@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>轻账日记 Web 预览</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="top-bar">
+        <small class="brand" id="todayText">今天</small>
+        <h1 id="pageTitle">首页</h1>
+      </header>
+
+      <main class="content">
+        <p id="toast" class="toast hidden"></p>
+        <section class="page active" id="homePage">
+          <article class="panel hero">
+            <p class="muted">今日已花</p>
+            <p class="money" id="todayTotal">¥0.00</p>
+            <p class="muted" id="weekTotal">本周累计 ¥0.00</p>
+          </article>
+
+          <div class="stack">
+            <button id="quickManualBtn" type="button" class="primary-btn quick-btn mega-btn" data-jump="record">＋ 快速记账</button>
+          </div>
+
+          <section class="panel">
+            <h2>今日账单</h2>
+            <ul id="homeTodayList" class="item-list"></ul>
+            <p id="homeTodayEmpty" class="muted">今天还没有记录，先记一笔吧。</p>
+          </section>
+
+          <section class="panel">
+            <h2>今日 AI 小结</h2>
+            <p id="homeInsightSummary">今天还没有复盘，去 AI 复盘页生成一条吧。</p>
+            <p id="homeInsightHint" class="muted micro-hint"></p>
+          </section>
+          <p id="dailyNudge" class="muted nudge-text">今天还没记账哦，花 10 秒记一笔吧。</p>
+        </section>
+
+        <section class="page" id="recordPage">
+          <section class="panel">
+            <h2>记账</h2>
+            <div class="segment">
+              <button class="mode-btn active" data-mode="manual">手动录入</button>
+              <button class="mode-btn" data-mode="ocr">OCR识票</button>
+            </div>
+
+            <div id="manualForm">
+              <label class="field">
+                <span>金额</span>
+                <input id="amountInput" type="number" step="0.01" placeholder="例如 26.50" />
+                <p id="amountAssist" class="muted amount-assist">输入金额，我帮你自动归类</p>
+              </label>
+              <label id="categoryField" class="field">
+                <span>分类（点一下即可）</span>
+                <div id="categoryOptions" class="category-options inline"></div>
+              </label>
+              <p id="networkHint" class="muted privacy-tip hidden">AI 推荐需联网，无网络时可手动选择。</p>
+              <label id="noteField" class="field secondary-field">
+                <input id="titleInput" type="text" placeholder="已自动归类，可补充点细节（不填也能保存）" />
+                <div id="noteSuggestions" class="note-suggestions hidden"></div>
+              </label>
+              <div class="save-row">
+                <button id="saveRecordBtn" class="primary-btn full-btn save-btn">保存</button>
+                <button id="editDateBtn" type="button" class="date-icon-btn" title="补记日期">📅</button>
+              </div>
+              <input id="recordDateInput" type="date" class="hidden-date-input" />
+              <p id="dateHint" class="muted privacy-tip">默认今天，如需补记点右侧日历。</p>
+              <p id="localPrivacyHint" class="muted privacy-tip">数据仅保存在本机，不上传云端。</p>
+            </div>
+
+            <div id="ocrForm" class="hidden">
+              <p class="muted">V1 推荐「相册选图识别」。Web 预览提供演示填充。</p>
+              <button id="ocrPrefillBtn" class="primary-btn full-btn">模拟相册选图识别并保存</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="page" id="statsPage">
+          <section class="panel">
+            <h2>统计</h2>
+            <div class="segment">
+              <button class="period-btn active" data-period="week">本周</button>
+              <button class="period-btn" data-period="month">本月</button>
+            </div>
+            <ul id="categoryStats" class="item-list compact"></ul>
+            <p id="categoryStatsEmpty" class="muted">当前周期暂无统计数据。</p>
+          </section>
+        </section>
+
+        <section class="page" id="insightPage">
+          <section class="panel">
+            <h2>AI 每日复盘</h2>
+            <p id="insightSummary">还没有今日复盘。</p>
+            <p id="insightAction" class="highlight"></p>
+            <p id="insightEncourage" class="muted"></p>
+            <button id="generateInsightBtn" class="primary-btn full-btn">换一条更适合我的建议</button>
+            <p id="insightLoading" class="muted hidden loading-text">正在生成中...</p>
+          </section>
+
+          <section class="panel">
+            <h2>近 7 天复盘</h2>
+            <ul id="insightHistory" class="item-list"></ul>
+            <p id="insightHistoryEmpty" class="muted">近 7 天暂无复盘。</p>
+          </section>
+        </section>
+
+        <section class="page" id="settingsPage">
+          <section class="panel">
+            <h2>设置</h2>
+            <p class="muted strong">数据仅保存在你的手机，不上传云端。</p>
+            <label class="field">
+              <span>显示名称</span>
+              <input id="displayNameInput" type="text" placeholder="输入昵称" />
+            </label>
+            <label class="switch-row">
+              <span>iCloud 备份（可选）</span>
+              <input id="syncSwitch" class="ios-switch" type="checkbox" />
+            </label>
+            <p class="muted privacy-tip setting-helper">开启后数据会同步到 iCloud，换机更方便。</p>
+            <label class="switch-row">
+              <span>开启 AI 智能建议（需联网）</span>
+              <input id="remoteAISwitch" class="ios-switch" type="checkbox" />
+            </label>
+            <p class="muted setting-helper">默认本地存储，不强制登录。</p>
+            <button id="resetGuideBtn" type="button" class="full-btn">重新查看新手引导</button>
+          </section>
+
+          <section class="panel">
+            <h2>外观</h2>
+            <div class="segment appearance-system-row">
+              <button class="appearance-btn" data-appearance="system">跟随系统</button>
+            </div>
+            <div class="segment appearance-manual-row">
+              <button class="appearance-btn" data-appearance="light">浅色</button>
+              <button class="appearance-btn" data-appearance="dark">深色</button>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <nav class="tabbar">
+        <button class="tab active" data-tab="home">
+          <span class="tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5M5.5 9.5V21h13V9.5" /></svg>
+          </span>
+          <span>首页</span>
+        </button>
+        <button class="tab" data-tab="record">
+          <span class="tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+          </span>
+          <span>记账</span>
+        </button>
+        <button class="tab" data-tab="stats">
+          <span class="tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 3v9h9M12 21a9 9 0 1 1 0-18" /></svg>
+          </span>
+          <span>统计</span>
+        </button>
+        <button class="tab" data-tab="insight">
+          <span class="tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M21 12a8.8 8.8 0 0 1-8.8 8.8c-1.4 0-2.8-.3-4-.9L3 21l1.2-4.7A8.8 8.8 0 1 1 21 12zM12 8.2l.8 1.8 1.9.2-1.4 1.3.4 1.9-1.7-1-1.7 1 .4-1.9-1.4-1.3 1.9-.2z" /></svg>
+          </span>
+          <span>AI复盘</span>
+        </button>
+        <button class="tab" data-tab="settings">
+          <span class="tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8 3.5l-1.9-.6a6.8 6.8 0 0 0-.5-1.2l1-1.8-1.8-1.8-1.8 1a6.8 6.8 0 0 0-1.2-.5L12 4l-1 .1-1 .2-.6 1.9a6.8 6.8 0 0 0-1.2.5l-1.8-1-1.8 1.8 1 1.8a6.8 6.8 0 0 0-.5 1.2L4 12l.1 1 .2 1 .1.4 1.9.6c.1.4.3.8.5 1.2l-1 1.8 1.8 1.8 1.8-1c.4.2.8.3 1.2.5L12 20l1-.1 1-.2.6-1.9c.4-.1.8-.3 1.2-.5l1.8 1 1.8-1.8-1-1.8c.2-.4.3-.8.5-1.2L20 12z" /></svg>
+          </span>
+          <span>设置</span>
+        </button>
+      </nav>
+
+      <div id="guideOverlay" class="guide-overlay hidden">
+        <div class="guide-card">
+          <p id="guideStepText" class="guide-step">第 1 张 / 3</p>
+          <h3 id="guideTitle">1 分钟快速记账</h3>
+          <p id="guideDesc">打开就能记，描述可选，支持补记，不给你负担。</p>
+          <div class="guide-actions">
+            <button id="guideSkipBtn" type="button">跳过</button>
+            <button id="guideNextBtn" type="button" class="primary-btn">下一步</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
