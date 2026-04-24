@@ -29,29 +29,47 @@
           <section class="panel">
             <h2>今日账单</h2>
             <ul id="homeTodayList" class="item-list"></ul>
-            <p id="homeTodayEmpty" class="muted">今天还没有记录，先记一笔吧。</p>
+            <div id="homeTodayEmptyArt" class="today-empty-art" aria-hidden="true">
+              <svg viewBox="0 0 120 80" role="presentation">
+                <rect x="26" y="20" width="68" height="48" rx="12" />
+                <line x1="40" y1="36" x2="80" y2="36" />
+                <line x1="40" y1="46" x2="72" y2="46" />
+                <line x1="40" y1="56" x2="64" y2="56" />
+                <line x1="92" y1="24" x2="104" y2="24" />
+                <line x1="98" y1="18" x2="98" y2="30" />
+              </svg>
+            </div>
           </section>
 
           <section class="panel">
             <h2>今日 AI 小结</h2>
-            <p id="homeInsightSummary">今天还没有复盘，去 AI 复盘页生成一条吧。</p>
+            <p id="homeInsightSummary" class="muted insight-summary">记几笔账，明天来这里看 AI 给你的专属小结。</p>
             <p id="homeInsightHint" class="muted micro-hint"></p>
           </section>
-          <p id="dailyNudge" class="muted nudge-text">今天还没记账哦，花 10 秒记一笔吧。</p>
+          <p id="dailyNudge" class="muted nudge-text">花 10 秒，轻松记一笔</p>
         </section>
+        <div id="petWidget" class="pet-widget hidden">
+          <button id="petBtn" type="button" class="pet-btn" aria-label="宠物助手">
+            <span class="pet-face" aria-hidden="true">🐱</span>
+          </button>
+          <p id="petBubble" class="pet-bubble hidden"></p>
+        </div>
 
         <section class="page" id="recordPage">
           <section class="panel">
-            <h2>记账</h2>
-            <div class="segment">
+            <h2 id="recordFormTitle">记账</h2>
+            <div id="recordModeSegment" class="segment">
               <button class="mode-btn active" data-mode="manual">手动录入</button>
-              <button class="mode-btn" data-mode="ocr">OCR识票</button>
+              <button class="mode-btn" data-mode="ocr">智能导入</button>
             </div>
 
             <div id="manualForm">
               <label class="field">
                 <span>金额</span>
-                <input id="amountInput" type="number" step="0.01" placeholder="例如 26.50" />
+                <div class="amount-input-wrap">
+                  <input id="amountInput" type="text" inputmode="decimal" placeholder="0.00" />
+                  <div id="amountDisplay" class="amount-display" aria-hidden="true"></div>
+                </div>
                 <p id="amountAssist" class="muted amount-assist">输入金额，我帮你自动归类</p>
               </label>
               <label id="categoryField" class="field">
@@ -63,52 +81,137 @@
                 <input id="titleInput" type="text" placeholder="已自动归类，可补充点细节（不填也能保存）" />
                 <div id="noteSuggestions" class="note-suggestions hidden"></div>
               </label>
+              <section id="memberScenePackBlock" class="member-scene-pack hidden">
+                <div class="member-scene-pack-head">
+                  <p class="member-scene-pack-title">小宠物的记账小帮手</p>
+                  <button id="memberScenePackEntryBtn" type="button" class="member-scene-pack-entry">解锁会员</button>
+                </div>
+                <p id="memberScenePackHint" class="muted">选个场景，我帮你猜今天花在哪，自动填好备注，帮你省下打字的功夫～</p>
+                <div id="memberScenePackList" class="member-scene-pack-list"></div>
+              </section>
               <div class="save-row">
                 <button id="saveRecordBtn" class="primary-btn full-btn save-btn">保存</button>
                 <button id="editDateBtn" type="button" class="date-icon-btn" title="补记日期">📅</button>
               </div>
+              <button id="deleteRecordBtn" type="button" class="full-btn delete-record-btn hidden">删除账单</button>
               <input id="recordDateInput" type="date" class="hidden-date-input" />
               <p id="dateHint" class="muted privacy-tip">默认今天，如需补记点右侧日历。</p>
               <p id="localPrivacyHint" class="muted privacy-tip">数据仅保存在本机，不上传云端。</p>
             </div>
 
             <div id="ocrForm" class="hidden">
-              <p class="muted">V1 推荐「相册选图识别」。Web 预览提供演示填充。</p>
-              <button id="ocrPrefillBtn" class="primary-btn full-btn">模拟相册选图识别并保存</button>
+              <p class="muted">导入微信/支付宝账单，自动识别并整理。</p>
+              <input id="ocrImageInput" type="file" accept="image/*" class="hidden" />
+              <button id="ocrPickImageBtn" class="primary-btn full-btn">导入账单 / 识别票据</button>
+              <div id="ocrLoadingBox" class="ocr-loading-box hidden">
+                <p class="muted">正在识别账单，请稍候…</p>
+                <div class="ocr-progress-track">
+                  <div id="ocrProgressBar" class="ocr-progress-bar"></div>
+                </div>
+              </div>
+
+              <section class="ocr-draft-panel">
+                <div class="ocr-draft-head">
+                  <h3>📥 导入账单草稿</h3>
+                  <button id="ocrClearResolvedBtn" type="button">完成整理</button>
+                </div>
+                <p id="ocrDraftSummary" class="muted">共 0 笔 · 合计 ¥0.00</p>
+                <div id="ocrDraftGroups"></div>
+              </section>
             </div>
           </section>
         </section>
 
         <section class="page" id="statsPage">
           <section class="panel">
-            <h2>统计</h2>
-            <div class="segment">
-              <button class="period-btn active" data-period="week">本周</button>
-              <button class="period-btn" data-period="month">本月</button>
+            <h2>账单</h2>
+            <div class="bill-filters">
+              <label>
+                <span class="muted">时间</span>
+                <select id="billDateFilter">
+                  <option value="month">本月</option>
+                  <option value="week">本周</option>
+                  <option value="year">本年</option>
+                </select>
+              </label>
+              <label>
+                <span class="muted">分类</span>
+                <select id="billCategoryFilter">
+                  <option value="">全部分类</option>
+                </select>
+              </label>
             </div>
-            <ul id="categoryStats" class="item-list compact"></ul>
-            <p id="categoryStatsEmpty" class="muted">当前周期暂无统计数据。</p>
+          </section>
+
+          <section class="panel bill-overview">
+            <h2>总览</h2>
+            <div class="bill-overview-grid">
+              <div>
+                <p class="muted">总支出</p>
+                <p id="billExpenseTotal" class="money-lite">¥0.00</p>
+              </div>
+            </div>
+            <div class="bill-trend-block">
+              <p class="muted">近 30 天支出趋势</p>
+              <svg id="billTrendChart" viewBox="0 0 300 90" class="bill-trend-chart" aria-hidden="true">
+                <line id="billTrendAxisY" x1="8" y1="8" x2="8" y2="82" />
+                <line id="billTrendAxisX" x1="8" y1="82" x2="292" y2="82" />
+                <text id="billTrendMaxLabel" x="10" y="14">0</text>
+                <text id="billTrendStartLabel" x="8" y="88">30天前</text>
+                <text id="billTrendEndLabel" x="246" y="88">今天</text>
+                <polyline id="billTrendLine" points="" />
+                <circle id="billTrendPeakDot" cx="8" cy="82" r="3" />
+                <text id="billTrendPeakLabel" x="12" y="74">¥0.00</text>
+              </svg>
+              <p id="billTrendInsight" class="muted bill-trend-insight">本月支出整体平稳。</p>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>记录列表</h2>
+            <ul id="billRecordsList" class="item-list"></ul>
+            <p id="billRecordsEmpty" class="muted">当前筛选条件下暂无账单。</p>
           </section>
         </section>
 
         <section class="page" id="insightPage">
+          <section class="panel">
+            <h2>月度 AI 复盘</h2>
+            <p id="monthlyTrialText" class="muted">剩余试用次数：5/5</p>
+            <button id="generateMonthlyInsightBtn" class="primary-btn full-btn">生成月度复盘</button>
+            <div id="monthlyInsightContent" class="monthly-insight-content hidden">
+              <p id="monthlyInsightSummary"></p>
+              <p id="monthlyInsightStructure" class="muted"></p>
+              <p id="monthlyInsightAdvice" class="highlight"></p>
+            </div>
+            <div class="advanced-insight-actions">
+              <button id="generateQuarterlyInsightBtn" type="button" class="full-btn locked-report-btn"><span class="lock-icon">🔒︎</span>生成季度复盘</button>
+              <button id="generateYearlyInsightBtn" type="button" class="full-btn locked-report-btn"><span class="lock-icon">🔒︎</span>生成年度复盘</button>
+            </div>
+          </section>
+
           <section class="panel">
             <h2>AI 每日复盘</h2>
             <p id="insightSummary">还没有今日复盘。</p>
             <p id="insightAction" class="highlight"></p>
             <p id="insightEncourage" class="muted"></p>
             <button id="generateInsightBtn" class="primary-btn full-btn">换一条更适合我的建议</button>
-            <p id="insightLoading" class="muted hidden loading-text">正在生成中...</p>
           </section>
 
           <section class="panel">
             <h2>近 7 天复盘</h2>
             <ul id="insightHistory" class="item-list"></ul>
-            <p id="insightHistoryEmpty" class="muted">近 7 天暂无复盘。</p>
+            <p id="insightHistoryEmpty" class="muted">近 7 天暂无复盘。多记几笔，就能看到更完整的消费节奏啦。</p>
           </section>
         </section>
 
         <section class="page" id="settingsPage">
+          <section class="panel account-panel">
+            <button id="accountEntryBtn" type="button" class="account-entry-btn">
+              <div id="accountAvatar" class="account-avatar" aria-hidden="true">👤</div>
+              <p id="accountEntryText" class="account-entry-text">点击登录，解锁云备份与会员权益 &gt;</p>
+            </button>
+          </section>
           <section class="panel">
             <h2>设置</h2>
             <p class="muted strong">数据仅保存在你的手机，不上传云端。</p>
@@ -126,6 +229,16 @@
               <input id="remoteAISwitch" class="ios-switch" type="checkbox" />
             </label>
             <p class="muted setting-helper">默认本地存储，不强制登录。</p>
+            <label class="switch-row">
+              <span>开启宠物陪伴</span>
+              <input id="petCompanionSwitch" class="ios-switch" type="checkbox" />
+            </label>
+            <p class="muted setting-helper">关闭后首页不显示宠物助手。</p>
+            <label class="switch-row" id="weatherCompanionRow">
+              <span>允许天气场景暖心互动 🌤️</span>
+              <input id="weatherCompanionSwitch" class="ios-switch" type="checkbox" />
+            </label>
+            <p id="weatherCompanionHelper" class="muted setting-helper">开启这个，我就能知道今天是晴是雨，陪你说更懂你的悄悄话啦！</p>
             <button id="resetGuideBtn" type="button" class="full-btn">重新查看新手引导</button>
           </section>
 
@@ -159,7 +272,7 @@
           <span class="tab-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M12 3v9h9M12 21a9 9 0 1 1 0-18" /></svg>
           </span>
-          <span>统计</span>
+          <span>账单</span>
         </button>
         <button class="tab" data-tab="insight">
           <span class="tab-icon" aria-hidden="true">
@@ -183,6 +296,143 @@
           <div class="guide-actions">
             <button id="guideSkipBtn" type="button">跳过</button>
             <button id="guideNextBtn" type="button" class="primary-btn">下一步</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="accountOverlay" class="guide-overlay hidden">
+        <div class="guide-card account-modal">
+          <button id="accountCloseBtn" type="button" class="account-close-btn" aria-label="关闭">×</button>
+          <div id="accountLoginView">
+            <h3>欢迎回来，继续把钱花明白</h3>
+            <p class="muted account-intro">登录后，账单可同步云端，换机不丢失，还能解锁专属会员权益</p>
+            <div class="stack account-login-actions">
+              <button id="accountPhoneLoginBtn" type="button" class="primary-btn full-btn">本机号码一键登录</button>
+              <p class="muted account-login-tip">仅用于账号标识，不发送垃圾信息</p>
+              <button id="accountWechatLoginBtn" type="button" class="full-btn">微信快捷登录</button>
+            </div>
+            <p class="muted account-privacy-tip">
+              你的账单数据默认保存在本地，登录仅用于同步备份与权益发放。我们不会向你发送营销信息，也不会将数据分享给第三方。
+            </p>
+            <button id="accountSkipBtn" type="button" class="account-skip-btn">稍后再说，先不登录</button>
+          </div>
+          <div id="accountCenterView" class="hidden">
+            <div class="account-center-head">
+              <div id="accountCenterAvatar" class="account-avatar" aria-hidden="true">🐱</div>
+              <p id="accountCenterName" class="account-title">你好呀，轻账用户</p>
+              <p id="accountCenterState" class="muted account-subtitle">当前状态：免费版</p>
+            </div>
+            <section class="account-benefits">
+              <h4>✨ 升级会员，解锁更多温柔陪伴</h4>
+              <ul>
+                <li>无限次 AI 复盘，更懂你的消费节奏</li>
+                <li>天气场景暖心互动，小宠物陪你说悄悄话</li>
+                <li>云端账单备份，换机不丢记录</li>
+              </ul>
+              <button id="accountUpgradeEntryBtn" type="button" class="primary-btn full-btn">查看会员方案</button>
+            </section>
+            <section class="account-security">
+              <h4>账号小管家</h4>
+              <label class="field account-petname-field">
+                <span>我的小宠物｜自定义名字</span>
+                <input id="accountPetNicknameInput" type="text" placeholder="输入 2-6 个字，例如：团子" maxlength="6" />
+              </label>
+              <button id="accountPetNicknameSaveBtn" type="button" class="full-btn">保存宠物昵称</button>
+              <p id="accountPetNicknameTip" class="muted account-login-tip">仅会员可自定义，支持 2-6 个字，不含特殊符号。</p>
+              <button id="accountBindPhoneBtn" type="button" class="full-btn">绑定手机号，方便找回账号</button>
+              <button id="accountLogoutBtn" type="button" class="full-btn">退出登录</button>
+            </section>
+          </div>
+          <div id="accountMemberView" class="hidden">
+            <button id="accountMemberBackBtn" type="button" class="account-skip-btn">返回账号</button>
+            <section class="account-member-hero">
+              <h3>✨ 升级会员，解锁更多温柔陪伴</h3>
+              <p class="muted account-intro">让小宠物陪你，更轻松地把钱花明白</p>
+            </section>
+            <section class="account-benefits">
+              <ul class="member-benefits-list">
+                <li><strong>📊 无限次 AI 复盘，更懂你的消费节奏</strong><span>不再限制月度复盘次数，随时可以回顾和分析自己的账单</span></li>
+                <li><strong>🌤️ 解锁天气 / 季节场景互动，小宠物陪你说悄悄话</strong><span>开启后，小宠物会根据天气、时间，给你更贴合当下的温柔陪伴语</span></li>
+                <li><strong>☁️ 云端账单备份，换机不丢记录</strong><span>登录账号后，账单数据可安全同步云端，换手机也不怕丢失</span></li>
+                <li><strong>🚫 告别所有广告，享受纯净记账体验</strong><span>全程无任何弹窗广告，记账更专注、更安心</span></li>
+                <li><strong>📝 宠物专属昵称 + 智能习惯备注</strong><span>自定义宠物名字全覆盖，结合消费偏好自动生成专属温柔备注</span></li>
+              </ul>
+            </section>
+            <section class="account-pricing">
+              <button id="buyMonthlyBtn" type="button" class="full-btn">
+                月度会员：¥12 / 月
+                <small>按月订阅，随时可取消</small>
+              </button>
+              <button id="buyYearlyBtn" type="button" class="primary-btn full-btn yearly-plan featured-plan">
+                <span class="featured-badge">✨ 推荐</span>
+                年度会员：¥98 / 年
+                <small>平均每天不到 1 毛钱，最划算</small>
+              </button>
+              <button id="buyLifetimeBtn" type="button" class="full-btn">
+                永久会员：¥198
+                <small>一次解锁，终身陪伴</small>
+              </button>
+              <p class="muted account-login-tip">订阅可随时在 App Store / 账户设置中取消，不会自动扣费。</p>
+            </section>
+            <p class="muted account-privacy-tip">
+              你的账单数据始终保存在本地，会员权益仅用于解锁功能与服务。我们不会将你的数据分享给第三方，也不会发送营销骚扰信息。
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div id="ocrConfirmOverlay" class="ocr-overlay hidden">
+        <div class="ocr-modal">
+          <h3>确认导入账单</h3>
+          <p class="muted ocr-modal-tip">所有识别均在本地完成，数据不上传</p>
+          <div class="ocr-stats">
+            <div>
+              <span class="muted">识别条数</span>
+              <strong id="ocrStatsCount">0</strong>
+            </div>
+            <div>
+              <span class="muted">总金额</span>
+              <strong id="ocrStatsAmount">¥0.00</strong>
+            </div>
+          </div>
+          <div class="ocr-batch-toolbar">
+            <button id="ocrSelectAllBtn" type="button">全选</button>
+            <button id="ocrInvertBtn" type="button">反选</button>
+            <select id="ocrBatchCategorySelect">
+              <option value="">批量修改分类</option>
+              <option value="餐饮">🍽️ 餐饮</option>
+              <option value="购物">🛒 购物</option>
+              <option value="交通">🚇 交通</option>
+              <option value="娱乐">🎮 娱乐</option>
+              <option value="日用">🧴 日用</option>
+              <option value="其他">⚪ 其他</option>
+            </select>
+          </div>
+          <ul id="ocrConfirmList" class="item-list ocr-confirm-list"></ul>
+          <div class="ocr-modal-actions">
+            <button id="ocrCancelBtn" type="button">取消</button>
+            <button id="ocrConfirmBtn" type="button" class="primary-btn">
+              确认导入
+              <small id="ocrConfirmMeta">已选 0 条</small>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="ocrCategoryOverlay" class="ocr-overlay hidden">
+        <div class="ocr-modal ocr-category-modal">
+          <h3>修改分类</h3>
+          <div id="ocrCategoryOptions" class="category-options"></div>
+        </div>
+      </div>
+
+      <div id="monthlyTrialModal" class="ocr-overlay hidden">
+        <div class="ocr-modal monthly-trial-modal">
+          <h3 id="monthlyTrialModalTitle">提示</h3>
+          <p id="monthlyTrialModalBody" class="muted"></p>
+          <div class="monthly-trial-modal-actions">
+            <button id="monthlyTrialModalOkBtn" type="button" class="full-btn">我知道了</button>
+            <button id="monthlyTrialUpgradeBtn" type="button" class="primary-btn full-btn">解锁无限次复盘</button>
           </div>
         </div>
       </div>
