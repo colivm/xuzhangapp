@@ -1,12 +1,20 @@
 import Foundation
 import SwiftUI
+import Combine
 
 @MainActor
 final class SettingsViewModel: ObservableObject {
     @Published private(set) var settings: AppSettings
+    @Published var loginPhone: String = ""
+    @Published var loginCode: String = ""
+    @Published private(set) var authMessage: String?
+    @Published private(set) var isAuthBusy: Bool = false
+    /// 是否已保存访问令牌（与 Keychain 同步，用于界面展示）。
+    @Published private(set) var hasCloudSession: Bool = false
 
     init() {
         settings = LocalStore.loadSettings()
+        hasCloudSession = !KeychainService.loadAccessToken().isEmpty
     }
 
     var displayName: String {
@@ -96,8 +104,104 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    var backendBaseURL: String {
+        get { settings.backendBaseURL }
+        set {
+            settings.backendBaseURL = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            persist()
+        }
+    }
+
+    var cloudUserId: String {
+        settings.cloudUserId
+    }
+
+    var memberTier: String {
+        get { settings.memberTier }
+        set {
+            settings.memberTier = newValue
+            persist()
+        }
+    }
+
     var colorScheme: ColorScheme? {
         settings.colorScheme
+    }
+
+    func sendSMSLoginCode() async {
+        authMessage = nil
+        let phone = loginPhone.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard phone.count == 11, phone.hasPrefix("1") else {
+            authMessage = "请输入 11 位手机号。"
+            return
+        }
+        isAuthBusy = true
+        defer { isAuthBusy = false }
+        let client = AuthService(baseURL: backendBaseURL)
+        do {
+            try await client.sendSMSCode(phone: phone)
+            authMessage = "验证码已发送（开发环境固定为后端 DEV_ALLOW_SMS_CODE）。"
+        } catch {
+            authMessage = error.localizedDescription
+        }
+    }
+
+    func verifySMSLogin() async {
+        authMessage = nil
+        let phone = loginPhone.trimmingCharacters(in: .whitespacesAndNewlines)
+        let code = loginCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard phone.count == 11 else {
+            authMessage = "请先填写手机号。"
+            return
+        }
+        guard !code.isEmpty else {
+            authMessage = "请输入验证码。"
+            return
+        }
+        isAuthBusy = true
+        defer { isAuthBusy = false }
+        let client = AuthService(baseURL: backendBaseURL)
+        do {
+            let session = try await client.loginWithSMS(phone: phone, code: code)
+            KeychainService.saveAccessToken(session.accessToken)
+            settings.displayName = session.displayName
+            settings.cloudUserId = session.userId
+            settings.memberTier = session.memberTier
+            persist()
+            let tier = try await client.fetchMemberMe(accessToken: session.accessToken)
+            settings.memberTier = tier.tier
+            persist()
+            hasCloudSession = true
+            authMessage = "登录成功。"
+            loginCode = ""
+        } catch {
+            authMessage = error.localizedDescription
+        }
+    }
+
+    func logoutCloud() {
+        KeychainService.clearAccessToken()
+        settings.cloudUserId = ""
+        settings.memberTier = "free"
+        hasCloudSession = false
+        authMessage = "已退出登录。"
+        persist()
+    }
+
+    func refreshMemberFromServer() async {
+        let token = KeychainService.loadAccessToken()
+        guard !token.isEmpty else { return }
+        isAuthBusy = true
+        defer { isAuthBusy = false }
+        let client = AuthService(baseURL: backendBaseURL)
+        do {
+            let tier = try await client.fetchMemberMe(accessToken: token)
+            settings.memberTier = tier.tier
+            persist()
+            authMessage = "会员状态已更新。"
+        } catch {
+            authMessage = error.localizedDescription
+        }
     }
 
     private func persist() {

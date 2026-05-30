@@ -70,7 +70,7 @@ final class AIReportService {
         """
 
         let body: [String: Any] = [
-            "model": model.isEmpty ? "glm-4-flash" : model,
+            "model": model.isEmpty ? "doubao-seed-1-6-flash-250828" : model,
             "messages": [
                 ["role": "system", "content": systemContent],
                 ["role": "user", "content": userContent]

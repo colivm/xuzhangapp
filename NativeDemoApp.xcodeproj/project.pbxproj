@@ -22,6 +22,13 @@
 		A100000D0000000000000001 /* AIReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001F0000000000000001 /* AIReportService.swift */; };
 		A100000E0000000000000001 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000210000000000000001 /* KeychainService.swift */; };
 		A100000F0000000000000001 /* AIUsageLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000220000000000000001 /* AIUsageLimiter.swift */; };
+		A10000230000000000000001 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000240000000000000001 /* AuthService.swift */; };
+		A10000250000000000000001 /* LedgerSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000260000000000000001 /* LedgerSyncService.swift */; };
+		A10000270000000000000001 /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000280000000000000001 /* AnalyticsService.swift */; };
+		A10000290000000000000001 /* MemberNudgePolicyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100002A0000000000000001 /* MemberNudgePolicyService.swift */; };
+		A100002B0000000000000001 /* PlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100002C0000000000000001 /* PlaybackService.swift */; };
+		A100002D0000000000000001 /* MemberFlowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100002E0000000000000001 /* MemberFlowService.swift */; };
+		A100002F0000000000000001 /* MemberPricingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000390000000000000001 /* MemberPricingView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -43,6 +50,13 @@
 		A100001F0000000000000001 /* AIReportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIReportService.swift; sourceTree = "<group>"; };
 		A10000210000000000000001 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		A10000220000000000000001 /* AIUsageLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIUsageLimiter.swift; sourceTree = "<group>"; };
+		A10000240000000000000001 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		A10000260000000000000001 /* LedgerSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerSyncService.swift; sourceTree = "<group>"; };
+		A10000280000000000000001 /* AnalyticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsService.swift; sourceTree = "<group>"; };
+		A100002A0000000000000001 /* MemberNudgePolicyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberNudgePolicyService.swift; sourceTree = "<group>"; };
+		A100002C0000000000000001 /* PlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackService.swift; sourceTree = "<group>"; };
+		A100002E0000000000000001 /* MemberFlowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberFlowService.swift; sourceTree = "<group>"; };
+		A10000390000000000000001 /* MemberPricingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberPricingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -105,6 +119,12 @@
 				A100001F0000000000000001 /* AIReportService.swift */,
 				A10000210000000000000001 /* KeychainService.swift */,
 				A10000220000000000000001 /* AIUsageLimiter.swift */,
+				A10000240000000000000001 /* AuthService.swift */,
+				A10000260000000000000001 /* LedgerSyncService.swift */,
+				A10000280000000000000001 /* AnalyticsService.swift */,
+				A100002A0000000000000001 /* MemberNudgePolicyService.swift */,
+				A100002C0000000000000001 /* PlaybackService.swift */,
+				A100002E0000000000000001 /* MemberFlowService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -123,6 +143,7 @@
 			children = (
 				A10000180000000000000001 /* HomeView.swift */,
 				A10000190000000000000001 /* SettingsView.swift */,
+				A10000390000000000000001 /* MemberPricingView.swift */,
 				A10000380000000000000001 /* Components */,
 			);
 			path = Views;
@@ -227,6 +248,13 @@
 				A100000D0000000000000001 /* AIReportService.swift in Sources */,
 				A100000E0000000000000001 /* KeychainService.swift in Sources */,
 				A100000F0000000000000001 /* AIUsageLimiter.swift in Sources */,
+				A10000230000000000000001 /* AuthService.swift in Sources */,
+				A10000250000000000000001 /* LedgerSyncService.swift in Sources */,
+				A10000270000000000000001 /* AnalyticsService.swift in Sources */,
+				A10000290000000000000001 /* MemberNudgePolicyService.swift in Sources */,
+				A100002B0000000000000001 /* PlaybackService.swift in Sources */,
+				A100002D0000000000000001 /* MemberFlowService.swift in Sources */,
+				A100002F0000000000000001 /* MemberPricingView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

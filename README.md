@@ -56,3 +56,6 @@ NativeDemoApp
 - `PRD_v0.1.md`：页面清单、字段设计、Prompt 模板与技术结构说明。
 - `API_v0.1.md`：AI 日报与可选同步接口草案。
 - `ai-proxy/README.md`：最小后端代理部署说明（推荐生产使用）。
+- `NativeDemoApp/IOS_REAL_INTEGRATION_CHECKLIST.md`：iOS 真实接入所需参数、账号和验收标准。
+- `NativeDemoApp/AppSecrets.example.plist`：生产配置模板（复制为 `AppSecrets.plist` 后填真实值）。
+- `backend/README.md`：iOS 迁移期的后端骨架（auth/member/ledger/iap/ai）。

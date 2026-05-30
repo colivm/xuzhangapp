@@ -1,0 +1,107 @@
+import Foundation
+
+enum LedgerSyncError: LocalizedError {
+    case invalidBaseURL
+    case badStatus(Int, String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidBaseURL:
+            return "后端地址无效，无法同步。"
+        case .badStatus(let code, let body):
+            return "同步失败 (\(code))：\(body)"
+        }
+    }
+}
+
+private struct LedgerDTO: Codable {
+    let id: String
+    let title: String
+    let amount: Double
+    let category: String
+    let source: String
+    let createdAt: String
+    let updatedAt: String
+}
+
+private struct LedgerListResponse: Codable {
+    let ok: Bool
+    let items: [LedgerDTO]
+}
+
+final class LedgerSyncService {
+    private let baseURL: String
+    private let accessToken: String
+    private let urlSession: URLSession
+    private let iso8601 = ISO8601DateFormatter()
+
+    init(baseURL: String, accessToken: String, urlSession: URLSession = .shared) {
+        self.baseURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        self.accessToken = accessToken
+        self.urlSession = urlSession
+    }
+
+    func upload(_ item: HomeItem) async throws {
+        let dto = LedgerDTO(
+            id: item.id.uuidString,
+            title: item.title,
+            amount: item.amount,
+            category: item.category.rawValue,
+            source: item.source.rawValue,
+            createdAt: iso8601.string(from: item.createdAt),
+            updatedAt: iso8601.string(from: item.updatedAt)
+        )
+        var request = try makeRequest(path: "/v1/ledger", method: "POST")
+        request.httpBody = try JSONEncoder().encode(dto)
+        _ = try await data(for: request)
+    }
+
+    func delete(id: UUID) async throws {
+        let request = try makeRequest(path: "/v1/ledger/\(id.uuidString)", method: "DELETE")
+        _ = try await data(for: request)
+    }
+
+    func fetchAll() async throws -> [HomeItem] {
+        let request = try makeRequest(path: "/v1/ledger", method: "GET")
+        let (data, _) = try await data(for: request)
+        let payload = try JSONDecoder().decode(LedgerListResponse.self, from: data)
+        return payload.items.map { dto in
+            let id = UUID(uuidString: dto.id) ?? UUID()
+            let createdAt = iso8601.date(from: dto.createdAt) ?? .now
+            let updatedAt = iso8601.date(from: dto.updatedAt) ?? createdAt
+            let category = HomeItem.Category(rawValue: dto.category) ?? .other
+            let source = HomeItem.Source(rawValue: dto.source) ?? .manual
+            return HomeItem(
+                id: id,
+                title: dto.title,
+                amount: dto.amount,
+                category: category,
+                source: source,
+                createdAt: createdAt,
+                updatedAt: updatedAt
+            )
+        }
+    }
+
+    private func makeRequest(path: String, method: String) throws -> URLRequest {
+        guard let url = URL(string: baseURL + path) else {
+            throw LedgerSyncError.invalidBaseURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        return request
+    }
+
+    private func data(for request: URLRequest) async throws -> (Data, String) {
+        let (data, response) = try await urlSession.data(for: request)
+        let body = String(data: data, encoding: .utf8) ?? ""
+        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200..<300).contains(statusCode) else {
+            throw LedgerSyncError.badStatus(statusCode, body)
+        }
+        return (data, body)
+    }
+}
+

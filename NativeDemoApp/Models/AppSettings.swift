@@ -47,6 +47,12 @@ struct AppSettings: Codable, Equatable {
     var aiEndpoint: String
     var aiModel: String
     var remoteAIMonthlyLimit: Int
+    /// 轻账后端根地址，例如 `http://127.0.0.1:8790`（模拟器连本机）或局域网 IP。
+    var backendBaseURL: String
+    /// 云端用户 ID，登录成功后由后端返回；未登录为空。
+    var cloudUserId: String
+    /// 会员档位：free / monthly / yearly / lifetime（与后端一致）。
+    var memberTier: String
 
     static let `default` = AppSettings(
         displayName: "SwiftUI 用户",
@@ -57,8 +63,11 @@ struct AppSettings: Codable, Equatable {
         aiTone: .gentle,
         useRemoteAI: false,
         aiEndpoint: "",
-        aiModel: "glm-4-flash",
-        remoteAIMonthlyLimit: 120
+        aiModel: "doubao-seed-1-6-flash-250828",
+        remoteAIMonthlyLimit: 120,
+        backendBaseURL: "http://127.0.0.1:8790",
+        cloudUserId: "",
+        memberTier: "free"
     )
 }
 
@@ -74,6 +83,9 @@ extension AppSettings {
         case aiEndpoint
         case aiModel
         case remoteAIMonthlyLimit
+        case backendBaseURL
+        case cloudUserId
+        case memberTier
     }
 
     init(from decoder: Decoder) throws {
@@ -86,8 +98,11 @@ extension AppSettings {
         aiTone = try container.decodeIfPresent(AITone.self, forKey: .aiTone) ?? .gentle
         useRemoteAI = try container.decodeIfPresent(Bool.self, forKey: .useRemoteAI) ?? false
         aiEndpoint = try container.decodeIfPresent(String.self, forKey: .aiEndpoint) ?? ""
-        aiModel = try container.decodeIfPresent(String.self, forKey: .aiModel) ?? "glm-4-flash"
+        aiModel = try container.decodeIfPresent(String.self, forKey: .aiModel) ?? "doubao-seed-1-6-flash-250828"
         remoteAIMonthlyLimit = try container.decodeIfPresent(Int.self, forKey: .remoteAIMonthlyLimit) ?? 120
+        backendBaseURL = try container.decodeIfPresent(String.self, forKey: .backendBaseURL) ?? "http://127.0.0.1:8790"
+        cloudUserId = try container.decodeIfPresent(String.self, forKey: .cloudUserId) ?? ""
+        memberTier = try container.decodeIfPresent(String.self, forKey: .memberTier) ?? "free"
     }
 }
 
