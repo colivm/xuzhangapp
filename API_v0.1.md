@@ -1,4 +1,4 @@
-# 轻账日记 API v0.1（客户端对接草案）
+# 序帐 API v0.1（客户端对接草案）
 
 > 当前 iOS 客户端已内置对智谱 AI OpenAPI 的直连适配，也支持走后端代理。  
 > 默认地址：`https://open.bigmodel.cn/api/paas/v4/chat/completions`  

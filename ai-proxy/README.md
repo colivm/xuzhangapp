@@ -1,6 +1,6 @@
 # ai-proxy
 
-用于 `轻账日记` 的最小后端代理层，目标是：
+用于 `序帐` 的最小后端代理层，目标是：
 
 - 隐藏智谱 API Key（不在 iOS 客户端暴露）
 - 代理并清洗模型输出（统一返回 `summary/action/encourage`）
@@ -22,12 +22,14 @@
 
 - 健康检查：`GET /health`
 - AI 日报：`POST /v1/insight/daily`
+- 本地调试签发 JWT：`POST /v1/auth/dev-token`
 
 请求示例：
 
 ```json
 {
   "model": "glm-4-flash",
+  "feature": "daily",
   "messages": [
     { "role": "system", "content": "..." },
     { "role": "user", "content": "..." }
@@ -35,6 +37,14 @@
   "temperature": 0.6
 }
 ```
+
+`feature` 可选值：
+- `daily`（普通）
+- `monthly`（普通）
+- `quarterly`（会员专属）
+- `yearly`（会员专属）
+
+当 `feature` 为 `quarterly/yearly` 时，服务端会强制校验 JWT 中的会员态。
 
 返回示例：
 
@@ -56,3 +66,31 @@
   - 如果代理层配置了 `APP_PROXY_TOKEN`，这里填 token
   - 如果代理层未配置 token，可留空
 - 模型可保留 `glm-4-flash`
+
+## 4. 安全接入（防黑产）
+
+### 4.1 鉴权
+- 设置 `JWT_SECRET` 后，服务端支持 `Authorization: Bearer <token>`。
+- 推荐开启 `REQUIRE_JWT=1`，强制所有请求带 JWT。
+
+### 4.2 会员能力校验
+- 服务端按 `feature` 判定能力等级。
+- `quarterly/yearly` 必须是会员 JWT（`isMember=true` 或 `role=member`）。
+
+### 4.3 限流
+- `USER_RATE_LIMIT_PER_MINUTE`：普通能力每用户限流。
+- `PREMIUM_RATE_LIMIT_PER_MINUTE`：会员专属能力每用户限流。
+- `MONTHLY_REQUEST_LIMIT`：全局月度消耗上限。
+
+### 4.4 本地开发快速拿 token
+请求 `POST /v1/auth/dev-token`，示例 body：
+```json
+{
+  "userId": "dev-user-001",
+  "isMember": true,
+  "expiresIn": "12h"
+}
+```
+返回 `token` 后，前端可放到 `localStorage`：
+- `qingzhang_ai_user_token`
+- `qingzhang_ai_proxy_token`（可选，若你启用了 APP_PROXY_TOKEN）

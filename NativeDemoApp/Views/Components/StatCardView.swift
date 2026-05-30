@@ -10,8 +10,8 @@ struct StatCardView: View {
             Image(systemName: iconName)
                 .font(.title3)
                 .frame(width: 36, height: 36)
-                .background(Color.accentColor.opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .background(Color(red: 0.47, green: 0.69, blue: 0.63).opacity(0.18))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
@@ -23,13 +23,14 @@ struct StatCardView: View {
 
             Spacer()
         }
-        .padding(14)
-        .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(16)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
 
-#Preview {
-    StatCardView(title: "示例", value: "42", iconName: "number")
-        .padding()
+struct StatCardView_Previews: PreviewProvider {
+    static var previews: some View {
+        StatCardView(title: "示例", value: "42", iconName: "number")
+            .padding()
+    }
 }

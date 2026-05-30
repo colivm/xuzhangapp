@@ -52,7 +52,7 @@ final class AIReportService {
         )
 
         let systemContent = """
-        你是“轻账日记”的温和消费复盘助手。
+        你是“序帐”的温和消费复盘助手。
         根据用户消费快照输出 JSON，字段必须是 summary/action/encourage。
         不要输出投资建议，不要说教。
         """
@@ -70,7 +70,7 @@ final class AIReportService {
         """
 
         let body: [String: Any] = [
-            "model": model.isEmpty ? "glm-4-flash" : model,
+            "model": model.isEmpty ? "doubao-seed-1-6-flash-250828" : model,
             "messages": [
                 ["role": "system", "content": systemContent],
                 ["role": "user", "content": userContent]
