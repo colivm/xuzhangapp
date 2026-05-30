@@ -14,9 +14,21 @@ struct AIInsightPayload: Codable {
     let encourage: String
 }
 
-enum AIReportServiceError: Error {
+enum AIReportServiceError: LocalizedError {
     case invalidEndpoint
+    case badStatus(Int, String)
     case invalidResponse
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidEndpoint:
+            return "AI 接口地址无效。"
+        case .badStatus(let code, let body):
+            return "AI 请求失败 (\(code))：\(body)"
+        case .invalidResponse:
+            return "AI 返回格式异常。"
+        }
+    }
 }
 
 final class AIReportService {
@@ -27,7 +39,8 @@ final class AIReportService {
         endpoint: String,
         apiKey: String,
         tone: AppSettings.AITone,
-        model: String
+        model: String,
+        feature: String = "daily"
     ) async throws -> AIInsightPayload {
         let finalEndpoint = endpoint.isEmpty ? zhipuDefaultEndpoint : endpoint
         guard let url = URL(string: finalEndpoint) else {
@@ -42,6 +55,12 @@ final class AIReportService {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         } else if !isDirectZhipu && !apiKey.isEmpty {
             request.setValue(apiKey, forHTTPHeaderField: "x-proxy-token")
+        }
+        if finalEndpoint.contains("/v1/ai/") {
+            let accessToken = KeychainService.loadAccessToken()
+            if !accessToken.isEmpty {
+                request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            }
         }
 
         let prompt = HomeViewModel.promptTemplate(
@@ -71,6 +90,7 @@ final class AIReportService {
 
         let body: [String: Any] = [
             "model": model.isEmpty ? "doubao-seed-1-6-flash-250828" : model,
+            "feature": feature,
             "messages": [
                 ["role": "system", "content": systemContent],
                 ["role": "user", "content": userContent]
@@ -81,8 +101,12 @@ final class AIReportService {
         request.timeoutInterval = 20
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+        guard let http = response as? HTTPURLResponse else {
             throw AIReportServiceError.invalidResponse
+        }
+        guard 200..<300 ~= http.statusCode else {
+            let bodyText = String(data: data, encoding: .utf8) ?? ""
+            throw AIReportServiceError.badStatus(http.statusCode, String(bodyText.prefix(300)))
         }
 
         if let payload = try? JSONDecoder().decode(AIInsightPayload.self, from: data) {

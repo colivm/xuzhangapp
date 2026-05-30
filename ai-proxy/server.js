@@ -164,6 +164,13 @@ app.listen(PORT, () => {
 });
 
 function authenticateRequest(req) {
+  if (APP_PROXY_TOKEN) {
+    const incomingToken = (req.headers["x-proxy-token"] || "").toString();
+    if (incomingToken && incomingToken === APP_PROXY_TOKEN) {
+      return { ok: true, user: { id: "proxy-token-client", isMember: true } };
+    }
+  }
+
   if (!JWT_SECRET) {
     if (REQUIRE_JWT) {
       return { ok: false, status: 401, code: "UNAUTHORIZED", message: "jwt disabled" };

@@ -35,6 +35,16 @@
     <dict>
         <key>NSAllowsLocalNetworking</key>
         <true/>
+        <key>NSExceptionDomains</key>
+        <dict>
+            <key>47.102.205.254</key>
+            <dict>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+                <key>NSIncludesSubdomains</key>
+                <true/>
+            </dict>
+        </dict>
     </dict>
 </dict>
 </plist>

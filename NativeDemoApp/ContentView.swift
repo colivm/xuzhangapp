@@ -31,13 +31,17 @@ struct GlassPanel: ViewModifier {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(.thinMaterial)
+                    .fill(AppColors.panel)
+                    .background(
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white.opacity(0.22), Color.white.opacity(0.04)],
+                            colors: [Color.white.opacity(0.16), Color.white.opacity(0.03)],
                             startPoint: UnitPoint(x: 0.3, y: 0),
                             endPoint: UnitPoint(x: 0.7, y: 1)
                         )
@@ -1680,11 +1684,32 @@ struct InsightWebView: View {
     @State private var monthlyInsightGenerated = false
     @State private var showAdvancedInsight = false
     @State private var monthlyTrialUsed = UserDefaults.standard.integer(forKey: "monthly_trial_used_v1")
+    @State private var monthlyReport: HomeViewModel.MonthlyInsightReport?
+    @State private var monthlyAIStatus: AIStatusPill?
+    @State private var monthlyTrialModal: MonthlyTrialModal?
     private let trialTotal = 5
 
+    private struct AIStatusPill: Equatable {
+        enum Kind {
+            case live
+            case fallback
+            case error
+        }
+
+        var kind: Kind
+        var text: String
+    }
+
+    private struct MonthlyTrialModal: Identifiable {
+        let id = UUID()
+        var title: String
+        var body: String
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
+        ZStack {
+            ScrollView {
+                VStack(spacing: 12) {
                 // ── 近 7 天生活复盘 ──
                 VStack(alignment: .leading, spacing: 12) {
                     Text("近 7 天生活复盘")
@@ -1747,7 +1772,10 @@ struct InsightWebView: View {
                     if exhausted {
                         // Trial exhausted - show upgrade
                         Button {
-                            onShowMemberPricing?()
+                            monthlyTrialModal = MonthlyTrialModal(
+                                title: "免费次数已用完",
+                                body: "您的免费月度复盘次数已用完，升级会员即可解锁无限次月度/季度/年度 AI 复盘，还有更多专属权益等你体验。"
+                            )
                         } label: {
                             HStack(spacing: 6) {
                                 Text("🔒 开通会员解锁无限复盘")
@@ -1766,15 +1794,11 @@ struct InsightWebView: View {
                         .buttonStyle(.plain)
                     } else {
                         Button {
-                            withAnimation(.easeInOut(duration: 0.25)) {
-                                monthlyInsightGenerated = true
-                            }
-                            if !isMember {
-                                monthlyTrialUsed += 1
-                                UserDefaults.standard.set(monthlyTrialUsed, forKey: "monthly_trial_used_v1")
+                            Task {
+                                await generateMonthlyInsight(isMember: isMember)
                             }
                         } label: {
-                            Text("生成月度复盘")
+                            Text(homeViewModel.isGeneratingMonthlyInsight ? "正在生成月度复盘..." : "生成月度复盘")
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
@@ -1790,18 +1814,22 @@ struct InsightWebView: View {
                             .shadow(color: AppColors.accent.opacity(0.3), radius: 8, y: 4)
                     }
                     .buttonStyle(.plain)
+                    .disabled(homeViewModel.isGeneratingMonthlyInsight)
                         }
 
-                    if monthlyInsightGenerated {
-                        let blocks = homeViewModel.localMonthlyInsightBlocks()
+                    if let status = monthlyAIStatus ?? defaultMonthlyAIStatus {
+                        aiStatusPill(status)
+                    }
+
+                    if monthlyInsightGenerated, let report = monthlyReport {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(blocks.summary)
+                            Text(report.summary)
                                 .font(.system(size: 14))
                                 .foregroundStyle(AppColors.text)
-                            Text(blocks.structure)
+                            Text(report.structure)
                                 .font(.system(size: 12))
                                 .foregroundStyle(AppColors.subtext)
-                            Text(blocks.advice)
+                            Text(report.advice)
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(AppColors.text)
                         }
@@ -1935,14 +1963,188 @@ struct InsightWebView: View {
                     }
                 }
                 .glassPanel(radius: 24, padding: 20)
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+                .padding(.bottom, 120)
+                .frame(maxWidth: 430)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 4)
-            .padding(.bottom, 120)
-            .frame(maxWidth: 430)
-            .frame(maxWidth: .infinity, alignment: .center)
+            .scrollIndicators(.hidden)
+
+            if let modal = monthlyTrialModal {
+                monthlyTrialOverlay(modal)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
         }
-        .scrollIndicators(.hidden)
+        .animation(.easeInOut(duration: 0.2), value: monthlyTrialModal?.id)
+    }
+
+    private func monthlyTrialOverlay(_ modal: MonthlyTrialModal) -> some View {
+        ZStack {
+            Color.black.opacity(0.26)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    monthlyTrialModal = nil
+                }
+
+            VStack(spacing: 18) {
+                Text(modal.title)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                    .multilineTextAlignment(.center)
+
+                Text(modal.body)
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppColors.subtext)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                HStack(spacing: 14) {
+                    Button {
+                        monthlyTrialModal = nil
+                    } label: {
+                        Text("我知道了")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(AppColors.text)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        monthlyTrialModal = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                            onShowMemberPricing?()
+                        }
+                    } label: {
+                        Text("解锁无限次复盘")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(AppColors.accent.opacity(0.86), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(28)
+            .frame(maxWidth: 390)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(AppColors.panel)
+                    .background(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.white.opacity(0.66), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.14), radius: 22, x: 0, y: 10)
+            .padding(.horizontal, 28)
+        }
+    }
+
+    private var defaultMonthlyAIStatus: AIStatusPill? {
+        if homeViewModel.isGeneratingMonthlyInsight {
+            return settingsViewModel.useRemoteAI
+                ? AIStatusPill(kind: .live, text: "AI 在线，实时分析中")
+                : AIStatusPill(kind: .fallback, text: "本地兜底，稳定可用")
+        }
+        guard settingsViewModel.useRemoteAI else {
+            return AIStatusPill(kind: .fallback, text: "本地兜底，稳定可用")
+        }
+        let endpoint = settingsViewModel.aiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isDirectModelEndpoint = endpoint.isEmpty || endpoint.contains("open.bigmodel.cn")
+        if isDirectModelEndpoint && KeychainService.loadAIAPIKey().isEmpty {
+            return AIStatusPill(kind: .error, text: "本地计算，AI Key 未配置")
+        }
+        return AIStatusPill(kind: .live, text: "AI 在线，生成时会尝试实时分析")
+    }
+
+    private func aiStatusPill(_ status: AIStatusPill) -> some View {
+        let palette: (fg: Color, bg: Color, border: Color)
+        switch status.kind {
+        case .live:
+            palette = (
+                AppColors.accent.opacity(0.95),
+                AppColors.accent.opacity(0.13),
+                AppColors.accent.opacity(0.28)
+            )
+        case .fallback:
+            palette = (
+                Color(red: 128/255, green: 98/255, blue: 42/255),
+                Color(red: 255/255, green: 246/255, blue: 222/255).opacity(0.82),
+                Color(red: 228/255, green: 201/255, blue: 134/255).opacity(0.55)
+            )
+        case .error:
+            palette = (
+                Color.orange.opacity(0.88),
+                Color.orange.opacity(0.12),
+                Color.orange.opacity(0.28)
+            )
+        }
+
+        return HStack(spacing: 6) {
+            Circle()
+                .fill(palette.fg)
+                .frame(width: 8, height: 8)
+            Text(status.text)
+                .font(.system(size: 12, weight: .medium))
+        }
+        .foregroundStyle(palette.fg)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Capsule(style: .continuous).fill(palette.bg))
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(palette.border, lineWidth: 1)
+        )
+    }
+
+    private func generateMonthlyInsight(isMember: Bool) async {
+        let firstTime = !isMember && monthlyTrialUsed == 0
+        monthlyAIStatus = settingsViewModel.useRemoteAI
+            ? AIStatusPill(kind: .live, text: "AI 在线，实时分析中")
+            : AIStatusPill(kind: .fallback, text: "本地兜底，稳定可用")
+
+        let report = await homeViewModel.generateMonthlyInsight(settings: settingsViewModel.settings)
+
+        await MainActor.run {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                monthlyReport = report
+                monthlyInsightGenerated = true
+                monthlyAIStatus = aiStatus(for: report.source)
+            }
+
+            guard !isMember else { return }
+            monthlyTrialUsed += 1
+            UserDefaults.standard.set(monthlyTrialUsed, forKey: "monthly_trial_used_v1")
+            let left = max(0, trialTotal - monthlyTrialUsed)
+            monthlyTrialModal = firstTime
+                ? MonthlyTrialModal(
+                    title: "🎁 新用户福利",
+                    body: "您已获得 5 次免费月度 AI 复盘机会，本次消耗 1 次，剩余 \(left) 次。"
+                )
+                : MonthlyTrialModal(
+                    title: "月度复盘已生成",
+                    body: "本次消耗 1 次免费次数，剩余 \(left) 次。"
+                )
+        }
+    }
+
+    private func aiStatus(for source: HomeViewModel.AIInsightSource) -> AIStatusPill {
+        switch source {
+        case .live:
+            return AIStatusPill(kind: .live, text: "AI 在线，已完成实时分析")
+        case .fallback:
+            return AIStatusPill(kind: .fallback, text: "本地兜底，稳定可用")
+        case .errorFallback:
+            return AIStatusPill(kind: .error, text: "本地计算，AI 服务忙，稍后再试")
+        }
     }
 
     private func softActionButton(_ title: String, action: @escaping () -> Void) -> some View {

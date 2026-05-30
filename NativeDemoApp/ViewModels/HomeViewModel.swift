@@ -17,6 +17,7 @@ final class HomeViewModel: ObservableObject {
     @Published var selectedPeriod: Period = .month
     @Published private(set) var ocrStatus: String = ""
     @Published private(set) var isGeneratingInsight: Bool = false
+    @Published private(set) var isGeneratingMonthlyInsight: Bool = false
     @Published private(set) var insightErrorMessage: String?
     @Published private(set) var insights: [DailyInsight] = []
     @Published private(set) var items: [HomeItem] = []
@@ -32,6 +33,27 @@ final class HomeViewModel: ObservableObject {
         var text: String
         var updatedAt: Date
         var scope: String // "weekly", "monthly", "none"
+    }
+
+    enum AIInsightSource: Equatable {
+        case live
+        case fallback
+        case errorFallback
+
+        var analyticsValue: String {
+            switch self {
+            case .live: return "live"
+            case .fallback: return "local_fallback"
+            case .errorFallback: return "error_fallback"
+            }
+        }
+    }
+
+    struct MonthlyInsightReport: Equatable {
+        var summary: String
+        var structure: String
+        var advice: String
+        var source: AIInsightSource
     }
 
     private let ocrService = OCRService()
@@ -250,6 +272,74 @@ final class HomeViewModel: ObservableObject {
         return (summary, structure, advice)
     }
 
+    func generateMonthlyInsight(settings: AppSettings) async -> MonthlyInsightReport {
+        isGeneratingMonthlyInsight = true
+        defer { isGeneratingMonthlyInsight = false }
+
+        let local = localMonthlyInsightBlocks()
+        var report = MonthlyInsightReport(
+            summary: local.summary,
+            structure: local.structure,
+            advice: local.advice,
+            source: .fallback
+        )
+
+        if settings.useRemoteAI {
+            let apiKey = KeychainService.loadAIAPIKey()
+            let endpoint = settings.aiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+            let isDirectModelEndpoint = endpoint.isEmpty || endpoint.contains("open.bigmodel.cn")
+            if AIUsageLimiter.canUseRemoteAI(limitPerMonth: settings.remoteAIMonthlyLimit),
+               !(isDirectModelEndpoint && apiKey.isEmpty) {
+                let monthItems = filteredItems(in: .month).filter { $0.amount > 0 }
+                let grouped = Dictionary(grouping: monthItems, by: \.category)
+                    .map { key, value in
+                        (category: key, amount: value.reduce(0) { $0 + $1.amount })
+                    }
+                    .sorted { $0.amount > $1.amount }
+                let monthKey = Self.monthKey(for: .now)
+                let snapshot = AISnapshot(
+                    date: monthKey,
+                    todayTotal: todayExpenseTotal,
+                    weekAverage: weeklyAverageExpense(),
+                    monthTotal: monthExpenseTotal,
+                    topCategories: grouped.prefix(3).map { $0.category.rawValue }
+                )
+                do {
+                    let payload = try await aiReportService.generateInsight(
+                        snapshot: snapshot,
+                        endpoint: endpoint,
+                        apiKey: apiKey,
+                        tone: settings.aiTone,
+                        model: settings.aiModel,
+                        feature: "monthly"
+                    )
+                    report = MonthlyInsightReport(
+                        summary: payload.summary,
+                        structure: payload.action,
+                        advice: payload.encourage,
+                        source: .live
+                    )
+                    _ = AIUsageLimiter.consumeOnce(limitPerMonth: settings.remoteAIMonthlyLimit)
+                } catch {
+                    insightErrorMessage = error.localizedDescription
+                    report.source = .errorFallback
+                }
+            } else {
+                report.source = .errorFallback
+            }
+        }
+
+        analyticsService.track(
+            "ai_monthly_generated",
+            props: [
+                "mode": report.source.analyticsValue,
+                "items": String(filteredItems(in: .month).count),
+            ]
+        )
+        triggerMemberNudge(scene: .aiMonthly)
+        return report
+    }
+
     private func topCategoryLabel(in period: Period) -> String {
         let target = filteredItems(in: period)
         let grouped = Dictionary(grouping: target, by: \.category)
@@ -358,7 +448,8 @@ final class HomeViewModel: ObservableObject {
                     endpoint: settings.aiEndpoint,
                     apiKey: apiKey,
                     tone: settings.aiTone,
-                    model: settings.aiModel
+                    model: settings.aiModel,
+                    feature: "daily"
                 )
                 let remoteInsight = DailyInsight(
                     dayKey: key,
@@ -373,7 +464,7 @@ final class HomeViewModel: ObservableObject {
                 isGeneratingInsight = false
                 return
             } catch {
-                insightErrorMessage = "远程 AI 不可用，已回退本地建议。"
+                insightErrorMessage = "远程 AI 不可用，已回退本地建议。\(error.localizedDescription)"
             }
             }
         }
@@ -562,6 +653,12 @@ final class HomeViewModel: ObservableObject {
     private nonisolated static func dayKey(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    private nonisolated static func monthKey(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM"
         return formatter.string(from: date)
     }
 

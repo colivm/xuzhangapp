@@ -42,6 +42,8 @@ struct AppSettings: Codable, Equatable {
     var appearance: Appearance
     var biometricLockEnabled: Bool
     var syncEnabled: Bool
+    var petCompanionEnabled: Bool
+    var weatherCompanionEnabled: Bool
     var aiTone: AITone
     var useRemoteAI: Bool
     var aiEndpoint: String
@@ -60,6 +62,8 @@ struct AppSettings: Codable, Equatable {
         appearance: .system,
         biometricLockEnabled: false,
         syncEnabled: false,
+        petCompanionEnabled: true,
+        weatherCompanionEnabled: true,
         aiTone: .gentle,
         useRemoteAI: false,
         aiEndpoint: "",
@@ -78,6 +82,8 @@ extension AppSettings {
         case appearance
         case biometricLockEnabled
         case syncEnabled
+        case petCompanionEnabled
+        case weatherCompanionEnabled
         case aiTone
         case useRemoteAI
         case aiEndpoint
@@ -95,6 +101,8 @@ extension AppSettings {
         appearance = try container.decodeIfPresent(Appearance.self, forKey: .appearance) ?? .system
         biometricLockEnabled = try container.decodeIfPresent(Bool.self, forKey: .biometricLockEnabled) ?? false
         syncEnabled = try container.decodeIfPresent(Bool.self, forKey: .syncEnabled) ?? false
+        petCompanionEnabled = try container.decodeIfPresent(Bool.self, forKey: .petCompanionEnabled) ?? true
+        weatherCompanionEnabled = try container.decodeIfPresent(Bool.self, forKey: .weatherCompanionEnabled) ?? true
         aiTone = try container.decodeIfPresent(AITone.self, forKey: .aiTone) ?? .gentle
         useRemoteAI = try container.decodeIfPresent(Bool.self, forKey: .useRemoteAI) ?? false
         aiEndpoint = try container.decodeIfPresent(String.self, forKey: .aiEndpoint) ?? ""

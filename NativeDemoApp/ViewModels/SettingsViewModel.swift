@@ -57,6 +57,22 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    var petCompanionEnabled: Bool {
+        get { settings.petCompanionEnabled }
+        set {
+            settings.petCompanionEnabled = newValue
+            persist()
+        }
+    }
+
+    var weatherCompanionEnabled: Bool {
+        get { settings.weatherCompanionEnabled }
+        set {
+            settings.weatherCompanionEnabled = newValue
+            persist()
+        }
+    }
+
     var aiTone: AppSettings.AITone {
         get { settings.aiTone }
         set {

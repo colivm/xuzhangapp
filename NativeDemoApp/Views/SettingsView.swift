@@ -3,15 +3,13 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @Binding var showMemberPricing: Bool
-    @State private var showPetCompanion = true
-    @State private var showWeatherCompanion = true
+    @State private var showAccountSheet = false
 
     var body: some View {
-        ScrollViewReader { proxy in
         ScrollView {
             VStack(spacing: 14) {
                 // ── Account Entry Panel ──
-                accountEntryPanel(proxy: proxy)
+                accountEntryPanel
 
                 // ── Main Settings Panel ──
                 mainSettingsPanel
@@ -19,11 +17,13 @@ struct SettingsView: View {
                 // ── Appearance Panel ──
                 appearancePanel
 
-                // ── Cloud Account Panel (iOS native auth) ──
-                cloudAccountPanel.id("cloudAccount")
-
                 // ── AI Settings Panel ──
                 aiSettingsPanel
+
+#if DEBUG
+                // ── Developer Settings Panel ──
+                developerSettingsPanel
+#endif
 
                 // ── Data & Privacy ──
                 privacyNote
@@ -35,15 +35,19 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .scrollIndicators(.hidden)
+        .sheet(isPresented: $showAccountSheet) {
+            accountSheet
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
     }
 
     // MARK: - Account Entry
 
-    private func accountEntryPanel(proxy: ScrollViewProxy) -> some View {
+    private var accountEntryPanel: some View {
         VStack(spacing: 0) {
             Button {
-                withAnimation { proxy.scrollTo("cloudAccount", anchor: UnitPoint.top) }
+                showAccountSheet = true
             } label: {
                 HStack(spacing: 12) {
                     ZStack {
@@ -54,7 +58,7 @@ struct SettingsView: View {
                             .font(.system(size: 22))
                     }
                     Text(settingsViewModel.hasCloudSession
-                         ? "你好，\(settingsViewModel.cloudUserId.prefix(8))"
+                         ? "\(settingsViewModel.displayName) > 管理账号与会员。"
                          : "点击登录，解锁云备份与会员权益 >")
                         .font(.system(size: 14))
                         .foregroundStyle(AppColors.text.opacity(0.9))
@@ -112,11 +116,17 @@ struct SettingsView: View {
             settingHelper("默认本地存储，不强制登录。")
 
             // Pet companion
-            settingToggle("开启宠物陪伴", isOn: $showPetCompanion)
+            settingToggle("开启宠物陪伴", isOn: Binding(
+                get: { settingsViewModel.petCompanionEnabled },
+                set: { settingsViewModel.petCompanionEnabled = $0 }
+            ))
             settingHelper("关闭后首页不显示宠物助手。")
 
             // Weather companion
-            settingToggle("允许天气场景暖心互动 🌤️", isOn: $showWeatherCompanion)
+            settingToggle("允许天气场景暖心互动 🌤️", isOn: Binding(
+                get: { settingsViewModel.weatherCompanionEnabled },
+                set: { settingsViewModel.weatherCompanionEnabled = $0 }
+            ))
             settingHelper("开启这个，我就能知道今天是晴是雨，陪你说更懂你的悄悄话啦！")
 
             // Reset guide
@@ -154,134 +164,153 @@ struct SettingsView: View {
         .webCardBackground()
     }
 
-    // MARK: - Cloud Account (from original iOS)
+    // MARK: - Account Sheet
 
-    private var cloudAccountPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("云端账号（手机号）")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(AppColors.text)
-
-            settingField(label: "后端根地址") {
-                TextField("http://127.0.0.1:8790", text: Binding(
-                    get: { settingsViewModel.backendBaseURL },
-                    set: { settingsViewModel.backendBaseURL = $0 }
-                ))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            }
-            settingHelper("模拟器连本机：http://127.0.0.1:8790。真机请填电脑局域网 IP。")
-
-            if settingsViewModel.hasCloudSession {
-                HStack {
-                    Text("用户 ID")
-                        .font(.system(size: 14))
-                        .foregroundStyle(AppColors.subtext)
-                    Spacer()
-                    Text(settingsViewModel.cloudUserId.isEmpty ? "—" : settingsViewModel.cloudUserId)
-                        .font(.system(size: 14))
+    private var accountSheet: some View {
+        ZStack {
+            AppColors.bg.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("账号与会员")
+                        .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(AppColors.text)
-                }
-                .padding(.vertical, 4)
 
-                HStack {
-                    Text("会员档位")
-                        .font(.system(size: 14))
-                        .foregroundStyle(AppColors.subtext)
-                    Spacer()
-                    Text(settingsViewModel.memberTier)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(AppColors.text)
-                }
+                    sectionBody(settingsViewModel.hasCloudSession
+                                ? "管理你的云端登录状态和会员权益。"
+                                : "登录后可同步会员状态，默认本地功能仍可直接使用。")
 
-                Button {
-                    showMemberPricing = true
-                } label: {
-                    HStack {
-                        Text("✨ 查看会员方案与权益")
-                            .font(.system(size: 14, weight: .medium))
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .bold))
+                    accountSheetContent
+
+                    if let msg = settingsViewModel.authMessage {
+                        Text(msg)
+                            .font(.system(size: 12))
                             .foregroundStyle(AppColors.subtext)
                     }
-                    .foregroundStyle(AppColors.text.opacity(0.88))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [AppColors.lockGold.opacity(0.12), Color.white.opacity(0.06)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(AppColors.lockGold.opacity(0.25), lineWidth: 1)
-                    )
                 }
-                .buttonStyle(.plain)
+                .webCardPadding()
+                .webCardBackground()
+                .padding(16)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
 
-                webButton("刷新会员状态") {
-                    Task { await settingsViewModel.refreshMemberFromServer() }
-                }
+    @ViewBuilder
+    private var accountSheetContent: some View {
+        if settingsViewModel.hasCloudSession {
+            HStack {
+                Text("账号状态")
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer()
+                Text("已登录")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppColors.text)
+            }
+            .padding(.vertical, 4)
 
-                Button("退出登录", role: .destructive) {
-                    settingsViewModel.logoutCloud()
+            HStack {
+                Text("显示名称")
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer()
+                Text(settingsViewModel.displayName)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppColors.text)
+            }
+
+            HStack {
+                Text("会员档位")
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer()
+                Text(settingsViewModel.memberTier)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppColors.text)
+            }
+
+            Button {
+                showAccountSheet = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    showMemberPricing = true
                 }
-                .font(.system(size: 14))
-                .foregroundStyle(.red.opacity(0.8))
+            } label: {
+                HStack {
+                    Text("✨ 查看会员方案与权益")
+                        .font(.system(size: 14, weight: .medium))
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(AppColors.subtext)
+                }
+                .foregroundStyle(AppColors.text.opacity(0.88))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 11)
+                .padding(.vertical, 12)
+                .padding(.horizontal, 14)
                 .background(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.red.opacity(0.2), lineWidth: 1)
+                        .fill(
+                            LinearGradient(
+                                colors: [AppColors.lockGold.opacity(0.12), Color.white.opacity(0.06)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
                 )
-            } else {
-                settingField(label: "手机号") {
-                    TextField("手机号", text: $settingsViewModel.loginPhone)
-                        .keyboardType(.phonePad)
-                }
-
-                settingField(label: "验证码") {
-                    TextField("验证码", text: $settingsViewModel.loginCode)
-                        .keyboardType(.numberPad)
-                }
-
-                webButton("发送验证码") {
-                    Task { await settingsViewModel.sendSMSLoginCode() }
-                }
-
-                Button("验证并登录") {
-                    Task { await settingsViewModel.verifySMSLogin() }
-                }
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(
-                    LinearGradient(
-                        colors: [AppColors.accent.opacity(0.92), AppColors.accent],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(AppColors.lockGold.opacity(0.25), lineWidth: 1)
                 )
-                .shadow(color: AppColors.accent.opacity(0.25), radius: 8, y: 4)
+            }
+            .buttonStyle(.plain)
+
+            webButton("刷新会员状态") {
+                Task { await settingsViewModel.refreshMemberFromServer() }
             }
 
-            if let msg = settingsViewModel.authMessage {
-                Text(msg)
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext)
+            Button("退出登录", role: .destructive) {
+                settingsViewModel.logoutCloud()
             }
+            .font(.system(size: 14))
+            .foregroundStyle(.red.opacity(0.8))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.red.opacity(0.2), lineWidth: 1)
+            )
+        } else {
+            settingField(label: "手机号") {
+                TextField("手机号", text: $settingsViewModel.loginPhone)
+                    .keyboardType(.phonePad)
+            }
+
+            settingField(label: "验证码") {
+                TextField("验证码", text: $settingsViewModel.loginCode)
+                    .keyboardType(.numberPad)
+            }
+
+            webButton("发送验证码") {
+                Task { await settingsViewModel.sendSMSLoginCode() }
+            }
+
+            Button("验证并登录") {
+                Task { await settingsViewModel.verifySMSLogin() }
+            }
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                LinearGradient(
+                    colors: [AppColors.accent.opacity(0.92), AppColors.accent],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            )
+            .shadow(color: AppColors.accent.opacity(0.25), radius: 8, y: 4)
         }
-        .webCardPadding()
-        .webCardBackground()
     }
 
     // MARK: - AI Settings
@@ -307,38 +336,65 @@ struct SettingsView: View {
                 }
             }
 
-            // AI Endpoint
-            settingField(label: "AI 接口地址（POST）") {
-                TextField("留空默认智谱", text: Binding(
-                    get: { settingsViewModel.aiEndpoint },
-                    set: { settingsViewModel.aiEndpoint = $0 }
-                ))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            }
-            settingHelper("留空默认使用智谱官方地址。")
-
-            // API Key
-            settingField(label: "AI API Key（可选）") {
-                SecureField("API Key 或代理口令", text: Binding(
-                    get: { settingsViewModel.aiAPIKey },
-                    set: { settingsViewModel.aiAPIKey = $0 }
-                ))
-            }
-            settingHelper("直连智谱时填 API Key；走代理时可填代理口令。")
-
-            // Model
-            settingField(label: "模型") {
-                TextField("doubao-seed-1-6-flash-250828", text: Binding(
-                    get: { settingsViewModel.aiModel },
-                    set: { settingsViewModel.aiModel = $0 }
-                ))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            }
         }
         .webCardPadding()
         .webCardBackground()
+    }
+
+    // MARK: - Developer Settings
+
+    private var developerSettingsPanel: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 12) {
+                settingField(label: "后端根地址") {
+                    TextField("http://127.0.0.1:8790", text: Binding(
+                        get: { settingsViewModel.backendBaseURL },
+                        set: { settingsViewModel.backendBaseURL = $0 }
+                    ))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                }
+                settingHelper("模拟器连本机：http://127.0.0.1:8790。真机请填电脑局域网 IP。")
+
+                // AI Endpoint
+                settingField(label: "AI 接口地址（POST）") {
+                    TextField("留空默认智谱", text: Binding(
+                        get: { settingsViewModel.aiEndpoint },
+                        set: { settingsViewModel.aiEndpoint = $0 }
+                    ))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                }
+                settingHelper("留空默认使用智谱官方地址。")
+
+                // API Key
+                settingField(label: "AI API Key（可选）") {
+                    SecureField("API Key 或代理口令", text: Binding(
+                        get: { settingsViewModel.aiAPIKey },
+                        set: { settingsViewModel.aiAPIKey = $0 }
+                    ))
+                }
+                settingHelper("直连智谱时填 API Key；走代理时可填代理口令。")
+
+                // Model
+                settingField(label: "模型") {
+                    TextField("doubao-seed-1-6-flash-250828", text: Binding(
+                        get: { settingsViewModel.aiModel },
+                        set: { settingsViewModel.aiModel = $0 }
+                    ))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                }
+            }
+            .padding(.top, 12)
+        } label: {
+            Text("开发调试")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(AppColors.text)
+        }
+        .webCardPadding()
+        .webCardBackground()
+        .tint(AppColors.subtext)
     }
 
     // MARK: - Privacy Note
@@ -477,13 +533,17 @@ private extension View {
         self
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(.thinMaterial)
+                    .fill(AppColors.panel)
+                    .background(
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white.opacity(0.22), Color.white.opacity(0.04)],
+                            colors: [Color.white.opacity(0.16), Color.white.opacity(0.03)],
                             startPoint: UnitPoint(x: 0.3, y: 0),
                             endPoint: UnitPoint(x: 0.7, y: 1)
                         )
@@ -492,10 +552,10 @@ private extension View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(AppColors.line.opacity(0.73), lineWidth: 1)
+                    .stroke(AppColors.line.opacity(0.88), lineWidth: 1)
                     .allowsHitTesting(false)
             )
-            .shadow(color: Color.black.opacity(0.04), radius: 16, x: 0, y: 4)
+            .shadow(color: Color(red: 117/255, green: 131/255, blue: 156/255).opacity(0.11), radius: 22, x: 0, y: 8)
     }
 
     func webCardPadding() -> some View {
