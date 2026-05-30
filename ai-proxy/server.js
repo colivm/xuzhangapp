@@ -2,7 +2,7 @@ const https = require("https");
 const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
-require("dotenv").config();
+require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 
 const app = express();
 app.use(cors());
