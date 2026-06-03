@@ -29,6 +29,7 @@
 		A100002B0000000000000001 /* PlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100002C0000000000000001 /* PlaybackService.swift */; };
 		A100002D0000000000000001 /* MemberFlowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100002E0000000000000001 /* MemberFlowService.swift */; };
 		A100002F0000000000000001 /* MemberPricingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000390000000000000001 /* MemberPricingView.swift */; };
+		A100003B0000000000000001 /* SummaryPlaybackSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100003A0000000000000001 /* SummaryPlaybackSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -57,6 +58,7 @@
 		A100002C0000000000000001 /* PlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackService.swift; sourceTree = "<group>"; };
 		A100002E0000000000000001 /* MemberFlowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberFlowService.swift; sourceTree = "<group>"; };
 		A10000390000000000000001 /* MemberPricingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberPricingView.swift; sourceTree = "<group>"; };
+		A100003A0000000000000001 /* SummaryPlaybackSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryPlaybackSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -144,6 +146,7 @@
 				A10000180000000000000001 /* HomeView.swift */,
 				A10000190000000000000001 /* SettingsView.swift */,
 				A10000390000000000000001 /* MemberPricingView.swift */,
+				A100003A0000000000000001 /* SummaryPlaybackSheet.swift */,
 				A10000380000000000000001 /* Components */,
 			);
 			path = Views;
@@ -255,6 +258,7 @@
 				A100002B0000000000000001 /* PlaybackService.swift in Sources */,
 				A100002D0000000000000001 /* MemberFlowService.swift in Sources */,
 				A100002F0000000000000001 /* MemberPricingView.swift in Sources */,
+				A100003B0000000000000001 /* SummaryPlaybackSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

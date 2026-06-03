@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>轻账日记 Web 预览</title>
+    <title>叙帐 Web 预览</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -364,16 +364,16 @@
             <div class="account-center-head">
               <div id="accountCenterAvatar" class="account-avatar" aria-hidden="true">🐱</div>
               <p id="accountPetNameFeedback" class="account-pet-name-feedback hidden"></p>
-              <p id="accountCenterName" class="account-title">你好呀，轻账用户</p>
+              <p id="accountCenterName" class="account-title">你好呀，叙帐用户</p>
               <p id="accountCenterState" class="muted account-subtitle">当前状态：免费版</p>
             </div>
             <section class="account-benefits">
               <h4 id="accountCenterBenefitsTitle">✨ 升级会员，解锁更多温柔陪伴</h4>
               <p id="accountCenterBenefitsLead" class="account-benefits-lead muted hidden"></p>
               <ul id="accountCenterBenefitsList">
-                <li>无限次 AI 复盘，更懂你的消费节奏</li>
-                <li>天气场景暖心互动，小宠物陪你说悄悄话</li>
-                <li>云端账单备份，换机不丢记录</li>
+                <li>周/月生活切片无限回看</li>
+                <li>场景备注包 + 宠物专属昵称</li>
+                <li>OCR 智能识票不限次</li>
               </ul>
               <button id="accountUpgradeEntryBtn" type="button" class="primary-btn full-btn">查看会员方案</button>
             </section>
@@ -401,33 +401,36 @@
               <button id="accountMemberBenefitsToggle" type="button" class="account-fold-toggle">查看会员权益详情</button>
               <div id="accountMemberBenefitsBody" class="member-fold-body hidden">
               <ul id="accountMemberBenefitsList" class="member-benefits-list">
-                <li><strong>📊 无限次 AI 复盘，更懂你的消费节奏</strong><span>不限次数复盘，随时回顾账单</span></li>
-                <li><strong>🌤️ 解锁天气 / 季节场景互动，小宠物陪你说悄悄话</strong><span>开启后，小宠物会根据天气、时间，给你更贴合当下的温柔陪伴语</span></li>
-                <li><strong>☁️ 云端账单备份，换机不丢记录</strong><span>登录账号后，账单数据可安全同步云端，换手机也不怕丢失</span></li>
-                <li><strong>🚫 告别所有广告，享受纯净记账体验</strong><span>全程无任何弹窗广告，记账更专注、更安心</span></li>
-                <li><strong>📝 宠物专属昵称 + 智能习惯备注</strong><span>自定义宠物名字全覆盖，结合消费偏好自动生成专属温柔备注</span></li>
+                <li><strong>🎬 周/月生活切片无限回看</strong><span>统计页「本周生活切片」「本月生活章」不限次数播放；用章节卡片看懂这段时间花了什么、节奏如何。核心卖点。</span></li>
+                <li><strong>📝 场景备注包 + 宠物专属昵称</strong><span>通勤/吃货/宠物/旅行四包一键备注；自定义昵称（2～6 字）贯穿切片与记账旁白。</span></li>
+                <li><strong>📷 OCR 智能识票不限次</strong><span>拍照导入账单；免费用户每日 3 次尝鲜，会员不限（可设软上限防滥用，商店仍写「不限」）。</span></li>
+                <li><strong>☁️ 云端备份 + 纯净无广告</strong><span>登录后账单可同步云端、换机不丢；全程无营销弹窗。天气/季节暖心旁白加强随会员模板更完整。</span></li>
+                <li><strong>💬 小 AI 说 · 播后可选深聊（不限次）</strong><span>生活切片讲完后，若想多一句交谈式建议再用；含季/年深度复盘（需 ai-proxy 会员 JWT）。增强项，非首图卖点。</span></li>
               </ul>
               </div>
             </section>
             <section class="account-pricing">
               <button id="buyYearlyBtn" type="button" class="primary-btn full-btn yearly-plan featured-plan">
                 <span class="featured-badge">✨ 推荐</span>
-                年度会员：¥98 / 年
+                年度会员：¥88 / 年
                 <small>平均每天不到 1 毛钱，最划算</small>
               </button>
               <button id="accountMorePlansToggle" type="button" class="full-btn account-more-plans-btn">查看更多套餐</button>
               <div id="accountMorePlansBody" class="hidden">
                 <button id="buyMonthlyBtn" type="button" class="full-btn">
-                  月度会员：¥12 / 月
-                  <small>按月订阅，随时可取消</small>
+                  月度会员：¥9 / 月
+                  <small>首月推介 ¥6，按月订阅，随时可取消</small>
                 </button>
                 <button id="buyLifetimeBtn" type="button" class="full-btn">
-                  永久会员：¥198
+                  永久会员：¥168
                   <small>一次解锁，终身陪伴</small>
                 </button>
               </div>
               <p class="muted account-login-tip">订阅可随时在 App Store / 账户设置中取消，不会自动扣费。</p>
             </section>
+            <p class="muted account-privacy-tip">
+              免费体验：本周生活切片每自然周 1 次 · 本月生活章终生 3 次 · OCR 每日 3 次 · 今日流水回放每日 1 次。开通会员后上述回访与识票不限。
+            </p>
             <p class="muted account-privacy-tip">
               你的账单数据始终保存在本地，会员权益仅用于解锁功能与服务。我们不会将你的数据分享给第三方，也不会发送营销骚扰信息。
             </p>

@@ -20,11 +20,6 @@ struct SettingsView: View {
                 // ── AI Settings Panel ──
                 aiSettingsPanel
 
-#if DEBUG
-                // ── Developer Settings Panel ──
-                developerSettingsPanel
-#endif
-
                 // ── Data & Privacy ──
                 privacyNote
             }
@@ -219,6 +214,7 @@ struct SettingsView: View {
                     .foregroundStyle(AppColors.text)
             }
 
+            // Debug/status display until StoreKit purchase + server receipt validation is wired.
             HStack {
                 Text("会员档位")
                     .font(.system(size: 14))
@@ -339,62 +335,6 @@ struct SettingsView: View {
         }
         .webCardPadding()
         .webCardBackground()
-    }
-
-    // MARK: - Developer Settings
-
-    private var developerSettingsPanel: some View {
-        DisclosureGroup {
-            VStack(alignment: .leading, spacing: 12) {
-                settingField(label: "后端根地址") {
-                    TextField("http://127.0.0.1:8790", text: Binding(
-                        get: { settingsViewModel.backendBaseURL },
-                        set: { settingsViewModel.backendBaseURL = $0 }
-                    ))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                }
-                settingHelper("模拟器连本机：http://127.0.0.1:8790。真机请填电脑局域网 IP。")
-
-                // AI Endpoint
-                settingField(label: "AI 接口地址（POST）") {
-                    TextField("留空默认智谱", text: Binding(
-                        get: { settingsViewModel.aiEndpoint },
-                        set: { settingsViewModel.aiEndpoint = $0 }
-                    ))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                }
-                settingHelper("留空默认使用智谱官方地址。")
-
-                // API Key
-                settingField(label: "AI API Key（可选）") {
-                    SecureField("API Key 或代理口令", text: Binding(
-                        get: { settingsViewModel.aiAPIKey },
-                        set: { settingsViewModel.aiAPIKey = $0 }
-                    ))
-                }
-                settingHelper("直连智谱时填 API Key；走代理时可填代理口令。")
-
-                // Model
-                settingField(label: "模型") {
-                    TextField("doubao-seed-1-6-flash-250828", text: Binding(
-                        get: { settingsViewModel.aiModel },
-                        set: { settingsViewModel.aiModel = $0 }
-                    ))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                }
-            }
-            .padding(.top, 12)
-        } label: {
-            Text("开发调试")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(AppColors.text)
-        }
-        .webCardPadding()
-        .webCardBackground()
-        .tint(AppColors.subtext)
     }
 
     // MARK: - Privacy Note

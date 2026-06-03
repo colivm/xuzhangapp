@@ -2,6 +2,9 @@ import Foundation
 import SwiftUI
 
 struct AppSettings: Codable, Equatable {
+    static let productionBackendBaseURL = "https://api.xuzhangapp.com"
+    static let productionAIEndpoint = "https://api.xuzhangapp.com/v1/ai/insight/daily"
+
     enum Appearance: String, Codable, CaseIterable, Identifiable {
         case system
         case light
@@ -49,15 +52,20 @@ struct AppSettings: Codable, Equatable {
     var aiEndpoint: String
     var aiModel: String
     var remoteAIMonthlyLimit: Int
-    /// 轻账后端根地址，例如 `http://127.0.0.1:8790`（模拟器连本机）或局域网 IP。
+    /// 叙帐后端根地址。生产环境固定走 `productionBackendBaseURL`。
     var backendBaseURL: String
     /// 云端用户 ID，登录成功后由后端返回；未登录为空。
     var cloudUserId: String
     /// 会员档位：free / monthly / yearly / lifetime（与后端一致）。
     var memberTier: String
 
+    mutating func applyProductionEndpoints() {
+        backendBaseURL = Self.productionBackendBaseURL
+        aiEndpoint = Self.productionAIEndpoint
+    }
+
     static let `default` = AppSettings(
-        displayName: "SwiftUI 用户",
+        displayName: "叙帐用户",
         notificationsEnabled: true,
         appearance: .system,
         biometricLockEnabled: false,
@@ -66,10 +74,10 @@ struct AppSettings: Codable, Equatable {
         weatherCompanionEnabled: true,
         aiTone: .gentle,
         useRemoteAI: false,
-        aiEndpoint: "",
+        aiEndpoint: productionAIEndpoint,
         aiModel: "doubao-seed-1-6-flash-250828",
         remoteAIMonthlyLimit: 120,
-        backendBaseURL: "http://127.0.0.1:8790",
+        backendBaseURL: productionBackendBaseURL,
         cloudUserId: "",
         memberTier: "free"
     )
@@ -96,7 +104,7 @@ extension AppSettings {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? "SwiftUI 用户"
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? "叙帐用户"
         notificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
         appearance = try container.decodeIfPresent(Appearance.self, forKey: .appearance) ?? .system
         biometricLockEnabled = try container.decodeIfPresent(Bool.self, forKey: .biometricLockEnabled) ?? false
@@ -105,12 +113,13 @@ extension AppSettings {
         weatherCompanionEnabled = try container.decodeIfPresent(Bool.self, forKey: .weatherCompanionEnabled) ?? true
         aiTone = try container.decodeIfPresent(AITone.self, forKey: .aiTone) ?? .gentle
         useRemoteAI = try container.decodeIfPresent(Bool.self, forKey: .useRemoteAI) ?? false
-        aiEndpoint = try container.decodeIfPresent(String.self, forKey: .aiEndpoint) ?? ""
+        aiEndpoint = try container.decodeIfPresent(String.self, forKey: .aiEndpoint) ?? Self.productionAIEndpoint
         aiModel = try container.decodeIfPresent(String.self, forKey: .aiModel) ?? "doubao-seed-1-6-flash-250828"
         remoteAIMonthlyLimit = try container.decodeIfPresent(Int.self, forKey: .remoteAIMonthlyLimit) ?? 120
-        backendBaseURL = try container.decodeIfPresent(String.self, forKey: .backendBaseURL) ?? "http://127.0.0.1:8790"
+        backendBaseURL = try container.decodeIfPresent(String.self, forKey: .backendBaseURL) ?? Self.productionBackendBaseURL
         cloudUserId = try container.decodeIfPresent(String.self, forKey: .cloudUserId) ?? ""
         memberTier = try container.decodeIfPresent(String.self, forKey: .memberTier) ?? "free"
+        applyProductionEndpoints()
     }
 }
 

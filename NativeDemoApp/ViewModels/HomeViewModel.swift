@@ -27,7 +27,38 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var activeMemberNudgeScene: MemberFlowScene?
     @Published private(set) var latestPlayback: PlaybackSnapshot?
     @Published private(set) var latestActionCard: ActionCardData?
+    @Published private(set) var activeRouteGuidance: PlaybackRouteGuidance?
     @Published var petMessage: String? = nil
+
+    enum PlaybackRouteGuidance: String, Identifiable {
+        case firstRecordTodayPlayback
+        case weekSliceReady
+        case fiveRecordsNeverPlayed
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .firstRecordTodayPlayback:
+                return "用 10 秒叙一下今天"
+            case .weekSliceReady:
+                return "本周生活切片可播放"
+            case .fiveRecordsNeverPlayed:
+                return "可以讲这周的故事了"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .firstRecordTodayPlayback:
+                return "第一笔已经记好，听一遍今日生活回放。"
+            case .weekSliceReady:
+                return "本周已经有 3 笔以上记录，去看看花听一遍。"
+            case .fiveRecordsNeverPlayed:
+                return "已记 5 笔以上，还没完整听过周切片。"
+            }
+        }
+    }
 
     struct ActionCardData: Codable, Equatable {
         var text: String
@@ -62,6 +93,8 @@ final class HomeViewModel: ObservableObject {
     private let nudgePolicyService = MemberNudgePolicyService()
     private let playbackService = PlaybackService()
     private let memberFlowService = MemberFlowService()
+    private let routeQuotaStore = SummaryPlaybackQuotaStore()
+    private var didEmitRouteGuidanceThisSession = false
 
     init() {
         items = LocalStore.loadHomeItems().sorted { $0.createdAt > $1.createdAt }
@@ -82,10 +115,12 @@ final class HomeViewModel: ObservableObject {
         }
         analyticsService.track("app_open", props: ["items": String(items.count)])
         refreshTodayPlayback()
+        refreshRouteGuidanceIfNeeded()
     }
 
     func addManualRecord() {
         guard let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0 else { return }
+        let wasEmpty = items.isEmpty
         let trimmed = inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = trimmed.isEmpty ? "\(selectedCategory.rawValue)消费" : trimmed
 
@@ -109,6 +144,11 @@ final class HomeViewModel: ObservableObject {
             ]
         )
         refreshTodayPlayback()
+        if wasEmpty {
+            emitRouteGuidance(.firstRecordTodayPlayback)
+        } else {
+            refreshRouteGuidanceIfNeeded()
+        }
         // Trigger pet message matching web petCopy.recordSaved
         let msgs = [
             "记下来的每一笔，都是你的掌控感呀！小猫咪为你点赞～",
@@ -274,6 +314,7 @@ final class HomeViewModel: ObservableObject {
 
     func generateMonthlyInsight(settings: AppSettings) async -> MonthlyInsightReport {
         isGeneratingMonthlyInsight = true
+        insightErrorMessage = nil
         defer { isGeneratingMonthlyInsight = false }
 
         let local = localMonthlyInsightBlocks()
@@ -325,6 +366,9 @@ final class HomeViewModel: ObservableObject {
                     report.source = .errorFallback
                 }
             } else {
+                insightErrorMessage = !AIUsageLimiter.canUseRemoteAI(limitPerMonth: settings.remoteAIMonthlyLimit)
+                    ? "本月远程 AI 配额已达上限。"
+                    : "直连模型需要 API Key，已回退本地建议。"
                 report.source = .errorFallback
             }
         }
@@ -540,8 +584,40 @@ final class HomeViewModel: ObservableObject {
         syncStatusMessage = "已为你打开会员路径（演示）：请到设置页完成开通。"
     }
 
+    func consumeRouteGuidance(_ guidance: PlaybackRouteGuidance? = nil) {
+        guard let activeRouteGuidance else { return }
+        if let guidance, guidance != activeRouteGuidance { return }
+        self.activeRouteGuidance = nil
+    }
+
+    func markSummaryPlaybackCompleted(_ range: SummaryPlaybackRange) {
+        if range == .week {
+            consumeRouteGuidance(.weekSliceReady)
+            consumeRouteGuidance(.fiveRecordsNeverPlayed)
+        }
+    }
+
     private func refreshTodayPlayback() {
         latestPlayback = playbackService.buildTodayPlayback(from: items)
+    }
+
+    private func refreshRouteGuidanceIfNeeded() {
+        guard !didEmitRouteGuidanceThisSession, activeRouteGuidance == nil else { return }
+        let weekCount = items.filter {
+            Calendar.current.isDate($0.createdAt, equalTo: .now, toGranularity: .weekOfYear)
+        }.count
+        if weekCount >= 3 && routeQuotaStore.weekRemaining(isMember: false) > 0 {
+            emitRouteGuidance(.weekSliceReady)
+        } else if items.count >= 5 && !routeQuotaStore.hasCompletedWeekPlaybackEver() {
+            emitRouteGuidance(.fiveRecordsNeverPlayed)
+        }
+    }
+
+    private func emitRouteGuidance(_ guidance: PlaybackRouteGuidance) {
+        guard !didEmitRouteGuidanceThisSession else { return }
+        activeRouteGuidance = guidance
+        didEmitRouteGuidanceThisSession = true
+        analyticsService.track("route_guidance_shown", props: ["type": guidance.rawValue])
     }
 
     func regenerateTodayInsight(userName: String, settings: AppSettings) async {
@@ -553,7 +629,7 @@ final class HomeViewModel: ObservableObject {
     nonisolated static func promptTemplate(todayTotal: Double, weeklyAverage: Double, monthlyTotal: Double, topCategories: String) -> String {
         """
         [System]
-        你是“轻账日记”的温和消费复盘助手。请根据消费聚合数据，输出简短复盘和一条可执行建议，不说教、不批判、不提供投资买卖建议。
+        你是“叙帐”的温和消费复盘助手。请根据消费聚合数据，输出简短复盘和一条可执行建议，不说教、不批判、不提供投资买卖建议。
 
         [User]
         日期：\(dayKey(for: .now))

@@ -30,7 +30,7 @@ enum AuthServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "后端地址无效，请检查设置里的「后端根地址」。"
+            return "后端服务地址配置异常。"
         case .badStatus(let code, let body):
             return "请求失败 (\(code))：\(body)"
         case .decodeFailed:

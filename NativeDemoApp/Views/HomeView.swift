@@ -3,13 +3,16 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     var onQuickRecord: () -> Void = {}
+    var onNavigateStats: (() -> Void)? = nil
     var onNavigateSettings: (() -> Void)? = nil
     var onShowMemberPricing: (() -> Void)? = nil
     @State private var showPlayback = false
+    @State private var showFirstRecordToast = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
+        ZStack(alignment: .top) {
+            ScrollView {
+                VStack(spacing: 12) {
                 // ── Hero Card (matching web .hero) ──
                 VStack(alignment: .leading, spacing: 8) {
                     Text("今日已花")
@@ -59,6 +62,11 @@ struct HomeView: View {
                 )
                 .shadow(color: AppColors.accent.opacity(0.30), radius: 16, x: 0, y: 6)
                 .buttonStyle(.plain)
+
+                if let guidance = homeViewModel.activeRouteGuidance,
+                   guidance != .firstRecordTodayPlayback {
+                    routeGuidanceBar(guidance)
+                }
 
                 // ── Today's Bills Panel ──
                 VStack(alignment: .leading, spacing: 12) {
@@ -131,15 +139,29 @@ struct HomeView: View {
                     }
                 }
                 .glassPanel(radius: 24, padding: 24)
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+                .padding(.bottom, 120)
+                .frame(maxWidth: 430)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 4)
-            .padding(.bottom, 120)
-            .frame(maxWidth: 430)
-            .frame(maxWidth: .infinity, alignment: .center)
+
+            if showFirstRecordToast {
+                firstRecordToast
+                    .padding(.horizontal, 18)
+                    .padding(.top, 10)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
         .scrollIndicators(.hidden)
         .background(Color.clear)
+        .onAppear {
+            handleRouteGuidance(homeViewModel.activeRouteGuidance)
+        }
+        .onChange(of: homeViewModel.activeRouteGuidance) { _, guidance in
+            handleRouteGuidance(guidance)
+        }
         .sheet(isPresented: $showPlayback) {
             BillPlaybackSheet(
                 onNavigateToSettings: { onNavigateSettings?() },
@@ -147,6 +169,82 @@ struct HomeView: View {
             )
                 .id(UUID())
                 .environmentObject(homeViewModel)
+        }
+    }
+
+    private var firstRecordToast: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "play.circle.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(AppColors.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("用 10 秒叙一下今天")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                Text("第一笔已经记好，马上听一遍今日回放。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.56), lineWidth: 1)
+        )
+        .shadow(color: AppColors.subtext.opacity(0.16), radius: 16, y: 8)
+    }
+
+    private func routeGuidanceBar(_ guidance: HomeViewModel.PlaybackRouteGuidance) -> some View {
+        Button {
+            homeViewModel.consumeRouteGuidance(guidance)
+            onNavigateStats?()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(AppColors.accent)
+                    .frame(width: 30, height: 30)
+                    .background(AppColors.accent.opacity(0.12), in: Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(guidance.title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                    Text(guidance.message)
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(AppColors.subtext.opacity(0.72))
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.white.opacity(0.68))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(AppColors.accent.opacity(0.22), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func handleRouteGuidance(_ guidance: HomeViewModel.PlaybackRouteGuidance?) {
+        guard guidance == .firstRecordTodayPlayback else { return }
+        showFirstRecordToast = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            showPlayback = true
+            showFirstRecordToast = false
+            homeViewModel.consumeRouteGuidance(.firstRecordTodayPlayback)
         }
     }
 

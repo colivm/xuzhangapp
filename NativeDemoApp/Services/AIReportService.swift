@@ -15,14 +15,14 @@ struct AIInsightPayload: Codable {
 }
 
 enum AIReportServiceError: LocalizedError {
-    case invalidEndpoint
+    case invalidEndpoint(String)
     case badStatus(Int, String)
     case invalidResponse
 
     var errorDescription: String? {
         switch self {
-        case .invalidEndpoint:
-            return "AI 接口地址无效。"
+        case .invalidEndpoint(let endpoint):
+            return "AI 服务地址配置异常：\(endpoint)"
         case .badStatus(let code, let body):
             return "AI 请求失败 (\(code))：\(body)"
         case .invalidResponse:
@@ -42,9 +42,9 @@ final class AIReportService {
         model: String,
         feature: String = "daily"
     ) async throws -> AIInsightPayload {
-        let finalEndpoint = endpoint.isEmpty ? zhipuDefaultEndpoint : endpoint
+        let finalEndpoint = normalizedEndpoint(endpoint)
         guard let url = URL(string: finalEndpoint) else {
-            throw AIReportServiceError.invalidEndpoint
+            throw AIReportServiceError.invalidEndpoint(finalEndpoint)
         }
 
         var request = URLRequest(url: url)
@@ -71,7 +71,7 @@ final class AIReportService {
         )
 
         let systemContent = """
-        你是“轻账日记”的温和消费复盘助手。
+        你是“叙帐”的温和消费复盘助手。
         根据用户消费快照输出 JSON，字段必须是 summary/action/encourage。
         不要输出投资建议，不要说教。
         """
@@ -98,7 +98,7 @@ final class AIReportService {
             "temperature": 0.6
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        request.timeoutInterval = 20
+        request.timeoutInterval = 45
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -156,5 +156,25 @@ final class AIReportService {
         }
 
         return nil
+    }
+
+    private func normalizedEndpoint(_ endpoint: String) -> String {
+        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return zhipuDefaultEndpoint }
+
+        let withoutTrailingSlash = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard
+            let components = URLComponents(string: withoutTrailingSlash),
+            components.scheme != nil,
+            components.host != nil
+        else {
+            return trimmed
+        }
+
+        let path = components.path
+        if path.isEmpty || path == "/" {
+            return withoutTrailingSlash + "/v1/insight/daily"
+        }
+        return trimmed
     }
 }

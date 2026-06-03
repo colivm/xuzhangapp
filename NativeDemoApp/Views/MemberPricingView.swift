@@ -7,23 +7,26 @@ struct MemberPricingView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var benefitsExpanded = false
     @State private var morePlansExpanded = false
+    @State private var purchaseNotice: String?
 
     private let plans = [
-        MemberPlan(id: "yearly", name: "年度会员", price: "¥98", period: "年", featured: true,
+        MemberPlan(id: "yearly", name: "年度会员", price: "¥88", period: "年", featured: true,
                    badge: "✨ 推荐", dailyHint: "平均每天不到 1 毛钱，最划算"),
-        MemberPlan(id: "monthly", name: "月度会员", price: "¥12", period: "月", featured: false,
-                   badge: nil, dailyHint: "按月订阅，随时可取消"),
-        MemberPlan(id: "lifetime", name: "永久会员", price: "¥198", period: "永久", featured: false,
+        MemberPlan(id: "monthly", name: "月度会员", price: "¥9", period: "月", featured: false,
+                   badge: nil, dailyHint: "首月推介 ¥6，按月订阅，随时可取消"),
+        MemberPlan(id: "lifetime", name: "永久会员", price: "¥168", period: "永久", featured: false,
                    badge: nil, dailyHint: "一次解锁，终身陪伴"),
     ]
 
     private let benefits = [
-        ("📊 无限次 AI 复盘，更懂你的消费节奏", "不限次数复盘，随时回顾账单"),
-        ("🌤️ 解锁天气 / 季节场景互动", "开启后，小宠物会根据天气、时间，给你更贴合当下的温柔陪伴语"),
-        ("☁️ 云端账单备份，换机不丢记录", "登录账号后，账单数据可安全同步云端"),
-        ("🚫 告别所有广告，享受纯净记账体验", "全程无任何弹窗广告，记账更专注、更安心"),
-        ("📝 宠物专属昵称 + 智能习惯备注", "自定义宠物名字全覆盖，结合消费偏好自动生成专属温柔备注"),
+        ("🎬 周/月生活切片无限回看", "统计页「本周生活切片」「本月生活章」不限次数播放；用章节卡片看懂这段时间花了什么、节奏如何。核心卖点。"),
+        ("📝 场景备注包 + 宠物专属昵称", "通勤/吃货/宠物/旅行四包一键备注；自定义昵称（2～6 字）贯穿切片与记账旁白。"),
+        ("📷 OCR 智能识票不限次", "拍照导入账单；免费用户每日 3 次尝鲜，会员不限（可设软上限防滥用，商店仍写「不限」）。"),
+        ("☁️ 云端备份 + 纯净无广告", "登录后账单可同步云端、换机不丢；全程无营销弹窗。天气/季节暖心旁白加强随会员模板更完整。"),
+        ("💬 小 AI 说 · 播后可选深聊（不限次）", "生活切片讲完后，若想多一句交谈式建议再用；含季/年深度复盘（需 ai-proxy 会员 JWT）。增强项，非首图卖点。"),
     ]
+
+    private let freeQuotaFootnote = "免费体验：本周生活切片每自然周 1 次 · 本月生活章终生 3 次 · OCR 每日 3 次 · 今日流水回放每日 1 次。开通会员后上述回访与识票不限。"
 
     private var isMember: Bool {
         let tier = settingsViewModel.memberTier.lowercased()
@@ -35,7 +38,9 @@ struct MemberPricingView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     // ── Hero ──
-                    heroSection
+                    if !isMember {
+                        heroSection
+                    }
 
                     // ── Benefits ──
                     benefitsSection
@@ -48,6 +53,7 @@ struct MemberPricingView: View {
                     }
 
                     // ── Privacy ──
+                    freeQuotaNote
                     privacyNote
                 }
                 .padding(20)
@@ -55,12 +61,22 @@ struct MemberPricingView: View {
             }
             .scrollIndicators(.hidden)
             .background(AppColors.bg.ignoresSafeArea())
-            .navigationTitle("会员方案")
+            .navigationTitle(isMember ? "会员详情" : "会员方案")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("关闭") { dismiss() }
                 }
+            }
+            .alert("暂未接入 App Store 购买", isPresented: Binding(
+                get: { purchaseNotice != nil },
+                set: { if !$0 { purchaseNotice = nil } }
+            )) {
+                Button("知道了", role: .cancel) {
+                    purchaseNotice = nil
+                }
+            } message: {
+                Text(purchaseNotice ?? "")
             }
         }
     }
@@ -251,6 +267,14 @@ struct MemberPricingView: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
+    private var freeQuotaNote: some View {
+        Text(freeQuotaFootnote)
+            .font(.system(size: 11))
+            .foregroundStyle(AppColors.subtext.opacity(0.75))
+            .lineSpacing(3)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     // MARK: - Plan Buttons
 
     private func featuredPlanButton(_ plan: MemberPlan) -> some View {
@@ -323,9 +347,7 @@ struct MemberPricingView: View {
     // MARK: - Purchase Handler
 
     private func handlePurchase(_ plan: MemberPlan) {
-        // Demo: simulate member activation (memberTier setter auto-persists)
-        settingsViewModel.memberTier = plan.id
-        dismiss()
+        purchaseNotice = "\(plan.name)价格为\(plan.price) / \(plan.period)。当前未接入 StoreKit 与服务端验单，不会发起扣款；调试会员档位请使用 Settings/服务端会员状态。"
     }
 }
 

@@ -146,6 +146,32 @@ const AI_SOFT_REPLACEMENTS = {
   纠正: "回看",
   管控: "整理",
 };
+
+const MEMBER_BENEFITS = [
+  {
+    title: "🎬 周/月生活切片无限回看",
+    desc: "统计页「本周生活切片」「本月生活章」不限次数播放；用章节卡片看懂这段时间花了什么、节奏如何。核心卖点。",
+  },
+  {
+    title: "📝 场景备注包 + 宠物专属昵称",
+    desc: "通勤/吃货/宠物/旅行四包一键备注；自定义昵称（2～6 字）贯穿切片与记账旁白。",
+  },
+  {
+    title: "📷 OCR 智能识票不限次",
+    desc: "拍照导入账单；免费用户每日 3 次尝鲜，会员不限（可设软上限防滥用，商店仍写「不限」）。",
+  },
+  {
+    title: "☁️ 云端备份 + 纯净无广告",
+    desc: "登录后账单可同步云端、换机不丢；全程无营销弹窗。天气/季节暖心旁白加强随会员模板更完整。",
+  },
+  {
+    title: "💬 小 AI 说 · 播后可选深聊（不限次）",
+    desc: "生活切片讲完后，若想多一句交谈式建议再用；含季/年深度复盘（需 ai-proxy 会员 JWT）。增强项，非首图卖点。",
+  },
+];
+
+const MEMBER_FREE_QUOTA_FOOTNOTE =
+  "免费体验：本周生活切片每自然周 1 次 · 本月生活章终生 3 次 · OCR 每日 3 次 · 今日流水回放每日 1 次。开通会员后上述回访与识票不限。";
 const HOT_WEATHER_THRESHOLD_C = 30;
 const MONTH_END_START_DAY = 26;
 const MONTH_EXPENSE_SOFT_THRESHOLD = 3500;
@@ -298,7 +324,7 @@ const PET_SCENE_RULES = [
 
 const defaultState = {
   settings: {
-    displayName: "轻账用户",
+    displayName: "叙帐用户",
     appearance: "system",
     syncEnabled: false,
     remoteAIEnabled: false,
@@ -1748,7 +1774,7 @@ async function downloadWeeklyShareCardImage() {
         footer: "#6b7688",
         footerSub: "#8f99ab",
       };
-  const nickname = (state.settings.displayName || "轻账用户").trim();
+  const nickname = (state.settings.displayName || "叙帐用户").trim();
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
   canvas.height = 1350;
@@ -1780,7 +1806,7 @@ async function downloadWeeklyShareCardImage() {
 
   ctx.fillStyle = theme.accent;
   ctx.font = "700 56px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-  ctx.fillText("轻账日记 · 周度分享卡", 140, 230);
+  ctx.fillText("叙帐 · 周度分享卡", 140, 230);
   ctx.font = "400 30px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   ctx.fillStyle = theme.titleSub;
   ctx.fillText(meta.period, 140, 290);
@@ -1915,7 +1941,7 @@ async function downloadWeeklyShareCardImage() {
   ctx.fillText("温柔回看，不必苛责，按自己的节奏慢慢生活。", 140, 1110);
   ctx.fillStyle = theme.footerSub;
   ctx.font = "400 27px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-  ctx.fillText("来自 轻账日记 · 小 AI 说", 140, 1172);
+  ctx.fillText("来自 叙帐 · 小 AI 说", 140, 1172);
 
   let blob = null;
   if (canvas.toBlob) {
@@ -3175,11 +3201,7 @@ function renderAccountCenterBenefits() {
     titleEl.textContent = `✨ ${petName}在这儿陪着你呀～`;
     leadEl.textContent = "你的会员权益都已解锁：";
     leadEl.classList.remove("hidden");
-    listEl.innerHTML = [
-      `<li>不限次数复盘，${petName}会陪你随时回看生活节奏</li>`,
-      `<li>换机也不丢账单，和${petName}的生活记录会一直在</li>`,
-      `<li>全程无广告打扰，和${petName}的记账时光更轻松</li>`,
-    ].join("");
+    listEl.innerHTML = MEMBER_BENEFITS.slice(0, 3).map((item) => `<li>${item.title.replace(/^[^\s]+ /, "")}</li>`).join("");
     return;
   }
 
@@ -3187,28 +3209,14 @@ function renderAccountCenterBenefits() {
     titleEl.textContent = "✨ 你的会员权益已生效";
     leadEl.textContent = "感谢你的支持，以下权益你都可以随时使用：";
     leadEl.classList.remove("hidden");
-    listEl.innerHTML = [
-      "<li>不限次数复盘，随时回看你的生活节奏</li>",
-      "<li>换机也不丢账单，生活记录始终连续</li>",
-      "<li>全程无广告打扰，记录过程更专注更舒适</li>",
-    ].join("");
+    listEl.innerHTML = MEMBER_BENEFITS.slice(0, 3).map((item) => `<li>${item.title.replace(/^[^\s]+ /, "")}</li>`).join("");
     return;
   }
 
   titleEl.textContent = petOn ? "✨ 升级会员，解锁更多温柔陪伴" : "✨ 升级会员，解锁更多实用权益";
   leadEl.textContent = "";
   leadEl.classList.add("hidden");
-  listEl.innerHTML = petOn
-    ? [
-        "<li>无限次 AI 复盘，更懂你的消费节奏</li>",
-        "<li>天气场景暖心互动，小宠物陪你说悄悄话</li>",
-        "<li>云端账单备份，换机不丢记录</li>",
-      ].join("")
-    : [
-        "<li>无限次 AI 复盘</li>",
-        "<li>云端账单备份</li>",
-        "<li>纯净无广告记账体验</li>",
-      ].join("");
+  listEl.innerHTML = MEMBER_BENEFITS.slice(0, 3).map((item) => `<li>${item.title.replace(/^[^\s]+ /, "")}</li>`).join("");
 }
 
 function renderMemberUpgradeBenefits() {
@@ -3225,28 +3233,11 @@ function renderMemberUpgradeBenefits() {
     refs.accountQuickBuyTip.textContent = "可随时取消，数据仍保留在本地。";
   }
 
-  if (petOn) {
-    titleEl.textContent = "✨ 升级会员，解锁更多温柔陪伴";
-    introEl.textContent = ctaCopy.intro;
-    listEl.innerHTML = [
-      "<li><strong>📊 无限次 AI 复盘，更懂你的消费节奏</strong><span>不限次数复盘，随时回顾账单</span></li>",
-      "<li><strong>🌤️ 解锁天气 / 季节场景互动，小宠物陪你说悄悄话</strong><span>开启后，小宠物会根据天气、时间，给你更贴合当下的温柔陪伴语</span></li>",
-      "<li><strong>☁️ 云端账单备份，换机不丢记录</strong><span>登录账号后，账单数据可安全同步云端，换手机也不怕丢失</span></li>",
-      "<li><strong>🚫 告别所有广告，享受纯净记账体验</strong><span>全程无任何弹窗广告，记账更专注、更安心</span></li>",
-      "<li><strong>📝 宠物专属昵称 + 智能习惯备注</strong><span>自定义宠物名字全覆盖，结合消费偏好自动生成专属温柔备注</span></li>",
-    ].join("");
-    return;
-  }
-
-  titleEl.textContent = "升级会员，解锁更多高级功能";
+  titleEl.textContent = petOn ? "✨ 升级会员，解锁更多温柔陪伴" : "升级会员，解锁更多实用权益";
   introEl.textContent = ctaCopy.intro;
-  listEl.innerHTML = [
-    "<li><strong>📊 无限次 AI 消费复盘</strong><span>不限次数生成复盘报告，随时回顾账单，掌握消费节奏</span></li>",
-    "<li><strong>🌤️ 天气 / 季节场景智能提醒</strong><span>根据天气、时间提供贴合当下的消费与生活建议</span></li>",
-    "<li><strong>☁️ 云端账单备份，换机不丢记录</strong><span>登录账号后，账单数据可安全同步云端，换手机也不怕丢失</span></li>",
-    "<li><strong>🚫 无广告纯净记账体验</strong><span>全程无弹窗广告，记账更专注、不受打扰</span></li>",
-    "<li><strong>📝 智能习惯备注与个性化标签</strong><span>结合消费偏好自动生成消费备注，方便后续管理与回顾</span></li>",
-  ].join("");
+  listEl.innerHTML = MEMBER_BENEFITS
+    .map((item) => `<li><strong>${item.title}</strong><span>${item.desc}</span></li>`)
+    .join("");
 }
 
 function updatePetRenameCopy() {
@@ -3287,7 +3278,7 @@ function renderAccountOverlay() {
     accountOverlayView = "center";
   }
   const isLoggedIn = Boolean(state.settings.isLoggedIn);
-  const accountName = state.settings.displayName || "轻账用户";
+  const accountName = state.settings.displayName || "叙帐用户";
   if (!isLoggedIn) {
     if (accountOverlayView !== "member") {
       accountOverlayView = "login";
@@ -4085,7 +4076,7 @@ function renderInsight() {
 }
 
 function renderSettings() {
-  const accountName = state.settings.displayName || "轻账用户";
+  const accountName = state.settings.displayName || "叙帐用户";
   const isLoggedIn = Boolean(state.settings.isLoggedIn);
   refs.accountAvatar.textContent = isLoggedIn ? "🐱" : "👤";
   refs.accountEntryText.textContent = isLoggedIn
@@ -4620,7 +4611,7 @@ function init() {
   });
 
   refs.displayNameInput.addEventListener("input", (e) => {
-    state.settings.displayName = e.target.value.trim() || "轻账用户";
+    state.settings.displayName = e.target.value.trim() || "叙帐用户";
     persist();
     renderHome();
     renderSettings();

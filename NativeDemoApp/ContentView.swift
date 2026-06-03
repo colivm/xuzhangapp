@@ -139,6 +139,10 @@ struct ContentView: View {
         }
         .onChange(of: selectedTab) { _, tab in
             if tab == .today { petHint = "今天花得怎么样？我帮你看着。" }
+            if tab == .stats {
+                homeViewModel.consumeRouteGuidance(.weekSliceReady)
+                homeViewModel.consumeRouteGuidance(.fiveRecordsNeverPlayed)
+            }
             petBubbleVisible = false
         }
         .onChange(of: homeViewModel.petMessage) { _, msg in
@@ -221,6 +225,7 @@ struct ContentView: View {
             switch selectedTab {
             case .today:
                 HomeView(onQuickRecord: { selectedTab = .record },
+                         onNavigateStats: { selectedTab = .stats },
                          onNavigateSettings: { selectedTab = .settings },
                          onShowMemberPricing: { showMemberPricing = true })
                     .transition(.asymmetric(
@@ -234,7 +239,10 @@ struct ContentView: View {
                     removal: .opacity.combined(with: .offset(y: 8))
                 ))
             case .stats:
-                StatsWebView()
+                StatsWebView(
+                    onShowMemberPricing: { showMemberPricing = true },
+                    onOpenInsight: { selectedTab = .insight }
+                )
                     .transition(.asymmetric(
                         insertion: .opacity.combined(with: .offset(y: 8)),
                         removal: .opacity.combined(with: .offset(y: 8))
@@ -279,6 +287,14 @@ struct ContentView: View {
                             )
                     }
                     .frame(maxWidth: .infinity, minHeight: 52)
+                    .overlay(alignment: .topTrailing) {
+                        if tab == .stats, shouldShowStatsGuidanceBadge {
+                            Circle()
+                                .fill(Color(red: 1.0, green: 110/255, blue: 136/255))
+                                .frame(width: 8, height: 8)
+                                .offset(x: -18, y: 4)
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
             }
@@ -296,6 +312,15 @@ struct ContentView: View {
                 }
                 .shadow(color: AppColors.bg.opacity(0.4), radius: 14, x: 0, y: -8)
         )
+    }
+
+    private var shouldShowStatsGuidanceBadge: Bool {
+        switch homeViewModel.activeRouteGuidance {
+        case .weekSliceReady, .fiveRecordsNeverPlayed:
+            return selectedTab != .stats
+        default:
+            return false
+        }
     }
 
     // MARK: - Tab Icons (custom shapes matching web SVG)
@@ -1205,9 +1230,18 @@ struct RecordView: View {
 
 struct StatsWebView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
-    @State private var selectedPeriod: StatsPeriod = .month
+    @EnvironmentObject private var settingsViewModel: SettingsViewModel
+    var onShowMemberPricing: (() -> Void)? = nil
+    var onOpenInsight: (() -> Void)? = nil
+
+    @State private var selectedPeriod: StatsPeriod = .week
     @State private var selectedCategory: HomeItem.Category? = nil
     @State private var editingItem: HomeItem?
+    @State private var summaryPlayback: SummaryPlayback?
+    @State private var summaryQuotaMessage: String?
+    @State private var quotaRefreshID = UUID()
+    private let playbackService = PlaybackService()
+    private let quotaStore = SummaryPlaybackQuotaStore()
 
     enum StatsPeriod: String, CaseIterable, Identifiable {
         case week = "本周"
@@ -1238,6 +1272,10 @@ struct StatsWebView: View {
 
     private var totalExpense: Double {
         filteredItems.filter { $0.amount > 0 }.reduce(0) { $0 + $1.amount }
+    }
+
+    private var hasMemberAccess: Bool {
+        ["monthly", "yearly", "lifetime"].contains(settingsViewModel.memberTier.lowercased())
     }
 
     @State private var showPeriodSheet = false
@@ -1319,6 +1357,8 @@ struct StatsWebView: View {
                 }
                 .glassPanel(radius: 24, padding: 20)
 
+                summarySliceCard
+
                 // ── Overview Panel ──
                 VStack(alignment: .leading, spacing: 12) {
                     Text("总览")
@@ -1386,6 +1426,159 @@ struct StatsWebView: View {
                 editingItem = nil
             }
         }
+        .sheet(item: $summaryPlayback) { playback in
+            SummaryPlaybackSheet(
+                playback: playback,
+                petEnabled: settingsViewModel.petCompanionEnabled,
+                isMember: hasMemberAccess,
+                onCompleted: { progress in
+                    quotaStore.markCompleted(playback.range, isMember: hasMemberAccess, progress: progress)
+                    if progress >= 0.8 {
+                        homeViewModel.markSummaryPlaybackCompleted(playback.range)
+                    }
+                    quotaRefreshID = UUID()
+                },
+                onShowMemberPricing: onShowMemberPricing,
+                onOpenWeekly: {
+                    useCustomRange = false
+                    selectedPeriod = .week
+                },
+                onOpenInsight: onOpenInsight
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
+        }
+        .alert("播放次数已用完", isPresented: Binding(
+            get: { summaryQuotaMessage != nil },
+            set: { if !$0 { summaryQuotaMessage = nil } }
+        )) {
+            Button("了解会员") {
+                let shouldOpenMember = summaryQuotaMessage?.contains("会员") ?? false
+                summaryQuotaMessage = nil
+                if shouldOpenMember { onShowMemberPricing?() }
+            }
+            Button("知道了", role: .cancel) {
+                summaryQuotaMessage = nil
+            }
+        } message: {
+            Text(summaryQuotaMessage ?? "")
+        }
+    }
+
+    // MARK: - Summary Playback Card
+
+    @ViewBuilder
+    private var summarySliceCard: some View {
+        let _ = quotaRefreshID
+        if useCustomRange || selectedPeriod == .year {
+            EmptyView()
+        } else {
+            let range = selectedPeriod == .week ? SummaryPlaybackRange.week : .month
+            let preview = buildSummaryPreview(for: range)
+            let hasData = preview.count > 0
+            let canPlay = hasData && quotaStore.canPlay(range, isMember: hasMemberAccess)
+            let isMonthLocked = range == .month && !hasMemberAccess && quotaStore.monthRemaining(isMember: false) <= 0
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    Text(isMonthLocked ? "🔒" : "🎬")
+                        .font(.system(size: 24))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(range == .week ? "本周生活切片" : "本月生活章")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+                        Text(summaryCardSubtitle(preview: preview, range: range, hasData: hasData, isMonthLocked: isMonthLocked))
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        handleSummaryPlaybackTap(range: range, preview: preview)
+                    } label: {
+                        Text(isMonthLocked ? "了解会员" : "播放")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(canPlay ? .white : AppColors.text.opacity(0.72))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(
+                                canPlay ? AppColors.accent : Color.white.opacity(0.64),
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(canPlay ? AppColors.accent.opacity(0.28) : Color.white.opacity(0.58), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!hasData && !isMonthLocked)
+                }
+
+                Text(summaryQuotaFootnote(range: range, hasData: hasData))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(range == .month && isMonthLocked ? AppColors.lockGold : AppColors.subtext)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .glassPanel(radius: 24, padding: 20)
+        }
+    }
+
+    private func buildSummaryPreview(for range: SummaryPlaybackRange) -> SummaryPlayback {
+        switch range {
+        case .week:
+            return playbackService.buildWeekSummary(from: homeViewModel.items)
+        case .month:
+            return playbackService.buildMonthSummary(from: homeViewModel.items)
+        }
+    }
+
+    private func summaryCardSubtitle(preview: SummaryPlayback, range: SummaryPlaybackRange, hasData: Bool, isMonthLocked: Bool) -> String {
+        guard hasData else { return "这个时间段还没有记录，先记一笔再播放。" }
+        if isMonthLocked {
+            return "会员专属 · 你的 3 次新用户体验已用完"
+        }
+        switch range {
+        case .week:
+            if homeViewModel.items.count >= 5 && !quotaStore.hasCompletedWeekPlaybackEver() {
+                return "已记 \(homeViewModel.items.count) 笔，可以讲这周的故事了"
+            }
+            let category = preview.topCategory.map { "\($0)为主" } ?? "日常为主"
+            return "\(preview.count) 笔 · \(preview.total.formatted(.cny)) · \(category)"
+        case .month:
+            return "\(preview.count) 笔 · \(preview.total.formatted(.cny)) · 6 章看完整月节奏"
+        }
+    }
+
+    private func summaryQuotaFootnote(range: SummaryPlaybackRange, hasData: Bool) -> String {
+        guard hasData else { return "生活切片使用本地模板生成，不依赖 AI 服务。" }
+        guard !hasMemberAccess else { return "会员可无限回看周/月生活切片。" }
+        switch range {
+        case .week:
+            let remaining = quotaStore.weekRemaining(isMember: false)
+            return remaining > 0 ? "本周剩余 1 次 · 会员可无限" : "本周剩余 0 次 · 下个自然周刷新"
+        case .month:
+            let remaining = quotaStore.monthRemaining(isMember: false)
+            return remaining > 0
+                ? "新用户专享剩余 \(remaining)/3 次 · 用完后需会员"
+                : "本周切片仍可按周免费播放"
+        }
+    }
+
+    private func handleSummaryPlaybackTap(range: SummaryPlaybackRange, preview: SummaryPlayback) {
+        guard preview.count > 0 else { return }
+        guard quotaStore.canPlay(range, isMember: hasMemberAccess) else {
+            switch range {
+            case .week:
+                summaryQuotaMessage = "本周的生活切片已经看完啦。下个自然周会再刷新 1 次免费次数。开通会员可无限回看周/月切片。"
+            case .month:
+                summaryQuotaMessage = "你的 3 次新用户「本月生活章」已用完。开通会员可无限播放，并享场景备注包与无限 OCR。本周切片仍会在每个自然周刷新 1 次免费次数。"
+            }
+            return
+        }
+        summaryPlayback = preview
     }
 
     // MARK: - Period Picker Sheet
@@ -1821,6 +2014,24 @@ struct InsightWebView: View {
                         aiStatusPill(status)
                     }
 
+                    if let error = homeViewModel.insightErrorMessage,
+                       monthlyAIStatus?.kind == .error {
+                        Text(error)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.orange.opacity(0.9))
+                            .lineLimit(3)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(Color.orange.opacity(0.08))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(Color.orange.opacity(0.22), lineWidth: 1)
+                            )
+                    }
+
                     if monthlyInsightGenerated, let report = monthlyReport {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(report.summary)
@@ -2143,7 +2354,7 @@ struct InsightWebView: View {
         case .fallback:
             return AIStatusPill(kind: .fallback, text: "本地兜底，稳定可用")
         case .errorFallback:
-            return AIStatusPill(kind: .error, text: "本地计算，AI 服务忙，稍后再试")
+            return AIStatusPill(kind: .error, text: "本地计算，远程 AI 未接通")
         }
     }
 
@@ -2218,7 +2429,7 @@ struct InsightWebView: View {
         let topRatio = total > 0 ? topAmount / total : 0
 
         let petMode = settingsViewModel.settings.aiTone == .gentle
-        let nick = settingsViewModel.displayName.isEmpty ? "轻账用户" : settingsViewModel.displayName
+        let nick = settingsViewModel.displayName.isEmpty ? "叙帐用户" : settingsViewModel.displayName
         let card = WeeklyShareCardView(
             weekTotal: total,
             topCategory: homeViewModel.weekTopCategoryText,
@@ -2246,7 +2457,7 @@ struct WeeklyShareCardView: View {
     let dailyTrend: [(String, Double)]
     let topCategoryRatio: Double
     var isPetMode: Bool = true
-    var nickname: String = "轻账用户"
+    var nickname: String = "叙帐用户"
 
     private var t: ShareCardTheme { isPetMode ? .pet : .neutral }
 
@@ -2295,7 +2506,7 @@ struct WeeklyShareCardView: View {
 
             // Content
             VStack(alignment: .leading, spacing: 0) {
-                Text("轻账日记 · 周度分享卡")
+                Text("叙帐 · 周度分享卡")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(t.accent)
                     .lineLimit(1)
@@ -2340,7 +2551,7 @@ struct WeeklyShareCardView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(t.footer)
                     .frame(maxWidth: .infinity)
-                Text("来自 轻账日记 · 小 AI 说")
+                Text("来自 叙帐 · 小 AI 说")
                     .font(.system(size: 10))
                     .foregroundStyle(t.footerSub)
                     .frame(maxWidth: .infinity)

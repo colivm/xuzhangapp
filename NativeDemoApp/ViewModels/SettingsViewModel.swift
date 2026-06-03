@@ -15,6 +15,10 @@ final class SettingsViewModel: ObservableObject {
     init() {
         settings = LocalStore.loadSettings()
         hasCloudSession = !KeychainService.loadAccessToken().isEmpty
+        if !hasCloudSession && Self.isBackendDefaultDisplayName(settings.displayName) {
+            settings.displayName = Self.localDefaultDisplayName
+        }
+        persist()
     }
 
     var displayName: String {
@@ -92,7 +96,7 @@ final class SettingsViewModel: ObservableObject {
     var aiEndpoint: String {
         get { settings.aiEndpoint }
         set {
-            settings.aiEndpoint = newValue
+            settings.aiEndpoint = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             persist()
         }
     }
@@ -199,6 +203,9 @@ final class SettingsViewModel: ObservableObject {
         KeychainService.clearAccessToken()
         settings.cloudUserId = ""
         settings.memberTier = "free"
+        if Self.isBackendDefaultDisplayName(settings.displayName) {
+            settings.displayName = Self.localDefaultDisplayName
+        }
         hasCloudSession = false
         authMessage = "已退出登录。"
         persist()
@@ -222,5 +229,13 @@ final class SettingsViewModel: ObservableObject {
 
     private func persist() {
         LocalStore.saveSettings(settings)
+    }
+
+    private static let localDefaultDisplayName = "叙帐用户"
+
+    private static func isBackendDefaultDisplayName(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("用户 ") else { return false }
+        return trimmed.dropFirst(3).allSatisfy(\.isNumber)
     }
 }
