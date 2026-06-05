@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
+import fs from "node:fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: resolve(__dirname, "..", ".env") });
@@ -13,4 +14,23 @@ export const config = {
   aiProxyToken: process.env.AI_PROXY_TOKEN || "",
   devAllowSmsCode: process.env.DEV_ALLOW_SMS_CODE || "123456",
   databaseUrl: process.env.DATABASE_URL || "",
+  appleIssuerId: process.env.APPLE_ISSUER_ID || "",
+  appleKeyId: process.env.APPLE_KEY_ID || "",
+  appleBundleId: process.env.APPLE_BUNDLE_ID || "",
+  applePrivateKeyPath: process.env.APPLE_PRIVATE_KEY_PATH || "",
+  applePrivateKey: process.env.APPLE_PRIVATE_KEY || "",
+  appleAppStoreApiBaseUrl: process.env.APPLE_APP_STORE_API_BASE_URL || "https://api.storekit.itunes.apple.com",
+  iapProductIds: {
+    monthly: process.env.IAP_MONTHLY_PRODUCT_ID || "",
+    yearly: process.env.IAP_YEARLY_PRODUCT_ID || "",
+    lifetime: process.env.IAP_LIFETIME_PRODUCT_ID || "",
+  },
 };
+
+export function loadApplePrivateKey() {
+  if (config.applePrivateKey) {
+    return config.applePrivateKey.replace(/\\n/g, "\n");
+  }
+  if (!config.applePrivateKeyPath) return "";
+  return fs.readFileSync(config.applePrivateKeyPath, "utf8");
+}

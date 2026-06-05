@@ -30,6 +30,9 @@
 		A100002D0000000000000001 /* MemberFlowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100002E0000000000000001 /* MemberFlowService.swift */; };
 		A100002F0000000000000001 /* MemberPricingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000390000000000000001 /* MemberPricingView.swift */; };
 		A100003B0000000000000001 /* SummaryPlaybackSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100003A0000000000000001 /* SummaryPlaybackSheet.swift */; };
+		A100003C0000000000000001 /* OCRConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100003D0000000000000001 /* OCRConfirmSheet.swift */; };
+		A100003E0000000000000001 /* ScenePackCopyPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100003F0000000000000001 /* ScenePackCopyPool.swift */; };
+		A10000430000000000000001 /* IAPService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000440000000000000001 /* IAPService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -59,6 +62,9 @@
 		A100002E0000000000000001 /* MemberFlowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberFlowService.swift; sourceTree = "<group>"; };
 		A10000390000000000000001 /* MemberPricingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberPricingView.swift; sourceTree = "<group>"; };
 		A100003A0000000000000001 /* SummaryPlaybackSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryPlaybackSheet.swift; sourceTree = "<group>"; };
+		A100003D0000000000000001 /* OCRConfirmSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRConfirmSheet.swift; sourceTree = "<group>"; };
+		A100003F0000000000000001 /* ScenePackCopyPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackCopyPool.swift; sourceTree = "<group>"; };
+		A10000440000000000000001 /* IAPService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IAPService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -127,6 +133,8 @@
 				A100002A0000000000000001 /* MemberNudgePolicyService.swift */,
 				A100002C0000000000000001 /* PlaybackService.swift */,
 				A100002E0000000000000001 /* MemberFlowService.swift */,
+				A100003F0000000000000001 /* ScenePackCopyPool.swift */,
+				A10000440000000000000001 /* IAPService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -147,6 +155,7 @@
 				A10000190000000000000001 /* SettingsView.swift */,
 				A10000390000000000000001 /* MemberPricingView.swift */,
 				A100003A0000000000000001 /* SummaryPlaybackSheet.swift */,
+				A100003D0000000000000001 /* OCRConfirmSheet.swift */,
 				A10000380000000000000001 /* Components */,
 			);
 			path = Views;
@@ -259,6 +268,9 @@
 				A100002D0000000000000001 /* MemberFlowService.swift in Sources */,
 				A100002F0000000000000001 /* MemberPricingView.swift in Sources */,
 				A100003B0000000000000001 /* SummaryPlaybackSheet.swift in Sources */,
+				A100003C0000000000000001 /* OCRConfirmSheet.swift in Sources */,
+				A100003E0000000000000001 /* ScenePackCopyPool.swift in Sources */,
+				A10000430000000000000001 /* IAPService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

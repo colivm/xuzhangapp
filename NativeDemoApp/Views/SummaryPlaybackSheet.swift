@@ -1,9 +1,12 @@
 import SwiftUI
+import UIKit
 
 struct SummaryPlaybackSheet: View {
     let playback: SummaryPlayback
     let petEnabled: Bool
     let isMember: Bool
+    var weeklySharePayload: WeeklyShareCardPayload?
+    var shareNickname: String = "叙帐用户"
     var onCompleted: (Double) -> Void
     var onShowMemberPricing: (() -> Void)? = nil
     var onOpenWeekly: (() -> Void)? = nil
@@ -15,6 +18,7 @@ struct SummaryPlaybackSheet: View {
     @State private var playbackDone = false
     @State private var completionReported = false
     @State private var playbackTask: Task<Void, Never>?
+    @State private var shareImage: ShareImage?
 
     private var currentChapter: SummaryChapter? {
         guard !playback.chapters.isEmpty else { return nil }
@@ -29,7 +33,10 @@ struct SummaryPlaybackSheet: View {
 
     var body: some View {
         ZStack {
-            backgroundGradient.ignoresSafeArea()
+            backgroundGradient
+                .id(currentChapter?.id ?? "empty")
+                .transition(.opacity)
+                .ignoresSafeArea()
 
             VStack(spacing: 18) {
                 Capsule()
@@ -55,6 +62,7 @@ struct SummaryPlaybackSheet: View {
             .padding(.horizontal, 22)
             .padding(.bottom, 24)
         }
+        .animation(.easeInOut(duration: 0.28), value: currentChapter?.id)
         .onAppear {
             startPlayback()
         }
@@ -65,30 +73,14 @@ struct SummaryPlaybackSheet: View {
             reportCompletionIfNeeded(progress: progressFraction)
             playbackTask?.cancel()
         }
+        .sheet(item: $shareImage) { item in
+            ActivityShareSheet(activityItems: [item.image])
+        }
     }
 
     private var backgroundGradient: LinearGradient {
-        if petEnabled {
-            LinearGradient(
-                colors: [
-                    AppColors.heroGradientPink.opacity(0.34),
-                    AppColors.heroGradientTeal.opacity(0.38),
-                    AppColors.bg
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        } else {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.86, green: 0.90, blue: 0.95),
-                    Color(red: 0.94, green: 0.96, blue: 0.98),
-                    AppColors.bg
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
+        let palette = chapterPalette(for: currentChapter)
+        return LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
     private var header: some View {
@@ -97,9 +89,10 @@ struct SummaryPlaybackSheet: View {
                 Text(playback.title)
                     .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundStyle(AppColors.text)
-                Text("\(playback.rangeLabel) · \(playback.count) 笔 · \(playback.total.formatted(.cny))")
+                Text(playback.teaserLine)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(AppColors.subtext)
+                    .lineLimit(2)
             }
             Spacer()
             Button {
@@ -118,24 +111,38 @@ struct SummaryPlaybackSheet: View {
     }
 
     private var chapterStage: some View {
-        VStack(spacing: 18) {
+        ZStack(alignment: .topTrailing) {
             if let chapter = currentChapter {
-                Text(chapter.title)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(AppColors.subtext)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: chapterSymbol(for: chapter))
+                    .font(.system(size: 112, weight: .bold))
+                    .foregroundStyle(chapterAccent(for: chapter).opacity(0.08))
+                    .offset(x: 18, y: -20)
+                    .allowsHitTesting(false)
 
-                metricView(for: chapter)
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(chapter.title)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(chapterAccent(for: chapter))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if shouldShowRangeLabel(for: chapter), let range = chapter.metrics["range"] {
+                        Text(range)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
+                    }
+
+                    Text(petEnabled ? chapter.narration.warm : chapter.narration.plain)
+                        .font(.system(size: 23, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AppColors.text)
+                        .lineSpacing(7)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+
+                    chapterSupportView(for: chapter)
+                }
                     .id(chapter.id)
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
-
-                Text(petEnabled ? chapter.narration.warm : chapter.narration.plain)
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
-                    .foregroundStyle(AppColors.text)
-                    .lineSpacing(6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
             }
         }
         .padding(24)
@@ -157,8 +164,10 @@ struct SummaryPlaybackSheet: View {
     }
 
     @ViewBuilder
-    private func metricView(for chapter: SummaryChapter) -> some View {
-        if let ratioText = chapter.metrics["ratio"], let ratio = Double(ratioText) {
+    private func chapterSupportView(for chapter: SummaryChapter) -> some View {
+        if hasNoSupportLine(chapter) {
+            EmptyView()
+        } else if isCategoryChapter(chapter), let ratioText = chapter.metrics["ratio"], let ratio = Double(ratioText) {
             HStack(spacing: 18) {
                 RatioRing(progress: max(0, min(ratio / 100, 1)))
                     .frame(width: 96, height: 96)
@@ -176,20 +185,21 @@ struct SummaryPlaybackSheet: View {
                 }
                 Spacer()
             }
-        } else if let total = chapter.metrics["total"] {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(total)
-                    .font(.system(size: 48, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.accentDark)
-                    .contentTransition(.numericText())
-                metricCaption(chapter)
-            }
-        } else if let amount = chapter.metrics["amount"] {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(amount)
-                    .font(.system(size: 48, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.accentDark)
-                    .contentTransition(.numericText())
+        } else if isHighlightChapter(chapter), let title = chapter.metrics["title"] {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("“\(title)”")
+                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(0.58), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color.white.opacity(0.68), lineWidth: 1)
+                    )
                 metricCaption(chapter)
             }
         } else {
@@ -199,16 +209,120 @@ struct SummaryPlaybackSheet: View {
 
     private func metricCaption(_ chapter: SummaryChapter) -> some View {
         let parts = [
-            chapter.metrics["count"].map { "\($0) 笔" },
-            chapter.metrics["day"],
-            chapter.metrics["busiestDay"],
-            chapter.metrics["title"],
-            chapter.metrics["change"]
+            compactIntroMetric(for: chapter),
+            rhythmMetric(for: chapter),
+            highlightMetric(for: chapter),
+            monthSegmentMetric(for: chapter)
         ].compactMap { $0 }
         return Text(parts.first ?? playback.rangeLabel)
-            .font(.system(size: 15, weight: .medium))
+            .font(.system(size: 14, weight: .medium))
             .foregroundStyle(AppColors.subtext)
-            .lineLimit(2)
+            .lineLimit(3)
+    }
+
+    private func compactIntroMetric(for chapter: SummaryChapter) -> String? {
+        guard isIntroChapter(chapter),
+              let count = chapter.metrics["count"],
+              let total = chapter.metrics["total"] else { return nil }
+        if let activeDays = chapter.metrics["activeDays"] {
+            let mom = chapter.metrics["momPercent"].flatMap { $0.isEmpty ? nil : " · 较上月 \($0)" } ?? ""
+            return "\(activeDays) 天 · \(count) 笔 · \(total)\(mom)"
+        }
+        return "\(count) 笔 · \(total)"
+    }
+
+    private func rhythmMetric(for chapter: SummaryChapter) -> String? {
+        guard isRhythmChapter(chapter) else { return nil }
+        if let busiest = chapter.metrics["busiestDay"], let count = chapter.metrics["count"] {
+            return "\(busiest) · \(count) 笔"
+        }
+        if let middle = chapter.metrics["middle"], let late = chapter.metrics["late"], let leading = chapter.metrics["leading"] {
+            return "\(leading)更热闹 · 中旬 \(middle) · 下旬 \(late)"
+        }
+        return nil
+    }
+
+    private func highlightMetric(for chapter: SummaryChapter) -> String? {
+        guard isHighlightChapter(chapter) else { return nil }
+        let parts = [chapter.metrics["day"], chapter.metrics["amount"]].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func monthSegmentMetric(for chapter: SummaryChapter) -> String? {
+        guard chapter.id == "month-early" else { return nil }
+        let parts = [
+            chapter.metrics["label"],
+            chapter.metrics["count"].map { "\($0) 笔" },
+            chapter.metrics["amount"]
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func shouldShowRangeLabel(for chapter: SummaryChapter) -> Bool {
+        chapter.id == "week-intro"
+    }
+
+    private func isIntroChapter(_ chapter: SummaryChapter) -> Bool {
+        chapter.id.contains("intro")
+    }
+
+    private func isRhythmChapter(_ chapter: SummaryChapter) -> Bool {
+        chapter.id.contains("rhythm") || chapter.id == "month-middle-late"
+    }
+
+    private func isCategoryChapter(_ chapter: SummaryChapter) -> Bool {
+        chapter.id.contains("category") || chapter.id == "month-composition"
+    }
+
+    private func isHighlightChapter(_ chapter: SummaryChapter) -> Bool {
+        chapter.id.contains("highlight")
+    }
+
+    private func isOutroChapter(_ chapter: SummaryChapter) -> Bool {
+        chapter.id.contains("outro") || chapter.id == "month-action"
+    }
+
+    private func hasNoSupportLine(_ chapter: SummaryChapter) -> Bool {
+        isOutroChapter(chapter) || chapter.id == "month-change"
+    }
+
+    private func chapterAccent(for chapter: SummaryChapter?) -> Color {
+        guard let chapter else { return AppColors.accent }
+        if isCategoryChapter(chapter) { return AppColors.accentDark }
+        if isRhythmChapter(chapter) { return Color(red: 0.22, green: 0.50, blue: 0.58) }
+        if isHighlightChapter(chapter) { return Color(red: 0.70, green: 0.36, blue: 0.28) }
+        if isOutroChapter(chapter) { return Color(red: 0.42, green: 0.46, blue: 0.64) }
+        return AppColors.accent
+    }
+
+    private func chapterSymbol(for chapter: SummaryChapter) -> String {
+        if isCategoryChapter(chapter) { return "chart.pie.fill" }
+        if isRhythmChapter(chapter) { return "waveform.path.ecg" }
+        if isHighlightChapter(chapter) { return "quote.bubble.fill" }
+        if isOutroChapter(chapter) { return "sparkles" }
+        return "calendar"
+    }
+
+    private func chapterPalette(for chapter: SummaryChapter?) -> [Color] {
+        let warmBase: [Color]
+        let coolBase: [Color]
+        if let chapter, isRhythmChapter(chapter) {
+            warmBase = [Color(red: 0.88, green: 0.97, blue: 0.96), Color(red: 1.00, green: 0.93, blue: 0.86), AppColors.bg]
+            coolBase = [Color(red: 0.86, green: 0.93, blue: 0.96), Color(red: 0.94, green: 0.97, blue: 0.98), AppColors.bg]
+        } else if let chapter, isCategoryChapter(chapter) {
+            warmBase = [Color(red: 1.00, green: 0.94, blue: 0.84), Color(red: 0.92, green: 0.97, blue: 0.90), AppColors.bg]
+            coolBase = [Color(red: 0.91, green: 0.94, blue: 0.89), Color(red: 0.95, green: 0.97, blue: 0.94), AppColors.bg]
+        } else if let chapter, isHighlightChapter(chapter) {
+            warmBase = [Color(red: 1.00, green: 0.90, blue: 0.86), Color(red: 1.00, green: 0.95, blue: 0.88), AppColors.bg]
+            coolBase = [Color(red: 0.93, green: 0.90, blue: 0.88), Color(red: 0.97, green: 0.95, blue: 0.93), AppColors.bg]
+        } else if let chapter, isOutroChapter(chapter) {
+            warmBase = [Color(red: 0.97, green: 0.90, blue: 0.98), Color(red: 0.91, green: 0.96, blue: 0.98), AppColors.bg]
+            coolBase = [Color(red: 0.89, green: 0.91, blue: 0.96), Color(red: 0.95, green: 0.96, blue: 0.98), AppColors.bg]
+        } else {
+            warmBase = [AppColors.heroGradientPink.opacity(0.34), AppColors.heroGradientTeal.opacity(0.38), AppColors.bg]
+            coolBase = [Color(red: 0.86, green: 0.90, blue: 0.95), Color(red: 0.94, green: 0.96, blue: 0.98), AppColors.bg]
+        }
+        return petEnabled ? warmBase : coolBase
     }
 
     private var controls: some View {
@@ -252,6 +366,11 @@ struct SummaryPlaybackSheet: View {
 
     private var doneActions: some View {
         VStack(spacing: 10) {
+            Text(playback.range == .week ? "像不像你的这周？" : "像不像你的这个月？")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AppColors.text.opacity(0.82))
+                .frame(maxWidth: .infinity, alignment: .leading)
+
             if playback.range == .week {
                 Button {
                     handlePrimaryDoneAction()
@@ -264,6 +383,19 @@ struct SummaryPlaybackSheet: View {
                         .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(.plain)
+
+                Button {
+                    shareWeeklyStoryCard()
+                } label: {
+                    Text("保存本周故事图")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(weeklySharePayload == nil)
 
                 Button {
                     dismiss()
@@ -321,6 +453,17 @@ struct SummaryPlaybackSheet: View {
         }
     }
 
+    private func shareWeeklyStoryCard() {
+        guard let payload = weeklySharePayload else { return }
+        let card = WeeklyShareCardView(
+            payload: payload,
+            isPetMode: petEnabled,
+            nickname: shareNickname.isEmpty ? "叙帐用户" : shareNickname
+        )
+        guard let image = card.snapshot() else { return }
+        shareImage = ShareImage(image: image)
+    }
+
     private func startPlayback() {
         guard !playback.chapters.isEmpty, isPlaying else { return }
         playbackTask?.cancel()
@@ -355,6 +498,21 @@ struct SummaryPlaybackSheet: View {
         completionReported = true
         onCompleted(progress)
     }
+}
+
+private struct ShareImage: Identifiable {
+    let id = UUID()
+    let image: UIImage
+}
+
+private struct ActivityShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 private struct RatioRing: View {

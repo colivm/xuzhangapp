@@ -36,11 +36,23 @@ struct SummaryPlayback: Identifiable, Codable, Equatable {
     let range: SummaryPlaybackRange
     let title: String
     let rangeLabel: String
+    let teaserLine: String
     let count: Int
     let total: Double
     let topCategory: String?
     let topCategoryRatio: Int
     let chapters: [SummaryChapter]
+}
+
+struct WeeklyShareCardPayload {
+    let weekTotal: Double
+    let topCategory: String
+    let recordCount: Int
+    let dailyTrend: [(String, Double)]
+    let topCategoryRatio: Double
+    let headline: String
+    let subtitle: String
+    let periodText: String
 }
 
 final class SummaryPlaybackQuotaStore {
@@ -118,6 +130,74 @@ final class SummaryPlaybackQuotaStore {
     }
 }
 
+final class DailyFeatureQuotaStore {
+    private enum Keys {
+        static let ocrImportDayKey = "ocrImportDayKey"
+        static let ocrImportUsedCount = "ocrImportUsedCount"
+        static let todayPlaybackDayKey = "todayPlaybackDayKey"
+        static let todayPlaybackUsedCount = "todayPlaybackUsedCount"
+    }
+
+    private let defaults: UserDefaults
+    private let ocrDailyLimit = 3
+    private let todayPlaybackDailyLimit = 1
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func ocrRemaining(isMember: Bool, now: Date = Date()) -> Int {
+        guard !isMember else { return Int.max }
+        syncDayIfNeeded(dayKey: Keys.ocrImportDayKey, usedKey: Keys.ocrImportUsedCount, now: now)
+        return max(0, ocrDailyLimit - defaults.integer(forKey: Keys.ocrImportUsedCount))
+    }
+
+    func todayPlaybackRemaining(isMember: Bool, now: Date = Date()) -> Int {
+        guard !isMember else { return Int.max }
+        syncDayIfNeeded(dayKey: Keys.todayPlaybackDayKey, usedKey: Keys.todayPlaybackUsedCount, now: now)
+        return max(0, todayPlaybackDailyLimit - defaults.integer(forKey: Keys.todayPlaybackUsedCount))
+    }
+
+    func canUseOCR(isMember: Bool, now: Date = Date()) -> Bool {
+        ocrRemaining(isMember: isMember, now: now) > 0
+    }
+
+    func canPlayTodayPlayback(isMember: Bool, now: Date = Date()) -> Bool {
+        todayPlaybackRemaining(isMember: isMember, now: now) > 0
+    }
+
+    func markOCRImported(isMember: Bool, now: Date = Date()) {
+        guard !isMember else { return }
+        syncDayIfNeeded(dayKey: Keys.ocrImportDayKey, usedKey: Keys.ocrImportUsedCount, now: now)
+        let used = defaults.integer(forKey: Keys.ocrImportUsedCount)
+        defaults.set(min(ocrDailyLimit, used + 1), forKey: Keys.ocrImportUsedCount)
+    }
+
+    func markTodayPlaybackStarted(isMember: Bool, now: Date = Date()) {
+        guard !isMember else { return }
+        syncDayIfNeeded(dayKey: Keys.todayPlaybackDayKey, usedKey: Keys.todayPlaybackUsedCount, now: now)
+        let used = defaults.integer(forKey: Keys.todayPlaybackUsedCount)
+        defaults.set(min(todayPlaybackDailyLimit, used + 1), forKey: Keys.todayPlaybackUsedCount)
+    }
+
+    private func syncDayIfNeeded(dayKey: String, usedKey: String, now: Date) {
+        let key = Self.localDayKey(for: now)
+        if defaults.string(forKey: dayKey) != key {
+            defaults.set(key, forKey: dayKey)
+            defaults.set(0, forKey: usedKey)
+        }
+    }
+
+    private static func localDayKey(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar.current
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+}
+
 final class PlaybackService {
     func buildTodayPlayback(from items: [HomeItem], now: Date = Date()) -> PlaybackSnapshot {
         let calendar = Calendar.current
@@ -163,6 +243,7 @@ final class PlaybackService {
                 range: .week,
                 title: title,
                 rangeLabel: rangeLabel,
+                teaserLine: "这周还没有记录，先记几笔再来看切片。",
                 count: 0,
                 total: 0,
                 topCategory: nil,
@@ -192,11 +273,11 @@ final class PlaybackService {
                     metrics: [
                         "busiestDay": busiest?.label ?? "本周",
                         "quietestDay": quietest?.label ?? "本周",
-                        "amount": Self.money(busiest?.amount ?? 0)
+                        "count": "\(busiest?.count ?? 0)"
                     ],
                     narration: SummaryNarration(
-                        warm: "最忙的是 \(busiest?.label ?? "本周")；\(quietest?.label ?? "某一天") 几乎没花钱，节奏很分明。",
-                        plain: "支出集中在 \(busiest?.label ?? "本周")，\(quietest?.label ?? "某一天") 最低。"
+                        warm: "最忙的是 \(busiest?.label ?? "本周")，留下 \(busiest?.count ?? 0) 笔记录；\(quietest?.label ?? "某一天") 安静很多，节奏很分明。",
+                        plain: "\(busiest?.label ?? "本周") 记录最多，共 \(busiest?.count ?? 0) 笔；\(quietest?.label ?? "某一天") 最少。"
                     ),
                     durationSec: 7
                 )
@@ -259,11 +340,41 @@ final class PlaybackService {
             range: .week,
             title: title,
             rangeLabel: rangeLabel,
+            teaserLine: weekTeaserLine(busiest: busiest, top: top, ratio: ratio, rows: rows),
             count: rows.count,
             total: total,
             topCategory: top?.category,
             topCategoryRatio: ratio,
             chapters: chapters
+        )
+    }
+
+    func buildWeeklyShareCardPayload(from items: [HomeItem], summary: SummaryPlayback? = nil, now: Date = Date()) -> WeeklyShareCardPayload? {
+        let calendar = Self.isoCalendar
+        guard let interval = calendar.dateInterval(of: .weekOfYear, for: now) else { return nil }
+        let rows = positiveItems(items, from: interval.start, to: interval.end)
+        guard !rows.isEmpty else { return nil }
+
+        let total = rows.reduce(0) { $0 + $1.amount }
+        let top = topCategoryStats(rows).first
+        let topAmount = top?.amount ?? 0
+        let ratio = total > 0 ? topAmount / total : 0
+        let builtSummary = summary ?? buildWeekSummary(from: items, now: now)
+        let trend = dailyActivity(rows, start: interval.start, days: 7).map { activity in
+            (Self.shortWeekdayFormatter.string(from: activity.date), activity.amount)
+        }
+        let period = "\(Self.dotDateFormatter.string(from: interval.start)) ~ \(Self.dotDateFormatter.string(from: calendar.date(byAdding: .day, value: -1, to: interval.end) ?? now))"
+        let closing = builtSummary.chapters.last?.narration.plain ?? "这一周已经留下了可以回看的生活痕迹。"
+
+        return WeeklyShareCardPayload(
+            weekTotal: total,
+            topCategory: top?.category ?? "日常",
+            recordCount: rows.count,
+            dailyTrend: trend,
+            topCategoryRatio: ratio,
+            headline: builtSummary.teaserLine,
+            subtitle: closing,
+            periodText: period
         )
     }
 
@@ -285,6 +396,7 @@ final class PlaybackService {
                 range: .month,
                 title: title,
                 rangeLabel: rangeLabel,
+                teaserLine: "这个月还没有记录，先记几笔再来看生活章。",
                 count: 0,
                 total: 0,
                 topCategory: nil,
@@ -296,16 +408,28 @@ final class PlaybackService {
         let activeDays = Set(rows.map { calendar.startOfDay(for: $0.createdAt) }).count
         let segments = monthSegments(rows, in: start, calendar: calendar)
         let leadingSegment = segments.max { $0.amount < $1.amount }
-        let changeText = monthlyChangeText(rows)
+        let previousRows = previousMonthItems(from: items, now: now)
+        let previousTotal = previousRows.reduce(0) { $0 + $1.amount }
+        let momPercent = monthOverMonthText(current: total, previous: previousTotal)
+        let changeText = monthlyChangeText(current: rows, previous: previousRows, segments: segments)
 
         let chapters: [SummaryChapter] = [
             SummaryChapter(
                 id: "month-intro",
                 title: "\(rangeLabel) 总览",
-                metrics: ["count": "\(rows.count)", "total": Self.money(total), "activeDays": "\(activeDays)"],
+                metrics: [
+                    "count": "\(rows.count)",
+                    "total": Self.money(total),
+                    "activeDays": "\(activeDays)",
+                    "momPercent": momPercent ?? ""
+                ],
                 narration: SummaryNarration(
-                    warm: "这个月小窝陪你收下 \(rows.count) 笔记录，\(activeDays) 天有生活痕迹，一共 \(Self.money(total))。",
-                    plain: "\(rangeLabel)：\(rows.count) 笔，\(activeDays) 个记录日，支出 \(Self.money(total))。"
+                    warm: momPercent.map {
+                        "\(rangeLabel) 你来了 \(activeDays) 天，总支出 \(Self.money(total))，比上月 \($0)。"
+                    } ?? "这个月小窝陪你收下 \(rows.count) 笔记录，\(activeDays) 天有生活痕迹，一共 \(Self.money(total))。",
+                    plain: momPercent.map {
+                        "\(rangeLabel)：\(activeDays) 天，\(Self.money(total))（较上月 \($0)）。"
+                    } ?? "\(rangeLabel)：\(rows.count) 笔，\(activeDays) 个记录日，支出 \(Self.money(total))。"
                 ),
                 durationSec: 8
             ),
@@ -370,6 +494,7 @@ final class PlaybackService {
             range: .month,
             title: title,
             rangeLabel: rangeLabel,
+            teaserLine: monthTeaserLine(segments: segments, top: top, ratio: ratio, changeText: changeText),
             count: rows.count,
             total: total,
             topCategory: top?.category,
@@ -431,6 +556,20 @@ final class PlaybackService {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.dateFormat = "yyyy-MM"
+        return formatter
+    }()
+
+    private static let dotDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy.MM.dd"
+        return formatter
+    }()
+
+    private static let shortWeekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "E"
         return formatter
     }()
 
@@ -505,16 +644,75 @@ final class PlaybackService {
         }
     }
 
-    private func monthlyChangeText(_ items: [HomeItem]) -> String {
-        let categories = Array(Set(items.map(\.category.rawValue))).sorted()
-        if categories.count >= 2 {
-            return "这个月出现了「\(categories[0])」和「\(categories[1])」等 \(categories.count) 类生活记录。"
+    private func weekTeaserLine(busiest: DayActivity?, top: CategoryAmount?, ratio: Int, rows: [HomeItem]) -> String {
+        if rows.count < 3 {
+            return "这周已有 \(rows.count) 笔记录，再多一点就能讲得更完整。"
         }
-        if let first = items.first, let last = items.last {
+        let topText = top.map { "\($0.category)约占\(ratio)%" } ?? "日常开始有了轮廓"
+        return "\(busiest?.label ?? "本周")最忙，\(topText)。"
+    }
+
+    private func monthTeaserLine(segments: [MonthSegment], top: CategoryAmount?, ratio: Int, changeText: String) -> String {
+        let leading = segments.max { $0.amount < $1.amount }?.label ?? "这个月"
+        if let top {
+            return "\(leading)更热闹，\(top.category)约占\(ratio)%。"
+        }
+        return changeText
+    }
+
+    private func previousMonthItems(from items: [HomeItem], now: Date) -> [HomeItem] {
+        let calendar = Calendar.current
+        guard let currentMonth = calendar.dateInterval(of: .month, for: now),
+              let previousStart = calendar.date(byAdding: .month, value: -1, to: currentMonth.start),
+              let previous = calendar.dateInterval(of: .month, for: previousStart) else {
+            return []
+        }
+        return positiveItems(items, from: previous.start, to: previous.end)
+    }
+
+    private func monthOverMonthText(current: Double, previous: Double) -> String? {
+        guard current > 0, previous > 0 else { return nil }
+        let diff = (current - previous) / previous * 100
+        let sign = diff >= 0 ? "+" : "-"
+        return "\(sign)\(Int(abs(diff).rounded()))%"
+    }
+
+    private func monthlyChangeText(current: [HomeItem], previous: [HomeItem], segments: [MonthSegment]) -> String {
+        let currentCategories = Set(current.map(\.category.rawValue))
+        let previousCategories = Set(previous.map(\.category.rawValue))
+        if let fresh = currentCategories.subtracting(previousCategories).sorted().first {
+            return "这个月新出现了「\(fresh)」分类，是一处新的生活记忆点。"
+        }
+        let streak = longestRecordStreak(in: current)
+        if streak >= 3 {
+            return "这个月最长连续 \(streak) 天有记录，生活节奏被接住了。"
+        }
+        if let leading = segments.max(by: { $0.amount < $1.amount }), leading.amount > 0 {
+            return "\(leading.label)最热闹，留下 \(leading.count) 笔、\(Self.money(leading.amount)) 的生活痕迹。"
+        }
+        if let first = current.first, let last = current.last {
             let days = max(1, Calendar.current.dateComponents([.day], from: first.createdAt, to: last.createdAt).day ?? 1)
             return "记录从 \(Self.shortDateFormatter.string(from: first.createdAt)) 延续到 \(Self.shortDateFormatter.string(from: last.createdAt))，跨度 \(days) 天。"
         }
         return "这个月已经留下了可以回看的生活痕迹。"
+    }
+
+    private func longestRecordStreak(in items: [HomeItem]) -> Int {
+        let calendar = Calendar.current
+        let days = Array(Set(items.map { calendar.startOfDay(for: $0.createdAt) })).sorted()
+        guard !days.isEmpty else { return 0 }
+        var best = 1
+        var current = 1
+        for index in 1..<days.count {
+            let delta = calendar.dateComponents([.day], from: days[index - 1], to: days[index]).day ?? 0
+            if delta == 1 {
+                current += 1
+                best = max(best, current)
+            } else {
+                current = 1
+            }
+        }
+        return best
     }
 
     private static func money(_ value: Double) -> String {

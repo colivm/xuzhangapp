@@ -116,6 +116,12 @@ struct SettingsView: View {
                 set: { settingsViewModel.petCompanionEnabled = $0 }
             ))
             settingHelper("关闭后首页不显示宠物助手。")
+            settingField(label: "宠物昵称") {
+                TextField("小窝", text: Binding(
+                    get: { settingsViewModel.petNickname },
+                    set: { settingsViewModel.petNickname = $0 }
+                ))
+            }
 
             // Weather companion
             settingToggle("允许天气场景暖心互动 🌤️", isOn: Binding(
@@ -224,6 +230,29 @@ struct SettingsView: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(AppColors.text)
             }
+
+            #if DEBUG
+            HStack(spacing: 8) {
+                Button("调试：开会员") {
+                    settingsViewModel.memberTier = "monthly"
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                Button("恢复免费") {
+                    settingsViewModel.memberTier = "free"
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AppColors.text.opacity(0.82))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.62), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            #endif
 
             Button {
                 showAccountSheet = false

@@ -37,10 +37,10 @@ const memberScenePacks = [
     category: "交通",
     desc: "比如：输入 ¥2，自动备注“日常地铁通勤出行”",
     rules: [
-      { max: 5, notes: ["日常地铁通勤出行", "公交短途出行打卡", "选择绿色出行，简单省心"] },
-      { max: 15, notes: ["公交短途出行打卡", "日常地铁通勤出行", "选择绿色出行，简单省心"] },
-      { max: 30, notes: ["选择绿色出行，简单省心", "日常地铁通勤出行", "公交短途出行打卡"] },
-      { max: 9999, notes: ["日常地铁通勤出行", "选择绿色出行，简单省心", "公交短途出行打卡"] },
+      { max: 5, notes: ["日常地铁通勤出行", "公交短途出行打卡", "选择绿色出行，简单省心", "早班地铁，稳稳到岗", "换乘一小段，通勤完成", "今天的路费，很日常", "刷卡进站，出发啦", "短途公交，省心到家"] },
+      { max: 15, notes: ["公交+地铁组合通勤", "下班高峰一段路", "打车到地铁站接驳", "通勤路上买瓶水", "今日出行主打省心", "固定路线，熟悉的感觉", "早晚通勤各记一笔", "城市穿梭的小开销"] },
+      { max: 30, notes: ["雨天打车通勤", "加班后打车回家", "共享单车月卡摊销", "停车/充电小费用", "今天路程稍长一点", "通勤多花了一点时间换舒适", "早晚两次出行", "为准时到达的小投资"] },
+      { max: 9999, notes: ["跨区通勤长途费", "出差市内交通", "高速/长途客车费", "一次性通勤大额支出", "今天跑了不少路", "行程较满的交通开销", "远距离往返", "为工作奔波的一天"] },
     ],
   },
   {
@@ -50,10 +50,10 @@ const memberScenePacks = [
     category: "餐饮",
     desc: "比如：输入 ¥12，自动备注“晨间咖啡唤醒日常”",
     rules: [
-      { max: 15, notes: ["晨间咖啡唤醒日常", "简单饮品放松心情", "随手添置早餐小食"] },
-      { max: 25, notes: ["简单饮品放松心情", "随手添置早餐小食", "晨间咖啡唤醒日常"] },
-      { max: 40, notes: ["随手添置早餐小食", "简单饮品放松心情", "晨间咖啡唤醒日常"] },
-      { max: 9999, notes: ["简单饮品放松心情", "随手添置早餐小食", "晨间咖啡唤醒日常"] },
+      { max: 15, notes: ["晨间咖啡唤醒日常", "简单饮品放松心情", "随手添置早餐小食", "豆浆包子早餐组合", "午前一杯奶茶小确幸", "便利店轻食补给", "早茶点心小份", "上班前快速吃一口"] },
+      { max: 25, notes: ["工作日午餐简餐", "外卖点到工位", "食堂一份热乎饭", "下午茶小点心", "约同事一起简吃", "饱腹又不折腾的一顿", "忙里偷闲喝点什么", "中午好好吃一口"] },
+      { max: 40, notes: ["晚餐小聚一份主菜", "周末早午餐放松", "尝试一家新店", "买菜顺路带点卤味", "认真做了一顿家常饭", "犒劳自己的一顿好饭", "热腾腾的面或饭", "今天吃得挺满足"] },
+      { max: 9999, notes: ["朋友小聚聚餐", "生日月小小庆祝餐", "想吃了很久的一顿", "节日加菜", "家庭聚餐贡献一道", "品质好一点的一餐", "约会餐厅体验", "美食探店打卡"] },
     ],
   },
   {
@@ -63,10 +63,10 @@ const memberScenePacks = [
     category: "其他",
     desc: "比如：输入 ¥20，自动备注“短途出行小消费”",
     rules: [
-      { max: 20, notes: ["短途出行小消费", "沿途小吃简单打卡", "出行便携物资采购"] },
-      { max: 80, notes: ["沿途小吃简单打卡", "短途出行小消费", "出行便携物资采购"] },
-      { max: 200, notes: ["出行便携物资采购", "短途出行小消费", "沿途小吃简单打卡"] },
-      { max: 9999, notes: ["短途出行小消费", "出行便携物资采购", "沿途小吃简单打卡"] },
+      { max: 20, notes: ["短途出行小消费", "沿途小吃简单打卡", "出行便携物资采购", "景点门口一瓶水", "小城漫步小花费", "街边明信片或小挂件", "公交日票/景区摆渡", "旅途中的轻量补给"] },
+      { max: 80, notes: ["展馆/景点门票", "民宿小用品补买", "旅途一顿特色简餐", "城市漫步咖啡歇脚", "伴手礼试吃装", "租车/骑行小时费", "行程里的一笔小惊喜", "路边摊体验打卡"] },
+      { max: 200, notes: ["一晚经济型住宿摊销", "城际大巴/高铁一段", "特色餐厅体验", "博物馆联票", "旅行装备小升级", "行程中较充实的一天", "小镇住宿加早午餐", "为风景多走一段路"] },
+      { max: 9999, notes: ["机票/高铁主段", "两晚住宿预算", "旅行套餐核心支出", "目的地一日游团", "行李箱/装备购置", "长假出行大项", "带家人出门的一程", "值得记住的一次出发"] },
     ],
   },
   {
@@ -76,10 +76,10 @@ const memberScenePacks = [
     category: "日用",
     desc: "比如：输入 ¥20，自动备注“给{petName}买了小零食”",
     rules: [
-      { max: 20, notes: ["给{petName}买了小零食", "给{petName}安排美味小点心", "补货宠物消耗小用品"] },
-      { max: 60, notes: ["为{petName}购置口粮用品", "给{petName}囤上爱吃的罐头", "入手小玩具，陪伴{petName}玩耍"] },
-      { max: 150, notes: ["购入{petName}专用主食与冻干", "安排{petName}日常驱虫护理", "带{petName}洗护美容，清爽干净"] },
-      { max: 9999, notes: ["带{petName}体检接种疫苗", "添置居家小窝与攀爬家具", "{petName}就医护理相关开销", "为{petName}选购高端营养口粮"] },
+      { max: 20, notes: ["给{petName}买了小零食", "给{petName}安排美味小点心", "补货宠物消耗小用品", "顺手囤一包冻干", "给{petName}挑个小玩具", "猫砂/尿垫补货", "给{petName}加一罐罐头", "毛孩的小零食时间"] },
+      { max: 60, notes: ["为{petName}购置口粮用品", "给{petName}囤上爱吃的罐头", "入手小玩具，陪伴{petName}玩耍", "宠物洗护用品补货", "给{petName}买新碗新窝配件", "驱虫药常备补货", "毛孩营养膏一支", "给{petName}添件舒适用品"] },
+      { max: 150, notes: ["购入{petName}专用主食与冻干", "安排{petName}日常驱虫护理", "带{petName}洗护美容，清爽干净", "宠物医院常规检查", "换季毛发护理开销", "给{petName}升级主食粮", "宠物保险/会员续费", "大件猫爬架小分期"] },
+      { max: 9999, notes: ["带{petName}体检接种疫苗", "添置居家小窝与攀爬家具", "{petName}就医护理相关开销", "为{petName}选购高端营养口粮", "宠物手术/治疗相关", "长途托运或寄养费用", "给{petName}安排年度体检套餐", "毛孩的大件生活升级"] },
     ],
   },
 ];
@@ -2530,7 +2530,7 @@ function resolvePetNameForNote() {
   const raw = (state.settings.userPetNickname || "").trim();
   const isMember = Boolean(state.settings.isMember);
   if (isMember && /^[\u4e00-\u9fa5A-Za-z0-9]{2,6}$/.test(raw)) return raw;
-  return "小宠物";
+  return "小窝";
 }
 
 function personalizePetText(text) {
@@ -2539,32 +2539,73 @@ function personalizePetText(text) {
 }
 
 function pickHistoryKeyword(category) {
+  const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
   const keywords = state.items
     .filter((item) => item.category === category)
+    .filter((item) => new Date(item.createdAt).getTime() >= cutoff)
     .map((item) => (item.title || "").trim())
     .filter((text) => text && !/消费$/.test(text) && text.length >= 2 && text.length <= 8);
   if (!keywords.length) return "";
-  return pickRandom(keywords.slice(0, 10));
+  const counts = new Map();
+  keywords.forEach((text) => counts.set(text, (counts.get(text) || 0) + 1));
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] || "";
 }
 
-function enrichNoteWithHistory(note, category) {
+function enrichNoteWithHistory(note, category, seed = "") {
   const keyword = pickHistoryKeyword(category);
   if (!keyword) return note;
   if (note.includes(keyword)) return note;
-  if (Math.random() > 0.45) return note;
+  if (stableIndex(`${seed}|historyChance`, 100) >= 45) return note;
   return `${note}，顺带记下「${keyword}」`;
+}
+
+function localDayKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function stableHash(seed) {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function stableIndex(seed, count) {
+  if (!count) return 0;
+  return stableHash(seed) % count;
+}
+
+function scenePackTierIndex(pack, amount) {
+  const index = pack.rules.findIndex((rule) => amount <= rule.max);
+  return index >= 0 ? index : Math.max(0, pack.rules.length - 1);
+}
+
+function stableScenePackNote(pack, amount, categoryContext) {
+  const tierIndex = scenePackTierIndex(pack, amount);
+  const matchedRule = pack.rules[tierIndex] || pack.rules[pack.rules.length - 1];
+  const notes = matchedRule?.notes || ["今天记一笔日常花费"];
+  const seed = `${localDayKey()}|${pack.id}|${tierIndex}|${categoryContext || pack.category}`;
+  return {
+    seed,
+    note: notes[stableIndex(seed, notes.length)] || notes[0],
+  };
 }
 
 function applyMemberScenePack(packId, { keepSelectedCategory = false } = {}) {
   const pack = memberScenePacks.find((x) => x.id === packId);
   if (!pack) return;
   const amount = getAmountValue();
-  const matchedRule = pack.rules.find((rule) => amount <= rule.max) || pack.rules[pack.rules.length - 1];
   const petName = resolvePetNameForNote();
   const effectiveCategory = keepSelectedCategory ? (selectedCategory || pack.category) : pack.category;
-  let phrase = pickRandom(matchedRule?.notes || ["今天记一笔日常花费"]);
+  const picked = stableScenePackNote(pack, amount, effectiveCategory);
+  let phrase = picked.note;
   phrase = phrase.replace(/\{petName\}/g, petName);
-  phrase = enrichNoteWithHistory(phrase, effectiveCategory);
+  phrase = enrichNoteWithHistory(phrase, effectiveCategory, picked.seed);
   if (!keepSelectedCategory) {
     selectCategory(pack.category);
   }

@@ -2,6 +2,17 @@ import Foundation
 import SwiftUI
 import Combine
 
+enum SettingsViewModelError: LocalizedError {
+    case loginRequired
+
+    var errorDescription: String? {
+        switch self {
+        case .loginRequired:
+            return "请先登录账号，再开通或恢复会员。"
+        }
+    }
+}
+
 @MainActor
 final class SettingsViewModel: ObservableObject {
     @Published private(set) var settings: AppSettings
@@ -65,6 +76,14 @@ final class SettingsViewModel: ObservableObject {
         get { settings.petCompanionEnabled }
         set {
             settings.petCompanionEnabled = newValue
+            persist()
+        }
+    }
+
+    var petNickname: String {
+        get { settings.petNickname }
+        set {
+            settings.petNickname = newValue
             persist()
         }
     }
@@ -225,6 +244,27 @@ final class SettingsViewModel: ObservableObject {
         } catch {
             authMessage = error.localizedDescription
         }
+    }
+
+    func verifyIAPPurchase(_ payload: IAPPurchaseVerification) async throws {
+        let token = KeychainService.loadAccessToken()
+        guard !token.isEmpty else {
+            authMessage = "请先登录账号，再开通会员。"
+            throw SettingsViewModelError.loginRequired
+        }
+        isAuthBusy = true
+        defer { isAuthBusy = false }
+        let client = AuthService(baseURL: backendBaseURL)
+        _ = try await client.verifyIAPPurchase(
+            accessToken: token,
+            productId: payload.productId,
+            transactionId: payload.transactionId,
+            signedTransactionInfo: payload.signedTransactionInfo
+        )
+        let tier = try await client.fetchMemberMe(accessToken: token)
+        settings.memberTier = tier.tier
+        persist()
+        authMessage = "会员状态已更新。"
     }
 
     private func persist() {

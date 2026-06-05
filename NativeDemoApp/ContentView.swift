@@ -615,6 +615,10 @@ struct RecordView: View {
     var onSaved: (() -> Void)? = nil
     @State private var selectedEntryMode: EntryMode = .manual
     @State private var selectedPhoto: PhotosPickerItem?
+    @State private var isOCRRecognizing = false
+    @State private var ocrProgress = 0.0
+    @State private var ocrConfirmDrafts: [OCRReceiptDraft] = []
+    @State private var showOCRConfirmSheet = false
     @State private var showRecordDateSheet = false
     @State private var scenePackExpanded = false
     @FocusState private var isAmountFocused: Bool
@@ -622,37 +626,7 @@ struct RecordView: View {
     private let recordAccent = AppColors.accent
     private let recordInk = AppColors.text
 
-    // MARK: - Member Scene Pack Data
-    private struct ScenePack {
-        let id: String; let emoji: String; let label: String
-        let category: HomeItem.Category; let desc: String
-        let rules: [(max: Double, notes: [String])]
-    }
-    private let scenePacks: [ScenePack] = [
-        ScenePack(id: "commute", emoji: "🚇", label: "打工人通勤包", category: .transport,
-                  desc: "比如：输入 ¥2，自动备注\u{201C}日常地铁通勤出行\u{201D}",
-                  rules: [(5, ["日常地铁通勤出行", "公交短途出行打卡", "选择绿色出行，简单省心"]),
-                          (15, ["公交短途出行打卡", "日常地铁通勤出行", "选择绿色出行，简单省心"]),
-                          (30, ["选择绿色出行，简单省心", "日常地铁通勤出行", "公交短途出行打卡"]),
-                          (9999, ["日常地铁通勤出行", "选择绿色出行，简单省心", "公交短途出行打卡"])]),
-        ScenePack(id: "food", emoji: "🍵", label: "吃货专属包", category: .dining,
-                  desc: "比如：输入 ¥12，自动备注\u{201C}晨间咖啡唤醒日常\u{201D}",
-                  rules: [(15, ["晨间咖啡唤醒日常", "简单饮品放松心情", "随手添置早餐小食"]),
-                          (25, ["简单饮品放松心情", "随手添置早餐小食", "晨间咖啡唤醒日常"]),
-                          (40, ["随手添置早餐小食", "简单饮品放松心情", "晨间咖啡唤醒日常"]),
-                          (9999, ["简单饮品放松心情", "随手添置早餐小食", "晨间咖啡唤醒日常"])]),
-        ScenePack(id: "travel", emoji: "✈️", label: "旅行预算包", category: .other,
-                  desc: "比如：输入 ¥20，自动备注\u{201C}短途出行小消费\u{201D}",
-                  rules: [(20, ["短途出行小消费", "沿途小吃简单打卡", "出行便携物资采购"]),
-                          (80, ["沿途小吃简单打卡", "短途出行小消费", "出行便携物资采购"]),
-                          (200, ["出行便携物资采购", "短途出行小消费", "沿途小吃简单打卡"]),
-                          (9999, ["短途出行小消费", "出行便携物资采购", "沿途小吃简单打卡"])]),
-        ScenePack(id: "pet", emoji: "🐱", label: "铲屎官宠物包", category: .daily,
-                  desc: "比如：输入 ¥20，自动备注\u{201C}给猫咪买了小零食\u{201D}",
-                  rules: [(20, ["给猫咪买了小零食", "安排美味小点心", "补货宠物消耗小用品"]),
-                          (60, ["为猫咪购置口粮用品", "囤上爱吃的罐头", "入手小玩具，陪伴玩耍"]),
-                          (9999, ["为猫咪购置口粮用品", "囤上爱吃的罐头", "入手小玩具，陪伴玩耍"])]),
-    ]
+    private let scenePacks = ScenePackCopyPool.definitions
 
     private var isMember: Bool {
         let tier = settingsViewModel.memberTier.lowercased()
@@ -660,6 +634,20 @@ struct RecordView: View {
     }
 
     private func guessScenePackId() -> String {
+        let categoryToPackId: [HomeItem.Category: String] = [
+            .dining: "food",
+            .transport: "commute",
+            .daily: "pet",
+            .shopping: "travel",
+            .entertainment: "travel",
+            .lodging: "travel",
+            .other: "travel",
+        ]
+        if let packId = categoryToPackId[homeViewModel.selectedCategory],
+           scenePacks.contains(where: { $0.id == packId }) {
+            return packId
+        }
+
         let amount = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
         if amount <= 15 { return "commute" }
         if amount <= 45 { return "food" }
@@ -667,12 +655,23 @@ struct RecordView: View {
         return "travel"
     }
 
-    private func applyScenePack(_ pack: ScenePack) {
+    private func applyScenePack(_ pack: ScenePackDefinition, keepSelectedCategory: Bool = false) {
         let amount = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
-        let rule = pack.rules.first(where: { amount <= $0.max }) ?? pack.rules.last!
-        let note = rule.notes.randomElement() ?? pack.label
-        homeViewModel.inputTitle = note
-        homeViewModel.selectedCategory = pack.category
+        let categoryContext = keepSelectedCategory ? homeViewModel.selectedCategory : pack.category
+        homeViewModel.inputTitle = ScenePackCopyPool.note(
+            for: pack,
+            amount: amount,
+            categoryContext: categoryContext,
+            petName: settingsViewModel.petNickname,
+            historyItems: homeViewModel.items
+        )
+        if !keepSelectedCategory {
+            homeViewModel.selectCategory(pack.category)
+        }
+    }
+
+    private func scenePackDesc(_ pack: ScenePackDefinition) -> String {
+        ScenePackCopyPool.renderPetName(pack.desc, petName: settingsViewModel.petNickname)
     }
 
     enum EntryMode: String, CaseIterable, Identifiable {
@@ -725,15 +724,43 @@ struct RecordView: View {
         .onChange(of: selectedPhoto) { _, newValue in
             guard let newValue else { return }
             Task {
+                await MainActor.run {
+                    isOCRRecognizing = true
+                    ocrProgress = 0.12
+                }
+                let progressTask = Task {
+                    while !Task.isCancelled {
+                        try? await Task.sleep(nanoseconds: 180_000_000)
+                        await MainActor.run {
+                            ocrProgress = min(0.88, ocrProgress + 0.08)
+                        }
+                    }
+                }
+                var drafts: [OCRReceiptDraft] = []
                 if let data = try? await newValue.loadTransferable(type: Data.self) {
-                    await homeViewModel.prefillFromOCR(imageData: data)
+                    drafts = await homeViewModel.recognizeOCRDrafts(imageData: data, isMember: isMember)
+                }
+                progressTask.cancel()
+                await MainActor.run {
+                    ocrProgress = 1
+                    if !drafts.isEmpty {
+                        ocrConfirmDrafts = drafts
+                        showOCRConfirmSheet = true
+                    }
+                }
+                try? await Task.sleep(nanoseconds: 180_000_000)
+                await MainActor.run {
+                    isOCRRecognizing = false
+                    ocrProgress = 0
+                    selectedPhoto = nil
                 }
             }
         }
         .onChange(of: homeViewModel.inputAmount) { _, newValue in
             guard selectedEntryMode == .manual else { return }
+            guard !homeViewModel.categoryLockedByUser else { return }
             if let category = homeViewModel.recommendCategory(for: newValue) {
-                homeViewModel.selectedCategory = category
+                homeViewModel.applyRecommendedCategory(category)
             }
         }
         .sheet(isPresented: $showRecordDateSheet) {
@@ -750,6 +777,16 @@ struct RecordView: View {
                     }
             }
             .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $showOCRConfirmSheet) {
+            OCRConfirmSheet(drafts: ocrConfirmDrafts) { selectedDrafts in
+                homeViewModel.importOCRDrafts(selectedDrafts, isMember: isMember)
+            }
+        }
+        .onChange(of: showOCRConfirmSheet) { _, isPresented in
+            if !isPresented {
+                ocrConfirmDrafts = []
+            }
         }
     }
 
@@ -928,7 +965,7 @@ struct RecordView: View {
         let isSelected = homeViewModel.selectedCategory == category
         return Button {
             withAnimation(.easeInOut(duration: 0.12)) {
-                homeViewModel.selectedCategory = category
+                homeViewModel.selectCategory(category)
             }
         } label: {
             HStack(spacing: 4) {
@@ -1094,7 +1131,7 @@ struct RecordView: View {
             let quickPackId = guessScenePackId()
             let quickPack = scenePacks.first(where: { $0.id == quickPackId }) ?? scenePacks[0]
             Button {
-                applyScenePack(quickPack)
+                applyScenePack(quickPack, keepSelectedCategory: true)
             } label: {
                 HStack(spacing: 4) {
                     Text("✨ 一键生成备注")
@@ -1142,7 +1179,7 @@ struct RecordView: View {
                         HStack {
                             Text("\(pack.emoji) \(pack.label)")
                                 .font(.system(size: 14, weight: .medium))
-                            Text(pack.desc)
+                            Text(scenePackDesc(pack))
                                 .font(.system(size: 11))
                                 .foregroundStyle(AppColors.subtext.opacity(0.7))
                                 .lineLimit(1)
@@ -1171,12 +1208,12 @@ struct RecordView: View {
     @ViewBuilder
     private var ocrForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("导入微信/支付宝账单截图，或选择小票图片，将调用本机识别并自动填充金额与分类。")
+            Text("导入微信/支付宝单笔账单详情截图，识别后先确认，再写入账单。")
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
 
             PhotosPicker(selection: $selectedPhoto, matching: .images, photoLibrary: .shared()) {
-                Label("选择小票图片", systemImage: "photo")
+                Label("导入账单 / 识别票据", systemImage: "photo")
                     .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 50)
@@ -1190,9 +1227,27 @@ struct RecordView: View {
                     )
                     .shadow(color: recordAccent.opacity(0.25), radius: 8, y: 4)
             }
+            .disabled(isOCRRecognizing)
 
-            Button("使用演示 OCR 记录") {
-                homeViewModel.addOCRDemoRecord()
+            if isOCRRecognizing {
+                VStack(alignment: .leading, spacing: 8) {
+                    ProgressView(value: ocrProgress)
+                        .tint(recordAccent)
+                    Text("正在识别账单，请稍候…")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.68))
+                )
+            }
+
+            #if DEBUG
+            Button("使用演示 OCR 结果") {
+                ocrConfirmDrafts = homeViewModel.makeDemoOCRDrafts()
+                showOCRConfirmSheet = true
             }
             .font(.system(size: 14))
             .foregroundStyle(recordAccent)
@@ -1202,6 +1257,7 @@ struct RecordView: View {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(recordAccent.opacity(0.5), lineWidth: 1)
             )
+            #endif
 
             if !homeViewModel.ocrStatus.isEmpty {
                 Text(homeViewModel.ocrStatus)
@@ -1209,6 +1265,16 @@ struct RecordView: View {
                     .foregroundStyle(AppColors.subtext)
                     .padding(.top, 4)
             }
+
+            OCRDraftPanel(
+                items: homeViewModel.ocrDraftItems,
+                onToggleResolved: { id, isResolved in homeViewModel.updateOCRDraftStatus(id: id, isResolved: isResolved) },
+                onCategoryChange: { id, category in homeViewModel.updateOCRDraftCategory(id: id, category: category) },
+                onAmountChange: { id, amount in homeViewModel.updateOCRDraftAmount(id: id, amount: amount) },
+                onDelete: { id in homeViewModel.deleteOCRDraftItem(id: id) },
+                onClearResolved: homeViewModel.clearResolvedOCRDrafts
+            )
+            .padding(.top, 6)
         }
     }
 
@@ -1431,6 +1497,10 @@ struct StatsWebView: View {
                 playback: playback,
                 petEnabled: settingsViewModel.petCompanionEnabled,
                 isMember: hasMemberAccess,
+                weeklySharePayload: playback.range == .week
+                    ? playbackService.buildWeeklyShareCardPayload(from: homeViewModel.items, summary: playback)
+                    : nil,
+                shareNickname: settingsViewModel.displayName,
                 onCompleted: { progress in
                     quotaStore.markCompleted(playback.range, isMember: hasMemberAccess, progress: progress)
                     if progress >= 0.8 {
@@ -1539,6 +1609,9 @@ struct StatsWebView: View {
         guard hasData else { return "这个时间段还没有记录，先记一笔再播放。" }
         if isMonthLocked {
             return "会员专属 · 你的 3 次新用户体验已用完"
+        }
+        if !preview.teaserLine.isEmpty {
+            return preview.teaserLine
         }
         switch range {
         case .week:
@@ -2403,39 +2476,11 @@ struct InsightWebView: View {
     // MARK: - Share Card Generation
 
     private func generateAndShareWeeklyCard() {
-        let cal = Calendar.current
-        let weekItems = homeViewModel.items.filter {
-            cal.isDate($0.createdAt, equalTo: .now, toGranularity: .weekOfYear) && $0.amount > 0
-        }
-        guard !weekItems.isEmpty else { return }
-
-        // Compute daily trend (last 7 days)
-        var dailyTrend: [(String, Double)] = []
-        let weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"]
-        for dayOffset in stride(from: 6, through: 0, by: -1) {
-            guard let date = cal.date(byAdding: .day, value: -dayOffset, to: Date()) else { continue }
-            let dayItems = weekItems.filter { cal.isDate($0.createdAt, inSameDayAs: date) }
-            let total = dayItems.reduce(0) { $0 + $1.amount }
-            let weekday = cal.component(.weekday, from: date) - 1 // 0=Sun
-            dailyTrend.append((weekdayLabels[weekday], total))
-        }
-
-        // Compute top category ratio
-        let total = weekItems.reduce(0) { $0 + $1.amount }
-        let catMap = Dictionary(grouping: weekItems, by: \.category).mapValues { items in
-            items.reduce(0) { $0 + $1.amount }
-        }
-        let topAmount = catMap.max(by: { $0.value < $1.value })?.value ?? 0
-        let topRatio = total > 0 ? topAmount / total : 0
-
-        let petMode = settingsViewModel.settings.aiTone == .gentle
+        guard let payload = PlaybackService().buildWeeklyShareCardPayload(from: homeViewModel.items) else { return }
+        let petMode = settingsViewModel.petCompanionEnabled
         let nick = settingsViewModel.displayName.isEmpty ? "叙帐用户" : settingsViewModel.displayName
         let card = WeeklyShareCardView(
-            weekTotal: total,
-            topCategory: homeViewModel.weekTopCategoryText,
-            recordCount: weekItems.count,
-            dailyTrend: dailyTrend,
-            topCategoryRatio: topRatio,
+            payload: payload,
             isPetMode: petMode,
             nickname: nick
         )
@@ -2456,6 +2501,9 @@ struct WeeklyShareCardView: View {
     let recordCount: Int
     let dailyTrend: [(String, Double)]
     let topCategoryRatio: Double
+    let headline: String
+    let subtitle: String
+    let periodText: String
     var isPetMode: Bool = true
     var nickname: String = "叙帐用户"
 
@@ -2486,7 +2534,46 @@ struct WeeklyShareCardView: View {
             footer: Color(hex: "6b7688"), footerSub: Color(hex: "8f99ab"))
     }
 
-    private var periodText: String {
+    init(
+        weekTotal: Double,
+        topCategory: String,
+        recordCount: Int,
+        dailyTrend: [(String, Double)],
+        topCategoryRatio: Double,
+        headline: String = "这一周你记录得很认真",
+        subtitle: String = "温柔回看，不必苛责，按自己的节奏慢慢生活。",
+        periodText: String? = nil,
+        isPetMode: Bool = true,
+        nickname: String = "叙帐用户"
+    ) {
+        self.weekTotal = weekTotal
+        self.topCategory = topCategory
+        self.recordCount = recordCount
+        self.dailyTrend = dailyTrend
+        self.topCategoryRatio = topCategoryRatio
+        self.headline = headline
+        self.subtitle = subtitle
+        self.periodText = periodText ?? Self.defaultPeriodText()
+        self.isPetMode = isPetMode
+        self.nickname = nickname
+    }
+
+    init(payload: WeeklyShareCardPayload, isPetMode: Bool = true, nickname: String = "叙帐用户") {
+        self.init(
+            weekTotal: payload.weekTotal,
+            topCategory: payload.topCategory,
+            recordCount: payload.recordCount,
+            dailyTrend: payload.dailyTrend,
+            topCategoryRatio: payload.topCategoryRatio,
+            headline: payload.headline,
+            subtitle: payload.subtitle,
+            periodText: payload.periodText,
+            isPetMode: isPetMode,
+            nickname: nickname
+        )
+    }
+
+    private static func defaultPeriodText() -> String {
         let cal = Calendar.current
         guard let start = cal.date(byAdding: .day, value: -6, to: Date()) else { return "" }
         let f = DateFormatter(); f.dateFormat = "yyyy.MM.dd"
@@ -2520,22 +2607,20 @@ struct WeeklyShareCardView: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(t.textMain)
                     .padding(.top, 20)
-                Text("这一周你记录得很认真")
-                    .font(.system(size: 15, weight: .semibold))
+                Text(headline)
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundStyle(t.textMain)
                     .padding(.top, 3)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.76)
 
                 // Stats
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("记录 \(recordCount) 笔")
-                    Text("总开销 \(weekTotal.formatted(.cny))")
-                    Text("常花类目 \(topCategory)")
+                HStack(spacing: 8) {
+                    storyMetric("记录", "\(recordCount) 笔")
+                    storyMetric("支出", weekTotal.formatted(.cny))
+                    storyMetric("主料", topCategory)
                 }
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(t.accent)
                 .padding(.top, 20)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
 
                 // Charts stacked vertically (HStack overflows at 390pt)
                 VStack(alignment: .leading, spacing: 10) {
@@ -2547,11 +2632,13 @@ struct WeeklyShareCardView: View {
                 Spacer(minLength: 12)
 
                 // Footer
-                Text("温柔回看，不必苛责，按自己的节奏慢慢生活。")
+                Text(subtitle)
                     .font(.system(size: 12))
                     .foregroundStyle(t.footer)
                     .frame(maxWidth: .infinity)
-                Text("来自 叙帐 · 小 AI 说")
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+                Text("来自 叙帐 · 温柔回看每一周")
                     .font(.system(size: 10))
                     .foregroundStyle(t.footerSub)
                     .frame(maxWidth: .infinity)
@@ -2568,6 +2655,23 @@ struct WeeklyShareCardView: View {
         }
         .frame(width: 390, height: 580)
         .clipped()
+    }
+
+    private func storyMetric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.system(size: 8, weight: .medium))
+                .foregroundStyle(t.textMuted)
+            Text(value)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(t.accent)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     // MARK: - Corner decoration

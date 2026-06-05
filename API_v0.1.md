@@ -71,3 +71,78 @@
 - `UPSTREAM_TIMEOUT`：模型超时
 - `UPSTREAM_UNAVAILABLE`：模型服务不可用
 - `INTERNAL_ERROR`：服务内部错误
+
+## 8. App Store 内购验单
+
+- **Method**: `POST`
+- **Path**: `/v1/iap/verify`
+- **Auth**: `Authorization: Bearer <accessToken>`
+- **Content-Type**: `application/json`
+
+客户端使用 StoreKit 2 购买成功后，将交易信息发给后端；后端使用 App Store Server API 查询并校验交易，再写入会员权益。
+
+### Request Body
+
+```json
+{
+  "productId": "com.xuzhang.member.yearly",
+  "transactionId": "2000000123456789",
+  "signedTransactionInfo": "eyJhbGciOiJFUzI1NiIsIng1YyI6Wy..."
+}
+```
+
+### Success Response（200）
+
+```json
+{
+  "ok": true,
+  "productId": "com.xuzhang.member.yearly",
+  "transactionId": "2000000123456789",
+  "originalTransactionId": "2000000123456789",
+  "environment": "Sandbox",
+  "memberTier": "yearly",
+  "memberExpiresAt": "2027-06-05T10:00:00.000Z"
+}
+```
+
+### Error Response
+
+```json
+{
+  "ok": false,
+  "error": "IAP_NOT_CONFIGURED",
+  "message": "Missing env: APPLE_ISSUER_ID, APPLE_KEY_ID"
+}
+```
+
+常见错误：
+
+- `INVALID_IAP_REQUEST`：缺少 `productId` 或 `transactionId`
+- `UNKNOWN_PRODUCT`：商品 ID 未配置或不在会员映射中
+- `APPLE_LOOKUP_FAILED`：App Store Server API 查询失败
+- `TRANSACTION_EXPIRED`：订阅交易已过期
+- `TRANSACTION_REVOKED`：交易已撤销
+- `TRANSACTION_ALREADY_BOUND`：同一 `originalTransactionId` 已绑定其他用户
+
+## 9. 会员状态查询
+
+- **Method**: `GET`
+- **Path**: `/v1/member/me`
+- **Auth**: `Authorization: Bearer <accessToken>`
+
+### Success Response（200）
+
+```json
+{
+  "ok": true,
+  "memberTier": "yearly",
+  "memberExpiresAt": "2027-06-05T10:00:00.000Z"
+}
+```
+
+会员档位与产品定价一致：
+
+- `monthly`：月度会员
+- `yearly`：年度会员
+- `lifetime`：永久会员，`memberExpiresAt = null`
+- `free`：免费用户

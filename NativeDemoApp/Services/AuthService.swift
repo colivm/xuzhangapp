@@ -63,6 +63,18 @@ private struct MemberMeResponse: Decodable {
     let memberExpiresAt: String?
 }
 
+private struct IAPVerifyBody: Encodable {
+    let productId: String
+    let transactionId: String
+    let signedTransactionInfo: String
+}
+
+private struct IAPVerifyResponse: Decodable {
+    let ok: Bool
+    let memberTier: String?
+    let memberExpiresAt: String?
+}
+
 protocol AuthServiceProtocol {
     func loginWithWeChat(authCode: String) async throws -> UserSession
     func sendSMSCode(phone: String) async throws
@@ -134,6 +146,32 @@ final class AuthService: AuthServiceProtocol {
             throw AuthServiceError.badStatus(http.statusCode, bodyText)
         }
         let decoded = try JSONDecoder().decode(MemberMeResponse.self, from: data)
+        guard decoded.ok else { throw AuthServiceError.decodeFailed }
+        return (decoded.memberTier ?? "free", decoded.memberExpiresAt)
+    }
+
+    func verifyIAPPurchase(
+        accessToken: String,
+        productId: String,
+        transactionId: String,
+        signedTransactionInfo: String
+    ) async throws -> (tier: String, expiresAt: String?) {
+        let url = try makeURL(path: "/v1/iap/verify")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(IAPVerifyBody(
+            productId: productId,
+            transactionId: transactionId,
+            signedTransactionInfo: signedTransactionInfo
+        ))
+        let (data, response, bodyText) = try await data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw AuthServiceError.badStatus(-1, "") }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw AuthServiceError.badStatus(http.statusCode, bodyText)
+        }
+        let decoded = try JSONDecoder().decode(IAPVerifyResponse.self, from: data)
         guard decoded.ok else { throw AuthServiceError.decodeFailed }
         return (decoded.memberTier ?? "free", decoded.memberExpiresAt)
     }

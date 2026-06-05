@@ -13,6 +13,7 @@ final class HomeViewModel: ObservableObject {
     @Published var inputTitle: String = ""
     @Published var inputAmount: String = ""
     @Published var selectedCategory: HomeItem.Category = .dining
+    @Published private(set) var categoryLockedByUser: Bool = false
     @Published var selectedDate: Date = .now
     @Published var selectedPeriod: Period = .month
     @Published private(set) var ocrStatus: String = ""
@@ -94,6 +95,7 @@ final class HomeViewModel: ObservableObject {
     private let playbackService = PlaybackService()
     private let memberFlowService = MemberFlowService()
     private let routeQuotaStore = SummaryPlaybackQuotaStore()
+    private let dailyQuotaStore = DailyFeatureQuotaStore()
     private var didEmitRouteGuidanceThisSession = false
 
     init() {
@@ -160,23 +162,165 @@ final class HomeViewModel: ObservableObject {
         Task { await syncUpsertToCloud(newItem) }
     }
 
-    func addOCRDemoRecord() {
-        inputTitle = "OCR 识别小票"
-        inputAmount = "26.5"
-        selectedCategory = .dining
-        addManualRecord()
+    var ocrDraftItems: [HomeItem] {
+        items
+            .filter { $0.source == .ocr && $0.draftMeta != nil }
+            .sorted {
+                let left = $0.draftMeta?.importedAt ?? $0.createdAt
+                let right = $1.draftMeta?.importedAt ?? $1.createdAt
+                return left > right
+            }
     }
 
-    func prefillFromOCR(imageData: Data) async {
+    func makeDemoOCRDrafts() -> [OCRReceiptDraft] {
+        [
+            OCRReceiptDraft(
+                title: "瑞幸咖啡",
+                amount: 18.9,
+                date: .now,
+                category: .dining,
+                confidence: 0.96,
+                rawText: "微信支付\n商户全称 瑞幸咖啡\n金额 -¥18.90\n支付时间 \(Self.dayKey(for: .now)) 09:24:00",
+                provider: .wechat
+            ),
+            OCRReceiptDraft(
+                title: "便利店日用品",
+                amount: 32.5,
+                date: .now,
+                category: .daily,
+                confidence: 0.94,
+                rawText: "支付宝\n商品说明 便利店日用品\n金额 ¥32.50\n付款时间 \(Self.dayKey(for: .now)) 19:06:00",
+                provider: .alipay
+            ),
+        ]
+    }
+
+    func recognizeOCRDrafts(imageData: Data, isMember: Bool) async -> [OCRReceiptDraft] {
+        guard dailyQuotaStore.canUseOCR(isMember: isMember) else {
+            ocrStatus = "今日免费识票次数已用完（3/3）。会员可无限智能导入。"
+            return []
+        }
         do {
-            let draft = try await ocrService.recognizeReceipt(from: imageData)
-            inputTitle = draft.title
-            inputAmount = draft.amount > 0 ? String(format: "%.2f", draft.amount) : ""
-            selectedCategory = draft.category
-            selectedDate = draft.date
-            ocrStatus = "识别完成，置信度 \(Int(draft.confidence * 100))%"
+            let drafts = try await ocrService.recognizeReceipt(from: imageData)
+            let count = drafts.count
+            let total = drafts.reduce(0) { $0 + $1.amount }
+            ocrStatus = "识别到 \(count) 条，合计 \(formatCurrency(total))。请确认后导入。"
+            return drafts
         } catch {
-            ocrStatus = "识别失败，请重试或手动录入。"
+            ocrStatus = (error as? LocalizedError)?.errorDescription ?? "识别失败，请重试或手动录入。"
+            return []
+        }
+    }
+
+    func importOCRDrafts(_ drafts: [OCRReceiptDraft], isMember: Bool) -> Int {
+        let validDrafts = drafts.filter { $0.amount > 0 }
+        guard !validDrafts.isEmpty else {
+            ocrStatus = "未选择可导入的账单。"
+            return 0
+        }
+        guard dailyQuotaStore.canUseOCR(isMember: isMember) else {
+            ocrStatus = "今日免费识票次数已用完（3/3）。会员可无限智能导入。"
+            return 0
+        }
+
+        let now = Date()
+        let batchId = UUID().uuidString
+        let importedItems = validDrafts.map { draft in
+            HomeItem(
+                title: draft.title,
+                amount: draft.amount,
+                category: draft.category,
+                source: .ocr,
+                createdAt: draft.date,
+                updatedAt: now,
+                draftMeta: HomeItem.DraftMeta(
+                    batchId: batchId,
+                    importedAt: now,
+                    status: .pending
+                )
+            )
+        }
+        items.insert(contentsOf: importedItems, at: 0)
+        dailyQuotaStore.markOCRImported(isMember: isMember)
+        persistItems()
+        analyticsService.track(
+            "ocr_records_imported",
+            props: [
+                "count": String(importedItems.count),
+                "source": "ocr",
+            ]
+        )
+        refreshTodayPlayback()
+        refreshRouteGuidanceIfNeeded()
+        updateOCRSuccessStatus(prefix: "已导入 \(importedItems.count) 条，进入待整理", isMember: isMember)
+        Task {
+            for item in importedItems {
+                await syncUpsertToCloud(item)
+            }
+        }
+        return importedItems.count
+    }
+
+    private func updateOCRSuccessStatus(prefix: String, isMember: Bool) {
+        guard !isMember else {
+            ocrStatus = "\(prefix)。会员 OCR 不限次。"
+            return
+        }
+        let remaining = dailyQuotaStore.ocrRemaining(isMember: false)
+        ocrStatus = "\(prefix)。今日免费识票剩余 \(remaining)/3 次。"
+    }
+
+    func updateOCRDraftStatus(id: UUID, isResolved: Bool) {
+        guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
+        items[idx].draftMeta?.status = isResolved ? .resolved : .pending
+        items[idx].updatedAt = Date()
+        persistItems()
+        Task { await syncUpsertToCloud(items[idx]) }
+    }
+
+    func updateOCRDraftCategory(id: UUID, category: HomeItem.Category) {
+        guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
+        items[idx].category = category
+        items[idx].emotionTag = HomeItem.inferEmotionTag(category: category, amount: items[idx].amount)
+        items[idx].updatedAt = Date()
+        persistItems()
+        Task { await syncUpsertToCloud(items[idx]) }
+    }
+
+    func updateOCRDraftAmount(id: UUID, amount: Double) {
+        guard amount > 0,
+              let idx = items.firstIndex(where: { $0.id == id }),
+              items[idx].draftMeta != nil else { return }
+        items[idx].amount = amount
+        items[idx].emotionTag = HomeItem.inferEmotionTag(category: items[idx].category, amount: amount)
+        items[idx].updatedAt = Date()
+        persistItems()
+        Task { await syncUpsertToCloud(items[idx]) }
+    }
+
+    func deleteOCRDraftItem(id: UUID) {
+        guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
+        items.remove(at: idx)
+        persistItems()
+        analyticsService.track("ocr_draft_deleted")
+        refreshTodayPlayback()
+        Task { await syncDeleteFromCloud(id: id) }
+    }
+
+    func clearResolvedOCRDrafts() {
+        var changedItems: [HomeItem] = []
+        for idx in items.indices where items[idx].draftMeta?.status == .resolved {
+            items[idx].draftMeta = nil
+            items[idx].updatedAt = Date()
+            changedItems.append(items[idx])
+        }
+        guard !changedItems.isEmpty else { return }
+        persistItems()
+        analyticsService.track("ocr_drafts_resolved", props: ["count": String(changedItems.count)])
+        Task {
+            for item in changedItems {
+                await syncUpsertToCloud(item)
+            }
         }
     }
 
@@ -400,6 +544,16 @@ final class HomeViewModel: ObservableObject {
         if amount < 200 { return .daily }
         if amount < 600 { return .shopping }
         return .other
+    }
+
+    func selectCategory(_ category: HomeItem.Category) {
+        selectedCategory = category
+        categoryLockedByUser = true
+    }
+
+    func applyRecommendedCategory(_ category: HomeItem.Category) {
+        guard !categoryLockedByUser else { return }
+        selectedCategory = category
     }
 
     func noteSuggestions(for category: HomeItem.Category) -> [String] {
@@ -667,6 +821,7 @@ final class HomeViewModel: ObservableObject {
         inputAmount = ""
         selectedDate = .now
         selectedCategory = .dining
+        categoryLockedByUser = false
     }
 
     private func persistItems() {

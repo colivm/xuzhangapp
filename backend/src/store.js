@@ -7,6 +7,7 @@ const memory = {
   sessionsByUserId: new Map(),
   ledgersByUserId: new Map(),
   smsCodeByPhone: new Map(),
+  iapTransactionsByOriginalId: new Map(),
 };
 
 let pool = null;
@@ -37,6 +38,16 @@ export async function initStore() {
       phone TEXT PRIMARY KEY,
       code TEXT NOT NULL,
       expire_at BIGINT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS iap_transactions (
+      original_transaction_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      transaction_id TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      member_tier TEXT NOT NULL,
+      member_expires_at TEXT NULL,
+      environment TEXT NULL,
+      verified_at TEXT NOT NULL
     );
   `);
   usePostgres = true;
@@ -124,6 +135,57 @@ export async function setSessionByUserId(userId, nextSession) {
      VALUES ($1, $2, $3)
      ON CONFLICT (user_id) DO UPDATE SET member_tier = EXCLUDED.member_tier, member_expires_at = EXCLUDED.member_expires_at`,
     [userId, nextSession.memberTier, nextSession.memberExpiresAt]
+  );
+}
+
+export async function getIAPTransactionByOriginalId(originalTransactionId) {
+  if (!usePostgres) {
+    return memory.iapTransactionsByOriginalId.get(originalTransactionId) || null;
+  }
+  const result = await pool.query(
+    `SELECT original_transaction_id, user_id, transaction_id, product_id, member_tier, member_expires_at, environment, verified_at
+     FROM iap_transactions WHERE original_transaction_id = $1`,
+    [originalTransactionId]
+  );
+  if (!result.rowCount) return null;
+  const row = result.rows[0];
+  return {
+    originalTransactionId: row.original_transaction_id,
+    userId: row.user_id,
+    transactionId: row.transaction_id,
+    productId: row.product_id,
+    memberTier: row.member_tier,
+    memberExpiresAt: row.member_expires_at,
+    environment: row.environment,
+    verifiedAt: row.verified_at,
+  };
+}
+
+export async function upsertIAPTransaction(record) {
+  if (!usePostgres) {
+    memory.iapTransactionsByOriginalId.set(record.originalTransactionId, record);
+    return;
+  }
+  await pool.query(
+    `INSERT INTO iap_transactions(original_transaction_id, user_id, transaction_id, product_id, member_tier, member_expires_at, environment, verified_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (original_transaction_id) DO UPDATE
+     SET transaction_id = EXCLUDED.transaction_id,
+         product_id = EXCLUDED.product_id,
+         member_tier = EXCLUDED.member_tier,
+         member_expires_at = EXCLUDED.member_expires_at,
+         environment = EXCLUDED.environment,
+         verified_at = EXCLUDED.verified_at`,
+    [
+      record.originalTransactionId,
+      record.userId,
+      record.transactionId,
+      record.productId,
+      record.memberTier,
+      record.memberExpiresAt,
+      record.environment || null,
+      record.verifiedAt,
+    ]
   );
 }
 

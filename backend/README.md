@@ -6,7 +6,7 @@
 - 会员状态读取与开发态切换
 - 账单同步接口（用户级）
 - AI 复盘转发到 `ai-proxy`
-- IAP 验单接口预留
+- IAP 验单接口（App Store Server API，需配置 Apple 密钥）
 
 ## 1. 安装与启动
 
@@ -30,14 +30,14 @@ npm run dev
 - `GET /v1/ledger`
 - `POST /v1/ledger`
 - `DELETE /v1/ledger/:id`
-- `POST /v1/iap/verify` (stub)
+- `POST /v1/iap/verify`
 - `POST /v1/ai/insight/daily`
 
 ## 3. 说明
 
 - 当前是内存存储版本，重启服务后数据会清空。
 - 支持 PostgreSQL：设置 `DATABASE_URL` 后自动切换 DB 存储。
-- 微信登录与 IAP 验单已留接口，等你提供配置后接真实服务。
+- 微信登录仍为 stub；IAP 验单配置 `APPLE_*` 与 `IAP_*_PRODUCT_ID` 后可联调沙盒/生产。
 - 账单上行采用 `updatedAt` 冲突策略（新版本覆盖旧版本）。
 
 ## 4. 与 iOS `NativeDemoApp` 联调

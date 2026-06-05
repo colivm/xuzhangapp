@@ -8,6 +8,8 @@ struct HomeView: View {
     var onShowMemberPricing: (() -> Void)? = nil
     @State private var showPlayback = false
     @State private var showFirstRecordToast = false
+    @State private var todayPlaybackQuotaMessage: String?
+    private let dailyQuotaStore = DailyFeatureQuotaStore()
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -76,7 +78,7 @@ struct HomeView: View {
                             .foregroundStyle(AppColors.text)
                         Spacer()
                         Button("账单回放") {
-                            showPlayback = true
+                            requestTodayPlayback()
                         }
                         .font(.system(size: 12))
                         .foregroundStyle(AppColors.accent.opacity(0.84))
@@ -170,6 +172,20 @@ struct HomeView: View {
                 .id(UUID())
                 .environmentObject(homeViewModel)
         }
+        .alert("今日回放次数已用完", isPresented: Binding(
+            get: { todayPlaybackQuotaMessage != nil },
+            set: { if !$0 { todayPlaybackQuotaMessage = nil } }
+        )) {
+            Button("了解会员") {
+                todayPlaybackQuotaMessage = nil
+                onShowMemberPricing?()
+            }
+            Button("知道了", role: .cancel) {
+                todayPlaybackQuotaMessage = nil
+            }
+        } message: {
+            Text(todayPlaybackQuotaMessage ?? "")
+        }
     }
 
     private var firstRecordToast: some View {
@@ -242,10 +258,23 @@ struct HomeView: View {
         guard guidance == .firstRecordTodayPlayback else { return }
         showFirstRecordToast = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            showPlayback = true
+            requestTodayPlayback()
             showFirstRecordToast = false
             homeViewModel.consumeRouteGuidance(.firstRecordTodayPlayback)
         }
+    }
+
+    private func requestTodayPlayback() {
+        guard !homeViewModel.todayItems.isEmpty else {
+            showPlayback = true
+            return
+        }
+        guard dailyQuotaStore.canPlayTodayPlayback(isMember: homeViewModel.hasMemberAccess) else {
+            todayPlaybackQuotaMessage = "今日免费回放次数已用完（1/1）。会员可无限回看今日流水回放。"
+            return
+        }
+        dailyQuotaStore.markTodayPlaybackStarted(isMember: homeViewModel.hasMemberAccess)
+        showPlayback = true
     }
 
     // MARK: - Empty State Art

@@ -5,9 +5,11 @@ import SwiftUI
 struct MemberPricingView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var iapService = IAPService.shared
     @State private var benefitsExpanded = false
     @State private var morePlansExpanded = false
     @State private var purchaseNotice: String?
+    @State private var isPurchasing = false
 
     private let plans = [
         MemberPlan(id: "yearly", name: "年度会员", price: "¥88", period: "年", featured: true,
@@ -68,7 +70,10 @@ struct MemberPricingView: View {
                     Button("关闭") { dismiss() }
                 }
             }
-            .alert("暂未接入 App Store 购买", isPresented: Binding(
+            .task {
+                await loadStoreProducts()
+            }
+            .alert("会员购买", isPresented: Binding(
                 get: { purchaseNotice != nil },
                 set: { if !$0 { purchaseNotice = nil } }
             )) {
@@ -223,7 +228,13 @@ struct MemberPricingView: View {
                 regularPlanButton(plans[2])
             }
 
-            Text("订阅可随时在 App Store / 账户设置中取消，不会自动扣费。")
+            restorePurchaseButton
+
+            #if DEBUG
+            debugPurchaseButtons
+            #endif
+
+            Text("订阅可随时在 App Store / 账户设置中取消。首月推介价以 App Store Connect 配置为准。")
                 .font(.system(size: 11))
                 .foregroundStyle(AppColors.subtext.opacity(0.8))
                 .padding(.top, 4)
@@ -294,7 +305,7 @@ struct MemberPricingView: View {
                         )
                         .padding(.bottom, 2)
                 }
-                Text("\(plan.name)：\(plan.price) / \(plan.period)")
+                Text("\(plan.name)：\(displayPrice(for: plan)) / \(plan.period)")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
                 Text(plan.dailyHint)
@@ -315,6 +326,7 @@ struct MemberPricingView: View {
             .shadow(color: AppColors.accent.opacity(0.3), radius: 8, y: 4)
         }
         .buttonStyle(.plain)
+        .disabled(isPurchasing)
     }
 
     private func regularPlanButton(_ plan: MemberPlan) -> some View {
@@ -322,7 +334,7 @@ struct MemberPricingView: View {
             handlePurchase(plan)
         } label: {
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(plan.name)：\(plan.price) / \(plan.period)")
+                Text("\(plan.name)：\(displayPrice(for: plan)) / \(plan.period)")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(AppColors.text.opacity(0.88))
                 Text(plan.dailyHint)
@@ -342,12 +354,116 @@ struct MemberPricingView: View {
             )
         }
         .buttonStyle(.plain)
+        .disabled(isPurchasing)
     }
+
+    private var restorePurchaseButton: some View {
+        Button {
+            restorePurchases()
+        } label: {
+            HStack {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 13, weight: .semibold))
+                Text(isPurchasing ? "处理中…" : "恢复购买")
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .foregroundStyle(AppColors.accent)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(AppColors.accent.opacity(0.35), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isPurchasing)
+    }
+
+    #if DEBUG
+    private var debugPurchaseButtons: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Debug：模拟会员档位")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AppColors.subtext)
+            HStack(spacing: 8) {
+                ForEach(plans) { plan in
+                    Button(plan.name.replacingOccurrences(of: "会员", with: "")) {
+                        settingsViewModel.memberTier = plan.id
+                        purchaseNotice = "已模拟切换为 \(plan.name)。Release 环境不会显示此入口。"
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColors.accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(AppColors.accent.opacity(0.1))
+                    )
+                }
+            }
+        }
+        .padding(.top, 4)
+    }
+    #endif
 
     // MARK: - Purchase Handler
 
     private func handlePurchase(_ plan: MemberPlan) {
-        purchaseNotice = "\(plan.name)价格为\(plan.price) / \(plan.period)。当前未接入 StoreKit 与服务端验单，不会发起扣款；调试会员档位请使用 Settings/服务端会员状态。"
+        guard settingsViewModel.hasCloudSession else {
+            purchaseNotice = "请先在设置页登录账号，再开通会员。这样换机后也能恢复你的会员状态。"
+            return
+        }
+        guard let tier = IAPTier(rawValue: plan.id) else { return }
+        isPurchasing = true
+        Task {
+            defer { isPurchasing = false }
+            do {
+                let payload = try await iapService.purchase(tier: tier)
+                try await settingsViewModel.verifyIAPPurchase(payload)
+                await iapService.finish(transactionId: payload.transactionId)
+                purchaseNotice = "购买成功，会员状态已更新。"
+            } catch {
+                purchaseNotice = error.localizedDescription
+            }
+        }
+    }
+
+    private func restorePurchases() {
+        guard settingsViewModel.hasCloudSession else {
+            purchaseNotice = "请先在设置页登录账号，再恢复购买。"
+            return
+        }
+        isPurchasing = true
+        Task {
+            defer { isPurchasing = false }
+            do {
+                let payloads = try await iapService.restorePurchases()
+                guard !payloads.isEmpty else {
+                    purchaseNotice = "没有找到可恢复的会员购买。"
+                    return
+                }
+                for payload in payloads {
+                    try await settingsViewModel.verifyIAPPurchase(payload)
+                    await iapService.finish(transactionId: payload.transactionId)
+                }
+                purchaseNotice = "已恢复购买，会员状态已更新。"
+            } catch {
+                purchaseNotice = error.localizedDescription
+            }
+        }
+    }
+
+    private func loadStoreProducts() async {
+        do {
+            try await iapService.loadProducts()
+        } catch {
+            purchaseNotice = error.localizedDescription
+        }
+    }
+
+    private func displayPrice(for plan: MemberPlan) -> String {
+        guard let tier = IAPTier(rawValue: plan.id) else { return plan.price }
+        return iapService.displayPrice(for: tier, fallback: plan.price)
     }
 }
 

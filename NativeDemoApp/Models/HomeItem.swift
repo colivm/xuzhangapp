@@ -1,6 +1,17 @@
 import Foundation
 
 struct HomeItem: Identifiable, Codable, Equatable {
+    struct DraftMeta: Codable, Equatable {
+        enum Status: String, Codable {
+            case pending
+            case resolved
+        }
+
+        var batchId: String
+        var importedAt: Date
+        var status: Status
+    }
+
     enum Category: String, Codable, CaseIterable, Identifiable {
         case dining = "餐饮"
         case shopping = "购物"
@@ -52,6 +63,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
     var createdAt: Date
     var updatedAt: Date
     var emotionTag: String
+    var draftMeta: DraftMeta?
 
     init(
         id: UUID = UUID(),
@@ -61,7 +73,8 @@ struct HomeItem: Identifiable, Codable, Equatable {
         source: Source = .manual,
         createdAt: Date = Date(),
         updatedAt: Date? = nil,
-        emotionTag: String? = nil
+        emotionTag: String? = nil,
+        draftMeta: DraftMeta? = nil
     ) {
         self.id = id
         self.title = title
@@ -71,6 +84,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
         self.emotionTag = emotionTag ?? HomeItem.inferEmotionTag(category: category, amount: amount)
+        self.draftMeta = draftMeta
     }
 
     static func inferEmotionTag(category: Category, amount: Double) -> String {
@@ -88,7 +102,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
 extension HomeItem {
     enum CodingKeys: String, CodingKey {
-        case id, title, amount, category, source, createdAt, updatedAt, emotionTag
+        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, draftMeta
     }
 
     init(from decoder: Decoder) throws {
@@ -102,6 +116,7 @@ extension HomeItem {
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
         emotionTag = try container.decodeIfPresent(String.self, forKey: .emotionTag)
             ?? HomeItem.inferEmotionTag(category: category, amount: amount)
+        draftMeta = try container.decodeIfPresent(DraftMeta.self, forKey: .draftMeta)
     }
 }
 

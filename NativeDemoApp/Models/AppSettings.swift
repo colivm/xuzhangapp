@@ -46,6 +46,7 @@ struct AppSettings: Codable, Equatable {
     var biometricLockEnabled: Bool
     var syncEnabled: Bool
     var petCompanionEnabled: Bool
+    var petNickname: String
     var weatherCompanionEnabled: Bool
     var aiTone: AITone
     var useRemoteAI: Bool
@@ -71,6 +72,7 @@ struct AppSettings: Codable, Equatable {
         biometricLockEnabled: false,
         syncEnabled: false,
         petCompanionEnabled: true,
+        petNickname: "",
         weatherCompanionEnabled: true,
         aiTone: .gentle,
         useRemoteAI: false,
@@ -91,6 +93,7 @@ extension AppSettings {
         case biometricLockEnabled
         case syncEnabled
         case petCompanionEnabled
+        case petNickname
         case weatherCompanionEnabled
         case aiTone
         case useRemoteAI
@@ -110,6 +113,7 @@ extension AppSettings {
         biometricLockEnabled = try container.decodeIfPresent(Bool.self, forKey: .biometricLockEnabled) ?? false
         syncEnabled = try container.decodeIfPresent(Bool.self, forKey: .syncEnabled) ?? false
         petCompanionEnabled = try container.decodeIfPresent(Bool.self, forKey: .petCompanionEnabled) ?? true
+        petNickname = try container.decodeIfPresent(String.self, forKey: .petNickname) ?? ""
         weatherCompanionEnabled = try container.decodeIfPresent(Bool.self, forKey: .weatherCompanionEnabled) ?? true
         aiTone = try container.decodeIfPresent(AITone.self, forKey: .aiTone) ?? .gentle
         useRemoteAI = try container.decodeIfPresent(Bool.self, forKey: .useRemoteAI) ?? false

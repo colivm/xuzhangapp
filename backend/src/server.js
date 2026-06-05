@@ -5,12 +5,14 @@ import {
   deleteLedger,
   deleteSmsCode,
   getLedgersByUserId,
+  getIAPTransactionByOriginalId,
   getOrCreateUserByPhone,
   getSessionByUserId,
   getSmsCode,
   initStore,
   setSessionByUserId,
   setSmsCode,
+  upsertIAPTransaction,
   upsertLedger,
 } from "./store.js";
 import { requireAuth, signAccessToken } from "./auth.js";
@@ -25,6 +27,7 @@ import {
 } from "./nudgePolicy.js";
 import { getMemberCtaCopy } from "./memberFlow.js";
 import { buildTodayPlayback } from "./playback.js";
+import { IAPVerifyError, verifyAppStoreTransaction } from "./iapService.js";
 
 const app = express();
 app.use(cors({ origin: config.allowOrigin === "*" ? true : config.allowOrigin }));
@@ -111,13 +114,56 @@ app.delete("/v1/ledger/:id", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/v1/iap/verify", requireAuth, (_req, res) => {
-  // v0 stub: replace with App Store Server API verification.
-  res.status(501).json({
-    ok: false,
-    error: "IAP_VERIFY_NOT_IMPLEMENTED",
-    message: "请接入 App Store Server API 后启用真实验单。",
-  });
+app.post("/v1/iap/verify", requireAuth, async (req, res) => {
+  const productId = String(req.body?.productId || "").trim();
+  const transactionId = String(req.body?.transactionId || "").trim();
+  if (!productId || !transactionId) {
+    return res.status(400).json({ ok: false, error: "INVALID_IAP_REQUEST" });
+  }
+
+  try {
+    const verified = await verifyAppStoreTransaction({
+      productId,
+      transactionId,
+      signedTransactionInfo: req.body?.signedTransactionInfo,
+    });
+
+    const existing = await getIAPTransactionByOriginalId(verified.originalTransactionId);
+    if (existing && existing.userId !== req.user.userId) {
+      return res.status(409).json({ ok: false, error: "TRANSACTION_ALREADY_BOUND" });
+    }
+
+    await upsertIAPTransaction({
+      originalTransactionId: verified.originalTransactionId,
+      userId: req.user.userId,
+      transactionId: verified.transactionId,
+      productId: verified.productId,
+      memberTier: verified.memberTier,
+      memberExpiresAt: verified.memberExpiresAt,
+      environment: verified.environment,
+      verifiedAt: new Date().toISOString(),
+    });
+
+    const current = await getSessionByUserId(req.user.userId);
+    const next = mergeMemberSession(current, {
+      memberTier: verified.memberTier,
+      memberExpiresAt: verified.memberExpiresAt,
+    });
+    await setSessionByUserId(req.user.userId, next);
+    res.json({
+      ok: true,
+      productId: verified.productId,
+      transactionId: verified.transactionId,
+      originalTransactionId: verified.originalTransactionId,
+      environment: verified.environment,
+      ...next,
+    });
+  } catch (error) {
+    if (error instanceof IAPVerifyError) {
+      return res.status(error.status).json({ ok: false, error: error.code, message: error.message });
+    }
+    res.status(500).json({ ok: false, error: "IAP_VERIFY_FAILED", message: String(error?.message || error) });
+  }
 });
 
 app.post("/v1/ai/insight/daily", requireAuth, async (req, res) => {
@@ -195,6 +241,26 @@ app.get("/v1/playback/today", requireAuth, async (req, res) => {
   const playback = buildTodayPlayback(rows);
   res.json({ ok: true, ...playback });
 });
+
+function mergeMemberSession(current, incoming) {
+  const currentTier = current?.memberTier || "free";
+  const incomingTier = incoming?.memberTier || "free";
+  if (currentTier === "lifetime" || incomingTier === "free") {
+    return current || { memberTier: "free", memberExpiresAt: null };
+  }
+  if (incomingTier === "lifetime") {
+    return { memberTier: "lifetime", memberExpiresAt: null };
+  }
+
+  const currentExpiry = Date.parse(current?.memberExpiresAt || "");
+  const incomingExpiry = Date.parse(incoming?.memberExpiresAt || "");
+  const currentActive = Number.isFinite(currentExpiry) && currentExpiry > Date.now();
+  const incomingActive = Number.isFinite(incomingExpiry) && incomingExpiry > Date.now();
+  if (currentActive && (!incomingActive || currentExpiry >= incomingExpiry)) {
+    return current;
+  }
+  return incoming;
+}
 
 initStore()
   .then(({ mode }) => {

@@ -1,8 +1,8 @@
 # 叙账 · 项目搭建说明
 
-> 更新时间：2026-06-02  
+> 更新时间：2026-06-04  
 > 产品版本：叙账 v0.1  
-> 适用阶段：**生产 HTTPS 已通**，Staging 同机部署文档已就绪（部分待落地）
+> 适用阶段：**主域 `xuzhangapp.com` HTTPS 已通**（Let's Encrypt，续期至 **2026-09-02**，certbot 自动续期）；API 子域见 §4.4
 
 本文档汇总 **本机开发、生产 ECS、Staging 测试** 的搭建步骤。细节分支流程与 Staging 运维见 [`STAGING_ENV_SETUP.md`](STAGING_ENV_SETUP.md)。
 
@@ -163,7 +163,8 @@ pm2 restart backend-staging ai-proxy-staging
 | 项目 | 值 |
 |------|-----|
 | ECS IP | `47.102.205.254` |
-| API 域名 | `https://api.xuzhangapp.com` |
+| **主域名** | `https://xuzhangapp.com`（Let's Encrypt，`/etc/letsencrypt/live/xuzhangapp.com/`，到期 **2026-09-02**） |
+| API 域名 | `https://api.xuzhangapp.com`（**已配 SSL**，见 §4.4） |
 | 代码目录（示例） | `/opt/xuzhang/xuzhangapp` |
 | backend 端口 | 8790（仅本机，Nginx 反代） |
 | ai-proxy 端口 | 8787（仅本机） |
@@ -210,7 +211,7 @@ pm2 start src/server.js --name backend
 pm2 save
 ```
 
-### 4.4 Nginx + SSL
+### 4.4 Nginx + SSL（API 子域 `api.xuzhangapp.com`）
 
 站点配置：`/etc/nginx/sites-available/api.xuzhangapp.com`
 
@@ -226,11 +227,152 @@ grep -r "ssl_certificate" /etc/nginx/
 openssl x509 -in /etc/nginx/ssl/api.xuzhangapp.com.pem -noout -dates
 ```
 
-测试证有效期至 **2026-08-29**，到期前需续签或换正式 DV 证。
+测试证有效期至 **2026-08-29**，到期前需续签或换 **Let's Encrypt**（见 §4.5 推荐方式）。
 
 Nginx 将 `443` 反代到 `http://127.0.0.1:8790`；**8787 不对公网暴露**，AI 走 `POST /v1/ai/insight/daily` 由 backend 转发。
 
-### 4.5 生产验收
+> **与主域关系**：`api.xuzhangapp.com` 与 `xuzhangapp.com` 为 **两个独立 Nginx server**、**两套证书**，互不影响。
+
+### 4.5 主域 SSL + Nginx（`xuzhangapp.com`）
+
+**现状**：主域已用 **certbot** 签发 HTTPS（2026-06 落地）；API 子域仍为独立测试证（§4.4）。  
+**用途**：ICP 备案主站、App Store **隐私政策 URL**、用户协议链接（静态页后续部署，本节先打通 HTTPS + Nginx）。
+
+#### 4.5.1 DNS（阿里云）
+
+| 主机记录 | 类型 | 记录值 |
+|----------|------|--------|
+| `@` | A | `47.102.205.254` |
+| `www` | A | `47.102.205.254`（或 CNAME → `xuzhangapp.com`） |
+
+确认解析生效：
+
+```bash
+dig +short xuzhangapp.com
+dig +short www.xuzhangapp.com
+```
+
+#### 4.5.2 静态目录（与代码同机，占位）
+
+生产代码目录：**`/opt/xuzhang/xuzhangapp`**（与 §4.2 `git pull` 一致）。
+
+**不要**把 Nginx `root` 指到仓库根目录（避免误暴露 `.env` 等）。仅暴露专用子目录：
+
+```text
+/opt/xuzhang/xuzhangapp/
+├── backend/          # 不对外
+├── site/             # 主域 Nginx 根（占位首页）
+│   └── index.html
+└── legal/            # 后续 Git 维护：privacy.html、terms.html
+```
+
+初始化占位（法务 HTML 尚未进仓库时）：
+
+```bash
+cd /opt/xuzhang/xuzhangapp
+mkdir -p site legal
+echo 'xuzhangapp' > site/index.html
+# 后续：git pull 后 legal/*.html 出现在 /opt/xuzhang/xuzhangapp/legal/
+chown -R www-data:www-data site legal   # Debian/Ubuntu；CentOS 用 nginx 用户
+chmod -R o+rX site legal
+```
+
+对外 URL（静态页就绪后）：
+
+```text
+/opt/xuzhang/xuzhangapp/legal/privacy.html  → https://xuzhangapp.com/legal/privacy.html
+/opt/xuzhang/xuzhangapp/legal/terms.html    → https://xuzhangapp.com/legal/terms.html
+```
+
+#### 4.5.3 Nginx 站点（HTTP，签证前）
+
+新建 **`/etc/nginx/sites-available/xuzhangapp.com`**（与 `api.xuzhangapp.com` **分开文件**，互不影响）：
+
+```nginx
+# 主站 xuzhangapp.com — 静态（代码目录 /opt/xuzhang/xuzhangapp）
+server {
+    listen 80;
+    listen [::]:80;
+    server_name xuzhangapp.com www.xuzhangapp.com;
+
+    root /opt/xuzhang/xuzhangapp/site;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # 法务页：仓库 legal/ 子目录（git pull 即更新）
+    location /legal/ {
+        alias /opt/xuzhang/xuzhangapp/legal/;
+    }
+}
+```
+
+**现有 API 配置保持不变**（`api.xuzhangapp.com` → 443 反代 `127.0.0.1:8790`）。  
+两个 `server` 靠 `server_name` 区分，443 可并存多证书。
+
+启用并重载：
+
+```bash
+ln -sf /etc/nginx/sites-available/xuzhangapp.com /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+```
+
+浏览器可先测：`http://xuzhangapp.com/`（应看到占位页；**仍为 HTTP，属正常**）。
+
+#### 4.5.4 申请 Let's Encrypt 证书（推荐，免费）
+
+与 API 子域测试证 **独立**；主域建议用 certbot 自动续期：
+
+```bash
+# Debian/Ubuntu 示例
+apt update
+apt install -y certbot python3-certbot-nginx
+
+certbot --nginx -d xuzhangapp.com -d www.xuzhangapp.com
+```
+
+按提示填写邮箱、同意条款。成功后 certbot 会：
+
+- 写入 `listen 443 ssl` 与证书路径（通常在 `/etc/letsencrypt/live/xuzhangapp.com/`）
+- 可选配置 HTTP → HTTPS 301
+
+验证续期：
+
+```bash
+certbot renew --dry-run
+```
+
+#### 4.5.5 验收
+
+```bash
+curl -I https://xuzhangapp.com/
+curl -I https://xuzhangapp.com/legal/terms.html   # 静态页上线前可能 404，但 HTTPS 应正常
+
+openssl s_client -connect xuzhangapp.com:443 -servername xuzhangapp.com </dev/null 2>/dev/null \
+  | openssl x509 -noout -subject -dates
+```
+
+浏览器地址栏应显示 🔒。  
+**App Store Connect / App 内链接须使用 `https://`，在 §4.5.4 完成后再填写。**
+
+#### 4.5.6 常见问题
+
+| 现象 | 处理 |
+|------|------|
+| certbot 报连接失败 | 安全组放行 **80**；DNS 是否指向 ECS |
+| `www` 与裸域证书不一致 | 申请时 `-d` 同时包含两个域名 |
+| 与 `api` 证书混淆 | `grep ssl_certificate /etc/nginx/sites-enabled/*` 分文件查看 |
+| 只想先测 API | 法务 URL **不要**临时挂到 `api.xuzhangapp.com`（商店认主域） |
+
+#### 4.5.7 后续（静态页，另任务）
+
+1. 在仓库增加 `legal/privacy.html`、`legal/terms.html`，`git pull` 到 `/opt/xuzhang/xuzhangapp`  
+2. iOS 设置页 / 会员页 / ASC 隐私 URL → `https://xuzhangapp.com/legal/...`  
+3. 见 [`TODO.md`](TODO.md) 栏 B
+
+### 4.6 生产验收（API）
 
 ```bash
 curl -s https://api.xuzhangapp.com/health
@@ -245,7 +387,7 @@ curl -s -X POST https://api.xuzhangapp.com/v1/auth/sms/verify \
 # 返回 accessToken 后可用于 AI 接口
 ```
 
-### 4.6 安全组建议
+### 4.7 安全组建议
 
 | 端口 | 公网 | 说明 |
 |------|------|------|
@@ -364,9 +506,11 @@ iOS → backend /v1/ai/insight/daily → ai-proxy → DeepSeek
 ## 11. 当前阶段下一步
 
 1. **iPhone 真机**全流程验证（`https://api.xuzhangapp.com`）
-2. 完成 **ICP 备案**
-3. 落地 **Staging**（DNS + SSL + pm2-staging，见 `STAGING_ENV_SETUP.md`）
-4. 生产安全加固（`APP_PROXY_TOKEN`、真实短信、关闭 dev 验证码）
-5. TestFlight 内测
+2. **主域 HTTPS**（§4.5 Let's Encrypt + Nginx）
+3. 完成 **ICP 备案**
+4. 落地 **Staging**（DNS + SSL + pm2-staging，见 `STAGING_ENV_SETUP.md`）
+5. 生产安全加固（`APP_PROXY_TOKEN`、真实短信、关闭 dev 验证码）
+6. 主域部署隐私政策 / 用户协议静态页 → App Store / App 内链接
+7. TestFlight 内测
 
 进度细节见 [`TODO.md`](TODO.md)。
