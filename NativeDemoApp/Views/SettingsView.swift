@@ -4,6 +4,14 @@ struct SettingsView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @Binding var showMemberPricing: Bool
     @State private var showAccountSheet = false
+    @State private var draftDisplayName = ""
+    @State private var draftPetNickname = ""
+    @FocusState private var focusedField: SettingsField?
+
+    private enum SettingsField {
+        case displayName
+        case petNickname
+    }
 
     var body: some View {
         ScrollView {
@@ -30,6 +38,27 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+        .onAppear {
+            draftDisplayName = settingsViewModel.displayName
+            draftPetNickname = settingsViewModel.petNickname
+        }
+        .onChange(of: focusedField) { oldValue, newValue in
+            if oldValue == .displayName, newValue != .displayName {
+                commitDisplayName()
+            }
+            if oldValue == .petNickname, newValue != .petNickname {
+                commitPetNickname()
+            }
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("完成") {
+                    focusedField = nil
+                }
+            }
+        }
         .sheet(isPresented: $showAccountSheet) {
             accountSheet
                 .presentationDetents([.medium, .large])
@@ -90,10 +119,10 @@ struct SettingsView: View {
 
             // Display name
             settingField(label: "显示名称") {
-                TextField("输入昵称", text: Binding(
-                    get: { settingsViewModel.displayName },
-                    set: { settingsViewModel.displayName = $0 }
-                ))
+                TextField("输入昵称", text: $draftDisplayName)
+                    .focused($focusedField, equals: .displayName)
+                    .submitLabel(.done)
+                    .onSubmit { commitDisplayName() }
             }
 
             // iCloud sync
@@ -117,10 +146,10 @@ struct SettingsView: View {
             ))
             settingHelper("关闭后首页不显示宠物助手。")
             settingField(label: "宠物昵称") {
-                TextField("小窝", text: Binding(
-                    get: { settingsViewModel.petNickname },
-                    set: { settingsViewModel.petNickname = $0 }
-                ))
+                TextField("小窝", text: $draftPetNickname)
+                    .focused($focusedField, equals: .petNickname)
+                    .submitLabel(.done)
+                    .onSubmit { commitPetNickname() }
             }
 
             // Weather companion
@@ -135,6 +164,23 @@ struct SettingsView: View {
         }
         .webCardPadding()
         .webCardBackground()
+    }
+
+    private func commitDisplayName() {
+        let trimmed = draftDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let next = trimmed.isEmpty ? "叙帐用户" : trimmed
+        draftDisplayName = next
+        if settingsViewModel.displayName != next {
+            settingsViewModel.displayName = next
+        }
+    }
+
+    private func commitPetNickname() {
+        let trimmed = draftPetNickname.trimmingCharacters(in: .whitespacesAndNewlines)
+        draftPetNickname = trimmed
+        if settingsViewModel.petNickname != trimmed {
+            settingsViewModel.petNickname = trimmed
+        }
     }
 
     // MARK: - Appearance

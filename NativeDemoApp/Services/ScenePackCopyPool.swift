@@ -47,7 +47,7 @@ enum ScenePackCopyPool {
             emoji: "✈️",
             label: "旅行预算包",
             desc: "比如：输入 ¥20，自动备注“短途出行小消费”",
-            category: .other,
+            category: .transport,
             tiers: [
                 ScenePackTier(maxAmount: 20, notes: ["短途出行小消费", "沿途小吃简单打卡", "出行便携物资采购", "景点门口一瓶水", "小城漫步小花费", "街边明信片或小挂件", "公交日票/景区摆渡", "旅途中的轻量补给"]),
                 ScenePackTier(maxAmount: 80, notes: ["展馆/景点门票", "民宿小用品补买", "旅途一顿特色简餐", "城市漫步咖啡歇脚", "伴手礼试吃装", "租车/骑行小时费", "行程里的一笔小惊喜", "路边摊体验打卡"]),

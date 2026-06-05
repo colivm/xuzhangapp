@@ -139,10 +139,6 @@ struct ContentView: View {
         }
         .onChange(of: selectedTab) { _, tab in
             if tab == .today { petHint = "今天花得怎么样？我帮你看着。" }
-            if tab == .stats {
-                homeViewModel.consumeRouteGuidance(.weekSliceReady)
-                homeViewModel.consumeRouteGuidance(.fiveRecordsNeverPlayed)
-            }
             petBubbleVisible = false
         }
         .onChange(of: homeViewModel.petMessage) { _, msg in
@@ -621,7 +617,12 @@ struct RecordView: View {
     @State private var showOCRConfirmSheet = false
     @State private var showRecordDateSheet = false
     @State private var scenePackExpanded = false
-    @FocusState private var isAmountFocused: Bool
+    @FocusState private var focusedField: RecordField?
+
+    private enum RecordField {
+        case amount
+        case note
+    }
 
     private let recordAccent = AppColors.accent
     private let recordInk = AppColors.text
@@ -656,6 +657,7 @@ struct RecordView: View {
     }
 
     private func applyScenePack(_ pack: ScenePackDefinition, keepSelectedCategory: Bool = false) {
+        dismissKeyboard()
         let amount = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
         let categoryContext = keepSelectedCategory ? homeViewModel.selectedCategory : pack.category
         homeViewModel.inputTitle = ScenePackCopyPool.note(
@@ -690,7 +692,11 @@ struct RecordView: View {
     }
 
     private var shouldShowAmountQuickKeys: Bool {
-        selectedEntryMode == .manual && (isAmountFocused || hasAmountDraft)
+        selectedEntryMode == .manual && (focusedField == .amount || hasAmountDraft)
+    }
+
+    private func dismissKeyboard() {
+        focusedField = nil
     }
 
     var body: some View {
@@ -721,6 +727,15 @@ struct RecordView: View {
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("完成") {
+                    dismissKeyboard()
+                }
+            }
+        }
         .onChange(of: selectedPhoto) { _, newValue in
             guard let newValue else { return }
             Task {
@@ -796,6 +811,7 @@ struct RecordView: View {
         HStack(spacing: 4) {
             ForEach(EntryMode.allCases) { mode in
                 Button {
+                    dismissKeyboard()
                     withAnimation(.easeInOut(duration: 0.2)) {
                         selectedEntryMode = mode
                     }
@@ -873,7 +889,7 @@ struct RecordView: View {
                         .font(.system(size: 40, weight: .bold, design: .rounded))
                         .foregroundStyle(recordInk)
                         .multilineTextAlignment(.leading)
-                        .focused($isAmountFocused)
+                        .focused($focusedField, equals: .amount)
                 }
             }
             .padding(.horizontal, 14)
@@ -964,6 +980,7 @@ struct RecordView: View {
     private func categoryChip(category: HomeItem.Category, isRecommended: Bool) -> some View {
         let isSelected = homeViewModel.selectedCategory == category
         return Button {
+            dismissKeyboard()
             withAnimation(.easeInOut(duration: 0.12)) {
                 homeViewModel.selectCategory(category)
             }
@@ -1010,6 +1027,9 @@ struct RecordView: View {
                 prompt: Text("已归类到「\(homeViewModel.selectedCategory.label)」，可补充点细节（不填也能保存）")
                     .foregroundStyle(AppColors.subtext.opacity(0.72))
             )
+            .focused($focusedField, equals: .note)
+            .submitLabel(.done)
+            .onSubmit { dismissKeyboard() }
             .font(.system(size: 16))
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
@@ -1026,6 +1046,7 @@ struct RecordView: View {
                 HStack(spacing: 8) {
                     ForEach(homeViewModel.noteSuggestions(for: homeViewModel.selectedCategory), id: \.self) { suggestion in
                         Button(suggestion) {
+                            dismissKeyboard()
                             homeViewModel.inputTitle = suggestion
                         }
                         .font(.system(size: 13, weight: .medium))
@@ -1052,6 +1073,7 @@ struct RecordView: View {
         ZStack(alignment: .topTrailing) {
             Button {
                 guard hasValidAmount else { return }
+                dismissKeyboard()
                 homeViewModel.addManualRecord()
                 onSaved?()
             } label: {
@@ -1086,6 +1108,7 @@ struct RecordView: View {
 
             if hasValidAmount {
                 Button {
+                    dismissKeyboard()
                     showRecordDateSheet = true
                 } label: {
                     Image(systemName: "calendar")
@@ -1122,8 +1145,8 @@ struct RecordView: View {
                     .background(Capsule(style: .continuous).fill(AppColors.lockGold))
             }
             Text(scenePackExpanded
-                 ? "可选场景：点一个就会自动生成备注。"
-                 : "可选项：先点保存也没问题；需要时一键生成备注。")
+                 ? "点选场景包会同步调整分类。"
+                 : "金额填好后，可自动补一句备注。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext.opacity(0.88))
 
@@ -1136,7 +1159,7 @@ struct RecordView: View {
                 HStack(spacing: 4) {
                     Text("✨ 一键生成备注")
                         .font(.system(size: 14, weight: .semibold))
-                    Text("按当前金额与已选分类生成，不改你的分类")
+                    Text("保留当前分类")
                         .font(.system(size: 11))
                         .foregroundStyle(AppColors.subtext.opacity(0.7))
                 }
@@ -1151,12 +1174,13 @@ struct RecordView: View {
 
             // Expand toggle
             Button {
+                dismissKeyboard()
                 withAnimation(.easeInOut(duration: 0.2)) { scenePackExpanded.toggle() }
             } label: {
                 HStack {
                     Text(scenePackExpanded ? "收起更多场景" : "展开更多场景")
                         .font(.system(size: 13))
-                    Text(scenePackExpanded ? "回到简洁输入模式" : "按场景手动选择生成备注")
+                    Text(scenePackExpanded ? "回到简洁输入" : "手动选择备注风格")
                         .font(.system(size: 11))
                         .foregroundStyle(AppColors.subtext.opacity(0.7))
                 }

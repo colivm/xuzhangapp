@@ -155,9 +155,9 @@ private enum IAPProductConfig {
         let secrets = loadSecretsPlist()
         let info = Bundle.main.infoDictionary ?? [:]
         return [
-            .monthly: secrets["IAPMonthlyProductID"] ?? infoString("IAPMonthlyProductID", in: info) ?? "com.example.ledger.member.monthly",
-            .yearly: secrets["IAPYearlyProductID"] ?? infoString("IAPYearlyProductID", in: info) ?? "com.example.ledger.member.yearly",
-            .lifetime: secrets["IAPLifetimeProductID"] ?? infoString("IAPLifetimeProductID", in: info) ?? "com.example.ledger.member.lifetime",
+            .monthly: secrets["IAPMonthlyProductID"] ?? infoString("IAPMonthlyProductID", in: info) ?? "com.xuzhang.app.member.monthly",
+            .yearly: secrets["IAPYearlyProductID"] ?? infoString("IAPYearlyProductID", in: info) ?? "com.xuzhang.app.member.yearly",
+            .lifetime: secrets["IAPLifetimeProductID"] ?? infoString("IAPLifetimeProductID", in: info) ?? "com.xuzhang.app.member.lifetime",
         ]
     }
 

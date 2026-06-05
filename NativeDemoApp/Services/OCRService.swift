@@ -105,10 +105,10 @@ final class OCRService {
     }
 
     private func detectProvider(from text: String) -> OCRProvider {
-        if text.contains("支付宝") || text.contains("蚂蚁") || text.contains("花呗") {
+        if text.contains("支付宝") || text.contains("蚂蚁") || text.contains("花呗") || text.contains("余额宝") {
             return .alipay
         }
-        if text.contains("微信支付") || text.contains("微信") || text.contains("零钱") {
+        if text.contains("微信支付") || text.contains("微信") || text.contains("零钱") || text.contains("财付通") {
             return .wechat
         }
         return .generic
@@ -117,7 +117,10 @@ final class OCRService {
     private func looksLikeListScreenshot(lines: [String], provider: OCRProvider) -> Bool {
         let text = lines.joined(separator: "\n")
         let listHints = ["账单列表", "全部交易", "交易记录", "本月支出", "本月收入", "筛选", "月账单", "全部账单"]
-        let detailHints = ["账单详情", "商品说明", "商家名称", "创建时间", "付款时间", "商户全称", "支付时间", "当前状态"]
+        let detailHints = [
+            "账单详情", "交易详情", "订单详情", "商品说明", "商品名称", "商家名称", "商户名称", "商户全称",
+            "交易对象", "收款方", "收款账户", "创建时间", "付款时间", "支付时间", "交易时间", "当前状态",
+        ]
         let hasListHint = listHints.contains { text.contains($0) }
         let hasDetailHint = detailHints.contains { text.contains($0) }
         let currencyCount = currencyCandidates(in: text).count
@@ -132,10 +135,10 @@ final class OCRService {
     }
 
     private func parseAlipay(lines: [String], rawText: String, confidence: Double) -> OCRReceiptDraft? {
-        let amount = amountNear(labels: ["金额", "付款金额", "实付"], in: lines) ?? currencyCandidates(in: rawText).first
-        let title = valueFor(labels: ["商品说明", "商家名称", "收款方", "付款给"], in: lines) ?? fallbackTitle(from: lines)
-        let date = dateNear(labels: ["付款时间", "创建时间", "交易时间"], in: lines) ?? firstDate(in: rawText)
-        guard let amount, let title, let date else { return nil }
+        let amount = amountNear(labels: ["金额", "付款金额", "实付款", "实付金额", "订单金额", "支付金额", "交易金额"], in: lines) ?? currencyCandidates(in: rawText).first
+        let title = valueFor(labels: ["商品说明", "商品名称", "商家名称", "商户名称", "交易对象", "收款方", "收款账户", "付款给", "对方账户"], in: lines) ?? fallbackTitle(from: lines)
+        let date = dateNear(labels: ["付款时间", "创建时间", "交易时间", "支付时间"], in: lines) ?? firstDate(in: rawText) ?? .now
+        guard let amount, let title else { return nil }
 
         return OCRReceiptDraft(
             title: title,
@@ -149,10 +152,10 @@ final class OCRService {
     }
 
     private func parseWeChat(lines: [String], rawText: String, confidence: Double) -> OCRReceiptDraft? {
-        let amount = amountNear(labels: ["金额", "支付金额", "转账金额"], in: lines) ?? currencyCandidates(in: rawText).first
-        let title = valueFor(labels: ["商户全称", "商品", "收款方", "对方"], in: lines) ?? fallbackTitle(from: lines)
-        let date = dateNear(labels: ["支付时间", "交易时间", "转账时间"], in: lines) ?? firstDate(in: rawText)
-        guard let amount, let title, let date else { return nil }
+        let amount = amountNear(labels: ["金额", "支付金额", "付款金额", "实付金额", "订单金额", "转账金额", "交易金额"], in: lines) ?? currencyCandidates(in: rawText).first
+        let title = valueFor(labels: ["商户全称", "商户名称", "商品", "商品名称", "交易对象", "收款方", "收款账户", "对方", "付款说明"], in: lines) ?? fallbackTitle(from: lines)
+        let date = dateNear(labels: ["支付时间", "交易时间", "转账时间", "付款时间"], in: lines) ?? firstDate(in: rawText) ?? .now
+        guard let amount, let title else { return nil }
 
         return OCRReceiptDraft(
             title: title,
@@ -184,7 +187,7 @@ final class OCRService {
     private func amountNear(labels: [String], in lines: [String]) -> Double? {
         for (index, line) in lines.enumerated() where labels.contains(where: { line.contains($0) }) {
             let scope = lines[index..<min(lines.count, index + 3)].joined(separator: "\n")
-            if let amount = currencyCandidates(in: scope).first ?? plainAmountCandidates(in: scope).max() {
+            if let amount = currencyCandidates(in: scope).first ?? plainAmountCandidates(in: scope).max() ?? labeledAmountCandidates(in: scope).first {
                 return amount
             }
         }
@@ -213,7 +216,7 @@ final class OCRService {
     }
 
     private func fallbackTitle(from lines: [String]) -> String? {
-        let blocked = ["¥", "￥", "金额", "时间", "订单", "单号", "支付", "账单", "详情", "当前状态", "成功", "付款方式"]
+        let blocked = ["¥", "￥", "金额", "时间", "订单", "单号", "支付", "付款", "收款", "交易", "账单", "详情", "当前状态", "成功", "付款方式"]
         return lines.first { line in
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard isUsableTitle(trimmed) else { return false }
@@ -240,7 +243,7 @@ final class OCRService {
     }
 
     private func firstDate(in text: String) -> Date? {
-        let pattern = #"20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}[日\s]*\d{0,2}:?\d{0,2}:?\d{0,2}"#
+        let pattern = #"(?:20\d{2}[-/.年])?\d{1,2}[-/.月]\d{1,2}[日\s]*\d{0,2}:?\d{0,2}:?\d{0,2}"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
         let nsText = text as NSString
         guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: nsText.length)) else {
@@ -253,13 +256,14 @@ final class OCRService {
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ".", with: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = raw.hasPrefix("20") ? raw : "\(Calendar.current.component(.year, from: .now))-\(raw)"
         let formats = ["yyyy-M-d HH:mm:ss", "yyyy-M-d HH:mm", "yyyy-M-d"]
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.timeZone = .current
         for format in formats {
             formatter.dateFormat = format
-            if let date = formatter.date(from: raw) {
+            if let date = formatter.date(from: normalized) {
                 return date
             }
         }
@@ -286,6 +290,16 @@ final class OCRService {
         return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).compactMap { match in
             guard match.numberOfRanges > 1 else { return nil }
             return Double(nsText.substring(with: match.range(at: 1)))
+        }
+    }
+
+    private func labeledAmountCandidates(in text: String) -> [Double] {
+        let pattern = #"(?:金额|付款金额|支付金额|实付金额|订单金额|交易金额|转账金额)[^\d\-+]{0,8}([-+]?\s*[0-9]{1,6}(?:\.[0-9]{1,2})?)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let nsText = text as NSString
+        return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).compactMap { match in
+            guard match.numberOfRanges > 1 else { return nil }
+            return Double(nsText.substring(with: match.range(at: 1)).replacingOccurrences(of: " ", with: ""))
         }
     }
 

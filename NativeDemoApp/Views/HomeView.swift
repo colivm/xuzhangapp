@@ -26,16 +26,10 @@ struct HomeView: View {
                         .foregroundStyle(AppColors.text)
                         .tracking(-0.01 * 44)
 
-                    if let insight = homeViewModel.todayInsight {
-                        Text("\(insight.summary) \(insight.action)")
-                            .font(.system(size: 12))
-                            .foregroundStyle(AppColors.subtext.opacity(0.88))
-                            .lineLimit(2)
-                    } else {
-                        Text("本周累计 \(homeViewModel.weekExpenseTotal.formatted(.cny))")
-                            .font(.system(size: 12))
-                            .foregroundStyle(AppColors.subtext.opacity(0.88))
-                    }
+                    Text(homeViewModel.todayHeroSubtitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext.opacity(0.88))
+                        .lineLimit(2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .glassPanelWithTint(radius: 24, padding: 24)
@@ -559,10 +553,10 @@ struct BillPlaybackSheet: View {
                     // 2-column grid matching web .bill-playback-actions
                     HStack(spacing: 8) {
                         Button {
-                            if playbackDone { restartPlayback() }
+                            if playbackDone { dismiss() }
                             else { isPlaying.toggle() }
                         } label: {
-                            Text(playbackDone ? "重播" : (isPlaying ? "暂停" : "播放"))
+                            Text(playbackDone ? "关闭" : (isPlaying ? "暂停" : "播放"))
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundStyle(AppColors.text.opacity(0.8))
                                 .frame(maxWidth: .infinity).padding(.vertical, 10)
@@ -570,7 +564,7 @@ struct BillPlaybackSheet: View {
                                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.35), lineWidth: 0.6))
                         }
                         Button { restartPlayback() } label: {
-                            Text("重播").font(.system(size: 14, weight: .medium)).foregroundStyle(.white)
+                            Text(playbackDone ? "再看一遍" : "重播").font(.system(size: 14, weight: .medium)).foregroundStyle(.white)
                                 .frame(maxWidth: .infinity).padding(.vertical, 10)
                                 .background(Capsule(style: .continuous).fill(AppColors.accent))
                         }

@@ -31,7 +31,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var activeRouteGuidance: PlaybackRouteGuidance?
     @Published var petMessage: String? = nil
 
-    enum PlaybackRouteGuidance: String, Identifiable {
+    enum PlaybackRouteGuidance: String, Identifiable, Hashable {
         case firstRecordTodayPlayback
         case weekSliceReady
         case fiveRecordsNeverPlayed
@@ -96,7 +96,7 @@ final class HomeViewModel: ObservableObject {
     private let memberFlowService = MemberFlowService()
     private let routeQuotaStore = SummaryPlaybackQuotaStore()
     private let dailyQuotaStore = DailyFeatureQuotaStore()
-    private var didEmitRouteGuidanceThisSession = false
+    private var emittedRouteGuidanceTypes: Set<PlaybackRouteGuidance> = []
 
     init() {
         items = LocalStore.loadHomeItems().sorted { $0.createdAt > $1.createdAt }
@@ -386,6 +386,20 @@ final class HomeViewModel: ObservableObject {
     var todayExpenseTotal: Double {
         let todayItems = items.filter { Calendar.current.isDateInToday($0.createdAt) && $0.amount > 0 }
         return todayItems.reduce(0) { $0 + $1.amount }
+    }
+
+    var todayHeroSubtitle: String {
+        let todayItems = items.filter { Calendar.current.isDateInToday($0.createdAt) && $0.amount > 0 }
+        let total = todayItems.reduce(0) { $0 + $1.amount }
+        let topCategory = todayItems
+            .reduce(into: [HomeItem.Category: Double]()) { result, item in
+                result[item.category, default: 0] += item.amount
+            }
+            .max(by: { $0.value < $1.value })?.key.rawValue ?? "无"
+        guard total > 0 else {
+            return "今天还没记支出，先从一笔小额开始就很好。"
+        }
+        return "叙帐用户，今天总支出 \(formatCurrency(total))，主要花在\(topCategory)。继续保持每笔小额记录就很好。"
     }
 
     var weekExpenseTotal: Double {
@@ -756,7 +770,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func refreshRouteGuidanceIfNeeded() {
-        guard !didEmitRouteGuidanceThisSession, activeRouteGuidance == nil else { return }
+        guard activeRouteGuidance == nil else { return }
         let weekCount = items.filter {
             Calendar.current.isDate($0.createdAt, equalTo: .now, toGranularity: .weekOfYear)
         }.count
@@ -768,9 +782,9 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func emitRouteGuidance(_ guidance: PlaybackRouteGuidance) {
-        guard !didEmitRouteGuidanceThisSession else { return }
+        guard !emittedRouteGuidanceTypes.contains(guidance) else { return }
         activeRouteGuidance = guidance
-        didEmitRouteGuidanceThisSession = true
+        emittedRouteGuidanceTypes.insert(guidance)
         analyticsService.track("route_guidance_shown", props: ["type": guidance.rawValue])
     }
 
