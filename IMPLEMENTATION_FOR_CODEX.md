@@ -1,8 +1,8 @@
 # 叙账 · Codex / Agent 实现任务单
 
-> 更新时间：2026-06-02  
+> 更新时间：2026-06-06  
 > 用途：把本文件 + 指定章节的产品文档交给 Codex、Cursor Agent 等，**按任务拆分实现**，避免一次「读完所有 md」导致漏项或乱改。  
-> 产品真相：`PRODUCT_NORTH_STAR.md`、`PRODUCT_PLAYBACK_MEMBERSHIP_v0.1.md`；本文件只写 **工程范围、代码锚点、禁止项、验收**。
+> **当前优先**：见 [`TODO.md`](TODO.md) §下一步最先做什么 — **TestFlight 回归 → B2.8 → C1**。
 
 ---
 
@@ -32,14 +32,18 @@
 
 | 模块 | 路径 | 说明 |
 |------|------|------|
-| 统计页 | `NativeDemoApp/ContentView.swift` → `StatsWebView` | 当前默认 `selectedPeriod = .month`，**免费用户应改为 `.week`**（北极星 §6.3） |
-| 今日回放 | `NativeDemoApp/Views/HomeView.swift` → `BillPlaybackSheet` | 播放状态机：`activeIndex` + `Task.sleep` |
-| 回放数据 | `NativeDemoApp/Services/PlaybackService.swift` | 扩展周/月聚合 |
-| 账单数据 | `NativeDemoApp/Models/HomeItem.swift`、`HomeViewModel.swift` | `items` 数据源 |
-| 会员 | `NativeDemoApp/Views/MemberPricingView.swift`、`SettingsViewModel` | `memberTier`：`monthly`/`yearly`/`lifetime` |
-| 场景包门槛 | `ContentView.swift` → `scenePacks`、`memberScenePackSection` | 已有会员判断 |
-| Web 环图/周聚合 | `web-preview/app.js` → `buildWeeklyShareMeta`、`topCategoryStats`、`downloadWeeklyShareCardImage` | 生活配方与聚合参考 |
-| 周度分享卡 iOS | `ContentView.swift` → `WeeklyShareCardView` | Phase D 分享复用，**Phase B 不做统计卡分享按钮** |
+| 统计页 · 生活切片 | `NativeDemoApp/Views/StatsWebView.swift` | 默认 `selectedPeriod = .week` ✅ |
+| 记账 · 场景包 | `NativeDemoApp/Views/RecordView.swift` + `ScenePackSectionView.swift` | 场景包、`OCRConfirmSheet` |
+| 场景包数据 | `NativeDemoApp/Services/ScenePackCopyPool.swift` | A4 哲学对齐 ✅ |
+| 切片旁白池 | `NativeDemoApp/Services/PlaybackCopyPool.swift` | B2.6 接入 ✅ |
+| 今日回放 | `NativeDemoApp/Views/HomeView.swift` → `BillPlaybackSheet` | 播放状态机 |
+| 切片播放 | `NativeDemoApp/Views/SummaryPlaybackSheet.swift` | B2.5 UI polish 目标 |
+| 回放聚合 | `NativeDemoApp/Services/PlaybackService.swift` | 周/月 summary |
+| 账单 / 分类 | `NativeDemoApp/ViewModels/HomeViewModel.swift` | B2.7 锁定 ✅；**B2.8 待改** `recommendCategory` |
+| 小 AI 说 | `NativeDemoApp/ContentView.swift`（Insight Tab） | A3 去预算化 ✅ |
+| 会员 / IAP | `MemberPricingView.swift`、`SettingsViewModel.verifyIAPPurchase` | StoreKit + verify ✅ |
+| 壳与 Tab | `NativeDemoApp/ContentView.swift` | ~1506 行；可再拆 Insight |
+| Web 参考（iOS 优先，Web 滞后） | `web-preview/app.js` | 勿默认与 iOS 同步改 |
 | 会员 Nudge | `NativeDemoApp/Services/MemberFlowService.swift` | 播完场景 |
 
 ---
@@ -47,19 +51,24 @@
 ## 3. 任务清单（推荐顺序）
 
 ```text
-B1 周/月聚合 + SummaryChapter 模型
-B2 SummaryPlaybackSheet（周 5 幕 MVP）
-B3 统计页生活切片卡片 + 默认本周
-B4 免费/会员次数 enforce
-A2 权益五条 UI 对齐（MemberPricingView 已改价，核对 enforce）
-C1 动线引导（首记、角标、播完 CTA）
-C2 OCR / 今日回放次数
-B2.5 生活切片叙事/UI 感染力 polish（**D1 前置，必做**）
-D1 播完分享图（合并周卡；依赖 B2.5）
-F1 支付宝/微信 OCR + 确认导入（对齐 Web 四步流程）
-A3 AI「议」边界对齐 · 去预算化（见 [`AGENT_PROMPT_AI_ADVICE_BOUNDARY.md`](AGENT_PROMPT_AI_ADVICE_BOUNDARY.md)）
-A4 场景包哲学对齐 · iOS（见 [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md)）
-E1 StoreKit 2 + 后端验单（TestFlight 付费前置）
+B1 周/月聚合 + SummaryChapter 模型                    ✅
+B2 SummaryPlaybackSheet（周 5 幕 MVP）               ✅
+B3 统计页生活切片卡片 + 默认本周                      ✅
+B4 免费/会员次数 enforce                             ✅
+A2 权益五条 UI 对齐                                  ✅
+A3 AI「议」边界 · 去预算化（iOS）                    ✅
+A4 场景包哲学对齐（iOS）                             ✅
+B2.6 PlaybackCopyPool 接入（iOS MVP）                ✅
+B2.7 分类锁定                                       ✅ 骨架
+C1 动线引导（首记、角标、播完 CTA）                   ⏳ 下一步 #3
+B2.8 智能分类推荐                                     ⏳ 下一步 #2
+B2.5 生活切片叙事/UI polish                           ⏳
+B2.9 天气宠物                                         ⏳
+B2.10 场景包防连重复（可选）                          ⏳
+C2 OCR / 今日回放次数                                ✅ 主链路
+D1 播完分享图                                         ⏳
+F1 OCR 详情页 + 去演示按钮                           ⏳ 进行中
+E1 StoreKit + 生产验单配置 + Release 门禁             ⏳ 客户端已有
 ```
 
 ---
@@ -1335,3 +1344,4 @@ struct ScenePackDefinition {
 | 2026-06-04 | 新增 **Task B2.7** 记账分类锁定（§10.12）；一键备注不覆盖手选分类 |
 | 2026-06-04 | 新增 **Task B2.8** 智能分类推荐（§10.13）、**B2.9** 天气宠物（§10.14） |
 | 2026-06-04 | 新增 **Task B2.10** 场景备注包文案池（§10.16）、`SCENE_PACK_COPY_POOL_v0.2.md` |
+| 2026-06-06 | §2.2 代码锚点更新（StatsWebView/RecordView）；§3 任务状态；链至 TODO |

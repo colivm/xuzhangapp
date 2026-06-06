@@ -1,98 +1,118 @@
 # 叙账 · 进度清单
 
-> 更新时间：2026-06-04  
-> API 域名：`https://api.xuzhangapp.com`  
-> v0.1 登录：**手机号验证码**（微信登录不做，见 v0.2+）
+> 更新时间：**2026-06-06**  
+> 分支：`feature/生活切片和会员权益` · 最近提交：`0e315c4` 产品内核文案收束  
+> API：`https://api.xuzhangapp.com` · 登录：手机号验证码（v0.1）
 
 ---
 
-## ✅ 已完成（摘要）
+## 🚀 下一步最先做什么（2026-06-06）
 
-- [x] 全栈骨架（iOS / web-preview / backend / ai-proxy）+ 五大 Tab
-- [x] 生产 ECS、HTTPS、`api.xuzhangapp.com`、PG 持久化、AI 经 backend 转发
-- [x] 生活切片 Phase B、动线 C1/C2、StoreKit 客户端骨架（**未接真实验单**）
-- [x] 会员 UI、次数 enforce、Web OCR 四步确认流程（演示）
+> 哲学与文案已进 iOS 代码；**现在最缺的是真机验证 + 记账路径最后一格产品债**。
+
+| 顺序 | 做什么 | 为什么先 | 预计 |
+|------|--------|----------|------|
+| **1** | **Mac 拉最新 → Archive → TestFlight**，按下方「回归 10 条」走一遍 | 确认 `0e315c4` 没回归；切片 copy 池、A3/A4 需耳朵验收 | 0.5～1 天 |
+| **2** | **Task B2.8 智能分类**（替换 `recommendCategory` 纯金额档） | 记账仍像传统 App；B2.7 锁定已做，推荐逻辑是缺口 | Agent 1 次 |
+| **3** | **Task C1 动线**（首记 → 看看花角标/引导） | 内核问题「价值传达」；功能有、触达未验 | 0.5 天 |
+| **4** | 购买成功 **welcome 文案** + 用尽次数话术走读 | 付费瞬间温度；改动小 | 0.5 天 |
+| **5** | **B2.5** 切片幕 UI 真机再看（copy 已有，UI 是否仍报表感） | 内核问题「感染力」 | 1 天 |
+| 并行 | 栏 B：备案、API 证续期、Spug 短信 | 上架 blocker，等待时可做 | — |
+
+**TestFlight 回归 10 条（哲学对齐版）**
+
+1. 新装 → 记 3 笔本周 → 看看花默认 **本周** → 播生活切片 **2 遍**，旁白有变化  
+2. 展开场景包：travel 为 **旅行出发包**，副文案为 tagline（无「比如输入 ¥」）  
+3. 手改分类 → 再改金额 → **分类不被覆盖**（B2.7）  
+4. 小 AI 说 → **记一句本月收束** → 无下月 ¥ 数字  
+5. OCR 选图 → 确认弹层 → 确认导入；取消/失败不扣次  
+6. 登录 → 沙盒购 → verify → 会员切片无限  
+7. 杀进程 → 数据仍在  
+8. 设置页会员档显示 **年度会员** 非 yearly  
+9. 弱数据（1～2 笔）播切片，copy 不尴尬  
+10. 播完 CTA：主会员 / 次「想多聊一句」是否合理  
+
+Agent 任务单：B2.8 → C1 → F1 polish → D1；见 [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) §3。
+
+---
+
+## ✅ 已完成（2026-06-06 更新）
+
+### 产品与文档
+- [x] 北极星 §0 创始人哲学、§0.5 AI「议」边界
+- [x] [`PRODUCT_STAGE_REVIEW_AND_STORE_COPY_v0.1.md`](PRODUCT_STAGE_REVIEW_AND_STORE_COPY_v0.1.md) 阶段总结 + App Store 草案
+- [x] [`AI_ADVICE_BOUNDARY_AUDIT_v0.1.md`](AI_ADVICE_BOUNDARY_AUDIT_v0.1.md)、Task **A3/A4** Agent prompt
+- [x] [`SCENE_PACK_COPY_POOL_v0.2.md`](SCENE_PACK_COPY_POOL_v0.2.md) §10 哲学对齐 + tagline
+
+### iOS 功能（`0e315c4` 及前序）
+- [x] 生活切片 Phase B/C、次数 enforce、默认 **本周**（`StatsWebView`）
+- [x] **PlaybackCopyPool** 接入 `PlaybackService`（按幕 hash 轮换，iOS MVP）
+- [x] **Task A3** 小 AI 说去预算化：记一句本月收束、fallback/Prompt §0.5
+- [x] **Task A4** 场景包：旅行出发包、5 条替词、四包 tagline
+- [x] **B2.7 骨架**：`categoryLockedByUser`，手改分类后推荐不覆盖
+- [x] **结构债**：拆出 `RecordView`、`StatsWebView`、`ScenePackSectionView`（`ContentView` ~1506 行）
+- [x] **F1 进行中**：`OCRConfirmSheet`、确认导入、草稿区；Vision 识票链路
+- [x] **StoreKit + `/v1/iap/verify`** 客户端（`MemberPricingView` + `SettingsViewModel.verifyIAPPurchase`）
+- [x] 会员 UI、**年度会员**中文档（`MemberPricingView` / `SettingsView`）
+- [x] ScenePackCopyPool：4 档 × 8 条 + stable hash + 历史增强
+- [x] TestFlight **首测闭环**（记、回放、切片、沙盒购、杀进程）
+
+### 对外与部署
+- [x] 生产 ECS、`api.xuzhangapp.com`、PG、ai-proxy 转发
+- [x] 主域 HTTPS、官网截图、favicon、**新 App 图标**
+- [x] 隐私 / 用户协议静态页（`legal/`）
 
 ---
 
 ## ⏳ 待办 · 两栏
 
-> **用法**：左栏按 **用户路径** 逐条真机 polish；右栏可与左栏并行，但 **收费上架前** 右栏必清。
-
-| **栏 A · 体验细调**（功能已有，抛光质量） | **栏 B · 接真环境 / 上架**（基础设施与发布） |
-|-------------------------------------------|-----------------------------------------------|
+| **栏 A · 体验细调** | **栏 B · 接真环境 / 上架** |
+|---------------------|----------------------------|
 | **路径 1 · 新用户首记** | **真机全流程** |
-| - [ ] 首记 → 今日回放引导（C1 话术/频率再验） | - [ ] 登录 → 记账 → 同步 → AI → 杀进程重开 |
-| - [ ] 记 ≥3 / ≥5 笔 → 看看花角标/卡片提示 | - [ ] 使用 `https://api.xuzhangapp.com` |
-| - [ ] **记账分类锁定**（手改分类后，金额推荐/一键备注不覆盖）— §10.12 | |
-| - [ ] **智能分类推荐**（历史 + 时段 + 金额，非固定档位）— §10.13 | |
-| - [ ] **天气场景宠物陪伴**（记完账/点宠物：雨天/高温等暖心提示，对齐 Web）— §10.14 | |
-| - [ ] **场景备注包文案池扩展**（四包 128 条 + 稳定轮换 + 历史增强）— §10.16 | |
+| - [ ] C1：首记 → 今日回放 / 看看花引导 | - [ ] 回归 10 条（见上文 §最先做） |
+| - [ ] 记 ≥3 笔 → 看看花角标/卡片提示 | - [ ] 生产 API 全链路再验 |
+| - [x] B2.7 分类锁定（骨架已有，真机再验） | |
+| - [ ] **B2.8 智能分类**（历史+时段+金额+关键词）— §10.13 | |
+| - [ ] B2.9 天气宠物（Open-Meteo；开关已有）— §10.14 | |
+| - [x] 场景包哲学 + tagline（A4）；B2.10 128 条 **iOS 已 32×4**，防连重复可选 | |
 | | |
 | **路径 2 · 生活切片** | **备案与合规** |
-| - [ ] **B2.5** 叙事/UI（旁白为主、少报表感）— [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) §10.8 | - [ ] ICP 备案完成 |
-| - [ ] **D1** 播完分享图（B2.5 后）— §10.9 | - [ ] 隐私政策 / 用户协议静态页 URL |
-| - [ ] 免费次数与会员页文案一致（周 1 / 月 3 / OCR 3） | - [ ] App Store 隐私问卷与 [`APP_STORE_LISTING.md`](APP_STORE_LISTING.md) 一致 |
+| - [ ] B2.5 叙事/UI（旁白为主、少报表感）— §10.8 | - [ ] ICP 备案 |
+| - [x] B2.6 PlaybackCopyPool 接入（MVP；对照 md 可补全条数） | - [x] 隐私 / 协议 URL 上线 |
+| - [ ] D1 播完分享图 — §10.9 | - [ ] ASC 隐私问卷 + [`APP_STORE_LISTING.md`](APP_STORE_LISTING.md) |
+| - [ ] 免费次数话术与 App 内 enforce 再走一遍 | |
 | | |
 | **路径 3 · 智能导入** | **生产安全** |
-| - [ ] **F1** 支付宝/微信 **账单详情** OCR + Web 四步确认 — §10.11 | - [ ] 真实短信（Spug）或关闭 dev 码 `123456` |
-| - [ ] iOS 对齐 Web：进度 → 确认弹层 → 草稿区 | - [ ] `APP_PROXY_TOKEN`、关公网 8790/8787 |
-| - [ ] 识别失败 / 取消不扣次 | - [ ] pm2/systemd 进程守护 |
-| - [ ] 去掉或 `#if DEBUG`「演示 OCR」 | - [x] **主域 HTTPS**（`xuzhangapp.com` Let's Encrypt，到期 2026-09-02） |
-| | - [ ] API 子域 SSL 续期（测试证 2026-08-29 前；可改 Let's Encrypt） |
+| - [ ] F1：详情页 OCR 真机 polish；去掉 **「演示 OCR」** 或 `#if DEBUG` | - [ ] Spug 短信 / 收紧 dev 码 |
+| - [x] iOS：进度 → 确认弹层 → 草稿区（主链路已有） | - [ ] `APP_PROXY_TOKEN`、防火墙 |
+| - [ ] 识别失败 / 取消不扣次（再验） | - [ ] pm2/systemd |
+| | - [x] 主域 HTTPS |
+| | - [ ] API 子域 SSL 续期（2026-08-29 前） |
 | | |
 | **路径 4 · 会员与 AI** | **TestFlight → 商店** |
-| - [ ] 用尽话术（切片 / OCR / 今日回放）走一遍 | - [ ] TestFlight 内测分发 |
-| - [ ] 播完 CTA：主会员、次「想多聊一句」 | - [ ] ASC：Bundle ID、截图、订阅说明 |
-| - [ ] AI fallback 与远程失败提示 | - [ ] 真机 + 内测反馈一轮 |
+| - [x] A3 AI 议边界（iOS） | - [x] TestFlight 首测通过 |
+| - [ ] 购买 welcome 文案；用尽话术走读 | - [ ] **新一轮** TestFlight（含 0e315c4） |
+| - [ ] 播完 CTA polish | - [ ] ASC 截图（按 STAGE_REVIEW §6） |
+| - [ ] 远程 AI 抽测 daily/monthly | - [ ] 内测反馈一轮 |
 | | |
-| **路径 5 · 设置 / 账号** | **真实支付（收费前）** |
-| - [ ] 手机号登录 / 退出 / Token 持久化 | - [ ] **E1** ASC Product ID + 推介首月 ¥6 — §10.10 |
-| - [ ] 同步开关与冲突提示 | - [ ] 沙盒购买 → `POST /v1/iap/verify`（替换 501） |
-| - [ ] 设置页 copy 与 v0.1 能力一致 | - [ ] `GET /v1/member/me` 刷新 tier；恢复购买 |
-| | - [ ] Release 禁止 Debug 直接写 `memberTier` |
+| **路径 5 · 设置** | **真实支付（收费前）** |
+| - [ ] 登录 / 同步 / 冲突提示 polish | - [x] backend `/v1/iap/verify` 已实现 |
+| - [ ] 设置页 copy 与能力一致 | - [ ] ASC Product ID + 推介 ¥6 生产配置 |
+| | - [ ] Release 禁 Debug 写 tier（`SettingsView` 模拟按钮需核对） |
 | | |
-| **可选 polish** | **v0.2+（本版不做）** |
-| - [ ] Logo / 启动图与 [`LOGO_BRIEF.md`](LOGO_BRIEF.md) | - [ ] 微信登录（已从 v0.1 移除） |
-| - [ ] 拆分 `ContentView.swift` 巨型文件 | - [ ] 账单列表长图 OCR 多条 |
-| - [ ] 空状态、弱数据切片 copy 再读一遍 | - [ ] 手机号哈希存储、正式 DV 证 |
-
----
-
-## 🎯 建议顺序
-
-```text
-1. 栏 B：真机全流程（1～2 天）
-2. 栏 A：B2.5 → D1 → F1（按 IMPLEMENTATION 任务单）
-3. 栏 B：备案 + 生产安全（并行等待）
-4. TestFlight 免费内测
-5. 栏 B：E1 真实支付 → 开订阅
-```
-
-**真机验收路径：**
-
-```text
-设置页 → https://api.xuzhangapp.com 登录
-  → 记一笔 / OCR 导入确认
-  → 看看花 · 本周生活切片播放
-  → AI 复盘（远程 + fallback）
-  → 杀 App 重开
-```
-
-| 设置项 | 值 |
-|--------|-----|
-| 后端根地址 | `https://api.xuzhangapp.com` |
-| AI 接口 | `https://api.xuzhangapp.com/v1/ai/insight/daily` |
-| 开启远程 AI / 同步 | 按需 ✅ |
+| **可选** | **v0.2+** |
+| - [x] Logo / 图标（已换）；启动图 | 微信登录、长图 OCR 多条 |
+| - [ ] `ContentView` 再拆（小 AI 说 Tab） | Web 预览与 iOS 对齐（A3/A4/copy） |
+| - [ ] 空状态、弱数据 copy 再读 | |
 
 ---
 
 ## 进度一览
 
 ```text
-[████████████████░░░░]  功能 MVP         ~85%  ✅ B/C + StoreKit 骨架
-[████████░░░░░░░░░░░░]  体验细调（栏 A）  ~40%  ⏳ B2.5 / D1 / F1
-[████████░░░░░░░░░░░░]  接真环境（栏 B）  ~35%  ⏳ 真机 + 备案 + E1
+[██████████████████░░]  功能 MVP         ~90%
+[███████████░░░░░░░░░]  体验细调（栏 A）  ~55%  ✅ A3/A4/B2.6/B2.7 骨架
+[█████████░░░░░░░░░░░]  接真环境（栏 B）  ~45%  ⏳ 备案 + 新一轮 TF + Release 门禁
 ```
 
 ---
@@ -101,8 +121,19 @@
 
 | 文档 | 用途 |
 |------|------|
-| [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) | B2.5 / D1 / F1 / E1 任务与 Codex 对话 |
-| [`PRODUCT_PLAYBACK_MEMBERSHIP_v0.1.md`](PRODUCT_PLAYBACK_MEMBERSHIP_v0.1.md) | 切片、次数、会员、OCR 规则 |
-| [`APP_STORE_LISTING.md`](APP_STORE_LISTING.md) | 上架文案与截图 |
-| [`NativeDemoApp/IOS_REAL_INTEGRATION_CHECKLIST.md`](NativeDemoApp/IOS_REAL_INTEGRATION_CHECKLIST.md) | iOS 生产参数（v0.1 仅手机号） |
-| [`TEST_CASES_v0.1.md`](TEST_CASES_v0.1.md) | **v0.1 全量测试用例**（P0 冒烟 + ~117 条） |
+| [`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) | §0 哲学、§0.5 议边界 |
+| [`PRODUCT_STAGE_REVIEW_AND_STORE_COPY_v0.1.md`](PRODUCT_STAGE_REVIEW_AND_STORE_COPY_v0.1.md) | 阶段总结、商店文案、§7 polish |
+| [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) | B2.8 / C1 / F1 / D1 / E1 |
+| [`AGENT_PROMPT_AI_ADVICE_BOUNDARY.md`](AGENT_PROMPT_AI_ADVICE_BOUNDARY.md) | Task A3（已完成 iOS） |
+| [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md) | Task A4（已完成 iOS） |
+| [`TEST_CASES_v0.1.md`](TEST_CASES_v0.1.md) | 全量测试用例 |
+| [`APP_STORE_LISTING.md`](APP_STORE_LISTING.md) | 上架截图与自检 |
+
+---
+
+## 修订记录
+
+| 日期 | 说明 |
+|------|------|
+| 2026-06-04 | 栏 A/B 两栏、建议顺序 |
+| 2026-06-06 | 对齐 `0e315c4`：已完成 A3/A4/B2.6/拆分/IAP；§最先做 + 回归 10 条 |
