@@ -1,148 +1,496 @@
-# 轻账日记 API v0.1（客户端对接草案）
+# 叙账 API v0.1
 
-> 当前 iOS 客户端已内置对智谱 AI OpenAPI 的直连适配，也支持走后端代理。  
-> 默认地址：`https://open.bigmodel.cn/api/paas/v4/chat/completions`  
-> 默认模型：`glm-4-flash`
+> 更新时间：2026-06-02  
+> 线上 Base URL：`https://api.xuzhangapp.com`  
+> 本地调试：`http://127.0.0.1:8790`
 
-## 1. AI 每日复盘接口
+---
 
-- **Method**: `POST`
-- **Path**: `/v1/insight/daily`
-- **Auth**: `Authorization: Bearer <API_KEY>`（可选）
-- **Content-Type**: `application/json`
+## 0. 架构概览
 
-### Request Body
+```text
+iOS App / Web
+      │
+      ▼
+https://api.xuzhangapp.com   (Nginx 443 → backend 8790)
+      │
+      ├── 认证 / 账单 / 会员 / 分析  → backend 直接处理
+      │
+      └── AI 复盘  POST /v1/ai/insight/daily
+              │
+              ▼
+          ai-proxy 8787（仅内网，不对外暴露）
+              │
+              ▼
+          DeepSeek API（deepseek-chat，由 ai-proxy/.env 配置）
+```
+
+**推荐客户端接入方式**：所有请求走 **backend**，AI 使用 `POST /v1/ai/insight/daily`，携带登录后的 JWT。  
+ai-proxy 仅部署在服务器内网，客户端无需直连。
+
+---
+
+## 1. 通用约定
+
+### 1.1 Base URL
+
+| 环境 | 地址 |
+|------|------|
+| 生产 | `https://api.xuzhangapp.com` |
+| Staging | `https://staging-api.xuzhangapp.com` |
+| 本地 | `http://127.0.0.1:8790` |
+
+### 1.2 请求头
+
+```http
+Content-Type: application/json
+Authorization: Bearer <accessToken>   # 需登录的接口必填
+```
+
+> `Authorization` 必须包含 `Bearer ` 前缀（注意有空格）。
+
+### 1.3 响应格式
+
+backend 接口统一使用：
+
+```json
+{ "ok": true, ... }
+```
+
+或：
+
+```json
+{ "ok": false, "error": "ERROR_CODE", "message": "可选说明" }
+```
+
+ai-proxy 直连接口（仅服务端内部）使用 `{ "code": "...", "message": "..." }` 格式。
+
+---
+
+## 2. 健康检查
+
+### `GET /health`
+
+无需鉴权。
+
+**Response 200**
 
 ```json
 {
-  "model": "glm-4-flash",
+  "ok": true,
+  "service": "qingzhang-backend",
+  "now": "2026-06-01T03:00:00.000Z"
+}
+```
+
+---
+
+## 3. 认证
+
+### 3.1 发送验证码
+
+- **Method**: `POST`
+- **Path**: `/v1/auth/sms/send`
+- **Auth**: 无
+
+**Request Body**
+
+```json
+{
+  "phone": "13800138000"
+}
+```
+
+**Response 200**
+
+```json
+{
+  "ok": true,
+  "cooldownSec": 60
+}
+```
+
+**Errors**
+
+| error | 说明 |
+|-------|------|
+| `INVALID_PHONE` | 手机号格式错误（须 11 位、1 开头） |
+
+> **当前实现（开发模式）**：验证码固定为 `backend/.env` 中 `DEV_ALLOW_SMS_CODE`（默认 `123456`），不发送真实短信。  
+> **计划接入**：[Spug 推送助手](https://push.spug.cc/) 发送真实验证码，详见 `SPUG_SMS_GUIDE.md`。
+
+---
+
+### 3.2 验证码登录
+
+- **Method**: `POST`
+- **Path**: `/v1/auth/sms/verify`
+- **Auth**: 无
+
+**Request Body**
+
+```json
+{
+  "phone": "13800138000",
+  "code": "123456"
+}
+```
+
+**Response 200**
+
+```json
+{
+  "ok": true,
+  "user": {
+    "userId": "f44ce25e-bcdd-46b3-8ab2-f987ef82b921",
+    "displayName": "用户8000",
+    "memberTier": "free",
+    "memberExpiresAt": null
+  },
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Errors**
+
+| error | 说明 |
+|-------|------|
+| `INVALID_CODE` | 验证码错误或已过期 |
+
+`accessToken` 有效期 **7 天**，客户端应存入 Keychain。
+
+---
+
+### 3.3 微信登录（预留）
+
+- **Method**: `POST`
+- **Path**: `/v1/auth/wechat/login`
+- **Status**: `501 WECHAT_NOT_IMPLEMENTED`
+
+---
+
+## 4. 会员
+
+### 4.1 查询会员状态
+
+- **Method**: `GET`
+- **Path**: `/v1/member/me`
+- **Auth**: Bearer JWT
+
+**Response 200**
+
+```json
+{
+  "ok": true,
+  "memberTier": "free",
+  "memberExpiresAt": null
+}
+```
+
+会员档位：`free` / `monthly` / `yearly` / `lifetime`
+
+---
+
+### 4.2 开发态切换会员（仅 dev）
+
+- **Method**: `POST`
+- **Path**: `/v1/member/dev/set-tier`
+- **Auth**: Bearer JWT
+
+**Request Body**
+
+```json
+{ "tier": "monthly" }
+```
+
+---
+
+### 4.3 会员 CTA 文案
+
+- **Method**: `GET`
+- **Path**: `/v1/member/cta-copy?scene=default`
+- **Auth**: Bearer JWT
+
+---
+
+### 4.4 会员 Nudge 策略
+
+| Method | Path | 说明 |
+|--------|------|------|
+| `GET` | `/v1/member/nudge/policy` | 读取策略与状态 |
+| `POST` | `/v1/member/nudge/policy` | 更新策略 |
+| `POST` | `/v1/member/nudge/evaluate` | 评估是否展示引导 |
+| `POST` | `/v1/member/nudge/dismiss` | 记录用户关闭 |
+
+---
+
+## 5. 账单同步
+
+客户端本地账单字段参考 `HomeItem`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | UUID 字符串 | 账单唯一 ID |
+| `title` | string | 备注 |
+| `amount` | number | 金额 |
+| `category` | string | 分类（餐饮/购物/交通/娱乐/日用/住宿/其他） |
+| `source` | string | `manual` / `ocr` |
+| `createdAt` | ISO8601 | 创建时间 |
+| `updatedAt` | ISO8601 | 更新时间（冲突策略：新版本覆盖旧版本） |
+| `emotionTag` | string | 情绪标签（可选） |
+
+### 5.1 拉取账单
+
+- **Method**: `GET`
+- **Path**: `/v1/ledger`
+- **Auth**: Bearer JWT
+
+**Response 200**
+
+```json
+{
+  "ok": true,
+  "items": [ { "id": "...", "title": "午餐", "amount": 35.0 } ]
+}
+```
+
+---
+
+### 5.2 上传 / 更新账单
+
+- **Method**: `POST`
+- **Path**: `/v1/ledger`
+- **Auth**: Bearer JWT
+
+**Request Body**：完整 `HomeItem` JSON 对象（须含 `id`、`createdAt`）
+
+**Response 200**
+
+```json
+{ "ok": true }
+```
+
+---
+
+### 5.3 删除账单
+
+- **Method**: `DELETE`
+- **Path**: `/v1/ledger/:id`
+- **Auth**: Bearer JWT
+
+**Response 200**
+
+```json
+{ "ok": true }
+```
+
+---
+
+## 6. AI 每日复盘（推荐路径）
+
+### 6.1 经 backend 转发（iOS 推荐）
+
+- **Method**: `POST`
+- **Path**: `/v1/ai/insight/daily`
+- **Auth**: `Authorization: Bearer <accessToken>`（**必填**）
+- **Content-Type**: `application/json`
+
+**Request Body**
+
+```json
+{
+  "model": "deepseek-chat",
+  "feature": "daily",
   "messages": [
-    {"role": "system", "content": "系统提示词"},
-    {"role": "user", "content": "用户提示词"}
+    { "role": "system", "content": "你是温和消费复盘助手，只输出 JSON，字段为 summary/action/encourage" },
+    { "role": "user", "content": "今日支出50元，主要餐饮。输出 summary/action/encourage JSON" }
   ],
   "temperature": 0.6
 }
 ```
 
-### Success Response（200）
+**feature 可选值**
+
+| 值 | 说明 |
+|----|------|
+| `daily` | 日复盘 |
+| `monthly` | 月复盘 |
+| `quarterly` | 季度复盘（会员，ai-proxy 校验） |
+| `yearly` | 年度复盘（会员，ai-proxy 校验） |
+
+> 实际上游模型由 `ai-proxy/.env` 中 `AI_UPSTREAM_MODEL` 决定（当前为 `deepseek-chat`），客户端传的 `model` 为备选。
+
+**Success Response 200**
 
 ```json
 {
-  "summary": "今天总支出较平稳，主要集中在餐饮和交通。",
+  "summary": "今天总支出较平稳，主要集中在餐饮。",
   "action": "明天把咖啡消费减少一次，预算会更轻松。",
   "encourage": "你已经在认真管理消费了。"
 }
 ```
 
-## 1.1 推荐代理模式
+**curl 示例**
 
-- 代理地址示例：`POST https://your-domain.com/v1/insight/daily`
-- 客户端可在 `x-proxy-token` 头中携带代理口令（可选）
-- 代理层负责：
-  - 保存 `ZHIPU_API_KEY`
-  - 转发请求到智谱
-  - 统一输出 `summary/action/encourage` JSON
+```bash
+# 1. 登录拿 token
+curl -X POST https://api.xuzhangapp.com/v1/auth/sms/verify \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"13800138000","code":"123456"}'
 
-### Error Response
+# 2. 调用 AI（注意 Bearer 前缀）
+curl -X POST https://api.xuzhangapp.com/v1/ai/insight/daily \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{
+    "model": "deepseek-chat",
+    "feature": "daily",
+    "messages": [
+      {"role":"system","content":"你是温和消费复盘助手，只输出JSON"},
+      {"role":"user","content":"今日支出50元，主要餐饮"}
+    ],
+    "temperature": 0.6
+  }'
+```
+
+---
+
+### 6.2 ai-proxy 直连（仅服务端内部 / 调试）
+
+- **内网地址**: `http://127.0.0.1:8787/v1/insight/daily`
+- **Auth**: 可选 `x-proxy-token`（当 `APP_PROXY_TOKEN` 已配置时）
+- **上游**: DeepSeek `https://api.deepseek.com/v1/chat/completions`
+
+客户端 **不应** 直连 ai-proxy；密钥与限流均由 proxy 层管理。
+
+---
+
+### 6.3 iOS 客户端配置
+
+| 设置项 | 生产值 |
+|--------|--------|
+| 后端根地址 | `https://api.xuzhangapp.com` |
+| AI 接口地址 | `https://api.xuzhangapp.com/v1/ai/insight/daily` |
+| 开启远程 AI | ✅ |
+| AI API Key | 留空（走 backend JWT，无需客户端 Key） |
+
+登录后 `AIReportService` 会自动在 `Authorization` 头附加 `Bearer <accessToken>`。
+
+---
+
+## 7. 分析与回放
+
+### 7.1 埋点上报
+
+- **Method**: `POST`
+- **Path**: `/v1/analytics/events`
+- **Auth**: Bearer JWT
+
+**Request Body**
 
 ```json
 {
-  "code": "UPSTREAM_TIMEOUT",
-  "message": "model timeout"
+  "event": "ai_daily_generated",
+  "props": { "mode": "live" }
 }
 ```
 
-## 2. 可选同步接口（预留）
+---
 
-### 2.1 Push 变更
-- `POST /v1/sync/push`
+### 7.2 埋点查询
 
-### 2.2 Pull 变更
-- `POST /v1/sync/pull`
+- **Method**: `GET`
+- **Path**: `/v1/analytics/events?limit=200`
+- **Auth**: Bearer JWT
 
-### 2.3 清空云端副本
-- `POST /v1/sync/reset`
+---
 
-## 3. 错误码约定
+### 7.3 埋点汇总
 
-- `INVALID_ARGUMENT`：参数缺失或格式错误
-- `UNAUTHORIZED`：认证失败
-- `FORBIDDEN`：无权限
-- `UPSTREAM_TIMEOUT`：模型超时
-- `UPSTREAM_UNAVAILABLE`：模型服务不可用
-- `INTERNAL_ERROR`：服务内部错误
+- **Method**: `GET`
+- **Path**: `/v1/analytics/summary?days=7`
+- **Auth**: Bearer JWT
 
-## 8. App Store 内购验单
+---
+
+### 7.4 今日消费回放
+
+- **Method**: `GET`
+- **Path**: `/v1/playback/today`
+- **Auth**: Bearer JWT
+
+---
+
+## 8. 内购验单（预留）
 
 - **Method**: `POST`
 - **Path**: `/v1/iap/verify`
-- **Auth**: `Authorization: Bearer <accessToken>`
-- **Content-Type**: `application/json`
+- **Status**: `501 IAP_VERIFY_NOT_IMPLEMENTED`
 
-客户端使用 StoreKit 2 购买成功后，将交易信息发给后端；后端使用 App Store Server API 查询并校验交易，再写入会员权益。
+---
 
-### Request Body
+## 9. 错误码
 
-```json
-{
-  "productId": "com.xuzhang.member.yearly",
-  "transactionId": "2000000123456789",
-  "signedTransactionInfo": "eyJhbGciOiJFUzI1NiIsIng1YyI6Wy..."
-}
-```
+### backend
 
-### Success Response（200）
+| error | HTTP | 说明 |
+|-------|------|------|
+| `UNAUTHORIZED` | 401 | 未携带 Token 或格式错误（缺 `Bearer ` 前缀） |
+| `INVALID_TOKEN` | 401 | Token 无效或过期 |
+| `INVALID_PHONE` | 400 | 手机号格式错误 |
+| `INVALID_CODE` | 400 | 验证码错误 |
+| `INVALID_LEDGER_ITEM` | 400 | 账单字段缺失 |
+| `INVALID_TIER` | 400 | 会员档位无效 |
+| `INVALID_EVENT` | 400 | 埋点 event 为空 |
+| `UPSTREAM_ERROR` | 502 | ai-proxy 转发失败 |
+| `WECHAT_NOT_IMPLEMENTED` | 501 | 微信登录未接入 |
+| `IAP_VERIFY_NOT_IMPLEMENTED` | 501 | 内购验单未接入 |
 
-```json
-{
-  "ok": true,
-  "productId": "com.xuzhang.member.yearly",
-  "transactionId": "2000000123456789",
-  "originalTransactionId": "2000000123456789",
-  "environment": "Sandbox",
-  "memberTier": "yearly",
-  "memberExpiresAt": "2027-06-05T10:00:00.000Z"
-}
-```
+### ai-proxy（内部）
 
-### Error Response
+| code | 说明 |
+|------|------|
+| `UNAUTHORIZED` | proxy token 或 JWT 无效 |
+| `FORBIDDEN` | 会员专属 feature 权限不足 |
+| `RATE_LIMIT` | 触发限流 |
+| `INVALID_ARGUMENT` | 参数缺失 |
+| `UPSTREAM_ERROR` | DeepSeek 上游失败 |
+| `PARSE_ERROR` | 模型输出无法解析为 JSON |
+| `CONFIG_ERROR` | 服务端配置缺失 |
+| `INTERNAL_ERROR` | 内部错误 |
 
-```json
-{
-  "ok": false,
-  "error": "IAP_NOT_CONFIGURED",
-  "message": "Missing env: APPLE_ISSUER_ID, APPLE_KEY_ID"
-}
-```
+---
 
-常见错误：
+## 10. 环境变量速查
 
-- `INVALID_IAP_REQUEST`：缺少 `productId` 或 `transactionId`
-- `UNKNOWN_PRODUCT`：商品 ID 未配置或不在会员映射中
-- `APPLE_LOOKUP_FAILED`：App Store Server API 查询失败
-- `TRANSACTION_EXPIRED`：订阅交易已过期
-- `TRANSACTION_REVOKED`：交易已撤销
-- `TRANSACTION_ALREADY_BOUND`：同一 `originalTransactionId` 已绑定其他用户
+### backend（`backend/.env`）
 
-## 9. 会员状态查询
+| 变量 | 说明 |
+|------|------|
+| `PORT` | 默认 8790 |
+| `JWT_SECRET` | JWT 签名密钥 |
+| `AI_PROXY_BASE_URL` | ai-proxy 内网地址，如 `http://127.0.0.1:8787` |
+| `AI_PROXY_TOKEN` | 转发 ai-proxy 时的可选口令 |
+| `DEV_ALLOW_SMS_CODE` | 开发固定验证码（生产应移除） |
+| `DATABASE_URL` | PostgreSQL 连接串（可选） |
 
-- **Method**: `GET`
-- **Path**: `/v1/member/me`
-- **Auth**: `Authorization: Bearer <accessToken>`
+### ai-proxy（`ai-proxy/.env`）
 
-### Success Response（200）
+| 变量 | 说明 |
+|------|------|
+| `AI_UPSTREAM_URL` | 当前：`https://api.deepseek.com/v1/chat/completions` |
+| `AI_UPSTREAM_API_KEY` | DeepSeek API Key |
+| `AI_UPSTREAM_MODEL` | 当前：`deepseek-chat` |
+| `APP_PROXY_TOKEN` | 可选，防滥用 |
+| `MONTHLY_REQUEST_LIMIT` | 代理层月度总调用上限 |
 
-```json
-{
-  "ok": true,
-  "memberTier": "yearly",
-  "memberExpiresAt": "2027-06-05T10:00:00.000Z"
-}
-```
+---
 
-会员档位与产品定价一致：
+## 11. 相关文档
 
-- `monthly`：月度会员
-- `yearly`：年度会员
-- `lifetime`：永久会员，`memberExpiresAt = null`
-- `free`：免费用户
+- `PROJECT_ANALYSIS.md` — 项目整体分析
+- `TODO.md` — 项目进度清单
+- `SPUG_SMS_GUIDE.md` — Spug 短信接入（计划）
+- `SMS_TEMPLATE.md` — 短信申请模板
+- `backend/README.md` — 后端安装与联调
+- `ai-proxy/README.md` — AI 代理部署说明

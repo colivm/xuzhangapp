@@ -1,6 +1,6 @@
 # NativeDemoApp (iOS 17+)
 
-一个从零搭建的 SwiftUI 原生 iOS App 示例（轻账日记 v0.1），包含：
+一个从零搭建的 SwiftUI 原生 iOS App 示例（叙账 v0.1），包含：
 
 - 底部 `TabBar`（首页 / 记账 / 统计 / AI复盘 / 设置）
 - 手动记账 + OCR 占位识别流程
@@ -53,8 +53,16 @@ NativeDemoApp
 
 ## 产品文档
 
+- **`PRODUCT_NORTH_STAR.md`**：产品北极星（生活回望、叙/账、先叙后议、NSM 与评审原则）。
+- **`APP_STORE_LISTING.md`**：App Store 名称/副标题、截图顺序与上架自检。
+- **`IMPLEMENTATION_FOR_CODEX.md`**：给 Codex/Agent 的分任务实现单（代码锚点、禁止项、验收）。
+- **`PROJECT_SETUP.md`**：项目搭建总览（本机开发、生产 ECS、Staging、iOS 联调）。
+- `PROJECT_ANALYSIS.md`：架构分析与完成度评估。
+- `STAGING_ENV_SETUP.md`：同机 Staging 部署与分支发版流程。
 - `PRD_v0.1.md`：页面清单、字段设计、Prompt 模板与技术结构说明。
+- **`PRODUCT_PLAYBACK_MEMBERSHIP_v0.1.md`**：生活切片、今日回放、场景包、OCR 与免费/会员权益设计。
 - `API_v0.1.md`：AI 日报与可选同步接口草案。
+- `TODO.md`：进度与上线清单。
 - `ai-proxy/README.md`：最小后端代理部署说明（推荐生产使用）。
 - `NativeDemoApp/IOS_REAL_INTEGRATION_CHECKLIST.md`：iOS 真实接入所需参数、账号和验收标准。
 - `NativeDemoApp/AppSecrets.example.plist`：生产配置模板（复制为 `AppSecrets.plist` 后填真实值）。
