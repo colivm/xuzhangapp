@@ -52,6 +52,7 @@ struct WeeklyShareCardPayload {
     let topCategoryRatio: Double
     let headline: String
     let subtitle: String
+    let anchorLine: String?
     let periodText: String
 }
 
@@ -394,6 +395,7 @@ final class PlaybackService {
             topCategoryRatio: ratio,
             headline: builtSummary.teaserLine,
             subtitle: closing,
+            anchorLine: weeklyShareAnchorLine(from: builtSummary),
             periodText: period
         )
     }
@@ -688,6 +690,23 @@ final class PlaybackService {
         }
         let topText = top.map { "\($0.category)约占\(ratio)%" } ?? "日常开始有了轮廓"
         return "\(busiest?.label ?? "本周")最忙，\(topText)。"
+    }
+
+    private func weeklyShareAnchorLine(from summary: SummaryPlayback) -> String? {
+        if let highlight = summary.chapters.first(where: { $0.id == "week-highlight" }),
+           let title = highlight.metrics["title"],
+           !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let day = highlight.metrics["day"], !day.isEmpty {
+                return "\(day)那笔：\(title)"
+            }
+            return "有一笔：\(title)"
+        }
+        if let rhythm = summary.chapters.first(where: { $0.id == "week-rhythm" }),
+           let busiest = rhythm.metrics["busiestDay"],
+           !busiest.isEmpty {
+            return "\(busiest)最满"
+        }
+        return nil
     }
 
     private func monthTeaserLine(segments: [MonthSegment], top: CategoryAmount?, ratio: Int, changeText: String) -> String {

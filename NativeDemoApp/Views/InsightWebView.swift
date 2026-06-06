@@ -564,6 +564,7 @@ struct WeeklyShareCardView: View {
     let topCategoryRatio: Double
     let headline: String
     let subtitle: String
+    let anchorLine: String?
     let periodText: String
     var isPetMode: Bool = true
     var nickname: String = "叙账用户"
@@ -572,26 +573,19 @@ struct WeeklyShareCardView: View {
 
     struct ShareCardTheme {
         let bgStart, bgEnd: Color; let panelBg, panelBorder: Color
-        let accent, accentSoft, titleSub, textMain, textMuted: Color
-        let trendBg, trendBorder, ringBg, ringBorder, ringTrack, ringArc: Color
+        let accent, titleSub, textMain, textMuted: Color
         let footer, footerSub: Color
         static let pet = ShareCardTheme(
             bgStart: Color(hex: "fff3e8"), bgEnd: Color(hex: "ffe9f2"),
             panelBg: Color.white.opacity(0.94), panelBorder: Color(hex: "efd7c7"),
-            accent: Color(hex: "d48754"), accentSoft: Color(hex: "e4a57a"),
+            accent: Color(hex: "d48754"),
             titleSub: Color(hex: "b79a86"), textMain: Color(hex: "4a3f37"), textMuted: Color(hex: "957f70"),
-            trendBg: Color(hex: "d48754").opacity(0.11), trendBorder: Color(hex: "d48754").opacity(0.28),
-            ringBg: Color(hex: "d48754").opacity(0.10), ringBorder: Color(hex: "d48754").opacity(0.24),
-            ringTrack: Color(hex: "e4a57a").opacity(0.22), ringArc: Color(hex: "d48754"),
             footer: Color(hex: "887566"), footerSub: Color(hex: "b19c8e"))
         static let neutral = ShareCardTheme(
             bgStart: Color(hex: "f3f6fb"), bgEnd: Color(hex: "edf1f7"),
             panelBg: Color.white.opacity(0.95), panelBorder: Color(hex: "d8deea"),
-            accent: Color(hex: "5e708a"), accentSoft: Color(hex: "7788a2"),
+            accent: Color(hex: "5e708a"),
             titleSub: Color(hex: "8c96a8"), textMain: Color(hex: "2f3947"), textMuted: Color(hex: "6f7a8d"),
-            trendBg: Color(hex: "5e708a").opacity(0.10), trendBorder: Color(hex: "5e708a").opacity(0.24),
-            ringBg: Color(hex: "5e708a").opacity(0.10), ringBorder: Color(hex: "5e708a").opacity(0.22),
-            ringTrack: Color(hex: "7788a2").opacity(0.22), ringArc: Color(hex: "5e708a"),
             footer: Color(hex: "6b7688"), footerSub: Color(hex: "8f99ab"))
     }
 
@@ -603,6 +597,7 @@ struct WeeklyShareCardView: View {
         topCategoryRatio: Double,
         headline: String = "这一周你记录得很认真",
         subtitle: String = "温柔回看，不必苛责，按自己的节奏慢慢生活。",
+        anchorLine: String? = nil,
         periodText: String? = nil,
         isPetMode: Bool = true,
         nickname: String = "叙账用户"
@@ -614,6 +609,7 @@ struct WeeklyShareCardView: View {
         self.topCategoryRatio = topCategoryRatio
         self.headline = headline
         self.subtitle = subtitle
+        self.anchorLine = anchorLine
         self.periodText = periodText ?? Self.defaultPeriodText()
         self.isPetMode = isPetMode
         self.nickname = nickname
@@ -628,6 +624,7 @@ struct WeeklyShareCardView: View {
             topCategoryRatio: payload.topCategoryRatio,
             headline: payload.headline,
             subtitle: payload.subtitle,
+            anchorLine: payload.anchorLine,
             periodText: payload.periodText,
             isPetMode: isPetMode,
             nickname: nickname
@@ -643,70 +640,78 @@ struct WeeklyShareCardView: View {
 
     var body: some View {
         ZStack {
-            // Background gradient
             LinearGradient(colors: [t.bgStart, t.bgEnd], startPoint: .top, endPoint: .bottom)
 
-            // Panel card
-            RoundedRectangle(cornerRadius: 18).fill(t.panelBg)
-                .shadow(color: t.accent.opacity(0.18), radius: 12, y: 3)
-                .overlay(RoundedRectangle(cornerRadius: 18).stroke(t.panelBorder, lineWidth: 1))
-                .padding(28)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(t.panelBg.opacity(0.62))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(t.panelBorder.opacity(0.52), lineWidth: 0.8)
+                )
+                .padding(.horizontal, 26)
+                .padding(.vertical, 24)
 
-            // Content
             VStack(alignment: .leading, spacing: 0) {
-                Text("叙账 · 周度分享卡")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(t.accent)
+                HStack(alignment: .firstTextBaseline) {
+                    Text(periodText)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(t.titleSub)
+                        .lineLimit(1)
+                    Spacer()
+                    Text("叙账")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(t.accent.opacity(0.72))
+                }
+
+                Text(displayNickname)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(t.textMuted.opacity(0.82))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                Text(periodText)
-                    .font(.system(size: 12))
-                    .foregroundStyle(t.titleSub)
-                    .padding(.top, 3)
+                    .padding(.top, 34)
 
-                Text("你好，\(nickname)")
-                    .font(.system(size: 13, weight: .medium))
+                Text(displayHeadline)
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
                     .foregroundStyle(t.textMain)
-                    .padding(.top, 20)
-                Text(headline)
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundStyle(t.textMain)
-                    .padding(.top, 3)
+                    .lineSpacing(7)
                     .lineLimit(3)
-                    .minimumScaleFactor(0.76)
+                    .minimumScaleFactor(0.72)
+                    .padding(.top, 10)
+                    .frame(minHeight: 148, alignment: .topLeading)
 
-                // Stats
-                HStack(spacing: 8) {
-                    storyMetric("记录", "\(recordCount) 笔")
-                    storyMetric("支出", weekTotal.formatted(.cny))
-                    storyMetric("主料", topCategory)
-                }
-                .padding(.top, 20)
-
-                // Charts stacked vertically (HStack overflows at 390pt)
-                VStack(alignment: .leading, spacing: 10) {
-                    trendChart
-                    ringChart
-                }
-                .padding(.top, 15)
-
-                Spacer(minLength: 12)
-
-                // Footer
-                Text(subtitle)
-                    .font(.system(size: 12))
+                Text(displaySubtitle)
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
                     .foregroundStyle(t.footer)
-                    .frame(maxWidth: .infinity)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.82)
+                    .lineSpacing(5)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.78)
+                    .padding(.top, 20)
+
+                if let anchor = displayAnchorLine {
+                    Text(anchor)
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundStyle(t.accent)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                        .padding(.top, 18)
+                }
+
+                Text(auxiliaryLine)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(t.textMuted)
+                    .padding(.top, displayAnchorLine == nil ? 18 : 12)
+
+                Spacer(minLength: 18)
+
+                rhythmTexture
+                    .padding(.bottom, 24)
+
                 Text("来自 叙账 · 温柔回看每一周")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(t.footerSub)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 48)
-            .padding(.vertical, 42)
+            .padding(.horizontal, 42)
+            .padding(.vertical, 38)
         }
         .overlay(alignment: .topTrailing) {
             cornerDec
@@ -718,21 +723,55 @@ struct WeeklyShareCardView: View {
         .clipped()
     }
 
-    private func storyMetric(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .font(.system(size: 8, weight: .medium))
-                .foregroundStyle(t.textMuted)
-            Text(value)
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-                .foregroundStyle(t.accent)
-                .lineLimit(1)
-                .minimumScaleFactor(0.65)
+    private var displayNickname: String {
+        let trimmed = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "这一周" : "\(trimmed)的这一周"
+    }
+
+    private var displayHeadline: String {
+        headline
+            .replacingOccurrences(of: "，([^，。]+)约占\\d+%", with: "，$1出现得比较多", options: .regularExpression)
+            .replacingOccurrences(of: "约占\\d+%", with: "出现得比较多", options: .regularExpression)
+            .replacingOccurrences(of: " 笔记录", with: " 次记录")
+    }
+
+    private var displaySubtitle: String {
+        let trimmed = subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "温柔回看，不必苛责。" }
+        if trimmed.contains("建议") || trimmed.contains("数据不足") {
+            return "这周先留下了一点痕迹，慢慢来就好。"
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 8)
-        .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        return trimmed
+            .replacingOccurrences(of: "¥\\s?[0-9,]+(\\.[0-9]+)?", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s{2,}", with: " ", options: .regularExpression)
+    }
+
+    private var displayAnchorLine: String? {
+        guard let anchor = anchorLine?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !anchor.isEmpty else { return nil }
+        return anchor
+    }
+
+    private var auxiliaryLine: String {
+        if recordCount <= 2 {
+            return "这周刚留下 \(recordCount) 段小痕迹。"
+        }
+        return "这周记了 \(recordCount) 次。"
+    }
+
+    private var rhythmTexture: some View {
+        let maxV = max(dailyTrend.map(\.1).max() ?? 1, 1)
+        let chartH: CGFloat = 34
+        return HStack(alignment: .bottom, spacing: 7) {
+            ForEach(Array(dailyTrend.enumerated()), id: \.offset) { idx, pt in
+                let h = max(4, (pt.1 / maxV) * chartH)
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(t.accent.opacity(pt.1 > 0 ? 0.34 : 0.16))
+                    .frame(width: 24, height: h)
+                    .accessibilityLabel("\(idx)")
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 40, alignment: .bottomLeading)
     }
 
     // MARK: - Corner decoration
@@ -748,93 +787,6 @@ struct WeeklyShareCardView: View {
             VStack(spacing: 4) { ForEach(0..<3) { i in
                 RoundedRectangle(cornerRadius: 2).fill(t.accent.opacity(0.72 - Double(i)*0.1)).frame(width: 38-CGFloat(i)*6, height: 4)
             }}.rotationEffect(.degrees(12)).offset(y: -6)
-        }
-    }
-
-    // MARK: - Trend chart
-
-    private var trendChart: some View {
-        let maxV = max(dailyTrend.map(\.1).max() ?? 1, 1)
-        let peak = dailyTrend.map(\.1).max() ?? 0
-        let barW: CGFloat = 16; let gap: CGFloat = 4; let chartH: CGFloat = 64
-
-        return VStack(alignment: .leading, spacing: 0) {
-            Text("近7天小趋势")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(t.textMuted)
-                .padding(.leading, 8).padding(.top, 6)
-
-            HStack(alignment: .bottom, spacing: gap) {
-                ForEach(Array(dailyTrend.enumerated()), id: \.offset) { idx, pt in
-                    let h = max(3, (pt.1 / maxV) * chartH)
-                    VStack(spacing: 2) {
-                        if pt.1 > 0 && pt.1 == peak {
-                            RoundedRectangle(cornerRadius: 4).fill(t.accent).frame(width: barW, height: h)
-                                .shadow(color: t.accent.opacity(0.35), radius: 3, y: 1)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 4)
-                                        .fill(Color.white.opacity(0.4))
-                                        .frame(width: barW - 6, height: 3)
-                                        .offset(y: -(h - 6) / 2)
-                                )
-                        } else {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(pt.1 > 0 ? t.accent.opacity(0.7) : t.accent.opacity(0.22))
-                                .frame(width: barW, height: h)
-                        }
-                        Text(pt.0).font(.system(size: 6)).foregroundStyle(t.titleSub)
-                    }
-                }
-            }
-            .frame(height: chartH + 12)
-            .padding(.horizontal, 8).padding(.bottom, 6)
-        }
-        .background(
-            RoundedRectangle(cornerRadius: 10).fill(t.trendBg)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(t.trendBorder, lineWidth: 1))
-        )
-    }
-
-    // MARK: - Ring chart
-
-    private var ringChart: some View {
-        let ratio = max(0, min(1, topCategoryRatio))
-        let ratioPct = Int(round(ratio * 100))
-
-        return HStack(spacing: 10) {
-            ZStack {
-                Circle().stroke(t.ringTrack, lineWidth: 7).frame(width: 48, height: 48)
-                Circle()
-                    .trim(from: 0, to: CGFloat(ratio))
-                    .stroke(t.ringArc, style: StrokeStyle(lineWidth: 7, lineCap: .round))
-                    .frame(width: 48, height: 48)
-                    .rotationEffect(.degrees(-90))
-                VStack(spacing: 0) {
-                    Text("\(ratioPct)%")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundStyle(t.accent)
-                    Text("TOP")
-                        .font(.system(size: 6))
-                        .foregroundStyle(t.textMuted)
-                }
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                legend(t.accent, "\(topCategory)占比最高")
-                legend(t.accent.opacity(0.5), "本周记录节奏平稳")
-                legend(t.accent.opacity(0.2), "继续按笔记录更好")
-            }
-        }
-        .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 10).fill(t.ringBg)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(t.ringBorder, lineWidth: 1))
-        )
-    }
-
-    private func legend(_ c: Color, _ t: String) -> some View {
-        HStack(spacing: 3) {
-            Circle().fill(c).frame(width: 4, height: 4)
-            Text(t).font(.system(size: 8)).foregroundStyle(self.t.textMuted)
         }
     }
 
