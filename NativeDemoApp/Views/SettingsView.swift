@@ -276,29 +276,6 @@ struct SettingsView: View {
                     .foregroundStyle(AppColors.text)
             }
 
-            #if DEBUG
-            HStack(spacing: 8) {
-                Button("调试：开会员") {
-                    settingsViewModel.memberTier = "monthly"
-                }
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                Button("恢复免费") {
-                    settingsViewModel.memberTier = "free"
-                }
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(AppColors.text.opacity(0.82))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(Color.white.opacity(0.62), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            #endif
-
             Button {
                 showAccountSheet = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -333,10 +310,6 @@ struct SettingsView: View {
                 )
             }
             .buttonStyle(.plain)
-
-            webButton("刷新会员状态") {
-                Task { await settingsViewModel.refreshMemberFromServer() }
-            }
 
             Button("退出登录", role: .destructive) {
                 settingsViewModel.logoutCloud()

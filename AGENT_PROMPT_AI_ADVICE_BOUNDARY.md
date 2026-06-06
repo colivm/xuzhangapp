@@ -1,5 +1,6 @@
 # Agent Prompt · Task A3 — AI「议」边界对齐（去预算化 · iOS）
 
+> **状态：iOS 已完成（2026-06-06）**；下文供回归 / 新 Agent 参考。  
 > 用法：**整段复制下方「复制发送」代码块**，作为一条消息发给 Cursor Agent / Codex。  
 > **仅 iOS**；`web-preview` 本轮 **不要改**。  
 > 产品依据：[`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) §0.5、[`AI_ADVICE_BOUNDARY_AUDIT_v0.1.md`](AI_ADVICE_BOUNDARY_AUDIT_v0.1.md)
@@ -12,7 +13,7 @@
 @AGENT_PROMPT_AI_ADVICE_BOUNDARY.md
 @AI_ADVICE_BOUNDARY_AUDIT_v0.1.md
 @PRODUCT_NORTH_STAR.md
-@NativeDemoApp/ContentView.swift
+@NativeDemoApp/Views/InsightWebView.swift
 @NativeDemoApp/ViewModels/HomeViewModel.swift
 @NativeDemoApp/Services/AIReportService.swift
 @PRD_v0.1.md
@@ -37,14 +38,14 @@
 
 ## 必须先 Read（按顺序，不要盲改）
 1. AI_ADVICE_BOUNDARY_AUDIT_v0.1.md §2、§5、§7
-2. NativeDemoApp/ContentView.swift — 小 AI 说 Tab 内 weekly/monthly soft actions
-3. NativeDemoApp/ViewModels/HomeViewModel.swift — local*InsightBlocks、buildMonthlySoftPlanText、generateDailyInsight fallback、promptTemplate、buildWeeklyRhythmText
+2. `NativeDemoApp/Views/InsightWebView.swift` — 小 AI 说 Tab（周/月 soft actions、记一句本月收束）
+3. `NativeDemoApp/ViewModels/HomeViewModel.swift` — local*InsightBlocks、buildMonthlyClosingText、generateDailyInsight fallback、promptTemplate
 4. NativeDemoApp/Services/AIReportService.swift — system prompt
 5. **Task A3 不要改** `ScenePackCopyPool.swift`（属 Task A4）
 
 ## 范围（严格）
-**只改 iOS**：
-- `NativeDemoApp/ContentView.swift`（小 AI 说 Tab 按钮文案）
+**只改 iOS**（本任务 **已完成**；路径供回归参考）：
+- `NativeDemoApp/Views/InsightWebView.swift`
 - `NativeDemoApp/ViewModels/HomeViewModel.swift`
 - `NativeDemoApp/Services/AIReportService.swift`
 - （可选 P1）`PRD_v0.1.md` §4.1～§4.2
@@ -59,14 +60,14 @@
 ## 必做 — P0（iOS）
 
 ### 1. 替换「柔和下月参考」（审计 §5.1 **方案 A**）
-- `ContentView.swift` 按钮文案 → **「记一句本月收束」**
+- `InsightWebView.swift` 按钮文案 → **「记一句本月收束」**
 - 删除 `total × 0.95` 及一切下月 ¥ 数字逻辑
 - 重写 `buildMonthlySoftPlanText()`（可重命名为 `buildMonthlyClosingText()`）：
   - 基于 **本月已有数据** 生成 **回望式收束句**（1～2 句）
   - 示例：「这个月「{topCategory}」出现得比较多，有几笔像是对自己的照顾。」
   - 无数据：邀请继续记，**不提下月参考金额**
 - 同步 `markMonthlySoftPlan()` / analytics（如 `monthly_closing_saved`）
-- 更新 ContentView 内对该按钮/方法的调用
+- 更新 `InsightWebView` 内对该按钮/方法的调用
 
 ### 2. 重写 iOS 本地 fallback（HomeViewModel）
 - `localMonthlyInsightBlocks()` — advice + structure（去掉「预期内」「温柔小预算」「框住」）
@@ -131,3 +132,4 @@
 |------|------|
 | 2026-06-06 | 首版：Task A3 完整 Agent 对话 |
 | 2026-06-06 | **仅 iOS**；移除 web-preview 范围与验收 |
+| 2026-06-06 | UI 路径改为 `InsightWebView.swift`；标 **已完成** |

@@ -18,22 +18,19 @@
 NativeDemoApp.xcodeproj
 NativeDemoApp
 ├── NativeDemoAppApp.swift
-├── ContentView.swift
+├── ContentView.swift          # Tab 壳 ~702 行
 ├── Info.plist
 ├── Assets.xcassets
-├── Models
-│   ├── HomeItem.swift
-│   └── AppSettings.swift
-├── Services
-│   └── LocalStore.swift
-├── ViewModels
-│   ├── HomeViewModel.swift
-│   └── SettingsViewModel.swift
-└── Views
+├── Models/
+├── Services/
+├── ViewModels/
+└── Views/
     ├── HomeView.swift
+    ├── RecordView.swift
+    ├── StatsWebView.swift
+    ├── InsightWebView.swift   # 小 AI 说 Tab
     ├── SettingsView.swift
-    └── Components
-        └── StatCardView.swift
+    └── Components/
 ```
 
 ## 在 Xcode 运行

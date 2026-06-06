@@ -230,22 +230,6 @@ final class SettingsViewModel: ObservableObject {
         persist()
     }
 
-    func refreshMemberFromServer() async {
-        let token = KeychainService.loadAccessToken()
-        guard !token.isEmpty else { return }
-        isAuthBusy = true
-        defer { isAuthBusy = false }
-        let client = AuthService(baseURL: backendBaseURL)
-        do {
-            let tier = try await client.fetchMemberMe(accessToken: token)
-            settings.memberTier = tier.tier
-            persist()
-            authMessage = "会员状态已更新。"
-        } catch {
-            authMessage = error.localizedDescription
-        }
-    }
-
     func verifyIAPPurchase(_ payload: IAPPurchaseVerification) async throws {
         let token = KeychainService.loadAccessToken()
         guard !token.isEmpty else {

@@ -12,14 +12,14 @@
 
 | 顺序 | 做什么 | 为什么先 | 预计 |
 |------|--------|----------|------|
-| **1** | **Mac 拉最新 → Archive → TestFlight**，按下方「回归 10 条」走一遍 | 确认 `0e315c4` 没回归；切片 copy 池、A3/A4 需耳朵验收 | 0.5～1 天 |
+| **1** | **Mac 拉最新 → Archive → TestFlight**，按下方「回归 11 条」走一遍 | 确认 Release 门禁 + `0e315c4` 没回归 | 0.5～1 天 |
 | **2** | **Task B2.8 智能分类**（替换 `recommendCategory` 纯金额档） | 记账仍像传统 App；B2.7 锁定已做，推荐逻辑是缺口 | Agent 1 次 |
 | **3** | **Task C1 动线**（首记 → 看看花角标/引导） | 内核问题「价值传达」；功能有、触达未验 | 0.5 天 |
 | **4** | 购买成功 **welcome 文案** + 用尽次数话术走读 | 付费瞬间温度；改动小 | 0.5 天 |
 | **5** | **B2.5** 切片幕 UI 真机再看（copy 已有，UI 是否仍报表感） | 内核问题「感染力」 | 1 天 |
 | 并行 | 栏 B：备案、API 证续期、Spug 短信 | 上架 blocker，等待时可做 | — |
 
-**TestFlight 回归 10 条（哲学对齐版）**
+**TestFlight 回归 11 条（哲学对齐版）**
 
 1. 新装 → 记 3 笔本周 → 看看花默认 **本周** → 播生活切片 **2 遍**，旁白有变化  
 2. 展开场景包：travel 为 **旅行出发包**，副文案为 tagline（无「比如输入 ¥」）  
@@ -31,6 +31,7 @@
 8. 设置页会员档显示 **年度会员** 非 yearly  
 9. 弱数据（1～2 笔）播切片，copy 不尴尬  
 10. 播完 CTA：主会员 / 次「想多聊一句」是否合理  
+11. **Release Archive**：设置/会员页 **无** Debug 写 tier 入口（TC-MEM-06）
 
 Agent 任务单：B2.8 → C1 → F1 polish → D1；见 [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) §3。
 
@@ -50,12 +51,13 @@ Agent 任务单：B2.8 → C1 → F1 polish → D1；见 [`IMPLEMENTATION_FOR_CO
 - [x] **Task A3** 小 AI 说去预算化：记一句本月收束、fallback/Prompt §0.5
 - [x] **Task A4** 场景包：旅行出发包、5 条替词、四包 tagline
 - [x] **B2.7 骨架**：`categoryLockedByUser`，手改分类后推荐不覆盖
-- [x] **结构债**：拆出 `RecordView`、`StatsWebView`、`ScenePackSectionView`（`ContentView` ~1506 行）
+- [x] **结构债 · Tab 拆分**：`RecordView`、`StatsWebView`、`ScenePackSectionView`、**`InsightWebView`**（`ContentView` **~702 行**，壳 + Tab + 主题）
 - [x] **F1 进行中**：`OCRConfirmSheet`、确认导入、草稿区；Vision 识票链路
 - [x] **StoreKit + `/v1/iap/verify`** 客户端（`MemberPricingView` + `SettingsViewModel.verifyIAPPurchase`）
 - [x] 会员 UI、**年度会员**中文档（`MemberPricingView` / `SettingsView`）
 - [x] ScenePackCopyPool：4 档 × 8 条 + stable hash + 历史增强
 - [x] TestFlight **首测闭环**（记、回放、切片、沙盒购、杀进程）
+- [x] **Release 门禁（iOS）**：移除设置/会员页 Debug 写 tier；`MemberNudgePolicyService` 统一 prod 频控
 
 ### 对外与部署
 - [x] 生产 ECS、`api.xuzhangapp.com`、PG、ai-proxy 转发
@@ -69,7 +71,7 @@ Agent 任务单：B2.8 → C1 → F1 polish → D1；见 [`IMPLEMENTATION_FOR_CO
 | **栏 A · 体验细调** | **栏 B · 接真环境 / 上架** |
 |---------------------|----------------------------|
 | **路径 1 · 新用户首记** | **真机全流程** |
-| - [ ] C1：首记 → 今日回放 / 看看花引导 | - [ ] 回归 10 条（见上文 §最先做） |
+| - [ ] C1：首记 → 今日回放 / 看看花引导 | - [ ] 回归 11 条（见上文 §最先做） |
 | - [ ] 记 ≥3 笔 → 看看花角标/卡片提示 | - [ ] 生产 API 全链路再验 |
 | - [x] B2.7 分类锁定（骨架已有，真机再验） | |
 | - [ ] **B2.8 智能分类**（历史+时段+金额+关键词）— §10.13 | |
@@ -98,21 +100,39 @@ Agent 任务单：B2.8 → C1 → F1 polish → D1；见 [`IMPLEMENTATION_FOR_CO
 | **路径 5 · 设置** | **真实支付（收费前）** |
 | - [ ] 登录 / 同步 / 冲突提示 polish | - [x] backend `/v1/iap/verify` 已实现 |
 | - [ ] 设置页 copy 与能力一致 | - [ ] ASC Product ID + 推介 ¥6 生产配置 |
-| | - [ ] Release 禁 Debug 写 tier（`SettingsView` 模拟按钮需核对） |
+| | - [x] Release 禁 Debug 写 tier（`SettingsView` / `MemberPricingView` 模拟入口已删） |
+| | - [ ] 生产 backend 禁 `POST /v1/member/dev/set-tier`（或仅 dev/staging） |
 | | |
-| **可选** | **v0.2+** |
-| - [x] Logo / 图标（已换）；启动图 | 微信登录、长图 OCR 多条 |
-| - [ ] `ContentView` 再拆（小 AI 说 Tab） | Web 预览与 iOS 对齐（A3/A4/copy） |
+| **可选 · 工程** | **v0.2+** |
+| - [x] Logo / 图标；Tab 级 `ContentView` 拆分（含 Insight） | Web 预览与 iOS 对齐（A3/A4/copy） |
+| - [ ] `WeeklyShareCardView` → `Views/Components/`（现嵌在 `InsightWebView`） | 微信登录、长图 OCR 多条 |
+| - [ ] `HomeViewModel` 按域瘦身（分类/OCR/Insight 可抽 Service） | |
+| - [ ] `AppColors` / `GlassPanel` → `Theme.swift`；`RecordEditSheet` 迁 Record | |
 | - [ ] 空状态、弱数据 copy 再读 | |
 
 ---
+
+## 🧱 结构债状态（2026-06-06）
+
+> Insight 拆完后 **无 🔴 高风险**；以下为 🟡 可排期项，**不阻塞** B2.8 / C1 / TestFlight。
+
+| 级别 | 项 | 行数/位置 | 建议时机 |
+|------|-----|-----------|----------|
+| 🟢 已解 | 巨型 `ContentView` | **~702** Tab 壳 | — |
+| 🟡 中等 | `InsightWebView` | ~805 | D1 分享图时拆 Section |
+| 🟡 中等 | `HomeViewModel` | ~866 | **B2.8** 时抽 `CategoryRecommendation` |
+| 🟡 低 | `WeeklyShareCardView` 位置 | `InsightWebView` 末尾 | 独立 Components（小改） |
+| 🟡 低 | 主题/编辑 sheet | `ContentView` 内 | v0.2 整理 |
+| 🟡 非结构 | backend `dev/set-tier`、Web 漂移 | `server.js` / web-preview | 上架前（iOS tier 门禁 ✅） |
+
 
 ## 进度一览
 
 ```text
 [██████████████████░░]  功能 MVP         ~90%
-[███████████░░░░░░░░░]  体验细调（栏 A）  ~55%  ✅ A3/A4/B2.6/B2.7 骨架
-[█████████░░░░░░░░░░░]  接真环境（栏 B）  ~45%  ⏳ 备案 + 新一轮 TF + Release 门禁
+[████████████░░░░░░░░]  体验细调（栏 A）  ~55%
+[██████████░░░░░░░░░░]  接真环境（栏 B）  ~50%  ✅ iOS Release tier 门禁
+[████████████████░░░░]  结构健康度        ~75%  ✅ Tab 拆分完成；VM/Insight 可排期
 ```
 
 ---
@@ -137,3 +157,5 @@ Agent 任务单：B2.8 → C1 → F1 polish → D1；见 [`IMPLEMENTATION_FOR_CO
 |------|------|
 | 2026-06-04 | 栏 A/B 两栏、建议顺序 |
 | 2026-06-06 | 对齐 `0e315c4`：已完成 A3/A4/B2.6/拆分/IAP；§最先做 + 回归 10 条 |
+| 2026-06-06 | InsightWebView 拆分完成；§结构债状态；可选工程债清单 |
+| 2026-06-06 | iOS Release 门禁 ✅：删 Debug 写 tier；Nudge 统一 prod |

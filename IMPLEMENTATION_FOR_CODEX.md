@@ -40,9 +40,11 @@
 | 切片播放 | `NativeDemoApp/Views/SummaryPlaybackSheet.swift` | B2.5 UI polish 目标 |
 | 回放聚合 | `NativeDemoApp/Services/PlaybackService.swift` | 周/月 summary |
 | 账单 / 分类 | `NativeDemoApp/ViewModels/HomeViewModel.swift` | B2.7 锁定 ✅；**B2.8 待改** `recommendCategory` |
-| 小 AI 说 | `NativeDemoApp/ContentView.swift`（Insight Tab） | A3 去预算化 ✅ |
+| 小 AI 说 | `NativeDemoApp/Views/InsightWebView.swift` | A3 去预算化 ✅；~805 行，D1 时可再拆 Section |
 | 会员 / IAP | `MemberPricingView.swift`、`SettingsViewModel.verifyIAPPurchase` | StoreKit + verify ✅ |
-| 壳与 Tab | `NativeDemoApp/ContentView.swift` | ~1506 行；可再拆 Insight |
+| 壳与 Tab | `NativeDemoApp/ContentView.swift` | **~702 行** Tab 壳 + `AppColors` / `RecordEditSheet` |
+| 周度分享卡 UI | `InsightWebView.swift` → `WeeklyShareCardView` | D1 前建议迁 `Views/Components/` |
+| ViewModel | `HomeViewModel.swift` | **~866 行**；B2.8 时抽分类推荐 |
 | Web 参考（iOS 优先，Web 滞后） | `web-preview/app.js` | 勿默认与 iOS 同步改 |
 | 会员 Nudge | `NativeDemoApp/Services/MemberFlowService.swift` | 播完场景 |
 
@@ -60,6 +62,7 @@ A3 AI「议」边界 · 去预算化（iOS）                    ✅
 A4 场景包哲学对齐（iOS）                             ✅
 B2.6 PlaybackCopyPool 接入（iOS MVP）                ✅
 B2.7 分类锁定                                       ✅ 骨架
+InsightWebView 从 ContentView 拆分                  ✅
 C1 动线引导（首记、角标、播完 CTA）                   ⏳ 下一步 #3
 B2.8 智能分类推荐                                     ⏳ 下一步 #2
 B2.5 生活切片叙事/UI polish                           ⏳
@@ -68,7 +71,7 @@ B2.10 场景包防连重复（可选）                          ⏳
 C2 OCR / 今日回放次数                                ✅ 主链路
 D1 播完分享图                                         ⏳
 F1 OCR 详情页 + 去演示按钮                           ⏳ 进行中
-E1 StoreKit + 生产验单配置 + Release 门禁             ⏳ 客户端已有
+E1 StoreKit + 生产验单配置 + Release 门禁（iOS）        ✅ tier 门禁 / ⏳ ASC 生产 + backend dev 路由
 ```
 
 ---
@@ -865,7 +868,7 @@ web-preview/app.js downloadWeeklyShareCardImage
 3. 替换 `MemberPricingView.handlePurchase`：真实购买 → 拿 signed transaction / transactionId → POST 验单
 4. 验单成功后：`AuthService` 调 `GET /v1/member/me` 刷新 tier → `SettingsViewModel.memberTier`
 5. 提供「恢复购买」入口（会员页底部）
-6. `#if DEBUG` 可保留「模拟开通」；Release 必须走 StoreKit
+6. **Release 不得**存在本地写 tier 的 UI；Debug 模拟开通入口已删除（2026-06-06）；会员变更仅 StoreKit → verify → `member/me`
 7. 首月 ¥6：依赖 ASC Introductory Offer，客户端只加载对应 subscription product
 
 ## 必做 — Backend
@@ -885,7 +888,7 @@ AuthService /v1/member/me
 server.js /v1/iap/verify、/v1/member/dev/set-tier（仅开发参考）
 
 ## 禁止
-未验单直接 settingsViewModel.memberTier = plan.id（Release）
+未验单直接 settingsViewModel.memberTier = plan.id（任何构建配置）
 在本任务重构 SummaryPlaybackSheet / 切片次数逻辑
 提交 .p8 私钥或真实 .env 到 git
 未要求 commit
@@ -1345,3 +1348,5 @@ struct ScenePackDefinition {
 | 2026-06-04 | 新增 **Task B2.8** 智能分类推荐（§10.13）、**B2.9** 天气宠物（§10.14） |
 | 2026-06-04 | 新增 **Task B2.10** 场景备注包文案池（§10.16）、`SCENE_PACK_COPY_POOL_v0.2.md` |
 | 2026-06-06 | §2.2 代码锚点更新（StatsWebView/RecordView）；§3 任务状态；链至 TODO |
+| 2026-06-06 | §2.2：`InsightWebView`、ContentView ~702；结构债 🟡 说明 |
+| 2026-06-06 | E1：iOS Release tier 门禁 ✅；§10.10 删 Debug 模拟开通说明 |

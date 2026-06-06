@@ -217,10 +217,10 @@ TestFlight 前      → 全文 P0 + P1（按模块勾选）
 |----|--------|-----|------|------|------|
 | TC-MEM-01 | P0 | All | — | 打开会员页 | 价格 ¥9/首月6/88/168；五条 §10.1.1 |
 | TC-MEM-02 | P0 | All | — | 脚注免费额度 | 与 §10.1.2 一致 |
-| TC-MEM-03 | P1 | iOS | Debug | 模拟开通各 tier | 切片/OCR/今日回放不限 |
+| TC-MEM-03 | — | iOS | — | ~~Debug 模拟开通~~ | **已移除**（2026-06-06）；改测 TC-MEM-04/05 沙盒 |
 | TC-MEM-04 | P0 | iOS | 沙盒 | 购买年付 → 验单 | verify 200；`member/me` 为 yearly |
 | TC-MEM-05 | P0 | iOS | 已购 | 恢复购买 | tier 恢复 |
-| TC-MEM-06 | P1 | iOS | Release | 未验单 | **不能**仅本地改 tier 即视为付费 |
+| TC-MEM-06 | P1 | iOS | Release Archive | 设置/会员页 | **无**「调试：开会员」「Debug：模拟档位」；未验单不能变会员 |
 | TC-MEM-07 | P1 | All | 免费用尽 | 各场景点「了解会员」 | 跳转会员页；话术 §11 |
 | TC-MEM-08 | P2 | All | — | 会员页 CTA 默认 | 年付 ¥88 为主推 |
 

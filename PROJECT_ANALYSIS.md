@@ -190,9 +190,10 @@ NativeDemoApp/
 
 ├── Services/        业务服务层
 
-├── Views/           HomeView, SettingsView, MemberPricingView
+├── Views/           HomeView, SettingsView, MemberPricingView,
+│                    RecordView, StatsWebView, InsightWebView, …
 
-└── ContentView.swift  主 Tab + 大量 UI（约 2600+ 行，与 web 视觉对齐）
+└── ContentView.swift  Tab 壳 + 主题 + RecordEditSheet（**~702 行**；Tab 视图已拆至 Views/）
 
 ```
 
@@ -644,7 +645,7 @@ feature/*  →  feature/xuzhangapp-staging  →  xuzhang1.0-release-2026
 
 
 
-1. **`ContentView.swift` 过大**（2600+ 行），宜拆分
+1. **Tab 级拆分已完成**：`ContentView` **~702 行**（壳）；`InsightWebView` ~805、`HomeViewModel` ~866 为 🟡 可排期债（见 [`TODO.md`](TODO.md) §结构债）
 
 2. **文档与客户端默认 model**：服务端已统一 DeepSeek；iOS `AppSettings` 默认仍为历史豆包字段，以 `ai-proxy/.env` 为准
 
@@ -652,7 +653,7 @@ feature/*  →  feature/xuzhangapp-staging  →  xuzhang1.0-release-2026
 
 4. **Staging 尚未完全部署**：避免与 prod 混用目录或 `.env`
 
-5. **上架前必须**：真机验证、备案、关 dev 验证码、配置 `APP_PROXY_TOKEN`
+5. **上架前必须**：真机验证、备案、关 dev 验证码、配置 `APP_PROXY_TOKEN`；**iOS Release tier 门禁 ✅**；生产 backend 仍须禁 `dev/set-tier`
 
 
 

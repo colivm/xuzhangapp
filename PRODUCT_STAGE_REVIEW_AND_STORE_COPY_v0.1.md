@@ -28,14 +28,14 @@
 |------|--------|------|
 | 功能 MVP | **~90%** | 记、切片、会员、OCR 确认、IAP verify 客户端已齐 |
 | 体验细调（栏 A） | **~55%** | A3/A4/B2.6/B2.7 已落地；B2.8/C1/B2.5 待做 |
-| 接真环境 / 上架（栏 B） | **~45%** | 首测已过；新一轮 TF + 备案 + Release 门禁 |
+| 接真环境 / 上架（栏 B） | **~50%** | iOS Release tier 门禁 ✅；备案 + backend dev 路由待收口 |
 
 **阶段定位（2026-06-06 更新）**
 
 | 问题 | 判断 |
 |------|------|
-| 可以继续 TestFlight 吗？ | **可以** — 先跑 [`TODO.md`](TODO.md) **回归 10 条**（含 `0e315c4`） |
-| 可以开订阅正式收钱吗？ | **暂不建议** — Release 门禁、备案、购买 welcome 未齐 |
+| 可以继续 TestFlight 吗？ | **可以** — 先跑 [`TODO.md`](TODO.md) **回归 11 条**（含 Release 门禁 + `0e315c4`） |
+| 可以开订阅正式收钱吗？ | **暂不建议** — 备案、ASC 生产 Product、backend dev 路由、购买 welcome 未齐（**iOS Release 已无 Debug 写 tier**） |
 | 最大杠杆？ | **真机验证感染力** + **B2.8 智能分类** + **C1 首播动线** |
 
 详见 [`TODO.md`](TODO.md) §**下一步最先做什么**。
@@ -294,16 +294,19 @@ web-preview  ───┤       └── ai-proxy :8787 → DeepSeek
 - `IAPService` + backend `POST /v1/iap/verify`  
 - Auth、Ledger 同步、AI 转发、会员 nudge  
 
-**主要结构债**
+**结构债（2026-06-06 更新）**
 
-| 项 | 影响 |
-|----|------|
-| `ContentView.swift` ~2700+ 行 | 改动互踩，维护与 Agent 改码风险高 |
-| `PlaybackCopyPool` 仅有文档、未进代码 | 切片文案重复、难轮换 |
-| Windows / Mac 分支双轨 | TestFlight 真机 ≠ Windows 仓库 |
-| ECS 手动 `git pull` | 官网/静态资源更新易漏 |
-| `POST /v1/member/dev/set-tier` | Release 须不可达 |
-| OCR iOS 占位 | 与会员权益、F1 任务不一致 |
+| 级别 | 项 | 说明 |
+|------|-----|------|
+| 🟢 | `ContentView` Tab 拆分 | **~702 行**；`RecordView` / `StatsWebView` / **`InsightWebView`** 已独立 |
+| 🟡 | `InsightWebView` ~805 行 | 债搬家非消失；D1 时可拆 Section |
+| 🟡 | `HomeViewModel` ~866 行 | B2.8 时抽分类推荐 |
+| 🟡 | `WeeklyShareCardView` | 嵌在 `InsightWebView`，建议迁 `Views/Components/` |
+| 🟡 | `PlaybackCopyPool` 全量 | MVP 已接，可对照 md 补条数 |
+| 🟡 | Windows/Mac 分支、ECS pull | 协作与运维习惯 |
+| 🟢 | iOS Release tier 门禁 | 已删 `SettingsView` / `MemberPricingView` Debug 写 tier；Nudge 统一 prod |
+| 🟡 | backend `dev/set-tier` | 生产仍注册；须 `NODE_ENV`/路由守卫或仅 staging |
+| 🟡 | OCR 演示按钮 | F1 polish |
 
 ### 4.3 上架 blocker（实施视角）
 
@@ -313,18 +316,21 @@ web-preview  ───┤       └── ai-proxy :8787 → DeepSeek
 ⏳ 生产 IAP 验单全链路（ASC Product ID ↔ backend env ↔ iOS StoreKit）
 ⏳ 短信真实通道或收紧 dev 验证码 123456
 ⏳ API 子域 SSL 续期、进程守护
-⏳ Release 构建禁止 Debug 直接写 memberTier
+✅ iOS Release：无 Debug 直接写 memberTier（设置/会员页）
+⏳ backend：`POST /v1/member/dev/set-tier` 生产不可达或鉴权收紧
 ```
 
 ### 4.4 建议实施顺序（与产品对齐）
 
 ```text
-1. Mac ↔ Windows 分支对齐
-2. B2.5 切片叙事 UI + B2.6 PlaybackCopyPool
-3. 购买/会员 UI 文案 polish（yearly→年度会员、欢迎语）
-4. E1 生产验单 + Release 门禁
-5. 拆分 ContentView（Stats / Record / ScenePack 独立）
+1. Mac ↔ Windows 分支对齐 → Archive → TestFlight（回归 11 条）
+2. **B2.8 智能分类**（见 [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) §10.13）
+3. C1 动线 + 购买 welcome 文案
+4. B2.5 切片 UI polish
+5. 可选：`WeeklyShareCardView` → `Views/Components/`；`HomeViewModel` 按域瘦身
 ```
+
+> **不必再先拆 `ContentView`**：Tab 级拆分 ✅；`InsightWebView` / VM 瘦身可随 B2.8、D1 排期。
 
 并行：ECS SSH 公钥、栏 B 备案。
 
@@ -340,8 +346,8 @@ web-preview  ───┤       └── ai-proxy :8787 → DeepSeek
 | 视角 | 一句话 |
 |------|--------|
 | **产品** | 定位稀缺、闭环成立；成败取决于切片感染力与首次播放体验 |
-| **实施** | 全栈骨架超 v0.1 平均水准；风险在结构债、双端分叉、合规/验单 |
-| **整体** | **适合续 TestFlight**；**暂不宜正式开订阅**，除非 E1 + OCR + 备案 + Release 安全网补齐 |
+| **实施** | 全栈骨架超 v0.1 平均；**Tab 拆分完成**，结构债 🟡 可排期；栏 B 合规待清 |
+| **整体** | **适合续 TestFlight**；**暂不宜正式开订阅**，除非 E1 生产验单 + 备案 + backend dev 路由收口 |
 
 ---
 
@@ -583,7 +589,7 @@ web-preview  ───┤       └── ai-proxy :8787 → DeepSeek
 | [`APP_STORE_IAP_SETUP.md`](APP_STORE_IAP_SETUP.md) | ASC 建品、TestFlight Beta 描述 |
 | [`PLAYBACK_COPY_POOL_v0.2.md`](PLAYBACK_COPY_POOL_v0.2.md) | 切片文案池 |
 | [`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) | §0.5 议的边界（宪法） |
-| [`AI_ADVICE_BOUNDARY_AUDIT_v0.1.md`](AI_ADVICE_BOUNDARY_AUDIT_v0.1.md) | iOS/Web 预算类 copy 待改清单（代码待改） |
+| [`AI_ADVICE_BOUNDARY_AUDIT_v0.1.md`](AI_ADVICE_BOUNDARY_AUDIT_v0.1.md) | iOS A3 ✅；Web 预算类 copy 待对齐 |
 | [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) | B2.5～B2.10 工程任务 |
 | [`TODO.md`](TODO.md) | 栏 A / 栏 B 进度 |
 
@@ -596,3 +602,6 @@ web-preview  ───┤       └── ai-proxy :8787 → DeepSeek
 | 2026-06-06 | 首版：TestFlight 后阶段性总结（产品 + 实施）+ App Store 完整文案草案 + UI/文案 polish 清单 |
 | 2026-06-06 | §3.6～§3.7 内核与哲学 |
 | 2026-06-06 | §2/§7 同步 `0e315c4`；链至 TODO §最先做 |
+| 2026-06-06 | §4.2 结构债更新：Tab 拆分 ✅；InsightWebView/VM 为 🟡 可排期 |
+| 2026-06-06 | §4.4 明确：不必再先拆 ContentView |
+| 2026-06-06 | iOS Release tier 门禁 ✅；backend `dev/set-tier` 仍 🟡 |

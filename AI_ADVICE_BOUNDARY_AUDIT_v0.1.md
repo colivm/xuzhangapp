@@ -1,7 +1,7 @@
 # 叙账 · AI「议」边界审计清单 v0.1
 
 > 更新时间：2026-06-06  
-> 状态：**产品定稿 · 代码待改**（本轮只出清单，不改实现）  
+> 状态：**iOS 已改（Task A3 ✅）** · **Web 待对齐**  
 > 依据：[`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) **§0.5**  
 > 背景：「柔和下月参考」等行为在语气上接近叙账，在结构上仍是 **软性预算**，与「先叙后议」「理解而非审判」冲突。
 
@@ -35,16 +35,18 @@
 
 ## 2. iOS 待改项
 
-### 2.1 UI 按钮 · `NativeDemoApp/ContentView.swift`
+> **2026-06-06**：§2.1～§2.2 **iOS 已落地**（`InsightWebView` + `HomeViewModel` + `AIReportService`）；下表保留审计对照。
 
-| 优先级 | 位置 | 当前 | 问题 | 建议方向 |
-|--------|------|------|------|----------|
-| **P0** | 月度 soft action ~L794 | 按钮「**柔和下月参考**」 | 名称即预算预期 | 删除，或改为「记一句本月收束」/「下月再叙时对照」 |
-| **—** | ~L797 | 「保存月度小结」 | 回望式 | 保留 |
-| **—** | ~L800 | 「切换叙述风格」 | 换叙述，非管控 | 保留 |
-| **⚠️ P1** | ~L668 | 「梳理本周节奏」 | 依赖下文文案 | 保留按钮，改 `buildWeeklyRhythmText` |
-| **—** | ~L673 | 「生成周度分享卡」 | 分享回望 | 保留（与 D1 分享图同源） |
-| **—** | ~L678 | 「标记常花类目」 | 回望标记 | 保留 |
+### 2.1 UI 按钮 · `NativeDemoApp/Views/InsightWebView.swift`（原 ContentView，已迁移）
+
+| 优先级 | 位置 | 当前 | 问题 | 建议方向 | 状态 |
+|--------|------|------|------|----------|------|
+| **P0** | 月度 soft action | 按钮「**记一句本月收束**」 | — | 方案 A | ✅ |
+| **—** | — | 「保存月度小结」 | 回望式 | 保留 | ✅ |
+| **—** | — | 「切换叙述风格」 | 换叙述，非管控 | 保留 | ✅ |
+| **P1** | — | 「梳理本周节奏」 | 依赖下文文案 | `buildWeeklyRhythmText` 回望式 | ✅ |
+| **—** | — | 「生成周度分享卡」 | 分享回望 | 保留（D1 同源） | ✅ |
+| **—** | — | 「标记常花类目」 | 回望标记 | 保留 | ✅ |
 
 ### 2.2 逻辑与 fallback · `NativeDemoApp/ViewModels/HomeViewModel.swift`
 
@@ -73,7 +75,7 @@
 | 优先级 | 文件 | 说明 |
 |--------|------|------|
 | **—** | `ScenePackCopyPool.swift` | 「旅行**预算包**」「两晚住宿**预算**」= 场景语义，**不改** |
-| **P2** | Tab 命名 `ContentView` `.insight` | 「小 AI 说」「生活复盘」— 可接受；商店勿主打 AI |
+| **P2** | Tab 命名 | 「小 AI 说」「生活复盘」— 可接受；商店勿主打 AI |
 
 ---
 
@@ -156,27 +158,30 @@ action 字段应是温柔收束或邀请继续记录/下月再叙，不是理财
 
 ---
 
-## 6. 改码顺序建议（未来执行，本轮不做）
+## 6. 改码顺序（执行记录）
 
 ```text
-1. P0：删除或替换「柔和下月参考」按钮 + buildMonthlySoftPlanText（**iOS**；Web 见 §3 后续）
-2. P0：重写 localMonthly / localWeekly / daily fallback advice（**iOS**）
-3. P1：改 promptTemplate + AIReportService system（**iOS**；PRD 可选）
-4. P1：buildWeeklyRhythmText「微调」→ 回望式（**iOS**）
-5. P2：PRD / API 示例 / ai-proxy README（可选）
-6. P2：Web §3 全量（**另任务**）
-7. 抽测：远程 AI daily + monthly 各 20 条（真机）
+1. P0：「柔和下月参考」→「记一句本月收束」+ buildMonthlyClosingText     ✅ iOS
+2. P0：localMonthly / localWeekly / daily fallback                          ✅ iOS
+3. P1：promptTemplate + AIReportService system                              ✅ iOS
+4. P1：buildWeeklyRhythmText 回望式                                         ✅ iOS
+5. P2：PRD / API 示例 / ai-proxy README（可选）                              ⏳
+6. P2：Web §3 全量（**另任务，故意不做**）                                    ⏳
+7. 抽测：远程 AI daily + monthly 各 20 条（真机）                             ⏳
 ```
 
 ---
 
-## 7. 验收标准（改码完成后）
+## 7. 验收标准
 
-- [ ] 小 AI 说 Tab 内 **无任何按钮** 产出下月/下周 ¥ 数字  
-- [ ] 全部本地 fallback `advice`/`action` 无「预算」「达成率」「框住」「减一次」  
-- [ ] Prompt 含 §5.3 禁止项；远程 AI 抽检通过率 ≥ 90%  
-- [ ] 「旅行预算包」等场景包 **未误改**  
-- [ ] 月度主路径仍为：**看看花 · 生活章 → 可选小 AI 说**  
+### iOS（Task A3）
+
+- [x] 小 AI 说 Tab 内 **无任何按钮** 产出下月/下周 ¥ 数字  
+- [x] 全部本地 fallback `advice`/`action` 无「预算」「达成率」「框住」「减一次」  
+- [x] Prompt 含 §5.3 禁止项  
+- [ ] 远程 AI 抽检通过率 ≥ 90%（真机抽测待做）  
+- [x] 「旅行预算包」等场景包 **未误改**（属 Task A4）  
+- [x] 月度主路径仍为：**看看花 · 生活章 → 可选小 AI 说**  
 
 ---
 
@@ -198,3 +203,4 @@ action 字段应是温柔收束或邀请继续记录/下月再叙，不是理财
 |------|------|
 | 2026-06-06 | 首版：iOS / Web / 文档 / Prompt 全量审计；P0～P2 分级；代码未改 |
 | 2026-06-06 | Task A3 实施范围收窄为 **仅 iOS**；§3 Web 标记后续 |
+| 2026-06-06 | iOS 改码 ✅；UI 路径 `InsightWebView.swift`；Web 仍待 |

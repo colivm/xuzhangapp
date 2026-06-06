@@ -230,10 +230,6 @@ struct MemberPricingView: View {
 
             restorePurchaseButton
 
-            #if DEBUG
-            debugPurchaseButtons
-            #endif
-
             Text("订阅可随时在 App Store 账户设置中取消。新用户首月优惠以购买页显示为准。")
                 .font(.system(size: 11))
                 .foregroundStyle(AppColors.subtext.opacity(0.8))
@@ -378,33 +374,6 @@ struct MemberPricingView: View {
         .buttonStyle(.plain)
         .disabled(isPurchasing)
     }
-
-    #if DEBUG
-    private var debugPurchaseButtons: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Debug：模拟会员档位")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(AppColors.subtext)
-            HStack(spacing: 8) {
-                ForEach(plans) { plan in
-                    Button(plan.name.replacingOccurrences(of: "会员", with: "")) {
-                        settingsViewModel.memberTier = plan.id
-                        purchaseNotice = "已模拟切换为 \(plan.name)。Release 环境不会显示此入口。"
-                    }
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(AppColors.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(AppColors.accent.opacity(0.1))
-                    )
-                }
-            }
-        }
-        .padding(.top, 4)
-    }
-    #endif
 
     // MARK: - Purchase Handler
 

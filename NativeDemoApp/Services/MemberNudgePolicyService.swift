@@ -1,19 +1,10 @@
 import Foundation
 
 struct MemberNudgePolicy: Codable, Equatable {
-    enum Mode: String, Codable {
-        case debug
-        case prod
-    }
-
-    var mode: Mode
-    var debugCooldownMs: Int
     var prodDailyLimit: Int
     var prodSceneCooldownDays: Int
 
     static let `default` = MemberNudgePolicy(
-        mode: .debug,
-        debugCooldownMs: 90_000,
         prodDailyLimit: 1,
         prodSceneCooldownDays: 7
     )
@@ -63,38 +54,28 @@ final class MemberNudgePolicyService {
         let policy = loadPolicy()
         let state = loadState()
         let now = Date()
-        switch policy.mode {
-        case .debug:
-            guard let last = state.lastShownAt else { return true }
-            return now.timeIntervalSince(last) * 1000 >= Double(policy.debugCooldownMs)
-        case .prod:
-            let today = Self.dayKey(for: now)
-            if state.dailyDayKey == today, state.dailyCount >= policy.prodDailyLimit { return false }
-            if let until = state.sceneCooldownUntil[scene], until > now { return false }
-            return true
-        }
+        let today = Self.dayKey(for: now)
+        if state.dailyDayKey == today, state.dailyCount >= policy.prodDailyLimit { return false }
+        if let until = state.sceneCooldownUntil[scene], until > now { return false }
+        return true
     }
 
     func markShown(scene: String) {
-        let policy = loadPolicy()
         var state = loadState()
         let now = Date()
         state.lastShownAt = now
-        if policy.mode == .prod {
-            let today = Self.dayKey(for: now)
-            if state.dailyDayKey == today {
-                state.dailyCount += 1
-            } else {
-                state.dailyDayKey = today
-                state.dailyCount = 1
-            }
+        let today = Self.dayKey(for: now)
+        if state.dailyDayKey == today {
+            state.dailyCount += 1
+        } else {
+            state.dailyDayKey = today
+            state.dailyCount = 1
         }
         saveState(state)
     }
 
     func markDismissed(scene: String) {
         let policy = loadPolicy()
-        guard policy.mode == .prod else { return }
         var state = loadState()
         let cooldownDays = max(1, policy.prodSceneCooldownDays)
         state.sceneCooldownUntil[scene] = Calendar.current.date(byAdding: .day, value: cooldownDays, to: Date())
