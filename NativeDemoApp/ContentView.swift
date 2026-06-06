@@ -68,7 +68,7 @@ struct ContentView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @State private var selectedTab: AppTab = .today
-    @State private var petHint: String = "记一笔，我会帮你盯着消费节奏。"
+    @State private var petHint: String = "我在这儿陪你，慢慢记就好。"
     @State private var petBubbleVisible: Bool = false
     @State private var showMemberPricing = false
 
@@ -122,7 +122,7 @@ struct ContentView: View {
             .ignoresSafeArea(.keyboard, edges: .bottom)
 
             // ── Pet Widget ──
-            if selectedTab == .today {
+            if selectedTab == .today, settingsViewModel.petCompanionEnabled {
                 petWidget
             }
         }
@@ -137,11 +137,16 @@ struct ContentView: View {
             )
         }
         .onChange(of: selectedTab) { _, tab in
-            if tab == .today { petHint = "今天花得怎么样？我帮你看着。" }
+            if tab == .today { petHint = "今天花得怎么样？慢慢记下来就好。" }
             petBubbleVisible = false
         }
+        .onChange(of: settingsViewModel.petCompanionEnabled) { _, enabled in
+            if !enabled {
+                petBubbleVisible = false
+            }
+        }
         .onChange(of: homeViewModel.petMessage) { _, msg in
-            guard let msg else { return }
+            guard let msg, settingsViewModel.petCompanionEnabled else { return }
             petHint = msg
             petBubbleVisible = true
             // Auto-dismiss after 4 seconds
@@ -524,13 +529,16 @@ struct ContentView: View {
                 withAnimation(.easeInOut(duration: 0.28)) {
                     petBubbleVisible.toggle()
                 }
-                if !petBubbleVisible {
-                    petHint = [
-                        "慢一点也没关系，先记下来就很棒。",
-                        "今天餐饮偏多，明天可以试试自己带饭。",
-                        "我在这儿，帮你把钱花明白。",
-                        "记一笔，我会帮你盯着消费节奏。"
-                    ].randomElement() ?? petHint
+                if petBubbleVisible {
+                    Task {
+                        if let message = await PetCompanionService.shared.petClickMessage(
+                            settings: settingsViewModel.settings,
+                            todayItems: homeViewModel.items
+                        ) {
+                            petHint = message
+                            petBubbleVisible = true
+                        }
+                    }
                 }
             } label: {
                 Text("🐱")

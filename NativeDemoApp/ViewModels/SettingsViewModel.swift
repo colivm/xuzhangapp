@@ -77,6 +77,13 @@ final class SettingsViewModel: ObservableObject {
         set {
             settings.petCompanionEnabled = newValue
             persist()
+            if newValue {
+                if settings.weatherCompanionEnabled {
+                    WeatherCompanionService.shared.startBackgroundRefresh()
+                }
+            } else {
+                WeatherCompanionService.shared.stopBackgroundRefresh()
+            }
         }
     }
 
@@ -93,6 +100,11 @@ final class SettingsViewModel: ObservableObject {
         set {
             settings.weatherCompanionEnabled = newValue
             persist()
+            if newValue, settings.petCompanionEnabled {
+                WeatherCompanionService.shared.startBackgroundRefresh()
+            } else {
+                WeatherCompanionService.shared.stopBackgroundRefresh()
+            }
         }
     }
 

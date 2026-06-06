@@ -2,6 +2,7 @@
 
 > 用法：**整段复制下方「复制发送」** 发给 Agent。  
 > **仅 iOS**；`web-preview` 本轮 **不要改**（作规则对照源）。  
+> **格式**：「复制发送」为单一 ` ```text ` 块，块内**不要**再嵌套 ` ```swift ` / ` ``` `，否则复制会截断。  
 > 可与 **B2.8** 合并一次 PR：先 B2.8 → 再 B2.9，验收分节勾选（见文末）。
 
 ---
@@ -76,20 +77,17 @@
 - 文案须与 Web 语义一致（可微调标点，禁止新增预算/管控句）
 
 ### 3. `PetCompanionService.swift`
-```swift
-buildContextualMessage(
-  record: HomeItem?,
-  weather: WeatherSnapshot?,
-  settings: AppSettings,
-  todayItems: [HomeItem]
-) async -> String
-```
-逻辑对齐 Web `buildContextualPetMessage`：
-1. `!weatherCompanionEnabled` → recordSaved 随机；偶发 weatherHint（带冷却，勿每次弹）
-2. 无定位权限 → 温柔 fallback + 偶发 weatherHint
-3. 有天气 → `PET_SCENE_RULES` 优先级第一条
-4. 补充：coldDrink / weekendRelax / lateNightSnack
-5. 兜底 recordSaved
+- 主方法签名：`buildContextualMessage(record:weather:settings:todayItems:) async -> String`
+  - record: HomeItem?
+  - weather: WeatherSnapshot?
+  - settings: AppSettings
+  - todayItems: [HomeItem]
+- 逻辑对齐 Web `buildContextualPetMessage`：
+  1. `!weatherCompanionEnabled` → recordSaved 随机；偶发 weatherHint（带冷却，勿每次弹）
+  2. 无定位权限 → 温柔 fallback + 偶发 weatherHint
+  3. 有天气 → `PET_SCENE_RULES` 优先级第一条
+  4. 补充：coldDrink / weekendRelax / lateNightSnack
+  5. 兜底 recordSaved
 
 另提供 `companionMessage(settings:)` / `lightSceneMessage()` 供宠物 **点击** 使用（对齐 Web pet click）
 
@@ -115,11 +113,9 @@ buildContextualMessage(
 
 ## 开关矩阵（必须实现）
 
-| 宠物陪伴 | 天气互动 | 行为 |
-|----------|----------|------|
-| 关 | * | 不显示宠物 / 无 petMessage |
-| 开 | 关 | recordSaved / companion / lightScene |
-| 开 | 开 | 完整场景 + 天气规则 |
+- 宠物关 + 天气任意 → 不显示宠物 / 无 petMessage
+- 宠物开 + 天气关 → recordSaved / companion / lightScene
+- 宠物开 + 天气开 → 完整场景 + 天气规则
 
 ## 禁止
 - 改 B2.8 分类推荐、ScenePackCopyPool、生活切片、StoreKit、小 AI 说
@@ -173,3 +169,4 @@ buildContextualMessage(
 | 日期 | 说明 |
 |------|------|
 | 2026-06-06 | 首版：B2.9 独立 prompt；合并 B2.8 说明；强调删管控式宠物句 |
+| 2026-06-06 | 修复「复制发送」嵌套代码块导致截断；开关矩阵改列表 |

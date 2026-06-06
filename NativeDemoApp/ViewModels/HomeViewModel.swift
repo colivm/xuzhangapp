@@ -92,6 +92,7 @@ final class HomeViewModel: ObservableObject {
     private let aiReportService = AIReportService()
     private let analyticsService = AnalyticsService()
     private let categoryRecommendService = CategoryRecommendService()
+    private let petCompanionService = PetCompanionService.shared
     private let nudgePolicyService = MemberNudgePolicyService()
     private let playbackService = PlaybackService()
     private let memberFlowService = MemberFlowService()
@@ -152,14 +153,7 @@ final class HomeViewModel: ObservableObject {
         } else {
             refreshRouteGuidanceIfNeeded()
         }
-        // Trigger pet message matching web petCopy.recordSaved
-        let msgs = [
-            "记下来的每一笔，都是你的掌控感呀！小猫咪为你点赞～",
-            "今天也按时记账啦，你超棒的！",
-            "这笔记录得很好，继续保持这个节奏～",
-            "今天的小快乐，也被好好记下来了。",
-        ]
-        petMessage = msgs.randomElement()
+        enqueuePetMessage(for: newItem)
         Task { await syncUpsertToCloud(newItem) }
     }
 
@@ -254,6 +248,9 @@ final class HomeViewModel: ObservableObject {
         refreshTodayPlayback()
         refreshRouteGuidanceIfNeeded()
         updateOCRSuccessStatus(prefix: "已导入 \(importedItems.count) 条，进入待整理", isMember: isMember)
+        if let firstItem = importedItems.first {
+            enqueuePetMessage(for: firstItem)
+        }
         Task {
             for item in importedItems {
                 await syncUpsertToCloud(item)
@@ -550,6 +547,30 @@ final class HomeViewModel: ObservableObject {
             return "暂无"
         }
         return top.rawValue
+    }
+
+    private func enqueuePetMessage(for record: HomeItem) {
+        let settings = LocalStore.loadSettings()
+        guard settings.petCompanionEnabled else {
+            petMessage = nil
+            return
+        }
+        let currentItems = items
+        let cachedWeather = WeatherCompanionService.shared.cachedSnapshot
+        Task {
+            let message = await petCompanionService.buildContextualMessage(
+                record: record,
+                weather: cachedWeather,
+                settings: settings,
+                todayItems: currentItems
+            )
+            if let message, LocalStore.loadSettings().petCompanionEnabled {
+                petMessage = message
+            }
+            if settings.weatherCompanionEnabled {
+                WeatherCompanionService.shared.refreshWeatherInBackground(refreshGeo: false)
+            }
+        }
     }
 
     func recommendCategory(for amountText: String) -> HomeItem.Category? {
