@@ -34,7 +34,7 @@
 10. 播完 CTA：主会员 / 次「想多聊一句」；**周播完** →「保存本周故事图」可导出 PNG（D1）  
 11. **Release Archive**：设置/会员页 **无** Debug 写 tier 入口（TC-MEM-06）
 
-Agent 下一任务：**B2.8**；见 [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) §10.13。
+Agent 下一任务：**B2.8** → [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md)（**不是** B2.10）。
 
 ### 代码核查（2026-06-06）
 
@@ -85,9 +85,10 @@ Agent 下一任务：**B2.8**；见 [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATI
 | - [x] C1：首记 → 今日回放 / 看看花引导 | - [ ] 回归 11 条（见上文 §最先做） |
 | - [x] 记 ≥3 笔 → 看看花角标/卡片提示 | - [ ] 生产 API 全链路再验 |
 | - [x] B2.7 分类锁定（真机再验） | |
-| - [ ] **B2.8 智能分类** — §10.13（**代码未改，仍金额档**） | |
-| - [ ] B2.9 天气宠物（Open-Meteo；开关已有）— §10.14 | |
-| - [x] 场景包哲学 + tagline（A4）；B2.10 128 条 **iOS 已 32×4**，防连重复可选 | |
+| - [x] **B2.10** 场景备注池（iOS）：`ScenePackCopyPool` 32×4 + stable hash + 历史增强 | |
+| - [ ] **B2.8 智能分类** — [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md) | |
+| - [ ] B2.9 天气宠物 — [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md)（可与 B2.8 合并 PR） | |
+| - [x] A4 场景包哲学 + tagline | |
 | | |
 | **路径 2 · 生活切片** | **备案与合规** |
 | - [ ] B2.5 叙事/UI（旁白为主、少报表感）— §10.8 | - [ ] ICP 备案 |
@@ -156,7 +157,9 @@ Agent 下一任务：**B2.8**；见 [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATI
 | [`PRODUCT_STAGE_REVIEW_AND_STORE_COPY_v0.1.md`](PRODUCT_STAGE_REVIEW_AND_STORE_COPY_v0.1.md) | 阶段总结、商店文案、§7 polish |
 | [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) | **B2.8**（待做）/ B2.5 / welcome |
 | [`AGENT_PROMPT_AI_ADVICE_BOUNDARY.md`](AGENT_PROMPT_AI_ADVICE_BOUNDARY.md) | Task A3（已完成 iOS） |
-| [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md) | Task A4（已完成 iOS） |
+| [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md) | Task B2.8（下一项） |
+| [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md) | Task B2.9（可与 B2.8 合并） |
+| [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md) | Task A4（已完成；≠ B2.10） |
 | [`TEST_CASES_v0.1.md`](TEST_CASES_v0.1.md) | 全量测试用例 |
 | [`APP_STORE_LISTING.md`](APP_STORE_LISTING.md) | 上架截图与自检 |
 
@@ -172,3 +175,5 @@ Agent 下一任务：**B2.8**；见 [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATI
 | 2026-06-06 | iOS Release 门禁 ✅：删 Debug 写 tier；Nudge 统一 prod |
 | 2026-06-06 | Task D1 播完分享图 ✅ |
 | 2026-06-06 | 代码核查：C1/F1 ✅；**B2.8 未做** |
+| 2026-06-06 | 新增 AGENT_PROMPT_B2.8；§10.15 任务编号对照 |
+| 2026-06-06 | 新增 AGENT_PROMPT_B2.9 天气宠物 + B2.8 合并说明 |

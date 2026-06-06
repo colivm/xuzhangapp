@@ -4,6 +4,8 @@
 > **仅 iOS**；`web-preview` 本轮 **不要改**。  
 > 与 **Task A3**（小 AI 说去预算化）并行不冲突：A3 不动场景包，A4 不动小 AI 说。
 
+> **与 B2.10 的区别**：**A4** = 包名/tagline/5 条替词（哲学收束，小 diff）。**B2.10** = 四包×4档×8 条池 + stable hash + 历史增强（`ScenePackCopyPool` 主体结构）。你若已跑 B2.10，**不要**用 A4 prompt 再跑一遍；下一项应是 **B2.8**（[`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md)）。
+
 ---
 
 ## @ 文件

@@ -67,7 +67,7 @@ C1 动线引导（首记、角标、播完 CTA）                   ✅
 B2.8 智能分类推荐                                     ⏳ **未做**（仍纯金额档）
 B2.5 生活切片叙事/UI polish                           ⏳
 B2.9 天气宠物                                         ⏳
-B2.10 场景包防连重复（可选）                          ⏳
+B2.10 场景包文案池（iOS MVP）                          ✅
 C2 OCR / 今日回放次数                                ✅ 主链路
 D1 播完分享图（周章）                                  ✅
 F1 OCR 详情页 + 去演示按钮                           ✅ 主链路（Debug 演示按钮可选删）
@@ -1082,7 +1082,7 @@ OCRService.swift 现状
 @IMPLEMENTATION_FOR_CODEX.md
 @PRODUCT_PLAYBACK_MEMBERSHIP_v0.1.md §8
 @NativeDemoApp/ViewModels/HomeViewModel.swift
-@NativeDemoApp/ContentView.swift
+@NativeDemoApp/Views/RecordView.swift
 @web-preview/app.js
 @TEST_CASES_v0.1.md
 ```
@@ -1149,8 +1149,8 @@ iOS `HomeViewModel.recommendCategory` 仅按金额硬编码：
 - `reasonTag: String?`（可选，调试用；UI 仍只显示 chip「推荐」）
 
 ### 接入点
-- 替换 `recommendCategory(for:)` 为 `recommendCategory(input:)` 或委托 Service
-- `ContentView` `.onChange(inputAmount)` 与 `categorySection` 的 `recommended` 均走新逻辑
+- 替换 `recommendCategory(for:)` 为委托 Service（或 `recommendCategory(input:)`）
+- `RecordView.swift` `.onChange(inputAmount)` 与 `categorySection` 的 `recommended` 均走新逻辑
 - **尊重** `categoryLockedByUser`（B2.7）
 
 ### 可选 P2（时间够再做）
@@ -1265,9 +1265,19 @@ iOS `HomeViewModel.recommendCategory` 仅按金额硬编码：
 
 ---
 
-### 10.15 合并 Prompt（B2.8 + B2.9 一次交付，可选）
+### 10.15 任务编号对照 + 合并 Prompt（可选）
 
-若希望 Codex **一次 PR** 完成记账智能体验，将 §10.13 + §10.14 两段 prompt 合并发送，并注明：**先做 B2.7 依赖检查 → B2.8 → B2.9**，单测/验收分节勾选。
+**不要混任务**：你跑的 **B2.10**（场景备注池）≠ **B2.8**（智能分类）≠ **B2.9**（天气宠物）。
+
+| ID | 名称 | 改什么 | 独立 Agent 文件 | 典型状态 |
+|----|------|--------|-----------------|----------|
+| **A4** | 场景包哲学对齐 | tagline、旅行出发包、5 条替词 | [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md) | ✅ iOS |
+| **B2.7** | 分类锁定 | `categoryLockedByUser` | §10.12 | ✅ |
+| **B2.8** | **智能分类推荐** | `CategoryRecommendService` | [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md) | ⏳ |
+| **B2.9** | 天气宠物 | Open-Meteo + `PET_SCENE_RULES` | [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md) | ⏳ |
+| **B2.10** | 场景备注池扩展 | 四包×4档×8条 + stable hash | §10.16 | ✅ iOS MVP |
+
+**可选合并（仅 B2.8 + B2.9）**：若希望 Codex **一次 PR** 完成「记账更聪明 + 宠物有温度」，将 §10.13 + §10.14 两段 prompt 合并发送，并注明：**先做 B2.7 依赖检查 → B2.8 → B2.9**，验收分节勾选。**不要**把 B2.10 / A4 写进同一条 prompt。
 
 ---
 
@@ -1353,3 +1363,4 @@ struct ScenePackDefinition {
 | 2026-06-06 | §2.2：`InsightWebView`、ContentView ~702；结构债 🟡 说明 |
 | 2026-06-06 | E1：iOS Release tier 门禁 ✅；§10.10 删 Debug 模拟开通说明 |
 | 2026-06-06 | D1 ✅：§2.2/§3/§4 Task D1 状态；周播完分享图 |
+| 2026-06-06 | §10.15 任务编号对照表；链至 AGENT_PROMPT_B2.8 / B2.9 |
