@@ -57,6 +57,8 @@ C2 OCR / 今日回放次数
 B2.5 生活切片叙事/UI 感染力 polish（**D1 前置，必做**）
 D1 播完分享图（合并周卡；依赖 B2.5）
 F1 支付宝/微信 OCR + 确认导入（对齐 Web 四步流程）
+A3 AI「议」边界对齐 · 去预算化（见 [`AGENT_PROMPT_AI_ADVICE_BOUNDARY.md`](AGENT_PROMPT_AI_ADVICE_BOUNDARY.md)）
+A4 场景包哲学对齐 · iOS（见 [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md)）
 E1 StoreKit 2 + 后端验单（TestFlight 付费前置）
 ```
 

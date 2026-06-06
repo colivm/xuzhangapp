@@ -236,6 +236,16 @@ final class PlaybackService {
             lhs.amount == rhs.amount ? lhs.count < rhs.count : lhs.amount < rhs.amount
         }
         let title = "本周生活切片"
+        let weekSeed = "week-\(SummaryPlaybackQuotaStore().currentWeekKey(now: now))"
+        let weekValues: [String: String] = [
+            "rangeLabel": rangeLabel,
+            "count": "\(rows.count)",
+            "total": Self.money(total),
+            "busiestDay": busiest?.label ?? "本周",
+            "quietestDay": quietest?.label ?? "某一天",
+            "topCategory": top?.category ?? "日常",
+            "ratio": "\(ratio)"
+        ]
 
         guard !rows.isEmpty else {
             return SummaryPlayback(
@@ -257,9 +267,10 @@ final class PlaybackService {
                 id: "week-intro",
                 title: "这一周",
                 metrics: ["count": "\(rows.count)", "total": Self.money(total), "range": rangeLabel],
-                narration: SummaryNarration(
-                    warm: "小窝陪你看了 \(rangeLabel)，\(rows.count) 笔小记录，一共 \(Self.money(total))。",
-                    plain: "\(rangeLabel)：\(rows.count) 笔，支出 \(Self.money(total))。"
+                narration: PlaybackCopyPool.narration(
+                    chapterId: rows.count < 3 ? "week-weak-intro" : "week-intro",
+                    seed: weekSeed,
+                    values: weekValues
                 ),
                 durationSec: 6
             )
@@ -275,9 +286,10 @@ final class PlaybackService {
                         "quietestDay": quietest?.label ?? "本周",
                         "count": "\(busiest?.count ?? 0)"
                     ],
-                    narration: SummaryNarration(
-                        warm: "最忙的是 \(busiest?.label ?? "本周")，留下 \(busiest?.count ?? 0) 笔记录；\(quietest?.label ?? "某一天") 安静很多，节奏很分明。",
-                        plain: "\(busiest?.label ?? "本周") 记录最多，共 \(busiest?.count ?? 0) 笔；\(quietest?.label ?? "某一天") 最少。"
+                    narration: PlaybackCopyPool.narration(
+                        chapterId: "week-rhythm",
+                        seed: weekSeed,
+                        values: weekValues
                     ),
                     durationSec: 7
                 )
@@ -293,9 +305,10 @@ final class PlaybackService {
                     "ratio": "\(ratio)",
                     "amount": Self.money(top?.amount ?? 0)
                 ],
-                narration: SummaryNarration(
-                    warm: "大约 \(ratio)% 花在「\(top?.category ?? "日常")」上，像这周日常的主料。",
-                    plain: "「\(top?.category ?? "日常")」约占 \(ratio)% 。"
+                narration: PlaybackCopyPool.narration(
+                    chapterId: "week-top-category",
+                    seed: weekSeed,
+                    values: weekValues
                 ),
                 durationSec: 7
             )
@@ -303,6 +316,11 @@ final class PlaybackService {
 
         if rows.count >= 3, let highlight {
             let day = Self.weekdayFormatter.string(from: highlight.createdAt)
+            let highlightValues = weekValues.merging([
+                "highlightTitle": highlight.title,
+                "highlightAmount": Self.money(highlight.amount),
+                "highlightDayLabel": day
+            ]) { current, _ in current }
             chapters.append(
                 SummaryChapter(
                     id: "week-highlight",
@@ -312,9 +330,10 @@ final class PlaybackService {
                         "amount": Self.money(highlight.amount),
                         "day": day
                     ],
-                    narration: SummaryNarration(
-                        warm: "印象最深的一笔：\(day) · \(highlight.title)，\(Self.money(highlight.amount))。",
-                        plain: "单笔最高：\(highlight.title)，\(Self.money(highlight.amount))（\(day)）。"
+                    narration: PlaybackCopyPool.narration(
+                        chapterId: "week-highlight",
+                        seed: weekSeed,
+                        values: highlightValues
                     ),
                     durationSec: 7
                 )
@@ -327,9 +346,10 @@ final class PlaybackService {
                 id: "week-outro",
                 title: weak ? "再多一点" : "下周再叙",
                 metrics: ["count": "\(rows.count)", "total": Self.money(total)],
-                narration: SummaryNarration(
-                    warm: weak ? "还只有 \(rows.count) 笔，再多记几天，小窝能讲得更完整。" : "这周有在认真记录生活，小窝下周再陪你叙。",
-                    plain: weak ? "记录较少（\(rows.count) 笔），补充后切片会更准确。" : "本周记录完整，下周可再看切片。"
+                narration: PlaybackCopyPool.narration(
+                    chapterId: weak ? "week-weak-outro" : "week-outro",
+                    seed: weekSeed,
+                    values: weekValues
                 ),
                 durationSec: weak ? 6 : 7
             )
@@ -412,6 +432,22 @@ final class PlaybackService {
         let previousTotal = previousRows.reduce(0) { $0 + $1.amount }
         let momPercent = monthOverMonthText(current: total, previous: previousTotal)
         let changeText = monthlyChangeText(current: rows, previous: previousRows, segments: segments)
+        let monthSeed = "month-\(Self.monthKeyFormatter.string(from: now))"
+        let monthValues: [String: String] = [
+            "rangeLabel": rangeLabel,
+            "count": "\(rows.count)",
+            "total": Self.money(total),
+            "activeDays": "\(activeDays)",
+            "momPercent": momPercent ?? "",
+            "earlyCount": "\(segments[0].count)",
+            "earlyAmount": Self.money(segments[0].amount),
+            "midAmount": Self.money(segments[1].amount),
+            "lateAmount": Self.money(segments[2].amount),
+            "leadingSegment": leadingSegment?.label ?? "其中一段",
+            "topCategory": top?.category ?? "日常",
+            "ratio": "\(ratio)",
+            "changeHint": changeText
+        ]
 
         let chapters: [SummaryChapter] = [
             SummaryChapter(
@@ -423,13 +459,10 @@ final class PlaybackService {
                     "activeDays": "\(activeDays)",
                     "momPercent": momPercent ?? ""
                 ],
-                narration: SummaryNarration(
-                    warm: momPercent.map {
-                        "\(rangeLabel) 你来了 \(activeDays) 天，总支出 \(Self.money(total))，比上月 \($0)。"
-                    } ?? "这个月小窝陪你收下 \(rows.count) 笔记录，\(activeDays) 天有生活痕迹，一共 \(Self.money(total))。",
-                    plain: momPercent.map {
-                        "\(rangeLabel)：\(activeDays) 天，\(Self.money(total))（较上月 \($0)）。"
-                    } ?? "\(rangeLabel)：\(rows.count) 笔，\(activeDays) 个记录日，支出 \(Self.money(total))。"
+                narration: PlaybackCopyPool.narration(
+                    chapterId: "month-intro",
+                    seed: monthSeed,
+                    values: monthValues
                 ),
                 durationSec: 8
             ),
@@ -437,9 +470,10 @@ final class PlaybackService {
                 id: "month-early",
                 title: "上旬",
                 metrics: ["label": segments[0].label, "amount": Self.money(segments[0].amount), "count": "\(segments[0].count)"],
-                narration: SummaryNarration(
-                    warm: "上旬记录 \(segments[0].count) 笔，花了 \(Self.money(segments[0].amount))，像月初慢慢铺开的底色。",
-                    plain: "上旬 \(segments[0].count) 笔，支出 \(Self.money(segments[0].amount))。"
+                narration: PlaybackCopyPool.narration(
+                    chapterId: "month-early",
+                    seed: monthSeed,
+                    values: monthValues
                 ),
                 durationSec: 8
             ),
@@ -451,9 +485,10 @@ final class PlaybackService {
                     "late": Self.money(segments[2].amount),
                     "leading": leadingSegment?.label ?? "本月"
                 ],
-                narration: SummaryNarration(
-                    warm: "中旬 \(Self.money(segments[1].amount))，下旬 \(Self.money(segments[2].amount))；\(leadingSegment?.label ?? "其中一段")更热闹一点。",
-                    plain: "中旬支出 \(Self.money(segments[1].amount))，下旬支出 \(Self.money(segments[2].amount))。"
+                narration: PlaybackCopyPool.narration(
+                    chapterId: "month-middle-late",
+                    seed: monthSeed,
+                    values: monthValues
                 ),
                 durationSec: 9
             ),
@@ -461,9 +496,10 @@ final class PlaybackService {
                 id: "month-composition",
                 title: "生活构成",
                 metrics: ["category": top?.category ?? "日常", "ratio": "\(ratio)", "amount": Self.money(top?.amount ?? 0)],
-                narration: SummaryNarration(
-                    warm: "「\(top?.category ?? "日常")」约占 \(ratio)% ，是这个月最明显的一块生活拼图。",
-                    plain: "「\(top?.category ?? "日常")」占比约 \(ratio)% 。"
+                narration: PlaybackCopyPool.narration(
+                    chapterId: "month-composition",
+                    seed: monthSeed,
+                    values: monthValues
                 ),
                 durationSec: 9
             ),
@@ -471,9 +507,10 @@ final class PlaybackService {
                 id: "month-change",
                 title: "变化点",
                 metrics: ["change": changeText],
-                narration: SummaryNarration(
-                    warm: changeText,
-                    plain: changeText
+                narration: PlaybackCopyPool.narration(
+                    chapterId: "month-change",
+                    seed: monthSeed,
+                    values: monthValues
                 ),
                 durationSec: 8
             ),
@@ -481,9 +518,10 @@ final class PlaybackService {
                 id: "month-action",
                 title: "月末小结",
                 metrics: ["total": Self.money(total), "topCategory": top?.category ?? "日常"],
-                narration: SummaryNarration(
-                    warm: "这个月的节奏已经有轮廓了，可以再看一次月度复盘，把下个月安排得轻一点。",
-                    plain: "本月生活章已生成，可继续查看月度复盘。"
+                narration: PlaybackCopyPool.narration(
+                    chapterId: "month-action",
+                    seed: monthSeed,
+                    values: monthValues
                 ),
                 durationSec: 8
             )

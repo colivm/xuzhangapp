@@ -446,7 +446,7 @@ SummaryPlaybackSheet（ZStack）
 | 打工人通勤包 | `commute` | 交通 |
 | 吃货专属包 | `food` | 餐饮 |
 | 铲屎官宠物包 | `pet` | 日用 |
-| 旅行预算包 | `travel` | 其他 |
+| 旅行出发包 | `travel` | 其他 |
 
 ### 7.2 入口与门槛
 

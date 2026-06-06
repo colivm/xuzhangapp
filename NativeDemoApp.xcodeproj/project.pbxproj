@@ -33,6 +33,10 @@
 		A100003C0000000000000001 /* OCRConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100003D0000000000000001 /* OCRConfirmSheet.swift */; };
 		A100003E0000000000000001 /* ScenePackCopyPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100003F0000000000000001 /* ScenePackCopyPool.swift */; };
 		A10000430000000000000001 /* IAPService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000440000000000000001 /* IAPService.swift */; };
+		A10000450000000000000001 /* RecordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000460000000000000001 /* RecordView.swift */; };
+		A10000470000000000000001 /* StatsWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000480000000000000001 /* StatsWebView.swift */; };
+		A10000490000000000000001 /* PlaybackCopyPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004A0000000000000001 /* PlaybackCopyPool.swift */; };
+		A100004B0000000000000001 /* ScenePackSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004C0000000000000001 /* ScenePackSectionView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -65,6 +69,10 @@
 		A100003D0000000000000001 /* OCRConfirmSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRConfirmSheet.swift; sourceTree = "<group>"; };
 		A100003F0000000000000001 /* ScenePackCopyPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackCopyPool.swift; sourceTree = "<group>"; };
 		A10000440000000000000001 /* IAPService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IAPService.swift; sourceTree = "<group>"; };
+		A10000460000000000000001 /* RecordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordView.swift; sourceTree = "<group>"; };
+		A10000480000000000000001 /* StatsWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsWebView.swift; sourceTree = "<group>"; };
+		A100004A0000000000000001 /* PlaybackCopyPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackCopyPool.swift; sourceTree = "<group>"; };
+		A100004C0000000000000001 /* ScenePackSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackSectionView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -132,6 +140,7 @@
 				A10000280000000000000001 /* AnalyticsService.swift */,
 				A100002A0000000000000001 /* MemberNudgePolicyService.swift */,
 				A100002C0000000000000001 /* PlaybackService.swift */,
+				A100004A0000000000000001 /* PlaybackCopyPool.swift */,
 				A100002E0000000000000001 /* MemberFlowService.swift */,
 				A100003F0000000000000001 /* ScenePackCopyPool.swift */,
 				A10000440000000000000001 /* IAPService.swift */,
@@ -152,6 +161,9 @@
 			isa = PBXGroup;
 			children = (
 				A10000180000000000000001 /* HomeView.swift */,
+				A10000460000000000000001 /* RecordView.swift */,
+				A10000480000000000000001 /* StatsWebView.swift */,
+				A100004C0000000000000001 /* ScenePackSectionView.swift */,
 				A10000190000000000000001 /* SettingsView.swift */,
 				A10000390000000000000001 /* MemberPricingView.swift */,
 				A100003A0000000000000001 /* SummaryPlaybackSheet.swift */,
@@ -271,6 +283,10 @@
 				A100003C0000000000000001 /* OCRConfirmSheet.swift in Sources */,
 				A100003E0000000000000001 /* ScenePackCopyPool.swift in Sources */,
 				A10000430000000000000001 /* IAPService.swift in Sources */,
+				A10000450000000000000001 /* RecordView.swift in Sources */,
+				A10000470000000000000001 /* StatsWebView.swift in Sources */,
+				A10000490000000000000001 /* PlaybackCopyPool.swift in Sources */,
+				A100004B0000000000000001 /* ScenePackSectionView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

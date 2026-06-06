@@ -446,8 +446,8 @@ final class HomeViewModel: ObservableObject {
         let summary = "近7天总支出 \(formatCurrency(total))，主要集中在\(topCategory)。"
         let structure = "近7天共记录 \(weekItems.count) 笔，\(topCategory)占比约 \(ratio)%。"
         let advice = total > 3000
-            ? "建议对高频支出分类设置分段预算，并在每周末回看预算达成率。"
-            : "整体支出节奏可控，继续保持按笔记录，长期会更容易优化消费结构。"
+            ? "这一周的记录已经很有轮廓，继续按笔记下去，下周生活切片会更像你的真实日常。"
+            : "这一周的节奏被慢慢记下来了，继续记录，下周生活章会更立体。"
         return (summary, structure, advice)
     }
 
@@ -462,11 +462,11 @@ final class HomeViewModel: ObservableObject {
             summary = "本月累计支出 \(formatCurrency(total))，消费里「\(top)」出现得比较多。"
         }
         let structure = total <= 0
-            ? "等你有了本月记录，我会帮你梳理分类占比与节奏。"
-            : "整体节奏上，\(top) 相关支出占比较高，可以留意是否都在预期内。"
+            ? "等你有了本月记录，我会帮你梳理分类占比与生活节奏。"
+            : "「\(top)」是这个月比较明显的一块生活拼图。"
         let advice = total <= 0
             ? "先坚持记一周，复盘会更有感觉。"
-            : "下月可以给「\(top)」设一个温柔小预算，不用太紧，轻轻框住就好。"
+            : "这个月的轮廓已经出来了，继续记录几天，月末生活章会更完整。"
         return (summary, structure, advice)
     }
 
@@ -687,9 +687,9 @@ final class HomeViewModel: ObservableObject {
 
         let action: String
         if todayTotal > weeklyAverage && weeklyAverage > 0 {
-            action = "明天把高频消费先减 1 次，预计会更轻松地控制预算。"
+            action = "今天的花费比平时多一些，先把这一笔生活节奏记下来就好。"
         } else {
-            action = "当前节奏很稳，继续保持每笔小额记录就很好。"
+            action = "当前节奏被好好记下来了，明天继续顺手记一两笔就好。"
         }
 
         let encourage = settings.aiTone == .gentle
@@ -797,7 +797,10 @@ final class HomeViewModel: ObservableObject {
     nonisolated static func promptTemplate(todayTotal: Double, weeklyAverage: Double, monthlyTotal: Double, topCategories: String) -> String {
         """
         [System]
-        你是“叙账”的温和消费复盘助手。请根据消费聚合数据，输出简短复盘和一条可执行建议，不说教、不批判、不提供投资买卖建议。
+        你是“叙账”的温和消费复盘助手。请根据消费聚合数据，输出简短复盘和一条温柔收束或邀请继续记录/下月再叙，不说教、不批判、不提供投资买卖建议。
+        「议」只谈已经发生的生活：可复述结构、节奏与感受。
+        禁止：下月/下周金额目标、预算上限、减少支出比例、达成率、任何管控式省钱建议。
+        action 字段应是温柔收束或邀请继续记录/下月再叙，不是理财计划。
 
         [User]
         日期：\(dayKey(for: .now))
@@ -918,7 +921,7 @@ final class HomeViewModel: ObservableObject {
 
     func buildWeeklyRhythmText() -> String {
         let top = weekTopCategoryText
-        return "本周开销以「\(top)」为主，先按当前节奏温柔安排，下周再慢慢微调。"
+        return "本周开销以「\(top)」为主，这一段的节奏就是这样，记下来了。"
     }
 
     func markWeeklyTag() {
@@ -928,16 +931,19 @@ final class HomeViewModel: ObservableObject {
         analyticsService.track("weekly_tag_marked", props: ["top": top])
     }
 
-    func buildMonthlySoftPlanText() -> String {
+    func buildMonthlyClosingText() -> String {
         let total = monthExpenseTotal
-        let next = total > 0 ? String(format: "%.0f", total * 0.95) : "0"
-        return "下月生活开销温柔参考：约 ¥\(next)，按你自己的节奏随心调整。"
+        let top = monthTopCategoryText
+        guard total > 0 else {
+            return "这个月还没有足够账单，先继续记几笔，月末生活章会更像你的日子。"
+        }
+        return "这个月「\(top)」出现得比较多，有几笔像是对自己的照顾。先记到这里，月末再回看会更完整。"
     }
 
-    func markMonthlySoftPlan() {
-        let result = buildMonthlySoftPlanText()
+    func markMonthlyClosing() {
+        let result = buildMonthlyClosingText()
         setLatestActionCard(result, scope: "monthly")
-        analyticsService.track("monthly_soft_plan")
+        analyticsService.track("monthly_closing_saved")
     }
 
     func markMonthlySaveSummary() {
