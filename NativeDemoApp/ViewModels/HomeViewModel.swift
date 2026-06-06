@@ -91,6 +91,7 @@ final class HomeViewModel: ObservableObject {
     private let ocrService = OCRService()
     private let aiReportService = AIReportService()
     private let analyticsService = AnalyticsService()
+    private let categoryRecommendService = CategoryRecommendService()
     private let nudgePolicyService = MemberNudgePolicyService()
     private let playbackService = PlaybackService()
     private let memberFlowService = MemberFlowService()
@@ -552,12 +553,23 @@ final class HomeViewModel: ObservableObject {
     }
 
     func recommendCategory(for amountText: String) -> HomeItem.Category? {
-        guard let amount = Double(amountText), amount > 0 else { return nil }
-        if amount < 30 { return .dining }
-        if amount < 80 { return .transport }
-        if amount < 200 { return .daily }
-        if amount < 600 { return .shopping }
-        return .other
+        recommendCategoryResult(for: amountText)?.recommended
+    }
+
+    func recommendCategoryResult(for amountText: String) -> CategoryRecommendResult? {
+        let normalizedAmount = amountText.replacingOccurrences(of: ",", with: "")
+        guard let amount = Double(normalizedAmount), amount > 0 else { return nil }
+        let start = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? .distantPast
+        let recentItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
+        return categoryRecommendService.recommend(
+            input: CategoryRecommendInput(
+                amount: amount,
+                referenceDate: selectedDate,
+                items: recentItems,
+                noteDraft: inputTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+                locked: categoryLockedByUser
+            )
+        )
     }
 
     func selectCategory(_ category: HomeItem.Category) {

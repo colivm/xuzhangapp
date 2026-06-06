@@ -95,6 +95,14 @@ struct RecordView: View {
         focusedField = nil
     }
 
+    private func refreshRecommendedCategory() {
+        guard selectedEntryMode == .manual else { return }
+        guard !homeViewModel.categoryLockedByUser else { return }
+        if let category = homeViewModel.recommendCategory(for: homeViewModel.inputAmount) {
+            homeViewModel.applyRecommendedCategory(category)
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
@@ -167,12 +175,14 @@ struct RecordView: View {
                 }
             }
         }
-        .onChange(of: homeViewModel.inputAmount) { _, newValue in
-            guard selectedEntryMode == .manual else { return }
-            guard !homeViewModel.categoryLockedByUser else { return }
-            if let category = homeViewModel.recommendCategory(for: newValue) {
-                homeViewModel.applyRecommendedCategory(category)
-            }
+        .onChange(of: homeViewModel.inputAmount) { _, _ in
+            refreshRecommendedCategory()
+        }
+        .onChange(of: homeViewModel.inputTitle) { _, _ in
+            refreshRecommendedCategory()
+        }
+        .onChange(of: homeViewModel.selectedDate) { _, _ in
+            refreshRecommendedCategory()
         }
         .sheet(isPresented: $showRecordDateSheet) {
             NavigationStack {

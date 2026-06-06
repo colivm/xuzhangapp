@@ -38,6 +38,7 @@
 		A10000490000000000000001 /* PlaybackCopyPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004A0000000000000001 /* PlaybackCopyPool.swift */; };
 		A100004B0000000000000001 /* ScenePackSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004C0000000000000001 /* ScenePackSectionView.swift */; };
 		A100004D0000000000000001 /* InsightWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004E0000000000000001 /* InsightWebView.swift */; };
+		A100004F0000000000000001 /* CategoryRecommendService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100008A0000000000000001 /* CategoryRecommendService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -75,6 +76,7 @@
 		A100004A0000000000000001 /* PlaybackCopyPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackCopyPool.swift; sourceTree = "<group>"; };
 		A100004C0000000000000001 /* ScenePackSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackSectionView.swift; sourceTree = "<group>"; };
 		A100004E0000000000000001 /* InsightWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightWebView.swift; sourceTree = "<group>"; };
+		A100008A0000000000000001 /* CategoryRecommendService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryRecommendService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -142,6 +144,7 @@
 				A10000280000000000000001 /* AnalyticsService.swift */,
 				A100002A0000000000000001 /* MemberNudgePolicyService.swift */,
 				A100002C0000000000000001 /* PlaybackService.swift */,
+				A100008A0000000000000001 /* CategoryRecommendService.swift */,
 				A100004A0000000000000001 /* PlaybackCopyPool.swift */,
 				A100002E0000000000000001 /* MemberFlowService.swift */,
 				A100003F0000000000000001 /* ScenePackCopyPool.swift */,
@@ -291,6 +294,7 @@
 				A10000490000000000000001 /* PlaybackCopyPool.swift in Sources */,
 				A100004B0000000000000001 /* ScenePackSectionView.swift in Sources */,
 				A100004D0000000000000001 /* InsightWebView.swift in Sources */,
+				A100004F0000000000000001 /* CategoryRecommendService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
