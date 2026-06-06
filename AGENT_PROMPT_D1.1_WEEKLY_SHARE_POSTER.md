@@ -1,6 +1,6 @@
 # Agent Prompt · Task D1.1 — 周分享海报叙事化 polish（仅 iOS）
 
-> **状态：待做**（D1 功能 ✅；本任务只做 **分享图气质**，不改 web）。  
+> **状态：iOS 已完成（2026-06-07）**；真机回归见 [`TODO.md`](TODO.md) 第 13 条。  
 > 用法：**整段复制下方「复制发送」** 发给 Agent。  
 > **仅 iOS**；`web-preview` 本轮 **不要改**。  
 > **格式**：「复制发送」为单一 ` ```text ` 块，块内**不要**再嵌套 ` ``` `，否则复制会截断。
@@ -13,7 +13,7 @@
 |----|--------|----------|------|
 | **B2.5** | 生活切片 Sheet 叙事/UI | `SummaryPlaybackSheet.swift` | ⏳ 可并行；气质应对齐 |
 | **D1** | 播完导出分享图（功能） | `SummaryPlaybackSheet` + `WeeklyShareCardView` | ✅ 已完成 |
-| **D1.1** | **周分享海报 polish**（本 prompt） | `WeeklyShareCardView` + 可选 `WeeklyShareCardPayload` | ⏳ **本任务** |
+| **D1.1** | **周分享海报 polish**（本 prompt） | `WeeklyShareCardView` + `WeeklyShareCardPayload.anchorLine` | ✅ **iOS 已完成** |
 
 **关系**：D1 已接通播完「保存本周故事图」与 AI Tab 预览/分享；D1.1 **不重做导出入口**，只把 `WeeklyShareCardView` 从「报表/dashboard」改成「生活周记海报」。
 
