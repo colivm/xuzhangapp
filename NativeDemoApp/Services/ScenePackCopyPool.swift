@@ -43,6 +43,32 @@ enum ScenePackCopyPool {
             ]
         ),
         ScenePackDefinition(
+            id: "care",
+            emoji: "💊",
+            label: "照顾自己包",
+            desc: "把身体的小照顾记下来",
+            category: .health,
+            tiers: [
+                ScenePackTier(maxAmount: 20, notes: ["药店顺手补一盒常备药", "买了点日常护理小物", "一支眼药水的小照顾", "补充维生素或小药片", "创可贴和棉签备一点", "今天把小不舒服照看住", "给身体留一点安心", "健康小物补齐了"]),
+                ScenePackTier(maxAmount: 60, notes: ["药店买药，先照顾好自己", "挂号问诊的一次记录", "换季护理用品补上", "牙膏牙线和口腔护理", "运动后买点恢复用品", "身体提醒我慢一点", "给自己安排基础护理", "小病小痛，认真记下"]),
+                ScenePackTier(maxAmount: 200, notes: ["一次检查，把心放稳一点", "牙科护理的一段小支出", "理疗/康复的一次照顾", "体检项目先记下来", "给身体做一次认真回应", "把健康这件事放在心上", "问诊和用药都记清楚", "今天是在好好照顾自己"]),
+                ScenePackTier(maxAmount: 9_999, notes: ["体检套餐，给自己一份安心", "牙科治疗的一笔重要开销", "医院检查与治疗相关", "长期护理用品一次补齐", "为身体恢复安排的一程", "健康这件大事，值得记下", "这笔是对自己的认真照看", "把身体放回生活的主位"]),
+            ]
+        ),
+        ScenePackDefinition(
+            id: "home",
+            emoji: "🏠",
+            label: "居家安顿包",
+            desc: "家里的日常，也是一段生活",
+            category: .home,
+            tiers: [
+                ScenePackTier(maxAmount: 20, notes: ["家里顺手补个小物件", "厨房小用品补上了", "一卷纸巾，一点安顿", "清洁小物让家更舒服", "今天给家添了一点方便", "小修小补也算照顾家", "生活角落被补齐一点", "家里的小消耗记一下"]),
+                ScenePackTier(maxAmount: 80, notes: ["日化清洁用品补货", "水电燃气的一笔日常", "给家里添点实用小物", "宽带/话费这类固定支出", "厨房和卫生间补给", "家里运转的小开销", "把日子打理得顺一点", "居家小补给安排上"]),
+                ScenePackTier(maxAmount: 300, notes: ["家电小维修记一笔", "物业/宽带相关支出", "给房间添一件舒服东西", "床品收纳换新一点", "家里需要的东西补齐", "为住得舒服多安排一点", "把家慢慢收拾好", "这笔让家更像家"]),
+                ScenePackTier(maxAmount: 9_999, notes: ["房租/押金相关支出", "大件家电或家具添置", "搬家相关的一段开销", "家里维修的一笔大项", "给长期生活做一次安顿", "这笔是家的基础感", "把住处安稳下来", "为家认真安排的一笔"]),
+            ]
+        ),
+        ScenePackDefinition(
             id: "travel",
             emoji: "✈️",
             label: "旅行出发包",
@@ -76,14 +102,22 @@ enum ScenePackCopyPool {
         date: Date = Date(),
         categoryContext: HomeItem.Category,
         petName: String,
-        historyItems: [HomeItem]
+        historyItems: [HomeItem],
+        allowPetCopy: Bool = true
     ) -> String {
         let tierIndex = tierIndex(for: pack, amount: amount)
         let tier = pack.tiers[tierIndex]
         let seed = "\(dayKey(for: date))|\(pack.id)|\(tierIndex)|\(categoryContext.rawValue)"
         let index = stableIndex(seed: seed, count: tier.notes.count)
         let rendered = renderPetName(tier.notes[index], petName: petName)
-        return enrichNoteWithHistory(rendered, category: categoryContext, date: date, items: historyItems, seed: seed)
+        return enrichNoteWithHistory(
+            rendered,
+            category: categoryContext,
+            date: date,
+            items: historyItems,
+            seed: seed,
+            allowPetCopy: allowPetCopy
+        )
     }
 
     static func tierIndex(for pack: ScenePackDefinition, amount: Double) -> Int {
@@ -104,10 +138,12 @@ enum ScenePackCopyPool {
         category: HomeItem.Category,
         date: Date,
         items: [HomeItem],
-        seed: String
+        seed: String,
+        allowPetCopy: Bool
     ) -> String {
         guard stableIndex(seed: seed + "|historyChance", count: 100) < 45,
               let keyword = historyKeyword(category: category, date: date, items: items),
+              allowPetCopy || !containsPetKeyword(keyword),
               !note.contains(keyword) else {
             return note
         }
@@ -130,6 +166,12 @@ enum ScenePackCopyPool {
         }
         .first?
         .key
+    }
+
+    private static func containsPetKeyword(_ text: String) -> Bool {
+        ["猫", "狗", "宠物", "猫砂", "尿垫", "罐头", "冻干", "驱虫", "毛孩", "小窝"].contains {
+            text.localizedCaseInsensitiveContains($0)
+        }
     }
 
     private static func dayKey(for date: Date) -> String {

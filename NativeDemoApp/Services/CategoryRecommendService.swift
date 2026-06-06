@@ -103,6 +103,8 @@ struct CategoryRecommendService {
         if isWeekend, (14..<22).contains(hour) {
             addTime(2, to: .entertainment, scores: &scores)
             addTime(1, to: .shopping, scores: &scores)
+            addTime(0.8, to: .social, scores: &scores)
+            addTime(0.6, to: .home, scores: &scores)
         }
     }
 
@@ -120,8 +122,17 @@ struct CategoryRecommendService {
         case 51.0...200.0:
             addAmount(1, to: .daily, scores: &scores)
             addAmount(1, to: .shopping, scores: &scores)
-        default:
+            addAmount(0.8, to: .health, scores: &scores)
+            addAmount(0.6, to: .social, scores: &scores)
+        case 201.0...800.0:
             addAmount(1, to: .shopping, scores: &scores)
+            addAmount(0.9, to: .home, scores: &scores)
+            addAmount(0.7, to: .health, scores: &scores)
+            addAmount(0.7, to: .social, scores: &scores)
+        default:
+            addAmount(1, to: .home, scores: &scores)
+            addAmount(0.8, to: .shopping, scores: &scores)
+            addAmount(0.8, to: .lodging, scores: &scores)
             addAmount(1, to: .other, scores: &scores)
         }
     }
@@ -136,9 +147,12 @@ struct CategoryRecommendService {
         let rules: [(HomeItem.Category, Double, [String])] = [
             (.transport, 4, ["地铁", "公交", "打车", "停车", "加油", "出租", "网约车", "高铁", "机票"]),
             (.dining, 4, ["咖啡", "奶茶", "午餐", "晚餐", "外卖", "早餐", "餐", "饭", "面包"]),
-            (.daily, 3, ["超市", "买菜", "日用品", "日化", "药店", "纸巾", "洗衣"]),
+            (.daily, 3, ["超市", "买菜", "日用品", "日化", "纸巾", "洗衣"]),
             (.entertainment, 3, ["电影", "游戏", "ktv", "KTV", "演唱会", "剧本杀"]),
             (.lodging, 4, ["酒店", "民宿", "住宿", "宾馆", "旅店"]),
+            (.health, 4, ["药店", "买药", "医院", "挂号", "问诊", "体检", "牙科", "口腔", "诊所", "疫苗", "医保", "康复"]),
+            (.home, 4, ["房租", "水电", "电费", "燃气", "物业", "宽带", "家电", "家具", "维修", "家政", "搬家", "保洁"]),
+            (.social, 4, ["红包", "礼物", "送礼", "请客", "份子钱", "随礼", "家人", "父母", "生日礼物", "聚会"]),
         ]
 
         for (category, score, keywords) in rules {
@@ -216,11 +230,14 @@ struct CategoryRecommendService {
         switch category {
         case .dining: return 0
         case .transport: return 1
-        case .daily: return 2
-        case .shopping: return 3
+        case .shopping: return 2
+        case .daily: return 3
         case .entertainment: return 4
         case .lodging: return 5
-        case .other: return 6
+        case .health: return 6
+        case .home: return 7
+        case .social: return 8
+        case .other: return 9
         }
     }
 }

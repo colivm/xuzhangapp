@@ -3,6 +3,7 @@ import SwiftUI
 struct ScenePackSectionView: View {
     let scenePacks: [ScenePackDefinition]
     let isExpanded: Bool
+    let isPetMode: Bool
     let recordInk: Color
     let onQuickGenerate: () -> Void
     let onToggleExpanded: () -> Void
@@ -12,7 +13,7 @@ struct ScenePackSectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("小宠物的记账小帮手")
+                Text(isPetMode ? "小宠物的记账小帮手" : "生活备注小帮手")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(recordInk.opacity(0.88))
                 Spacer()

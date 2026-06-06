@@ -23,7 +23,11 @@ struct RecordView: View {
     private let recordAccent = AppColors.accent
     private let recordInk = AppColors.text
 
-    private let scenePacks = ScenePackCopyPool.definitions
+    private var visibleScenePacks: [ScenePackDefinition] {
+        ScenePackCopyPool.definitions.filter { pack in
+            settingsViewModel.petCompanionEnabled || pack.id != "pet"
+        }
+    }
 
     private var isMember: Bool {
         let tier = settingsViewModel.memberTier.lowercased()
@@ -34,21 +38,24 @@ struct RecordView: View {
         let categoryToPackId: [HomeItem.Category: String] = [
             .dining: "food",
             .transport: "commute",
-            .daily: "pet",
             .shopping: "travel",
+            .daily: settingsViewModel.petCompanionEnabled ? "pet" : "home",
             .entertainment: "travel",
             .lodging: "travel",
+            .health: "care",
+            .home: "home",
+            .social: "food",
             .other: "travel",
         ]
         if let packId = categoryToPackId[homeViewModel.selectedCategory],
-           scenePacks.contains(where: { $0.id == packId }) {
+           visibleScenePacks.contains(where: { $0.id == packId }) {
             return packId
         }
 
         let amount = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
         if amount <= 15 { return "commute" }
         if amount <= 45 { return "food" }
-        if amount <= 120 { return "pet" }
+        if amount <= 120 { return settingsViewModel.petCompanionEnabled ? "pet" : "home" }
         return "travel"
     }
 
@@ -61,7 +68,8 @@ struct RecordView: View {
             amount: amount,
             categoryContext: categoryContext,
             petName: settingsViewModel.petNickname,
-            historyItems: homeViewModel.items
+            historyItems: homeViewModel.items,
+            allowPetCopy: settingsViewModel.petCompanionEnabled
         )
         if !keepSelectedCategory {
             homeViewModel.selectCategory(pack.category)
@@ -539,10 +547,12 @@ struct RecordView: View {
     @ViewBuilder
     private var memberScenePackSection: some View {
         let quickPackId = guessScenePackId()
-        let quickPack = scenePacks.first(where: { $0.id == quickPackId }) ?? scenePacks[0]
+        let packs = visibleScenePacks
+        let quickPack = packs.first(where: { $0.id == quickPackId }) ?? packs[0]
         ScenePackSectionView(
-            scenePacks: scenePacks,
+            scenePacks: packs,
             isExpanded: scenePackExpanded,
+            isPetMode: settingsViewModel.petCompanionEnabled,
             recordInk: recordInk,
             onQuickGenerate: {
                 applyScenePack(quickPack, keepSelectedCategory: true)

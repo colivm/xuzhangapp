@@ -14,11 +14,14 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
     enum Category: String, Codable, CaseIterable, Identifiable {
         case dining = "餐饮"
-        case shopping = "购物"
         case transport = "交通"
-        case entertainment = "娱乐"
+        case shopping = "购物"
         case daily = "日用"
+        case entertainment = "娱乐"
         case lodging = "住宿"
+        case health = "健康"
+        case home = "居家"
+        case social = "人情"
         case other = "其他"
 
         var id: String { rawValue }
@@ -26,11 +29,14 @@ struct HomeItem: Identifiable, Codable, Equatable {
         var emoji: String {
             switch self {
             case .dining: return "🍜"
-            case .shopping: return "🛍️"
             case .transport: return "🚌"
-            case .entertainment: return "🎡"
+            case .shopping: return "🛍️"
             case .daily: return "🧸"
+            case .entertainment: return "🎡"
             case .lodging: return "🏨"
+            case .health: return "💊"
+            case .home: return "🏠"
+            case .social: return "🎁"
             case .other: return "🌟"
             }
         }
@@ -38,11 +44,14 @@ struct HomeItem: Identifiable, Codable, Equatable {
         var label: String {
             switch self {
             case .dining: return "吃饭"
-            case .shopping: return "购物"
             case .transport: return "出行"
-            case .entertainment: return "娱乐"
+            case .shopping: return "购物"
             case .daily: return "日用"
+            case .entertainment: return "娱乐"
             case .lodging: return "住宿"
+            case .health: return "健康"
+            case .home: return "居家"
+            case .social: return "人情"
             case .other: return "其他"
             }
         }
@@ -90,11 +99,14 @@ struct HomeItem: Identifiable, Codable, Equatable {
     static func inferEmotionTag(category: Category, amount: Double) -> String {
         switch category {
         case .dining: return amount >= 40 ? "小确幸时刻" : "日常补给"
-        case .shopping: return amount >= 100 ? "给自己加点好心情" : "生活补给"
         case .transport: return amount >= 20 ? "远途奔波" : "日常通勤"
-        case .entertainment: return amount >= 150 ? "难得放松" : "忙里偷闲"
+        case .shopping: return amount >= 100 ? "给自己加点好心情" : "生活补给"
         case .daily: return amount >= 50 ? "用心生活" : "细水长流"
+        case .entertainment: return amount >= 150 ? "难得放松" : "忙里偷闲"
         case .lodging: return amount >= 300 ? "旅途休憩" : "短暂停留"
+        case .health: return amount >= 100 ? "认真照顾自己" : "健康小照顾"
+        case .home: return amount >= 300 ? "把家安顿好" : "居家小补给"
+        case .social: return amount >= 100 ? "心意往来" : "人情小记"
         case .other: return amount >= 80 ? "特别时刻" : "日常碎片"
         }
     }

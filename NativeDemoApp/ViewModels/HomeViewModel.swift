@@ -607,16 +607,22 @@ final class HomeViewModel: ObservableObject {
         switch category {
         case .dining:
             return ["午餐简餐", "咖啡/奶茶", "晚餐聚餐"]
-        case .shopping:
-            return ["日常补货", "冲动消费", "电商下单"]
         case .transport:
             return ["地铁通勤", "打车出行", "停车/油费"]
+        case .shopping:
+            return ["日常补货", "电商下单", "给自己添点东西"]
+        case .daily:
+            return ["家用日化", "生活用品", "超市补给"]
         case .entertainment:
             return ["电影娱乐", "游戏充值", "周末放松"]
-        case .daily:
-            return ["家用日化", "药店采购", "生活用品"]
         case .lodging:
             return ["酒店住宿", "差旅住宿", "民宿短住"]
+        case .health:
+            return ["药店买药", "挂号问诊", "体检/护理"]
+        case .home:
+            return ["房租水电", "家里添置", "维修/物业"]
+        case .social:
+            return ["送礼心意", "家人开销", "红包/人情"]
         case .other:
             return ["杂项开支", "临时支出", "待分类记录"]
         }

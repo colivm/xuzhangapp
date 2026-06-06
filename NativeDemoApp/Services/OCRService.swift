@@ -311,6 +311,15 @@ final class OCRService {
         if lower.contains("地铁") || lower.contains("公交") || lower.contains("打车") || lower.contains("滴滴") || lower.contains("铁路") {
             return .transport
         }
+        if lower.contains("药店") || lower.contains("买药") || lower.contains("医院") || lower.contains("挂号") || lower.contains("体检") || lower.contains("牙科") || lower.contains("口腔") || lower.contains("诊所") {
+            return .health
+        }
+        if lower.contains("房租") || lower.contains("水电") || lower.contains("电费") || lower.contains("燃气") || lower.contains("物业") || lower.contains("宽带") || lower.contains("维修") || lower.contains("家电") {
+            return .home
+        }
+        if lower.contains("红包") || lower.contains("礼物") || lower.contains("送礼") || lower.contains("请客") || lower.contains("份子钱") || lower.contains("随礼") {
+            return .social
+        }
         if lower.contains("超市") || lower.contains("商城") || lower.contains("购物") || lower.contains("淘宝") || lower.contains("京东") {
             return .shopping
         }
