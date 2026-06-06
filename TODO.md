@@ -1,48 +1,46 @@
 # 叙账 · 进度清单
 
-> 更新时间：**2026-06-06**（代码核查：C1/F1 ✅ · B2.8 ❌）  
-> 分支：`feature/生活切片和会员权益` · 工作区含 Release 门禁 / D1 等未提交改动  
+> 更新时间：**2026-06-06**（代码核查：B2.8/B2.9/backend dev 路由 ✅）  
+> 分支：`feature/生活切片和会员权益`  
 > API：`https://api.xuzhangapp.com` · 登录：手机号验证码（v0.1）
 
 ---
 
 ## 🚀 下一步最先做什么（2026-06-06）
 
-> C1 / F1 / D1 已在代码中；**唯一未做的 Agent 任务是 B2.8**。下一步：**真机回归 + B2.8**。
+> B2.8 / B2.9 / backend 生产门禁已在代码中。**现在最缺：真机回归 + 栏 B 上架项**。
 
 | 顺序 | 做什么 | 为什么先 | 预计 |
 |------|--------|----------|------|
-| **1** | **Mac 拉最新 → Archive → TestFlight**，按下方「回归 11 条」 | 验 C1 动线、F1 OCR、D1 分享、Release 门禁 | 0.5～1 天 |
-| **2** | **Task B2.8 智能分类**（仍纯金额档，见 §核查） | 记账路径最后一格产品债 | Agent 1 次 |
-| **3** | 购买 success **welcome 文案** + 用尽次数话术走读 | 付费瞬间温度 | 0.5 天 |
-| **4** | **B2.5** 切片幕 UI 真机再看 | 内核「感染力」 | 1 天 |
-| 并行 | 栏 B：备案、API 证续期、Spug 短信 | 上架 blocker | — |
+| **1** | **Mac 拉最新 → Archive → TestFlight**，按下方「回归 13 条」 | 验 B2.8 分类、B2.9 宠物/天气、Release 全门禁 | 0.5～1 天 |
+| **2** | 购买 **welcome 文案** + 用尽次数话术走读 | 付费瞬间温度 | 0.5 天 |
+| **3** | **B2.5** 切片幕 UI 真机再看 | 内核「感染力」 | 1 天 |
+| 并行 | 栏 B：备案、Spug 短信、ASC Product ID | 上架 blocker | — |
 
-**TestFlight 回归 11 条（哲学对齐版）**
+**TestFlight 回归 13 条（哲学对齐版）**
 
 1. 新装 → **首记** Toast「用 10 秒叙一下今天」→ 自动开今日回放（C1）  
 2. 本周 ≥3 笔 → 看看花 Tab **角标** + 首页引导条（C1）  
 3. 记 3 笔本周 → 看看花默认 **本周** → 播生活切片 **2 遍**，旁白有变化  
-2. 展开场景包：travel 为 **旅行出发包**，副文案为 tagline（无「比如输入 ¥」）  
-3. 手改分类 → 再改金额 → **分类不被覆盖**（B2.7）  
-4. 小 AI 说 → **记一句本月收束** → 无下月 ¥ 数字  
-5. OCR 选图 → 确认弹层 → 确认导入；取消/失败不扣次  
-6. 登录 → 沙盒购 → verify → 会员切片无限  
-7. 杀进程 → 数据仍在  
-8. 设置页会员档显示 **年度会员** 非 yearly  
-9. 弱数据（1～2 笔）播切片，copy 不尴尬  
-10. 播完 CTA：主会员 / 次「想多聊一句」；**周播完** →「保存本周故事图」可导出 PNG（D1）  
-11. **Release Archive**：设置/会员页 **无** Debug 写 tier 入口（TC-MEM-06）
+4. 展开场景包：travel 为 **旅行出发包**，副文案为 tagline（无「比如输入 ¥」）  
+5. 手改分类 → 再改金额 → **分类不被覆盖**（B2.7）  
+6. **B2.8**：工作日早 8 点 ¥4 → 推荐偏 **交通**；12 点 ¥25 → 偏 **餐饮**；备注含「地铁」→ 交通  
+7. **B2.9**：开天气互动 → 定位授权；记一笔后宠物句 **非** 固定 4 句；点宠物 **无**「餐饮偏多/带饭」  
+8. 小 AI 说 → **记一句本月收束** → 无下月 ¥ 数字  
+9. OCR 选图 → 确认弹层 → 确认导入；取消/失败不扣次  
+10. 登录 → 沙盒购 → verify → 会员切片无限  
+11. 杀进程 → 数据仍在  
+12. 播完 CTA + **周播完**「保存本周故事图」导出 PNG（D1）  
+13. **Release Archive**：设置/会员页无 Debug 写 tier；生产 API 无 `dev/set-tier`（`NODE_ENV=production`）
 
-Agent 下一任务：**B2.8** → [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md)（**不是** B2.10）。
-
-### 代码核查（2026-06-06）
+### 代码核查（2026-06-06 更新）
 
 | 任务 | 结论 | 依据 |
 |------|------|------|
-| **C1 动线** | ✅ 已做 | `PlaybackRouteGuidance` 三态；首记 Toast+回放；`ContentView` 看看花角标；`StatsWebView` ≥5 笔文案 |
-| **F1 OCR** | ✅ 主链路 | `OCRConfirmSheet` 四步 + `OCRDraftPanel`；仅确认导入扣次；Release 无演示按钮 |
-| **B2.8 智能分类** | ❌ **未做** | `recommendCategory` 仍 `<30 餐饮 / <80 交通…`；无 `CategoryRecommendService` |
+| **backend dev/set-tier** | ✅ | `server.js` L87–99：`if (!isProduction)` 才注册 |
+| **B2.8 智能分类** | ✅ | `CategoryRecommendService.swift`；`HomeViewModel.recommendCategoryResult`；`RecordView` 监听 amount/title/date |
+| **B2.9 天气宠物** | ✅ | `WeatherCompanionService` + `PetCompanionCopy` + `PetCompanionService`；`enqueuePetMessage`；`Info.plist` 定位文案 |
+| **C1 / F1 / D1** | ✅ | 见前序核查 |
 
 ---
 
@@ -68,7 +66,10 @@ Agent 下一任务：**B2.8** → [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_
 - [x] ScenePackCopyPool：4 档 × 8 条 + stable hash + 历史增强
 - [x] TestFlight **首测闭环**（记、回放、切片、沙盒购、杀进程）
 - [x] **Release 门禁（iOS）**：移除设置/会员页 Debug 写 tier；`MemberNudgePolicyService` 统一 prod 频控
-- [x] **Task D1 播完分享图**：周切片播完「保存本周故事图」→ `WeeklyShareCardView.snapshot()` → 系统分享；`PlaybackService.buildWeeklyShareCardPayload`；AI Tab「生成周度分享卡」同源
+- [x] **Task D1 播完分享图**（周章播完分享）
+- [x] **Task B2.8 智能分类**：`CategoryRecommendService`（历史 40% + 时段 35% + 金额 15% + 备注 10%）
+- [x] **Task B2.9 天气宠物**：Open-Meteo + `PET_SCENE_RULES` + 记完账/点击宠物；删管控式硬编码
+- [x] **backend Release**：`dev/set-tier` 仅 `NODE_ENV !== production` 注册
 
 ### 对外与部署
 - [x] 生产 ECS、`api.xuzhangapp.com`、PG、ai-proxy 转发
@@ -82,12 +83,12 @@ Agent 下一任务：**B2.8** → [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_
 | **栏 A · 体验细调** | **栏 B · 接真环境 / 上架** |
 |---------------------|----------------------------|
 | **路径 1 · 新用户首记** | **真机全流程** |
-| - [x] C1：首记 → 今日回放 / 看看花引导 | - [ ] 回归 11 条（见上文 §最先做） |
+| - [x] C1：首记 → 今日回放 / 看看花引导 | - [ ] 回归 13 条（见上文 §最先做） |
 | - [x] 记 ≥3 笔 → 看看花角标/卡片提示 | - [ ] 生产 API 全链路再验 |
 | - [x] B2.7 分类锁定（真机再验） | |
-| - [x] **B2.10** 场景备注池（iOS）：`ScenePackCopyPool` 32×4 + stable hash + 历史增强 | |
-| - [ ] **B2.8 智能分类** — [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md) | |
-| - [ ] B2.9 天气宠物 — [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md)（可与 B2.8 合并 PR） | |
+| - [x] **B2.8 智能分类** — `CategoryRecommendService` | |
+| - [x] **B2.9 天气宠物** — `WeatherCompanionService` / `PetCompanionService` | |
+| - [x] **B2.10** 场景备注池 | |
 | - [x] A4 场景包哲学 + tagline | |
 | | |
 | **路径 2 · 生活切片** | **备案与合规** |
@@ -126,12 +127,13 @@ Agent 下一任务：**B2.8** → [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_
 
 ## 🧱 结构债状态（2026-06-06）
 
-> Insight 拆完后 **无 🔴 高风险**；B2.8 未做时不阻塞 TestFlight，但记账推荐仍偏工具感。
+> B2.8 Service 已抽出；`HomeViewModel` 仍偏胖，v0.2 可继续瘦身。
 
 | 级别 | 项 | 行数/位置 | 建议时机 |
 |------|-----|-----------|----------|
 | 🟢 已解 | 巨型 `ContentView` | **~702** Tab 壳 | — |
-| 🟡 中等 | `HomeViewModel` | ~866 | **B2.8** 抽 `CategoryRecommendService` |
+| 🟢 已解 | B2.8 分类 Service | `CategoryRecommendService.swift` | — |
+| 🟡 中等 | `HomeViewModel` | ~950+ | OCR/Insight 等可继续抽 |
 | 🟡 中等 | `InsightWebView` | ~805 | 可选迁 `WeeklyShareCardView` |
 | 🟡 低 | `WeeklyShareCardView` 位置 | `InsightWebView` 末尾 | 独立 Components（小改） |
 | 🟡 低 | 主题/编辑 sheet | `ContentView` 内 | v0.2 整理 |
@@ -141,10 +143,10 @@ Agent 下一任务：**B2.8** → [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_
 ## 进度一览
 
 ```text
-[████████████████████]  功能 MVP         ~92%  ⏳ B2.8
-[██████████████░░░░░░]  体验细调（栏 A）  ~65%  ✅ C1/F1/D1
-[██████████░░░░░░░░░░]  接真环境（栏 B）  ~50%  ✅ Release tier 门禁
-[████████████████░░░░]  结构健康度        ~75%  ✅ Tab 拆分；VM 待 B2.8
+[█████████████████████]  功能 MVP         ~95%  ✅ B2.8/B2.9
+[████████████████░░░░]  体验细调（栏 A）  ~75%  ⏳ B2.5 / welcome
+[███████████░░░░░░░░░]  接真环境（栏 B）  ~55%  ✅ iOS+backend Release 门禁
+[█████████████████░░░]  结构健康度        ~80%  ✅ Tab 拆分 + 分类 Service
 ```
 
 ---
@@ -155,10 +157,10 @@ Agent 下一任务：**B2.8** → [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_
 |------|------|
 | [`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) | §0 哲学、§0.5 议边界 |
 | [`PRODUCT_STAGE_REVIEW_AND_STORE_COPY_v0.1.md`](PRODUCT_STAGE_REVIEW_AND_STORE_COPY_v0.1.md) | 阶段总结、商店文案、§7 polish |
-| [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) | **B2.8**（待做）/ B2.5 / welcome |
-| [`AGENT_PROMPT_AI_ADVICE_BOUNDARY.md`](AGENT_PROMPT_AI_ADVICE_BOUNDARY.md) | Task A3（已完成 iOS） |
-| [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md) | Task B2.8（下一项） |
-| [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md) | Task B2.9（可与 B2.8 合并） |
+| [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) | B2.5 / welcome / ASC |
+| [`AGENT_PROMPT_AI_ADVICE_BOUNDARY.md`](AGENT_PROMPT_AI_ADVICE_BOUNDARY.md) | Task A3（✅） |
+| [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md) | Task B2.8（✅ 已完成） |
+| [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md) | Task B2.9（✅ 已完成） |
 | [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md) | Task A4（已完成；≠ B2.10） |
 | [`TEST_CASES_v0.1.md`](TEST_CASES_v0.1.md) | 全量测试用例 |
 | [`APP_STORE_LISTING.md`](APP_STORE_LISTING.md) | 上架截图与自检 |
@@ -177,3 +179,4 @@ Agent 下一任务：**B2.8** → [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_
 | 2026-06-06 | 代码核查：C1/F1 ✅；**B2.8 未做** |
 | 2026-06-06 | 新增 AGENT_PROMPT_B2.8；§10.15 任务编号对照 |
 | 2026-06-06 | 新增 AGENT_PROMPT_B2.9 天气宠物 + B2.8 合并说明 |
+| 2026-06-06 | 核查：B2.8/B2.9/backend dev 路由 ✅；回归 13 条 |

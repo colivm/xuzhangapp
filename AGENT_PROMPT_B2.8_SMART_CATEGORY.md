@@ -1,8 +1,7 @@
 # Agent Prompt · Task B2.8 — 智能分类推荐（仅 iOS）
 
-> 用法：**整段复制下方「复制发送」** 发给 Agent。  
-> **仅 iOS**；`web-preview` 本轮 **不要改**（除非用户另要求 Web 对齐）。  
-> **不要与 B2.10 混淆**：B2.10 = 场景包备注池（`ScenePackCopyPool`）；B2.8 = **记账默认分类**。
+> **状态：iOS 已完成（2026-06-06）**；下文供回归参考。  
+> 用法：**整段复制下方「复制发送」** 发给 Agent。
 
 ---
 
@@ -12,8 +11,8 @@
 |----|--------|----------|------|
 | **A4** | 场景包哲学 / tagline / 替词 | `ScenePackCopyPool.swift` 文案 | ✅ 已完成 |
 | **B2.7** | 手选分类锁定 | `categoryLockedByUser` | ✅ 已完成 |
-| **B2.8** | **智能分类推荐**（本 prompt） | `CategoryRecommendService` + `HomeViewModel` | ⏳ **待做** |
-| **B2.9** | 天气宠物陪伴 | [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md) | ⏳ 另任务 |
+| **B2.8** | **智能分类推荐**（本 prompt） | `CategoryRecommendService` + `HomeViewModel` | ✅ **已完成** |
+| **B2.9** | 天气宠物陪伴 | [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md) | ✅ **已完成** |
 | **B2.10** | 场景包 128 条池 + stable hash | `ScenePackCopyPool.swift` 结构 | ✅ iOS MVP 已有 |
 
 可选合并：**B2.8 + B2.9** 可一次 PR（见 [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) §10.15）；**B2.10 不要塞进 B2.8**。
@@ -111,3 +110,4 @@ B2.7 已做：用户手选分类后 `categoryLockedByUser`，推荐不得覆盖�
 | 日期 | 说明 |
 |------|------|
 | 2026-06-06 | 首版：B2.8 独立 prompt；与 A4/B2.10 编号对照 |
+| 2026-06-06 | 标 **iOS 已完成** |

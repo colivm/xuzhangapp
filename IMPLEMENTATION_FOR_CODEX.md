@@ -39,12 +39,13 @@
 | 今日回放 | `NativeDemoApp/Views/HomeView.swift` → `BillPlaybackSheet` | 播放状态机 |
 | 切片播放 | `NativeDemoApp/Views/SummaryPlaybackSheet.swift` | 播完 CTA + **D1「保存本周故事图」** ✅ |
 | 回放聚合 | `NativeDemoApp/Services/PlaybackService.swift` | 周/月 summary + `buildWeeklyShareCardPayload` ✅ |
-| 账单 / 分类 | `NativeDemoApp/ViewModels/HomeViewModel.swift` | B2.7 锁定 ✅；**B2.8 ❌** 仍 `amount<30→餐饮` |
+| 账单 / 分类 | `CategoryRecommendService.swift` + `HomeViewModel` | B2.8 ✅ 历史+时段+金额+备注 |
+| 天气宠物 | `WeatherCompanionService` / `PetCompanionService` / `PetCompanionCopy` | B2.9 ✅ |
 | 小 AI 说 | `NativeDemoApp/Views/InsightWebView.swift` | A3 ✅；含 `WeeklyShareCardView` + AI Tab 分享入口 |
 | 会员 / IAP | `MemberPricingView.swift`、`SettingsViewModel.verifyIAPPurchase` | StoreKit + verify ✅ |
 | 壳与 Tab | `NativeDemoApp/ContentView.swift` | **~702 行** Tab 壳 + `AppColors` / `RecordEditSheet` |
 | 周度分享卡 UI | `InsightWebView.swift` → `WeeklyShareCardView` | D1 ✅；可选迁 `Views/Components/` |
-| ViewModel | `HomeViewModel.swift` | **~866 行**；B2.8 时抽分类推荐 |
+| ViewModel | `HomeViewModel.swift` | B2.8 已抽 `CategoryRecommendService`；仍偏胖 🟡 |
 | Web 参考（iOS 优先，Web 滞后） | `web-preview/app.js` | 勿默认与 iOS 同步改 |
 | 会员 Nudge | `NativeDemoApp/Services/MemberFlowService.swift` | 播完场景 |
 
@@ -64,14 +65,14 @@ B2.6 PlaybackCopyPool 接入（iOS MVP）                ✅
 B2.7 分类锁定                                       ✅ 骨架
 InsightWebView 从 ContentView 拆分                  ✅
 C1 动线引导（首记、角标、播完 CTA）                   ✅
-B2.8 智能分类推荐                                     ⏳ **未做**（仍纯金额档）
+B2.8 智能分类推荐                                     ✅
 B2.5 生活切片叙事/UI polish                           ⏳
-B2.9 天气宠物                                         ⏳
+B2.9 天气宠物                                         ✅
 B2.10 场景包文案池（iOS MVP）                          ✅
 C2 OCR / 今日回放次数                                ✅ 主链路
 D1 播完分享图（周章）                                  ✅
 F1 OCR 详情页 + 去演示按钮                           ✅ 主链路（Debug 演示按钮可选删）
-E1 StoreKit + 生产验单配置 + Release 门禁（iOS）        ✅ tier 门禁 / ⏳ ASC 生产 + backend dev 路由
+E1 StoreKit + Release 门禁（iOS + backend dev 路由）   ✅
 ```
 
 ---
@@ -1273,8 +1274,8 @@ iOS `HomeViewModel.recommendCategory` 仅按金额硬编码：
 |----|------|--------|-----------------|----------|
 | **A4** | 场景包哲学对齐 | tagline、旅行出发包、5 条替词 | [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md) | ✅ iOS |
 | **B2.7** | 分类锁定 | `categoryLockedByUser` | §10.12 | ✅ |
-| **B2.8** | **智能分类推荐** | `CategoryRecommendService` | [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md) | ⏳ |
-| **B2.9** | 天气宠物 | Open-Meteo + `PET_SCENE_RULES` | [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md) | ⏳ |
+| **B2.8** | 智能分类推荐 | `CategoryRecommendService` | [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md) | ✅ |
+| **B2.9** | 天气宠物 | Open-Meteo + `PET_SCENE_RULES` | [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md) | ✅ |
 | **B2.10** | 场景备注池扩展 | 四包×4档×8条 + stable hash | §10.16 | ✅ iOS MVP |
 
 **可选合并（仅 B2.8 + B2.9）**：若希望 Codex **一次 PR** 完成「记账更聪明 + 宠物有温度」，将 §10.13 + §10.14 两段 prompt 合并发送，并注明：**先做 B2.7 依赖检查 → B2.8 → B2.9**，验收分节勾选。**不要**把 B2.10 / A4 写进同一条 prompt。

@@ -26,9 +26,9 @@
 
 | 维度 | 完成度 | 含义 |
 |------|--------|------|
-| 功能 MVP | **~90%** | 记、切片、会员、OCR 确认、IAP verify 客户端已齐 |
-| 体验细调（栏 A） | **~58%** | A3/A4/B2.6/B2.7/**D1** 已落地；B2.8/C1/B2.5 待做 |
-| 接真环境 / 上架（栏 B） | **~50%** | iOS Release tier 门禁 ✅；备案 + backend dev 路由待收口 |
+| 功能 MVP | **~95%** | B2.8/B2.9/C1/F1/D1 已齐；⏳ B2.5 / welcome |
+| 体验细调（栏 A） | **~75%** | 记账路径基本完成；⏳ 切片 UI 感染力 |
+| 接真环境 / 上架（栏 B） | **~55%** | iOS+backend Release 门禁 ✅；备案 / ASC 待做 |
 
 **阶段定位（2026-06-06 更新）**
 
@@ -36,7 +36,7 @@
 |------|------|
 | 可以继续 TestFlight 吗？ | **可以** — 先跑 [`TODO.md`](TODO.md) **回归 11 条**（含 Release 门禁 + `0e315c4`） |
 | 可以开订阅正式收钱吗？ | **暂不建议** — 备案、ASC 生产 Product、backend dev 路由、购买 welcome 未齐（**iOS Release 已无 Debug 写 tier**） |
-| 最大杠杆？ | **真机验证感染力** + **B2.8 智能分类** + **C1 首播动线** |
+| 最大杠杆？ | **真机回归 13 条** + **B2.5 切片感染力** + **购买 welcome** |
 
 详见 [`TODO.md`](TODO.md) §**下一步最先做什么**。
 
@@ -300,7 +300,7 @@ web-preview  ───┤       └── ai-proxy :8787 → DeepSeek
 |------|-----|------|
 | 🟢 | `ContentView` Tab 拆分 | **~702 行**；`RecordView` / `StatsWebView` / **`InsightWebView`** 已独立 |
 | 🟡 | `InsightWebView` ~805 行 | 含 `WeeklyShareCardView`；D1 ✅，可选迁 Components |
-| 🟡 | `HomeViewModel` ~866 行 | B2.8 时抽分类推荐 |
+| 🟢 | `HomeViewModel` 分类 | `CategoryRecommendService` 已抽 | ✅ B2.8 |
 | 🟡 | `WeeklyShareCardView` | 嵌在 `InsightWebView`，建议迁 `Views/Components/` |
 | 🟡 | `PlaybackCopyPool` 全量 | MVP 已接，可对照 md 补条数 |
 | 🟡 | Windows/Mac 分支、ECS pull | 协作与运维习惯 |
@@ -323,11 +323,9 @@ web-preview  ───┤       └── ai-proxy :8787 → DeepSeek
 ### 4.4 建议实施顺序（与产品对齐）
 
 ```text
-1. Mac ↔ Windows 分支对齐 → Archive → TestFlight（回归 11 条）
-2. **B2.8 智能分类**（见 [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) §10.13）
-3. C1 动线 + 购买 welcome 文案
-4. B2.5 切片 UI polish
-5. 可选：`WeeklyShareCardView` → `Views/Components/`；`HomeViewModel` 按域瘦身
+1. Mac ↔ Windows 对齐 → Archive → TestFlight（**回归 13 条**）
+2. 购买 welcome 文案 + B2.5 切片 UI polish
+3. 栏 B：备案、ASC Product ID、Spug 短信
 ```
 
 > **不必再先拆 `ContentView`**：Tab 级拆分 ✅；`InsightWebView` / VM 瘦身可随 B2.8 排期（D1 已落地）。
@@ -556,9 +554,10 @@ web-preview  ───┤       └── ai-proxy :8787 → DeepSeek
 ### 7.2 记账省力（支撑「叙」之前少摩擦）
 
 - [x] B2.7 分类锁定（`categoryLockedByUser`，真机再验）
-- [ ] B2.8 智能分类（历史 + 时段 + 金额 + 关键词）— **下一步工程 #2**
-- [x] A4 场景包哲学 + tagline；B2.10 池 32×4 已有，防连重复可选
-- [ ] B2.9 天气宠物（对齐 Web）
+- [x] B2.8 智能分类（`CategoryRecommendService`）
+- [x] B2.9 天气宠物（Open-Meteo + 场景规则）
+- [x] A4 场景包哲学 + tagline；B2.10 池 32×4
+- [ ] B2.9 真机：雨天/高温场景句再走一遍（代码已有）
 
 ### 7.3 会员与付费文案
 
@@ -605,4 +604,4 @@ web-preview  ───┤       └── ai-proxy :8787 → DeepSeek
 | 2026-06-06 | §4.2 结构债更新：Tab 拆分 ✅；InsightWebView/VM 为 🟡 可排期 |
 | 2026-06-06 | §4.4 明确：不必再先拆 ContentView |
 | 2026-06-06 | iOS/backend Release tier 门禁 ✅；backend `dev/set-tier` 生产不注册 |
-| 2026-06-06 | D1 播完分享图 ✅；体验细调 ~58% |
+| 2026-06-06 | B2.8/B2.9 ✅；§2/§4/§7 进度更新 |

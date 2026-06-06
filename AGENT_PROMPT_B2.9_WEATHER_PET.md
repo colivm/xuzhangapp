@@ -1,9 +1,9 @@
 # Agent Prompt · Task B2.9 — 天气场景宠物陪伴（仅 iOS）
 
+> **状态：iOS 已完成（2026-06-06）**；下文供回归参考。  
 > 用法：**整段复制下方「复制发送」** 发给 Agent。  
 > **仅 iOS**；`web-preview` 本轮 **不要改**（作规则对照源）。  
-> **格式**：「复制发送」为单一 ` ```text ` 块，块内**不要**再嵌套 ` ```swift ` / ` ``` `，否则复制会截断。  
-> 可与 **B2.8** 合并一次 PR：先 B2.8 → 再 B2.9，验收分节勾选（见文末）。
+> **格式**：「复制发送」为单一 ` ```text ` 块，块内**不要**再嵌套 ` ``` `，否则复制会截断。
 
 ---
 
@@ -12,7 +12,7 @@
 | ID | 做什么 | 主要文件 | 状态 |
 |----|--------|----------|------|
 | **B2.8** | 智能分类推荐 | `CategoryRecommendService` | ⏳ 另任务 / 可合并 |
-| **B2.9** | **天气宠物陪伴**（本 prompt） | `WeatherCompanionService` + `PetCompanionService` | ⏳ **待做** |
+| **B2.9** | **天气宠物陪伴**（本 prompt） | `WeatherCompanionService` + `PetCompanionService` | ✅ **已完成** |
 | **B2.10** | 场景备注池 | `ScenePackCopyPool.swift` | ✅ 已完成 |
 
 设置里已有 `petCompanionEnabled`、`weatherCompanionEnabled` 开关，但 iOS **未接** Open-Meteo / 场景规则；记完账 `petMessage` 仍是 4 条固定句；点宠物按钮有 **管控式** 硬编码（须替换）。
@@ -170,3 +170,4 @@
 |------|------|
 | 2026-06-06 | 首版：B2.9 独立 prompt；合并 B2.8 说明；强调删管控式宠物句 |
 | 2026-06-06 | 修复「复制发送」嵌套代码块导致截断；开关矩阵改列表 |
+| 2026-06-06 | 标 **iOS 已完成** |
