@@ -98,12 +98,12 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
     static func inferEmotionTag(category: Category, amount: Double) -> String {
         switch category {
-        case .dining: return amount >= 40 ? "小确幸时刻" : "日常补给"
-        case .transport: return amount >= 20 ? "远途奔波" : "日常通勤"
-        case .shopping: return amount >= 100 ? "给自己加点好心情" : "生活补给"
-        case .daily: return amount >= 50 ? "用心生活" : "细水长流"
+        case .dining: return amount >= 40 ? "小确幸时刻" : "日常一口"
+        case .transport: return amount >= 20 ? "去远一点" : "日常出行"
+        case .shopping: return amount >= 100 ? "给自己添好心情" : "顺手添置"
+        case .daily: return amount >= 50 ? "认真打理日子" : "细水长流"
         case .entertainment: return amount >= 150 ? "难得放松" : "忙里偷闲"
-        case .lodging: return amount >= 300 ? "旅途休憩" : "短暂停留"
+        case .lodging: return amount >= 300 ? "好好停一晚" : "短暂停留"
         case .health: return amount >= 100 ? "认真照顾自己" : "健康小照顾"
         case .home: return amount >= 300 ? "把家安顿好" : "居家小补给"
         case .social: return amount >= 100 ? "心意往来" : "人情小记"

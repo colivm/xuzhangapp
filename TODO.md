@@ -100,6 +100,8 @@
 | - [x] D1 播完分享图 — §10.9（周章；月章 v0.2） | - [ ] ASC 隐私问卷 + [`APP_STORE_LISTING.md`](APP_STORE_LISTING.md) |
 | - [x] **D1.1** 分享海报叙事化（代码）— [`AGENT_PROMPT_D1.1`](AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md) | |
 | - [ ] **D1.1 真机验收** — 回归第 13 条：故事图非报表感 | |
+| - [ ] **心意往来包** B2.11 — [`AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md`](AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md) | |
+| - [ ] **情绪标签 polish** B2.12（7 类；health/home/social 不动）— [`AGENT_PROMPT_B2.12_EMOTION_TAGS.md`](AGENT_PROMPT_B2.12_EMOTION_TAGS.md) | |
 | - [ ] 免费次数话术与 App 内 enforce 再走一遍 | |
 | | |
 | **路径 3 · 智能导入** | **生产安全** |
@@ -167,6 +169,9 @@
 | [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md) | Task B2.8（✅ 已完成） |
 | [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md) | Task B2.9（✅ 已完成） |
 | [`AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md`](AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md) | Task D1.1 分享海报（✅ 代码；真机验 ⏳） |
+| [`AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md`](AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md) | Task B2.11 心意往来包（⏳） |
+| [`AGENT_PROMPT_B2.12_EMOTION_TAGS.md`](AGENT_PROMPT_B2.12_EMOTION_TAGS.md) | Task B2.12 情绪标签 7 类（⏳） |
+| [`CATEGORY_SCENE_COPY_AUDIT_v0.1.md`](CATEGORY_SCENE_COPY_AUDIT_v0.1.md) | 分类/场景包内核审计 |
 | [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md) | Task A4（已完成；≠ B2.10） |
 | [`TEST_CASES_v0.1.md`](TEST_CASES_v0.1.md) | 全量测试用例 |
 | [`APP_STORE_LISTING.md`](APP_STORE_LISTING.md) | 上架截图与自检 |
