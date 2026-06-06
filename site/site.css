@@ -206,6 +206,22 @@ a:hover {
   color: var(--subtext);
 }
 
+.trust-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.trust-row span {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--subtext);
+  font-size: 12px;
+}
+
 .hero-card {
   padding: 28px 24px;
   background: var(--card);

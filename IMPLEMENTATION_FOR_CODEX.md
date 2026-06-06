@@ -37,13 +37,13 @@
 | 场景包数据 | `NativeDemoApp/Services/ScenePackCopyPool.swift` | A4 哲学对齐 ✅ |
 | 切片旁白池 | `NativeDemoApp/Services/PlaybackCopyPool.swift` | B2.6 接入 ✅ |
 | 今日回放 | `NativeDemoApp/Views/HomeView.swift` → `BillPlaybackSheet` | 播放状态机 |
-| 切片播放 | `NativeDemoApp/Views/SummaryPlaybackSheet.swift` | B2.5 UI polish 目标 |
-| 回放聚合 | `NativeDemoApp/Services/PlaybackService.swift` | 周/月 summary |
-| 账单 / 分类 | `NativeDemoApp/ViewModels/HomeViewModel.swift` | B2.7 锁定 ✅；**B2.8 待改** `recommendCategory` |
-| 小 AI 说 | `NativeDemoApp/Views/InsightWebView.swift` | A3 去预算化 ✅；~805 行，D1 时可再拆 Section |
+| 切片播放 | `NativeDemoApp/Views/SummaryPlaybackSheet.swift` | 播完 CTA + **D1「保存本周故事图」** ✅ |
+| 回放聚合 | `NativeDemoApp/Services/PlaybackService.swift` | 周/月 summary + `buildWeeklyShareCardPayload` ✅ |
+| 账单 / 分类 | `NativeDemoApp/ViewModels/HomeViewModel.swift` | B2.7 锁定 ✅；**B2.8 ❌** 仍 `amount<30→餐饮` |
+| 小 AI 说 | `NativeDemoApp/Views/InsightWebView.swift` | A3 ✅；含 `WeeklyShareCardView` + AI Tab 分享入口 |
 | 会员 / IAP | `MemberPricingView.swift`、`SettingsViewModel.verifyIAPPurchase` | StoreKit + verify ✅ |
 | 壳与 Tab | `NativeDemoApp/ContentView.swift` | **~702 行** Tab 壳 + `AppColors` / `RecordEditSheet` |
-| 周度分享卡 UI | `InsightWebView.swift` → `WeeklyShareCardView` | D1 前建议迁 `Views/Components/` |
+| 周度分享卡 UI | `InsightWebView.swift` → `WeeklyShareCardView` | D1 ✅；可选迁 `Views/Components/` |
 | ViewModel | `HomeViewModel.swift` | **~866 行**；B2.8 时抽分类推荐 |
 | Web 参考（iOS 优先，Web 滞后） | `web-preview/app.js` | 勿默认与 iOS 同步改 |
 | 会员 Nudge | `NativeDemoApp/Services/MemberFlowService.swift` | 播完场景 |
@@ -63,14 +63,14 @@ A4 场景包哲学对齐（iOS）                             ✅
 B2.6 PlaybackCopyPool 接入（iOS MVP）                ✅
 B2.7 分类锁定                                       ✅ 骨架
 InsightWebView 从 ContentView 拆分                  ✅
-C1 动线引导（首记、角标、播完 CTA）                   ⏳ 下一步 #3
-B2.8 智能分类推荐                                     ⏳ 下一步 #2
+C1 动线引导（首记、角标、播完 CTA）                   ✅
+B2.8 智能分类推荐                                     ⏳ **未做**（仍纯金额档）
 B2.5 生活切片叙事/UI polish                           ⏳
 B2.9 天气宠物                                         ⏳
 B2.10 场景包防连重复（可选）                          ⏳
 C2 OCR / 今日回放次数                                ✅ 主链路
-D1 播完分享图                                         ⏳
-F1 OCR 详情页 + 去演示按钮                           ⏳ 进行中
+D1 播完分享图（周章）                                  ✅
+F1 OCR 详情页 + 去演示按钮                           ✅ 主链路（Debug 演示按钮可选删）
 E1 StoreKit + 生产验单配置 + Release 门禁（iOS）        ✅ tier 门禁 / ⏳ ASC 生产 + backend dev 路由
 ```
 
@@ -172,6 +172,8 @@ E1 StoreKit + 生产验单配置 + Release 门禁（iOS）        ✅ tier 门�
 
 ### Task C1 — 动线引导
 
+> **状态：iOS 已完成**（`3bb63e9` 及后续；`PlaybackRouteGuidance` + Tab 角标 + 首记 Toast）。
+
 **范围**
 
 - 首记后引导今日回放（§6.2）。  
@@ -221,9 +223,9 @@ E1 StoreKit + 生产验单配置 + Release 门禁（iOS）        ✅ tier 门�
 
 ### Task D1 — 播完分享图
 
-**范围**
+> **状态：iOS 已完成（2026-06-06）** — 周章播完「保存本周故事图」；月章海报 v0.2。
 
-- **仅**在 `SummaryPlaybackSheet` 播完页提供「保存故事图」。  
+**范围**  
 - 数据与 **B2.5 后的** `buildWeekSummary` / `teaserLine` 同源；与 AI Tab「周度分享卡」共用聚合。  
 - **分享图 = 一屏海报摘要**（叙事标题 + 适度图表），**不是**把 Sheet 五幕拼成一张报表。  
 - 视觉：复用 `WeeklyShareCardView` 的 **主题色/渐变/品牌**，主标题优先 `teaserLine` 或播完收束句。  
@@ -1350,3 +1352,4 @@ struct ScenePackDefinition {
 | 2026-06-06 | §2.2 代码锚点更新（StatsWebView/RecordView）；§3 任务状态；链至 TODO |
 | 2026-06-06 | §2.2：`InsightWebView`、ContentView ~702；结构债 🟡 说明 |
 | 2026-06-06 | E1：iOS Release tier 门禁 ✅；§10.10 删 Debug 模拟开通说明 |
+| 2026-06-06 | D1 ✅：§2.2/§3/§4 Task D1 状态；周播完分享图 |

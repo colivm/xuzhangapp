@@ -30,6 +30,7 @@ import { buildTodayPlayback } from "./playback.js";
 import { IAPVerifyError, verifyAppStoreTransaction } from "./iapService.js";
 
 const app = express();
+const isProduction = process.env.NODE_ENV === "production";
 app.use(cors({ origin: config.allowOrigin === "*" ? true : config.allowOrigin }));
 app.use(express.json({ limit: "1mb" }));
 
@@ -83,17 +84,19 @@ app.get("/v1/member/me", requireAuth, async (req, res) => {
   res.json({ ok: true, ...session });
 });
 
-app.post("/v1/member/dev/set-tier", requireAuth, async (req, res) => {
-  const tier = String(req.body?.tier || "free");
-  const allow = new Set(["free", "monthly", "yearly", "lifetime"]);
-  if (!allow.has(tier)) return res.status(400).json({ ok: false, error: "INVALID_TIER" });
-  const next = {
-    memberTier: tier,
-    memberExpiresAt: tier === "lifetime" || tier === "free" ? null : new Date(Date.now() + 30 * 86400000).toISOString(),
-  };
-  await setSessionByUserId(req.user.userId, next);
-  res.json({ ok: true, ...next });
-});
+if (!isProduction) {
+  app.post("/v1/member/dev/set-tier", requireAuth, async (req, res) => {
+    const tier = String(req.body?.tier || "free");
+    const allow = new Set(["free", "monthly", "yearly", "lifetime"]);
+    if (!allow.has(tier)) return res.status(400).json({ ok: false, error: "INVALID_TIER" });
+    const next = {
+      memberTier: tier,
+      memberExpiresAt: tier === "lifetime" || tier === "free" ? null : new Date(Date.now() + 30 * 86400000).toISOString(),
+    };
+    await setSessionByUserId(req.user.userId, next);
+    res.json({ ok: true, ...next });
+  });
+}
 
 app.get("/v1/ledger", requireAuth, async (req, res) => {
   const rows = await getLedgersByUserId(req.user.userId);

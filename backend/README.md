@@ -26,7 +26,7 @@ npm run dev
 - `POST /v1/auth/sms/verify`
 - `POST /v1/auth/wechat/login` (stub)
 - `GET /v1/member/me`
-- `POST /v1/member/dev/set-tier` (dev only)
+- `POST /v1/member/dev/set-tier` (dev only; `NODE_ENV=production` 下不注册)
 - `GET /v1/ledger`
 - `POST /v1/ledger`
 - `DELETE /v1/ledger/:id`

@@ -27,7 +27,7 @@
 | 维度 | 完成度 | 含义 |
 |------|--------|------|
 | 功能 MVP | **~90%** | 记、切片、会员、OCR 确认、IAP verify 客户端已齐 |
-| 体验细调（栏 A） | **~55%** | A3/A4/B2.6/B2.7 已落地；B2.8/C1/B2.5 待做 |
+| 体验细调（栏 A） | **~58%** | A3/A4/B2.6/B2.7/**D1** 已落地；B2.8/C1/B2.5 待做 |
 | 接真环境 / 上架（栏 B） | **~50%** | iOS Release tier 门禁 ✅；备案 + backend dev 路由待收口 |
 
 **阶段定位（2026-06-06 更新）**
@@ -299,13 +299,13 @@ web-preview  ───┤       └── ai-proxy :8787 → DeepSeek
 | 级别 | 项 | 说明 |
 |------|-----|------|
 | 🟢 | `ContentView` Tab 拆分 | **~702 行**；`RecordView` / `StatsWebView` / **`InsightWebView`** 已独立 |
-| 🟡 | `InsightWebView` ~805 行 | 债搬家非消失；D1 时可拆 Section |
+| 🟡 | `InsightWebView` ~805 行 | 含 `WeeklyShareCardView`；D1 ✅，可选迁 Components |
 | 🟡 | `HomeViewModel` ~866 行 | B2.8 时抽分类推荐 |
 | 🟡 | `WeeklyShareCardView` | 嵌在 `InsightWebView`，建议迁 `Views/Components/` |
 | 🟡 | `PlaybackCopyPool` 全量 | MVP 已接，可对照 md 补条数 |
 | 🟡 | Windows/Mac 分支、ECS pull | 协作与运维习惯 |
 | 🟢 | iOS Release tier 门禁 | 已删 `SettingsView` / `MemberPricingView` Debug 写 tier；Nudge 统一 prod |
-| 🟡 | backend `dev/set-tier` | 生产仍注册；须 `NODE_ENV`/路由守卫或仅 staging |
+| 🟢 | backend `dev/set-tier` | 已加 `NODE_ENV=production` 守卫；生产不注册 |
 | 🟡 | OCR 演示按钮 | F1 polish |
 
 ### 4.3 上架 blocker（实施视角）
@@ -317,7 +317,7 @@ web-preview  ───┤       └── ai-proxy :8787 → DeepSeek
 ⏳ 短信真实通道或收紧 dev 验证码 123456
 ⏳ API 子域 SSL 续期、进程守护
 ✅ iOS Release：无 Debug 直接写 memberTier（设置/会员页）
-⏳ backend：`POST /v1/member/dev/set-tier` 生产不可达或鉴权收紧
+✅ backend：`POST /v1/member/dev/set-tier` 在 `NODE_ENV=production` 下不注册
 ```
 
 ### 4.4 建议实施顺序（与产品对齐）
@@ -330,7 +330,7 @@ web-preview  ───┤       └── ai-proxy :8787 → DeepSeek
 5. 可选：`WeeklyShareCardView` → `Views/Components/`；`HomeViewModel` 按域瘦身
 ```
 
-> **不必再先拆 `ContentView`**：Tab 级拆分 ✅；`InsightWebView` / VM 瘦身可随 B2.8、D1 排期。
+> **不必再先拆 `ContentView`**：Tab 级拆分 ✅；`InsightWebView` / VM 瘦身可随 B2.8 排期（D1 已落地）。
 
 并行：ECS SSH 公钥、栏 B 备案。
 
@@ -604,4 +604,5 @@ web-preview  ───┤       └── ai-proxy :8787 → DeepSeek
 | 2026-06-06 | §2/§7 同步 `0e315c4`；链至 TODO §最先做 |
 | 2026-06-06 | §4.2 结构债更新：Tab 拆分 ✅；InsightWebView/VM 为 🟡 可排期 |
 | 2026-06-06 | §4.4 明确：不必再先拆 ContentView |
-| 2026-06-06 | iOS Release tier 门禁 ✅；backend `dev/set-tier` 仍 🟡 |
+| 2026-06-06 | iOS/backend Release tier 门禁 ✅；backend `dev/set-tier` 生产不注册 |
+| 2026-06-06 | D1 播完分享图 ✅；体验细调 ~58% |

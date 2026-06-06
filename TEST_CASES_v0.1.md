@@ -178,9 +178,9 @@ TestFlight 前      → 全文 P0 + P1（按模块勾选）
 | TC-SLICE-09 | P1 | All | 播完 | 主 CTA 会员/下周；次 CTA AI | 符合 §6.4；AI 非主按钮 |
 | TC-SLICE-10 | P1 | All | 宠物开/关 | 各播一遍 | warm/plain 旁白切换 |
 | TC-SLICE-11 | P1 | All | — | 切「本年」 | 生活切片卡片隐藏或即将上线 |
-| TC-SLICE-12 | P2 | All | 播放中 | 不应出现分享按钮（D1 前） | 统计卡仅「播放」 |
+| TC-SLICE-12 | P2 | All | 播放中 | 不应出现分享按钮 | 统计卡仅「播放」；分享仅在播完页 |
 | TC-SLICE-13 | P2 | All | B2.5 后 | 观感自查 | 旁白为主，非报表 KPI 霸屏 |
-| TC-SLICE-14 | P2 | D1 后 | 周播完 | 「保存故事图」 | 仅播完页；PNG 数据正确 |
+| TC-SLICE-14 | P2 | iOS | 周播完 | 「保存本周故事图」 | 导出 PNG；与 AI Tab 周卡数据同源 |
 
 ---
 
@@ -207,7 +207,7 @@ TestFlight 前      → 全文 P0 + P1（按模块勾选）
 | TC-AI-05 | P1 | All | — | 历史列表 | 近 30 条可浏览 |
 | TC-AI-06 | P1 | All | — | 文案自查 | 无「超支/浪费/克制/乱花钱」等评判词 |
 | TC-AI-07 | P2 | All | 会员 | 月度/周度深度（若有） | 可生成或 fallback |
-| TC-AI-08 | P2 | iOS | — | 周度分享卡（AI Tab） | 与当前周数据一致 |
+| TC-AI-08 | P2 | iOS | — | 周度分享卡（AI Tab） | 与播完分享图同源 payload |
 
 ---
 

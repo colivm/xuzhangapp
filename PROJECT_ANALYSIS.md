@@ -653,7 +653,7 @@ feature/*  →  feature/xuzhangapp-staging  →  xuzhang1.0-release-2026
 
 4. **Staging 尚未完全部署**：避免与 prod 混用目录或 `.env`
 
-5. **上架前必须**：真机验证、备案、关 dev 验证码、配置 `APP_PROXY_TOKEN`；**iOS Release tier 门禁 ✅**；生产 backend 仍须禁 `dev/set-tier`
+5. **上架前必须**：真机验证、备案、关 dev 验证码、配置 `APP_PROXY_TOKEN`；**iOS/backend Release tier 门禁 ✅**
 
 
 

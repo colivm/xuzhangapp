@@ -682,7 +682,7 @@ private let benefits = [
 ### Phase D — 云端与增值
 
 - [ ] `GET /v1/playback/summary?range=week|month`  
-- [ ] 切片分享图、云端缓存  
+- [x] 切片分享图（周章播完 + AI Tab；`WeeklyShareCardView`）  
 - [ ] 年度长卷 + 与季/年 AI 联动  
 
 ---
