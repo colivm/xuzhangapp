@@ -21,14 +21,14 @@ struct MemberPricingView: View {
     ]
 
     private let benefits = [
-        ("🎬 周/月生活切片无限回看", "统计页「本周生活切片」「本月生活章」不限次数播放；用章节卡片看懂这段时间花了什么、节奏如何。核心卖点。"),
-        ("📝 场景备注包 + 宠物专属昵称", "通勤/吃货/宠物/旅行四包一键备注；自定义昵称（2～6 字）贯穿切片与记账旁白。"),
-        ("📷 OCR 智能识票不限次", "拍照导入账单；免费用户每日 3 次尝鲜，会员不限（可设软上限防滥用，商店仍写「不限」）。"),
-        ("☁️ 云端备份 + 纯净无广告", "登录后账单可同步云端、换机不丢；全程无营销弹窗。天气/季节暖心旁白加强随会员模板更完整。"),
-        ("💬 小 AI 说 · 播后可选深聊（不限次）", "生活切片讲完后，若想多一句交谈式建议再用；含季/年深度复盘（需 ai-proxy 会员 JWT）。增强项，非首图卖点。"),
+        ("🎬 周/月生活切片无限回看", "在「看看花」里不限次数回看本周生活切片与本月生活章，把一段时间的花费讲成清楚的生活脉络。"),
+        ("📝 场景备注包 + 宠物专属昵称", "通勤、吃货、宠物、旅行四类一键备注；自定义昵称会出现在记账旁白与生活切片里。"),
+        ("📷 OCR 智能识票不限次", "导入微信/支付宝单笔账单详情截图，识别后先确认，再写入账单。免费用户每日 3 次，会员不限次。"),
+        ("☁️ 云端备份 + 纯净无广告", "登录后可同步账单与会员状态，换机时更容易恢复；App 内不放广告。"),
+        ("💬 小 AI 说 · 播后可选深聊", "生活切片讲完后，想再多一句建议时可以继续聊，语气保持温和、不说教。"),
     ]
 
-    private let freeQuotaFootnote = "免费体验：本周生活切片每自然周 1 次 · 本月生活章终生 3 次 · OCR 每日 3 次 · 今日流水回放每日 1 次。开通会员后上述回访与识票不限。"
+    private let freeQuotaFootnote = "免费体验：本周生活切片每自然周 1 次 · 本月生活章终生 3 次 · OCR 每日 3 次 · 今日生活回放每日 1 次。开通会员后，周/月切片与 OCR 可不限次使用。"
 
     private var isMember: Bool {
         let tier = settingsViewModel.memberTier.lowercased()
@@ -90,11 +90,11 @@ struct MemberPricingView: View {
 
     private var heroSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("✨ 升级会员，解锁更多温柔陪伴")
+            Text("让生活切片一直可回看")
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(AppColors.text)
 
-            Text("让小宠物陪你，更轻松地把钱花明白")
+            Text("会员解锁周/月切片无限回看、OCR 不限次和云端备份。")
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
 
@@ -120,7 +120,7 @@ struct MemberPricingView: View {
                 .buttonStyle(.plain)
                 .padding(.top, 4)
 
-                Text("可随时取消，数据仍保留在本地。")
+                Text("订阅可随时在 App Store 账户设置中取消。")
                     .font(.system(size: 11))
                     .foregroundStyle(AppColors.subtext.opacity(0.8))
             }
@@ -234,7 +234,7 @@ struct MemberPricingView: View {
             debugPurchaseButtons
             #endif
 
-            Text("订阅可随时在 App Store / 账户设置中取消。首月推介价以 App Store Connect 配置为准。")
+            Text("订阅可随时在 App Store 账户设置中取消。新用户首月优惠以购买页显示为准。")
                 .font(.system(size: 11))
                 .foregroundStyle(AppColors.subtext.opacity(0.8))
                 .padding(.top, 4)
@@ -248,7 +248,7 @@ struct MemberPricingView: View {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 32))
                 .foregroundStyle(AppColors.accent)
-            Text("你已是\(settingsViewModel.memberTier)会员")
+            Text("你已开通\(memberTierDisplayName(settingsViewModel.memberTier))")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(AppColors.text)
             Text("所有会员权益已解锁，感谢你的信任与陪伴。")
@@ -271,7 +271,7 @@ struct MemberPricingView: View {
     // MARK: - Privacy
 
     private var privacyNote: some View {
-        Text("你的账单数据始终保存在本地，会员权益仅用于解锁功能与服务。我们不会将你的数据分享给第三方，也不会发送营销骚扰信息。")
+        Text("默认不登录也能记账。开启云端备份后，仅同步必要账单数据与会员状态；OCR 原图不会上传。")
             .font(.system(size: 11))
             .foregroundStyle(AppColors.subtext.opacity(0.75))
             .lineSpacing(3)
@@ -464,6 +464,15 @@ struct MemberPricingView: View {
     private func displayPrice(for plan: MemberPlan) -> String {
         guard let tier = IAPTier(rawValue: plan.id) else { return plan.price }
         return iapService.displayPrice(for: tier, fallback: plan.price)
+    }
+
+    private func memberTierDisplayName(_ tier: String) -> String {
+        switch tier.lowercased() {
+        case "monthly": return "月度会员"
+        case "yearly": return "年度会员"
+        case "lifetime": return "永久会员"
+        default: return "会员"
+        }
     }
 }
 

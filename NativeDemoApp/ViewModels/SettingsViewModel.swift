@@ -179,7 +179,7 @@ final class SettingsViewModel: ObservableObject {
         let client = AuthService(baseURL: backendBaseURL)
         do {
             try await client.sendSMSCode(phone: phone)
-            authMessage = "验证码已发送（开发环境固定为后端 DEV_ALLOW_SMS_CODE）。"
+            authMessage = "验证码已发送，请查看短信。"
         } catch {
             authMessage = error.localizedDescription
         }
@@ -271,7 +271,7 @@ final class SettingsViewModel: ObservableObject {
         LocalStore.saveSettings(settings)
     }
 
-    private static let localDefaultDisplayName = "叙帐用户"
+    private static let localDefaultDisplayName = "叙账用户"
 
     private static func isBackendDefaultDisplayName(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)

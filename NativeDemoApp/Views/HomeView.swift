@@ -264,7 +264,7 @@ struct HomeView: View {
             return
         }
         guard dailyQuotaStore.canPlayTodayPlayback(isMember: homeViewModel.hasMemberAccess) else {
-            todayPlaybackQuotaMessage = "今日免费回放次数已用完（1/1）。会员可无限回看今日流水回放。"
+            todayPlaybackQuotaMessage = "今日免费回放次数已用完（1/1）。会员可无限回看今日生活回放。"
             return
         }
         dailyQuotaStore.markTodayPlaybackStarted(isMember: homeViewModel.hasMemberAccess)

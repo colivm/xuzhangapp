@@ -399,7 +399,7 @@ final class HomeViewModel: ObservableObject {
         guard total > 0 else {
             return "今天还没记支出，先从一笔小额开始就很好。"
         }
-        return "叙帐用户，今天总支出 \(formatCurrency(total))，主要花在\(topCategory)。继续保持每笔小额记录就很好。"
+        return "叙账用户，今天总支出 \(formatCurrency(total))，主要花在\(topCategory)。继续保持每笔小额记录就很好。"
     }
 
     var weekExpenseTotal: Double {
@@ -749,7 +749,7 @@ final class HomeViewModel: ObservableObject {
         analyticsService.track("member_cta_clicked", props: ["scene": scene.rawValue, "channel": "ios_home"])
         memberNudgeCopy = nil
         activeMemberNudgeScene = nil
-        syncStatusMessage = "已为你打开会员路径（演示）：请到设置页完成开通。"
+        syncStatusMessage = "已为你打开会员路径：请到设置页完成开通。"
     }
 
     func consumeRouteGuidance(_ guidance: PlaybackRouteGuidance? = nil) {
@@ -797,7 +797,7 @@ final class HomeViewModel: ObservableObject {
     nonisolated static func promptTemplate(todayTotal: Double, weeklyAverage: Double, monthlyTotal: Double, topCategories: String) -> String {
         """
         [System]
-        你是“叙帐”的温和消费复盘助手。请根据消费聚合数据，输出简短复盘和一条可执行建议，不说教、不批判、不提供投资买卖建议。
+        你是“叙账”的温和消费复盘助手。请根据消费聚合数据，输出简短复盘和一条可执行建议，不说教、不批判、不提供投资买卖建议。
 
         [User]
         日期：\(dayKey(for: .now))

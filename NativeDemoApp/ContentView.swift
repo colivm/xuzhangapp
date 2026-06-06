@@ -2196,7 +2196,7 @@ struct InsightWebView: View {
                             }
                             .buttonStyle(.plain)
                         } else {
-                            Text("季度 / 年度复盘可在后续版本接入远程 AI。")
+                            Text("季度 / 年度复盘正在打磨中，先从每周和每月慢慢回看。")
                                 .font(.system(size: 12))
                                 .foregroundStyle(AppColors.subtext)
                         }
@@ -2502,7 +2502,7 @@ struct InsightWebView: View {
     private func generateAndShareWeeklyCard() {
         guard let payload = PlaybackService().buildWeeklyShareCardPayload(from: homeViewModel.items) else { return }
         let petMode = settingsViewModel.petCompanionEnabled
-        let nick = settingsViewModel.displayName.isEmpty ? "叙帐用户" : settingsViewModel.displayName
+        let nick = settingsViewModel.displayName.isEmpty ? "叙账用户" : settingsViewModel.displayName
         let card = WeeklyShareCardView(
             payload: payload,
             isPetMode: petMode,
@@ -2529,7 +2529,7 @@ struct WeeklyShareCardView: View {
     let subtitle: String
     let periodText: String
     var isPetMode: Bool = true
-    var nickname: String = "叙帐用户"
+    var nickname: String = "叙账用户"
 
     private var t: ShareCardTheme { isPetMode ? .pet : .neutral }
 
@@ -2568,7 +2568,7 @@ struct WeeklyShareCardView: View {
         subtitle: String = "温柔回看，不必苛责，按自己的节奏慢慢生活。",
         periodText: String? = nil,
         isPetMode: Bool = true,
-        nickname: String = "叙帐用户"
+        nickname: String = "叙账用户"
     ) {
         self.weekTotal = weekTotal
         self.topCategory = topCategory
@@ -2582,7 +2582,7 @@ struct WeeklyShareCardView: View {
         self.nickname = nickname
     }
 
-    init(payload: WeeklyShareCardPayload, isPetMode: Bool = true, nickname: String = "叙帐用户") {
+    init(payload: WeeklyShareCardPayload, isPetMode: Bool = true, nickname: String = "叙账用户") {
         self.init(
             weekTotal: payload.weekTotal,
             topCategory: payload.topCategory,
@@ -2617,7 +2617,7 @@ struct WeeklyShareCardView: View {
 
             // Content
             VStack(alignment: .leading, spacing: 0) {
-                Text("叙帐 · 周度分享卡")
+                Text("叙账 · 周度分享卡")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(t.accent)
                     .lineLimit(1)
@@ -2662,7 +2662,7 @@ struct WeeklyShareCardView: View {
                     .frame(maxWidth: .infinity)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
-                Text("来自 叙帐 · 温柔回看每一周")
+                Text("来自 叙账 · 温柔回看每一周")
                     .font(.system(size: 10))
                     .foregroundStyle(t.footerSub)
                     .frame(maxWidth: .infinity)

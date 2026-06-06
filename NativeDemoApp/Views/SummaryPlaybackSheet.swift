@@ -6,7 +6,7 @@ struct SummaryPlaybackSheet: View {
     let petEnabled: Bool
     let isMember: Bool
     var weeklySharePayload: WeeklyShareCardPayload?
-    var shareNickname: String = "叙帐用户"
+    var shareNickname: String = "叙账用户"
     var onCompleted: (Double) -> Void
     var onShowMemberPricing: (() -> Void)? = nil
     var onOpenWeekly: (() -> Void)? = nil
@@ -458,7 +458,7 @@ struct SummaryPlaybackSheet: View {
         let card = WeeklyShareCardView(
             payload: payload,
             isPetMode: petEnabled,
-            nickname: shareNickname.isEmpty ? "叙帐用户" : shareNickname
+            nickname: shareNickname.isEmpty ? "叙账用户" : shareNickname
         )
         guard let image = card.snapshot() else { return }
         shareImage = ShareImage(image: image)

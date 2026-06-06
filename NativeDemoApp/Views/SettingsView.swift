@@ -115,7 +115,7 @@ struct SettingsView: View {
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(AppColors.text)
 
-            sectionBody("数据仅保存在你的手机，不上传云端。")
+            sectionBody("默认仅保存在你的手机；登录并开启同步后，才会上传云端备份。")
 
             // Display name
             settingField(label: "显示名称") {
@@ -125,12 +125,12 @@ struct SettingsView: View {
                     .onSubmit { commitDisplayName() }
             }
 
-            // iCloud sync
-            settingToggle("iCloud 备份（可选）", isOn: Binding(
+            // Cloud sync
+            settingToggle("云端备份（可选）", isOn: Binding(
                 get: { settingsViewModel.syncEnabled },
                 set: { settingsViewModel.syncEnabled = $0 }
             ))
-            settingHelper("开启后数据会同步到 iCloud，换机更方便。")
+            settingHelper("开启后账单会同步到云端，换机时可恢复。")
 
             // AI toggle
             settingToggle("开启 AI 智能建议（需联网）", isOn: Binding(
@@ -168,7 +168,7 @@ struct SettingsView: View {
 
     private func commitDisplayName() {
         let trimmed = draftDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let next = trimmed.isEmpty ? "叙帐用户" : trimmed
+        let next = trimmed.isEmpty ? "叙账用户" : trimmed
         draftDisplayName = next
         if settingsViewModel.displayName != next {
             settingsViewModel.displayName = next
@@ -266,13 +266,12 @@ struct SettingsView: View {
                     .foregroundStyle(AppColors.text)
             }
 
-            // Debug/status display until StoreKit purchase + server receipt validation is wired.
             HStack {
                 Text("会员档位")
                     .font(.system(size: 14))
                     .foregroundStyle(AppColors.subtext)
                 Spacer()
-                Text(settingsViewModel.memberTier)
+                Text(memberTierDisplayName(settingsViewModel.memberTier))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(AppColors.text)
             }
@@ -419,7 +418,7 @@ struct SettingsView: View {
             Text("数据与隐私")
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(AppColors.text)
-            Text("默认本地存储，无需登录即可完整使用。如果开启同步，后续版本会使用加密远程同步。")
+            Text("默认本地存储，无需登录即可完整使用。开启云端备份后，仅同步必要账单数据与会员状态。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
         }
@@ -538,6 +537,15 @@ struct SettingsView: View {
                 .shadow(color: isActive ? AppColors.accent.opacity(0.2) : .clear, radius: 4, y: 2)
         }
         .buttonStyle(.plain)
+    }
+
+    private func memberTierDisplayName(_ tier: String) -> String {
+        switch tier.lowercased() {
+        case "monthly": return "月度会员"
+        case "yearly": return "年度会员"
+        case "lifetime": return "永久会员"
+        default: return "免费用户"
+        }
     }
 }
 

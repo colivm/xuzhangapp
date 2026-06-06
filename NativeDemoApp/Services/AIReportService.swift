@@ -71,7 +71,7 @@ final class AIReportService {
         )
 
         let systemContent = """
-        你是“叙帐”的温和消费复盘助手。
+        你是“叙账”的温和消费复盘助手。
         根据用户消费快照输出 JSON，字段必须是 summary/action/encourage。
         不要输出投资建议，不要说教。
         """

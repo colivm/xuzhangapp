@@ -53,7 +53,7 @@ struct AppSettings: Codable, Equatable {
     var aiEndpoint: String
     var aiModel: String
     var remoteAIMonthlyLimit: Int
-    /// 叙帐后端根地址。生产环境固定走 `productionBackendBaseURL`。
+    /// 叙账后端根地址。生产环境固定走 `productionBackendBaseURL`。
     var backendBaseURL: String
     /// 云端用户 ID，登录成功后由后端返回；未登录为空。
     var cloudUserId: String
@@ -66,7 +66,7 @@ struct AppSettings: Codable, Equatable {
     }
 
     static let `default` = AppSettings(
-        displayName: "叙帐用户",
+        displayName: "叙账用户",
         notificationsEnabled: true,
         appearance: .system,
         biometricLockEnabled: false,
@@ -107,7 +107,7 @@ extension AppSettings {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? "叙帐用户"
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? "叙账用户"
         notificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
         appearance = try container.decodeIfPresent(Appearance.self, forKey: .appearance) ?? .system
         biometricLockEnabled = try container.decodeIfPresent(Bool.self, forKey: .biometricLockEnabled) ?? false
