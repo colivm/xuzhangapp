@@ -14,6 +14,8 @@ struct InsightWebView: View {
     @State private var monthlyReport: HomeViewModel.MonthlyInsightReport?
     @State private var monthlyAIStatus: AIStatusPill?
     @State private var monthlyTrialModal: MonthlyTrialModal?
+    @State private var isSavingWeeklyShareCard = false
+    @State private var weeklyShareSaveMessage: String?
     private let trialTotal = 5
 
     private struct AIStatusPill: Equatable {
@@ -71,6 +73,11 @@ struct InsightWebView: View {
                     softActionButton("生成周度分享卡") {
                         homeViewModel.markWeeklyShareGenerated()
                         generateAndShareWeeklyCard()
+                    }
+                    if let weeklyShareSaveMessage {
+                        Text(weeklyShareSaveMessage)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
                     }
                     if !homeViewModel.weekTopCategoryText.isEmpty && homeViewModel.weekTopCategoryText != "暂无" {
                         softActionButton("标记常花类目") {
@@ -537,7 +544,8 @@ struct InsightWebView: View {
     // MARK: - Share Card Generation
 
     private func generateAndShareWeeklyCard() {
-        guard let payload = PlaybackService().buildWeeklyShareCardPayload(from: homeViewModel.items) else { return }
+        guard !isSavingWeeklyShareCard,
+              let payload = PlaybackService().buildWeeklyShareCardPayload(from: homeViewModel.items) else { return }
         let petMode = settingsViewModel.petCompanionEnabled
         let nick = settingsViewModel.displayName.isEmpty ? "叙账用户" : settingsViewModel.displayName
         let card = WeeklyShareCardView(
@@ -546,10 +554,16 @@ struct InsightWebView: View {
             nickname: nick
         )
         guard let img = card.snapshot() else { return }
-        let av = UIActivityViewController(activityItems: [img], applicationActivities: nil)
-        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let vc = scene.windows.first?.rootViewController {
-            vc.present(av, animated: true)
+        isSavingWeeklyShareCard = true
+        weeklyShareSaveMessage = nil
+        Task {
+            do {
+                try await PhotoLibrarySaveService.shared.saveImageToLibrary(img)
+                weeklyShareSaveMessage = "已保存到相册。"
+            } catch {
+                weeklyShareSaveMessage = (error as? LocalizedError)?.errorDescription ?? "保存失败，请稍后再试。"
+            }
+            isSavingWeeklyShareCard = false
         }
     }
 }

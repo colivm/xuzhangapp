@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct SummaryPlaybackSheet: View {
     let playback: SummaryPlayback
@@ -18,7 +17,8 @@ struct SummaryPlaybackSheet: View {
     @State private var playbackDone = false
     @State private var completionReported = false
     @State private var playbackTask: Task<Void, Never>?
-    @State private var shareImage: ShareImage?
+    @State private var isSavingShareCard = false
+    @State private var shareSaveMessage: String?
 
     private var currentChapter: SummaryChapter? {
         guard !playback.chapters.isEmpty else { return nil }
@@ -72,9 +72,6 @@ struct SummaryPlaybackSheet: View {
         .onDisappear {
             reportCompletionIfNeeded(progress: progressFraction)
             playbackTask?.cancel()
-        }
-        .sheet(item: $shareImage) { item in
-            ActivityShareSheet(activityItems: [item.image])
         }
     }
 
@@ -385,7 +382,7 @@ struct SummaryPlaybackSheet: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    shareWeeklyStoryCard()
+                    saveWeeklyStoryCard()
                 } label: {
                     Text("保存本周故事图")
                         .font(.system(size: 15, weight: .semibold))
@@ -395,7 +392,14 @@ struct SummaryPlaybackSheet: View {
                         .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .disabled(weeklySharePayload == nil)
+                .disabled(weeklySharePayload == nil || isSavingShareCard)
+
+                if let shareSaveMessage {
+                    Text(shareSaveMessage)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
                 Button {
                     dismiss()
@@ -453,15 +457,25 @@ struct SummaryPlaybackSheet: View {
         }
     }
 
-    private func shareWeeklyStoryCard() {
-        guard let payload = weeklySharePayload else { return }
+    private func saveWeeklyStoryCard() {
+        guard let payload = weeklySharePayload, !isSavingShareCard else { return }
         let card = WeeklyShareCardView(
             payload: payload,
             isPetMode: petEnabled,
             nickname: shareNickname.isEmpty ? "叙账用户" : shareNickname
         )
         guard let image = card.snapshot() else { return }
-        shareImage = ShareImage(image: image)
+        isSavingShareCard = true
+        shareSaveMessage = nil
+        Task {
+            do {
+                try await PhotoLibrarySaveService.shared.saveImageToLibrary(image)
+                shareSaveMessage = "已保存到相册。"
+            } catch {
+                shareSaveMessage = (error as? LocalizedError)?.errorDescription ?? "保存失败，请稍后再试。"
+            }
+            isSavingShareCard = false
+        }
     }
 
     private func startPlayback() {
@@ -500,20 +514,6 @@ struct SummaryPlaybackSheet: View {
     }
 }
 
-private struct ShareImage: Identifiable {
-    let id = UUID()
-    let image: UIImage
-}
-
-private struct ActivityShareSheet: UIViewControllerRepresentable {
-    let activityItems: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
 
 private struct RatioRing: View {
     let progress: Double

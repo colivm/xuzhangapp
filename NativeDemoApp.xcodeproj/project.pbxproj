@@ -42,6 +42,7 @@
 		B20000010000000000000001 /* WeatherCompanionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000040000000000000001 /* WeatherCompanionService.swift */; };
 		B20000020000000000000001 /* PetCompanionCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000050000000000000001 /* PetCompanionCopy.swift */; };
 		B20000030000000000000001 /* PetCompanionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000060000000000000001 /* PetCompanionService.swift */; };
+		B20000070000000000000001 /* PhotoLibrarySaveService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000080000000000000001 /* PhotoLibrarySaveService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -83,6 +84,7 @@
 		B20000040000000000000001 /* WeatherCompanionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherCompanionService.swift; sourceTree = "<group>"; };
 		B20000050000000000000001 /* PetCompanionCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetCompanionCopy.swift; sourceTree = "<group>"; };
 		B20000060000000000000001 /* PetCompanionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetCompanionService.swift; sourceTree = "<group>"; };
+		B20000080000000000000001 /* PhotoLibrarySaveService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibrarySaveService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -154,6 +156,7 @@
 				B20000040000000000000001 /* WeatherCompanionService.swift */,
 				B20000050000000000000001 /* PetCompanionCopy.swift */,
 				B20000060000000000000001 /* PetCompanionService.swift */,
+				B20000080000000000000001 /* PhotoLibrarySaveService.swift */,
 				A100004A0000000000000001 /* PlaybackCopyPool.swift */,
 				A100002E0000000000000001 /* MemberFlowService.swift */,
 				A100003F0000000000000001 /* ScenePackCopyPool.swift */,
@@ -307,6 +310,7 @@
 				B20000010000000000000001 /* WeatherCompanionService.swift in Sources */,
 				B20000020000000000000001 /* PetCompanionCopy.swift in Sources */,
 				B20000030000000000000001 /* PetCompanionService.swift in Sources */,
+				B20000070000000000000001 /* PhotoLibrarySaveService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
