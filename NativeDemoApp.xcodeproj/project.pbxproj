@@ -37,6 +37,7 @@
 		A10000470000000000000001 /* StatsWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000480000000000000001 /* StatsWebView.swift */; };
 		A10000490000000000000001 /* PlaybackCopyPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004A0000000000000001 /* PlaybackCopyPool.swift */; };
 		A100004B0000000000000001 /* ScenePackSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004C0000000000000001 /* ScenePackSectionView.swift */; };
+		A100004D0000000000000001 /* InsightWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004E0000000000000001 /* InsightWebView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -73,6 +74,7 @@
 		A10000480000000000000001 /* StatsWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsWebView.swift; sourceTree = "<group>"; };
 		A100004A0000000000000001 /* PlaybackCopyPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackCopyPool.swift; sourceTree = "<group>"; };
 		A100004C0000000000000001 /* ScenePackSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackSectionView.swift; sourceTree = "<group>"; };
+		A100004E0000000000000001 /* InsightWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightWebView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -163,6 +165,7 @@
 				A10000180000000000000001 /* HomeView.swift */,
 				A10000460000000000000001 /* RecordView.swift */,
 				A10000480000000000000001 /* StatsWebView.swift */,
+				A100004E0000000000000001 /* InsightWebView.swift */,
 				A100004C0000000000000001 /* ScenePackSectionView.swift */,
 				A10000190000000000000001 /* SettingsView.swift */,
 				A10000390000000000000001 /* MemberPricingView.swift */,
@@ -287,6 +290,7 @@
 				A10000470000000000000001 /* StatsWebView.swift in Sources */,
 				A10000490000000000000001 /* PlaybackCopyPool.swift in Sources */,
 				A100004B0000000000000001 /* ScenePackSectionView.swift in Sources */,
+				A100004D0000000000000001 /* InsightWebView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
