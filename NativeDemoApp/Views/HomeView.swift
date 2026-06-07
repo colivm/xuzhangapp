@@ -35,12 +35,15 @@ struct HomeView: View {
                 .glassPanelWithTint(radius: 24, padding: 24)
 
                 // ── Quick Record Button (matching web .mega-btn) ──
-                Button("＋ 快速记账") {
+                Button {
                     onQuickRecord()
+                } label: {
+                    Text("＋ 快速记账")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 72)
+                        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 }
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: 72)
                 .background(
                     LinearGradient(
                         colors: [
@@ -58,6 +61,7 @@ struct HomeView: View {
                 )
                 .shadow(color: AppColors.accent.opacity(0.30), radius: 16, x: 0, y: 6)
                 .buttonStyle(.plain)
+                .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
 
                 if let guidance = homeViewModel.activeRouteGuidance,
                    guidance != .firstRecordTodayPlayback {
