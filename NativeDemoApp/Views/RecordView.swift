@@ -317,13 +317,13 @@ struct RecordView: View {
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(recordInk.opacity(0.82))
 
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Button {
-                    focusedField = nil
-                    withAnimation(.easeInOut(duration: 0.16)) {
-                        amountPadActive = true
-                    }
-                } label: {
+            Button {
+                focusedField = nil
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    amountPadActive = true
+                }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
                     HStack(spacing: 0) {
                     Text("¥")
                         .font(.system(size: 28, weight: .semibold, design: .rounded))
@@ -338,10 +338,12 @@ struct RecordView: View {
                         .contentTransition(.numericText())
                     }
                 }
-                .buttonStyle(.plain)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 14)
+            .buttonStyle(.plain)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(Color.white.opacity(0.78))
@@ -357,6 +359,7 @@ struct RecordView: View {
                         lineWidth: 1
                     )
             )
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
             Text("输入金额，我帮你自动归类")
                 .font(.system(size: 12))
