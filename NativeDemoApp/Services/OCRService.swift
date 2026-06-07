@@ -51,7 +51,7 @@ enum OCRServiceError: LocalizedError {
         case .noRecognizedText:
             return "没有识别到账单文字，请重新截图。"
         case .detailPageRequired:
-            return "请打开单笔账单详情页再截图"
+            return "没能识别到账单金额，请换一张更清晰的账单截图，或手动补一下金额。"
         }
     }
 }
@@ -84,8 +84,17 @@ final class OCRService {
 
         let confidence = candidates.map(\.confidence).reduce(0, +) / Float(max(candidates.count, 1))
         let provider = detectProvider(from: text)
-        guard !looksLikeListScreenshot(lines: lines, provider: provider) else {
-            throw OCRServiceError.detailPageRequired
+
+        if looksLikeListScreenshot(lines: lines, provider: provider) {
+            let listDrafts = parseListReceipts(
+                lines: lines,
+                rawText: text,
+                confidence: Double(confidence),
+                provider: provider
+            )
+            if !listDrafts.isEmpty {
+                return listDrafts
+            }
         }
 
         let draft: OCRReceiptDraft?
@@ -98,17 +107,33 @@ final class OCRService {
             draft = parseGeneric(lines: lines, rawText: text, confidence: Double(confidence))
         }
 
-        guard let draft, draft.amount > 0 else {
+        if let draft, draft.amount > 0 {
+            return [draft]
+        }
+
+        let fallbackDrafts = parseListReceipts(
+            lines: lines,
+            rawText: text,
+            confidence: Double(confidence),
+            provider: provider
+        )
+        guard !fallbackDrafts.isEmpty else {
             throw OCRServiceError.detailPageRequired
         }
-        return [draft]
+        return fallbackDrafts
     }
 
     private func detectProvider(from text: String) -> OCRProvider {
         if text.contains("支付宝") || text.contains("蚂蚁") || text.contains("花呗") || text.contains("余额宝") {
             return .alipay
         }
+        if text.contains("搜索交易记录") || text.contains("收支分析") || text.contains("本月已省") || text.contains("贴纸") {
+            return .alipay
+        }
         if text.contains("微信支付") || text.contains("微信") || text.contains("零钱") || text.contains("财付通") {
+            return .wechat
+        }
+        if text.contains("查找交易") || text.contains("收支统计") || text.contains("全部账单") {
             return .wechat
         }
         return .generic
@@ -116,7 +141,10 @@ final class OCRService {
 
     private func looksLikeListScreenshot(lines: [String], provider: OCRProvider) -> Bool {
         let text = lines.joined(separator: "\n")
-        let listHints = ["账单列表", "全部交易", "交易记录", "本月支出", "本月收入", "筛选", "月账单", "全部账单"]
+        let listHints = [
+            "账单列表", "全部交易", "交易记录", "本月支出", "本月收入", "筛选", "月账单", "全部账单",
+            "查找交易", "搜索交易记录", "收支统计", "收支分析", "全部", "支出", "转账", "退款", "订单",
+        ]
         let detailHints = [
             "账单详情", "交易详情", "订单详情", "商品说明", "商品名称", "商家名称", "商户名称", "商户全称",
             "交易对象", "收款方", "收款账户", "创建时间", "付款时间", "支付时间", "交易时间", "当前状态",
@@ -170,7 +198,7 @@ final class OCRService {
 
     private func parseGeneric(lines: [String], rawText: String, confidence: Double) -> OCRReceiptDraft? {
         guard let amount = currencyCandidates(in: rawText).first ?? plainAmountCandidates(in: rawText).max(),
-              let title = fallbackTitle(from: lines) else {
+              let title = fallbackTitle(from: lines) ?? lines.first(where: isUsableTitle) else {
             return nil
         }
         return OCRReceiptDraft(
@@ -182,6 +210,166 @@ final class OCRService {
             rawText: rawText,
             provider: .generic
         )
+    }
+
+    private func parseListReceipts(
+        lines: [String],
+        rawText: String,
+        confidence: Double,
+        provider: OCRProvider
+    ) -> [OCRReceiptDraft] {
+        var drafts: [OCRReceiptDraft] = []
+        var seenKeys = Set<String>()
+        let referenceDate = statementReferenceDate(in: rawText) ?? .now
+
+        for index in lines.indices {
+            let line = lines[index]
+            guard !shouldSkipListAmountLine(line) else { continue }
+            guard let amountInfo = signedListAmountInfo(in: line), amountInfo.amount < 0 else { continue }
+
+            let windowStart = max(0, index - 3)
+            let windowEnd = min(lines.count, index + 5)
+            let windowLines = Array(lines[windowStart..<windowEnd])
+            let windowText = windowLines.joined(separator: "\n")
+            let title = amountInfo.inlineTitle ?? nearbyListTitle(lines: lines, amountIndex: index, provider: provider) ?? "账单记录"
+            let amount = abs(amountInfo.amount)
+            guard amount > 0, amount < 1_000_000 else { continue }
+
+            let date = listDate(in: windowText, now: referenceDate)
+                ?? firstDate(in: windowText)
+                ?? firstDate(in: rawText)
+                ?? referenceDate
+            let category = listCategory(
+                provider: provider,
+                title: title,
+                windowLines: windowLines,
+                windowText: windowText
+            )
+            let dayKey = Calendar.current.startOfDay(for: date).timeIntervalSince1970
+            let key = "\(title)|\(Int((amount * 100).rounded()))|\(Int(dayKey))"
+            guard !seenKeys.contains(key) else { continue }
+            seenKeys.insert(key)
+
+            drafts.append(
+                OCRReceiptDraft(
+                    title: title,
+                    amount: amount,
+                    date: date,
+                    category: category,
+                    confidence: confidence,
+                    rawText: windowText,
+                    provider: provider
+                )
+            )
+        }
+
+        return Array(drafts.prefix(12))
+    }
+
+    private func signedListAmountInfo(in line: String) -> (amount: Double, inlineTitle: String?)? {
+        let normalized = line
+            .replacingOccurrences(of: "−", with: "-")
+            .replacingOccurrences(of: "—", with: "-")
+            .replacingOccurrences(of: "￥", with: "¥")
+            .replacingOccurrences(of: ",", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let pattern = #"^(?:(.+?)\s*)?-\s*(?:¥\s*)?([0-9]{1,6}(?:\.[0-9]{1,2})?)(?:\s*(?:等待确认收货|交易成功|支付成功|已全额退款|已退款(?:\(¥?\s*[0-9]+(?:\.[0-9]{1,2})?\))?))?$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let nsText = normalized as NSString
+        guard let match = regex.firstMatch(in: normalized, range: NSRange(location: 0, length: nsText.length)),
+              match.numberOfRanges > 2 else {
+            return nil
+        }
+        let title: String?
+        if match.range(at: 1).location != NSNotFound {
+            let rawTitle = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            title = isLikelyListTitle(rawTitle) ? rawTitle : nil
+        } else {
+            title = nil
+        }
+        let value = nsText.substring(with: match.range(at: 2))
+        return (-(Double(value) ?? 0), title)
+    }
+
+    private func nearbyListTitle(lines: [String], amountIndex: Int, provider: OCRProvider) -> String? {
+        switch provider {
+        case .alipay:
+            return nearbyTitle(lines: lines, amountIndex: amountIndex, offsets: [-1, -2, -3, 1])
+        case .wechat:
+            return nearbyTitle(lines: lines, amountIndex: amountIndex, offsets: [-1, -2, 1, -3])
+        case .generic:
+            return nearbyTitle(lines: lines, amountIndex: amountIndex, offsets: [-1, -2, 1, -3, 2])
+        }
+    }
+
+    private func nearbyTitle(lines: [String], amountIndex: Int, offsets: [Int]) -> String? {
+        for offset in offsets {
+            let candidateIndex = amountIndex + offset
+            guard lines.indices.contains(candidateIndex) else { continue }
+            let candidate = lines[candidateIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            if isLikelyListTitle(candidate) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
+    private func isLikelyListTitle(_ value: String) -> Bool {
+        guard isUsableTitle(value) else { return false }
+        let blocked = [
+            "¥", "￥", "金额", "时间", "订单", "单号", "支付", "付款", "收款", "交易", "账单", "详情",
+            "当前状态", "成功", "失败", "付款方式", "筛选", "全部", "月支出", "月收入", "余额", "零钱",
+            "银行卡", "微信支付", "支付宝", "支出", "收入", "本月", "搜索", "查找", "等待确认收货",
+            "日用百货", "文化休闲", "餐饮美食", "教育培训", "服饰装扮", "爱车养车", "充值缴费",
+            "商业服务", "转账红包", "投资理财", "已全额退款", "已退款", "交易关闭",
+        ]
+        return !blocked.contains { value.contains($0) }
+    }
+
+    private func shouldSkipListAmountLine(_ line: String) -> Bool {
+        let skipWords = ["收入 ¥", "收入￥", "支出 ¥", "支出￥", "本月已省", "转入", "提现", "充值", "还款"]
+        return skipWords.contains { line.contains($0) }
+    }
+
+    private func listCategory(
+        provider: OCRProvider,
+        title: String,
+        windowLines: [String],
+        windowText: String
+    ) -> HomeItem.Category {
+        if provider == .alipay,
+           let alipayCategory = alipayListCategory(from: windowLines) {
+            return alipayCategory
+        }
+        return inferCategory(from: "\(title)\n\(windowText)")
+    }
+
+    private func alipayListCategory(from lines: [String]) -> HomeItem.Category? {
+        for line in lines {
+            let text = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard isAlipayCategoryLine(text) else { continue }
+            return mapAlipayCategory(text)
+        }
+        return nil
+    }
+
+    private func isAlipayCategoryLine(_ text: String) -> Bool {
+        mapAlipayCategory(text) != nil
+    }
+
+    private func mapAlipayCategory(_ text: String) -> HomeItem.Category? {
+        if text.contains("餐饮美食") { return .dining }
+        if text.contains("日用百货") { return .daily }
+        if text.contains("服饰装扮") { return .shopping }
+        if text.contains("文化休闲") { return .entertainment }
+        if text.contains("爱车养车") { return .transport }
+        if text.contains("充值缴费") { return .home }
+        if text.contains("教育培训") { return .other }
+        if text.contains("商业服务") { return .other }
+        if text.contains("转账红包") { return .other }
+        if text.contains("投资理财") { return .other }
+        if text == "其他" { return .other }
+        return nil
     }
 
     private func amountNear(labels: [String], in lines: [String]) -> Double? {
@@ -216,7 +404,10 @@ final class OCRService {
     }
 
     private func fallbackTitle(from lines: [String]) -> String? {
-        let blocked = ["¥", "￥", "金额", "时间", "订单", "单号", "支付", "付款", "收款", "交易", "账单", "详情", "当前状态", "成功", "付款方式"]
+        let blocked = [
+            "¥", "￥", "金额", "时间", "订单", "单号", "支付", "付款", "收款", "交易", "账单", "详情",
+            "当前状态", "成功", "付款方式", "筛选", "全部", "月支出", "月收入", "余额", "零钱", "银行卡",
+        ]
         return lines.first { line in
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard isUsableTitle(trimmed) else { return false }
@@ -270,6 +461,93 @@ final class OCRService {
         return nil
     }
 
+    private func listDate(in text: String, now: Date = .now) -> Date? {
+        relativeListDate(in: text, now: now)
+            ?? monthDayListDate(in: text, now: now)
+            ?? dashedMonthDayListDate(in: text, now: now)
+    }
+
+    private func statementReferenceDate(in text: String) -> Date? {
+        let pattern = #"(20\d{2})年\s*(\d{1,2})月"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let nsText = text as NSString
+        guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: nsText.length)),
+              match.numberOfRanges > 2 else {
+            return nil
+        }
+
+        var components = DateComponents()
+        components.year = Int(nsText.substring(with: match.range(at: 1)))
+        components.month = Int(nsText.substring(with: match.range(at: 2)))
+        components.day = 15
+        components.hour = 12
+        return Calendar.current.date(from: components)
+    }
+
+    private func relativeListDate(in text: String, now: Date) -> Date? {
+        let pattern = #"(今天|昨日|昨天|前天)\s*(\d{1,2}):(\d{2})"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let nsText = text as NSString
+        guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: nsText.length)),
+              match.numberOfRanges > 3 else {
+            return nil
+        }
+
+        let label = nsText.substring(with: match.range(at: 1))
+        let hour = Int(nsText.substring(with: match.range(at: 2))) ?? 0
+        let minute = Int(nsText.substring(with: match.range(at: 3))) ?? 0
+        let dayOffset: Int
+        switch label {
+        case "昨天", "昨日":
+            dayOffset = -1
+        case "前天":
+            dayOffset = -2
+        default:
+            dayOffset = 0
+        }
+        let calendar = Calendar.current
+        let day = calendar.date(byAdding: .day, value: dayOffset, to: now) ?? now
+        return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day)
+    }
+
+    private func monthDayListDate(in text: String, now: Date) -> Date? {
+        let pattern = #"(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let nsText = text as NSString
+        guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: nsText.length)),
+              match.numberOfRanges > 4 else {
+            return nil
+        }
+
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year], from: now)
+        components.month = Int(nsText.substring(with: match.range(at: 1)))
+        components.day = Int(nsText.substring(with: match.range(at: 2)))
+        components.hour = Int(nsText.substring(with: match.range(at: 3)))
+        components.minute = Int(nsText.substring(with: match.range(at: 4)))
+        components.second = 0
+        return calendar.date(from: components)
+    }
+
+    private func dashedMonthDayListDate(in text: String, now: Date) -> Date? {
+        let pattern = #"(\d{1,2})-(\d{1,2})\s*(\d{1,2}):(\d{2})"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let nsText = text as NSString
+        guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: nsText.length)),
+              match.numberOfRanges > 4 else {
+            return nil
+        }
+
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year], from: now)
+        components.month = Int(nsText.substring(with: match.range(at: 1)))
+        components.day = Int(nsText.substring(with: match.range(at: 2)))
+        components.hour = Int(nsText.substring(with: match.range(at: 3)))
+        components.minute = Int(nsText.substring(with: match.range(at: 4)))
+        components.second = 0
+        return calendar.date(from: components)
+    }
+
     private func currencyCandidates(in text: String) -> [Double] {
         let pattern = #"[-+]?\s*[¥￥]\s*([0-9]+(?:\.[0-9]{1,2})?)"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
@@ -305,10 +583,13 @@ final class OCRService {
 
     private func inferCategory(from text: String) -> HomeItem.Category {
         let lower = text.lowercased()
-        if lower.contains("咖啡") || lower.contains("餐") || lower.contains("外卖") || lower.contains("饭") || lower.contains("茶") {
+        if lower.contains("转账") || lower.contains("红包") {
+            return .other
+        }
+        if lower.contains("咖啡") || lower.contains("餐") || lower.contains("外卖") || lower.contains("饭") || lower.contains("茶") || lower.contains("美团") || lower.contains("饿了么") || lower.contains("把子肉") || lower.contains("馄饨") || lower.contains("餐饮美食") {
             return .dining
         }
-        if lower.contains("地铁") || lower.contains("公交") || lower.contains("打车") || lower.contains("滴滴") || lower.contains("铁路") {
+        if lower.contains("地铁") || lower.contains("公交") || lower.contains("打车") || lower.contains("滴滴") || lower.contains("铁路") || lower.contains("停车") || lower.contains("车服") || lower.contains("充车") || lower.contains("充电") || lower.contains("顺易通信") {
             return .transport
         }
         if lower.contains("药店") || lower.contains("买药") || lower.contains("医院") || lower.contains("挂号") || lower.contains("体检") || lower.contains("牙科") || lower.contains("口腔") || lower.contains("诊所") {
@@ -317,13 +598,16 @@ final class OCRService {
         if lower.contains("房租") || lower.contains("水电") || lower.contains("电费") || lower.contains("燃气") || lower.contains("物业") || lower.contains("宽带") || lower.contains("维修") || lower.contains("家电") {
             return .home
         }
-        if lower.contains("红包") || lower.contains("礼物") || lower.contains("送礼") || lower.contains("请客") || lower.contains("份子钱") || lower.contains("随礼") {
+        if lower.contains("礼物") || lower.contains("送礼") || lower.contains("请客") || lower.contains("份子钱") || lower.contains("随礼") {
             return .social
         }
-        if lower.contains("超市") || lower.contains("商城") || lower.contains("购物") || lower.contains("淘宝") || lower.contains("京东") {
+        if lower.contains("日用百货") || lower.contains("便利蜂") || lower.contains("便利店") || lower.contains("超市") {
+            return .daily
+        }
+        if lower.contains("商城") || lower.contains("购物") || lower.contains("淘宝") || lower.contains("京东") || lower.contains("闪购") {
             return .shopping
         }
-        if lower.contains("电影") || lower.contains("游戏") || lower.contains("会员") {
+        if lower.contains("电影") || lower.contains("游戏") || lower.contains("会员") || lower.contains("影院") || lower.contains("文化休闲") || lower.contains("酷享影") || lower.contains("抖音") {
             return .entertainment
         }
         if lower.contains("酒店") || lower.contains("住宿") || lower.contains("民宿") {

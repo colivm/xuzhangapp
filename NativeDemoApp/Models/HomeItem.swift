@@ -132,6 +132,47 @@ extension HomeItem {
     }
 }
 
+extension HomeItem.Category {
+    var defaultRecordTitle: String {
+        "\(rawValue)记录"
+    }
+}
+
+extension HomeItem.Source {
+    var displayName: String {
+        switch self {
+        case .manual: return "手动记录"
+        case .ocr: return "智能导入"
+        }
+    }
+}
+
+extension Date {
+    var zhBillDateTime: String {
+        Date.zhBillDateTimeFormatter.string(from: self)
+    }
+
+    var zhBillTime: String {
+        Date.zhBillTimeFormatter.string(from: self)
+    }
+
+    private static let zhBillDateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "M月d日 HH:mm"
+        return formatter
+    }()
+
+    private static let zhBillTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+}
+
 // MARK: - Shared CNY Format
 
 extension FormatStyle where Self == FloatingPointFormatStyle<Double>.Currency {

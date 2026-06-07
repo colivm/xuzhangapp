@@ -448,7 +448,7 @@ struct SettingsView: View {
     }
 
     private func webButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        return Button(action: action) {
             Text(title)
                 .font(.system(size: 14))
                 .foregroundStyle(AppColors.text.opacity(0.82))
@@ -467,31 +467,35 @@ struct SettingsView: View {
     }
 
     private func webAppearanceButton(_ title: String, isActive: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        let titleWeight: Font.Weight = isActive ? .semibold : .regular
+        let foreground = isActive ? AppColors.accent.opacity(0.84) : AppColors.text.opacity(0.82)
+        let fill = isActive ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.72)
+        let stroke = isActive ? AppColors.accent.opacity(0.45) : Color.white.opacity(0.5)
+        let shadow = isActive ? AppColors.accent.opacity(0.18) : Color.clear
+
+        return Button(action: action) {
             HStack {
                 Text(title)
-                    .font(.system(size: 14, weight: isActive ? .semibold : .regular))
+                    .font(.system(size: 14, weight: titleWeight))
                 Spacer()
                 if isActive {
                     Text("✓")
                         .font(.system(size: 11))
                 }
             }
-            .foregroundStyle(
-                isActive ? AppColors.accent.opacity(0.84) : AppColors.text.opacity(0.82)
-            )
+            .foregroundStyle(foreground)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
             .padding(.horizontal, 14)
             .background(
-                isActive ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.72),
-                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(fill)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(isActive ? AppColors.accent.opacity(0.45) : Color.white.opacity(0.5), lineWidth: 1)
+                    .stroke(stroke, lineWidth: 1)
             )
-            .shadow(color: isActive ? AppColors.accent.opacity(0.18) : .clear, radius: 6, y: 3)
+            .shadow(color: shadow, radius: 6, y: 3)
         }
         .buttonStyle(.plain)
     }

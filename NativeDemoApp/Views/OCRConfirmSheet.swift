@@ -32,7 +32,11 @@ struct OCRConfirmSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("所有识别均在本地完成，数据不上传")
+                            Text("先帮你把截图里的支出整理出来，请核对金额、备注和分类。")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(AppColors.text)
+
+                            Text("识别均在本地完成，原图不会上传。退款和收入会尽量忽略。")
                                 .font(.system(size: 13))
                                 .foregroundStyle(AppColors.subtext)
 
@@ -70,7 +74,7 @@ struct OCRConfirmSheet: View {
                             dismiss()
                         }
                     } label: {
-                        Text("确认导入（已选 \(selectedRows.count) 条）")
+                        Text("导入 \(selectedRows.count) 条到账单")
                             .font(.system(size: 15, weight: .semibold))
                             .frame(maxWidth: .infinity, minHeight: 48)
                     }
@@ -84,7 +88,7 @@ struct OCRConfirmSheet: View {
                 .padding(16)
                 .background(.ultraThinMaterial)
             }
-            .navigationTitle("确认导入账单")
+            .navigationTitle("待确认账单")
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.large])
@@ -109,7 +113,7 @@ struct OCRConfirmSheet: View {
             .foregroundStyle(AppColors.accent)
 
             HStack {
-                Text("批量修改分类")
+                Text("把已选账单改为")
                     .font(.system(size: 13))
                     .foregroundStyle(AppColors.subtext)
                 Spacer()
@@ -135,31 +139,41 @@ struct OCRConfirmSheet: View {
 
     private func confirmRow(_ index: Int) -> some View {
         let row = rows[index]
-        return HStack(alignment: .top, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
             Button {
                 rows[index].selected.toggle()
             } label: {
-                VStack(spacing: 4) {
-                    Image(systemName: row.selected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 22, weight: .semibold))
-                    Text("导入此条")
-                        .font(.system(size: 10, weight: .medium))
-                }
+                Image(systemName: row.selected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 24, weight: .semibold))
                 .foregroundStyle(row.selected ? AppColors.accent : AppColors.subtext.opacity(0.5))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("导入此条")
 
             VStack(alignment: .leading, spacing: 8) {
+                    Text(row.draft.title)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(3)
+
+                    Text(row.draft.date.zhBillDateTime)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                }
+
+                Spacer(minLength: 8)
+
                 Text(row.draft.amount.formatted(.cny.precision(.fractionLength(2))))
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(AppColors.text)
+                    .minimumScaleFactor(0.75)
+            }
 
-                Text("\(row.draft.date.formatted(date: .numeric, time: .shortened)) · \(row.draft.title)")
-                    .font(.system(size: 13))
+            HStack(spacing: 10) {
+                Text("分类")
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(AppColors.subtext)
-                    .lineLimit(2)
-
                 Picker("分类", selection: $rows[index].draft.category) {
                     ForEach(HomeItem.Category.allCases) { category in
                         Text(category.displayName).tag(category)
@@ -167,10 +181,15 @@ struct OCRConfirmSheet: View {
                 }
                 .pickerStyle(.menu)
                 .font(.system(size: 13, weight: .medium))
+
+                Spacer()
+
+                Text(row.selected ? "将导入" : "已跳过")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(row.selected ? AppColors.accent : AppColors.subtext)
             }
-            Spacer(minLength: 0)
         }
-        .padding(14)
+        .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(row.selected ? AppColors.accent.opacity(0.08) : Color.white.opacity(0.58))
@@ -238,33 +257,36 @@ struct OCRDraftPanel: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("OCR 草稿区")
-                        .font(.system(size: 16, weight: .bold))
+                    Text("待整理账单")
+                        .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(AppColors.text)
-                    Text(items.isEmpty ? "导入的账单会在这里变成草稿，方便你随时整理～" : "共 \(pendingItems.count) 笔待整理 · 合计 \(pendingTotal.formatted(.cny.precision(.fractionLength(2))))")
+                    Text(items.isEmpty ? "导入后会先放在这里，你可以再改分类、金额或删掉误识别。" : "\(pendingItems.count) 笔待整理 · 合计 \(pendingTotal.formatted(.cny.precision(.fractionLength(2))))")
                         .font(.system(size: 12))
                         .foregroundStyle(AppColors.subtext)
                 }
                 Spacer()
-                Button("完成整理") { onClearResolved() }
+                Button("收起已整理") { onClearResolved() }
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(resolvedCount > 0 ? AppColors.accent : AppColors.subtext.opacity(0.45))
                     .disabled(resolvedCount == 0)
             }
 
             if items.isEmpty {
-                Text("导入的账单会在这里变成草稿，方便你随时整理～")
+                Text("选择账单截图后，识别结果会先进入确认页；确认导入后，会出现在这里继续整理。")
                     .font(.system(size: 13))
                     .foregroundStyle(AppColors.subtext)
-                    .frame(maxWidth: .infinity, minHeight: 86)
+                    .frame(maxWidth: .infinity, minHeight: 108)
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .fill(Color.white.opacity(0.58))
                     )
             } else {
-                List {
+                LazyVStack(spacing: 14) {
                     ForEach(visibleGroups, id: \.key) { group in
-                        Section(group.importedAt.formatted(date: .numeric, time: .shortened)) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("导入于 \(group.importedAt.zhBillDateTime)")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(AppColors.subtext)
                             ForEach(group.items) { item in
                                 OCRDraftRow(
                                     item: item,
@@ -272,22 +294,26 @@ struct OCRDraftPanel: View {
                                     onCategoryChange: onCategoryChange,
                                     onAmountChange: onAmountChange
                                 )
-                                .swipeActions(edge: .trailing) {
-                                    Button("删除", role: .destructive) {
+                                .overlay(alignment: .topTrailing) {
+                                    Button(role: .destructive) {
                                         onDelete(item.id)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(AppColors.subtext.opacity(0.8))
+                                            .frame(width: 30, height: 30)
+                                            .background(Color.white.opacity(0.58), in: Circle())
                                     }
+                                    .buttonStyle(.plain)
+                                    .padding(10)
                                 }
                             }
                         }
                     }
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .frame(height: min(CGFloat(max(items.count, 1)) * 92 + CGFloat(visibleGroups.count) * 42, 420))
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
-        .padding(14)
+        .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(AppColors.accent.opacity(0.06))
@@ -325,60 +351,109 @@ private struct OCRDraftRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Button {
-                onToggleResolved(item.id, !isResolved)
-            } label: {
-                Image(systemName: isResolved ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 21, weight: .semibold))
-                    .foregroundStyle(isResolved ? AppColors.accent : AppColors.subtext.opacity(0.48))
-            }
-            .buttonStyle(.plain)
+        rowContent
+    }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(item.createdAt.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext)
-                Text(item.title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(1)
-                Picker("分类", selection: Binding(
-                    get: { item.category },
-                    set: { onCategoryChange(item.id, $0) }
-                )) {
-                    ForEach(HomeItem.Category.allCases) { category in
-                        Text(category.displayName).tag(category)
-                    }
-                }
-                .pickerStyle(.menu)
-                .font(.system(size: 12))
-                Text(isResolved ? "已整理" : "待整理 ↓")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(isResolved ? AppColors.accent : AppColors.subtext)
-            }
-
-            Spacer(minLength: 8)
-
-            TextField("金额", text: $amountText)
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.trailing)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(AppColors.text)
-                .frame(width: 82)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.72))
-                )
-                .onSubmit { commitAmount() }
-                .onChange(of: amountText) { _, newValue in
-                    guard let value = Double(newValue.replacingOccurrences(of: ",", with: "")), value > 0 else { return }
-                    onAmountChange(item.id, value)
-                }
+    private var rowContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            headerRow
+            categoryRow
+            amountEditor
         }
-        .padding(.vertical, 6)
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(isResolved ? Color.white.opacity(0.46) : Color.white.opacity(0.68))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(isResolved ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.52), lineWidth: 1)
+        )
+    }
+
+    private var headerRow: some View {
+        HStack(alignment: .top, spacing: 12) {
+            resolveButton
+            titleBlock
+            Spacer(minLength: 8)
+            amountDisplay
+        }
+    }
+
+    private var resolveButton: some View {
+        Button {
+            onToggleResolved(item.id, !isResolved)
+        } label: {
+            Image(systemName: isResolved ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 23, weight: .semibold))
+                .foregroundStyle(isResolved ? AppColors.accent : AppColors.subtext.opacity(0.48))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(item.title)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(3)
+            Text(item.createdAt.zhBillDateTime)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+        }
+    }
+
+    private var amountDisplay: some View {
+        Text(item.amount.formatted(.cny.precision(.fractionLength(2))))
+            .font(.system(size: 18, weight: .bold))
+            .foregroundStyle(AppColors.text)
+            .minimumScaleFactor(0.75)
+    }
+
+    private var categoryRow: some View {
+        HStack(spacing: 10) {
+            Text("分类")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+            categoryPicker
+            Spacer()
+            Text(isResolved ? "已整理" : "待整理 ↓")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(isResolved ? AppColors.accent : AppColors.subtext)
+        }
+    }
+
+    private var categoryPicker: some View {
+        Picker("分类", selection: Binding(
+            get: { item.category },
+            set: { onCategoryChange(item.id, $0) }
+        )) {
+            ForEach(HomeItem.Category.allCases) { category in
+                Text(category.displayName).tag(category)
+            }
+        }
+        .pickerStyle(.menu)
+        .font(.system(size: 12))
+    }
+
+    private var amountEditor: some View {
+        TextField("金额", text: $amountText)
+            .keyboardType(.decimalPad)
+            .multilineTextAlignment(.trailing)
+            .font(.system(size: 14, weight: .bold))
+            .foregroundStyle(AppColors.text)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.white.opacity(0.72))
+            )
+            .onSubmit { commitAmount() }
+            .onChange(of: amountText) { _, newValue in
+                guard let value = Double(newValue.replacingOccurrences(of: ",", with: "")), value > 0 else { return }
+                onAmountChange(item.id, value)
+            }
     }
 
     private func commitAmount() {

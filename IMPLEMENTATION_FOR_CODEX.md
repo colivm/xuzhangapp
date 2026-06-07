@@ -1051,7 +1051,7 @@ OCRService.swift 现状
 
 ### 4. guessScenePackId
 - 对齐 Web `guessMemberScenePackId` 的 `categoryToPackId` 映射：
-  - 餐饮→food, 交通→commute, 日用→pet, 购物/娱乐/其他→travel
+  - 餐饮→food, 交通→commute, 购物→shopping, 日用→pet, 娱乐/其他→travel
 - 先按 `homeViewModel.selectedCategory` 映射；无映射再按金额 fallback
 
 ### 5. 一键生成备注按钮
@@ -1304,13 +1304,14 @@ iOS `HomeViewModel.recommendCategory` 仅按金额硬编码：
 ## @ 必读
 @SCENE_PACK_COPY_POOL_v0.2.md（§3～§7 全部 128 条备注为唯一文案来源）
 
-## 现状
-iOS `ContentView.scenePacks` 每金额档仅 3 条备注 + `randomElement()`，重复极快。
-Web `memberScenePacks` 同样偏少；宠物包 Web 有 4 档 iOS 仅 3 档。
+## 当前状态（2026-06-07 同步）
+iOS 已迁入 `ScenePackCopyPool.swift`：8 包 × 4 档 × 8 条，并支持餐饮/交通时段子池、历史关键词增强、`{petName}` 渲染、心意往来包和顺手添置包。
+连续点击同一场景包会用 `variant` 顺序轮换，避免用户不满意时只能得到同一句。
+Web 同步仍作为后续任务单独处理。
 
 ## 目标
-1. 新建 `ScenePackCopyPool.swift`（或 JSON 资源 + loader），迁入四包 × 4 档 × 8 条
-2. 选取：`hash(dayKey + packId + tierIndex + categoryContext) % poolSize`（§2.1），同天稳定、换日换句
+1. 维护 `ScenePackCopyPool.swift`，当前 iOS 为 8 包 × 4 档 × 8 条
+2. 选取：首次 `hash(dayKey + packId + tierIndex + categoryContext + contextKey) % poolSize`；连续点击用 `variant` 顺序后移，同天可换句、换日也可换句
 3. 可选：时段子池（commute morning/evening、food noon/night）在 tier 内优先
 4. `enrichNoteWithHistory` 对齐 Web（§2.2）：45% 概率追加用户历史备注关键词
 5. `{petName}`：读 `AppSettings.petNickname`（无则「小窝」）
@@ -1336,7 +1337,7 @@ struct ScenePackDefinition {
 - [ ] 四包每档 ≥8 条备注已迁入
 - [ ] 同一天同金额连点一键备注 → 同一句（稳定 hash）
 - [ ] 改系统日期到次日 → 句式可变化
-- [ ] 手选「购物」+ 一键备注 → 分类不变，备注来自 travel/food 等映射包
+- [ ] 手选「购物」+ 一键备注 → 分类不变，备注来自 shopping 顺手添置包，不出现门票/机票/高铁/行程
 - [ ] 宠物包 `{petName}` 正确替换；第 4 档（≤150）存在
 - [ ] 历史备注词偶发追加（同分类）
 - [ ] Web memberScenePacks 与 iOS 条数一致

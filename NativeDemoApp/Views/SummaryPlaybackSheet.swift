@@ -157,6 +157,12 @@ struct SummaryPlaybackSheet: View {
                 .stroke(Color.white.opacity(0.62), lineWidth: 1)
         )
         .shadow(color: AppColors.subtext.opacity(0.16), radius: 22, x: 0, y: 12)
+        .gesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { value in
+                    handleChapterSwipe(value.translation.width)
+                }
+        )
         .animation(.easeInOut(duration: 0.22), value: activeIndex)
     }
 
@@ -164,95 +170,93 @@ struct SummaryPlaybackSheet: View {
     private func chapterSupportView(for chapter: SummaryChapter) -> some View {
         if hasNoSupportLine(chapter) {
             EmptyView()
-        } else if isCategoryChapter(chapter), let ratioText = chapter.metrics["ratio"], let ratio = Double(ratioText) {
-            HStack(spacing: 18) {
-                RatioRing(progress: max(0, min(ratio / 100, 1)))
-                    .frame(width: 96, height: 96)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("\(Int(ratio))%")
-                        .font(.system(size: 42, weight: .bold, design: .rounded))
-                        .foregroundStyle(AppColors.accentDark)
-                        .contentTransition(.numericText())
-                    Text(chapter.metrics["category"] ?? "生活")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(AppColors.text)
-                    Text(chapter.metrics["amount"] ?? "")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
-                }
-                Spacer()
-            }
+        } else if isCategoryChapter(chapter) {
+            categoryChapterSupport(chapter)
         } else if isHighlightChapter(chapter), let title = chapter.metrics["title"] {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("“\(title)”")
-                    .font(.system(size: 20, weight: .semibold, design: .rounded))
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.58), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(Color.white.opacity(0.68), lineWidth: 1)
-                    )
-                metricCaption(chapter)
-            }
+            highlightChapterSupport(title: title, chapter: chapter)
         } else {
-            metricCaption(chapter)
+            softChapterHint(chapter)
         }
     }
 
-    private func metricCaption(_ chapter: SummaryChapter) -> some View {
-        let parts = [
-            compactIntroMetric(for: chapter),
-            rhythmMetric(for: chapter),
-            highlightMetric(for: chapter),
-            monthSegmentMetric(for: chapter)
-        ].compactMap { $0 }
-        return Text(parts.first ?? playback.rangeLabel)
+    private func highlightChapterSupport(title: String, chapter: SummaryChapter) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            highlightChapterTitle(title)
+            if let day = chapter.metrics["day"] {
+                supportHint(day)
+            }
+        }
+    }
+
+    private func categoryChapterSupport(_ chapter: SummaryChapter) -> some View {
+        let category = chapter.metrics["category"] ?? "生活"
+        return supportHint("生活主料：\(category)")
+    }
+
+    private func highlightChapterTitle(_ title: String) -> some View {
+        let quotedTitle = "“\(title)”"
+
+        return highlightChapterTitleText(quotedTitle)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.white.opacity(0.58))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.68), lineWidth: 1)
+            )
+    }
+
+    private func highlightChapterTitleText(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 20, weight: .semibold, design: .rounded))
+            .foregroundStyle(AppColors.text)
+            .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private func softChapterHint(_ chapter: SummaryChapter) -> some View {
+        if let text = softHintText(for: chapter) {
+            supportHint(text)
+        } else {
+            EmptyView()
+        }
+    }
+
+    private func supportHint(_ text: String) -> some View {
+        Text(text)
             .font(.system(size: 14, weight: .medium))
             .foregroundStyle(AppColors.subtext)
             .lineLimit(3)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.46))
+            )
     }
 
-    private func compactIntroMetric(for chapter: SummaryChapter) -> String? {
-        guard isIntroChapter(chapter),
-              let count = chapter.metrics["count"],
-              let total = chapter.metrics["total"] else { return nil }
-        if let activeDays = chapter.metrics["activeDays"] {
-            let mom = chapter.metrics["momPercent"].flatMap { $0.isEmpty ? nil : " · 较上月 \($0)" } ?? ""
-            return "\(activeDays) 天 · \(count) 笔 · \(total)\(mom)"
+    private func softHintText(for chapter: SummaryChapter) -> String? {
+        if isIntroChapter(chapter) {
+            return chapter.metrics["range"] ?? playback.rangeLabel
         }
-        return "\(count) 笔 · \(total)"
-    }
-
-    private func rhythmMetric(for chapter: SummaryChapter) -> String? {
-        guard isRhythmChapter(chapter) else { return nil }
-        if let busiest = chapter.metrics["busiestDay"], let count = chapter.metrics["count"] {
-            return "\(busiest) · \(count) 笔"
+        if isRhythmChapter(chapter), let busiest = chapter.metrics["busiestDay"] {
+            return "\(busiest) 更热闹一点"
         }
         if let middle = chapter.metrics["middle"], let late = chapter.metrics["late"], let leading = chapter.metrics["leading"] {
-            return "\(leading)更热闹 · 中旬 \(middle) · 下旬 \(late)"
+            if middle == late {
+                return "中旬和下旬差不多安静"
+            }
+            return "\(leading) 更热闹一点"
+        }
+        if chapter.id == "month-early" {
+            return chapter.metrics["label"].map { "\($0)先铺开一点" }
         }
         return nil
-    }
-
-    private func highlightMetric(for chapter: SummaryChapter) -> String? {
-        guard isHighlightChapter(chapter) else { return nil }
-        let parts = [chapter.metrics["day"], chapter.metrics["amount"]].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    private func monthSegmentMetric(for chapter: SummaryChapter) -> String? {
-        guard chapter.id == "month-early" else { return nil }
-        let parts = [
-            chapter.metrics["label"],
-            chapter.metrics["count"].map { "\($0) 笔" },
-            chapter.metrics["amount"]
-        ].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private func shouldShowRangeLabel(for chapter: SummaryChapter) -> Bool {
@@ -483,8 +487,7 @@ struct SummaryPlaybackSheet: View {
         playbackTask?.cancel()
         playbackTask = Task {
             while !Task.isCancelled && isPlaying && activeIndex < playback.chapters.count {
-                let duration = playback.chapters[activeIndex].durationSec
-                try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
                 guard !Task.isCancelled else { break }
                 await MainActor.run {
                     if activeIndex < playback.chapters.count - 1 {
@@ -496,6 +499,32 @@ struct SummaryPlaybackSheet: View {
                     }
                 }
             }
+        }
+    }
+
+    private func handleChapterSwipe(_ width: CGFloat) {
+        guard abs(width) > 44 else { return }
+        let shouldResume = isPlaying
+        playbackTask?.cancel()
+        if width < 0 {
+            moveToChapter(activeIndex + 1)
+        } else {
+            moveToChapter(activeIndex - 1)
+        }
+        if shouldResume && !playbackDone {
+            startPlayback()
+        }
+    }
+
+    private func moveToChapter(_ index: Int) {
+        guard !playback.chapters.isEmpty else { return }
+        let lastIndex = playback.chapters.count - 1
+        let nextIndex = min(max(index, 0), lastIndex)
+        activeIndex = nextIndex
+        playbackDone = nextIndex == lastIndex
+        if playbackDone {
+            isPlaying = false
+            reportCompletionIfNeeded(progress: 1)
         }
     }
 

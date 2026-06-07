@@ -11,8 +11,8 @@
 
 | ID | 做什么 | 主要文件 | 状态 |
 |----|--------|----------|------|
-| **B2.12** | **情绪标签 polish**（本 prompt） | `HomeItem.inferEmotionTag` | ⏳ 本任务 |
-| **B2.11** | 心意往来包 | 见 [`AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md`](AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md) | ⏳ 可同 PR |
+| **B2.12** | **情绪标签 polish**（本 prompt） | `HomeItem.inferEmotionTag` | ✅ 已完成 |
+| **B2.11** | 心意往来包 | 见 [`AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md`](AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md) | ✅ 已完成 |
 
 **展示位置**：首页今日列表、回放 Sheet 条目副行（`emotionTag` 字段，随分类/金额自动推断）。
 
@@ -131,3 +131,4 @@ Agent 定稿后输出 **完整 7×2 对照表**（旧 → 新）。
 | 日期 | 说明 |
 |------|------|
 | 2026-06-07 | 首版：Task B2.12 七分类情绪标签 polish |
+| 2026-06-07 | 状态更新：七分类标签已落地，health/home/social 保持母版 |

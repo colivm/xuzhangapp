@@ -12,7 +12,7 @@ final class HomeViewModel: ObservableObject {
 
     @Published var inputTitle: String = ""
     @Published var inputAmount: String = ""
-    @Published var selectedCategory: HomeItem.Category = .dining
+    @Published var selectedCategory: HomeItem.Category = .other
     @Published private(set) var categoryLockedByUser: Bool = false
     @Published var selectedDate: Date = .now
     @Published var selectedPeriod: Period = .month
@@ -126,7 +126,7 @@ final class HomeViewModel: ObservableObject {
         guard let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0 else { return }
         let wasEmpty = items.isEmpty
         let trimmed = inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = trimmed.isEmpty ? "\(selectedCategory.rawValue)消费" : trimmed
+        let title = trimmed.isEmpty ? selectedCategory.defaultRecordTitle : trimmed
 
         let newItem = HomeItem(
             title: title,
@@ -192,7 +192,7 @@ final class HomeViewModel: ObservableObject {
 
     func recognizeOCRDrafts(imageData: Data, isMember: Bool) async -> [OCRReceiptDraft] {
         guard dailyQuotaStore.canUseOCR(isMember: isMember) else {
-            ocrStatus = "今日免费识票次数已用完（3/3）。会员可无限智能导入。"
+            ocrStatus = "今日免费账单识别次数已用完（3/3）。会员可无限智能导入。"
             return []
         }
         do {
@@ -214,7 +214,7 @@ final class HomeViewModel: ObservableObject {
             return 0
         }
         guard dailyQuotaStore.canUseOCR(isMember: isMember) else {
-            ocrStatus = "今日免费识票次数已用完（3/3）。会员可无限智能导入。"
+            ocrStatus = "今日免费账单识别次数已用完（3/3）。会员可无限智能导入。"
             return 0
         }
 
@@ -265,7 +265,7 @@ final class HomeViewModel: ObservableObject {
             return
         }
         let remaining = dailyQuotaStore.ocrRemaining(isMember: false)
-        ocrStatus = "\(prefix)。今日免费识票剩余 \(remaining)/3 次。"
+            ocrStatus = "\(prefix)。今日免费账单识别剩余 \(remaining)/3 次。"
     }
 
     func updateOCRDraftStatus(id: UUID, isResolved: Bool) {
@@ -397,7 +397,7 @@ final class HomeViewModel: ObservableObject {
         guard total > 0 else {
             return "今天还没记支出，先从一笔小额开始就很好。"
         }
-        return "叙账用户，今天总支出 \(formatCurrency(total))，主要花在\(topCategory)。继续保持每笔小额记录就很好。"
+        return "今天的记录里，「\(topCategory)」最常出现，日子又多了一点轮廓。"
     }
 
     var weekExpenseTotal: Double {
@@ -432,18 +432,15 @@ final class HomeViewModel: ObservableObject {
         guard !weekItems.isEmpty else {
             return ("近 7 天暂无复盘。多记几笔，就能看到更完整的消费节奏啦。", "", "")
         }
-        let total = weekItems.reduce(0) { $0 + $1.amount }
         let catMap = Dictionary(grouping: weekItems, by: \.category).mapValues { cats in
             cats.reduce(0) { $0 + $1.amount }
         }
         let top = catMap.max(by: { $0.value < $1.value })
         let topCategory = top?.key.rawValue ?? "暂无"
-        let topAmount = top?.value ?? 0
-        let ratio = total > 0 ? Int(round(topAmount / total * 100)) : 0
 
-        let summary = "近7天总支出 \(formatCurrency(total))，主要集中在\(topCategory)。"
-        let structure = "近7天共记录 \(weekItems.count) 笔，\(topCategory)占比约 \(ratio)%。"
-        let advice = total > 3000
+        let summary = "近 7 天里，\(topCategory)最容易被看见。"
+        let structure = "这一周的账单像几段生活片段，慢慢拼出了自己的节奏。"
+        let advice = weekItems.count >= 8
             ? "这一周的记录已经很有轮廓，继续按笔记下去，下周生活切片会更像你的真实日常。"
             : "这一周的节奏被慢慢记下来了，继续记录，下周生活章会更立体。"
         return (summary, structure, advice)
@@ -457,10 +454,10 @@ final class HomeViewModel: ObservableObject {
         if total <= 0 {
             summary = "本月还没有足够账单，多记几笔再来生成月度复盘吧。"
         } else {
-            summary = "本月累计支出 \(formatCurrency(total))，消费里「\(top)」出现得比较多。"
+            summary = "这个月的记录里，「\(top)」出现得比较多。"
         }
         let structure = total <= 0
-            ? "等你有了本月记录，我会帮你梳理分类占比与生活节奏。"
+            ? "等你有了本月记录，我会帮你梳理这段时间的生活节奏。"
             : "「\(top)」是这个月比较明显的一块生活拼图。"
         let advice = total <= 0
             ? "先坚持记一周，复盘会更有感觉。"
@@ -620,11 +617,11 @@ final class HomeViewModel: ObservableObject {
         case .health:
             return ["药店买药", "挂号问诊", "体检/护理"]
         case .home:
-            return ["房租水电", "家里添置", "维修/物业"]
+            return ["水电燃气", "家里添置", "修修补补"]
         case .social:
-            return ["送礼心意", "家人开销", "红包/人情"]
+            return ["带份小小心意", "聚会叙旧", "探望记挂"]
         case .other:
-            return ["杂项开支", "临时支出", "待分类记录"]
+            return ["一时兴起的小物", "没归类的小痕迹", "先记下一笔"]
         }
     }
 
@@ -721,19 +718,19 @@ final class HomeViewModel: ObservableObject {
         }
 
         let summary = settings.aiTone == .gentle
-            ? "\(userName)，今天总支出 \(formatCurrency(todayTotal))，主要花在\(topCategory)。"
-            : "今日支出 \(formatCurrency(todayTotal))，高频消费分类：\(topCategory)。"
+            ? "\(userName)，今天的记录里「\(topCategory)」最常出现。"
+            : "今天更常记录到「\(topCategory)」。"
 
         let action: String
         if todayTotal > weeklyAverage && weeklyAverage > 0 {
-            action = "今天的花费比平时多一些，先把这一笔生活节奏记下来就好。"
+            action = "今天的记录比平时热闹一点，先把这段生活收下来。"
         } else {
-            action = "当前节奏被好好记下来了，明天继续顺手记一两笔就好。"
+            action = "今天的几笔已经被好好记下来了，明天再顺手补上新的片段。"
         }
 
         let encourage = settings.aiTone == .gentle
-            ? "慢慢来，你已经在把钱花得更明白了。"
-            : "持续记录，你会更快看到变化。"
+            ? "慢慢来，日子会在这些小记录里变得清楚。"
+            : "继续记录，会更容易看见自己的日常轮廓。"
 
         let insight = DailyInsight(
             dayKey: key,
@@ -876,7 +873,7 @@ final class HomeViewModel: ObservableObject {
         inputTitle = ""
         inputAmount = ""
         selectedDate = .now
-        selectedCategory = .dining
+        selectedCategory = .other
         categoryLockedByUser = false
     }
 
@@ -960,12 +957,12 @@ final class HomeViewModel: ObservableObject {
 
     func buildWeeklyRhythmText() -> String {
         let top = weekTopCategoryText
-        return "本周开销以「\(top)」为主，这一段的节奏就是这样，记下来了。"
+        return "这周「\(top)」出现得更勤一点，像这段日子的一个小主题。"
     }
 
     func markWeeklyTag() {
         let top = weekTopCategoryText
-        let result = "常花类目回看：这周更常记录「\(top)」，后续复盘会更清晰。"
+        let result = "这周更常记录到「\(top)」，先把这个生活主题留下。"
         setLatestActionCard(result, scope: "weekly")
         analyticsService.track("weekly_tag_marked", props: ["top": top])
     }
@@ -976,7 +973,7 @@ final class HomeViewModel: ObservableObject {
         guard total > 0 else {
             return "这个月还没有足够账单，先继续记几笔，月末生活章会更像你的日子。"
         }
-        return "这个月「\(top)」出现得比较多，有几笔像是对自己的照顾。先记到这里，月末再回看会更完整。"
+        return "这个月「\(top)」出现得比较多，先把这条线索留在这里。月末再回看会更完整。"
     }
 
     func markMonthlyClosing() {

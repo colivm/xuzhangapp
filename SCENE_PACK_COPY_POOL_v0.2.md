@@ -2,20 +2,22 @@
 
 > 用途：会员「一键生成备注」/ 展开场景包；**非 AI**，本地模板。  
 > 依据：[`PRODUCT_PLAYBACK_MEMBERSHIP_v0.1.md`](PRODUCT_PLAYBACK_MEMBERSHIP_v0.1.md) §7、[`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) 正向表达。  
-> 更新时间：2026-06-04
+> 更新时间：2026-06-07  
+> 代码现状：`ScenePackCopyPool.swift` 已有 **8 包 / 基础 256 条**（commute、food、care、home、social、shopping、travel、pet），并为餐饮/交通增加本地时段子池；本文保留完整池草案与同步说明。
 
 ---
 
-## 1. 现状问题
+## 1. 现状与已补齐项
 
-| 项 | 现在 | 问题 |
+| 项 | 旧问题 | 当前状态 |
 |----|------|------|
-| 每档备注数 | **3 条** / 金额档 | 连点几次就重复 |
-| 选取 | `randomElement()` | 同一次记账可连抽同句 |
-| 时段 | 无 | 早 8 点与晚 8 点同句 |
-| 历史 | Web 有 `enrichNoteWithHistory` | iOS 未接 |
-| 宠物包档位 | iOS 3 档 | Web 4 档（含 ≤150） |
-| `{petName}` | Web 有 | iOS 硬编码「猫咪」 |
+| 每档备注数 | **3 条** / 金额档，连点重复 | ✅ iOS 每包 4 档 × 8 条 |
+| 选取 | `randomElement()` 不稳定 | ✅ 首次 `stableIndex(seed:)`，连续点击按 variant 轮换 |
+| 时段 | 早 8 点与晚 8 点同句 | ✅ 餐饮/交通已有时段子池；其他包仍按金额档 |
+| 历史 | Web 有 `enrichNoteWithHistory`，iOS 未接 | ✅ iOS 已接近 90 天同分类关键词增强 |
+| 宠物包档位 | iOS 3 档 | ✅ iOS 4 档（含 ≤150） |
+| `{petName}` | Web 有，iOS 硬编码「猫咪」 | ✅ iOS 使用宠物昵称，默认「小窝」 |
+| 人情 | 曾映射到 food | ✅ B2.11 已新增 `social` 心意往来包 |
 
 ---
 
@@ -31,14 +33,16 @@
 ```text
 dayKey = yyyy-MM-dd（本地日历日）
 tierIndex = 命中金额档下标
-seed = dayKey + "|" + packId + "|" + tierIndex + "|" + (keepCategory ? selectedCategory : pack.category)
-index = abs(seed.hashValue) % poolSize
+baseSeed = dayKey + "|" + packId + "|" + tierIndex + "|" + categoryContext + "|" + contextKey
+baseIndex = abs(baseSeed.hashValue) % poolSize
+index = (baseIndex + variant) % poolSize
 ```
 
-- **同一天、同一包、同一金额档**：一键备注结果 **稳定**（用户可预期）。  
+- **同一天、同一包、同一金额档首次点击**：一键备注结果 **稳定**（用户可预期）。  
+- **连续点击同一场景包**：`variant` 递增并顺序后移，支持用户不满意时再次轮换一句，避免 hash 碰撞回同一句。  
 - **换自然日**：自动换句式。  
-- **防连重复（可选）**：记录 `lastNoteByPackId`，若与上次相同则 `(index+1) % poolSize`。  
-- **时段子池（可选）**：在 tier 内先按 `hour` 选 `morning/noon/evening/night` 子数组，再 hash。
+- **防连重复（可选）**：若相邻 variant 仍碰撞到同句，可记录 `lastNoteByPackId` 并 `(index+1) % poolSize`。  
+- **时段子池**：餐饮按 breakfast/lunch/tea/dinner/nightSnack；交通按 morningCommute/eveningCommute；其余包仍按金额档。
 
 ### 2.2 历史增强（对齐 Web `enrichNoteWithHistory`）
 
@@ -84,7 +88,7 @@ index = abs(seed.hashValue) % poolSize
 | C-B05 | 今日出行主打省心 |
 | C-B06 | 固定路线，熟悉的感觉 |
 | C-B07 | 早晚通勤各记一笔 |
-| C-B08 | 城市穿梭的小开销 |
+| C-B08 | 城市穿梭的一段路 |
 
 ### 档 C · ¥15 < amount ≤ ¥30
 
@@ -106,13 +110,17 @@ index = abs(seed.hashValue) % poolSize
 | C-D01 | 跨区通勤长途费 |
 | C-D02 | 出差市内交通 |
 | C-D03 | 高速/长途客车费 |
-| C-D04 | 一次性通勤大额支出 |
+| C-D04 | 一次较长的通勤路 |
 | C-D05 | 今天跑了不少路 |
-| C-D06 | 行程较满的交通开销 |
+| C-D06 | 行程较满的一天路 |
 | C-D07 | 远距离往返 |
-| C-D08 | 为工作奔波的一天 |
+| C-D08 | 为工作跑了不少路 |
 
 **时段加权（可选子池标签）**：07–10 `morning` 优先 A/B；18–21 `evening` 优先 B/C 含「下班」句。
+
+**代码已实现时段子池（不替换基础 tier，仅一键备注优先使用）**：
+- 07–10：早班通勤 / 上班路上 / 早高峰
+- 17–21：下班路上 / 晚高峰 / 回家路费
 
 ---
 
@@ -170,7 +178,12 @@ index = abs(seed.hashValue) % poolSize
 | F-D07 | 约会餐厅体验 |
 | F-D08 | 美食探店打卡 |
 
-**时段加权**：11–14 优先 B；17–21 优先 C/D；22–06 优先 A/B 宵夜向（可增 F-N01 深夜小食慰藉）。
+**代码已实现时段子池（不替换基础 tier，仅一键备注优先使用）**：
+- 05–10：早餐 / 晨间咖啡 / 上班前一口
+- 11–14：午餐 / 外卖 / 食堂
+- 14–17：下午茶 / 咖啡 / 茶歇
+- 17–21：晚餐 / 下班后一顿热饭
+- 21–05：夜宵 / 深夜小食 / 晚归路上的一口热食
 
 ---
 
@@ -212,7 +225,7 @@ index = abs(seed.hashValue) % poolSize
 | P-C02 | 安排{petName}日常驱虫护理 |
 | P-C03 | 带{petName}洗护美容，清爽干净 |
 | P-C04 | 宠物医院常规检查 |
-| P-C05 | 换季毛发护理开销 |
+| P-C05 | 换季毛发护理记一笔 |
 | P-C06 | 给{petName}升级主食粮 |
 | P-C07 | 宠物保险/会员续费 |
 | P-C08 | 大件猫爬架小分期 |
@@ -232,7 +245,41 @@ index = abs(seed.hashValue) % poolSize
 
 ---
 
-## 6. 旅行出发包 · `travel` · 交通/其他
+## 6. 已落地新增生活包概要
+
+> 详见 `NativeDemoApp/Services/ScenePackCopyPool.swift`。本节是文档同步摘要，避免旧版 4 包说明误导后续实现。
+
+### 6.1 照顾自己包 · `care` · 健康
+
+- label：照顾自己包
+- desc：把身体的小照顾记下来
+- 档位：≤20 / ≤60 / ≤200 / >200，各 8 条
+- 气质：药店、问诊、体检、护理都写成「照顾自己」，不写省钱或健康 KPI。
+
+### 6.2 居家安顿包 · `home` · 居家
+
+- label：居家安顿包
+- desc：家里的日常，也是一段生活
+- 档位：≤20 / ≤80 / ≤300 / >300，各 8 条
+- 气质：纸巾、日化、水电、维修、房租都写成「安顿生活」，不强调固定成本控制。
+
+### 6.3 心意往来包 · `social` · 人情
+
+- label：心意往来包
+- desc：关系里的一小句记录
+- 档位：≤30 / ≤100 / ≤300 / >300，各 8 条
+- 气质：探望、聚会、带份心意、叙旧、团圆、记挂；禁止红包、随礼、份子、礼金、人情债、家人开销、社交支出。
+
+### 6.4 顺手添置包 · `shopping` · 购物
+
+- label：顺手添置包
+- desc：给生活添一点刚好
+- 档位：≤30 / ≤100 / ≤300 / >300，各 8 条
+- 气质：小物、常用物、换新、大件好物；不混入门票、机票、高铁、行程、旅行类句子。
+
+---
+
+## 7. 旅行出发包 · `travel` · 交通/其他
 
 ### 档 A · amount ≤ ¥20
 
@@ -288,21 +335,25 @@ index = abs(seed.hashValue) % poolSize
 
 ---
 
-## 7. 规模汇总
+## 8. 规模汇总
 
 | 包 | 档位数 | 每档条数 | 小计 |
 |----|--------|----------|------|
 | commute | 4 | 8 | 32 |
 | food | 4 | 8 | 32 |
+| care | 4 | 8 | 32 |
+| home | 4 | 8 | 32 |
+| social | 4 | 8 | 32 |
+| shopping | 4 | 8 | 32 |
 | pet | 4 | 8 | 32 |
 | travel | 4 | 8 | 32 |
-| **合计** | | | **128 条** |
+| **合计** | | | **256 条** |
 
 加历史增强与换日 hash，会员高频使用 **2～4 周** 重复感明显低于现 3 条 × random。
 
 ---
 
-## 8. 与分类映射（`guessScenePackId`）
+## 9. 与分类映射（`guessScenePackId`）
 
 一键备注猜包时 **优先已选分类**（B2.7 后）：
 
@@ -310,10 +361,15 @@ index = abs(seed.hashValue) % poolSize
 |------|--------|
 | 交通 | commute |
 | 餐饮 | food |
-| 日用 | pet |
-| 购物/娱乐/其他 | travel |
+| 健康 | care |
+| 居家 | home |
+| 人情 | social |
+| 购物 | shopping |
+| 日用 | pet（开宠物）/ home（关宠物） |
+| 娱乐/其他 | travel |
+| 住宿 | travel |
 
-无映射再按金额 fallback：`≤15 commute · ≤45 food · ≤120 pet · else travel`。
+无映射再按金额 fallback：`≤15 commute · ≤45 food · ≤120 pet/home · else travel`。
 
 ---
 
@@ -330,7 +386,7 @@ index = abs(seed.hashValue) % poolSize
 | **打工人通勤包** | 整体对齐；仅 2 条备注需替词 |
 | **展开列表 desc** | 「比如：输入 ¥X，自动备注…」像教程占位 | 改为 §10.4 **生活化 tagline** |
 
-**吃货 / 宠物包备注 tiers**：本轮 **不改**（B2.10 扩池另做）；**desc tagline 四包都改**。
+**历史说明（2026-06-06）**：当时仅做四包 tagline 与 travel rename；2026-06-07 已新增 care/home/social 与时段子池，当前代码以 §1、§6、§8、§9 为准。
 
 ### 10.2 包名定稿（仅 `label` 展示，id 仍为 `travel`）
 
@@ -358,7 +414,7 @@ index = abs(seed.hashValue) % poolSize
 | T-D02 | 两晚住宿预算 | 途中连住两晚 |
 | T-D03 | 旅行套餐核心支出 | 行程里的重头戏 |
 
-**其余 122 条**：保持 §3～§6 现稿（§6 标题已改为「旅行出发包」）。
+**说明**：§10.3 是 2026-06-06 的四包哲学修订记录；2026-06-07 起新增 care/home/social 与时段子池以代码为准。
 
 ### 10.4 展开列表 tagline（`desc` 字段，定稿）
 
@@ -370,15 +426,15 @@ index = abs(seed.hashValue) % poolSize
 | `commute` | 比如：输入 ¥2，自动备注… | **把通勤记成日常一句** |
 | `food` | 比如：输入 ¥12，自动备注… | **吃喝里的一小句生活** |
 | `travel` | 比如：输入 ¥20，自动备注… | **路上的花费，也值得记下** |
-| `pet` | 比如：输入 ¥20，自动备注… | **{petName} 相关的小开销** |
+| `pet` | 比如：输入 ¥20，自动备注… | **{petName} 相关的小日常** |
 
 宠物包 `{petName}` 经 `ScenePackCopyPool.renderPetName` 渲染（默认「小窝」）。
 
 ### 10.5 验收
 
 - [ ] iOS 记账页展开场景包，travel 显示 **旅行出发包**
-- [ ] 四包 `desc` 为上表 tagline，无「比如」「输入 ¥」「自动备注」
-- [ ] 上表 §10.3 五条备注在对应金额档一键备注可抽到（hash 稳定选取不变）
+- [ ] 历史四包 `desc` 为上表 tagline，无「比如」「输入 ¥」「自动备注」
+- [ ] 上表 §10.3 五条备注在对应金额档一键备注可抽到（首次 hash 稳定，连续点击可轮换）
 - [ ] 无新增「预算 / 摊销 / 小投资 / 核心支出」出现在 commute / travel 池
 - [ ] `food` / `pet` 包 **备注 tiers** 未误改（仅 desc 可改）
 
@@ -391,10 +447,12 @@ index = abs(seed.hashValue) % poolSize
 
 ---
 
-## 9. 修订记录
+## 11. 修订记录
 
 | 日期 | 说明 |
 |------|------|
-| 2026-06-04 | v0.2：四包各 4 档 × 8 条；选取规则、历史增强、pet 第四档对齐 Web |
+| 2026-06-04 | v0.2：历史四包各 4 档 × 8 条；选取规则、历史增强、pet 第四档对齐 Web |
 | 2026-06-06 | §10 哲学对齐：旅行出发包 rename；commute/travel 共 5 条替词；§2.3 增补忌用词 |
-| 2026-06-06 | §10.4：四包 `desc` 改为生活化 tagline，去掉「比如输入 ¥」 |
+| 2026-06-06 | §10.4：历史四包 `desc` 改为生活化 tagline，去掉「比如输入 ¥」 |
+| 2026-06-07 | 同步代码现状：7 包 / 224 条、B2.11 social 包、餐饮/交通时段子池、映射表 |
+| 2026-06-07 | 补 shopping 顺手添置包：购物不再复用 travel，当前 8 包 / 256 条 |

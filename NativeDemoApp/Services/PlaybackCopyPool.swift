@@ -26,7 +26,7 @@ enum PlaybackCopyPool {
 
     private static let fallbackGroup = PlaybackCopyGroup(
         warm: ["这段时间已经留下了可以回看的生活痕迹。"],
-        plain: ["本段生活切片已生成。"]
+        plain: ["这段时间已经留下了可以回看的生活痕迹。"]
     )
 
     private static let groups: [String: PlaybackCopyGroup] = [
@@ -38,10 +38,10 @@ enum PlaybackCopyPool {
                 "{count} 笔小记录，{total}；这一周的故事，开始讲了。"
             ],
             plain: [
-                "{rangeLabel}：{count} 笔，支出 {total}。",
-                "本周 {count} 笔，合计 {total}。",
-                "{count} 笔 · {total}（{rangeLabel}）。",
-                "周期内 {count} 笔记录，总支出 {total}。"
+                "这周留下了 {count} 笔小痕迹。",
+                "{rangeLabel} 这段时间，可以从 {count} 笔记录说起。",
+                "这一周有 {count} 个可回看的片段。",
+                "先把这一周轻轻打开。"
             ]
         ),
         "week-weak-intro": PlaybackCopyGroup(
@@ -51,51 +51,51 @@ enum PlaybackCopyPool {
                 "记录还不多，先把 {total} 收下来。"
             ],
             plain: [
-                "{count} 笔，{total}（数据较少）。",
-                "本周 {count} 笔记录。",
-                "记录偏少：{count} 笔。"
+                "{count} 笔也是一个开头。",
+                "这周刚留下几段小痕迹。",
+                "记录还不多，但已经可以先看一眼。"
             ]
         ),
         "week-rhythm": PlaybackCopyGroup(
             warm: [
                 "{busiestDay} 最热闹；{quietestDay} 很轻，这一周一紧一松。",
-                "支出集中在 {busiestDay}，{quietestDay} 则很轻，节奏分得开。",
-                "{busiestDay} 花得最多；{quietestDay} 像刻意留白。",
-                "若把这一周拉成曲线：{busiestDay} 是峰，{quietestDay} 是谷。"
+                "记录集中在 {busiestDay}，{quietestDay} 则很轻，节奏分得开。",
+                "{busiestDay} 记录最多，{quietestDay} 相对轻一些。",
+                "这一周的起伏，主要落在 {busiestDay} 和 {quietestDay}。"
             ],
             plain: [
-                "支出高峰：{busiestDay}；最低：{quietestDay}。",
-                "{busiestDay} 笔数/金额最高，{quietestDay} 最低。",
-                "集中日 {busiestDay}，轻量日 {quietestDay}。",
-                "本周波动：{busiestDay} → {quietestDay}。"
+                "{busiestDay} 更热闹，{quietestDay} 轻一些。",
+                "这一周的起伏，主要落在 {busiestDay} 和 {quietestDay}。",
+                "{busiestDay} 记录更多，{quietestDay} 相对少一点。",
+                "这一周不是一条直线，有热闹也有轻的一天。"
             ]
         ),
         "week-top-category": PlaybackCopyGroup(
             warm: [
-                "「{topCategory}」占了这周的多数，约 {ratio}%。",
-                "大约 {ratio}% 在「{topCategory}」，这周的生活配方里，它站 C 位。",
-                "翻遍这一周，「{topCategory}」出现最勤，约 {ratio}%。",
-                "{ratio}% 落在「{topCategory}」上，像这一周的底色。"
+                "「{topCategory}」是这周最常出现的生活主料。",
+                "这周「{topCategory}」在记录里更靠前。",
+                "翻遍这一周，「{topCategory}」最容易被看见。",
+                "这一周，「{topCategory}」留下的痕迹更明显。"
             ],
             plain: [
-                "「{topCategory}」约占 {ratio}%。",
-                "TOP1：{topCategory}（{ratio}%）。",
-                "{topCategory}：{ratio}% 占比。",
-                "最高分类 {topCategory}，{ratio}%。"
+                "「{topCategory}」是这周最常出现的生活主料。",
+                "这周「{topCategory}」在记录里更靠前。",
+                "这一周，「{topCategory}」留下的痕迹更明显。",
+                "翻到这一周，「{topCategory}」最容易被看见。"
             ]
         ),
         "week-highlight": PlaybackCopyGroup(
             warm: [
-                "{highlightDayLabel}，你为自己留了这样一笔：「{highlightTitle}」。",
-                "若选本周一笔来代表心情，{petName}会投给「{highlightTitle}」。",
-                "{highlightDayLabel} 这一笔最有画面感：「{highlightTitle}」。",
-                "本周的高光落在 {highlightDayLabel}：「{highlightTitle}」。"
+                "{highlightDayLabel}，记录里有这样一笔：「{highlightTitle}」。",
+                "{highlightDayLabel} 这一笔被单独拎出来：「{highlightTitle}」。",
+                "这一周有一笔较醒目：「{highlightTitle}」。",
+                "本周的单笔片段落在 {highlightDayLabel}：「{highlightTitle}」。"
             ],
             plain: [
-                "单笔代表：{highlightTitle}（{highlightDayLabel}，{highlightAmount}）。",
-                "本周最高单笔：{highlightAmount}，{highlightTitle}。",
-                "高光：{highlightTitle} · {highlightAmount}。",
-                "{highlightDayLabel}：{highlightTitle}，{highlightAmount}。"
+                "{highlightDayLabel} 这一笔：「{highlightTitle}」。",
+                "这一笔「{highlightTitle}」被单独列出来。",
+                "这一周有一笔：「{highlightTitle}」。",
+                "{highlightDayLabel} 的「{highlightTitle}」留在记录里。"
             ]
         ),
         "week-outro": PlaybackCopyGroup(
@@ -106,10 +106,10 @@ enum PlaybackCopyPool {
                 "周切片到这儿。下一周有了新记录，再来听新版。"
             ],
             plain: [
-                "本周切片结束，下周可再看。",
-                "周度回放完成。",
-                "本周生活切片已播完。",
-                "结束；下个自然周更新。"
+                "这一周先叙到这里。",
+                "下个自然周，再来听新的这一周。",
+                "这段生活已经被好好收下。",
+                "先把这一周放在这里。"
             ]
         ),
         "week-weak-outro": PlaybackCopyGroup(
@@ -119,9 +119,9 @@ enum PlaybackCopyPool {
                 "补几笔日常，下次切片会更立体。"
             ],
             plain: [
-                "记录较少，补充后可生成更完整切片。",
-                "建议增加记录后再播放。",
-                "数据不足，完整 5 幕需 ≥3 笔。"
+                "再多记几笔，下一遍会更像你的这一周。",
+                "等这一周更完整一点，再回来听。",
+                "先留住这个开头，后面会更立体。"
             ]
         ),
         "month-intro": PlaybackCopyGroup(
@@ -132,52 +132,52 @@ enum PlaybackCopyPool {
                 "先把 {rangeLabel} 拢在一起：{activeDays} 天、{count} 笔、{total}。"
             ],
             plain: [
-                "{rangeLabel}：{count} 笔，{activeDays} 天，{total}。",
-                "本月 {count} 笔 / {activeDays} 记录日 / {total}。",
-                "{activeDays} 天有账，合计 {total}。",
-                "月总览：{count} 笔，{total}。"
+                "{rangeLabel} 有 {activeDays} 天留下了生活痕迹。",
+                "这个月来了 {activeDays} 天，留下 {count} 个片段。",
+                "先把 {rangeLabel} 轻轻打开。",
+                "这个月的生活章，从 {activeDays} 个记录日说起。"
             ]
         ),
         "month-early": PlaybackCopyGroup(
             warm: [
-                "上旬 {earlyCount} 笔，{earlyAmount}，像月初慢慢铺开的底色。",
-                "月初这十天：{earlyCount} 笔、{earlyAmount}，节奏偏稳。",
-                "上旬先落下 {earlyCount} 笔，合计 {earlyAmount}。",
-                "前十天记了 {earlyCount} 笔，{earlyAmount}，为这个月定调。"
+                "上旬先落下 {earlyCount} 笔记录。",
+                "月初这十天，留下了 {earlyCount} 笔。",
+                "上旬的记录先把这个月铺开。",
+                "前十天，是这个月的开场。"
             ],
             plain: [
-                "上旬 {earlyCount} 笔，{earlyAmount}。",
-                "1-10 日：{earlyAmount}。",
-                "上旬支出 {earlyAmount}。",
-                "上旬 {earlyCount} 笔。"
+                "上旬先落下了 {earlyCount} 笔。",
+                "月初这十天，有一点点生活底色。",
+                "上旬的记录先把这个月铺开。",
+                "前十天，是这个月的开场。"
             ]
         ),
         "month-middle-late": PlaybackCopyGroup(
             warm: [
-                "中旬 {midAmount}，下旬 {lateAmount}；{leadingSegment}更热闹一点。",
-                "月中的节奏在中下旬拉开：{leadingSegment}支出更集中。",
-                "中旬 {midAmount}、下旬 {lateAmount}，{leadingSegment}是本月的小高峰。",
+                "中旬和下旬的节奏拉开了一点，{leadingSegment}更热闹。",
+                "月中的节奏在中下旬拉开：{leadingSegment}更集中。",
+                "{leadingSegment}是本月后半段更明显的一段。",
                 "后半月比前半月更活跃，{leadingSegment}尤其明显。"
             ],
             plain: [
-                "中旬 {midAmount}，下旬 {lateAmount}。",
-                "中下旬对比：{midAmount} / {lateAmount}。",
-                "最高旬段：{leadingSegment}。",
-                "中 {midAmount} · 下 {lateAmount}。"
+                "中旬和下旬的节奏拉开了一点。",
+                "{leadingSegment}更热闹一点。",
+                "这个月的后半段更容易被看见。",
+                "中下旬各有自己的节奏。"
             ]
         ),
         "month-composition": PlaybackCopyGroup(
             warm: [
-                "「{topCategory}」约占 {ratio}%，是这个月最明显的一块拼图。",
-                "翻遍 {rangeLabel}，「{topCategory}」站 C 位，约 {ratio}%。",
-                "生活配方里，「{topCategory}」约 {ratio}%，仍是主角。",
-                "{ratio}% 落在「{topCategory}」，这一月的底色很清楚。"
+                "「{topCategory}」是这个月最明显的一块拼图。",
+                "翻遍 {rangeLabel}，「{topCategory}」站得比较靠前。",
+                "生活构成里，「{topCategory}」更靠前。",
+                "这个月，「{topCategory}」留下的痕迹更明显。"
             ],
             plain: [
-                "{topCategory}：{ratio}%。",
-                "本月 TOP1 {topCategory}（{ratio}%）。",
-                "最高分类 {topCategory}。",
-                "{topCategory} 占比 {ratio}%。"
+                "「{topCategory}」是这个月最明显的一块拼图。",
+                "这个月，「{topCategory}」最容易被看见。",
+                "生活构成里，「{topCategory}」站得比较靠前。",
+                "翻到这个月，「{topCategory}」是一条清楚的线。"
             ]
         ),
         "month-change": PlaybackCopyGroup(
@@ -198,18 +198,18 @@ enum PlaybackCopyPool {
                 "这一章讲完了，下个月见。"
             ],
             plain: [
-                "本月生活章已生成。",
-                "月章播放结束。",
-                "可继续查看月度复盘。",
-                "本月切片完成。"
+                "这个月先叙到这里。",
+                "这一章已经被好好收下。",
+                "下个月，会有新的生活章。",
+                "这段时间先放在这里。"
             ]
         )
     ]
 
     private static let teasers = [
-        "{busiestDayShort} 支出最多 · {topCategory} 约 {ratio}%",
-        "这一周，{topCategory} 是主角",
-        "{count} 笔 · {total} · {topCategory} 为主",
+        "{busiestDayShort} 最热闹 · {topCategory} 更靠前",
+        "这一周，{topCategory} 更常出现",
+        "{count} 笔小痕迹，串起这一周",
         "{rangeLabel} · 约半分钟讲完"
     ]
 

@@ -128,7 +128,7 @@ struct HomeView: View {
                                 .foregroundStyle(AppColors.subtext.opacity(0.9))
                         }
                         Text(homeViewModel.weekTopCategoryText != "暂无"
-                             ? "最近「\(homeViewModel.weekTopCategoryText)」类消费较多，可以稍微留意平衡。"
+                             ? "最近「\(homeViewModel.weekTopCategoryText)」出现得多一点，像这段日子的一个小主题。"
                              : "随手记几笔，这里会慢慢长出你的生活痕迹。")
                             .font(.system(size: 13))
                             .foregroundStyle(AppColors.subtext)
@@ -333,7 +333,7 @@ struct HomeView: View {
 
                 Text("·").foregroundStyle(AppColors.subtext)
 
-                Text(item.createdAt.formatted(date: .numeric, time: .shortened))
+                Text(item.createdAt.zhBillDateTime)
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.subtext)
             }
@@ -412,166 +412,14 @@ struct BillPlaybackSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Drag handle
-            Capsule()
-                .fill(Color.white.opacity(0.3))
-                .frame(width: 36, height: 5)
-                .padding(.top, 8).padding(.bottom, 4)
-
+            dragHandle
             if todayItems.isEmpty {
-                VStack(spacing: 12) {
-                    Text("📭").font(.system(size: 40))
-                    Text("今天还没有记录，先记一笔吧。")
-                        .font(.system(size: 14)).foregroundStyle(AppColors.subtext)
-                }
-                .frame(maxHeight: .infinity)
+                emptyPlaybackState
             } else {
-                // Title matching web: 今日生活回放 + 10秒看完...
-                VStack(spacing: 6) {
-                    Text("今日生活回放").font(.system(size: 18, weight: .bold)).foregroundStyle(AppColors.text)
-                    Text("10 秒看完今天的生活节奏").font(.system(size: 12)).foregroundStyle(AppColors.subtext)
-                }.padding(.top, 10).padding(.bottom, 6)
-
-                // Timeline
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            ForEach(Array(todayItems.enumerated()), id: \.element.id) { idx, item in
-                                VStack(spacing: 0) {
-                                    // Row 1: time·category on left, amount on right (dark/large)
-                                    HStack(alignment: .firstTextBaseline) {
-                                        HStack(spacing: 5) {
-                                            Circle()
-                                                .fill(idx <= activeIndex ? AppColors.accent : Color.white.opacity(0.4))
-                                                .frame(width: 7, height: 7)
-                                            Text(formatClockTime(item.createdAt))
-                                                .font(.system(size: 14, weight: .medium, design: .monospaced))
-                                                .foregroundStyle(idx <= activeIndex ? AppColors.text : AppColors.subtext)
-                                            Text("·").foregroundStyle(AppColors.subtext.opacity(0.35))
-                                            Text(item.category.rawValue)
-                                                .font(.system(size: 14, weight: idx == activeIndex ? .semibold : .regular))
-                                                .foregroundStyle(idx <= activeIndex ? AppColors.text : AppColors.subtext)
-                                        }
-                                        Spacer()
-                                        Text(item.amount.formatted(.cny))
-                                            .font(.system(size: 18, weight: .bold, design: .rounded))
-                                            .foregroundStyle(AppColors.text)
-                                    }
-                                    // Row 2: title·emotionTag (light/pale)
-                                    HStack(spacing: 4) {
-                                        Text(item.title).font(.system(size: 11))
-                                        if !item.emotionTag.isEmpty {
-                                            Text("·").font(.system(size: 11)).foregroundStyle(AppColors.subtext.opacity(0.4))
-                                            Text(item.emotionTag).font(.system(size: 11))
-                                        }
-                                        Spacer()
-                                    }
-                                    .foregroundStyle(AppColors.subtext.opacity(0.6))
-                                    .padding(.top, 2)
-                                }
-                                .padding(.vertical, idx == activeIndex ? 10 : 7)
-                                .padding(.horizontal, 20)
-                                .background(
-                                    idx == activeIndex && !playbackDone
-                                        ? RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                            .fill(.ultraThinMaterial)
-                                            .overlay(RoundedRectangle(cornerRadius: 14).fill(AppColors.accent.opacity(0.05)))
-                                        : nil
-                                )
-                                .scaleEffect(idx == activeIndex && !playbackDone ? 1.01 : 1.0, anchor: .leading)
-                                .opacity(idx <= activeIndex || activeIndex == -1 ? 1 : 0.35)
-                                .animation(.spring(response: 0.35, dampingFraction: 0.65), value: activeIndex)
-                                .id(idx)
-                                .overlay(alignment: .top) {
-                                    if idx > 0 { Rectangle().fill(Color.white.opacity(0.25)).frame(height: 0.6).padding(.horizontal, 12) }
-                                }
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                    .onChange(of: activeIndex) { _, idx in
-                        if idx >= 0 {
-                            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                                proxy.scrollTo(idx, anchor: .center)
-                            }
-                        }
-                    }
-                }
-
+                playbackContent
                 Spacer()
-
-                if playbackDone {
-                    Text("今天的生活节奏已记录完毕✨")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(AppColors.accent.opacity(0.8))
-                        .padding(.bottom, 8)
-
-                    // Member nudge card — floating glass layer above controls
-                    if showMemberNudge {
-                        VStack(spacing: 10) {
-                            Text("把这周的生活轨迹长期留住，回看会更温柔。")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(AppColors.text.opacity(0.88))
-                                .multilineTextAlignment(.center)
-                            HStack(spacing: 20) {
-                                Button { dismiss() } label: {
-                                    Text("稍后再说").font(.system(size: 12))
-                                        .foregroundStyle(AppColors.subtext.opacity(0.7))
-                                }
-                                Button {
-                                    dismiss()
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        onShowMemberPricing?()
-                                    }
-                                } label: {
-                                    Text("✨ 了解会员").font(.system(size: 13, weight: .semibold))
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 16).padding(.vertical, 8)
-                                        .background(Capsule(style: .continuous).fill(AppColors.accent))
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(16)
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(.ultraThinMaterial)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(Color.white.opacity(0.5), lineWidth: 0.8)
-                        )
-                        .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 4)
-                        .padding(.horizontal, 16).padding(.bottom, 10)
-                        .transition(.opacity.combined(with: .scale(scale: 0.95).combined(with: .offset(y: 8))))
-                    }
-                }
-
-                // Controls: grid-template-columns 1fr 1fr
-                VStack(spacing: 10) {
-                    // 2-column grid matching web .bill-playback-actions
-                    HStack(spacing: 8) {
-                        Button {
-                            if playbackDone { dismiss() }
-                            else { isPlaying.toggle() }
-                        } label: {
-                            Text(playbackDone ? "关闭" : (isPlaying ? "暂停" : "播放"))
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(AppColors.text.opacity(0.8))
-                                .frame(maxWidth: .infinity).padding(.vertical, 10)
-                                .background(RoundedRectangle(cornerRadius: 12).fill(.ultraThinMaterial))
-                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.35), lineWidth: 0.6))
-                        }
-                        Button { restartPlayback() } label: {
-                            Text(playbackDone ? "再看一遍" : "重播").font(.system(size: 14, weight: .medium)).foregroundStyle(.white)
-                                .frame(maxWidth: .infinity).padding(.vertical, 10)
-                                .background(Capsule(style: .continuous).fill(AppColors.accent))
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 20).padding(.bottom, 16)
-                }
+                playbackDoneSection
+                playbackControls
             }
         }
         .background(.ultraThinMaterial)
@@ -608,6 +456,253 @@ struct BillPlaybackSheet: View {
                 }
             }
         }
+    }
+
+    private var dragHandle: some View {
+        Capsule()
+            .fill(Color.white.opacity(0.3))
+            .frame(width: 36, height: 5)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+    }
+
+    private var emptyPlaybackState: some View {
+        VStack(spacing: 12) {
+            Text("📭")
+                .font(.system(size: 40))
+            Text("今天还没有记录，先记一笔吧。")
+                .font(.system(size: 14))
+                .foregroundStyle(AppColors.subtext)
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    private var playbackContent: some View {
+        VStack(spacing: 0) {
+            playbackHeader
+            playbackTimeline
+        }
+    }
+
+    private var playbackHeader: some View {
+        VStack(spacing: 6) {
+            Text("今日生活回放")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(AppColors.text)
+            Text("10 秒看完今天的生活节奏")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext)
+        }
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+    }
+
+    private var playbackTimeline: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(Array(todayItems.enumerated()), id: \.element.id) { index, item in
+                        playbackTimelineRow(item: item, index: index)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .onChange(of: activeIndex) { _, index in
+                guard index >= 0 else { return }
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                    proxy.scrollTo(index, anchor: .center)
+                }
+            }
+        }
+    }
+
+    private func playbackTimelineRow(item: HomeItem, index: Int) -> some View {
+        let isActive = index == activeIndex
+        let isRevealed = index <= activeIndex || activeIndex == -1
+
+        return VStack(spacing: 0) {
+            playbackTimelineMainRow(item: item, index: index, isActive: isActive)
+            playbackTimelineNoteRow(item: item)
+        }
+        .padding(.vertical, isActive ? 10 : 7)
+        .padding(.horizontal, 20)
+        .background(activeTimelineBackground(isActive: isActive))
+        .scaleEffect(isActive && !playbackDone ? 1.01 : 1.0, anchor: .leading)
+        .opacity(isRevealed ? 1 : 0.35)
+        .animation(.spring(response: 0.35, dampingFraction: 0.65), value: activeIndex)
+        .id(index)
+        .overlay(alignment: .top) {
+            if index > 0 {
+                Rectangle()
+                    .fill(Color.white.opacity(0.25))
+                    .frame(height: 0.6)
+                    .padding(.horizontal, 12)
+            }
+        }
+    }
+
+    private func playbackTimelineMainRow(item: HomeItem, index: Int, isActive: Bool) -> some View {
+        let isRevealed = index <= activeIndex
+        let textColor = isRevealed ? AppColors.text : AppColors.subtext
+        let dotColor = isRevealed ? AppColors.accent : Color.white.opacity(0.4)
+        let categoryWeight: Font.Weight = isActive ? .semibold : .regular
+
+        return HStack(alignment: .firstTextBaseline) {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 7, height: 7)
+                Text(formatClockTime(item.createdAt))
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(textColor)
+                Text("·")
+                    .foregroundStyle(AppColors.subtext.opacity(0.35))
+                Text(item.category.rawValue)
+                    .font(.system(size: 14, weight: categoryWeight))
+                    .foregroundStyle(textColor)
+            }
+            Spacer()
+            Text(item.amount.formatted(.cny))
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text)
+        }
+    }
+
+    private func playbackTimelineNoteRow(item: HomeItem) -> some View {
+        HStack(spacing: 4) {
+            Text(item.title)
+                .font(.system(size: 11))
+            if !item.emotionTag.isEmpty {
+                Text("·")
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppColors.subtext.opacity(0.4))
+                Text(item.emotionTag)
+                    .font(.system(size: 11))
+            }
+            Spacer()
+        }
+        .foregroundStyle(AppColors.subtext.opacity(0.6))
+        .padding(.top, 2)
+    }
+
+    @ViewBuilder
+    private func activeTimelineBackground(isActive: Bool) -> some View {
+        if isActive && !playbackDone {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(AppColors.accent.opacity(0.05))
+                )
+        }
+    }
+
+    @ViewBuilder
+    private var playbackDoneSection: some View {
+        if playbackDone {
+            Text("今天的生活节奏已记录完毕✨")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(AppColors.accent.opacity(0.8))
+                .padding(.bottom, 8)
+
+            if showMemberNudge {
+                memberPlaybackNudge
+            }
+        }
+    }
+
+    private var memberPlaybackNudge: some View {
+        VStack(spacing: 10) {
+            Text("把这周的生活轨迹长期留住，回看会更温柔。")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AppColors.text.opacity(0.88))
+                .multilineTextAlignment(.center)
+            HStack(spacing: 20) {
+                Button {
+                    dismiss()
+                } label: {
+                    Text("稍后再说")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext.opacity(0.7))
+                }
+                Button {
+                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        onShowMemberPricing?()
+                    }
+                } label: {
+                    Text("✨ 了解会员")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Capsule(style: .continuous).fill(AppColors.accent))
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.5), lineWidth: 0.8)
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 4)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
+        .transition(.opacity.combined(with: .scale(scale: 0.95).combined(with: .offset(y: 8))))
+    }
+
+    private var playbackControls: some View {
+        HStack(spacing: 8) {
+            Button {
+                if playbackDone {
+                    dismiss()
+                } else {
+                    isPlaying.toggle()
+                }
+            } label: {
+                primaryPlaybackControlLabel
+            }
+            Button {
+                restartPlayback()
+            } label: {
+                replayPlaybackControlLabel
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 16)
+    }
+
+    private var primaryPlaybackControlLabel: some View {
+        let title = playbackDone ? "关闭" : (isPlaying ? "暂停" : "播放")
+
+        return Text(title)
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(AppColors.text.opacity(0.8))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 12).fill(.ultraThinMaterial))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.white.opacity(0.35), lineWidth: 0.6)
+            )
+    }
+
+    private var replayPlaybackControlLabel: some View {
+        let title = playbackDone ? "再看一遍" : "重播"
+
+        return Text(title)
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(Capsule(style: .continuous).fill(AppColors.accent))
     }
 
     private var progressFraction: CGFloat {

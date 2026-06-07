@@ -2,6 +2,7 @@ import Foundation
 
 enum LocalStore {
     private static let settingsKey = "app_settings_v1"
+    private static let homeItemsBackupKey = "home_items_v1_backup"
     private static let homeItemsFile = "home_items_v1.json"
     private static let dailyInsightsFile = "daily_insights_v1.json"
 
@@ -28,18 +29,19 @@ enum LocalStore {
 
     static func loadHomeItems() -> [HomeItem] {
         guard let fileURL = fileURL(for: homeItemsFile) else {
-            return []
+            return loadHomeItemsBackup()
         }
 
         do {
             let data = try Data(contentsOf: fileURL)
             return try JSONDecoder().decode([HomeItem].self, from: data)
         } catch {
-            return []
+            return loadHomeItemsBackup()
         }
     }
 
     static func saveHomeItems(_ items: [HomeItem]) {
+        saveHomeItemsBackup(items)
         guard let fileURL = fileURL(for: homeItemsFile) else {
             return
         }
@@ -50,6 +52,18 @@ enum LocalStore {
         } catch {
             print("Failed to save home items: \(error)")
         }
+    }
+
+    private static func loadHomeItemsBackup() -> [HomeItem] {
+        guard let data = UserDefaults.standard.data(forKey: homeItemsBackupKey) else {
+            return []
+        }
+        return (try? JSONDecoder().decode([HomeItem].self, from: data)) ?? []
+    }
+
+    private static func saveHomeItemsBackup(_ items: [HomeItem]) {
+        guard let data = try? JSONEncoder().encode(items) else { return }
+        UserDefaults.standard.set(data, forKey: homeItemsBackupKey)
     }
 
     static func loadDailyInsights() -> [DailyInsight] {

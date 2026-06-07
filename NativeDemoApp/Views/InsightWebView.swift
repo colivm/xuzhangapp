@@ -38,289 +38,7 @@ struct InsightWebView: View {
     var body: some View {
         ZStack {
             ScrollView {
-                VStack(spacing: 12) {
-                // ── 近 7 天生活复盘 ──
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("近 7 天生活复盘")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(AppColors.text)
-
-                    let weeklyBlocks = homeViewModel.localWeeklyInsightBlocks()
-                    if weeklyBlocks.summary.contains("暂无复盘") {
-                        Text(weeklyBlocks.summary)
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppColors.subtext)
-                    } else {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(weeklyBlocks.summary)
-                                .font(.system(size: 14))
-                                .foregroundStyle(AppColors.text)
-                            Text(weeklyBlocks.structure)
-                                .font(.system(size: 12))
-                                .foregroundStyle(AppColors.subtext)
-                            Text(weeklyBlocks.advice)
-                                .font(.system(size: 12))
-                                .foregroundStyle(AppColors.subtext)
-                        }
-                    }
-
-                    // Soft action buttons (matching web weekly-soft-actions)
-                    softActionButton("梳理本周节奏") {
-                        let text = homeViewModel.buildWeeklyRhythmText()
-                        homeViewModel.setLatestActionCard(text, scope: "weekly")
-                        homeViewModel.markWeeklyRhythmReviewed()
-                    }
-                    softActionButton("生成周度分享卡") {
-                        homeViewModel.markWeeklyShareGenerated()
-                        generateAndShareWeeklyCard()
-                    }
-                    if let weeklyShareSaveMessage {
-                        Text(weeklyShareSaveMessage)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AppColors.subtext)
-                    }
-                    if !homeViewModel.weekTopCategoryText.isEmpty && homeViewModel.weekTopCategoryText != "暂无" {
-                        softActionButton("标记常花类目") {
-                            homeViewModel.markWeeklyTag()
-                        }
-                    }
-                }
-                .glassPanel(radius: 24, padding: 20)
-
-                // ── 月度生活复盘 ──
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("月度生活复盘")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(AppColors.text)
-
-                    let left = max(0, trialTotal - monthlyTrialUsed)
-                    let isMember = ["monthly", "yearly", "lifetime"].contains(settingsViewModel.memberTier.lowercased())
-                    let exhausted = !isMember && monthlyTrialUsed >= trialTotal
-
-                    if !isMember {
-                        Text(exhausted ? "免费试用次数已用完" : "剩余试用次数：\(left)/\(trialTotal)")
-                            .font(.system(size: 12))
-                            .foregroundStyle(exhausted ? Color.orange.opacity(0.8) : AppColors.subtext)
-                    }
-
-                    if exhausted {
-                        // Trial exhausted - show upgrade
-                        Button {
-                            monthlyTrialModal = MonthlyTrialModal(
-                                title: "免费次数已用完",
-                                body: "您的免费月度复盘次数已用完，升级会员即可解锁无限次月度/季度/年度 AI 复盘，还有更多专属权益等你体验。"
-                            )
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text("🔒 开通会员解锁无限复盘")
-                                    .font(.system(size: 16, weight: .semibold))
-                            }
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(
-                                LinearGradient(colors: [Color.orange.opacity(0.8), Color.orange.opacity(0.6)],
-                                               startPoint: .topLeading, endPoint: .bottomTrailing),
-                                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            )
-                            .shadow(color: Color.orange.opacity(0.3), radius: 8, y: 4)
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        Button {
-                            Task {
-                                await generateMonthlyInsight(isMember: isMember)
-                            }
-                        } label: {
-                            Text(homeViewModel.isGeneratingMonthlyInsight ? "正在生成月度复盘..." : "生成月度复盘")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                            .background(
-                                LinearGradient(
-                                    colors: [AppColors.accent.opacity(0.92), AppColors.accent],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            )
-                            .shadow(color: AppColors.accent.opacity(0.3), radius: 8, y: 4)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(homeViewModel.isGeneratingMonthlyInsight)
-                        }
-
-                    if let status = monthlyAIStatus ?? defaultMonthlyAIStatus {
-                        aiStatusPill(status)
-                    }
-
-                    if let error = homeViewModel.insightErrorMessage,
-                       monthlyAIStatus?.kind == .error {
-                        Text(error)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.orange.opacity(0.9))
-                            .lineLimit(3)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(Color.orange.opacity(0.08))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(Color.orange.opacity(0.22), lineWidth: 1)
-                            )
-                    }
-
-                    if monthlyInsightGenerated, let report = monthlyReport {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(report.summary)
-                                .font(.system(size: 14))
-                                .foregroundStyle(AppColors.text)
-                            Text(report.structure)
-                                .font(.system(size: 12))
-                                .foregroundStyle(AppColors.subtext)
-                            Text(report.advice)
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(AppColors.text)
-                        }
-                        .padding(12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(AppColors.accent.opacity(0.08))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(AppColors.accent.opacity(0.22), lineWidth: 1)
-                        )
-
-                        // Monthly soft actions
-                        softActionButton("记一句本月收束") {
-                            homeViewModel.markMonthlyClosing()
-                        }
-                        softActionButton("保存月度小结") {
-                            homeViewModel.markMonthlySaveSummary()
-                        }
-                        softActionButton("切换叙述风格") {
-                            homeViewModel.regenerateMonthlyInsight()
-                        }
-                    }
-
-                    // Advanced insight toggle
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showAdvancedInsight.toggle()
-                        }
-                    } label: {
-                        Text(showAdvancedInsight ? "收起更多复盘" : "查看更多复盘")
-                            .font(.system(size: 14))
-                            .foregroundStyle(AppColors.subtext.opacity(0.88))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(Color.white.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                            )
-                    }
-                    .buttonStyle(.plain)
-
-                    if showAdvancedInsight {
-                        if settingsViewModel.memberTier == "free" {
-                            Button {
-                                onShowMemberPricing?()
-                            } label: {
-                                lockedReportButton("生成季度复盘")
-                            }
-                            .buttonStyle(.plain)
-                            Button {
-                                onShowMemberPricing?()
-                            } label: {
-                                lockedReportButton("生成年度复盘")
-                            }
-                            .buttonStyle(.plain)
-                        } else {
-                            Text("季度 / 年度复盘正在打磨中，先从每周和每月慢慢回看。")
-                                .font(.system(size: 12))
-                                .foregroundStyle(AppColors.subtext)
-                        }
-                    }
-                }
-                .glassPanel(radius: 24, padding: 20)
-
-                // ── 今日生活小记 ──
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("今日生活小记")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(AppColors.text)
-
-                    if let insight = homeViewModel.todayInsight {
-                        Text(insight.summary)
-                            .font(.system(size: 14))
-                            .foregroundStyle(AppColors.text)
-                        Text(insight.action)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(AppColors.text)
-                        Text(insight.encourage)
-                            .font(.system(size: 12))
-                            .foregroundStyle(AppColors.subtext)
-                    } else {
-                        Text("还没有今日复盘。")
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppColors.subtext)
-                    }
-
-                    Button("换个轻读版本") {
-                        Task {
-                            await homeViewModel.regenerateTodayInsight(
-                                userName: settingsViewModel.displayName,
-                                settings: settingsViewModel.settings
-                            )
-                        }
-                    }
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppColors.subtext.opacity(0.88))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color.white.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                    )
-                    .buttonStyle(.plain)
-
-                    if homeViewModel.isGeneratingInsight {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                            Text("AI 正在生成中…")
-                                .font(.system(size: 12))
-                                .foregroundStyle(AppColors.subtext)
-                        }
-                        .padding(.top, 4)
-                    }
-
-                    if let error = homeViewModel.insightErrorMessage {
-                        Text(error)
-                            .font(.system(size: 11))
-                            .foregroundStyle(AppColors.subtext)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(Color(red: 255/255, green: 246/255, blue: 222/255).opacity(0.78))
-                            )
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .stroke(Color(red: 228/255, green: 201/255, blue: 134/255).opacity(0.48), lineWidth: 1)
-                            )
-                    }
-                }
-                .glassPanel(radius: 24, padding: 20)
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, 4)
-                .padding(.bottom, 120)
-                .frame(maxWidth: 430)
-                .frame(maxWidth: .infinity, alignment: .center)
+                insightContent
             }
             .scrollIndicators(.hidden)
 
@@ -330,6 +48,370 @@ struct InsightWebView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: monthlyTrialModal?.id)
+    }
+
+    private var insightContent: some View {
+        VStack(spacing: 12) {
+            weeklyInsightSection
+            monthlyInsightSection
+            todayInsightSection
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+        .padding(.bottom, 120)
+        .frame(maxWidth: 430)
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var weeklyInsightSection: some View {
+        let weeklyBlocks = homeViewModel.localWeeklyInsightBlocks()
+
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("近 7 天生活复盘")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(AppColors.text)
+
+            weeklyInsightText(weeklyBlocks)
+
+            softActionButton("梳理本周节奏") {
+                let text = homeViewModel.buildWeeklyRhythmText()
+                homeViewModel.setLatestActionCard(text, scope: "weekly")
+                homeViewModel.markWeeklyRhythmReviewed()
+            }
+            softActionButton("生成周度分享卡") {
+                homeViewModel.markWeeklyShareGenerated()
+                generateAndShareWeeklyCard()
+            }
+            if let weeklyShareSaveMessage {
+                Text(weeklyShareSaveMessage)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            if !homeViewModel.weekTopCategoryText.isEmpty && homeViewModel.weekTopCategoryText != "暂无" {
+                softActionButton("标记常花类目") {
+                    homeViewModel.markWeeklyTag()
+                }
+            }
+        }
+        .glassPanel(radius: 24, padding: 20)
+    }
+
+    @ViewBuilder
+    private func weeklyInsightText(_ weeklyBlocks: (summary: String, structure: String, advice: String)) -> some View {
+        if weeklyBlocks.summary.contains("暂无复盘") {
+            Text(weeklyBlocks.summary)
+                .font(.system(size: 13))
+                .foregroundStyle(AppColors.subtext)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(weeklyBlocks.summary)
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppColors.text)
+                Text(weeklyBlocks.structure)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext)
+                Text(weeklyBlocks.advice)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext)
+            }
+        }
+    }
+
+    private var monthlyInsightSection: some View {
+        let left = max(0, trialTotal - monthlyTrialUsed)
+        let tier = settingsViewModel.memberTier.lowercased()
+        let isMember = ["monthly", "yearly", "lifetime"].contains(tier)
+        let exhausted = !isMember && monthlyTrialUsed >= trialTotal
+
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("月度生活复盘")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(AppColors.text)
+
+            monthlyTrialText(left: left, isMember: isMember, exhausted: exhausted)
+            monthlyGenerateControl(isMember: isMember, exhausted: exhausted)
+            monthlyAIStatusView
+            monthlyErrorView
+            monthlyReportView
+            advancedInsightToggle
+            advancedInsightContent
+        }
+        .glassPanel(radius: 24, padding: 20)
+    }
+
+    @ViewBuilder
+    private func monthlyTrialText(left: Int, isMember: Bool, exhausted: Bool) -> some View {
+        if !isMember {
+            let text = exhausted ? "免费试用次数已用完" : "剩余试用次数：\(left)/\(trialTotal)"
+            let color = exhausted ? Color.orange.opacity(0.8) : AppColors.subtext
+
+            Text(text)
+                .font(.system(size: 12))
+                .foregroundStyle(color)
+        }
+    }
+
+    @ViewBuilder
+    private func monthlyGenerateControl(isMember: Bool, exhausted: Bool) -> some View {
+        if exhausted {
+            Button {
+                monthlyTrialModal = MonthlyTrialModal(
+                    title: "免费次数已用完",
+                    body: "您的免费月度复盘次数已用完，升级会员即可解锁无限次月度/季度/年度 AI 复盘，还有更多专属权益等你体验。"
+                )
+            } label: {
+                monthlyUpgradeButtonLabel
+            }
+            .buttonStyle(.plain)
+        } else {
+            Button {
+                Task {
+                    await generateMonthlyInsight(isMember: isMember)
+                }
+            } label: {
+                monthlyGenerateButtonLabel
+            }
+            .buttonStyle(.plain)
+            .disabled(homeViewModel.isGeneratingMonthlyInsight)
+        }
+    }
+
+    private var monthlyUpgradeButtonLabel: some View {
+        HStack(spacing: 6) {
+            Text("🔒 开通会员解锁无限复盘")
+                .font(.system(size: 16, weight: .semibold))
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(
+            LinearGradient(
+                colors: [Color.orange.opacity(0.8), Color.orange.opacity(0.6)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .shadow(color: Color.orange.opacity(0.3), radius: 8, y: 4)
+    }
+
+    private var monthlyGenerateButtonLabel: some View {
+        let title = homeViewModel.isGeneratingMonthlyInsight ? "正在生成月度复盘..." : "生成月度复盘"
+
+        return Text(title)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                LinearGradient(
+                    colors: [AppColors.accent.opacity(0.92), AppColors.accent],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            )
+            .shadow(color: AppColors.accent.opacity(0.3), radius: 8, y: 4)
+    }
+
+    @ViewBuilder
+    private var monthlyAIStatusView: some View {
+        if let status = monthlyAIStatus ?? defaultMonthlyAIStatus {
+            aiStatusPill(status)
+        }
+    }
+
+    @ViewBuilder
+    private var monthlyErrorView: some View {
+        if let error = homeViewModel.insightErrorMessage,
+           monthlyAIStatus?.kind == .error {
+            monthlyErrorText(error)
+        }
+    }
+
+    private func monthlyErrorText(_ error: String) -> some View {
+        let foreground = Color.orange.opacity(0.9)
+        let fill = Color.orange.opacity(0.08)
+        let stroke = Color.orange.opacity(0.22)
+
+        return Text(error)
+            .font(.system(size: 11))
+            .foregroundStyle(foreground)
+            .lineLimit(3)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(fill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(stroke, lineWidth: 1)
+            )
+    }
+
+    @ViewBuilder
+    private var monthlyReportView: some View {
+        if monthlyInsightGenerated, let report = monthlyReport {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(report.summary)
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppColors.text)
+                Text(report.structure)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext)
+                Text(report.advice)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(AppColors.accent.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(AppColors.accent.opacity(0.22), lineWidth: 1)
+            )
+
+            softActionButton("记一句本月收束") {
+                homeViewModel.markMonthlyClosing()
+            }
+            softActionButton("保存月度小结") {
+                homeViewModel.markMonthlySaveSummary()
+            }
+            softActionButton("切换叙述风格") {
+                homeViewModel.regenerateMonthlyInsight()
+            }
+        }
+    }
+
+    private var advancedInsightToggle: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showAdvancedInsight.toggle()
+            }
+        } label: {
+            Text(showAdvancedInsight ? "收起更多复盘" : "查看更多复盘")
+                .font(.system(size: 14))
+                .foregroundStyle(AppColors.subtext.opacity(0.88))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.white.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var advancedInsightContent: some View {
+        if showAdvancedInsight {
+            if settingsViewModel.memberTier == "free" {
+                Button {
+                    onShowMemberPricing?()
+                } label: {
+                    lockedReportButton("生成季度复盘")
+                }
+                .buttonStyle(.plain)
+                Button {
+                    onShowMemberPricing?()
+                } label: {
+                    lockedReportButton("生成年度复盘")
+                }
+                .buttonStyle(.plain)
+            } else {
+                Text("季度 / 年度复盘正在打磨中，先从每周和每月慢慢回看。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext)
+            }
+        }
+    }
+
+    private var todayInsightSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("今日生活小记")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(AppColors.text)
+
+            todayInsightText
+            todayRegenerateButton
+            todayInsightLoading
+            todayInsightError
+        }
+        .glassPanel(radius: 24, padding: 20)
+    }
+
+    @ViewBuilder
+    private var todayInsightText: some View {
+        if let insight = homeViewModel.todayInsight {
+            Text(insight.summary)
+                .font(.system(size: 14))
+                .foregroundStyle(AppColors.text)
+            Text(insight.action)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AppColors.text)
+            Text(insight.encourage)
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext)
+        } else {
+            Text("还没有今日复盘。")
+                .font(.system(size: 13))
+                .foregroundStyle(AppColors.subtext)
+        }
+    }
+
+    private var todayRegenerateButton: some View {
+        Button("换个轻读版本") {
+            Task {
+                await homeViewModel.regenerateTodayInsight(
+                    userName: settingsViewModel.displayName,
+                    settings: settingsViewModel.settings
+                )
+            }
+        }
+        .font(.system(size: 14))
+        .foregroundStyle(AppColors.subtext.opacity(0.88))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+        )
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var todayInsightLoading: some View {
+        if homeViewModel.isGeneratingInsight {
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("AI 正在生成中…")
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    @ViewBuilder
+    private var todayInsightError: some View {
+        if let error = homeViewModel.insightErrorMessage {
+            Text(error)
+                .font(.system(size: 11))
+                .foregroundStyle(AppColors.subtext)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color(red: 255/255, green: 246/255, blue: 222/255).opacity(0.78))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(Color(red: 228/255, green: 201/255, blue: 134/255).opacity(0.48), lineWidth: 1)
+                )
+        }
     }
 
     private func monthlyTrialOverlay(_ modal: MonthlyTrialModal) -> some View {
@@ -838,4 +920,3 @@ extension Color {
         self.init(red: r, green: g, blue: b)
     }
 }
-

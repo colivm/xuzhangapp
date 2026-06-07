@@ -8,7 +8,7 @@ struct WeatherSnapshot: Equatable {
 }
 
 @MainActor
-final class WeatherCompanionService: NSObject, CLLocationManagerDelegate {
+final class WeatherCompanionService: NSObject, @preconcurrency CLLocationManagerDelegate {
     static let shared = WeatherCompanionService()
 
     private let manager = CLLocationManager()

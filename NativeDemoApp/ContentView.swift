@@ -684,9 +684,9 @@ struct RecordEditSheet: View {
 
                     // Date
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("日期").font(.system(size: 14, weight: .medium))
+                        Text("账单时间").font(.system(size: 14, weight: .medium))
                             .foregroundStyle(AppColors.text.opacity(0.82))
-                        DatePicker("", selection: $selectedDate, displayedComponents: [.date])
+                        DatePicker("补记时间", selection: $selectedDate, displayedComponents: [.date, .hourAndMinute])
                             .datePickerStyle(.graphical)
                             .padding(8)
                             .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -709,7 +709,7 @@ struct RecordEditSheet: View {
                         var updated = item
                         updated.amount = parsedAmount
                         updated.title = titleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            ? "\(selectedCategory.rawValue)消费" : titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            ? selectedCategory.defaultRecordTitle : titleText.trimmingCharacters(in: .whitespacesAndNewlines)
                         updated.category = selectedCategory
                         updated.createdAt = selectedDate
                         updated.updatedAt = Date()

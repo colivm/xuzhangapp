@@ -13,6 +13,8 @@ struct RecordView: View {
     @State private var showOCRConfirmSheet = false
     @State private var showRecordDateSheet = false
     @State private var scenePackExpanded = false
+    @State private var scenePackVariants: [String: Int] = [:]
+    @State private var amountPadActive = false
     @FocusState private var focusedField: RecordField?
 
     private enum RecordField {
@@ -38,13 +40,13 @@ struct RecordView: View {
         let categoryToPackId: [HomeItem.Category: String] = [
             .dining: "food",
             .transport: "commute",
-            .shopping: "travel",
-            .daily: settingsViewModel.petCompanionEnabled ? "pet" : "home",
+            .shopping: "shopping",
+            .daily: "home",
             .entertainment: "travel",
             .lodging: "travel",
             .health: "care",
             .home: "home",
-            .social: "food",
+            .social: "social",
             .other: "travel",
         ]
         if let packId = categoryToPackId[homeViewModel.selectedCategory],
@@ -55,7 +57,7 @@ struct RecordView: View {
         let amount = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
         if amount <= 15 { return "commute" }
         if amount <= 45 { return "food" }
-        if amount <= 120 { return settingsViewModel.petCompanionEnabled ? "pet" : "home" }
+        if amount <= 120 { return "home" }
         return "travel"
     }
 
@@ -63,17 +65,39 @@ struct RecordView: View {
         dismissKeyboard()
         let amount = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
         let categoryContext = keepSelectedCategory ? homeViewModel.selectedCategory : pack.category
+        let variantKey = scenePackVariantKey(
+            pack: pack,
+            amount: amount,
+            category: categoryContext,
+            date: homeViewModel.selectedDate
+        )
+        let variant = scenePackVariants[variantKey, default: 0]
+        scenePackVariants[variantKey] = variant + 1
         homeViewModel.inputTitle = ScenePackCopyPool.note(
             for: pack,
             amount: amount,
+            date: homeViewModel.selectedDate,
             categoryContext: categoryContext,
             petName: settingsViewModel.petNickname,
             historyItems: homeViewModel.items,
-            allowPetCopy: settingsViewModel.petCompanionEnabled
+            allowPetCopy: settingsViewModel.petCompanionEnabled,
+            variant: variant
         )
         if !keepSelectedCategory {
             homeViewModel.selectCategory(pack.category)
         }
+    }
+
+    private func scenePackVariantKey(
+        pack: ScenePackDefinition,
+        amount: Double,
+        category: HomeItem.Category,
+        date: Date
+    ) -> String {
+        let day = Calendar.current.startOfDay(for: date).timeIntervalSince1970
+        let hour = Calendar.current.component(.hour, from: date)
+        let amountBucket = Int((amount * 100).rounded())
+        return "\(pack.id)|\(category.rawValue)|\(amountBucket)|\(Int(day))|\(hour)"
     }
 
     private func scenePackDesc(_ pack: ScenePackDefinition) -> String {
@@ -96,10 +120,11 @@ struct RecordView: View {
     }
 
     private var shouldShowAmountQuickKeys: Bool {
-        selectedEntryMode == .manual && (focusedField == .amount || hasAmountDraft)
+        selectedEntryMode == .manual && amountPadActive
     }
 
     private func dismissKeyboard() {
+        amountPadActive = false
         focusedField = nil
     }
 
@@ -140,14 +165,13 @@ struct RecordView: View {
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("完成") {
-                    dismissKeyboard()
-                }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if shouldShowAmountQuickKeys {
+                amountKeyboardDock
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .animation(.easeInOut(duration: 0.18), value: shouldShowAmountQuickKeys)
         .onChange(of: selectedPhoto) { _, newValue in
             guard let newValue else { return }
             Task {
@@ -192,12 +216,17 @@ struct RecordView: View {
         .onChange(of: homeViewModel.selectedDate) { _, _ in
             refreshRecommendedCategory()
         }
+        .onChange(of: focusedField) { _, newValue in
+            if newValue == .note {
+                amountPadActive = false
+            }
+        }
         .sheet(isPresented: $showRecordDateSheet) {
             NavigationStack {
-                DatePicker("账单日期", selection: $homeViewModel.selectedDate, displayedComponents: [.date])
+                DatePicker("账单时间", selection: $homeViewModel.selectedDate, displayedComponents: [.date, .hourAndMinute])
                     .datePickerStyle(.graphical)
                     .padding()
-                    .navigationTitle("补记日期")
+                    .navigationTitle("补记时间")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
@@ -260,8 +289,6 @@ struct RecordView: View {
         VStack(alignment: .leading, spacing: 14) {
             // Amount field
             amountField
-            // Quick keyboard (show on focus or draft, matching web)
-            if shouldShowAmountQuickKeys { amountQuickKeys }
             // Category chips
             if hasValidAmount { categorySection }
             // Note suggestions
@@ -291,20 +318,27 @@ struct RecordView: View {
                 .foregroundStyle(recordInk.opacity(0.82))
 
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                HStack(spacing: 0) {
+                Button {
+                    focusedField = nil
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        amountPadActive = true
+                    }
+                } label: {
+                    HStack(spacing: 0) {
                     Text("¥")
                         .font(.system(size: 28, weight: .semibold, design: .rounded))
                         .foregroundStyle(AppColors.subtext.opacity(0.74))
                         .padding(.trailing, 2)
                         .offset(y: 1)
 
-                    TextField("0.00", text: $homeViewModel.inputAmount)
-                        .keyboardType(.decimalPad)
+                    Text(homeViewModel.inputAmount.isEmpty ? "0.00" : homeViewModel.inputAmount)
                         .font(.system(size: 40, weight: .bold, design: .rounded))
-                        .foregroundStyle(recordInk)
-                        .multilineTextAlignment(.leading)
-                        .focused($focusedField, equals: .amount)
+                        .foregroundStyle(homeViewModel.inputAmount.isEmpty ? AppColors.subtext.opacity(0.45) : recordInk)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentTransition(.numericText())
+                    }
                 }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 14)
@@ -332,39 +366,114 @@ struct RecordView: View {
 
     // MARK: - Amount Quick Keys
 
-    private var amountQuickKeys: some View {
-        HStack(spacing: 8) {
-            quickKeyButton(".00") { applyDot00() }
-            quickKeyButton("+10元") { applyAmountDelta(10) }
-            quickKeyButton("+50元") { applyAmountDelta(50) }
-            quickKeyButton("+100元") { applyAmountDelta(100) }
+    private var amountKeyboardDock: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                Text("金额")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer()
+                quickKeyButton(".00") { applyDot00() }
+                    .frame(maxWidth: 72)
+                quickKeyButton("+10") { applyAmountDelta(10) }
+                    .frame(maxWidth: 72)
+                quickKeyButton("+50") { applyAmountDelta(50) }
+                    .frame(maxWidth: 72)
+                Button {
+                    dismissKeyboard()
+                } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(recordAccent)
+                        .frame(width: 42, height: 34)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.white.opacity(0.78))
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("收起键盘")
+            }
+
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3),
+                spacing: 8
+            ) {
+                ForEach(["1", "2", "3", "4", "5", "6", "7", "8", "9"], id: \.self) { key in
+                    amountPadButton(key) { appendAmountKey(key) }
+                }
+                amountPadButton(".") { appendAmountKey(".") }
+                amountPadButton("0") { appendAmountKey("0") }
+                amountPadButton("⌫", isAccent: true) { deleteAmountKey() }
+            }
         }
-        .padding(8)
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(AppColors.panelStrong.opacity(0.88))
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .overlay(Color(red: 0.94, green: 0.95, blue: 0.96).opacity(0.86))
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(AppColors.line.opacity(0.8), lineWidth: 1)
-        )
-        .shadow(color: AppColors.bg.opacity(0.32), radius: 14, x: 0, y: 6)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(AppColors.line.opacity(0.55))
+                .frame(height: 1)
+        }
+        .shadow(color: Color.black.opacity(0.12), radius: 18, x: 0, y: -6)
     }
 
-    private func quickKeyButton(_ title: String, action: @escaping () -> Void) -> some View {
+    private func amountPadButton(_ title: String, isAccent: Bool = false, action: @escaping () -> Void) -> some View {
+        let foreground = amountPadForeground(isAccent: isAccent)
+        let fill = amountPadFill(isAccent: isAccent)
+        let stroke = amountPadStroke(isAccent: isAccent)
+
+        return Button(action: action) {
+            Text(title)
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .foregroundStyle(foreground)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(fill)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(stroke, lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.08), radius: 1, y: 1)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func amountPadForeground(isAccent: Bool) -> Color {
+        isAccent ? recordAccent : recordInk.opacity(0.92)
+    }
+
+    private func amountPadFill(isAccent: Bool) -> Color {
+        isAccent ? Color.white.opacity(0.72) : Color.white.opacity(0.92)
+    }
+
+    private func amountPadStroke(isAccent: Bool) -> Color {
+        isAccent ? recordAccent.opacity(0.22) : Color.white.opacity(0.7)
+    }
+
+    private func quickKeyButton(_ title: String, isAccent: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(recordInk.opacity(0.88))
+                .foregroundStyle(isAccent ? recordAccent : recordInk.opacity(0.88))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(AppColors.panelStrong.opacity(0.9))
+                        .fill(isAccent ? recordAccent.opacity(0.12) : Color.white.opacity(0.78))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AppColors.line.opacity(0.76), lineWidth: 1)
+                        .stroke(isAccent ? recordAccent.opacity(0.25) : AppColors.line.opacity(0.76), lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
@@ -573,12 +682,12 @@ struct RecordView: View {
     @ViewBuilder
     private var ocrForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("导入微信/支付宝单笔账单详情截图，识别后先确认，再写入账单。")
+            Text("导入微信/支付宝账单截图，识别后先确认，再写入账单。")
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
 
             PhotosPicker(selection: $selectedPhoto, matching: .images, photoLibrary: .shared()) {
-                Label("导入账单 / 识别票据", systemImage: "photo")
+                Label("导入账单截图", systemImage: "photo")
                     .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 50)
@@ -644,6 +753,36 @@ struct RecordView: View {
     }
 
     // MARK: - Amount helpers
+
+    private func appendAmountKey(_ key: String) {
+        var value = homeViewModel.inputAmount.trimmingCharacters(in: .whitespacesAndNewlines)
+        if key == "." {
+            guard !value.contains(".") else { return }
+            homeViewModel.inputAmount = value.isEmpty ? "0." : value + "."
+            return
+        }
+
+        if value == "0" {
+            value = ""
+        }
+        let next = value + key
+        guard isValidAmountDraft(next) else { return }
+        homeViewModel.inputAmount = next
+    }
+
+    private func deleteAmountKey() {
+        guard !homeViewModel.inputAmount.isEmpty else { return }
+        homeViewModel.inputAmount.removeLast()
+    }
+
+    private func isValidAmountDraft(_ value: String) -> Bool {
+        guard value.count <= 9 else { return false }
+        if let dotIndex = value.firstIndex(of: ".") {
+            let decimals = value[value.index(after: dotIndex)...]
+            return decimals.count <= 2
+        }
+        return true
+    }
 
     private func applyAmountDelta(_ delta: Double) {
         let base = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0

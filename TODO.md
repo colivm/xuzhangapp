@@ -1,6 +1,6 @@
 # 叙账 · 进度清单
 
-> 更新时间：**2026-06-07**（D1.1 周分享海报 polish ✅；待真机验收）  
+> 更新时间：**2026-06-07**（B2.11/B2.12 + 夜宵时段备注补齐；待真机验收）  
 > 分支：`feature/生活切片和会员权益`  
 > API：`https://api.xuzhangapp.com` · 登录：手机号验证码（v0.1）
 
@@ -8,16 +8,16 @@
 
 ## 🚀 下一步最先做什么（2026-06-07）
 
-> B2.8 / B2.9 / D1.1 / backend 生产门禁已在代码中。**现在最缺：真机回归（含分享海报气质）+ 栏 B 上架项**。
+> B2.8 / B2.9 / B2.11 / B2.12 / D1.1 / backend 生产门禁已在代码中。**现在最缺：真机回归（含分享海报气质、心意往来包、夜宵时段备注）+ 栏 B 上架项**。
 
 | 顺序 | 做什么 | 为什么先 | 预计 |
 |------|--------|----------|------|
-| **1** | **Mac 拉最新 → Archive → TestFlight**，按下方「回归 14 条」 | 验 B2.8/B2.9、**D1.1 故事图非报表感**、Release 全门禁 | 0.5～1 天 |
+| **1** | **Mac 拉最新 → Archive → TestFlight**，按下方「回归 16 条」 | 验 B2.8/B2.9/B2.11/B2.12、**D1.1 故事图非报表感**、Release 全门禁 | 0.5～1 天 |
 | **2** | 购买 **welcome 文案** + 用尽次数话术走读 | 付费瞬间温度；与分享图「被看见」同频 | 0.5 天 |
 | **3** | **B2.5** 切片 Sheet 播放过程 UI | 过程叙、产物叙不割裂 | 1 天 |
 | 并行 | 栏 B：备案、Spug 短信、ASC Product ID | 上架 blocker | — |
 
-**TestFlight 回归 14 条（哲学对齐版）**
+**TestFlight 回归 16 条（哲学对齐版）**
 
 1. 新装 → **首记** Toast「用 10 秒叙一下今天」→ 自动开今日回放（C1）  
 2. 本周 ≥3 笔 → 看看花 Tab **角标** + 首页引导条（C1）  
@@ -25,14 +25,16 @@
 4. 展开场景包：travel 为 **旅行出发包**，副文案为 tagline（无「比如输入 ¥」）  
 5. 手改分类 → 再改金额 → **分类不被覆盖**（B2.7）  
 6. **B2.8**：工作日早 8 点 ¥4 → 推荐偏 **交通**；12 点 ¥25 → 偏 **餐饮**；备注含「地铁」→ 交通  
-7. **B2.9**：开天气互动 → 定位授权；记一笔后宠物句 **非** 固定 4 句；点宠物 **无**「餐饮偏多/带饭」  
-8. 小 AI 说 → **记一句本月收束** → 无下月 ¥ 数字  
-9. OCR 选图 → 确认弹层 → 确认导入；取消/失败不扣次  
-10. 登录 → 沙盒购 → verify → 会员切片无限  
-11. 杀进程 → 数据仍在  
-12. 播完 CTA + **周播完**「保存本周故事图」导出 PNG（D1）  
-13. **D1.1 分享海报**：无 KPI 三格 / 环图 TOP%；主视觉为 headline + 收束句；播完导出与 AI Tab **同源气质**；像「生活周记」非「消费报告」  
-14. **Release Archive**：设置/会员页无 Debug 写 tier；生产 API 无 `dev/set-tier`（`NODE_ENV=production`）
+7. **B2.8/B2.10 补洞**：历史餐饮很多时，¥200/¥800 不应仍一律吃饭；同金额连续点一键备注可轮换；补记 23:30 餐饮 + 一键备注出现夜宵/深夜小食语境  
+8. **B2.9**：开天气互动 → 定位授权；记一笔后宠物句 **非** 固定 4 句；点宠物 **无**「餐饮偏多/带饭」  
+9. 小 AI 说 → **记一句本月收束** → 无下月 ¥ 数字  
+10. OCR 选图 → 确认弹层 → 确认导入；取消/失败不扣次  
+11. 登录 → 沙盒购 → verify → 会员切片无限  
+12. 杀进程 → 数据仍在  
+13. 播完 CTA + **周播完**「保存本周故事图」导出 PNG（D1）  
+14. **D1.1 分享海报**：无 KPI 三格 / 环图 TOP%；主视觉为 headline + 收束句；播完导出与 AI Tab **同源气质**；像「生活周记」非「消费报告」  
+15. **B2.11/B2.12**：手选人情 + 一键备注 → 心意往来包，无午餐/奶茶/红包/随礼；新建人情记录 emotionTag 为人情小记/心意往来  
+16. **Release Archive**：设置/会员页无 Debug 写 tier；生产 API 无 `dev/set-tier`（`NODE_ENV=production`）
 
 ### 代码核查（2026-06-07 更新）
 
@@ -41,6 +43,8 @@
 | **backend dev/set-tier** | ✅ | `server.js` L87–99：`if (!isProduction)` 才注册 |
 | **B2.8 智能分类** | ✅ | `CategoryRecommendService.swift`；`HomeViewModel.recommendCategoryResult`；`RecordView` 监听 amount/title/date |
 | **B2.9 天气宠物** | ✅ | `WeatherCompanionService` + `PetCompanionCopy` + `PetCompanionService`；`enqueuePetMessage`；`Info.plist` 定位文案 |
+| **B2.11 心意往来包** | ✅ | `ScenePackCopyPool.social` 4 档 × 8 条；`RecordView.guessScenePackId(.social)`；social chips 去敏感词 |
+| **B2.12 情绪标签 polish** | ✅ | `HomeItem.inferEmotionTag` 七类已 soften；health/home/social 保持母版 |
 | **C1 / F1 / D1** | ✅ | 见前序核查 |
 | **D1.1 周分享海报** | ✅ 代码 | `WeeklyShareCardView` 叙事海报布局；`anchorLine` + `rhythmTexture`；删 KPI/环图；`PlaybackService.weeklyShareAnchorLine` |
 
@@ -70,8 +74,11 @@
 - [x] **Release 门禁（iOS）**：移除设置/会员页 Debug 写 tier；`MemberNudgePolicyService` 统一 prod 频控
 - [x] **Task D1 播完分享图**（周章播完分享）
 - [x] **Task D1.1 周分享海报 polish** — 叙事主视觉、删报表 KPI/环图、`anchorLine`、极淡 rhythm；播完 + AI Tab 同源（[`AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md`](AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md)）
-- [x] **Task B2.8 智能分类**：`CategoryRecommendService`（历史 40% + 时段 35% + 金额 15% + 备注 10%）
+- [x] **Task B2.8 智能分类**：`CategoryRecommendService`（历史 10% + 时段 20% + 金额 45% + 备注 35%，避免历史餐饮污染独裁）
 - [x] **Task B2.9 天气宠物**：Open-Meteo + `PET_SCENE_RULES` + 记完账/点击宠物；删管控式硬编码
+- [x] **Task B2.11 心意往来包**：social 包、映射、chips；人情一键备注不再走 food
+- [x] **Task B2.12 情绪标签 polish**：7 类标签 soften；无奔波/开销/支出类标签
+- [x] **夜宵时段备注**：一键备注传 `selectedDate`；餐饮按早/午/下午茶/晚/夜宵分支
 - [x] **backend Release**：`dev/set-tier` 仅 `NODE_ENV !== production` 注册
 
 ### 对外与部署
@@ -95,13 +102,13 @@
 | - [x] A4 场景包哲学 + tagline | |
 | | |
 | **路径 2 · 生活切片** | **备案与合规** |
-| - [ ] B2.5 叙事/UI（旁白为主、少报表感）— §10.8 | - [ ] ICP 备案 |
+| - [x] B2.5 叙事/UI P0（旁白为主、少报表感；待真机观感验收）— §10.8 | - [ ] ICP 备案 |
 | - [x] B2.6 PlaybackCopyPool 接入（MVP；对照 md 可补全条数） | - [x] 隐私 / 协议 URL 上线 |
 | - [x] D1 播完分享图 — §10.9（周章；月章 v0.2） | - [ ] ASC 隐私问卷 + [`APP_STORE_LISTING.md`](APP_STORE_LISTING.md) |
 | - [x] **D1.1** 分享海报叙事化（代码）— [`AGENT_PROMPT_D1.1`](AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md) | |
 | - [ ] **D1.1 真机验收** — 回归第 13 条：故事图非报表感 | |
-| - [ ] **心意往来包** B2.11 — [`AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md`](AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md) | |
-| - [ ] **情绪标签 polish** B2.12（7 类；health/home/social 不动）— [`AGENT_PROMPT_B2.12_EMOTION_TAGS.md`](AGENT_PROMPT_B2.12_EMOTION_TAGS.md) | |
+| - [x] **心意往来包** B2.11 — [`AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md`](AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md) | |
+| - [x] **情绪标签 polish** B2.12（7 类；health/home/social 不动）— [`AGENT_PROMPT_B2.12_EMOTION_TAGS.md`](AGENT_PROMPT_B2.12_EMOTION_TAGS.md) | |
 | - [ ] 免费次数话术与 App 内 enforce 再走一遍 | |
 | | |
 | **路径 3 · 智能导入** | **生产安全** |
@@ -151,7 +158,7 @@
 
 ```text
 [█████████████████████]  功能 MVP         ~95%  ✅ B2.8/B2.9
-[█████████████████░░░]  体验细调（栏 A）  ~80%  ⏳ B2.5 / welcome / D1.1 真机验
+[██████████████████░░]  体验细调（栏 A）  ~85%  ⏳ welcome / D1.1+B2.5 真机验
 [███████████░░░░░░░░░]  接真环境（栏 B）  ~55%  ✅ iOS+backend Release 门禁
 [█████████████████░░░]  结构健康度        ~80%  ✅ Tab 拆分 + 分类 Service
 ```
@@ -169,8 +176,8 @@
 | [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md) | Task B2.8（✅ 已完成） |
 | [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md) | Task B2.9（✅ 已完成） |
 | [`AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md`](AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md) | Task D1.1 分享海报（✅ 代码；真机验 ⏳） |
-| [`AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md`](AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md) | Task B2.11 心意往来包（⏳） |
-| [`AGENT_PROMPT_B2.12_EMOTION_TAGS.md`](AGENT_PROMPT_B2.12_EMOTION_TAGS.md) | Task B2.12 情绪标签 7 类（⏳） |
+| [`AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md`](AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md) | Task B2.11 心意往来包（✅） |
+| [`AGENT_PROMPT_B2.12_EMOTION_TAGS.md`](AGENT_PROMPT_B2.12_EMOTION_TAGS.md) | Task B2.12 情绪标签 7 类（✅） |
 | [`CATEGORY_SCENE_COPY_AUDIT_v0.1.md`](CATEGORY_SCENE_COPY_AUDIT_v0.1.md) | 分类/场景包内核审计 |
 | [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md) | Task A4（已完成；≠ B2.10） |
 | [`TEST_CASES_v0.1.md`](TEST_CASES_v0.1.md) | 全量测试用例 |

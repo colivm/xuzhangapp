@@ -11,7 +11,7 @@
 
 | ID | 做什么 | 主要文件 | 状态 |
 |----|--------|----------|------|
-| **B2.11** | **心意往来包**（本 prompt） | `ScenePackCopyPool` + `RecordView` + `HomeViewModel` | ⏳ 本任务 |
+| **B2.11** | **心意往来包**（本 prompt） | `ScenePackCopyPool` + `RecordView` + `HomeViewModel` | ✅ 已完成 |
 | B2.10 | 场景备注池 128 条 | 四包基础 | ✅ |
 | care / home | 照顾自己 / 居家安顿 | 已上线 | ✅ 气质母版 |
 
@@ -41,7 +41,7 @@
 
 ## 背景（北极星）
 叙账卖的是「生活被看见」，不是报表/礼账。人情类 copy 容易尴尬；「红包 / 随礼 / 份子 / 家人开销 / 人情债」敏感且偏账本。
-当前 **P0 bug**：`RecordView.guessScenePackId` 把 `.social`（人情）映射到 `food` 吃货包 → 一键备注出餐饮句，与分类语义打架。
+历史 **P0 bug**：`RecordView.guessScenePackId` 曾把 `.social`（人情）映射到 `food` 吃货包 → 一键备注出餐饮句，与分类语义打架。当前已修为 `.social -> "social"`。
 
 ## 气质母版（须对齐，Read care/home 包）
 - `ScenePackCopyPool` 中 **照顾自己包 `care`**、**居家安顿包 `home`**
@@ -143,3 +143,4 @@
 | 日期 | 说明 |
 |------|------|
 | 2026-06-07 | 首版：Task B2.11 心意往来包 |
+| 2026-06-07 | 状态更新：social 包、映射、chips 已落地 |

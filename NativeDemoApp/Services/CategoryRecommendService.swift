@@ -21,7 +21,7 @@ struct CategoryRecommendService {
         var note: Double = 0
 
         var total: Double {
-            history * 0.40 + time * 0.35 + amount * 0.15 + note * 0.10
+            history * 0.10 + time * 0.20 + amount * 0.45 + note * 0.35
         }
     }
 
@@ -37,12 +37,15 @@ struct CategoryRecommendService {
         applyNoteScores(note: input.noteDraft, scores: &scores)
 
         let ranked = HomeItem.Category.allCases
-            .map { category in (category, breakdown: scores[category] ?? ScoreBreakdown()) }
+            .map { category -> (category: HomeItem.Category, breakdown: ScoreBreakdown, total: Double) in
+                let breakdown = scores[category] ?? ScoreBreakdown()
+                return (category, breakdown, breakdown.total)
+            }
             .sorted { lhs, rhs in
-                if lhs.breakdown.total == rhs.breakdown.total {
+                if lhs.total == rhs.total {
                     return categoryPriority(lhs.category) < categoryPriority(rhs.category)
                 }
-                return lhs.breakdown.total > rhs.breakdown.total
+                return lhs.total > rhs.total
             }
 
         guard let best = ranked.first else { return nil }
@@ -60,19 +63,18 @@ struct CategoryRecommendService {
         guard !historyItems.isEmpty else { return }
 
         let totalCount = Double(historyItems.count)
+        let confidence = min(totalCount / 20, 1)
         let grouped = Dictionary(grouping: historyItems, by: \.category)
         for category in HomeItem.Category.allCases {
             let ratio = Double(grouped[category]?.count ?? 0) / totalCount
-            addHistory(ratio * 4, to: category, scores: &scores)
+            addHistory(ratio * confidence, to: category, scores: &scores)
         }
 
         let low = input.amount * 0.7
         let high = input.amount * 1.3
         let sameBand = historyItems.filter { $0.amount >= low && $0.amount <= high }
-        if let top = mostFrequentCategory(in: sameBand) {
-            addHistory(1.5, to: top, scores: &scores)
-        } else if let top = mostFrequentCategory(in: historyItems) {
-            addHistory(0.6, to: top, scores: &scores)
+        if sameBand.count >= 4, let top = mostFrequentCategory(in: sameBand) {
+            addHistory(0.8, to: top, scores: &scores)
         }
     }
 
@@ -87,17 +89,17 @@ struct CategoryRecommendService {
 
         if !isWeekend, (7..<10).contains(hour) {
             addTime(input.amount <= 30 ? 3.4 : 3, to: .transport, scores: &scores)
-            addTime(1, to: .dining, scores: &scores)
+            addTime(input.amount <= 35 ? 0.8 : 0.2, to: .dining, scores: &scores)
         }
         if (11..<14).contains(hour) {
-            addTime(3, to: .dining, scores: &scores)
+            addTime(input.amount <= 80 ? 3 : 0.6, to: .dining, scores: &scores)
         }
         if (17..<20).contains(hour) {
-            addTime(2, to: .dining, scores: &scores)
+            addTime(input.amount <= 120 ? 2 : 0.5, to: .dining, scores: &scores)
             addTime(1, to: .transport, scores: &scores)
         }
         if hour >= 22 || hour < 6 {
-            addTime(2, to: .dining, scores: &scores)
+            addTime(input.amount <= 100 ? 2 : 0.5, to: .dining, scores: &scores)
             addTime(1, to: .entertainment, scores: &scores)
         }
         if isWeekend, (14..<22).contains(hour) {
@@ -114,26 +116,32 @@ struct CategoryRecommendService {
     ) {
         switch amount {
         case ...20.0:
-            addAmount(1, to: .dining, scores: &scores)
-            addAmount(1, to: .transport, scores: &scores)
+            addAmount(2.0, to: .transport, scores: &scores)
+            addAmount(1.8, to: .dining, scores: &scores)
+            addAmount(1.4, to: .daily, scores: &scores)
         case 21.0...50.0:
-            addAmount(1, to: .dining, scores: &scores)
-            addAmount(1, to: .transport, scores: &scores)
+            addAmount(2.0, to: .shopping, scores: &scores)
+            addAmount(1.9, to: .daily, scores: &scores)
+            addAmount(1.8, to: .dining, scores: &scores)
+            addAmount(1.5, to: .transport, scores: &scores)
         case 51.0...200.0:
-            addAmount(1, to: .daily, scores: &scores)
-            addAmount(1, to: .shopping, scores: &scores)
-            addAmount(0.8, to: .health, scores: &scores)
-            addAmount(0.6, to: .social, scores: &scores)
+            addAmount(3.0, to: .shopping, scores: &scores)
+            addAmount(2.6, to: .daily, scores: &scores)
+            addAmount(2.2, to: .health, scores: &scores)
+            addAmount(1.8, to: .social, scores: &scores)
+            addAmount(1.2, to: .home, scores: &scores)
         case 201.0...800.0:
-            addAmount(1, to: .shopping, scores: &scores)
-            addAmount(0.9, to: .home, scores: &scores)
-            addAmount(0.7, to: .health, scores: &scores)
-            addAmount(0.7, to: .social, scores: &scores)
+            addAmount(3.0, to: .shopping, scores: &scores)
+            addAmount(2.6, to: .home, scores: &scores)
+            addAmount(2.2, to: .health, scores: &scores)
+            addAmount(2.0, to: .social, scores: &scores)
+            addAmount(1.0, to: .lodging, scores: &scores)
         default:
-            addAmount(1, to: .home, scores: &scores)
-            addAmount(0.8, to: .shopping, scores: &scores)
-            addAmount(0.8, to: .lodging, scores: &scores)
-            addAmount(1, to: .other, scores: &scores)
+            addAmount(3.0, to: .home, scores: &scores)
+            addAmount(2.5, to: .lodging, scores: &scores)
+            addAmount(2.2, to: .shopping, scores: &scores)
+            addAmount(2.0, to: .other, scores: &scores)
+            addAmount(1.8, to: .social, scores: &scores)
         }
     }
 
@@ -146,7 +154,8 @@ struct CategoryRecommendService {
 
         let rules: [(HomeItem.Category, Double, [String])] = [
             (.transport, 4, ["地铁", "公交", "打车", "停车", "加油", "出租", "网约车", "高铁", "机票"]),
-            (.dining, 4, ["咖啡", "奶茶", "午餐", "晚餐", "外卖", "早餐", "餐", "饭", "面包"]),
+            (.dining, 4, ["咖啡", "奶茶", "午餐", "晚餐", "夜宵", "宵夜", "外卖", "早餐", "餐", "饭", "面包"]),
+            (.shopping, 4.5, ["淘宝", "京东", "拼多多", "商城", "购物", "下单", "快递", "衣服", "鞋", "包", "化妆品", "护肤", "数码", "耳机", "手机", "电脑", "家居", "买了", "购入", "添置"]),
             (.daily, 3, ["超市", "买菜", "日用品", "日化", "纸巾", "洗衣"]),
             (.entertainment, 3, ["电影", "游戏", "ktv", "KTV", "演唱会", "剧本杀"]),
             (.lodging, 4, ["酒店", "民宿", "住宿", "宾馆", "旅店"]),
@@ -204,16 +213,23 @@ struct CategoryRecommendService {
 
     private func mostFrequentCategory(in items: [HomeItem]) -> HomeItem.Category? {
         let grouped = Dictionary(grouping: items, by: \.category)
-        return HomeItem.Category.allCases
-            .map { category in (category, count: grouped[category]?.count ?? 0) }
-            .filter { $0.count > 0 }
-            .sorted {
-                if $0.count == $1.count {
-                    return categoryPriority($0.category) < categoryPriority($1.category)
-                }
-                return $0.count > $1.count
+        let counts = HomeItem.Category.allCases
+            .map { category -> (category: HomeItem.Category, count: Int, priority: Int) in
+                (
+                    category: category,
+                    count: grouped[category]?.count ?? 0,
+                    priority: categoryPriority(category)
+                )
             }
-            .first?.category
+            .filter { entry in entry.count > 0 }
+            .sorted { lhs, rhs in
+                if lhs.count == rhs.count {
+                    return lhs.priority < rhs.priority
+                }
+                return lhs.count > rhs.count
+            }
+
+        return counts.first?.category
     }
 
     private func dominantReason(for breakdown: ScoreBreakdown) -> String? {

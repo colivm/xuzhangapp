@@ -218,7 +218,7 @@ final class PlaybackService {
         return PlaybackSnapshot(durationMs: 10_000, entries: Array(rows))
     }
 
-    func buildWeekSummary(from items: [HomeItem], now: Date = Date()) -> SummaryPlayback {
+    func buildWeekSummary(from items: [HomeItem], now: Date = Date(), copySeed: String = "") -> SummaryPlayback {
         let calendar = Self.isoCalendar
         let interval = calendar.dateInterval(of: .weekOfYear, for: now)
         let start = interval?.start ?? calendar.startOfDay(for: now)
@@ -237,7 +237,8 @@ final class PlaybackService {
             lhs.amount == rhs.amount ? lhs.count < rhs.count : lhs.amount < rhs.amount
         }
         let title = "本周生活切片"
-        let weekSeed = "week-\(SummaryPlaybackQuotaStore().currentWeekKey(now: now))"
+        let weekKey = SummaryPlaybackQuotaStore().currentWeekKey(now: now)
+        let weekSeed = playbackCopySeed(base: "week-\(weekKey)", suffix: copySeed)
         let weekValues: [String: String] = [
             "rangeLabel": rangeLabel,
             "count": "\(rows.count)",
@@ -250,7 +251,7 @@ final class PlaybackService {
 
         guard !rows.isEmpty else {
             return SummaryPlayback(
-                id: "week-\(SummaryPlaybackQuotaStore().currentWeekKey(now: now))",
+                id: "week-\(weekKey)",
                 range: .week,
                 title: title,
                 rangeLabel: rangeLabel,
@@ -357,11 +358,11 @@ final class PlaybackService {
         )
 
         return SummaryPlayback(
-            id: "week-\(SummaryPlaybackQuotaStore().currentWeekKey(now: now))",
+            id: "week-\(weekKey)",
             range: .week,
             title: title,
             rangeLabel: rangeLabel,
-            teaserLine: weekTeaserLine(busiest: busiest, top: top, ratio: ratio, rows: rows),
+            teaserLine: weekTeaserLine(busiest: busiest, top: top, rows: rows, copySeed: weekSeed),
             count: rows.count,
             total: total,
             topCategory: top?.category,
@@ -400,7 +401,7 @@ final class PlaybackService {
         )
     }
 
-    func buildMonthSummary(from items: [HomeItem], now: Date = Date()) -> SummaryPlayback {
+    func buildMonthSummary(from items: [HomeItem], now: Date = Date(), copySeed: String = "") -> SummaryPlayback {
         let calendar = Calendar.current
         let interval = calendar.dateInterval(of: .month, for: now)
         let start = interval?.start ?? calendar.startOfDay(for: now)
@@ -434,7 +435,8 @@ final class PlaybackService {
         let previousTotal = previousRows.reduce(0) { $0 + $1.amount }
         let momPercent = monthOverMonthText(current: total, previous: previousTotal)
         let changeText = monthlyChangeText(current: rows, previous: previousRows, segments: segments)
-        let monthSeed = "month-\(Self.monthKeyFormatter.string(from: now))"
+        let monthKey = Self.monthKeyFormatter.string(from: now)
+        let monthSeed = playbackCopySeed(base: "month-\(monthKey)", suffix: copySeed)
         let monthValues: [String: String] = [
             "rangeLabel": rangeLabel,
             "count": "\(rows.count)",
@@ -530,11 +532,11 @@ final class PlaybackService {
         ]
 
         return SummaryPlayback(
-            id: "month-\(Self.monthKeyFormatter.string(from: now))",
+            id: "month-\(monthKey)",
             range: .month,
             title: title,
             rangeLabel: rangeLabel,
-            teaserLine: monthTeaserLine(segments: segments, top: top, ratio: ratio, changeText: changeText),
+            teaserLine: monthTeaserLine(segments: segments, top: top, changeText: changeText, copySeed: monthSeed),
             count: rows.count,
             total: total,
             topCategory: top?.category,
@@ -642,6 +644,7 @@ final class PlaybackService {
                 item.category.rawValue,
                 item.category.label,
                 item.category.displayName,
+                item.category.defaultRecordTitle,
                 "\(item.category.rawValue)消费",
                 "未命名记录"
             ]
@@ -684,12 +687,17 @@ final class PlaybackService {
         }
     }
 
-    private func weekTeaserLine(busiest: DayActivity?, top: CategoryAmount?, ratio: Int, rows: [HomeItem]) -> String {
+    private func weekTeaserLine(busiest: DayActivity?, top: CategoryAmount?, rows: [HomeItem], copySeed: String) -> String {
         if rows.count < 3 {
             return "这周已有 \(rows.count) 笔记录，再多一点就能讲得更完整。"
         }
-        let topText = top.map { "\($0.category)约占\(ratio)%" } ?? "日常开始有了轮廓"
-        return "\(busiest?.label ?? "本周")最忙，\(topText)。"
+        let values = [
+            "busiestDayShort": busiest?.label ?? "本周",
+            "topCategory": top?.category ?? "日常",
+            "count": "\(rows.count)",
+            "rangeLabel": "这一周"
+        ]
+        return PlaybackCopyPool.teaser(seed: copySeed, values: values)
     }
 
     private func weeklyShareAnchorLine(from summary: SummaryPlayback) -> String? {
@@ -709,12 +717,23 @@ final class PlaybackService {
         return nil
     }
 
-    private func monthTeaserLine(segments: [MonthSegment], top: CategoryAmount?, ratio: Int, changeText: String) -> String {
+    private func monthTeaserLine(segments: [MonthSegment], top: CategoryAmount?, changeText: String, copySeed: String) -> String {
         let leading = segments.max { $0.amount < $1.amount }?.label ?? "这个月"
         if let top {
-            return "\(leading)更热闹，\(top.category)约占\(ratio)%。"
+            let values = [
+                "busiestDayShort": leading,
+                "topCategory": top.category,
+                "count": "\(segments.reduce(0) { $0 + $1.count })",
+                "rangeLabel": "这个月"
+            ]
+            return PlaybackCopyPool.teaser(seed: copySeed, values: values)
         }
         return changeText
+    }
+
+    private func playbackCopySeed(base: String, suffix: String) -> String {
+        let trimmed = suffix.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? base : "\(base)|\(trimmed)"
     }
 
     private func previousMonthItems(from items: [HomeItem], now: Date) -> [HomeItem] {
@@ -738,7 +757,7 @@ final class PlaybackService {
         let currentCategories = Set(current.map(\.category.rawValue))
         let previousCategories = Set(previous.map(\.category.rawValue))
         if let fresh = currentCategories.subtracting(previousCategories).sorted().first {
-            return "这个月新出现了「\(fresh)」分类，是一处新的生活记忆点。"
+            return "这个月新出现了「\(fresh)」分类。"
         }
         let streak = longestRecordStreak(in: current)
         if streak >= 3 {

@@ -49,6 +49,17 @@ struct StatsWebView: View {
         filteredItems.filter { $0.amount > 0 }.reduce(0) { $0 + $1.amount }
     }
 
+    private var allPositiveSettledItems: [HomeItem] {
+        homeViewModel.items.filter { $0.amount > 0 && $0.draftMeta == nil }
+    }
+
+    private var emptyRecordListText: String {
+        if homeViewModel.items.isEmpty {
+            return "还没有账单，先去记一笔。"
+        }
+        return "当前筛选下没有账单，可以切到本月或本年看看。"
+    }
+
     private var hasMemberAccess: Bool {
         ["monthly", "yearly", "lifetime"].contains(settingsViewModel.memberTier.lowercased())
     }
@@ -136,12 +147,12 @@ struct StatsWebView: View {
 
                 // ── Overview Panel ──
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("总览")
+                    Text("这一段")
                         .font(.system(size: 22, weight: .bold))
                         .foregroundStyle(AppColors.text)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("总支出")
+                        Text("合计")
                             .font(.system(size: 13))
                             .foregroundStyle(AppColors.subtext)
                         Text(totalExpense.formatted(.cny))
@@ -164,7 +175,7 @@ struct StatsWebView: View {
                         .foregroundStyle(AppColors.text)
 
                     if filteredItems.isEmpty {
-                        Text("当前筛选条件下暂无账单。")
+                        Text(emptyRecordListText)
                             .font(.system(size: 13))
                             .foregroundStyle(AppColors.subtext)
                     } else {
@@ -274,22 +285,27 @@ struct StatsWebView: View {
                     Spacer()
                 }
 
+                let playbackButtonTitle = isMonthLocked ? "了解会员" : "播放"
+                let playbackForeground = canPlay ? Color.white : AppColors.text.opacity(0.72)
+                let playbackFill = canPlay ? AppColors.accent : Color.white.opacity(0.64)
+                let playbackStroke = canPlay ? AppColors.accent.opacity(0.28) : Color.white.opacity(0.58)
+
                 HStack(spacing: 12) {
                     Button {
                         handleSummaryPlaybackTap(range: range, preview: preview)
                     } label: {
-                        Text(isMonthLocked ? "了解会员" : "播放")
+                        Text(playbackButtonTitle)
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(canPlay ? .white : AppColors.text.opacity(0.72))
+                            .foregroundStyle(playbackForeground)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 13)
                             .background(
-                                canPlay ? AppColors.accent : Color.white.opacity(0.64),
-                                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(playbackFill)
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .stroke(canPlay ? AppColors.accent.opacity(0.28) : Color.white.opacity(0.58), lineWidth: 1)
+                                    .stroke(playbackStroke, lineWidth: 1)
                             )
                     }
                     .buttonStyle(.plain)
@@ -360,7 +376,38 @@ struct StatsWebView: View {
             }
             return
         }
-        summaryPlayback = preview
+        let copySeed = nextSummaryCopySeed(for: range)
+        summaryPlayback = buildSummaryPlayback(for: range, copySeed: copySeed)
+    }
+
+    private func buildSummaryPlayback(for range: SummaryPlaybackRange, copySeed: String) -> SummaryPlayback {
+        switch range {
+        case .week:
+            return playbackService.buildWeekSummary(from: homeViewModel.items, copySeed: copySeed)
+        case .month:
+            return playbackService.buildMonthSummary(from: homeViewModel.items, copySeed: copySeed)
+        }
+    }
+
+    private func nextSummaryCopySeed(for range: SummaryPlaybackRange) -> String {
+        let period = summaryCopyPeriodKey(for: range)
+        let key = "summary_copy_variant_\(range.rawValue)_\(period)"
+        let defaults = UserDefaults.standard
+        let next = defaults.integer(forKey: key) + 1
+        defaults.set(next, forKey: key)
+        return "open-\(next)"
+    }
+
+    private func summaryCopyPeriodKey(for range: SummaryPlaybackRange) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        switch range {
+        case .week:
+            formatter.dateFormat = "yyyy-'W'ww"
+        case .month:
+            formatter.dateFormat = "yyyy-MM"
+        }
+        return formatter.string(from: .now)
     }
 
     // MARK: - Period Picker Sheet
@@ -458,7 +505,7 @@ struct StatsWebView: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AppColors.subtext.opacity(0.82))
                 Text("·").foregroundStyle(AppColors.subtext)
-                Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
+                Text(item.createdAt.zhBillDateTime)
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.subtext)
             }
@@ -513,7 +560,7 @@ struct StatsWebView: View {
                 Text("·")
                     .foregroundStyle(AppColors.subtext)
 
-                Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
+                Text(item.createdAt.zhBillDateTime)
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.subtext)
             }
@@ -534,12 +581,12 @@ struct StatsWebView: View {
     private var trendChart: some View {
         let trendData = computeTrendData()
         VStack(alignment: .leading, spacing: 6) {
-            Text("近 30 天支出趋势")
+            Text("近 30 天记录走势")
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
 
             if trendData.isEmpty {
-                Text("暂无足够数据绘制趋势图。")
+                Text("近 30 天还没有可绘制的账单。")
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.subtext)
                     .padding(.vertical, 20)
@@ -627,12 +674,12 @@ struct StatsWebView: View {
         var points: [TrendPoint] = []
         for dayOffset in stride(from: 29, through: 0, by: -1) {
             guard let date = cal.date(byAdding: .day, value: -dayOffset, to: Date()) else { continue }
-            let dayItems = homeViewModel.items.filter { cal.isDate($0.createdAt, inSameDayAs: date) }
+            let dayItems = allPositiveSettledItems.filter { cal.isDate($0.createdAt, inSameDayAs: date) }
             let total = dayItems.reduce(0) { $0 + $1.amount }
             let label = cal.component(.day, from: date)
             points.append(TrendPoint(day: "\(label)", value: total))
         }
-        return points
+        return points.contains { $0.value > 0 } ? points : []
     }
 
     private func trendInsightText(data: [TrendPoint]) -> String {
@@ -641,10 +688,10 @@ struct StatsWebView: View {
         let recent = data.suffix(7)
         let recentAvg = recent.isEmpty ? 0 : recent.reduce(0) { $0 + $1.value } / Double(recent.count)
         if recentAvg > avg * 1.15 {
-            return "最近一周支出有所上升，可以稍微留意。"
+            return "最近一周留下的记录更密一些。"
         } else if recentAvg < avg * 0.85 {
-            return "最近一周支出有所下降，节奏不错。"
+            return "最近一周记录轻了一点。"
         }
-        return "本月支出整体平稳。"
+        return "近 30 天的节奏比较平稳。"
     }
 }
