@@ -71,6 +71,7 @@ struct ContentView: View {
     @State private var petHint: String = "我在这儿陪你，慢慢记就好。"
     @State private var petBubbleVisible: Bool = false
     @State private var showMemberPricing = false
+    @State private var showMinimalOnboarding = false
 
     enum AppTab: Int, CaseIterable, Identifiable {
         case today
@@ -130,6 +131,28 @@ struct ContentView: View {
             MemberPricingView()
                 .environmentObject(settingsViewModel)
         }
+        .sheet(isPresented: $showMinimalOnboarding) {
+            MinimalOnboardingSheet(
+                onStartFirstRecord: {
+                    showMinimalOnboarding = false
+                    withAnimation(.easeInOut(duration: 0.32)) {
+                        selectedTab = .record
+                    }
+                },
+                onSkip: {
+                    showMinimalOnboarding = false
+                }
+            )
+            .presentationDetents([.height(360), .medium])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(.clear)
+            .presentationCornerRadius(28)
+        }
+        .onAppear {
+            if !MinimalOnboardingStore.hasCompleted {
+                showMinimalOnboarding = true
+            }
+        }
         .task {
             await homeViewModel.generateDailyInsight(
                 userName: settingsViewModel.displayName,
@@ -146,7 +169,7 @@ struct ContentView: View {
             }
         }
         .onChange(of: homeViewModel.petMessage) { _, msg in
-            guard let msg, settingsViewModel.petCompanionEnabled else { return }
+            guard let msg, settingsViewModel.petCompanionEnabled, !showMinimalOnboarding else { return }
             petHint = msg
             petBubbleVisible = true
             // Auto-dismiss after 4 seconds
@@ -255,7 +278,12 @@ struct ContentView: View {
                         removal: .opacity.combined(with: .offset(y: 8))
                     ))
             case .settings:
-                SettingsView(showMemberPricing: $showMemberPricing)
+                SettingsView(
+                    showMemberPricing: $showMemberPricing,
+                    onShowMinimalOnboarding: {
+                        showMinimalOnboarding = true
+                    }
+                )
                     .transition(.asymmetric(
                         insertion: .opacity.combined(with: .offset(y: 8)),
                         removal: .opacity.combined(with: .offset(y: 8))

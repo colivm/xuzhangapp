@@ -231,10 +231,10 @@ struct HomeView: View {
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(AppColors.accent)
             VStack(alignment: .leading, spacing: 2) {
-                Text("用 10 秒叙一下今天")
+                Text("用十几秒叙一下今天")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(AppColors.text)
-                Text("第一笔已经记好，马上听一遍今日回放。")
+                Text("第一笔已经记好，听一遍今日回放。")
                     .font(.system(size: 11))
                     .foregroundStyle(AppColors.subtext)
             }

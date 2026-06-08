@@ -42,7 +42,7 @@ final class HomeViewModel: ObservableObject {
         var title: String {
             switch self {
             case .firstRecordTodayPlayback:
-                return "用 10 秒叙一下今天"
+                return "用十几秒叙一下今天"
             case .weekSliceReady:
                 return "本周生活切片可播放"
             case .fiveRecordsNeverPlayed:
@@ -53,7 +53,7 @@ final class HomeViewModel: ObservableObject {
         var message: String {
             switch self {
             case .firstRecordTodayPlayback:
-                return "第一笔已经记好，听一遍今日生活回放。"
+                return "第一笔已经记好，听一遍今日回放。"
             case .weekSliceReady:
                 return "本周已经有 3 笔以上记录，去看看花听一遍。"
             case .fiveRecordsNeverPlayed:

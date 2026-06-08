@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @Binding var showMemberPricing: Bool
+    var onShowMinimalOnboarding: () -> Void = {}
     @State private var showAccountSheet = false
     @State private var draftDisplayName = ""
     @State private var draftPetNickname = ""
@@ -162,7 +163,9 @@ struct SettingsView: View {
             settingHelper("开启这个，我就能知道今天是晴是雨，陪你说更懂你的悄悄话啦！")
 
             // Reset guide
-            webButton("重新查看新手引导") { /* trigger guide overlay */ }
+            webButton("重新查看新手引导") {
+                onShowMinimalOnboarding()
+            }
         }
         .webCardPadding()
         .webCardBackground()
