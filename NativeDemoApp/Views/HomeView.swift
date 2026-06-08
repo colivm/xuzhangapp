@@ -193,36 +193,71 @@ struct HomeView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(isPrimary ? .white : AppColors.accent.opacity(0.88))
+            HStack(spacing: 10) {
+                homeActionIconBadge(systemImage: systemImage)
 
-                Text(title)
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(isPrimary ? .white : AppColors.text)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.84)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.84)
 
-                Text(subtitle)
-                    .font(.system(size: 11))
-                    .foregroundStyle(isPrimary ? Color.white.opacity(0.82) : AppColors.subtext.opacity(0.86))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(AppColors.subtext.opacity(0.88))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, minHeight: 108, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
+            .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(isPrimary ? AppColors.accent.opacity(0.90) : Color.white.opacity(0.66))
+                    .fill(
+                        LinearGradient(
+                            colors: isPrimary
+                                ? [
+                                    AppColors.accent.opacity(0.14),
+                                    Color.white.opacity(0.70)
+                                  ]
+                                : [
+                                    Color.white.opacity(0.74),
+                                    Color.white.opacity(0.62)
+                                  ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(isPrimary ? Color.white.opacity(0.42) : AppColors.accent.opacity(0.18), lineWidth: 1)
+                    .stroke(
+                        isPrimary
+                            ? AppColors.accent.opacity(0.26)
+                            : Color.white.opacity(0.54),
+                        lineWidth: 1
+                    )
             )
-            .shadow(color: isPrimary ? AppColors.accent.opacity(0.22) : AppColors.subtext.opacity(0.08), radius: 12, x: 0, y: 6)
+            .shadow(color: AppColors.subtext.opacity(0.08), radius: 12, x: 0, y: 5)
         }
         .buttonStyle(.plain)
+    }
+
+    private func homeActionIconBadge(systemImage: String) -> some View {
+        Image(systemName: systemImage == "plus.circle.fill" ? "plus" : "play.fill")
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(AppColors.accent.opacity(0.92))
+            .frame(width: 34, height: 34)
+            .background(
+                Circle()
+                    .fill(AppColors.accent.opacity(0.13))
+            )
+            .overlay(
+                Circle()
+                    .stroke(AppColors.accent.opacity(0.20), lineWidth: 1)
+            )
     }
 
     private var firstRecordToast: some View {
