@@ -39,8 +39,8 @@ const memberScenePacks = [
     rules: [
       { max: 5, notes: ["日常地铁通勤出行", "公交短途出行打卡", "选择绿色出行，简单省心", "早班地铁，稳稳到岗", "换乘一小段，通勤完成", "今天的路费，很日常", "刷卡进站，出发啦", "短途公交，省心到家"] },
       { max: 15, notes: ["公交+地铁组合通勤", "下班高峰一段路", "打车到地铁站接驳", "通勤路上买瓶水", "今日出行主打省心", "固定路线，熟悉的感觉", "早晚通勤各记一笔", "城市穿梭的小开销"] },
-      { max: 30, notes: ["雨天打车通勤", "加班后打车回家", "共享单车月卡摊销", "停车/充电小费用", "今天路程稍长一点", "通勤多花了一点时间换舒适", "早晚两次出行", "为准时到达的小投资"] },
-      { max: 9999, notes: ["跨区通勤长途费", "出差市内交通", "高速/长途客车费", "一次性通勤大额支出", "今天跑了不少路", "行程较满的交通开销", "远距离往返", "为工作奔波的一天"] },
+      { max: 30, notes: ["雨天打车通勤", "加班后打车回家", "共享单车月卡里的一天", "停车/充电小费用", "今天路程稍长一点", "通勤多花了一点时间换舒适", "早晚两次出行", "为一程准时到达"] },
+      { max: 9999, notes: ["跨区通勤长途费", "出差市内交通", "高速/长途客车费", "一段较长的出行", "今天跑了不少路", "行程较满的一天", "远距离往返", "为远一点的到达"] },
     ],
   },
   {
@@ -59,14 +59,14 @@ const memberScenePacks = [
   {
     id: "travel",
     emoji: "✈️",
-    label: "旅行预算包",
+    label: "旅行出发包",
     category: "其他",
     desc: "比如：输入 ¥20，自动备注“短途出行小消费”",
     rules: [
       { max: 20, notes: ["短途出行小消费", "沿途小吃简单打卡", "出行便携物资采购", "景点门口一瓶水", "小城漫步小花费", "街边明信片或小挂件", "公交日票/景区摆渡", "旅途中的轻量补给"] },
       { max: 80, notes: ["展馆/景点门票", "民宿小用品补买", "旅途一顿特色简餐", "城市漫步咖啡歇脚", "伴手礼试吃装", "租车/骑行小时费", "行程里的一笔小惊喜", "路边摊体验打卡"] },
-      { max: 200, notes: ["一晚经济型住宿摊销", "城际大巴/高铁一段", "特色餐厅体验", "博物馆联票", "旅行装备小升级", "行程中较充实的一天", "小镇住宿加早午餐", "为风景多走一段路"] },
-      { max: 9999, notes: ["机票/高铁主段", "两晚住宿预算", "旅行套餐核心支出", "目的地一日游团", "行李箱/装备购置", "长假出行大项", "带家人出门的一程", "值得记住的一次出发"] },
+      { max: 200, notes: ["经济型住宿这一晚", "城际大巴/高铁一段", "特色餐厅体验", "博物馆联票", "旅行装备小升级", "行程中较充实的一天", "小镇住宿加早午餐", "为风景多走一段路"] },
+      { max: 9999, notes: ["机票/高铁主段", "途中连住两晚", "行程里的重头戏", "目的地一日游团", "行李箱/装备购置", "长假出行大项", "带家人出门的一程", "值得记住的一次出发"] },
     ],
   },
   {
@@ -83,6 +83,70 @@ const memberScenePacks = [
     ],
   },
 ];
+const coldStartWhispers = [
+  "金额在这就行，分类和备注可以先空着。",
+  "只填数额，也算把今天留住了一截。",
+  "不用解释为什么花，先记上就好。",
+  "分类我会先帮你猜，错了晚点再改。",
+  "这一句生活句，放进账本后会自己长出来。",
+  "记完去首页，今天会多一段痕迹。",
+  "今晚回放时，这一笔会轮到它说话。",
+  "花出去的不是分数，是今天真实走过的一下。",
+  "记一笔，今天又多了一小块可叙的素材。",
+  "细节晚点再补也行，数额先按住这一刻。",
+  "早上记下的，会并进今天前半段的故事。",
+  "夜里记下的，留给今天的收束来讲。",
+  "周末记下的，算进这段日子的一个脚注。",
+  "想不起具体买了什么，也没关系。",
+  "不用挑分类，先把这一刻记下来。",
+];
+const brandsLite = [
+  {
+    id: "luckin",
+    displayName: "瑞幸咖啡",
+    aliases: ["瑞幸", "luckin"],
+    category: "餐饮",
+    emotion: "早班路上，顺手续一口",
+    mood: "咖啡小照顾",
+    lines: ["早班路上，顺手续一口", "蓝杯小小提神", "赶路前醒一醒"],
+  },
+  {
+    id: "starbucks",
+    displayName: "星巴克",
+    aliases: ["星巴克", "starbucks"],
+    category: "餐饮",
+    emotion: "给自己留一小段坐下来的时间",
+    mood: "片刻停靠",
+    lines: ["给自己留一小段坐下来的时间", "在咖啡香里慢慢缓一会儿", "这一杯像今天的短暂停靠"],
+  },
+  {
+    id: "mcd",
+    displayName: "麦当劳",
+    aliases: ["麦当劳", "mcdonald", "mcd"],
+    category: "餐饮",
+    emotion: "熟悉的一口，快速把自己接上",
+    mood: "熟悉一餐",
+    lines: ["熟悉的一口，快速把自己接上", "忙里先吃一顿熟悉的", "这一餐简单又稳当"],
+  },
+  {
+    id: "meituan",
+    displayName: "美团外卖",
+    aliases: ["美团外卖", "美团"],
+    category: "餐饮",
+    emotion: "把一顿饭送到今天手边",
+    mood: "饭到手边",
+    lines: ["把一顿饭送到今天手边", "不用折腾，也能好好吃一口", "这一餐被稳稳送到了"],
+  },
+  {
+    id: "didi",
+    displayName: "滴滴出行",
+    aliases: ["滴滴出行", "滴滴", "didi"],
+    category: "交通",
+    emotion: "为一程顺利到达",
+    mood: "顺利到达",
+    lines: ["为一程顺利到达", "这段路有人稳稳接上", "把今天的一段路交给车窗外"],
+  },
+];
 const CATEGORY_AI_ENDPOINT = "http://localhost:8787/v1/category/recommend";
 const INSIGHT_AI_ENDPOINT = "http://localhost:8787/v1/insight/daily";
 const AI_PROXY_TOKEN_STORAGE_KEY = "qingzhang_ai_proxy_token";
@@ -96,7 +160,7 @@ const PERIOD_TIMEOUT_MS = {
   weekly: 22000,
   monthly: 35000,
 };
-const DEBUG_UI_ENABLED = false;
+const DEBUG_UI_ENABLED = new URLSearchParams(window.location.search).get("debug") === "1";
 const UI_TABS = new Set(["home", "record", "stats", "insight", "settings"]);
 const UI_MODALS = new Set(["none", "guide", "account", "ocrConfirm", "ocrCategory", "monthlyTrial", "billDateRange", "deleteConfirm", "billPlayback"]);
 const UI_INPUT_FOCUS = new Set(["none", "amount", "title"]);
@@ -393,6 +457,8 @@ const refs = {
   memberNudgeBtn: document.getElementById("memberNudgeBtn"),
   memberNudgeDismissBtn: document.getElementById("memberNudgeDismissBtn"),
   recordModeSegment: document.getElementById("recordModeSegment"),
+  recordImportLink: document.getElementById("recordImportLink"),
+  recordManualLink: document.getElementById("recordManualLink"),
   modeButtons: [...document.querySelectorAll(".mode-btn")],
   manualForm: document.getElementById("manualForm"),
   ocrForm: document.getElementById("ocrForm"),
@@ -400,10 +466,14 @@ const refs = {
   amountStage: document.getElementById("amountStage"),
   lifeEntryPreview: document.getElementById("lifeEntryPreview"),
   lifeEntryHeadline: document.getElementById("lifeEntryHeadline"),
+  lifeEntryHeadlineHint: document.getElementById("lifeEntryHeadlineHint"),
   lifeEntryAmount: document.getElementById("lifeEntryAmount"),
   lifeEntryEmotion: document.getElementById("lifeEntryEmotion"),
   lifeEntryMeta: document.getElementById("lifeEntryMeta"),
-  lifeEntryQuickActions: document.getElementById("lifeEntryQuickActions"),
+  lifeEntryChangeCategory: document.getElementById("lifeEntryChangeCategory"),
+  lifeEntryQuietActions: document.getElementById("lifeEntryQuietActions"),
+  lifeEntryNoteEditor: document.getElementById("lifeEntryNoteEditor"),
+  lifeEntryCategoryPanel: document.getElementById("lifeEntryCategoryPanel"),
   recordPrimaryActions: document.getElementById("recordPrimaryActions"),
   recordDetailsFold: document.getElementById("recordDetailsFold"),
   recordDetailsToggle: document.getElementById("recordDetailsToggle"),
@@ -431,6 +501,9 @@ const refs = {
   editDateBtn: document.getElementById("editDateBtn"),
   saveRecordBtn: document.getElementById("saveRecordBtn"),
   deleteRecordBtn: document.getElementById("deleteRecordBtn"),
+  scenePackMoreSheet: document.getElementById("scenePackMoreSheet"),
+  scenePackMoreCloseBtn: document.getElementById("scenePackMoreCloseBtn"),
+  scenePackMoreList: document.getElementById("scenePackMoreList"),
   ocrImageInput: document.getElementById("ocrImageInput"),
   ocrPickImageBtn: document.getElementById("ocrPickImageBtn"),
   ocrLoadingBox: document.getElementById("ocrLoadingBox"),
@@ -582,6 +655,10 @@ let petActionTimer = null;
 let scenePackExpanded = false;
 let prefillDemoMode = "generic";
 let recordDetailsExpanded = false;
+let noteEditorExpanded = false;
+let categoryPanelExpanded = false;
+let previewLineVariant = 0;
+let previewLineWasRotated = false;
 let weatherGeo = null;
 let weatherSnapshot = null;
 let isRequestingWeatherPermission = false;
@@ -621,6 +698,7 @@ function loadState() {
       ...structuredClone(defaultState),
       ...parsed,
       settings: { ...defaultState.settings, ...parsed.settings },
+      recordMode: "manual",
       items: Array.isArray(parsed.items) ? parsed.items : [],
       insights: Array.isArray(parsed.insights) ? parsed.insights : [],
       latestActionCard:
@@ -686,6 +764,7 @@ function syncOverlayScrollLock() {
     refs.billDateRangeModal,
     refs.deleteConfirmModal,
     refs.billPlaybackModal,
+    refs.scenePackMoreSheet,
   ];
   const hasVisibleOverlay = overlays.some((el) => el && !el.classList.contains("hidden"));
   document.body.classList.toggle("modal-open", hasVisibleOverlay);
@@ -702,6 +781,7 @@ function watchOverlayChanges() {
     refs.billDateRangeModal,
     refs.deleteConfirmModal,
     refs.billPlaybackModal,
+    refs.scenePackMoreSheet,
   ].filter(Boolean);
   overlays.forEach((el) => {
     const observer = new MutationObserver(() => syncOverlayScrollLock());
@@ -2350,92 +2430,240 @@ function getCategoryMeta(value) {
 }
 
 function updateNotePlaceholder() {
-  const amountReady = isAmountReady();
-  if (!amountReady) {
-    refs.titleInput.placeholder = "这一笔像什么？不写也能保存";
-    return;
-  }
-  const meta = getCategoryMeta(selectedCategory || localRecommendedCategory());
-  refs.titleInput.placeholder = `已归类到「${meta.label}」，可补充一句生活细节`;
+  refs.titleInput.placeholder = "这一笔想怎么被记住？";
 }
 
-// Web-only prototype states. iOS UI-P1 should use F1.3/B2.13 resolver outputs.
-const prefillDemoPresets = {
-  brand: {
-    headline: "瑞幸咖啡",
-    emotion: "早班路上，顺手续一口",
-    actionText: "换一句说法",
-    actionClass: "link-btn",
-  },
-  habit: {
-    headline: "地铁通勤",
-    emotion: "日常出行",
-    actionText: "✨ 换一句",
-    actionClass: "scene-quick-btn",
-  },
-  generic: {
-    headline: "吃饭的一小笔",
-    emotion: "日常一口",
-    actionText: "✨ 帮我写一句",
-    actionClass: "scene-primary-btn",
-  },
-};
-
 function compactRecordTime() {
-  const raw = refs.recordDateInput.value;
-  if (!raw) return new Date().toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
-  const date = new Date(`${raw}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return raw;
-  return date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+  return new Date().toLocaleTimeString("zh-CN", { hour: "numeric", minute: "2-digit" });
+}
+
+function matchBrandInNote(text = "") {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+  const matches = brandsLite
+    .flatMap((brand) => [...brand.aliases, ...(brand.lines || []), brand.emotion, brand.mood]
+      .filter(Boolean)
+      .map((alias) => ({ brand, alias })))
+    .sort((a, b) => b.alias.length - a.alias.length || a.brand.id.localeCompare(b.brand.id));
+  return matches.find(({ alias }) => raw.toLowerCase().includes(alias.toLowerCase()))?.brand || null;
+}
+
+function amountBandForHabit(amount) {
+  if (amount <= 20) return 0;
+  if (amount <= 50) return 1;
+  if (amount <= 120) return 2;
+  if (amount <= 300) return 3;
+  return 4;
+}
+
+function estimateHabitConfidence() {
+  const amount = getAmountValue();
+  if (!state.items.length || Number.isNaN(amount) || amount <= 0) return { confidence: 0, category: localRecommendedCategory(), title: "" };
+  const band = amountBandForHabit(amount);
+  const hour = new Date().getHours();
+  const hourBucket = Math.floor(hour / 3);
+  const recent = state.items.slice(0, 90).filter((item) => {
+    const itemAmount = Number(item.amount || 0);
+    const itemHour = new Date(item.createdAt || Date.now()).getHours();
+    return itemAmount > 0
+      && amountBandForHabit(itemAmount) === band
+      && Math.floor(itemHour / 3) === hourBucket;
+  });
+  if (recent.length < 3) return { confidence: 0.35, category: topCategoryFromHistory(), title: "" };
+  const counts = new Map();
+  recent.forEach((item) => counts.set(item.category, (counts.get(item.category) || 0) + 1));
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const top = ranked[0];
+  const second = ranked[1]?.[1] || 0;
+  const confidence = top ? top[1] / Math.max(top[1] + second, 1) : 0;
+  const titles = recent
+    .filter((item) => item.category === top?.[0])
+    .map((item) => (item.title || "").trim())
+    .filter((title) => title && !/消费$/.test(title) && title.length >= 2 && title.length <= 12);
+  const title = titles[0] || "";
+  return { confidence, category: top?.[0] || topCategoryFromHistory(), title };
+}
+
+function pickColdStartWhisper(amount = getAmountValue(), date = new Date()) {
+  const dateKey = localDayKey(date);
+  const hourBucket = Math.floor(date.getHours() / 3);
+  return coldStartWhispers[stableIndex(`${amount}|${dateKey}|${hourBucket}`, coldStartWhispers.length)] || coldStartWhispers[0];
+}
+
+function categoryFallbackLine(category) {
+  const map = {
+    餐饮: "吃饭的一小笔",
+    交通: "路上的一小段",
+    购物: "给生活添一点",
+    娱乐: "留给放松的一笔",
+    日用: "日常的一点补给",
+    其他: "今天的一小笔",
+  };
+  return map[category] || "今天的一小笔";
+}
+
+function resolveRecordPreviewTier() {
+  const amount = getAmountValue();
+  if (!amount || Number.isNaN(amount) || amount <= 0) return { tier: "L0" };
+  const note = refs.titleInput.value.trim();
+  const brand = matchBrandInNote(note);
+  const habit = estimateHabitConfidence();
+  const edited = Boolean(editingRecordId || note || previewLineWasRotated);
+  if (!brand && !edited && state.items.length < 3) {
+    return { tier: "L1", source: "cold", category: habit.category || localRecommendedCategory(), habit };
+  }
+  if (brand) return { tier: "L2", source: "brand", brand, category: brand.category, habit };
+  if (edited) return { tier: "L2", source: "edited", category: selectedCategory || habit.category || localRecommendedCategory(), habit };
+  if (habit.confidence >= 0.55) return { tier: "L2", source: "habit", category: habit.category, habit };
+  return { tier: "L1", source: "cold", category: habit.category || localRecommendedCategory(), habit };
+}
+
+function resolvePreviewEmotion(preview) {
+  if (preview.tier !== "L2") return "";
+  if (preview.brand) return preview.brand.mood || preview.brand.emotion;
+  return inferEmotionTag({ category: preview.category || selectedCategory || localRecommendedCategory(), amount: getAmountValue() });
+}
+
+function previewHeadlineFor(preview) {
+  const userTitle = refs.titleInput.value.trim();
+  if (preview.tier === "L1") return pickColdStartWhisper();
+  if (preview.brand) {
+    const isAliasOnly = preview.brand.aliases.some((alias) => userTitle.toLowerCase() === alias.toLowerCase());
+    if (userTitle && !isAliasOnly) return userTitle;
+    const lines = preview.brand.lines || [preview.brand.emotion || preview.brand.displayName];
+    return lines[previewLineVariant % lines.length] || preview.brand.emotion || preview.brand.displayName;
+  }
+  if (userTitle) return userTitle;
+  if (preview.source === "habit" && preview.habit?.title) return preview.habit.title;
+  return categoryFallbackLine(preview.category || selectedCategory || localRecommendedCategory());
+}
+
+function showLifeEntryNoteEditor() {
+  noteEditorExpanded = true;
+  updateLifeEntryPreview();
+  setTimeout(() => refs.titleInput?.focus(), 60);
+}
+
+function makeQuietAction(label, onClick) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "life-slip-action";
+  btn.textContent = label;
+  btn.addEventListener("pointerdown", (event) => event.preventDefault());
+  btn.addEventListener("click", onClick);
+  return btn;
+}
+
+function renderQuietActions(preview) {
+  refs.lifeEntryQuietActions.innerHTML = "";
+  if (preview.tier === "L0") return;
+  const primaryLabel = preview.source === "brand"
+    ? "换说法"
+    : preview.tier === "L2"
+      ? "换一句"
+      : "帮我写一句";
+  refs.lifeEntryQuietActions.appendChild(makeQuietAction(primaryLabel, () => rotatePreviewLine(preview)));
+  if (preview.tier === "L2" && (previewLineWasRotated || preview.source !== "cold")) {
+    refs.lifeEntryQuietActions.appendChild(makeQuietAction("换个角度", openScenePackMoreSheet));
+  }
+  refs.lifeEntryQuietActions.appendChild(makeQuietAction("自己写一句", showLifeEntryNoteEditor));
+}
+
+function rotatePreviewLine(preview = resolveRecordPreviewTier()) {
+  const amount = getAmountValue();
+  if (!amount || Number.isNaN(amount) || amount <= 0) return;
+  previewLineVariant += 1;
+  previewLineWasRotated = true;
+  if (preview.brand) {
+    const lines = preview.brand.lines || [preview.brand.displayName];
+    refs.titleInput.value = lines[previewLineVariant % lines.length] || lines[0];
+    selectedCategory = preview.brand.category;
+  } else {
+    const packId = guessMemberScenePackId();
+    applyMemberScenePack(packId, { keepSelectedCategory: true, silent: true, variant: previewLineVariant });
+    return;
+  }
+  updateCategoryUI();
+  updateLifeEntryPreview();
+}
+
+function openScenePackMoreSheet() {
+  const angleCopy = {
+    commute: { title: "路上的角度", tagline: "地铁公交，赶路路上的一小段" },
+    food: { title: "一顿饭的角度", tagline: "一顿饭、一杯喝的、小聚" },
+    travel: { title: "出发途中的角度", tagline: "出发、途中、沿路痕迹" },
+    pet: { title: "陪伴照顾的角度", tagline: "宠物日常与陪伴" },
+  };
+  refs.scenePackMoreList.innerHTML = "";
+  memberScenePacks.forEach((pack) => {
+    const copy = angleCopy[pack.id] || { title: "另一种角度", tagline: "从另一种生活角度记下这一笔" };
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "scene-pack-more-option";
+    btn.innerHTML = `<span>${pack.emoji} ${copy.title}</span><small>${copy.tagline}</small>`;
+    btn.addEventListener("click", () => {
+      previewLineVariant += 1;
+      previewLineWasRotated = true;
+      applyMemberScenePack(pack.id, { keepSelectedCategory: false, silent: true, variant: previewLineVariant });
+      closeScenePackMoreSheet();
+    });
+    refs.scenePackMoreList.appendChild(btn);
+  });
+  refs.scenePackMoreSheet?.classList.remove("hidden");
+  syncOverlayScrollLock();
+}
+
+function closeScenePackMoreSheet() {
+  refs.scenePackMoreSheet?.classList.add("hidden");
+  syncOverlayScrollLock();
 }
 
 function updateLifeEntryPreview() {
   const amountReady = isAmountReady();
   refs.lifeEntryPreview?.classList.toggle("hidden", !amountReady);
   refs.recordPrimaryActions?.classList.toggle("hidden", !amountReady && !editingRecordId);
-  refs.recordDetailsFold?.classList.toggle("hidden", !amountReady && !editingRecordId);
-  refs.prefillDemoBar?.classList.toggle("hidden", !amountReady && !editingRecordId);
+  refs.recordDetailsFold?.classList.add("hidden");
+  refs.prefillDemoBar?.classList.toggle("hidden", !DEBUG_UI_ENABLED || (!amountReady && !editingRecordId));
   if (!amountReady && !editingRecordId) return;
 
-  const preset = prefillDemoPresets[prefillDemoMode] || prefillDemoPresets.generic;
+  const preview = resolveRecordPreviewTier();
   const amount = getAmountValue();
-  const meta = getCategoryMeta(selectedCategory || localRecommendedCategory());
+  const meta = getCategoryMeta(preview.category || selectedCategory || localRecommendedCategory());
+  if (preview.brand && !categoryLockedByUser) {
+    selectedCategory = preview.brand.category;
+  } else if (!selectedCategory && preview.category) {
+    selectedCategory = preview.category;
+  }
+  const headline = previewHeadlineFor(preview);
+  const emotion = resolvePreviewEmotion(preview);
   const userTitle = refs.titleInput.value.trim();
-  const headline = userTitle || preset.headline;
-  const emotion = preset.emotion;
-  refs.lifeEntryHeadline.textContent = headline || "这一笔还没长出说法";
+  const isAliasOnly = preview.brand && preview.brand.aliases.some((alias) => userTitle.toLowerCase() === alias.toLowerCase());
+  const shouldShowHint = preview.tier === "L2" && (previewLineWasRotated || preview.source === "habit" || isAliasOnly || (!userTitle && preview.source !== "edited"));
+  refs.lifeEntryPreview.classList.toggle("life-slip--whisper", preview.tier === "L1");
+  refs.lifeEntryPreview.classList.toggle("life-slip--confirm", preview.tier === "L2");
+  refs.lifeEntryHeadline.textContent = headline || "今天的一小笔";
   refs.lifeEntryAmount.textContent = Number.isNaN(amount) ? "¥0.00" : formatCNY(amount);
+  refs.lifeEntryHeadlineHint?.classList.toggle("hidden", !shouldShowHint);
   refs.lifeEntryEmotion.textContent = emotion;
-  refs.lifeEntryEmotion.classList.toggle("hidden", !emotion);
-  refs.lifeEntryMeta.textContent = `${meta.label} · ${compactRecordTime()}`;
-
-  refs.lifeEntryQuickActions.innerHTML = "";
-  const quickBtn = document.createElement("button");
-  quickBtn.type = "button";
-  quickBtn.className = preset.actionClass;
-  quickBtn.textContent = preset.actionText;
-  quickBtn.addEventListener("pointerdown", (event) => event.preventDefault());
-  quickBtn.addEventListener("click", () => {
-    if (!state.settings.isMember && prefillDemoMode === "generic") {
-      openAccountOverlay();
-      return;
-    }
-    const packId = guessMemberScenePackId();
-    applyMemberScenePack(packId, { keepSelectedCategory: true });
-  });
-  refs.lifeEntryQuickActions.appendChild(quickBtn);
-
-  const detailBtn = document.createElement("button");
-  detailBtn.type = "button";
-  detailBtn.className = "link-btn";
-  detailBtn.textContent = "补充细节";
-  detailBtn.addEventListener("click", () => toggleRecordDetails(true));
-  refs.lifeEntryQuickActions.appendChild(detailBtn);
+  refs.lifeEntryEmotion.classList.toggle("hidden", preview.tier !== "L2" || !emotion);
+  refs.lifeEntryMeta.textContent = preview.tier === "L1"
+    ? `今天 · ${compactRecordTime()}`
+    : `${preview.brand ? `${preview.brand.displayName} · ` : ""}${meta.label} · 今天 ${compactRecordTime()}`;
+  refs.lifeEntryChangeCategory?.classList.toggle("hidden", preview.tier !== "L2");
+  refs.lifeEntryNoteEditor?.classList.toggle("hidden", !noteEditorExpanded);
+  refs.lifeEntryCategoryPanel?.classList.toggle("hidden", !categoryPanelExpanded || preview.tier !== "L2");
+  refs.amountAssist.textContent = preview.tier === "L1"
+    ? "数额够了。"
+    : "金额只是刻度";
+  refs.amountAssist.classList.toggle("hidden", preview.tier === "L2");
+  renderQuietActions(preview);
 }
 
 function toggleRecordDetails(force) {
   recordDetailsExpanded = typeof force === "boolean" ? force : !recordDetailsExpanded;
-  refs.recordDetailsBody?.classList.toggle("hidden", !recordDetailsExpanded);
+  noteEditorExpanded = recordDetailsExpanded;
+  refs.lifeEntryNoteEditor?.classList.toggle("hidden", !noteEditorExpanded);
+  refs.recordDetailsBody?.classList.toggle("hidden", true);
   if (refs.recordDetailsToggleHint) {
     refs.recordDetailsToggleHint.textContent = recordDetailsExpanded ? "收起" : "展开";
   }
@@ -2690,24 +2918,26 @@ function scenePackTierIndex(pack, amount) {
   return index >= 0 ? index : Math.max(0, pack.rules.length - 1);
 }
 
-function stableScenePackNote(pack, amount, categoryContext) {
+function stableScenePackNote(pack, amount, categoryContext, variant = 0) {
   const tierIndex = scenePackTierIndex(pack, amount);
   const matchedRule = pack.rules[tierIndex] || pack.rules[pack.rules.length - 1];
   const notes = matchedRule?.notes || ["今天记一笔日常花费"];
   const seed = `${localDayKey()}|${pack.id}|${tierIndex}|${categoryContext || pack.category}`;
+  const baseIndex = stableIndex(seed, notes.length);
+  const noteIndex = (baseIndex + Math.max(0, variant)) % notes.length;
   return {
-    seed,
-    note: notes[stableIndex(seed, notes.length)] || notes[0],
+    seed: `${seed}|${variant}`,
+    note: notes[noteIndex] || notes[0],
   };
 }
 
-function applyMemberScenePack(packId, { keepSelectedCategory = false } = {}) {
+function applyMemberScenePack(packId, { keepSelectedCategory = false, silent = false, variant = 0 } = {}) {
   const pack = memberScenePacks.find((x) => x.id === packId);
   if (!pack) return;
   const amount = getAmountValue();
   const petName = resolvePetNameForNote();
   const effectiveCategory = keepSelectedCategory ? (selectedCategory || pack.category) : pack.category;
-  const picked = stableScenePackNote(pack, amount, effectiveCategory);
+  const picked = stableScenePackNote(pack, amount, effectiveCategory, variant);
   let phrase = picked.note;
   phrase = phrase.replace(/\{petName\}/g, petName);
   phrase = enrichNoteWithHistory(phrase, effectiveCategory, picked.seed);
@@ -2720,7 +2950,9 @@ function applyMemberScenePack(packId, { keepSelectedCategory = false } = {}) {
   scenePackExpanded = false;
   renderRecord();
   updateLifeEntryPreview();
-  showToast(`已生成：${pack.label}`);
+  if (!silent) {
+    showToast("已换一句说法");
+  }
 }
 
 function guessMemberScenePackId() {
@@ -2742,6 +2974,7 @@ function guessMemberScenePackId() {
 }
 
 function renderMemberScenePacks() {
+  if (!refs.memberScenePackBlock) return;
   const isManualMode = state.recordMode === "manual";
   const isEditing = Boolean(editingRecordId);
   const amountReady = isAmountReady();
@@ -2834,7 +3067,7 @@ function addRecord({ title, amount, category, source, occurredAt }) {
     return false;
   }
   const finalCategory = category || "其他";
-  const finalTitle = title && title.trim() ? title.trim() : `${finalCategory}消费`;
+  const finalTitle = title && title.trim() ? title.trim() : categoryFallbackLine(finalCategory);
   const finalDate = occurredAt ? mergeDateWithCurrentTime(occurredAt) : new Date().toISOString();
   state.items.unshift({
     id: crypto.randomUUID(),
@@ -3939,6 +4172,10 @@ function startNewManualRecordDraft() {
   selectedCategory = topCategoryFromHistory();
   categoryLockedByUser = false;
   recordDetailsExpanded = false;
+  noteEditorExpanded = false;
+  categoryPanelExpanded = false;
+  previewLineWasRotated = false;
+  previewLineVariant = 0;
   refs.noteSuggestions.classList.add("hidden");
   refs.noteSuggestions.innerHTML = "";
   refs.recordDateInput.value = new Date().toISOString().slice(0, 10);
@@ -3960,6 +4197,9 @@ function openRecordEditor(recordId) {
   categoryLockedByUser = true;
   refs.recordDateInput.value = item.createdAt.slice(0, 10);
   recordDetailsExpanded = true;
+  noteEditorExpanded = true;
+  categoryPanelExpanded = true;
+  previewLineWasRotated = true;
   switchTab("record");
   renderRecord();
 }
@@ -3967,10 +4207,11 @@ function openRecordEditor(recordId) {
 function renderRecord() {
   const amountReady = isAmountReady();
   const isEditing = Boolean(editingRecordId);
-  refs.recordModeSegment.classList.toggle("hidden", Boolean(editingRecordId));
+  refs.recordModeSegment.classList.add("hidden");
   refs.modeButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.mode === state.recordMode));
   refs.manualForm.classList.toggle("hidden", state.recordMode !== "manual");
   refs.ocrForm.classList.toggle("hidden", state.recordMode !== "ocr");
+  refs.recordImportLink?.classList.toggle("hidden", state.recordMode !== "manual" || Boolean(editingRecordId));
   refs.deleteRecordBtn.classList.toggle("hidden", editingRecordId == null || state.recordMode !== "manual");
   refs.amountQuickKeyboard?.classList.toggle(
     "hidden",
@@ -3985,14 +4226,19 @@ function renderRecord() {
   const wasDisabled = refs.saveRecordBtn.disabled;
   if (isEditing) {
     recordDetailsExpanded = true;
+    noteEditorExpanded = true;
+    categoryPanelExpanded = true;
   }
-  refs.categoryField.classList.toggle("hidden", !amountReady && !isEditing);
-  refs.noteField.classList.toggle("hidden", !amountReady && !isEditing);
+  refs.categoryField?.classList.toggle("hidden", true);
+  refs.noteField?.classList.toggle("hidden", true);
   refs.amountAssist.classList.toggle("hidden", amountReady || isEditing);
-  refs.networkHint.classList.toggle("hidden", !amountReady || !state.settings.remoteAIEnabled || isEditing);
-  refs.dateHint.classList.toggle("hidden", !amountReady && !isEditing);
-  refs.localPrivacyHint.classList.toggle("hidden", !amountReady && !isEditing);
-  refs.editDateBtn.classList.toggle("hidden", !amountReady && !isEditing);
+  if (!amountReady && !isEditing) {
+    refs.amountAssist.textContent = "记下一笔今天的生活";
+  }
+  refs.networkHint?.classList.toggle("hidden", true);
+  refs.dateHint?.classList.toggle("hidden", true);
+  refs.localPrivacyHint?.classList.toggle("hidden", true);
+  refs.editDateBtn.classList.toggle("hidden", !isEditing);
   refs.saveRecordBtn.disabled = !amountReady;
   refs.saveRecordBtn.textContent = isEditing ? "更新这一笔" : "放进账本";
   toggleRecordDetails(recordDetailsExpanded && (amountReady || isEditing));
@@ -4433,13 +4679,49 @@ function init() {
       refs.noteSuggestions.classList.add("hidden");
     }, 120);
   });
+  refs.lifeEntryHeadline?.addEventListener("click", () => {
+    noteEditorExpanded = !noteEditorExpanded;
+    updateLifeEntryPreview();
+    if (noteEditorExpanded) {
+      setTimeout(() => refs.titleInput?.focus(), 60);
+    }
+  });
+  refs.lifeEntryChangeCategory?.addEventListener("click", () => {
+    categoryPanelExpanded = !categoryPanelExpanded;
+    updateLifeEntryPreview();
+  });
+  refs.scenePackMoreCloseBtn?.addEventListener("click", closeScenePackMoreSheet);
+  refs.scenePackMoreSheet?.addEventListener("click", (event) => {
+    if (event.target === refs.scenePackMoreSheet) {
+      closeScenePackMoreSheet();
+    }
+  });
+  refs.recordImportLink?.addEventListener("click", () => {
+    resetRecordEditorState();
+    state.recordMode = "ocr";
+    renderRecord();
+  });
+  refs.recordManualLink?.addEventListener("click", () => {
+    startNewManualRecordDraft();
+    state.recordMode = "manual";
+    renderRecord();
+  });
   refs.recordDetailsToggle?.addEventListener("click", () => {
     toggleRecordDetails();
   });
   refs.prefillDemoButtons?.forEach((btn) => {
     btn.addEventListener("click", () => {
       prefillDemoMode = btn.dataset.prefillMode || "generic";
-      refs.titleInput.value = "";
+      previewLineWasRotated = false;
+      if (prefillDemoMode === "brand") {
+        refs.titleInput.value = "瑞幸";
+      } else if (prefillDemoMode === "habit") {
+        refs.titleInput.value = "地铁通勤";
+        selectedCategory = "交通";
+        previewLineWasRotated = true;
+      } else {
+        refs.titleInput.value = "";
+      }
       updateLifeEntryPreview();
       renderRecord();
     });
@@ -4547,7 +4829,7 @@ function init() {
         showToast("请先填写有效金额。");
       } else {
         const finalCategory = selectedCategory || "其他";
-        current.title = refs.titleInput.value.trim() || `${finalCategory}消费`;
+        current.title = refs.titleInput.value.trim() || categoryFallbackLine(finalCategory);
         current.amount = amount;
         current.category = finalCategory;
         current.createdAt = mergeDateWithCurrentTime(refs.recordDateInput.value);
@@ -4572,6 +4854,10 @@ function init() {
       selectedCategory = topCategoryFromHistory();
       categoryLockedByUser = false;
       recordDetailsExpanded = false;
+      noteEditorExpanded = false;
+      categoryPanelExpanded = false;
+      previewLineWasRotated = false;
+      previewLineVariant = 0;
       prefillDemoMode = "generic";
       resetRecordEditorState();
       updateCategoryUI();
@@ -4579,7 +4865,7 @@ function init() {
       refs.noteSuggestions.innerHTML = "";
       refs.recordDateInput.value = new Date().toISOString().slice(0, 10);
       goHomeAfterSave();
-      showToast(wasEditing ? "账单已更新" : "手动记录已保存");
+      showToast(wasEditing ? "账单已更新" : "已记下。去首页看看今天留下的痕迹。");
       updateDebugHUD("save-ok");
       setTimeout(() => {
         triggerPetMicroAction("stamp", "啪叽盖章，记进小本本啦～");
@@ -4874,7 +5160,7 @@ function init() {
   };
   refs.accountPhoneLoginBtn.addEventListener("click", mockLogin);
   refs.accountWechatLoginBtn.addEventListener("click", mockLogin);
-  refs.memberScenePackEntryBtn.addEventListener("click", () => {
+  refs.memberScenePackEntryBtn?.addEventListener("click", () => {
     openAccountOverlay();
     memberPlansExpanded = false;
     accountOverlayView = state.settings.isMember ? "center" : "member";

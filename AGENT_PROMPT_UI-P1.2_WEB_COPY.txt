@@ -1,0 +1,288 @@
+你在 xuzhangapp 实现 Task UI-P1.2-WEB — 记账页综合抛光（仅 web-preview/；同一 PR）。
+
+================================================================================
+产品共识（必读，不可因实现糙而降级策略）
+================================================================================
+
+策略本身成立且高级：用户只确认、不配置；复杂度藏在引擎和回望里。
+本 PR 不是把记账页做更热闹，而是继续压短输入链路。
+
+当前 Web 预览只证明了交互结构，还没证明产品气质。
+禁止误判成「表单折叠了、有点糙」——那是结构稿，不是气质稿。
+
+本 PR 目标感受：
+  「我只输一个金额，它就轻轻帮我把这笔生活接住了。」
+错误感受（必须避免）：
+  「我把表单藏起来了，加了一张预览卡，还是有点工具感。」
+
+验收母句：我只放进去一笔，系统自己帮我长出叙事——用户有没有被接住？
+
+================================================================================
+范围与禁止
+================================================================================
+
+只做：web-preview/index.html、web-preview/app.js、web-preview/styles.css
+不动：NativeDemoApp、backend
+不改：resolveRecordPreviewTier 判定 if 条件（obvious bug 除外）
+不改：coldStartWhispers 15 条原文
+不堆：新业务功能、新 tier
+不 commit（除非用户明确要求）
+
+================================================================================
+北极星
+================================================================================
+
+默认让用户确认，不让用户配置。
+首屏主路径永远三段，中间不得插入 fold / segment / demo 条：
+
+  1. 金额舞台
+  2. 生活纸条 life-slip
+  3. 放进账本（全页唯一主色 CTA）
+
+禁止首屏主路径出现：分类 chip grid、备注字段标签、recordDetailsFold、
+memberScenePackBlock 列表、prefillDemoBar（非 debug）、双按钮模式切换 segment。
+
+================================================================================
+预览三档（逻辑已定，只改 UI 绑定）
+================================================================================
+
+L0 — 无有效金额
+  隐藏纸条
+
+L1 — 有金额 + 低置信
+  主行：pickColdStartWhisper()
+  胶囊：隐藏
+  meta：今天 · H:mm（无分类）
+  foot：帮我写一句 | 自己写一句
+  换个角度：永不显示
+  强制：items.length < 3 且无品牌 → L1
+
+L2 — 品牌 / 习惯>=0.55 / 编辑 / 点过换句
+  主行：生活句
+  胶囊：显示（弱化样式）
+  meta：{分类} · 今天 H:mm，末尾 link「改」
+  foot：换一句 | 自己写一句（brand 用「换说法」）
+  换句后 foot 加：换个角度
+  触发：editingRecordId | matchBrandInNote | previewLineWasRotated | (items>=3 && habit>=0.55)
+
+引擎静默：L1 保存仍写分类/emotion；UI 不展示胶囊。
+
+================================================================================
+首屏 DOM 顺序
+================================================================================
+
+kicker「把一笔生活放进账本」
+h2「记下这一笔」（可略缩小）
+#amountStage
+#recordImportRow（说明 + 轻 link：有账单截图？从截图导入 →）
+#lifeEntryPreview（life-slip）
+#recordPrimaryActions（放进账本）
+
+OCR 侧门（不是模式切换器）：
+  - 移除或隐藏主路径 #recordModeSegment（手动录入 | 智能导入）
+  - 新增 record-import-row：说明句「有账单截图？」(muted) + link「从截图导入 →」(#recordImportLink)
+  - 仍是侧门，不是 Tab segment；说明句帮发现，link 保持低对比
+  - 点击展开 #ocrForm；引导：从账单里捞一段生活，确认后再放进账本
+  - state.recordMode 逻辑保留，UI 不呈现双按钮 segment
+  - OCR 区主按钮偏叙事：选择截图，捞进账本
+
+藏起来的旧模块：
+  - #amountQuickKeyboard：默认 hidden；focus 时小 link 行 .00 | +10 | +50 | +100
+  - #prefillDemoBar：仅 ?debug=1 或 DEBUG_UI_ENABLED
+  - #recordDetailsFold：永久 hidden
+  - #memberScenePackBlock：不在记账页主路径渲染
+
+================================================================================
+生活纸条 life-slip（核心视觉抛光）
+================================================================================
+
+一个容器，不是控件拼盘。删掉 #lifeEntryPrimaryAction 动态 pill；
+改由 #lifeEntryQuietActions 纯 link 承担。
+
+推荐结构：
+
+<section id="lifeEntryPreview" class="life-slip hidden">
+  <div class="life-slip-body">
+    <p id="lifeEntryHeadline" class="life-slip-headline"></p>
+    <p id="lifeEntryHeadlineHint" class="life-slip-hint hidden"></p>
+    <p id="lifeEntryEmotion" class="life-slip-mood hidden"></p>
+    <p id="lifeEntryMeta" class="life-slip-meta muted"></p>
+    <!-- L2 meta 行末尾内嵌 button#lifeEntryChangeCategory 改 -->
+  </div>
+  <div class="life-slip-foot">
+    <nav id="lifeEntryQuietActions" class="life-slip-quiet-actions"></nav>
+    <span id="lifeEntryAmount" class="life-slip-amount"></span>
+  </div>
+  <div id="lifeEntryNoteEditor" class="life-slip-expand hidden">
+    <input id="titleInput" placeholder="这一笔想怎么被记住？" />
+  </div>
+  <div id="lifeEntryCategoryPanel" class="life-slip-expand hidden">
+    <div id="categoryOptions" class="category-options inline"></div>
+  </div>
+</section>
+
+视觉原则：
+  - 圆角 20-24px，极淡纸感；子块不得各自像 button card
+  - body/foot 用留白或极淡线分隔，foot 不是第二面板
+  - 禁止 foot 出现 scene-primary-btn / scene-quick-btn / 与放进账本同权重主色块
+
+L1 life-slip--whisper（轻耳语，像提示不像卡）：
+  - 无重阴影；可选左侧 2px accent 竖线；背景几乎融入 panel
+  - 主行 15-16px regular，subtext 色，行高 1.55
+  - 无胶囊
+  - meta 11px muted
+  - foot：帮我写一句 | 自己写一句
+  - 角标金额 11px，opacity 约 0.55，右下
+
+L2 life-slip--confirm（确认卡，主行主角）：
+  - 主行 20-22px semibold，最大权重
+  - 胶囊 11px，无实心底或 50% 描边，主行下 6px 附注感
+  - meta 12px；改在同行末尾 link
+  - 角标金额 12px subtext，foot 右下，弱于主行
+
+金额舞台 amountAssist：
+  - L0：记下一笔今天的生活
+  - L1：数额够了。（短）
+  - L2：hidden 或极淡「金额只是刻度」
+  - 垂直间距 amountStage → life-slip → save-row：16-20px
+
+================================================================================
+安静操作（foot 全 link，无 pill，无 emoji）
+================================================================================
+
+L1 foot：帮我写一句 | 自己写一句
+L2 未换句：换一句 | 自己写一句（brand：换说法）
+L2 已换句：换一句 | 换个角度 | 自己写一句
+
+换个角度显示条件：previewLineWasRotated === true 或 (tier===L2 && source!=='cold')
+L1 永不显示换个角度
+
+各控件行为：
+  帮我写一句 / 换一句 / 换说法 → rotatePreviewLine()，不自动展开分类 grid
+  自己写一句 → noteEditorExpanded=true，展开 titleInput 并 focus，L1/L2 均可见
+  换个角度 → openScenePackMoreSheet()
+  改 → toggle lifeEntryCategoryPanel，仅 L2
+  主行 click → 可辅助展开手写，但不能是唯一「自己写」入口
+
+link 样式：12px；hover 仅 underline 或 opacity 0.85；无背景色块
+
+系统句 hint（#lifeEntryHeadlineHint，11px muted）：
+  文案：想换说法，点下面轻字即可
+  显示：主行来自引擎且用户未手写
+  禁止：系统先写了一句 · 可点「自己写一句」…（太工具）
+
+================================================================================
+文案气质
+================================================================================
+
+叙账语气：生活瞬间、周记感、可叙之材、笃定不软腻
+禁止：功能提示、填表腔（比如输入¥）、审计词、广告腔、对用户说「场景包」「备注字段」
+
+耳语池 15 条（原文不得改，写入 app.js）：
+  金额在这就行，分类和备注可以先空着。
+  只填数额，也算把今天留住了一截。
+  不用解释为什么花，先记上就好。
+  分类我会先帮你猜，错了晚点再改。
+  这一句生活句，放进账本后会自己长出来。
+  记完去首页，今天会多一段痕迹。
+  今晚回放时，这一笔会轮到它说话。
+  花出去的不是分数，是今天真实走过的一下。
+  记一笔，今天又多了一小块可叙的素材。
+  细节晚点再补也行，数额先按住这一刻。
+  早上记下的，会并进今天前半段的故事。
+  夜里记下的，留给今天的收束来讲。
+  周末记下的，算进这段日子的一个脚注。
+  想不起具体买了什么，也没关系。
+  不用挑分类，先把这一刻记下来。
+
+品牌 emotion/lines 须生活感（memberScenePacks[].desc 不得出现在用户 UI）：
+  luckin：早班路上，顺手续一口 / 蓝杯小小提神 / 赶路前醒一醒
+  starbucks：给自己留一小段坐下来的时间 / 咖啡香里缓一会儿
+  mcd / meituan / didi：保持生活感，去广告腔
+
+换个角度 Sheet（删除 openScenePackMoreSheet 内 moreCopy「路上的一句」等）：
+  标题：换个角度
+  副标题：从另一种生活角度，记下这一笔。
+  commute 打工人通勤包 · 地铁公交，赶路路上的一小段
+  food 吃货专属包 · 一顿饭、一杯喝的、小聚
+  travel 旅行预算包 · 出发、途中、沿路痕迹
+  pet 铲屎官宠物包 · 宠物日常与陪伴
+  禁止副文案含：比如、适合 XXX 类、XX的一句
+
+================================================================================
+当前代码缺口（必须修）
+================================================================================
+
+1. #recordModeSegment 在 manualForm 之后（页面底部）→ 主路径无 segment，改 recordImportLink
+2. renderPreviewPrimaryAction 创建 scene-primary-btn/scene-quick-btn → 删，改 renderQuietActions
+3. 无 lifeEntryHeadlineHint / 自己写一句可见入口 → 按上文 DOM 增补
+4. lifeEntryMoreBtn 文案「更多」、L2 全显示 → 改名「换个角度」，按条件显示
+5. openScenePackMoreSheet 用 moreCopy「路上的一句」→ 改用 pack.label + tagline
+6. Sheet 标题「更多说法」→「换个角度」
+7. amountQuickKeyboard 四颗大 pill → focus 时小 link
+8. L1 --whisper 仍有明显边框阴影 → 轻耳语
+9. 换句 pill 与更多并排 → foot 统一 quiet actions
+
+引擎函数保留，改接线：
+  resolveRecordPreviewTier、estimateHabitConfidence、matchBrandInNote、brandsLite×5、
+  pickColdStartWhisper、rotatePreviewLine、applyMemberScenePack、guessMemberScenePackId、inferEmotionTag
+  renderPreviewPrimaryAction → 本 PR 删除，改 renderQuietActions
+
+rotatePreviewLine 注意：非 brand 分支 applyMemberScenePack 后须 updateLifeEntryPreview 且 previewLineWasRotated=true
+
+================================================================================
+实施顺序
+================================================================================
+
+1. index.html：life-slip DOM + recordImportLink；移/藏 recordModeSegment
+2. app.js：renderQuietActions；删 pill；hint / 自己写一句 / 换个角度条件
+3. app.js：openScenePackMoreSheet 叙式 tagline
+4. styles.css：life-slip L1 whisper / L2 confirm；quiet link；金额舞台节奏
+5. app.js：快捷金额低调；prefillDemoBar debug gate
+6. 自测验收
+
+================================================================================
+验收清单
+================================================================================
+
+质感问句：用户第一眼看到的是一句生活，还是一排按钮？
+
+必过：
+  [ ] 首屏：金额 → 纸条 → 放进账本（无 segment、无 fold、无 demo 条）
+  [ ] L1 像轻提示；无胶囊；foot 帮我写一句|自己写一句；无换个角度
+  [ ] L2 主行最大；胶囊淡；金额安静；改在 meta 行末
+  [ ] L2 换句后：hint + foot 含换个角度
+  [ ] 自己写一句可见且 focus 输入框
+  [ ] 改才出分类 grid；换句不自动展开 grid
+  [ ] Sheet 用 pack.label + 叙式 tagline；无「路上的一句」
+  [ ] OCR 轻 link 侧门；不像 Tab 切换
+  [ ] 快捷金额非首屏大 pill
+  [ ] ?debug=1 可见 prefill demo；默认不可见
+  [ ] 清空数据输 10 → L1；备注瑞幸 → L2 品牌
+  [ ] tier 判定行为与改前一致
+  [ ] 首页/OCR 保存/编辑不回归
+  [ ] 母句：我只输金额，有没有被轻轻接住？
+
+可选：
+  [ ] L1 首笔 toast：已记下。首页会慢慢长出这一笔的痕迹。
+
+================================================================================
+必须先 Read
+================================================================================
+
+@web-preview/index.html
+@web-preview/app.js
+@web-preview/styles.css
+@RECORD_PAGE_DESIGN_v0.1.md
+
+================================================================================
+交付
+================================================================================
+
+1. 改动文件列表
+2. 缺口修复对照（9 条逐条）
+3. L1/L2 质感前后说明（3 条）
+4. 验收勾选
+5. 未做：iOS UI-P1.2
+
+最小 diff，仅 web-preview/。
