@@ -1,0 +1,123 @@
+你在 xuzhangapp 实现 Task UI-P1.3-iOS-SMALL — 顶栏 / 新建补记日期 / 首页文案（小 PR · 仅 NativeDemoApp/；同一 PR）。
+
+================================================================================
+本 PR 边界（最重要）
+================================================================================
+
+只做 3 件事，改动面小：
+  A. 顶栏小字不要所有 Tab 都显示「今天」
+  B. 新建记账补记日期 → 对齐编辑态暖日历，去掉系统 DatePicker + 浮动日历 icon
+  C. 首页动作卡「记一笔」→「记下一笔」（与 Tab「记下」统一）
+
+不做：痕迹页 / 复盘页 / 设置 / 会员 / 编辑迁 RecordView / 文案引擎 / Web
+
+================================================================================
+背景（代码已证实）
+================================================================================
+
+ContentView.topBar ~220：小字固定 Text("今天")，大标题才是 pageTitle → 非首页语义冲突
+
+RecordView ~348：.sheet + DatePicker(.graphical) 系统日历
+RecordView ~903：saveRow「放进账本」右上浮动 calendar icon
+
+RecordEditSheet（ContentView ~893 warmCalendar）：编辑已是 life-slip + inline 暖日历 + quiet「改日期」
+→ 新建与编辑两套日期 UI，新建把主路径拉回 demo 表单感
+
+HomeView ~22：动作卡仍「记一笔」，Tab 已定「记下」
+
+================================================================================
+范围与禁止
+================================================================================
+
+可改：
+  NativeDemoApp/ContentView.swift（topBar / AppTab kicker）
+  NativeDemoApp/Views/RecordView.swift
+  NativeDemoApp/Views/HomeView.swift（仅左动作卡 title 一行）
+  新建 NativeDemoApp/Views/Components/WarmRecordDatePanel.swift（推荐，从 RecordEditSheet 抽取）
+  RecordEditSheet 改为引用共享组件（若抽取）
+
+禁止改：
+  RecordPrefillService / NarrativeCopyResolver / RecordPreviewTier / addManualRecord 规则
+  StatsWebView / InsightWebView / SettingsView / MemberPricingView
+  web-preview / backend
+  git commit（除非用户明确要求）
+
+================================================================================
+任务 A · 顶栏小字按 Tab 变化
+================================================================================
+
+删除 topBar 里固定 Text("今天")。
+
+推荐：小字用 selectedTab.title（与底栏 Tab 名一致）：
+
+  今天 → 小字「今天」，大标题「今日」（已有 pageTitle）
+  记下 → 小字「记下」，大标题「记下这一笔」
+  痕迹 → 小字「痕迹」，大标题「账单与切片」
+  复盘 → 小字「复盘」，大标题「生活复盘」
+  我的 → 小字「我的」，大标题「设置」
+
+实现：AppTab 加 kicker（或复用 title），topBar 绑定。
+样式保持 12pt medium subtext；不改大标题字号、不改 Tab 栏 SVG。
+
+================================================================================
+任务 B · 新建补记日期对齐编辑暖日历
+================================================================================
+
+4.1 删除（RecordView 新建路径）
+
+  整段 .sheet(isPresented: $showRecordDateSheet) 系统 DatePicker(.graphical)
+  saveRow 里放进账本按钮右上浮动 Image(systemName: "calendar") 及 offset 叠层
+  showRecordDateSheet 若不再需要则移除
+
+4.2 新增（对齐 RecordEditSheet）
+
+  抽取 WarmRecordDatePanel：Binding<Date> + 月切换 + 日 grid + 时/分 stepper + 暖色底
+  （从 RecordEditSheet.warmCalendar 及 shiftMonth/setDay/setHour/setMinute 等 helper 迁出，视觉交互一致）
+
+  RecordView 增加：
+    @State private var datePanelExpanded = false
+    quiet link「改日期」（12pt accent link，同编辑 quietLink 气质）
+    点击 toggle datePanelExpanded
+    展开时在 life-slip 下方或 saveRow 上方 inline 显示 WarmRecordDatePanel
+    不要 sheet、不要系统 DatePicker
+    默认折叠；仅用户点「改日期」才展开
+    日期源仍为 homeViewModel.selectedDate；变更后刷新 previewCardMeta
+
+4.3 「改日期」位置
+
+  优先：saveRow 下方一行 secondary quiet actions，仅「改日期」
+  禁止：saveRow 上再挂圆形日历 icon
+
+4.4 RecordEditSheet
+
+  若已抽组件，RecordEditSheet 内 warmCalendar 改为引用 WarmRecordDatePanel，避免双份实现。
+
+================================================================================
+任务 C · 首页动作卡文案
+================================================================================
+
+HomeView 双动作卡左侧 title：
+  「记一笔」 → 「记下一笔」
+subtitle「只输金额也可以」保留。
+右侧「听今日回放」不动。
+
+================================================================================
+验收清单
+================================================================================
+
+必过：
+  [ ] 切痕迹/复盘/设置：顶栏小字不是「今天」
+  [ ] 新建记账：无系统 graphical DatePicker sheet；saveRow 无浮动 calendar icon
+  [ ] 点「改日期」→ inline 暖日历；默认折叠；选日期后 meta 更新
+  [ ] 编辑账单（RecordEditSheet）暖日历仍正常
+  [ ] 首页左卡「记下一笔」
+  [ ] life-slip / 放进账本 / OCR 侧门 / tier 零回归
+
+================================================================================
+@ 文件
+================================================================================
+
+@AGENT_PROMPT_UI-P1.3_IOS_SMALL_POLISH.md
+@NativeDemoApp/ContentView.swift
+@NativeDemoApp/Views/RecordView.swift
+@NativeDemoApp/Views/HomeView.swift

@@ -217,7 +217,7 @@ struct ContentView: View {
 
     private var topBar: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("今天")
+            Text(selectedTab.title)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
 
@@ -664,22 +664,12 @@ private extension Color {
     }
 }
 
-// MARK: - Record Edit Sheet
+// MARK: - Warm Record Date Panel
 
-struct RecordEditSheet: View {
-    let item: HomeItem
-    var onSave: (HomeItem) -> Void
-    var onDelete: () -> Void
-
-    @State private var amountText: String
-    @State private var titleText: String
-    @State private var selectedCategory: HomeItem.Category
-    @State private var selectedDate: Date
+struct WarmRecordDatePanel: View {
+    @Binding var selection: Date
     @State private var calendarMonth: Date
-    @State private var noteEditorExpanded = false
-    @State private var categoryPanelExpanded = false
-    @State private var datePanelExpanded = false
-    @Environment(\.dismiss) private var dismiss
+
     private var calendar: Calendar {
         var value = Calendar(identifier: .gregorian)
         value.locale = Locale(identifier: "zh_CN")
@@ -687,27 +677,16 @@ struct RecordEditSheet: View {
         return value
     }
 
-    init(item: HomeItem, onSave: @escaping (HomeItem) -> Void, onDelete: @escaping () -> Void) {
-        self.item = item
-        self.onSave = onSave
-        self.onDelete = onDelete
-        _amountText = State(initialValue: String(format: "%.2f", item.amount))
-        _titleText = State(initialValue: item.title)
-        _selectedCategory = State(initialValue: item.category)
-        _selectedDate = State(initialValue: item.createdAt)
-        _calendarMonth = State(initialValue: Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: item.createdAt)) ?? item.createdAt)
+    init(selection: Binding<Date>) {
+        self._selection = selection
+        self._calendarMonth = State(initialValue: Self.monthStart(for: selection.wrappedValue))
     }
 
-    private var parsedAmount: Double {
-        Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
-    }
-
-    private var cleanTitle: String {
-        titleText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var previewTitle: String {
-        cleanTitle.isEmpty ? selectedCategory.defaultRecordTitle : cleanTitle
+    static func monthStart(for date: Date) -> Date {
+        var value = Calendar(identifier: .gregorian)
+        value.locale = Locale(identifier: "zh_CN")
+        value.firstWeekday = 2
+        return value.date(from: value.dateComponents([.year, .month], from: date)) ?? date
     }
 
     private var monthTitle: String {
@@ -727,6 +706,186 @@ struct RecordEditSheet: View {
             cursor = calendar.date(byAdding: .day, value: 1, to: cursor) ?? lastWeek.end
         }
         return days
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Button {
+                    shiftMonth(-1)
+                } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AppColors.accent)
+
+                Spacer()
+
+                Text(monthTitle)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+
+                Spacer()
+
+                Button {
+                    shiftMonth(1)
+                } label: {
+                    Image(systemName: "chevron.right")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AppColors.accent)
+            }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: 7), spacing: 6) {
+                ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { day in
+                    Text(day)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppColors.subtext.opacity(0.72))
+                        .frame(height: 20)
+                }
+                ForEach(Array(calendarDays.enumerated()), id: \.offset) { pair in
+                    if let date = pair.element {
+                        dayButton(date)
+                    } else {
+                        Color.clear.frame(height: 34)
+                    }
+                }
+            }
+
+            HStack(spacing: 10) {
+                timeStepper(title: "时", value: calendar.component(.hour, from: selection), range: 0...23) { setHour($0) }
+                timeStepper(title: "分", value: calendar.component(.minute, from: selection), range: 0...59) { setMinute($0) }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(AppColors.accent.opacity(0.07))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
+        )
+    }
+
+    private func dayButton(_ date: Date) -> some View {
+        let isSelected = calendar.isDate(date, inSameDayAs: selection)
+        return Button {
+            setDay(date)
+        } label: {
+            Text("\(calendar.component(.day, from: date))")
+                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? AppColors.text : AppColors.subtext)
+                .frame(maxWidth: .infinity)
+                .frame(height: 34)
+                .background(
+                    Circle()
+                        .fill(isSelected ? AppColors.accent.opacity(0.20) : Color.white.opacity(0.38))
+                )
+                .overlay(
+                    Circle()
+                        .stroke(isSelected ? AppColors.accent.opacity(0.36) : Color.white.opacity(0.18), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func timeStepper(title: String, value: Int, range: ClosedRange<Int>, onSet: @escaping (Int) -> Void) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+            Button {
+                onSet(value == range.lowerBound ? range.upperBound : value - 1)
+            } label: {
+                Image(systemName: "minus")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AppColors.accent)
+
+            Text(String(format: "%02d", value))
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppColors.text)
+                .frame(width: 30)
+
+            Button {
+                onSet(value == range.upperBound ? range.lowerBound : value + 1)
+            } label: {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AppColors.accent)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.56))
+        )
+    }
+
+    private func shiftMonth(_ value: Int) {
+        calendarMonth = calendar.date(byAdding: .month, value: value, to: calendarMonth) ?? calendarMonth
+    }
+
+    private func setDay(_ date: Date) {
+        var selectedComponents = calendar.dateComponents([.hour, .minute], from: selection)
+        let dayComponents = calendar.dateComponents([.year, .month, .day], from: date)
+        selectedComponents.year = dayComponents.year
+        selectedComponents.month = dayComponents.month
+        selectedComponents.day = dayComponents.day
+        selection = calendar.date(from: selectedComponents) ?? selection
+    }
+
+    private func setHour(_ hour: Int) {
+        var components = calendar.dateComponents([.year, .month, .day, .minute], from: selection)
+        components.hour = hour
+        selection = calendar.date(from: components) ?? selection
+    }
+
+    private func setMinute(_ minute: Int) {
+        var components = calendar.dateComponents([.year, .month, .day, .hour], from: selection)
+        components.minute = minute
+        selection = calendar.date(from: components) ?? selection
+    }
+}
+
+// MARK: - Record Edit Sheet
+
+struct RecordEditSheet: View {
+    let item: HomeItem
+    var onSave: (HomeItem) -> Void
+    var onDelete: () -> Void
+
+    @State private var amountText: String
+    @State private var titleText: String
+    @State private var selectedCategory: HomeItem.Category
+    @State private var selectedDate: Date
+    @State private var noteEditorExpanded = false
+    @State private var categoryPanelExpanded = false
+    @State private var datePanelExpanded = false
+    @Environment(\.dismiss) private var dismiss
+
+    init(item: HomeItem, onSave: @escaping (HomeItem) -> Void, onDelete: @escaping () -> Void) {
+        self.item = item
+        self.onSave = onSave
+        self.onDelete = onDelete
+        _amountText = State(initialValue: String(format: "%.2f", item.amount))
+        _titleText = State(initialValue: item.title)
+        _selectedCategory = State(initialValue: item.category)
+        _selectedDate = State(initialValue: item.createdAt)
+    }
+
+    private var parsedAmount: Double {
+        Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
+    }
+
+    private var cleanTitle: String {
+        titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var previewTitle: String {
+        cleanTitle.isEmpty ? selectedCategory.defaultRecordTitle : cleanTitle
     }
 
     var body: some View {
@@ -847,7 +1006,7 @@ struct RecordEditSheet: View {
             }
 
             if datePanelExpanded {
-                warmCalendar
+                WarmRecordDatePanel(selection: $selectedDate)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -888,116 +1047,6 @@ struct RecordEditSheet: View {
                 .buttonStyle(.plain)
             }
         }
-    }
-
-    private var warmCalendar: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Button {
-                    shiftMonth(-1)
-                } label: {
-                    Image(systemName: "chevron.left")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(AppColors.accent)
-                Spacer()
-                Text(monthTitle)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                Spacer()
-                Button {
-                    shiftMonth(1)
-                } label: {
-                    Image(systemName: "chevron.right")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(AppColors.accent)
-            }
-
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: 7), spacing: 6) {
-                ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { day in
-                    Text(day)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(AppColors.subtext.opacity(0.72))
-                        .frame(height: 20)
-                }
-                ForEach(Array(calendarDays.enumerated()), id: \.offset) { pair in
-                    if let date = pair.element {
-                        dayButton(date)
-                    } else {
-                        Color.clear.frame(height: 34)
-                    }
-                }
-            }
-
-            HStack(spacing: 10) {
-                timeStepper(title: "时", value: calendar.component(.hour, from: selectedDate), range: 0...23) { setHour($0) }
-                timeStepper(title: "分", value: calendar.component(.minute, from: selectedDate), range: 0...59) { setMinute($0) }
-            }
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(AppColors.accent.opacity(0.07))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
-        )
-    }
-
-    private func dayButton(_ date: Date) -> some View {
-        let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
-        return Button {
-            setDay(date)
-        } label: {
-            Text("\(calendar.component(.day, from: date))")
-                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                .foregroundStyle(isSelected ? AppColors.text : AppColors.subtext)
-                .frame(maxWidth: .infinity)
-                .frame(height: 34)
-                .background(
-                    Circle()
-                        .fill(isSelected ? AppColors.accent.opacity(0.20) : Color.white.opacity(0.38))
-                )
-                .overlay(
-                    Circle()
-                        .stroke(isSelected ? AppColors.accent.opacity(0.36) : Color.white.opacity(0.18), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func timeStepper(title: String, value: Int, range: ClosedRange<Int>, onSet: @escaping (Int) -> Void) -> some View {
-        HStack(spacing: 8) {
-            Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppColors.subtext)
-            Button {
-                onSet(value == range.lowerBound ? range.upperBound : value - 1)
-            } label: {
-                Image(systemName: "minus")
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(AppColors.accent)
-            Text(String(format: "%02d", value))
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppColors.text)
-                .frame(width: 30)
-            Button {
-                onSet(value == range.upperBound ? range.lowerBound : value + 1)
-            } label: {
-                Image(systemName: "plus")
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(AppColors.accent)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.56))
-        )
     }
 
     private var saveButton: some View {
@@ -1054,30 +1103,6 @@ struct RecordEditSheet: View {
         .buttonStyle(.plain)
     }
 
-    private func shiftMonth(_ value: Int) {
-        calendarMonth = calendar.date(byAdding: .month, value: value, to: calendarMonth) ?? calendarMonth
-    }
-
-    private func setDay(_ date: Date) {
-        var selectedComponents = calendar.dateComponents([.hour, .minute], from: selectedDate)
-        let dayComponents = calendar.dateComponents([.year, .month, .day], from: date)
-        selectedComponents.year = dayComponents.year
-        selectedComponents.month = dayComponents.month
-        selectedComponents.day = dayComponents.day
-        selectedDate = calendar.date(from: selectedComponents) ?? selectedDate
-    }
-
-    private func setHour(_ hour: Int) {
-        var components = calendar.dateComponents([.year, .month, .day, .minute], from: selectedDate)
-        components.hour = hour
-        selectedDate = calendar.date(from: components) ?? selectedDate
-    }
-
-    private func setMinute(_ minute: Int) {
-        var components = calendar.dateComponents([.year, .month, .day, .hour], from: selectedDate)
-        components.minute = minute
-        selectedDate = calendar.date(from: components) ?? selectedDate
-    }
 }
 
 // MARK: - Preview

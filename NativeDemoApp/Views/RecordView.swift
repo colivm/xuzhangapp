@@ -11,13 +11,13 @@ struct RecordView: View {
     @State private var ocrProgress = 0.0
     @State private var ocrConfirmDrafts: [OCRReceiptDraft] = []
     @State private var showOCRConfirmSheet = false
-    @State private var showRecordDateSheet = false
     @State private var scenePackExpanded = false
     @State private var scenePackVariants: [String: Int] = [:]
     @State private var amountPadActive = false
     @State private var recordDetailsExpanded = false
     @State private var categoryGridExpanded = false
     @State private var noteEditorExpanded = false
+    @State private var datePanelExpanded = false
     @State private var previewLineWasRotated = false
     @State private var showScenePackAngleSheet = false
     @FocusState private var focusedField: RecordField?
@@ -188,7 +188,7 @@ struct RecordView: View {
         case .hidden:
             return ""
         case .whisper:
-            return "今天 · \(homeViewModel.selectedDate.formatted(.dateTime.hour().minute()))"
+            return homeViewModel.selectedDate.zhBillDateTime
         case .confirm:
             return previewMeta
         }
@@ -331,6 +331,7 @@ struct RecordView: View {
                 previewLineWasRotated = false
                 categoryGridExpanded = false
                 noteEditorExpanded = false
+                datePanelExpanded = false
             }
             refreshRecommendedCategory()
         }
@@ -344,21 +345,6 @@ struct RecordView: View {
             if newValue == .note {
                 amountPadActive = false
             }
-        }
-        .sheet(isPresented: $showRecordDateSheet) {
-            NavigationStack {
-                DatePicker("账单时间", selection: $homeViewModel.selectedDate, displayedComponents: [.date, .hourAndMinute])
-                    .datePickerStyle(.graphical)
-                    .padding()
-                    .navigationTitle("补记时间")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("完成") { showRecordDateSheet = false }
-                        }
-                    }
-            }
-            .presentationDetents([.medium])
         }
         .sheet(isPresented: $showOCRConfirmSheet) {
             OCRConfirmSheet(drafts: ocrConfirmDrafts) { selectedDrafts in
@@ -426,6 +412,13 @@ struct RecordView: View {
                 lifeEntryPreview
             }
             saveRow
+            if hasValidAmount {
+                recordDateQuietActions
+                if datePanelExpanded {
+                    WarmRecordDatePanel(selection: $homeViewModel.selectedDate)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
             if hasValidAmount {
                 expandedDetails
             }
@@ -860,66 +853,65 @@ struct RecordView: View {
     // MARK: - Save Row
 
     private var saveRow: some View {
-        ZStack(alignment: .topTrailing) {
-            Button {
-                guard hasValidAmount else { return }
-                dismissKeyboard()
-                homeViewModel.addManualRecord()
-                recordDetailsExpanded = false
-                categoryGridExpanded = false
-                noteEditorExpanded = false
-                onSaved?()
-            } label: {
-                ZStack {
-                    if hasValidAmount {
-                        LinearGradient(
-                            colors: [recordAccent.opacity(0.92), recordAccent],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                        .clipShape(Capsule(style: .continuous))
-                    } else {
-                        Capsule(style: .continuous)
-                            .fill(AppColors.panelStrong)
-                    }
-
-                    Text("放进账本")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(hasValidAmount ? Color.white : AppColors.subtext.opacity(0.72))
-                        .padding(.vertical, 14)
-                        .frame(maxWidth: .infinity)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 52)
-                .overlay(
+        Button {
+            guard hasValidAmount else { return }
+            dismissKeyboard()
+            homeViewModel.addManualRecord()
+            recordDetailsExpanded = false
+            categoryGridExpanded = false
+            noteEditorExpanded = false
+            datePanelExpanded = false
+            onSaved?()
+        } label: {
+            ZStack {
+                if hasValidAmount {
+                    LinearGradient(
+                        colors: [recordAccent.opacity(0.92), recordAccent],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .clipShape(Capsule(style: .continuous))
+                } else {
                     Capsule(style: .continuous)
-                        .stroke(hasValidAmount ? Color.white.opacity(0.36) : AppColors.line, lineWidth: 1)
-                )
-                .shadow(color: hasValidAmount ? recordAccent.opacity(0.35) : Color.clear, radius: 12, x: 0, y: 6)
+                        .fill(AppColors.panelStrong)
+                }
+
+                Text("放进账本")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(hasValidAmount ? Color.white : AppColors.subtext.opacity(0.72))
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 52)
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(hasValidAmount ? Color.white.opacity(0.36) : AppColors.line, lineWidth: 1)
+            )
+            .shadow(color: hasValidAmount ? recordAccent.opacity(0.35) : Color.clear, radius: 12, x: 0, y: 6)
+        }
+        .buttonStyle(.plain)
+        .disabled(!hasValidAmount)
+        .padding(.top, 6)
+    }
+
+    private var recordDateQuietActions: some View {
+        HStack {
+            Spacer()
+            Button {
+                dismissKeyboard()
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    datePanelExpanded.toggle()
+                }
+            } label: {
+                Text("改日期")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(recordAccent.opacity(0.9))
             }
             .buttonStyle(.plain)
-            .disabled(!hasValidAmount)
-
-            if hasValidAmount {
-                Button {
-                    dismissKeyboard()
-                    showRecordDateSheet = true
-                } label: {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(recordAccent)
-                        .frame(width: 36, height: 36)
-                        .background(
-                            Circle()
-                                .fill(.white)
-                                .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 3)
-                        )
-                }
-                .buttonStyle(.plain)
-                .offset(x: 6, y: -10)
-            }
+            Spacer()
         }
-        .padding(.top, 6)
+        .padding(.top, -4)
     }
 
     // MARK: - Member Scene Packs

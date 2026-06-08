@@ -19,7 +19,7 @@ struct HomeView: View {
 
                 HStack(spacing: 10) {
                     homeActionCard(
-                        title: "记一笔",
+                        title: "记下一笔",
                         subtitle: "只输金额也可以",
                         systemImage: "plus.circle.fill",
                         isPrimary: true,
