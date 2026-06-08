@@ -7,6 +7,8 @@ struct SettingsView: View {
     @State private var draftDisplayName = ""
     @State private var draftPetNickname = ""
     @FocusState private var focusedField: SettingsField?
+    private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
+    private let privacyURL = URL(string: "https://xuzhangapp.com/legal/privacy.html")!
 
     private enum SettingsField {
         case displayName
@@ -353,6 +355,8 @@ struct SettingsView: View {
                 in: RoundedRectangle(cornerRadius: 14, style: .continuous)
             )
             .shadow(color: AppColors.accent.opacity(0.25), radius: 8, y: 4)
+
+            legalInlineText(prefix: "登录即表示你已阅读并同意")
         }
     }
 
@@ -394,9 +398,43 @@ struct SettingsView: View {
             Text("默认本地存储，无需登录即可完整使用。开启云端备份后，仅同步必要账单数据与会员状态。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
+            legalLinksRow
+                .padding(.top, 4)
+            Text("ICP备案号：待备案")
+                .font(.system(size: 11))
+                .foregroundStyle(AppColors.subtext.opacity(0.68))
+                .padding(.top, 2)
         }
         .webCardPadding()
         .webCardBackground()
+    }
+
+    private var legalLinksRow: some View {
+        HStack(spacing: 12) {
+            Link("用户协议", destination: termsURL)
+            Text("·")
+                .foregroundStyle(AppColors.subtext.opacity(0.55))
+            Link("隐私政策", destination: privacyURL)
+        }
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(AppColors.accentDark.opacity(0.9))
+    }
+
+    private func legalInlineText(prefix: String) -> some View {
+        HStack(spacing: 4) {
+            Text(prefix)
+                .foregroundStyle(AppColors.subtext.opacity(0.78))
+            Link("用户协议", destination: termsURL)
+                .foregroundStyle(AppColors.accentDark.opacity(0.9))
+            Text("和")
+                .foregroundStyle(AppColors.subtext.opacity(0.78))
+            Link("隐私政策", destination: privacyURL)
+                .foregroundStyle(AppColors.accentDark.opacity(0.9))
+        }
+        .font(.system(size: 11))
+        .frame(maxWidth: .infinity, alignment: .center)
+        .lineLimit(1)
+        .minimumScaleFactor(0.82)
     }
 
     // MARK: - Shared Components

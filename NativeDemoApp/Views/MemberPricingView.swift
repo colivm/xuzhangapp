@@ -10,6 +10,8 @@ struct MemberPricingView: View {
     @State private var morePlansExpanded = false
     @State private var purchaseNotice: String?
     @State private var isPurchasing = false
+    private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
+    private let privacyURL = URL(string: "https://xuzhangapp.com/legal/privacy.html")!
 
     private let plans = [
         MemberPlan(id: "yearly", name: "年度会员", price: "¥88", period: "年", featured: true,
@@ -99,6 +101,9 @@ struct MemberPricingView: View {
                 .foregroundStyle(AppColors.subtext)
 
             if !isMember {
+                legalPurchaseNote
+                    .padding(.top, 2)
+
                 Button {
                     handlePurchase(plans[0]) // yearly default
                 } label: {
@@ -197,6 +202,8 @@ struct MemberPricingView: View {
 
     private var pricingSection: some View {
         VStack(alignment: .leading, spacing: 10) {
+            legalPurchaseNote
+
             // Featured yearly plan
             featuredPlanButton(plans[0])
 
@@ -272,6 +279,23 @@ struct MemberPricingView: View {
             .foregroundStyle(AppColors.subtext.opacity(0.75))
             .lineSpacing(3)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var legalPurchaseNote: some View {
+        HStack(spacing: 4) {
+            Text("购买前请阅读")
+                .foregroundStyle(AppColors.subtext.opacity(0.78))
+            Link("用户协议", destination: termsURL)
+                .foregroundStyle(AppColors.accentDark.opacity(0.9))
+            Text("和")
+                .foregroundStyle(AppColors.subtext.opacity(0.78))
+            Link("隐私政策", destination: privacyURL)
+                .foregroundStyle(AppColors.accentDark.opacity(0.9))
+        }
+        .font(.system(size: 11))
+        .lineLimit(1)
+        .minimumScaleFactor(0.82)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var freeQuotaNote: some View {
