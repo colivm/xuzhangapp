@@ -1,0 +1,180 @@
+你在 xuzhangapp 实现 Task UI-P1.2-WEB-EDIT — 账单编辑态对齐 life-slip（仅 web-preview/；同一 PR）。
+
+================================================================================
+本 PR 边界（最重要）
+================================================================================
+
+只做：editingRecordId 编辑态 — 从列表点进「改一笔」时的折叠默认、次要操作气质、meta 日期
+不做：新建记账页重做、iOS、backend、tier 判定规则、文案池
+
+前置：新建路径 P1.2 life-slip 已落地；本 PR 让编辑路径与新建一致，去掉 demo 全展开表单感。
+
+验收母句：从列表点进改一笔，第一眼是「一句生活 + 确认」，不是「备注框 + 分类 grid 全展开」。
+
+================================================================================
+问题根因（当前代码 · 必读）
+================================================================================
+
+openRecordEditor()（app.js ~4186）：
+  recordDetailsExpanded = noteEditorExpanded = categoryPanelExpanded = true
+  previewLineWasRotated = true
+
+renderRecord() isEditing 分支（~4227-4230）：
+  每次 render 再次强制三者 true → 编辑态永远锁死展开
+
+表现：进编辑即见 #lifeEntryNoteEditor 输入框 + #lifeEntryCategoryPanel 分类 grid
+      = 旧 demo「编辑账单表单」，与「确认而非配置」冲突
+
+新建路径 startNewManualRecordDraft() 已正确折叠 — 勿改坏。
+
+================================================================================
+产品共识
+================================================================================
+
+编辑 = 调整这一笔生活，不是打开账单表单。
+编辑首屏主路径与新建同结构：
+
+  1. 金额舞台
+  2. 生活纸条 life-slip（通常 L2，editingRecordId 已触发 edited 分支）
+  3. 更新这一笔（唯一主色 CTA）
+  4. 次要：改日期 · 删除这一笔（quiet link）
+
+禁止编辑态首屏默认出现：分类 chip grid、备注输入框、recordDetailsFold 展开。
+
+================================================================================
+范围与禁止
+================================================================================
+
+可改：
+  web-preview/app.js — openRecordEditor、renderRecord（仅 isEditing）、updateLifeEntryPreview（编辑 meta 日期）、保存 toast
+  web-preview/index.html — #editDateBtn、#deleteRecordBtn
+  web-preview/styles.css — 编辑次要操作 quiet 样式（若需）
+
+禁止改：
+  resolveRecordPreviewTier() 判定 if 条件
+  coldStartWhispers、品牌 lines、addRecord 字段逻辑
+  新建记账页 DOM / 新建态默认行为
+  首页列表、OCR、NativeDemoApp、backend
+  git commit（除非用户明确要求）
+
+================================================================================
+4.1 进入编辑 openRecordEditor — 改什么
+================================================================================
+
+保留（数据预填）：
+  editingRecordId、titleInput、amountStream、selectedCategory
+  categoryLockedByUser = true
+  recordDateInput = item 日期
+  recordFormTitle = 「调整这一笔」
+  隐藏 recordImportLink；显示删除、改日期
+
+改为折叠默认（对齐 startNewManualRecordDraft）：
+  recordDetailsExpanded = false
+  noteEditorExpanded = false
+  categoryPanelExpanded = false
+  不要设 previewLineWasRotated = true
+  （tier 已由 editingRecordId → edited → L2；有 title 时主行直接显示原生活句）
+
+================================================================================
+4.2 renderRecord 编辑分支 — 改什么
+================================================================================
+
+删除 isEditing 时强制 recordDetailsExpanded/noteEditorExpanded/categoryPanelExpanded = true 的代码块。
+
+编辑与新建共用 expand 规则：
+  lifeEntryNoteEditor：仅 noteEditorExpanded
+  lifeEntryCategoryPanel：仅 categoryPanelExpanded && L2
+  toggleRecordDetails：不因 isEditing 绕过折叠
+
+保留编辑专有：
+  saveRecordBtn = 「更新这一笔」
+  editDateBtn、deleteRecordBtn 可见
+  amountAssist 编辑时可 hidden
+
+================================================================================
+4.3 life-slip 交互（与新建一致）
+================================================================================
+
+自己写一句 → noteEditorExpanded=true，focus titleInput
+改 → toggle lifeEntryCategoryPanel
+换一句/换说法 → rotatePreviewLine()，不自动展开 grid
+换个角度 → openScenePackMoreSheet()
+
+验收：列表点一条 → 首屏只见 金额 + L2 纸条 + 更新这一笔；不见输入框与分类 grid。
+
+================================================================================
+4.4 meta 日期（编辑专有）
+================================================================================
+
+编辑态 meta 反映该笔实际日期，非一律「今天」：
+  今天：{分类} · 今天 H:mm（H:mm 取自 item createdAt）
+  非今天：{分类} · M月D日（或 yyyy-M-D，与列表 muted 一致）
+  改日期后 updateLifeEntryPreview 刷新 meta
+
+不改 tier 判定。
+
+================================================================================
+4.5 次要操作 quiet 化
+================================================================================
+
+editDateBtn：
+  文案 link「改日期」，去掉 📅 emoji
+  life-slip-link 或同级 quiet 样式
+  仍触发 recordDateInput picker
+
+deleteRecordBtn：
+  文案「删除这一笔」（非「删除账单」）
+  text/link 按钮，不要 full-btn 大块
+  建议 record-edit-secondary-row：改日期 · 删除这一笔
+
+保存 toast：「这一笔已更新」（非「账单已更新」）
+
+================================================================================
+入口与退出（保持现有逻辑）
+================================================================================
+
+首页今日列表、痕迹 Tab 列表 → openRecordEditor
+保存成功 → 清 editingRecordId，goHomeAfterSave()，toast 叙式
+编辑中再点记下 Tab → startNewManualRecordDraft() 保持
+删除 modal 流程保持
+
+================================================================================
+实施顺序
+================================================================================
+
+1. app.js openRecordEditor 折叠默认 + 去掉 previewLineWasRotated 强制
+2. app.js renderRecord 删 isEditing 强制展开
+3. app.js updateLifeEntryPreview 编辑 meta 真实日期
+4. index.html + styles.css 改日期/删除 quiet 化
+5. app.js 保存 toast
+6. 自测验收
+
+最小 diff：仅 web-preview/index.html · app.js · styles.css
+
+================================================================================
+验收清单
+================================================================================
+
+必过：
+  [ ] 进编辑：L2 显示原 title；默认无备注框、无分类 grid
+  [ ] 自己写一句才展开输入；改才展开 grid
+  [ ] 换一句不自动展开 grid
+  [ ] 主 CTA「更新这一笔」；标题「调整这一笔」
+  [ ] OCR 侧门编辑态 hidden
+  [ ] 改日期/删除为 quiet link，无删除账单、无 📅 大按钮
+  [ ] 补记日期后 meta 显示对应日期
+  [ ] 保存后回首页，数据正确
+  [ ] 新建记账 L0/L1/L2 零回归
+
+质感问句：从列表点进改一笔，是「一句生活 + 确认」，还是「表单全展开」？
+
+================================================================================
+@ 文件
+================================================================================
+
+@AGENT_PROMPT_UI-P1.2_WEB_EDIT_RECORD.md
+@AGENT_PROMPT_UI-P1.2_WEB_FULL.md
+@RECORD_PAGE_DESIGN_v0.1.md
+@web-preview/index.html
+@web-preview/app.js
+@web-preview/styles.css

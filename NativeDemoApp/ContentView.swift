@@ -675,7 +675,17 @@ struct RecordEditSheet: View {
     @State private var titleText: String
     @State private var selectedCategory: HomeItem.Category
     @State private var selectedDate: Date
+    @State private var calendarMonth: Date
+    @State private var noteEditorExpanded = false
+    @State private var categoryPanelExpanded = false
+    @State private var datePanelExpanded = false
     @Environment(\.dismiss) private var dismiss
+    private var calendar: Calendar {
+        var value = Calendar(identifier: .gregorian)
+        value.locale = Locale(identifier: "zh_CN")
+        value.firstWeekday = 2
+        return value
+    }
 
     init(item: HomeItem, onSave: @escaping (HomeItem) -> Void, onDelete: @escaping () -> Void) {
         self.item = item
@@ -685,127 +695,55 @@ struct RecordEditSheet: View {
         _titleText = State(initialValue: item.title)
         _selectedCategory = State(initialValue: item.category)
         _selectedDate = State(initialValue: item.createdAt)
+        _calendarMonth = State(initialValue: Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: item.createdAt)) ?? item.createdAt)
     }
 
     private var parsedAmount: Double {
         Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
     }
 
+    private var cleanTitle: String {
+        titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var previewTitle: String {
+        cleanTitle.isEmpty ? selectedCategory.defaultRecordTitle : cleanTitle
+    }
+
+    private var monthTitle: String {
+        calendarMonth.formatted(.dateTime.year().month())
+    }
+
+    private var calendarDays: [Date?] {
+        guard let monthInterval = calendar.dateInterval(of: .month, for: calendarMonth),
+              let firstWeek = calendar.dateInterval(of: .weekOfMonth, for: monthInterval.start),
+              let lastWeek = calendar.dateInterval(of: .weekOfMonth, for: monthInterval.end.addingTimeInterval(-1))
+        else { return [] }
+
+        var days: [Date?] = []
+        var cursor = firstWeek.start
+        while cursor < lastWeek.end {
+            days.append(calendar.isDate(cursor, equalTo: calendarMonth, toGranularity: .month) ? cursor : nil)
+            cursor = calendar.date(byAdding: .day, value: 1, to: cursor) ?? lastWeek.end
+        }
+        return days
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Amount
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("金额").font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(AppColors.text.opacity(0.82))
-                        HStack(spacing: 2) {
-                            Text("¥").font(.system(size: 28, weight: .semibold, design: .rounded))
-                                .foregroundStyle(AppColors.subtext.opacity(0.74))
-                            TextField("0.00", text: $amountText)
-                                .keyboardType(.decimalPad)
-                                .font(.system(size: 36, weight: .bold, design: .rounded))
-                                .foregroundStyle(AppColors.text)
-                        }
-                        .padding(.horizontal, 14).padding(.vertical, 12)
-                        .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.white.opacity(0.78)))
-                    }
-
-                    // Category
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("分类").font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(AppColors.text.opacity(0.82))
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 90, maximum: 140), spacing: 8)], spacing: 8) {
-                            ForEach(HomeItem.Category.allCases) { cat in
-                                Button {
-                                    selectedCategory = cat
-                                } label: {
-                                    Text(cat.displayName)
-                                        .font(.system(size: 14, weight: selectedCategory == cat ? .semibold : .regular))
-                                        .foregroundStyle(selectedCategory == cat ? .white : AppColors.text.opacity(0.82))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .background(
-                                            selectedCategory == cat ? AppColors.accent : Color.white.opacity(0.72),
-                                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        )
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-
-                    // Date
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("账单时间").font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(AppColors.text.opacity(0.82))
-                        DatePicker("补记时间", selection: $selectedDate, displayedComponents: [.date, .hourAndMinute])
-                            .datePickerStyle(.graphical)
-                            .padding(8)
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color.white.opacity(0.62)))
-                    }
-
-                    // Note
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("备注").font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(AppColors.text.opacity(0.82))
-                        TextField("补充细节", text: $titleText)
-                            .font(.system(size: 16))
-                            .padding(.horizontal, 14).padding(.vertical, 11)
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color.white.opacity(0.72)))
-                    }
-
-                    // Save
-                    Button {
-                        var updated = item
-                        updated.amount = parsedAmount
-                        updated.title = titleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            ? selectedCategory.defaultRecordTitle : titleText.trimmingCharacters(in: .whitespacesAndNewlines)
-                        updated.category = selectedCategory
-                        updated.createdAt = selectedDate
-                        updated.updatedAt = Date()
-                        onSave(updated)
-                        dismiss()
-                    } label: {
-                        Text("保存修改")
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                LinearGradient(colors: [AppColors.accent.opacity(0.92), AppColors.accent],
-                                               startPoint: .topLeading, endPoint: .bottomTrailing),
-                                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            )
-                            .shadow(color: AppColors.accent.opacity(0.3), radius: 8, y: 4)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(parsedAmount <= 0)
-
-                    // Delete
-                    Button(role: .destructive) {
-                        onDelete()
-                        dismiss()
-                    } label: {
-                        Text("删除账单")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(.red.opacity(0.8))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 13)
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(Color.red.opacity(0.25), lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
+                VStack(alignment: .leading, spacing: 14) {
+                    amountStage
+                    editPreviewCard
+                    saveButton
+                    editQuietActions
                 }
                 .padding(20)
                 .padding(.bottom, 40)
             }
             .scrollIndicators(.hidden)
             .background(AppColors.bg.ignoresSafeArea())
-            .navigationTitle("编辑账单")
+            .navigationTitle("调整这一笔")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -813,6 +751,332 @@ struct RecordEditSheet: View {
                 }
             }
         }
+    }
+
+    private var amountStage: some View {
+        HStack(spacing: 4) {
+            Text("¥")
+                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppColors.subtext.opacity(0.72))
+            TextField("0.00", text: $amountText)
+                .keyboardType(.decimalPad)
+                .font(.system(size: 38, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.white.opacity(0.74))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.56), lineWidth: 1)
+        )
+    }
+
+    private var editPreviewCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(previewTitle)
+                    .font(.system(size: 21, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(HomeItem.inferEmotionTag(category: selectedCategory, amount: parsedAmount))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.accent.opacity(0.95))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule(style: .continuous)
+                            .stroke(AppColors.accent.opacity(0.28), lineWidth: 1)
+                    )
+
+                HStack(spacing: 7) {
+                    Text("\(selectedCategory.displayName) · \(selectedDate.zhBillDateTime)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext)
+                    Button("改") {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            categoryPanelExpanded.toggle()
+                        }
+                    }
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.accent.opacity(0.9))
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Divider().opacity(0.36)
+
+            HStack(spacing: 9) {
+                quietLink("自己写一句") {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        noteEditorExpanded.toggle()
+                    }
+                }
+                Text("|").foregroundStyle(AppColors.subtext.opacity(0.32))
+                quietLink("改日期") {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        datePanelExpanded.toggle()
+                    }
+                }
+                Spacer()
+                Text(parsedAmount.formatted(.cny.precision(.fractionLength(2))))
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(AppColors.subtext.opacity(0.72))
+            }
+
+            if noteEditorExpanded {
+                TextField("这一笔想怎么被记住？", text: $titleText)
+                    .font(.system(size: 16))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.white.opacity(0.68))
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            if categoryPanelExpanded {
+                categoryGrid
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            if datePanelExpanded {
+                warmCalendar
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.white.opacity(0.68))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(0.56), lineWidth: 1)
+        )
+        .shadow(color: AppColors.subtext.opacity(0.09), radius: 16, x: 0, y: 7)
+    }
+
+    private var categoryGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 82, maximum: 128), spacing: 8)], spacing: 8) {
+            ForEach(HomeItem.Category.allCases) { cat in
+                Button {
+                    selectedCategory = cat
+                } label: {
+                    Text(cat.displayName)
+                        .font(.system(size: 13, weight: selectedCategory == cat ? .semibold : .regular))
+                        .foregroundStyle(selectedCategory == cat ? AppColors.text : AppColors.subtext)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(selectedCategory == cat ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.58))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(selectedCategory == cat ? AppColors.accent.opacity(0.34) : Color.white.opacity(0.38), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var warmCalendar: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Button {
+                    shiftMonth(-1)
+                } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AppColors.accent)
+                Spacer()
+                Text(monthTitle)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                Spacer()
+                Button {
+                    shiftMonth(1)
+                } label: {
+                    Image(systemName: "chevron.right")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AppColors.accent)
+            }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: 7), spacing: 6) {
+                ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { day in
+                    Text(day)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppColors.subtext.opacity(0.72))
+                        .frame(height: 20)
+                }
+                ForEach(Array(calendarDays.enumerated()), id: \.offset) { pair in
+                    if let date = pair.element {
+                        dayButton(date)
+                    } else {
+                        Color.clear.frame(height: 34)
+                    }
+                }
+            }
+
+            HStack(spacing: 10) {
+                timeStepper(title: "时", value: calendar.component(.hour, from: selectedDate), range: 0...23) { setHour($0) }
+                timeStepper(title: "分", value: calendar.component(.minute, from: selectedDate), range: 0...59) { setMinute($0) }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(AppColors.accent.opacity(0.07))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
+        )
+    }
+
+    private func dayButton(_ date: Date) -> some View {
+        let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
+        return Button {
+            setDay(date)
+        } label: {
+            Text("\(calendar.component(.day, from: date))")
+                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? AppColors.text : AppColors.subtext)
+                .frame(maxWidth: .infinity)
+                .frame(height: 34)
+                .background(
+                    Circle()
+                        .fill(isSelected ? AppColors.accent.opacity(0.20) : Color.white.opacity(0.38))
+                )
+                .overlay(
+                    Circle()
+                        .stroke(isSelected ? AppColors.accent.opacity(0.36) : Color.white.opacity(0.18), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func timeStepper(title: String, value: Int, range: ClosedRange<Int>, onSet: @escaping (Int) -> Void) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+            Button {
+                onSet(value == range.lowerBound ? range.upperBound : value - 1)
+            } label: {
+                Image(systemName: "minus")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AppColors.accent)
+            Text(String(format: "%02d", value))
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppColors.text)
+                .frame(width: 30)
+            Button {
+                onSet(value == range.upperBound ? range.lowerBound : value + 1)
+            } label: {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AppColors.accent)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.56))
+        )
+    }
+
+    private var saveButton: some View {
+        Button {
+            var updated = item
+            updated.amount = parsedAmount
+            updated.title = cleanTitle.isEmpty ? selectedCategory.defaultRecordTitle : cleanTitle
+            updated.category = selectedCategory
+            updated.createdAt = selectedDate
+            updated.updatedAt = Date()
+            onSave(updated)
+            dismiss()
+        } label: {
+            Text("更新这一笔")
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(
+                    LinearGradient(colors: [AppColors.accent.opacity(0.92), AppColors.accent],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                )
+                .shadow(color: AppColors.accent.opacity(0.22), radius: 8, y: 4)
+        }
+        .buttonStyle(.plain)
+        .disabled(parsedAmount <= 0)
+        .opacity(parsedAmount <= 0 ? 0.56 : 1)
+    }
+
+    private var editQuietActions: some View {
+        HStack(spacing: 8) {
+            Spacer()
+            Button(role: .destructive) {
+                onDelete()
+                dismiss()
+            } label: {
+                Text("删除这一笔")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.red.opacity(0.72))
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .padding(.top, 2)
+    }
+
+    private func quietLink(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.accent.opacity(0.9))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func shiftMonth(_ value: Int) {
+        calendarMonth = calendar.date(byAdding: .month, value: value, to: calendarMonth) ?? calendarMonth
+    }
+
+    private func setDay(_ date: Date) {
+        var selectedComponents = calendar.dateComponents([.hour, .minute], from: selectedDate)
+        let dayComponents = calendar.dateComponents([.year, .month, .day], from: date)
+        selectedComponents.year = dayComponents.year
+        selectedComponents.month = dayComponents.month
+        selectedComponents.day = dayComponents.day
+        selectedDate = calendar.date(from: selectedComponents) ?? selectedDate
+    }
+
+    private func setHour(_ hour: Int) {
+        var components = calendar.dateComponents([.year, .month, .day, .minute], from: selectedDate)
+        components.hour = hour
+        selectedDate = calendar.date(from: components) ?? selectedDate
+    }
+
+    private func setMinute(_ minute: Int) {
+        var components = calendar.dateComponents([.year, .month, .day, .hour], from: selectedDate)
+        components.minute = minute
+        selectedDate = calendar.date(from: components) ?? selectedDate
     }
 }
 

@@ -113,7 +113,11 @@
 
               <div id="recordPrimaryActions" class="save-row">
                 <button id="saveRecordBtn" type="button" class="primary-btn full-btn save-btn">放进账本</button>
-                <button id="editDateBtn" type="button" class="date-icon-btn hidden" title="补记日期">📅</button>
+              </div>
+              <div id="recordEditSecondaryRow" class="record-edit-secondary-row hidden">
+                <button id="editDateBtn" type="button" class="life-slip-link record-edit-secondary" title="改日期">改日期</button>
+                <span aria-hidden="true">·</span>
+                <button id="deleteRecordBtn" type="button" class="life-slip-link record-edit-secondary record-edit-delete">删除这一笔</button>
               </div>
               <button id="recordImportLink" type="button" class="record-import-link">有账单截图？从截图导入 →</button>
 
@@ -126,7 +130,6 @@
                 <button type="button" data-prefill-mode="generic">冷启动</button>
               </div>
 
-              <button id="deleteRecordBtn" type="button" class="full-btn delete-record-btn hidden">删除账单</button>
               <input id="recordDateInput" type="date" class="hidden-date-input" />
             </div>
 

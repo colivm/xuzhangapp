@@ -1221,13 +1221,6 @@ button.pet-btn:active {
   cursor: not-allowed;
 }
 
-.delete-record-btn {
-  margin-top: 10px;
-  border-color: color-mix(in srgb, #ef4444 45%, var(--line));
-  color: #ef4444;
-  background: color-mix(in srgb, #ef4444 8%, var(--panel));
-}
-
 .quick-btn {
   font-weight: 600;
 }
@@ -1576,6 +1569,29 @@ button.pet-btn:active {
   margin-top: 14px;
 }
 
+.record-edit-secondary-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 28px;
+  margin-top: 9px;
+  color: color-mix(in srgb, var(--subtext) 72%, transparent);
+  font-size: 12px;
+}
+
+.record-edit-secondary-row.hidden {
+  display: none;
+}
+
+.record-edit-secondary {
+  line-height: 1.2;
+}
+
+.record-edit-delete {
+  color: color-mix(in srgb, #e15f5f 72%, var(--subtext));
+}
+
 #recordPage .save-btn {
   min-height: 52px;
   font-size: 17px;
@@ -1759,26 +1775,6 @@ button.pet-btn:active {
   margin-top: 2px;
   font-size: 11px;
   color: var(--subtext);
-}
-
-.save-row {
-  position: relative;
-}
-
-.date-icon-btn {
-  position: absolute;
-  top: -10px;
-  right: 6px;
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-  background: color-mix(in srgb, var(--panel) 84%, var(--bg));
-  font-size: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
 }
 
 .hidden-date-input {

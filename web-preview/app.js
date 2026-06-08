@@ -475,6 +475,7 @@ const refs = {
   lifeEntryNoteEditor: document.getElementById("lifeEntryNoteEditor"),
   lifeEntryCategoryPanel: document.getElementById("lifeEntryCategoryPanel"),
   recordPrimaryActions: document.getElementById("recordPrimaryActions"),
+  recordEditSecondaryRow: document.getElementById("recordEditSecondaryRow"),
   recordDetailsFold: document.getElementById("recordDetailsFold"),
   recordDetailsToggle: document.getElementById("recordDetailsToggle"),
   recordDetailsToggleHint: document.getElementById("recordDetailsToggleHint"),
@@ -2433,8 +2434,21 @@ function updateNotePlaceholder() {
   refs.titleInput.placeholder = "这一笔想怎么被记住？";
 }
 
-function compactRecordTime() {
-  return new Date().toLocaleTimeString("zh-CN", { hour: "numeric", minute: "2-digit" });
+function compactRecordTime(date = new Date()) {
+  const parsed = date instanceof Date ? date : new Date(date);
+  const safeDate = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  return safeDate.toLocaleTimeString("zh-CN", { hour: "numeric", minute: "2-digit" });
+}
+
+function recordPreviewDateText() {
+  if (!editingRecordId) return `今天 ${compactRecordTime()}`;
+  const item = state.items.find((x) => x.id === editingRecordId);
+  const selectedDate = refs.recordDateInput.value || item?.createdAt?.slice(0, 10) || localDayKey(new Date());
+  const itemDate = item?.createdAt ? new Date(item.createdAt) : new Date();
+  if (selectedDate === localDayKey(new Date())) return `今天 ${compactRecordTime(itemDate)}`;
+  const [, , month, day] = selectedDate.match(/^(\d{4})-(\d{2})-(\d{2})$/) || [];
+  if (month && day) return `${Number(month)}月${Number(day)}日`;
+  return selectedDate;
 }
 
 function matchBrandInNote(text = "") {
@@ -2646,9 +2660,10 @@ function updateLifeEntryPreview() {
   refs.lifeEntryHeadlineHint?.classList.toggle("hidden", !shouldShowHint);
   refs.lifeEntryEmotion.textContent = emotion;
   refs.lifeEntryEmotion.classList.toggle("hidden", preview.tier !== "L2" || !emotion);
+  const dateText = recordPreviewDateText();
   refs.lifeEntryMeta.textContent = preview.tier === "L1"
-    ? `今天 · ${compactRecordTime()}`
-    : `${preview.brand ? `${preview.brand.displayName} · ` : ""}${meta.label} · 今天 ${compactRecordTime()}`;
+    ? dateText.replace(" ", " · ")
+    : `${preview.brand ? `${preview.brand.displayName} · ` : ""}${meta.label} · ${dateText}`;
   refs.lifeEntryChangeCategory?.classList.toggle("hidden", preview.tier !== "L2");
   refs.lifeEntryNoteEditor?.classList.toggle("hidden", !noteEditorExpanded);
   refs.lifeEntryCategoryPanel?.classList.toggle("hidden", !categoryPanelExpanded || preview.tier !== "L2");
@@ -4161,6 +4176,7 @@ function resetRecordEditorState() {
   editingRecordId = null;
   refs.recordFormTitle.textContent = "记下这一笔";
   refs.deleteRecordBtn.classList.add("hidden");
+  refs.recordEditSecondaryRow?.classList.add("hidden");
 }
 
 function startNewManualRecordDraft() {
@@ -4196,10 +4212,11 @@ function openRecordEditor(recordId) {
   selectedCategory = item.category || "其他";
   categoryLockedByUser = true;
   refs.recordDateInput.value = item.createdAt.slice(0, 10);
-  recordDetailsExpanded = true;
-  noteEditorExpanded = true;
-  categoryPanelExpanded = true;
-  previewLineWasRotated = true;
+  recordDetailsExpanded = false;
+  noteEditorExpanded = false;
+  categoryPanelExpanded = false;
+  previewLineWasRotated = false;
+  previewLineVariant = 0;
   switchTab("record");
   renderRecord();
 }
@@ -4212,6 +4229,7 @@ function renderRecord() {
   refs.manualForm.classList.toggle("hidden", state.recordMode !== "manual");
   refs.ocrForm.classList.toggle("hidden", state.recordMode !== "ocr");
   refs.recordImportLink?.classList.toggle("hidden", state.recordMode !== "manual" || Boolean(editingRecordId));
+  refs.recordEditSecondaryRow?.classList.toggle("hidden", editingRecordId == null || state.recordMode !== "manual");
   refs.deleteRecordBtn.classList.toggle("hidden", editingRecordId == null || state.recordMode !== "manual");
   refs.amountQuickKeyboard?.classList.toggle(
     "hidden",
@@ -4224,11 +4242,6 @@ function renderRecord() {
   }
 
   const wasDisabled = refs.saveRecordBtn.disabled;
-  if (isEditing) {
-    recordDetailsExpanded = true;
-    noteEditorExpanded = true;
-    categoryPanelExpanded = true;
-  }
   refs.categoryField?.classList.toggle("hidden", true);
   refs.noteField?.classList.toggle("hidden", true);
   refs.amountAssist.classList.toggle("hidden", amountReady || isEditing);
@@ -4865,7 +4878,7 @@ function init() {
       refs.noteSuggestions.innerHTML = "";
       refs.recordDateInput.value = new Date().toISOString().slice(0, 10);
       goHomeAfterSave();
-      showToast(wasEditing ? "账单已更新" : "已记下。去首页看看今天留下的痕迹。");
+      showToast(wasEditing ? "这一笔已更新" : "已记下。去首页看看今天留下的痕迹。");
       updateDebugHUD("save-ok");
       setTimeout(() => {
         triggerPetMicroAction("stamp", "啪叽盖章，记进小本本啦～");
