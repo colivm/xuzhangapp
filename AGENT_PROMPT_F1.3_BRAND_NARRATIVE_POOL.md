@@ -1,6 +1,6 @@
 # Agent Prompt · Task F1.3 — 品牌叙事池（仅 iOS）
 
-> **状态：待做**  
+> **状态：iOS 代码已完成（待 TestFlight 验收）**  
 > 战略依据：[`RECORDING_CHAIN_VISION_v0.1.md`](RECORDING_CHAIN_VISION_v0.1.md) — **缩短记账链路、叙事自动长出来**  
 > 依赖：**F1.2 OCR 回归完成后**再开（数据正确优先）；可与 B2.13 分 PR，但须共用 `NarrativeCopyResolver`。  
 > 用法：**整段复制下方「复制发送」** 发给 Agent。  
@@ -13,7 +13,7 @@
 | ID | 做什么 | 主要文件 | 状态 |
 |----|--------|----------|------|
 | F1.2 | OCR 真机回归 | `OCRService` 等 | ✅ 已完成 |
-| **F1.3** | **本 prompt · 品牌词典 + 专用叙事池** | `MerchantBrandCatalog` + `NarrativeCopyResolver` | ⏳ 本任务 |
+| **F1.3** | **本 prompt · 品牌词典 + 专用叙事池** | `MerchantBrandCatalog` + `NarrativeCopyResolver` | ✅ 代码完成 · ⏳ TF 验 |
 | F1.3b | Logo 图像匹配（可选二期） | Vision feature print | 📋 未纳入本 PR |
 | B2.13 | 个人习惯预填 | `RecordPrefillService` | ⏳ 见另 prompt |
 

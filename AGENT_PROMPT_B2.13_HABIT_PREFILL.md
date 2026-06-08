@@ -1,6 +1,6 @@
 # Agent Prompt · Task B2.13 — 个人习惯预填（仅 iOS）
 
-> **状态：待做**  
+> **状态：iOS 代码已完成（待 TestFlight 验收）**  
 > 战略依据：[`RECORDING_CHAIN_VISION_v0.1.md`](RECORDING_CHAIN_VISION_v0.1.md) — **缩短记账链路、叙事自动长出来**  
 > 依赖：**F1.3 `NarrativeCopyResolver` 已存在**（分 PR 亦可，但 emotion 须走同一 resolver）。  
 > 用法：**整段复制下方「复制发送」** 发给 Agent。  

@@ -131,9 +131,7 @@ struct RecordView: View {
     private func refreshRecommendedCategory() {
         guard selectedEntryMode == .manual else { return }
         guard !homeViewModel.categoryLockedByUser else { return }
-        if let category = homeViewModel.recommendCategory(for: homeViewModel.inputAmount) {
-            homeViewModel.applyRecommendedCategory(category)
-        }
+        homeViewModel.refreshRecordPrefill()
     }
 
     var body: some View {

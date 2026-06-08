@@ -98,7 +98,7 @@
 | - [x] 记 ≥3 笔 → 看看花角标/卡片提示 | - [ ] 生产 API 全链路再验 |
 | - [x] B2.7 分类锁定（真机再验） | |
 | - [x] **B2.8 智能分类** — `CategoryRecommendService` | |
-| - [ ] **B2.13 个人习惯预填** — 只输金额 → 分类/备注/情绪 — [`AGENT_PROMPT_B2.13`](AGENT_PROMPT_B2.13_HABIT_PREFILL.md) | |
+| - [x] **B2.13 个人习惯预填**（代码）— [`AGENT_PROMPT_B2.13`](AGENT_PROMPT_B2.13_HABIT_PREFILL.md)；待 TF 验 | |
 | - [x] **B2.9 天气宠物** — `WeatherCompanionService` / `PetCompanionService` | |
 | - [x] **B2.10** 场景备注池 | |
 | - [x] A4 场景包哲学 + tagline | |
@@ -115,7 +115,7 @@
 | **路径 3 · 智能导入 · 记账链路** | **生产安全** |
 | - [x] F1：OCR 四步主链路（`OCRConfirmSheet` + 草稿区） | - [ ] Spug 短信 / 收紧 dev 码 |
 | - [ ] **F1.2** OCR 真机回归 — [`AGENT_PROMPT_F1.2`](AGENT_PROMPT_F1.2_OCR_STATS_REGRESSION.md) | - [ ] `APP_PROXY_TOKEN`、防火墙 |
-| - [ ] **F1.3** 品牌叙事池 — [`AGENT_PROMPT_F1.3`](AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md) | - [ ] pm2/systemd |
+| - [x] **F1.3** 品牌叙事池（代码）— [`AGENT_PROMPT_F1.3`](AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md)；待 TF 验 | - [ ] pm2/systemd |
 | - [ ] F1.3b Logo 识别（可选二期） | - [x] 主域 HTTPS |
 | - [ ] F1 可选：删 `#if DEBUG`「演示 OCR」（Release 已不可见） | - [ ] API 子域 SSL 续期（2026-08-29 前） |
 | - [x] 识别失败 / 取消不扣次（逻辑已有，真机再验） | |
@@ -182,7 +182,7 @@
 | [`AGENT_PROMPT_B2.12_EMOTION_TAGS.md`](AGENT_PROMPT_B2.12_EMOTION_TAGS.md) | Task B2.12 情绪标签 7 类（✅） |
 | [`RECORDING_CHAIN_VISION_v0.1.md`](RECORDING_CHAIN_VISION_v0.1.md) | **缩短记账链路、叙事自动长出来** — 双引擎 + cascade |
 | [`AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md`](AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md) | Task F1.3 品牌叙事池（⏳） |
-| [`AGENT_PROMPT_B2.13_HABIT_PREFILL.md`](AGENT_PROMPT_B2.13_HABIT_PREFILL.md) | Task B2.13 个人习惯预填（⏳） |
+| [`AGENT_PROMPT_B2.13_HABIT_PREFILL.md`](AGENT_PROMPT_B2.13_HABIT_PREFILL.md) | Task B2.13 个人习惯预填（✅ 代码 · ⏳ TF 验） |
 | [`CATEGORY_SCENE_COPY_AUDIT_v0.1.md`](CATEGORY_SCENE_COPY_AUDIT_v0.1.md) | 分类/场景包内核审计 |
 | [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md) | Task A4（已完成；≠ B2.10） |
 | [`TEST_CASES_v0.1.md`](TEST_CASES_v0.1.md) | 全量测试用例 |

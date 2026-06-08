@@ -29,6 +29,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var latestPlayback: PlaybackSnapshot?
     @Published private(set) var latestActionCard: ActionCardData?
     @Published private(set) var activeRouteGuidance: PlaybackRouteGuidance?
+    @Published private(set) var recordPrefillResult: RecordPrefillResult?
     @Published var petMessage: String? = nil
 
     enum PlaybackRouteGuidance: String, Identifiable, Hashable {
@@ -92,6 +93,7 @@ final class HomeViewModel: ObservableObject {
     private let aiReportService = AIReportService()
     private let analyticsService = AnalyticsService()
     private let categoryRecommendService = CategoryRecommendService()
+    private let recordPrefillService = RecordPrefillService()
     private let petCompanionService = PetCompanionService.shared
     private let nudgePolicyService = MemberNudgePolicyService()
     private let playbackService = PlaybackService()
@@ -99,6 +101,7 @@ final class HomeViewModel: ObservableObject {
     private let routeQuotaStore = SummaryPlaybackQuotaStore()
     private let dailyQuotaStore = DailyFeatureQuotaStore()
     private var emittedRouteGuidanceTypes: Set<PlaybackRouteGuidance> = []
+    private var recordPrefillAmount: Double?
 
     init() {
         items = LocalStore.loadHomeItems().sorted { $0.createdAt > $1.createdAt }
@@ -660,6 +663,15 @@ final class HomeViewModel: ObservableObject {
     func recommendCategoryResult(for amountText: String) -> CategoryRecommendResult? {
         let normalizedAmount = amountText.replacingOccurrences(of: ",", with: "")
         guard let amount = Double(normalizedAmount), amount > 0 else { return nil }
+        if let category = recordPrefillResult?.category,
+           let recordPrefillAmount,
+           abs(recordPrefillAmount - amount) < 0.005 {
+            return CategoryRecommendResult(recommended: category, reasonTag: recordPrefillResult?.source)
+        }
+        let trimmedNote = inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let brand = MerchantBrandCatalog.matchBrand(in: trimmedNote), !categoryLockedByUser {
+            return CategoryRecommendResult(recommended: brand.category, reasonTag: "brand")
+        }
         let start = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? .distantPast
         let recentItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
         return categoryRecommendService.recommend(
@@ -671,6 +683,44 @@ final class HomeViewModel: ObservableObject {
                 locked: categoryLockedByUser
             )
         )
+    }
+
+    func refreshRecordPrefill() {
+        let normalizedAmount = inputAmount.replacingOccurrences(of: ",", with: "")
+        guard let amount = Double(normalizedAmount), amount > 0 else {
+            recordPrefillResult = nil
+            recordPrefillAmount = nil
+            return
+        }
+
+        let trimmedNote = inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let brand = MerchantBrandCatalog.matchBrand(in: trimmedNote)
+        if let brand, !categoryLockedByUser {
+            applyRecommendedCategory(brand.category)
+        }
+
+        let start = Calendar.current.date(byAdding: .day, value: -180, to: Date()) ?? .distantPast
+        let recentItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
+        let result = recordPrefillService.prefill(
+            input: RecordPrefillInput(
+                amount: amount,
+                referenceDate: selectedDate,
+                items: recentItems,
+                noteDraft: trimmedNote,
+                categoryLocked: categoryLockedByUser,
+                merchantBrandId: brand?.id
+            )
+        )
+        recordPrefillResult = result
+        recordPrefillAmount = amount
+
+        guard let result else { return }
+        if let category = result.category, result.confidence >= 0.55 {
+            applyRecommendedCategory(category)
+        }
+        if let title = result.title, result.confidence >= 0.65, trimmedNote.isEmpty {
+            inputTitle = title
+        }
     }
 
     func selectCategory(_ category: HomeItem.Category) {
@@ -962,6 +1012,8 @@ final class HomeViewModel: ObservableObject {
         selectedDate = .now
         selectedCategory = .other
         categoryLockedByUser = false
+        recordPrefillResult = nil
+        recordPrefillAmount = nil
     }
 
     private func persistItems() {

@@ -21,7 +21,7 @@ struct CategoryRecommendService {
         var note: Double = 0
 
         var total: Double {
-            history * 0.10 + time * 0.20 + amount * 0.45 + note * 0.35
+            history * 0.40 + time * 0.35 + amount * 0.15 + note * 0.10
         }
     }
 
