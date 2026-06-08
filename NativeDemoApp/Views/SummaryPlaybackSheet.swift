@@ -110,52 +110,14 @@ struct SummaryPlaybackSheet: View {
     private var chapterStage: some View {
         ZStack(alignment: .topTrailing) {
             if let chapter = currentChapter {
-                Image(systemName: chapterSymbol(for: chapter))
-                    .font(.system(size: 112, weight: .bold))
-                    .foregroundStyle(chapterAccent(for: chapter).opacity(0.08))
-                    .offset(x: 18, y: -20)
-                    .allowsHitTesting(false)
-
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(chapter.title)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(chapterAccent(for: chapter))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if shouldShowRangeLabel(for: chapter), let range = chapter.metrics["range"] {
-                        Text(range)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(AppColors.subtext)
-                    }
-
-                    Text(petEnabled ? chapter.narration.warm : chapter.narration.plain)
-                        .font(.system(size: 23, weight: .semibold, design: .rounded))
-                        .foregroundStyle(AppColors.text)
-                        .lineSpacing(7)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .contentTransition(.opacity)
-
-                    chapterSupportView(for: chapter)
-                }
-                    .id(chapter.id)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                chapterStageSymbol(chapter)
+                chapterStageContent(chapter)
             }
         }
         .padding(24)
         .frame(maxWidth: .infinity, minHeight: 330, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color.white.opacity(0.62))
-                .background(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.62), lineWidth: 1)
-        )
+        .background(chapterStageBackground)
+        .overlay(chapterStageBorder)
         .shadow(color: AppColors.subtext.opacity(0.16), radius: 22, x: 0, y: 12)
         .gesture(
             DragGesture(minimumDistance: 24)
@@ -164,6 +126,65 @@ struct SummaryPlaybackSheet: View {
                 }
         )
         .animation(.easeInOut(duration: 0.22), value: activeIndex)
+    }
+
+    private func chapterStageSymbol(_ chapter: SummaryChapter) -> some View {
+        Image(systemName: chapterSymbol(for: chapter))
+            .font(.system(size: 112, weight: .bold))
+            .foregroundStyle(chapterAccent(for: chapter).opacity(0.08))
+            .offset(x: 18, y: -20)
+            .allowsHitTesting(false)
+    }
+
+    private func chapterStageContent(_ chapter: SummaryChapter) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            chapterTitle(chapter)
+            chapterRangeLabel(chapter)
+            chapterNarration(chapter)
+            chapterSupportView(for: chapter)
+        }
+        .id(chapter.id)
+        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+    }
+
+    private func chapterTitle(_ chapter: SummaryChapter) -> some View {
+        Text(chapter.title)
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(chapterAccent(for: chapter))
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func chapterRangeLabel(_ chapter: SummaryChapter) -> some View {
+        if shouldShowRangeLabel(for: chapter), let range = chapter.metrics["range"] {
+            Text(range)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+        }
+    }
+
+    private func chapterNarration(_ chapter: SummaryChapter) -> some View {
+        Text(petEnabled ? chapter.narration.warm : chapter.narration.plain)
+            .font(.system(size: 23, weight: .semibold, design: .rounded))
+            .foregroundStyle(AppColors.text)
+            .lineSpacing(7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .contentTransition(.opacity)
+    }
+
+    private var chapterStageBackground: some View {
+        RoundedRectangle(cornerRadius: 28, style: .continuous)
+            .fill(Color.white.opacity(0.62))
+            .background(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+    }
+
+    private var chapterStageBorder: some View {
+        RoundedRectangle(cornerRadius: 28, style: .continuous)
+            .stroke(Color.white.opacity(0.62), lineWidth: 1)
     }
 
     @ViewBuilder

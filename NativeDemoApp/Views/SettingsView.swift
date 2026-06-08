@@ -495,16 +495,20 @@ struct SettingsView: View {
                 .foregroundStyle(AppColors.text.opacity(0.82))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 11)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.white.opacity(0.72))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.white.opacity(0.5), lineWidth: 1)
-                )
+                .background(webButtonBackground)
+                .overlay(webButtonBorder)
         }
         .buttonStyle(.plain)
+    }
+
+    private var webButtonBackground: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(Color.white.opacity(0.72))
+    }
+
+    private var webButtonBorder: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .stroke(Color.white.opacity(0.5), lineWidth: 1)
     }
 
     private func webAppearanceButton(_ title: String, isActive: Bool, action: @escaping () -> Void) -> some View {

@@ -4,18 +4,18 @@ import UIKit
 // MARK: - Color Constants (matching web CSS variables)
 
 struct AppColors {
-    static let accent = Color(red: 127/255, green: 179/255, blue: 162/255)          // #7fb3a2
-    static let accentDark = Color(red: 120/255, green: 174/255, blue: 158/255)        // #78ae9e
-    static let bg = Color(red: 238/255, green: 240/255, blue: 244/255)                // #eef0f4
+    static let accent = Color(red: 0.498, green: 0.702, blue: 0.635)          // #7fb3a2
+    static let accentDark = Color(red: 0.471, green: 0.682, blue: 0.620)        // #78ae9e
+    static let bg = Color(red: 0.933, green: 0.941, blue: 0.957)                // #eef0f4
     static let panel = Color.white.opacity(0.62)
     static let panelStrong = Color.white.opacity(0.82)
     static let line = Color.white.opacity(0.52)
-    static let text = Color(red: 37/255, green: 48/255, blue: 65/255)                 // #253041
-    static let subtext = Color(red: 111/255, green: 123/255, blue: 143/255)           // #6f7b8f
+    static let text = Color(red: 0.145, green: 0.188, blue: 0.255)                 // #253041
+    static let subtext = Color(red: 0.435, green: 0.482, blue: 0.561)           // #6f7b8f
     static let heroGradientPink = Color(red: 1.0, green: 0.77, blue: 0.87)            // pink tint
     static let heroGradientTeal = Color(red: 0.69, green: 0.88, blue: 0.86)           // teal tint
     static let tabActiveBg = Color(red: 0.67, green: 0.87, blue: 0.75).opacity(0.42)
-    static let lockGold = Color(red: 201/255, green: 166/255, blue: 74/255)           // #c9a64a
+    static let lockGold = Color(red: 0.788, green: 0.651, blue: 0.290)           // #c9a64a
 }
 
 // MARK: - Glass Panel Modifier
@@ -589,22 +589,7 @@ struct ContentView: View {
     private var petWidget: some View {
         VStack(alignment: .trailing, spacing: 8) {
             if petBubbleVisible {
-                Text(petHint)
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.text.opacity(0.88))
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 9)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color.white.opacity(0.45), lineWidth: 1)
-                    )
-                    .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
-                    .frame(maxWidth: 220, alignment: .trailing)
-                    .transition(.scale.combined(with: .opacity))
+                petBubble
             }
 
             Button {
@@ -641,6 +626,29 @@ struct ContentView: View {
         .padding(.trailing, 16)
         .padding(.bottom, 102)
     }
+
+    private var petBubble: some View {
+        Text(petHint)
+            .font(.system(size: 12))
+            .foregroundStyle(AppColors.text.opacity(0.88))
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+            .background(petBubbleBackground)
+            .overlay(petBubbleBorder)
+            .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
+            .frame(maxWidth: 220, alignment: .trailing)
+            .transition(.scale.combined(with: .opacity))
+    }
+
+    private var petBubbleBackground: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(.ultraThinMaterial)
+    }
+
+    private var petBubbleBorder: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .stroke(Color.white.opacity(0.45), lineWidth: 1)
+    }
 }
 
 // MARK: - Color Mix Extension
@@ -668,6 +676,7 @@ private extension Color {
 
 struct WarmRecordDatePanel: View {
     @Binding var selection: Date
+    var onSelectionChanged: () -> Void = {}
     @State private var calendarMonth: Date
 
     private var calendar: Calendar {
@@ -677,8 +686,9 @@ struct WarmRecordDatePanel: View {
         return value
     }
 
-    init(selection: Binding<Date>) {
+    init(selection: Binding<Date>, onSelectionChanged: @escaping () -> Void = {}) {
         self._selection = selection
+        self.onSelectionChanged = onSelectionChanged
         self._calendarMonth = State(initialValue: Self.monthStart(for: selection.wrappedValue))
     }
 
@@ -690,8 +700,16 @@ struct WarmRecordDatePanel: View {
     }
 
     private var monthTitle: String {
-        calendarMonth.formatted(.dateTime.year().month())
+        Self.monthTitleFormatter.string(from: calendarMonth)
     }
+
+    private static let monthTitleFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy年M月"
+        return formatter
+    }()
 
     private var calendarDays: [Date?] {
         guard let monthInterval = calendar.dateInterval(of: .month, for: calendarMonth),
@@ -770,24 +788,35 @@ struct WarmRecordDatePanel: View {
 
     private func dayButton(_ date: Date) -> some View {
         let isSelected = calendar.isDate(date, inSameDayAs: selection)
+        let dayText = String(calendar.component(.day, from: date))
         return Button {
             setDay(date)
         } label: {
-            Text("\(calendar.component(.day, from: date))")
-                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                .foregroundStyle(isSelected ? AppColors.text : AppColors.subtext)
-                .frame(maxWidth: .infinity)
-                .frame(height: 34)
-                .background(
-                    Circle()
-                        .fill(isSelected ? AppColors.accent.opacity(0.20) : Color.white.opacity(0.38))
-                )
-                .overlay(
-                    Circle()
-                        .stroke(isSelected ? AppColors.accent.opacity(0.36) : Color.white.opacity(0.18), lineWidth: 1)
-                )
+            dayButtonLabel(dayText, isSelected: isSelected)
         }
         .buttonStyle(.plain)
+    }
+
+    private func dayButtonLabel(_ title: String, isSelected: Bool) -> some View {
+        let weight: Font.Weight = isSelected ? .semibold : .regular
+        let foreground: Color = isSelected ? AppColors.text : AppColors.subtext
+        return Text(title)
+            .font(.system(size: 13, weight: weight))
+            .foregroundStyle(foreground)
+            .frame(maxWidth: .infinity)
+            .frame(height: 34)
+            .background(dayButtonBackground(isSelected: isSelected))
+            .overlay(dayButtonBorder(isSelected: isSelected))
+    }
+
+    private func dayButtonBackground(isSelected: Bool) -> some View {
+        let fill = isSelected ? AppColors.accent.opacity(0.20) : Color.white.opacity(0.38)
+        return Circle().fill(fill)
+    }
+
+    private func dayButtonBorder(isSelected: Bool) -> some View {
+        let stroke = isSelected ? AppColors.accent.opacity(0.36) : Color.white.opacity(0.18)
+        return Circle().stroke(stroke, lineWidth: 1)
     }
 
     private func timeStepper(title: String, value: Int, range: ClosedRange<Int>, onSet: @escaping (Int) -> Void) -> some View {
@@ -835,18 +864,21 @@ struct WarmRecordDatePanel: View {
         selectedComponents.month = dayComponents.month
         selectedComponents.day = dayComponents.day
         selection = calendar.date(from: selectedComponents) ?? selection
+        onSelectionChanged()
     }
 
     private func setHour(_ hour: Int) {
         var components = calendar.dateComponents([.year, .month, .day, .minute], from: selection)
         components.hour = hour
         selection = calendar.date(from: components) ?? selection
+        onSelectionChanged()
     }
 
     private func setMinute(_ minute: Int) {
         var components = calendar.dateComponents([.year, .month, .day, .hour], from: selection)
         components.minute = minute
         selection = calendar.date(from: components) ?? selection
+        onSelectionChanged()
     }
 }
 
@@ -936,117 +968,195 @@ struct RecordEditSheet: View {
 
     private var editPreviewCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 7) {
-                Text(previewTitle)
-                    .font(.system(size: 21, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text(HomeItem.inferEmotionTag(category: selectedCategory, amount: parsedAmount))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppColors.accent.opacity(0.95))
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule(style: .continuous)
-                            .stroke(AppColors.accent.opacity(0.28), lineWidth: 1)
-                    )
-
-                HStack(spacing: 7) {
-                    Text("\(selectedCategory.displayName) · \(selectedDate.zhBillDateTime)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppColors.subtext)
-                    Button("改") {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            categoryPanelExpanded.toggle()
-                        }
-                    }
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.accent.opacity(0.9))
-                    .buttonStyle(.plain)
-                }
-            }
+            editPreviewHeader
 
             Divider().opacity(0.36)
 
-            HStack(spacing: 9) {
-                quietLink("自己写一句") {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        noteEditorExpanded.toggle()
-                    }
-                }
-                Text("|").foregroundStyle(AppColors.subtext.opacity(0.32))
-                quietLink("改日期") {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        datePanelExpanded.toggle()
-                    }
-                }
-                Spacer()
-                Text(parsedAmount.formatted(.cny.precision(.fractionLength(2))))
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(AppColors.subtext.opacity(0.72))
-            }
+            editPreviewActions
 
-            if noteEditorExpanded {
-                TextField("这一笔想怎么被记住？", text: $titleText)
-                    .font(.system(size: 16))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color.white.opacity(0.68))
-                    )
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
-            if categoryPanelExpanded {
-                categoryGrid
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
-            if datePanelExpanded {
-                WarmRecordDatePanel(selection: $selectedDate)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
+            editPreviewExpandedSections
         }
         .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.white.opacity(0.68))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.white.opacity(0.56), lineWidth: 1)
-        )
+        .background(editPreviewBackground)
+        .overlay(editPreviewBorder)
         .shadow(color: AppColors.subtext.opacity(0.09), radius: 16, x: 0, y: 7)
+    }
+
+    private var editPreviewHeader: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(previewTitle)
+                .font(.system(size: 21, weight: .semibold))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            editPreviewEmotionPill
+            editPreviewMetaRow
+        }
+    }
+
+    private var editPreviewEmotionPill: some View {
+        Text(HomeItem.inferEmotionTag(category: selectedCategory, amount: parsedAmount))
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(AppColors.accent.opacity(0.95))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(editPreviewEmotionBorder)
+    }
+
+    private var editPreviewEmotionBorder: some View {
+        Capsule(style: .continuous)
+            .stroke(AppColors.accent.opacity(0.28), lineWidth: 1)
+    }
+
+    private var editPreviewMetaRow: some View {
+        HStack(spacing: 7) {
+            Text("\(selectedCategory.displayName) · \(selectedDate.zhBillDateTime)")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext)
+            Button("改") {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    categoryPanelExpanded.toggle()
+                }
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(AppColors.accent.opacity(0.9))
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var editPreviewActions: some View {
+        HStack(spacing: 9) {
+            quietLink("自己写一句") {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    noteEditorExpanded.toggle()
+                }
+            }
+            Text("|").foregroundStyle(AppColors.subtext.opacity(0.32))
+            quietLink(selectedDate.zhBillDateTime) {
+                dismissKeyboard()
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    datePanelExpanded.toggle()
+                }
+            }
+            Spacer()
+            Text(parsedAmount.formatted(.cny.precision(.fractionLength(2))))
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(AppColors.subtext.opacity(0.72))
+        }
+    }
+
+    @ViewBuilder
+    private var editPreviewExpandedSections: some View {
+        if noteEditorExpanded {
+            editPreviewNoteField
+        }
+
+        if categoryPanelExpanded {
+            categoryGrid
+                .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+
+        if datePanelExpanded {
+            WarmRecordDatePanel(selection: $selectedDate) {
+                dismissKeyboard()
+            }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
+    private var editPreviewNoteField: some View {
+        TextField("这一笔想怎么被记住？", text: $titleText)
+            .font(.system(size: 16))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.68))
+            )
+            .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private var editPreviewBackground: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(Color.white.opacity(0.68))
+    }
+
+    private var editPreviewBorder: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .stroke(Color.white.opacity(0.56), lineWidth: 1)
     }
 
     private var categoryGrid: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 82, maximum: 128), spacing: 8)], spacing: 8) {
             ForEach(HomeItem.Category.allCases) { cat in
-                Button {
-                    selectedCategory = cat
-                } label: {
-                    Text(cat.displayName)
-                        .font(.system(size: 13, weight: selectedCategory == cat ? .semibold : .regular))
-                        .foregroundStyle(selectedCategory == cat ? AppColors.text : AppColors.subtext)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(selectedCategory == cat ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.58))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(selectedCategory == cat ? AppColors.accent.opacity(0.34) : Color.white.opacity(0.38), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
+                categoryGridButton(cat)
             }
         }
+    }
+
+    private func categoryGridButton(_ category: HomeItem.Category) -> some View {
+        let isSelected = selectedCategory == category
+        return Button {
+            selectCategory(category)
+        } label: {
+            categoryGridButtonLabel(category, isSelected: isSelected)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func categoryGridButtonLabel(_ category: HomeItem.Category, isSelected: Bool) -> some View {
+        let weight: Font.Weight = isSelected ? .semibold : .regular
+        let foreground: Color = isSelected ? AppColors.text : AppColors.subtext
+        return Text(category.displayName)
+            .font(.system(size: 13, weight: weight))
+            .foregroundStyle(foreground)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(categoryGridButtonBackground(isSelected: isSelected))
+            .overlay(categoryGridButtonBorder(isSelected: isSelected))
+    }
+
+    private func categoryGridButtonBackground(isSelected: Bool) -> some View {
+        let fill = isSelected ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.58)
+        return RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(fill)
+    }
+
+    private func categoryGridButtonBorder(isSelected: Bool) -> some View {
+        let stroke = isSelected ? AppColors.accent.opacity(0.34) : Color.white.opacity(0.38)
+        return RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .stroke(stroke, lineWidth: 1)
+    }
+
+    private func selectCategory(_ category: HomeItem.Category) {
+        selectedCategory = category
+        titleText = editNoteSuggestion(for: category)
+        dismissKeyboard()
+        withAnimation(.easeInOut(duration: 0.18)) {
+            categoryPanelExpanded = false
+        }
+    }
+
+    private func editNoteSuggestion(for category: HomeItem.Category) -> String {
+        guard let pack = ScenePackCopyPool.definitions.first(where: { $0.category == category }) else {
+            return category.defaultRecordTitle
+        }
+        return ScenePackCopyPool.note(
+            for: pack,
+            amount: parsedAmount,
+            date: selectedDate,
+            categoryContext: category,
+            petName: "",
+            historyItems: [],
+            allowPetCopy: false
+        )
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     private var saveButton: some View {

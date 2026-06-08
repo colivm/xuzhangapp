@@ -8,8 +8,18 @@ struct MerchantBrandDefinition {
     let tiers: [ScenePackTier]
 }
 
+private struct MerchantBrandAliasMatch {
+    let brand: MerchantBrandDefinition
+    let alias: String
+}
+
 enum MerchantBrandCatalog {
-    static let definitions: [MerchantBrandDefinition] = [
+    static let definitions: [MerchantBrandDefinition] = diningDefinitions
+        + transportDefinitions
+        + dailyDefinitions
+        + shoppingDefinitions
+
+    private static let diningDefinitions: [MerchantBrandDefinition] = [
         brand("luckin", "瑞幸咖啡", ["瑞幸咖啡", "瑞幸", "luckin"], .dining, [
             ["早班路上，顺手续一口", "蓝杯小小提神", "把清晨叫醒一点", "赶路前的一杯", "今天也先醒过来", "咖啡香落进早上"],
             ["午后补一点精神", "工位旁边的一口蓝杯", "忙里接住一点清醒", "给下午留点余地", "一杯咖啡缓一缓", "把节奏续上一点"],
@@ -70,6 +80,9 @@ enum MerchantBrandCatalog {
             ["想吃的被送来了", "一餐把节奏稳住", "给今天补点热乎", "这顿饭来得及时", "把日常好好喂饱", "不用赶路的一餐"],
             ["认真吃好这一顿", "饭菜把一段忙碌接住", "给自己留一餐踏实", "这一顿值得记下", "日子被热饭安顿", "忙完也要吃好"],
         ]),
+    ]
+
+    private static let transportDefinitions: [MerchantBrandDefinition] = [
         brand("didi", "滴滴出行", ["滴滴出行", "滴滴", "didi"], .transport, [
             ["一程把我送到", "赶路有人接住", "今天顺利到达", "路上少走一段", "出门这一程稳了", "把时间接得刚好"],
             ["忙里叫了一程", "这段路不用硬撑", "准时到达的一程", "城市里换个走法", "把路程交给车轮", "赶点路也稳住"],
@@ -88,6 +101,9 @@ enum MerchantBrandCatalog {
             ["骑过一段城市", "轻快地到下一站", "这一程不重", "把短路程记下来", "单车让出行简单", "今天的路很顺手"],
             ["这一段骑得挺完整", "把稍远一点也骑到", "单车陪我穿过路口", "认真走完一段路", "城市风里的一程", "出行被轻轻安排"],
         ]),
+    ]
+
+    private static let dailyDefinitions: [MerchantBrandDefinition] = [
         brand("freshippo", "盒马", ["盒马鲜生", "盒马"], .daily, [
             ["顺手补点新鲜", "今天的菜篮子落下了", "给家里添点食材", "鲜货带回日常", "饭桌有了准备", "生活被补上一点"],
             ["晚饭材料安排好", "给冰箱添一点", "把今天吃的准备上", "家里的烟火气来了", "食材接住这一餐", "日常补给很具体"],
@@ -112,6 +128,9 @@ enum MerchantBrandCatalog {
             ["买到一点刚需", "便利店让今天轻些", "给日常补个角落", "小小补给记下来", "顺手添一点方便", "生活被补齐一点"],
             ["认真添了一袋日常", "一站把小事接住", "给这几天留点方便", "便利店里的踏实感", "这次补给很顺手", "日子被轻轻安顿"],
         ]),
+    ]
+
+    private static let shoppingDefinitions: [MerchantBrandDefinition] = [
         brand("miniso", "名创优品", ["名创优品", "MINISO", "miniso"], .shopping, [
             ["顺手添个小物", "看到合适就带回", "给日常加点方便", "小东西也有用处", "今天添一点新鲜", "把角落补齐一点"],
             ["挑到一个顺手物件", "给生活加点小秩序", "这一件刚好需要", "日常被轻轻更新", "小物带来一点好心情", "把需要的拿下"],
@@ -140,12 +159,21 @@ enum MerchantBrandCatalog {
     static func matchBrand(in text: String) -> MerchantBrandDefinition? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        let matches = definitions.flatMap { brand in
-            brand.aliases.map { alias in (brand: brand, alias: alias) }
+
+        var matches: [MerchantBrandAliasMatch] = []
+        for brand in definitions {
+            for alias in brand.aliases {
+                matches.append(MerchantBrandAliasMatch(brand: brand, alias: alias))
+            }
         }
-        .sorted { lhs, rhs in
-            lhs.alias.count == rhs.alias.count ? lhs.brand.id < rhs.brand.id : lhs.alias.count > rhs.alias.count
+
+        matches.sort { lhs, rhs in
+            if lhs.alias.count == rhs.alias.count {
+                return lhs.brand.id < rhs.brand.id
+            }
+            return lhs.alias.count > rhs.alias.count
         }
+
         return matches.first { containsAlias($0.alias, in: trimmed) }?.brand
     }
 

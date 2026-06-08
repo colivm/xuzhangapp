@@ -56,52 +56,15 @@ struct LifeEntryPreviewCard: View {
                     .foregroundStyle(AppColors.subtext.opacity(0.78))
             }
 
-            if isConfirm && !emotion.isEmpty {
-                Text(emotion)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppColors.accent.opacity(0.62))
-                    .lineLimit(1)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color.white.opacity(0.34))
-                    )
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(AppColors.accent.opacity(0.16), lineWidth: 0.7)
-                    )
-            }
+            emotionPill
 
-            HStack(spacing: 7) {
-                Text(meta)
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext.opacity(0.82))
-                    .lineLimit(1)
-
-                Spacer(minLength: 8)
-
-                if isConfirm {
-                    Button("改", action: onChangeCategory)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.accent.opacity(0.72))
-                        .buttonStyle(.plain)
-                }
-            }
+            metaRow
         }
     }
 
     private var footContent: some View {
         HStack(alignment: .center, spacing: 10) {
-            HStack(spacing: 0) {
-                quietAction(primaryActionTitle, action: onPrimaryAction)
-                if showAngleAction && isConfirm {
-                    separator
-                    quietAction("换个角度", action: onAngleAction)
-                }
-                separator
-                quietAction("自己写一句", action: onWriteOwn)
-            }
+            actionRow
 
             Spacer(minLength: 10)
 
@@ -110,6 +73,60 @@ struct LifeEntryPreviewCard: View {
                 .foregroundStyle(AppColors.subtext.opacity(isWhisper ? 0.48 : 0.58))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
+        }
+    }
+
+    @ViewBuilder
+    private var emotionPill: some View {
+        if isConfirm && !emotion.isEmpty {
+            Text(emotion)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.accent.opacity(0.62))
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(emotionPillBackground)
+                .overlay(emotionPillBorder)
+        }
+    }
+
+    private var emotionPillBackground: some View {
+        Capsule(style: .continuous)
+            .fill(Color.white.opacity(0.34))
+    }
+
+    private var emotionPillBorder: some View {
+        Capsule(style: .continuous)
+            .stroke(AppColors.accent.opacity(0.16), lineWidth: 0.7)
+    }
+
+    private var metaRow: some View {
+        HStack(spacing: 7) {
+            Text(meta)
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext.opacity(0.82))
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            if isConfirm {
+                Button("改", action: onChangeCategory)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.accent.opacity(0.72))
+                    .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var actionRow: some View {
+        HStack(spacing: 0) {
+            quietAction(primaryActionTitle, action: onPrimaryAction)
+            if showAngleAction && isConfirm {
+                separator
+                quietAction("换个角度", action: onAngleAction)
+            }
+            separator
+            quietAction("自己写一句", action: onWriteOwn)
         }
     }
 

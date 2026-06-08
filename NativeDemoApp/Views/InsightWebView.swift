@@ -416,70 +416,111 @@ struct InsightWebView: View {
 
     private func monthlyTrialOverlay(_ modal: MonthlyTrialModal) -> some View {
         ZStack {
-            Color.black.opacity(0.26)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    monthlyTrialModal = nil
-                }
+            trialOverlayBackdrop
+            trialOverlayCard(modal)
+        }
+    }
 
-            VStack(spacing: 18) {
-                Text(modal.title)
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(AppColors.text)
-                    .multilineTextAlignment(.center)
-
-                Text(modal.body)
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppColors.subtext)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                HStack(spacing: 14) {
-                    Button {
-                        monthlyTrialModal = nil
-                    } label: {
-                        Text("我知道了")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(AppColors.text)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 13)
-                            .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        monthlyTrialModal = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                            onShowMemberPricing?()
-                        }
-                    } label: {
-                        Text("解锁无限次复盘")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 13)
-                            .background(AppColors.accent.opacity(0.86), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                }
+    private var trialOverlayBackdrop: some View {
+        Color.black.opacity(0.26)
+            .ignoresSafeArea()
+            .onTapGesture {
+                monthlyTrialModal = nil
             }
-            .padding(28)
-            .frame(maxWidth: 390)
+    }
+
+    private func trialOverlayCard(_ modal: MonthlyTrialModal) -> some View {
+        VStack(spacing: 18) {
+            trialOverlayCopy(modal)
+            trialOverlayActions
+        }
+        .padding(28)
+        .frame(maxWidth: 390)
+        .background(trialOverlayCardBackground)
+        .overlay(trialOverlayCardBorder)
+        .shadow(color: Color.black.opacity(0.14), radius: 22, x: 0, y: 10)
+        .padding(.horizontal, 28)
+    }
+
+    private func trialOverlayCopy(_ modal: MonthlyTrialModal) -> some View {
+        VStack(spacing: 18) {
+            Text(modal.title)
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(AppColors.text)
+                .multilineTextAlignment(.center)
+
+            Text(modal.body)
+                .font(.system(size: 14))
+                .foregroundStyle(AppColors.subtext)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var trialOverlayActions: some View {
+        HStack(spacing: 14) {
+            trialOverlayDismissButton
+            trialOverlayUpgradeButton
+        }
+    }
+
+    private var trialOverlayDismissButton: some View {
+        Button {
+            monthlyTrialModal = nil
+        } label: {
+            trialOverlayButtonLabel(
+                "我知道了",
+                foreground: AppColors.text,
+                background: Color.white.opacity(0.72),
+                weight: .medium
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var trialOverlayUpgradeButton: some View {
+        Button {
+            monthlyTrialModal = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                onShowMemberPricing?()
+            }
+        } label: {
+            trialOverlayButtonLabel(
+                "解锁无限次复盘",
+                foreground: .white,
+                background: AppColors.accent.opacity(0.86),
+                weight: .semibold
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func trialOverlayButtonLabel(
+        _ title: String,
+        foreground: Color,
+        background: Color,
+        weight: Font.Weight
+    ) -> some View {
+        Text(title)
+            .font(.system(size: 16, weight: weight))
+            .foregroundStyle(foreground)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .background(background, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var trialOverlayCardBackground: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(AppColors.panel)
             .background(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(AppColors.panel)
-                    .background(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                    )
+                    .fill(.ultraThinMaterial)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color.white.opacity(0.66), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.14), radius: 22, x: 0, y: 10)
-            .padding(.horizontal, 28)
-        }
+    }
+
+    private var trialOverlayCardBorder: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .stroke(Color.white.opacity(0.66), lineWidth: 1)
     }
 
     private var defaultMonthlyAIStatus: AIStatusPill? {

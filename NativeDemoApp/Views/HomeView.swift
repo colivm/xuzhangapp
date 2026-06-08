@@ -14,89 +14,7 @@ struct HomeView: View {
     var body: some View {
         ZStack(alignment: .top) {
             ScrollView {
-                VStack(spacing: 12) {
-                todayStoryHero
-
-                HStack(spacing: 10) {
-                    homeActionCard(
-                        title: "记下一笔",
-                        subtitle: "只输金额也可以",
-                        systemImage: "plus.circle.fill",
-                        isPrimary: true,
-                        action: onQuickRecord
-                    )
-                    homeActionCard(
-                        title: "听今日回放",
-                        subtitle: homeViewModel.todayItems.isEmpty ? "有记录后可播放" : "十几秒叙完今天",
-                        systemImage: "play.circle.fill",
-                        isPrimary: false,
-                        action: requestTodayPlayback
-                    )
-                }
-
-                if let guidance = homeViewModel.activeRouteGuidance,
-                   guidance != .firstRecordTodayPlayback {
-                    routeGuidanceBar(guidance)
-                }
-
-                // ── Today's Bills Panel ──
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("今天留下的痕迹")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(AppColors.text)
-
-                    if homeViewModel.recentThreeItems.isEmpty {
-                        // Empty state art (matching web SVG)
-                        VStack(spacing: 0) {
-                            emptyStateArt
-                                .padding(.vertical, 8)
-                        }
-                    } else {
-                        ForEach(Array(homeViewModel.recentThreeItems.enumerated()), id: \.element.id) { index, item in
-                            billListItem(item: item, isFirst: index == 0)
-                        }
-                    }
-                }
-                .glassPanel(radius: 24, padding: 24)
-
-                // ── Life Rhythm Card (matching web homeActionCard) ──
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("近期生活节奏")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(AppColors.text)
-
-                    if let card = homeViewModel.latestActionCard, !card.text.isEmpty {
-                        Text(card.text)
-                            .font(.system(size: 14))
-                            .foregroundStyle(AppColors.text.opacity(0.88))
-                        Text(card.updatedAt, style: .relative)
-                            .font(.system(size: 11))
-                            .foregroundStyle(AppColors.subtext)
-                    } else if homeViewModel.recentThreeItems.isEmpty {
-                        Text("随手记几笔，这里会慢慢长出你的生活痕迹。")
-                            .font(.system(size: 14))
-                            .foregroundStyle(AppColors.subtext)
-                    } else {
-                        let daysWithRecords = countDaysWithRecords()
-                        if daysWithRecords > 0 {
-                            Text("已坚持记录 \(daysWithRecords) 天")
-                                .font(.system(size: 12))
-                                .foregroundStyle(AppColors.subtext.opacity(0.9))
-                        }
-                        Text(homeViewModel.weekTopCategoryText != "暂无"
-                             ? "最近「\(homeViewModel.weekTopCategoryText)」出现得多一点，像这段日子的一个小主题。"
-                             : "随手记几笔，这里会慢慢长出你的生活痕迹。")
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppColors.subtext)
-                    }
-                }
-                .glassPanel(radius: 24, padding: 24)
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, 4)
-                .padding(.bottom, 120)
-                .frame(maxWidth: 430)
-                .frame(maxWidth: .infinity, alignment: .center)
+                homeContent
             }
 
             if showFirstRecordToast {
@@ -138,6 +56,120 @@ struct HomeView: View {
         }
     }
 
+    private var homeContent: some View {
+        VStack(spacing: 12) {
+            todayStoryHero
+            homeActionRow
+            routeGuidanceContent
+            todayBillsPanel
+            lifeRhythmPanel
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+        .padding(.bottom, 120)
+        .frame(maxWidth: 430)
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var homeActionRow: some View {
+        HStack(spacing: 10) {
+            homeActionCard(
+                title: "记下一笔",
+                subtitle: "只输金额也可以",
+                systemImage: "plus.circle.fill",
+                isPrimary: true,
+                action: onQuickRecord
+            )
+            homeActionCard(
+                title: "听今日回放",
+                subtitle: homeViewModel.todayItems.isEmpty ? "有记录后可播放" : "十几秒叙完今天",
+                systemImage: "play.circle.fill",
+                isPrimary: false,
+                action: requestTodayPlayback
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var routeGuidanceContent: some View {
+        if let guidance = homeViewModel.activeRouteGuidance,
+           guidance != .firstRecordTodayPlayback {
+            routeGuidanceBar(guidance)
+        }
+    }
+
+    private var todayBillsPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("今天留下的痕迹")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(AppColors.text)
+            todayBillsContent
+        }
+        .glassPanel(radius: 24, padding: 24)
+    }
+
+    @ViewBuilder
+    private var todayBillsContent: some View {
+        if homeViewModel.recentThreeItems.isEmpty {
+            VStack(spacing: 0) {
+                emptyStateArt
+                    .padding(.vertical, 8)
+            }
+        } else {
+            ForEach(Array(homeViewModel.recentThreeItems.enumerated()), id: \.element.id) { index, item in
+                billListItem(item: item, isFirst: index == 0)
+            }
+        }
+    }
+
+    private var lifeRhythmPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("近期生活节奏")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(AppColors.text)
+            lifeRhythmContent
+        }
+        .glassPanel(radius: 24, padding: 24)
+    }
+
+    @ViewBuilder
+    private var lifeRhythmContent: some View {
+        if let card = homeViewModel.latestActionCard, !card.text.isEmpty {
+            Text(card.text)
+                .font(.system(size: 14))
+                .foregroundStyle(AppColors.text.opacity(0.88))
+            Text(card.updatedAt, style: .relative)
+                .font(.system(size: 11))
+                .foregroundStyle(AppColors.subtext)
+        } else if homeViewModel.recentThreeItems.isEmpty {
+            Text("随手记几笔，这里会慢慢长出你的生活痕迹。")
+                .font(.system(size: 14))
+                .foregroundStyle(AppColors.subtext)
+        } else {
+            lifeRhythmFallback
+        }
+    }
+
+    private var lifeRhythmFallback: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            let daysWithRecords = countDaysWithRecords()
+            if daysWithRecords > 0 {
+                Text("已坚持记录 \(daysWithRecords) 天")
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext.opacity(0.9))
+            }
+            Text(lifeRhythmFallbackText)
+                .font(.system(size: 13))
+                .foregroundStyle(AppColors.subtext)
+        }
+    }
+
+    private var lifeRhythmFallbackText: String {
+        homeViewModel.weekTopCategoryText != "暂无"
+            ? "最近「\(homeViewModel.weekTopCategoryText)」出现得多一点，像这段日子的一个小主题。"
+            : "随手记几笔，这里会慢慢长出你的生活痕迹。"
+    }
+
     private var todayStoryHero: some View {
         let narrative = homeViewModel.todayStoryNarrative
         return VStack(alignment: .leading, spacing: 12) {
@@ -175,14 +207,18 @@ struct HomeView: View {
             .minimumScaleFactor(0.78)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.58))
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(Color.white.opacity(0.46), lineWidth: 1)
-            )
+            .background(narrativePillBackground)
+            .overlay(narrativePillBorder)
+    }
+
+    private var narrativePillBackground: some View {
+        Capsule(style: .continuous)
+            .fill(Color.white.opacity(0.58))
+    }
+
+    private var narrativePillBorder: some View {
+        Capsule(style: .continuous)
+            .stroke(Color.white.opacity(0.46), lineWidth: 1)
     }
 
     private func homeActionCard(
@@ -695,44 +731,56 @@ struct BillPlaybackSheet: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppColors.text.opacity(0.88))
                 .multilineTextAlignment(.center)
-            HStack(spacing: 20) {
-                Button {
-                    dismiss()
-                } label: {
-                    Text("稍后再说")
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppColors.subtext.opacity(0.7))
-                }
-                Button {
-                    dismiss()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        onShowMemberPricing?()
-                    }
-                } label: {
-                    Text("✨ 了解会员")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Capsule(style: .continuous).fill(AppColors.accent))
-                }
-            }
-            .buttonStyle(.plain)
+            memberPlaybackNudgeActions
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.5), lineWidth: 0.8)
-        )
+        .background(memberPlaybackNudgeBackground)
+        .overlay(memberPlaybackNudgeBorder)
         .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 4)
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
         .transition(.opacity.combined(with: .scale(scale: 0.95).combined(with: .offset(y: 8))))
+    }
+
+    private var memberPlaybackNudgeActions: some View {
+        HStack(spacing: 20) {
+            Button {
+                dismiss()
+            } label: {
+                Text("稍后再说")
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext.opacity(0.7))
+            }
+            Button {
+                dismiss()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    onShowMemberPricing?()
+                }
+            } label: {
+                memberPlaybackNudgePrimaryLabel
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var memberPlaybackNudgePrimaryLabel: some View {
+        Text("✨ 了解会员")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Capsule(style: .continuous).fill(AppColors.accent))
+    }
+
+    private var memberPlaybackNudgeBackground: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(.ultraThinMaterial)
+    }
+
+    private var memberPlaybackNudgeBorder: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(Color.white.opacity(0.5), lineWidth: 0.8)
     }
 
     private var playbackControls: some View {

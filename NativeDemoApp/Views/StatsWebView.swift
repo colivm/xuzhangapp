@@ -75,178 +75,226 @@ struct StatsWebView: View {
     @State private var useCustomRange = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                // ── Filters Panel (matching web bill-filters: grid 1fr 1fr) ──
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("账单")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(AppColors.text)
-
-                    // 2-column grid matching web grid-template-columns: 1fr 1fr
-                    HStack(alignment: .top, spacing: 8) {
-                        // Time filter (left)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("时间").font(.system(size: 11)).foregroundStyle(AppColors.subtext)
-                            Button { showPeriodSheet = true } label: {
-                                HStack {
-                                    Text(useCustomRange ? "自定义" : selectedPeriod.rawValue)
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundStyle(AppColors.text.opacity(0.88))
-                                    Spacer()
-                                    Image(systemName: "chevron.down")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundStyle(AppColors.subtext.opacity(0.6))
-                                }
-                                .padding(.horizontal, 12).padding(.vertical, 10)
-                                .frame(maxWidth: .infinity, minHeight: 44)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .fill(.ultraThinMaterial)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .stroke(Color.white.opacity(0.45), lineWidth: 0.8)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .frame(maxWidth: .infinity)
-
-                        // Category filter (right)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("分类").font(.system(size: 11)).foregroundStyle(AppColors.subtext)
-                            Menu {
-                                Button("全部分类") { selectedCategory = nil }
-                                ForEach(HomeItem.Category.allCases) { cat in
-                                    Button(cat.rawValue) { selectedCategory = cat }
-                                }
-                            } label: {
-                                HStack {
-                                    Text(selectedCategory?.rawValue ?? "全部分类")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundStyle(AppColors.text.opacity(0.88))
-                                    Spacer()
-                                    Image(systemName: "chevron.down")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundStyle(AppColors.subtext.opacity(0.6))
-                                }
-                                .padding(.horizontal, 12).padding(.vertical, 10)
-                                .frame(maxWidth: .infinity, minHeight: 44)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .fill(.ultraThinMaterial)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .stroke(Color.white.opacity(0.45), lineWidth: 0.8)
-                                )
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-                .glassPanel(radius: 24, padding: 20)
-
-                summarySliceCard
-
-                // ── Overview Panel ──
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("这一段")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(AppColors.text)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("合计")
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppColors.subtext)
-                        Text(totalExpense.formatted(.cny))
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .foregroundStyle(AppColors.accent.opacity(0.86))
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
-                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(0.62)))
-
-                    trendChart
-                }
-                .glassPanel(radius: 24, padding: 20)
-
-                // ── Record List Panel ──
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("记录列表")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(AppColors.text)
-
-                    if filteredItems.isEmpty {
-                        Text(emptyRecordListText)
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppColors.subtext)
-                    } else {
-                        ForEach(filteredItems) { item in
-                            Button {
-                                editingItem = item
-                            } label: {
-                                billRecordRow(item)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .glassPanel(radius: 24, padding: 20)
+        statsScrollView
+            .sheet(isPresented: $showPeriodSheet) {
+                periodPickerSheet
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 4)
-            .padding(.bottom, 120)
-            .frame(maxWidth: 430)
-            .frame(maxWidth: .infinity, alignment: .center)
+            .sheet(item: $editingItem) { item in
+                editSheet(for: item)
+            }
+            .sheet(item: $summaryPlayback) { playback in
+                summaryPlaybackSheet(playback)
+            }
+            .alert("播放次数已用完", isPresented: summaryQuotaAlertBinding) {
+                summaryQuotaAlertActions
+            } message: {
+                Text(summaryQuotaMessage ?? "")
+            }
+    }
+
+    private var statsScrollView: some View {
+        ScrollView {
+            statsContent
         }
         .scrollIndicators(.hidden)
-        .sheet(isPresented: $showPeriodSheet) {
-            periodPickerSheet
+    }
+
+    private var statsContent: some View {
+        VStack(spacing: 12) {
+            filtersPanel
+            summarySliceCard
+            overviewPanel
+            recordListPanel
         }
-        .sheet(item: $editingItem) { item in
-            RecordEditSheet(item: item) { updated in
-                homeViewModel.updateItem(updated)
-                editingItem = nil
-            } onDelete: {
-                if let idx = homeViewModel.items.firstIndex(where: { $0.id == item.id }) {
-                    homeViewModel.delete(at: IndexSet(integer: idx))
-                }
-                editingItem = nil
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+        .padding(.bottom, 120)
+        .frame(maxWidth: 430)
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var filtersPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("账单")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(AppColors.text)
+
+            HStack(alignment: .top, spacing: 8) {
+                periodFilter
+                categoryFilter
             }
         }
-        .sheet(item: $summaryPlayback) { playback in
-            SummaryPlaybackSheet(
-                playback: playback,
-                petEnabled: settingsViewModel.petCompanionEnabled,
-                isMember: hasMemberAccess,
-                weeklySharePayload: playback.range == .week
-                    ? playbackService.buildWeeklyShareCardPayload(from: homeViewModel.items, summary: playback)
-                    : nil,
-                shareNickname: settingsViewModel.displayName,
-                onCompleted: { progress in
-                    quotaStore.markCompleted(playback.range, isMember: hasMemberAccess, progress: progress)
-                    if progress >= 0.8 {
-                        homeViewModel.markSummaryPlaybackCompleted(playback.range)
-                    }
-                    quotaRefreshID = UUID()
-                },
-                onShowMemberPricing: onShowMemberPricing,
-                onOpenWeekly: {
-                    useCustomRange = false
-                    selectedPeriod = .week
-                },
-                onOpenInsight: onOpenInsight
-            )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.hidden)
+        .glassPanel(radius: 24, padding: 20)
+    }
+
+    private var periodFilter: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            filterLabel("时间")
+            Button {
+                showPeriodSheet = true
+            } label: {
+                filterButtonLabel(useCustomRange ? "自定义" : selectedPeriod.rawValue)
+            }
+            .buttonStyle(.plain)
         }
-        .alert("播放次数已用完", isPresented: Binding(
+        .frame(maxWidth: .infinity)
+    }
+
+    private var categoryFilter: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            filterLabel("分类")
+            Menu {
+                Button("全部分类") { selectedCategory = nil }
+                ForEach(HomeItem.Category.allCases) { cat in
+                    Button(cat.rawValue) { selectedCategory = cat }
+                }
+            } label: {
+                filterButtonLabel(selectedCategory?.rawValue ?? "全部分类")
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func filterLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11))
+            .foregroundStyle(AppColors.subtext)
+    }
+
+    private func filterButtonLabel(_ title: String) -> some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(AppColors.text.opacity(0.88))
+            Spacer()
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(AppColors.subtext.opacity(0.6))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .background(filterControlBackground)
+        .overlay(filterControlBorder)
+    }
+
+    private var filterControlBackground: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(.ultraThinMaterial)
+    }
+
+    private var filterControlBorder: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .stroke(Color.white.opacity(0.45), lineWidth: 0.8)
+    }
+
+    private var overviewPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("这一段")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(AppColors.text)
+            totalExpenseCard
+            trendChart
+        }
+        .glassPanel(radius: 24, padding: 20)
+    }
+
+    private var totalExpenseCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("合计")
+                .font(.system(size: 13))
+                .foregroundStyle(AppColors.subtext)
+            Text(totalExpense.formatted(.cny))
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.accent.opacity(0.86))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.62))
+        )
+    }
+
+    private var recordListPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("记录列表")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(AppColors.text)
+            recordListContent
+        }
+        .glassPanel(radius: 24, padding: 20)
+    }
+
+    @ViewBuilder
+    private var recordListContent: some View {
+        if filteredItems.isEmpty {
+            Text(emptyRecordListText)
+                .font(.system(size: 13))
+                .foregroundStyle(AppColors.subtext)
+        } else {
+            ForEach(filteredItems) { item in
+                Button {
+                    editingItem = item
+                } label: {
+                    billRecordRow(item)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func editSheet(for item: HomeItem) -> some View {
+        RecordEditSheet(item: item) { updated in
+            homeViewModel.updateItem(updated)
+            editingItem = nil
+        } onDelete: {
+            if let idx = homeViewModel.items.firstIndex(where: { $0.id == item.id }) {
+                homeViewModel.delete(at: IndexSet(integer: idx))
+            }
+            editingItem = nil
+        }
+    }
+
+    private func summaryPlaybackSheet(_ playback: SummaryPlayback) -> some View {
+        SummaryPlaybackSheet(
+            playback: playback,
+            petEnabled: settingsViewModel.petCompanionEnabled,
+            isMember: hasMemberAccess,
+            weeklySharePayload: weeklySharePayload(for: playback),
+            shareNickname: settingsViewModel.displayName,
+            onCompleted: { progress in
+                quotaStore.markCompleted(playback.range, isMember: hasMemberAccess, progress: progress)
+                if progress >= 0.8 {
+                    homeViewModel.markSummaryPlaybackCompleted(playback.range)
+                }
+                quotaRefreshID = UUID()
+            },
+            onShowMemberPricing: onShowMemberPricing,
+            onOpenWeekly: {
+                useCustomRange = false
+                selectedPeriod = .week
+            },
+            onOpenInsight: onOpenInsight
+        )
+        .presentationDetents([.large])
+        .presentationDragIndicator(.hidden)
+    }
+
+    private func weeklySharePayload(for playback: SummaryPlayback) -> WeeklyShareCardPayload? {
+        guard playback.range == .week else { return nil }
+        return playbackService.buildWeeklyShareCardPayload(from: homeViewModel.items, summary: playback)
+    }
+
+    private var summaryQuotaAlertBinding: Binding<Bool> {
+        Binding(
             get: { summaryQuotaMessage != nil },
             set: { if !$0 { summaryQuotaMessage = nil } }
-        )) {
+        )
+    }
+
+    @ViewBuilder
+    private var summaryQuotaAlertActions: some View {
             Button("了解会员") {
                 let shouldOpenMember = summaryQuotaMessage?.contains("会员") ?? false
                 summaryQuotaMessage = nil
@@ -255,9 +303,6 @@ struct StatsWebView: View {
             Button("知道了", role: .cancel) {
                 summaryQuotaMessage = nil
             }
-        } message: {
-            Text(summaryQuotaMessage ?? "")
-        }
     }
 
     // MARK: - Summary Playback Card
@@ -426,58 +471,11 @@ struct StatsWebView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 ForEach(StatsPeriod.allCases) { period in
-                    Button {
-                        useCustomRange = false
-                        selectedPeriod = period
-                        showPeriodSheet = false
-                    } label: {
-                        HStack {
-                            Text(period.rawValue)
-                                .font(.system(size: 16, weight: (!useCustomRange && selectedPeriod == period) ? .semibold : .regular))
-                            Spacer()
-                            if !useCustomRange && selectedPeriod == period {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(AppColors.accent)
-                            }
-                        }
-                        .foregroundStyle(AppColors.text)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12).padding(.horizontal, 16)
-                        .background(
-                            (!useCustomRange && selectedPeriod == period)
-                                ? AppColors.accent.opacity(0.1)
-                                : Color.white.opacity(0.62),
-                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        )
-                    }
-                    .buttonStyle(.plain)
+                    periodOptionButton(period)
                 }
 
                 // Custom date range
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("自定义日期").font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(AppColors.text.opacity(0.8))
-                    DatePicker("开始", selection: $customStartDate, displayedComponents: [.date])
-                        .datePickerStyle(.compact)
-                    DatePicker("结束", selection: $customEndDate, displayedComponents: [.date])
-                        .datePickerStyle(.compact)
-                    Button {
-                        useCustomRange = true
-                        showPeriodSheet = false
-                    } label: {
-                        Text("应用自定义日期")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(14)
-                .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.white.opacity(0.62)))
+                customDateRangePicker
             }
             .padding(24)
             .background(AppColors.bg.ignoresSafeArea())
@@ -490,6 +488,74 @@ struct StatsWebView: View {
             }
             .presentationDetents([.medium, .large])
         }
+    }
+
+    private func periodOptionButton(_ period: StatsPeriod) -> some View {
+        let isSelected = !useCustomRange && selectedPeriod == period
+        return Button {
+            useCustomRange = false
+            selectedPeriod = period
+            showPeriodSheet = false
+        } label: {
+            periodOptionLabel(period, isSelected: isSelected)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func periodOptionLabel(_ period: StatsPeriod, isSelected: Bool) -> some View {
+        HStack {
+            Text(period.rawValue)
+                .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
+            Spacer()
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(AppColors.accent)
+            }
+        }
+        .foregroundStyle(AppColors.text)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .background(periodOptionBackground(isSelected: isSelected))
+    }
+
+    private func periodOptionBackground(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(isSelected ? AppColors.accent.opacity(0.1) : Color.white.opacity(0.62))
+    }
+
+    private var customDateRangePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("自定义日期")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(AppColors.text.opacity(0.8))
+            DatePicker("开始", selection: $customStartDate, displayedComponents: [.date])
+                .datePickerStyle(.compact)
+            DatePicker("结束", selection: $customEndDate, displayedComponents: [.date])
+                .datePickerStyle(.compact)
+            applyCustomDateButton
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.62))
+        )
+    }
+
+    private var applyCustomDateButton: some View {
+        Button {
+            useCustomRange = true
+            showPeriodSheet = false
+        } label: {
+            Text("应用自定义日期")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Simplified Category Filter Chips (no longer used, replaced by Menu)

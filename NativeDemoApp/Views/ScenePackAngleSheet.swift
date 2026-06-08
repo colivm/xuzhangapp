@@ -10,7 +10,7 @@ struct ScenePackAngleSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                ForEach(scenePacks) { pack in
+                ForEach(scenePacks, id: \.id) { pack in
                     Button {
                         onSelectPack(pack)
                         dismiss()

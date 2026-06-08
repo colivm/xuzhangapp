@@ -140,7 +140,16 @@ struct OCRConfirmSheet: View {
     private func confirmRow(_ index: Int) -> some View {
         let row = rows[index]
         return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
+            confirmRowHeader(row: row, index: index)
+            confirmRowCategory(row: row, index: index)
+        }
+        .padding(16)
+        .background(confirmRowBackground(isSelected: row.selected))
+        .overlay(confirmRowBorder(isSelected: row.selected))
+    }
+
+    private func confirmRowHeader(row: ConfirmRow, index: Int) -> some View {
+        HStack(alignment: .top, spacing: 12) {
             Button {
                 rows[index].selected.toggle()
             } label: {
@@ -164,40 +173,44 @@ struct OCRConfirmSheet: View {
 
                 Spacer(minLength: 8)
 
-                Text(row.draft.amount.formatted(.cny.precision(.fractionLength(2))))
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(AppColors.text)
-                    .minimumScaleFactor(0.75)
-            }
-
-            HStack(spacing: 10) {
-                Text("分类")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppColors.subtext)
-                Picker("分类", selection: $rows[index].draft.category) {
-                    ForEach(HomeItem.Category.allCases) { category in
-                        Text(category.displayName).tag(category)
-                    }
-                }
-                .pickerStyle(.menu)
-                .font(.system(size: 13, weight: .medium))
-
-                Spacer()
-
-                Text(row.selected ? "将导入" : "已跳过")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(row.selected ? AppColors.accent : AppColors.subtext)
-            }
+            Text(row.draft.amount.formatted(.cny.precision(.fractionLength(2))))
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(AppColors.text)
+                .minimumScaleFactor(0.75)
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(row.selected ? AppColors.accent.opacity(0.08) : Color.white.opacity(0.58))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(row.selected ? AppColors.accent.opacity(0.24) : Color.white.opacity(0.45), lineWidth: 1)
-        )
+    }
+
+    private func confirmRowCategory(row: ConfirmRow, index: Int) -> some View {
+        HStack(spacing: 10) {
+            Text("分类")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+            Picker("分类", selection: $rows[index].draft.category) {
+                ForEach(HomeItem.Category.allCases) { category in
+                    Text(category.displayName).tag(category)
+                }
+            }
+            .pickerStyle(.menu)
+            .font(.system(size: 13, weight: .medium))
+
+            Spacer()
+
+            Text(row.selected ? "将导入" : "已跳过")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(row.selected ? AppColors.accent : AppColors.subtext)
+        }
+    }
+
+    private func confirmRowBackground(isSelected: Bool) -> some View {
+        let fill = isSelected ? AppColors.accent.opacity(0.08) : Color.white.opacity(0.58)
+        return RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(fill)
+    }
+
+    private func confirmRowBorder(isSelected: Bool) -> some View {
+        let stroke = isSelected ? AppColors.accent.opacity(0.24) : Color.white.opacity(0.45)
+        return RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(stroke, lineWidth: 1)
     }
 
     private func statBlock(title: String, value: String) -> some View {
@@ -221,6 +234,8 @@ struct OCRConfirmSheet: View {
 }
 
 struct OCRDraftPanel: View {
+    private typealias DraftGroup = (key: String, importedAt: Date, items: [HomeItem])
+
     let items: [HomeItem]
     let onToggleResolved: (UUID, Bool) -> Void
     let onCategoryChange: (UUID, HomeItem.Category) -> Void
@@ -229,17 +244,17 @@ struct OCRDraftPanel: View {
     let onClearResolved: () -> Void
     let onResolveAllPending: () -> Void
 
-    private var visibleGroups: [(key: String, importedAt: Date, items: [HomeItem])] {
+    private var visibleGroups: [DraftGroup] {
         let grouped = Dictionary(grouping: items) { item in
             item.draftMeta?.batchId ?? item.id.uuidString
         }
-        return grouped.map { key, batchItems in
+        var groups: [DraftGroup] = grouped.map { key, batchItems in
             let importedAt = batchItems.first?.draftMeta?.importedAt ?? batchItems.first?.createdAt ?? .now
-            return (key: key, importedAt: importedAt, items: batchItems.sorted { $0.createdAt > $1.createdAt })
+            let sortedItems = batchItems.sorted { $0.createdAt > $1.createdAt }
+            return (key: key, importedAt: importedAt, items: sortedItems)
         }
-        .sorted { $0.importedAt > $1.importedAt }
-        .prefix(3)
-        .map { $0 }
+        groups.sort { $0.importedAt > $1.importedAt }
+        return Array(groups.prefix(3))
     }
 
     private var pendingItems: [HomeItem] {
@@ -256,67 +271,105 @@ struct OCRDraftPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("待整理账单")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(AppColors.text)
-                    Text(items.isEmpty ? "导入后会先放在这里，你可以再改分类、金额或删掉误识别。" : "\(pendingItems.count) 笔待整理 · 合计 \(pendingTotal.formatted(.cny.precision(.fractionLength(2))))")
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppColors.subtext)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 8) {
-                    Button("\u{4E00}\u{952E}\u{6807}\u{8BB0}\u{5DF2}\u{6574}\u{7406}") { onResolveAllPending() }
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(pendingItems.isEmpty ? AppColors.subtext.opacity(0.45) : AppColors.accent)
-                        .disabled(pendingItems.isEmpty)
-                    Button("\u{5B8C}\u{6210}\u{6574}\u{7406}\u{FF08}\(resolvedCount) \u{7B14}\u{FF09}") { onClearResolved() }
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(resolvedCount > 0 ? AppColors.accent : AppColors.subtext.opacity(0.45))
-                        .disabled(resolvedCount == 0)
-                }
-            }
+            panelHeader
 
             if items.isEmpty {
-                Text("选择账单截图后，识别结果会先进入确认页；确认导入后，会出现在这里继续整理。")
-                    .font(.system(size: 13))
-                    .foregroundStyle(AppColors.subtext)
-                    .frame(maxWidth: .infinity, minHeight: 108)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.white.opacity(0.58))
-                    )
+                emptyState
             } else {
-                LazyVStack(spacing: 14) {
-                    ForEach(visibleGroups, id: \.key) { group in
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("导入于 \(group.importedAt.zhBillDateTime)")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(AppColors.subtext)
-                            ForEach(group.items) { item in
-                                OCRDraftRow(
-                                    item: item,
-                                    onToggleResolved: onToggleResolved,
-                                    onCategoryChange: onCategoryChange,
-                                    onAmountChange: onAmountChange,
-                                    onDelete: onDelete
-                                )
-                            }
-                        }
-                    }
-                }
+                draftGroupList
             }
         }
         .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(AppColors.accent.opacity(0.06))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(AppColors.accent.opacity(0.16), lineWidth: 1)
-        )
+        .background(panelBackground)
+        .overlay(panelBorder)
+    }
+
+    private var panelHeader: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("待整理账单")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                Text(panelSubtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 8) {
+                Button("\u{4E00}\u{952E}\u{6807}\u{8BB0}\u{5DF2}\u{6574}\u{7406}") { onResolveAllPending() }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(resolveAllForeground)
+                    .disabled(pendingItems.isEmpty)
+                Button("\u{5B8C}\u{6210}\u{6574}\u{7406}\u{FF08}\(resolvedCount) \u{7B14}\u{FF09}") { onClearResolved() }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(clearResolvedForeground)
+                    .disabled(resolvedCount == 0)
+            }
+        }
+    }
+
+    private var panelSubtitle: String {
+        if items.isEmpty {
+            return "导入后会先放在这里，你可以再改分类、金额或删掉误识别。"
+        }
+        let total = pendingTotal.formatted(.cny.precision(.fractionLength(2)))
+        return "\(pendingItems.count) 笔待整理 · 合计 \(total)"
+    }
+
+    private var resolveAllForeground: Color {
+        pendingItems.isEmpty ? AppColors.subtext.opacity(0.45) : AppColors.accent
+    }
+
+    private var clearResolvedForeground: Color {
+        resolvedCount > 0 ? AppColors.accent : AppColors.subtext.opacity(0.45)
+    }
+
+    private var emptyState: some View {
+        Text("选择账单截图后，识别结果会先进入确认页；确认导入后，会出现在这里继续整理。")
+            .font(.system(size: 13))
+            .foregroundStyle(AppColors.subtext)
+            .frame(maxWidth: .infinity, minHeight: 108)
+            .background(emptyStateBackground)
+    }
+
+    private var emptyStateBackground: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color.white.opacity(0.58))
+    }
+
+    private var draftGroupList: some View {
+        LazyVStack(spacing: 14) {
+            ForEach(visibleGroups, id: \.key) { group in
+                draftGroupSection(group)
+            }
+        }
+    }
+
+    private func draftGroupSection(_ group: DraftGroup) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("导入于 \(group.importedAt.zhBillDateTime)")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+            ForEach(group.items) { item in
+                OCRDraftRow(
+                    item: item,
+                    onToggleResolved: onToggleResolved,
+                    onCategoryChange: onCategoryChange,
+                    onAmountChange: onAmountChange,
+                    onDelete: onDelete
+                )
+            }
+        }
+    }
+
+    private var panelBackground: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(AppColors.accent.opacity(0.06))
+    }
+
+    private var panelBorder: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .stroke(AppColors.accent.opacity(0.16), lineWidth: 1)
     }
 }
 
@@ -359,14 +412,20 @@ private struct OCRDraftRow: View {
             amountEditor
         }
         .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(isResolved ? Color.white.opacity(0.46) : Color.white.opacity(0.68))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(isResolved ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.52), lineWidth: 1)
-        )
+        .background(rowBackground)
+        .overlay(rowBorder)
+    }
+
+    private var rowBackground: some View {
+        let fill = isResolved ? Color.white.opacity(0.46) : Color.white.opacity(0.68)
+        return RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(fill)
+    }
+
+    private var rowBorder: some View {
+        let stroke = isResolved ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.52)
+        return RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(stroke, lineWidth: 1)
     }
 
     private var headerRow: some View {

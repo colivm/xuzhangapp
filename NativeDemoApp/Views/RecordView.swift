@@ -372,26 +372,7 @@ struct RecordView: View {
     private var recordModeSegment: some View {
         HStack(spacing: 4) {
             ForEach(EntryMode.allCases) { mode in
-                Button {
-                    dismissKeyboard()
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        selectedEntryMode = mode
-                    }
-                } label: {
-                    Text(mode.rawValue)
-                        .font(.system(size: 15, weight: selectedEntryMode == mode ? .semibold : .regular))
-                        .foregroundStyle(recordInk)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(
-                            selectedEntryMode == mode
-                                ? Color.white.opacity(0.85)
-                                : Color.clear,
-                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        )
-                        .shadow(color: selectedEntryMode == mode ? Color.black.opacity(0.08) : .clear, radius: 2, y: 1)
-                }
-                .buttonStyle(.plain)
+                recordModeButton(mode)
             }
         }
         .padding(2)
@@ -399,6 +380,37 @@ struct RecordView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color.white.opacity(0.25))
         )
+    }
+
+    private func recordModeButton(_ mode: EntryMode) -> some View {
+        let isSelected = selectedEntryMode == mode
+        return Button {
+            dismissKeyboard()
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedEntryMode = mode
+            }
+        } label: {
+            recordModeLabel(mode, isSelected: isSelected)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func recordModeLabel(_ mode: EntryMode, isSelected: Bool) -> some View {
+        let weight: Font.Weight = isSelected ? .semibold : .regular
+        let shadow = isSelected ? Color.black.opacity(0.08) : Color.clear
+        return Text(mode.rawValue)
+            .font(.system(size: 15, weight: weight))
+            .foregroundStyle(recordInk)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(recordModeBackground(isSelected: isSelected))
+            .shadow(color: shadow, radius: 2, y: 1)
+    }
+
+    private func recordModeBackground(isSelected: Bool) -> some View {
+        let fill = isSelected ? Color.white.opacity(0.85) : Color.clear
+        return RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(fill)
     }
 
     // MARK: - Manual Form
@@ -415,7 +427,9 @@ struct RecordView: View {
             if hasValidAmount {
                 recordDateQuietActions
                 if datePanelExpanded {
-                    WarmRecordDatePanel(selection: $homeViewModel.selectedDate)
+                    WarmRecordDatePanel(selection: $homeViewModel.selectedDate) {
+                        dismissKeyboard()
+                    }
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
@@ -553,21 +567,32 @@ struct RecordView: View {
             dismissKeyboard()
             action()
         }) {
-            Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(isActive ? AppColors.accent.opacity(0.9) : recordInk.opacity(0.78))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(isActive ? AppColors.accent.opacity(0.12) : Color.white.opacity(0.58))
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .stroke(isActive ? AppColors.accent.opacity(0.25) : Color.white.opacity(0.48), lineWidth: 1)
-                )
+            detailToggleLabel(title, isActive: isActive)
         }
         .buttonStyle(.plain)
+    }
+
+    private func detailToggleLabel(_ title: String, isActive: Bool) -> some View {
+        let foreground = isActive ? AppColors.accent.opacity(0.9) : recordInk.opacity(0.78)
+        return Text(title)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(foreground)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(detailToggleBackground(isActive: isActive))
+            .overlay(detailToggleBorder(isActive: isActive))
+    }
+
+    private func detailToggleBackground(isActive: Bool) -> some View {
+        let fill = isActive ? AppColors.accent.opacity(0.12) : Color.white.opacity(0.58)
+        return Capsule(style: .continuous)
+            .fill(fill)
+    }
+
+    private func detailToggleBorder(isActive: Bool) -> some View {
+        let stroke = isActive ? AppColors.accent.opacity(0.25) : Color.white.opacity(0.48)
+        return Capsule(style: .continuous)
+            .stroke(stroke, lineWidth: 1)
     }
 
     // MARK: - Amount Field
@@ -722,21 +747,32 @@ struct RecordView: View {
 
     private func quickKeyButton(_ title: String, isAccent: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(isAccent ? recordAccent : recordInk.opacity(0.88))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(isAccent ? recordAccent.opacity(0.12) : Color.white.opacity(0.78))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(isAccent ? recordAccent.opacity(0.25) : AppColors.line.opacity(0.76), lineWidth: 1)
-                )
+            quickKeyButtonLabel(title, isAccent: isAccent)
         }
         .buttonStyle(.plain)
+    }
+
+    private func quickKeyButtonLabel(_ title: String, isAccent: Bool) -> some View {
+        let foreground = isAccent ? recordAccent : recordInk.opacity(0.88)
+        return Text(title)
+            .font(.system(size: 13, weight: .semibold, design: .rounded))
+            .foregroundStyle(foreground)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(quickKeyButtonBackground(isAccent: isAccent))
+            .overlay(quickKeyButtonBorder(isAccent: isAccent))
+    }
+
+    private func quickKeyButtonBackground(isAccent: Bool) -> some View {
+        let fill = isAccent ? recordAccent.opacity(0.12) : Color.white.opacity(0.78)
+        return RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(fill)
+    }
+
+    private func quickKeyButtonBorder(isAccent: Bool) -> some View {
+        let stroke = isAccent ? recordAccent.opacity(0.25) : AppColors.line.opacity(0.76)
+        return RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .stroke(stroke, lineWidth: 1)
     }
 
     // MARK: - Category Section
@@ -768,36 +804,44 @@ struct RecordView: View {
                 homeViewModel.selectCategory(category)
             }
         } label: {
-            HStack(spacing: 4) {
-                Text(category.displayName)
-                    .font(.system(size: 14, weight: .medium))
-                if isRecommended {
-                    Text("推荐")
-                        .font(.system(size: 11))
-                        .foregroundStyle(AppColors.subtext)
-                }
-            }
-            .foregroundStyle(isSelected
-                ? AppColors.accent.opacity(0.84)
-                : recordInk)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .background(
-                isSelected
-                    ? AppColors.accent.opacity(0.16)
-                    : Color.white.opacity(0.62),
-                in: Capsule(style: .continuous)
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(
-                        isSelected ? AppColors.accent.opacity(0.45) : Color.white.opacity(0.45),
-                        lineWidth: 1
-                    )
-            )
-            .scaleEffect(isSelected ? 1.03 : 1.0)
+            categoryChipLabel(category: category, isRecommended: isRecommended, isSelected: isSelected)
         }
         .buttonStyle(.plain)
+    }
+
+    private func categoryChipLabel(
+        category: HomeItem.Category,
+        isRecommended: Bool,
+        isSelected: Bool
+    ) -> some View {
+        let foreground = isSelected ? AppColors.accent.opacity(0.84) : recordInk
+        return HStack(spacing: 4) {
+            Text(category.displayName)
+                .font(.system(size: 14, weight: .medium))
+            if isRecommended {
+                Text("推荐")
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppColors.subtext)
+            }
+        }
+        .foregroundStyle(foreground)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(categoryChipBackground(isSelected: isSelected))
+        .overlay(categoryChipBorder(isSelected: isSelected))
+        .scaleEffect(isSelected ? 1.03 : 1.0)
+    }
+
+    private func categoryChipBackground(isSelected: Bool) -> some View {
+        let fill = isSelected ? AppColors.accent.opacity(0.16) : Color.white.opacity(0.62)
+        return Capsule(style: .continuous)
+            .fill(fill)
+    }
+
+    private func categoryChipBorder(isSelected: Bool) -> some View {
+        let stroke = isSelected ? AppColors.accent.opacity(0.45) : Color.white.opacity(0.45)
+        return Capsule(style: .continuous)
+            .stroke(stroke, lineWidth: 1)
     }
 
     // MARK: - Note Section
@@ -904,7 +948,7 @@ struct RecordView: View {
                     datePanelExpanded.toggle()
                 }
             } label: {
-                Text("改日期")
+                Text(homeViewModel.selectedDate.zhBillDateTime)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(recordAccent.opacity(0.9))
             }

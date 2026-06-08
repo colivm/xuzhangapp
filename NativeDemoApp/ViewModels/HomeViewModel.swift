@@ -245,7 +245,7 @@ final class HomeViewModel: ObservableObject {
         let importedItems = validDrafts.map { draft in
             let category = NarrativeCopyResolver.resolveCategory(brandId: draft.merchantBrandId, fallback: draft.category)
             let title = NarrativeCopyResolver.resolveTitle(brandId: draft.merchantBrandId, fallback: draft.title)
-            HomeItem(
+            return HomeItem(
                 title: title,
                 amount: draft.amount,
                 category: category,
