@@ -84,19 +84,19 @@ struct ContentView: View {
 
         var title: String {
             switch self {
-            case .today: return "今日"
-            case .record: return "记一笔"
-            case .stats: return "看看花"
-            case .insight: return "小 AI 说"
-            case .settings: return "我的小窝"
+            case .today: return "今天"
+            case .record: return "记下"
+            case .stats: return "痕迹"
+            case .insight: return "复盘"
+            case .settings: return "我的"
             }
         }
 
         var pageTitle: String {
             switch self {
             case .today: return "今日"
-            case .record: return "记账"
-            case .stats: return "账单"
+            case .record: return "记下这一笔"
+            case .stats: return "账单与切片"
             case .insight: return "生活复盘"
             case .settings: return "设置"
             }
@@ -384,149 +384,203 @@ struct ContentView: View {
         .frame(width: 30, height: 30)
     }
 
-    // Today tab — house with dot
+    // Today tab — horizon arc with soft sunrise
     private func tabTodayGlyph(isSelected: Bool) -> some View {
         let fg = isSelected
             ? AppColors.accent.opacity(0.84)
             : AppColors.subtext.opacity(0.74).mix(with: AppColors.accent.opacity(0.26), by: 0.5)
         return ZStack {
             Path { p in
-                p.move(to: CGPoint(x: 12, y: 7.1))
-                p.addLine(to: CGPoint(x: 6.9, y: 11))
-                p.addLine(to: CGPoint(x: 6.9, y: 17))
-                p.addLine(to: CGPoint(x: 10.1, y: 17))
-                p.addLine(to: CGPoint(x: 10.1, y: 13.9))
-                p.addLine(to: CGPoint(x: 13.9, y: 13.9))
-                p.addLine(to: CGPoint(x: 13.9, y: 17))
-                p.addLine(to: CGPoint(x: 17.1, y: 17))
-                p.addLine(to: CGPoint(x: 17.1, y: 11))
+                p.move(to: CGPoint(x: 6.8, y: 14.4))
+                p.addCurve(to: CGPoint(x: 12, y: 10.3),
+                           control1: CGPoint(x: 7.9, y: 11.6),
+                           control2: CGPoint(x: 9.8, y: 10.3))
+                p.addCurve(to: CGPoint(x: 17.2, y: 14.4),
+                           control1: CGPoint(x: 14.2, y: 10.3),
+                           control2: CGPoint(x: 16.1, y: 11.6))
                 p.closeSubpath()
             }
-            .fill(fg)
+            .fill(fg.opacity(0.62))
+
+            Path { p in
+                p.move(to: CGPoint(x: 6.2, y: 15.4))
+                p.addCurve(to: CGPoint(x: 17.8, y: 15.4),
+                           control1: CGPoint(x: 9.8, y: 14.2),
+                           control2: CGPoint(x: 14.2, y: 14.2))
+            }
+            .stroke(Color.white.opacity(0.88), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
 
             Circle()
-                .fill(Color(red: 1.0, green: 182/255, blue: 200/255)) // pink dot
-                .frame(width: 3.5, height: 3.5)
-                .offset(x: 6.8, y: -5.2)
+                .fill(Color(red: 1.0, green: 181/255, blue: 159/255))
+                .frame(width: 3.8, height: 3.8)
+                .offset(y: -5.4)
         }
     }
 
-    // Record tab — circle with plus cutout
+    // Record tab — folded note with light writing strokes
     private func tabRecordGlyph(isSelected: Bool) -> some View {
         let fg = isSelected
             ? AppColors.accent.opacity(0.84)
             : AppColors.subtext.opacity(0.74).mix(with: AppColors.accent.opacity(0.26), by: 0.5)
         return ZStack {
-            Circle()
-                .fill(fg.opacity(0.7))
-                .frame(width: 10.6, height: 10.6)
-
-            // Plus cross (cutout effect)
             Path { p in
-                p.move(to: CGPoint(x: 12, y: 9.3))
-                p.addLine(to: CGPoint(x: 12, y: 14.7))
-                p.move(to: CGPoint(x: 9.3, y: 12))
-                p.addLine(to: CGPoint(x: 14.7, y: 12))
+                p.move(to: CGPoint(x: 7.4, y: 7.4))
+                p.addLine(to: CGPoint(x: 15.2, y: 7.4))
+                p.addCurve(to: CGPoint(x: 16.8, y: 9),
+                           control1: CGPoint(x: 16.1, y: 7.4),
+                           control2: CGPoint(x: 16.8, y: 8.1))
+                p.addLine(to: CGPoint(x: 16.8, y: 16.6))
+                p.addLine(to: CGPoint(x: 8.7, y: 16.6))
+                p.addCurve(to: CGPoint(x: 7.1, y: 15),
+                           control1: CGPoint(x: 7.8, y: 16.6),
+                           control2: CGPoint(x: 7.1, y: 15.9))
+                p.addLine(to: CGPoint(x: 7.1, y: 7.7))
+                p.addCurve(to: CGPoint(x: 7.4, y: 7.4),
+                           control1: CGPoint(x: 7.1, y: 7.5),
+                           control2: CGPoint(x: 7.2, y: 7.4))
             }
-            .stroke(Color.white.opacity(0.88), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-            .frame(width: 10.6, height: 10.6)
+            .fill(fg)
+
+            Path { p in
+                p.move(to: CGPoint(x: 14.9, y: 7.4))
+                p.addLine(to: CGPoint(x: 14.9, y: 10.5))
+                p.addLine(to: CGPoint(x: 18, y: 10.5))
+                p.addCurve(to: CGPoint(x: 14.9, y: 7.4),
+                           control1: CGPoint(x: 17.6, y: 9),
+                           control2: CGPoint(x: 16.4, y: 7.8))
+            }
+            .fill(fg.opacity(0.58))
+
+            Path { p in
+                p.move(to: CGPoint(x: 9.5, y: 11))
+                p.addLine(to: CGPoint(x: 13.6, y: 11))
+                p.move(to: CGPoint(x: 9.5, y: 13.2))
+                p.addLine(to: CGPoint(x: 12.3, y: 13.2))
+                p.move(to: CGPoint(x: 13.8, y: 15.4))
+                p.addCurve(to: CGPoint(x: 15.7, y: 14),
+                           control1: CGPoint(x: 14.5, y: 15),
+                           control2: CGPoint(x: 15.1, y: 14.6))
+            }
+            .stroke(Color.white.opacity(0.88), style: StrokeStyle(lineWidth: 1.25, lineCap: .round))
         }
     }
 
-    // Stats tab — three hearts
+    // Stats tab — curved trace with soft dots
     private func tabStatsGlyph(isSelected: Bool) -> some View {
         let fg = isSelected
             ? AppColors.accent.opacity(0.84)
             : AppColors.subtext.opacity(0.74).mix(with: AppColors.accent.opacity(0.26), by: 0.5)
         return ZStack {
-            // Heart 1 (top)
-            HeartShape()
-                .fill(fg)
-                .frame(width: 8, height: 7)
-                .offset(y: -2.5)
-            // Heart 2 (left)
-            HeartShape()
-                .fill(fg)
-                .frame(width: 8, height: 7)
-                .offset(x: -4.5, y: 3.5)
-            // Heart 3 (right)
-            HeartShape()
-                .fill(fg)
-                .frame(width: 8, height: 7)
-                .offset(x: 4.5, y: 3.5)
-            // Center dot
+            Path { p in
+                p.move(to: CGPoint(x: 6.7, y: 15.2))
+                p.addCurve(to: CGPoint(x: 17.3, y: 10.8),
+                           control1: CGPoint(x: 8.7, y: 10.6),
+                           control2: CGPoint(x: 12.2, y: 9.3))
+            }
+            .stroke(Color.white.opacity(0.88), style: StrokeStyle(lineWidth: 1.35, lineCap: .round))
+
             Circle()
-                .fill(Color.white.opacity(0.84))
-                .frame(width: 3, height: 3)
-                .offset(y: 0.5)
+                .fill(fg.opacity(0.58))
+                .frame(width: 4.2, height: 4.2)
+                .offset(x: -4.1, y: 2.6)
+
+            Circle()
+                .fill(fg)
+                .frame(width: 4.8, height: 4.8)
+                .offset(x: 0.1, y: -0.5)
+
+            Circle()
+                .fill(fg.opacity(0.58))
+                .frame(width: 4, height: 4)
+                .offset(x: 4.4, y: -1.4)
         }
     }
 
-    // Insight tab — chat bubble with lines
+    // Insight tab — slightly opened review pages
     private func tabInsightGlyph(isSelected: Bool) -> some View {
         let fg = isSelected
             ? AppColors.accent.opacity(0.84)
             : AppColors.subtext.opacity(0.74).mix(with: AppColors.accent.opacity(0.26), by: 0.5)
         return ZStack {
             Path { p in
-                p.move(to: CGPoint(x: 7.4, y: 8.7))
-                p.addCurve(to: CGPoint(x: 9.2, y: 6.9),
-                           control1: CGPoint(x: 7.4, y: 7.7),
-                           control2: CGPoint(x: 8.2, y: 6.9))
-                p.addLine(to: CGPoint(x: 14.9, y: 6.9))
-                p.addCurve(to: CGPoint(x: 16.7, y: 8.7),
-                           control1: CGPoint(x: 15.9, y: 6.9),
-                           control2: CGPoint(x: 16.7, y: 7.7))
-                p.addLine(to: CGPoint(x: 16.7, y: 12.4))
-                p.addCurve(to: CGPoint(x: 14.9, y: 14.2),
-                           control1: CGPoint(x: 16.7, y: 13.4),
-                           control2: CGPoint(x: 15.9, y: 14.2))
-                p.addLine(to: CGPoint(x: 11.5, y: 14.2))
-                p.addLine(to: CGPoint(x: 9, y: 16.2))
-                p.addLine(to: CGPoint(x: 9, y: 14.2))
-                p.addLine(to: CGPoint(x: 8.2, y: 14.2))
-                p.addCurve(to: CGPoint(x: 7.4, y: 12.4),
-                           control1: CGPoint(x: 7.2, y: 14.2),
-                           control2: CGPoint(x: 7.4, y: 13.4))
+                p.move(to: CGPoint(x: 6.7, y: 8.6))
+                p.addCurve(to: CGPoint(x: 12, y: 9),
+                           control1: CGPoint(x: 8.5, y: 7.8),
+                           control2: CGPoint(x: 10.3, y: 7.8))
+                p.addLine(to: CGPoint(x: 12, y: 17.5))
+                p.addCurve(to: CGPoint(x: 6.7, y: 17.1),
+                           control1: CGPoint(x: 10.3, y: 16.4),
+                           control2: CGPoint(x: 8.5, y: 16.3))
                 p.closeSubpath()
             }
             .fill(fg)
 
-            // Chat lines
             Path { p in
-                p.move(to: CGPoint(x: 11.2, y: 9.9))
-                p.addLine(to: CGPoint(x: 13.5, y: 9.9))
-                p.move(to: CGPoint(x: 10.8, y: 12))
-                p.addLine(to: CGPoint(x: 13.9, y: 12))
+                p.move(to: CGPoint(x: 12, y: 9))
+                p.addCurve(to: CGPoint(x: 17.3, y: 8.6),
+                           control1: CGPoint(x: 13.7, y: 7.8),
+                           control2: CGPoint(x: 15.5, y: 7.8))
+                p.addLine(to: CGPoint(x: 17.3, y: 17.1))
+                p.addCurve(to: CGPoint(x: 12, y: 17.5),
+                           control1: CGPoint(x: 15.5, y: 16.3),
+                           control2: CGPoint(x: 13.7, y: 16.4))
+                p.closeSubpath()
+            }
+            .fill(fg.opacity(0.58))
+
+            Path { p in
+                p.move(to: CGPoint(x: 9, y: 10.9))
+                p.addCurve(to: CGPoint(x: 11.3, y: 11.4),
+                           control1: CGPoint(x: 9.8, y: 10.8),
+                           control2: CGPoint(x: 10.6, y: 11))
+                p.move(to: CGPoint(x: 14.9, y: 10.9))
+                p.addCurve(to: CGPoint(x: 12.7, y: 11.4),
+                           control1: CGPoint(x: 14.1, y: 10.8),
+                           control2: CGPoint(x: 13.4, y: 11))
+                p.move(to: CGPoint(x: 12, y: 9.2))
+                p.addLine(to: CGPoint(x: 12, y: 17.2))
             }
             .stroke(Color.white.opacity(0.88), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
         }
     }
 
-    // Settings tab — house with dot
+    // Settings tab — rounded profile silhouette
     private func tabSettingsGlyph(isSelected: Bool) -> some View {
         let fg = isSelected
             ? AppColors.accent.opacity(0.84)
             : AppColors.subtext.opacity(0.74).mix(with: AppColors.accent.opacity(0.26), by: 0.5)
         return ZStack {
+            Circle()
+                .fill(fg.opacity(0.58))
+                .frame(width: 5, height: 5)
+                .offset(y: -3)
+
             Path { p in
-                p.move(to: CGPoint(x: 8.5, y: 17.1))
-                p.addLine(to: CGPoint(x: 8.5, y: 12.7))
-                p.addLine(to: CGPoint(x: 12, y: 9.5))
-                p.addLine(to: CGPoint(x: 15.5, y: 12.7))
-                p.addLine(to: CGPoint(x: 15.5, y: 17.1))
-                p.addLine(to: CGPoint(x: 13.1, y: 17.1))
-                p.addLine(to: CGPoint(x: 13.1, y: 14.4))
-                p.addLine(to: CGPoint(x: 10.9, y: 14.4))
-                p.addLine(to: CGPoint(x: 10.9, y: 17.1))
+                p.move(to: CGPoint(x: 7.2, y: 16.9))
+                p.addCurve(to: CGPoint(x: 12, y: 12.9),
+                           control1: CGPoint(x: 7.9, y: 14.4),
+                           control2: CGPoint(x: 9.7, y: 12.9))
+                p.addCurve(to: CGPoint(x: 16.8, y: 16.9),
+                           control1: CGPoint(x: 14.3, y: 12.9),
+                           control2: CGPoint(x: 16.1, y: 14.4))
+                p.addCurve(to: CGPoint(x: 16.1, y: 17.8),
+                           control1: CGPoint(x: 16.9, y: 17.4),
+                           control2: CGPoint(x: 16.6, y: 17.8))
+                p.addLine(to: CGPoint(x: 7.9, y: 17.8))
+                p.addCurve(to: CGPoint(x: 7.2, y: 16.9),
+                           control1: CGPoint(x: 7.4, y: 17.8),
+                           control2: CGPoint(x: 7.1, y: 17.4))
                 p.closeSubpath()
             }
             .fill(fg)
 
-            Circle()
-                .fill(Color(red: 1.0, green: 182/255, blue: 200/255))
-                .frame(width: 3.2, height: 3.2)
-                .offset(x: -5.7, y: -5.8)
+            Path { p in
+                p.move(to: CGPoint(x: 9.5, y: 16.5))
+                p.addCurve(to: CGPoint(x: 14.5, y: 16.5),
+                           control1: CGPoint(x: 11.1, y: 17),
+                           control2: CGPoint(x: 12.9, y: 17))
+            }
+            .stroke(Color.white.opacity(0.88), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
         }
     }
 
@@ -586,34 +640,6 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         .padding(.trailing, 16)
         .padding(.bottom, 102)
-    }
-}
-
-// MARK: - Heart Shape Helper
-
-private struct HeartShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var p = Path()
-        let w = rect.width
-        let h = rect.height
-        p.move(to: CGPoint(x: w/2, y: h))
-        p.addCurve(to: CGPoint(x: 0, y: h*0.3),
-                   control1: CGPoint(x: w/2, y: h*0.7),
-                   control2: CGPoint(x: 0, y: h*0.55))
-        p.addArc(center: CGPoint(x: w*0.25, y: h*0.3),
-                 radius: w*0.25,
-                 startAngle: .degrees(180),
-                 endAngle: .degrees(0),
-                 clockwise: false)
-        p.addArc(center: CGPoint(x: w*0.75, y: h*0.3),
-                 radius: w*0.25,
-                 startAngle: .degrees(180),
-                 endAngle: .degrees(0),
-                 clockwise: false)
-        p.addCurve(to: CGPoint(x: w/2, y: h),
-                   control1: CGPoint(x: w, y: h*0.55),
-                   control2: CGPoint(x: w/2, y: h*0.7))
-        return p
     }
 }
 

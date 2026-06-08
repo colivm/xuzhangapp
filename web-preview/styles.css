@@ -2440,14 +2440,14 @@ button.tab:active {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: color-mix(in srgb, var(--subtext) 74%, var(--accent) 26%);
-  filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--accent) 40%, transparent));
+  color: color-mix(in srgb, var(--subtext) 56%, #c58f71 44%);
+  filter: drop-shadow(0 1px 1px color-mix(in srgb, #d6a37f 32%, transparent));
   transition: color 0.32s var(--ease-out-soft), filter 0.32s var(--ease-out-soft);
 }
 
 .tab.active .tab-icon {
-  color: var(--accent);
-  filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--accent) 65%, transparent));
+  color: color-mix(in srgb, var(--accent) 72%, #d68f75 28%);
+  filter: drop-shadow(0 1px 2px color-mix(in srgb, #d99d77 48%, transparent));
 }
 
 .tab-icon svg {
@@ -2456,15 +2456,15 @@ button.tab:active {
 }
 
 .tab-icon .tab-bg {
-  fill: color-mix(in srgb, currentColor 18%, #ffefc2 82%);
+  fill: color-mix(in srgb, currentColor 16%, #fff1d1 84%);
 }
 
 .tab-icon .tab-glyph {
-  fill: color-mix(in srgb, currentColor 84%, #1f2937 16%);
+  fill: color-mix(in srgb, currentColor 88%, #7a5d4d 12%);
 }
 
 .tab-icon .tab-glyph-soft {
-  fill: color-mix(in srgb, currentColor 70%, #fff 30%);
+  fill: color-mix(in srgb, currentColor 58%, #ffe4d1 42%);
 }
 
 .tab-icon .tab-cutout {
@@ -2479,11 +2479,11 @@ button.tab:active {
 }
 
 .tab-icon .tab-dot {
-  fill: #ffb6c8;
+  fill: #ffb59f;
 }
 
 .tab.active .tab-icon .tab-bg {
-  fill: color-mix(in srgb, currentColor 34%, #ffe7a2 66%);
+  fill: color-mix(in srgb, currentColor 30%, #ffe8b6 70%);
 }
 
 .tab span:last-child {

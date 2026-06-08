@@ -337,10 +337,10 @@ const petCopy = {
 };
 const pageTitles = {
   home: "今日",
-  record: "记一笔",
-  stats: "看看花",
-  insight: "小 AI 说",
-  settings: "我的小窝",
+  record: "记下这一笔",
+  stats: "账单与切片",
+  insight: "生活复盘",
+  settings: "设置",
 };
 
 const PET_SCENE_RULES = [
