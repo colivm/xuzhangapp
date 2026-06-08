@@ -18,6 +18,8 @@ struct RecordView: View {
     @State private var recordDetailsExpanded = false
     @State private var categoryGridExpanded = false
     @State private var noteEditorExpanded = false
+    @State private var previewLineWasRotated = false
+    @State private var showScenePackAngleSheet = false
     @FocusState private var focusedField: RecordField?
 
     private enum RecordField {
@@ -166,27 +168,43 @@ struct RecordView: View {
         "\(homeViewModel.selectedCategory.displayName) · \(homeViewModel.selectedDate.zhBillDateTime)"
     }
 
-    private var previewQuickActionTitle: String {
-        switch previewQuickActionProminence {
-        case .link:
-            return "换一句说法"
-        case .balanced:
-            return "✨ 换一句"
-        case .primary:
-            return "✨ 帮我写一句"
+    private var previewTier: RecordPreviewTier {
+        RecordPreviewTier.resolve(
+            .init(
+                amount: inputAmountValue,
+                itemsCount: homeViewModel.items.count,
+                hasBrand: previewBrand != nil || homeViewModel.recordPrefillResult?.source == "brand",
+                hasNote: !homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                previewLineWasRotated: previewLineWasRotated,
+                isEditing: false,
+                prefillSource: homeViewModel.recordPrefillResult?.source,
+                prefillConfidence: homeViewModel.recordPrefillResult?.confidence
+            )
+        )
+    }
+
+    private var previewCardMeta: String {
+        switch previewTier {
+        case .hidden:
+            return ""
+        case .whisper:
+            return "今天 · \(homeViewModel.selectedDate.formatted(.dateTime.hour().minute()))"
+        case .confirm:
+            return previewMeta
         }
     }
 
-    private var previewQuickActionProminence: LifeEntryPreviewCard.QuickActionProminence {
+    private var previewHint: String? {
+        guard previewTier == .confirm else { return nil }
+        let hasManualNote = !homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return hasManualNote ? nil : "想换说法，点下面轻字即可"
+    }
+
+    private var previewQuickActionTitle: String {
         if previewBrand != nil || homeViewModel.recordPrefillResult?.source == "brand" {
-            return .link
+            return "换说法"
         }
-        if let result = homeViewModel.recordPrefillResult,
-           result.source == "habit",
-           result.confidence >= 0.55 {
-            return .balanced
-        }
-        return .primary
+        return previewTier == .confirm ? "换一句" : "帮我写一句"
     }
 
     private var hasAmountDraft: Bool {
@@ -230,6 +248,7 @@ struct RecordView: View {
         let quickPackId = guessScenePackId()
         let packs = visibleScenePacks
         guard let quickPack = packs.first(where: { $0.id == quickPackId }) ?? packs.first else { return }
+        previewLineWasRotated = true
         applyScenePack(quickPack, keepSelectedCategory: true)
     }
 
@@ -248,9 +267,6 @@ struct RecordView: View {
                     Text("记一笔")
                         .font(.system(size: 22, weight: .bold))
                         .foregroundStyle(recordInk)
-
-                    // Segment control
-                    recordModeSegment
 
                     if selectedEntryMode == .manual {
                         manualForm
@@ -311,6 +327,11 @@ struct RecordView: View {
             }
         }
         .onChange(of: homeViewModel.inputAmount) { _, _ in
+            if !hasValidAmount {
+                previewLineWasRotated = false
+                categoryGridExpanded = false
+                noteEditorExpanded = false
+            }
             refreshRecommendedCategory()
         }
         .onChange(of: homeViewModel.inputTitle) { _, _ in
@@ -342,6 +363,15 @@ struct RecordView: View {
         .sheet(isPresented: $showOCRConfirmSheet) {
             OCRConfirmSheet(drafts: ocrConfirmDrafts) { selectedDrafts in
                 homeViewModel.importOCRDrafts(selectedDrafts, isMember: isMember)
+            }
+        }
+        .sheet(isPresented: $showScenePackAngleSheet) {
+            ScenePackAngleSheet(
+                scenePacks: visibleScenePacks,
+                scenePackDesc: scenePackDesc
+            ) { pack in
+                previewLineWasRotated = true
+                applyScenePack(pack)
             }
         }
         .onChange(of: showOCRConfirmSheet) { _, isPresented in
@@ -391,34 +421,30 @@ struct RecordView: View {
     private var manualForm: some View {
         VStack(alignment: .leading, spacing: 14) {
             amountField
+            ocrSideDoor
             if hasValidAmount {
                 lifeEntryPreview
             }
             saveRow
             if hasValidAmount {
-                recordDetailsFold
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("默认今天，如需补记点右侧日历。")
-                    Text("数据仅保存在本机，不上传云端。")
-                }
-                .font(.system(size: 11))
-                .foregroundStyle(AppColors.subtext.opacity(0.82))
+                expandedDetails
             }
         }
     }
 
     private var lifeEntryPreview: some View {
         LifeEntryPreviewCard(
+            tier: previewTier,
             headline: previewHeadline,
-            emotion: previewEmotion,
-            meta: previewMeta,
+            hint: previewHint,
+            emotion: previewTier == .whisper ? "" : previewEmotion,
+            meta: previewCardMeta,
             amountText: inputAmountValue.formatted(.cny),
-            quickActionTitle: previewQuickActionTitle,
-            quickActionProminence: previewQuickActionProminence,
+            primaryActionTitle: previewQuickActionTitle,
+            showAngleAction: previewLineWasRotated && previewTier == .confirm,
             onTap: {
                 dismissKeyboard()
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    recordDetailsExpanded = true
                     noteEditorExpanded = true
                 }
                 focusedField = .note
@@ -426,12 +452,53 @@ struct RecordView: View {
             onChangeCategory: {
                 dismissKeyboard()
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    recordDetailsExpanded = true
                     categoryGridExpanded = true
                 }
             },
-            onQuickAction: handlePreviewQuickAction
+            onPrimaryAction: handlePreviewQuickAction,
+            onWriteOwn: {
+                dismissKeyboard()
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    noteEditorExpanded = true
+                }
+                focusedField = .note
+            },
+            onAngleAction: {
+                dismissKeyboard()
+                showScenePackAngleSheet = true
+            }
         )
+    }
+
+    private var ocrSideDoor: some View {
+        Button {
+            dismissKeyboard()
+            selectedEntryMode = .ocr
+        } label: {
+            Text("有账单截图？从截图导入 →")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.86))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.48))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(AppColors.line.opacity(0.52), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var expandedDetails: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if categoryGridExpanded { categorySection }
+            if noteEditorExpanded { noteSection }
+        }
     }
 
     private var recordDetailsFold: some View {
@@ -886,6 +953,16 @@ struct RecordView: View {
     @ViewBuilder
     private var ocrForm: some View {
         VStack(alignment: .leading, spacing: 12) {
+            Button {
+                dismissKeyboard()
+                selectedEntryMode = .manual
+            } label: {
+                Text("回到手动记一笔 →")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.86))
+            }
+            .buttonStyle(.plain)
+
             Text("导入微信/支付宝账单截图，识别后先确认，再写入账单。")
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)

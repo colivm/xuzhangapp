@@ -1,143 +1,160 @@
 import SwiftUI
 
 struct LifeEntryPreviewCard: View {
-    enum QuickActionProminence {
-        case link
-        case balanced
-        case primary
-    }
-
+    let tier: RecordPreviewTier
     let headline: String
+    let hint: String?
     let emotion: String
     let meta: String
     let amountText: String
-    let quickActionTitle: String
-    let quickActionProminence: QuickActionProminence
+    let primaryActionTitle: String
+    let showAngleAction: Bool
     var onTap: () -> Void
     var onChangeCategory: () -> Void
-    var onQuickAction: () -> Void
+    var onPrimaryAction: () -> Void
+    var onWriteOwn: () -> Void
+    var onAngleAction: () -> Void
+
+    private var isWhisper: Bool { tier == .whisper }
+    private var isConfirm: Bool { tier == .confirm }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 9) {
-                    Text(headline)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(AppColors.text)
-                        .lineLimit(3)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 0) {
+            bodyContent
 
-                    Text(emotion)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(AppColors.accent.opacity(0.78))
-                        .lineLimit(1)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(AppColors.accent.opacity(0.08))
-                        )
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(AppColors.accent.opacity(0.18), lineWidth: 0.7)
-                        )
-                }
+            Divider()
+                .background(AppColors.line.opacity(0.38))
+                .padding(.top, 12)
 
-                Spacer(minLength: 8)
-
-                Text(amountText)
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.text.opacity(0.66))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-            }
-
-            HStack(spacing: 8) {
-                Text(meta)
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext.opacity(0.86))
-                    .lineLimit(1)
-
-                Spacer(minLength: 8)
-
-                Button("改分类", action: onChangeCategory)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.accent.opacity(0.86))
-                    .buttonStyle(.plain)
-            }
-
-            quickActionButton
+            footContent
+                .padding(.top, 10)
         }
-        .padding(16)
+        .padding(.horizontal, 17)
+        .padding(.top, isWhisper ? 15 : 17)
+        .padding(.bottom, 13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.thinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.34), AppColors.accent.opacity(0.07)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .allowsHitTesting(false)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(Color.white.opacity(0.58), lineWidth: 1)
-                .allowsHitTesting(false)
-        )
-        .shadow(color: AppColors.subtext.opacity(0.10), radius: 14, x: 0, y: 7)
-        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .shadow(color: isWhisper ? .clear : AppColors.subtext.opacity(0.08), radius: 14, x: 0, y: 6)
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .onTapGesture(perform: onTap)
     }
 
-    @ViewBuilder
-    private var quickActionButton: some View {
-        switch quickActionProminence {
-        case .link:
-            Button(quickActionTitle, action: onQuickAction)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(AppColors.accent.opacity(0.82))
-                .buttonStyle(.plain)
-        case .balanced:
-            Button(action: onQuickAction) {
-                Text(quickActionTitle)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppColors.accent.opacity(0.9))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+    private var bodyContent: some View {
+        VStack(alignment: .leading, spacing: isWhisper ? 7 : 8) {
+            Text(headline)
+                .font(.system(size: isWhisper ? 15.5 : 21, weight: isWhisper ? .regular : .semibold))
+                .foregroundStyle(isWhisper ? AppColors.text.opacity(0.76) : AppColors.text)
+                .lineSpacing(isWhisper ? 2 : 1)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let hint, !hint.isEmpty, isConfirm {
+                Text(hint)
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppColors.subtext.opacity(0.78))
+            }
+
+            if isConfirm && !emotion.isEmpty {
+                Text(emotion)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.accent.opacity(0.62))
+                    .lineLimit(1)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(AppColors.accent.opacity(0.10))
+                            .fill(Color.white.opacity(0.34))
                     )
                     .overlay(
                         Capsule(style: .continuous)
-                            .stroke(AppColors.accent.opacity(0.22), lineWidth: 1)
+                            .stroke(AppColors.accent.opacity(0.16), lineWidth: 0.7)
                     )
             }
-            .buttonStyle(.plain)
-        case .primary:
-            Button(action: onQuickAction) {
-                Text(quickActionTitle)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(AppColors.accent.opacity(0.9))
-                    )
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(Color.white.opacity(0.38), lineWidth: 1)
-                    )
+
+            HStack(spacing: 7) {
+                Text(meta)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext.opacity(0.82))
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                if isConfirm {
+                    Button("改", action: onChangeCategory)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.accent.opacity(0.72))
+                        .buttonStyle(.plain)
+                }
             }
-            .buttonStyle(.plain)
         }
+    }
+
+    private var footContent: some View {
+        HStack(alignment: .center, spacing: 10) {
+            HStack(spacing: 0) {
+                quietAction(primaryActionTitle, action: onPrimaryAction)
+                if showAngleAction && isConfirm {
+                    separator
+                    quietAction("换个角度", action: onAngleAction)
+                }
+                separator
+                quietAction("自己写一句", action: onWriteOwn)
+            }
+
+            Spacer(minLength: 10)
+
+            Text(amountText)
+                .font(.system(size: isWhisper ? 11 : 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppColors.subtext.opacity(isWhisper ? 0.48 : 0.58))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+    }
+
+    private func quietAction(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(AppColors.accent.opacity(0.68))
+            .buttonStyle(.plain)
+    }
+
+    private var separator: some View {
+        Text("|")
+            .font(.system(size: 12))
+            .foregroundStyle(AppColors.subtext.opacity(0.42))
+            .padding(.horizontal, 8)
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(.thinMaterial)
+            .overlay(
+                LinearGradient(
+                    colors: isWhisper
+                        ? [Color.white.opacity(0.34), Color.white.opacity(0.12)]
+                        : [Color.white.opacity(0.42), AppColors.accent.opacity(0.06)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(alignment: .leading) {
+                if isWhisper {
+                    Capsule(style: .continuous)
+                        .fill(AppColors.accent.opacity(0.32))
+                        .frame(width: 2)
+                        .padding(.vertical, 16)
+                }
+            }
+    }
+
+    private var cardBorder: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .stroke(
+                isWhisper ? AppColors.line.opacity(0.55) : AppColors.accent.opacity(0.18),
+                lineWidth: 1
+            )
+            .allowsHitTesting(false)
     }
 }

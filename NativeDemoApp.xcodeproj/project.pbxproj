@@ -48,6 +48,8 @@
 		D21300010000000000000001 /* RecordPrefillService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21300020000000000000001 /* RecordPrefillService.swift */; };
 		E10000010000000000000001 /* LifeEntryPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000020000000000000001 /* LifeEntryPreviewCard.swift */; };
 		F10000010000000000000001 /* MinimalOnboardingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000020000000000000001 /* MinimalOnboardingSheet.swift */; };
+		F12000010000000000000001 /* RecordPreviewTier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F12000020000000000000001 /* RecordPreviewTier.swift */; };
+		F12000030000000000000001 /* ScenePackAngleSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F12000040000000000000001 /* ScenePackAngleSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -95,6 +97,8 @@
 		D21300020000000000000001 /* RecordPrefillService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordPrefillService.swift; sourceTree = "<group>"; };
 		E10000020000000000000001 /* LifeEntryPreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeEntryPreviewCard.swift; sourceTree = "<group>"; };
 		F10000020000000000000001 /* MinimalOnboardingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinimalOnboardingSheet.swift; sourceTree = "<group>"; };
+		F12000020000000000000001 /* RecordPreviewTier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordPreviewTier.swift; sourceTree = "<group>"; };
+		F12000040000000000000001 /* ScenePackAngleSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackAngleSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -145,6 +149,7 @@
 			children = (
 				A10000130000000000000001 /* HomeItem.swift */,
 				A10000140000000000000001 /* AppSettings.swift */,
+				F12000020000000000000001 /* RecordPreviewTier.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -195,6 +200,7 @@
 				A10000480000000000000001 /* StatsWebView.swift */,
 				A100004E0000000000000001 /* InsightWebView.swift */,
 				A100004C0000000000000001 /* ScenePackSectionView.swift */,
+				F12000040000000000000001 /* ScenePackAngleSheet.swift */,
 				F10000020000000000000001 /* MinimalOnboardingSheet.swift */,
 				A10000190000000000000001 /* SettingsView.swift */,
 				A10000390000000000000001 /* MemberPricingView.swift */,
@@ -331,6 +337,8 @@
 				D21300010000000000000001 /* RecordPrefillService.swift in Sources */,
 				E10000010000000000000001 /* LifeEntryPreviewCard.swift in Sources */,
 				F10000010000000000000001 /* MinimalOnboardingSheet.swift in Sources */,
+				F12000010000000000000001 /* RecordPreviewTier.swift in Sources */,
+				F12000030000000000000001 /* ScenePackAngleSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
