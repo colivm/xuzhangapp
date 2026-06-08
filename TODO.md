@@ -1,6 +1,6 @@
 # 叙账 · 进度清单
 
-> 更新时间：**2026-06-07**（B2.11/B2.12 + 夜宵时段备注补齐；待真机验收）  
+> 更新时间：**2026-06-08**（记账链路愿景 + F1.3 品牌池 + B2.13 习惯预填立项）  
 > 分支：`feature/生活切片和会员权益`  
 > API：`https://api.xuzhangapp.com` · 登录：手机号验证码（v0.1）
 
@@ -15,6 +15,7 @@
 | **1** | **Mac 拉最新 → Archive → TestFlight**，按下方「回归 16 条」 | 验 B2.8/B2.9/B2.11/B2.12、**D1.1 故事图非报表感**、Release 全门禁 | 0.5～1 天 |
 | **2** | 购买 **welcome 文案** + 用尽次数话术走读 | 付费瞬间温度；与分享图「被看见」同频 | 0.5 天 |
 | **3** | **B2.5** 切片 Sheet 播放过程 UI | 过程叙、产物叙不割裂 | 1 天 |
+| **4** | **F1.2 → F1.3 → B2.13** 记账链路（见 [`RECORDING_CHAIN_VISION_v0.1.md`](RECORDING_CHAIN_VISION_v0.1.md)） | **缩短记账链路、叙事自动长出来** | F1.2 先；F1.3/B2.13 各 1 PR |
 | 并行 | 栏 B：备案、Spug 短信、ASC Product ID | 上架 blocker | — |
 
 **TestFlight 回归 16 条（哲学对齐版）**
@@ -97,6 +98,7 @@
 | - [x] 记 ≥3 笔 → 看看花角标/卡片提示 | - [ ] 生产 API 全链路再验 |
 | - [x] B2.7 分类锁定（真机再验） | |
 | - [x] **B2.8 智能分类** — `CategoryRecommendService` | |
+| - [ ] **B2.13 个人习惯预填** — 只输金额 → 分类/备注/情绪 — [`AGENT_PROMPT_B2.13`](AGENT_PROMPT_B2.13_HABIT_PREFILL.md) | |
 | - [x] **B2.9 天气宠物** — `WeatherCompanionService` / `PetCompanionService` | |
 | - [x] **B2.10** 场景备注池 | |
 | - [x] A4 场景包哲学 + tagline | |
@@ -106,17 +108,17 @@
 | - [x] B2.6 PlaybackCopyPool 接入（MVP；对照 md 可补全条数） | - [x] 隐私 / 协议 URL 上线 |
 | - [x] D1 播完分享图 — §10.9（周章；月章 v0.2） | - [ ] ASC 隐私问卷 + [`APP_STORE_LISTING.md`](APP_STORE_LISTING.md) |
 | - [x] **D1.1** 分享海报叙事化（代码）— [`AGENT_PROMPT_D1.1`](AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md) | |
-| - [ ] **D1.1 真机验收** — 回归第 13 条：故事图非报表感 | |
 | - [x] **心意往来包** B2.11 — [`AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md`](AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md) | |
 | - [x] **情绪标签 polish** B2.12（7 类；health/home/social 不动）— [`AGENT_PROMPT_B2.12_EMOTION_TAGS.md`](AGENT_PROMPT_B2.12_EMOTION_TAGS.md) | |
 | - [ ] 免费次数话术与 App 内 enforce 再走一遍 | |
 | | |
-| **路径 3 · 智能导入** | **生产安全** |
+| **路径 3 · 智能导入 · 记账链路** | **生产安全** |
 | - [x] F1：OCR 四步主链路（`OCRConfirmSheet` + 草稿区） | - [ ] Spug 短信 / 收紧 dev 码 |
-| - [ ] F1 可选：删 `#if DEBUG`「演示 OCR」（Release 已不可见） | - [ ] `APP_PROXY_TOKEN`、防火墙 |
-| - [x] 识别失败 / 取消不扣次（逻辑已有，真机再验） | - [ ] pm2/systemd |
-| | - [x] 主域 HTTPS |
-| | - [ ] API 子域 SSL 续期（2026-08-29 前） |
+| - [ ] **F1.2** OCR 真机回归 — [`AGENT_PROMPT_F1.2`](AGENT_PROMPT_F1.2_OCR_STATS_REGRESSION.md) | - [ ] `APP_PROXY_TOKEN`、防火墙 |
+| - [ ] **F1.3** 品牌叙事池 — [`AGENT_PROMPT_F1.3`](AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md) | - [ ] pm2/systemd |
+| - [ ] F1.3b Logo 识别（可选二期） | - [x] 主域 HTTPS |
+| - [ ] F1 可选：删 `#if DEBUG`「演示 OCR」（Release 已不可见） | - [ ] API 子域 SSL 续期（2026-08-29 前） |
+| - [x] 识别失败 / 取消不扣次（逻辑已有，真机再验） | |
 | | |
 | **路径 4 · 会员与 AI** | **TestFlight → 商店** |
 | - [x] A3 AI 议边界（iOS） | - [x] TestFlight 首测通过 |
@@ -178,6 +180,9 @@
 | [`AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md`](AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md) | Task D1.1 分享海报（✅ 代码；真机验 ⏳） |
 | [`AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md`](AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md) | Task B2.11 心意往来包（✅） |
 | [`AGENT_PROMPT_B2.12_EMOTION_TAGS.md`](AGENT_PROMPT_B2.12_EMOTION_TAGS.md) | Task B2.12 情绪标签 7 类（✅） |
+| [`RECORDING_CHAIN_VISION_v0.1.md`](RECORDING_CHAIN_VISION_v0.1.md) | **缩短记账链路、叙事自动长出来** — 双引擎 + cascade |
+| [`AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md`](AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md) | Task F1.3 品牌叙事池（⏳） |
+| [`AGENT_PROMPT_B2.13_HABIT_PREFILL.md`](AGENT_PROMPT_B2.13_HABIT_PREFILL.md) | Task B2.13 个人习惯预填（⏳） |
 | [`CATEGORY_SCENE_COPY_AUDIT_v0.1.md`](CATEGORY_SCENE_COPY_AUDIT_v0.1.md) | 分类/场景包内核审计 |
 | [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md) | Task A4（已完成；≠ B2.10） |
 | [`TEST_CASES_v0.1.md`](TEST_CASES_v0.1.md) | 全量测试用例 |
@@ -199,3 +204,4 @@
 | 2026-06-06 | 新增 AGENT_PROMPT_B2.9 天气宠物 + B2.8 合并说明 |
 | 2026-06-06 | 核查：B2.8/B2.9/backend dev 路由 ✅；回归 13 条 |
 | 2026-06-07 | **D1.1** 周分享海报 polish ✅；回归扩 **14** 条；体验 ~80% |
+| 2026-06-08 | 记账链路愿景 + **F1.3** 品牌叙事池 + **B2.13** 习惯预填 Agent prompt；北极星 §5.2 |

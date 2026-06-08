@@ -34,7 +34,12 @@ struct StatsWebView: View {
             items = homeViewModel.items.filter { $0.createdAt >= start && $0.createdAt < end }
         } else {
             switch selectedPeriod {
-            case .week: items = homeViewModel.items.filter { Calendar.current.isDate($0.createdAt, equalTo: .now, toGranularity: .weekOfYear) }
+            case .week:
+                if let interval = PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: .now) {
+                    items = homeViewModel.items.filter { $0.createdAt >= interval.start && $0.createdAt < interval.end }
+                } else {
+                    items = []
+                }
             case .month: items = homeViewModel.items.filter { Calendar.current.isDate($0.createdAt, equalTo: .now, toGranularity: .month) }
             case .year: items = homeViewModel.items.filter { Calendar.current.isDate($0.createdAt, equalTo: .now, toGranularity: .year) }
             }
@@ -361,7 +366,7 @@ struct StatsWebView: View {
             let remaining = quotaStore.monthRemaining(isMember: false)
             return remaining > 0
                 ? "新用户专享剩余 \(remaining)/3 次 · 用完后需会员"
-                : "本周切片仍可按周免费播放"
+                : "本月生活章体验已用完 · 会员可无限回看"
         }
     }
 

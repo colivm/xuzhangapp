@@ -689,6 +689,10 @@ struct RecordView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
 
+            Text("请保证每笔完整在画面内，上下留一点边；首尾笔被裁切可能漏识别。")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext.opacity(0.86))
+
             PhotosPicker(selection: $selectedPhoto, matching: .images, photoLibrary: .shared()) {
                 Label("导入账单截图", systemImage: "photo")
                     .font(.system(size: 16, weight: .medium))
@@ -749,7 +753,8 @@ struct RecordView: View {
                 onCategoryChange: { id, category in homeViewModel.updateOCRDraftCategory(id: id, category: category) },
                 onAmountChange: { id, amount in homeViewModel.updateOCRDraftAmount(id: id, amount: amount) },
                 onDelete: { id in homeViewModel.deleteOCRDraftItem(id: id) },
-                onClearResolved: homeViewModel.clearResolvedOCRDrafts
+                onClearResolved: homeViewModel.clearResolvedOCRDrafts,
+                onResolveAllPending: homeViewModel.resolveAllPendingOCRDrafts
             )
             .padding(.top, 6)
         }

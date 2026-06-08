@@ -70,7 +70,9 @@ final class OCRService {
         let handler = VNImageRequestHandler(cgImage: cgImage)
         try handler.perform([request])
 
-        let observations = request.results ?? []
+        let observations = (request.results ?? []).sorted {
+            $0.boundingBox.minY > $1.boundingBox.minY
+        }
         let candidates = observations.compactMap { $0.topCandidates(1).first }
         let lines = candidates
             .map(\.string)
@@ -246,7 +248,7 @@ final class OCRService {
                 windowText: windowText
             )
             let dayKey = Calendar.current.startOfDay(for: date).timeIntervalSince1970
-            let key = "\(title)|\(Int((amount * 100).rounded()))|\(Int(dayKey))"
+            let key = "\(index)|\(Int((amount * 100).rounded()))|\(Int(dayKey))"
             guard !seenKeys.contains(key) else { continue }
             seenKeys.insert(key)
 
@@ -283,7 +285,7 @@ final class OCRService {
         let title: String?
         if match.range(at: 1).location != NSNotFound {
             let rawTitle = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
-            title = isLikelyListTitle(rawTitle) ? rawTitle : nil
+            title = isLikelyListTitle(rawTitle) && !isPureAmountLine(rawTitle) ? rawTitle : nil
         } else {
             title = nil
         }
@@ -296,10 +298,30 @@ final class OCRService {
         case .alipay:
             return nearbyTitle(lines: lines, amountIndex: amountIndex, offsets: [-1, -2, -3, 1])
         case .wechat:
-            return nearbyTitle(lines: lines, amountIndex: amountIndex, offsets: [-1, -2, 1, -3])
+            return wechatListTitle(lines: lines, amountIndex: amountIndex)
         case .generic:
             return nearbyTitle(lines: lines, amountIndex: amountIndex, offsets: [-1, -2, 1, -3, 2])
         }
+    }
+
+    private func wechatListTitle(lines: [String], amountIndex: Int) -> String? {
+        guard amountIndex > 0 else { return nil }
+        let start = amountIndex - 1
+        let end = max(0, amountIndex - 4)
+
+        for candidateIndex in stride(from: start, through: end, by: -1) {
+            let candidate = lines[candidateIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            if isPureAmountLine(candidate) || signedListAmountInfo(in: candidate) != nil {
+                break
+            }
+            if isListTimeLine(candidate) || isListStatusLine(candidate) {
+                continue
+            }
+            if containsChinese(candidate), isLikelyListTitle(candidate) {
+                return candidate
+            }
+        }
+        return nil
     }
 
     private func nearbyTitle(lines: [String], amountIndex: Int, offsets: [Int]) -> String? {
@@ -315,7 +337,7 @@ final class OCRService {
     }
 
     private func isLikelyListTitle(_ value: String) -> Bool {
-        guard isUsableTitle(value) else { return false }
+        guard isUsableTitle(value), !isPureAmountLine(value) else { return false }
         let blocked = [
             "¥", "￥", "金额", "时间", "订单", "单号", "支付", "付款", "收款", "交易", "账单", "详情",
             "当前状态", "成功", "失败", "付款方式", "筛选", "全部", "月支出", "月收入", "余额", "零钱",
@@ -418,9 +440,43 @@ final class OCRService {
     private func isUsableTitle(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2, trimmed.count <= 40 else { return false }
+        if isPureAmountLine(trimmed) { return false }
         if trimmed.range(of: #"^\d{4}[-/.年]"#, options: .regularExpression) != nil { return false }
         if trimmed.range(of: #"[¥￥]\s*-?\d"#, options: .regularExpression) != nil { return false }
         return true
+    }
+
+    private func isPureAmountLine(_ value: String) -> Bool {
+        let trimmed = value
+            .replacingOccurrences(of: ",", with: "")
+            .replacingOccurrences(of: "\u{00A5}", with: "")
+            .replacingOccurrences(of: "\u{FFE5}", with: "")
+            .replacingOccurrences(of: "\u{697C}", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.range(
+            of: #"^-?\s*[0-9]+(?:\.[0-9]{1,2})?\s*$"#,
+            options: .regularExpression
+        ) != nil
+    }
+
+    private func isListTimeLine(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.range(of: #"^\d{1,2}:\d{2}(?::\d{2})?$"#, options: .regularExpression) != nil {
+            return true
+        }
+        if trimmed.range(of: #"^\d{1,2}[-/.]\d{1,2}\s+\d{1,2}:\d{2}"#, options: .regularExpression) != nil {
+            return true
+        }
+        return trimmed.range(of: #"^(今天|昨天|前天)\s+\d{1,2}:\d{2}"#, options: .regularExpression) != nil
+    }
+
+    private func isListStatusLine(_ value: String) -> Bool {
+        let statusWords = ["交易成功", "支付成功", "已退款", "已全额退款", "等待确认收货", "交易关闭"]
+        return statusWords.contains { value.contains($0) }
+    }
+
+    private func containsChinese(_ value: String) -> Bool {
+        value.range(of: #"\p{Han}"#, options: .regularExpression) != nil
     }
 
     private func dateNear(labels: [String], in lines: [String]) -> Date? {

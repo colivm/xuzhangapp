@@ -227,6 +227,7 @@ struct OCRDraftPanel: View {
     let onAmountChange: (UUID, Double) -> Void
     let onDelete: (UUID) -> Void
     let onClearResolved: () -> Void
+    let onResolveAllPending: () -> Void
 
     private var visibleGroups: [(key: String, importedAt: Date, items: [HomeItem])] {
         let grouped = Dictionary(grouping: items) { item in
@@ -265,10 +266,16 @@ struct OCRDraftPanel: View {
                         .foregroundStyle(AppColors.subtext)
                 }
                 Spacer()
-                Button("收起已整理") { onClearResolved() }
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(resolvedCount > 0 ? AppColors.accent : AppColors.subtext.opacity(0.45))
-                    .disabled(resolvedCount == 0)
+                VStack(alignment: .trailing, spacing: 8) {
+                    Button("\u{4E00}\u{952E}\u{6807}\u{8BB0}\u{5DF2}\u{6574}\u{7406}") { onResolveAllPending() }
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(pendingItems.isEmpty ? AppColors.subtext.opacity(0.45) : AppColors.accent)
+                        .disabled(pendingItems.isEmpty)
+                    Button("\u{5B8C}\u{6210}\u{6574}\u{7406}\u{FF08}\(resolvedCount) \u{7B14}\u{FF09}") { onClearResolved() }
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(resolvedCount > 0 ? AppColors.accent : AppColors.subtext.opacity(0.45))
+                        .disabled(resolvedCount == 0)
+                }
             }
 
             if items.isEmpty {
@@ -292,21 +299,9 @@ struct OCRDraftPanel: View {
                                     item: item,
                                     onToggleResolved: onToggleResolved,
                                     onCategoryChange: onCategoryChange,
-                                    onAmountChange: onAmountChange
+                                    onAmountChange: onAmountChange,
+                                    onDelete: onDelete
                                 )
-                                .overlay(alignment: .topTrailing) {
-                                    Button(role: .destructive) {
-                                        onDelete(item.id)
-                                    } label: {
-                                        Image(systemName: "trash")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(AppColors.subtext.opacity(0.8))
-                                            .frame(width: 30, height: 30)
-                                            .background(Color.white.opacity(0.58), in: Circle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .padding(10)
-                                }
                             }
                         }
                     }
@@ -330,6 +325,7 @@ private struct OCRDraftRow: View {
     let onToggleResolved: (UUID, Bool) -> Void
     let onCategoryChange: (UUID, HomeItem.Category) -> Void
     let onAmountChange: (UUID, Double) -> Void
+    let onDelete: (UUID) -> Void
 
     @State private var amountText: String
 
@@ -337,12 +333,14 @@ private struct OCRDraftRow: View {
         item: HomeItem,
         onToggleResolved: @escaping (UUID, Bool) -> Void,
         onCategoryChange: @escaping (UUID, HomeItem.Category) -> Void,
-        onAmountChange: @escaping (UUID, Double) -> Void
+        onAmountChange: @escaping (UUID, Double) -> Void,
+        onDelete: @escaping (UUID) -> Void
     ) {
         self.item = item
         self.onToggleResolved = onToggleResolved
         self.onCategoryChange = onCategoryChange
         self.onAmountChange = onAmountChange
+        self.onDelete = onDelete
         _amountText = State(initialValue: String(format: "%.2f", item.amount))
     }
 
@@ -420,6 +418,7 @@ private struct OCRDraftRow: View {
             Text(isResolved ? "已整理" : "待整理 ↓")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(isResolved ? AppColors.accent : AppColors.subtext)
+            deleteButton
         }
     }
 
@@ -429,11 +428,27 @@ private struct OCRDraftRow: View {
             set: { onCategoryChange(item.id, $0) }
         )) {
             ForEach(HomeItem.Category.allCases) { category in
-                Text(category.displayName).tag(category)
+                Text(category.displayName)
+                    .lineLimit(1)
+                    .tag(category)
             }
         }
         .pickerStyle(.menu)
         .font(.system(size: 12))
+        .frame(minWidth: 76, alignment: .leading)
+    }
+
+    private var deleteButton: some View {
+        Button(role: .destructive) {
+            onDelete(item.id)
+        } label: {
+            Image(systemName: "trash")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppColors.subtext.opacity(0.82))
+                .frame(width: 28, height: 28)
+                .background(Color.white.opacity(0.58), in: Circle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var amountEditor: some View {

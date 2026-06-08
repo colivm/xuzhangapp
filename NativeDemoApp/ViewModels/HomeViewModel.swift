@@ -322,6 +322,23 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
+    func resolveAllPendingOCRDrafts() {
+        var changedItems: [HomeItem] = []
+        for idx in items.indices where items[idx].draftMeta?.status == .pending {
+            items[idx].draftMeta?.status = .resolved
+            items[idx].updatedAt = Date()
+            changedItems.append(items[idx])
+        }
+        guard !changedItems.isEmpty else { return }
+        persistItems()
+        analyticsService.track("ocr_drafts_resolve_all", props: ["count": String(changedItems.count)])
+        Task {
+            for item in changedItems {
+                await syncUpsertToCloud(item)
+            }
+        }
+    }
+
     func delete(at offsets: IndexSet) {
         let deletedIDs = offsets.compactMap { items.indices.contains($0) ? items[$0].id : nil }
         items.remove(atOffsets: offsets)
@@ -807,9 +824,12 @@ final class HomeViewModel: ObservableObject {
 
     private func refreshRouteGuidanceIfNeeded() {
         guard activeRouteGuidance == nil else { return }
-        let weekCount = items.filter {
-            Calendar.current.isDate($0.createdAt, equalTo: .now, toGranularity: .weekOfYear)
-        }.count
+        let weekCount: Int
+        if let interval = PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: .now) {
+            weekCount = items.filter { $0.createdAt >= interval.start && $0.createdAt < interval.end }.count
+        } else {
+            weekCount = 0
+        }
         if weekCount >= 3 && routeQuotaStore.weekRemaining(isMember: false) > 0 {
             emitRouteGuidance(.weekSliceReady)
         } else if items.count >= 5 && !routeQuotaStore.hasCompletedWeekPlaybackEver() {
@@ -855,7 +875,8 @@ final class HomeViewModel: ObservableObject {
         return items.filter { item in
             switch period {
             case .week:
-                return calendar.isDate(item.createdAt, equalTo: .now, toGranularity: .weekOfYear)
+                guard let interval = PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: .now) else { return false }
+                return item.createdAt >= interval.start && item.createdAt < interval.end
             case .month:
                 return calendar.isDate(item.createdAt, equalTo: .now, toGranularity: .month)
             }

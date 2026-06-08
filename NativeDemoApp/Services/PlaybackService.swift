@@ -697,7 +697,7 @@ final class PlaybackService {
             "count": "\(rows.count)",
             "rangeLabel": "这一周"
         ]
-        return PlaybackCopyPool.teaser(seed: copySeed, values: values)
+        return PlaybackCopyPool.weekTeaser(seed: copySeed, values: values)
     }
 
     private func weeklyShareAnchorLine(from summary: SummaryPlayback) -> String? {
@@ -726,7 +726,7 @@ final class PlaybackService {
                 "count": "\(segments.reduce(0) { $0 + $1.count })",
                 "rangeLabel": "这个月"
             ]
-            return PlaybackCopyPool.teaser(seed: copySeed, values: values)
+            return PlaybackCopyPool.monthTeaser(seed: copySeed, values: values)
         }
         return changeText
     }

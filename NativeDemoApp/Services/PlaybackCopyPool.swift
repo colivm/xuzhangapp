@@ -21,7 +21,15 @@ enum PlaybackCopyPool {
     }
 
     static func teaser(seed: String, values: [String: String]) -> String {
-        render(pick(teasers, seed: seed), values: values)
+        weekTeaser(seed: seed, values: values)
+    }
+
+    static func weekTeaser(seed: String, values: [String: String]) -> String {
+        render(pick(weekTeasers, seed: seed), values: values)
+    }
+
+    static func monthTeaser(seed: String, values: [String: String]) -> String {
+        render(pick(monthTeasers, seed: seed), values: values)
     }
 
     private static let fallbackGroup = PlaybackCopyGroup(
@@ -206,11 +214,18 @@ enum PlaybackCopyPool {
         )
     ]
 
-    private static let teasers = [
+    private static let weekTeasers = [
         "{busiestDayShort} 最热闹 · {topCategory} 更靠前",
         "这一周，{topCategory} 更常出现",
         "{count} 笔小痕迹，串起这一周",
         "{rangeLabel} · 约半分钟讲完"
+    ]
+
+    private static let monthTeasers = [
+        "{rangeLabel}里，「{topCategory}」最常被看见",
+        "这个月，「{topCategory}」像一条清楚的生活线索",
+        "{count} 笔记录，把这个月慢慢讲清楚",
+        "{rangeLabel}的生活轮廓，已经被记下来了"
     ]
 
     private static func render(_ template: String, values: [String: String]) -> String {
