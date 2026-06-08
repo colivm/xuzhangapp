@@ -55,6 +55,7 @@ NativeDemoApp
 - **`IMPLEMENTATION_FOR_CODEX.md`**：给 Codex/Agent 的分任务实现单（代码锚点、禁止项、验收）。
 - **`PROJECT_SETUP.md`**：项目搭建总览（本机开发、生产 ECS、Staging、iOS 联调）。
 - `PROJECT_ANALYSIS.md`：架构分析与完成度评估。
+- **`PROJECT_SUMMARY_v0.1.md`**：多轮迭代后的项目总结（哲学、能力、完成度、下一步；**优先读**）。
 - `STAGING_ENV_SETUP.md`：同机 Staging 部署与分支发版流程。
 - `PRD_v0.1.md`：页面清单、字段设计、Prompt 模板与技术结构说明。
 - **`PRODUCT_PLAYBACK_MEMBERSHIP_v0.1.md`**：生活切片、今日回放、场景包、OCR 与免费/会员权益设计。

@@ -183,7 +183,8 @@
 | [`RECORDING_CHAIN_VISION_v0.1.md`](RECORDING_CHAIN_VISION_v0.1.md) | **缩短记账链路、叙事自动长出来** — 双引擎 + cascade |
 | [`AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md`](AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md) | Task F1.3 品牌叙事池（⏳） |
 | [`AGENT_PROMPT_B2.13_HABIT_PREFILL.md`](AGENT_PROMPT_B2.13_HABIT_PREFILL.md) | Task B2.13 个人习惯预填（✅ 代码 · ⏳ TF 验） |
-| [`CATEGORY_SCENE_COPY_AUDIT_v0.1.md`](CATEGORY_SCENE_COPY_AUDIT_v0.1.md) | 分类/场景包内核审计 |
+| [`PROJECT_SUMMARY_v0.1.md`](PROJECT_SUMMARY_v0.1.md) | **项目总结**（哲学、能力、完成度、下一步） |
+| [`PROJECT_ANALYSIS.md`](PROJECT_ANALYSIS.md) | 早期架构分析（部分已旧，以 SUMMARY 为准） |
 | [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md) | Task A4（已完成；≠ B2.10） |
 | [`TEST_CASES_v0.1.md`](TEST_CASES_v0.1.md) | 全量测试用例 |
 | [`APP_STORE_LISTING.md`](APP_STORE_LISTING.md) | 上架截图与自检 |
