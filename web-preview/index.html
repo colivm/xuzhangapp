@@ -17,20 +17,36 @@
         <p id="toast" class="toast hidden"></p>
         <div class="page-stack">
         <section class="page active" id="homePage">
-          <article class="panel hero">
-            <p class="muted">今日已花</p>
-            <p class="money" id="todayTotal">¥0.00</p>
-            <p class="muted" id="weekTotal">本周累计 ¥0.00</p>
+          <article class="panel hero home-story-hero">
+            <p class="muted home-kicker">今日小记</p>
+            <h2 id="homeStoryTitle">今天先记下来</h2>
+            <p id="homeStorySubtitle" class="home-story-subtitle">晚上再回头看，这一天会慢慢有轮廓。</p>
+            <div class="home-story-foot">
+              <span id="todayTotal">¥0.00</span>
+              <span id="weekTotal">本周累计 ¥0.00</span>
+            </div>
           </article>
 
-          <div class="stack">
-            <button id="quickManualBtn" type="button" class="primary-btn quick-btn mega-btn" data-jump="record">＋ 快速记账</button>
-          </div>
+          <section class="home-action-grid" aria-label="今日动作">
+            <button id="quickManualBtn" type="button" class="home-action-card home-action-primary" data-jump="record">
+              <span class="home-action-icon">＋</span>
+              <span>
+                <strong>记一笔</strong>
+                <small>只输金额也可以</small>
+              </span>
+            </button>
+            <button id="homePlaybackEntryBtn" type="button" class="home-action-card">
+              <span class="home-action-icon">▶</span>
+              <span>
+                <strong>听今日回放</strong>
+                <small id="homePlaybackEntryHint">有记录后可播放</small>
+              </span>
+            </button>
+          </section>
 
-          <section class="panel">
+          <section class="panel home-record-panel">
             <div class="panel-head">
-              <h2>今日账单</h2>
-              <button id="playbackTodayBtn" type="button" class="ghost-mini-btn">账单回放</button>
+              <h2>今天留下的痕迹</h2>
             </div>
             <ul id="homeTodayList" class="item-list"></ul>
             <div id="homeTodayEmptyArt" class="today-empty-art" aria-hidden="true">
@@ -45,65 +61,93 @@
             </div>
           </section>
 
-          <section id="homeActionCard" class="panel">
-            <h2>近期生活节奏</h2>
+          <section id="homeActionCard" class="panel home-action-note">
+            <h2>这一段生活</h2>
             <p id="homeActionCardMeta" class="muted micro-hint"></p>
             <p id="homeActionCardText" class="muted">随手记几笔，这里会慢慢长出你的生活痕迹。</p>
           </section>
         </section>
 
         <section class="page" id="recordPage">
-          <section class="panel">
-            <h2 id="recordFormTitle">记账</h2>
+          <section class="panel record-compose-panel">
+            <p class="muted record-kicker">把一笔生活放进账本</p>
+            <h2 id="recordFormTitle">记下这一笔</h2>
             <div id="recordModeSegment" class="segment">
               <button class="mode-btn active" data-mode="manual">手动录入</button>
               <button class="mode-btn" data-mode="ocr">智能导入</button>
             </div>
 
             <div id="manualForm">
-              <label class="field">
-                <span>金额</span>
+              <section id="amountStage" class="amount-stage">
                 <div class="amount-input-wrap">
                   <input id="amountInput" type="text" inputmode="decimal" placeholder="0.00" />
                   <div id="amountDisplay" class="amount-display" aria-hidden="true"></div>
                 </div>
-                <p id="amountAssist" class="muted amount-assist">输入金额，我帮你自动归类</p>
+                <p id="amountAssist" class="muted amount-assist">记下一笔今天的生活</p>
                 <div id="amountQuickKeyboard" class="amount-quick-keyboard hidden" aria-label="金额快捷键">
                   <button type="button" class="amount-key" data-amount-action="dot00">.00</button>
                   <button type="button" class="amount-key" data-amount-action="plus10">+10元</button>
                   <button type="button" class="amount-key" data-amount-action="plus50">+50元</button>
                   <button type="button" class="amount-key" data-amount-action="plus100">+100元</button>
                 </div>
-              </label>
-              <label id="categoryField" class="field">
-                <span>分类（点一下即可）</span>
-                <div id="categoryOptions" class="category-options inline"></div>
-              </label>
-              <p id="networkHint" class="muted privacy-tip hidden">AI 推荐需联网，无网络时可手动选择。</p>
-              <label id="noteField" class="field secondary-field">
-                <input id="titleInput" type="text" placeholder="已自动归类，可补充点细节（不填也能保存）" />
-                <div id="noteSuggestions" class="note-suggestions hidden"></div>
-              </label>
-              <section id="memberScenePackBlock" class="member-scene-pack hidden">
-                <div class="member-scene-pack-head">
-                  <p class="member-scene-pack-title">小宠物的记账小帮手</p>
-                  <button id="memberScenePackEntryBtn" type="button" class="member-scene-pack-entry">解锁会员</button>
-                </div>
-                <p id="memberScenePackHint" class="muted">选个场景，我帮你猜今天花在哪，自动填好备注，帮你省下打字的功夫～</p>
-                <div id="memberScenePackList" class="member-scene-pack-list"></div>
               </section>
-              <div class="save-row">
-                <button id="saveRecordBtn" type="button" class="primary-btn full-btn save-btn">保存</button>
+
+              <section id="lifeEntryPreview" class="life-entry-preview hidden">
+                <div class="life-entry-main">
+                  <p id="lifeEntryHeadline" class="life-entry-headline">这一笔会这样记下</p>
+                  <span id="lifeEntryAmount" class="life-entry-amount">¥0.00</span>
+                </div>
+                <p id="lifeEntryEmotion" class="life-entry-emotion hidden"></p>
+                <p id="lifeEntryMeta" class="life-entry-meta muted"></p>
+                <div id="lifeEntryQuickActions" class="life-entry-quick-actions"></div>
+              </section>
+
+              <div id="recordPrimaryActions" class="save-row">
+                <button id="saveRecordBtn" type="button" class="primary-btn full-btn save-btn">放进账本</button>
                 <button id="editDateBtn" type="button" class="date-icon-btn" title="补记日期">📅</button>
               </div>
+
+              <section id="recordDetailsFold" class="record-details-fold hidden">
+                <button id="recordDetailsToggle" type="button" class="record-details-toggle">
+                  <span>补充细节 / 改分类</span>
+                  <small id="recordDetailsToggleHint">展开</small>
+                </button>
+                <div id="recordDetailsBody" class="record-details-body hidden">
+                  <label id="categoryField" class="field">
+                    <span>这一笔更像哪类生活</span>
+                    <div id="categoryOptions" class="category-options inline"></div>
+                  </label>
+                  <p id="networkHint" class="muted privacy-tip hidden">AI 推荐需联网，无网络时可手动选择。</p>
+                  <label id="noteField" class="field secondary-field">
+                    <input id="titleInput" type="text" placeholder="这一笔像什么？不写也能保存" />
+                    <div id="noteSuggestions" class="note-suggestions hidden"></div>
+                  </label>
+                  <section id="memberScenePackBlock" class="member-scene-pack hidden">
+                    <div class="member-scene-pack-head">
+                      <p class="member-scene-pack-title">省力写一句</p>
+                      <button id="memberScenePackEntryBtn" type="button" class="member-scene-pack-entry">解锁会员</button>
+                    </div>
+                    <p id="memberScenePackHint" class="muted">选个场景，让备注更像一段生活，而不是一行账。</p>
+                    <div id="memberScenePackList" class="member-scene-pack-list"></div>
+                  </section>
+                  <p id="dateHint" class="muted privacy-tip">默认今天，如需补记点右侧日历。</p>
+                  <p id="localPrivacyHint" class="muted privacy-tip">数据仅保存在本机，不上传云端。</p>
+                </div>
+              </section>
+
+              <div id="prefillDemoBar" class="prefill-demo-bar">
+                <span class="muted">开发预览：</span>
+                <button type="button" data-prefill-mode="brand">品牌（瑞幸）</button>
+                <button type="button" data-prefill-mode="habit">习惯（地铁）</button>
+                <button type="button" data-prefill-mode="generic">冷启动</button>
+              </div>
+
               <button id="deleteRecordBtn" type="button" class="full-btn delete-record-btn hidden">删除账单</button>
               <input id="recordDateInput" type="date" class="hidden-date-input" />
-              <p id="dateHint" class="muted privacy-tip">默认今天，如需补记点右侧日历。</p>
-              <p id="localPrivacyHint" class="muted privacy-tip">数据仅保存在本机，不上传云端。</p>
             </div>
 
             <div id="ocrForm" class="hidden">
-              <p class="muted">导入微信/支付宝账单，自动识别并整理。</p>
+              <p class="muted">从账单里捞生活片段，确认后再放进账本。</p>
               <input id="ocrImageInput" type="file" accept="image/*" class="hidden" />
               <button id="ocrPickImageBtn" class="primary-btn full-btn">导入账单 / 识别票据</button>
               <div id="ocrLoadingBox" class="ocr-loading-box hidden">

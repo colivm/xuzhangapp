@@ -16,7 +16,8 @@
 | **2** | 购买 **welcome 文案** + 用尽次数话术走读 | 付费瞬间温度；与分享图「被看见」同频 | 0.5 天 |
 | **3** | **B2.5** 切片 Sheet 播放过程 UI | 过程叙、产物叙不割裂 | 1 天 |
 | **4** | **F1.2 → F1.3 → B2.13** 记账链路（见 [`RECORDING_CHAIN_VISION_v0.1.md`](RECORDING_CHAIN_VISION_v0.1.md)） | **缩短记账链路、叙事自动长出来** | F1.2 先；F1.3/B2.13 各 1 PR |
-| 并行 | 栏 B：备案、Spug 短信、ASC Product ID | 上架 blocker | — |
+| **5** | **UI-P1** 记账页叙事化 | 生活预览卡、表单折叠 | ⏳ 见 RECORD_PAGE_DESIGN |
+| **6** | 栏 B：备案、Spug、ASC | 上架 blocker | — |
 
 **TestFlight 回归 16 条（哲学对齐版）**
 
@@ -99,6 +100,8 @@
 | - [x] B2.7 分类锁定（真机再验） | |
 | - [x] **B2.8 智能分类** — `CategoryRecommendService` | |
 | - [x] **B2.13 个人习惯预填**（代码）— [`AGENT_PROMPT_B2.13`](AGENT_PROMPT_B2.13_HABIT_PREFILL.md)；待 TF 验 | |
+| - [ ] **UI-P1 记账页叙事化（iOS）** — [`RECORD_PAGE_DESIGN`](RECORD_PAGE_DESIGN_v0.1.md) · [`AGENT_PROMPT_UI-P1`](AGENT_PROMPT_UI-P1_INPUT_LAYER_VISUAL.md) | |
+| - [ ] **UI-P1-WEB 记账页 Web 预览原型** — 先浏览器看效果 · [`AGENT_PROMPT_UI-P1_WEB_PREVIEW.md`](AGENT_PROMPT_UI-P1_WEB_PREVIEW.md) | |
 | - [x] **B2.9 天气宠物** — `WeatherCompanionService` / `PetCompanionService` | |
 | - [x] **B2.10** 场景备注池 | |
 | - [x] A4 场景包哲学 + tagline | |

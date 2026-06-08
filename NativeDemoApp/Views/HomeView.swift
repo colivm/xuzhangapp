@@ -15,53 +15,24 @@ struct HomeView: View {
         ZStack(alignment: .top) {
             ScrollView {
                 VStack(spacing: 12) {
-                // ── Hero Card (matching web .hero) ──
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("今日已花")
-                        .font(.system(size: 13))
-                        .foregroundStyle(AppColors.subtext)
+                todayStoryHero
 
-                    Text(homeViewModel.todayExpenseTotal.formatted(.cny))
-                        .font(.system(size: 44, weight: .black, design: .rounded))
-                        .foregroundStyle(AppColors.text)
-                        .tracking(-0.01 * 44)
-
-                    Text(homeViewModel.todayHeroSubtitle)
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppColors.subtext.opacity(0.88))
-                        .lineLimit(2)
+                HStack(spacing: 10) {
+                    homeActionCard(
+                        title: "记一笔",
+                        subtitle: "只输金额也可以",
+                        systemImage: "plus.circle.fill",
+                        isPrimary: true,
+                        action: onQuickRecord
+                    )
+                    homeActionCard(
+                        title: "听今日回放",
+                        subtitle: homeViewModel.todayItems.isEmpty ? "有记录后可播放" : "十几秒叙完今天",
+                        systemImage: "play.circle.fill",
+                        isPrimary: false,
+                        action: requestTodayPlayback
+                    )
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .glassPanelWithTint(radius: 24, padding: 24)
-
-                // ── Quick Record Button (matching web .mega-btn) ──
-                Button {
-                    onQuickRecord()
-                } label: {
-                    Text("＋ 快速记账")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 72)
-                        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                }
-                .background(
-                    LinearGradient(
-                        colors: [
-                            AppColors.accent.opacity(0.92),
-                            AppColors.accent.opacity(0.84)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(Color.white.opacity(0.45), lineWidth: 1)
-                )
-                .shadow(color: AppColors.accent.opacity(0.30), radius: 16, x: 0, y: 6)
-                .buttonStyle(.plain)
-                .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
 
                 if let guidance = homeViewModel.activeRouteGuidance,
                    guidance != .firstRecordTodayPlayback {
@@ -70,28 +41,9 @@ struct HomeView: View {
 
                 // ── Today's Bills Panel ──
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("今日账单")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(AppColors.text)
-                        Spacer()
-                        Button("账单回放") {
-                            requestTodayPlayback()
-                        }
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppColors.accent.opacity(0.84))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(Color.white.opacity(0.72))
-                        )
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(AppColors.accent.opacity(0.28), lineWidth: 1)
-                        )
-                        .buttonStyle(.plain)
-                    }
+                    Text("今天留下的痕迹")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(AppColors.text)
 
                     if homeViewModel.recentThreeItems.isEmpty {
                         // Empty state art (matching web SVG)
@@ -184,6 +136,93 @@ struct HomeView: View {
         } message: {
             Text(todayPlaybackQuotaMessage ?? "")
         }
+    }
+
+    private var todayStoryHero: some View {
+        let narrative = homeViewModel.todayStoryNarrative
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("今日小记")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+
+            Text(narrative.title)
+                .font(.system(size: 27, weight: .bold))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(narrative.subtitle)
+                .font(.system(size: 14))
+                .foregroundStyle(AppColors.text.opacity(0.78))
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 8) {
+                narrativePill(narrative.todayTotalText)
+                narrativePill(narrative.weekTotalText)
+            }
+            .padding(.top, 2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassPanelWithTint(radius: 24, padding: 24)
+    }
+
+    private func narrativePill(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(AppColors.subtext.opacity(0.88))
+            .lineLimit(1)
+            .minimumScaleFactor(0.78)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.58))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(Color.white.opacity(0.46), lineWidth: 1)
+            )
+    }
+
+    private func homeActionCard(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        isPrimary: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(isPrimary ? .white : AppColors.accent.opacity(0.88))
+
+                Text(title)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(isPrimary ? .white : AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.84)
+
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(isPrimary ? Color.white.opacity(0.82) : AppColors.subtext.opacity(0.86))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, minHeight: 108, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(isPrimary ? AppColors.accent.opacity(0.90) : Color.white.opacity(0.66))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(isPrimary ? Color.white.opacity(0.42) : AppColors.accent.opacity(0.18), lineWidth: 1)
+            )
+            .shadow(color: isPrimary ? AppColors.accent.opacity(0.22) : AppColors.subtext.opacity(0.08), radius: 12, x: 0, y: 6)
+        }
+        .buttonStyle(.plain)
     }
 
     private var firstRecordToast: some View {

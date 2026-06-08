@@ -68,6 +68,13 @@ final class HomeViewModel: ObservableObject {
         var scope: String // "weekly", "monthly", "none"
     }
 
+    struct TodayStoryNarrative: Equatable {
+        var title: String
+        var subtitle: String
+        var todayTotalText: String
+        var weekTotalText: String
+    }
+
     enum AIInsightSource: Equatable {
         case live
         case fallback
@@ -491,6 +498,42 @@ final class HomeViewModel: ObservableObject {
         return weekItems.reduce(0) { $0 + $1.amount }
     }
 
+    var todayStoryNarrative: TodayStoryNarrative {
+        let records = todayItems
+        let count = records.count
+        let totalText = todayExpenseTotal.formatted(.cny)
+        let weekText = weekExpenseTotal.formatted(.cny)
+        let topCategory = topCategoryLabel(from: records)
+
+        let title: String
+        let subtitle: String
+        switch count {
+        case 0:
+            title = "今天先记下来"
+            subtitle = "晚上再回头看，这一天会慢慢有轮廓。"
+        case 1:
+            title = "今天的第一笔小痕迹"
+            let emotion = records.first?.emotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            subtitle = "\(!emotion.isEmpty ? emotion : "这笔生活被记下来了")，这一天刚翻开第一页。"
+        case 2:
+            title = "今天已留下 2 段小痕迹"
+            subtitle = "主要在「\(topCategory)」上，轮廓慢慢变得具体。"
+        case 3:
+            title = "今天留下了 3 段小痕迹"
+            subtitle = "合计 \(totalText)，几笔小账轻轻串起今天。"
+        default:
+            title = "今天留下了 \(count) 段小痕迹"
+            subtitle = "「\(topCategory)」居多，几笔小账轻轻留住今天怎样过的。"
+        }
+
+        return TodayStoryNarrative(
+            title: title,
+            subtitle: subtitle,
+            todayTotalText: "今日合计 \(totalText)",
+            weekTotalText: "本周累计 \(weekText)"
+        )
+    }
+
     var monthTopCategoryText: String {
         topCategoryLabel(in: .month)
     }
@@ -630,6 +673,18 @@ final class HomeViewModel: ObservableObject {
             return "暂无"
         }
         return top.rawValue
+    }
+
+    private func topCategoryLabel(from target: [HomeItem]) -> String {
+        let grouped = Dictionary(grouping: target, by: \.category)
+        guard let top = grouped.max(by: { lhs, rhs in
+            let left = lhs.value.reduce(0) { $0 + $1.amount }
+            let right = rhs.value.reduce(0) { $0 + $1.amount }
+            return left < right
+        })?.key else {
+            return "生活"
+        }
+        return top.label
     }
 
     private func enqueuePetMessage(for record: HomeItem) {

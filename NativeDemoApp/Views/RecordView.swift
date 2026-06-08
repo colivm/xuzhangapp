@@ -15,6 +15,9 @@ struct RecordView: View {
     @State private var scenePackExpanded = false
     @State private var scenePackVariants: [String: Int] = [:]
     @State private var amountPadActive = false
+    @State private var recordDetailsExpanded = false
+    @State private var categoryGridExpanded = false
+    @State private var noteEditorExpanded = false
     @FocusState private var focusedField: RecordField?
 
     private enum RecordField {
@@ -115,6 +118,77 @@ struct RecordView: View {
         return v > 0
     }
 
+    private var inputAmountValue: Double {
+        Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
+    }
+
+    private var previewBrand: MerchantBrandDefinition? {
+        let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let brand = MerchantBrandCatalog.matchBrand(in: title) {
+            return brand
+        }
+        if let title = homeViewModel.recordPrefillResult?.title {
+            return MerchantBrandCatalog.matchBrand(in: title)
+        }
+        return nil
+    }
+
+    private var previewHeadline: String {
+        let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty { return title }
+        if let prefillTitle = homeViewModel.recordPrefillResult?.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !prefillTitle.isEmpty {
+            return prefillTitle
+        }
+        return previewFallbackTitle(for: homeViewModel.selectedCategory)
+    }
+
+    private var previewEmotion: String {
+        if let result = homeViewModel.recordPrefillResult,
+           let emotion = result.emotionTag?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !emotion.isEmpty,
+           (result.source == "brand" || result.confidence >= 0.65) {
+            return emotion
+        }
+        let brandId = previewBrand?.id
+        return NarrativeCopyResolver.resolveEmotionTag(
+            context: NarrativeCopyResolver.Context(
+                brandId: brandId,
+                category: homeViewModel.selectedCategory,
+                amount: inputAmountValue,
+                date: homeViewModel.selectedDate,
+                seed: "\(inputAmountValue)|\(homeViewModel.selectedDate.timeIntervalSince1970)|\(homeViewModel.selectedCategory.rawValue)|\(brandId ?? "")"
+            )
+        )
+    }
+
+    private var previewMeta: String {
+        "\(homeViewModel.selectedCategory.displayName) · \(homeViewModel.selectedDate.zhBillDateTime)"
+    }
+
+    private var previewQuickActionTitle: String {
+        switch previewQuickActionProminence {
+        case .link:
+            return "换一句说法"
+        case .balanced:
+            return "✨ 换一句"
+        case .primary:
+            return "✨ 帮我写一句"
+        }
+    }
+
+    private var previewQuickActionProminence: LifeEntryPreviewCard.QuickActionProminence {
+        if previewBrand != nil || homeViewModel.recordPrefillResult?.source == "brand" {
+            return .link
+        }
+        if let result = homeViewModel.recordPrefillResult,
+           result.source == "habit",
+           result.confidence >= 0.55 {
+            return .balanced
+        }
+        return .primary
+    }
+
     private var hasAmountDraft: Bool {
         !homeViewModel.inputAmount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -126,6 +200,37 @@ struct RecordView: View {
     private func dismissKeyboard() {
         amountPadActive = false
         focusedField = nil
+    }
+
+    private func previewFallbackTitle(for category: HomeItem.Category) -> String {
+        switch category {
+        case .dining: return "吃饭的一小笔"
+        case .transport: return "路上的一小段"
+        case .shopping: return "给生活添一点"
+        case .daily: return "日常的一点补给"
+        case .entertainment: return "留给放松的一笔"
+        case .lodging: return "停下来的一晚"
+        case .health: return "照顾自己的一笔"
+        case .home: return "把家安顿一下"
+        case .social: return "心意往来的一笔"
+        case .other: return "今天的一小笔"
+        }
+    }
+
+    private func handlePreviewQuickAction() {
+        dismissKeyboard()
+        guard hasValidAmount else { return }
+        guard isMember else {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                recordDetailsExpanded = true
+                noteEditorExpanded = true
+            }
+            return
+        }
+        let quickPackId = guessScenePackId()
+        let packs = visibleScenePacks
+        guard let quickPack = packs.first(where: { $0.id == quickPackId }) ?? packs.first else { return }
+        applyScenePack(quickPack, keepSelectedCategory: true)
     }
 
     private func refreshRecommendedCategory() {
@@ -140,7 +245,7 @@ struct RecordView: View {
                 // ── Record Panel (matching web recordPage) ──
                 VStack(alignment: .leading, spacing: 16) {
                     // Title
-                    Text("记账")
+                    Text("记一笔")
                         .font(.system(size: 22, weight: .bold))
                         .foregroundStyle(recordInk)
 
@@ -285,18 +390,13 @@ struct RecordView: View {
     @ViewBuilder
     private var manualForm: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // Amount field
             amountField
-            // Category chips
-            if hasValidAmount { categorySection }
-            // Note suggestions
-            if hasValidAmount { noteSection }
-            // Save row — always visible (gray when disabled, matching web .save-btn:disabled)
-            saveRow
-            // Member scene packs (matching web: show when amount ready + is member)
-            if hasValidAmount && isMember { memberScenePackSection }
-            // Hints (only visible when amount is valid, matching web)
             if hasValidAmount {
+                lifeEntryPreview
+            }
+            saveRow
+            if hasValidAmount {
+                recordDetailsFold
                 VStack(alignment: .leading, spacing: 4) {
                     Text("默认今天，如需补记点右侧日历。")
                     Text("数据仅保存在本机，不上传云端。")
@@ -307,14 +407,113 @@ struct RecordView: View {
         }
     }
 
+    private var lifeEntryPreview: some View {
+        LifeEntryPreviewCard(
+            headline: previewHeadline,
+            emotion: previewEmotion,
+            meta: previewMeta,
+            amountText: inputAmountValue.formatted(.cny),
+            quickActionTitle: previewQuickActionTitle,
+            quickActionProminence: previewQuickActionProminence,
+            onTap: {
+                dismissKeyboard()
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    recordDetailsExpanded = true
+                    noteEditorExpanded = true
+                }
+                focusedField = .note
+            },
+            onChangeCategory: {
+                dismissKeyboard()
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    recordDetailsExpanded = true
+                    categoryGridExpanded = true
+                }
+            },
+            onQuickAction: handlePreviewQuickAction
+        )
+    }
+
+    private var recordDetailsFold: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                dismissKeyboard()
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    recordDetailsExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("补充细节")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(recordInk.opacity(0.88))
+                        Text("不急，想补再补。")
+                            .font(.system(size: 11))
+                            .foregroundStyle(AppColors.subtext.opacity(0.78))
+                    }
+                    Spacer()
+                    Image(systemName: recordDetailsExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(AppColors.subtext.opacity(0.72))
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.54))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.46), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            if recordDetailsExpanded {
+                HStack(spacing: 8) {
+                    detailToggleButton("改分类", isActive: categoryGridExpanded) {
+                        withAnimation(.easeInOut(duration: 0.16)) { categoryGridExpanded.toggle() }
+                    }
+                    detailToggleButton("写点细节", isActive: noteEditorExpanded) {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            noteEditorExpanded.toggle()
+                            if noteEditorExpanded { focusedField = .note }
+                        }
+                    }
+                }
+
+                if categoryGridExpanded { categorySection }
+                if noteEditorExpanded { noteSection }
+                if isMember { memberScenePackSection }
+            }
+        }
+    }
+
+    private func detailToggleButton(_ title: String, isActive: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: {
+            dismissKeyboard()
+            action()
+        }) {
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(isActive ? AppColors.accent.opacity(0.9) : recordInk.opacity(0.78))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 9)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(isActive ? AppColors.accent.opacity(0.12) : Color.white.opacity(0.58))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(isActive ? AppColors.accent.opacity(0.25) : Color.white.opacity(0.48), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Amount Field
 
     private var amountField: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("金额")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(recordInk.opacity(0.82))
-
+        VStack(alignment: .leading, spacing: 8) {
             Button {
                 focusedField = nil
                 withAnimation(.easeInOut(duration: 0.16)) {
@@ -359,7 +558,7 @@ struct RecordView: View {
             )
             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-            Text("输入金额，我帮你自动归类")
+            Text(hasValidAmount ? "金额只是刻度，这一笔会长成一句生活记录。" : "记下一笔今天的生活")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext.opacity(0.76))
         }
@@ -599,6 +798,9 @@ struct RecordView: View {
                 guard hasValidAmount else { return }
                 dismissKeyboard()
                 homeViewModel.addManualRecord()
+                recordDetailsExpanded = false
+                categoryGridExpanded = false
+                noteEditorExpanded = false
                 onSaved?()
             } label: {
                 ZStack {
@@ -614,13 +816,14 @@ struct RecordView: View {
                             .fill(AppColors.panelStrong)
                     }
 
-                    Text("保存")
+                    Text("放进账本")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(hasValidAmount ? Color.white : AppColors.subtext.opacity(0.72))
-                        .padding(.vertical, 16)
+                        .padding(.vertical, 14)
                         .frame(maxWidth: .infinity)
                 }
                 .frame(maxWidth: .infinity)
+                .frame(minHeight: 52)
                 .overlay(
                     Capsule(style: .continuous)
                         .stroke(hasValidAmount ? Color.white.opacity(0.36) : AppColors.line, lineWidth: 1)

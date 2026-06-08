@@ -365,11 +365,14 @@ const refs = {
   tabs: [...document.querySelectorAll(".tab")],
   jumpButtons: [...document.querySelectorAll("[data-jump]")],
   quickManualBtn: document.getElementById("quickManualBtn"),
+  homeStoryTitle: document.getElementById("homeStoryTitle"),
+  homeStorySubtitle: document.getElementById("homeStorySubtitle"),
+  homePlaybackEntryBtn: document.getElementById("homePlaybackEntryBtn"),
+  homePlaybackEntryHint: document.getElementById("homePlaybackEntryHint"),
   todayTotal: document.getElementById("todayTotal"),
   weekTotal: document.getElementById("weekTotal"),
   homeTodayList: document.getElementById("homeTodayList"),
   homeTodayEmptyArt: document.getElementById("homeTodayEmptyArt"),
-  playbackTodayBtn: document.getElementById("playbackTodayBtn"),
   homeInsightSummary: document.getElementById("homeInsightSummary"),
   homeInsightHint: document.getElementById("homeInsightHint"),
   homeActionCard: document.getElementById("homeActionCard"),
@@ -394,6 +397,20 @@ const refs = {
   manualForm: document.getElementById("manualForm"),
   ocrForm: document.getElementById("ocrForm"),
   recordFormTitle: document.getElementById("recordFormTitle"),
+  amountStage: document.getElementById("amountStage"),
+  lifeEntryPreview: document.getElementById("lifeEntryPreview"),
+  lifeEntryHeadline: document.getElementById("lifeEntryHeadline"),
+  lifeEntryAmount: document.getElementById("lifeEntryAmount"),
+  lifeEntryEmotion: document.getElementById("lifeEntryEmotion"),
+  lifeEntryMeta: document.getElementById("lifeEntryMeta"),
+  lifeEntryQuickActions: document.getElementById("lifeEntryQuickActions"),
+  recordPrimaryActions: document.getElementById("recordPrimaryActions"),
+  recordDetailsFold: document.getElementById("recordDetailsFold"),
+  recordDetailsToggle: document.getElementById("recordDetailsToggle"),
+  recordDetailsToggleHint: document.getElementById("recordDetailsToggleHint"),
+  recordDetailsBody: document.getElementById("recordDetailsBody"),
+  prefillDemoBar: document.getElementById("prefillDemoBar"),
+  prefillDemoButtons: [...document.querySelectorAll("[data-prefill-mode]")],
   amountInput: document.getElementById("amountInput"),
   amountDisplay: document.getElementById("amountDisplay"),
   amountQuickKeyboard: document.getElementById("amountQuickKeyboard"),
@@ -563,6 +580,8 @@ let petLongPressTriggered = false;
 let pendingPetBubbleText = "";
 let petActionTimer = null;
 let scenePackExpanded = false;
+let prefillDemoMode = "generic";
+let recordDetailsExpanded = false;
 let weatherGeo = null;
 let weatherSnapshot = null;
 let isRequestingWeatherPermission = false;
@@ -2333,11 +2352,93 @@ function getCategoryMeta(value) {
 function updateNotePlaceholder() {
   const amountReady = isAmountReady();
   if (!amountReady) {
-    refs.titleInput.placeholder = "已自动归类，可补充点细节（不填也能保存）";
+    refs.titleInput.placeholder = "这一笔像什么？不写也能保存";
     return;
   }
   const meta = getCategoryMeta(selectedCategory || localRecommendedCategory());
-  refs.titleInput.placeholder = `已归类到「${meta.label}」，可补充点细节（不填也能保存）`;
+  refs.titleInput.placeholder = `已归类到「${meta.label}」，可补充一句生活细节`;
+}
+
+// Web-only prototype states. iOS UI-P1 should use F1.3/B2.13 resolver outputs.
+const prefillDemoPresets = {
+  brand: {
+    headline: "瑞幸咖啡",
+    emotion: "早班路上，顺手续一口",
+    actionText: "换一句说法",
+    actionClass: "link-btn",
+  },
+  habit: {
+    headline: "地铁通勤",
+    emotion: "日常出行",
+    actionText: "✨ 换一句",
+    actionClass: "scene-quick-btn",
+  },
+  generic: {
+    headline: "吃饭的一小笔",
+    emotion: "日常一口",
+    actionText: "✨ 帮我写一句",
+    actionClass: "scene-primary-btn",
+  },
+};
+
+function compactRecordTime() {
+  const raw = refs.recordDateInput.value;
+  if (!raw) return new Date().toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+  const date = new Date(`${raw}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return raw;
+  return date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+}
+
+function updateLifeEntryPreview() {
+  const amountReady = isAmountReady();
+  refs.lifeEntryPreview?.classList.toggle("hidden", !amountReady);
+  refs.recordPrimaryActions?.classList.toggle("hidden", !amountReady && !editingRecordId);
+  refs.recordDetailsFold?.classList.toggle("hidden", !amountReady && !editingRecordId);
+  refs.prefillDemoBar?.classList.toggle("hidden", !amountReady && !editingRecordId);
+  if (!amountReady && !editingRecordId) return;
+
+  const preset = prefillDemoPresets[prefillDemoMode] || prefillDemoPresets.generic;
+  const amount = getAmountValue();
+  const meta = getCategoryMeta(selectedCategory || localRecommendedCategory());
+  const userTitle = refs.titleInput.value.trim();
+  const headline = userTitle || preset.headline;
+  const emotion = preset.emotion;
+  refs.lifeEntryHeadline.textContent = headline || "这一笔还没长出说法";
+  refs.lifeEntryAmount.textContent = Number.isNaN(amount) ? "¥0.00" : formatCNY(amount);
+  refs.lifeEntryEmotion.textContent = emotion;
+  refs.lifeEntryEmotion.classList.toggle("hidden", !emotion);
+  refs.lifeEntryMeta.textContent = `${meta.label} · ${compactRecordTime()}`;
+
+  refs.lifeEntryQuickActions.innerHTML = "";
+  const quickBtn = document.createElement("button");
+  quickBtn.type = "button";
+  quickBtn.className = preset.actionClass;
+  quickBtn.textContent = preset.actionText;
+  quickBtn.addEventListener("pointerdown", (event) => event.preventDefault());
+  quickBtn.addEventListener("click", () => {
+    if (!state.settings.isMember && prefillDemoMode === "generic") {
+      openAccountOverlay();
+      return;
+    }
+    const packId = guessMemberScenePackId();
+    applyMemberScenePack(packId, { keepSelectedCategory: true });
+  });
+  refs.lifeEntryQuickActions.appendChild(quickBtn);
+
+  const detailBtn = document.createElement("button");
+  detailBtn.type = "button";
+  detailBtn.className = "link-btn";
+  detailBtn.textContent = "补充细节";
+  detailBtn.addEventListener("click", () => toggleRecordDetails(true));
+  refs.lifeEntryQuickActions.appendChild(detailBtn);
+}
+
+function toggleRecordDetails(force) {
+  recordDetailsExpanded = typeof force === "boolean" ? force : !recordDetailsExpanded;
+  refs.recordDetailsBody?.classList.toggle("hidden", !recordDetailsExpanded);
+  if (refs.recordDetailsToggleHint) {
+    refs.recordDetailsToggleHint.textContent = recordDetailsExpanded ? "收起" : "展开";
+  }
 }
 
 function updateCategoryUI() {
@@ -2345,11 +2446,13 @@ function updateCategoryUI() {
     renderCategoryOptions();
     updateNotePlaceholder();
     renderMemberScenePacks();
+    updateLifeEntryPreview();
     return;
   }
   renderCategoryOptions();
   updateNotePlaceholder();
   renderMemberScenePacks();
+  updateLifeEntryPreview();
 }
 
 function topCategoryFromHistory() {
@@ -2491,6 +2594,7 @@ function selectCategory(value) {
   categoryLockedByUser = true;
   triggerHaptic();
   updateCategoryUI();
+  updateLifeEntryPreview();
 }
 
 function renderNoteSuggestions() {
@@ -2519,6 +2623,7 @@ function renderNoteSuggestions() {
       refs.titleInput.value = text;
       refs.noteSuggestions.classList.add("hidden");
       refs.noteSuggestions.innerHTML = "";
+      updateLifeEntryPreview();
       refs.titleInput.focus();
     });
     refs.noteSuggestions.appendChild(chip);
@@ -2614,6 +2719,7 @@ function applyMemberScenePack(packId, { keepSelectedCategory = false } = {}) {
   refs.noteSuggestions.innerHTML = "";
   scenePackExpanded = false;
   renderRecord();
+  updateLifeEntryPreview();
   showToast(`已生成：${pack.label}`);
 }
 
@@ -3703,6 +3809,49 @@ function topCategoryFor(items) {
   return Object.entries(map).sort((a, b) => b[1] - a[1])[0]?.[0];
 }
 
+function buildHomeStoryNarrative(todayItems) {
+  const count = todayItems.length;
+  const todayTotal = todayItems.reduce((sum, x) => sum + x.amount, 0);
+  const topCategory = topCategoryFor(todayItems);
+
+  if (count === 0) {
+    return {
+      title: "今天先记下来",
+      subtitle: "晚上再回头看，这一天会慢慢有轮廓。",
+    };
+  }
+  if (count === 1) {
+    const item = todayItems[0];
+    const tag = item.emotionTag || inferEmotionTag(item);
+    return {
+      title: "今天的第一笔小痕迹",
+      subtitle: `${tag}，这一天刚翻开第一页。`,
+    };
+  }
+  if (count === 2) {
+    return {
+      title: "今天已留下 2 段小痕迹",
+      subtitle: topCategory
+        ? `主要在「${topCategory}」上，轮廓慢慢变得具体。`
+        : "两笔小账落下来，今天开始有了形状。",
+    };
+  }
+  if (count === 3) {
+    return {
+      title: "今天留下了 3 段小痕迹",
+      subtitle: todayTotal > 0
+        ? `合计 ${formatCNY(todayTotal)}，几笔小账轻轻串起今天。`
+        : "三笔落下来，这一天正在变得可看。",
+    };
+  }
+  return {
+    title: `今天留下了 ${count} 段小痕迹`,
+    subtitle: topCategory
+      ? `「${topCategory}」居多，几笔小账轻轻留住今天怎样过的。`
+      : "几笔小账不是评判，只是把今天怎样过的，轻轻留住。",
+  };
+}
+
 function renderHome() {
   const copy = getExperienceCopy();
   const todayKey = new Date().toISOString().slice(0, 10);
@@ -3713,11 +3862,20 @@ function renderHome() {
 
   refs.todayTotal.textContent = formatCNY(todayTotal);
   refs.weekTotal.textContent = `本周累计 ${formatCNY(weekTotal)}`;
+  const homeStory = buildHomeStoryNarrative(todayItems);
+  if (refs.homeStoryTitle) {
+    refs.homeStoryTitle.textContent = homeStory.title;
+  }
+  if (refs.homeStorySubtitle) {
+    refs.homeStorySubtitle.textContent = homeStory.subtitle;
+  }
 
   refs.homeTodayList.innerHTML = "";
-  if (refs.playbackTodayBtn) {
-    refs.playbackTodayBtn.disabled = todayItems.length === 0;
-    refs.playbackTodayBtn.textContent = todayItems.length ? "账单回放" : "暂无回放";
+  if (refs.homePlaybackEntryBtn) {
+    refs.homePlaybackEntryBtn.disabled = todayItems.length === 0;
+  }
+  if (refs.homePlaybackEntryHint) {
+    refs.homePlaybackEntryHint.textContent = todayItems.length ? "十几秒叙完今天" : "有记录后可播放";
   }
   const recent = [...todayItems]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -3768,7 +3926,7 @@ function renderHome() {
 
 function resetRecordEditorState() {
   editingRecordId = null;
-  refs.recordFormTitle.textContent = "记账";
+  refs.recordFormTitle.textContent = "记下这一笔";
   refs.deleteRecordBtn.classList.add("hidden");
 }
 
@@ -3780,6 +3938,7 @@ function startNewManualRecordDraft() {
   updateAmountInputFromStream();
   selectedCategory = topCategoryFromHistory();
   categoryLockedByUser = false;
+  recordDetailsExpanded = false;
   refs.noteSuggestions.classList.add("hidden");
   refs.noteSuggestions.innerHTML = "";
   refs.recordDateInput.value = new Date().toISOString().slice(0, 10);
@@ -3792,7 +3951,7 @@ function openRecordEditor(recordId) {
   if (!item) return;
   editingRecordId = recordId;
   state.recordMode = "manual";
-  refs.recordFormTitle.textContent = "编辑账单";
+  refs.recordFormTitle.textContent = "调整这一笔";
   refs.deleteRecordBtn.classList.remove("hidden");
   refs.titleInput.value = item.title || "";
   amountStream = parseAmountTextToStream(String(item.amount.toFixed(2)));
@@ -3800,6 +3959,7 @@ function openRecordEditor(recordId) {
   selectedCategory = item.category || "其他";
   categoryLockedByUser = true;
   refs.recordDateInput.value = item.createdAt.slice(0, 10);
+  recordDetailsExpanded = true;
   switchTab("record");
   renderRecord();
 }
@@ -3816,13 +3976,16 @@ function renderRecord() {
     "hidden",
     !(state.recordMode === "manual" && (isAmountInputFocused || hasAmountStreamValue()))
   );
-  refs.recordFormTitle.textContent = editingRecordId ? "编辑账单" : "记账";
+  refs.recordFormTitle.textContent = editingRecordId ? "调整这一笔" : "记下这一笔";
   if (state.recordMode !== "manual") {
     renderOCRDraftArea();
     return;
   }
 
   const wasDisabled = refs.saveRecordBtn.disabled;
+  if (isEditing) {
+    recordDetailsExpanded = true;
+  }
   refs.categoryField.classList.toggle("hidden", !amountReady && !isEditing);
   refs.noteField.classList.toggle("hidden", !amountReady && !isEditing);
   refs.amountAssist.classList.toggle("hidden", amountReady || isEditing);
@@ -3831,6 +3994,12 @@ function renderRecord() {
   refs.localPrivacyHint.classList.toggle("hidden", !amountReady && !isEditing);
   refs.editDateBtn.classList.toggle("hidden", !amountReady && !isEditing);
   refs.saveRecordBtn.disabled = !amountReady;
+  refs.saveRecordBtn.textContent = isEditing ? "更新这一笔" : "放进账本";
+  toggleRecordDetails(recordDetailsExpanded && (amountReady || isEditing));
+  updateLifeEntryPreview();
+  refs.prefillDemoButtons?.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.prefillMode === prefillDemoMode);
+  });
   if (wasDisabled && amountReady) {
     refs.saveRecordBtn.classList.remove("save-ready");
     requestAnimationFrame(() => {
@@ -3844,6 +4013,7 @@ function renderRecord() {
   }
   updateCategoryUI();
   renderMemberScenePacks();
+  updateLifeEntryPreview();
 }
 
 function renderStats() {
@@ -4202,6 +4372,7 @@ function init() {
     if (refs.recordDateInput.value) {
       showToast(`已切换为补记日期：${refs.recordDateInput.value}`);
     }
+    updateLifeEntryPreview();
   });
   selectedCategory = topCategoryFromHistory();
   amountStream = parseAmountTextToStream(refs.amountInput.value);
@@ -4251,6 +4422,7 @@ function init() {
   refs.titleInput.addEventListener("input", () => {
     setUIInputFocus("title");
     renderNoteSuggestions();
+    updateLifeEntryPreview();
     if (!editingRecordId) {
       scheduleCategoryRecommendation();
     }
@@ -4260,6 +4432,17 @@ function init() {
     setTimeout(() => {
       refs.noteSuggestions.classList.add("hidden");
     }, 120);
+  });
+  refs.recordDetailsToggle?.addEventListener("click", () => {
+    toggleRecordDetails();
+  });
+  refs.prefillDemoButtons?.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      prefillDemoMode = btn.dataset.prefillMode || "generic";
+      refs.titleInput.value = "";
+      updateLifeEntryPreview();
+      renderRecord();
+    });
   });
   refs.tabs.forEach((btn) =>
     btn.addEventListener("click", () => {
@@ -4388,6 +4571,8 @@ function init() {
       updateAmountInputFromStream();
       selectedCategory = topCategoryFromHistory();
       categoryLockedByUser = false;
+      recordDetailsExpanded = false;
+      prefillDemoMode = "generic";
       resetRecordEditorState();
       updateCategoryUI();
       refs.noteSuggestions.classList.add("hidden");
@@ -4628,7 +4813,7 @@ function init() {
       closeMonthlyTrialModal();
     }
   });
-  refs.playbackTodayBtn?.addEventListener("click", openBillPlaybackModal);
+  refs.homePlaybackEntryBtn?.addEventListener("click", openBillPlaybackModal);
   refs.billPlaybackCloseBtn?.addEventListener("click", closeBillPlaybackModal);
   refs.billPlaybackPauseBtn?.addEventListener("click", () => {
     if (playbackRunning) {

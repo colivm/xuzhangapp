@@ -782,6 +782,142 @@ body.theme-dark #accountCenterView.member-pet-theme #accountLogoutBtn:hover {
   background: linear-gradient(140deg, color-mix(in srgb, var(--accent) 14%, var(--panel) 86%), var(--panel));
 }
 
+.home-story-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 26px 24px 22px;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--accent) 16%, var(--panel) 84%), color-mix(in srgb, var(--panel) 96%, transparent)),
+    radial-gradient(80% 90% at 92% 8%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 62%);
+}
+
+.home-story-hero::after {
+  content: "";
+  position: absolute;
+  right: 24px;
+  bottom: 22px;
+  width: 86px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  opacity: 0.35;
+  transform: rotate(-8deg);
+  pointer-events: none;
+}
+
+.home-kicker,
+.record-kicker {
+  margin-bottom: 8px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.home-story-hero h2 {
+  max-width: 280px;
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.22;
+  letter-spacing: -0.015em;
+}
+
+.home-story-subtitle {
+  max-width: 300px;
+  margin: 10px 0 0;
+  color: color-mix(in srgb, var(--text) 76%, var(--subtext));
+  font-size: 15px;
+  line-height: 1.58;
+}
+
+.home-story-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.home-story-foot span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 80%, transparent);
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+  color: color-mix(in srgb, var(--subtext) 92%, var(--text));
+  font-size: 12px;
+}
+
+#todayTotal {
+  font-weight: 640;
+  color: color-mix(in srgb, var(--text) 82%, var(--subtext));
+}
+
+.home-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.home-action-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 78px;
+  padding: 13px 14px;
+  text-align: left;
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--panel) 84%, rgba(255, 255, 255, 0.18)), color-mix(in srgb, var(--panel) 96%, transparent));
+  box-shadow: var(--glass-shadow);
+}
+
+.home-action-primary {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--glass-border));
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--accent) 22%, var(--panel)), color-mix(in srgb, var(--panel) 94%, transparent));
+}
+
+.home-action-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--accent) 82%, var(--text));
+  background: color-mix(in srgb, var(--accent) 13%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line));
+  font-weight: 700;
+}
+
+.home-action-card strong,
+.home-action-card small {
+  display: block;
+}
+
+.home-action-card strong {
+  font-size: 15px;
+  line-height: 1.22;
+}
+
+.home-action-card small {
+  margin-top: 3px;
+  color: var(--subtext);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.home-record-panel .panel-head h2,
+.home-action-note h2 {
+  font-size: 18px;
+}
+
+.home-action-note {
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
 .money {
   margin: 8px 0;
   font-size: 44px;
@@ -1115,6 +1251,224 @@ button.pet-btn:active {
 
 .mega-btn:active {
   transform: scale(0.975);
+}
+
+.record-compose-panel {
+  padding-top: 22px;
+}
+
+.record-compose-panel > h2 {
+  margin-bottom: 14px;
+  font-size: 26px;
+  letter-spacing: -0.012em;
+}
+
+#manualForm {
+  margin-top: 14px;
+}
+
+#amountStage {
+  margin-bottom: 12px;
+}
+
+#amountStage .amount-input-wrap {
+  margin-top: 2px;
+}
+
+#amountStage #amountInput {
+  min-height: 74px;
+  border-radius: 20px;
+}
+
+#amountStage .amount-display {
+  min-height: 74px;
+  padding: 12px 14px;
+  font-size: 43px;
+}
+
+.life-entry-preview {
+  position: relative;
+  margin: 12px 0;
+  padding: 17px 16px 15px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--glass-border));
+  border-radius: 22px;
+  background:
+    radial-gradient(88% 86% at 88% 10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 68%),
+    linear-gradient(152deg, color-mix(in srgb, var(--panel) 88%, rgba(255, 255, 255, 0.2)), color-mix(in srgb, var(--panel) 96%, transparent));
+  box-shadow:
+    0 8px 20px color-mix(in srgb, var(--bg) 30%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--glass-border) 48%, transparent);
+}
+
+.life-entry-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.life-entry-headline {
+  margin: 0;
+  color: color-mix(in srgb, var(--text) 92%, var(--accent));
+  font-size: 18px;
+  font-weight: 680;
+  line-height: 1.45;
+}
+
+.life-entry-amount {
+  margin-top: 2px;
+  color: color-mix(in srgb, var(--subtext) 78%, transparent);
+  font-size: 14px;
+  font-weight: 640;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.life-entry-emotion {
+  display: inline-flex;
+  width: fit-content;
+  margin: 10px 0 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  color: color-mix(in srgb, var(--accent) 62%, var(--text));
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.life-entry-meta {
+  margin-top: 9px;
+  font-size: 12px;
+}
+
+.life-entry-quick-actions {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.life-entry-quick-actions button,
+.prefill-demo-bar button,
+.record-details-toggle {
+  min-height: 32px;
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 6px 11px;
+}
+
+.life-entry-quick-actions .link-btn {
+  border-color: transparent;
+  background: transparent;
+  color: color-mix(in srgb, var(--accent) 82%, var(--text));
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.life-entry-quick-actions .scene-quick-btn {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: color-mix(in srgb, var(--accent) 9%, var(--panel));
+}
+
+.life-entry-quick-actions .scene-primary-btn {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: linear-gradient(155deg, color-mix(in srgb, var(--accent) 22%, var(--panel)), color-mix(in srgb, var(--panel) 95%, transparent));
+  color: color-mix(in srgb, var(--text) 90%, var(--accent));
+  font-weight: 680;
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.record-details-fold {
+  margin-top: 10px;
+}
+
+.record-details-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border-radius: var(--radius-lg);
+  border-style: dashed;
+  padding: 10px 12px;
+  color: color-mix(in srgb, var(--text) 78%, var(--subtext));
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+
+.record-details-toggle small {
+  color: var(--subtext);
+  font-size: 11px;
+}
+
+.record-details-body {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--panel) 78%, transparent);
+}
+
+.prefill-demo-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 4px;
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 68%, transparent);
+}
+
+.prefill-demo-bar .muted {
+  flex: 0 0 auto;
+  font-size: 11px;
+}
+
+.prefill-demo-bar button {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 7px;
+  color: var(--subtext);
+  background: transparent;
+  border-color: transparent;
+  font-size: 11px;
+}
+
+.prefill-demo-bar button.active {
+  color: color-mix(in srgb, var(--accent) 82%, var(--text));
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
+  font-weight: 620;
+}
+
+#recordPage .field {
+  margin-bottom: 14px;
+}
+
+#recordPage .field > span {
+  font-size: 14px;
+  color: color-mix(in srgb, var(--text) 74%, var(--subtext));
+}
+
+#recordPage .secondary-field input {
+  min-height: 46px;
+  background:
+    linear-gradient(color-mix(in srgb, var(--panel) 76%, var(--bg) 24%), color-mix(in srgb, var(--panel) 90%, transparent)) padding-box,
+    linear-gradient(140deg, color-mix(in srgb, var(--line) 82%, transparent), color-mix(in srgb, var(--glass-border) 74%, transparent)) border-box;
+}
+
+#recordPage .save-row {
+  margin-top: 14px;
+}
+
+#recordPage .save-btn {
+  min-height: 52px;
+  font-size: 17px;
+  font-weight: 680;
+}
+
+#recordPage .privacy-tip {
+  margin-top: 7px;
 }
 
 .item-list {
