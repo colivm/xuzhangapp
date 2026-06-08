@@ -43,6 +43,8 @@
 		B20000020000000000000001 /* PetCompanionCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000050000000000000001 /* PetCompanionCopy.swift */; };
 		B20000030000000000000001 /* PetCompanionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000060000000000000001 /* PetCompanionService.swift */; };
 		B20000070000000000000001 /* PhotoLibrarySaveService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000080000000000000001 /* PhotoLibrarySaveService.swift */; };
+		C30000010000000000000001 /* MerchantBrandCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000020000000000000001 /* MerchantBrandCatalog.swift */; };
+		C30000030000000000000001 /* NarrativeCopyResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000040000000000000001 /* NarrativeCopyResolver.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -85,6 +87,8 @@
 		B20000050000000000000001 /* PetCompanionCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetCompanionCopy.swift; sourceTree = "<group>"; };
 		B20000060000000000000001 /* PetCompanionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetCompanionService.swift; sourceTree = "<group>"; };
 		B20000080000000000000001 /* PhotoLibrarySaveService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibrarySaveService.swift; sourceTree = "<group>"; };
+		C30000020000000000000001 /* MerchantBrandCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MerchantBrandCatalog.swift; sourceTree = "<group>"; };
+		C30000040000000000000001 /* NarrativeCopyResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NarrativeCopyResolver.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -153,6 +157,8 @@
 				A100002A0000000000000001 /* MemberNudgePolicyService.swift */,
 				A100002C0000000000000001 /* PlaybackService.swift */,
 				A100008A0000000000000001 /* CategoryRecommendService.swift */,
+				C30000020000000000000001 /* MerchantBrandCatalog.swift */,
+				C30000040000000000000001 /* NarrativeCopyResolver.swift */,
 				B20000040000000000000001 /* WeatherCompanionService.swift */,
 				B20000050000000000000001 /* PetCompanionCopy.swift */,
 				B20000060000000000000001 /* PetCompanionService.swift */,
@@ -311,6 +317,8 @@
 				B20000020000000000000001 /* PetCompanionCopy.swift in Sources */,
 				B20000030000000000000001 /* PetCompanionService.swift in Sources */,
 				B20000070000000000000001 /* PhotoLibrarySaveService.swift in Sources */,
+				C30000010000000000000001 /* MerchantBrandCatalog.swift in Sources */,
+				C30000030000000000000001 /* NarrativeCopyResolver.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

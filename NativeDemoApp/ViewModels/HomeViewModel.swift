@@ -126,15 +126,27 @@ final class HomeViewModel: ObservableObject {
         guard let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0 else { return }
         let wasEmpty = items.isEmpty
         let trimmed = inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = trimmed.isEmpty ? selectedCategory.defaultRecordTitle : trimmed
+        let baseTitle = trimmed.isEmpty ? selectedCategory.defaultRecordTitle : trimmed
+        let brand = MerchantBrandCatalog.matchBrand(in: baseTitle)
+        let category = NarrativeCopyResolver.resolveCategory(brandId: brand?.id, fallback: selectedCategory)
+        let title = NarrativeCopyResolver.resolveTitle(brandId: brand?.id, fallback: baseTitle)
+        let emotionTag = resolvedEmotionTag(
+            brandId: brand?.id,
+            category: category,
+            amount: amount,
+            date: selectedDate,
+            seed: title
+        )
 
         let newItem = HomeItem(
             title: title,
             amount: amount,
-            category: selectedCategory,
+            category: category,
             source: .manual,
             createdAt: selectedDate,
-            updatedAt: Date()
+            updatedAt: Date(),
+            emotionTag: emotionTag,
+            merchantBrandId: brand?.id
         )
         items.insert(newItem, at: 0)
         resetInput()
@@ -221,13 +233,23 @@ final class HomeViewModel: ObservableObject {
         let now = Date()
         let batchId = UUID().uuidString
         let importedItems = validDrafts.map { draft in
+            let category = NarrativeCopyResolver.resolveCategory(brandId: draft.merchantBrandId, fallback: draft.category)
+            let title = NarrativeCopyResolver.resolveTitle(brandId: draft.merchantBrandId, fallback: draft.title)
             HomeItem(
-                title: draft.title,
+                title: title,
                 amount: draft.amount,
-                category: draft.category,
+                category: category,
                 source: .ocr,
                 createdAt: draft.date,
                 updatedAt: now,
+                emotionTag: resolvedEmotionTag(
+                    brandId: draft.merchantBrandId,
+                    category: category,
+                    amount: draft.amount,
+                    date: draft.date,
+                    seed: "\(draft.id.uuidString)|\(title)"
+                ),
+                merchantBrandId: draft.merchantBrandId,
                 draftMeta: HomeItem.DraftMeta(
                     batchId: batchId,
                     importedAt: now,
@@ -276,10 +298,35 @@ final class HomeViewModel: ObservableObject {
         Task { await syncUpsertToCloud(items[idx]) }
     }
 
+    private func resolvedEmotionTag(
+        brandId: String?,
+        category: HomeItem.Category,
+        amount: Double,
+        date: Date,
+        seed: String
+    ) -> String {
+        NarrativeCopyResolver.resolveEmotionTag(
+            context: NarrativeCopyResolver.Context(
+                brandId: brandId,
+                category: category,
+                amount: amount,
+                date: date,
+                seed: seed
+            )
+        )
+    }
+
     func updateOCRDraftCategory(id: UUID, category: HomeItem.Category) {
         guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
-        items[idx].category = category
-        items[idx].emotionTag = HomeItem.inferEmotionTag(category: category, amount: items[idx].amount)
+        let resolvedCategory = NarrativeCopyResolver.resolveCategory(brandId: items[idx].merchantBrandId, fallback: category)
+        items[idx].category = resolvedCategory
+        items[idx].emotionTag = resolvedEmotionTag(
+            brandId: items[idx].merchantBrandId,
+            category: resolvedCategory,
+            amount: items[idx].amount,
+            date: items[idx].createdAt,
+            seed: items[idx].id.uuidString
+        )
         items[idx].updatedAt = Date()
         persistItems()
         Task { await syncUpsertToCloud(items[idx]) }
@@ -290,7 +337,13 @@ final class HomeViewModel: ObservableObject {
               let idx = items.firstIndex(where: { $0.id == id }),
               items[idx].draftMeta != nil else { return }
         items[idx].amount = amount
-        items[idx].emotionTag = HomeItem.inferEmotionTag(category: items[idx].category, amount: amount)
+        items[idx].emotionTag = resolvedEmotionTag(
+            brandId: items[idx].merchantBrandId,
+            category: items[idx].category,
+            amount: amount,
+            date: items[idx].createdAt,
+            seed: items[idx].id.uuidString
+        )
         items[idx].updatedAt = Date()
         persistItems()
         Task { await syncUpsertToCloud(items[idx]) }
@@ -354,14 +407,27 @@ final class HomeViewModel: ObservableObject {
 
     func updateItem(_ updated: HomeItem) {
         guard let idx = items.firstIndex(where: { $0.id == updated.id }) else { return }
-        items[idx] = updated
+        var resolved = updated
+        let matchedBrand = MerchantBrandCatalog.matchBrand(in: updated.title)
+        let brandId = matchedBrand?.id ?? updated.merchantBrandId
+        resolved.merchantBrandId = brandId
+        resolved.category = NarrativeCopyResolver.resolveCategory(brandId: brandId, fallback: updated.category)
+        resolved.title = NarrativeCopyResolver.resolveTitle(brandId: brandId, fallback: updated.title)
+        resolved.emotionTag = resolvedEmotionTag(
+            brandId: brandId,
+            category: resolved.category,
+            amount: resolved.amount,
+            date: resolved.createdAt,
+            seed: resolved.id.uuidString
+        )
+        items[idx] = resolved
         persistItems()
         analyticsService.track("record_updated", props: [
-            "category": updated.category.rawValue,
-            "amount": String(format: "%.2f", updated.amount)
+            "category": resolved.category.rawValue,
+            "amount": String(format: "%.2f", resolved.amount)
         ])
         refreshTodayPlayback()
-        Task { await syncUpsertToCloud(updated) }
+        Task { await syncUpsertToCloud(resolved) }
     }
 
     func syncCloudLedgerNow() async {

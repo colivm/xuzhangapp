@@ -72,6 +72,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
     var createdAt: Date
     var updatedAt: Date
     var emotionTag: String
+    var merchantBrandId: String?
     var draftMeta: DraftMeta?
 
     init(
@@ -83,6 +84,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
         createdAt: Date = Date(),
         updatedAt: Date? = nil,
         emotionTag: String? = nil,
+        merchantBrandId: String? = nil,
         draftMeta: DraftMeta? = nil
     ) {
         self.id = id
@@ -93,6 +95,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
         self.emotionTag = emotionTag ?? HomeItem.inferEmotionTag(category: category, amount: amount)
+        self.merchantBrandId = merchantBrandId
         self.draftMeta = draftMeta
     }
 
@@ -114,7 +117,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
 extension HomeItem {
     enum CodingKeys: String, CodingKey {
-        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, draftMeta
+        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta
     }
 
     init(from decoder: Decoder) throws {
@@ -128,6 +131,7 @@ extension HomeItem {
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
         emotionTag = try container.decodeIfPresent(String.self, forKey: .emotionTag)
             ?? HomeItem.inferEmotionTag(category: category, amount: amount)
+        merchantBrandId = try container.decodeIfPresent(String.self, forKey: .merchantBrandId)
         draftMeta = try container.decodeIfPresent(DraftMeta.self, forKey: .draftMeta)
     }
 }

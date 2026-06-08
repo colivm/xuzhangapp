@@ -17,6 +17,7 @@ struct OCRReceiptDraft: Identifiable, Equatable {
     var confidence: Double
     var rawText: String
     var provider: OCRProvider
+    var merchantBrandId: String?
 
     init(
         id: UUID = UUID(),
@@ -26,7 +27,8 @@ struct OCRReceiptDraft: Identifiable, Equatable {
         category: HomeItem.Category,
         confidence: Double,
         rawText: String,
-        provider: OCRProvider
+        provider: OCRProvider,
+        merchantBrandId: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -36,6 +38,7 @@ struct OCRReceiptDraft: Identifiable, Equatable {
         self.confidence = confidence
         self.rawText = rawText
         self.provider = provider
+        self.merchantBrandId = merchantBrandId
     }
 }
 
@@ -170,7 +173,7 @@ final class OCRService {
         let date = dateNear(labels: ["付款时间", "创建时间", "交易时间", "支付时间"], in: lines) ?? firstDate(in: rawText) ?? .now
         guard let amount, let title else { return nil }
 
-        return OCRReceiptDraft(
+        return brandedDraft(OCRReceiptDraft(
             title: title,
             amount: abs(amount),
             date: date,
@@ -178,7 +181,7 @@ final class OCRService {
             confidence: confidence,
             rawText: rawText,
             provider: .alipay
-        )
+        ))
     }
 
     private func parseWeChat(lines: [String], rawText: String, confidence: Double) -> OCRReceiptDraft? {
@@ -187,7 +190,7 @@ final class OCRService {
         let date = dateNear(labels: ["支付时间", "交易时间", "转账时间", "付款时间"], in: lines) ?? firstDate(in: rawText) ?? .now
         guard let amount, let title else { return nil }
 
-        return OCRReceiptDraft(
+        return brandedDraft(OCRReceiptDraft(
             title: title,
             amount: abs(amount),
             date: date,
@@ -195,7 +198,7 @@ final class OCRService {
             confidence: confidence,
             rawText: rawText,
             provider: .wechat
-        )
+        ))
     }
 
     private func parseGeneric(lines: [String], rawText: String, confidence: Double) -> OCRReceiptDraft? {
@@ -203,7 +206,7 @@ final class OCRService {
               let title = fallbackTitle(from: lines) ?? lines.first(where: isUsableTitle) else {
             return nil
         }
-        return OCRReceiptDraft(
+        return brandedDraft(OCRReceiptDraft(
             title: title,
             amount: abs(amount),
             date: firstDate(in: rawText) ?? .now,
@@ -211,7 +214,18 @@ final class OCRService {
             confidence: confidence,
             rawText: rawText,
             provider: .generic
-        )
+        ))
+    }
+
+    private func brandedDraft(_ draft: OCRReceiptDraft) -> OCRReceiptDraft {
+        guard let brand = MerchantBrandCatalog.matchBrand(in: "\(draft.title)\n\(draft.rawText)") else {
+            return draft
+        }
+        var resolved = draft
+        resolved.merchantBrandId = brand.id
+        resolved.category = NarrativeCopyResolver.resolveCategory(brandId: brand.id, fallback: draft.category)
+        resolved.title = NarrativeCopyResolver.resolveTitle(brandId: brand.id, fallback: draft.title)
+        return resolved
     }
 
     private func parseListReceipts(
@@ -241,12 +255,15 @@ final class OCRService {
                 ?? firstDate(in: windowText)
                 ?? firstDate(in: rawText)
                 ?? referenceDate
-            let category = listCategory(
+            let inferredCategory = listCategory(
                 provider: provider,
                 title: title,
                 windowLines: windowLines,
                 windowText: windowText
             )
+            let brand = MerchantBrandCatalog.matchBrand(in: "\(title)\n\(windowText)")
+            let category = NarrativeCopyResolver.resolveCategory(brandId: brand?.id, fallback: inferredCategory)
+            let resolvedTitle = NarrativeCopyResolver.resolveTitle(brandId: brand?.id, fallback: title)
             let dayKey = Calendar.current.startOfDay(for: date).timeIntervalSince1970
             let key = "\(index)|\(Int((amount * 100).rounded()))|\(Int(dayKey))"
             guard !seenKeys.contains(key) else { continue }
@@ -254,13 +271,14 @@ final class OCRService {
 
             drafts.append(
                 OCRReceiptDraft(
-                    title: title,
+                    title: resolvedTitle,
                     amount: amount,
                     date: date,
                     category: category,
                     confidence: confidence,
                     rawText: windowText,
-                    provider: provider
+                    provider: provider,
+                    merchantBrandId: brand?.id
                 )
             )
         }
