@@ -60,6 +60,11 @@ enum OCRServiceError: LocalizedError {
 }
 
 final class OCRService {
+    private enum ListAmountInfo {
+        case expense(amount: Double, inlineTitle: String?)
+        case ignored
+    }
+
     func recognizeReceipt(from imageData: Data) async throws -> [OCRReceiptDraft] {
         guard let image = UIImage(data: imageData), let cgImage = image.cgImage else {
             throw OCRServiceError.invalidImage
@@ -242,7 +247,14 @@ final class OCRService {
         for index in lines.indices {
             let line = lines[index]
             guard !shouldSkipListAmountLine(line) else { continue }
-            guard let amountInfo = signedListAmountInfo(in: line), amountInfo.amount < 0 else { continue }
+            let amountInfo: (amount: Double, inlineTitle: String?)
+            let statusContext = adjacentListStatusContext(lines: lines, index: index)
+            switch listAmountInfo(in: line, statusContext: statusContext) {
+            case .some(.expense(let amount, let inlineTitle)):
+                amountInfo = (amount, inlineTitle)
+            case .some(.ignored), .none:
+                continue
+            }
 
             let windowStart = max(0, index - 3)
             let windowEnd = min(lines.count, index + 5)
@@ -287,20 +299,50 @@ final class OCRService {
         return Array(drafts.prefix(12))
     }
 
-    private func signedListAmountInfo(in line: String) -> (amount: Double, inlineTitle: String?)? {
+    private func listExpenseAmountInfo(in line: String) -> (amount: Double, inlineTitle: String?)? {
+        guard case let .some(.expense(amount, inlineTitle)) = listAmountInfo(in: line) else {
+            return nil
+        }
+        return (amount, inlineTitle)
+    }
+
+    // List examples:
+    // - "瑞幸咖啡 18.00 交易成功" is an expense even without a minus sign.
+    // - "瑞幸咖啡 18.00" followed by "交易成功" is also an expense.
+    // - "瑞幸咖啡 18.00 交易关闭" is ignored because the order was not paid.
+    private func listAmountInfo(in line: String, statusContext: String = "") -> ListAmountInfo? {
         let normalized = line
             .replacingOccurrences(of: "−", with: "-")
             .replacingOccurrences(of: "—", with: "-")
             .replacingOccurrences(of: "￥", with: "¥")
             .replacingOccurrences(of: ",", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let pattern = #"^(?:(.+?)\s*)?-\s*(?:¥\s*)?([0-9]{1,6}(?:\.[0-9]{1,2})?)(?:\s*(?:等待确认收货|交易成功|支付成功|已全额退款|已退款(?:\(¥?\s*[0-9]+(?:\.[0-9]{1,2})?\))?))?$"#
+        let statusPattern = #"(等待确认收货|交易成功|支付成功|已全额退款|已退款(?:\(¥?\s*[0-9]+(?:\.[0-9]{1,2})?\))?|交易关闭)"#
+        let pattern = #"^(?:(.+?)\s*)?(-)?\s*(?:¥\s*)?([0-9]{1,6}(?:\.[0-9]{1,2})?)(?:\s*"# + statusPattern + #")?$"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
         let nsText = normalized as NSString
         guard let match = regex.firstMatch(in: normalized, range: NSRange(location: 0, length: nsText.length)),
-              match.numberOfRanges > 2 else {
+              match.numberOfRanges > 4 else {
             return nil
         }
+
+        let status = match.range(at: 4).location != NSNotFound
+            ? nsText.substring(with: match.range(at: 4))
+            : ""
+        let statusScope = "\(status)\n\(statusContext)"
+        if statusScope.contains("交易关闭") {
+            // 关闭订单展示了金额但没有实际支出，不能导入为账单。
+            return .ignored
+        }
+        if statusScope.contains("已退款") || statusScope.contains("已全额退款") {
+            // 退款正数行按产品规则忽略，避免和原支出重复抵消。
+            return .ignored
+        }
+
+        let hasMinus = match.range(at: 2).location != NSNotFound
+        let paidWithoutMinus = !hasMinus && ["等待确认收货", "交易成功", "支付成功"].contains { statusScope.contains($0) }
+        guard hasMinus || paidWithoutMinus else { return nil }
+
         let title: String?
         if match.range(at: 1).location != NSNotFound {
             let rawTitle = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -308,8 +350,16 @@ final class OCRService {
         } else {
             title = nil
         }
-        let value = nsText.substring(with: match.range(at: 2))
-        return (-(Double(value) ?? 0), title)
+        let value = nsText.substring(with: match.range(at: 3))
+        return .expense(amount: -(Double(value) ?? 0), inlineTitle: title)
+    }
+
+    private func adjacentListStatusContext(lines: [String], index: Int) -> String {
+        [index - 1, index + 1]
+            .filter { lines.indices.contains($0) }
+            .map { lines[$0].trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { isListStatusLine($0) }
+            .joined(separator: "\n")
     }
 
     private func nearbyListTitle(lines: [String], amountIndex: Int, provider: OCRProvider) -> String? {
@@ -330,7 +380,7 @@ final class OCRService {
 
         for candidateIndex in stride(from: start, through: end, by: -1) {
             let candidate = lines[candidateIndex].trimmingCharacters(in: .whitespacesAndNewlines)
-            if isPureAmountLine(candidate) || signedListAmountInfo(in: candidate) != nil {
+            if isPureAmountLine(candidate) || listExpenseAmountInfo(in: candidate) != nil {
                 break
             }
             if isListTimeLine(candidate) || isListStatusLine(candidate) {
@@ -356,7 +406,7 @@ final class OCRService {
     }
 
     private func isLikelyListTitle(_ value: String) -> Bool {
-        guard isUsableTitle(value), !isPureAmountLine(value) else { return false }
+        guard isUsableTitle(value), !isPureAmountLine(value), !isListTimeLine(value), !isListStatusLine(value) else { return false }
         let blocked = [
             "¥", "￥", "金额", "时间", "订单", "单号", "支付", "付款", "收款", "交易", "账单", "详情",
             "当前状态", "成功", "失败", "付款方式", "筛选", "全部", "月支出", "月收入", "余额", "零钱",
@@ -485,6 +535,9 @@ final class OCRService {
             return true
         }
         if trimmed.range(of: #"^\d{1,2}[-/.]\d{1,2}\s+\d{1,2}:\d{2}"#, options: .regularExpression) != nil {
+            return true
+        }
+        if trimmed.range(of: #"^(周一|周二|周三|周四|周五|周六|周日|星期一|星期二|星期三|星期四|星期五|星期六|星期日)\s+\d{1,2}:\d{2}"#, options: .regularExpression) != nil {
             return true
         }
         return trimmed.range(of: #"^(今天|昨天|前天)\s+\d{1,2}:\d{2}"#, options: .regularExpression) != nil

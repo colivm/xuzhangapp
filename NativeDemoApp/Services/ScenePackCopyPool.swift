@@ -130,11 +130,17 @@ enum ScenePackCopyPool {
         petName: String,
         historyItems: [HomeItem],
         allowPetCopy: Bool = true,
-        variant: Int = 0
+        variant: Int = 0,
+        allowTravelSpecificCopy: Bool = false
     ) -> String {
         let tierIndex = tierIndex(for: pack, amount: amount)
         let tier = pack.tiers[tierIndex]
-        let context = contextualNotes(for: pack, category: categoryContext, date: date)
+        let context = contextualNotes(
+            for: pack,
+            category: categoryContext,
+            date: date,
+            allowTravelSpecificCopy: allowTravelSpecificCopy
+        )
         let notes = context?.notes ?? tier.notes
         let baseSeed = "\(dayKey(for: date))|\(pack.id)|\(tierIndex)|\(categoryContext.rawValue)|\(context?.key ?? "tier")"
         let baseIndex = stableIndex(seed: baseSeed, count: notes.count)
@@ -157,9 +163,17 @@ enum ScenePackCopyPool {
     private static func contextualNotes(
         for pack: ScenePackDefinition,
         category: HomeItem.Category,
-        date: Date
+        date: Date,
+        allowTravelSpecificCopy: Bool
     ) -> (key: String, notes: [String])? {
         let hour = Calendar.current.component(.hour, from: date)
+
+        if pack.id == "travel",
+           hour < 6,
+           !allowTravelSpecificCopy,
+           ![.transport, .lodging, .entertainment].contains(category) {
+            return ("lateNightTravelNeutral", ["深夜这笔先轻轻记下", "夜里的一点小花费", "凌晨顺手补上一笔", "晚归路上的小记录", "深夜日常也算生活", "夜里这点花费记一下", "凌晨的小开销留个底", "夜深了也把账记稳"])
+        }
 
         if pack.id == "food" || category == .dining {
             switch hour {

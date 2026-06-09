@@ -42,6 +42,25 @@ struct RecordView: View {
     }
 
     private func guessScenePackId() -> String {
+        let amount = inputAmountValue
+        let isLateNight = Calendar.current.component(.hour, from: homeViewModel.selectedDate) < 6
+        if isLateNight, homeViewModel.selectedCategory == .dining {
+            return availableScenePackId("food")
+        }
+        if isLateNight,
+           homeViewModel.selectedCategory == .other,
+           amount <= 45,
+           !hasTravelContextForCurrentRecord {
+            return availableScenePackId("food")
+        }
+        if homeViewModel.selectedCategory == .other {
+            if hasTravelContextForCurrentRecord {
+                return availableScenePackId("travel")
+            }
+            if amount <= 45 { return availableScenePackId("food") }
+            if amount <= 120 { return availableScenePackId("home") }
+        }
+
         let categoryToPackId: [HomeItem.Category: String] = [
             .dining: "food",
             .transport: "commute",
@@ -52,18 +71,43 @@ struct RecordView: View {
             .health: "care",
             .home: "home",
             .social: "social",
-            .other: "travel",
         ]
         if let packId = categoryToPackId[homeViewModel.selectedCategory],
            visibleScenePacks.contains(where: { $0.id == packId }) {
             return packId
         }
 
-        let amount = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
         if amount <= 15 { return "commute" }
         if amount <= 45 { return "food" }
         if amount <= 120 { return "home" }
         return "travel"
+    }
+
+    private func availableScenePackId(_ preferred: String, fallback: String = "food") -> String {
+        if visibleScenePacks.contains(where: { $0.id == preferred }) {
+            return preferred
+        }
+        return fallback
+    }
+
+    private var hasTravelContextForCurrentRecord: Bool {
+        let note = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if containsTravelKeyword(note) {
+            return true
+        }
+        let start = Calendar.current.date(byAdding: .day, value: -30, to: homeViewModel.selectedDate) ?? .distantPast
+        return homeViewModel.items.contains { item in
+            item.createdAt >= start && (
+                item.category == .lodging ||
+                item.category == .entertainment ||
+                containsTravelKeyword(item.title)
+            )
+        }
+    }
+
+    private func containsTravelKeyword(_ text: String) -> Bool {
+        let keywords = ["旅行", "旅途", "景区", "景点", "行程", "酒店", "民宿", "住宿", "机票", "高铁", "机场", "车站", "门票", "出发", "返程", "摆渡"]
+        return keywords.contains { text.contains($0) }
     }
 
     private func applyScenePack(_ pack: ScenePackDefinition, keepSelectedCategory: Bool = false) {
@@ -86,7 +130,8 @@ struct RecordView: View {
             petName: settingsViewModel.petNickname,
             historyItems: homeViewModel.items,
             allowPetCopy: settingsViewModel.petCompanionEnabled,
-            variant: variant
+            variant: variant,
+            allowTravelSpecificCopy: !keepSelectedCategory || containsTravelKeyword(homeViewModel.inputTitle)
         )
         if !keepSelectedCategory {
             homeViewModel.selectCategory(pack.category)

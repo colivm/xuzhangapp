@@ -550,6 +550,21 @@ final class PlaybackService {
         let amount: Double
     }
 
+    private struct CategoryMonthlyStat {
+        let category: String
+        let count: Int
+        let amount: Double
+    }
+
+    private struct MonthlyCategoryChange {
+        let category: String
+        let current: CategoryMonthlyStat
+        let previous: CategoryMonthlyStat?
+        let amountDelta: Double
+        let countDelta: Int
+        let score: Double
+    }
+
     private struct DayActivity {
         let date: Date
         let label: String
@@ -754,10 +769,18 @@ final class PlaybackService {
     }
 
     private func monthlyChangeText(current: [HomeItem], previous: [HomeItem], segments: [MonthSegment]) -> String {
-        let currentCategories = Set(current.map(\.category.rawValue))
-        let previousCategories = Set(previous.map(\.category.rawValue))
-        if let fresh = currentCategories.subtracting(previousCategories).sorted().first {
-            return "这个月新出现了「\(fresh)」分类。"
+        if let change = meaningfulMonthlyCategoryChange(current: current, previous: previous) {
+            let amountText = Self.money(abs(change.amountDelta))
+            if change.previous == nil {
+                return "这个月「\(change.category)」开始变得明显，留下 \(change.current.count) 笔、\(Self.money(change.current.amount)) 的生活痕迹。"
+            }
+            if change.amountDelta >= 0 {
+                let countText = change.countDelta > 0 ? "，多了 \(change.countDelta) 笔" : ""
+                return "这个月「\(change.category)」比上月更显眼\(countText)，多出约 \(amountText)。"
+            } else {
+                let countText = change.countDelta < 0 ? "，少了 \(abs(change.countDelta)) 笔" : ""
+                return "这个月「\(change.category)」比上月轻了一些\(countText)，少了约 \(amountText)。"
+            }
         }
         let streak = longestRecordStreak(in: current)
         if streak >= 3 {
@@ -771,6 +794,71 @@ final class PlaybackService {
             return "记录从 \(Self.shortDateFormatter.string(from: first.createdAt)) 延续到 \(Self.shortDateFormatter.string(from: last.createdAt))，跨度 \(days) 天。"
         }
         return "这个月已经留下了可以回看的生活痕迹。"
+    }
+
+    private func meaningfulMonthlyCategoryChange(current: [HomeItem], previous: [HomeItem]) -> MonthlyCategoryChange? {
+        let previousTotal = previous.reduce(0) { $0 + $1.amount }
+        guard previous.count >= 3, previousTotal > 0 else { return nil }
+
+        let currentStats = monthlyCategoryStats(current)
+        let previousStats = monthlyCategoryStats(previous)
+        let currentTotal = max(current.reduce(0) { $0 + $1.amount }, 1)
+        let categoryNames = Set(currentStats.keys).union(previousStats.keys)
+
+        let candidates = categoryNames.compactMap { category -> MonthlyCategoryChange? in
+            guard let current = currentStats[category], current.count > 0 else { return nil }
+            let previous = previousStats[category]
+            let previousAmount = previous?.amount ?? 0
+            let previousCount = previous?.count ?? 0
+            let amountDelta = current.amount - previousAmount
+            let countDelta = current.count - previousCount
+            let shareDelta = current.amount / currentTotal - previousAmount / previousTotal
+
+            if previous == nil {
+                guard current.count >= 2 || current.amount >= max(50, currentTotal * 0.08) else { return nil }
+            } else {
+                let amountSignificant = abs(amountDelta) >= max(50, previousAmount * 0.25)
+                let countSignificant = abs(countDelta) >= 2
+                let shareSignificant = abs(shareDelta) >= 0.12
+                guard amountSignificant || countSignificant || shareSignificant else { return nil }
+            }
+
+            let score = abs(shareDelta) * 100
+                + min(abs(amountDelta) / 50, 8)
+                + Double(abs(countDelta)) * 0.8
+                + (previous == nil ? 1.5 : 0)
+            return MonthlyCategoryChange(
+                category: category,
+                current: current,
+                previous: previous,
+                amountDelta: amountDelta,
+                countDelta: countDelta,
+                score: score
+            )
+        }
+
+        return candidates.max {
+            if $0.score == $1.score {
+                return $0.current.amount < $1.current.amount
+            }
+            return $0.score < $1.score
+        }
+    }
+
+    private func monthlyCategoryStats(_ items: [HomeItem]) -> [String: CategoryMonthlyStat] {
+        var buckets: [String: (count: Int, amount: Double)] = [:]
+        for item in items {
+            let category = item.category.rawValue
+            let current = buckets[category] ?? (count: 0, amount: 0)
+            buckets[category] = (count: current.count + 1, amount: current.amount + item.amount)
+        }
+        return buckets.reduce(into: [:]) { result, entry in
+            result[entry.key] = CategoryMonthlyStat(
+                category: entry.key,
+                count: entry.value.count,
+                amount: entry.value.amount
+            )
+        }
     }
 
     private func longestRecordStreak(in items: [HomeItem]) -> Int {

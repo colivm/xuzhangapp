@@ -7,6 +7,25 @@ struct RecordPrefillInput {
     let noteDraft: String
     let categoryLocked: Bool
     let merchantBrandId: String?
+    let context: RecordContextSignal?
+
+    init(
+        amount: Double,
+        referenceDate: Date,
+        items: [HomeItem],
+        noteDraft: String,
+        categoryLocked: Bool,
+        merchantBrandId: String?,
+        context: RecordContextSignal? = nil
+    ) {
+        self.amount = amount
+        self.referenceDate = referenceDate
+        self.items = items
+        self.noteDraft = noteDraft
+        self.categoryLocked = categoryLocked
+        self.merchantBrandId = merchantBrandId
+        self.context = context
+    }
 }
 
 struct RecordPrefillResult {
@@ -94,7 +113,8 @@ struct RecordPrefillService {
                 referenceDate: input.referenceDate,
                 items: historyItems,
                 noteDraft: input.noteDraft,
-                locked: input.categoryLocked
+                locked: input.categoryLocked,
+                context: input.context
             )
         )
         guard let result else { return nil }

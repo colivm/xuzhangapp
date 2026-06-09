@@ -107,7 +107,8 @@ final class HomeViewModel: ObservableObject {
     private let memberFlowService = MemberFlowService()
     private let routeQuotaStore = SummaryPlaybackQuotaStore()
     private let dailyQuotaStore = DailyFeatureQuotaStore()
-    private var emittedRouteGuidanceTypes: Set<PlaybackRouteGuidance> = []
+    private static let routeGuidanceHandledDefaultsKey = "route_guidance_handled_v1"
+    private var emittedRouteGuidanceKeys: Set<String> = []
     private var recordPrefillAmount: Double?
 
     init() {
@@ -744,9 +745,17 @@ final class HomeViewModel: ObservableObject {
                 referenceDate: selectedDate,
                 items: recentItems,
                 noteDraft: inputTitle.trimmingCharacters(in: .whitespacesAndNewlines),
-                locked: categoryLockedByUser
+                locked: categoryLockedByUser,
+                context: currentRecordContextSignal()
             )
         )
+    }
+
+    private func currentRecordContextSignal() -> RecordContextSignal {
+        let settings = LocalStore.loadSettings()
+        // Coarse local context only: cached weather plus time bands, no location trail or POI.
+        let weather = settings.weatherCompanionEnabled ? WeatherCompanionService.shared.cachedSnapshot : nil
+        return RecordContextSignal(referenceDate: selectedDate, weather: weather)
     }
 
     func refreshRecordPrefill(applySuggestedTitle: Bool = true) {
@@ -772,7 +781,8 @@ final class HomeViewModel: ObservableObject {
                 items: recentItems,
                 noteDraft: trimmedNote,
                 categoryLocked: categoryLockedByUser,
-                merchantBrandId: brand?.id
+                merchantBrandId: brand?.id,
+                context: currentRecordContextSignal()
             )
         )
         recordPrefillResult = result
@@ -986,8 +996,14 @@ final class HomeViewModel: ObservableObject {
     }
 
     func consumeRouteGuidance(_ guidance: PlaybackRouteGuidance? = nil) {
-        guard let activeRouteGuidance else { return }
+        guard let activeRouteGuidance else {
+            if let guidance {
+                persistRouteGuidanceHandled(guidance)
+            }
+            return
+        }
         if let guidance, guidance != activeRouteGuidance { return }
+        persistRouteGuidanceHandled(activeRouteGuidance)
         self.activeRouteGuidance = nil
     }
 
@@ -1018,10 +1034,37 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func emitRouteGuidance(_ guidance: PlaybackRouteGuidance) {
-        guard !emittedRouteGuidanceTypes.contains(guidance) else { return }
+        let key = routeGuidanceHandledKey(for: guidance)
+        guard !emittedRouteGuidanceKeys.contains(key) else { return }
+        guard !hasHandledRouteGuidance(guidance) else { return }
         activeRouteGuidance = guidance
-        emittedRouteGuidanceTypes.insert(guidance)
+        emittedRouteGuidanceKeys.insert(key)
+        persistRouteGuidanceHandled(guidance)
         analyticsService.track("route_guidance_shown", props: ["type": guidance.rawValue])
+    }
+
+    private func hasHandledRouteGuidance(_ guidance: PlaybackRouteGuidance) -> Bool {
+        let key = routeGuidanceHandledKey(for: guidance)
+        return Set(UserDefaults.standard.stringArray(forKey: Self.routeGuidanceHandledDefaultsKey) ?? []).contains(key)
+    }
+
+    private func persistRouteGuidanceHandled(_ guidance: PlaybackRouteGuidance) {
+        let key = routeGuidanceHandledKey(for: guidance)
+        var handled = Set(UserDefaults.standard.stringArray(forKey: Self.routeGuidanceHandledDefaultsKey) ?? [])
+        guard handled.insert(key).inserted else { return }
+        UserDefaults.standard.set(Array(handled), forKey: Self.routeGuidanceHandledDefaultsKey)
+    }
+
+    private func routeGuidanceHandledKey(for guidance: PlaybackRouteGuidance, date: Date = .now) -> String {
+        switch guidance {
+        case .firstRecordTodayPlayback:
+            return "\(guidance.rawValue):once"
+        case .weekSliceReady, .fiveRecordsNeverPlayed:
+            let components = PlaybackService.isoCalendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+            let year = components.yearForWeekOfYear ?? 0
+            let week = components.weekOfYear ?? 0
+            return "\(guidance.rawValue):isoWeek:\(year)-\(week)"
+        }
     }
 
     func regenerateTodayInsight(userName: String, settings: AppSettings) async {
