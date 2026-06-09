@@ -362,7 +362,7 @@ struct ContentView: View {
                     ? AppColors.accent.opacity(0.34)
                     : Color.white.opacity(0.42).mix(with: AppColors.accent.opacity(0.18), by: 0.5)
                 )
-                .frame(width: 30, height: 30)
+                .frame(width: 24, height: 24)
 
             // Foreground icon
             Group {
@@ -379,9 +379,9 @@ struct ContentView: View {
                     tabSettingsGlyph(isSelected: isSelected)
                 }
             }
-            .frame(width: 18, height: 18)
+            .frame(width: 24, height: 24)
         }
-        .frame(width: 30, height: 30)
+        .frame(width: 24, height: 24)
     }
 
     // Today tab — horizon arc with soft sunrise
