@@ -16,6 +16,7 @@ struct InsightWebView: View {
     @State private var monthlyTrialModal: MonthlyTrialModal?
     @State private var isSavingWeeklyShareCard = false
     @State private var weeklyShareSaveMessage: String?
+    @State private var isTodayInsightExpanded = false
     private let trialTotal = 5
 
     private struct AIStatusPill: Equatable {
@@ -51,7 +52,7 @@ struct InsightWebView: View {
     }
 
     private var insightContent: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 18) {
             weeklyInsightSection
             monthlyInsightSection
             todayInsightSection
@@ -73,24 +74,27 @@ struct InsightWebView: View {
 
             weeklyInsightText(weeklyBlocks)
 
-            softActionButton("梳理本周节奏") {
+            primaryActionButton("梳理本周节奏") {
                 let text = homeViewModel.buildWeeklyRhythmText()
                 homeViewModel.setLatestActionCard(text, scope: "weekly")
                 homeViewModel.markWeeklyRhythmReviewed()
             }
-            softActionButton("生成周度分享卡") {
-                homeViewModel.markWeeklyShareGenerated()
-                generateAndShareWeeklyCard()
+
+            HStack(spacing: 14) {
+                quietTextButton("生成周度分享卡") {
+                    homeViewModel.markWeeklyShareGenerated()
+                    generateAndShareWeeklyCard()
+                }
+                if !homeViewModel.weekTopCategoryText.isEmpty && homeViewModel.weekTopCategoryText != "暂无" {
+                    quietTextButton("标记常花类目") {
+                        homeViewModel.markWeeklyTag()
+                    }
+                }
             }
             if let weeklyShareSaveMessage {
                 Text(weeklyShareSaveMessage)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.subtext)
-            }
-            if !homeViewModel.weekTopCategoryText.isEmpty && homeViewModel.weekTopCategoryText != "暂无" {
-                softActionButton("标记常花类目") {
-                    homeViewModel.markWeeklyTag()
-                }
             }
         }
         .glassPanel(radius: 24, padding: 20)
@@ -128,8 +132,8 @@ struct InsightWebView: View {
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(AppColors.text)
 
-            monthlyTrialText(left: left, isMember: isMember, exhausted: exhausted)
             monthlyGenerateControl(isMember: isMember, exhausted: exhausted)
+            monthlyTrialText(left: left, isMember: isMember, exhausted: exhausted)
             monthlyAIStatusView
             monthlyErrorView
             monthlyReportView
@@ -142,12 +146,11 @@ struct InsightWebView: View {
     @ViewBuilder
     private func monthlyTrialText(left: Int, isMember: Bool, exhausted: Bool) -> some View {
         if !isMember {
-            let text = exhausted ? "免费试用次数已用完" : "剩余试用次数：\(left)/\(trialTotal)"
-            let color = exhausted ? Color.orange.opacity(0.8) : AppColors.subtext
+            let text = exhausted ? "免费试用次数已用完" : "剩余 \(left)/\(trialTotal) 次月度回顾"
 
             Text(text)
                 .font(.system(size: 12))
-                .foregroundStyle(color)
+                .foregroundStyle(AppColors.subtext.opacity(0.86))
         }
     }
 
@@ -155,12 +158,9 @@ struct InsightWebView: View {
     private func monthlyGenerateControl(isMember: Bool, exhausted: Bool) -> some View {
         if exhausted {
             Button {
-                monthlyTrialModal = MonthlyTrialModal(
-                    title: "免费次数已用完",
-                    body: "您的免费月度复盘次数已用完，升级会员即可解锁无限次月度/季度/年度 AI 复盘，还有更多专属权益等你体验。"
-                )
+                onShowMemberPricing?()
             } label: {
-                monthlyUpgradeButtonLabel
+                monthlyUpgradeLinkLabel
             }
             .buttonStyle(.plain)
         } else {
@@ -176,42 +176,30 @@ struct InsightWebView: View {
         }
     }
 
-    private var monthlyUpgradeButtonLabel: some View {
-        HStack(spacing: 6) {
-            Text("🔒 开通会员解锁无限复盘")
-                .font(.system(size: 16, weight: .semibold))
-        }
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .background(
-            LinearGradient(
-                colors: [Color.orange.opacity(0.8), Color.orange.opacity(0.6)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-        )
-        .shadow(color: Color.orange.opacity(0.3), radius: 8, y: 4)
+    private var monthlyUpgradeLinkLabel: some View {
+        Text("想多聊几句？了解会员")
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(AppColors.accent.opacity(0.9))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 6)
     }
 
     private var monthlyGenerateButtonLabel: some View {
-        let title = homeViewModel.isGeneratingMonthlyInsight ? "正在生成月度复盘..." : "生成月度复盘"
+        let title = homeViewModel.isGeneratingMonthlyInsight ? "正在梳理这一月..." : "生成这一月的回顾"
 
         return Text(title)
-            .font(.system(size: 16, weight: .semibold))
+            .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
             .background(
-                LinearGradient(
-                    colors: [AppColors.accent.opacity(0.92), AppColors.accent],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(AppColors.accent.opacity(0.9))
             )
-            .shadow(color: AppColors.accent.opacity(0.3), radius: 8, y: 4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(AppColors.accent.opacity(0.18), lineWidth: 1)
+            )
     }
 
     @ViewBuilder
@@ -331,16 +319,32 @@ struct InsightWebView: View {
 
     private var todayInsightSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("今日生活小记")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(AppColors.text)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isTodayInsightExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    Text("今日小记（可选）")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(AppColors.text.opacity(0.86))
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(AppColors.subtext.opacity(0.7))
+                        .rotationEffect(.degrees(isTodayInsightExpanded ? 180 : 0))
+                }
+            }
+            .buttonStyle(.plain)
 
-            todayInsightText
-            todayRegenerateButton
-            todayInsightLoading
-            todayInsightError
+            if isTodayInsightExpanded {
+                todayInsightText
+                todayRegenerateButton
+                todayInsightLoading
+                todayInsightError
+            }
         }
-        .glassPanel(radius: 24, padding: 20)
+        .glassPanel(radius: 20, padding: 18)
     }
 
     @ViewBuilder
@@ -622,6 +626,35 @@ struct InsightWebView: View {
         }
     }
 
+    private func primaryActionButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 11)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(AppColors.accent.opacity(0.9))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(AppColors.accent.opacity(0.18), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func quietTextButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.88))
+                .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+    }
+
     private func softActionButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
@@ -645,22 +678,24 @@ struct InsightWebView: View {
     }
 
     private func lockedReportButton(_ title: String) -> some View {
-        HStack(spacing: 6) {
-            Text("🔒︎")
-                .font(.system(size: 14))
+        HStack {
             Text(title)
                 .font(.system(size: 14))
+            Spacer()
+            Text("会员可用")
+                .font(.system(size: 11, weight: .medium))
         }
         .foregroundStyle(AppColors.subtext.opacity(0.86))
         .frame(maxWidth: .infinity)
+        .padding(.horizontal, 12)
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.4))
+                .fill(Color.white.opacity(0.24))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                .stroke(AppColors.subtext.opacity(0.18), lineWidth: 1)
         )
     }
 

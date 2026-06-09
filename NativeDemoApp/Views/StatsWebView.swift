@@ -15,6 +15,7 @@ struct StatsWebView: View {
     @State private var summaryPlayback: SummaryPlayback?
     @State private var summaryQuotaMessage: String?
     @State private var quotaRefreshID = UUID()
+    @State private var isFiltersExpanded = false
     private let playbackService = PlaybackService()
     private let quotaStore = SummaryPlaybackQuotaStore()
 
@@ -60,13 +61,29 @@ struct StatsWebView: View {
 
     private var emptyRecordListText: String {
         if homeViewModel.items.isEmpty {
-            return "还没有账单，先去记一笔。"
+            return "这一段还没有痕迹，先去记下一笔。"
         }
-        return "当前筛选下没有账单，可以切到本月或本年看看。"
+        return "这一段没有匹配的痕迹，可以换个时间或分类看看。"
     }
 
     private var hasMemberAccess: Bool {
         ["monthly", "yearly", "lifetime"].contains(settingsViewModel.memberTier.lowercased())
+    }
+
+    private var currentFilterSummary: String {
+        let periodText = useCustomRange ? "自定义时间" : selectedPeriod.rawValue
+        let categoryText = selectedCategory?.rawValue ?? "全部分类"
+        return "\(periodText) · \(categoryText)"
+    }
+
+    private var overviewNarrativeText: String {
+        let count = filteredItems.count
+        guard count > 0 else {
+            return "这一段还安静着，先留下几笔，之后就能慢慢看见生活的纹理。"
+        }
+        let trendData = computeTrendData()
+        let trendText = trendData.isEmpty ? "多记几天，节奏会更清楚。" : trendInsightText(data: trendData)
+        return "这一段留下 \(count) 笔，合计 \(totalExpense.formatted(.cny))。\(trendText)"
     }
 
     @State private var showPeriodSheet = false
@@ -101,9 +118,9 @@ struct StatsWebView: View {
 
     private var statsContent: some View {
         VStack(spacing: 12) {
-            filtersPanel
             summarySliceCard
             overviewPanel
+            filtersPanel
             recordListPanel
         }
         .padding(.horizontal, 12)
@@ -114,17 +131,45 @@ struct StatsWebView: View {
     }
 
     private var filtersPanel: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("账单")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(AppColors.text)
+        VStack(alignment: .leading, spacing: isFiltersExpanded ? 14 : 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isFiltersExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("细查时间与分类")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(AppColors.text.opacity(0.82))
+                        Text(currentFilterSummary)
+                            .font(.system(size: 11))
+                            .foregroundStyle(AppColors.subtext)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(AppColors.subtext.opacity(0.7))
+                        .rotationEffect(.degrees(isFiltersExpanded ? 180 : 0))
+                }
+            }
+            .buttonStyle(.plain)
 
-            HStack(alignment: .top, spacing: 8) {
-                periodFilter
-                categoryFilter
+            if isFiltersExpanded {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("时间与分类")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+
+                    HStack(alignment: .top, spacing: 8) {
+                        periodFilter
+                        categoryFilter
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .glassPanel(radius: 24, padding: 20)
+        .glassPanel(radius: 18, padding: isFiltersExpanded ? 16 : 14)
     }
 
     private var periodFilter: some View {
@@ -189,10 +234,14 @@ struct StatsWebView: View {
     }
 
     private var overviewPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("这一段")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(AppColors.text)
+            Text(overviewNarrativeText)
+                .font(.system(size: 14))
+                .foregroundStyle(AppColors.text.opacity(0.82))
+                .fixedSize(horizontal: false, vertical: true)
             totalExpenseCard
             trendChart
         }
@@ -200,25 +249,27 @@ struct StatsWebView: View {
     }
 
     private var totalExpenseCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        HStack(alignment: .firstTextBaseline) {
             Text("合计")
-                .font(.system(size: 13))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
+            Spacer()
             Text(totalExpense.formatted(.cny))
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(AppColors.accent.opacity(0.86))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.62))
+                .fill(Color.white.opacity(0.54))
         )
     }
 
     private var recordListPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("记录列表")
+            Text("这一段里的笔笔")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(AppColors.text)
             recordListContent
@@ -233,11 +284,11 @@ struct StatsWebView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
         } else {
-            ForEach(filteredItems) { item in
+            ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
                 Button {
                     editingItem = item
                 } label: {
-                    billRecordRow(item)
+                    billRecordRow(item, isFirst: index == 0)
                 }
                 .buttonStyle(.plain)
             }
@@ -335,7 +386,7 @@ struct StatsWebView: View {
                     Spacer()
                 }
 
-                let playbackButtonTitle = isMonthLocked ? "了解会员" : "播放"
+                let playbackButtonTitle = isMonthLocked ? "了解会员" : "听听这一段"
                 let playbackForeground = canPlay ? Color.white : AppColors.text.opacity(0.72)
                 let playbackFill = canPlay ? AppColors.accent : Color.white.opacity(0.64)
                 let playbackStroke = canPlay ? AppColors.accent.opacity(0.28) : Color.white.opacity(0.58)
@@ -381,7 +432,7 @@ struct StatsWebView: View {
     }
 
     private func summaryCardSubtitle(preview: SummaryPlayback, range: SummaryPlaybackRange, hasData: Bool, isMonthLocked: Bool) -> String {
-        guard hasData else { return "这个时间段还没有记录，先记一笔再播放。" }
+        guard hasData else { return "先留下几笔，这里就能慢慢讲出这一段生活。" }
         if isMonthLocked {
             return "会员专属 · 你的 3 次新用户体验已用完"
         }
@@ -560,7 +611,7 @@ struct StatsWebView: View {
 
     // MARK: - Simplified Category Filter Chips (no longer used, replaced by Menu)
 
-    private func billRecordRow(_ item: HomeItem) -> some View {
+    private func billRecordRow(_ item: HomeItem, isFirst: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(item.title)
@@ -571,6 +622,18 @@ struct StatsWebView: View {
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(AppColors.text)
             }
+
+            if !item.emotionTag.isEmpty {
+                Text(item.emotionTag)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.accent.opacity(0.74))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.08)))
+                    .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.18), lineWidth: 0.7))
+                    .padding(.bottom, 4)
+            }
+
             HStack(spacing: 6) {
                 Text(item.category.rawValue)
                     .font(.system(size: 11, weight: .medium))
@@ -581,9 +644,15 @@ struct StatsWebView: View {
                     .foregroundStyle(AppColors.subtext)
             }
         }
-        .padding(.vertical, 4).padding(.horizontal, 4)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 4)
         .overlay(alignment: .top) {
-            Rectangle().fill(Color.white.opacity(0.35)).frame(height: 0.8).padding(.top, -4)
+            if !isFirst {
+                Rectangle()
+                    .fill(Color.white.opacity(0.30))
+                    .frame(height: 1)
+                    .padding(.top, -10)
+            }
         }
     }
 
@@ -652,19 +721,19 @@ struct StatsWebView: View {
     private var trendChart: some View {
         let trendData = computeTrendData()
         VStack(alignment: .leading, spacing: 6) {
-            Text("近 30 天记录走势")
-                .font(.system(size: 13))
+            Text("一点走势")
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
 
             if trendData.isEmpty {
-                Text("近 30 天还没有可绘制的账单。")
+                Text("近 30 天还没有足够的痕迹。")
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.subtext)
-                    .padding(.vertical, 20)
+                    .padding(.vertical, 12)
             } else {
                 GeometryReader { geo in
                     let w = geo.size.width
-                    let h: CGFloat = 90
+                    let h: CGFloat = 48
                     let maxVal = trendData.map(\.value).max() ?? 1
                     let padding: CGFloat = 8
                     let chartW = w - padding * 2
@@ -723,13 +792,7 @@ struct StatsWebView: View {
                         }
                     }
                 }
-                .frame(height: 92)
-
-                // Trend insight
-                Text(trendInsightText(data: trendData))
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext)
-                    .padding(.top, 2)
+                .frame(height: 52)
             }
         }
     }

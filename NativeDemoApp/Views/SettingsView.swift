@@ -18,7 +18,7 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) {
+            VStack(spacing: 16) {
                 // ── Account Entry Panel ──
                 accountEntryPanel
 
@@ -84,11 +84,17 @@ struct SettingsView: View {
                         Text("👤")
                             .font(.system(size: 22))
                     }
-                    Text(settingsViewModel.hasCloudSession
-                         ? "\(settingsViewModel.displayName) > 管理账号与会员。"
-                         : "点击登录，解锁云备份与会员权益 >")
-                        .font(.system(size: 14))
-                        .foregroundStyle(AppColors.text.opacity(0.9))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("你的叙账在这里")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(AppColors.text)
+                        Text(settingsViewModel.hasCloudSession
+                             ? "\(settingsViewModel.displayName)，账号、备份和会员状态都放在这里。"
+                             : "不用登录也能完整记录；想换机备份时，再把它放进云端。")
+                            .font(.system(size: 12))
+                            .foregroundStyle(AppColors.subtext)
+                            .lineLimit(2)
+                    }
                     Spacer()
                     if settingsViewModel.hasCloudSession {
                         Text(settingsViewModel.memberTier.uppercased())
@@ -101,6 +107,9 @@ struct SettingsView: View {
                                     .fill(AppColors.accent)
                             )
                     }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(AppColors.subtext.opacity(0.62))
                 }
             }
             .buttonStyle(.plain)
@@ -114,11 +123,7 @@ struct SettingsView: View {
 
     private var mainSettingsPanel: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("设置")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(AppColors.text)
-
-            sectionBody("默认仅保存在你的手机；登录并开启同步后，才会上传云端备份。")
+            sectionBody("这些偏好只属于你的叙账空间。默认保存在手机里；登录并开启同步后，才会上传云端备份。")
 
             // Display name
             settingField(label: "显示名称") {
@@ -136,11 +141,11 @@ struct SettingsView: View {
             settingHelper("开启后账单会同步到云端，换机时可恢复。")
 
             // AI toggle
-            settingToggle("开启 AI 智能建议（需联网）", isOn: Binding(
+            settingToggle("允许联网梳理复盘（可选）", isOn: Binding(
                 get: { settingsViewModel.useRemoteAI },
                 set: { settingsViewModel.useRemoteAI = $0 }
             ))
-            settingHelper("默认本地存储，不强制登录。")
+            settingHelper("关闭后仍可使用本地回望，不强制登录。")
 
             // Pet companion
             settingToggle("开启宠物陪伴", isOn: Binding(
@@ -193,7 +198,7 @@ struct SettingsView: View {
     private var appearancePanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("外观")
-                .font(.system(size: 22, weight: .bold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(AppColors.text)
 
             // System follow
@@ -288,31 +293,16 @@ struct SettingsView: View {
                 }
             } label: {
                 HStack {
-                    Text("✨ 查看会员方案与权益")
+                    Text("想多留几段回望？了解会员")
                         .font(.system(size: 14, weight: .medium))
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(AppColors.subtext)
                 }
-                .foregroundStyle(AppColors.text.opacity(0.88))
+                .foregroundStyle(AppColors.accent.opacity(0.9))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .padding(.horizontal, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [AppColors.lockGold.opacity(0.12), Color.white.opacity(0.06)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(AppColors.lockGold.opacity(0.25), lineWidth: 1)
-                )
+                .padding(.vertical, 6)
             }
             .buttonStyle(.plain)
 
@@ -367,13 +357,13 @@ struct SettingsView: View {
 
     private var aiSettingsPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("AI 设置")
-                .font(.system(size: 22, weight: .bold))
+            Text("复盘语气")
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(AppColors.text)
 
             // Tone
             VStack(alignment: .leading, spacing: 6) {
-                Text("建议语气")
+                Text("语气偏好")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(AppColors.text.opacity(0.82))
                 HStack(spacing: 4) {

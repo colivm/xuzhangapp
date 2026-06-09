@@ -96,7 +96,7 @@ struct ContentView: View {
             switch self {
             case .today: return "今日"
             case .record: return "记下这一笔"
-            case .stats: return "账单与切片"
+            case .stats: return "这一段痕迹"
             case .insight: return "生活复盘"
             case .settings: return "设置"
             }
