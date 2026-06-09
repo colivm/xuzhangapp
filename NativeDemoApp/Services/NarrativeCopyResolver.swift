@@ -89,10 +89,28 @@ enum NarrativeCopyResolver {
 
     private static func isGenericTitle(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || isNoisyTimeTitle(trimmed) {
+            return true
+        }
         if trimmed.range(of: #"^-?\s*[¥￥]?\s*[0-9]+(?:\.[0-9]{1,2})?\s*$"#, options: .regularExpression) != nil {
             return true
         }
         return ["账单记录", "微信消费", "未命名记录"].contains(trimmed) || trimmed.hasSuffix("记录")
+    }
+
+    static func isNoisyTimeTitle(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let month = String(UnicodeScalar(0x6708)!)
+        let day = String(UnicodeScalar(0x65E5)!)
+        let monthDayPattern = "^\\d{1,2}" + month + "\\d{1,2}" + day + "(?:\\s*\\d{1,2}:?\\d{0,2})?$"
+        let patterns = [
+            #"^\d{1,2}:\d{2}(?::\d{2})?$"#,
+            #"^\d{1,2}:\s*$"#,
+            #"^\d{1,2}[-/.]\d{1,2}(?:\s+\d{1,2}:?\d{0,2})?$"#,
+            #"^20\d{2}[-/.]\d{1,2}[-/.]\d{1,2}(?:\s+\d{1,2}:?\d{0,2})?$"#,
+            monthDayPattern,
+        ]
+        return patterns.contains { trimmed.range(of: $0, options: .regularExpression) != nil }
     }
 
     private static func stableIndex(seed: String, count: Int) -> Int {

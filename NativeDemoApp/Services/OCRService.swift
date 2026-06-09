@@ -169,7 +169,8 @@ final class OCRService {
 
     private func parseAlipay(lines: [String], rawText: String, confidence: Double) -> OCRReceiptDraft? {
         let amount = amountNear(labels: ["金额", "付款金额", "实付款", "实付金额", "订单金额", "支付金额", "交易金额"], in: lines) ?? currencyCandidates(in: rawText).first
-        let title = valueFor(labels: ["商品说明", "商品名称", "商家名称", "商户名称", "交易对象", "收款方", "收款账户", "付款给", "对方账户"], in: lines) ?? fallbackTitle(from: lines)
+        let brand = MerchantBrandCatalog.matchOCRBrand(in: rawText)
+        let title = valueFor(labels: ["商品说明", "商品名称", "商家名称", "商户名称", "交易对象", "收款方", "收款账户", "付款给", "对方账户"], in: lines) ?? brand?.displayName ?? fallbackTitle(from: lines)
         let date = dateNear(labels: ["付款时间", "创建时间", "交易时间", "支付时间"], in: lines) ?? firstDate(in: rawText) ?? .now
         guard let amount, let title else { return nil }
 
@@ -218,7 +219,7 @@ final class OCRService {
     }
 
     private func brandedDraft(_ draft: OCRReceiptDraft) -> OCRReceiptDraft {
-        guard let brand = MerchantBrandCatalog.matchBrand(in: "\(draft.title)\n\(draft.rawText)") else {
+        guard let brand = MerchantBrandCatalog.matchOCRBrand(in: "\(draft.title)\n\(draft.rawText)") else {
             return draft
         }
         var resolved = draft
@@ -458,6 +459,7 @@ final class OCRService {
     private func isUsableTitle(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2, trimmed.count <= 40 else { return false }
+        if NarrativeCopyResolver.isNoisyTimeTitle(trimmed) || isListStatusLine(trimmed) { return false }
         if isPureAmountLine(trimmed) { return false }
         if trimmed.range(of: #"^\d{4}[-/.年]"#, options: .regularExpression) != nil { return false }
         if trimmed.range(of: #"[¥￥]\s*-?\d"#, options: .regularExpression) != nil { return false }

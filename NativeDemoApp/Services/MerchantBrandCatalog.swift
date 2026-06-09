@@ -177,6 +177,21 @@ enum MerchantBrandCatalog {
         return matches.first { containsAlias($0.alias, in: trimmed) }?.brand
     }
 
+    static func matchOCRBrand(in text: String) -> MerchantBrandDefinition? {
+        if let brand = matchBrand(in: text) {
+            return brand
+        }
+        let folded = text
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "\n", with: "")
+        let luckinSignals = ["luckincoffee", "蓝杯", "小蓝杯"]
+        if luckinSignals.contains(where: { folded.contains($0) }) {
+            return definition(for: "luckin")
+        }
+        return nil
+    }
+
     private static func brand(
         _ id: String,
         _ displayName: String,

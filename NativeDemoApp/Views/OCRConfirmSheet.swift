@@ -166,6 +166,10 @@ struct OCRConfirmSheet: View {
                         .foregroundStyle(AppColors.text)
                         .lineLimit(3)
 
+                    if let brand = brand(for: row.draft) {
+                        brandChip(brand)
+                    }
+
                     Text(row.draft.date.zhBillDateTime)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.subtext)
@@ -178,6 +182,32 @@ struct OCRConfirmSheet: View {
                 .foregroundStyle(AppColors.text)
                 .minimumScaleFactor(0.75)
         }
+    }
+
+    private func brand(for draft: OCRReceiptDraft) -> MerchantBrandDefinition? {
+        MerchantBrandCatalog.definition(for: draft.merchantBrandId)
+            ?? MerchantBrandCatalog.matchOCRBrand(in: "\(draft.title)\n\(draft.rawText)")
+    }
+
+    private func brandChip(_ brand: MerchantBrandDefinition) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "tag.fill")
+                .font(.system(size: 10, weight: .bold))
+            Text(brand.displayName)
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(AppColors.accent.opacity(0.88))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(
+            Capsule(style: .continuous)
+                .fill(AppColors.accent.opacity(0.10))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(AppColors.accent.opacity(0.18), lineWidth: 1)
+        )
     }
 
     private func confirmRowCategory(row: ConfirmRow, index: Int) -> some View {
