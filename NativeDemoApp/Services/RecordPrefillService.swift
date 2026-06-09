@@ -176,6 +176,19 @@ struct RecordPrefillService {
         guard (2...12).contains(title.count) else { return false }
         if title == category.defaultRecordTitle { return false }
         if title.hasSuffix("记录") || title.hasSuffix("消费") { return false }
+        let month = String(UnicodeScalar(0x6708)!)
+        let day = String(UnicodeScalar(0x65E5)!)
+        let monthDayPattern = "^\\d{1,2}" + month + "\\d{1,2}" + day + "(?:\\s*\\d{1,2}:?\\d{0,2})?$"
+        let noisyTimePatterns = [
+            #"^\d{1,2}:\d{2}$"#,
+            #"^\d{1,2}:\s*$"#,
+            #"^\d{1,2}[-/]\d{1,2}(?:\s+\d{1,2}:?\d{0,2})?$"#,
+            #"^\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:\s+\d{1,2}:?\d{0,2})?$"#,
+            monthDayPattern,
+        ]
+        if noisyTimePatterns.contains(where: { title.range(of: $0, options: .regularExpression) != nil }) {
+            return false
+        }
         if title.range(of: #"^-?\s*[¥￥]?\s*[0-9]+(?:\.[0-9]{1,2})?\s*$"#, options: .regularExpression) != nil {
             return false
         }

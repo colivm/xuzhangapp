@@ -252,121 +252,125 @@ struct RecordView: View {
         applyScenePack(quickPack, keepSelectedCategory: true)
     }
 
-    private func refreshRecommendedCategory() {
+    private func refreshRecommendedCategory(applySuggestedTitle: Bool = true) {
         guard selectedEntryMode == .manual else { return }
         guard !homeViewModel.categoryLockedByUser else { return }
-        homeViewModel.refreshRecordPrefill()
+        homeViewModel.refreshRecordPrefill(applySuggestedTitle: applySuggestedTitle)
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                // ── Record Panel (matching web recordPage) ──
-                VStack(alignment: .leading, spacing: 16) {
-                    // Title
-                    Text("记一笔")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(recordInk)
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                VStack(spacing: 14) {
+                    // ── Record Panel (matching web recordPage) ──
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Title
+                        Text("记一笔")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(recordInk)
 
-                    if selectedEntryMode == .manual {
-                        manualForm
-                    } else {
-                        ocrForm
-                    }
-                }
-                .glassPanel(radius: 24, padding: 24)
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 4)
-            .padding(.bottom, 120)
-            .frame(maxWidth: 430)
-            .frame(maxWidth: .infinity, alignment: .center)
-        }
-        .scrollIndicators(.hidden)
-        .scrollDismissesKeyboard(.interactively)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if shouldShowAmountQuickKeys {
-                amountKeyboardDock
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .animation(.easeInOut(duration: 0.18), value: shouldShowAmountQuickKeys)
-        .onChange(of: selectedPhoto) { _, newValue in
-            guard let newValue else { return }
-            Task {
-                await MainActor.run {
-                    isOCRRecognizing = true
-                    ocrProgress = 0.12
-                }
-                let progressTask = Task {
-                    while !Task.isCancelled {
-                        try? await Task.sleep(nanoseconds: 180_000_000)
-                        await MainActor.run {
-                            ocrProgress = min(0.88, ocrProgress + 0.08)
+                        if selectedEntryMode == .manual {
+                            manualForm
+                        } else {
+                            ocrForm
                         }
                     }
+                    .glassPanel(radius: 24, padding: 24)
                 }
-                var drafts: [OCRReceiptDraft] = []
-                if let data = try? await newValue.loadTransferable(type: Data.self) {
-                    drafts = await homeViewModel.recognizeOCRDrafts(imageData: data, isMember: isMember)
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+                .padding(.bottom, 120)
+                .frame(maxWidth: 430)
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if shouldShowAmountQuickKeys {
+                    amountKeyboardDock
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                progressTask.cancel()
-                await MainActor.run {
-                    ocrProgress = 1
-                    if !drafts.isEmpty {
-                        ocrConfirmDrafts = drafts
-                        showOCRConfirmSheet = true
+            }
+            .animation(.easeInOut(duration: 0.18), value: shouldShowAmountQuickKeys)
+            .onChange(of: selectedPhoto) { _, newValue in
+                guard let newValue else { return }
+                Task {
+                    await MainActor.run {
+                        isOCRRecognizing = true
+                        ocrProgress = 0.12
+                    }
+                    let progressTask = Task {
+                        while !Task.isCancelled {
+                            try? await Task.sleep(nanoseconds: 180_000_000)
+                            await MainActor.run {
+                                ocrProgress = min(0.88, ocrProgress + 0.08)
+                            }
+                        }
+                    }
+                    var drafts: [OCRReceiptDraft] = []
+                    if let data = try? await newValue.loadTransferable(type: Data.self) {
+                        drafts = await homeViewModel.recognizeOCRDrafts(imageData: data, isMember: isMember)
+                    }
+                    progressTask.cancel()
+                    await MainActor.run {
+                        ocrProgress = 1
+                        if !drafts.isEmpty {
+                            ocrConfirmDrafts = drafts
+                            showOCRConfirmSheet = true
+                        }
+                    }
+                    try? await Task.sleep(nanoseconds: 180_000_000)
+                    await MainActor.run {
+                        isOCRRecognizing = false
+                        ocrProgress = 0
+                        selectedPhoto = nil
                     }
                 }
-                try? await Task.sleep(nanoseconds: 180_000_000)
-                await MainActor.run {
-                    isOCRRecognizing = false
-                    ocrProgress = 0
-                    selectedPhoto = nil
+            }
+            .onChange(of: homeViewModel.inputAmount) { _, _ in
+                if !hasValidAmount {
+                    previewLineWasRotated = false
+                    categoryGridExpanded = false
+                    noteEditorExpanded = false
+                    datePanelExpanded = false
+                }
+                refreshRecommendedCategory()
+            }
+            .onChange(of: homeViewModel.inputTitle) { _, _ in
+                refreshRecommendedCategory(applySuggestedTitle: false)
+            }
+            .onChange(of: homeViewModel.selectedDate) { _, _ in
+                refreshRecommendedCategory()
+            }
+            .onChange(of: focusedField) { _, newValue in
+                if newValue == .note {
+                    amountPadActive = false
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        scrollProxy.scrollTo("recordNoteField", anchor: .center)
+                    }
                 }
             }
-        }
-        .onChange(of: homeViewModel.inputAmount) { _, _ in
-            if !hasValidAmount {
-                previewLineWasRotated = false
-                categoryGridExpanded = false
-                noteEditorExpanded = false
-                datePanelExpanded = false
+            .sheet(isPresented: $showOCRConfirmSheet) {
+                OCRConfirmSheet(drafts: ocrConfirmDrafts) { selectedDrafts in
+                    homeViewModel.importOCRDrafts(selectedDrafts, isMember: isMember)
+                }
             }
-            refreshRecommendedCategory()
-        }
-        .onChange(of: homeViewModel.inputTitle) { _, _ in
-            refreshRecommendedCategory()
-        }
-        .onChange(of: homeViewModel.selectedDate) { _, _ in
-            refreshRecommendedCategory()
-        }
-        .onChange(of: focusedField) { _, newValue in
-            if newValue == .note {
-                amountPadActive = false
+            .sheet(isPresented: $showScenePackAngleSheet) {
+                ScenePackAngleSheet(
+                    scenePacks: visibleScenePacks,
+                    scenePackDesc: scenePackDesc
+                ) { pack in
+                    previewLineWasRotated = true
+                    applyScenePack(pack)
+                }
             }
-        }
-        .sheet(isPresented: $showOCRConfirmSheet) {
-            OCRConfirmSheet(drafts: ocrConfirmDrafts) { selectedDrafts in
-                homeViewModel.importOCRDrafts(selectedDrafts, isMember: isMember)
-            }
-        }
-        .sheet(isPresented: $showScenePackAngleSheet) {
-            ScenePackAngleSheet(
-                scenePacks: visibleScenePacks,
-                scenePackDesc: scenePackDesc
-            ) { pack in
-                previewLineWasRotated = true
-                applyScenePack(pack)
-            }
-        }
-        .onChange(of: showOCRConfirmSheet) { _, isPresented in
-            if !isPresented {
-                ocrConfirmDrafts = []
+            .onChange(of: showOCRConfirmSheet) { _, isPresented in
+                if !isPresented {
+                    ocrConfirmDrafts = []
+                }
             }
         }
     }
-
     // MARK: - Segment
 
     private var recordModeSegment: some View {
@@ -892,6 +896,7 @@ struct RecordView: View {
                 }
             }
         }
+        .id("recordNoteField")
     }
 
     // MARK: - Save Row

@@ -153,6 +153,9 @@ extension HomeItem.Source {
 
 extension Date {
     var zhBillDateTime: String {
+        if !Calendar.current.isDate(self, equalTo: Date(), toGranularity: .year) {
+            return Date.zhBillDateTimeWithYearFormatter.string(from: self)
+        }
         Date.zhBillDateTimeFormatter.string(from: self)
     }
 
@@ -165,6 +168,14 @@ extension Date {
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.dateFormat = "M月d日 HH:mm"
+        return formatter
+    }()
+
+    private static let zhBillDateTimeWithYearFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy\u{5E74}M\u{6708}d\u{65E5} HH:mm"
         return formatter
     }()
 

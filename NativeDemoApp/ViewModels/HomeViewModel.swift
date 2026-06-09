@@ -305,7 +305,13 @@ final class HomeViewModel: ObservableObject {
         items[idx].draftMeta?.status = isResolved ? .resolved : .pending
         items[idx].updatedAt = Date()
         persistItems()
+        clearOCRStatusIfNoPendingDrafts()
         Task { await syncUpsertToCloud(items[idx]) }
+    }
+
+    private func clearOCRStatusIfNoPendingDrafts() {
+        guard !items.contains(where: { $0.source == .ocr && $0.draftMeta?.status == .pending }) else { return }
+        ocrStatus = ""
     }
 
     private func resolvedEmotionTag(
@@ -363,6 +369,7 @@ final class HomeViewModel: ObservableObject {
         guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
         items.remove(at: idx)
         persistItems()
+        clearOCRStatusIfNoPendingDrafts()
         analyticsService.track("ocr_draft_deleted")
         refreshTodayPlayback()
         Task { await syncDeleteFromCloud(id: id) }
@@ -375,6 +382,7 @@ final class HomeViewModel: ObservableObject {
             items[idx].updatedAt = Date()
             changedItems.append(items[idx])
         }
+        clearOCRStatusIfNoPendingDrafts()
         guard !changedItems.isEmpty else { return }
         persistItems()
         analyticsService.track("ocr_drafts_resolved", props: ["count": String(changedItems.count)])
@@ -394,6 +402,7 @@ final class HomeViewModel: ObservableObject {
         }
         guard !changedItems.isEmpty else { return }
         persistItems()
+        clearOCRStatusIfNoPendingDrafts()
         analyticsService.track("ocr_drafts_resolve_all", props: ["count": String(changedItems.count)])
         Task {
             for item in changedItems {
@@ -740,7 +749,7 @@ final class HomeViewModel: ObservableObject {
         )
     }
 
-    func refreshRecordPrefill() {
+    func refreshRecordPrefill(applySuggestedTitle: Bool = true) {
         let normalizedAmount = inputAmount.replacingOccurrences(of: ",", with: "")
         guard let amount = Double(normalizedAmount), amount > 0 else {
             recordPrefillResult = nil
@@ -773,7 +782,7 @@ final class HomeViewModel: ObservableObject {
         if let category = result.category, result.confidence >= 0.55 {
             applyRecommendedCategory(category)
         }
-        if let title = result.title, result.confidence >= 0.65, trimmedNote.isEmpty {
+        if applySuggestedTitle, let title = result.title, result.confidence >= 0.65, trimmedNote.isEmpty {
             inputTitle = title
         }
     }
