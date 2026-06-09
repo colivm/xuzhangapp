@@ -1,7 +1,7 @@
-# Agent Prompt · Task UI-P1.2b-WEB — 记账页抛光（最新 Web 预览 · 仅 web-preview）
+﻿# Agent Prompt · Task UI-P1.2b-WEB — 记账页抛光（最新 Web 预览 · 仅 web-preview）
 
 > **状态：待做 · 当前最新 Web Agent prompt**  
-> 继承 [`AGENT_PROMPT_UI-P1.2_WEB_CONFIRM_NOT_CONFIG.md`](AGENT_PROMPT_UI-P1.2_WEB_CONFIRM_NOT_CONFIG.md) 分级策略；本 PR **补齐实现糙点**。  
+> 继承 [`PROMPT_记账-Web确认而非配置.md`](PROMPT_记账-Web确认而非配置.md) 分级策略；本 PR **补齐实现糙点**。  
 > **北极星**：**默认让用户确认，不让用户配置。**  
 > **依赖：无** — 仅 `web-preview/`；**不动 iOS** / backend。  
 > 用法：**整段复制下方「复制发送」** 发给 Agent。
@@ -212,8 +212,8 @@ const coldStartWhispers = [
 ## @ 文件
 
 ```text
-@AGENT_PROMPT_UI-P1.2b_WEB_POLISH.md
-@AGENT_PROMPT_UI-P1.2_WEB_CONFIRM_NOT_CONFIG.md
+@PROMPT_记账-Web抛光P1.2b.md
+@PROMPT_记账-Web确认而非配置.md
 @PRODUCT_VISION_EVAL_v0.1.md
 @web-preview/index.html
 @web-preview/app.js
@@ -246,7 +246,7 @@ const coldStartWhispers = [
 9. styles 抛光 actions 分层 + hint + whisper 态
 
 ## 必须先 Read
-@AGENT_PROMPT_UI-P1.2b_WEB_POLISH.md
+@PROMPT_记账-Web抛光P1.2b.md
 @web-preview/index.html
 @web-preview/app.js
 @web-preview/styles.css

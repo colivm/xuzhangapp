@@ -1,4 +1,4 @@
-# Agent Prompt · Task UI-P1.2-WEB — 记账页综合抛光（最新 · 仅 web-preview）
+﻿# Agent Prompt · Task UI-P1.2-WEB — 记账页综合抛光（最新 · 仅 web-preview）
 
 > **状态：待做 · 当前唯一 Web 记账页 Agent prompt**  
 > **取代**：`P1.2_WEB_CONFIRM_NOT_CONFIG` / `P1.2b_WEB_POLISH` / `P1.2c_WEB_VISUAL_POLISH`（策略已并入本文）  
@@ -375,7 +375,7 @@ renderPreviewPrimaryAction()   → 本 PR 删除 pill 路径，改 renderQuietAc
 ## 14. @ 文件
 
 ```text
-@AGENT_PROMPT_UI-P1.2_WEB_FULL.md
+@PROMPT_记账-Web综合抛光P1.2-完整说明.md
 @PRODUCT_VISION_EVAL_v0.1.md
 @RECORD_PAGE_DESIGN_v0.1.md
 @web-preview/index.html
@@ -387,7 +387,7 @@ renderPreviewPrimaryAction()   → 本 PR 删除 pill 路径，改 renderQuietAc
 
 ## 15. 复制发送
 
-见同目录 `AGENT_PROMPT_UI-P1.2_WEB_COPY.txt`（纯文本，无嵌套代码块，可直接全选复制）。
+见同目录 `PROMPT_记账-Web综合抛光P1.2-任务.txt`（纯文本，无嵌套代码块，可直接全选复制）。
 
 ---
 

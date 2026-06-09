@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>叙帐 Web 预览</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260609-polish2" />
   </head>
   <body>
     <div class="app-shell">
@@ -163,149 +163,179 @@
         </section>
 
         <section class="page" id="statsPage">
-          <section class="panel">
-            <h2>账单</h2>
-            <div class="bill-filters">
-              <label>
-                <span class="muted">时间</span>
-                <button id="billDateFilterBtn" type="button" class="full-btn bill-date-filter-btn">本月</button>
-              </label>
-              <label>
-                <span class="muted">分类</span>
-                <select id="billCategoryFilter">
-                  <option value="">全部分类</option>
-                </select>
-              </label>
-            </div>
-          </section>
+          <section class="trace-chapter-card xz-chapter-card trace-hero-panel">
+            <p class="trace-chapter-kicker" id="traceChapterKicker">
+              <button type="button" id="traceRangeWeekBtn" class="trace-range-text">本周</button>
+              <span class="trace-range-sep" aria-hidden="true">·</span>
+              <button type="button" id="traceRangeMonthBtn" class="trace-range-text active">本月</button>
+            </p>
 
-          <section class="panel bill-overview">
-            <h2>总览</h2>
-            <div class="bill-overview-grid">
-              <div>
-                <p class="muted">总支出</p>
-                <p id="billExpenseTotal" class="money-lite">¥0.00</p>
+            <p id="traceHeroNarrative" class="trace-hero-narrative">这一段还安静着，先留下几笔，之后就能慢慢看见生活的纹理。</p>
+            <p id="traceHeroPreview" class="muted trace-hero-preview">先记几笔，这里会变成能听的一段生活。</p>
+
+            <button id="traceHeroPlayBtn" type="button" class="trace-listen-ritual">
+              <span class="trace-listen-icon" aria-hidden="true">▶</span>
+              <span>听听这一段</span>
+            </button>
+
+            <div class="trace-slip-stage">
+              <div class="trace-slip-divider"></div>
+              <ul id="traceHeroRecordsList" class="trace-slip-list"></ul>
+              <div id="traceHeroEmpty" class="trace-empty-state hidden">
+                <div class="today-empty-art" aria-hidden="true">
+                  <svg viewBox="0 0 120 80" role="presentation">
+                    <rect x="26" y="20" width="68" height="48" rx="12" />
+                    <line x1="40" y1="36" x2="80" y2="36" />
+                    <line x1="40" y1="46" x2="72" y2="46" />
+                    <line x1="40" y1="56" x2="64" y2="56" />
+                    <line x1="92" y1="24" x2="104" y2="24" />
+                    <line x1="98" y1="18" x2="98" y2="30" />
+                  </svg>
+                </div>
+                <p class="muted">这一段还没有痕迹，先去记下一笔。</p>
               </div>
             </div>
-            <div class="bill-trend-block">
-              <p class="muted">近 30 天支出趋势</p>
-              <svg id="billTrendChart" viewBox="0 0 300 90" class="bill-trend-chart" aria-hidden="true">
-                <line id="billTrendAxisY" x1="8" y1="8" x2="8" y2="82" />
-                <line id="billTrendAxisX" x1="8" y1="82" x2="292" y2="82" />
-                <text id="billTrendMaxLabel" x="10" y="14">0</text>
-                <text id="billTrendStartLabel" x="8" y="88">30天前</text>
-                <text id="billTrendEndLabel" x="246" y="88">今天</text>
-                <polyline id="billTrendLine" points="" />
-                <circle id="billTrendPeakDot" cx="8" cy="82" r="3" />
-                <text id="billTrendPeakLabel" x="12" y="74">¥0.00</text>
-              </svg>
-              <p id="billTrendInsight" class="muted bill-trend-insight">本月支出整体平稳。</p>
-            </div>
           </section>
 
-          <section class="panel">
-            <h2>记录列表</h2>
-            <ul id="billRecordsList" class="item-list"></ul>
-            <p id="billRecordsEmpty" class="muted">当前筛选条件下暂无账单。</p>
-          </section>
+          <div class="trace-appendix-strip">
+            <button id="traceDetailOpenBtn" type="button" class="trace-detail-link">细查这一段 →</button>
+          </div>
         </section>
 
         <section class="page" id="insightPage">
-          <section class="panel">
-            <h2>近 7 天生活复盘</h2>
-            <ul id="insightHistory" class="item-list"></ul>
-            <p id="insightHistoryEmpty" class="muted">近 7 天暂无复盘。多记几笔，就能看到更完整的消费节奏啦。</p>
-            <div class="insight-soft-actions weekly-soft-actions">
-              <button id="weeklyRhythmBtn" type="button" class="full-btn soft-action-btn hidden">梳理本周节奏</button>
-              <button id="weeklyShareBtn" type="button" class="full-btn soft-action-btn hidden">生成周度分享卡</button>
-              <button id="weeklyTagBtn" type="button" class="full-btn soft-action-btn hidden">标记常花类目</button>
+          <section class="insight-journal xz-chapter-card">
+            <p class="insight-journal-kicker" id="insightWeekKicker">这周 · 6/3-6/9</p>
+            <article id="insightJournalBody" class="insight-journal-body">近 7 天还没有足够记录。多记几笔，这里会慢慢长出一周的回信。</article>
+            <p id="insightJournalClosing" class="insight-journal-closing muted"></p>
+            <div class="insight-journal-actions">
+              <button id="weeklyRhythmBtn" type="button" class="insight-quiet-action hidden">梳理本周节奏 →</button>
+              <button id="weeklyShareBtn" type="button" class="insight-quiet-action hidden">生成周度分享卡</button>
+              <button id="weeklyTagBtn" type="button" class="insight-quiet-action hidden">标记常花类目</button>
             </div>
           </section>
 
-          <section class="panel">
-            <h2>月度生活复盘</h2>
-            <p id="monthlyTrialText" class="muted">剩余试用次数：5/5</p>
-            <button id="generateMonthlyInsightBtn" class="primary-btn full-btn">生成月度复盘</button>
-            <p id="monthlyAIStatus" class="muted ai-status-pill hidden"></p>
-            <div id="monthlyInsightContent" class="monthly-insight-content hidden">
-              <p id="monthlyInsightSummary"></p>
-              <p id="monthlyInsightStructure" class="muted"></p>
-              <p id="monthlyInsightAdvice" class="highlight"></p>
-            </div>
-            <div class="insight-soft-actions monthly-soft-actions">
-              <button id="monthlySoftPlanBtn" type="button" class="full-btn soft-action-btn hidden">柔和下月参考</button>
-              <button id="monthlySaveSummaryBtn" type="button" class="full-btn soft-action-btn hidden">保存月度小结</button>
-              <button id="monthlyToneSwitchBtn" type="button" class="full-btn soft-action-btn hidden">切换叙述风格</button>
-            </div>
-            <button id="advancedInsightToggleBtn" type="button" class="full-btn advanced-insight-toggle">查看更多复盘</button>
-            <div id="advancedInsightActions" class="advanced-insight-actions hidden">
-              <button id="generateQuarterlyInsightBtn" type="button" class="full-btn locked-report-btn"><span class="lock-icon">🔒︎</span>生成季度复盘</button>
-              <button id="generateYearlyInsightBtn" type="button" class="full-btn locked-report-btn"><span class="lock-icon">🔒︎</span>生成年度复盘</button>
-            </div>
-          </section>
-
-          <section class="panel">
-            <h2>今日生活小记</h2>
-            <p id="insightSummary">还没有今日复盘。</p>
-            <p id="insightAction" class="highlight"></p>
-            <p id="insightEncourage" class="muted"></p>
-            <button id="generateInsightBtn" class="full-btn optional-read-btn">换个轻读版本</button>
-            <p id="dailyAIStatus" class="muted ai-status-pill hidden"></p>
+          <section class="insight-next-chapter">
+            <p class="insight-chapter-footnote muted">周记写到这里。想读更长的，再翻开下面。</p>
+            <p class="insight-next-label muted">再读一章</p>
+            <button id="insightMonthlyOpenBtn" type="button" class="insight-next-card">
+              <span class="insight-next-kicker">这一月</span>
+              <span class="insight-next-title">翻开月记 →</span>
+            </button>
+            <button id="insightTodayOpenBtn" type="button" class="insight-next-quiet">今日小记（可选）→</button>
           </section>
         </section>
 
         <section class="page" id="settingsPage">
-          <section class="panel account-panel">
+          <section class="settings-identity-card xz-chapter-card">
             <button id="accountEntryBtn" type="button" class="account-entry-btn">
               <div id="accountAvatar" class="account-avatar" aria-hidden="true">👤</div>
-              <p id="accountEntryText" class="account-entry-text">点击登录，解锁云备份与会员权益 &gt;</p>
+              <span class="settings-identity-copy">
+                <strong id="settingsIdentityName">叙帐用户</strong>
+                <span id="settingsIdentityMeta" class="muted">本地保存 · 免费版</span>
+                <span id="accountEntryText" class="account-entry-text">点击登录，解锁云备份与会员权益 &gt;</span>
+              </span>
             </button>
           </section>
-          <section class="panel">
-            <h2>设置</h2>
-            <p class="muted strong">数据仅保存在你的手机，不上传云端。</p>
-            <label class="field">
-              <span>显示名称</span>
-              <input id="displayNameInput" type="text" placeholder="输入昵称" />
-            </label>
-            <label class="switch-row">
-              <span>iCloud 备份（可选）</span>
-              <input id="syncSwitch" class="ios-switch" type="checkbox" />
-            </label>
-            <p class="muted privacy-tip setting-helper">开启后数据会同步到 iCloud，换机更方便。</p>
-            <label class="switch-row">
-              <span>开启 AI 智能建议（需联网）</span>
-              <input id="remoteAISwitch" class="ios-switch" type="checkbox" />
-            </label>
-            <p class="muted setting-helper">默认本地存储，不强制登录。</p>
-            <label class="switch-row">
-              <span>开启宠物陪伴</span>
-              <input id="petCompanionSwitch" class="ios-switch" type="checkbox" />
-            </label>
-            <p class="muted setting-helper">关闭后首页不显示宠物助手。</p>
-            <label class="switch-row" id="weatherCompanionRow">
-              <span>允许天气场景暖心互动 🌤️</span>
-              <input id="weatherCompanionSwitch" class="ios-switch" type="checkbox" />
-            </label>
-            <p id="weatherCompanionHelper" class="muted setting-helper">开启这个，我就能知道今天是晴是雨，陪你说更懂你的悄悄话啦！</p>
-            <label class="switch-row hidden" id="weatherNeutralRow">
-              <span>天气 / 季节场景智能提醒 🌤️</span>
-              <input id="weatherNeutralSwitch" class="ios-switch" type="checkbox" />
-            </label>
-            <p id="weatherNeutralHelper" class="muted setting-helper hidden">根据天气与时间，提供更贴合当下的消费与生活建议。</p>
-            <button id="resetGuideBtn" type="button" class="full-btn">重新查看新手引导</button>
+
+          <section class="settings-chapter-panel">
+          <div class="settings-entry-list">
+            <p class="settings-section-label">你的叙账</p>
+            <button id="settingsAccountRowBtn" type="button" class="settings-entry-row">
+              <span>账号与会员</span>
+              <small id="settingsAccountRowMeta">管理登录与会员</small>
+            </button>
+            <button type="button" class="settings-entry-row" data-settings-sheet="backup">
+              <span>备份与联网</span>
+              <small>云端备份、联网梳理</small>
+            </button>
+            <button type="button" class="settings-entry-row" data-settings-sheet="companion">
+              <span>陪伴与语气</span>
+              <small>宠物、天气互动</small>
+            </button>
+
+            <p class="settings-section-label">偏好与安心</p>
+            <button type="button" class="settings-entry-row" data-settings-sheet="appearance">
+              <span>外观</span>
+              <small id="settingsAppearanceMeta">跟随系统</small>
+            </button>
+            <button type="button" class="settings-entry-row" data-settings-sheet="privacy">
+              <span>数据与隐私</span>
+              <small>本地昵称、说明与协议</small>
+            </button>
+          </div>
           </section>
 
-          <section class="panel">
-            <h2>外观</h2>
-            <div class="segment appearance-system-row">
-              <button class="appearance-btn" data-appearance="system">跟随系统</button>
+          <div class="settings-footer-links">
+            <button id="resetGuideBtn" type="button">重新查看新手引导</button>
+            <span aria-hidden="true">·</span>
+            <button id="privacyPolicyBtn" type="button">隐私政策</button>
+            <span aria-hidden="true">·</span>
+            <button id="termsLinkBtn" type="button">用户协议</button>
+          </div>
+
+          <div id="settingsSheetModal" class="ocr-overlay hidden">
+            <div class="ocr-modal settings-sheet-modal xz-chapter-card">
+              <button id="settingsSheetCloseBtn" type="button" class="account-close-btn" aria-label="关闭">×</button>
+
+              <section id="settingsSheetBackup" class="settings-sheet-section hidden">
+                <p class="settings-sheet-kicker">备份与联网</p>
+                <p class="muted settings-sheet-lead">默认本地保存；你可以按需要打开云端备份或联网梳理。</p>
+                <label class="switch-row">
+                  <span>iCloud 备份（可选）</span>
+                  <input id="syncSwitch" class="ios-switch" type="checkbox" />
+                </label>
+                <p class="muted privacy-tip setting-helper">开启后数据会同步到 iCloud，换机更方便。</p>
+                <label class="switch-row">
+                  <span>开启 AI 智能建议（需联网）</span>
+                  <input id="remoteAISwitch" class="ios-switch" type="checkbox" />
+                </label>
+                <p class="muted setting-helper">联网只用于需要生成或梳理的时刻，账单仍优先留在本地。</p>
+              </section>
+
+              <section id="settingsSheetCompanion" class="settings-sheet-section hidden">
+                <p class="settings-sheet-kicker">陪伴与语气</p>
+                <p class="muted settings-sheet-lead">让首页的小陪伴更贴近你的节奏；不需要时也可以随时关掉。</p>
+                <label class="switch-row">
+                  <span>开启宠物陪伴</span>
+                  <input id="petCompanionSwitch" class="ios-switch" type="checkbox" />
+                </label>
+                <p class="muted setting-helper">关闭后首页不显示宠物助手。</p>
+                <label class="switch-row" id="weatherCompanionRow">
+                  <span>允许天气场景暖心互动 🌤️</span>
+                  <input id="weatherCompanionSwitch" class="ios-switch" type="checkbox" />
+                </label>
+                <p id="weatherCompanionHelper" class="muted setting-helper">开启这个，我就能知道今天是晴是雨，陪你说更懂你的悄悄话啦！</p>
+                <label class="switch-row hidden" id="weatherNeutralRow">
+                  <span>天气 / 季节场景智能提醒 🌤️</span>
+                  <input id="weatherNeutralSwitch" class="ios-switch" type="checkbox" />
+                </label>
+                <p id="weatherNeutralHelper" class="muted setting-helper hidden">根据天气与时间，提供更贴合当下的消费与生活建议。</p>
+              </section>
+
+              <section id="settingsSheetAppearance" class="settings-sheet-section hidden">
+                <p class="settings-sheet-kicker">外观</p>
+                <p class="muted settings-sheet-lead">按你习惯的屏幕亮度来，不影响账单数据。</p>
+                <div class="segment appearance-system-row">
+                  <button class="appearance-btn" data-appearance="system">跟随系统</button>
+                </div>
+                <div class="segment appearance-manual-row">
+                  <button class="appearance-btn" data-appearance="light">浅色</button>
+                  <button class="appearance-btn" data-appearance="dark">深色</button>
+                </div>
+              </section>
+
+              <section id="settingsSheetPrivacy" class="settings-sheet-section hidden">
+                <p class="settings-sheet-kicker">数据与隐私</p>
+                <p class="muted settings-sheet-lead">你留下的每一笔，默认只在本机。这里可以改昵称，也可以查看数据说明。</p>
+                <label class="field">
+                  <span>显示名称</span>
+                  <input id="displayNameInput" type="text" placeholder="输入昵称" />
+                </label>
+                <p class="muted strong">数据仅保存在你的手机，不上传云端。</p>
+                <p class="muted setting-helper">开启云端备份、联网 AI 或天气互动时，会按对应功能请求必要权限。</p>
+              </section>
             </div>
-            <div class="segment appearance-manual-row">
-              <button class="appearance-btn" data-appearance="light">浅色</button>
-              <button class="appearance-btn" data-appearance="dark">深色</button>
-            </div>
-          </section>
+          </div>
         </section>
         </div>
         <div id="petWidget" class="pet-widget hidden">
@@ -546,6 +576,52 @@
         </div>
       </div>
 
+      <div id="monthlyInsightModal" class="ocr-overlay hidden">
+        <div class="ocr-modal insight-monthly-modal">
+          <button id="monthlyInsightCloseBtn" type="button" class="account-close-btn" aria-label="关闭">×</button>
+          <p class="insight-journal-kicker" id="monthlySheetKicker">这一月 · 2026年6月</p>
+          <div class="monthly-sheet-paper xz-chapter-card">
+            <section class="insight-sheet-body">
+              <article id="monthlyJournalBody" class="insight-journal-body monthly-journal-body">这一月还没有回顾。点下面生成，会在这里长出一封月记。</article>
+              <p id="monthlyJournalClosing" class="insight-journal-closing muted"></p>
+
+              <footer class="monthly-journal-footnote">
+                <p class="monthly-footnote-primary">
+                  <button id="generateMonthlyInsightBtn" type="button" class="monthly-footnote-link monthly-footnote-primary-action">生成这一月的回顾 →</button>
+                  <span id="monthlyTrialInline" class="monthly-trial-inline muted"></span>
+                </p>
+                <p id="monthlyAIStatus" class="muted ai-status-pill hidden"></p>
+                <p class="monthly-footnote-quiet">
+                  <button id="monthlySaveSummaryBtn" type="button" class="monthly-footnote-link monthly-footnote-secondary hidden">保存月度小结</button>
+                  <span id="monthlyFootnoteDot" class="monthly-footnote-dot hidden" aria-hidden="true">·</span>
+                  <button id="monthlyToneSwitchBtn" type="button" class="monthly-footnote-link monthly-footnote-secondary hidden">换个叙述风格</button>
+                </p>
+                <button id="advancedInsightToggleBtn" type="button" class="monthly-footnote-link monthly-footnote-appendix">更多时间段</button>
+              </footer>
+
+              <div id="advancedInsightActions" class="advanced-insight-actions hidden">
+                <button id="generateQuarterlyInsightBtn" type="button" class="full-btn locked-report-btn">生成季度复盘</button>
+                <button id="generateYearlyInsightBtn" type="button" class="full-btn locked-report-btn">生成年度复盘</button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <div id="todayInsightModal" class="ocr-overlay hidden">
+        <div class="ocr-modal insight-today-modal">
+          <button id="todayInsightCloseBtn" type="button" class="account-close-btn" aria-label="关闭">×</button>
+          <p class="insight-section-label">今日小记</p>
+          <section class="insight-sheet-body">
+            <p id="insightSummary">还没有今日复盘。</p>
+            <p id="insightAction" class="highlight"></p>
+            <p id="insightEncourage" class="muted"></p>
+            <button id="generateInsightBtn" class="full-btn optional-read-btn">换个轻读版本</button>
+            <p id="dailyAIStatus" class="muted ai-status-pill hidden"></p>
+          </section>
+        </div>
+      </div>
+
       <div id="deleteConfirmModal" class="ocr-overlay hidden">
         <div class="ocr-modal delete-confirm-modal">
           <h3>确认删除这条账单？</h3>
@@ -553,6 +629,74 @@
           <div class="delete-confirm-actions">
             <button id="deleteConfirmCancelBtn" type="button" class="full-btn">先不删</button>
             <button id="deleteConfirmOkBtn" type="button" class="full-btn delete-confirm-ok-btn">确认删除</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="traceDetailModal" class="ocr-overlay hidden">
+        <div class="ocr-modal trace-detail-modal">
+          <button id="traceDetailCloseBtn" type="button" class="account-close-btn" aria-label="关闭">×</button>
+          <h3>细查这一段</h3>
+          <div class="bill-filters trace-detail-filters">
+            <label>
+              <span class="muted">时间</span>
+              <button id="billDateFilterBtn" type="button" class="full-btn bill-date-filter-btn">本月</button>
+            </label>
+            <label>
+              <span class="muted">分类</span>
+              <select id="billCategoryFilter">
+                <option value="">全部分类</option>
+              </select>
+            </label>
+          </div>
+
+          <p id="traceDetailMeta" class="muted trace-detail-meta">本月 · 全部分类 · 0 笔 · 合计 ¥0.00</p>
+
+          <div class="bill-trend-block trace-detail-trend collapsed">
+            <div class="trace-trend-summary-row">
+              <p id="billTrendInsight" class="muted bill-trend-insight">这一段整体比较匀，没有特别突出的起伏。</p>
+              <button id="traceTrendToggleBtn" type="button" class="trace-trend-toggle">展开走势</button>
+            </div>
+            <svg id="billTrendChart" viewBox="0 0 300 90" class="bill-trend-chart" aria-hidden="true">
+              <line id="billTrendAxisY" x1="8" y1="8" x2="8" y2="82" />
+              <line id="billTrendAxisX" x1="8" y1="82" x2="292" y2="82" />
+              <text id="billTrendMaxLabel" x="10" y="14">0</text>
+              <text id="billTrendStartLabel" x="8" y="88">30天前</text>
+              <text id="billTrendEndLabel" x="246" y="88">今天</text>
+              <polyline id="billTrendLine" points="" />
+              <circle id="billTrendPeakDot" cx="8" cy="82" r="3" />
+              <text id="billTrendPeakLabel" x="12" y="74">¥0.00</text>
+            </svg>
+          </div>
+
+          <ul id="billRecordsList" class="item-list trace-detail-list"></ul>
+          <p id="billRecordsEmpty" class="muted">这一段没有匹配的痕迹，可以换个时间或分类看看。</p>
+        </div>
+      </div>
+
+      <div id="traceSliceModal" class="ocr-overlay hidden">
+        <div class="ocr-modal trace-slice-modal">
+          <button id="traceSliceCloseBtn" type="button" class="account-close-btn" aria-label="关闭">×</button>
+          <div class="trace-slice-header">
+            <p id="traceSliceKicker" class="muted">本月生活章</p>
+            <h3 id="traceSliceTitle">听听这一段</h3>
+            <p id="traceSliceTeaser" class="muted">这段生活已经有了可以回看的痕迹。</p>
+          </div>
+
+          <section id="traceSliceStage" class="trace-slice-stage">
+            <div id="traceSlicePage" class="trace-slice-page">
+              <span id="traceSliceSymbol" class="trace-slice-symbol" aria-hidden="true">✦</span>
+              <p id="traceSliceChapterTitle" class="trace-slice-chapter-title">这一段</p>
+              <p id="traceSliceNarration" class="trace-slice-narration">慢慢看见这一段生活怎么走过。</p>
+              <p id="traceSliceSupport" class="trace-slice-support muted">本地生成，不依赖 AI。</p>
+            </div>
+          </section>
+
+          <div id="traceSliceDots" class="trace-slice-dots" aria-label="切片章节"></div>
+          <div class="trace-slice-actions">
+            <button id="traceSlicePrevBtn" type="button" class="trace-slice-icon-btn" aria-label="上一章">‹</button>
+            <button id="traceSlicePlayBtn" type="button" class="trace-slice-play-btn">暂停</button>
+            <button id="traceSliceNextBtn" type="button" class="trace-slice-icon-btn" aria-label="下一章">›</button>
           </div>
         </div>
       </div>
@@ -583,8 +727,8 @@
       <div id="billPlaybackModal" class="ocr-overlay hidden">
         <div class="ocr-modal bill-playback-modal">
           <button id="billPlaybackCloseBtn" type="button" class="account-close-btn" aria-label="关闭">×</button>
-          <h3>今日生活回放</h3>
-          <p class="muted bill-playback-subtitle">10 秒看完今天的生活节奏</p>
+          <h3 id="billPlaybackTitle">今日生活回放</h3>
+          <p id="billPlaybackSubtitle" class="muted bill-playback-subtitle">10 秒看完今天的生活节奏</p>
           <ul id="billPlaybackTimeline" class="bill-playback-timeline"></ul>
           <div class="bill-playback-progress-track">
             <div id="billPlaybackProgressBar" class="bill-playback-progress-bar"></div>
@@ -606,6 +750,6 @@
       </div>
     </div>
 
-    <script src="./app.js?v=20260427-debug1"></script>
+    <script src="./app.js?v=20260609-polish2"></script>
   </body>
 </html>

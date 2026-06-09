@@ -1,4 +1,4 @@
-# Agent Prompt · Task F1.2 — OCR / 看看花 真机回归修复（仅 iOS）
+﻿# Agent Prompt · Task F1.2 — OCR / 看看花 真机回归修复（仅 iOS）
 
 > **状态：待做**  
 > 触发：真机 TestFlight 回归（2026-06-08 前后）+ 近 3 次提交 OCR 大改（`441cf3f` / `6b4d9e7` / `7a887fc`）  
@@ -79,7 +79,7 @@
 ## @ 文件（Agent 必须先 Read）
 
 ```text
-@AGENT_PROMPT_F1.2_OCR_STATS_REGRESSION.md
+@PROMPT_回归-F1.2_OCR与看看花真机修复-iOS.md
 @NativeDemoApp/Views/OCRConfirmSheet.swift
 @NativeDemoApp/ViewModels/HomeViewModel.swift
 @NativeDemoApp/Services/OCRService.swift
@@ -97,7 +97,7 @@
 你在 xuzhangapp 实现 **Task F1.2 — OCR / 看看花 真机回归修复**（6+1 项；**仅 iOS**；**同一 PR**）。
 
 ## 背景
-TestFlight 真机回归发现 6 个问题（见 AGENT_PROMPT_F1.2_OCR_STATS_REGRESSION.md 分析表）。近 commit `441cf3f` 大幅改了 OCR 列表解析与待整理 UI。修复须 **小 diff**，不重写 OCR 架构。
+TestFlight 真机回归发现 6 个问题（见 PROMPT_回归-F1.2_OCR与看看花真机修复-iOS.md 分析表）。近 commit `441cf3f` 大幅改了 OCR 列表解析与待整理 UI。修复须 **小 diff**，不重写 OCR 架构。
 
 ## 执行顺序（必须按此顺序改，避免返工）
 1. **必做 5** — OCR 微信/支付宝分流 + 少一行增强（数据正确优先）
@@ -108,7 +108,7 @@ TestFlight 真机回归发现 6 个问题（见 AGENT_PROMPT_F1.2_OCR_STATS_REGR
 6. **必做 6** — 一键标记已整理
 
 ## 必须先 Read
-@AGENT_PROMPT_F1.2_OCR_STATS_REGRESSION.md
+@PROMPT_回归-F1.2_OCR与看看花真机修复-iOS.md
 @NativeDemoApp/Services/OCRService.swift
 @NativeDemoApp/Views/OCRConfirmSheet.swift
 @NativeDemoApp/ViewModels/HomeViewModel.swift

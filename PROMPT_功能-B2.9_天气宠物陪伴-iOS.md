@@ -1,4 +1,4 @@
-# Agent Prompt · Task B2.9 — 天气场景宠物陪伴（仅 iOS）
+﻿# Agent Prompt · Task B2.9 — 天气场景宠物陪伴（仅 iOS）
 
 > **状态：iOS 已完成（2026-06-06）**；下文供回归参考。  
 > 用法：**整段复制下方「复制发送」** 发给 Agent。  
@@ -22,7 +22,7 @@
 ## @ 文件（Agent 必须先 Read）
 
 ```text
-@AGENT_PROMPT_B2.9_WEATHER_PET.md
+@PROMPT_功能-B2.9_天气宠物陪伴-iOS.md
 @IMPLEMENTATION_FOR_CODEX.md
 @PRODUCT_NORTH_STAR.md
 @web-preview/app.js
@@ -151,7 +151,7 @@
 
 若一次 PR 完成「记账更聪明 + 宠物有温度」，**同一条消息**内按顺序粘贴：
 
-1. 整段 [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md) 「复制发送」
+1. 整段 [`PROMPT_功能-B2.8_智能分类推荐-iOS.md`](PROMPT_功能-B2.8_智能分类推荐-iOS.md) 「复制发送」
 2. 空一行
 3. 整段 **上文「复制发送」**
 4. 末尾加一句：

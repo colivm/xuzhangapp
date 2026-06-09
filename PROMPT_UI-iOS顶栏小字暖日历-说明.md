@@ -1,9 +1,9 @@
-# Agent Prompt · Task UI-P1.3-iOS-SMALL — 顶栏 / 新建补记日期 / 首页文案（小 PR · 仅 iOS）
+﻿# Agent Prompt · Task UI-P1.3-iOS-SMALL — 顶栏 / 新建补记日期 / 首页文案（小 PR · 仅 iOS）
 
 > **状态：待做 · 走查落地 · 改动面小**  
 > **范围**：`ContentView.swift` · `RecordView.swift` · `HomeView.swift` + 可选新建 `WarmRecordDatePanel.swift`  
 > **不动**：痕迹页 / 复盘页 / 设置 / 会员 / 文案引擎 / Web  
-> 用法：**整段复制同目录 `AGENT_PROMPT_UI-P1.3_IOS_SMALL_POLISH_COPY.txt`**
+> 用法：**整段复制同目录 `PROMPT_UI-iOS顶栏小字暖日历-任务.txt`**
 
 ---
 
@@ -116,7 +116,7 @@ subtitle「只输金额也可以」**保留**。右侧「听今日回放」不�
 ## 7. @ 文件
 
 ```text
-@AGENT_PROMPT_UI-P1.3_IOS_SMALL_POLISH.md
+@PROMPT_UI-iOS顶栏小字暖日历-说明.md
 @NativeDemoApp/ContentView.swift
 @NativeDemoApp/Views/RecordView.swift
 @NativeDemoApp/Views/HomeView.swift

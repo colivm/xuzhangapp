@@ -1,4 +1,4 @@
-# Agent Prompt · Task B2.12 — 情绪标签 polish（7 分类 · 仅 iOS）
+﻿# Agent Prompt · Task B2.12 — 情绪标签 polish（7 分类 · 仅 iOS）
 
 > **状态：待做**  
 > 用法：**整段复制下方「复制发送」** 发给 Agent。  
@@ -12,7 +12,7 @@
 | ID | 做什么 | 主要文件 | 状态 |
 |----|--------|----------|------|
 | **B2.12** | **情绪标签 polish**（本 prompt） | `HomeItem.inferEmotionTag` | ✅ 已完成 |
-| **B2.11** | 心意往来包 | 见 [`AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md`](AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md) | ✅ 已完成 |
+| **B2.11** | 心意往来包 | 见 [`PROMPT_功能-B2.11_心意往来场景包-iOS.md`](PROMPT_功能-B2.11_心意往来场景包-iOS.md) | ✅ 已完成 |
 
 **展示位置**：首页今日列表、回放 Sheet 条目副行（`emotionTag` 字段，随分类/金额自动推断）。
 
@@ -21,7 +21,7 @@
 ## @ 文件（Agent 必须先 Read）
 
 ```text
-@AGENT_PROMPT_B2.12_EMOTION_TAGS.md
+@PROMPT_功能-B2.12_情绪标签polish-iOS.md
 @CATEGORY_SCENE_COPY_AUDIT_v0.1.md
 @PRODUCT_NORTH_STAR.md
 @NativeDemoApp/Models/HomeItem.swift

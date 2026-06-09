@@ -1,4 +1,4 @@
-# Agent Prompt · Task F1.3 — 品牌叙事池（仅 iOS）
+﻿# Agent Prompt · Task F1.3 — 品牌叙事池（仅 iOS）
 
 > **状态：iOS 代码已完成（待 TestFlight 验收）**  
 > 战略依据：[`RECORDING_CHAIN_VISION_v0.1.md`](RECORDING_CHAIN_VISION_v0.1.md) — **缩短记账链路、叙事自动长出来**  
@@ -171,7 +171,7 @@ brandId 命中且 catalog 有池 → 品牌 tiers（+ 可选时段 contextual，
 
 ```text
 @RECORDING_CHAIN_VISION_v0.1.md
-@AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md
+@PROMPT_功能-F1.3_品牌叙事池-iOS.md
 @NativeDemoApp/Services/OCRService.swift
 @NativeDemoApp/Services/ScenePackCopyPool.swift
 @NativeDemoApp/Models/HomeItem.swift
@@ -207,7 +207,7 @@ brandId 命中且 catalog 有池 → 品牌 tiers（+ 可选时段 contextual，
 
 ## 必须先 Read
 @RECORDING_CHAIN_VISION_v0.1.md
-@AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md
+@PROMPT_功能-F1.3_品牌叙事池-iOS.md
 @NativeDemoApp/Services/OCRService.swift
 @NativeDemoApp/Services/ScenePackCopyPool.swift
 @NativeDemoApp/Models/HomeItem.swift

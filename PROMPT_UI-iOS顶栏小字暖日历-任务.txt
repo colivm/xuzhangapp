@@ -1,4 +1,4 @@
-你在 xuzhangapp 实现 Task UI-P1.3-iOS-SMALL — 顶栏 / 新建补记日期 / 首页文案（小 PR · 仅 NativeDemoApp/；同一 PR）。
+﻿你在 xuzhangapp 实现 Task UI-P1.3-iOS-SMALL — 顶栏 / 新建补记日期 / 首页文案（小 PR · 仅 NativeDemoApp/；同一 PR）。
 
 ================================================================================
 本 PR 边界（最重要）
@@ -117,7 +117,7 @@ subtitle「只输金额也可以」保留。
 @ 文件
 ================================================================================
 
-@AGENT_PROMPT_UI-P1.3_IOS_SMALL_POLISH.md
+@PROMPT_UI-iOS顶栏小字暖日历-说明.md
 @NativeDemoApp/ContentView.swift
 @NativeDemoApp/Views/RecordView.swift
 @NativeDemoApp/Views/HomeView.swift

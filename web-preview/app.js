@@ -162,7 +162,7 @@ const PERIOD_TIMEOUT_MS = {
 };
 const DEBUG_UI_ENABLED = new URLSearchParams(window.location.search).get("debug") === "1";
 const UI_TABS = new Set(["home", "record", "stats", "insight", "settings"]);
-const UI_MODALS = new Set(["none", "guide", "account", "ocrConfirm", "ocrCategory", "monthlyTrial", "billDateRange", "deleteConfirm", "billPlayback"]);
+const UI_MODALS = new Set(["none", "guide", "account", "ocrConfirm", "ocrCategory", "monthlyTrial", "monthlyInsight", "todayInsight", "traceDetail", "traceSlice", "settingsSheet", "billDateRange", "deleteConfirm", "billPlayback"]);
 const UI_INPUT_FOCUS = new Set(["none", "amount", "title"]);
 const ERROR_LOG_KEY = "qingzhang_runtime_errors_v1";
 const ANALYTICS_KEY = "qingzhang_product_analytics_v1";
@@ -338,9 +338,9 @@ const petCopy = {
 const pageTitles = {
   home: "今日",
   record: "记下这一笔",
-  stats: "账单与切片",
+  stats: "这一段痕迹",
   insight: "生活复盘",
-  settings: "设置",
+  settings: "我的叙账",
 };
 
 const PET_SCENE_RULES = [
@@ -524,6 +524,34 @@ const refs = {
   ocrClearResolvedBtn: document.getElementById("ocrClearResolvedBtn"),
   ocrCategoryOverlay: document.getElementById("ocrCategoryOverlay"),
   ocrCategoryOptions: document.getElementById("ocrCategoryOptions"),
+  traceRangeWeekBtn: document.getElementById("traceRangeWeekBtn"),
+  traceRangeMonthBtn: document.getElementById("traceRangeMonthBtn"),
+  traceChapterKicker: document.getElementById("traceChapterKicker"),
+  traceHeroNarrative: document.getElementById("traceHeroNarrative"),
+  traceHeroPreview: document.getElementById("traceHeroPreview"),
+  traceHeroPlayBtn: document.getElementById("traceHeroPlayBtn"),
+  traceHeroRecordsList: document.getElementById("traceHeroRecordsList"),
+  traceHeroEmpty: document.getElementById("traceHeroEmpty"),
+  traceDetailOpenBtn: document.getElementById("traceDetailOpenBtn"),
+  traceDetailModal: document.getElementById("traceDetailModal"),
+  traceDetailCloseBtn: document.getElementById("traceDetailCloseBtn"),
+  traceDetailMeta: document.getElementById("traceDetailMeta"),
+  traceTrendToggleBtn: document.getElementById("traceTrendToggleBtn"),
+  traceSliceModal: document.getElementById("traceSliceModal"),
+  traceSliceCloseBtn: document.getElementById("traceSliceCloseBtn"),
+  traceSliceKicker: document.getElementById("traceSliceKicker"),
+  traceSliceTitle: document.getElementById("traceSliceTitle"),
+  traceSliceTeaser: document.getElementById("traceSliceTeaser"),
+  traceSliceStage: document.getElementById("traceSliceStage"),
+  traceSlicePage: document.getElementById("traceSlicePage"),
+  traceSliceSymbol: document.getElementById("traceSliceSymbol"),
+  traceSliceChapterTitle: document.getElementById("traceSliceChapterTitle"),
+  traceSliceNarration: document.getElementById("traceSliceNarration"),
+  traceSliceSupport: document.getElementById("traceSliceSupport"),
+  traceSliceDots: document.getElementById("traceSliceDots"),
+  traceSlicePrevBtn: document.getElementById("traceSlicePrevBtn"),
+  traceSlicePlayBtn: document.getElementById("traceSlicePlayBtn"),
+  traceSliceNextBtn: document.getElementById("traceSliceNextBtn"),
   billDateFilterBtn: document.getElementById("billDateFilterBtn"),
   billCategoryFilter: document.getElementById("billCategoryFilter"),
   billExpenseTotal: document.getElementById("billExpenseTotal"),
@@ -536,14 +564,13 @@ const refs = {
   billTrendPeakDot: document.getElementById("billTrendPeakDot"),
   billTrendPeakLabel: document.getElementById("billTrendPeakLabel"),
   billTrendInsight: document.getElementById("billTrendInsight"),
-  monthlyTrialText: document.getElementById("monthlyTrialText"),
+  monthlyTrialInline: document.getElementById("monthlyTrialInline"),
+  monthlyFootnoteDot: document.getElementById("monthlyFootnoteDot"),
   generateMonthlyInsightBtn: document.getElementById("generateMonthlyInsightBtn"),
   monthlyAIStatus: document.getElementById("monthlyAIStatus"),
-  monthlyInsightContent: document.getElementById("monthlyInsightContent"),
-  monthlyInsightSummary: document.getElementById("monthlyInsightSummary"),
-  monthlyInsightStructure: document.getElementById("monthlyInsightStructure"),
-  monthlyInsightAdvice: document.getElementById("monthlyInsightAdvice"),
-  monthlySoftPlanBtn: document.getElementById("monthlySoftPlanBtn"),
+  monthlySheetKicker: document.getElementById("monthlySheetKicker"),
+  monthlyJournalBody: document.getElementById("monthlyJournalBody"),
+  monthlyJournalClosing: document.getElementById("monthlyJournalClosing"),
   monthlySaveSummaryBtn: document.getElementById("monthlySaveSummaryBtn"),
   monthlyToneSwitchBtn: document.getElementById("monthlyToneSwitchBtn"),
   advancedInsightToggleBtn: document.getElementById("advancedInsightToggleBtn"),
@@ -553,6 +580,12 @@ const refs = {
   monthlyTrialModalBody: document.getElementById("monthlyTrialModalBody"),
   monthlyTrialModalOkBtn: document.getElementById("monthlyTrialModalOkBtn"),
   monthlyTrialUpgradeBtn: document.getElementById("monthlyTrialUpgradeBtn"),
+  monthlyInsightModal: document.getElementById("monthlyInsightModal"),
+  monthlyInsightCloseBtn: document.getElementById("monthlyInsightCloseBtn"),
+  todayInsightModal: document.getElementById("todayInsightModal"),
+  todayInsightCloseBtn: document.getElementById("todayInsightCloseBtn"),
+  insightMonthlyOpenBtn: document.getElementById("insightMonthlyOpenBtn"),
+  insightTodayOpenBtn: document.getElementById("insightTodayOpenBtn"),
   deleteConfirmModal: document.getElementById("deleteConfirmModal"),
   deleteConfirmCancelBtn: document.getElementById("deleteConfirmCancelBtn"),
   deleteConfirmOkBtn: document.getElementById("deleteConfirmOkBtn"),
@@ -566,6 +599,8 @@ const refs = {
   billDateRangeConfirmBtn: document.getElementById("billDateRangeConfirmBtn"),
   billPlaybackModal: document.getElementById("billPlaybackModal"),
   billPlaybackCloseBtn: document.getElementById("billPlaybackCloseBtn"),
+  billPlaybackTitle: document.getElementById("billPlaybackTitle"),
+  billPlaybackSubtitle: document.getElementById("billPlaybackSubtitle"),
   billPlaybackTimeline: document.getElementById("billPlaybackTimeline"),
   billPlaybackProgressBar: document.getElementById("billPlaybackProgressBar"),
   billPlaybackDoneText: document.getElementById("billPlaybackDoneText"),
@@ -576,16 +611,28 @@ const refs = {
   insightSummary: document.getElementById("insightSummary"),
   insightAction: document.getElementById("insightAction"),
   insightEncourage: document.getElementById("insightEncourage"),
+  insightWeekKicker: document.getElementById("insightWeekKicker"),
+  insightJournalBody: document.getElementById("insightJournalBody"),
+  insightJournalClosing: document.getElementById("insightJournalClosing"),
   weeklyRhythmBtn: document.getElementById("weeklyRhythmBtn"),
   weeklyShareBtn: document.getElementById("weeklyShareBtn"),
   weeklyTagBtn: document.getElementById("weeklyTagBtn"),
-  insightHistory: document.getElementById("insightHistory"),
-  insightHistoryEmpty: document.getElementById("insightHistoryEmpty"),
   generateInsightBtn: document.getElementById("generateInsightBtn"),
   dailyAIStatus: document.getElementById("dailyAIStatus"),
   accountEntryBtn: document.getElementById("accountEntryBtn"),
   accountAvatar: document.getElementById("accountAvatar"),
   accountEntryText: document.getElementById("accountEntryText"),
+  settingsIdentityName: document.getElementById("settingsIdentityName"),
+  settingsIdentityMeta: document.getElementById("settingsIdentityMeta"),
+  settingsAccountRowBtn: document.getElementById("settingsAccountRowBtn"),
+  settingsAccountRowMeta: document.getElementById("settingsAccountRowMeta"),
+  settingsAppearanceMeta: document.getElementById("settingsAppearanceMeta"),
+  settingsSheetButtons: [...document.querySelectorAll("[data-settings-sheet]")],
+  settingsSheetModal: document.getElementById("settingsSheetModal"),
+  settingsSheetCloseBtn: document.getElementById("settingsSheetCloseBtn"),
+  settingsSheetSections: [...document.querySelectorAll(".settings-sheet-section")],
+  privacyPolicyBtn: document.getElementById("privacyPolicyBtn"),
+  termsLinkBtn: document.getElementById("termsLinkBtn"),
   accountOverlay: document.getElementById("accountOverlay"),
   accountCloseBtn: document.getElementById("accountCloseBtn"),
   accountLoginView: document.getElementById("accountLoginView"),
@@ -679,6 +726,16 @@ let playbackElapsedBeforePause = 0;
 let playbackActiveIndex = -1;
 let playbackRecords = [];
 let playbackRunning = false;
+let traceSliceChapters = [];
+let traceSliceActiveIndex = 0;
+let traceSliceTimer = null;
+let traceSlicePlaying = false;
+let traceSliceTransitionDir = 1;
+let traceSliceAnimating = false;
+let traceSliceHasRendered = false;
+let traceSliceMotionToken = 0;
+let traceTrendExpanded = false;
+let monthlyJournalRevealTimer = null;
 const uiRuntimeState = {
   tab: "home",
   modal: "none",
@@ -762,6 +819,11 @@ function syncOverlayScrollLock() {
     refs.ocrConfirmOverlay,
     refs.ocrCategoryOverlay,
     refs.monthlyTrialModal,
+    refs.monthlyInsightModal,
+    refs.todayInsightModal,
+    refs.traceDetailModal,
+    refs.traceSliceModal,
+    refs.settingsSheetModal,
     refs.billDateRangeModal,
     refs.deleteConfirmModal,
     refs.billPlaybackModal,
@@ -779,6 +841,11 @@ function watchOverlayChanges() {
     refs.ocrConfirmOverlay,
     refs.ocrCategoryOverlay,
     refs.monthlyTrialModal,
+    refs.monthlyInsightModal,
+    refs.todayInsightModal,
+    refs.traceDetailModal,
+    refs.traceSliceModal,
+    refs.settingsSheetModal,
     refs.billDateRangeModal,
     refs.deleteConfirmModal,
     refs.billPlaybackModal,
@@ -1635,6 +1702,315 @@ function getBillRangeForMode(mode) {
   if (mode === "month") return buildQuickRange("month");
   if (mode === "year") return buildQuickRange("year");
   return getCurrentBillRangeOrDefault();
+}
+
+function setTraceHeroRange(period) {
+  if (!["week", "month"].includes(period)) return;
+  state.period = period;
+  persist();
+  renderStats();
+}
+
+function openTraceDetailModal() {
+  traceTrendExpanded = false;
+  renderTraceTrendVisibility();
+  setUIModal("traceDetail");
+  refs.traceDetailModal?.classList.remove("hidden");
+}
+
+function closeTraceDetailModal() {
+  setUIModal("none");
+  refs.traceDetailModal?.classList.add("hidden");
+}
+
+function renderTraceTrendVisibility() {
+  const trendBlock = document.querySelector(".trace-detail-trend");
+  trendBlock?.classList.toggle("collapsed", !traceTrendExpanded);
+  if (refs.traceTrendToggleBtn) {
+    refs.traceTrendToggleBtn.textContent = traceTrendExpanded ? "收起走势" : "展开走势";
+  }
+}
+
+function stopTraceSliceTimer() {
+  if (traceSliceTimer) {
+    clearInterval(traceSliceTimer);
+    traceSliceTimer = null;
+  }
+  traceSlicePlaying = false;
+}
+
+function startTraceSliceTimer() {
+  stopTraceSliceTimer();
+  if (traceSliceChapters.length <= 1) {
+    updateTraceSliceControls();
+    return;
+  }
+  traceSlicePlaying = true;
+  updateTraceSliceControls();
+  traceSliceTimer = setInterval(() => {
+    if (traceSliceAnimating) return;
+    if (traceSliceActiveIndex >= traceSliceChapters.length - 1) {
+      stopTraceSliceTimer();
+      updateTraceSliceControls();
+      return;
+    }
+    traceSliceTransitionDir = 1;
+    traceSliceActiveIndex += 1;
+    renderTraceSliceChapter();
+  }, 3200);
+}
+
+function traceSliceDayLabel(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "这一段";
+  return date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+}
+
+function traceSliceTopCategory(items) {
+  const map = new Map();
+  items.forEach((item) => {
+    const key = item.category || "日常";
+    map.set(key, (map.get(key) || 0) + Number(item.amount || 0));
+  });
+  return [...map.entries()]
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount)[0] || null;
+}
+
+function traceSliceBusiestDay(items) {
+  const map = new Map();
+  items.forEach((item) => {
+    const key = String(item.createdAt || "").slice(0, 10);
+    if (!key) return;
+    const current = map.get(key) || { count: 0, total: 0, sample: item.createdAt };
+    current.count += 1;
+    current.total += Number(item.amount || 0);
+    map.set(key, current);
+  });
+  const busiest = [...map.values()].sort((a, b) => b.total - a.total || b.count - a.count)[0];
+  return busiest ? { ...busiest, label: traceSliceDayLabel(busiest.sample) } : null;
+}
+
+function buildTraceSliceChapters(period, items) {
+  const label = billPeriodLabel(period);
+  const total = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const top = traceSliceTopCategory(items);
+  const busiest = traceSliceBusiestDay(items);
+  const highlight = [...items].sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))[0];
+  const chapters = [
+    {
+      type: "intro",
+      title: period === "week" ? "这一周" : "这个月",
+      narration: `${label}留下 ${items.length} 笔，合计 ${formatCNY(total)}。这些小小的记录，拼成了这一段生活。`,
+      support: period === "week" ? "本周生活切片" : "本月生活章",
+      symbol: "✦",
+    },
+  ];
+
+  if (busiest) {
+    chapters.push({
+      type: "rhythm",
+      title: "节奏起伏",
+      narration: `${busiest.label}热闹一点，留下 ${busiest.count} 笔，合计 ${formatCNY(busiest.total)}。`,
+      support: "不是判断，只是把生活的轻重缓急轻轻标出来。",
+      symbol: "〰",
+    });
+  }
+
+  if (top) {
+    chapters.push({
+      type: "category",
+      title: "生活主料",
+      narration: `「${top.category}」出现得多一点，像是这段日子里更常被照顾的一部分。`,
+      support: `${top.category} · ${formatCNY(top.amount)}`,
+      symbol: "◌",
+    });
+  }
+
+  if (highlight) {
+    chapters.push({
+      type: "highlight",
+      title: "印象一笔",
+      narration: `有一笔「${highlight.title}」被留在这里，金额是 ${formatCNY(highlight.amount)}。`,
+      support: `${highlight.category} · ${traceSliceDayLabel(highlight.createdAt)}`,
+      symbol: "“”",
+    });
+  }
+
+  chapters.push({
+    type: "outro",
+    title: period === "week" ? "下周再叙" : "月末小结",
+    narration: period === "week"
+      ? "这一周已经被好好放进账本。下次回看时，它会更像一段被保存下来的生活。"
+      : "这个月不是一串数字，而是一段被慢慢记下来的日常。",
+    support: "切片由本地记录生成。",
+    symbol: "✧",
+  });
+
+  return chapters;
+}
+
+function openTraceSliceModal() {
+  const period = state.period === "week" ? "week" : "month";
+  const items = getTraceHeroPlaybackRecords();
+  if (!items.length) {
+    showToast(`${billPeriodLabel(period)}还没有账单可播放。`);
+    return;
+  }
+  traceSliceChapters = buildTraceSliceChapters(period, items);
+  traceSliceActiveIndex = 0;
+  traceSliceTransitionDir = 1;
+  traceSliceAnimating = false;
+  traceSliceHasRendered = false;
+  traceSliceMotionToken += 1;
+  clearTraceSlicePageMotion();
+  refs.traceSliceKicker.textContent = period === "week" ? "本周生活切片" : "本月生活章";
+  refs.traceSliceTitle.textContent = period === "week" ? "听听这一周" : "听听这个月";
+  refs.traceSliceTeaser.textContent = `${items.length} 笔 · ${formatCNY(items.reduce((sum, item) => sum + Number(item.amount || 0), 0))}`;
+  setUIModal("traceSlice");
+  refs.traceSliceModal?.classList.remove("hidden");
+  renderTraceSliceChapter({ enterOnly: true });
+  startTraceSliceTimer();
+}
+
+function closeTraceSliceModal() {
+  stopTraceSliceTimer();
+  traceSliceAnimating = false;
+  traceSliceHasRendered = false;
+  traceSliceMotionToken += 1;
+  clearTraceSlicePageMotion();
+  setUIModal("none");
+  refs.traceSliceModal?.classList.add("hidden");
+}
+
+function moveTraceSliceChapter(delta) {
+  if (!traceSliceChapters.length || traceSliceAnimating) return;
+  const nextIndex = Math.max(0, Math.min(traceSliceChapters.length - 1, traceSliceActiveIndex + delta));
+  if (nextIndex === traceSliceActiveIndex) {
+    updateTraceSliceControls();
+    return;
+  }
+  traceSliceTransitionDir = delta >= 0 ? 1 : -1;
+  traceSliceActiveIndex = nextIndex;
+  renderTraceSliceChapter();
+}
+
+function clearTraceSlicePageMotion() {
+  refs.traceSlicePage?.classList.remove(
+    "trace-slice-enter",
+    "trace-slice-enter-next",
+    "trace-slice-enter-prev",
+    "trace-slice-enter-initial",
+    "trace-slice-enter-active",
+    "trace-slice-exit",
+    "trace-slice-exit-next",
+    "trace-slice-exit-prev",
+    "trace-slice-exit-active"
+  );
+}
+
+function escapeTraceSliceHTML(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function applyTraceSliceNarrationStagger(el, text) {
+  if (!el) return;
+  const lines = String(text || "").match(/[^。！？；]+[。！？；]?/g) || [String(text || "")];
+  const displayLines = lines.length > 3 ? [lines[0], lines[1], lines.slice(2).join("")] : lines;
+  el.innerHTML = displayLines
+    .slice(0, 3)
+    .map((line, index) => `<span class="trace-slice-line" style="--line-i:${index}">${escapeTraceSliceHTML(line.trim())}</span>`)
+    .join("");
+}
+
+function updateTraceSliceContent(chapter) {
+  refs.traceSliceStage.className = `trace-slice-stage ${chapter.type}`;
+  refs.traceSliceSymbol.textContent = chapter.symbol;
+  refs.traceSliceChapterTitle.textContent = chapter.title;
+  applyTraceSliceNarrationStagger(refs.traceSliceNarration, chapter.narration);
+  refs.traceSliceSupport.textContent = chapter.support;
+  updateTraceSliceControls();
+}
+
+function updateTraceSliceControls() {
+  refs.traceSlicePlayBtn.textContent = traceSlicePlaying ? "暂停" : "继续";
+  refs.traceSlicePrevBtn.disabled = traceSliceAnimating || traceSliceActiveIndex === 0;
+  refs.traceSliceNextBtn.disabled = traceSliceAnimating || traceSliceActiveIndex >= traceSliceChapters.length - 1;
+  refs.traceSliceDots.innerHTML = traceSliceChapters
+    .map((_, index) => `<span class="${index === traceSliceActiveIndex ? "active" : ""}"></span>`)
+    .join("");
+}
+
+function waitForTraceSliceTransition(el, token, callback) {
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    el.removeEventListener("transitionend", onEnd);
+    if (token !== traceSliceMotionToken) return;
+    callback();
+  };
+  const onEnd = (event) => {
+    if (event.target === el && ["transform", "opacity"].includes(event.propertyName)) {
+      finish();
+    }
+  };
+  el.addEventListener("transitionend", onEnd);
+  setTimeout(finish, 560);
+}
+
+function runTraceSliceEnter(page, directionClass, token) {
+  clearTraceSlicePageMotion();
+  page.classList.add("trace-slice-enter", directionClass);
+  requestAnimationFrame(() => {
+    if (token !== traceSliceMotionToken) return;
+    page.classList.add("trace-slice-enter-active");
+  });
+  waitForTraceSliceTransition(page, token, () => {
+    clearTraceSlicePageMotion();
+    traceSliceAnimating = false;
+    traceSliceHasRendered = true;
+    updateTraceSliceControls();
+  });
+}
+
+function renderTraceSliceChapter(options = {}) {
+  const chapter = traceSliceChapters[traceSliceActiveIndex];
+  if (!chapter) return;
+  const page = refs.traceSlicePage;
+  if (!page) {
+    updateTraceSliceContent(chapter);
+    traceSliceHasRendered = true;
+    return;
+  }
+  if (traceSliceAnimating) return;
+
+  traceSliceAnimating = true;
+  const motionToken = ++traceSliceMotionToken;
+  updateTraceSliceControls();
+  const dirClass = traceSliceTransitionDir >= 0 ? "next" : "prev";
+  const enterClass = options.enterOnly || !traceSliceHasRendered ? "trace-slice-enter-initial" : `trace-slice-enter-${dirClass}`;
+  if (options.enterOnly || !traceSliceHasRendered) {
+    updateTraceSliceContent(chapter);
+    runTraceSliceEnter(page, enterClass, motionToken);
+    return;
+  }
+
+  clearTraceSlicePageMotion();
+  page.classList.add("trace-slice-exit", `trace-slice-exit-${dirClass}`);
+  requestAnimationFrame(() => {
+    if (motionToken !== traceSliceMotionToken) return;
+    page.classList.add("trace-slice-exit-active");
+  });
+  waitForTraceSliceTransition(page, motionToken, () => {
+    updateTraceSliceContent(chapter);
+    runTraceSliceEnter(page, enterClass, motionToken);
+  });
 }
 
 function openBillDateRangeModal() {
@@ -3739,6 +4115,92 @@ function closeMonthlyTrialModal() {
   refs.monthlyTrialModal.classList.add("hidden");
 }
 
+function resetMonthlyJournalMotion() {
+  if (monthlyJournalRevealTimer) {
+    clearTimeout(monthlyJournalRevealTimer);
+    monthlyJournalRevealTimer = null;
+  }
+  refs.monthlyJournalBody?.classList.remove("monthly-journal-revealed", "monthly-journal-generating");
+  refs.monthlyJournalClosing?.classList.remove("monthly-journal-revealed", "monthly-journal-generating");
+}
+
+function escapeMonthlyJournalHTML(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function wrapMonthlyJournalRevealLines(el) {
+  if (!el || el.classList.contains("monthly-journal-generating")) return;
+  const text = el.textContent.trim();
+  if (!text) return;
+  const lines = text.match(/[^。！？；]+[。！？；]?/g) || [text];
+  const displayLines = lines.length > 4 ? [lines[0], lines[1], lines[2], lines.slice(3).join("")] : lines;
+  el.innerHTML = displayLines
+    .slice(0, 4)
+    .map((line, index) => `<span class="monthly-journal-line" style="--line-i:${index}">${escapeMonthlyJournalHTML(line.trim())}</span>`)
+    .join("");
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+}
+
+function queueMonthlyJournalReveal() {
+  if (monthlyJournalRevealTimer) {
+    clearTimeout(monthlyJournalRevealTimer);
+    monthlyJournalRevealTimer = null;
+  }
+  const modal = refs.monthlyInsightModal;
+  if (!modal || modal.classList.contains("hidden")) return;
+  refs.monthlyJournalBody?.classList.remove("monthly-journal-revealed");
+  refs.monthlyJournalClosing?.classList.remove("monthly-journal-revealed");
+  if (state.isGeneratingMonthlyInsight) {
+    refs.monthlyJournalBody?.classList.add("monthly-journal-generating");
+    return;
+  }
+  refs.monthlyJournalBody?.classList.remove("monthly-journal-generating");
+  monthlyJournalRevealTimer = setTimeout(() => {
+    if (modal.classList.contains("hidden") || state.isGeneratingMonthlyInsight) return;
+    wrapMonthlyJournalRevealLines(refs.monthlyJournalBody);
+    refs.monthlyJournalBody?.classList.add("monthly-journal-revealed");
+    refs.monthlyJournalClosing?.classList.add("monthly-journal-revealed");
+    monthlyJournalRevealTimer = null;
+  }, prefersReducedMotion() ? 0 : 200);
+}
+
+function openMonthlyInsightModal() {
+  setUIModal("monthlyInsight");
+  const modal = refs.monthlyInsightModal;
+  modal?.classList.remove("hidden");
+  modal?.classList.remove("monthly-sheet-opened");
+  resetMonthlyJournalMotion();
+  requestAnimationFrame(() => {
+    modal?.classList.add("monthly-sheet-opened");
+    queueMonthlyJournalReveal();
+  });
+}
+
+function closeMonthlyInsightModal() {
+  setUIModal("none");
+  refs.monthlyInsightModal?.classList.remove("monthly-sheet-opened");
+  resetMonthlyJournalMotion();
+  refs.monthlyInsightModal?.classList.add("hidden");
+}
+
+function openTodayInsightModal() {
+  setUIModal("todayInsight");
+  refs.todayInsightModal?.classList.remove("hidden");
+}
+
+function closeTodayInsightModal() {
+  setUIModal("none");
+  refs.todayInsightModal?.classList.add("hidden");
+}
+
 function openDeleteConfirmModal(recordId) {
   if (!recordId) return;
   pendingDeleteRecordId = recordId;
@@ -3779,6 +4241,18 @@ function getTodayPlaybackRecords() {
   const todayKey = new Date().toISOString().slice(0, 10);
   return state.items
     .filter((item) => item.createdAt.slice(0, 10) === todayKey)
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+    .slice(0, 16);
+}
+
+function getTraceHeroPlaybackRecords() {
+  const heroPeriod = state.period === "week" ? "week" : "month";
+  const range = getBillRangeForMode(heroPeriod);
+  return state.items
+    .filter((item) => {
+      const day = String(item.createdAt || "").slice(0, 10);
+      return item.amount > 0 && day && day >= range.start && day <= range.end;
+    })
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
     .slice(0, 16);
 }
@@ -3865,17 +4339,18 @@ function closeBillPlaybackModal() {
   refs.billPlaybackModal.classList.add("hidden");
 }
 
-function openBillPlaybackModal() {
-  const records = getTodayPlaybackRecords();
+function openBillPlaybackWithRecords(records, options = {}) {
   if (!records.length) {
-    trackAnalytics("bill_playback_open_empty");
-    showToast("今天还没有账单可回放。");
+    trackAnalytics("bill_playback_open_empty", { source: options.source || "today" });
+    showToast(options.emptyMessage || "这一段还没有账单可回放。");
     return;
   }
-  trackAnalytics("bill_playback_open", { count: records.length });
+  trackAnalytics("bill_playback_open", { count: records.length, source: options.source || "today" });
   playbackRecords = records;
   playbackElapsedBeforePause = 0;
   playbackActiveIndex = -1;
+  if (refs.billPlaybackTitle) refs.billPlaybackTitle.textContent = options.title || "今日生活回放";
+  if (refs.billPlaybackSubtitle) refs.billPlaybackSubtitle.textContent = options.subtitle || "10 秒看完今天的生活节奏";
   refs.billPlaybackTimeline.innerHTML = "";
   records.forEach((item) => {
     const li = document.createElement("li");
@@ -3895,6 +4370,26 @@ function openBillPlaybackModal() {
   setUIModal("billPlayback");
   refs.billPlaybackModal.classList.remove("hidden");
   startBillPlayback();
+}
+
+function openBillPlaybackModal() {
+  openBillPlaybackWithRecords(getTodayPlaybackRecords(), {
+    source: "today",
+    title: "今日生活回放",
+    subtitle: "10 秒看完今天的生活节奏",
+    emptyMessage: "今天还没有账单可回放。",
+  });
+}
+
+function openTraceHeroPlaybackModal() {
+  const heroPeriod = state.period === "week" ? "week" : "month";
+  const label = billPeriodLabel(heroPeriod);
+  openBillPlaybackWithRecords(getTraceHeroPlaybackRecords(), {
+    source: `trace_${heroPeriod}`,
+    title: `${label}生活回放`,
+    subtitle: "听听这一段生活的节奏",
+    emptyMessage: `${label}还没有账单可回放。`,
+  });
 }
 
 async function generateMonthlyInsight() {
@@ -3997,10 +4492,12 @@ async function generatePremiumInsight(label, days) {
       getAIStatusText(state.settings.remoteAIEnabled ? "error" : "fallback")
     );
   }
-  refs.monthlyInsightContent.classList.remove("hidden");
-  refs.monthlyInsightSummary.textContent = report.summary;
-  refs.monthlyInsightStructure.textContent = report.structure;
-  refs.monthlyInsightAdvice.textContent = report.advice;
+  if (refs.monthlyJournalBody) {
+    refs.monthlyJournalBody.textContent = formatMonthlyJournalText(report, rangeItems);
+  }
+  if (refs.monthlyJournalClosing) {
+    refs.monthlyJournalClosing.textContent = `${label}也可以像一封长一点的回信，留到之后慢慢翻。`;
+  }
   renderAIStatus();
   showToast(getToastCopy().insightGenerated(label));
   showPetBubble(buildAiReviewPetMessage());
@@ -4143,13 +4640,7 @@ function renderHome() {
       <p class="muted">${item.category} · ${new Date(item.createdAt).toLocaleString()}</p>
     `;
     const openEditor = () => openRecordEditor(item.id);
-    li.addEventListener("click", openEditor);
-    li.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openEditor();
-      }
-    });
+    bindRecordRowActivation(li, openEditor);
     refs.homeTodayList.appendChild(li);
   });
 
@@ -4179,6 +4670,42 @@ function resetRecordEditorState() {
   refs.recordEditSecondaryRow?.classList.add("hidden");
 }
 
+function bindRecordRowActivation(row, activate) {
+  let startX = 0;
+  let startY = 0;
+  let moved = false;
+  const MOVE_THRESHOLD = 12;
+
+  row.addEventListener("pointerdown", (event) => {
+    startX = event.clientX;
+    startY = event.clientY;
+    moved = false;
+  });
+  row.addEventListener("pointermove", (event) => {
+    if (Math.abs(event.clientX - startX) > MOVE_THRESHOLD || Math.abs(event.clientY - startY) > MOVE_THRESHOLD) {
+      moved = true;
+    }
+  });
+  row.addEventListener("pointercancel", () => {
+    moved = true;
+  });
+  row.addEventListener("click", (event) => {
+    if (moved) {
+      event.preventDefault();
+      event.stopPropagation();
+      moved = false;
+      return;
+    }
+    activate();
+  });
+  row.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      activate();
+    }
+  });
+}
+
 function startNewManualRecordDraft() {
   resetRecordEditorState();
   state.recordMode = "manual";
@@ -4202,6 +4729,9 @@ function startNewManualRecordDraft() {
 function openRecordEditor(recordId) {
   const item = state.items.find((x) => x.id === recordId);
   if (!item) return;
+  if (refs.traceDetailModal && !refs.traceDetailModal.classList.contains("hidden")) {
+    closeTraceDetailModal();
+  }
   editingRecordId = recordId;
   state.recordMode = "manual";
   refs.recordFormTitle.textContent = "调整这一笔";
@@ -4286,10 +4816,12 @@ function renderStats() {
       persist();
     }
   }
+  const heroPeriod = period === "week" ? "week" : "month";
   const category = refs.billCategoryFilter.value;
   const periodRange = getBillRangeForMode(period);
   const rangeStart = periodRange?.start || "";
   const rangeEnd = periodRange?.end || "";
+  const heroRange = getBillRangeForMode(heroPeriod);
 
   const categoryOptions = ["", ...new Set(state.items.map((x) => x.category))];
   const currentSelect = refs.billCategoryFilter.value;
@@ -4308,34 +4840,123 @@ function renderStats() {
   filtered = filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   const expenseTotal = filtered.filter((x) => x.amount > 0).reduce((sum, x) => sum + x.amount, 0);
-  refs.billExpenseTotal.textContent = formatCNY(expenseTotal);
+  if (refs.billExpenseTotal) refs.billExpenseTotal.textContent = formatCNY(expenseTotal);
   renderBillTrendChart(filtered, period);
+  renderTraceTrendVisibility();
+  if (refs.traceDetailMeta) {
+    refs.traceDetailMeta.textContent = `${billPeriodLabel(period)} · ${category || "全部分类"} · ${filtered.length} 笔 · 合计 ${formatCNY(expenseTotal)}`;
+  }
 
   refs.billRecordsList.innerHTML = "";
   refs.billRecordsEmpty.style.display = filtered.length ? "none" : "block";
-  filtered.forEach((item) => {
+  filtered.forEach((item, index) => {
     const li = document.createElement("li");
-    li.className = "home-record-item";
+    li.className = "trace-slip-item trace-detail-row";
+    li.dataset.category = item.category || "其他";
+    if (index > 0) li.classList.add("with-divider");
     li.tabIndex = 0;
     li.innerHTML = `
-      <div class="item-title-row">
-        <span>${item.title}</span>
-        <span>${formatCNY(item.amount)}</span>
+      <span class="trace-slip-accent" aria-hidden="true"></span>
+      <div class="trace-slip-copy">
+        <div class="trace-slip-title-row">
+          <span class="trace-slip-title">${item.title}</span>
+          <span class="trace-slip-amount muted">${formatCNY(item.amount)}</span>
+        </div>
+        <p class="trace-slip-meta muted">${item.category} · ${formatRecordDetailTime(item.createdAt)}</p>
       </div>
-      <p class="muted">${item.category} · ${new Date(item.createdAt).toLocaleString()}</p>
     `;
     const openEditor = () => openRecordEditor(item.id);
-    li.addEventListener("click", openEditor);
-    li.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openEditor();
-      }
-    });
+    bindRecordRowActivation(li, openEditor);
     refs.billRecordsList.appendChild(li);
   });
+
+  const heroItems = state.items
+    .filter((item) => {
+      const day = String(item.createdAt || "").slice(0, 10);
+      return item.amount > 0 && day && day >= heroRange.start && day <= heroRange.end;
+    })
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const heroTotal = heroItems.reduce((sum, item) => sum + item.amount, 0);
+  const topCategory = topCategoryFor(heroItems) || "日常";
+  refs.traceRangeWeekBtn?.classList.toggle("active", heroPeriod === "week");
+  refs.traceRangeMonthBtn?.classList.toggle("active", heroPeriod === "month");
+  if (refs.traceHeroPlayBtn) {
+    refs.traceHeroPlayBtn.disabled = heroItems.length === 0;
+  }
+  if (refs.traceHeroNarrative) {
+    refs.traceHeroNarrative.textContent = heroItems.length
+      ? `这一段留下 ${heroItems.length} 笔，合计 ${formatCNY(heroTotal)}。「${topCategory}」出现得多一点，像这段日子的一个小主题。`
+      : "这一段还安静着，先留下几笔，之后就能慢慢看见生活的纹理。";
+  }
+  if (refs.traceHeroPreview) {
+    refs.traceHeroPreview.textContent = heroItems.length >= 3
+      ? `${heroPeriod === "week" ? "本周生活切片" : "本月生活章"}已经有素材，可以听听这一段怎么走过。`
+      : "先记几笔，这里会变成能听的一段生活。";
+  }
+  renderTraceHeroRecords(heroItems.slice(0, 3));
+
   updateBillCustomRangeBtnText();
   updateDebugHUD(`render-stats:${filtered.length}`);
+}
+
+function billPeriodLabel(period) {
+  if (period === "week") return "本周";
+  if (period === "month") return "本月";
+  if (period === "year") return "本年";
+  if (period === "custom") return "自定义";
+  return "这一段";
+}
+
+function renderTraceHeroRecords(items) {
+  if (!refs.traceHeroRecordsList || !refs.traceHeroEmpty) return;
+  refs.traceHeroRecordsList.innerHTML = "";
+  refs.traceHeroEmpty.classList.toggle("hidden", items.length > 0);
+  items.forEach((item, index) => {
+    const li = document.createElement("li");
+    li.className = "trace-slip-item";
+    li.dataset.category = item.category || "其他";
+    li.tabIndex = 0;
+    li.innerHTML = `
+      <span class="trace-slip-accent" aria-hidden="true"></span>
+      <div class="trace-slip-copy">
+        <div class="trace-slip-title-row">
+          <span class="trace-slip-title">${item.title}</span>
+          <span class="trace-slip-amount muted">${formatCNY(item.amount)}</span>
+        </div>
+        ${item.emotion ? `<p class="life-slip-mood trace-slip-mood">${item.emotion}</p>` : ""}
+        <p class="trace-slip-meta muted">${item.category} · ${formatRecordTime(item.createdAt)}</p>
+      </div>
+    `;
+    if (index > 0) li.classList.add("with-divider");
+    const openEditor = () => openRecordEditor(item.id);
+    bindRecordRowActivation(li, openEditor);
+    refs.traceHeroRecordsList.appendChild(li);
+  });
+}
+
+function formatRecordTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function formatRecordDetailTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 function renderBillTrendChart(sourceItems = [], period = "month") {
@@ -4429,12 +5050,74 @@ function renderBillTrendChart(sourceItems = [], period = "month") {
   const recent7 = safeTotals.slice(-7).reduce((sum, x) => sum + x, 0);
   const prev7 = safeTotals.slice(-14, -7).reduce((sum, x) => sum + x, 0);
   if (recent7 > prev7 * 1.15) {
-    refs.billTrendInsight.textContent = "最近一周支出有上升趋势，建议关注高频消费分类。";
+    refs.billTrendInsight.textContent = "最近几天花得密了一点，多集中在少数几笔。";
   } else if (recent7 < prev7 * 0.85) {
-    refs.billTrendInsight.textContent = "最近一周支出明显回落，当前消费节奏更稳了。";
+    refs.billTrendInsight.textContent = "最近几天节奏慢下来了。";
   } else {
-    refs.billTrendInsight.textContent = "本月支出整体平稳，保持记录就很棒。";
+    refs.billTrendInsight.textContent = "这一段整体比较匀，没有特别突出的起伏。";
   }
+}
+
+function formatJournalShortDate(date) {
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function formatInsightWeekKicker(start, end) {
+  return `这周 · ${formatJournalShortDate(start)}-${formatJournalShortDate(end)}`;
+}
+
+function formatWeeklyJournalText(report, items) {
+  if (!items.length) {
+    return "近 7 天还没有足够记录。多记几笔，这里会慢慢长出一周的回信。";
+  }
+  const total = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const top = traceSliceTopCategory(items);
+  const days = new Set(items.map((item) => String(item.createdAt || "").slice(0, 10)).filter(Boolean));
+  const countText = items.length <= 2 ? "几笔" : `${items.length} 笔`;
+  const amountMood = total <= 80 ? "花得不多" : total <= 300 ? "花得还算轻" : "花得比平时更有存在感";
+  const categoryText = top?.category && top.category !== "暂无" ? `「${top.category}」冒出来几次` : "一些零散的小事被记了下来";
+  const rhythmText = days.size <= 2
+    ? "它们没有铺满整周，更像几次被顺手留下的片刻。"
+    : "日子分布得比较散，像是这一周慢慢展开的脚注。";
+  return `这周记下 ${countText}，${amountMood}，${categoryText}。${rhythmText}`;
+}
+
+function formatWeeklyJournalClosing(items) {
+  if (!items.length) return "";
+  const total = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  if (items.length <= 2) return "愿意的话，下周再多留几笔，这封回信会更完整。";
+  if (total > 300) return "愿意的话，下周再回头看看，生活的重心可能会露出新的样子。";
+  return "愿意的话，下周再对照看看有没有新变化。";
+}
+
+function formatMonthlySheetKicker(monthKey) {
+  const [year, month] = String(monthKey || "").split("-");
+  const monthNumber = Number(month);
+  if (!year || !monthNumber) return "这一月";
+  return `这一月 · ${year}年${monthNumber}月`;
+}
+
+function formatMonthlyJournalPlaceholder() {
+  return "这一月还没有回顾。点下面生成，会在这里长出一封月记。";
+}
+
+function formatMonthlyJournalText(report, monthItems) {
+  if (!monthItems.length && !report) return formatMonthlyJournalPlaceholder();
+  const total = monthItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const top = traceSliceTopCategory(monthItems);
+  const countText = monthItems.length ? `${monthItems.length} 笔` : "几笔";
+  const amountText = total <= 120 ? "花费很轻" : total <= 600 ? "花得不算重" : "留下了更明显的生活痕迹";
+  const topText = top?.category ? `「${top.category}」偶尔露头` : "几处日常被留下来";
+  const spreadText = top && total > 0 && top.amount / total > 0.66
+    ? "这个月有一类事情更常被记住。"
+    : "没有哪一类占满整个月，更像几处被留下的注脚。";
+  return `这个月记下来 ${countText}，${amountText}，${topText}。${spreadText}`;
+}
+
+function formatMonthlyJournalClosing(monthItems) {
+  if (!monthItems.length) return "";
+  if (monthItems.length <= 2) return "愿意的话，下个月再多留几笔，这封月记会更有轮廓。";
+  return "愿意的话，下个月再翻开对照看看。";
 }
 
 function renderInsight() {
@@ -4458,23 +5141,19 @@ function renderInsight() {
   refs.insightAction.classList.toggle("skeleton-w-90", state.isGeneratingInsight);
   refs.insightEncourage.classList.toggle("skeleton-w-72", state.isGeneratingInsight);
 
-  refs.insightHistory.innerHTML = "";
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
   sevenDaysAgo.setHours(0, 0, 0, 0);
+  if (refs.insightWeekKicker) {
+    refs.insightWeekKicker.textContent = formatInsightWeekKicker(sevenDaysAgo, new Date());
+  }
   const weekItems = state.items.filter((item) => new Date(item.createdAt) >= sevenDaysAgo && item.amount > 0);
-  refs.insightHistoryEmpty.style.display = weekItems.length ? "none" : "block";
-
-  if (weekItems.length) {
-    const weeklyReport = rangeInsightPayload(7, "近7天");
-    const li = document.createElement("li");
-    li.innerHTML = `
-      <div class="item-title-row"><span>${new Date().toISOString().slice(0, 10)}</span><span>${copy.weeklyHistoryTag}</span></div>
-      <p>${weeklyReport.summary}</p>
-      <p class="muted">${weeklyReport.structure}</p>
-      <p class="muted">${weeklyReport.advice}</p>
-    `;
-    refs.insightHistory.appendChild(li);
+  const weeklyReport = rangeInsightPayload(7, "近7天");
+  if (refs.insightJournalBody) {
+    refs.insightJournalBody.textContent = formatWeeklyJournalText(weeklyReport, weekItems);
+  }
+  if (refs.insightJournalClosing) {
+    refs.insightJournalClosing.textContent = formatWeeklyJournalClosing(weekItems);
   }
 
   refs.generateInsightBtn.disabled = state.isGeneratingInsight;
@@ -4482,41 +5161,49 @@ function renderInsight() {
   refs.generateInsightBtn.classList.toggle("generating", state.isGeneratingInsight);
 
   const monthKey = thisMonthKey();
-  const monthlyReport = state.monthlyInsights.find((x) => x.monthKey === monthKey) || state.monthlyInsights[0];
+  const monthlyReport = state.monthlyInsights.find((x) => x.monthKey === monthKey);
+  const monthItems = state.items.filter((x) => x.createdAt.startsWith(monthKey) && x.amount > 0);
   const left = Math.max(0, TRIAL_TOTAL - state.monthlyTrialUsed);
   const isMember = Boolean(state.settings.isMember);
   const isMonthlyLocked = !isMember && left === 0;
-  refs.monthlyTrialText.classList.toggle("hidden", isMember);
-  if (!isMember) {
-    refs.monthlyTrialText.textContent = `剩余试用次数：${left}/${TRIAL_TOTAL}`;
+  if (refs.monthlySheetKicker) {
+    refs.monthlySheetKicker.textContent = formatMonthlySheetKicker(monthKey);
+  }
+  refs.monthlyTrialInline?.classList.toggle("hidden", isMember);
+  if (refs.monthlyTrialInline && !isMember) {
+    refs.monthlyTrialInline.textContent = `剩余 ${left}/${TRIAL_TOTAL} 次`;
   }
   refs.generateMonthlyInsightBtn.disabled = state.isGeneratingMonthlyInsight;
+  refs.generateMonthlyInsightBtn.classList.add("monthly-footnote-link", "monthly-footnote-primary-action");
   refs.generateMonthlyInsightBtn.classList.toggle("generating", state.isGeneratingMonthlyInsight);
-  refs.generateMonthlyInsightBtn.classList.toggle("primary-btn", !isMonthlyLocked);
-  refs.generateMonthlyInsightBtn.classList.toggle("locked-report-btn", isMonthlyLocked);
+  refs.generateMonthlyInsightBtn.classList.toggle("monthly-generate-locked", isMonthlyLocked);
   if (state.isGeneratingMonthlyInsight) {
-    refs.generateMonthlyInsightBtn.textContent = copy.monthlyBtnLoading;
+    refs.generateMonthlyInsightBtn.textContent = "正在梳理这一月...";
   } else if (isMonthlyLocked) {
-    refs.generateMonthlyInsightBtn.innerHTML = copy.monthlyBtnLocked;
-  } else {
-    refs.generateMonthlyInsightBtn.textContent = copy.monthlyBtnIdle;
-  }
-  refs.monthlyInsightContent.classList.toggle("hidden", !monthlyReport && !state.isGeneratingMonthlyInsight);
-  if (state.isGeneratingMonthlyInsight) {
-    refs.monthlyInsightSummary.textContent = " ";
-    refs.monthlyInsightStructure.textContent = " ";
-    refs.monthlyInsightAdvice.textContent = " ";
+    refs.generateMonthlyInsightBtn.textContent = "想多聊几句？了解会员 →";
   } else if (monthlyReport) {
-    refs.monthlyInsightSummary.textContent = monthlyReport.summary;
-    refs.monthlyInsightStructure.textContent = monthlyReport.structure;
-    refs.monthlyInsightAdvice.textContent = monthlyReport.advice;
+    refs.generateMonthlyInsightBtn.textContent = "再写一版 →";
+  } else {
+    refs.generateMonthlyInsightBtn.textContent = "生成这一月的回顾 →";
   }
-  refs.monthlyInsightSummary.classList.toggle("skeleton-line", state.isGeneratingMonthlyInsight);
-  refs.monthlyInsightStructure.classList.toggle("skeleton-line", state.isGeneratingMonthlyInsight);
-  refs.monthlyInsightAdvice.classList.toggle("skeleton-line", state.isGeneratingMonthlyInsight);
-  refs.monthlyInsightSummary.classList.toggle("skeleton-w-100", state.isGeneratingMonthlyInsight);
-  refs.monthlyInsightStructure.classList.toggle("skeleton-w-92", state.isGeneratingMonthlyInsight);
-  refs.monthlyInsightAdvice.classList.toggle("skeleton-w-76", state.isGeneratingMonthlyInsight);
+  if (state.isGeneratingMonthlyInsight) {
+    refs.monthlyJournalBody.textContent = "正在梳理这一月...";
+    refs.monthlyJournalClosing.textContent = "";
+  } else if (monthlyReport) {
+    refs.monthlyJournalBody.textContent = formatMonthlyJournalText(monthlyReport, monthItems);
+    refs.monthlyJournalClosing.textContent = formatMonthlyJournalClosing(monthItems);
+  } else {
+    refs.monthlyJournalBody.textContent = formatMonthlyJournalPlaceholder();
+    refs.monthlyJournalClosing.textContent = "";
+  }
+  refs.monthlyJournalBody.classList.remove("skeleton-line", "skeleton-w-100");
+  refs.monthlyJournalBody.classList.toggle("monthly-journal-generating", state.isGeneratingMonthlyInsight);
+  refs.monthlyJournalClosing.classList.remove("monthly-journal-generating");
+  if (refs.monthlyInsightModal && !refs.monthlyInsightModal.classList.contains("hidden")) {
+    refs.monthlyJournalBody.classList.remove("monthly-journal-revealed");
+    refs.monthlyJournalClosing.classList.remove("monthly-journal-revealed");
+    requestAnimationFrame(queueMonthlyJournalReveal);
+  }
   const showWeeklyActions = weekItems.length > 0 && !state.isGeneratingInsight;
   [refs.weeklyRhythmBtn, refs.weeklyShareBtn, refs.weeklyTagBtn].forEach((btn) => {
     if (!btn) return;
@@ -4524,13 +5211,16 @@ function renderInsight() {
     btn.disabled = !showWeeklyActions;
   });
   const showMonthlyActions = Boolean(monthlyReport) && !state.isGeneratingMonthlyInsight;
-  [refs.monthlySoftPlanBtn, refs.monthlySaveSummaryBtn, refs.monthlyToneSwitchBtn].forEach((btn) => {
+  [refs.monthlySaveSummaryBtn, refs.monthlyToneSwitchBtn].forEach((btn) => {
     if (!btn) return;
+    btn.classList.add("monthly-footnote-link", "monthly-footnote-secondary");
     btn.classList.toggle("hidden", !showMonthlyActions);
     btn.disabled = !showMonthlyActions;
   });
+  refs.monthlyFootnoteDot?.classList.toggle("hidden", !showMonthlyActions);
   if (refs.advancedInsightToggleBtn && refs.advancedInsightActions) {
-    refs.advancedInsightToggleBtn.textContent = advancedInsightExpanded ? "收起更多复盘" : "查看更多复盘";
+    refs.advancedInsightToggleBtn.classList.add("monthly-footnote-link", "monthly-footnote-appendix");
+    refs.advancedInsightToggleBtn.textContent = advancedInsightExpanded ? "收起更多时间段" : "更多时间段";
     refs.advancedInsightActions.classList.toggle("hidden", !advancedInsightExpanded);
   }
   const memberUnlocked = state.settings.isMember;
@@ -4538,20 +5228,54 @@ function renderInsight() {
   refs.generateYearlyInsightBtn.classList.toggle("member-unlocked", memberUnlocked);
   refs.generateQuarterlyInsightBtn.innerHTML = memberUnlocked
     ? "生成季度复盘"
-    : '<span class="lock-icon">🔒︎</span>生成季度复盘';
+    : "生成季度复盘";
   refs.generateYearlyInsightBtn.innerHTML = memberUnlocked
     ? "生成年度复盘"
-    : '<span class="lock-icon">🔒︎</span>生成年度复盘';
+    : "生成年度复盘";
   renderAIStatus();
+}
+
+function settingsMemberLabel() {
+  if (!state.settings.isMember) return "免费版";
+  const tier = String(state.settings.memberTier || "").toLowerCase();
+  if (tier === "monthly") return "月度会员";
+  if (tier === "yearly") return "年度会员";
+  if (tier === "lifetime") return "永久会员";
+  return "会员";
+}
+
+function settingsAppearanceLabel() {
+  if (state.settings.appearance === "dark") return "深色";
+  if (state.settings.appearance === "light") return "浅色";
+  return "跟随系统";
+}
+
+function openSettingsSheet(sheetId) {
+  const normalized = ["backup", "appearance", "companion", "privacy"].includes(sheetId) ? sheetId : "backup";
+  refs.settingsSheetSections.forEach((section) => {
+    section.classList.toggle("hidden", section.id !== `settingsSheet${normalized[0].toUpperCase()}${normalized.slice(1)}`);
+  });
+  setUIModal("settingsSheet");
+  refs.settingsSheetModal?.classList.remove("hidden");
+}
+
+function closeSettingsSheet() {
+  setUIModal("none");
+  refs.settingsSheetModal?.classList.add("hidden");
 }
 
 function renderSettings() {
   const accountName = state.settings.displayName || "叙帐用户";
   const isLoggedIn = Boolean(state.settings.isLoggedIn);
+  const memberLabel = settingsMemberLabel();
   refs.accountAvatar.textContent = isLoggedIn ? "🐱" : "👤";
+  refs.settingsIdentityName.textContent = accountName;
+  refs.settingsIdentityMeta.textContent = `${state.settings.syncEnabled ? "已同步云端" : "本地保存"} · ${memberLabel}`;
   refs.accountEntryText.textContent = isLoggedIn
-    ? `${accountName} > 管理账号与会员。`
-    : "点击登录，解锁云备份与会员权益 >";
+    ? "你的叙账在这里，账号和权益都可以慢慢整理。"
+    : "想备份或续聊时，再点这里登录。";
+  refs.settingsAccountRowMeta.textContent = isLoggedIn ? `已登录 · ${memberLabel}` : "未登录 · 可选";
+  refs.settingsAppearanceMeta.textContent = settingsAppearanceLabel();
   refs.displayNameInput.value = state.settings.displayName;
   refs.syncSwitch.checked = state.settings.syncEnabled;
   refs.remoteAISwitch.checked = state.settings.remoteAIEnabled;
@@ -4581,7 +5305,7 @@ function runStabilitySmokeChecks() {
     { id: "tab-sync", pass: uiRuntimeState.tab === currentTab && currentTab === activePage && currentTab === activeTab },
     { id: "modal-state", pass: UI_MODALS.has(uiRuntimeState.modal) },
     { id: "input-focus-state", pass: UI_INPUT_FOCUS.has(uiRuntimeState.inputFocus) },
-    { id: "stats-render-safe", pass: Boolean(refs.billExpenseTotal && refs.billRecordsList && refs.billRecordsEmpty) },
+    { id: "stats-render-safe", pass: Boolean(refs.traceDetailMeta && refs.billRecordsList && refs.billRecordsEmpty) },
     { id: "record-render-safe", pass: Boolean(refs.saveRecordBtn && refs.amountInput && refs.categoryOptions) },
     { id: "insight-render-safe", pass: Boolean(refs.generateInsightBtn && refs.insightSummary) },
     { id: "overlay-lock-safe", pass: typeof syncOverlayScrollLock === "function" },
@@ -4771,8 +5495,44 @@ function init() {
     })
   );
 
-  refs.billCategoryFilter.addEventListener("change", renderStats);
-  refs.billDateFilterBtn.addEventListener("click", openBillDateRangeModal);
+  refs.traceRangeWeekBtn?.addEventListener("click", () => setTraceHeroRange("week"));
+  refs.traceRangeMonthBtn?.addEventListener("click", () => setTraceHeroRange("month"));
+  refs.traceHeroPlayBtn?.addEventListener("click", openTraceSliceModal);
+  refs.traceDetailOpenBtn?.addEventListener("click", openTraceDetailModal);
+  refs.traceDetailCloseBtn?.addEventListener("click", closeTraceDetailModal);
+  refs.traceDetailModal?.addEventListener("click", (event) => {
+    if (event.target === refs.traceDetailModal) {
+      closeTraceDetailModal();
+    }
+  });
+  refs.traceTrendToggleBtn?.addEventListener("click", () => {
+    traceTrendExpanded = !traceTrendExpanded;
+    renderTraceTrendVisibility();
+  });
+  refs.traceSliceCloseBtn?.addEventListener("click", closeTraceSliceModal);
+  refs.traceSliceModal?.addEventListener("click", (event) => {
+    if (event.target === refs.traceSliceModal) {
+      closeTraceSliceModal();
+    }
+  });
+  refs.traceSlicePrevBtn?.addEventListener("click", () => {
+    stopTraceSliceTimer();
+    moveTraceSliceChapter(-1);
+  });
+  refs.traceSliceNextBtn?.addEventListener("click", () => {
+    stopTraceSliceTimer();
+    moveTraceSliceChapter(1);
+  });
+  refs.traceSlicePlayBtn?.addEventListener("click", () => {
+    if (traceSlicePlaying) {
+      stopTraceSliceTimer();
+      updateTraceSliceControls();
+    } else {
+      startTraceSliceTimer();
+    }
+  });
+  refs.billCategoryFilter?.addEventListener("change", renderStats);
+  refs.billDateFilterBtn?.addEventListener("click", openBillDateRangeModal);
   refs.billDateRangeCloseBtn.addEventListener("click", closeBillDateRangeModal);
   refs.billPresetWeekBtn.addEventListener("click", () => {
     billRangeDraftMode = "week";
@@ -5010,17 +5770,9 @@ function init() {
     renderHome();
     showToast(`已标记常花类目：${topCategory}。`);
   });
-  refs.monthlySoftPlanBtn?.addEventListener("click", () => {
-    const result = buildMonthlySoftPlanText();
-    state.monthlyActionCard = result;
-    setLatestActionCard(result, { scope: "monthly" });
-    persist();
-    renderHome();
-    showToast("柔和下月参考已生成，已放到首页卡片。");
-  });
   refs.monthlySaveSummaryBtn?.addEventListener("click", () => {
     const monthKey = thisMonthKey();
-    const monthlyReport = state.monthlyInsights.find((x) => x.monthKey === monthKey) || state.monthlyInsights[0];
+    const monthlyReport = state.monthlyInsights.find((x) => x.monthKey === monthKey);
     if (!monthlyReport) {
       showToast("先生成月度复盘，再保存小结。");
       return;
@@ -5104,12 +5856,27 @@ function init() {
   refs.monthlyTrialModalOkBtn.addEventListener("click", closeMonthlyTrialModal);
   refs.monthlyTrialUpgradeBtn.addEventListener("click", () => {
     closeMonthlyTrialModal();
+    closeMonthlyInsightModal();
     switchTab("settings");
     showToast(getToastCopy().memberEntryHint);
   });
   refs.monthlyTrialModal.addEventListener("click", (event) => {
     if (event.target === refs.monthlyTrialModal) {
       closeMonthlyTrialModal();
+    }
+  });
+  refs.insightMonthlyOpenBtn?.addEventListener("click", openMonthlyInsightModal);
+  refs.monthlyInsightCloseBtn?.addEventListener("click", closeMonthlyInsightModal);
+  refs.monthlyInsightModal?.addEventListener("click", (event) => {
+    if (event.target === refs.monthlyInsightModal) {
+      closeMonthlyInsightModal();
+    }
+  });
+  refs.insightTodayOpenBtn?.addEventListener("click", openTodayInsightModal);
+  refs.todayInsightCloseBtn?.addEventListener("click", closeTodayInsightModal);
+  refs.todayInsightModal?.addEventListener("click", (event) => {
+    if (event.target === refs.todayInsightModal) {
+      closeTodayInsightModal();
     }
   });
   refs.homePlaybackEntryBtn?.addEventListener("click", openBillPlaybackModal);
@@ -5144,6 +5911,24 @@ function init() {
   });
   refs.accountEntryBtn.addEventListener("click", () => {
     openAccountOverlay();
+  });
+  refs.settingsAccountRowBtn?.addEventListener("click", () => {
+    openAccountOverlay();
+  });
+  refs.settingsSheetButtons.forEach((btn) => {
+    btn.addEventListener("click", () => openSettingsSheet(btn.dataset.settingsSheet));
+  });
+  refs.settingsSheetCloseBtn?.addEventListener("click", closeSettingsSheet);
+  refs.settingsSheetModal?.addEventListener("click", (event) => {
+    if (event.target === refs.settingsSheetModal) {
+      closeSettingsSheet();
+    }
+  });
+  refs.privacyPolicyBtn?.addEventListener("click", () => {
+    openSettingsSheet("privacy");
+  });
+  refs.termsLinkBtn?.addEventListener("click", () => {
+    showToast("用户协议会在正式版中打开完整页面。");
   });
   refs.memberNudgeBtn?.addEventListener("click", () => {
     trackAnalytics("member_cta_clicked", { source: memberCtaContext, channel: "nudge_bar" });
@@ -5339,6 +6124,7 @@ function init() {
       state.settings.appearance = btn.dataset.appearance;
       persist();
       applyTheme();
+      renderSettings();
     })
   );
   systemThemeQuery.addEventListener("change", () => state.settings.appearance === "system" && applyTheme());

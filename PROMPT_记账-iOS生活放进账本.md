@@ -1,4 +1,4 @@
-# Agent Prompt · Task UI-P1 — 记账页「生活放进账本」（仅 iOS）
+﻿# Agent Prompt · Task UI-P1 — 记账页「生活放进账本」（仅 iOS）
 
 > **状态：待做**  
 > 设计北极星：[`RECORD_PAGE_DESIGN_v0.1.md`](RECORD_PAGE_DESIGN_v0.1.md) — **把一段生活放进账本，不是填写金额表单**  
@@ -197,7 +197,7 @@ StoreKit · 会员权益逻辑
 
 ```text
 @RECORD_PAGE_DESIGN_v0.1.md
-@AGENT_PROMPT_UI-P1_INPUT_LAYER_VISUAL.md
+@PROMPT_记账-iOS生活放进账本.md
 @NativeDemoApp/Views/RecordView.swift
 @NativeDemoApp/ViewModels/HomeViewModel.swift
 @NativeDemoApp/Views/HomeView.swift
@@ -232,7 +232,7 @@ RecordView 仍是 web 表单克隆（金额标签、分类 grid、保存记录�
 
 ## 必须先 Read
 @RECORD_PAGE_DESIGN_v0.1.md
-@AGENT_PROMPT_UI-P1_INPUT_LAYER_VISUAL.md
+@PROMPT_记账-iOS生活放进账本.md
 @NativeDemoApp/Views/RecordView.swift
 @NativeDemoApp/ViewModels/HomeViewModel.swift
 @NativeDemoApp/Services/NarrativeCopyResolver.swift

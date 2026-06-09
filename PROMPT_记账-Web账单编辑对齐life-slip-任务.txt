@@ -1,4 +1,4 @@
-你在 xuzhangapp 实现 Task UI-P1.2-WEB-EDIT — 账单编辑态对齐 life-slip（仅 web-preview/；同一 PR）。
+﻿你在 xuzhangapp 实现 Task UI-P1.2-WEB-EDIT — 账单编辑态对齐 life-slip（仅 web-preview/；同一 PR）。
 
 ================================================================================
 本 PR 边界（最重要）
@@ -172,8 +172,8 @@ deleteRecordBtn：
 @ 文件
 ================================================================================
 
-@AGENT_PROMPT_UI-P1.2_WEB_EDIT_RECORD.md
-@AGENT_PROMPT_UI-P1.2_WEB_FULL.md
+@PROMPT_记账-Web账单编辑对齐life-slip-说明.md
+@PROMPT_记账-Web综合抛光P1.2-完整说明.md
 @RECORD_PAGE_DESIGN_v0.1.md
 @web-preview/index.html
 @web-preview/app.js

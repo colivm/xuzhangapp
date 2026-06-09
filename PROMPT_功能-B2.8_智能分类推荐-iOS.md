@@ -1,4 +1,4 @@
-# Agent Prompt · Task B2.8 — 智能分类推荐（仅 iOS）
+﻿# Agent Prompt · Task B2.8 — 智能分类推荐（仅 iOS）
 
 > **状态：iOS 已完成（2026-06-06）**；下文供回归参考。  
 > 用法：**整段复制下方「复制发送」** 发给 Agent。
@@ -12,7 +12,7 @@
 | **A4** | 场景包哲学 / tagline / 替词 | `ScenePackCopyPool.swift` 文案 | ✅ 已完成 |
 | **B2.7** | 手选分类锁定 | `categoryLockedByUser` | ✅ 已完成 |
 | **B2.8** | **智能分类推荐**（本 prompt） | `CategoryRecommendService` + `HomeViewModel` | ✅ **已完成** |
-| **B2.9** | 天气宠物陪伴 | [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md) | ✅ **已完成** |
+| **B2.9** | 天气宠物陪伴 | [`PROMPT_功能-B2.9_天气宠物陪伴-iOS.md`](PROMPT_功能-B2.9_天气宠物陪伴-iOS.md) | ✅ **已完成** |
 | **B2.10** | 场景包 128 条池 + stable hash | `ScenePackCopyPool.swift` 结构 | ✅ iOS MVP 已有 |
 
 可选合并：**B2.8 + B2.9** 可一次 PR（见 [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) §10.15）；**B2.10 不要塞进 B2.8**。
@@ -22,7 +22,7 @@
 ## @ 文件（Agent 必须先 Read）
 
 ```text
-@AGENT_PROMPT_B2.8_SMART_CATEGORY.md
+@PROMPT_功能-B2.8_智能分类推荐-iOS.md
 @IMPLEMENTATION_FOR_CODEX.md
 @NativeDemoApp/ViewModels/HomeViewModel.swift
 @NativeDemoApp/Views/RecordView.swift
@@ -92,7 +92,7 @@ B2.7 已做：用户手选分类后 `categoryLockedByUser`，推荐不得覆盖�
 1. 改动文件列表
 2. 验收勾选
 3. 2～3 条示例：早高峰小额 / 午餐 / 有历史习惯
-4. 未做项（Web、远程 AI 分类；B2.9 见 AGENT_PROMPT_B2.9_WEATHER_PET.md）
+4. 未做项（Web、远程 AI 分类；B2.9 见 PROMPT_功能-B2.9_天气宠物陪伴-iOS.md）
 
 最小 diff；先 Read 再改。
 ```
@@ -101,7 +101,7 @@ B2.7 已做：用户手选分类后 `categoryLockedByUser`，推荐不得覆盖�
 
 ## 与 B2.9 合并发送（可选）
 
-见 [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md) 文末「与 B2.8 合并发送」。
+见 [`PROMPT_功能-B2.9_天气宠物陪伴-iOS.md`](PROMPT_功能-B2.9_天气宠物陪伴-iOS.md) 文末「与 B2.8 合并发送」。
 
 ---
 

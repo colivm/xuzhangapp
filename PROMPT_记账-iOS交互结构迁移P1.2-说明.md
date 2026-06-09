@@ -1,10 +1,10 @@
-# Agent Prompt · Task UI-P1.2-iOS — 记账页：只迁交互结构 + 视觉层级（仅 iOS）
+﻿# Agent Prompt · Task UI-P1.2-iOS — 记账页：只迁交互结构 + 视觉层级（仅 iOS）
 
 > **状态：待做 · 当前 iOS 记账页 Agent prompt**  
 > **迁什么**：L0/L1/L2 **展示分层**、life-slip **视觉层级**、安静 link 操作、OCR 侧门、首屏信息架构  
 > **不迁什么**：Web 文案、耳语池、品牌句、场景包 tagline；**iOS 文案引擎一字不改**  
 > **范围**：仅 `NativeDemoApp/` 记账页 View 层；**禁止改** `web-preview/`  
-> 用法：整段复制 `AGENT_PROMPT_UI-P1.2_IOS_COPY.txt`
+> 用法：整段复制 `PROMPT_记账-iOS交互结构迁移P1.2-任务.txt`
 
 ---
 

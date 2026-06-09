@@ -1,4 +1,4 @@
-# Agent Prompt · Task ONB-MIN — 极简新手引导（仅 iOS）
+﻿# Agent Prompt · Task ONB-MIN — 极简新手引导（仅 iOS）
 
 > **状态：待做**  
 > **战略**：打开 App 后 **1 张首启卡** + **首笔保存情境提示（回看）**；不搞开屏轮播、不搞多步 coach marks。  
@@ -146,7 +146,7 @@ key 建议: minimal_onboarding_completed_v1
 ## @ 文件
 
 ```text
-@AGENT_PROMPT_ONBOARDING_MIN.md
+@PROMPT_功能-新手引导极简版-iOS.md
 @PRODUCT_NORTH_STAR.md
 @NativeDemoApp/ContentView.swift
 @NativeDemoApp/Views/SettingsView.swift
@@ -177,7 +177,7 @@ key 建议: minimal_onboarding_completed_v1
 5. **必做 4** — SettingsView「重新查看新手引导」接同一 Sheet
 
 ## 必须先 Read
-@AGENT_PROMPT_ONBOARDING_MIN.md
+@PROMPT_功能-新手引导极简版-iOS.md
 @PRODUCT_NORTH_STAR.md
 @NativeDemoApp/ContentView.swift
 @NativeDemoApp/Views/SettingsView.swift

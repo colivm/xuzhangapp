@@ -1,4 +1,4 @@
-# Agent Prompt · Task B2.13 — 个人习惯预填（仅 iOS）
+﻿# Agent Prompt · Task B2.13 — 个人习惯预填（仅 iOS）
 
 > **状态：iOS 代码已完成（待 TestFlight 验收）**  
 > 战略依据：[`RECORDING_CHAIN_VISION_v0.1.md`](RECORDING_CHAIN_VISION_v0.1.md) — **缩短记账链路、叙事自动长出来**  
@@ -149,13 +149,13 @@ struct RecordPrefillResult {
 
 ```text
 @RECORDING_CHAIN_VISION_v0.1.md
-@AGENT_PROMPT_B2.13_HABIT_PREFILL.md
+@PROMPT_功能-B2.13_个人习惯预填-iOS.md
 @NativeDemoApp/Services/CategoryRecommendService.swift
 @NativeDemoApp/Services/ScenePackCopyPool.swift
 @NativeDemoApp/ViewModels/HomeViewModel.swift
 @NativeDemoApp/Views/RecordView.swift
 @NativeDemoApp/Models/HomeItem.swift
-@AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md
+@PROMPT_功能-F1.3_品牌叙事池-iOS.md
 ```
 
 ---
@@ -184,13 +184,13 @@ Cascade（与 F1.3 共用）：
 
 ## 必须先 Read
 @RECORDING_CHAIN_VISION_v0.1.md
-@AGENT_PROMPT_B2.13_HABIT_PREFILL.md
+@PROMPT_功能-B2.13_个人习惯预填-iOS.md
 @NativeDemoApp/Services/CategoryRecommendService.swift
 @NativeDemoApp/Services/ScenePackCopyPool.swift
 @NativeDemoApp/ViewModels/HomeViewModel.swift
 @NativeDemoApp/Views/RecordView.swift
 @NativeDemoApp/Models/HomeItem.swift
-@AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md
+@PROMPT_功能-F1.3_品牌叙事池-iOS.md
 
 ---
 

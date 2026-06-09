@@ -1,4 +1,4 @@
-# Agent Prompt · Task UI-P1.1-WEB — 冷启动极简预览（仅 web-preview）
+﻿# Agent Prompt · Task UI-P1.1-WEB — 冷启动极简预览（仅 web-preview）
 
 > **状态：待做**  
 > **战略**：输入层「记时极简」——冷启动只露 **金额 + 许可耳语 + 放进账本**；丰盈留在引擎与回望。  
@@ -211,7 +211,7 @@ const brandsLite = [
 ## @ 文件
 
 ```text
-@AGENT_PROMPT_UI-P1.1_WEB_COLDSTART_MIN.md
+@PROMPT_记账-Web冷启动极简预览.md
 @PRODUCT_VISION_EVAL_v0.1.md
 @CATEGORY_SCENE_COPY_AUDIT_v0.1.md
 @web-preview/app.js
@@ -241,7 +241,7 @@ const brandsLite = [
 7. prefillDemoBar 仅 debug；styles whisper 态
 
 ## 必须先 Read
-@AGENT_PROMPT_UI-P1.1_WEB_COLDSTART_MIN.md
+@PROMPT_记账-Web冷启动极简预览.md
 @PRODUCT_VISION_EVAL_v0.1.md
 @CATEGORY_SCENE_COPY_AUDIT_v0.1.md
 @web-preview/app.js

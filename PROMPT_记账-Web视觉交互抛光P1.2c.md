@@ -1,4 +1,4 @@
-# Agent Prompt · Task UI-P1.2c-WEB — 视觉与交互质感抛光（最新 Web 预览）
+﻿# Agent Prompt · Task UI-P1.2c-WEB — 视觉与交互质感抛光（最新 Web 预览）
 
 > **状态：待做 · 当前最新 Web Agent prompt**  
 > **前提**：L0/L1/L2 策略与 tier 逻辑 **已定，本 PR 不改**（见 P1.2 / P1.2b）。  
@@ -225,8 +225,8 @@ Sheet 标题：**换个角度**
 ## @ 文件
 
 ```text
-@AGENT_PROMPT_UI-P1.2c_WEB_VISUAL_POLISH.md
-@AGENT_PROMPT_UI-P1.2b_WEB_POLISH.md
+@PROMPT_记账-Web视觉交互抛光P1.2c.md
+@PROMPT_记账-Web抛光P1.2b.md
 @PRODUCT_VISION_EVAL_v0.1.md
 @RECORD_PAGE_DESIGN_v0.1.md
 @web-preview/index.html
@@ -260,7 +260,7 @@ L0/L1/L2 策略与 tier 逻辑 **已定，不改**。本 PR **不堆功能**，�
 9. prefillDemoBar 仅 debug；memberScenePackBlock 不主路径渲染
 
 ## 必须先 Read
-@AGENT_PROMPT_UI-P1.2c_WEB_VISUAL_POLISH.md
+@PROMPT_记账-Web视觉交互抛光P1.2c.md
 @web-preview/index.html
 @web-preview/app.js
 @web-preview/styles.css

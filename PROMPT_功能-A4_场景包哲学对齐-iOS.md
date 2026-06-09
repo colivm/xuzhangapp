@@ -1,17 +1,17 @@
-# Agent Prompt · Task A4 — 场景包哲学对齐（iOS）
+﻿# Agent Prompt · Task A4 — 场景包哲学对齐（iOS）
 
 > 用法：**整段复制下方「复制发送」** 发给 Agent。  
 > **仅 iOS**；`web-preview` 本轮 **不要改**。  
 > 与 **Task A3**（小 AI 说去预算化）并行不冲突：A3 不动场景包，A4 不动小 AI 说。
 
-> **与 B2.10 的区别**：**A4** = 包名/tagline/5 条替词（哲学收束，小 diff）。**B2.10** = 四包×4档×8 条池 + stable hash + 历史增强（`ScenePackCopyPool` 主体结构）。你若已跑 B2.10，**不要**用 A4 prompt 再跑一遍；下一项应是 **B2.8**（[`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md)）。
+> **与 B2.10 的区别**：**A4** = 包名/tagline/5 条替词（哲学收束，小 diff）。**B2.10** = 四包×4档×8 条池 + stable hash + 历史增强（`ScenePackCopyPool` 主体结构）。你若已跑 B2.10，**不要**用 A4 prompt 再跑一遍；下一项应是 **B2.8**（[`PROMPT_功能-B2.8_智能分类推荐-iOS.md`](PROMPT_功能-B2.8_智能分类推荐-iOS.md)）。
 
 ---
 
 ## @ 文件
 
 ```text
-@AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md
+@PROMPT_功能-A4_场景包哲学对齐-iOS.md
 @SCENE_PACK_COPY_POOL_v0.2.md
 @PRODUCT_NORTH_STAR.md
 @NativeDemoApp/Services/ScenePackCopyPool.swift

@@ -1,6 +1,6 @@
-# Agent Prompt · Task UI-P1.2-WEB — 确认而非配置（记账页 · 仅 web-preview）
+﻿# Agent Prompt · Task UI-P1.2-WEB — 确认而非配置（记账页 · 仅 web-preview）
 
-> **状态：待做 · 最新 Web 预览 prompt**（取代 [`AGENT_PROMPT_UI-P1.1_WEB_COLDSTART_MIN.md`](AGENT_PROMPT_UI-P1.1_WEB_COLDSTART_MIN.md)）  
+> **状态：待做 · 最新 Web 预览 prompt**（取代 [`PROMPT_记账-Web冷启动极简预览.md`](PROMPT_记账-Web冷启动极简预览.md)）  
 > **北极星句**：**默认让用户确认，不让用户配置。**  
 > **依赖：无** — 仅 `web-preview/`；**不动 iOS** / backend。  
 > 用法：**整段复制下方「复制发送」** 发给 Agent。
@@ -249,7 +249,7 @@ function rotatePreviewLine() {
 ## @ 文件
 
 ```text
-@AGENT_PROMPT_UI-P1.2_WEB_CONFIRM_NOT_CONFIG.md
+@PROMPT_记账-Web确认而非配置.md
 @PRODUCT_VISION_EVAL_v0.1.md
 @RECORD_PAGE_DESIGN_v0.1.md
 @web-preview/app.js
@@ -285,7 +285,7 @@ function rotatePreviewLine() {
 10. prefillDemoBar 仅 debug；styles L1 whisper / L2 完整卡
 
 ## 必须先 Read
-@AGENT_PROMPT_UI-P1.2_WEB_CONFIRM_NOT_CONFIG.md
+@PROMPT_记账-Web确认而非配置.md
 @PRODUCT_VISION_EVAL_v0.1.md
 @RECORD_PAGE_DESIGN_v0.1.md
 @web-preview/app.js

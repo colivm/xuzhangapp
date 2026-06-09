@@ -1,4 +1,4 @@
-# Agent Prompt · Task D1.1 — 周分享海报叙事化 polish（仅 iOS）
+﻿# Agent Prompt · Task D1.1 — 周分享海报叙事化 polish（仅 iOS）
 
 > **状态：iOS 已完成（2026-06-07）**；真机回归见 [`TODO.md`](TODO.md) 第 13 条。  
 > 用法：**整段复制下方「复制发送」** 发给 Agent。  
@@ -31,7 +31,7 @@
 ## @ 文件（Agent 必须先 Read）
 
 ```text
-@AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md
+@PROMPT_功能-D1.1_周分享海报叙事化-iOS.md
 @PRODUCT_NORTH_STAR.md
 @PRODUCT_PLAYBACK_MEMBERSHIP_v0.1.md
 @IMPLEMENTATION_FOR_CODEX.md

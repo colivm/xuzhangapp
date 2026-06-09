@@ -1,4 +1,4 @@
-# Agent Prompt · Task A3 — AI「议」边界对齐（去预算化 · iOS）
+﻿# Agent Prompt · Task A3 — AI「议」边界对齐（去预算化 · iOS）
 
 > **状态：iOS 已完成（2026-06-06）**；下文供回归 / 新 Agent 参考。  
 > 用法：**整段复制下方「复制发送」代码块**，作为一条消息发给 Cursor Agent / Codex。  
@@ -10,7 +10,7 @@
 ## @ 文件（Agent 必须先 Read）
 
 ```text
-@AGENT_PROMPT_AI_ADVICE_BOUNDARY.md
+@PROMPT_功能-A3_AI议边界去预算化-iOS.md
 @AI_ADVICE_BOUNDARY_AUDIT_v0.1.md
 @PRODUCT_NORTH_STAR.md
 @NativeDemoApp/Views/InsightWebView.swift

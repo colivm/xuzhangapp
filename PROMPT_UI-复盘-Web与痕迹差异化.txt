@@ -1,0 +1,172 @@
+你在 xuzhangapp 实现 Task UI-P3.2-WEB — 复盘 Tab 与痕迹 Tab 差异化（仅 web-preview/；先看效果）。
+
+================================================================================
+边界
+================================================================================
+
+只改复盘页 **展示层**（HTML/CSS + renderInsight 展示拼装）；不动 iOS、backend、git commit。
+
+可改：
+  web-preview/index.html（#insightPage、相关 modal 壳）
+  web-preview/styles.css（#insightPage、.insight-*；勿改 .trace-*）
+  web-preview/app.js（renderInsight、新增展示用 helper；事件绑定）
+
+禁止改：
+  rangeInsightPayload / monthlyInsightPayload / requestAIInsight 函数体
+  buildWeeklyRhythmText / buildWeeklyShareCardText 逻辑
+  痕迹页 #statsPage、.trace-* 任何样式
+  会员试用计数、生成月度复盘业务流
+  HomeViewModel / NativeDemoApp
+
+================================================================================
+问题（用户对现稿反馈）
+================================================================================
+
+复盘页按 P3.2 改完后与痕迹页太像：
+  · 同款 glass 圆角卡
+  · 同款满宽 accent 绿按钮（梳理本周节奏 ≈ 听听这一段）
+  · 三段报表体（笔数/金额/占比）≈ 痕迹 hero 叙事
+
+目标：复盘 = **周记/回信**（读），痕迹 = **场记/纪录片**（听+看笔笔）。
+两 Tab 可同属「单叙事 + 少量入口」，但 **视觉语法必须可一眼区分**。
+
+================================================================================
+设计原则 · 复盘 vs 痕迹
+================================================================================
+
+| 维度 | 痕迹（勿动） | 复盘（本 PR） |
+|------|-------------|---------------|
+| 气质 | 场记、可听可看 | 周记、读完即走 |
+| 容器 | glass 卡 + chip | 暖色阅读面 / 栏目标题，弱边框 |
+| 主 CTA | 满宽绿「听听这一段」 | **禁止同款绿条** |
+| 正文 | 笔数+金额+主题+slip | **一段连贯周记**，数字埋进句子 |
+| 列表 | 3 条 slip | **无账单列表** |
+| 底部入口 | 细查这一段 → | 这一月的回顾 → / 今日小记 → |
+
+================================================================================
+任务 1 · 主屏 #insightPage 结构重做
+================================================================================
+
+1.1 替换 `.insight-reading-surface` 为 **周记阅读区** `.insight-journal`：
+
+```html
+<section class="insight-journal">
+  <p class="insight-journal-kicker" id="insightWeekKicker">这周 · 6/3–6/9</p>
+  <article id="insightJournalBody" class="insight-journal-body"></article>
+  <p id="insightJournalClosing" class="insight-journal-closing muted"></p>
+  <div class="insight-journal-actions">
+    <button id="weeklyRhythmBtn" type="button" class="insight-quiet-action">梳理本周节奏 →</button>
+    <button id="weeklyShareBtn" type="button" class="insight-quiet-action">生成周度分享卡</button>
+    <button id="weeklyTagBtn" type="button" class="insight-quiet-action">标记常花类目</button>
+  </div>
+</section>
+<div class="insight-quiet-links">…保持…</div>
+```
+
+  · 删除 `#insightHistory` 的 `<ul>` 三 `<p>` 报表结构（或保留 id 但隐藏，改由 journalBody 渲染）
+  · **不要** chip（本周/本月）；复盘固定近 7 天
+
+1.2 刊头 `#insightWeekKicker`
+  · renderInsight 内计算近 7 天日期范围，格式：`这周 · M/d–M/d`
+  · 12–13pt subtext，非 22pt 标题
+
+1.3 正文 `#insightJournalBody` — **一段连贯文章**
+  · 新增展示 helper（仅 app.js，不改 rangeInsightPayload）：
+
+```js
+function formatWeeklyJournalText(report, items) {
+  // 用 report.summary / structure 的数据语义，重排为 2–4 句周记
+  // 禁止照搬三行报表；禁止「占比约 X%」单独成句
+  // 禁止 advice 原句里的「优化消费结构」「预算」「建议关注」
+  // 示例语气：
+  // 「这周记下来 4 笔，花得不多，其他类冒了几次，像随手记下的小念头。
+  //   日子整体比较匀，没有特别挤在一起的花费。」
+}
+```
+
+  · 空态：「近 7 天还没有足够记录。多记几笔，这里会慢慢长出一周的回信。」
+
+1.4 收束句 `#insightJournalClosing`（可选第二段，13px muted）
+  · 从 report 信息生成 **感受性收束**，非教练建议
+  · 示例：「愿意的话，下周再对照看看有没有新变化。」
+  · **不要**使用 rangeInsightPayload().advice 原文
+
+1.5 操作区 `.insight-journal-actions`
+  · **三个全是 quiet text link**（同 .insight-quiet-links 气质）
+  · **删除** `.weekly-soft-actions .soft-action-btn:first-child` 的满宽绿渐变样式
+  · `#weeklyRhythmBtn` 文案改为「梳理本周节奏 →」（带箭头，非大按钮）
+  · 后两个并排或换行：生成周度分享卡 · 标记常花类目
+
+1.6 底部 quiet links 保持：
+  · 这一月的回顾 →（开 #monthlyInsightModal）
+  · 今日小记（可选）→（开 #todayInsightModal）
+
+================================================================================
+任务 2 · 样式 .insight-journal（与 .trace-hero-panel 明显不同）
+================================================================================
+
+2.1 `.insight-journal` 背景：
+  · 暖色轻渐变（参考 trace-slice-modal 的杏绿调，但更淡）
+  · `border-radius: 20px`；边框极淡或仅左侧 3px accent 竖条（`.insight-journal::before`）
+  · **不要**与 `.trace-hero-panel` 相同的白 glass + 强阴影
+
+2.2 `.insight-journal-body`：
+  · `font-size: 17px; line-height: 1.72; font-weight: 500`
+  · 段落间距 0（单 article 一段）；颜色 text 主色
+  · 无金额右对齐、无 list-style
+
+2.3 `.insight-journal-kicker`：12px，letter-spacing 0.04em，subtext
+
+2.4 `.insight-journal-closing`：13px，margin-top 12px，斜体可选
+
+2.5 `.insight-quiet-action`：
+  · 透明底、13px、无 border、无 full-width
+  · hover 略 accent；**禁止** `.trace-play-btn` / `primary-btn` 同款
+
+2.6 删除或覆盖旧规则：
+  · `.weekly-soft-actions .soft-action-btn:first-child` 满宽绿渐变 → 移除
+  · `.insight-reading-surface` 若不用可删
+
+================================================================================
+任务 3 · renderInsight 展示拼装（逻辑冻结）
+================================================================================
+
+3.1 仍调用 `rangeInsightPayload(7, "近7天")` 取数据，但：
+  · 不直接把 summary/structure/advice 三行插入 DOM
+  · 改调 `formatWeeklyJournalText(report, weekItems)` 写入 `#insightJournalBody`
+  · closing 单独生成（可用 structure 语义，不用 advice 原文）
+
+3.2 `#weeklyRhythmBtn` click 仍调 `buildWeeklyRhythmText()` + toast/卡片逻辑（不改）
+
+3.3 月度 / 今日 modal 内逻辑不动；仅确保主屏不再露出月度生成大按钮
+
+3.4 bump `app.js` 缓存 query（如 ?v=20260609-insight-journal1）
+
+================================================================================
+任务 4 · 产品校验（改完自测）
+================================================================================
+
+与痕迹页并排放：
+  [ ] 复盘页 **没有**满宽绿色主按钮
+  [ ] 复盘页 **没有**本周/本月 chip
+  [ ] 复盘页 **没有**账单 slip 列表
+  [ ] 复盘正文读起来像 **周记段落**，不是三行 KPI
+  [ ] 全文无「优化消费结构」「建议关注」「预算达成」类教练句
+  [ ] 痕迹页零改动
+
+功能回归：
+  [ ] 梳理本周节奏 / 分享卡 / 标记类目仍可用
+  [ ] 这一月的回顾 / 今日小记 modal 仍可用
+  [ ] 月度生成 / 试用次数逻辑不变
+
+================================================================================
+参考
+================================================================================
+
+痕迹标杆（勿改）：web-preview #statsPage .trace-hero-panel
+哲学：PRODUCT_NORTH_STAR §0 先叙后议；复盘是「读回信」，痕迹是「听这一段」
+
+@web-preview/index.html
+@web-preview/styles.css
+@web-preview/app.js
+@PRODUCT_NORTH_STAR.md

@@ -1,8 +1,8 @@
-# Agent Prompt · Task UI-P1-WEB — 记账页「生活放进账本」Web 预览原型
+﻿# Agent Prompt · Task UI-P1-WEB — 记账页「生活放进账本」Web 预览原型
 
 > **状态：待做**  
 > **范围：仅 `web-preview/`** — **不要改** `NativeDemoApp/`、backend、ai-proxy  
-> 设计依据：[`RECORD_PAGE_DESIGN_v0.1.md`](RECORD_PAGE_DESIGN_v0.1.md) · [`AGENT_PROMPT_UI-P1_INPUT_LAYER_VISUAL.md`](AGENT_PROMPT_UI-P1_INPUT_LAYER_VISUAL.md)  
+> 设计依据：[`RECORD_PAGE_DESIGN_v0.1.md`](RECORD_PAGE_DESIGN_v0.1.md) · [`PROMPT_记账-iOS生活放进账本.md`](PROMPT_记账-iOS生活放进账本.md)  
 > 用途：创始人 **Windows 本地预览 UI 气质**，验证后再做 iOS UI-P1  
 > 用法：**整段复制下方「复制发送」** 发给 Agent。
 
@@ -34,7 +34,7 @@ Web 预览目标：
 
 ```text
 @RECORD_PAGE_DESIGN_v0.1.md
-@AGENT_PROMPT_UI-P1_INPUT_LAYER_VISUAL.md
+@PROMPT_记账-iOS生活放进账本.md
 @web-preview/index.html
 @web-preview/app.js
 @web-preview/styles.css
@@ -238,7 +238,7 @@ iOS 不会有此条；CSS 用小字 muted，标注「开发预览」。
 
 ## 必须先 Read
 @RECORD_PAGE_DESIGN_v0.1.md
-@AGENT_PROMPT_UI-P1_WEB_PREVIEW.md
+@PROMPT_记账-Web生活放进账本原型.md
 @web-preview/index.html
 @web-preview/app.js
 @web-preview/styles.css

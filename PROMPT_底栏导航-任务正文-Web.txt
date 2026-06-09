@@ -1,4 +1,4 @@
-你在 xuzhangapp 实现 Task TAB-NAV-WEB — 五 Tab 命名 + 暖 glyph 图标（仅 web-preview/；同一 PR）。
+﻿你在 xuzhangapp 实现 Task TAB-NAV-WEB — 五 Tab 命名 + 暖 glyph 图标（仅 web-preview/；同一 PR）。
 
 ================================================================================
 范围（严格）
@@ -90,7 +90,7 @@ styles.css 改动范围（可选微调）
 @web-preview/styles.css
 @web-preview/app.js
 @LOGO_BRIEF.md
-@AGENT_PROMPT_TAB_NAV_POLISH.md
+@PROMPT_底栏导航-说明文档-iOS与Web.md
 
 ================================================================================
 验收

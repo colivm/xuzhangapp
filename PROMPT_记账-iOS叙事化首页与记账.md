@@ -1,4 +1,4 @@
-# Agent Prompt · Task UI-P1 — iOS 叙事化（记账页 + 首页 · 仅 iOS）
+﻿# Agent Prompt · Task UI-P1 — iOS 叙事化（记账页 + 首页 · 仅 iOS）
 
 > **状态：待做**  
 > **战略**：Web 预览暂停拟真；**iOS 为真源**，本 PR 把已落地的 F1.3/B2.13 引擎 **展示成叙账气质**。  
@@ -246,7 +246,7 @@ Typography：叙 headline 22pt bold；生活主行 17pt semibold；muted 12pt；
 
 ```text
 @RECORD_PAGE_DESIGN_v0.1.md
-@AGENT_PROMPT_UI-P1_IOS.md
+@PROMPT_记账-iOS叙事化首页与记账.md
 @NativeDemoApp/Views/RecordView.swift
 @NativeDemoApp/ViewModels/HomeViewModel.swift
 @NativeDemoApp/Views/HomeView.swift
@@ -284,7 +284,7 @@ Web 预览暂停拟真；**iOS 为真源**。F1.3/B2.13 引擎已落地，本 PR
 
 ## 必须先 Read
 @RECORD_PAGE_DESIGN_v0.1.md
-@AGENT_PROMPT_UI-P1_IOS.md
+@PROMPT_记账-iOS叙事化首页与记账.md
 @NativeDemoApp/Views/RecordView.swift
 @NativeDemoApp/ViewModels/HomeViewModel.swift
 @NativeDemoApp/Views/HomeView.swift

@@ -1,10 +1,10 @@
-# Agent Prompt · Task TAB-NAV — 五 Tab 命名 + 暖 glyph 图标（iOS 主 · Web 同步）
+﻿# Agent Prompt · Task TAB-NAV — 五 Tab 命名 + 暖 glyph 图标（iOS 主 · Web 同步）
 
 > **状态：待做**  
 > **目标**：去掉 demo 期 Tab 名与冷图标，对齐叙账「记 · 叙 · 议」气质  
 > **范围**：iOS 必做；`web-preview` tabbar **文案+SVG 同步**（可选同 PR）  
 > **禁止**：改 Tab 路由、各页业务逻辑、Playback/会员/记账引擎  
-> 用法：整段复制 `AGENT_PROMPT_TAB_NAV_POLISH_COPY.txt`
+> 用法：整段复制 `PROMPT_底栏导航-任务正文-iOS.txt`
 
 ---
 

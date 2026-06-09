@@ -1,0 +1,186 @@
+﻿你在 xuzhangapp 实现 Task UI-P4-WEB-TRACE — 痕迹「生活切片」幕间翻页动效（仅 web-preview/；布局已定稿勿动）。
+
+================================================================================
+边界
+================================================================================
+
+只改 #traceSliceModal 动效层 + 相关 CSS + renderTraceSliceChapter 切幕逻辑。
+
+可改：
+  web-preview/index.html（#traceSliceModal 内 stage 结构，仅包裹层）
+  web-preview/styles.css（.trace-slice-* 动效类、@keyframes）
+  web-preview/app.js（renderTraceSliceChapter / moveTraceSliceChapter / openTraceSliceModal 动效钩子）
+
+禁止改：
+  buildTraceSliceChapters / traceSlice 章节文案与数据逻辑
+  #statsPage 主屏布局、#traceDetailModal
+  insightPage / homePage / recordPage / settingsPage
+  iOS、backend、git commit
+
+允许：
+  · 在 stage 内加包裹 div（.trace-slice-page）用于翻页
+  · 切幕时短暂 class 切换，不改章节数组结构
+  · prefers-reduced-motion 降级为淡入淡出
+
+================================================================================
+背景（产品意图）
+================================================================================
+
+痕迹 Tab 已定稿：主屏 hero +「听听这一段」→ #traceSliceModal。
+Modal 已有多幕（intro / rhythm / category / highlight / outro）和自动轮播 timer（3200ms）。
+现状：切幕是 **瞬间换字**，像 PPT 硬切，缺少「听一段生活」的翻页感。
+
+目标：幕与幕之间 = **绘本翻页 / 纪录片切镜**（横向轻翻 + 旁白淡入），不是报表切换。
+痕迹动效语法 = **横向推进**（与复盘纵向信纸展开区分）。
+
+================================================================================
+任务 1 · HTML 包裹层（index.html）
+================================================================================
+
+1.1 在 #traceSliceStage 内，把现有 4 个内容节点包进一层：
+
+```html
+<section id="traceSliceStage" class="trace-slice-stage">
+  <div id="traceSlicePage" class="trace-slice-page">
+    <span id="traceSliceSymbol" class="trace-slice-symbol" aria-hidden="true">✦</span>
+    <p id="traceSliceChapterTitle" class="trace-slice-chapter-title">这一段</p>
+    <p id="traceSliceNarration" class="trace-slice-narration">慢慢看见这一段生活怎么走过。</p>
+    <p id="traceSliceSupport" class="trace-slice-support muted">本地生成，不依赖 AI。</p>
+  </div>
+</section>
+```
+
+1.2 **不要**拆成双页 DOM（避免同步两页数据）；用单页 + CSS transform 模拟翻页即可。
+
+1.3 app.js refs 仍指向原 id，无需改 querySelector 列表（除非新增 #traceSlicePage）。
+
+================================================================================
+任务 2 · 切幕逻辑（app.js）
+================================================================================
+
+2.1 新增模块级变量：
+
+```js
+let traceSliceTransitionDir = 1; // 1=下一章，-1=上一章
+let traceSliceAnimating = false;
+```
+
+2.2 moveTraceSliceChapter(delta) 在改 index 前：
+
+```js
+traceSliceTransitionDir = delta >= 0 ? 1 : -1;
+```
+
+2.3 startTraceSliceTimer 自动前进时 traceSliceTransitionDir = 1。
+
+2.4 重构 renderTraceSliceChapter()：
+
+  · 若 traceSliceAnimating，return（防抖）
+  · 取 #traceSlicePage（refs.traceSlicePage 或 query）
+  · **退出动画**：加 class `trace-slice-exit trace-slice-exit-${dir}`（dir 为 left/right 与 transitionDir 对应）
+  · 监听 transitionend（仅一次，filter propertyName 为 transform/opacity）
+  · 退出完成后：
+      - 更新 stage type class、symbol、title、narration、support、dots、按钮 disabled
+      - narration 可选拆句 stagger（见 2.5）
+      - 移除 exit class，加 `trace-slice-enter trace-slice-enter-${dir}`
+      - 下一帧 requestAnimationFrame 后加 `trace-slice-enter-active`
+      - enter transitionend 后清理 enter class，traceSliceAnimating = false
+  · **首屏**（openTraceSliceModal 第一次 render）：跳过 exit，只做 enter（从下方轻抬 + 淡入）
+
+2.5 旁白 stagger（轻量，可选但推荐）：
+
+```js
+function applyTraceSliceNarrationStagger(el, text) {
+  // 按 。！？； 拆 1–3 句；每句包 <span class="trace-slice-line">，style="--line-i:N"
+  // 无标点则整段一个 span
+  // textContent 赋值路径改为 innerHTML（仅自家 span，无用户输入，安全）
+}
+```
+
+  · support / title 用普通 opacity 淡入，不必逐字
+  · generating 不适用（切片无 AI）
+
+2.6 openTraceSliceModal：render 前 traceSliceAnimating = false；首次 render 走 enter-only 分支。
+
+2.7 closeTraceSliceModal：清理 page 上所有 trace-slice-enter/exit class。
+
+================================================================================
+任务 3 · CSS 动效（styles.css）
+================================================================================
+
+3.1 #traceSliceStage 保持 overflow:hidden；加 perspective: 900px（仅 stage，不影响 modal）。
+
+3.2 .trace-slice-page：
+  · position: relative; width: 100%; height: 100%;
+  · transform-origin: center center;
+  · will-change: transform, opacity;
+
+3.3 **进入**（首屏 + 切幕后）：
+  · .trace-slice-enter：opacity 0；transform translateX(18px) rotateY(-6deg)（下一章）或 translateX(-18px) rotateY(6deg)（上一章）
+  · .trace-slice-enter-active：opacity 1；transform none
+  · duration 0.42–0.48s；easing var(--ease-out-soft)
+
+3.4 **退出**：
+  · .trace-slice-exit：opacity 1；transform none
+  · .trace-slice-exit-active：opacity 0；transform translateX(-14px) rotateY(8deg)（下一章方向）或反向（上一章）
+  · duration 0.32–0.38s
+
+3.5 旁白 stagger：
+```css
+.trace-slice-line {
+  display: block;
+  opacity: 0;
+  transform: translateY(6px);
+  animation: traceSliceLineIn 0.38s var(--ease-out-soft) forwards;
+  animation-delay: calc(var(--line-i) * 80ms + 60ms);
+}
+@keyframes traceSliceLineIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+```
+
+3.6 进度点 .trace-slice-dots span.active：加 scale 过渡（0.2s），非弹跳。
+
+3.7 **Modal 入场**（已有 .ocr-overlay 升起）：#traceSliceModal .trace-slice-modal 可微调为略慢 0.52s，与幕间动效同族即可；勿改全局 .ocr-overlay。
+
+3.8 **prefers-reduced-motion: reduce**：
+  · 禁用 rotateY；exit/enter 仅 opacity 0.25s
+  · 禁用 .trace-slice-line animation-delay，整段同时显示
+
+================================================================================
+任务 4 · 气质约束（必过）
+================================================================================
+
+  [ ] 切幕总时长（exit+enter）≤ 0.9s，不拖沓
+  [ ] 无音效、无数字滚动、无图表动画
+  [ ] 自动轮播时翻页方向始终为「下一章」
+  [ ] 暂停/继续、上一章/下一章按钮逻辑不变
+  [ ] 章节文案、buildTraceSliceChapters 输出不变
+  [ ] 快速连点 prev/next 不叠影（animating 防抖）
+  [ ] 与复盘 Sheet 动效视觉语法不同（痕迹=横向翻页）
+
+================================================================================
+任务 5 · 验收步骤（Web 预览）
+================================================================================
+
+1. 痕迹 Tab → 有数据时点「听听这一段」
+2. Modal 升起 → 第一幕旁白逐句淡入（非整段弹出）
+3. 等自动切幕或点 › → 有轻翻页感，不是硬切字
+4. 点 ‹ 反向翻页
+5. 关闭再开 → 动画重置正常
+6. 系统开「减少动态效果」→ 仅淡入淡出
+
+bump app.js / styles.css query：?v=20260609-trace-motion1
+
+================================================================================
+参考
+================================================================================
+
+现有：renderTraceSliceChapter、startTraceSliceTimer（app.js ~1718–1875）
+现有：.trace-slice-stage / .trace-slice-modal（styles.css ~2010）
+布局定稿：PROMPT_UI-痕迹-Web主屏与细查布局.txt
+复盘动效（勿混）：PROMPT_UI-复盘-Web月度Sheet展开动效.txt
+
+@web-preview/index.html
+@web-preview/styles.css
+@web-preview/app.js

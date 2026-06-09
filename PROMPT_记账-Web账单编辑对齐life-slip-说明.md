@@ -1,9 +1,9 @@
-# Agent Prompt · Task UI-P1.2-WEB-EDIT — 账单编辑态对齐 life-slip（仅 web-preview）
+﻿# Agent Prompt · Task UI-P1.2-WEB-EDIT — 账单编辑态对齐 life-slip（仅 web-preview）
 
 > **状态：待做 · Web 编辑态专项**  
-> **前置**：新建记账页 P1.2 life-slip 结构已落地（`AGENT_PROMPT_UI-P1.2_WEB_FULL.md`）  
+> **前置**：新建记账页 P1.2 life-slip 结构已落地（`PROMPT_记账-Web综合抛光P1.2-完整说明.md`）  
 > **范围**：**仅** `editingRecordId` 编辑态；**不**重做新建流程、**不**动 iOS / backend  
-> 用法：**整段复制同目录 `AGENT_PROMPT_UI-P1.2_WEB_EDIT_RECORD_COPY.txt`** 发给 Agent。
+> 用法：**整段复制同目录 `PROMPT_记账-Web账单编辑对齐life-slip-任务.txt`** 发给 Agent。
 
 ---
 
@@ -204,8 +204,8 @@ categoryPanelExpanded = false;
 ## 8. @ 文件
 
 ```text
-@AGENT_PROMPT_UI-P1.2_WEB_EDIT_RECORD.md
-@AGENT_PROMPT_UI-P1.2_WEB_FULL.md
+@PROMPT_记账-Web账单编辑对齐life-slip-说明.md
+@PROMPT_记账-Web综合抛光P1.2-完整说明.md
 @RECORD_PAGE_DESIGN_v0.1.md
 @web-preview/index.html
 @web-preview/app.js
@@ -216,7 +216,7 @@ categoryPanelExpanded = false;
 
 ## 9. 复制发送
 
-见同目录 **`AGENT_PROMPT_UI-P1.2_WEB_EDIT_RECORD_COPY.txt`**（纯文本，可直接全选复制）。
+见同目录 **`PROMPT_记账-Web账单编辑对齐life-slip-任务.txt`**（纯文本，可直接全选复制）。
 
 ---
 

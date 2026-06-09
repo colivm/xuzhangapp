@@ -1,4 +1,4 @@
-# Agent Prompt · Task B2.11 — 心意往来包（人情分类 · 仅 iOS）
+﻿# Agent Prompt · Task B2.11 — 心意往来包（人情分类 · 仅 iOS）
 
 > **状态：待做**  
 > 用法：**整段复制下方「复制发送」** 发给 Agent。  
@@ -22,7 +22,7 @@
 ## @ 文件（Agent 必须先 Read）
 
 ```text
-@AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md
+@PROMPT_功能-B2.11_心意往来场景包-iOS.md
 @CATEGORY_SCENE_COPY_AUDIT_v0.1.md
 @PRODUCT_NORTH_STAR.md
 @SCENE_PACK_COPY_POOL_v0.2.md
@@ -130,7 +130,7 @@
 
 ## 与 B2.12 合并发送（可选）
 
-若同 PR 做 **情绪标签 polish**，先粘贴 [`AGENT_PROMPT_B2.12_EMOTION_TAGS.md`](AGENT_PROMPT_B2.12_EMOTION_TAGS.md)「复制发送」，再粘贴本文件「复制发送」，末尾加：
+若同 PR 做 **情绪标签 polish**，先粘贴 [`PROMPT_功能-B2.12_情绪标签polish-iOS.md`](PROMPT_功能-B2.12_情绪标签polish-iOS.md)「复制发送」，再粘贴本文件「复制发送」，末尾加：
 
 ```text
 同一 PR：B2.11 只做 social 包+映射+chips；B2.12 只改 inferEmotionTag 七分类，勿动 health/home/social 三档。
