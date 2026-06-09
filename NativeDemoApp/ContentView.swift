@@ -98,7 +98,7 @@ struct ContentView: View {
             case .record: return "记下这一笔"
             case .stats: return "这一段痕迹"
             case .insight: return "生活复盘"
-            case .settings: return "设置"
+            case .settings: return "我的叙账"
             }
         }
     }

@@ -16,6 +16,8 @@ struct StatsWebView: View {
     @State private var summaryQuotaMessage: String?
     @State private var quotaRefreshID = UUID()
     @State private var isFiltersExpanded = false
+    @State private var showTraceDetailSheet = false
+    @State private var isTrendExpandedInSheet = false
     private let playbackService = PlaybackService()
     private let quotaStore = SummaryPlaybackQuotaStore()
 
@@ -96,6 +98,9 @@ struct StatsWebView: View {
             .sheet(isPresented: $showPeriodSheet) {
                 periodPickerSheet
             }
+            .sheet(isPresented: $showTraceDetailSheet) {
+                traceDetailSheet
+            }
             .sheet(item: $editingItem) { item in
                 editSheet(for: item)
             }
@@ -118,16 +123,324 @@ struct StatsWebView: View {
 
     private var statsContent: some View {
         VStack(spacing: 12) {
-            summarySliceCard
-            overviewPanel
-            filtersPanel
-            recordListPanel
+            traceChapterCard
+            traceAppendixStrip
         }
         .padding(.horizontal, 12)
         .padding(.top, 4)
         .padding(.bottom, 120)
         .frame(maxWidth: 430)
         .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var heroScopedItems: [HomeItem] {
+        if useCustomRange || selectedPeriod == .year {
+            return filteredItems
+        }
+        let calendar = Calendar.current
+        let items: [HomeItem]
+        switch selectedPeriod {
+        case .week:
+            if let interval = PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: .now) {
+                items = homeViewModel.items.filter { $0.createdAt >= interval.start && $0.createdAt < interval.end }
+            } else {
+                items = []
+            }
+        case .month:
+            items = homeViewModel.items.filter { calendar.isDate($0.createdAt, equalTo: .now, toGranularity: .month) }
+        case .year:
+            items = []
+        }
+        return items
+            .filter { $0.amount > 0 && $0.draftMeta == nil }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    private var heroTotalExpense: Double {
+        heroScopedItems.filter { $0.amount > 0 }.reduce(0) { $0 + $1.amount }
+    }
+
+    private var heroNarrativeText: String {
+        let items = heroScopedItems
+        guard !items.isEmpty else {
+            return selectedPeriod == .week
+                ? "这一周还安静着，先留下几笔，之后就能慢慢看见生活的纹理。"
+                : "这个月还安静着，先留下几笔，之后就能慢慢看见生活的纹理。"
+        }
+        let grouped = Dictionary(grouping: items, by: \.category)
+        let topCategory = grouped
+            .map { (category: $0.key, total: $0.value.reduce(0) { $0 + $1.amount }) }
+            .sorted { $0.total > $1.total }
+            .first?.category.rawValue ?? "日常"
+        return "这一段留下 \(items.count) 笔，合计 \(heroTotalExpense.formatted(.cny))。「\(topCategory)」出现得多一点，像这段日子的一个小主题。"
+    }
+
+    private var heroRange: SummaryPlaybackRange {
+        selectedPeriod == .week ? .week : .month
+    }
+
+    private var traceChapterCard: some View {
+        let _ = quotaRefreshID
+        let range = heroRange
+        let preview = buildSummaryPreview(for: range)
+        let hasData = !heroScopedItems.isEmpty
+        let isMonthLocked = range == .month && !hasMemberAccess && quotaStore.monthRemaining(isMember: false) <= 0
+        let canPlay = hasData && quotaStore.canPlay(range, isMember: hasMemberAccess)
+
+        return VStack(alignment: .leading, spacing: 14) {
+            traceRangeKicker
+
+            Text(heroNarrativeText)
+                .font(.system(size: 16, weight: .medium))
+                .lineSpacing(5)
+                .foregroundStyle(AppColors.text)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(summaryCardSubtitle(preview: preview, range: range, hasData: hasData, isMonthLocked: isMonthLocked))
+                .font(.system(size: 13))
+                .foregroundStyle(AppColors.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                handleSummaryPlaybackTap(range: range, preview: preview)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isMonthLocked ? "lock.fill" : "play.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 22, height: 22)
+                        .background(Circle().fill(AppColors.accent.opacity(canPlay ? 0.16 : 0.08)))
+                    Text(isMonthLocked ? "了解会员" : "听听这一段")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundStyle(canPlay || isMonthLocked ? AppColors.accent.opacity(0.9) : AppColors.subtext.opacity(0.82))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.38).mix(with: AppColors.accent.opacity(0.10), by: 0.45))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(AppColors.accent.opacity(canPlay || isMonthLocked ? 0.24 : 0.10), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(!hasData && !isMonthLocked)
+
+            if hasData {
+                VStack(spacing: 8) {
+                    ForEach(Array(heroScopedItems.prefix(3).enumerated()), id: \.element.id) { _, item in
+                        Button {
+                            editingItem = item
+                        } label: {
+                            traceSlipRow(item)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color.white.opacity(0.26))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(AppColors.accent.opacity(0.10), lineWidth: 1)
+                )
+            } else {
+                traceEmptyState
+            }
+        }
+        .glassPanel(radius: 24, padding: 20)
+    }
+
+    private var traceRangeKicker: some View {
+        HStack(spacing: 6) {
+            traceRangeText("本周", period: .week)
+            Text("·")
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(AppColors.subtext.opacity(0.55))
+            traceRangeText("本月", period: .month)
+        }
+    }
+
+    private func traceRangeText(_ title: String, period: StatsPeriod) -> some View {
+        let isSelected = !useCustomRange && selectedPeriod == period
+        return Button {
+            useCustomRange = false
+            selectedPeriod = period
+        } label: {
+            Text(title)
+                .font(.system(size: 12, weight: isSelected ? .bold : .semibold))
+                .foregroundStyle(isSelected ? AppColors.text.opacity(0.92) : AppColors.subtext.opacity(0.78))
+                .overlay(alignment: .bottom) {
+                    if isSelected {
+                        Rectangle()
+                            .fill(AppColors.accent.opacity(0.35))
+                            .frame(height: 1)
+                            .offset(y: 3)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func traceSlipRow(_ item: HomeItem) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(traceAccentColor(for: item.category))
+                .frame(width: 3)
+                .frame(maxHeight: .infinity)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(item.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1)
+                    Spacer()
+                    Text(item.amount.formatted(.cny))
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(AppColors.subtext.opacity(0.92))
+                }
+                HStack(spacing: 4) {
+                    Text(item.category.rawValue)
+                    Text("·")
+                    Text(item.createdAt.zhBillDateTime)
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .frame(minHeight: 58)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.40))
+        )
+    }
+
+    private func traceAccentColor(for category: HomeItem.Category) -> Color {
+        switch category {
+        case .dining:
+            return Color(red: 0.78, green: 0.58, blue: 0.34).opacity(0.78)
+        case .transport:
+            return Color(red: 0.40, green: 0.62, blue: 0.70).opacity(0.78)
+        default:
+            return AppColors.accent.opacity(0.56)
+        }
+    }
+
+    private var traceEmptyState: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("✦")
+                .font(.system(size: 22))
+                .foregroundStyle(AppColors.accent.opacity(0.7))
+            Text(emptyRecordListText)
+                .font(.system(size: 13))
+                .foregroundStyle(AppColors.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.32))
+        )
+    }
+
+    private var traceAppendixStrip: some View {
+        Button {
+            showTraceDetailSheet = true
+        } label: {
+            HStack {
+                Text("细查这一段 →")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppColors.text.opacity(0.72))
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(0.30).mix(with: AppColors.accent.opacity(0.08), by: 0.5))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var traceDetailSheet: some View {
+        NavigationStack {
+            ZStack {
+                AppColors.bg.ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("细查这一段")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+
+                        Text(traceDetailMetaText)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        HStack(alignment: .top, spacing: 8) {
+                            periodFilter
+                            categoryFilter
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.18)) {
+                                    isTrendExpandedInSheet.toggle()
+                                }
+                            } label: {
+                                HStack {
+                                    Text(trendInsightText(data: computeTrendData()))
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(AppColors.text.opacity(0.78))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Spacer()
+                                    Text(isTrendExpandedInSheet ? "收起走势" : "展开走势")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(AppColors.accent.opacity(0.82))
+                                }
+                            }
+                            .buttonStyle(.plain)
+
+                            if isTrendExpandedInSheet {
+                                trendChart
+                                    .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
+                        }
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color.white.opacity(0.36))
+                        )
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            recordListContent
+                        }
+                    }
+                    .padding(18)
+                    .padding(.bottom, 28)
+                }
+                .scrollIndicators(.hidden)
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { showTraceDetailSheet = false }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var traceDetailMetaText: String {
+        "\(currentFilterSummary) · \(filteredItems.count) 笔 · 合计 \(totalExpense.formatted(.cny))"
     }
 
     private var filtersPanel: some View {

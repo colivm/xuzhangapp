@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Binding var showMemberPricing: Bool
     var onShowMinimalOnboarding: () -> Void = {}
     @State private var showAccountSheet = false
+    @State private var activeSettingsSheet: SettingsSheet?
     @State private var draftDisplayName = ""
     @State private var draftPetNickname = ""
     @FocusState private var focusedField: SettingsField?
@@ -16,23 +17,30 @@ struct SettingsView: View {
         case petNickname
     }
 
+    private enum SettingsSheet: String, Identifiable {
+        case backup
+        case appearance
+        case companion
+        case privacy
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .backup: return "备份与联网"
+            case .appearance: return "外观"
+            case .companion: return "陪伴与语气"
+            case .privacy: return "数据与隐私"
+            }
+        }
+    }
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
-                // ── Account Entry Panel ──
-                accountEntryPanel
-
-                // ── Main Settings Panel ──
-                mainSettingsPanel
-
-                // ── Appearance Panel ──
-                appearancePanel
-
-                // ── AI Settings Panel ──
-                aiSettingsPanel
-
-                // ── Data & Privacy ──
-                privacyNote
+            VStack(spacing: 14) {
+                settingsIdentityCard
+                settingsChapterPanel
+                settingsFooterLinks
             }
             .padding(.horizontal, 12)
             .padding(.top, 4)
@@ -67,9 +75,234 @@ struct SettingsView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(item: $activeSettingsSheet) { sheet in
+            settingsSheet(sheet)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     // MARK: - Account Entry
+
+    private var settingsIdentityCard: some View {
+        Button {
+            showAccountSheet = true
+        } label: {
+            HStack(spacing: 12) {
+                narrativeSealAvatar
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(settingsViewModel.displayName.isEmpty ? "叙账用户" : settingsViewModel.displayName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                    Text("本地保存 · \(memberTierDisplayName(settingsViewModel.memberTier))")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                    Text(settingsViewModel.hasCloudSession ? "云端备份已准备好，慢慢记就好。" : "想备份或续聊时，再点这里登录。")
+                        .font(.system(size: 12))
+                        .italic()
+                        .foregroundStyle(AppColors.subtext.opacity(0.88))
+                        .lineLimit(2)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.white.opacity(0.40).mix(with: AppColors.accent.opacity(0.06), by: 0.45))
+        )
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(AppColors.accent.opacity(0.34))
+                .frame(width: 3)
+                .padding(.vertical, 18)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(AppColors.line.opacity(0.72), lineWidth: 1)
+        )
+        .shadow(color: AppColors.subtext.opacity(0.08), radius: 18, y: 8)
+    }
+
+    private var narrativeSealAvatar: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(red: 1.0, green: 0.96, blue: 0.88).opacity(0.88))
+                .frame(width: 44, height: 44)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(AppColors.accent.opacity(0.36), lineWidth: 1)
+                )
+            Text("叙")
+                .font(.system(size: 20, weight: .bold, design: .serif))
+                .foregroundStyle(AppColors.accent.opacity(0.78))
+        }
+    }
+
+    private var settingsChapterPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("你的叙账")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(AppColors.subtext.opacity(0.82))
+            VStack(spacing: 0) {
+                settingsEntryRow(mark: "你", title: "账号与会员", summary: settingsViewModel.hasCloudSession ? "已登录" : "未登录 · 可选") {
+                    showAccountSheet = true
+                }
+                settingsEntryRow(mark: "云", title: "备份与联网", summary: "云端备份、联网梳理") {
+                    activeSettingsSheet = .backup
+                }
+                settingsEntryRow(mark: "伴", title: "陪伴与语气", summary: "宠物、天气互动") {
+                    activeSettingsSheet = .companion
+                }
+                settingsEntryRow(mark: "色", title: "外观", summary: appearanceSummary) {
+                    activeSettingsSheet = .appearance
+                }
+                settingsEntryRow(mark: "安", title: "数据与隐私", summary: "本地昵称、说明与协议") {
+                    activeSettingsSheet = .privacy
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.34).mix(with: AppColors.accent.opacity(0.05), by: 0.42))
+        )
+    }
+
+    private func settingsEntryRow(mark: String, title: String, summary: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Text(mark)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.accent.opacity(0.72))
+                    .frame(width: 26, height: 26)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(AppColors.accent.opacity(0.10))
+                    )
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                Spacer()
+                Text(summary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext.opacity(0.82))
+                    .lineLimit(1)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(AppColors.subtext.opacity(0.45))
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 11)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var settingsFooterLinks: some View {
+        HStack(spacing: 8) {
+            Button("重新查看新手引导") { onShowMinimalOnboarding() }
+            Text("·")
+            Link("隐私政策", destination: privacyURL)
+            Text("·")
+            Link("用户协议", destination: termsURL)
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(AppColors.subtext.opacity(0.74))
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var appearanceSummary: String {
+        switch settingsViewModel.appearance {
+        case .system: return "跟随系统"
+        case .light: return "浅色"
+        case .dark: return "深色"
+        }
+    }
+
+    private func settingsSheet(_ sheet: SettingsSheet) -> some View {
+        ZStack {
+            AppColors.bg.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(sheet.title)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                    settingsSheetContent(sheet)
+                }
+                .webCardPadding()
+                .webCardBackground()
+                .padding(16)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    @ViewBuilder
+    private func settingsSheetContent(_ sheet: SettingsSheet) -> some View {
+        switch sheet {
+        case .backup:
+            settingToggle("云端备份（可选）", isOn: Binding(
+                get: { settingsViewModel.syncEnabled },
+                set: { settingsViewModel.syncEnabled = $0 }
+            ))
+            settingHelper("开启后账单会同步到云端，换机时可恢复。")
+            settingToggle("允许联网梳理复盘（可选）", isOn: Binding(
+                get: { settingsViewModel.useRemoteAI },
+                set: { settingsViewModel.useRemoteAI = $0 }
+            ))
+            settingHelper("关闭后仍可使用本地回望，不强制登录。")
+        case .appearance:
+            webAppearanceButton("跟随系统", isActive: settingsViewModel.appearance == .system) {
+                settingsViewModel.appearance = .system
+            }
+            HStack(spacing: 4) {
+                webAppearanceButton("浅色", isActive: settingsViewModel.appearance == .light) {
+                    settingsViewModel.appearance = .light
+                }
+                webAppearanceButton("深色", isActive: settingsViewModel.appearance == .dark) {
+                    settingsViewModel.appearance = .dark
+                }
+            }
+        case .companion:
+            settingToggle("开启宠物陪伴", isOn: Binding(
+                get: { settingsViewModel.petCompanionEnabled },
+                set: { settingsViewModel.petCompanionEnabled = $0 }
+            ))
+            settingField(label: "宠物昵称") {
+                TextField("小叙", text: $draftPetNickname)
+                    .focused($focusedField, equals: .petNickname)
+                    .submitLabel(.done)
+                    .onSubmit { commitPetNickname() }
+            }
+            settingToggle("允许天气场景暖心互动", isOn: Binding(
+                get: { settingsViewModel.weatherCompanionEnabled },
+                set: { settingsViewModel.weatherCompanionEnabled = $0 }
+            ))
+            VStack(alignment: .leading, spacing: 6) {
+                Text("复盘语气")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppColors.text.opacity(0.82))
+                HStack(spacing: 4) {
+                    webToneButton("温和", isActive: settingsViewModel.aiTone == .gentle) {
+                        settingsViewModel.aiTone = .gentle
+                    }
+                    webToneButton("中性", isActive: settingsViewModel.aiTone == .neutral) {
+                        settingsViewModel.aiTone = .neutral
+                    }
+                }
+            }
+        case .privacy:
+            sectionBody("默认本地存储，无需登录即可完整使用。开启云端备份后，仅同步必要账单数据与会员状态。")
+            legalLinksRow
+            Text("ICP备案号：待备案")
+                .font(.system(size: 11))
+                .foregroundStyle(AppColors.subtext.opacity(0.68))
+        }
+    }
 
     private var accountEntryPanel: some View {
         VStack(spacing: 0) {
@@ -235,6 +468,13 @@ struct SettingsView: View {
                     sectionBody(settingsViewModel.hasCloudSession
                                 ? "管理你的云端登录状态和会员权益。"
                                 : "登录后可同步会员状态，默认本地功能仍可直接使用。")
+
+                    settingField(label: "本地昵称") {
+                        TextField("叙账用户", text: $draftDisplayName)
+                            .focused($focusedField, equals: .displayName)
+                            .submitLabel(.done)
+                            .onSubmit { commitDisplayName() }
+                    }
 
                     accountSheetContent
 

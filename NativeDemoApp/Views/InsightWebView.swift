@@ -17,6 +17,8 @@ struct InsightWebView: View {
     @State private var isSavingWeeklyShareCard = false
     @State private var weeklyShareSaveMessage: String?
     @State private var isTodayInsightExpanded = false
+    @State private var showMonthlyInsightSheet = false
+    @State private var showTodayInsightSheet = false
     private let trialTotal = 5
 
     private struct AIStatusPill: Equatable {
@@ -49,19 +51,168 @@ struct InsightWebView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: monthlyTrialModal?.id)
+        .sheet(isPresented: $showMonthlyInsightSheet) {
+            monthlyInsightSheet
+        }
+        .sheet(isPresented: $showTodayInsightSheet) {
+            todayInsightSheet
+        }
     }
 
     private var insightContent: some View {
-        VStack(spacing: 18) {
-            weeklyInsightSection
-            monthlyInsightSection
-            todayInsightSection
+        VStack(alignment: .leading, spacing: 0) {
+            insightJournalCard
+            insightChapterFootnote
+            insightNextChapter
         }
         .padding(.horizontal, 12)
         .padding(.top, 4)
         .padding(.bottom, 120)
         .frame(maxWidth: 430)
         .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var insightJournalCard: some View {
+        let weeklyBlocks = homeViewModel.localWeeklyInsightBlocks()
+        return VStack(alignment: .leading, spacing: 13) {
+            Text(weekKickerText)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(AppColors.subtext.opacity(0.78))
+
+            Text(formatWeeklyJournalText(weeklyBlocks))
+                .font(.system(size: 17, weight: .medium))
+                .lineSpacing(6)
+                .foregroundStyle(AppColors.text)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(weeklyJournalClosing(weeklyBlocks))
+                .font(.system(size: 13))
+                .italic()
+                .foregroundStyle(AppColors.subtext.opacity(0.86))
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 14) {
+                quietTextButton("梳理本周节奏 →") {
+                    let text = homeViewModel.buildWeeklyRhythmText()
+                    homeViewModel.setLatestActionCard(text, scope: "weekly")
+                    homeViewModel.markWeeklyRhythmReviewed()
+                }
+                quietTextButton("生成周度分享卡") {
+                    homeViewModel.markWeeklyShareGenerated()
+                    generateAndShareWeeklyCard()
+                }
+                if !homeViewModel.weekTopCategoryText.isEmpty && homeViewModel.weekTopCategoryText != "暂无" {
+                    quietTextButton("标记常花类目") {
+                        homeViewModel.markWeeklyTag()
+                    }
+                }
+            }
+            .padding(.top, 2)
+
+            if let weeklyShareSaveMessage {
+                Text(weeklyShareSaveMessage)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+            }
+        }
+        .padding(.leading, 4)
+        .glassPanel(radius: 22, padding: 20)
+    }
+
+    private var insightChapterFootnote: some View {
+        Text("周记写到这里。想读更长的，再翻开下面。")
+            .font(.system(size: 13))
+            .italic()
+            .foregroundStyle(AppColors.subtext.opacity(0.72))
+            .padding(.leading, 22)
+            .padding(.top, 12)
+            .padding(.bottom, 14)
+    }
+
+    private var insightNextChapter: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("再读一章")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(AppColors.subtext.opacity(0.82))
+
+            Button {
+                showMonthlyInsightSheet = true
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("这一月")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppColors.subtext.opacity(0.82))
+                    Text("翻开月记 →")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(AppColors.accent.opacity(0.82))
+                }
+                .frame(minWidth: 210, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.42).mix(with: Color(red: 1.0, green: 0.94, blue: 0.84), by: 0.35))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color(red: 0.94, green: 0.82, blue: 0.68).opacity(0.35), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                showTodayInsightSheet = true
+            } label: {
+                Text("今日小记（可选） →")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.82))
+                    .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.leading, 14)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Color(red: 0.79, green: 0.56, blue: 0.34).opacity(0.18))
+                .frame(width: 1)
+        }
+        .padding(.leading, 8)
+    }
+
+    private var weekKickerText: String {
+        let cal = Calendar.current
+        let end = Date()
+        let start = cal.date(byAdding: .day, value: -6, to: end) ?? end
+        return "这周 · \(shortDateText(start))–\(shortDateText(end))"
+    }
+
+    private func formatWeeklyJournalText(_ blocks: (summary: String, structure: String, advice: String)) -> String {
+        if blocks.summary.contains("暂无复盘") {
+            return "近 7 天还没有足够记录。多记几笔，这里会慢慢长出一周的回信。"
+        }
+        let weekItems = recentPositiveItems(days: 7)
+        let countText = weekItems.isEmpty ? "这周还没留下太多记录" : "这周记下 \(weekItems.count) 笔"
+        let top = homeViewModel.weekTopCategoryText.isEmpty ? "日常" : homeViewModel.weekTopCategoryText
+        return "\(countText)，「\(top)」冒出来几次，像随手留在日子里的小注脚。\(blocks.structure)"
+    }
+
+    private func weeklyJournalClosing(_ blocks: (summary: String, structure: String, advice: String)) -> String {
+        blocks.summary.contains("暂无复盘")
+            ? "等记录多一点，再回来读这一周。"
+            : "愿意的话，下周再对照看看有没有新变化。"
+    }
+
+    private func recentPositiveItems(days: Int) -> [HomeItem] {
+        let cal = Calendar.current
+        let start = cal.date(byAdding: .day, value: -(days - 1), to: Date()) ?? Date()
+        return homeViewModel.items.filter { $0.createdAt >= start && $0.amount > 0 }
+    }
+
+    private func shortDateText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M/d"
+        return formatter.string(from: date)
     }
 
     private var weeklyInsightSection: some View {
@@ -415,6 +566,205 @@ struct InsightWebView: View {
                     Capsule(style: .continuous)
                         .stroke(Color(red: 228/255, green: 201/255, blue: 134/255).opacity(0.48), lineWidth: 1)
                 )
+        }
+    }
+
+    private var monthlyInsightSheet: some View {
+        let left = max(0, trialTotal - monthlyTrialUsed)
+        let tier = settingsViewModel.memberTier.lowercased()
+        let isMember = ["monthly", "yearly", "lifetime"].contains(tier)
+        let exhausted = !isMember && monthlyTrialUsed >= trialTotal
+
+        return ZStack {
+            AppColors.bg.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(monthlyKickerText)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(AppColors.subtext.opacity(0.78))
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(monthlyJournalText)
+                            .font(.system(size: 17, weight: .medium))
+                            .lineSpacing(6)
+                            .foregroundStyle(AppColors.text)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text(monthlyJournalClosingText)
+                            .font(.system(size: 13))
+                            .italic()
+                            .foregroundStyle(AppColors.subtext.opacity(0.84))
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        monthlyJournalFootnote(left: left, isMember: isMember, exhausted: exhausted)
+                    }
+                    .padding(.leading, 4)
+                    .glassPanel(radius: 22, padding: 20)
+                }
+                .padding(18)
+                .padding(.bottom, 28)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var todayInsightSheet: some View {
+        ZStack {
+            AppColors.bg.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("今日小记")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(AppColors.subtext.opacity(0.78))
+
+                    todayInsightText
+                    todayRegenerateButton
+                    todayInsightLoading
+                    todayInsightError
+                }
+                .padding(20)
+                .glassPanel(radius: 22, padding: 20)
+                .padding(18)
+                .padding(.bottom, 28)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private func monthlyJournalFootnote(left: Int, isMember: Bool, exhausted: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Rectangle()
+                .fill(Color(red: 0.94, green: 0.82, blue: 0.68).opacity(0.30))
+                .frame(height: 1)
+                .padding(.top, 6)
+                .padding(.bottom, 12)
+
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                if exhausted {
+                    Button {
+                        onShowMemberPricing?()
+                    } label: {
+                        monthlyFootnotePrimary("想多聊几句？了解会员 →")
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button {
+                        Task {
+                            await generateMonthlyInsight(isMember: isMember)
+                        }
+                    } label: {
+                        monthlyFootnotePrimary(monthlyInsightGenerated ? "再写一版 →" : "生成这一月的回顾 →")
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(homeViewModel.isGeneratingMonthlyInsight)
+                }
+
+                if !isMember {
+                    Text(exhausted ? "免费次数已用完" : "剩余 \(left)/\(trialTotal) 次")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext.opacity(0.58))
+                }
+            }
+
+            monthlyAIStatusView
+                .padding(.top, 8)
+            monthlyErrorView
+                .padding(.top, 6)
+
+            if monthlyInsightGenerated, monthlyReport != nil, !homeViewModel.isGeneratingMonthlyInsight {
+                HStack(spacing: 6) {
+                    monthlyFootnoteSecondaryButton("保存月度小结") {
+                        homeViewModel.markMonthlySaveSummary()
+                    }
+                    Text("·")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext.opacity(0.45))
+                    monthlyFootnoteSecondaryButton("换个叙述风格") {
+                        homeViewModel.regenerateMonthlyInsight()
+                    }
+                }
+                .padding(.top, 10)
+            }
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showAdvancedInsight.toggle()
+                }
+            } label: {
+                Text(showAdvancedInsight ? "收起更多时间段" : "更多时间段")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(AppColors.subtext.opacity(0.56))
+                    .padding(.top, 16)
+            }
+            .buttonStyle(.plain)
+
+            advancedInsightContent
+                .padding(.top, 12)
+        }
+    }
+
+    private func monthlyFootnotePrimary(_ title: String) -> some View {
+        Text(homeViewModel.isGeneratingMonthlyInsight ? "正在梳理这一月..." : title)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(AppColors.accent.opacity(0.82))
+    }
+
+    private func monthlyFootnoteSecondaryButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.74))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var monthlyKickerText: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy年M月"
+        return "这一月 · \(formatter.string(from: Date()))"
+    }
+
+    private var monthlyJournalText: String {
+        if homeViewModel.isGeneratingMonthlyInsight {
+            return "正在梳理这一月..."
+        }
+        if monthlyInsightGenerated, let report = monthlyReport {
+            return formatMonthlyJournalText(report)
+        }
+        return "这一月还没有回顾。点下面生成，会在这里长出一封月记。"
+    }
+
+    private var monthlyJournalClosingText: String {
+        if homeViewModel.isGeneratingMonthlyInsight {
+            return ""
+        }
+        if monthlyInsightGenerated, monthlyReport != nil {
+            return "愿意的话，下个月再翻开对照看看。"
+        }
+        return "先放在这里，等你想读的时候再打开。"
+    }
+
+    private func formatMonthlyJournalText(_ report: HomeViewModel.MonthlyInsightReport) -> String {
+        let monthItems = currentMonthPositiveItems
+        guard !monthItems.isEmpty else {
+            return "这一月还没有足够记录，月记先留一页空白。"
+        }
+        let top = Dictionary(grouping: monthItems, by: \.category)
+            .map { (category: $0.key, count: $0.value.count, total: $0.value.reduce(0) { $0 + $1.amount }) }
+            .sorted { $0.total > $1.total }
+            .first?.category.rawValue ?? "日常"
+        return "这个月记下来 \(monthItems.count) 笔，花费很轻，「\(top)」偶尔露头。\(report.structure)"
+    }
+
+    private var currentMonthPositiveItems: [HomeItem] {
+        homeViewModel.items.filter {
+            Calendar.current.isDate($0.createdAt, equalTo: Date(), toGranularity: .month) && $0.amount > 0
         }
     }
 
