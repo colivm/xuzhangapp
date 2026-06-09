@@ -146,7 +146,8 @@ final class HomeViewModel: ObservableObject {
             category: category,
             amount: amount,
             date: selectedDate,
-            seed: title
+            seed: title,
+            note: title
         )
 
         let newItem = HomeItem(
@@ -258,7 +259,8 @@ final class HomeViewModel: ObservableObject {
                     category: category,
                     amount: draft.amount,
                     date: draft.date,
-                    seed: "\(draft.id.uuidString)|\(title)"
+                    seed: "\(draft.id.uuidString)|\(title)",
+                    note: title
                 ),
                 merchantBrandId: draft.merchantBrandId,
                 draftMeta: HomeItem.DraftMeta(
@@ -320,7 +322,8 @@ final class HomeViewModel: ObservableObject {
         category: HomeItem.Category,
         amount: Double,
         date: Date,
-        seed: String
+        seed: String,
+        note: String = ""
     ) -> String {
         NarrativeCopyResolver.resolveEmotionTag(
             context: NarrativeCopyResolver.Context(
@@ -328,7 +331,8 @@ final class HomeViewModel: ObservableObject {
                 category: category,
                 amount: amount,
                 date: date,
-                seed: seed
+                seed: seed,
+                note: note
             )
         )
     }
@@ -342,7 +346,8 @@ final class HomeViewModel: ObservableObject {
             category: resolvedCategory,
             amount: items[idx].amount,
             date: items[idx].createdAt,
-            seed: items[idx].id.uuidString
+            seed: "\(items[idx].id.uuidString)|\(items[idx].title)",
+            note: items[idx].title
         )
         items[idx].updatedAt = Date()
         persistItems()
@@ -359,7 +364,8 @@ final class HomeViewModel: ObservableObject {
             category: items[idx].category,
             amount: amount,
             date: items[idx].createdAt,
-            seed: items[idx].id.uuidString
+            seed: "\(items[idx].id.uuidString)|\(items[idx].title)",
+            note: items[idx].title
         )
         items[idx].updatedAt = Date()
         persistItems()
@@ -438,7 +444,8 @@ final class HomeViewModel: ObservableObject {
             category: resolved.category,
             amount: resolved.amount,
             date: resolved.createdAt,
-            seed: resolved.id.uuidString
+            seed: "\(resolved.id.uuidString)|\(resolved.title)",
+            note: resolved.title
         )
         items[idx] = resolved
         persistItems()

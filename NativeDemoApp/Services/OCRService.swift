@@ -192,7 +192,8 @@ final class OCRService {
 
     private func parseWeChat(lines: [String], rawText: String, confidence: Double) -> OCRReceiptDraft? {
         let amount = amountNear(labels: ["金额", "支付金额", "付款金额", "实付金额", "订单金额", "转账金额", "交易金额"], in: lines) ?? currencyCandidates(in: rawText).first
-        let title = valueFor(labels: ["商户全称", "商户名称", "商品", "商品名称", "交易对象", "收款方", "收款账户", "对方", "付款说明"], in: lines) ?? fallbackTitle(from: lines)
+        let brand = MerchantBrandCatalog.matchOCRBrand(in: rawText)
+        let title = valueFor(labels: ["商户全称", "商户名称", "商品", "商品名称", "交易对象", "收款方", "收款账户", "对方", "付款说明"], in: lines) ?? brand?.displayName ?? fallbackTitle(from: lines)
         let date = dateNear(labels: ["支付时间", "交易时间", "转账时间", "付款时间"], in: lines) ?? firstDate(in: rawText) ?? .now
         guard let amount, let title else { return nil }
 
@@ -498,17 +499,41 @@ final class OCRService {
         let blocked = [
             "¥", "￥", "金额", "时间", "订单", "单号", "支付", "付款", "收款", "交易", "账单", "详情",
             "当前状态", "成功", "付款方式", "筛选", "全部", "月支出", "月收入", "余额", "零钱", "银行卡",
+            "完成", "取消", "返回", "关闭",
         ]
-        return lines.first { line in
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard isUsableTitle(trimmed) else { return false }
-            return !blocked.contains { trimmed.contains($0) }
+        let candidates = lines.compactMap { line -> String? in
+            let trimmed = normalizedOCRTitleCandidate(line)
+            guard isUsableTitle(trimmed) else { return nil }
+            guard !blocked.contains(where: { trimmed.contains($0) }) else { return nil }
+            return trimmed
         }
+        return candidates.first(where: containsChinese) ?? candidates.first
+    }
+
+    private func normalizedOCRTitleCandidate(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "！", with: "!")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func isStatusBarNoiseTitle(_ value: String) -> Bool {
+        let normalized = normalizedOCRTitleCandidate(value)
+            .replacingOccurrences(of: " ", with: "")
+            .uppercased()
+        let compact = normalized.replacingOccurrences(of: #"[^A-Z0-9:!]"#, with: "", options: .regularExpression)
+        if compact.range(of: #"^\d{1,2}:\d{2}!?[A-Z0-9!]*$"#, options: .regularExpression) != nil {
+            return true
+        }
+        if compact.range(of: #"^!?[!A-Z]*5G[A-Z]?\d{1,3}$"#, options: .regularExpression) != nil {
+            return true
+        }
+        return false
     }
 
     private func isUsableTitle(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2, trimmed.count <= 40 else { return false }
+        if isStatusBarNoiseTitle(trimmed) { return false }
         if NarrativeCopyResolver.isNoisyTimeTitle(trimmed) || isListStatusLine(trimmed) { return false }
         if isPureAmountLine(trimmed) { return false }
         if trimmed.range(of: #"^\d{4}[-/.年]"#, options: .regularExpression) != nil { return false }

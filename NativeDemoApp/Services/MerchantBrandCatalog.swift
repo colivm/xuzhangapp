@@ -128,6 +128,24 @@ enum MerchantBrandCatalog {
             ["买到一点刚需", "便利店让今天轻些", "给日常补个角落", "小小补给记下来", "顺手添一点方便", "生活被补齐一点"],
             ["认真添了一袋日常", "一站把小事接住", "给这几天留点方便", "便利店里的踏实感", "这次补给很顺手", "日子被轻轻安顿"],
         ]),
+        brand("bianlifeng", "便利蜂", ["便利蜂", "bianlifeng"], .daily, [
+            ["便利蜂顺手补给", "饮料和小食在手边", "路过买点方便", "今天补点小需要", "便利店一站完成", "小补给记下来"],
+            ["午间简单买一点", "忙里拿点吃的", "这一站很顺手", "便利小站接住日常", "小袋子带着走", "把日常小缺口补上"],
+            ["顺手添点需要的", "便利店里补齐一点", "给今天加点方便", "小小一袋带回去", "这一笔很日常", "生活角落被照看"],
+            ["认真添了一袋日常", "一站把小事接住", "给这几天留点方便", "便利店里的踏实感", "这次补给很顺手", "日子被轻轻安顿"],
+        ]),
+        brand("seveneleven", "7-Eleven", ["7-Eleven", "7-eleven", "7ELEVEN", "7eleven", "7-11"], .daily, [
+            ["便利店顺手补给", "饭团和饮料在手边", "小物件刚好带上", "日常一站完成", "今天补点方便", "小补给记下来"],
+            ["午间简单买一点", "便当把中午接住", "饮料和小食在手边", "忙里有个便利角落", "这一站很顺手", "把日常小缺口补上"],
+            ["顺手添点需要的", "便利店里补齐一点", "给今天加点方便", "小小一袋带回去", "这一笔很日常", "生活角落被照看"],
+            ["认真补了一轮日常", "一站式把小事办完", "给这几天添点方便", "便利店接住忙日子", "小补给让日子顺一点", "把需要的都带上"],
+        ]),
+        brand("meiyijia", "美宜佳", ["美宜佳", "meiyijia"], .daily, [
+            ["便利店顺手补给", "小物件刚好带上", "饮料和小食在手边", "路过买点方便", "今天补点日常", "小补给记下来"],
+            ["午间简单买一点", "忙里拿点吃的", "这一站很顺手", "便利角落接住日常", "小袋子带着走", "把日常小缺口补上"],
+            ["顺手添点需要的", "便利店里补齐一点", "给今天加点方便", "小小一袋带回去", "这一笔很日常", "生活角落被照看"],
+            ["认真添了一袋日常", "一站把小事接住", "给这几天留点方便", "便利店里的踏实感", "这次补给很顺手", "日子被轻轻安顿"],
+        ]),
     ]
 
     private static let shoppingDefinitions: [MerchantBrandDefinition] = [
@@ -175,6 +193,14 @@ enum MerchantBrandCatalog {
         }
 
         return matches.first { containsAlias($0.alias, in: trimmed) }?.brand
+    }
+
+    static func isExactBrandAlias(_ text: String, for brandId: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let brand = definition(for: brandId), !trimmed.isEmpty else { return false }
+        return brand.aliases.contains { alias in
+            alias.caseInsensitiveCompare(trimmed) == .orderedSame
+        } || brand.displayName.caseInsensitiveCompare(trimmed) == .orderedSame
     }
 
     static func matchOCRBrand(in text: String) -> MerchantBrandDefinition? {

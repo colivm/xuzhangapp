@@ -7,6 +7,23 @@ enum NarrativeCopyResolver {
         let amount: Double
         let date: Date
         let seed: String
+        let note: String
+
+        init(
+            brandId: String?,
+            category: HomeItem.Category,
+            amount: Double,
+            date: Date,
+            seed: String,
+            note: String = ""
+        ) {
+            self.brandId = brandId
+            self.category = category
+            self.amount = amount
+            self.date = date
+            self.seed = seed
+            self.note = note
+        }
     }
 
     static func resolveTitle(brandId: String?, fallback: String) -> String {
@@ -14,7 +31,10 @@ enum NarrativeCopyResolver {
         guard let brand = MerchantBrandCatalog.definition(for: brandId) else {
             return trimmed.isEmpty ? fallback : trimmed
         }
-        if trimmed.isEmpty || isGenericTitle(trimmed) || MerchantBrandCatalog.matchBrand(in: trimmed) != nil {
+        if trimmed.isEmpty || isGenericTitle(trimmed) {
+            return brand.displayName
+        }
+        if MerchantBrandCatalog.isExactBrandAlias(trimmed, for: brand.id) {
             return brand.displayName
         }
         return trimmed
@@ -27,6 +47,10 @@ enum NarrativeCopyResolver {
     static func resolveEmotionTag(context: Context) -> String {
         if let brand = MerchantBrandCatalog.definition(for: context.brandId),
            let note = note(from: brand.tiers, amount: context.amount, seed: context.seed) {
+            return note
+        }
+
+        if let note = noteAwareEmotionTag(context: context) {
             return note
         }
 
@@ -50,11 +74,55 @@ enum NarrativeCopyResolver {
         return HomeItem.inferEmotionTag(category: context.category, amount: context.amount)
     }
 
+    private static func noteAwareEmotionTag(context: Context) -> String? {
+        let noteText = context.note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !noteText.isEmpty else { return nil }
+        let lower = noteText.lowercased()
+
+        if containsAny(lower, ["饮料", "喝的", "可乐", "雪碧", "汽水", "果汁", "茶饮", "奶茶", "咖啡", "拿铁", "美式", "冰饮"]) {
+            return pick(
+                [
+                    "顺手买杯喝的",
+                    "小饮料接住这一刻",
+                    "给路上添点清爽",
+                    "一口喝的记下来",
+                    "便利店饮料在手边",
+                    "今天补点小清爽",
+                ],
+                seed: context.seed + "|drink"
+            )
+        }
+
+        if containsAny(lower, ["便利蜂", "便利店", "全家", "罗森", "711", "7-11"]) {
+            return pick(
+                [
+                    "便利店顺手补给",
+                    "这一站很方便",
+                    "小补给刚好带上",
+                    "日常一站完成",
+                    "路过顺手买一点",
+                    "生活角落被照看",
+                ],
+                seed: context.seed + "|convenience"
+            )
+        }
+
+        return nil
+    }
+
     private static func note(from tiers: [ScenePackTier], amount: Double, seed: String) -> String? {
         guard !tiers.isEmpty else { return nil }
         let tier = tiers.first { amount <= $0.maxAmount } ?? tiers[tiers.count - 1]
         guard !tier.notes.isEmpty else { return nil }
         return tier.notes[stableIndex(seed: seed, count: tier.notes.count)]
+    }
+
+    private static func pick(_ notes: [String], seed: String) -> String {
+        notes[stableIndex(seed: seed, count: notes.count)]
+    }
+
+    private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.contains($0.lowercased()) }
     }
 
     private static func scenePack(for category: HomeItem.Category) -> ScenePackDefinition? {
