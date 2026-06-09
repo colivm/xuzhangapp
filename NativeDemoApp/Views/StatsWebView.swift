@@ -303,6 +303,12 @@ struct StatsWebView: View {
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(AppColors.subtext.opacity(0.92))
                 }
+                if shouldShowTraceSlipEmotion(for: item) {
+                    Text(item.emotionTag)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext.opacity(0.78))
+                        .lineLimit(1)
+                }
                 HStack(spacing: 4) {
                     Text(item.category.rawValue)
                     Text("·")
@@ -319,6 +325,12 @@ struct StatsWebView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.white.opacity(0.40))
         )
+    }
+
+    private func shouldShowTraceSlipEmotion(for item: HomeItem) -> Bool {
+        let tag = item.emotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tag.isEmpty else { return false }
+        return tag != HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
     }
 
     private func traceAccentColor(for category: HomeItem.Category) -> Color {

@@ -133,7 +133,7 @@ final class HomeViewModel: ObservableObject {
         refreshRouteGuidanceIfNeeded()
     }
 
-    func addManualRecord() {
+    func addManualRecord(userEditedTitle: Bool = false) {
         guard let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0 else { return }
         let wasEmpty = items.isEmpty
         let trimmed = inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -158,7 +158,8 @@ final class HomeViewModel: ObservableObject {
             createdAt: selectedDate,
             updatedAt: Date(),
             emotionTag: emotionTag,
-            merchantBrandId: brand?.id
+            merchantBrandId: brand?.id,
+            userEditedTitle: userEditedTitle ? true : nil
         )
         items.insert(newItem, at: 0)
         resetInput()
@@ -433,6 +434,7 @@ final class HomeViewModel: ObservableObject {
 
     func updateItem(_ updated: HomeItem) {
         guard let idx = items.firstIndex(where: { $0.id == updated.id }) else { return }
+        let original = items[idx]
         var resolved = updated
         let matchedBrand = MerchantBrandCatalog.matchBrand(in: updated.title)
         let brandId = matchedBrand?.id ?? updated.merchantBrandId
@@ -447,6 +449,11 @@ final class HomeViewModel: ObservableObject {
             seed: "\(resolved.id.uuidString)|\(resolved.title)",
             note: resolved.title
         )
+        let titleWasEdited = updated.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            != original.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if resolved.userEditedTitle == true || titleWasEdited {
+            resolved.userEditedTitle = true
+        }
         items[idx] = resolved
         persistItems()
         analyticsService.track("record_updated", props: [

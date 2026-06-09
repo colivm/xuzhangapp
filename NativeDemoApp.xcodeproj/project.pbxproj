@@ -46,6 +46,7 @@
 		C30000010000000000000001 /* MerchantBrandCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000020000000000000001 /* MerchantBrandCatalog.swift */; };
 		C30000030000000000000001 /* NarrativeCopyResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000040000000000000001 /* NarrativeCopyResolver.swift */; };
 		D21300010000000000000001 /* RecordPrefillService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21300020000000000000001 /* RecordPrefillService.swift */; };
+		E0A000010000000000000001 /* EchoAnchorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0A000020000000000000001 /* EchoAnchorService.swift */; };
 		E10000010000000000000001 /* LifeEntryPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000020000000000000001 /* LifeEntryPreviewCard.swift */; };
 		F10000010000000000000001 /* MinimalOnboardingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000020000000000000001 /* MinimalOnboardingSheet.swift */; };
 		F12000010000000000000001 /* RecordPreviewTier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F12000020000000000000001 /* RecordPreviewTier.swift */; };
@@ -95,6 +96,7 @@
 		C30000020000000000000001 /* MerchantBrandCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MerchantBrandCatalog.swift; sourceTree = "<group>"; };
 		C30000040000000000000001 /* NarrativeCopyResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NarrativeCopyResolver.swift; sourceTree = "<group>"; };
 		D21300020000000000000001 /* RecordPrefillService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordPrefillService.swift; sourceTree = "<group>"; };
+		E0A000020000000000000001 /* EchoAnchorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoAnchorService.swift; sourceTree = "<group>"; };
 		E10000020000000000000001 /* LifeEntryPreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeEntryPreviewCard.swift; sourceTree = "<group>"; };
 		F10000020000000000000001 /* MinimalOnboardingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinimalOnboardingSheet.swift; sourceTree = "<group>"; };
 		F12000020000000000000001 /* RecordPreviewTier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordPreviewTier.swift; sourceTree = "<group>"; };
@@ -169,6 +171,7 @@
 				A100002C0000000000000001 /* PlaybackService.swift */,
 				A100008A0000000000000001 /* CategoryRecommendService.swift */,
 				D21300020000000000000001 /* RecordPrefillService.swift */,
+				E0A000020000000000000001 /* EchoAnchorService.swift */,
 				C30000020000000000000001 /* MerchantBrandCatalog.swift */,
 				C30000040000000000000001 /* NarrativeCopyResolver.swift */,
 				B20000040000000000000001 /* WeatherCompanionService.swift */,
@@ -335,6 +338,7 @@
 				C30000010000000000000001 /* MerchantBrandCatalog.swift in Sources */,
 				C30000030000000000000001 /* NarrativeCopyResolver.swift in Sources */,
 				D21300010000000000000001 /* RecordPrefillService.swift in Sources */,
+				E0A000010000000000000001 /* EchoAnchorService.swift in Sources */,
 				E10000010000000000000001 /* LifeEntryPreviewCard.swift in Sources */,
 				F10000010000000000000001 /* MinimalOnboardingSheet.swift in Sources */,
 				F12000010000000000000001 /* RecordPreviewTier.swift in Sources */,

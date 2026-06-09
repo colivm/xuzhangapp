@@ -74,6 +74,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
     var emotionTag: String
     var merchantBrandId: String?
     var draftMeta: DraftMeta?
+    var userEditedTitle: Bool?
 
     init(
         id: UUID = UUID(),
@@ -85,7 +86,8 @@ struct HomeItem: Identifiable, Codable, Equatable {
         updatedAt: Date? = nil,
         emotionTag: String? = nil,
         merchantBrandId: String? = nil,
-        draftMeta: DraftMeta? = nil
+        draftMeta: DraftMeta? = nil,
+        userEditedTitle: Bool? = nil
     ) {
         self.id = id
         self.title = title
@@ -97,6 +99,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
         self.emotionTag = emotionTag ?? HomeItem.inferEmotionTag(category: category, amount: amount)
         self.merchantBrandId = merchantBrandId
         self.draftMeta = draftMeta
+        self.userEditedTitle = userEditedTitle
     }
 
     static func inferEmotionTag(category: Category, amount: Double) -> String {
@@ -117,7 +120,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
 extension HomeItem {
     enum CodingKeys: String, CodingKey {
-        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta
+        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta, userEditedTitle
     }
 
     init(from decoder: Decoder) throws {
@@ -133,6 +136,7 @@ extension HomeItem {
             ?? HomeItem.inferEmotionTag(category: category, amount: amount)
         merchantBrandId = try container.decodeIfPresent(String.self, forKey: .merchantBrandId)
         draftMeta = try container.decodeIfPresent(DraftMeta.self, forKey: .draftMeta)
+        userEditedTitle = try container.decodeIfPresent(Bool.self, forKey: .userEditedTitle)
     }
 }
 

@@ -239,6 +239,7 @@ final class PlaybackService {
         let title = "本周生活切片"
         let weekKey = SummaryPlaybackQuotaStore().currentWeekKey(now: now)
         let weekSeed = playbackCopySeed(base: "week-\(weekKey)", suffix: copySeed)
+        let echoAnchor = EchoAnchorService.shared.pickEchoAnchor(items: rows, periodKey: weekKey, now: now)
         let weekValues: [String: String] = [
             "rangeLabel": rangeLabel,
             "count": "\(rows.count)",
@@ -317,26 +318,34 @@ final class PlaybackService {
         )
 
         if rows.count >= 3, let highlight {
-            let day = Self.weekdayFormatter.string(from: highlight.createdAt)
+            // Echo priority: weekly playback owns the visible anchor when a highlight chapter exists.
+            let displayHighlight = echoAnchor.flatMap { anchor in
+                rows.first { $0.id == anchor.itemId }
+            } ?? highlight
+            let day = Self.weekdayFormatter.string(from: displayHighlight.createdAt)
             let highlightValues = weekValues.merging([
-                "highlightTitle": highlight.title,
-                "highlightAmount": Self.money(highlight.amount),
+                "highlightTitle": displayHighlight.title,
+                "highlightAmount": Self.money(displayHighlight.amount),
                 "highlightDayLabel": day
             ]) { current, _ in current }
+            let echoSentence = echoAnchor
+                .map { EchoAnchorService.shared.formatEchoAnchorSentence($0) }
+                .flatMap { $0.isEmpty ? nil : $0 }
             chapters.append(
                 SummaryChapter(
                     id: "week-highlight",
                     title: "印象一笔",
                     metrics: [
-                        "title": highlight.title,
-                        "amount": Self.money(highlight.amount),
+                        "title": displayHighlight.title,
+                        "amount": Self.money(displayHighlight.amount),
                         "day": day
                     ],
-                    narration: PlaybackCopyPool.narration(
-                        chapterId: "week-highlight",
-                        seed: weekSeed,
-                        values: highlightValues
-                    ),
+                    narration: echoSentence.map { SummaryNarration(warm: $0, plain: $0) }
+                        ?? PlaybackCopyPool.narration(
+                            chapterId: "week-highlight",
+                            seed: weekSeed,
+                            values: highlightValues
+                        ),
                     durationSec: 7
                 )
             )

@@ -193,7 +193,18 @@ struct InsightWebView: View {
         let weekItems = recentPositiveItems(days: 7)
         let countText = weekItems.isEmpty ? "这周还没留下太多记录" : "这周记下 \(weekItems.count) 笔"
         let top = homeViewModel.weekTopCategoryText.isEmpty ? "日常" : homeViewModel.weekTopCategoryText
-        return "\(countText)，「\(top)」冒出来几次，像随手留在日子里的小注脚。\(blocks.structure)"
+        var text = "\(countText)，「\(top)」冒出来几次，像随手留在日子里的小注脚。\(blocks.structure)"
+        // Echo priority: when week-highlight can exist, playback owns the anchor to avoid repeating it here.
+        if weekItems.count < 3 {
+            let periodKey = EchoAnchorService.shared.periodKeyForWeek()
+            if let anchor = EchoAnchorService.shared.pickEchoAnchor(items: weekItems, periodKey: periodKey) {
+                let sentence = EchoAnchorService.shared.formatEchoAnchorSentence(anchor)
+                if !sentence.isEmpty {
+                    text += sentence
+                }
+            }
+        }
+        return text
     }
 
     private func weeklyJournalClosing(_ blocks: (summary: String, structure: String, advice: String)) -> String {
@@ -759,7 +770,15 @@ struct InsightWebView: View {
             .map { (category: $0.key, count: $0.value.count, total: $0.value.reduce(0) { $0 + $1.amount }) }
             .sorted { $0.total > $1.total }
             .first?.category.rawValue ?? "日常"
-        return "这个月记下来 \(monthItems.count) 笔，花费很轻，「\(top)」偶尔露头。\(report.structure)"
+        var text = "这个月记下来 \(monthItems.count) 笔，花费很轻，「\(top)」偶尔露头。\(report.structure)"
+        let periodKey = EchoAnchorService.shared.periodKeyForMonth()
+        if let anchor = EchoAnchorService.shared.pickEchoAnchor(items: monthItems, periodKey: periodKey) {
+            let sentence = EchoAnchorService.shared.formatEchoAnchorSentence(anchor)
+            if !sentence.isEmpty {
+                text += sentence
+            }
+        }
+        return text
     }
 
     private var currentMonthPositiveItems: [HomeItem] {

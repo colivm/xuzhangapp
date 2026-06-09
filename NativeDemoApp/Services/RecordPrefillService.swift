@@ -179,7 +179,7 @@ struct RecordPrefillService {
             .filter { $0.category == category }
             .map(\.title)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { isHabitTitle($0, category: category) }
+            .filter { Self.isHabitTitle($0, category: category) }
             .reduce(into: [String: Int]()) { result, title in
                 result[title, default: 0] += 1
             }
@@ -192,10 +192,19 @@ struct RecordPrefillService {
         .first?.key
     }
 
-    private func isHabitTitle(_ title: String, category: HomeItem.Category) -> Bool {
+    static func isHabitTitle(_ title: String, category: HomeItem.Category) -> Bool {
         guard (2...12).contains(title.count) else { return false }
         if title == category.defaultRecordTitle { return false }
         if title.hasSuffix("记录") || title.hasSuffix("消费") { return false }
+        if isDirtyTraceTitle(title) { return false }
+        if title.range(of: #"^-?\s*[¥￥]?\s*[0-9]+(?:\.[0-9]{1,2})?\s*$"#, options: .regularExpression) != nil {
+            return false
+        }
+        return true
+    }
+
+    static func isDirtyTraceTitle(_ title: String) -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let month = String(UnicodeScalar(0x6708)!)
         let day = String(UnicodeScalar(0x65E5)!)
         let monthDayPattern = "^\\d{1,2}" + month + "\\d{1,2}" + day + "(?:\\s*\\d{1,2}:?\\d{0,2})?$"
@@ -206,13 +215,7 @@ struct RecordPrefillService {
             #"^\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:\s+\d{1,2}:?\d{0,2})?$"#,
             monthDayPattern,
         ]
-        if noisyTimePatterns.contains(where: { title.range(of: $0, options: .regularExpression) != nil }) {
-            return false
-        }
-        if title.range(of: #"^-?\s*[¥￥]?\s*[0-9]+(?:\.[0-9]{1,2})?\s*$"#, options: .regularExpression) != nil {
-            return false
-        }
-        return true
+        return noisyTimePatterns.contains { trimmed.range(of: $0, options: .regularExpression) != nil }
     }
 
     private func hourBucket(for date: Date) -> Int {

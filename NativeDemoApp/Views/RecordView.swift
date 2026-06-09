@@ -241,8 +241,27 @@ struct RecordView: View {
 
     private var previewHint: String? {
         guard previewTier == .confirm else { return nil }
-        let hasManualNote = !homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return hasManualNote ? nil : "想换说法，点下面轻字即可"
+        return currentTitleShouldBeUserEdited ? "会像这样留在账本里" : "想被将来认出来，可改几个字"
+    }
+
+    private var currentTitleShouldBeUserEdited: Bool {
+        guard noteEditorExpanded else { return false }
+        let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return false }
+        if title == homeViewModel.recordPrefillResult?.title?.trimmingCharacters(in: .whitespacesAndNewlines) {
+            return false
+        }
+        let brandId = MerchantBrandCatalog.matchBrand(in: title)?.id
+        let draft = HomeItem(
+            title: title,
+            amount: inputAmountValue,
+            category: homeViewModel.selectedCategory,
+            createdAt: homeViewModel.selectedDate,
+            emotionTag: previewEmotion,
+            merchantBrandId: brandId,
+            userEditedTitle: true
+        )
+        return EchoAnchorService.shared.isEligibleLifeTraceTitle(title, item: draft)
     }
 
     private var previewQuickActionTitle: String {
@@ -950,7 +969,7 @@ struct RecordView: View {
         Button {
             guard hasValidAmount else { return }
             dismissKeyboard()
-            homeViewModel.addManualRecord()
+            homeViewModel.addManualRecord(userEditedTitle: currentTitleShouldBeUserEdited)
             recordDetailsExpanded = false
             categoryGridExpanded = false
             noteEditorExpanded = false

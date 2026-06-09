@@ -1,0 +1,268 @@
+你在 xuzhangapp 实现 Task MEMORY-LOOP-iOS — 记望回指 · 产品记忆机制（**仅 NativeDemoApp · 真机验证**）。
+
+> 战略层见 @PRODUCT_NORTH_STAR.md §0.6、@PROMPT_功能-记望回指_全链路.txt。  
+> **本任务不做 Web**；Web 看不出效果，直接在 iOS 真机闭环验收。
+
+================================================================================
+零、真机验收目标（做完应能感到什么）
+================================================================================
+
+护城河体验（30 秒可感知）：
+  1. **记**：记账预览卡有一句轻 hint，鼓励改几个字（不强制）
+  2. **存**：脏标题/习惯预填/OCR 时间串 **不会** 被选为锚点
+  3. **望 · 弱闭环**：痕迹 Tab 票根可见非默认 emotionTag（muted）
+  4. **望 · 锚点**：本周手写「加班后吃点热乎的」→ **听听这一段** 切片「印象一笔」幕 **或** 复盘周记末 **出现 1 次** 回指句
+
+评审问句：
+  · §0.3 — 首屏仍读生活，不是 KPI 报表？
+  · §0.6 — **能认出是哪一笔自己记下的吗？**
+
+================================================================================
+一、边界（iOS only）
+================================================================================
+
+可改（仅此范围）：
+  NativeDemoApp/Services/EchoAnchorService.swift          ← **新建 · 唯一规则源**
+  NativeDemoApp.xcodeproj/project.pbxproj                 ← 把新文件加入 target
+  NativeDemoApp/Models/HomeItem.swift                     ← userEditedTitle 可选字段
+  NativeDemoApp/Services/RecordPrefillService.swift       ← 脏标题规则与 Service 对齐
+  NativeDemoApp/Services/PlaybackService.swift            ← week-highlight 幕 narration
+  NativeDemoApp/Views/RecordView.swift                    ← life-slip hint 文案
+  NativeDemoApp/ViewModels/HomeViewModel.swift            ← 保存时写 userEditedTitle
+  NativeDemoApp/Views/StatsWebView.swift                  ← traceSlipRow emotion 弱闭环
+  NativeDemoApp/Views/InsightWebView.swift                ← 周记/月记末追加锚点（备落点）
+
+禁止改：
+  web-preview/、backend/、ai-proxy/
+  Tab IA、会员/quota、Playback 幕数/时长、AI 远程生成
+  git commit（除非用户明确要求）
+  无合格素材时禁止编「温柔回忆」散文
+
+**最小 diff**：不重写 ViewModel 业务、不重构三 Tab；只接 EchoAnchorService 调用点。
+
+================================================================================
+二、记 · RecordView life-slip hint + 存盘标记
+================================================================================
+
+**现状**（RecordView.swift）：
+  · `previewHint`：confirm 态、无手写备注 →「想换说法，点下面轻字即可」
+  · `previewFallbackTitle` 与 `HomeItem.Category.defaultRecordTitle` **不一致**（前者「吃饭的一小笔」，后者「餐饮记录」）— eligibility 须覆盖 **两套** 默认标题
+
+**改 hint**（仅文案 + 轻逻辑）：
+
+| 条件 | hint |
+|------|------|
+| confirm 态 + 标题来自预填/场景包（非用户手打） | 「想被将来认出来，可改几个字」 |
+| confirm 态 + 用户已在备注框写过（trim ≥4 字且非脏串/非默认） | 「会像这样留在账本里」 |
+| whisper 态 | 无 hint（保持） |
+
+判断「用户手打」：
+  · `noteEditorExpanded` 曾展开且 `inputTitle` 与 `recordPrefillResult?.title` 不同；或
+  · `onChange(inputTitle)` 时 `applySuggestedTitle: false` 路径下用户有输入
+
+**保存时**（HomeViewModel.addManualRecord + 编辑保存路径）：
+  · 若用户手打/改过 title → `userEditedTitle = true`
+  · 否则 `userEditedTitle = false` 或 nil
+  · HomeItem Codable 增 `var userEditedTitle: Bool?`，decode 缺省 nil（旧数据兼容）
+
+**不做**：保存前拦截、强制填备注、弹窗教育
+
+================================================================================
+三、存 · EchoAnchorService（新建 · 唯一规则源）
+================================================================================
+
+```swift
+struct EchoAnchor: Equatable {
+    let snippet: String
+    let kind: EchoAnchorKind  // .title | .emotion
+    let itemId: UUID
+}
+
+enum EchoAnchorKind { case title, emotion }
+```
+
+公开 API：
+```text
+isEligibleLifeTraceTitle(_ title: String, item: HomeItem) -> Bool
+isDirtyTraceTitle(_ title: String) -> Bool
+isBrandHardTitle(_ title: String, merchantBrandId: String?) -> Bool
+pickEchoAnchor(items: [HomeItem], periodKey: String, now: Date) -> EchoAnchor?
+formatEchoAnchorSentence(_ anchor: EchoAnchor) -> String
+periodKeyForWeek(now:) -> String   // 对齐 SummaryPlaybackQuotaStore.currentWeekKey
+periodKeyForMonth(now:) -> String  // yyyy-MM
+```
+
+--------------------------------------------------------------------------------
+3.1 硬过滤 isEligibleLifeTraceTitle
+--------------------------------------------------------------------------------
+
+title trim 后须 **全部** 满足：
+  · 长度 **4～18** 字（Character.count）
+  · ≠ `category.defaultRecordTitle`（如「餐饮记录」）
+  · ≠ RecordView `previewFallbackTitle` 全套（吃饭的一小笔、路上的一小段…今天的一小笔）
+  · ≠ isDirtyTraceTitle — **复用/对齐** RecordPrefillService.isHabitTitle 里 OCR 时间 regex（08:38、M月d日 等）
+  · ≠ isBrandHardTitle — title 等于 MerchantBrandCatalog.definition(for:)?.displayName 或 isExactBrandAlias，且 item.userEditedTitle != true
+  · ≠ 习惯预填短句 — 可用 RecordPrefillService 同规则判断 isHabitTitle；MVP 一律 exclude，**除非** userEditedTitle == true
+  · 不含隐私 denylist：密码、身份证、银行卡、验证码
+
+建议：RecordPrefillService 将 isHabitTitle / 脏标题 regex **internal static** 供 EchoAnchorService 调用，避免两套规则漂移。
+
+--------------------------------------------------------------------------------
+3.2 软排序 pickEchoAnchor
+--------------------------------------------------------------------------------
+
+period 内 items：amount > 0，时间落在对应 week/month interval（week 用 PlaybackService.isoCalendar 与 buildWeekSummary 一致）。
+
+合格 title 池计分，取最高；同分 `stableHash(item.id.uuidString + periodKey) % 5`：
+  +30  落在 period 最近 7 天内
+  +25  emotionTag ≠ HomeItem.inferEmotionTag(category, amount)
+  +15  金额不极端（period 内 P25～P75，或 ≤ 中位数×2）
+  +10  title 6～14 字
+  +5   merchantBrandId != nil 且 userEditedTitle == true
+  +5   userEditedTitle == true
+
+降级（**仅 title 池 0 条** 且 items.count ≥ 2）：
+  · 选 1 条非默认 emotionTag，kind=.emotion
+  · MVP **默认开启**；仍无 → nil
+
+频率：
+  · 同一 periodKey **全局 1 条**
+  · items.count < 2 → nil
+
+--------------------------------------------------------------------------------
+3.3 锚点句 formatEchoAnchorSentence
+--------------------------------------------------------------------------------
+
+kind=.title（stableHash(itemId.uuidString) % 2）：
+  A. 「有一笔你写下「{snippet}」，像是那天给自己留的一点照顾。」
+  B. 「{snippet}」—— 有一笔是这样留在账本里的。」
+
+kind=.emotion：
+  C. 「有一次你标记过「{snippet}」，像一段很小的生活注脚。」
+
+禁止 coach / 占比 / 预算 / 心理分析；snippet 空不输出。
+
+================================================================================
+四、望 · 落点接线（按现有代码挂钩）
+================================================================================
+
+**同 period 锚点句在用户可见 UI 只出现 1 次。** 优先级写进代码注释。
+
+--------------------------------------------------------------------------------
+4.1 主落点 · 周切片「印象一笔」幕
+--------------------------------------------------------------------------------
+
+文件：PlaybackService.swift · `buildWeekSummary`
+
+**现状**：
+  · `rows.count >= 3` 时追加 `id: "week-highlight"` 章（title「印象一笔」）
+  · `highlightItem(in:)` 按金额+非泛标题选一笔；narration 来自 PlaybackCopyPool `week-highlight`
+  · SummaryPlaybackSheet 对 highlight 章有特殊 UI（`chapter.id.contains("highlight")`）
+
+**改法**（最小）：
+  1. buildWeekSummary 内 `let weekKey = ...` 后调用：
+     `EchoAnchorService.shared.pickEchoAnchor(items: rows, periodKey: weekKey, now: now)`
+  2. 若 anchor != nil 且将生成 week-highlight 章：
+     · narration 改为 `SummaryNarration(warm: sentence, plain: sentence)`，**不用** PlaybackCopyPool
+     · metrics 仍可保留 highlightItem 的 title/amount/day（或 anchor 对应 item）
+  3. 若 anchor == nil → **零回归**，保持现有 highlightItem + CopyPool
+
+**勿改**：章 id、durationSec、幕数、quota、SummaryPlaybackSheet 结构
+
+--------------------------------------------------------------------------------
+4.2 备落点 · 复盘周记
+--------------------------------------------------------------------------------
+
+文件：InsightWebView.swift · `formatWeeklyJournalText`
+
+**规则**：仅当 **本周不会** 在切片展示锚点时追加（防重复）：
+  · `recentPositiveItems(days: 7).count < 3` → 无 week-highlight 章 → 可追加
+  · 或 `count >= 3` 但 pickEchoAnchor == nil → 不追加
+  · `count >= 3` 且 anchor != nil → **切片会展示，周记不追加**
+
+追加方式：在 return 字符串 **末尾** 句号连接 `formatEchoAnchorSentence(anchor)`。
+
+**勿** 单独开「回忆卡」；锚点融在周记段落里。
+
+--------------------------------------------------------------------------------
+4.3 备落点 · 月记（MVP 建议做）
+--------------------------------------------------------------------------------
+
+**现状**：`buildMonthSummary` **无** highlight 章（只有 month-intro … month-action 6 章）。
+
+文件：InsightWebView.swift · `formatMonthlyJournalText`
+  · periodKey = yyyy-MM（与 PlaybackService.monthKeyFormatter 一致）
+  · 对 `currentMonthPositiveItems` 调 pickEchoAnchor
+  · 有则末尾追加锚点句（月记无切片竞争，直接 append）
+
+月度「听听这一段」播放 **不接** 锚点（无 highlight 章）；仅月记 Sheet 正文体现。
+
+--------------------------------------------------------------------------------
+4.4 弱闭环 · 痕迹票根 slip
+--------------------------------------------------------------------------------
+
+文件：StatsWebView.swift · `traceSlipRow`
+
+在 title 行与 meta 行之间，若：
+  `let defaultTag = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)`
+  `item.emotionTag != defaultTag`
+则加一行 muted 12pt：`Text(item.emotionTag)`，色 AppColors.subtext
+
+**不占** 每 period 1 次 cap。
+
+================================================================================
+五、Xcode 工程
+================================================================================
+
+新建 `NativeDemoApp/Services/EchoAnchorService.swift` 后：
+  · 加入 NativeDemoApp target（project.pbxproj）
+  · 可用 `final class EchoAnchorService` + `static let shared` 或 enum namespace
+
+编译须 0 error；真机 Run 验证。
+
+================================================================================
+六、真机验收清单（按顺序测）
+================================================================================
+
+**造数**
+  1. 记 3 笔，其中 1 笔备注手写「加班后吃点热乎的」（餐饮即可）
+  2. 痕迹 Tab → 票根见 emotionTag（若改过情绪或非默认）
+  3. 痕迹 Tab →「听听这一段」→ 播到「印象一笔」→ 听到锚点句 A 或 B
+  4. 复盘 Tab → 周记 **不应** 重复同句（因 count≥3 走切片）
+  5. 删到只剩 1～2 笔合格手写 → 无切片 highlight → 周记末可出现锚点
+  6. 全用默认标题/习惯预填 → 无锚点，叙述与改前一致
+  7. 仅非默认 emotionTag、无合格 title → 听到/看到 C 模板（若开降级）
+  8. 记账 confirm 态：预填时 hint「想被将来认出来…」；手打后「会像这样留在账本里」
+
+**回归**
+  [ ] 痕迹/复盘首屏 IA 未变（场记+票根 / 周记体）
+  [ ] 无锚点周：听听、周记、月记与改前一致
+  [ ] 细查 Sheet 合计/筛选仍可用
+  [ ] §0.3 / §0.6 评审问句通过
+
+================================================================================
+七、明确不做（MVP 外）
+================================================================================
+
+  · Web / 跨端规则对齐
+  · 改 PlaybackCopyPool 全池文案
+  · 月度切片新增 highlight 章
+  · AI 改写锚点、每条都 echo、回忆 Feed
+  · 锚点进痕迹 hero 叙事正文（只在切片/周记/月记）
+
+================================================================================
+参考（改前必读）
+================================================================================
+
+@PRODUCT_NORTH_STAR.md §0.6
+@PROMPT_功能-记望回指_全链路.txt
+@PROMPT_修复-A2至A5_记账四处小体验-iOS.txt
+@NativeDemoApp/Models/HomeItem.swift
+@NativeDemoApp/Services/RecordPrefillService.swift
+@NativeDemoApp/Services/PlaybackService.swift        ← buildWeekSummary · week-highlight · highlightItem
+@NativeDemoApp/Services/PlaybackCopyPool.swift       ← week-highlight 模板（有锚点时 bypass）
+@NativeDemoApp/Views/RecordView.swift                ← previewHint · previewFallbackTitle
+@NativeDemoApp/ViewModels/HomeViewModel.swift        ← addManualRecord
+@NativeDemoApp/Views/StatsWebView.swift              ← traceSlipRow · traceChapterCard
+@NativeDemoApp/Views/InsightWebView.swift            ← formatWeeklyJournalText · formatMonthlyJournalText
+@NativeDemoApp/Views/SummaryPlaybackSheet.swift      ← highlight 章 UI（勿破坏）
