@@ -16,9 +16,12 @@ struct InsightWebView: View {
     @State private var monthlyTrialModal: MonthlyTrialModal?
     @State private var isSavingWeeklyShareCard = false
     @State private var weeklyShareSaveMessage: String?
+    @State private var weeklyRhythmMessage: String?
     @State private var isTodayInsightExpanded = false
     @State private var showMonthlyInsightSheet = false
     @State private var showTodayInsightSheet = false
+    @State private var monthlyActionMessage: String?
+    @State private var monthlyNarrativeVariant = 0
     private let trialTotal = 5
 
     private struct AIStatusPill: Equatable {
@@ -36,6 +39,10 @@ struct InsightWebView: View {
         let id = UUID()
         var title: String
         var body: String
+    }
+
+    private var hasMemberAccess: Bool {
+        settingsViewModel.settings.hasMemberAccess
     }
 
     var body: some View {
@@ -96,6 +103,9 @@ struct InsightWebView: View {
                     let text = homeViewModel.buildWeeklyRhythmText()
                     homeViewModel.setLatestActionCard(text, scope: "weekly")
                     homeViewModel.markWeeklyRhythmReviewed()
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        weeklyRhythmMessage = text
+                    }
                 }
                 quietTextButton("生成周度分享卡") {
                     homeViewModel.markWeeklyShareGenerated()
@@ -113,6 +123,14 @@ struct InsightWebView: View {
                 Text(weeklyShareSaveMessage)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.subtext)
+            }
+
+            if let weeklyRhythmMessage {
+                Text(weeklyRhythmMessage)
+                    .font(.system(size: 13))
+                    .lineSpacing(4)
+                    .foregroundStyle(AppColors.text.opacity(0.78))
+                    .padding(.top, 2)
             }
         }
         .padding(.leading, 4)
@@ -151,7 +169,7 @@ struct InsightWebView: View {
                 .padding(.vertical, 14)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(0.42).mix(with: Color(red: 1.0, green: 0.94, blue: 0.84), by: 0.35))
+                        .fill(AppColors.monthlyInsightBg)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -192,16 +210,13 @@ struct InsightWebView: View {
         }
         let weekItems = recentPositiveItems(days: 7)
         let countText = weekItems.isEmpty ? "这周还没留下太多记录" : "这周记下 \(weekItems.count) 笔"
-        let top = homeViewModel.weekTopCategoryText.isEmpty ? "日常" : homeViewModel.weekTopCategoryText
-        var text = "\(countText)，「\(top)」冒出来几次，像随手留在日子里的小注脚。\(blocks.structure)"
-        // Echo priority: when week-highlight can exist, playback owns the anchor to avoid repeating it here.
-        if weekItems.count < 3 {
-            let periodKey = EchoAnchorService.shared.periodKeyForWeek()
-            if let anchor = EchoAnchorService.shared.pickEchoAnchor(items: weekItems, periodKey: periodKey) {
-                let sentence = EchoAnchorService.shared.formatEchoAnchorSentence(anchor)
-                if !sentence.isEmpty {
-                    text += sentence
-                }
+        let totalText = weekItems.isEmpty ? "" : "，合计 \(weekItems.reduce(0) { $0 + $1.amount }.formatted(.cny))"
+        var text = "\(countText)\(totalText)。\(blocks.summary)\(blocks.structure)"
+        let periodKey = EchoAnchorService.shared.periodKeyForWeek()
+        if let anchor = EchoAnchorService.shared.pickEchoAnchor(items: weekItems, periodKey: periodKey) {
+            let sentence = EchoAnchorService.shared.formatEchoAnchorSentence(anchor)
+            if !sentence.isEmpty {
+                text += sentence
             }
         }
         return text
@@ -240,6 +255,9 @@ struct InsightWebView: View {
                 let text = homeViewModel.buildWeeklyRhythmText()
                 homeViewModel.setLatestActionCard(text, scope: "weekly")
                 homeViewModel.markWeeklyRhythmReviewed()
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    weeklyRhythmMessage = text
+                }
             }
 
             HStack(spacing: 14) {
@@ -257,6 +275,12 @@ struct InsightWebView: View {
                 Text(weeklyShareSaveMessage)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.subtext)
+            }
+            if let weeklyRhythmMessage {
+                Text(weeklyRhythmMessage)
+                    .font(.system(size: 13))
+                    .foregroundStyle(AppColors.text.opacity(0.78))
+                    .padding(.top, 2)
             }
         }
         .glassPanel(radius: 24, padding: 20)
@@ -285,8 +309,7 @@ struct InsightWebView: View {
 
     private var monthlyInsightSection: some View {
         let left = max(0, trialTotal - monthlyTrialUsed)
-        let tier = settingsViewModel.memberTier.lowercased()
-        let isMember = ["monthly", "yearly", "lifetime"].contains(tier)
+        let isMember = hasMemberAccess
         let exhausted = !isMember && monthlyTrialUsed >= trialTotal
 
         return VStack(alignment: .leading, spacing: 12) {
@@ -296,7 +319,9 @@ struct InsightWebView: View {
 
             monthlyGenerateControl(isMember: isMember, exhausted: exhausted)
             monthlyTrialText(left: left, isMember: isMember, exhausted: exhausted)
-            monthlyAIStatusView
+            if monthlyInsightGenerated || homeViewModel.isGeneratingMonthlyInsight || monthlyAIStatus?.kind == .error {
+                monthlyAIStatusView
+            }
             monthlyErrorView
             monthlyReportView
             advancedInsightToggle
@@ -428,10 +453,15 @@ struct InsightWebView: View {
                 homeViewModel.markMonthlyClosing()
             }
             softActionButton("保存月度小结") {
-                homeViewModel.markMonthlySaveSummary()
+                saveMonthlySummary()
             }
             softActionButton("切换叙述风格") {
-                homeViewModel.regenerateMonthlyInsight()
+                changeMonthlyNarrativeStyle()
+            }
+            if let monthlyActionMessage {
+                Text(monthlyActionMessage)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.78))
             }
         }
     }
@@ -458,7 +488,7 @@ struct InsightWebView: View {
     @ViewBuilder
     private var advancedInsightContent: some View {
         if showAdvancedInsight {
-            if settingsViewModel.memberTier == "free" {
+            if !hasMemberAccess {
                 Button {
                     onShowMemberPricing?()
                 } label: {
@@ -582,8 +612,7 @@ struct InsightWebView: View {
 
     private var monthlyInsightSheet: some View {
         let left = max(0, trialTotal - monthlyTrialUsed)
-        let tier = settingsViewModel.memberTier.lowercased()
-        let isMember = ["monthly", "yearly", "lifetime"].contains(tier)
+        let isMember = hasMemberAccess
         let exhausted = !isMember && monthlyTrialUsed >= trialTotal
 
         return ZStack {
@@ -682,24 +711,33 @@ struct InsightWebView: View {
                 }
             }
 
-            monthlyAIStatusView
-                .padding(.top, 8)
+            if monthlyInsightGenerated || homeViewModel.isGeneratingMonthlyInsight || monthlyAIStatus?.kind == .error {
+                monthlyAIStatusView
+                    .padding(.top, 8)
+            }
             monthlyErrorView
                 .padding(.top, 6)
 
             if monthlyInsightGenerated, monthlyReport != nil, !homeViewModel.isGeneratingMonthlyInsight {
                 HStack(spacing: 6) {
                     monthlyFootnoteSecondaryButton("保存月度小结") {
-                        homeViewModel.markMonthlySaveSummary()
+                        saveMonthlySummary()
                     }
                     Text("·")
                         .font(.system(size: 12))
                         .foregroundStyle(AppColors.subtext.opacity(0.45))
                     monthlyFootnoteSecondaryButton("换个叙述风格") {
-                        homeViewModel.regenerateMonthlyInsight()
+                        changeMonthlyNarrativeStyle()
                     }
                 }
                 .padding(.top, 10)
+            }
+
+            if let monthlyActionMessage {
+                Text(monthlyActionMessage)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.accent.opacity(0.72))
+                    .padding(.top, 8)
             }
 
             Button {
@@ -746,7 +784,7 @@ struct InsightWebView: View {
             return "正在梳理这一月..."
         }
         if monthlyInsightGenerated, let report = monthlyReport {
-            return formatMonthlyJournalText(report)
+            return formatMonthlyJournalText(report, variant: monthlyNarrativeVariant)
         }
         return "这一月还没有回顾。点下面生成，会在这里长出一封月记。"
     }
@@ -761,7 +799,7 @@ struct InsightWebView: View {
         return "先放在这里，等你想读的时候再打开。"
     }
 
-    private func formatMonthlyJournalText(_ report: HomeViewModel.MonthlyInsightReport) -> String {
+    private func formatMonthlyJournalText(_ report: HomeViewModel.MonthlyInsightReport, variant: Int) -> String {
         let monthItems = currentMonthPositiveItems
         guard !monthItems.isEmpty else {
             return "这一月还没有足够记录，月记先留一页空白。"
@@ -770,7 +808,17 @@ struct InsightWebView: View {
             .map { (category: $0.key, count: $0.value.count, total: $0.value.reduce(0) { $0 + $1.amount }) }
             .sorted { $0.total > $1.total }
             .first?.category.rawValue ?? "日常"
-        var text = "这个月记下来 \(monthItems.count) 笔，花费很轻，「\(top)」偶尔露头。\(report.structure)"
+        let total = monthItems.reduce(0) { $0 + $1.amount }
+        let opening: String
+        switch variant % 3 {
+        case 1:
+            opening = "换个角度读：这个月留下 \(monthItems.count) 笔，\(total.formatted(.cny)) 慢慢散在生活里，「\(top)」是最清楚的一条线。"
+        case 2:
+            opening = "再轻一点写：\(monthItems.count) 笔记录像一页月记，\(total.formatted(.cny)) 里，「\(top)」先被看见。"
+        default:
+            opening = "这个月记下来 \(monthItems.count) 笔，\(total.formatted(.cny)) 慢慢落在账本里，「\(top)」偶尔露头。"
+        }
+        var text = "\(opening)\(report.structure)"
         let periodKey = EchoAnchorService.shared.periodKeyForMonth()
         if let anchor = EchoAnchorService.shared.pickEchoAnchor(items: monthItems, periodKey: periodKey) {
             let sentence = EchoAnchorService.shared.formatEchoAnchorSentence(anchor)
@@ -779,6 +827,21 @@ struct InsightWebView: View {
             }
         }
         return text
+    }
+
+    private func saveMonthlySummary() {
+        homeViewModel.markMonthlySaveSummary()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            monthlyActionMessage = "已保存到叙账回望里。"
+        }
+    }
+
+    private func changeMonthlyNarrativeStyle() {
+        homeViewModel.regenerateMonthlyInsight()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            monthlyNarrativeVariant = (monthlyNarrativeVariant + 1) % 3
+            monthlyActionMessage = "已换成另一种月记语气。"
+        }
     }
 
     private var currentMonthPositiveItems: [HomeItem] {
@@ -899,18 +962,16 @@ struct InsightWebView: View {
     private var defaultMonthlyAIStatus: AIStatusPill? {
         if homeViewModel.isGeneratingMonthlyInsight {
             return settingsViewModel.useRemoteAI
-                ? AIStatusPill(kind: .live, text: "AI 在线，实时分析中")
-                : AIStatusPill(kind: .fallback, text: "本地兜底，稳定可用")
+                ? AIStatusPill(kind: .live, text: "正在写这一月")
+                : AIStatusPill(kind: .fallback, text: "正在用本地记录写这一月")
         }
-        guard settingsViewModel.useRemoteAI else {
-            return AIStatusPill(kind: .fallback, text: "本地兜底，稳定可用")
-        }
+        guard settingsViewModel.useRemoteAI else { return nil }
         let endpoint = settingsViewModel.aiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         let isDirectModelEndpoint = endpoint.isEmpty || endpoint.contains("open.bigmodel.cn")
         if isDirectModelEndpoint && KeychainService.loadAIAPIKey().isEmpty {
             return AIStatusPill(kind: .error, text: "本地计算，AI Key 未配置")
         }
-        return AIStatusPill(kind: .live, text: "AI 在线，生成时会尝试实时分析")
+        return nil
     }
 
     private func aiStatusPill(_ status: AIStatusPill) -> some View {
@@ -956,8 +1017,8 @@ struct InsightWebView: View {
     private func generateMonthlyInsight(isMember: Bool) async {
         let firstTime = !isMember && monthlyTrialUsed == 0
         monthlyAIStatus = settingsViewModel.useRemoteAI
-            ? AIStatusPill(kind: .live, text: "AI 在线，实时分析中")
-            : AIStatusPill(kind: .fallback, text: "本地兜底，稳定可用")
+            ? AIStatusPill(kind: .live, text: "正在写这一月")
+            : AIStatusPill(kind: .fallback, text: "正在用本地记录写这一月")
 
         let report = await homeViewModel.generateMonthlyInsight(settings: settingsViewModel.settings)
 
@@ -966,6 +1027,7 @@ struct InsightWebView: View {
                 monthlyReport = report
                 monthlyInsightGenerated = true
                 monthlyAIStatus = aiStatus(for: report.source)
+                monthlyActionMessage = nil
             }
 
             guard !isMember else { return }
@@ -974,12 +1036,12 @@ struct InsightWebView: View {
             let left = max(0, trialTotal - monthlyTrialUsed)
             monthlyTrialModal = firstTime
                 ? MonthlyTrialModal(
-                    title: "🎁 新用户福利",
-                    body: "您已获得 5 次免费月度 AI 复盘机会，本次消耗 1 次，剩余 \(left) 次。"
+                    title: "月记写好了",
+                    body: "这次先用掉 1 次月度回顾体验，还剩 \(left) 次。"
                 )
                 : MonthlyTrialModal(
                     title: "月度复盘已生成",
-                    body: "本次消耗 1 次免费次数，剩余 \(left) 次。"
+                    body: "这次用掉 1 次月度回顾体验，还剩 \(left) 次。"
                 )
         }
     }
@@ -987,9 +1049,9 @@ struct InsightWebView: View {
     private func aiStatus(for source: HomeViewModel.AIInsightSource) -> AIStatusPill {
         switch source {
         case .live:
-            return AIStatusPill(kind: .live, text: "AI 在线，已完成实时分析")
+            return AIStatusPill(kind: .live, text: "已写好这一月")
         case .fallback:
-            return AIStatusPill(kind: .fallback, text: "本地兜底，稳定可用")
+            return AIStatusPill(kind: .fallback, text: "已用本地记录写好")
         case .errorFallback:
             return AIStatusPill(kind: .error, text: "本地计算，远程 AI 未接通")
         }
@@ -1110,24 +1172,18 @@ struct WeeklyShareCardView: View {
     var isPetMode: Bool = true
     var nickname: String = "叙账用户"
 
-    private var t: ShareCardTheme { isPetMode ? .pet : .neutral }
+    private var t: ShareCardTheme { .journal }
 
     struct ShareCardTheme {
         let bgStart, bgEnd: Color; let panelBg, panelBorder: Color
         let accent, titleSub, textMain, textMuted: Color
         let footer, footerSub: Color
-        static let pet = ShareCardTheme(
-            bgStart: Color(hex: "fff3e8"), bgEnd: Color(hex: "ffe9f2"),
-            panelBg: Color.white.opacity(0.94), panelBorder: Color(hex: "efd7c7"),
-            accent: Color(hex: "d48754"),
-            titleSub: Color(hex: "b79a86"), textMain: Color(hex: "4a3f37"), textMuted: Color(hex: "957f70"),
-            footer: Color(hex: "887566"), footerSub: Color(hex: "b19c8e"))
-        static let neutral = ShareCardTheme(
-            bgStart: Color(hex: "f3f6fb"), bgEnd: Color(hex: "edf1f7"),
-            panelBg: Color.white.opacity(0.95), panelBorder: Color(hex: "d8deea"),
-            accent: Color(hex: "5e708a"),
-            titleSub: Color(hex: "8c96a8"), textMain: Color(hex: "2f3947"), textMuted: Color(hex: "6f7a8d"),
-            footer: Color(hex: "6b7688"), footerSub: Color(hex: "8f99ab"))
+        static let journal = ShareCardTheme(
+            bgStart: Color(hex: "eef0f4"), bgEnd: Color(hex: "f7f3ec"),
+            panelBg: Color.white.opacity(0.72), panelBorder: Color(hex: "eadfce"),
+            accent: Color(hex: "7fb3a2"),
+            titleSub: Color(hex: "8c96a8"), textMain: Color(hex: "253041"), textMuted: Color(hex: "6f7b8f"),
+            footer: Color(hex: "4c5968"), footerSub: Color(hex: "9aa4b2"))
     }
 
     init(
@@ -1181,84 +1237,83 @@ struct WeeklyShareCardView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [t.bgStart, t.bgEnd], startPoint: .top, endPoint: .bottom)
+            LinearGradient(colors: [t.bgStart, t.bgEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
 
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(t.panelBg.opacity(0.62))
+                .fill(t.panelBg)
                 .overlay(
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(t.panelBorder.opacity(0.52), lineWidth: 0.8)
+                        .stroke(t.panelBorder.opacity(0.62), lineWidth: 1)
                 )
                 .padding(.horizontal, 26)
                 .padding(.vertical, 24)
 
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(periodText)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(t.titleSub)
-                        .lineLimit(1)
-                    Spacer()
-                    Text("叙账")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(t.accent.opacity(0.72))
-                }
+                Text("周记摘页")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(t.titleSub.opacity(0.92))
+
+                Text(periodText)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(t.titleSub.opacity(0.82))
+                    .lineLimit(1)
+                    .padding(.top, 6)
 
                 Text(displayNickname)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(t.textMuted.opacity(0.82))
                     .lineLimit(1)
-                    .padding(.top, 34)
+                    .padding(.top, 30)
 
-                Text(displayHeadline)
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                Text(journalTitle)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(t.textMain)
-                    .lineSpacing(7)
+                    .lineSpacing(6)
                     .lineLimit(3)
-                    .minimumScaleFactor(0.72)
+                    .minimumScaleFactor(0.76)
                     .padding(.top, 10)
-                    .frame(minHeight: 148, alignment: .topLeading)
+                    .frame(minHeight: 98, alignment: .topLeading)
 
-                Text(displaySubtitle)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundStyle(t.footer)
-                    .lineSpacing(5)
-                    .lineLimit(3)
-                    .minimumScaleFactor(0.78)
-                    .padding(.top, 20)
+                Rectangle()
+                    .fill(t.panelBorder.opacity(0.62))
+                    .frame(height: 1)
+                    .padding(.top, 16)
+                    .padding(.bottom, 18)
+
+                Text(journalBody)
+                    .font(.system(size: 18, weight: .medium, design: .rounded))
+                    .foregroundStyle(t.textMain.opacity(0.92))
+                    .lineSpacing(7)
+                    .lineLimit(8)
+                    .minimumScaleFactor(0.74)
 
                 if let anchor = displayAnchorLine {
                     Text(anchor)
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundStyle(t.accent)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-                        .padding(.top, 18)
+                        .lineSpacing(4)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.76)
+                        .padding(.top, 20)
                 }
 
                 Text(auxiliaryLine)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(t.textMuted)
-                    .padding(.top, displayAnchorLine == nil ? 18 : 12)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(t.textMuted.opacity(0.86))
+                    .padding(.top, displayAnchorLine == nil ? 22 : 14)
 
                 Spacer(minLength: 18)
 
                 rhythmTexture
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 18)
 
-                Text("来自 叙账 · 温柔回看每一周")
+                Text("来自 叙账 · 认真记录，慢慢回看")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(t.footerSub)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 42)
             .padding(.vertical, 38)
-        }
-        .overlay(alignment: .topTrailing) {
-            cornerDec
-                .frame(width: 52, height: 36)
-                .padding(.top, 32)
-                .padding(.trailing, 32)
         }
         .frame(width: 390, height: 580)
         .clipped()
@@ -1269,22 +1324,27 @@ struct WeeklyShareCardView: View {
         return trimmed.isEmpty ? "这一周" : "\(trimmed)的这一周"
     }
 
-    private var displayHeadline: String {
-        headline
+    private var journalTitle: String {
+        if recordCount <= 2 {
+            return "这周先留下几段小痕迹"
+        }
+        return "这周记下 \(recordCount) 笔生活"
+    }
+
+    private var journalBody: String {
+        let cleanedHeadline = headline
             .replacingOccurrences(of: "，([^，。]+)约占\\d+%", with: "，$1出现得比较多", options: .regularExpression)
             .replacingOccurrences(of: "约占\\d+%", with: "出现得比较多", options: .regularExpression)
             .replacingOccurrences(of: " 笔记录", with: " 次记录")
-    }
-
-    private var displaySubtitle: String {
-        let trimmed = subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "温柔回看，不必苛责。" }
-        if trimmed.contains("建议") || trimmed.contains("数据不足") {
-            return "这周先留下了一点痕迹，慢慢来就好。"
-        }
-        return trimmed
+        let cleanedSubtitle = subtitle
+            .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "¥\\s?[0-9,]+(\\.[0-9]+)?", with: "", options: .regularExpression)
             .replacingOccurrences(of: "\\s{2,}", with: " ", options: .regularExpression)
+        let middle = cleanedHeadline.isEmpty ? "这一周已经留下了可以回看的生活痕迹。" : cleanedHeadline
+        let closing = cleanedSubtitle.contains("建议") || cleanedSubtitle.contains("数据不足") || cleanedSubtitle.isEmpty
+            ? "不用急着评价它，先把这一周轻轻收好。"
+            : cleanedSubtitle
+        return "\(middle)\n\(closing)"
     }
 
     private var displayAnchorLine: String? {
@@ -1294,41 +1354,24 @@ struct WeeklyShareCardView: View {
     }
 
     private var auxiliaryLine: String {
-        if recordCount <= 2 {
-            return "这周刚留下 \(recordCount) 段小痕迹。"
-        }
-        return "这周记了 \(recordCount) 次。"
+        let top = topCategory.trimmingCharacters(in: .whitespacesAndNewlines)
+        return top.isEmpty ? "\(recordCount) 笔记录被收进这一页。" : "\(recordCount) 笔记录 · \(top) 被看见。"
     }
 
     private var rhythmTexture: some View {
-        let maxV = max(dailyTrend.map(\.1).max() ?? 1, 1)
-        let chartH: CGFloat = 34
-        return HStack(alignment: .bottom, spacing: 7) {
+        HStack(spacing: 8) {
             ForEach(Array(dailyTrend.enumerated()), id: \.offset) { idx, pt in
-                let h = max(4, (pt.1 / maxV) * chartH)
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(t.accent.opacity(pt.1 > 0 ? 0.34 : 0.16))
-                    .frame(width: 24, height: h)
+                Circle()
+                    .fill(t.accent.opacity(pt.1 > 0 ? 0.40 : 0.13))
+                    .frame(width: pt.1 > 0 ? 8 : 5, height: pt.1 > 0 ? 8 : 5)
                     .accessibilityLabel("\(idx)")
             }
+            Spacer()
+            Text("这一周")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(t.footerSub)
         }
-        .frame(maxWidth: .infinity, minHeight: 40, alignment: .bottomLeading)
-    }
-
-    // MARK: - Corner decoration
-
-    @ViewBuilder private var cornerDec: some View {
-        if isPetMode {
-            Path { p in
-                p.move(to: CGPoint(x: 12, y: 20)); p.addLine(to: CGPoint(x: 10, y: 2)); p.addLine(to: CGPoint(x: 20, y: 14))
-                p.move(to: CGPoint(x: 38, y: 20)); p.addLine(to: CGPoint(x: 40, y: 2)); p.addLine(to: CGPoint(x: 30, y: 14))
-                p.addEllipse(in: CGRect(x: 10, y: 14, width: 30, height: 22))
-            }.stroke(t.accent.opacity(0.75), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-        } else {
-            VStack(spacing: 4) { ForEach(0..<3) { i in
-                RoundedRectangle(cornerRadius: 2).fill(t.accent.opacity(0.72 - Double(i)*0.1)).frame(width: 38-CGFloat(i)*6, height: 4)
-            }}.rotationEffect(.degrees(12)).offset(y: -6)
-        }
+        .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
     }
 
     func snapshot() -> UIImage? {

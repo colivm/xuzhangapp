@@ -444,7 +444,7 @@ struct SummaryPlaybackSheet: View {
                 Button {
                     handlePrimaryDoneAction()
                 } label: {
-                    Text(isMember ? "继续回看" : "了解会员")
+                    Text(isMember ? "再看一遍" : "了解会员")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)

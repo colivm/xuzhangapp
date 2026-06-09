@@ -16,6 +16,14 @@ struct AppColors {
     static let heroGradientTeal = Color(red: 0.69, green: 0.88, blue: 0.86)           // teal tint
     static let tabActiveBg = Color(red: 0.67, green: 0.87, blue: 0.75).opacity(0.42)
     static let lockGold = Color(red: 0.788, green: 0.651, blue: 0.290)           // #c9a64a
+    static let tabInactiveBg = Color(red: 0.749, green: 0.851, blue: 0.817).opacity(0.30)
+    static let tabInactiveGlyph = Color(red: 0.467, green: 0.592, blue: 0.598).opacity(0.50)
+    static let floatingPetPanel = Color(red: 0.749, green: 0.851, blue: 0.817).opacity(0.37)
+    static let settingsIdentityPanel = Color(red: 0.774, green: 0.866, blue: 0.836).opacity(0.25)
+    static let settingsChapterPanel = Color(red: 0.789, green: 0.875, blue: 0.846).opacity(0.22)
+    static let tracePlaybackButtonBg = Color(red: 0.774, green: 0.866, blue: 0.836).opacity(0.25)
+    static let traceAppendixBg = Color(red: 0.749, green: 0.851, blue: 0.817).opacity(0.19)
+    static let monthlyInsightBg = Color(red: 1.0, green: 0.979, blue: 0.944).opacity(0.62)
 }
 
 // MARK: - Glass Panel Modifier
@@ -360,7 +368,7 @@ struct ContentView: View {
             Circle()
                 .fill(isSelected
                     ? AppColors.accent.opacity(0.34)
-                    : Color.white.opacity(0.42).mix(with: AppColors.accent.opacity(0.18), by: 0.5)
+                    : AppColors.tabInactiveBg
                 )
                 .frame(width: 24, height: 24)
 
@@ -388,7 +396,7 @@ struct ContentView: View {
     private func tabTodayGlyph(isSelected: Bool) -> some View {
         let fg = isSelected
             ? AppColors.accent.opacity(0.84)
-            : AppColors.subtext.opacity(0.74).mix(with: AppColors.accent.opacity(0.26), by: 0.5)
+            : AppColors.tabInactiveGlyph
         return ZStack {
             Path { p in
                 p.move(to: CGPoint(x: 6.8, y: 14.4))
@@ -421,7 +429,7 @@ struct ContentView: View {
     private func tabRecordGlyph(isSelected: Bool) -> some View {
         let fg = isSelected
             ? AppColors.accent.opacity(0.84)
-            : AppColors.subtext.opacity(0.74).mix(with: AppColors.accent.opacity(0.26), by: 0.5)
+            : AppColors.tabInactiveGlyph
         return ZStack {
             Path { p in
                 p.move(to: CGPoint(x: 7.4, y: 7.4))
@@ -469,7 +477,7 @@ struct ContentView: View {
     private func tabStatsGlyph(isSelected: Bool) -> some View {
         let fg = isSelected
             ? AppColors.accent.opacity(0.84)
-            : AppColors.subtext.opacity(0.74).mix(with: AppColors.accent.opacity(0.26), by: 0.5)
+            : AppColors.tabInactiveGlyph
         return ZStack {
             Path { p in
                 p.move(to: CGPoint(x: 6.7, y: 15.2))
@@ -500,7 +508,7 @@ struct ContentView: View {
     private func tabInsightGlyph(isSelected: Bool) -> some View {
         let fg = isSelected
             ? AppColors.accent.opacity(0.84)
-            : AppColors.subtext.opacity(0.74).mix(with: AppColors.accent.opacity(0.26), by: 0.5)
+            : AppColors.tabInactiveGlyph
         return ZStack {
             Path { p in
                 p.move(to: CGPoint(x: 6.7, y: 8.6))
@@ -548,7 +556,7 @@ struct ContentView: View {
     private func tabSettingsGlyph(isSelected: Bool) -> some View {
         let fg = isSelected
             ? AppColors.accent.opacity(0.84)
-            : AppColors.subtext.opacity(0.74).mix(with: AppColors.accent.opacity(0.26), by: 0.5)
+            : AppColors.tabInactiveGlyph
         return ZStack {
             Circle()
                 .fill(fg.opacity(0.58))
@@ -614,7 +622,7 @@ struct ContentView: View {
             .frame(width: 52, height: 52)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(AppColors.panel.mix(with: AppColors.accent.opacity(0.12), by: 0.5))
+                    .fill(AppColors.floatingPetPanel)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)

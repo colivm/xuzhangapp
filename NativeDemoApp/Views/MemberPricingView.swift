@@ -33,8 +33,7 @@ struct MemberPricingView: View {
     private let freeQuotaFootnote = "免费体验：本周生活切片每自然周 1 次 · 本月生活章终生 3 次 · OCR 每日 3 次 · 今日生活回放每日 1 次。开通会员后，周/月切片与 OCR 可不限次使用。"
 
     private var isMember: Bool {
-        let tier = settingsViewModel.memberTier.lowercased()
-        return ["monthly", "yearly", "lifetime"].contains(tier)
+        settingsViewModel.settings.hasMemberAccess
     }
 
     var body: some View {
@@ -251,7 +250,7 @@ struct MemberPricingView: View {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 32))
                 .foregroundStyle(AppColors.accent)
-            Text("你已开通\(memberTierDisplayName(settingsViewModel.memberTier))")
+            Text("你已开通\(AppSettings.memberTierDisplayName(settingsViewModel.memberTier))")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(AppColors.text)
             Text("所有会员权益已解锁，感谢你的信任与陪伴。")
@@ -459,14 +458,6 @@ struct MemberPricingView: View {
         return iapService.displayPrice(for: tier, fallback: plan.price)
     }
 
-    private func memberTierDisplayName(_ tier: String) -> String {
-        switch tier.lowercased() {
-        case "monthly": return "月度会员"
-        case "yearly": return "年度会员"
-        case "lifetime": return "永久会员"
-        default: return "会员"
-        }
-    }
 }
 
 // MARK: - Member Plan Model

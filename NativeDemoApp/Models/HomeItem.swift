@@ -160,7 +160,7 @@ extension Date {
         if !Calendar.current.isDate(self, equalTo: Date(), toGranularity: .year) {
             return Date.zhBillDateTimeWithYearFormatter.string(from: self)
         }
-        Date.zhBillDateTimeFormatter.string(from: self)
+        return Date.zhBillDateTimeFormatter.string(from: self)
     }
 
     var zhBillTime: String {

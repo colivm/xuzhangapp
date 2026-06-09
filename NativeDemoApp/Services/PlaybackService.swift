@@ -725,18 +725,15 @@ final class PlaybackService {
     }
 
     private func weeklyShareAnchorLine(from summary: SummaryPlayback) -> String? {
-        if let highlight = summary.chapters.first(where: { $0.id == "week-highlight" }),
-           let title = highlight.metrics["title"],
-           !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            if let day = highlight.metrics["day"], !day.isEmpty {
-                return "\(day)那笔：\(title)"
+        if let highlight = summary.chapters.first(where: { $0.id == "week-highlight" }) {
+            let narration = highlight.narration.plain.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !narration.isEmpty {
+                return narration
             }
-            return "有一笔：\(title)"
-        }
-        if let rhythm = summary.chapters.first(where: { $0.id == "week-rhythm" }),
-           let busiest = rhythm.metrics["busiestDay"],
-           !busiest.isEmpty {
-            return "\(busiest)最满"
+            if let title = highlight.metrics["title"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !title.isEmpty {
+                return "有一笔是这样留在账本里的：\(title)"
+            }
         }
         return nil
     }

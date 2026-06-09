@@ -489,8 +489,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     var hasMemberAccess: Bool {
-        let tier = LocalStore.loadSettings().memberTier.lowercased()
-        return ["monthly", "yearly", "lifetime"].contains(tier)
+        AppSettings.hasMemberAccess(tier: LocalStore.loadSettings().memberTier)
     }
 
     var monthExpenseTotal: Double {
@@ -980,9 +979,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func triggerMemberNudge(scene: MemberFlowScene) {
-        let tier = LocalStore.loadSettings().memberTier.lowercased()
-        let isPaid = ["monthly", "yearly", "lifetime"].contains(tier)
-        guard !isPaid else {
+        guard !AppSettings.hasMemberAccess(tier: LocalStore.loadSettings().memberTier) else {
             memberNudgeCopy = nil
             activeMemberNudgeScene = nil
             return
@@ -1216,8 +1213,19 @@ final class HomeViewModel: ObservableObject {
     }
 
     func buildWeeklyRhythmText() -> String {
+        let cal = Calendar.current
+        guard let start = cal.date(byAdding: .day, value: -6, to: Date()) else {
+            return "这周的记录还不够完整，先继续把日子慢慢记下来。"
+        }
+        let weekItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
+        guard !weekItems.isEmpty else {
+            return "这周还没有足够账单，先不用急着复盘。多记几笔后，节奏会更清楚。"
+        }
         let top = weekTopCategoryText
-        return "这周「\(top)」出现得更勤一点，像这段日子的一个小主题。"
+        let total = weekItems.reduce(0) { $0 + $1.amount }
+        let activeDays = Set(weekItems.map { cal.startOfDay(for: $0.createdAt) }).count
+        let rhythm = activeDays >= 5 ? "记录分布得比较均匀" : "记录集中在 \(activeDays) 天里"
+        return "这周共 \(weekItems.count) 笔，合计 \(total.formatted(.cny))，\(rhythm)。 「\(top)」是最显眼的一段，但更值得留下的是这一周已经有了可回看的生活节奏。"
     }
 
     func markWeeklyTag() {

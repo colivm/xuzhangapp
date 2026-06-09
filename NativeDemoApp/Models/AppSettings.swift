@@ -128,6 +128,23 @@ extension AppSettings {
 }
 
 extension AppSettings {
+    static func hasMemberAccess(tier: String) -> Bool {
+        ["monthly", "yearly", "lifetime"].contains(tier.lowercased())
+    }
+
+    var hasMemberAccess: Bool {
+        Self.hasMemberAccess(tier: memberTier)
+    }
+
+    static func memberTierDisplayName(_ tier: String) -> String {
+        switch tier.lowercased() {
+        case "monthly": return "月度会员"
+        case "yearly": return "年度会员"
+        case "lifetime": return "永久会员"
+        default: return "免费版"
+        }
+    }
+
     var colorScheme: ColorScheme? {
         switch appearance {
         case .system:

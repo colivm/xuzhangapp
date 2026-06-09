@@ -35,6 +35,10 @@ struct SettingsView: View {
         }
     }
 
+    private var hasMemberAccess: Bool {
+        settingsViewModel.settings.hasMemberAccess
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
@@ -94,7 +98,7 @@ struct SettingsView: View {
                     Text(settingsViewModel.displayName.isEmpty ? "叙账用户" : settingsViewModel.displayName)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(AppColors.text)
-                    Text("本地保存 · \(memberTierDisplayName(settingsViewModel.memberTier))")
+                    Text("本地保存 · \(AppSettings.memberTierDisplayName(settingsViewModel.memberTier))")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.subtext)
                     Text(settingsViewModel.hasCloudSession ? "云端备份已准备好，慢慢记就好。" : "想备份或续聊时，再点这里登录。")
@@ -111,7 +115,7 @@ struct SettingsView: View {
         .buttonStyle(.plain)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color.white.opacity(0.40).mix(with: AppColors.accent.opacity(0.06), by: 0.45))
+                .fill(AppColors.settingsIdentityPanel)
         )
         .overlay(alignment: .leading) {
             RoundedRectangle(cornerRadius: 999, style: .continuous)
@@ -168,7 +172,7 @@ struct SettingsView: View {
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.34).mix(with: AppColors.accent.opacity(0.05), by: 0.42))
+                .fill(AppColors.settingsChapterPanel)
         )
     }
 
@@ -521,30 +525,37 @@ struct SettingsView: View {
                     .font(.system(size: 14))
                     .foregroundStyle(AppColors.subtext)
                 Spacer()
-                Text(memberTierDisplayName(settingsViewModel.memberTier))
+                Text(AppSettings.memberTierDisplayName(settingsViewModel.memberTier))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(AppColors.text)
             }
 
-            Button {
-                showAccountSheet = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                    showMemberPricing = true
+            if hasMemberAccess {
+                Text("会员权益已生效，周/月复盘和 OCR 次数不会再被免费额度限制。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext.opacity(0.82))
+                    .padding(.vertical, 6)
+            } else {
+                Button {
+                    showAccountSheet = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        showMemberPricing = true
+                    }
+                } label: {
+                    HStack {
+                        Text("想多留几段回望？了解会员")
+                            .font(.system(size: 14, weight: .medium))
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(AppColors.subtext)
+                    }
+                    .foregroundStyle(AppColors.accent.opacity(0.9))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
                 }
-            } label: {
-                HStack {
-                    Text("想多留几段回望？了解会员")
-                        .font(.system(size: 14, weight: .medium))
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(AppColors.subtext)
-                }
-                .foregroundStyle(AppColors.accent.opacity(0.9))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             Button("退出登录", role: .destructive) {
                 settingsViewModel.logoutCloud()
@@ -791,14 +802,6 @@ struct SettingsView: View {
         .buttonStyle(.plain)
     }
 
-    private func memberTierDisplayName(_ tier: String) -> String {
-        switch tier.lowercased() {
-        case "monthly": return "月度会员"
-        case "yearly": return "年度会员"
-        case "lifetime": return "永久会员"
-        default: return "免费用户"
-        }
-    }
 }
 
 // MARK: - Web Card Styling Helpers

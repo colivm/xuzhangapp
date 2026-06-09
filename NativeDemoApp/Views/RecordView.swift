@@ -37,8 +37,7 @@ struct RecordView: View {
     }
 
     private var isMember: Bool {
-        let tier = settingsViewModel.memberTier.lowercased()
-        return ["monthly", "yearly", "lifetime"].contains(tier)
+        settingsViewModel.settings.hasMemberAccess
     }
 
     private func guessScenePackId() -> String {

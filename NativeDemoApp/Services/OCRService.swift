@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import UIKit
 import Vision
 
@@ -75,7 +76,10 @@ final class OCRService {
         request.usesLanguageCorrection = true
         request.recognitionLanguages = ["zh-Hans", "en-US"]
 
-        let handler = VNImageRequestHandler(cgImage: cgImage)
+        let handler = VNImageRequestHandler(
+            cgImage: cgImage,
+            orientation: CGImagePropertyOrientation(image.imageOrientation)
+        )
         try handler.perform([request])
 
         let observations = (request.results ?? []).sorted {
@@ -768,5 +772,30 @@ final class OCRService {
             return .lodging
         }
         return .daily
+    }
+}
+
+private extension CGImagePropertyOrientation {
+    init(_ uiOrientation: UIImage.Orientation) {
+        switch uiOrientation {
+        case .up:
+            self = .up
+        case .upMirrored:
+            self = .upMirrored
+        case .down:
+            self = .down
+        case .downMirrored:
+            self = .downMirrored
+        case .left:
+            self = .left
+        case .leftMirrored:
+            self = .leftMirrored
+        case .right:
+            self = .right
+        case .rightMirrored:
+            self = .rightMirrored
+        @unknown default:
+            self = .up
+        }
     }
 }

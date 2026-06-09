@@ -18,6 +18,7 @@ struct StatsWebView: View {
     @State private var isFiltersExpanded = false
     @State private var showTraceDetailSheet = false
     @State private var isTrendExpandedInSheet = false
+    @State private var pendingEditingItemAfterTraceClose: HomeItem?
     private let playbackService = PlaybackService()
     private let quotaStore = SummaryPlaybackQuotaStore()
 
@@ -69,7 +70,7 @@ struct StatsWebView: View {
     }
 
     private var hasMemberAccess: Bool {
-        ["monthly", "yearly", "lifetime"].contains(settingsViewModel.memberTier.lowercased())
+        settingsViewModel.settings.hasMemberAccess
     }
 
     private var currentFilterSummary: String {
@@ -106,6 +107,11 @@ struct StatsWebView: View {
             }
             .sheet(item: $summaryPlayback) { playback in
                 summaryPlaybackSheet(playback)
+            }
+            .onChange(of: showTraceDetailSheet) { _, isPresented in
+                if !isPresented {
+                    presentPendingEditorIfNeeded()
+                }
             }
             .alert("播放次数已用完", isPresented: summaryQuotaAlertBinding) {
                 summaryQuotaAlertActions
@@ -217,7 +223,7 @@ struct StatsWebView: View {
                 .padding(.vertical, 9)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.38).mix(with: AppColors.accent.opacity(0.10), by: 0.45))
+                        .fill(AppColors.tracePlaybackButtonBg)
                 )
                 .overlay(
                     Capsule(style: .continuous)
@@ -231,9 +237,10 @@ struct StatsWebView: View {
                 VStack(spacing: 8) {
                     ForEach(Array(heroScopedItems.prefix(3).enumerated()), id: \.element.id) { _, item in
                         Button {
-                            editingItem = item
+                            openEditor(for: item)
                         } label: {
                             traceSlipRow(item)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
@@ -376,7 +383,7 @@ struct StatsWebView: View {
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white.opacity(0.30).mix(with: AppColors.accent.opacity(0.08), by: 0.5))
+                    .fill(AppColors.traceAppendixBg)
             )
         }
         .buttonStyle(.plain)
@@ -433,7 +440,7 @@ struct StatsWebView: View {
                         )
 
                         VStack(alignment: .leading, spacing: 12) {
-                            recordListContent
+                            recordListContent(fromTraceDetail: true)
                         }
                     }
                     .padding(18)
@@ -597,26 +604,48 @@ struct StatsWebView: View {
             Text("这一段里的笔笔")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(AppColors.text)
-            recordListContent
+            recordListContent()
         }
         .glassPanel(radius: 24, padding: 20)
     }
 
     @ViewBuilder
-    private var recordListContent: some View {
+    private func recordListContent(fromTraceDetail: Bool = false) -> some View {
         if filteredItems.isEmpty {
             Text(emptyRecordListText)
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
         } else {
             ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
-                Button {
-                    editingItem = item
-                } label: {
-                    billRecordRow(item, isFirst: index == 0)
+                if fromTraceDetail {
+                    traceDetailBillRecordRow(item, isFirst: index == 0)
+                } else {
+                    Button {
+                        openEditor(for: item)
+                    } label: {
+                        billRecordRow(item, isFirst: index == 0)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
+        }
+    }
+
+    private func openEditor(for item: HomeItem, fromTraceDetail: Bool = false) {
+        if fromTraceDetail {
+            pendingEditingItemAfterTraceClose = item
+            showTraceDetailSheet = false
+        } else {
+            editingItem = item
+        }
+    }
+
+    private func presentPendingEditorIfNeeded() {
+        guard let item = pendingEditingItemAfterTraceClose else { return }
+        pendingEditingItemAfterTraceClose = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            editingItem = item
         }
     }
 
@@ -978,6 +1007,32 @@ struct StatsWebView: View {
                     .frame(height: 1)
                     .padding(.top, -10)
             }
+        }
+    }
+
+    private func traceDetailBillRecordRow(_ item: HomeItem, isFirst: Bool) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            billRecordRow(item, isFirst: isFirst)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                openEditor(for: item, fromTraceDetail: true)
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppColors.accent.opacity(0.88))
+                    .frame(width: 38, height: 38)
+                    .background(
+                        Circle()
+                            .fill(Color.white.opacity(0.60))
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(AppColors.accent.opacity(0.18), lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("编辑账单")
         }
     }
 
