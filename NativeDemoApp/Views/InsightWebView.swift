@@ -134,7 +134,7 @@ struct InsightWebView: View {
             }
         }
         .padding(.leading, 4)
-        .glassPanel(radius: 22, padding: 20)
+        .paperChapterPanel(radius: 22, padding: 20)
     }
 
     private var insightChapterFootnote: some View {
@@ -213,7 +213,9 @@ struct InsightWebView: View {
         let totalText = weekItems.isEmpty ? "" : "，合计 \(weekItems.reduce(0) { $0 + $1.amount }.formatted(.cny))"
         var text = "\(countText)\(totalText)。\(blocks.summary)\(blocks.structure)"
         let periodKey = EchoAnchorService.shared.periodKeyForWeek()
-        if let anchor = EchoAnchorService.shared.pickEchoAnchor(items: weekItems, periodKey: periodKey) {
+        // Echo priority: when weekly playback can show a highlight chapter, keep the anchor there.
+        if weekItems.count < 3,
+           let anchor = EchoAnchorService.shared.pickEchoAnchor(items: weekItems, periodKey: periodKey) {
             let sentence = EchoAnchorService.shared.formatEchoAnchorSentence(anchor)
             if !sentence.isEmpty {
                 text += sentence
@@ -639,7 +641,7 @@ struct InsightWebView: View {
                         monthlyJournalFootnote(left: left, isMember: isMember, exhausted: exhausted)
                     }
                     .padding(.leading, 4)
-                    .glassPanel(radius: 22, padding: 20)
+                    .paperChapterPanel(radius: 22, padding: 20)
                 }
                 .padding(18)
                 .padding(.bottom, 28)

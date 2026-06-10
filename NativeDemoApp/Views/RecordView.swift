@@ -98,7 +98,6 @@ struct RecordView: View {
         return homeViewModel.items.contains { item in
             item.createdAt >= start && (
                 item.category == .lodging ||
-                item.category == .entertainment ||
                 containsTravelKeyword(item.title)
             )
         }
@@ -278,9 +277,22 @@ struct RecordView: View {
         selectedEntryMode == .manual && amountPadActive
     }
 
+    private var recordContentBottomPadding: CGFloat {
+        focusedField == .note ? 360 : 120
+    }
+
     private func dismissKeyboard() {
         amountPadActive = false
         focusedField = nil
+    }
+
+    private func scrollNoteFieldIntoView(_ proxy: ScrollViewProxy) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) {
+            guard focusedField == .note else { return }
+            withAnimation(.easeInOut(duration: 0.24)) {
+                proxy.scrollTo("recordNoteField", anchor: .bottom)
+            }
+        }
     }
 
     private func previewFallbackTitle(for category: HomeItem.Category) -> String {
@@ -327,10 +339,7 @@ struct RecordView: View {
                 VStack(spacing: 14) {
                     // ── Record Panel (matching web recordPage) ──
                     VStack(alignment: .leading, spacing: 16) {
-                        // Title
-                        Text("记一笔")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(recordInk)
+                        recordPanelHeader
 
                         if selectedEntryMode == .manual {
                             manualForm
@@ -338,11 +347,11 @@ struct RecordView: View {
                             ocrForm
                         }
                     }
-                    .glassPanel(radius: 24, padding: 24)
+                    .recordEntryPanel(radius: 24, padding: 24)
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 4)
-                .padding(.bottom, 120)
+                .padding(.bottom, recordContentBottomPadding)
                 .frame(maxWidth: 430)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
@@ -408,9 +417,7 @@ struct RecordView: View {
             .onChange(of: focusedField) { _, newValue in
                 if newValue == .note {
                     amountPadActive = false
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        scrollProxy.scrollTo("recordNoteField", anchor: .center)
-                    }
+                    scrollNoteFieldIntoView(scrollProxy)
                 }
             }
             .sheet(isPresented: $showOCRConfirmSheet) {
@@ -435,6 +442,25 @@ struct RecordView: View {
         }
     }
     // MARK: - Segment
+
+    private var recordPanelHeader: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("把一笔生活放进账本")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppColors.accent.opacity(0.78))
+
+            Text("记下这一笔")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(recordInk)
+
+            if hasAmountDraft {
+                Text("这一笔会先落到账本，再慢慢长成回望。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext.opacity(0.76))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
 
     private var recordModeSegment: some View {
         HStack(spacing: 4) {
@@ -486,11 +512,11 @@ struct RecordView: View {
     private var manualForm: some View {
         VStack(alignment: .leading, spacing: 14) {
             amountField
-            ocrSideDoor
             if hasValidAmount {
                 lifeEntryPreview
             }
             saveRow
+            ocrSideDoor
             if hasValidAmount {
                 recordDateQuietActions
                 if datePanelExpanded {
@@ -665,7 +691,35 @@ struct RecordView: View {
     // MARK: - Amount Field
 
     private var amountField: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            amountStage
+
+            Text(hasValidAmount ? "金额只是刻度，这一笔会长成一句生活记录。" : emptyAmountWhisper)
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext.opacity(0.76))
+                .frame(maxWidth: .infinity, alignment: hasAmountDraft ? .leading : .center)
+                .multilineTextAlignment(hasAmountDraft ? .leading : .center)
+        }
+    }
+
+    private var amountStage: some View {
+        ZStack {
+            if !hasAmountDraft {
+                Ellipse()
+                    .fill(
+                        RadialGradient(
+                            colors: [AppColors.accent.opacity(0.14), AppColors.accent.opacity(0.0)],
+                            center: .center,
+                            startRadius: 4,
+                            endRadius: 135
+                        )
+                    )
+                    .frame(height: 112)
+                    .blur(radius: 4)
+                    .padding(.horizontal, 10)
+                    .allowsHitTesting(false)
+            }
+
             Button {
                 focusedField = nil
                 withAnimation(.easeInOut(duration: 0.16)) {
@@ -673,47 +727,96 @@ struct RecordView: View {
                 }
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    HStack(spacing: 0) {
                     Text("¥")
-                        .font(.system(size: 28, weight: .semibold, design: .rounded))
-                        .foregroundStyle(AppColors.subtext.opacity(0.74))
+                        .font(.system(size: hasAmountDraft ? 28 : 30, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AppColors.subtext.opacity(hasAmountDraft ? 0.74 : 0.68))
                         .padding(.trailing, 2)
                         .offset(y: 1)
 
                     Text(homeViewModel.inputAmount.isEmpty ? "0.00" : homeViewModel.inputAmount)
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
-                        .foregroundStyle(homeViewModel.inputAmount.isEmpty ? AppColors.subtext.opacity(0.45) : recordInk)
+                        .font(.system(size: hasAmountDraft ? 40 : 42, weight: .bold, design: .rounded))
+                        .foregroundStyle(homeViewModel.inputAmount.isEmpty ? AppColors.subtext.opacity(0.46) : recordInk)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentTransition(.numericText())
-                    }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 14)
+                .padding(.horizontal, hasAmountDraft ? 14 : 18)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .frame(minHeight: hasAmountDraft ? 72 : 82)
+                .contentShape(RoundedRectangle(cornerRadius: amountFieldRadius, style: .continuous))
             }
             .buttonStyle(.plain)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white.opacity(0.78))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [AppColors.accent.opacity(0.35), AppColors.accent.opacity(0.12)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-            Text(hasValidAmount ? "金额只是刻度，这一笔会长成一句生活记录。" : "记下一笔今天的生活")
-                .font(.system(size: 12))
-                .foregroundStyle(AppColors.subtext.opacity(0.76))
+            .background(amountFieldBackground)
+            .overlay(amountFieldBorder)
+            .overlay(alignment: .top) {
+                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                    .fill(Color.white.opacity(hasAmountDraft ? 0.24 : 0.36))
+                    .frame(height: 1)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 1)
+                    .allowsHitTesting(false)
+            }
+            .shadow(color: hasAmountDraft ? Color.clear : AppColors.accent.opacity(0.12), radius: 18, x: 0, y: 8)
+            .contentShape(RoundedRectangle(cornerRadius: amountFieldRadius, style: .continuous))
+            .padding(.horizontal, hasAmountDraft ? 0 : 12)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, hasAmountDraft ? 0 : 4)
+    }
+
+    private var amountFieldRadius: CGFloat {
+        hasAmountDraft ? 16 : 20
+    }
+
+    private var amountFieldBackground: some View {
+        RoundedRectangle(cornerRadius: amountFieldRadius, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: amountFieldBackgroundColors,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+    }
+
+    private var amountFieldBorder: some View {
+        RoundedRectangle(cornerRadius: amountFieldRadius, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        AppColors.accent.opacity(hasAmountDraft ? 0.30 : 0.42),
+                        AppColors.paperBorder.opacity(hasAmountDraft ? 0.14 : 0.26),
+                        Color.white.opacity(hasAmountDraft ? 0.26 : 0.34)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
+    }
+
+    private var amountFieldBackgroundColors: [Color] {
+        if hasAmountDraft {
+            return [
+                Color.white.opacity(0.86),
+                AppColors.paperMist.opacity(0.38)
+            ]
+        }
+        return [
+            AppColors.paperWarm.opacity(0.68),
+            AppColors.tracePlaybackButtonBg.opacity(0.62),
+            Color.white.opacity(0.58)
+        ]
+    }
+
+    private var emptyAmountWhisper: String {
+        let lines = [
+            "记下一笔今天的生活",
+            "先从一个数字开始，留下一点今天。",
+            "不用想清楚，先把这一刻记下来。",
+            "数额在这就行，晚点会慢慢长成一句生活记录。"
+        ]
+        let day = Calendar.current.ordinality(of: .day, in: .era, for: Date()) ?? 0
+        return lines[day % lines.count]
     }
 
     // MARK: - Amount Quick Keys
@@ -938,7 +1041,7 @@ struct RecordView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(homeViewModel.noteSuggestions(for: homeViewModel.selectedCategory), id: \.self) { suggestion in
+                    ForEach(homeViewModel.noteSuggestions(for: homeViewModel.selectedCategory, at: homeViewModel.selectedDate), id: \.self) { suggestion in
                         Button(suggestion) {
                             dismissKeyboard()
                             homeViewModel.inputTitle = suggestion
@@ -984,13 +1087,21 @@ struct RecordView: View {
                     )
                     .clipShape(Capsule(style: .continuous))
                 } else {
-                    Capsule(style: .continuous)
-                        .fill(AppColors.panelStrong)
+                    LinearGradient(
+                        colors: [
+                            AppColors.paperWarm.opacity(0.74),
+                            AppColors.tracePlaybackButtonBg.opacity(0.46),
+                            Color.white.opacity(0.72)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .clipShape(Capsule(style: .continuous))
                 }
 
                 Text("放进账本")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(hasValidAmount ? Color.white : AppColors.subtext.opacity(0.72))
+                    .foregroundStyle(hasValidAmount ? Color.white : AppColors.accent.opacity(0.66))
                     .padding(.vertical, 14)
                     .frame(maxWidth: .infinity)
             }
@@ -998,12 +1109,13 @@ struct RecordView: View {
             .frame(minHeight: 52)
             .overlay(
                 Capsule(style: .continuous)
-                    .stroke(hasValidAmount ? Color.white.opacity(0.36) : AppColors.line, lineWidth: 1)
+                    .stroke(hasValidAmount ? Color.white.opacity(0.36) : AppColors.accent.opacity(0.18), lineWidth: 1)
             )
-            .shadow(color: hasValidAmount ? recordAccent.opacity(0.35) : Color.clear, radius: 12, x: 0, y: 6)
+            .shadow(color: hasValidAmount ? recordAccent.opacity(0.35) : AppColors.accent.opacity(0.06), radius: 12, x: 0, y: 6)
         }
         .buttonStyle(.plain)
         .disabled(!hasValidAmount)
+        .opacity(1)
         .padding(.top, 6)
     }
 
@@ -1183,5 +1295,66 @@ struct RecordView: View {
     private func applyDot00() {
         let base = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
         homeViewModel.inputAmount = String(format: "%.2f", base)
+    }
+}
+
+private struct RecordEntryPanel: ViewModifier {
+    var radius: CGFloat = 24
+    var padding: CGFloat = 24
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                AppColors.tracePlaybackButtonBg.opacity(0.48),
+                                AppColors.paperWarm.opacity(0.50),
+                                Color.white.opacity(0.72)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .background(
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(.thinMaterial)
+                    )
+            )
+            .overlay(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                    .fill(AppColors.accent.opacity(0.24))
+                    .frame(width: 34, height: 3)
+                    .padding(.top, 16)
+                    .padding(.leading, 22)
+                    .allowsHitTesting(false)
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.58),
+                                AppColors.accent.opacity(0.16),
+                                AppColors.paperBorder.opacity(0.16)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+                    .allowsHitTesting(false)
+            )
+            .shadow(color: AppColors.accent.opacity(0.08), radius: 24, x: 0, y: 10)
+            .shadow(color: Color(red: 128/255, green: 106/255, blue: 82/255).opacity(0.06), radius: 10, x: 0, y: 4)
+    }
+}
+
+private extension View {
+    func recordEntryPanel(radius: CGFloat = 24, padding: CGFloat = 24) -> some View {
+        modifier(RecordEntryPanel(radius: radius, padding: padding))
     }
 }

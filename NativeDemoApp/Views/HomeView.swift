@@ -8,6 +8,8 @@ struct HomeView: View {
     var onShowMemberPricing: (() -> Void)? = nil
     @State private var showPlayback = false
     @State private var showFirstRecordToast = false
+    @State private var showTodayRecordsSheet = false
+    @State private var editingItem: HomeItem?
     @State private var todayPlaybackQuotaMessage: String?
     private let dailyQuotaStore = DailyFeatureQuotaStore()
 
@@ -39,6 +41,12 @@ struct HomeView: View {
             )
                 .id(UUID())
                 .environmentObject(homeViewModel)
+        }
+        .sheet(isPresented: $showTodayRecordsSheet) {
+            todayRecordsSheet
+        }
+        .sheet(item: $editingItem) { item in
+            editSheet(for: item)
         }
         .alert("今日回放次数已用完", isPresented: Binding(
             get: { todayPlaybackQuotaMessage != nil },
@@ -116,8 +124,21 @@ struct HomeView: View {
                     .padding(.vertical, 8)
             }
         } else {
-            ForEach(Array(homeViewModel.recentThreeItems.enumerated()), id: \.element.id) { index, item in
-                billListItem(item: item, isFirst: index == 0)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(homeViewModel.recentThreeItems.enumerated()), id: \.element.id) { index, item in
+                    billListItem(item: item, isFirst: index == 0)
+                }
+                if homeViewModel.todayItems.count > homeViewModel.recentThreeItems.count {
+                    Button {
+                        showTodayRecordsSheet = true
+                    } label: {
+                        Text("查看今天全部 \(homeViewModel.todayItems.count) 笔 →")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(AppColors.subtext.opacity(0.82))
+                            .padding(.top, 8)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
     }
@@ -456,11 +477,70 @@ struct HomeView: View {
         .padding(.horizontal, 4)
         .overlay(alignment: .top) {
             if !isFirst {
-                Rectangle()
-                    .fill(Color.white.opacity(0.30))
-                    .frame(height: 1)
+                PaperCreaseDivider()
                     .padding(.top, -10)
             }
+        }
+    }
+
+    private var todayRecordsSheet: some View {
+        NavigationStack {
+            ZStack {
+                AppColors.bg.ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("今天留下的痕迹")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+
+                        Text(todayRecordsMetaText)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
+
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(homeViewModel.todayItems.enumerated()), id: \.element.id) { index, item in
+                                Button {
+                                    showTodayRecordsSheet = false
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                                        editingItem = item
+                                    }
+                                } label: {
+                                    billListItem(item: item, isFirst: index == 0)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .paperChapterPanel(radius: 22, padding: 16, showsAccentLine: false)
+                    }
+                    .padding(18)
+                    .padding(.bottom, 28)
+                }
+                .scrollIndicators(.hidden)
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { showTodayRecordsSheet = false }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var todayRecordsMetaText: String {
+        let total = homeViewModel.todayItems.reduce(0) { $0 + $1.amount }
+        return "\(homeViewModel.todayItems.count) 笔 · 合计 \(total.formatted(.cny)) · 点任一条可调整"
+    }
+
+    private func editSheet(for item: HomeItem) -> some View {
+        RecordEditSheet(item: item) { updated in
+            homeViewModel.updateItem(updated)
+            editingItem = nil
+        } onDelete: {
+            if let idx = homeViewModel.items.firstIndex(where: { $0.id == item.id }) {
+                homeViewModel.delete(at: IndexSet(integer: idx))
+            }
+            editingItem = nil
         }
     }
 

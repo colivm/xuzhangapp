@@ -10,6 +10,10 @@ struct AppColors {
     static let panel = Color.white.opacity(0.62)
     static let panelStrong = Color.white.opacity(0.82)
     static let line = Color.white.opacity(0.52)
+    static let paperWarm = Color(red: 0.992, green: 0.952, blue: 0.878)
+    static let paperMist = Color(red: 0.938, green: 0.958, blue: 0.932)
+    static let paperBorder = Color(red: 0.902, green: 0.760, blue: 0.584)
+    static let paperCrease = Color(red: 0.760, green: 0.560, blue: 0.360)
     static let text = Color(red: 0.145, green: 0.188, blue: 0.255)                 // #253041
     static let subtext = Color(red: 0.435, green: 0.482, blue: 0.561)           // #6f7b8f
     static let heroGradientPink = Color(red: 1.0, green: 0.77, blue: 0.87)            // pink tint
@@ -64,9 +68,77 @@ struct GlassPanel: ViewModifier {
     }
 }
 
+struct PaperChapterPanel: ViewModifier {
+    var radius: CGFloat = 24
+    var padding: CGFloat = 22
+    var showsAccentLine: Bool = true
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .padding(.leading, showsAccentLine ? 6 : 0)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                AppColors.paperWarm.opacity(0.84),
+                                Color.white.opacity(0.70),
+                                AppColors.paperMist.opacity(0.62)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .background(
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(.thinMaterial)
+                    )
+            )
+            .overlay(alignment: .leading) {
+                if showsAccentLine {
+                    RoundedRectangle(cornerRadius: 999, style: .continuous)
+                        .fill(AppColors.paperCrease.opacity(0.28))
+                        .frame(width: 2)
+                        .padding(.vertical, 20)
+                        .padding(.leading, 14)
+                        .allowsHitTesting(false)
+                }
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(AppColors.paperBorder.opacity(0.28), lineWidth: 1)
+                    .allowsHitTesting(false)
+            )
+            .shadow(color: Color(red: 128/255, green: 106/255, blue: 82/255).opacity(0.10), radius: 22, x: 0, y: 8)
+    }
+}
+
+struct PaperCreaseDivider: View {
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(AppColors.paperCrease.opacity(0.12))
+                .frame(height: 1)
+            LinearGradient(
+                colors: [.clear, Color.white.opacity(0.46), .clear],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(height: 1)
+        }
+        .padding(.horizontal, 4)
+    }
+}
+
 extension View {
     func glassPanel(radius: CGFloat = 24, padding: CGFloat = 24) -> some View {
         modifier(GlassPanel(radius: radius, padding: padding))
+    }
+
+    func paperChapterPanel(radius: CGFloat = 24, padding: CGFloat = 22, showsAccentLine: Bool = true) -> some View {
+        modifier(PaperChapterPanel(radius: radius, padding: padding, showsAccentLine: showsAccentLine))
     }
 }
 

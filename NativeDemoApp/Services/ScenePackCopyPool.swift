@@ -171,7 +171,7 @@ enum ScenePackCopyPool {
         if pack.id == "travel",
            hour < 6,
            !allowTravelSpecificCopy,
-           ![.transport, .lodging, .entertainment].contains(category) {
+           category != .lodging {
             return ("lateNightTravelNeutral", ["深夜这笔先轻轻记下", "夜里的一点小花费", "凌晨顺手补上一笔", "晚归路上的小记录", "深夜日常也算生活", "夜里这点花费记一下", "凌晨的小开销留个底", "夜深了也把账记稳"])
         }
 

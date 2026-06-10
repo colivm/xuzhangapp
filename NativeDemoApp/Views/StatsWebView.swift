@@ -162,6 +162,50 @@ struct StatsWebView: View {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
+    private var traceRepresentativeItems: [HomeItem] {
+        representativeTraceItems(from: heroScopedItems)
+    }
+
+    private func representativeTraceItems(from items: [HomeItem]) -> [HomeItem] {
+        guard items.count > 3 else { return items }
+        let ranked = Array(items.enumerated()).sorted { lhs, rhs in
+            let leftScore = traceRepresentativeScore(item: lhs.element, index: lhs.offset)
+            let rightScore = traceRepresentativeScore(item: rhs.element, index: rhs.offset)
+            if leftScore == rightScore {
+                return lhs.element.createdAt > rhs.element.createdAt
+            }
+            return leftScore > rightScore
+        }
+
+        var selected: [HomeItem] = []
+        var selectedCategories = Set<String>()
+        for candidate in ranked where selected.count < 3 {
+            let categoryKey = candidate.element.category.rawValue
+            guard !selectedCategories.contains(categoryKey) else { continue }
+            selected.append(candidate.element)
+            selectedCategories.insert(categoryKey)
+        }
+        for candidate in ranked where selected.count < 3 {
+            guard !selected.contains(where: { $0.id == candidate.element.id }) else { continue }
+            selected.append(candidate.element)
+        }
+        return selected.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    private func traceRepresentativeScore(item: HomeItem, index: Int) -> Int {
+        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let defaultTitle = item.category.defaultRecordTitle
+        let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
+        var score = 0
+        if !item.emotionTag.isEmpty && item.emotionTag != defaultEmotion { score += 40 }
+        if item.userEditedTitle == true { score += 30 }
+        if title != defaultTitle && (4...18).contains(title.count) { score += 20 }
+        if case .manual = item.source { score += 6 }
+        score += min(index, 6) * 2
+        if title == defaultTitle { score -= 12 }
+        return score
+    }
+
     private var heroTotalExpense: Double {
         heroScopedItems.filter { $0.amount > 0 }.reduce(0) { $0 + $1.amount }
     }
@@ -235,7 +279,7 @@ struct StatsWebView: View {
 
             if hasData {
                 VStack(spacing: 8) {
-                    ForEach(Array(heroScopedItems.prefix(3).enumerated()), id: \.element.id) { _, item in
+                    ForEach(Array(traceRepresentativeItems.enumerated()), id: \.element.id) { _, item in
                         Button {
                             openEditor(for: item)
                         } label: {
@@ -258,7 +302,7 @@ struct StatsWebView: View {
                 traceEmptyState
             }
         }
-        .glassPanel(radius: 24, padding: 20)
+        .paperChapterPanel(radius: 24, padding: 20)
     }
 
     private var traceRangeKicker: some View {
@@ -442,6 +486,7 @@ struct StatsWebView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             recordListContent(fromTraceDetail: true)
                         }
+                        .paperChapterPanel(radius: 22, padding: 16, showsAccentLine: false)
                     }
                     .padding(18)
                     .padding(.bottom, 28)
@@ -1002,9 +1047,7 @@ struct StatsWebView: View {
         .padding(.horizontal, 4)
         .overlay(alignment: .top) {
             if !isFirst {
-                Rectangle()
-                    .fill(Color.white.opacity(0.30))
-                    .frame(height: 1)
+                PaperCreaseDivider()
                     .padding(.top, -10)
             }
         }
@@ -1088,9 +1131,7 @@ struct StatsWebView: View {
         .padding(.vertical, 4)
         .padding(.horizontal, 4)
         .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color.white.opacity(0.35))
-                .frame(height: 0.8)
+            PaperCreaseDivider()
                 .padding(.top, -4)
         }
     }

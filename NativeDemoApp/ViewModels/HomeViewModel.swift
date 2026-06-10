@@ -820,10 +820,22 @@ final class HomeViewModel: ObservableObject {
         selectedCategory = category
     }
 
-    func noteSuggestions(for category: HomeItem.Category) -> [String] {
+    func noteSuggestions(for category: HomeItem.Category, at date: Date = .now) -> [String] {
         switch category {
         case .dining:
-            return ["午餐简餐", "咖啡/奶茶", "晚餐聚餐"]
+            let hour = Calendar.current.component(.hour, from: date)
+            switch hour {
+            case 5..<10:
+                return ["早餐简单吃一口", "晨间咖啡", "上班前补点能量"]
+            case 10..<14:
+                return ["午餐简餐", "咖啡/奶茶", "中午好好吃一口"]
+            case 14..<17:
+                return ["下午茶小点心", "咖啡/奶茶", "忙里偷闲喝点什么"]
+            case 17..<21:
+                return ["晚餐好好吃一口", "下班后的一顿热饭", "晚餐小聚"]
+            default:
+                return ["夜里补一点", "加班后吃点热乎的", "深夜小食"]
+            }
         case .transport:
             return ["地铁通勤", "打车出行", "停车/油费"]
         case .shopping:
