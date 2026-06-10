@@ -774,7 +774,7 @@ struct StatsWebView: View {
                     Text(isMonthLocked ? "🔒" : "🎬")
                         .font(.system(size: 24))
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(range == .week ? "本周生活切片" : "本月生活章")
+                        Text(range == .week ? "本周回放" : "本月回放")
                             .font(.system(size: 22, weight: .bold))
                             .foregroundStyle(AppColors.text)
                         Text(summaryCardSubtitle(preview: preview, range: range, hasData: hasData, isMonthLocked: isMonthLocked))
@@ -831,7 +831,7 @@ struct StatsWebView: View {
     }
 
     private func summaryCardSubtitle(preview: SummaryPlayback, range: SummaryPlaybackRange, hasData: Bool, isMonthLocked: Bool) -> String {
-        guard hasData else { return "先留下几笔，这里就能慢慢讲出这一段生活。" }
+        guard hasData else { return "先留下几笔，这里就能讲出这一段。" }
         if isMonthLocked {
             return "会员专属 · 你的 3 次新用户体验已用完"
         }
@@ -846,13 +846,13 @@ struct StatsWebView: View {
             let category = preview.topCategory.map { "\($0)为主" } ?? "日常为主"
             return "\(preview.count) 笔 · \(preview.total.formatted(.cny)) · \(category)"
         case .month:
-            return "\(preview.count) 笔 · \(preview.total.formatted(.cny)) · 6 章看完整月节奏"
+            return "\(preview.count) 笔 · \(preview.total.formatted(.cny)) · 分段看完整月节奏"
         }
     }
 
     private func summaryQuotaFootnote(range: SummaryPlaybackRange, hasData: Bool) -> String {
-        guard hasData else { return "生活切片使用本地模板生成，不依赖 AI 服务。" }
-        guard !hasMemberAccess else { return "会员可无限回看周/月生活切片。" }
+        guard hasData else { return "回放使用本地模板生成，不依赖 AI 服务。" }
+        guard !hasMemberAccess else { return "会员可无限回看周/月回放。" }
         switch range {
         case .week:
             let remaining = quotaStore.weekRemaining(isMember: false)
@@ -861,7 +861,7 @@ struct StatsWebView: View {
             let remaining = quotaStore.monthRemaining(isMember: false)
             return remaining > 0
                 ? "新用户专享剩余 \(remaining)/3 次 · 用完后需会员"
-                : "本月生活章体验已用完 · 会员可无限回看"
+                : "本月回放体验已用完 · 会员可无限回看"
         }
     }
 
@@ -870,9 +870,9 @@ struct StatsWebView: View {
         guard quotaStore.canPlay(range, isMember: hasMemberAccess) else {
             switch range {
             case .week:
-                summaryQuotaMessage = "本周的生活切片已经看完啦。下个自然周会再刷新 1 次免费次数。开通会员可无限回看周/月切片。"
+                summaryQuotaMessage = "本周回放已经看完啦。下个自然周会再刷新 1 次免费次数。开通会员可无限回看周/月回放。"
             case .month:
-                summaryQuotaMessage = "你的 3 次新用户「本月生活章」已用完。开通会员可无限播放，并享场景备注包与无限 OCR。本周切片仍会在每个自然周刷新 1 次免费次数。"
+                summaryQuotaMessage = "你的 3 次新用户「本月回放」已用完。开通会员可无限播放，并享场景备注包与无限 OCR。本周回放仍会在每个自然周刷新 1 次免费次数。"
             }
             return
         }

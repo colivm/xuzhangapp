@@ -236,7 +236,7 @@ final class PlaybackService {
         let quietest = active.min { lhs, rhs in
             lhs.amount == rhs.amount ? lhs.count < rhs.count : lhs.amount < rhs.amount
         }
-        let title = "本周生活切片"
+        let title = "本周回放"
         let weekKey = SummaryPlaybackQuotaStore().currentWeekKey(now: now)
         let weekSeed = playbackCopySeed(base: "week-\(weekKey)", suffix: copySeed)
         let echoAnchor = EchoAnchorService.shared.pickEchoAnchor(items: rows, periodKey: weekKey, now: now)
@@ -256,7 +256,7 @@ final class PlaybackService {
                 range: .week,
                 title: title,
                 rangeLabel: rangeLabel,
-                teaserLine: "这周还没有记录，先记几笔再来看切片。",
+                teaserLine: "这周还没有记录，先记几笔再回来听。",
                 count: 0,
                 total: 0,
                 topCategory: nil,
@@ -302,7 +302,7 @@ final class PlaybackService {
         chapters.append(
             SummaryChapter(
                 id: "week-top-category",
-                title: "生活主料",
+                title: "主要类目",
                 metrics: [
                     "category": top?.category ?? "日常",
                     "ratio": "\(ratio)",
@@ -395,7 +395,7 @@ final class PlaybackService {
             (Self.shortWeekdayFormatter.string(from: activity.date), activity.amount)
         }
         let period = "\(Self.dotDateFormatter.string(from: interval.start)) ~ \(Self.dotDateFormatter.string(from: calendar.date(byAdding: .day, value: -1, to: interval.end) ?? now))"
-        let closing = builtSummary.chapters.last?.narration.plain ?? "这一周已经留下了可以回看的生活痕迹。"
+        let closing = builtSummary.chapters.last?.narration.plain ?? "这一周已经留下了可以回看的记录。"
 
         return WeeklyShareCardPayload(
             weekTotal: total,
@@ -417,7 +417,7 @@ final class PlaybackService {
         let end = interval?.end ?? now
         let rows = positiveItems(items, from: start, to: end)
         let total = rows.reduce(0) { $0 + $1.amount }
-        let title = "本月生活章"
+        let title = "本月回放"
         let rangeLabel = Self.monthFormatter.string(from: now)
         let top = topCategoryStats(rows).first
         let ratio = total > 0 ? Int(round(((top?.amount ?? 0) / total) * 100)) : 0
@@ -428,7 +428,7 @@ final class PlaybackService {
                 range: .month,
                 title: title,
                 rangeLabel: rangeLabel,
-                teaserLine: "这个月还没有记录，先记几笔再来看生活章。",
+                teaserLine: "这个月还没有记录，先记几笔再回来听。",
                 count: 0,
                 total: 0,
                 topCategory: nil,
@@ -778,7 +778,7 @@ final class PlaybackService {
         if let change = meaningfulMonthlyCategoryChange(current: current, previous: previous) {
             let amountText = Self.money(abs(change.amountDelta))
             if change.previous == nil {
-                return "这个月「\(change.category)」开始变得明显，留下 \(change.current.count) 笔、\(Self.money(change.current.amount)) 的生活痕迹。"
+                return "这个月「\(change.category)」开始变得明显，记录了 \(change.current.count) 笔、\(Self.money(change.current.amount))。"
             }
             if change.amountDelta >= 0 {
                 let countText = change.countDelta > 0 ? "，多了 \(change.countDelta) 笔" : ""
@@ -790,16 +790,16 @@ final class PlaybackService {
         }
         let streak = longestRecordStreak(in: current)
         if streak >= 3 {
-            return "这个月最长连续 \(streak) 天有记录，生活节奏被接住了。"
+            return "这个月最长连续 \(streak) 天有记录，节奏比较清楚。"
         }
         if let leading = segments.max(by: { $0.amount < $1.amount }), leading.amount > 0 {
-            return "\(leading.label)最热闹，留下 \(leading.count) 笔、\(Self.money(leading.amount)) 的生活痕迹。"
+            return "\(leading.label)最热闹，记录了 \(leading.count) 笔、\(Self.money(leading.amount))。"
         }
         if let first = current.first, let last = current.last {
             let days = max(1, Calendar.current.dateComponents([.day], from: first.createdAt, to: last.createdAt).day ?? 1)
             return "记录从 \(Self.shortDateFormatter.string(from: first.createdAt)) 延续到 \(Self.shortDateFormatter.string(from: last.createdAt))，跨度 \(days) 天。"
         }
-        return "这个月已经留下了可以回看的生活痕迹。"
+        return "这个月已经有几笔可以回看的记录。"
     }
 
     private func meaningfulMonthlyCategoryChange(current: [HomeItem], previous: [HomeItem]) -> MonthlyCategoryChange? {

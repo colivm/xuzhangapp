@@ -226,7 +226,9 @@ enum MerchantBrandCatalog {
         _ tierNotes: [[String]]
     ) -> MerchantBrandDefinition {
         let limits: [Double] = [20, 50, 120, 9_999]
-        let tiers = zip(limits, tierNotes).map { ScenePackTier(maxAmount: $0.0, notes: $0.1) }
+        let tiers = zip(limits, tierNotes).map {
+            ScenePackTier(maxAmount: $0.0, notes: $0.1.map(sanitizeBrandNote))
+        }
         return MerchantBrandDefinition(
             id: id,
             displayName: displayName,
@@ -234,6 +236,30 @@ enum MerchantBrandCatalog {
             category: category,
             tiers: tiers
         )
+    }
+
+    private static func sanitizeBrandNote(_ note: String) -> String {
+        [
+            "顺手": "",
+            "慢慢": "",
+            "接住": "安排好",
+            "被安排好": "安排好",
+            "被稳稳安排": "稳稳到达",
+            "被稳稳安排好": "稳稳到达",
+            "好好": "",
+            "温柔": "轻一点",
+            "值得": "适合",
+            "松弛": "缓一缓",
+            "生活痕迹": "记录",
+            "生活节奏": "节奏",
+            "照看": "整理",
+            "一小段": "一段",
+            "一小笔": "一笔"
+        ].reduce(note) { result, pair in
+            result.replacingOccurrences(of: pair.key, with: pair.value)
+        }
+        .replacingOccurrences(of: "  ", with: " ")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func containsAlias(_ alias: String, in text: String) -> Bool {

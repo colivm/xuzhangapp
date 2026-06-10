@@ -107,7 +107,7 @@ struct InsightWebView: View {
                         weeklyRhythmMessage = text
                     }
                 }
-                quietTextButton("生成周度分享卡") {
+                quietTextButton("保存周记摘页") {
                     homeViewModel.markWeeklyShareGenerated()
                     generateAndShareWeeklyCard()
                 }
@@ -263,7 +263,7 @@ struct InsightWebView: View {
             }
 
             HStack(spacing: 14) {
-                quietTextButton("生成周度分享卡") {
+                quietTextButton("保存周记摘页") {
                     homeViewModel.markWeeklyShareGenerated()
                     generateAndShareWeeklyCard()
                 }
@@ -454,10 +454,10 @@ struct InsightWebView: View {
             softActionButton("记一句本月收束") {
                 homeViewModel.markMonthlyClosing()
             }
-            softActionButton("保存月度小结") {
+            softActionButton("保存月记") {
                 saveMonthlySummary()
             }
-            softActionButton("切换叙述风格") {
+            softActionButton("换一版") {
                 changeMonthlyNarrativeStyle()
             }
             if let monthlyActionMessage {
@@ -504,7 +504,7 @@ struct InsightWebView: View {
                 }
                 .buttonStyle(.plain)
             } else {
-                Text("季度 / 年度复盘正在打磨中，先从每周和每月慢慢回看。")
+                Text("季度 / 年度复盘正在打磨中，先从每周和每月开始回看。")
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.subtext)
             }
@@ -722,13 +722,13 @@ struct InsightWebView: View {
 
             if monthlyInsightGenerated, monthlyReport != nil, !homeViewModel.isGeneratingMonthlyInsight {
                 HStack(spacing: 6) {
-                    monthlyFootnoteSecondaryButton("保存月度小结") {
+                    monthlyFootnoteSecondaryButton("保存月记") {
                         saveMonthlySummary()
                     }
                     Text("·")
                         .font(.system(size: 12))
                         .foregroundStyle(AppColors.subtext.opacity(0.45))
-                    monthlyFootnoteSecondaryButton("换个叙述风格") {
+                    monthlyFootnoteSecondaryButton("换一版") {
                         changeMonthlyNarrativeStyle()
                     }
                 }
@@ -814,11 +814,11 @@ struct InsightWebView: View {
         let opening: String
         switch variant % 3 {
         case 1:
-            opening = "换个角度读：这个月留下 \(monthItems.count) 笔，\(total.formatted(.cny)) 慢慢散在生活里，「\(top)」是最清楚的一条线。"
+            opening = "换个角度读：这个月留下 \(monthItems.count) 笔，\(total.formatted(.cny)) 记在账本里，「\(top)」是最清楚的一条线。"
         case 2:
             opening = "再轻一点写：\(monthItems.count) 笔记录像一页月记，\(total.formatted(.cny)) 里，「\(top)」先被看见。"
         default:
-            opening = "这个月记下来 \(monthItems.count) 笔，\(total.formatted(.cny)) 慢慢落在账本里，「\(top)」偶尔露头。"
+            opening = "这个月记下来 \(monthItems.count) 笔，\(total.formatted(.cny)) 落在账本里，「\(top)」偶尔露头。"
         }
         var text = "\(opening)\(report.structure)"
         let periodKey = EchoAnchorService.shared.periodKeyForMonth()
@@ -1195,7 +1195,7 @@ struct WeeklyShareCardView: View {
         dailyTrend: [(String, Double)],
         topCategoryRatio: Double,
         headline: String = "这一周你记录得很认真",
-        subtitle: String = "温柔回看，不必苛责，按自己的节奏慢慢生活。",
+        subtitle: String = "这一周先留在这里，之后再回来对照。",
         anchorLine: String? = nil,
         periodText: String? = nil,
         isPetMode: Bool = true,
@@ -1309,7 +1309,7 @@ struct WeeklyShareCardView: View {
                 rhythmTexture
                     .padding(.bottom, 18)
 
-                Text("来自 叙账 · 认真记录，慢慢回看")
+                Text("来自 叙账 · 认真记录，回头再看")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(t.footerSub)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1328,9 +1328,9 @@ struct WeeklyShareCardView: View {
 
     private var journalTitle: String {
         if recordCount <= 2 {
-            return "这周先留下几段小痕迹"
+            return "这周先留下几笔记录"
         }
-        return "这周记下 \(recordCount) 笔生活"
+        return "这周记下 \(recordCount) 笔记录"
     }
 
     private var journalBody: String {
@@ -1342,9 +1342,9 @@ struct WeeklyShareCardView: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "¥\\s?[0-9,]+(\\.[0-9]+)?", with: "", options: .regularExpression)
             .replacingOccurrences(of: "\\s{2,}", with: " ", options: .regularExpression)
-        let middle = cleanedHeadline.isEmpty ? "这一周已经留下了可以回看的生活痕迹。" : cleanedHeadline
+        let middle = cleanedHeadline.isEmpty ? "这一周已经留下了可以回看的记录。" : cleanedHeadline
         let closing = cleanedSubtitle.contains("建议") || cleanedSubtitle.contains("数据不足") || cleanedSubtitle.isEmpty
-            ? "不用急着评价它，先把这一周轻轻收好。"
+            ? "先把这一周放在这里，之后再回来对照。"
             : cleanedSubtitle
         return "\(middle)\n\(closing)"
     }

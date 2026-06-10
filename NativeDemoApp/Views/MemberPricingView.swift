@@ -23,14 +23,14 @@ struct MemberPricingView: View {
     ]
 
     private let benefits = [
-        ("🎬 周/月生活切片无限回看", "在「看看花」里不限次数回看本周生活切片与本月生活章，把一段时间的花费讲成清楚的生活脉络。"),
+        ("🎬 周/月回放无限回看", "在「痕迹」里不限次数回看本周和本月，把一段时间的花费讲清楚。"),
         ("📝 场景备注包 + 宠物专属昵称", "通勤、吃喝、购物、旅行、健康、居家等生活场景一键备注；开启宠物陪伴后可使用宠物相关备注与昵称。"),
         ("📷 OCR 账单识别不限次", "导入微信/支付宝账单截图，识别后先确认，再写入账单。免费用户每日 3 次，会员不限次。"),
         ("☁️ 云端备份 + 纯净无广告", "登录后可同步账单与会员状态，换机时更容易恢复；App 内不放广告。"),
-        ("💬 小 AI 说 · 播后可选深聊", "生活切片讲完后，想再多一句建议时可以继续聊，语气保持温和、不说教。"),
+        ("💬 小 AI 说 · 播后可选深聊", "回放结束后，想再多一句建议时可以继续聊，语气保持温和、不说教。"),
     ]
 
-    private let freeQuotaFootnote = "免费体验：本周生活切片每自然周 1 次 · 本月生活章终生 3 次 · OCR 每日 3 次 · 今日生活回放每日 1 次。开通会员后，周/月切片与 OCR 可不限次使用。"
+    private let freeQuotaFootnote = "免费体验：本周回放每自然周 1 次 · 本月回放终生 3 次 · OCR 每日 3 次 · 今日回放每日 1 次。开通会员后，周/月回放与 OCR 可不限次使用。"
 
     private var isMember: Bool {
         settingsViewModel.settings.hasMemberAccess
@@ -91,11 +91,11 @@ struct MemberPricingView: View {
 
     private var heroSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("让生活切片一直可回看")
+            Text("让周记和月记一直可回看")
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(AppColors.text)
 
-            Text("会员解锁周/月切片无限回看、OCR 不限次和云端备份。")
+            Text("会员解锁周/月回放无限回看、OCR 不限次和云端备份。")
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
 

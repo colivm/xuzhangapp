@@ -26,6 +26,16 @@ final class EchoAnchorService {
         "把家安顿一下",
         "心意往来的一笔",
         "今天的一小笔",
+        "这顿饭记下来了",
+        "这段路记下来了",
+        "这次购物记下来了",
+        "这次日用补给",
+        "这次放松安排",
+        "这晚住宿记下来了",
+        "这次健康支出",
+        "这笔居家开销",
+        "这次人情往来",
+        "这笔记录已放好",
     ]
 
     private init() {}
@@ -123,11 +133,11 @@ final class EchoAnchorService {
         switch anchor.kind {
         case .title:
             if stableHash(anchor.itemId.uuidString) % 2 == 0 {
-                return "有一笔你写下「\(snippet)」，像是那天给自己留的一点照顾。"
+                return "有一笔你写下「\(snippet)」，后来也能从这里认出来。"
             }
             return "「\(snippet)」—— 有一笔是这样留在账本里的。"
         case .emotion:
-            return "有一次你标记过「\(snippet)」，像一段很小的生活注脚。"
+            return "有一次你标记过「\(snippet)」，这条记录因此更好认。"
         }
     }
 

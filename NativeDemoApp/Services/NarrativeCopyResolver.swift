@@ -82,9 +82,9 @@ enum NarrativeCopyResolver {
         if containsAny(lower, ["饮料", "喝的", "可乐", "雪碧", "汽水", "果汁", "茶饮", "奶茶", "咖啡", "拿铁", "美式", "冰饮"]) {
             return pick(
                 [
-                    "顺手买杯喝的",
-                    "小饮料接住这一刻",
-                    "给路上添点清爽",
+                    "买杯喝的",
+                    "小饮料记一笔",
+                    "路上添点清爽",
                     "一口喝的记下来",
                     "便利店饮料在手边",
                     "今天补点小清爽",
@@ -96,12 +96,12 @@ enum NarrativeCopyResolver {
         if containsAny(lower, ["便利蜂", "便利店", "全家", "罗森", "711", "7-11"]) {
             return pick(
                 [
-                    "便利店顺手补给",
+                    "便利店补给",
                     "这一站很方便",
                     "小补给刚好带上",
                     "日常一站完成",
-                    "路过顺手买一点",
-                    "生活角落被照看",
+                    "路过买一点",
+                    "便利店小袋子",
                 ],
                 seed: context.seed + "|convenience"
             )
@@ -145,10 +145,10 @@ enum NarrativeCopyResolver {
         switch category {
         case .daily:
             return [
-                ScenePackTier(maxAmount: 30, notes: ["顺手补点日用", "日常小物补上", "生活角落添一点", "刚好需要的小东西", "把日子补齐一点", "小补给记下来"]),
-                ScenePackTier(maxAmount: 100, notes: ["日常用品补齐", "把生活小事接住", "家用小物安排好", "顺手添点方便", "这笔很有日常感", "给日子留点顺手"]),
-                ScenePackTier(maxAmount: 300, notes: ["认真打理日子", "生活用品换新一点", "把常用的补上", "日常被照看到了", "这一笔让日子顺一些", "给生活添点踏实"]),
-                ScenePackTier(maxAmount: 9_999, notes: ["给长期日常做安排", "把生活底子补稳", "认真添置一件常用物", "这一笔让日子更稳", "日常需要被好好接住", "生活被安顿了一点"]),
+                ScenePackTier(maxAmount: 30, notes: ["补点日用", "日常小物补上", "生活角落添一点", "刚好需要的小东西", "小东西补齐一点", "小补给记下来"]),
+                ScenePackTier(maxAmount: 100, notes: ["日常用品补齐", "生活小事记一笔", "家用小物安排好", "添点方便", "这笔很有日常感", "日常用品一袋"]),
+                ScenePackTier(maxAmount: 300, notes: ["打理日子的一笔", "生活用品换新一点", "把常用的补上", "日常用品补到位", "这一笔让日子顺一些", "给日常添点踏实"]),
+                ScenePackTier(maxAmount: 9_999, notes: ["长期日常安排", "把生活底子补稳", "添置一件常用物", "这一笔让日子更稳", "日常大项记下", "生活用品大笔支出"]),
             ]
         default:
             return []

@@ -44,7 +44,7 @@ final class HomeViewModel: ObservableObject {
             case .firstRecordTodayPlayback:
                 return "用十几秒叙一下今天"
             case .weekSliceReady:
-                return "本周生活切片可播放"
+                return "本周回放可播放"
             case .fiveRecordsNeverPlayed:
                 return "可以讲这周的故事了"
             }
@@ -533,20 +533,20 @@ final class HomeViewModel: ObservableObject {
         switch count {
         case 0:
             title = "今天先记下来"
-            subtitle = "晚上再回头看，这一天会慢慢有轮廓。"
+            subtitle = "晚上再回头看，这一天会更清楚。"
         case 1:
-            title = "今天的第一笔小痕迹"
+            title = "今天的第一笔记录"
             let emotion = records.first?.emotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             subtitle = "\(!emotion.isEmpty ? emotion : "这笔生活被记下来了")，这一天刚翻开第一页。"
         case 2:
-            title = "今天已留下 2 段小痕迹"
-            subtitle = "主要在「\(topCategory)」上，轮廓慢慢变得具体。"
+            title = "今天已记下 2 笔"
+            subtitle = "主要在「\(topCategory)」上，轮廓变得具体。"
         case 3:
-            title = "今天留下了 3 段小痕迹"
-            subtitle = "合计 \(totalText)，几笔小账轻轻串起今天。"
+            title = "今天记下了 3 笔"
+            subtitle = "合计 \(totalText)，今天的记录已经成形。"
         default:
-            title = "今天留下了 \(count) 段小痕迹"
-            subtitle = "「\(topCategory)」居多，几笔小账轻轻留住今天怎样过的。"
+            title = "今天记下了 \(count) 笔"
+            subtitle = "「\(topCategory)」居多，今天的轮廓已经清楚。"
         }
 
         return TodayStoryNarrative(
@@ -591,10 +591,10 @@ final class HomeViewModel: ObservableObject {
         let topCategory = top?.key.rawValue ?? "暂无"
 
         let summary = "近 7 天里，\(topCategory)最容易被看见。"
-        let structure = "这一周的账单像几段生活片段，慢慢拼出了自己的节奏。"
+        let structure = "这一周的账单分成几段，节奏已经能看出来。"
         let advice = weekItems.count >= 8
-            ? "这一周的记录已经很有轮廓，继续按笔记下去，下周生活切片会更像你的真实日常。"
-            : "这一周的节奏被慢慢记下来了，继续记录，下周生活章会更立体。"
+            ? "这一周的记录已经很有轮廓，继续按笔记下去，下周回放会更贴近你的真实日常。"
+            : "这一周的节奏已经记下来了，继续记录，下周回放会更完整。"
         return (summary, structure, advice)
     }
 
@@ -609,11 +609,11 @@ final class HomeViewModel: ObservableObject {
             summary = "这个月的记录里，「\(top)」出现得比较多。"
         }
         let structure = total <= 0
-            ? "等你有了本月记录，我会帮你梳理这段时间的生活节奏。"
+            ? "等你有了本月记录，我会帮你梳理这段时间的变化。"
             : "「\(top)」是这个月比较明显的一块生活拼图。"
         let advice = total <= 0
             ? "先坚持记一周，复盘会更有感觉。"
-            : "这个月的轮廓已经出来了，继续记录几天，月末生活章会更完整。"
+            : "这个月的轮廓已经出来了，继续记录几天，月记会更完整。"
         return (summary, structure, advice)
     }
 
@@ -826,24 +826,24 @@ final class HomeViewModel: ObservableObject {
             let hour = Calendar.current.component(.hour, from: date)
             switch hour {
             case 5..<10:
-                return ["早餐简单吃一口", "晨间咖啡", "上班前补点能量"]
+                return ["早餐", "晨间咖啡", "上班前买点吃的"]
             case 10..<14:
-                return ["午餐简餐", "咖啡/奶茶", "中午好好吃一口"]
+                return ["午餐简餐", "咖啡/奶茶", "食堂一份热饭"]
             case 14..<17:
-                return ["下午茶小点心", "咖啡/奶茶", "忙里偷闲喝点什么"]
+                return ["下午茶", "咖啡/奶茶", "便利店轻食"]
             case 17..<21:
-                return ["晚餐好好吃一口", "下班后的一顿热饭", "晚餐小聚"]
+                return ["晚餐一顿热饭", "下班后吃点热乎的", "晚餐小聚"]
             default:
-                return ["夜里补一点", "加班后吃点热乎的", "深夜小食"]
+                return ["夜宵", "加班后吃点热乎的", "深夜小食"]
             }
         case .transport:
             return ["地铁通勤", "打车出行", "停车/油费"]
         case .shopping:
-            return ["日常补货", "电商下单", "给自己添点东西"]
+            return ["日常补货", "电商下单", "买到常用物品"]
         case .daily:
             return ["家用日化", "生活用品", "超市补给"]
         case .entertainment:
-            return ["电影娱乐", "游戏充值", "周末放松"]
+            return ["电影票", "游戏充值", "周末一场活动"]
         case .lodging:
             return ["酒店住宿", "差旅住宿", "民宿短住"]
         case .health:
@@ -851,9 +851,9 @@ final class HomeViewModel: ObservableObject {
         case .home:
             return ["水电燃气", "家里添置", "修修补补"]
         case .social:
-            return ["带份小小心意", "聚会叙旧", "探望记挂"]
+            return ["带份小心意", "聚会叙旧", "探望时买点东西"]
         case .other:
-            return ["一时兴起的小物", "没归类的小痕迹", "先记下一笔"]
+            return ["临时开销", "还没归类", "先记下一笔"]
         }
     }
 
@@ -957,11 +957,11 @@ final class HomeViewModel: ObservableObject {
         if todayTotal > weeklyAverage && weeklyAverage > 0 {
             action = "今天的记录比平时热闹一点，先把这段生活收下来。"
         } else {
-            action = "今天的几笔已经被好好记下来了，明天再顺手补上新的片段。"
+            action = "今天这几笔已经留在账本里，明天有新花费再继续记。"
         }
 
         let encourage = settings.aiTone == .gentle
-            ? "慢慢来，日子会在这些小记录里变得清楚。"
+            ? "先按今天这些记录看，日常会一点点清楚。"
             : "继续记录，会更容易看见自己的日常轮廓。"
 
         let insight = DailyInsight(
@@ -1227,7 +1227,7 @@ final class HomeViewModel: ObservableObject {
     func buildWeeklyRhythmText() -> String {
         let cal = Calendar.current
         guard let start = cal.date(byAdding: .day, value: -6, to: Date()) else {
-            return "这周的记录还不够完整，先继续把日子慢慢记下来。"
+            return "这周的记录还不够完整，先继续记几笔。"
         }
         let weekItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
         guard !weekItems.isEmpty else {
@@ -1237,7 +1237,7 @@ final class HomeViewModel: ObservableObject {
         let total = weekItems.reduce(0) { $0 + $1.amount }
         let activeDays = Set(weekItems.map { cal.startOfDay(for: $0.createdAt) }).count
         let rhythm = activeDays >= 5 ? "记录分布得比较均匀" : "记录集中在 \(activeDays) 天里"
-        return "这周共 \(weekItems.count) 笔，合计 \(total.formatted(.cny))，\(rhythm)。 「\(top)」是最显眼的一段，但更值得留下的是这一周已经有了可回看的生活节奏。"
+        return "这周共 \(weekItems.count) 笔，合计 \(total.formatted(.cny))，\(rhythm)。 「\(top)」是最显眼的一段，这一周已经有了可回看的记录。"
     }
 
     func markWeeklyTag() {
@@ -1251,7 +1251,7 @@ final class HomeViewModel: ObservableObject {
         let total = monthExpenseTotal
         let top = monthTopCategoryText
         guard total > 0 else {
-            return "这个月还没有足够账单，先继续记几笔，月末生活章会更像你的日子。"
+            return "这个月还没有足够账单，先继续记几笔，月记会更像你的日子。"
         }
         return "这个月「\(top)」出现得比较多，先把这条线索留在这里。月末再回看会更完整。"
     }

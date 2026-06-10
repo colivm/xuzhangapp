@@ -145,7 +145,7 @@ struct HomeView: View {
 
     private var lifeRhythmPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("近期生活节奏")
+            Text("近期记录")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(AppColors.text)
             lifeRhythmContent
@@ -163,7 +163,7 @@ struct HomeView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(AppColors.subtext)
         } else if homeViewModel.recentThreeItems.isEmpty {
-            Text("随手记几笔，这里会慢慢长出你的生活痕迹。")
+            Text("先记几笔，这里会列出最近的记录。")
                 .font(.system(size: 14))
                 .foregroundStyle(AppColors.subtext)
         } else {
@@ -187,8 +187,8 @@ struct HomeView: View {
 
     private var lifeRhythmFallbackText: String {
         homeViewModel.weekTopCategoryText != "暂无"
-            ? "最近「\(homeViewModel.weekTopCategoryText)」出现得多一点，像这段日子的一个小主题。"
-            : "随手记几笔，这里会慢慢长出你的生活痕迹。"
+            ? "最近「\(homeViewModel.weekTopCategoryText)」出现得多一点，是这段时间的一个小主题。"
+            : "先记几笔，这里会列出最近的记录。"
     }
 
     private var todayStoryHero: some View {
@@ -683,7 +683,7 @@ struct BillPlaybackSheet: View {
             Text("今日生活回放")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(AppColors.text)
-            Text("10 秒看完今天的生活节奏")
+            Text("10 秒看完今天的记录")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
         }
@@ -794,7 +794,7 @@ struct BillPlaybackSheet: View {
     @ViewBuilder
     private var playbackDoneSection: some View {
         if playbackDone {
-            Text("今天的生活节奏已记录完毕✨")
+            Text("今天的记录已回放完毕")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(AppColors.accent.opacity(0.8))
                 .padding(.bottom, 8)
@@ -807,7 +807,7 @@ struct BillPlaybackSheet: View {
 
     private var memberPlaybackNudge: some View {
         VStack(spacing: 10) {
-            Text("把这周的生活轨迹长期留住，回看会更温柔。")
+            Text("把这周记录长期留住，之后还能回来听。")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppColors.text.opacity(0.88))
                 .multilineTextAlignment(.center)

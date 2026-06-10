@@ -20,6 +20,7 @@ struct RecordView: View {
     @State private var datePanelExpanded = false
     @State private var previewLineWasRotated = false
     @State private var showScenePackAngleSheet = false
+    @State private var didAutoFocusAmountPad = false
     @FocusState private var focusedField: RecordField?
 
     private enum RecordField {
@@ -278,12 +279,23 @@ struct RecordView: View {
     }
 
     private var recordContentBottomPadding: CGFloat {
-        focusedField == .note ? 360 : 120
+        focusedField == .note || amountPadActive ? 360 : 120
     }
 
     private func dismissKeyboard() {
         amountPadActive = false
         focusedField = nil
+    }
+
+    private func focusAmountPad(delay: Double = 0.18) {
+        guard selectedEntryMode == .manual else { return }
+        focusedField = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard selectedEntryMode == .manual else { return }
+            withAnimation(.easeInOut(duration: 0.18)) {
+                amountPadActive = true
+            }
+        }
     }
 
     private func scrollNoteFieldIntoView(_ proxy: ScrollViewProxy) {
@@ -297,16 +309,16 @@ struct RecordView: View {
 
     private func previewFallbackTitle(for category: HomeItem.Category) -> String {
         switch category {
-        case .dining: return "吃饭的一小笔"
-        case .transport: return "路上的一小段"
-        case .shopping: return "给生活添一点"
-        case .daily: return "日常的一点补给"
-        case .entertainment: return "留给放松的一笔"
-        case .lodging: return "停下来的一晚"
-        case .health: return "照顾自己的一笔"
-        case .home: return "把家安顿一下"
-        case .social: return "心意往来的一笔"
-        case .other: return "今天的一小笔"
+        case .dining: return "这顿饭记下来了"
+        case .transport: return "这段路记下来了"
+        case .shopping: return "这次购物记下来了"
+        case .daily: return "这次日用补给"
+        case .entertainment: return "这次放松安排"
+        case .lodging: return "这晚住宿记下来了"
+        case .health: return "这次健康支出"
+        case .home: return "这笔居家开销"
+        case .social: return "这次人情往来"
+        case .other: return "这笔记录已放好"
         }
     }
 
@@ -414,11 +426,23 @@ struct RecordView: View {
             .onChange(of: homeViewModel.selectedDate) { _, _ in
                 refreshRecommendedCategory()
             }
+            .onChange(of: selectedEntryMode) { _, newValue in
+                if newValue == .manual {
+                    focusAmountPad(delay: 0.08)
+                } else {
+                    dismissKeyboard()
+                }
+            }
             .onChange(of: focusedField) { _, newValue in
                 if newValue == .note {
                     amountPadActive = false
                     scrollNoteFieldIntoView(scrollProxy)
                 }
+            }
+            .onAppear {
+                guard !didAutoFocusAmountPad else { return }
+                didAutoFocusAmountPad = true
+                focusAmountPad()
             }
             .sheet(isPresented: $showOCRConfirmSheet) {
                 OCRConfirmSheet(drafts: ocrConfirmDrafts) { selectedDrafts in
@@ -453,12 +477,11 @@ struct RecordView: View {
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(recordInk)
 
-            if hasAmountDraft {
-                Text("这一笔会先落到账本，再慢慢长成回望。")
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext.opacity(0.76))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text(hasAmountDraft ? "这一笔会先落到账本，再长成回望。" : "先敲金额，分类和备注会跟着浮出来。")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext.opacity(0.76))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(height: 17, alignment: .leading)
         }
     }
 
@@ -481,6 +504,9 @@ struct RecordView: View {
             dismissKeyboard()
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedEntryMode = mode
+            }
+            if mode == .manual {
+                focusAmountPad(delay: 0.12)
             }
         } label: {
             recordModeLabel(mode, isSelected: isSelected)
@@ -529,6 +555,21 @@ struct RecordView: View {
             if hasValidAmount {
                 expandedDetails
             }
+        }
+    }
+
+    private var recordWarmupAmounts: [String] {
+        switch homeViewModel.selectedCategory {
+        case .transport:
+            return ["6", "12", "25"]
+        case .dining:
+            return ["18", "32", "58"]
+        case .daily:
+            return ["29", "68", "99"]
+        case .shopping:
+            return ["39", "88", "128"]
+        default:
+            return ["12", "36", "68"]
         }
     }
 
@@ -693,6 +734,10 @@ struct RecordView: View {
     private var amountField: some View {
         VStack(alignment: .leading, spacing: 10) {
             amountStage
+            if !hasAmountDraft {
+                amountWarmupChips
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
 
             Text(hasValidAmount ? "金额只是刻度，这一笔会长成一句生活记录。" : emptyAmountWhisper)
                 .font(.system(size: 12))
@@ -700,6 +745,33 @@ struct RecordView: View {
                 .frame(maxWidth: .infinity, alignment: hasAmountDraft ? .leading : .center)
                 .multilineTextAlignment(hasAmountDraft ? .leading : .center)
         }
+    }
+
+    private var amountWarmupChips: some View {
+        HStack(spacing: 8) {
+            ForEach(recordWarmupAmounts, id: \.self) { amount in
+                Button {
+                    homeViewModel.inputAmount = amount
+                    focusAmountPad(delay: 0.02)
+                } label: {
+                    Text("¥\(amount)")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(recordInk.opacity(0.78))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.50))
+                        )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(AppColors.line.opacity(0.42), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
     }
 
     private var amountStage: some View {
@@ -728,20 +800,20 @@ struct RecordView: View {
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("¥")
-                        .font(.system(size: hasAmountDraft ? 28 : 30, weight: .semibold, design: .rounded))
+                        .font(.system(size: 30, weight: .semibold, design: .rounded))
                         .foregroundStyle(AppColors.subtext.opacity(hasAmountDraft ? 0.74 : 0.68))
                         .padding(.trailing, 2)
                         .offset(y: 1)
 
                     Text(homeViewModel.inputAmount.isEmpty ? "0.00" : homeViewModel.inputAmount)
-                        .font(.system(size: hasAmountDraft ? 40 : 42, weight: .bold, design: .rounded))
+                        .font(.system(size: 42, weight: .bold, design: .rounded))
                         .foregroundStyle(homeViewModel.inputAmount.isEmpty ? AppColors.subtext.opacity(0.46) : recordInk)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentTransition(.numericText())
                 }
-                .padding(.horizontal, hasAmountDraft ? 14 : 18)
+                .padding(.horizontal, 18)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(minHeight: hasAmountDraft ? 72 : 82)
+                .frame(minHeight: 82)
                 .contentShape(RoundedRectangle(cornerRadius: amountFieldRadius, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -755,16 +827,17 @@ struct RecordView: View {
                     .padding(.top, 1)
                     .allowsHitTesting(false)
             }
-            .shadow(color: hasAmountDraft ? Color.clear : AppColors.accent.opacity(0.12), radius: 18, x: 0, y: 8)
+            .shadow(color: AppColors.accent.opacity(hasAmountDraft ? 0.07 : 0.12), radius: 18, x: 0, y: 8)
             .contentShape(RoundedRectangle(cornerRadius: amountFieldRadius, style: .continuous))
-            .padding(.horizontal, hasAmountDraft ? 0 : 12)
+            .padding(.horizontal, 12)
         }
+        .frame(height: 90)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, hasAmountDraft ? 0 : 4)
+        .padding(.vertical, 4)
     }
 
     private var amountFieldRadius: CGFloat {
-        hasAmountDraft ? 16 : 20
+        20
     }
 
     private var amountFieldBackground: some View {
@@ -797,8 +870,9 @@ struct RecordView: View {
     private var amountFieldBackgroundColors: [Color] {
         if hasAmountDraft {
             return [
-                Color.white.opacity(0.86),
-                AppColors.paperMist.opacity(0.38)
+                Color.white.opacity(0.78),
+                AppColors.paperWarm.opacity(0.42),
+                AppColors.tracePlaybackButtonBg.opacity(0.30)
             ]
         }
         return [
@@ -810,10 +884,10 @@ struct RecordView: View {
 
     private var emptyAmountWhisper: String {
         let lines = [
-            "记下一笔今天的生活",
-            "先从一个数字开始，留下一点今天。",
-            "不用想清楚，先把这一刻记下来。",
-            "数额在这就行，晚点会慢慢长成一句生活记录。"
+            "金额填上后，再补分类和备注。",
+            "先从数字开始，这一笔就有了位置。",
+            "不用想完整，先把金额记下来。",
+            "数额在这就行，后面再补一句记录。"
         ]
         let day = Calendar.current.ordinality(of: .day, in: .era, for: Date()) ?? 0
         return lines[day % lines.count]
@@ -1081,7 +1155,10 @@ struct RecordView: View {
             ZStack {
                 if hasValidAmount {
                     LinearGradient(
-                        colors: [recordAccent.opacity(0.92), recordAccent],
+                        colors: [
+                            Color(red: 0.57, green: 0.75, blue: 0.69).opacity(0.90),
+                            recordAccent.opacity(0.78)
+                        ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -1101,7 +1178,7 @@ struct RecordView: View {
 
                 Text("放进账本")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(hasValidAmount ? Color.white : AppColors.accent.opacity(0.66))
+                    .foregroundStyle(hasValidAmount ? Color.white.opacity(0.95) : AppColors.accent.opacity(0.66))
                     .padding(.vertical, 14)
                     .frame(maxWidth: .infinity)
             }
@@ -1109,9 +1186,9 @@ struct RecordView: View {
             .frame(minHeight: 52)
             .overlay(
                 Capsule(style: .continuous)
-                    .stroke(hasValidAmount ? Color.white.opacity(0.36) : AppColors.accent.opacity(0.18), lineWidth: 1)
+                    .stroke(hasValidAmount ? Color.white.opacity(0.26) : AppColors.accent.opacity(0.18), lineWidth: 1)
             )
-            .shadow(color: hasValidAmount ? recordAccent.opacity(0.35) : AppColors.accent.opacity(0.06), radius: 12, x: 0, y: 6)
+            .shadow(color: hasValidAmount ? recordAccent.opacity(0.18) : AppColors.accent.opacity(0.06), radius: 10, x: 0, y: 5)
         }
         .buttonStyle(.plain)
         .disabled(!hasValidAmount)

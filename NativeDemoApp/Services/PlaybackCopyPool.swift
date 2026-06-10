@@ -33,23 +33,23 @@ enum PlaybackCopyPool {
     }
 
     private static let fallbackGroup = PlaybackCopyGroup(
-        warm: ["这段时间已经留下了可以回看的生活痕迹。"],
-        plain: ["这段时间已经留下了可以回看的生活痕迹。"]
+        warm: ["这段时间已经有几笔可以回看的记录。"],
+        plain: ["这段时间已经有几笔可以回看的记录。"]
     )
 
     private static let groups: [String: PlaybackCopyGroup] = [
         "week-intro": PlaybackCopyGroup(
             warm: [
-                "这一周，你留下了 {count} 笔小痕迹，合计 {total}。",
+                "这一周，你留下了 {count} 笔记录，合计 {total}。",
                 "{petName}收拢了这一周：{count} 笔，{total}。",
                 "先把 {rangeLabel} 拢在一起，{count} 笔，{total}，从这里叙起。",
-                "{count} 笔小记录，{total}；这一周的故事，开始讲了。"
+                "{count} 笔记录，{total}；这一周从这里说起。"
             ],
             plain: [
-                "这周留下了 {count} 笔小痕迹。",
+                "这周留下了 {count} 笔记录。",
                 "{rangeLabel} 这段时间，可以从 {count} 笔记录说起。",
-                "这一周有 {count} 个可回看的片段。",
-                "先把这一周轻轻打开。"
+                "这一周有 {count} 笔可回看的记录。",
+                "先把这一周打开看看。"
             ]
         ),
         "week-weak-intro": PlaybackCopyGroup(
@@ -60,7 +60,7 @@ enum PlaybackCopyPool {
             ],
             plain: [
                 "{count} 笔也是一个开头。",
-                "这周刚留下几段小痕迹。",
+                "这周刚留下几笔记录。",
                 "记录还不多，但已经可以先看一眼。"
             ]
         ),
@@ -80,15 +80,15 @@ enum PlaybackCopyPool {
         ),
         "week-top-category": PlaybackCopyGroup(
             warm: [
-                "「{topCategory}」是这周最常出现的生活主料。",
+                "「{topCategory}」是这周最常出现的一类。",
                 "这周「{topCategory}」在记录里更靠前。",
                 "翻遍这一周，「{topCategory}」最容易被看见。",
-                "这一周，「{topCategory}」留下的痕迹更明显。"
+                "这一周，「{topCategory}」出现得更明显。"
             ],
             plain: [
-                "「{topCategory}」是这周最常出现的生活主料。",
+                "「{topCategory}」是这周最常出现的一类。",
                 "这周「{topCategory}」在记录里更靠前。",
-                "这一周，「{topCategory}」留下的痕迹更明显。",
+                "这一周，「{topCategory}」出现得更明显。",
                 "翻到这一周，「{topCategory}」最容易被看见。"
             ]
         ),
@@ -108,15 +108,15 @@ enum PlaybackCopyPool {
         ),
         "week-outro": PlaybackCopyGroup(
             warm: [
-                "这一遍先叙到这里。下周再记几天，{petName}准时来接新的一周。",
-                "这一周的故事讲完了；下个自然周，再来叙新的一章。",
-                "先收下这一遍回看。下周见，{petName}还在。",
-                "周切片到这儿。下一周有了新记录，再来听新版。"
+                "这一周先讲到这里。下周有新记录，再回来听。",
+                "这一周的回放到这里；下个自然周再看新的版本。",
+                "先把这一周放在这里。下周见，{petName}还在。",
+                "这一周到这儿。下一周有了新记录，再来听新版。"
             ],
             plain: [
                 "这一周先叙到这里。",
                 "下个自然周，再来听新的这一周。",
-                "这段生活已经被好好收下。",
+                "这一周已经留在记录里。",
                 "先把这一周放在这里。"
             ]
         ),
@@ -124,7 +124,7 @@ enum PlaybackCopyPool {
             warm: [
                 "再多记几笔，下一遍会更像你的这一周。",
                 "{petName}等你把这一周记满，再来叙完整版。",
-                "补几笔日常，下次切片会更立体。"
+                "补几笔日常，下次回放会更完整。"
             ],
             plain: [
                 "再多记几笔，下一遍会更像你的这一周。",
@@ -134,16 +134,16 @@ enum PlaybackCopyPool {
         ),
         "month-intro": PlaybackCopyGroup(
             warm: [
-                "{rangeLabel}，{activeDays} 天有生活痕迹，{count} 笔，一共 {total}。",
+                "{rangeLabel}，{activeDays} 天有记录，{count} 笔，一共 {total}。",
                 "{petName}收下 {rangeLabel}：{count} 笔、{activeDays} 个记录日，合计 {total}。",
                 "这个月你来了 {activeDays} 天，留下 {count} 笔，{total}。",
                 "先把 {rangeLabel} 拢在一起：{activeDays} 天、{count} 笔、{total}。"
             ],
             plain: [
-                "{rangeLabel} 有 {activeDays} 天留下了生活痕迹。",
+                "{rangeLabel} 有 {activeDays} 天留下了记录。",
                 "这个月来了 {activeDays} 天，留下 {count} 个片段。",
-                "先把 {rangeLabel} 轻轻打开。",
-                "这个月的生活章，从 {activeDays} 个记录日说起。"
+                "先把 {rangeLabel} 打开看看。",
+                "这个月的月记，从 {activeDays} 个记录日说起。"
             ]
         ),
         "month-early": PlaybackCopyGroup(
@@ -179,7 +179,7 @@ enum PlaybackCopyPool {
                 "「{topCategory}」是这个月最明显的一块拼图。",
                 "翻遍 {rangeLabel}，「{topCategory}」站得比较靠前。",
                 "生活构成里，「{topCategory}」更靠前。",
-                "这个月，「{topCategory}」留下的痕迹更明显。"
+                "这个月，「{topCategory}」出现得更明显。"
             ],
             plain: [
                 "「{topCategory}」是这个月最明显的一块拼图。",
@@ -201,14 +201,14 @@ enum PlaybackCopyPool {
         "month-action": PlaybackCopyGroup(
             warm: [
                 "这个月的节奏已经有轮廓了，想再聊细一点，可以打开月度复盘。",
-                "生活章先叙到这里。下个月的新记录，会生成新的一章。",
+                "这个月先讲到这里。下个月有新记录，再回来听。",
                 "{petName}把 {rangeLabel} 收好；下次再来听新版。",
-                "这一章讲完了，下个月见。"
+                "这个月讲完了，下个月见。"
             ],
             plain: [
                 "这个月先叙到这里。",
-                "这一章已经被好好收下。",
-                "下个月，会有新的生活章。",
+                "这个月已经留在记录里。",
+                "下个月，会有新的月记。",
                 "这段时间先放在这里。"
             ]
         )
@@ -217,15 +217,15 @@ enum PlaybackCopyPool {
     private static let weekTeasers = [
         "{busiestDayShort} 最热闹 · {topCategory} 更靠前",
         "这一周，{topCategory} 更常出现",
-        "{count} 笔小痕迹，串起这一周",
+        "{count} 笔记录，串起这一周",
         "{rangeLabel} · 约半分钟讲完"
     ]
 
     private static let monthTeasers = [
         "{rangeLabel}里，「{topCategory}」最常被看见",
         "这个月，「{topCategory}」像一条清楚的生活线索",
-        "{count} 笔记录，把这个月慢慢讲清楚",
-        "{rangeLabel}的生活轮廓，已经被记下来了"
+        "{count} 笔记录，把这个月讲清楚",
+        "{rangeLabel}的记录轮廓已经出来了"
     ]
 
     private static func render(_ template: String, values: [String: String]) -> String {

@@ -10,7 +10,7 @@
   --hero-pink: rgba(255, 196, 222, 0.35);
   --hero-teal: rgba(176, 224, 220, 0.45);
   --max: 960px;
-  --max-wide: 1040px;
+  --max-wide: 1120px;
 }
 
 * {
@@ -112,7 +112,8 @@ a:hover {
 .hero {
   position: relative;
   overflow: hidden;
-  padding: 56px 0 64px;
+  padding: 42px 0 64px;
+  background: #fbf7f1;
 }
 
 .hero::before {
@@ -120,16 +121,28 @@ a:hover {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 15% 20%, var(--hero-pink), transparent 45%),
-    radial-gradient(circle at 85% 30%, var(--hero-teal), transparent 42%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(238, 240, 244, 0.86)),
+    radial-gradient(circle at 16% 18%, rgba(255, 236, 224, 0.78), transparent 38%),
+    radial-gradient(circle at 86% 28%, rgba(176, 224, 220, 0.42), transparent 38%);
   pointer-events: none;
 }
 
 .hero .wrap {
   position: relative;
+}
+
+.hero-layout {
   display: grid;
-  gap: 32px;
+  grid-template-columns: minmax(0, 0.78fr) minmax(520px, 1.22fr);
+  gap: 28px;
   align-items: center;
+  max-width: var(--max-wide);
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 2;
+  padding: 28px 0 18px;
 }
 
 .hero-badge {
@@ -153,7 +166,7 @@ a:hover {
 
 .hero-lead {
   margin: 0 0 28px;
-  max-width: 540px;
+  max-width: 520px;
   font-size: 17px;
   color: var(--subtext);
 }
@@ -222,30 +235,36 @@ a:hover {
   font-size: 12px;
 }
 
-.hero-card {
-  padding: 28px 24px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  box-shadow: 0 12px 32px rgba(37, 48, 65, 0.06);
+.hero-visual {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  width: min(66vw, 760px);
+  aspect-ratio: 2048 / 1026;
+  justify-self: end;
+  border-radius: 46px;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(255, 251, 246, 0.96), rgba(239, 249, 242, 0.88)),
+    radial-gradient(circle at 76% 76%, rgba(127, 179, 162, 0.24), transparent 40%);
+  box-shadow: 0 28px 56px rgba(37, 48, 65, 0.08);
 }
 
-.hero-card h2 {
-  margin: 0 0 12px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--subtext);
+.hero-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(37, 48, 65, 0.06);
+  border-radius: inherit;
 }
 
-.hero-card p {
-  margin: 0 0 8px;
-  font-size: 15px;
-}
-
-.hero-card .highlight {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text);
+.hero-visual img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
 }
 
 /* ── Features ── */
@@ -622,19 +641,77 @@ a:hover {
 }
 
 @media (min-width: 720px) {
-  .hero .wrap {
-    grid-template-columns: 1.1fr 0.9fr;
-  }
-
   .features {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
+@media (max-width: 980px) {
+  .hero {
+    padding-top: 32px;
+  }
+
+  .hero-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .hero-copy {
+    order: 2;
+    padding-top: 0;
+  }
+
+  .hero-visual {
+    order: 1;
+    width: 100%;
+    max-width: 720px;
+    justify-self: center;
+    border-radius: 34px;
+  }
+
+  .hero-lead {
+    max-width: 680px;
+  }
+}
+
 @media (max-width: 600px) {
+  .site-header .wrap {
+    height: auto;
+    min-height: 56px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    gap: 12px;
+  }
+
+  .logo {
+    flex: 0 0 auto;
+  }
+
   .nav-links {
     gap: 12px;
     font-size: 13px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .hero {
+    padding: 20px 0 44px;
+  }
+
+  .hero-visual {
+    border-radius: 24px;
+  }
+
+  .hero h1 {
+    font-size: 32px;
+  }
+
+  .hero-actions .btn {
+    width: 100%;
+  }
+
+  .trust-row span {
+    font-size: 11px;
   }
 
   .carousel-slide {
