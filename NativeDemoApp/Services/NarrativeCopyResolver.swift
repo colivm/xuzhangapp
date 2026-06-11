@@ -54,7 +54,7 @@ enum NarrativeCopyResolver {
             return note
         }
 
-        if let pack = scenePack(for: context.category) {
+        if let pack = scenePack(for: context) {
             return ScenePackCopyPool.note(
                 for: pack,
                 amount: context.amount,
@@ -125,13 +125,15 @@ enum NarrativeCopyResolver {
         keywords.contains { text.contains($0.lowercased()) }
     }
 
-    private static func scenePack(for category: HomeItem.Category) -> ScenePackDefinition? {
+    private static func scenePack(for context: Context) -> ScenePackDefinition? {
         let packId: String?
-        switch category {
+        switch context.category {
         case .dining: packId = "food"
         case .transport: packId = "commute"
         case .shopping: packId = "shopping"
-        case .lodging, .entertainment, .other: packId = "travel"
+        case .lodging: packId = "travel"
+        case .entertainment, .other:
+            packId = containsTravelKeyword(context.note) ? "travel" : nil
         case .health: packId = "care"
         case .home: packId = "home"
         case .social: packId = "social"
@@ -139,6 +141,11 @@ enum NarrativeCopyResolver {
         }
         guard let packId else { return nil }
         return ScenePackCopyPool.definitions.first { $0.id == packId }
+    }
+
+    private static func containsTravelKeyword(_ text: String) -> Bool {
+        let keywords = ["旅行", "旅途", "景区", "景点", "行程", "酒店", "民宿", "住宿", "机票", "高铁", "机场", "车站", "门票", "出发", "返程", "摆渡"]
+        return keywords.contains { text.contains($0) }
     }
 
     private static func genericTiers(for category: HomeItem.Category) -> [ScenePackTier] {

@@ -116,6 +116,22 @@ struct HomeItem: Identifiable, Codable, Equatable {
         case .other: return amount >= 80 ? "单独记录" : "日常记录"
         }
     }
+
+    var displayEmotionTag: String {
+        let trimmed = emotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        if Self.containsTravelKeyword(trimmed),
+           category != .lodging,
+           !Self.containsTravelKeyword(title) {
+            return Self.inferEmotionTag(category: category, amount: amount)
+        }
+        return trimmed
+    }
+
+    private static func containsTravelKeyword(_ text: String) -> Bool {
+        let keywords = ["旅行", "旅途", "景区", "景点", "行程", "酒店", "民宿", "住宿", "机票", "高铁", "机场", "车站", "门票", "出发", "返程", "摆渡"]
+        return keywords.contains { text.contains($0) }
+    }
 }
 
 extension HomeItem {

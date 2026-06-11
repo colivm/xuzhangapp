@@ -1195,7 +1195,7 @@ struct WeeklyShareCardView: View {
         dailyTrend: [(String, Double)],
         topCategoryRatio: Double,
         headline: String = "这一周留下几笔记录",
-        subtitle: String = "这些记录先留在这一页，之后再回来对照。",
+        subtitle: String = "之后有新记录，再回来对照。",
         anchorLine: String? = nil,
         periodText: String? = nil,
         isPetMode: Bool = true,
@@ -1251,7 +1251,7 @@ struct WeeklyShareCardView: View {
                 .padding(.vertical, 24)
 
             VStack(alignment: .leading, spacing: 0) {
-                Text("周记摘页")
+                Text("周记一页")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(t.titleSub.opacity(0.92))
 
@@ -1323,7 +1323,7 @@ struct WeeklyShareCardView: View {
 
     private var displayNickname: String {
         let trimmed = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "这一周" : "\(trimmed)的这一周"
+        return trimmed.isEmpty ? "这一周" : "\(trimmed) · 这一周"
     }
 
     private var journalTitle: String {
@@ -1338,19 +1338,20 @@ struct WeeklyShareCardView: View {
             .replacingOccurrences(of: "，([^，。]+)约占\\d+%", with: "，$1出现得比较多", options: .regularExpression)
             .replacingOccurrences(of: "约占\\d+%", with: "出现得比较多", options: .regularExpression)
             .replacingOccurrences(of: " 笔记录", with: " 次记录")
-            .replacingOccurrences(of: "串起这一周", with: "留成这一页")
+            .replacingOccurrences(of: "串起这一周", with: "留在这一周")
             .replacingOccurrences(of: "最容易被看见", with: "出现得多一些")
-            .replacingOccurrences(of: "先叙到这里", with: "先留在这一页")
+            .replacingOccurrences(of: "先叙到这里", with: "先记到这里")
         let cleanedSubtitle = subtitle
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "¥\\s?[0-9,]+(\\.[0-9]+)?", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "这一周先叙到这里。", with: "之后再回来对照。")
-            .replacingOccurrences(of: "先把这一周放在这里。", with: "之后再回来对照。")
-            .replacingOccurrences(of: "这些记录先留在这一页。", with: "之后再回来对照。")
+            .replacingOccurrences(of: "这一周先叙到这里。", with: "之后有新记录，再回来对照。")
+            .replacingOccurrences(of: "先把这一周放在这里。", with: "之后有新记录，再回来对照。")
+            .replacingOccurrences(of: "这些记录先留在这一页。", with: "之后有新记录，再回来对照。")
+            .replacingOccurrences(of: "这些记录先放在这里。", with: "之后有新记录，再回来对照。")
             .replacingOccurrences(of: "\\s{2,}", with: " ", options: .regularExpression)
         let middle = cleanedHeadline.isEmpty ? "这一周已经留下几笔可以回看的记录。" : cleanedHeadline
         let closing = cleanedSubtitle.contains("建议") || cleanedSubtitle.contains("数据不足") || cleanedSubtitle.isEmpty
-            ? "之后再回来对照。"
+            ? "之后有新记录，再回来对照。"
             : cleanedSubtitle
         return "\(middle)\n\(closing)"
     }
@@ -1363,7 +1364,7 @@ struct WeeklyShareCardView: View {
 
     private var auxiliaryLine: String {
         let top = topCategory.trimmingCharacters(in: .whitespacesAndNewlines)
-        return top.isEmpty ? "\(recordCount) 笔记录留在这一页。" : "\(recordCount) 笔记录 · \(top) 出现得多一些。"
+        return top.isEmpty ? "\(recordCount) 笔记录留在这一周。" : "\(recordCount) 笔记录 · \(top) 出现得多一些。"
     }
 
     private var rhythmTexture: some View {

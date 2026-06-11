@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import UIKit
 import Vision
 
@@ -65,6 +66,11 @@ final class OCRService {
         case ignored
     }
 
+    private struct OCRLine {
+        let text: String
+        let boundingBox: CGRect
+    }
+
     func recognizeReceipt(from imageData: Data) async throws -> [OCRReceiptDraft] {
         guard let image = UIImage(data: imageData), let cgImage = image.cgImage else {
             throw OCRServiceError.invalidImage
@@ -75,17 +81,31 @@ final class OCRService {
         request.usesLanguageCorrection = true
         request.recognitionLanguages = ["zh-Hans", "en-US"]
 
-        let handler = VNImageRequestHandler(cgImage: cgImage)
+        let handler = VNImageRequestHandler(
+            cgImage: cgImage,
+            orientation: CGImagePropertyOrientation(image.imageOrientation)
+        )
         try handler.perform([request])
 
-        let observations = (request.results ?? []).sorted {
-            $0.boundingBox.minY > $1.boundingBox.minY
-        }
-        let candidates = observations.compactMap { $0.topCandidates(1).first }
-        let lines = candidates
-            .map(\.string)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        let recognizedLines = (request.results ?? [])
+            .compactMap { observation -> (candidate: VNRecognizedText, box: CGRect)? in
+                guard let candidate = observation.topCandidates(1).first else { return nil }
+                return (candidate, observation.boundingBox)
+            }
+            .compactMap { item -> (candidate: VNRecognizedText, line: OCRLine)? in
+                let text = item.candidate.string.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else { return nil }
+                return (item.candidate, OCRLine(text: text, boundingBox: item.box))
+            }
+            .sorted { lhs, rhs in
+                if isSameOCRRow(lhs.line.boundingBox, rhs.line.boundingBox) {
+                    return lhs.line.boundingBox.minX < rhs.line.boundingBox.minX
+                }
+                return lhs.line.boundingBox.minY > rhs.line.boundingBox.minY
+            }
+        let candidates = recognizedLines.map { $0.candidate }
+        let ocrLines = recognizedLines.map { $0.line }
+        let lines = ocrLines.map { $0.text }
         let text = lines.joined(separator: "\n")
 
         guard !lines.isEmpty else {
@@ -97,7 +117,7 @@ final class OCRService {
 
         if looksLikeListScreenshot(lines: lines, provider: provider) {
             let listDrafts = parseListReceipts(
-                lines: lines,
+                ocrLines: ocrLines,
                 rawText: text,
                 confidence: Double(confidence),
                 provider: provider
@@ -122,7 +142,7 @@ final class OCRService {
         }
 
         let fallbackDrafts = parseListReceipts(
-            lines: lines,
+            ocrLines: ocrLines,
             rawText: text,
             confidence: Double(confidence),
             provider: provider
@@ -161,15 +181,36 @@ final class OCRService {
         ]
         let hasListHint = listHints.contains { text.contains($0) }
         let hasDetailHint = detailHints.contains { text.contains($0) }
+        let amountLineCount = listAmountLineCount(in: lines)
         let currencyCount = currencyCandidates(in: text).count
 
         if hasListHint && !hasDetailHint {
+            return true
+        }
+        if amountLineCount >= 3 && !hasDetailHint {
             return true
         }
         if provider != .generic && currencyCount >= 4 && !hasDetailHint {
             return true
         }
         return false
+    }
+
+    private func listAmountLineCount(in lines: [String]) -> Int {
+        lines.indices.reduce(0) { count, index in
+            let line = lines[index]
+            guard !shouldSkipListAmountLine(line) else { return count }
+            let context = adjacentListStatusContext(lines: lines, index: index)
+            guard case .some(.expense) = listAmountInfo(in: line, statusContext: context) else {
+                return count
+            }
+            return count + 1
+        }
+    }
+
+    private func isSameOCRRow(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
+        let rowHeight = max(lhs.height, rhs.height, 0.018)
+        return abs(lhs.midY - rhs.midY) <= max(0.014, rowHeight * 0.72)
     }
 
     private func parseAlipay(lines: [String], rawText: String, confidence: Double) -> OCRReceiptDraft? {
@@ -236,7 +277,7 @@ final class OCRService {
     }
 
     private func parseListReceipts(
-        lines: [String],
+        ocrLines: [OCRLine],
         rawText: String,
         confidence: Double,
         provider: OCRProvider
@@ -244,9 +285,10 @@ final class OCRService {
         var drafts: [OCRReceiptDraft] = []
         var seenKeys = Set<String>()
         let referenceDate = statementReferenceDate(in: rawText) ?? .now
+        let lines = ocrLines.map(\.text)
 
-        for index in lines.indices {
-            let line = lines[index]
+        for index in ocrLines.indices {
+            let line = ocrLines[index].text
             guard !shouldSkipListAmountLine(line) else { continue }
             let amountInfo: (amount: Double, inlineTitle: String?)
             let statusContext = adjacentListStatusContext(lines: lines, index: index)
@@ -261,7 +303,7 @@ final class OCRService {
             let windowEnd = min(lines.count, index + 5)
             let windowLines = Array(lines[windowStart..<windowEnd])
             let windowText = windowLines.joined(separator: "\n")
-            let title = amountInfo.inlineTitle ?? nearbyListTitle(lines: lines, amountIndex: index, provider: provider) ?? "账单记录"
+            let title = amountInfo.inlineTitle ?? nearbyListTitle(lines: ocrLines, amountIndex: index, provider: provider) ?? "账单记录"
             let amount = abs(amountInfo.amount)
             guard amount > 0, amount < 1_000_000 else { continue }
 
@@ -275,7 +317,7 @@ final class OCRService {
                 windowLines: windowLines,
                 windowText: windowText
             )
-            let brand = MerchantBrandCatalog.matchBrand(in: "\(title)\n\(windowText)")
+            let brand = MerchantBrandCatalog.matchOCRBrand(in: "\(title)\n\(windowText)")
             let category = NarrativeCopyResolver.resolveCategory(brandId: brand?.id, fallback: inferredCategory)
             let resolvedTitle = NarrativeCopyResolver.resolveTitle(brandId: brand?.id, fallback: title)
             let dayKey = Calendar.current.startOfDay(for: date).timeIntervalSince1970
@@ -347,6 +389,11 @@ final class OCRService {
         let title: String?
         if match.range(at: 1).location != NSNotFound {
             let rawTitle = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            if isAmountOnlyCluster(rawTitle) {
+                // Vision may merge the right-side amount column into lines like "-52.00 -4.50".
+                // Treating the first amount as a title shifts the whole WeChat list by one row.
+                return nil
+            }
             title = isLikelyListTitle(rawTitle) && !isPureAmountLine(rawTitle) ? rawTitle : nil
         } else {
             title = nil
@@ -356,14 +403,14 @@ final class OCRService {
     }
 
     private func adjacentListStatusContext(lines: [String], index: Int) -> String {
-        [index - 1, index + 1]
+        [index - 2, index - 1, index + 1, index + 2]
             .filter { lines.indices.contains($0) }
             .map { lines[$0].trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { isListStatusLine($0) }
             .joined(separator: "\n")
     }
 
-    private func nearbyListTitle(lines: [String], amountIndex: Int, provider: OCRProvider) -> String? {
+    private func nearbyListTitle(lines: [OCRLine], amountIndex: Int, provider: OCRProvider) -> String? {
         switch provider {
         case .alipay:
             return nearbyTitle(lines: lines, amountIndex: amountIndex, offsets: [-1, -2, -3, 1])
@@ -374,15 +421,35 @@ final class OCRService {
         }
     }
 
-    private func wechatListTitle(lines: [String], amountIndex: Int) -> String? {
+    private func wechatListTitle(lines: [OCRLine], amountIndex: Int) -> String? {
+        guard lines.indices.contains(amountIndex) else { return nil }
+        let amountBox = lines[amountIndex].boundingBox
+
+        let sameRowTitle = lines.enumerated()
+            .filter { index, line in
+                guard index != amountIndex else { return false }
+                guard isSameOCRRow(line.boundingBox, amountBox) else { return false }
+                guard line.boundingBox.midX < amountBox.midX else { return false }
+                let candidate = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return containsChinese(candidate) && isLikelyListTitle(candidate)
+            }
+            .sorted { lhs, rhs in
+                lhs.element.boundingBox.minX > rhs.element.boundingBox.minX
+            }
+            .first?.element.text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let sameRowTitle {
+            return sameRowTitle
+        }
+
         guard amountIndex > 0 else { return nil }
         let start = amountIndex - 1
         let end = max(0, amountIndex - 4)
 
         for candidateIndex in stride(from: start, through: end, by: -1) {
-            let candidate = lines[candidateIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            let candidate = lines[candidateIndex].text.trimmingCharacters(in: .whitespacesAndNewlines)
             if isPureAmountLine(candidate) || listExpenseAmountInfo(in: candidate) != nil {
-                break
+                continue
             }
             if isListTimeLine(candidate) || isListStatusLine(candidate) {
                 continue
@@ -394,11 +461,11 @@ final class OCRService {
         return nil
     }
 
-    private func nearbyTitle(lines: [String], amountIndex: Int, offsets: [Int]) -> String? {
+    private func nearbyTitle(lines: [OCRLine], amountIndex: Int, offsets: [Int]) -> String? {
         for offset in offsets {
             let candidateIndex = amountIndex + offset
             guard lines.indices.contains(candidateIndex) else { continue }
-            let candidate = lines[candidateIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            let candidate = lines[candidateIndex].text.trimmingCharacters(in: .whitespacesAndNewlines)
             if isLikelyListTitle(candidate) {
                 return candidate
             }
@@ -408,6 +475,7 @@ final class OCRService {
 
     private func isLikelyListTitle(_ value: String) -> Bool {
         guard isUsableTitle(value), !isPureAmountLine(value), !isListTimeLine(value), !isListStatusLine(value) else { return false }
+        guard !isAmountOnlyCluster(value) else { return false }
         let blocked = [
             "¥", "￥", "金额", "时间", "订单", "单号", "支付", "付款", "收款", "交易", "账单", "详情",
             "当前状态", "成功", "失败", "付款方式", "筛选", "全部", "月支出", "月收入", "余额", "零钱",
@@ -419,7 +487,7 @@ final class OCRService {
     }
 
     private func shouldSkipListAmountLine(_ line: String) -> Bool {
-        let skipWords = ["收入 ¥", "收入￥", "支出 ¥", "支出￥", "本月已省", "转入", "提现", "充值", "还款"]
+        let skipWords = ["收入 ¥", "收入￥", "支出 ¥", "支出￥", "本月已省", "转入", "提现", "还款"]
         return skipWords.contains { line.contains($0) }
     }
 
@@ -429,6 +497,7 @@ final class OCRService {
         windowLines: [String],
         windowText: String
     ) -> HomeItem.Category {
+        // 支付宝列表自带分类，优先信平台分类；微信通常没有分类，用商户名/标题做本地推断。
         if provider == .alipay,
            let alipayCategory = alipayListCategory(from: windowLines) {
             return alipayCategory
@@ -536,22 +605,41 @@ final class OCRService {
         if isStatusBarNoiseTitle(trimmed) { return false }
         if NarrativeCopyResolver.isNoisyTimeTitle(trimmed) || isListStatusLine(trimmed) { return false }
         if isPureAmountLine(trimmed) { return false }
+        if isAmountOnlyCluster(trimmed) { return false }
+        guard containsChinese(trimmed) || containsAlphabetic(trimmed) else { return false }
         if trimmed.range(of: #"^\d{4}[-/.年]"#, options: .regularExpression) != nil { return false }
         if trimmed.range(of: #"[¥￥]\s*-?\d"#, options: .regularExpression) != nil { return false }
         return true
     }
 
     private func isPureAmountLine(_ value: String) -> Bool {
-        let trimmed = value
+        let trimmed = normalizedAmountText(value)
+        return trimmed.range(
+            of: #"^-?\s*[0-9]+(?:\.[0-9]{1,2})?\s*$"#,
+            options: .regularExpression
+        ) != nil
+    }
+
+    private func isAmountOnlyCluster(_ value: String) -> Bool {
+        let normalized = normalizedAmountText(value)
+        let stripped = normalized.replacingOccurrences(
+            of: #"[-+]?\s*[0-9]+(?:\.[0-9]{1,2})?"#,
+            with: "",
+            options: .regularExpression
+        )
+        return !normalized.isEmpty && stripped.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func normalizedAmountText(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "−", with: "-")
+            .replacingOccurrences(of: "—", with: "-")
+            .replacingOccurrences(of: "–", with: "-")
             .replacingOccurrences(of: ",", with: "")
             .replacingOccurrences(of: "\u{00A5}", with: "")
             .replacingOccurrences(of: "\u{FFE5}", with: "")
             .replacingOccurrences(of: "\u{697C}", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.range(
-            of: #"^-?\s*[0-9]+(?:\.[0-9]{1,2})?\s*$"#,
-            options: .regularExpression
-        ) != nil
     }
 
     private func isListTimeLine(_ value: String) -> Bool {
@@ -575,6 +663,10 @@ final class OCRService {
 
     private func containsChinese(_ value: String) -> Bool {
         value.range(of: #"\p{Han}"#, options: .regularExpression) != nil
+    }
+
+    private func containsAlphabetic(_ value: String) -> Bool {
+        value.range(of: #"[A-Za-z]"#, options: .regularExpression) != nil
     }
 
     private func dateNear(labels: [String], in lines: [String]) -> Date? {
@@ -740,7 +832,7 @@ final class OCRService {
         if lower.contains("转账") || lower.contains("红包") {
             return .other
         }
-        if lower.contains("咖啡") || lower.contains("餐") || lower.contains("外卖") || lower.contains("饭") || lower.contains("茶") || lower.contains("美团") || lower.contains("饿了么") || lower.contains("把子肉") || lower.contains("馄饨") || lower.contains("餐饮美食") {
+        if lower.contains("咖啡") || lower.contains("餐") || lower.contains("外卖") || lower.contains("饭") || lower.contains("茶") || lower.contains("美团") || lower.contains("饿了么") || lower.contains("把子肉") || lower.contains("馄饨") || lower.contains("餐饮美食") || lower.contains("火锅") || lower.contains("海鲜") || lower.contains("大排档") || lower.contains("烧烤") || lower.contains("小吃") || lower.contains("饭店") || lower.contains("餐厅") {
             return .dining
         }
         if lower.contains("地铁") || lower.contains("公交") || lower.contains("打车") || lower.contains("滴滴") || lower.contains("铁路") || lower.contains("停车") || lower.contains("车服") || lower.contains("充车") || lower.contains("充电") || lower.contains("顺易通信") {
@@ -768,5 +860,30 @@ final class OCRService {
             return .lodging
         }
         return .daily
+    }
+}
+
+private extension CGImagePropertyOrientation {
+    init(_ uiOrientation: UIImage.Orientation) {
+        switch uiOrientation {
+        case .up:
+            self = .up
+        case .upMirrored:
+            self = .upMirrored
+        case .down:
+            self = .down
+        case .downMirrored:
+            self = .downMirrored
+        case .left:
+            self = .left
+        case .leftMirrored:
+            self = .leftMirrored
+        case .right:
+            self = .right
+        case .rightMirrored:
+            self = .rightMirrored
+        @unknown default:
+            self = .up
+        }
     }
 }

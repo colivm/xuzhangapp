@@ -452,8 +452,9 @@ struct HomeView: View {
                     .foregroundStyle(AppColors.text)
             }
 
-            if !item.emotionTag.isEmpty {
-                Text(item.emotionTag)
+            let emotionTag = item.displayEmotionTag
+            if !emotionTag.isEmpty {
+                Text(emotionTag)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AppColors.accent.opacity(0.74))
                     .padding(.horizontal, 8).padding(.vertical, 3)
@@ -766,11 +767,12 @@ struct BillPlaybackSheet: View {
         HStack(spacing: 4) {
             Text(item.title)
                 .font(.system(size: 11))
-            if !item.emotionTag.isEmpty {
+            let emotionTag = item.displayEmotionTag
+            if !emotionTag.isEmpty {
                 Text("·")
                     .font(.system(size: 11))
                     .foregroundStyle(AppColors.subtext.opacity(0.4))
-                Text(item.emotionTag)
+                Text(emotionTag)
                     .font(.system(size: 11))
             }
             Spacer()

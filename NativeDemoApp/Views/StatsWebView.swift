@@ -192,8 +192,9 @@ struct StatsWebView: View {
         let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let defaultTitle = item.category.defaultRecordTitle
         let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
+        let emotion = item.displayEmotionTag
         var score = 0
-        if !item.emotionTag.isEmpty && item.emotionTag != defaultEmotion { score += 40 }
+        if !emotion.isEmpty && emotion != defaultEmotion { score += 40 }
         if item.userEditedTitle == true { score += 30 }
         if title != defaultTitle && (4...18).contains(title.count) { score += 20 }
         if case .manual = item.source { score += 6 }
@@ -351,7 +352,7 @@ struct StatsWebView: View {
                         .foregroundStyle(AppColors.subtext.opacity(0.92))
                 }
                 if shouldShowTraceSlipEmotion(for: item) {
-                    Text(item.emotionTag)
+                    Text(item.displayEmotionTag)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.subtext.opacity(0.78))
                         .lineLimit(1)
@@ -375,7 +376,7 @@ struct StatsWebView: View {
     }
 
     private func shouldShowTraceSlipEmotion(for item: HomeItem) -> Bool {
-        let tag = item.emotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !tag.isEmpty else { return false }
         return tag != HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
     }
@@ -1046,8 +1047,9 @@ struct StatsWebView: View {
                     .foregroundStyle(AppColors.text)
             }
 
-            if !item.emotionTag.isEmpty {
-                Text(item.emotionTag)
+            let emotionTag = item.displayEmotionTag
+            if !emotionTag.isEmpty {
+                Text(emotionTag)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AppColors.accent.opacity(0.74))
                     .padding(.horizontal, 8)

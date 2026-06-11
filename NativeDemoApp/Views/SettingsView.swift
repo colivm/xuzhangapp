@@ -119,7 +119,7 @@ struct SettingsView: View {
         )
         .overlay(alignment: .leading) {
             RoundedRectangle(cornerRadius: 999, style: .continuous)
-                .fill(AppColors.accent.opacity(0.34))
+                .fill(settingsInkAccent.opacity(0.34))
                 .frame(width: 3)
                 .padding(.vertical, 18)
         }
@@ -137,11 +137,11 @@ struct SettingsView: View {
                 .frame(width: 44, height: 44)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AppColors.accent.opacity(0.36), lineWidth: 1)
+                        .stroke(settingsInkAccent.opacity(0.32), lineWidth: 1)
                 )
             Text("叙")
                 .font(.system(size: 20, weight: .bold, design: .serif))
-                .foregroundStyle(AppColors.accent.opacity(0.78))
+                .foregroundStyle(settingsInkAccent.opacity(0.82))
         }
     }
 
@@ -181,11 +181,11 @@ struct SettingsView: View {
             HStack(spacing: 10) {
                 Text(mark)
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppColors.accent.opacity(0.72))
+                    .foregroundStyle(settingsMarkColor(mark).opacity(0.82))
                     .frame(width: 26, height: 26)
                     .background(
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(AppColors.accent.opacity(0.10))
+                            .fill(settingsMarkColor(mark).opacity(0.10))
                     )
                 Text(title)
                     .font(.system(size: 15, weight: .semibold))
@@ -224,6 +224,25 @@ struct SettingsView: View {
         case .system: return "跟随系统"
         case .light: return "浅色"
         case .dark: return "深色"
+        }
+    }
+
+    private var settingsInkAccent: Color {
+        Color(red: 0.66, green: 0.47, blue: 0.30)
+    }
+
+    private func settingsMarkColor(_ mark: String) -> Color {
+        switch mark {
+        case "云":
+            return Color(red: 0.47, green: 0.56, blue: 0.68)
+        case "伴":
+            return AppColors.accent.opacity(0.88)
+        case "色":
+            return Color(red: 0.70, green: 0.55, blue: 0.36)
+        case "安":
+            return Color(red: 0.56, green: 0.53, blue: 0.62)
+        default:
+            return settingsInkAccent
         }
     }
 

@@ -93,16 +93,7 @@ struct RecordView: View {
 
     private var hasTravelContextForCurrentRecord: Bool {
         let note = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if containsTravelKeyword(note) {
-            return true
-        }
-        let start = Calendar.current.date(byAdding: .day, value: -30, to: homeViewModel.selectedDate) ?? .distantPast
-        return homeViewModel.items.contains { item in
-            item.createdAt >= start && (
-                item.category == .lodging ||
-                containsTravelKeyword(item.title)
-            )
-        }
+        return containsTravelKeyword(note)
     }
 
     private func containsTravelKeyword(_ text: String) -> Bool {
@@ -204,7 +195,8 @@ struct RecordView: View {
                 category: homeViewModel.selectedCategory,
                 amount: inputAmountValue,
                 date: homeViewModel.selectedDate,
-                seed: "\(inputAmountValue)|\(homeViewModel.selectedDate.timeIntervalSince1970)|\(homeViewModel.selectedCategory.rawValue)|\(brandId ?? "")"
+                seed: "\(inputAmountValue)|\(homeViewModel.selectedDate.timeIntervalSince1970)|\(homeViewModel.selectedCategory.rawValue)|\(brandId ?? "")",
+                note: homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
             )
         )
     }
