@@ -21,7 +21,7 @@ struct MinimalOnboardingSheet: View {
             AppColors.bg.ignoresSafeArea()
             VStack(spacing: 18) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("记一笔，今天就开始有轮廓")
+                    Text("先记一笔，今天有个开头")
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(AppColors.text)
                         .lineLimit(2)

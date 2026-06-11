@@ -354,3 +354,24 @@
 - 不把所有文案一次性改成同一种“文学风格”。
 
 第一轮只解决：高频怪词、机器拼接、强安慰、场景误贴。
+
+## 12. 工具化护栏
+
+本地可运行轻量文案 lint：
+
+```bash
+python scripts/copy_lint.py
+```
+
+严格模式会把降频词也作为失败：
+
+```bash
+python scripts/copy_lint.py --strict-soft
+```
+
+规则：
+
+- `小确幸 / 治愈 / 你值得 / 被看见 / 掌控感 / 接住 / 高光 / 生活角落` 等高风险词默认失败。
+- `温柔 / 慢慢 / 顺手 / 值得 / 松弛 / 照顾 / 安顿 / 收下 / 轮廓` 默认只报警，严格模式失败。
+- `sanitizeLifeNote`、`sanitizeBrandNote` 和 `.replacingOccurrences(of:)` 中的旧词映射键不计入失败；这些位置用于把旧词替换掉。
+- `MerchantBrandCatalog` 的品牌原始池会在构造时统一经过 `sanitizeBrandNote`，因此 soft 词不刷屏；blocked 词仍会失败。

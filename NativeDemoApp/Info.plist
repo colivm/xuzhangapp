@@ -34,7 +34,7 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>用于根据本地天气生成温柔陪伴提醒，可随时在设置关闭；不上传账单</string>
+	<string>用于根据本地天气生成本地提醒，可随时在设置关闭；不上传账单</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>用于将本周故事图保存到相册，便于你回看或分享。</string>
 	<key>UIApplicationSceneManifest</key>

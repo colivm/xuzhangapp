@@ -23,7 +23,7 @@ enum PetCompanionCopy {
     static let weatherHint = [
         "开启天气后，雨天、降温这些情况会多一句提示。",
         "允许获取天气后，提示会更贴近当天。",
-        "天冷、降温、下雨天，可以顺手补一句记录。（前往设置开启）",
+        "天冷、降温、下雨天，可以补一句记录。（前往设置开启）",
     ]
 
     static let weatherAiFallback = [

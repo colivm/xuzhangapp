@@ -514,7 +514,7 @@ final class HomeViewModel: ObservableObject {
         guard total > 0 else {
             return "今天还没记支出，先从一笔小额开始就很好。"
         }
-        return "今天的记录里，「\(topCategory)」最常出现，日子又多了一点轮廓。"
+        return "今天的记录里，「\(topCategory)」最常出现，日子又多了一点细节。"
     }
 
     var weekExpenseTotal: Double {
@@ -541,13 +541,13 @@ final class HomeViewModel: ObservableObject {
             subtitle = "\(!emotion.isEmpty ? emotion : "这笔生活被记下来了")，这一天刚翻开第一页。"
         case 2:
             title = "今天已记下 2 笔"
-            subtitle = "主要在「\(topCategory)」上，轮廓变得具体。"
+            subtitle = "主要在「\(topCategory)」上，记录变得具体。"
         case 3:
             title = "今天记下了 3 笔"
             subtitle = "合计 \(totalText)，今天的记录已经成形。"
         default:
             title = "今天记下了 \(count) 笔"
-            subtitle = "「\(topCategory)」居多，今天的轮廓已经清楚。"
+            subtitle = "「\(topCategory)」居多，今天的记录已经清楚。"
         }
 
         return TodayStoryNarrative(

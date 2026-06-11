@@ -148,7 +148,7 @@ struct ContentView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @State private var selectedTab: AppTab = .today
-    @State private var petHint: String = "我在这儿陪你，慢慢记就好。"
+    @State private var petHint: String = "有一笔就记一笔，晚点也能补。"
     @State private var petBubbleVisible: Bool = false
     @State private var showMemberPricing = false
     @State private var showMinimalOnboarding = false
@@ -240,7 +240,7 @@ struct ContentView: View {
             )
         }
         .onChange(of: selectedTab) { _, tab in
-            if tab == .today { petHint = "今天花得怎么样？慢慢记下来就好。" }
+            if tab == .today { petHint = "今天花到哪儿了？有一笔就先记一笔。" }
             petBubbleVisible = false
         }
         .onChange(of: settingsViewModel.petCompanionEnabled) { _, enabled in
