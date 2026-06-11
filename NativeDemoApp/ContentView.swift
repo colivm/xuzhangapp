@@ -966,7 +966,7 @@ struct WarmRecordDatePanel: View {
 
 struct RecordEditSheet: View {
     let item: HomeItem
-    var onSave: (HomeItem) -> Void
+    var onSave: (HomeItem) -> Bool
     var onDelete: () -> Void
 
     @State private var amountText: String
@@ -976,9 +976,10 @@ struct RecordEditSheet: View {
     @State private var noteEditorExpanded = false
     @State private var categoryPanelExpanded = false
     @State private var datePanelExpanded = false
+    @State private var safetyMessage: String?
     @Environment(\.dismiss) private var dismiss
 
-    init(item: HomeItem, onSave: @escaping (HomeItem) -> Void, onDelete: @escaping () -> Void) {
+    init(item: HomeItem, onSave: @escaping (HomeItem) -> Bool, onDelete: @escaping () -> Void) {
         self.item = item
         self.onSave = onSave
         self.onDelete = onDelete
@@ -1016,6 +1017,13 @@ struct RecordEditSheet: View {
             .background(AppColors.bg.ignoresSafeArea())
             .navigationTitle("调整这一笔")
             .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: titleText) { _, newValue in
+                if newValue.count > 32 {
+                    titleText = String(newValue.prefix(32))
+                    return
+                }
+                safetyMessage = nil
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
@@ -1130,6 +1138,13 @@ struct RecordEditSheet: View {
     private var editPreviewExpandedSections: some View {
         if noteEditorExpanded {
             editPreviewNoteField
+        }
+
+        if let safetyMessage {
+            Text(safetyMessage)
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext.opacity(0.82))
+                .transition(.opacity)
         }
 
         if categoryPanelExpanded {
@@ -1247,8 +1262,14 @@ struct RecordEditSheet: View {
             updated.category = selectedCategory
             updated.createdAt = selectedDate
             updated.updatedAt = Date()
-            onSave(updated)
-            dismiss()
+            if onSave(updated) {
+                dismiss()
+            } else {
+                safetyMessage = "这句备注里可能有隐私信息，先改成更简单的记录。"
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    noteEditorExpanded = true
+                }
+            }
         } label: {
             Text("更新这一笔")
                 .font(.system(size: 17, weight: .bold, design: .rounded))

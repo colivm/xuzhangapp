@@ -19,6 +19,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var loginPhone: String = ""
     @Published var loginCode: String = ""
     @Published private(set) var authMessage: String?
+    @Published private(set) var contentSafetyMessage: String?
     @Published private(set) var isAuthBusy: Bool = false
     /// 是否已保存访问令牌（与 Keychain 同步，用于界面展示）。
     @Published private(set) var hasCloudSession: Bool = false
@@ -29,13 +30,15 @@ final class SettingsViewModel: ObservableObject {
         if !hasCloudSession && Self.isBackendDefaultDisplayName(settings.displayName) {
             settings.displayName = Self.localDefaultDisplayName
         }
+        settings.displayName = sanitizedDisplayName(settings.displayName)
+        settings.petNickname = sanitizedPetNickname(settings.petNickname)
         persist()
     }
 
     var displayName: String {
         get { settings.displayName }
         set {
-            settings.displayName = newValue
+            settings.displayName = sanitizedDisplayName(newValue)
             persist()
         }
     }
@@ -90,9 +93,35 @@ final class SettingsViewModel: ObservableObject {
     var petNickname: String {
         get { settings.petNickname }
         set {
-            settings.petNickname = newValue
+            settings.petNickname = sanitizedPetNickname(newValue)
             persist()
         }
+    }
+
+    @discardableResult
+    func updateDisplayName(_ value: String) -> Bool {
+        let result = UserContentRiskService.shared.validateDisplayName(value, fallback: Self.localDefaultDisplayName)
+        guard result.isAllowed else {
+            contentSafetyMessage = result.message
+            return false
+        }
+        settings.displayName = result.value
+        contentSafetyMessage = nil
+        persist()
+        return true
+    }
+
+    @discardableResult
+    func updatePetNickname(_ value: String) -> Bool {
+        let result = UserContentRiskService.shared.validatePetNickname(value)
+        guard result.isAllowed else {
+            contentSafetyMessage = result.message
+            return false
+        }
+        settings.petNickname = result.value
+        contentSafetyMessage = nil
+        persist()
+        return true
     }
 
     var weatherCompanionEnabled: Bool {
@@ -215,7 +244,7 @@ final class SettingsViewModel: ObservableObject {
         do {
             let session = try await client.loginWithSMS(phone: phone, code: code)
             KeychainService.saveAccessToken(session.accessToken)
-            settings.displayName = session.displayName
+            settings.displayName = sanitizedDisplayName(session.displayName)
             settings.cloudUserId = session.userId
             settings.memberTier = session.memberTier
             persist()
@@ -265,6 +294,16 @@ final class SettingsViewModel: ObservableObject {
 
     private func persist() {
         LocalStore.saveSettings(settings)
+    }
+
+    private func sanitizedDisplayName(_ value: String) -> String {
+        let result = UserContentRiskService.shared.validateDisplayName(value, fallback: Self.localDefaultDisplayName)
+        return result.isAllowed ? result.value : Self.localDefaultDisplayName
+    }
+
+    private func sanitizedPetNickname(_ value: String) -> String {
+        let result = UserContentRiskService.shared.validatePetNickname(value)
+        return result.isAllowed ? result.value : ""
     }
 
     private static let localDefaultDisplayName = "叙账用户"

@@ -422,6 +422,11 @@ struct RecordView: View {
                 refreshRecommendedCategory()
             }
             .onChange(of: homeViewModel.inputTitle) { _, _ in
+                if homeViewModel.inputTitle.count > 32 {
+                    homeViewModel.inputTitle = String(homeViewModel.inputTitle.prefix(32))
+                    return
+                }
+                homeViewModel.clearRecordInputMessage()
                 refreshRecommendedCategory(applySuggestedTitle: false)
             }
             .onChange(of: homeViewModel.selectedDate) { _, _ in
@@ -1155,6 +1160,13 @@ struct RecordView: View {
                     .stroke(Color.white.opacity(0.45), lineWidth: 1)
             )
 
+            if let message = homeViewModel.recordInputMessage {
+                Text(message)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext.opacity(0.82))
+                    .padding(.horizontal, 2)
+            }
+
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(homeViewModel.noteSuggestions(for: homeViewModel.selectedCategory, at: homeViewModel.selectedDate), id: \.self) { suggestion in
@@ -1187,7 +1199,14 @@ struct RecordView: View {
         Button {
             guard hasValidAmount else { return }
             dismissKeyboard()
-            homeViewModel.addManualRecord(userEditedTitle: currentTitleShouldBeUserEdited)
+            let didSave = homeViewModel.addManualRecord(userEditedTitle: currentTitleShouldBeUserEdited)
+            guard didSave else {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    recordDetailsExpanded = true
+                    noteEditorExpanded = true
+                }
+                return
+            }
             recordDetailsExpanded = false
             categoryGridExpanded = false
             noteEditorExpanded = false

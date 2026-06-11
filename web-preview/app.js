@@ -269,6 +269,68 @@ const AI_SOFT_REPLACEMENTS = {
   管控: "整理",
 };
 
+const RISK_PRIVACY_PATTERNS = [
+  { re: /https?:\/\/|www\.|[\w.-]+@[\w.-]+\.\w+/i, label: "链接或邮箱" },
+  { re: /\b1[3-9]\d{9}\b/, label: "手机号" },
+  { re: /\b\d{17}[\dXx]\b/, label: "身份证号" },
+  { re: /\b(?:\d[ -]?){12,19}\b/, label: "银行卡号" },
+  { re: /(验证码|密码|口令|token|密钥|银行卡|身份证|手机号).{0,8}\d{4,}/i, label: "敏感信息" },
+];
+const RISK_CONTENT_WORDS = [
+  "傻逼",
+  "操你",
+  "约炮",
+  "裸聊",
+  "色情",
+  "赌博",
+  "毒品",
+  "自杀",
+  "杀人",
+  "恐怖袭击",
+];
+
+function normalizeUserText(value, maxLength) {
+  const compact = String(value || "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return compact.slice(0, maxLength);
+}
+
+function riskReasonForText(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const privacyHit = RISK_PRIVACY_PATTERNS.find((item) => item.re.test(text));
+  if (privacyHit) return `包含${privacyHit.label}`;
+  const compact = text.replace(/\s/g, "").toLowerCase();
+  const wordHit = RISK_CONTENT_WORDS.find((word) => compact.includes(word.toLowerCase()));
+  if (wordHit) return "包含不适合展示的词";
+  return "";
+}
+
+function validateDisplayName(value, { fallback = "叙帐用户", label = "昵称", min = 1, max = 12 } = {}) {
+  const normalized = normalizeUserText(value, max);
+  if (!normalized) return { ok: true, value: fallback };
+  if (!new RegExp(`^[\\u4e00-\\u9fa5A-Za-z0-9_·-]{${min},${max}}$`).test(normalized)) {
+    return { ok: false, value: fallback, message: `${label}只能使用 ${min}-${max} 个中文、字母或数字` };
+  }
+  const reason = riskReasonForText(normalized);
+  if (reason) return { ok: false, value: fallback, message: `${label}${reason}，请换一个` };
+  return { ok: true, value: normalized };
+}
+
+function validateManualNote(value, { allowEmpty = true } = {}) {
+  const normalized = normalizeUserText(value, 32);
+  if (!normalized) {
+    return allowEmpty
+      ? { ok: true, value: "" }
+      : { ok: false, value: "", message: "备注不能为空" };
+  }
+  const reason = riskReasonForText(normalized);
+  if (reason) return { ok: false, value: "", message: `备注${reason}，请换一句更日常的说法` };
+  return { ok: true, value: normalized };
+}
+
 const MEMBER_BENEFITS = [
   {
     title: "🎬 周/月生活切片无限回看",
@@ -565,6 +627,7 @@ const refs = {
   scenePackMoreList: document.getElementById("scenePackMoreList"),
   ocrImageInput: document.getElementById("ocrImageInput"),
   ocrPickImageBtn: document.getElementById("ocrPickImageBtn"),
+  ocrDemoResultBtn: document.getElementById("ocrDemoResultBtn"),
   ocrLoadingBox: document.getElementById("ocrLoadingBox"),
   ocrProgressBar: document.getElementById("ocrProgressBar"),
   ocrConfirmOverlay: document.getElementById("ocrConfirmOverlay"),
@@ -579,6 +642,7 @@ const refs = {
   ocrConfirmMeta: document.getElementById("ocrConfirmMeta"),
   ocrDraftSummary: document.getElementById("ocrDraftSummary"),
   ocrDraftGroups: document.getElementById("ocrDraftGroups"),
+  ocrResolveAllBtn: document.getElementById("ocrResolveAllBtn"),
   ocrClearResolvedBtn: document.getElementById("ocrClearResolvedBtn"),
   ocrCategoryOverlay: document.getElementById("ocrCategoryOverlay"),
   ocrCategoryOptions: document.getElementById("ocrCategoryOptions"),
@@ -810,7 +874,7 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return structuredClone(defaultState);
     const parsed = JSON.parse(raw);
-    return {
+    const next = {
       ...structuredClone(defaultState),
       ...parsed,
       settings: { ...defaultState.settings, ...parsed.settings },
@@ -826,6 +890,11 @@ function loadState() {
             }
           : null,
     };
+    const displayName = validateDisplayName(next.settings.displayName, { fallback: "叙帐用户", label: "昵称", min: 1, max: 12 });
+    next.settings.displayName = displayName.ok ? displayName.value : "叙帐用户";
+    const petName = validateDisplayName(next.settings.userPetNickname, { fallback: "", label: "宠物昵称", min: 2, max: 6 });
+    next.settings.userPetNickname = petName.ok ? petName.value : "";
+    return next;
   } catch {
     return structuredClone(defaultState);
   }
@@ -3210,7 +3279,11 @@ async function recommendCategorySmart() {
     return { category: local, source: "local" };
   }
 
-  const note = refs.titleInput.value.trim();
+  const noteRisk = validateManualNote(refs.titleInput.value, { allowEmpty: true });
+  if (!noteRisk.ok) {
+    return { category: local, source: "local" };
+  }
+  const note = noteRisk.value;
   const prompt = `根据金额与备注推荐消费分类，只返回一个分类：餐饮/购物/交通/娱乐/日用/其他。金额：${amount}，备注：${note || "无"}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 1800);
@@ -3595,7 +3668,12 @@ function addRecord({ title, amount, category, source, occurredAt }) {
     return false;
   }
   const finalCategory = category || "其他";
-  const finalTitle = title && title.trim() ? title.trim() : categoryFallbackLine(finalCategory);
+  const noteRisk = validateManualNote(title, { allowEmpty: true });
+  if (!noteRisk.ok) {
+    showToast(noteRisk.message);
+    return false;
+  }
+  const finalTitle = noteRisk.value || categoryFallbackLine(finalCategory);
   const finalDate = occurredAt ? mergeDateWithCurrentTime(occurredAt) : new Date().toISOString();
   const numericAmount = Number(amount);
   state.items.unshift({
@@ -3861,6 +3939,20 @@ function clearResolvedDraftMarks() {
   render();
 }
 
+function resolveAllPendingDrafts() {
+  let changed = 0;
+  state.items.forEach((item) => {
+    if (item.source === "ocr" && item.draftMeta?.status === "pending") {
+      item.draftMeta.status = "resolved";
+      changed += 1;
+    }
+  });
+  if (!changed) return 0;
+  persist();
+  render();
+  return changed;
+}
+
 function bindDraftSwipe(rowEl, itemId) {
   let startX = 0;
   rowEl.addEventListener("touchstart", (event) => {
@@ -3884,11 +3976,19 @@ function bindDraftSwipe(rowEl, itemId) {
 function renderOCRDraftArea() {
   const items = draftItemsByRecentBatches();
   const pendingItems = items.filter((x) => x.draftMeta?.status !== "resolved");
+  const resolvedCount = items.filter((x) => x.draftMeta?.status === "resolved").length;
   const total = pendingItems.reduce((sum, x) => sum + x.amount, 0);
   refs.ocrDraftSummary.textContent = `共 ${pendingItems.length} 笔待整理 · 合计 ${formatCNY(total)}`;
+  if (refs.ocrResolveAllBtn) {
+    refs.ocrResolveAllBtn.disabled = pendingItems.length === 0;
+  }
+  if (refs.ocrClearResolvedBtn) {
+    refs.ocrClearResolvedBtn.textContent = `完成整理（${resolvedCount} 笔）`;
+    refs.ocrClearResolvedBtn.disabled = resolvedCount === 0;
+  }
   refs.ocrDraftGroups.innerHTML = "";
   if (!items.length) {
-    refs.ocrDraftGroups.innerHTML = `<p class="muted">导入的账单会在这里变成草稿，方便你随时整理～</p>`;
+    refs.ocrDraftGroups.innerHTML = `<p class="ocr-draft-empty muted">选择账单截图后，识别结果会先进入确认页；确认导入后，会出现在这里继续整理。</p>`;
     return;
   }
   const grouped = new Map();
@@ -3911,25 +4011,35 @@ function renderOCRDraftArea() {
         const row = document.createElement("div");
         row.className = `ocr-draft-row ${item.draftMeta.status === "resolved" ? "resolved" : ""}`;
         const pending = item.draftMeta.status !== "resolved";
+        const statusText = pending ? "待整理 ↓" : "已整理";
         row.innerHTML = `
           <div class="ocr-draft-row-inner">
-            <input type="checkbox" ${pending ? "" : "checked"} />
+            <button type="button" class="ocr-draft-check" aria-label="${pending ? "标记已整理" : "标记待整理"}">${pending ? "○" : "✓"}</button>
             <div class="ocr-draft-main">
-              <p class="muted">${new Date(item.createdAt).toLocaleString()}</p>
-              <button type="button" class="ocr-draft-category">${item.category}${pending ? '<span class="ocr-draft-pending">待整理</span>' : ""}</button>
-            </div>
-            <div class="ocr-draft-amount-wrap">
-              <button type="button" class="ocr-draft-amount">${formatCNY(item.amount)}</button>
+              <div class="ocr-draft-title-row">
+                <p class="ocr-draft-title">${item.title}</p>
+                <button type="button" class="ocr-draft-amount">${formatCNY(item.amount)}</button>
+              </div>
+              <p class="muted ocr-draft-time">${new Date(item.createdAt).toLocaleString()}</p>
+              <div class="ocr-draft-meta-row">
+                <span>分类</span>
+                <button type="button" class="ocr-draft-category">${item.category}</button>
+                <span class="ocr-draft-status ${pending ? "pending" : "resolved"}">${statusText}</span>
+                <button type="button" class="ocr-draft-delete-inline" aria-label="删除">删除</button>
+              </div>
               <input type="text" inputmode="decimal" class="ocr-draft-amount-input hidden" value="${Number(item.amount).toFixed(2)}" />
             </div>
           </div>
           <button type="button" class="ocr-draft-delete">删除</button>
         `;
-        row.querySelector("input[type='checkbox']")?.addEventListener("change", (event) => {
-          toggleDraftStatus(item.id, event.target.checked);
+        row.querySelector(".ocr-draft-check")?.addEventListener("click", () => {
+          toggleDraftStatus(item.id, pending);
         });
         row.querySelector(".ocr-draft-category")?.addEventListener("click", () => {
           openDraftCategoryPicker(item.id);
+        });
+        row.querySelector(".ocr-draft-delete-inline")?.addEventListener("click", () => {
+          deleteDraftItem(item.id);
         });
         const amountBtn = row.querySelector(".ocr-draft-amount");
         const amountInput = row.querySelector(".ocr-draft-amount-input");
@@ -4230,7 +4340,6 @@ function renderAccountOverlay() {
           ? "永久会员已开通"
           : "会员已开通";
   refs.accountCenterName.textContent = `你好呀，${accountName}`;
-  refs.accountCenterAvatar.textContent = petOn ? "🐱" : "👤";
   refs.accountCenterState.textContent = `当前状态：✨ ${memberStateText}`;
   refs.accountPetNameFeedback?.classList.add("hidden");
   refs.accountPetNameFeedback?.classList.remove("showing");
@@ -5501,7 +5610,6 @@ function renderSettings() {
   const accountName = state.settings.displayName || "叙帐用户";
   const isLoggedIn = Boolean(state.settings.isLoggedIn);
   const memberLabel = settingsMemberLabel();
-  refs.accountAvatar.textContent = isLoggedIn ? "🐱" : "👤";
   refs.settingsIdentityName.textContent = accountName;
   refs.settingsIdentityMeta.textContent = `${state.settings.syncEnabled ? "已同步云端" : "本地保存"} · ${memberLabel}`;
   refs.accountEntryText.textContent = isLoggedIn
@@ -5821,8 +5929,18 @@ function init() {
   refs.saveRecordBtn.addEventListener("click", async () => {
     updateDebugHUD("save-click-start");
     const wasEditing = Boolean(editingRecordId);
+    const noteRisk = validateManualNote(refs.titleInput.value, { allowEmpty: true });
+    if (!noteRisk.ok) {
+      showToast(noteRisk.message);
+      updateDebugHUD("save-blocked-risk");
+      return;
+    }
+    if (refs.titleInput.value !== noteRisk.value) {
+      refs.titleInput.value = noteRisk.value;
+      updateLifeEntryPreview();
+    }
     const draftRecordContext = {
-      title: refs.titleInput.value.trim(),
+      title: noteRisk.value,
       category: selectedCategory || "其他",
       amount: getAmountValue(),
       createdAt: refs.recordDateInput.value,
@@ -5835,7 +5953,7 @@ function init() {
         showToast("请先填写有效金额。");
       } else {
         const finalCategory = selectedCategory || "其他";
-        current.title = refs.titleInput.value.trim() || categoryFallbackLine(finalCategory);
+        current.title = noteRisk.value || categoryFallbackLine(finalCategory);
         current.amount = amount;
         current.category = finalCategory;
         current.createdAt = mergeDateWithCurrentTime(refs.recordDateInput.value);
@@ -5853,7 +5971,7 @@ function init() {
       }
     } else {
       ok = addRecord({
-        title: refs.titleInput.value.trim(),
+        title: noteRisk.value,
         amount: getAmountValue(),
         category: selectedCategory || "其他",
         source: "manual",
@@ -5909,6 +6027,10 @@ function init() {
     openOCRConfirm(result);
     refs.ocrImageInput.value = "";
   });
+  refs.ocrDemoResultBtn?.addEventListener("click", async () => {
+    const result = await runMockOCR({ name: "wechat-demo.png" });
+    openOCRConfirm(result);
+  });
   refs.ocrCancelBtn.addEventListener("click", () => {
     closeOCRConfirm();
   });
@@ -5925,6 +6047,10 @@ function init() {
     }
     clearResolvedDraftMarks();
     showToast(`已完成整理 ${resolvedCount} 条账单`);
+  });
+  refs.ocrResolveAllBtn?.addEventListener("click", () => {
+    const changed = resolveAllPendingDrafts();
+    showToast(changed ? `已标记 ${changed} 条为已整理` : "没有待整理账单");
   });
   refs.ocrCategoryOverlay.addEventListener("click", (event) => {
     if (event.target === refs.ocrCategoryOverlay) {
@@ -6143,7 +6269,15 @@ function init() {
   });
 
   refs.displayNameInput.addEventListener("input", (e) => {
-    state.settings.displayName = e.target.value.trim() || "叙帐用户";
+    const result = validateDisplayName(e.target.value, { fallback: "叙帐用户", label: "昵称", min: 1, max: 12 });
+    if (!result.ok) {
+      showToast(result.message);
+      return;
+    }
+    if (e.target.value !== result.value && e.target.value.trim().length > 12) {
+      e.target.value = result.value;
+    }
+    state.settings.displayName = result.value;
     persist();
     renderHome();
     renderSettings();
@@ -6255,12 +6389,17 @@ function init() {
       showToast("升级会员后可自定义宠物昵称");
       return;
     }
-    const nextName = (refs.accountPetNicknameInput.value || "").trim();
-    const isValidName = /^[\u4e00-\u9fa5A-Za-z0-9]{2,6}$/.test(nextName);
-    if (!isValidName) {
-      playPetRenameFeedback("唔… 换个名字好不好？");
+    const result = validateDisplayName(refs.accountPetNicknameInput.value, {
+      fallback: "",
+      label: "宠物昵称",
+      min: 2,
+      max: 6,
+    });
+    if (!result.ok || !result.value) {
+      playPetRenameFeedback(result.message || "换个名字好不好？");
       return;
     }
+    const nextName = result.value;
     const previousName = (state.settings.userPetNickname || "").trim();
     state.settings.userPetNickname = nextName;
     persist();

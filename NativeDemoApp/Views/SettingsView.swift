@@ -301,6 +301,10 @@ struct SettingsView: View {
                     .submitLabel(.done)
                     .onSubmit { commitPetNickname() }
             }
+            settingHelper("昵称只保存在本地设置里，不要写手机号、证件号或链接。")
+            if let msg = settingsViewModel.contentSafetyMessage {
+                settingHelper(msg)
+            }
             settingToggle("允许天气场景暖心互动", isOn: Binding(
                 get: { settingsViewModel.weatherCompanionEnabled },
                 set: { settingsViewModel.weatherCompanionEnabled = $0 }
@@ -388,6 +392,10 @@ struct SettingsView: View {
                     .submitLabel(.done)
                     .onSubmit { commitDisplayName() }
             }
+            settingHelper("头像使用内置叙账印章，不上传头像图片；昵称不要写手机号、证件号或链接。")
+            if let msg = settingsViewModel.contentSafetyMessage {
+                settingHelper(msg)
+            }
 
             // Cloud sync
             settingToggle("云端备份（可选）", isOn: Binding(
@@ -415,6 +423,10 @@ struct SettingsView: View {
                     .submitLabel(.done)
                     .onSubmit { commitPetNickname() }
             }
+            settingHelper("不要把手机号、证件号或链接写进昵称。")
+            if let msg = settingsViewModel.contentSafetyMessage {
+                settingHelper(msg)
+            }
 
             // Weather companion
             settingToggle("允许天气场景暖心互动 🌤️", isOn: Binding(
@@ -435,17 +447,19 @@ struct SettingsView: View {
     private func commitDisplayName() {
         let trimmed = draftDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let next = trimmed.isEmpty ? "叙账用户" : trimmed
-        draftDisplayName = next
-        if settingsViewModel.displayName != next {
-            settingsViewModel.displayName = next
+        if settingsViewModel.updateDisplayName(next) {
+            draftDisplayName = settingsViewModel.displayName
+        } else {
+            draftDisplayName = settingsViewModel.displayName
         }
     }
 
     private func commitPetNickname() {
         let trimmed = draftPetNickname.trimmingCharacters(in: .whitespacesAndNewlines)
-        draftPetNickname = trimmed
-        if settingsViewModel.petNickname != trimmed {
-            settingsViewModel.petNickname = trimmed
+        if settingsViewModel.updatePetNickname(trimmed) {
+            draftPetNickname = settingsViewModel.petNickname
+        } else {
+            draftPetNickname = settingsViewModel.petNickname
         }
     }
 
@@ -498,8 +512,15 @@ struct SettingsView: View {
                             .submitLabel(.done)
                             .onSubmit { commitDisplayName() }
                     }
+                    settingHelper("头像使用内置叙账印章，不上传头像图片；昵称不要写手机号、证件号或链接。")
 
                     accountSheetContent
+
+                    if let msg = settingsViewModel.contentSafetyMessage {
+                        Text(msg)
+                            .font(.system(size: 12))
+                            .foregroundStyle(AppColors.subtext)
+                    }
 
                     if let msg = settingsViewModel.authMessage {
                         Text(msg)

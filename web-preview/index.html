@@ -103,7 +103,7 @@
                   <span id="lifeEntryAmount" class="life-slip-amount">¥0.00</span>
                 </div>
                 <div id="lifeEntryNoteEditor" class="life-slip-expand hidden">
-                  <input id="titleInput" type="text" placeholder="这一笔想怎么被记住？" />
+                  <input id="titleInput" type="text" placeholder="这一笔想怎么被记住？" maxlength="32" autocomplete="off" />
                   <div id="noteSuggestions" class="note-suggestions hidden"></div>
                 </div>
                 <div id="lifeEntryCategoryPanel" class="life-slip-expand hidden">
@@ -138,24 +138,34 @@
               <button class="mode-btn" data-mode="ocr">智能导入</button>
             </div>
 
-            <div id="ocrForm" class="hidden">
-              <button id="recordManualLink" type="button" class="record-import-link">回到手动记一笔 →</button>
-              <p class="muted">从账单里捞一段生活，确认后再放进账本。</p>
+            <div id="ocrForm" class="hidden ocr-import-view">
+              <button id="recordManualLink" type="button" class="record-import-link ocr-back-link">回到手动记一笔 →</button>
+              <div class="ocr-import-intro">
+                <p class="ocr-import-title">导入微信/支付宝账单截图</p>
+                <p class="muted">识别后先确认，再写入账本。</p>
+                <p class="muted ocr-import-tip">请保证每笔完整在画面内，上下留一点边；首尾笔被裁切可能漏识别。</p>
+              </div>
               <input id="ocrImageInput" type="file" accept="image/*" class="hidden" />
-              <button id="ocrPickImageBtn" class="primary-btn full-btn">选择截图，捞进账本</button>
+              <button id="ocrPickImageBtn" class="primary-btn full-btn ocr-import-primary">导入账单截图</button>
               <div id="ocrLoadingBox" class="ocr-loading-box hidden">
                 <p class="muted">正在识别账单，请稍候…</p>
                 <div class="ocr-progress-track">
                   <div id="ocrProgressBar" class="ocr-progress-bar"></div>
                 </div>
               </div>
+              <button id="ocrDemoResultBtn" type="button" class="ocr-demo-btn">使用账单样例</button>
 
               <section class="ocr-draft-panel">
                 <div class="ocr-draft-head">
-                  <h3>📥 导入账单草稿</h3>
-                  <button id="ocrClearResolvedBtn" type="button">完成整理</button>
+                  <div>
+                    <h3>待整理账单</h3>
+                    <p id="ocrDraftSummary" class="muted">共 0 笔 · 合计 ¥0.00</p>
+                  </div>
+                  <div class="ocr-draft-actions">
+                    <button id="ocrResolveAllBtn" type="button">一键标记已整理</button>
+                    <button id="ocrClearResolvedBtn" type="button">完成整理（0 笔）</button>
+                  </div>
                 </div>
-                <p id="ocrDraftSummary" class="muted">共 0 笔 · 合计 ¥0.00</p>
                 <div id="ocrDraftGroups"></div>
               </section>
             </div>
@@ -228,7 +238,7 @@
         <section class="page" id="settingsPage">
           <section class="settings-identity-card xz-chapter-card">
             <button id="accountEntryBtn" type="button" class="account-entry-btn">
-              <div id="accountAvatar" class="account-avatar" aria-hidden="true">👤</div>
+              <div id="accountAvatar" class="account-avatar account-seal-avatar" aria-hidden="true">叙</div>
               <span class="settings-identity-copy">
                 <strong id="settingsIdentityName">叙帐用户</strong>
                 <span id="settingsIdentityMeta" class="muted">本地保存 · 免费版</span>
@@ -329,8 +339,10 @@
                 <p class="muted settings-sheet-lead">你留下的每一笔，默认只在本机。这里可以改昵称，也可以查看数据说明。</p>
                 <label class="field">
                   <span>显示名称</span>
-                  <input id="displayNameInput" type="text" placeholder="输入昵称" />
+                  <input id="displayNameInput" type="text" placeholder="输入昵称" maxlength="12" autocomplete="off" />
                 </label>
+                <p class="muted setting-helper">昵称只用于本机展示和分享卡；不要填写手机号、证件号或链接。</p>
+                <p class="muted setting-helper">头像使用内置标识，当前不支持上传图片或填写外链。</p>
                 <p class="muted strong">数据仅保存在你的手机，不上传云端。</p>
                 <p class="muted setting-helper">开启云端备份、联网 AI 或天气互动时，会按对应功能请求必要权限。</p>
               </section>
@@ -435,7 +447,7 @@
           </div>
           <div id="accountCenterView" class="hidden">
             <div class="account-center-head">
-              <div id="accountCenterAvatar" class="account-avatar" aria-hidden="true">🐱</div>
+              <div id="accountCenterAvatar" class="account-avatar account-seal-avatar" aria-hidden="true">叙</div>
               <p id="accountPetNameFeedback" class="account-pet-name-feedback hidden"></p>
               <p id="accountCenterName" class="account-title">你好呀，叙帐用户</p>
               <p id="accountCenterState" class="muted account-subtitle">当前状态：免费版</p>
@@ -454,7 +466,7 @@
               <h4>账号小管家</h4>
               <label class="field account-petname-field">
                 <span>给我的小宠物起个名字吧</span>
-                <input id="accountPetNicknameInput" type="text" placeholder="输入 2-6 个字，例如：团子" maxlength="6" />
+                <input id="accountPetNicknameInput" type="text" placeholder="输入 2-6 个字，例如：团子" maxlength="6" autocomplete="off" />
               </label>
               <button id="accountPetNicknameSaveBtn" type="button" class="full-btn">保存宠物昵称</button>
               <p id="accountPetNicknameTip" class="muted account-login-tip">仅会员可自定义，支持 2-6 个字，不含特殊符号。</p>

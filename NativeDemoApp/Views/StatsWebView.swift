@@ -721,8 +721,11 @@ struct StatsWebView: View {
 
     private func editSheet(for item: HomeItem) -> some View {
         RecordEditSheet(item: item) { updated in
-            homeViewModel.updateItem(updated)
-            editingItem = nil
+            let didSave = homeViewModel.updateItem(updated)
+            if didSave {
+                editingItem = nil
+            }
+            return didSave
         } onDelete: {
             if let idx = homeViewModel.items.firstIndex(where: { $0.id == item.id }) {
                 homeViewModel.delete(at: IndexSet(integer: idx))

@@ -31,6 +31,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var latestActionCard: ActionCardData?
     @Published private(set) var activeRouteGuidance: PlaybackRouteGuidance?
     @Published private(set) var recordPrefillResult: RecordPrefillResult?
+    @Published private(set) var recordInputMessage: String?
     @Published var petMessage: String? = nil
 
     enum PlaybackRouteGuidance: String, Identifiable, Hashable {
@@ -134,10 +135,17 @@ final class HomeViewModel: ObservableObject {
         refreshRouteGuidanceIfNeeded()
     }
 
-    func addManualRecord(userEditedTitle: Bool = false) {
-        guard let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0 else { return }
+    @discardableResult
+    func addManualRecord(userEditedTitle: Bool = false) -> Bool {
+        guard let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0 else { return false }
         let wasEmpty = items.isEmpty
-        let trimmed = inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noteResult = UserContentRiskService.shared.validateManualNote(inputTitle, allowEmpty: true)
+        guard noteResult.isAllowed else {
+            recordInputMessage = noteResult.message
+            return false
+        }
+        recordInputMessage = nil
+        let trimmed = noteResult.value
         let baseTitle = trimmed.isEmpty ? selectedCategory.defaultRecordTitle : trimmed
         let brand = MerchantBrandCatalog.matchBrand(in: baseTitle)
         let category: HomeItem.Category
@@ -187,6 +195,7 @@ final class HomeViewModel: ObservableObject {
         }
         enqueuePetMessage(for: newItem)
         Task { await syncUpsertToCloud(newItem) }
+        return true
     }
 
     var ocrDraftItems: [HomeItem] {
@@ -447,11 +456,19 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    func updateItem(_ updated: HomeItem) {
-        guard let idx = items.firstIndex(where: { $0.id == updated.id }) else { return }
+    @discardableResult
+    func updateItem(_ updated: HomeItem) -> Bool {
+        guard let idx = items.firstIndex(where: { $0.id == updated.id }) else { return false }
         let original = items[idx]
         var resolved = updated
-        let matchedBrand = MerchantBrandCatalog.matchBrand(in: updated.title)
+        let titleResult = UserContentRiskService.shared.validateManualNote(updated.title, allowEmpty: false)
+        guard titleResult.isAllowed else {
+            recordInputMessage = titleResult.message
+            return false
+        }
+        recordInputMessage = nil
+        resolved.title = titleResult.value
+        let matchedBrand = MerchantBrandCatalog.matchBrand(in: resolved.title)
         let brandId = matchedBrand?.id ?? updated.merchantBrandId
         let categoryWasEdited = updated.category != original.category
         let categoryOverridesBrand = brandCategory(for: brandId).map { updated.category != $0 } ?? false
@@ -461,7 +478,7 @@ final class HomeViewModel: ObservableObject {
         } else {
             resolved.category = NarrativeCopyResolver.resolveCategory(brandId: brandId, fallback: updated.category)
         }
-        resolved.title = NarrativeCopyResolver.resolveTitle(brandId: brandId, fallback: updated.title)
+        resolved.title = NarrativeCopyResolver.resolveTitle(brandId: brandId, fallback: resolved.title)
         let emotionBrandId = (categoryWasEdited || categoryOverridesBrand) ? nil : brandId
         resolved.emotionTag = resolvedEmotionTag(
             brandId: emotionBrandId,
@@ -471,7 +488,7 @@ final class HomeViewModel: ObservableObject {
             seed: "\(resolved.id.uuidString)|\(resolved.title)",
             note: resolved.title
         )
-        let titleWasEdited = updated.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let titleWasEdited = titleResult.value.trimmingCharacters(in: .whitespacesAndNewlines)
             != original.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if resolved.userEditedTitle == true || titleWasEdited {
             resolved.userEditedTitle = true
@@ -484,6 +501,7 @@ final class HomeViewModel: ObservableObject {
         ])
         refreshTodayPlayback()
         Task { await syncUpsertToCloud(resolved) }
+        return true
     }
 
     func syncCloudLedgerNow() async {
@@ -769,7 +787,8 @@ final class HomeViewModel: ObservableObject {
            abs(recordPrefillAmount - amount) < 0.005 {
             return CategoryRecommendResult(recommended: category, reasonTag: recordPrefillResult?.source)
         }
-        let trimmedNote = inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noteResult = UserContentRiskService.shared.validateManualNote(inputTitle, allowEmpty: true)
+        let trimmedNote = noteResult.isAllowed ? noteResult.value : ""
         if let brand = MerchantBrandCatalog.matchBrand(in: trimmedNote), !categoryLockedByUser {
             return CategoryRecommendResult(recommended: brand.category, reasonTag: "brand")
         }
@@ -780,7 +799,7 @@ final class HomeViewModel: ObservableObject {
                 amount: amount,
                 referenceDate: selectedDate,
                 items: recentItems,
-                noteDraft: inputTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+                noteDraft: trimmedNote,
                 locked: categoryLockedByUser,
                 context: currentRecordContextSignal()
             )
@@ -802,7 +821,8 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
-        let trimmedNote = inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noteResult = UserContentRiskService.shared.validateManualNote(inputTitle, allowEmpty: true)
+        let trimmedNote = noteResult.isAllowed ? noteResult.value : ""
         let brand = MerchantBrandCatalog.matchBrand(in: trimmedNote)
         if let brand, !categoryLockedByUser {
             applyRecommendedCategory(brand.category)
@@ -831,6 +851,10 @@ final class HomeViewModel: ObservableObject {
         if applySuggestedTitle, let title = result.title, result.confidence >= 0.65, trimmedNote.isEmpty {
             inputTitle = title
         }
+    }
+
+    func clearRecordInputMessage() {
+        recordInputMessage = nil
     }
 
     func selectCategory(_ category: HomeItem.Category) {
