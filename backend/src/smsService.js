@@ -47,6 +47,8 @@ export async function sendLoginSmsCode(phone) {
     await sendAliyunSms({
       phone,
       code,
+      schemeName: config.aliyunSmsSchemeName,
+      countryCode: config.aliyunSmsCountryCode,
       signName: config.aliyunSmsSignName,
       templateCode: config.aliyunSmsTemplateCode,
     });
@@ -63,35 +65,41 @@ function generateSmsCode() {
   return String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
-async function sendAliyunSms({ phone, code, signName, templateCode }) {
+async function sendAliyunSms({ phone, code, schemeName, countryCode, signName, templateCode }) {
   if (!isSmsConfigured()) {
     throw new SmsProviderError("SMS_NOT_CONFIGURED", "Aliyun SMS provider is not configured.");
   }
-  const request = buildAliyunSendSmsRequest({
+  const request = buildAliyunSendSmsVerifyCodeRequest({
     phone,
+    schemeName,
+    countryCode,
     signName,
     templateCode,
     templateParam: JSON.stringify({ code }),
   });
   const response = await requestAliyun(request);
   if (response.Code !== "OK") {
-    throw new SmsProviderError(response.Code || "ALIYUN_SMS_FAILED", response.Message || "Aliyun SMS send failed.");
+    throw new SmsProviderError(response.Code || "ALIYUN_SMS_FAILED", response.Message || "Aliyun SMS verify code send failed.");
   }
 }
 
-function buildAliyunSendSmsRequest({ phone, signName, templateCode, templateParam }) {
-  const endpoint = config.aliyunSmsEndpoint || "dysmsapi.aliyuncs.com";
+function buildAliyunSendSmsVerifyCodeRequest({ phone, schemeName, countryCode, signName, templateCode, templateParam }) {
+  const endpoint = config.aliyunSmsEndpoint || "dypnsapi.aliyuncs.com";
   const params = {
-    PhoneNumbers: phone,
+    PhoneNumber: phone,
+    CountryCode: countryCode || "86",
     SignName: signName,
     TemplateCode: templateCode,
     TemplateParam: templateParam,
   };
+  if (schemeName) {
+    params.SchemeName = schemeName;
+  }
   const query = canonicalQuery(params);
   const payloadHash = sha256Hex("");
   const headers = {
     host: endpoint,
-    "x-acs-action": "SendSms",
+    "x-acs-action": "SendSmsVerifyCode",
     "x-acs-content-sha256": payloadHash,
     "x-acs-date": new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
     "x-acs-signature-nonce": crypto.randomUUID().replace(/-/g, ""),

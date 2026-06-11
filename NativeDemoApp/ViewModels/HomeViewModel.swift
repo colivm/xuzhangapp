@@ -950,29 +950,37 @@ final class HomeViewModel: ObservableObject {
         let grouped = Dictionary(grouping: contextItems) { item in
             Int((item.amount * 100).rounded())
         }
-        return grouped
-            .map { entry in
-                let cents = entry.key
-                let group = entry.value
-                (
-                    amount: Double(cents) / 100,
-                    count: group.count,
-                    latest: group.map(\.createdAt).max() ?? .distantPast
-                )
+        struct FrequentAmountCandidate {
+            let amount: Double
+            let count: Int
+            let latest: Date
+        }
+
+        let candidates: [FrequentAmountCandidate] = grouped.map { entry in
+            let cents = entry.key
+            let group = entry.value
+            let latestDate = group.map { $0.createdAt }.max() ?? .distantPast
+            return FrequentAmountCandidate(
+                amount: Double(cents) / 100,
+                count: group.count,
+                latest: latestDate
+            )
+        }
+
+        let validCandidates = candidates.filter { candidate in
+            candidate.count >= 3 &&
+            candidate.amount > 0 &&
+            candidate.amount <= 9999
+        }
+
+        let sortedCandidates = validCandidates.sorted { lhs, rhs in
+            if lhs.count == rhs.count {
+                return lhs.latest > rhs.latest
             }
-            .filter { candidate in
-                candidate.count >= 3 &&
-                candidate.amount > 0 &&
-                candidate.amount <= 9999
-            }
-            .sorted { lhs, rhs in
-                if lhs.count == rhs.count {
-                    return lhs.latest > rhs.latest
-                }
-                return lhs.count > rhs.count
-            }
-            .prefix(3)
-            .map(\.amount)
+            return lhs.count > rhs.count
+        }
+
+        return sortedCandidates.prefix(3).map { $0.amount }
     }
 
     private func hourHabitBucket(for date: Date) -> Int {

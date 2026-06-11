@@ -47,7 +47,7 @@ npm run dev
 - 账单写入会校验 `title`、`amount` 等基础字段，并拦截手机号、证件号、银行卡号、链接/邮箱、明显不适内容和少量公共安全高风险短语。
 - AI 转发前后会做基础内容安全检查；日志只记录拦截原因和脱敏样本，不应记录完整账单正文。
 - 短信验证码有 60 秒冷却、每手机号/IP 小时级发送上限和验证码错误次数上限；生产环境应替换真实短信服务并接入更强的 IP/设备风控。
-- 短信服务支持 `SMS_PROVIDER=dev` 和 `SMS_PROVIDER=aliyun`。本地/staging 可用 `DEV_ALLOW_SMS_CODE`；生产必须配置阿里云短信 AccessKey、签名和模板 Code。
+- 短信服务支持 `SMS_PROVIDER=dev` 和 `SMS_PROVIDER=aliyun`。本地/staging 可用 `DEV_ALLOW_SMS_CODE`；生产使用阿里云云通信号码认证服务 `SendSmsVerifyCode`，需配置 AccessKey、签名、模板 Code，可按需配置 `ALIYUN_SMS_SCHEME_NAME` 和 `ALIYUN_SMS_COUNTRY_CODE`。
 - 埋点 props 会过滤 token/key/signed 字段，并脱敏手机号、证件号、银行卡号、链接/邮箱。
 - `DELETE /v1/account` 会删除用户、会话、云端账本、短信验证码、内存埋点和服务端 IAP 绑定记录；Apple 订阅本身仍由 App Store 管理。
 - `NODE_ENV=production` 下会启用启动门禁：必须配置强 `JWT_SECRET`、`DATABASE_URL`、非 `*` 的 `ALLOW_ORIGIN`、`AI_PROXY_TOKEN`、`SMS_PROVIDER=aliyun` 和阿里云短信参数，并且不能继续使用开发短信码。
