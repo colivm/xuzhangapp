@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>叙帐 Web 预览</title>
-    <link rel="stylesheet" href="./styles.css?v=20260609-polish2" />
+    <link rel="stylesheet" href="./styles.css?v=20260611-web-align" />
   </head>
   <body>
     <div class="app-shell">
@@ -20,7 +20,7 @@
           <article class="panel hero home-story-hero">
             <p class="muted home-kicker">今日小记</p>
             <h2 id="homeStoryTitle">今天先记下来</h2>
-            <p id="homeStorySubtitle" class="home-story-subtitle">晚上再回头看，这一天会慢慢有轮廓。</p>
+            <p id="homeStorySubtitle" class="home-story-subtitle">晚上再回头看，今天会清楚一点。</p>
             <div class="home-story-foot">
               <span id="todayTotal">¥0.00</span>
               <span id="weekTotal">本周累计 ¥0.00</span>
@@ -64,7 +64,7 @@
           <section id="homeActionCard" class="panel home-action-note">
             <h2>这一段生活</h2>
             <p id="homeActionCardMeta" class="muted micro-hint"></p>
-            <p id="homeActionCardText" class="muted">随手记几笔，这里会慢慢长出你的生活痕迹。</p>
+            <p id="homeActionCardText" class="muted">先记几笔，这里会留下今天的样子。</p>
           </section>
         </section>
 
@@ -91,11 +91,11 @@
               <section id="lifeEntryPreview" class="life-slip hidden">
                 <div class="life-slip-body">
                   <p id="lifeEntryHeadline" class="life-slip-headline">这一笔会这样记下</p>
-                  <p id="lifeEntryHeadlineHint" class="life-slip-hint hidden">想换说法，点下面轻字即可</p>
+                  <p id="lifeEntryHeadlineHint" class="life-slip-hint hidden">分类不对？点下方「改分类」即可</p>
                   <p id="lifeEntryEmotion" class="life-slip-mood hidden"></p>
                   <div class="life-slip-meta-row">
                     <p id="lifeEntryMeta" class="life-slip-meta muted"></p>
-                    <button type="button" id="lifeEntryChangeCategory" class="life-slip-link hidden">改</button>
+                    <button type="button" id="lifeEntryChangeCategory" class="life-slip-link hidden">改分类</button>
                   </div>
                 </div>
                 <div class="life-slip-foot">
@@ -170,7 +170,7 @@
               <button type="button" id="traceRangeMonthBtn" class="trace-range-text active">本月</button>
             </p>
 
-            <p id="traceHeroNarrative" class="trace-hero-narrative">这一段还安静着，先留下几笔，之后就能慢慢看见生活的纹理。</p>
+            <p id="traceHeroNarrative" class="trace-hero-narrative">这一段还安静着，先留下几笔，之后就能看清一点。</p>
             <p id="traceHeroPreview" class="muted trace-hero-preview">先记几笔，这里会变成能听的一段生活。</p>
 
             <button id="traceHeroPlayBtn" type="button" class="trace-listen-ritual">
@@ -205,7 +205,7 @@
         <section class="page" id="insightPage">
           <section class="insight-journal xz-chapter-card">
             <p class="insight-journal-kicker" id="insightWeekKicker">这周 · 6/3-6/9</p>
-            <article id="insightJournalBody" class="insight-journal-body">近 7 天还没有足够记录。多记几笔，这里会慢慢长出一周的回信。</article>
+            <article id="insightJournalBody" class="insight-journal-body">近 7 天还没有足够记录。多记几笔，这里会整理成一段周记。</article>
             <p id="insightJournalClosing" class="insight-journal-closing muted"></p>
             <div class="insight-journal-actions">
               <button id="weeklyRhythmBtn" type="button" class="insight-quiet-action hidden">梳理本周节奏 →</button>
@@ -286,7 +286,7 @@
                 </label>
                 <p class="muted privacy-tip setting-helper">开启后数据会同步到 iCloud，换机更方便。</p>
                 <label class="switch-row">
-                  <span>开启 AI 智能建议（需联网）</span>
+                  <span>开启 AI 小记（需联网）</span>
                   <input id="remoteAISwitch" class="ios-switch" type="checkbox" />
                 </label>
                 <p class="muted setting-helper">联网只用于需要生成或梳理的时刻，账单仍优先留在本地。</p>
@@ -294,22 +294,22 @@
 
               <section id="settingsSheetCompanion" class="settings-sheet-section hidden">
                 <p class="settings-sheet-kicker">陪伴与语气</p>
-                <p class="muted settings-sheet-lead">让首页的小陪伴更贴近你的节奏；不需要时也可以随时关掉。</p>
+                <p class="muted settings-sheet-lead">让首页提示更贴近当天记录；不需要时也可以随时关掉。</p>
                 <label class="switch-row">
                   <span>开启宠物陪伴</span>
                   <input id="petCompanionSwitch" class="ios-switch" type="checkbox" />
                 </label>
                 <p class="muted setting-helper">关闭后首页不显示宠物助手。</p>
                 <label class="switch-row" id="weatherCompanionRow">
-                  <span>允许天气场景暖心互动 🌤️</span>
+                  <span>允许天气场景提示 🌤️</span>
                   <input id="weatherCompanionSwitch" class="ios-switch" type="checkbox" />
                 </label>
-                <p id="weatherCompanionHelper" class="muted setting-helper">开启这个，我就能知道今天是晴是雨，陪你说更懂你的悄悄话啦！</p>
+                <p id="weatherCompanionHelper" class="muted setting-helper">开启后，雨天、热天这些情况会多一句提示。</p>
                 <label class="switch-row hidden" id="weatherNeutralRow">
-                  <span>天气 / 季节场景智能提醒 🌤️</span>
+                  <span>天气 / 季节场景提示 🌤️</span>
                   <input id="weatherNeutralSwitch" class="ios-switch" type="checkbox" />
                 </label>
-                <p id="weatherNeutralHelper" class="muted setting-helper hidden">根据天气与时间，提供更贴合当下的消费与生活建议。</p>
+                <p id="weatherNeutralHelper" class="muted setting-helper hidden">根据天气与时间，给当天记录补一句具体提示。</p>
               </section>
 
               <section id="settingsSheetAppearance" class="settings-sheet-section hidden">
@@ -421,8 +421,8 @@
         <div class="guide-card account-modal">
           <button id="accountCloseBtn" type="button" class="account-close-btn" aria-label="关闭">×</button>
           <div id="accountLoginView">
-            <h3>欢迎回来，继续把钱花明白</h3>
-            <p class="muted account-intro">登录后，账单可同步云端，换机不丢失，还能解锁专属会员权益</p>
+            <h3>欢迎回来，继续把记录留清楚</h3>
+            <p class="muted account-intro">登录后，账单可同步云端，换机不丢失，还能解锁会员权益</p>
             <div class="stack account-login-actions">
               <button id="accountPhoneLoginBtn" type="button" class="primary-btn full-btn">本机号码一键登录</button>
               <p class="muted account-login-tip">仅用于账号标识，不发送垃圾信息</p>
@@ -441,7 +441,7 @@
               <p id="accountCenterState" class="muted account-subtitle">当前状态：免费版</p>
             </div>
             <section class="account-benefits">
-              <h4 id="accountCenterBenefitsTitle">✨ 升级会员，解锁更多温柔陪伴</h4>
+              <h4 id="accountCenterBenefitsTitle">升级会员，解锁更多回看能力</h4>
               <p id="accountCenterBenefitsLead" class="account-benefits-lead muted hidden"></p>
               <ul id="accountCenterBenefitsList">
                 <li>周/月生活切片无限回看</li>
@@ -465,8 +465,8 @@
           <div id="accountMemberView" class="hidden">
             <button id="accountMemberBackBtn" type="button" class="account-skip-btn">返回账号</button>
             <section class="account-member-hero">
-              <h3 id="accountMemberHeroTitle">✨ 升级会员，解锁更多温柔陪伴</h3>
-              <p id="accountMemberHeroIntro" class="muted account-intro">让小宠物陪你，更轻松地把钱花明白</p>
+              <h3 id="accountMemberHeroTitle">升级会员，解锁更多回看能力</h3>
+              <p id="accountMemberHeroIntro" class="muted account-intro">让小宠物陪你，把每天几笔记清楚</p>
               <button id="accountQuickBuyBtn" type="button" class="primary-btn full-btn account-quick-action">立即开通年度会员（推荐）</button>
               <p id="accountQuickBuyTip" class="muted account-login-tip">可随时取消，数据仍保留在本地。</p>
             </section>
@@ -474,11 +474,11 @@
               <button id="accountMemberBenefitsToggle" type="button" class="account-fold-toggle">查看会员权益详情</button>
               <div id="accountMemberBenefitsBody" class="member-fold-body hidden">
               <ul id="accountMemberBenefitsList" class="member-benefits-list">
-                <li><strong>🎬 周/月生活切片无限回看</strong><span>统计页「本周生活切片」「本月生活章」不限次数播放；用章节卡片看懂这段时间花了什么、节奏如何。核心卖点。</span></li>
-                <li><strong>📝 场景备注包 + 宠物专属昵称</strong><span>通勤/吃货/宠物/旅行四包一键备注；自定义昵称（2～6 字）贯穿切片与记账旁白。</span></li>
-                <li><strong>📷 OCR 智能识票不限次</strong><span>拍照导入账单；免费用户每日 3 次尝鲜，会员不限（可设软上限防滥用，商店仍写「不限」）。</span></li>
-                <li><strong>☁️ 云端备份 + 纯净无广告</strong><span>登录后账单可同步云端、换机不丢；全程无营销弹窗。天气/季节暖心旁白加强随会员模板更完整。</span></li>
-                <li><strong>💬 小 AI 说 · 播后可选深聊（不限次）</strong><span>生活切片讲完后，若想多一句交谈式建议再用；含季/年深度复盘（需 ai-proxy 会员 JWT）。增强项，非首图卖点。</span></li>
+                <li><strong>🎬 周/月生活切片无限回看</strong><span>统计页「本周生活切片」「本月生活章」不限次数播放；用章节卡片回看这段时间花了什么、节奏如何。</span></li>
+                <li><strong>📝 场景备注包 + 宠物专属昵称</strong><span>通勤、吃饭、居家、添置、身体、往来、旅行、宠物等备注包；自定义昵称（2～6 字）会用于宠物相关记录。</span></li>
+                <li><strong>📷 OCR 识票不限次</strong><span>拍照导入账单；免费用户每日 3 次，会员不限（可设软上限防滥用，商店仍写「不限」）。</span></li>
+                <li><strong>☁️ 云端备份 + 纯净无广告</strong><span>登录后账单可同步云端、换机不丢；全程无营销弹窗。天气/季节提示会随会员模板更完整。</span></li>
+                <li><strong>💬 小 AI 说 · 播后可选续聊（不限次）</strong><span>生活切片讲完后，若想多读一句再用；含季/年回看（需 ai-proxy 会员 JWT）。</span></li>
               </ul>
               </div>
             </section>
@@ -571,7 +571,7 @@
           <p id="monthlyTrialModalBody" class="muted"></p>
           <div class="monthly-trial-modal-actions">
             <button id="monthlyTrialModalOkBtn" type="button" class="full-btn">我知道了</button>
-            <button id="monthlyTrialUpgradeBtn" type="button" class="primary-btn full-btn">解锁无限次复盘</button>
+            <button id="monthlyTrialUpgradeBtn" type="button" class="primary-btn full-btn">解锁更多回看</button>
           </div>
         </div>
       </div>
@@ -582,7 +582,7 @@
           <p class="insight-journal-kicker" id="monthlySheetKicker">这一月 · 2026年6月</p>
           <div class="monthly-sheet-paper xz-chapter-card">
             <section class="insight-sheet-body">
-              <article id="monthlyJournalBody" class="insight-journal-body monthly-journal-body">这一月还没有回顾。点下面生成，会在这里长出一封月记。</article>
+              <article id="monthlyJournalBody" class="insight-journal-body monthly-journal-body">这一月还没有回顾。生成后，这里会写成一段月记。</article>
               <p id="monthlyJournalClosing" class="insight-journal-closing muted"></p>
 
               <footer class="monthly-journal-footnote">
@@ -594,7 +594,7 @@
                 <p class="monthly-footnote-quiet">
                   <button id="monthlySaveSummaryBtn" type="button" class="monthly-footnote-link monthly-footnote-secondary hidden">保存月度小结</button>
                   <span id="monthlyFootnoteDot" class="monthly-footnote-dot hidden" aria-hidden="true">·</span>
-                  <button id="monthlyToneSwitchBtn" type="button" class="monthly-footnote-link monthly-footnote-secondary hidden">换个叙述风格</button>
+                  <button id="monthlyToneSwitchBtn" type="button" class="monthly-footnote-link monthly-footnote-secondary hidden">换个说法再读</button>
                 </p>
                 <button id="advancedInsightToggleBtn" type="button" class="monthly-footnote-link monthly-footnote-appendix">更多时间段</button>
               </footer>
@@ -613,10 +613,10 @@
           <button id="todayInsightCloseBtn" type="button" class="account-close-btn" aria-label="关闭">×</button>
           <p class="insight-section-label">今日小记</p>
           <section class="insight-sheet-body">
-            <p id="insightSummary">还没有今日复盘。</p>
+            <p id="insightSummary">还没有今日小记。</p>
             <p id="insightAction" class="highlight"></p>
             <p id="insightEncourage" class="muted"></p>
-            <button id="generateInsightBtn" class="full-btn optional-read-btn">换个轻读版本</button>
+            <button id="generateInsightBtn" class="full-btn optional-read-btn">换个说法再读</button>
             <p id="dailyAIStatus" class="muted ai-status-pill hidden"></p>
           </section>
         </div>
@@ -687,7 +687,7 @@
             <div id="traceSlicePage" class="trace-slice-page">
               <span id="traceSliceSymbol" class="trace-slice-symbol" aria-hidden="true">✦</span>
               <p id="traceSliceChapterTitle" class="trace-slice-chapter-title">这一段</p>
-              <p id="traceSliceNarration" class="trace-slice-narration">慢慢看见这一段生活怎么走过。</p>
+              <p id="traceSliceNarration" class="trace-slice-narration">看见这一段生活怎么走过。</p>
               <p id="traceSliceSupport" class="trace-slice-support muted">本地生成，不依赖 AI。</p>
             </div>
           </section>
@@ -750,6 +750,6 @@
       </div>
     </div>
 
-    <script src="./app.js?v=20260609-polish2"></script>
+    <script src="./app.js?v=20260611-web-align"></script>
   </body>
 </html>
