@@ -582,6 +582,7 @@ struct RecordView: View {
             meta: previewCardMeta,
             amountText: inputAmountValue.formatted(.cny),
             primaryActionTitle: previewQuickActionTitle,
+            showsPrimaryAction: isMember,
             showAngleAction: previewLineWasRotated && previewTier == .confirm,
             onTap: {
                 dismissKeyboard()

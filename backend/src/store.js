@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
+import { createClient } from "redis";
 import { config } from "./config.js";
 
 const memory = {
@@ -12,49 +13,70 @@ const memory = {
 
 let pool = null;
 let usePostgres = false;
+let redis = null;
 
 export async function initStore() {
-  if (!config.databaseUrl) return { mode: "memory" };
-  pool = new Pool({ connectionString: config.databaseUrl });
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS users (
-      user_id TEXT PRIMARY KEY,
-      phone TEXT UNIQUE NOT NULL,
-      display_name TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS sessions (
-      user_id TEXT PRIMARY KEY,
-      member_tier TEXT NOT NULL DEFAULT 'free',
-      member_expires_at TEXT NULL
-    );
-    CREATE TABLE IF NOT EXISTS ledgers (
-      user_id TEXT NOT NULL,
-      item_id TEXT NOT NULL,
-      payload JSONB NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (user_id, item_id)
-    );
-    CREATE TABLE IF NOT EXISTS sms_codes (
-      phone TEXT PRIMARY KEY,
-      code TEXT NOT NULL,
-      expire_at BIGINT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS iap_transactions (
-      original_transaction_id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      transaction_id TEXT NOT NULL,
-      product_id TEXT NOT NULL,
-      member_tier TEXT NOT NULL,
-      member_expires_at TEXT NULL,
-      environment TEXT NULL,
-      verified_at TEXT NOT NULL
-    );
-  `);
-  usePostgres = true;
-  return { mode: "postgres" };
+  if (config.redisUrl) {
+    redis = createClient({ url: config.redisUrl });
+    redis.on("error", (error) => {
+      console.error("[store] redis error", error);
+    });
+    await redis.connect();
+  }
+
+  if (config.databaseUrl) {
+    pool = new Pool({ connectionString: config.databaseUrl });
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        user_id TEXT PRIMARY KEY,
+        phone TEXT UNIQUE NOT NULL,
+        display_name TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS sessions (
+        user_id TEXT PRIMARY KEY,
+        member_tier TEXT NOT NULL DEFAULT 'free',
+        member_expires_at TEXT NULL
+      );
+      CREATE TABLE IF NOT EXISTS ledgers (
+        user_id TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        payload JSONB NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, item_id)
+      );
+      CREATE TABLE IF NOT EXISTS sms_codes (
+        phone TEXT PRIMARY KEY,
+        code TEXT NOT NULL,
+        expire_at BIGINT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS iap_transactions (
+        original_transaction_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        transaction_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        member_tier TEXT NOT NULL,
+        member_expires_at TEXT NULL,
+        environment TEXT NULL,
+        verified_at TEXT NOT NULL
+      );
+    `);
+    usePostgres = true;
+  }
+
+  return {
+    mode: [
+      usePostgres ? "postgres" : "memory",
+      redis ? "redis-sms" : "memory-sms",
+    ].join("+"),
+  };
 }
 
 export async function setSmsCode(phone, code, expireAt) {
+  if (redis) {
+    const ttlMs = Math.max(1, expireAt - Date.now());
+    await redis.set(smsCodeKey(phone), JSON.stringify({ code, expireAt }), { PX: ttlMs });
+    return;
+  }
   if (!usePostgres) {
     memory.smsCodeByPhone.set(phone, { code, expireAt });
     return;
@@ -68,6 +90,20 @@ export async function setSmsCode(phone, code, expireAt) {
 }
 
 export async function getSmsCode(phone) {
+  if (redis) {
+    const value = await redis.get(smsCodeKey(phone));
+    if (!value) return null;
+    try {
+      const parsed = JSON.parse(value);
+      return {
+        code: String(parsed.code || ""),
+        expireAt: Number(parsed.expireAt || 0),
+      };
+    } catch {
+      await redis.del(smsCodeKey(phone));
+      return null;
+    }
+  }
   if (!usePostgres) return memory.smsCodeByPhone.get(phone) || null;
   const result = await pool.query(`SELECT code, expire_at FROM sms_codes WHERE phone = $1`, [phone]);
   if (!result.rowCount) return null;
@@ -78,6 +114,10 @@ export async function getSmsCode(phone) {
 }
 
 export async function deleteSmsCode(phone) {
+  if (redis) {
+    await redis.del(smsCodeKey(phone));
+    return;
+  }
   if (!usePostgres) {
     memory.smsCodeByPhone.delete(phone);
     return;
@@ -250,6 +290,7 @@ export async function deleteAccountByUserId(userId) {
     if (phoneToDelete) {
       memory.usersByPhone.delete(phoneToDelete);
       memory.smsCodeByPhone.delete(phoneToDelete);
+      if (redis) await redis.del(smsCodeKey(phoneToDelete));
     }
     memory.sessionsByUserId.delete(userId);
     memory.ledgersByUserId.delete(userId);
@@ -268,6 +309,7 @@ export async function deleteAccountByUserId(userId) {
     await pool.query(`DELETE FROM iap_transactions WHERE user_id = $1`, [userId]);
     if (phone) {
       await pool.query(`DELETE FROM sms_codes WHERE phone = $1`, [phone]);
+      if (redis) await redis.del(smsCodeKey(phone));
     }
     await pool.query(`DELETE FROM users WHERE user_id = $1`, [userId]);
     await pool.query("COMMIT");
@@ -275,4 +317,8 @@ export async function deleteAccountByUserId(userId) {
     await pool.query("ROLLBACK");
     throw error;
   }
+}
+
+function smsCodeKey(phone) {
+  return `${config.redisKeyPrefix}:sms_code:${phone}`;
 }

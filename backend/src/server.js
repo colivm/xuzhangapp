@@ -361,6 +361,9 @@ function validateProductionConfig() {
   if (!config.databaseUrl) {
     issues.push("DATABASE_URL is required in production; memory store must not be used.");
   }
+  if (!config.redisUrl) {
+    issues.push("REDIS_URL is required in production; SMS codes must not use memory storage.");
+  }
   if (config.allowOrigin === "*") {
     issues.push("ALLOW_ORIGIN must not be '*' in production.");
   }

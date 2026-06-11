@@ -69,13 +69,17 @@ async function sendAliyunSms({ phone, code, schemeName, countryCode, signName, t
   if (!isSmsConfigured()) {
     throw new SmsProviderError("SMS_NOT_CONFIGURED", "Aliyun SMS provider is not configured.");
   }
+  const templateParam = {
+    code,
+    min: config.aliyunSmsTemplateMin || String(Math.ceil(SMS_CODE_TTL_MS / 60_000)),
+  };
   const request = buildAliyunSendSmsVerifyCodeRequest({
     phone,
     schemeName,
     countryCode,
     signName,
     templateCode,
-    templateParam: JSON.stringify({ code }),
+    templateParam: JSON.stringify(templateParam),
   });
   const response = await requestAliyun(request);
   if (response.Code !== "OK") {

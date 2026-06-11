@@ -8,6 +8,7 @@ struct LifeEntryPreviewCard: View {
     let meta: String
     let amountText: String
     let primaryActionTitle: String
+    let showsPrimaryAction: Bool
     let showAngleAction: Bool
     var onTap: () -> Void
     var onChangeCategory: () -> Void
@@ -120,12 +121,14 @@ struct LifeEntryPreviewCard: View {
 
     private var actionRow: some View {
         HStack(spacing: 0) {
-            quietAction(primaryActionTitle, action: onPrimaryAction)
-            if showAngleAction && isConfirm {
+            if showsPrimaryAction {
+                quietAction(primaryActionTitle, action: onPrimaryAction)
+                if showAngleAction && isConfirm {
+                    separator
+                    quietAction("换个角度", action: onAngleAction)
+                }
                 separator
-                quietAction("换个角度", action: onAngleAction)
             }
-            separator
             quietAction("自己写一句", action: onWriteOwn)
         }
     }
