@@ -14,6 +14,7 @@ struct UserSession: Codable, Equatable {
     let refreshToken: String?
     let loginType: LoginType
     var memberTier: String
+    var memberExpiresAt: String?
 }
 
 enum LoginType: String, Codable {
@@ -130,7 +131,8 @@ final class AuthService: AuthServiceProtocol {
             accessToken: token,
             refreshToken: nil,
             loginType: .phone,
-            memberTier: user.memberTier ?? "free"
+            memberTier: user.memberTier ?? "free",
+            memberExpiresAt: user.memberExpiresAt
         )
     }
 

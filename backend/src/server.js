@@ -18,7 +18,13 @@ import {
   upsertLedger,
 } from "./store.js";
 import { requireAuth, signAccessToken } from "./auth.js";
-import { trackEvent, listEvents, summarizeEvents } from "./analytics.js";
+import { deleteEventsByUserId, trackEvent, listEvents, summarizeEvents } from "./analytics.js";
+import {
+  checkSmsSendRateLimit,
+  checkSmsVerifyRateLimit,
+  clearSmsVerifyFailures,
+  markSmsVerifyFailed,
+} from "./rateLimit.js";
 import {
   canShowNudge,
   getPolicy as getNudgePolicy,
@@ -51,6 +57,10 @@ app.post("/v1/auth/sms/send", async (req, res) => {
   if (!/^1\d{10}$/.test(phone)) {
     return res.status(400).json({ ok: false, error: "INVALID_PHONE" });
   }
+  const limit = checkSmsSendRateLimit(phone, clientIP(req));
+  if (!limit.ok) {
+    return res.status(429).json({ ok: false, error: limit.error, retryAfterSec: limit.retryAfterSec });
+  }
   const code = config.devAllowSmsCode;
   await setSmsCode(phone, code, Date.now() + 5 * 60 * 1000);
   return res.json({ ok: true, cooldownSec: 60 });
@@ -59,10 +69,16 @@ app.post("/v1/auth/sms/send", async (req, res) => {
 app.post("/v1/auth/sms/verify", async (req, res) => {
   const phone = String(req.body?.phone || "").trim();
   const code = String(req.body?.code || "").trim();
+  const limit = checkSmsVerifyRateLimit(phone, clientIP(req));
+  if (!limit.ok) {
+    return res.status(429).json({ ok: false, error: limit.error, retryAfterSec: limit.retryAfterSec });
+  }
   const snapshot = await getSmsCode(phone);
   if (!snapshot || snapshot.expireAt < Date.now() || snapshot.code !== code) {
+    markSmsVerifyFailed(phone, clientIP(req));
     return res.status(400).json({ ok: false, error: "INVALID_CODE" });
   }
+  clearSmsVerifyFailures(phone, clientIP(req));
   await deleteSmsCode(phone);
   const user = await getOrCreateUserByPhone(phone);
   const accessToken = signAccessToken(user);
@@ -141,6 +157,7 @@ app.delete("/v1/ledger", requireAuth, async (req, res) => {
 
 app.delete("/v1/account", requireAuth, async (req, res) => {
   await deleteAccountByUserId(req.user.userId);
+  deleteEventsByUserId(req.user.userId);
   res.json({ ok: true });
 });
 
@@ -317,6 +334,10 @@ function mergeMemberSession(current, incoming) {
     return current;
   }
   return incoming;
+}
+
+function clientIP(req) {
+  return String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
 }
 
 initStore()

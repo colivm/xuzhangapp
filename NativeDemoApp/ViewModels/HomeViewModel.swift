@@ -529,7 +529,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     var hasMemberAccess: Bool {
-        AppSettings.hasMemberAccess(tier: LocalStore.loadSettings().memberTier)
+        LocalStore.loadSettings().hasMemberAccess
     }
 
     var monthExpenseTotal: Double {
@@ -857,6 +857,20 @@ final class HomeViewModel: ObservableObject {
         recordInputMessage = nil
     }
 
+    func clearLocalLedgerData() {
+        items = []
+        insights = []
+        latestPlayback = nil
+        latestActionCard = nil
+        activeRouteGuidance = nil
+        recordPrefillResult = nil
+        recordPrefillAmount = nil
+        petMessage = nil
+        LocalStore.saveHomeItems([])
+        LocalStore.saveDailyInsights([])
+        UserDefaults.standard.removeObject(forKey: "latest_action_card_v1")
+    }
+
     func selectCategory(_ category: HomeItem.Category) {
         selectedCategory = category
         categoryLockedByUser = true
@@ -1111,7 +1125,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func triggerMemberNudge(scene: MemberFlowScene) {
-        guard !AppSettings.hasMemberAccess(tier: LocalStore.loadSettings().memberTier) else {
+        guard !LocalStore.loadSettings().hasMemberAccess else {
             memberNudgeCopy = nil
             activeMemberNudgeScene = nil
             return

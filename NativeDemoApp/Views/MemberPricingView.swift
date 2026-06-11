@@ -253,6 +253,11 @@ struct MemberPricingView: View {
             Text("你已开通\(AppSettings.memberTierDisplayName(settingsViewModel.memberTier))")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(AppColors.text)
+            if let validity = settingsViewModel.settings.memberValidityText {
+                Text(validity)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.text.opacity(0.72))
+            }
             Text("所有会员权益已解锁，感谢你的信任与陪伴。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)

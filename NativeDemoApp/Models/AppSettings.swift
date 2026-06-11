@@ -59,6 +59,8 @@ struct AppSettings: Codable, Equatable {
     var cloudUserId: String
     /// 会员档位：free / monthly / yearly / lifetime（与后端一致）。
     var memberTier: String
+    /// 会员有效期，后端返回的 ISO8601 字符串；永久会员为空。
+    var memberExpiresAt: String?
 
     mutating func applyProductionEndpoints() {
         backendBaseURL = Self.productionBackendBaseURL
@@ -81,7 +83,8 @@ struct AppSettings: Codable, Equatable {
         remoteAIMonthlyLimit: 120,
         backendBaseURL: productionBackendBaseURL,
         cloudUserId: "",
-        memberTier: "free"
+        memberTier: "free",
+        memberExpiresAt: nil
     )
 }
 
@@ -103,6 +106,7 @@ extension AppSettings {
         case backendBaseURL
         case cloudUserId
         case memberTier
+        case memberExpiresAt
     }
 
     init(from decoder: Decoder) throws {
@@ -123,17 +127,28 @@ extension AppSettings {
         backendBaseURL = try container.decodeIfPresent(String.self, forKey: .backendBaseURL) ?? Self.productionBackendBaseURL
         cloudUserId = try container.decodeIfPresent(String.self, forKey: .cloudUserId) ?? ""
         memberTier = try container.decodeIfPresent(String.self, forKey: .memberTier) ?? "free"
+        memberExpiresAt = try container.decodeIfPresent(String.self, forKey: .memberExpiresAt)
         applyProductionEndpoints()
     }
 }
 
 extension AppSettings {
-    static func hasMemberAccess(tier: String) -> Bool {
-        ["monthly", "yearly", "lifetime"].contains(tier.lowercased())
+    static func hasMemberAccess(tier: String, expiresAt: String? = nil, now: Date = Date()) -> Bool {
+        switch tier.lowercased() {
+        case "lifetime":
+            return true
+        case "monthly", "yearly":
+            guard let expiresAt, let expiry = parseISODate(expiresAt) else {
+                return true
+            }
+            return expiry > now
+        default:
+            return false
+        }
     }
 
     var hasMemberAccess: Bool {
-        Self.hasMemberAccess(tier: memberTier)
+        Self.hasMemberAccess(tier: memberTier, expiresAt: memberExpiresAt)
     }
 
     static func memberTierDisplayName(_ tier: String) -> String {
@@ -143,6 +158,43 @@ extension AppSettings {
         case "lifetime": return "永久会员"
         default: return "免费版"
         }
+    }
+
+    var memberValidityText: String? {
+        switch memberTier.lowercased() {
+        case "lifetime":
+            return "永久有效"
+        case "monthly", "yearly":
+            guard let memberExpiresAt, let date = Self.parseISODate(memberExpiresAt) else {
+                return nil
+            }
+            return "有效期至 \(Self.displayDateFormatter.string(from: date))"
+        default:
+            return nil
+        }
+    }
+
+    private static let displayDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy年M月d日"
+        return formatter
+    }()
+
+    private static let isoDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let fractionalISODateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static func parseISODate(_ value: String) -> Date? {
+        fractionalISODateFormatter.date(from: value) ?? isoDateFormatter.date(from: value)
     }
 
     var colorScheme: ColorScheme? {

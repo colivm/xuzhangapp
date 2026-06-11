@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
+    @EnvironmentObject private var homeViewModel: HomeViewModel
     @Binding var showMemberPricing: Bool
     var onShowMinimalOnboarding: () -> Void = {}
     @State private var showAccountSheet = false
@@ -95,15 +96,26 @@ struct SettingsView: View {
             Text("只删除服务器上的同步账本，本机记录仍保留。为避免重新上传，云端同步会同时关闭。")
         }
         .confirmationDialog("注销账号？", isPresented: $showDeleteAccountConfirm, titleVisibility: .visible) {
-            Button("注销账号并删除云端数据", role: .destructive) {
+            Button("保留本机账本并注销", role: .destructive) {
                 Task {
-                    await settingsViewModel.deleteCloudAccount()
-                    showAccountSheet = false
+                    let didDelete = await settingsViewModel.deleteCloudAccount()
+                    if didDelete {
+                        showAccountSheet = false
+                    }
+                }
+            }
+            Button("清空本机账本并注销", role: .destructive) {
+                Task {
+                    let didDelete = await settingsViewModel.deleteCloudAccount()
+                    if didDelete {
+                        homeViewModel.clearLocalLedgerData()
+                        showAccountSheet = false
+                    }
                 }
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("会删除云端账本、登录账号与服务端会员绑定记录，本机账本不会自动删除。Apple 订阅仍需在 App Store 管理。")
+            Text("这会退出登录，并清空服务器上的账号、云端账本和会员绑定状态。Apple 订阅不会自动取消，之后可用同一 Apple ID 登录后恢复购买。")
         }
     }
 
@@ -591,6 +603,18 @@ struct SettingsView: View {
                     .foregroundStyle(AppColors.text)
             }
 
+            if let validity = settingsViewModel.settings.memberValidityText {
+                HStack {
+                    Text("会员有效期")
+                        .font(.system(size: 14))
+                        .foregroundStyle(AppColors.subtext)
+                    Spacer()
+                    Text(validity)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(AppColors.text)
+                }
+            }
+
             if hasMemberAccess {
                 Text("会员权益已生效，周/月复盘和 OCR 次数不会再被免费额度限制。")
                     .font(.system(size: 12))
@@ -929,5 +953,6 @@ struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
         SettingsView(showMemberPricing: .constant(false))
             .environmentObject(SettingsViewModel())
+            .environmentObject(HomeViewModel())
     }
 }

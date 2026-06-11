@@ -200,6 +200,9 @@ final class SettingsViewModel: ObservableObject {
         get { settings.memberTier }
         set {
             settings.memberTier = newValue
+            if newValue.lowercased() == "free" {
+                settings.memberExpiresAt = nil
+            }
             persist()
         }
     }
@@ -247,9 +250,11 @@ final class SettingsViewModel: ObservableObject {
             settings.displayName = sanitizedDisplayName(session.displayName)
             settings.cloudUserId = session.userId
             settings.memberTier = session.memberTier
+            settings.memberExpiresAt = session.memberExpiresAt
             persist()
             let tier = try await client.fetchMemberMe(accessToken: session.accessToken)
             settings.memberTier = tier.tier
+            settings.memberExpiresAt = tier.expiresAt
             persist()
             hasCloudSession = true
             authMessage = "登录成功。"
@@ -263,6 +268,7 @@ final class SettingsViewModel: ObservableObject {
         KeychainService.clearAccessToken()
         settings.cloudUserId = ""
         settings.memberTier = "free"
+        settings.memberExpiresAt = nil
         if Self.isBackendDefaultDisplayName(settings.displayName) {
             settings.displayName = Self.localDefaultDisplayName
         }
@@ -291,12 +297,13 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
-    func deleteCloudAccount() async {
+    @discardableResult
+    func deleteCloudAccount() async -> Bool {
         authMessage = nil
         let token = KeychainService.loadAccessToken()
         guard !token.isEmpty else {
             authMessage = "请先登录账号。"
-            return
+            return false
         }
         isAuthBusy = true
         defer { isAuthBusy = false }
@@ -306,15 +313,18 @@ final class SettingsViewModel: ObservableObject {
             KeychainService.clearAccessToken()
             settings.cloudUserId = ""
             settings.memberTier = "free"
+            settings.memberExpiresAt = nil
             settings.syncEnabled = false
             if Self.isBackendDefaultDisplayName(settings.displayName) {
                 settings.displayName = Self.localDefaultDisplayName
             }
             hasCloudSession = false
-            authMessage = "账号已注销，云端数据已删除。"
+            authMessage = "账号已注销，服务器数据和会员绑定状态已清空。"
             persist()
+            return true
         } catch {
             authMessage = error.localizedDescription
+            return false
         }
     }
 
@@ -335,6 +345,7 @@ final class SettingsViewModel: ObservableObject {
         )
         let tier = try await client.fetchMemberMe(accessToken: token)
         settings.memberTier = tier.tier
+        settings.memberExpiresAt = tier.expiresAt
         persist()
         authMessage = "会员状态已更新。"
     }

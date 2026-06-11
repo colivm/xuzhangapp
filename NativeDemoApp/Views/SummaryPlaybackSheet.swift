@@ -19,6 +19,7 @@ struct SummaryPlaybackSheet: View {
     @State private var playbackTask: Task<Void, Never>?
     @State private var isSavingShareCard = false
     @State private var shareSaveMessage: String?
+    @State private var showShareCardPrivacyConfirm = false
 
     private var currentChapter: SummaryChapter? {
         guard !playback.chapters.isEmpty else { return nil }
@@ -72,6 +73,14 @@ struct SummaryPlaybackSheet: View {
         .onDisappear {
             reportCompletionIfNeeded(progress: progressFraction)
             playbackTask?.cancel()
+        }
+        .confirmationDialog("保存本周故事图？", isPresented: $showShareCardPrivacyConfirm, titleVisibility: .visible) {
+            Button("保存到相册") {
+                saveWeeklyStoryCard()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("故事图可能包含昵称、金额区间和你写下的回望文字。保存后请先确认内容，再发给别人。")
         }
     }
 
@@ -407,7 +416,7 @@ struct SummaryPlaybackSheet: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    saveWeeklyStoryCard()
+                    showShareCardPrivacyConfirm = true
                 } label: {
                     Text("保存本周故事图")
                         .font(.system(size: 15, weight: .semibold))

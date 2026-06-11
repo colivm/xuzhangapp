@@ -22,6 +22,7 @@ struct InsightWebView: View {
     @State private var showTodayInsightSheet = false
     @State private var monthlyActionMessage: String?
     @State private var monthlyNarrativeVariant = 0
+    @State private var showWeeklySharePrivacyConfirm = false
     private let trialTotal = 5
 
     private struct AIStatusPill: Equatable {
@@ -63,6 +64,15 @@ struct InsightWebView: View {
         }
         .sheet(isPresented: $showTodayInsightSheet) {
             todayInsightSheet
+        }
+        .confirmationDialog("保存周记摘页？", isPresented: $showWeeklySharePrivacyConfirm, titleVisibility: .visible) {
+            Button("保存到相册") {
+                homeViewModel.markWeeklyShareGenerated()
+                generateAndShareWeeklyCard()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("摘页可能包含昵称、金额区间和你写下的回望文字。保存后请先确认内容，再发给别人。")
         }
     }
 
@@ -108,8 +118,7 @@ struct InsightWebView: View {
                     }
                 }
                 quietTextButton("保存周记摘页") {
-                    homeViewModel.markWeeklyShareGenerated()
-                    generateAndShareWeeklyCard()
+                    showWeeklySharePrivacyConfirm = true
                 }
                 if !homeViewModel.weekTopCategoryText.isEmpty && homeViewModel.weekTopCategoryText != "暂无" {
                     quietTextButton("标记常花类目") {
@@ -270,8 +279,7 @@ struct InsightWebView: View {
 
             HStack(spacing: 14) {
                 quietTextButton("保存周记摘页") {
-                    homeViewModel.markWeeklyShareGenerated()
-                    generateAndShareWeeklyCard()
+                    showWeeklySharePrivacyConfirm = true
                 }
                 if !homeViewModel.weekTopCategoryText.isEmpty && homeViewModel.weekTopCategoryText != "暂无" {
                     quietTextButton("标记常花类目") {
