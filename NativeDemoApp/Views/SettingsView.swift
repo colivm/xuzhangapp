@@ -101,7 +101,7 @@ struct SettingsView: View {
                     Text("本地保存 · \(AppSettings.memberTierDisplayName(settingsViewModel.memberTier))")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.subtext)
-                    Text(settingsViewModel.hasCloudSession ? "云端备份已准备好，慢慢记就好。" : "想备份或续聊时，再点这里登录。")
+                    Text(settingsViewModel.hasCloudSession ? "云端备份已准备好，照常记就好。" : "想备份或续聊时，再点这里登录。")
                         .font(.system(size: 12))
                         .italic()
                         .foregroundStyle(AppColors.subtext.opacity(0.88))

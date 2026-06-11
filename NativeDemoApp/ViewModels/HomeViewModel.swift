@@ -610,11 +610,11 @@ final class HomeViewModel: ObservableObject {
             summary = "这个月的记录里，「\(top)」出现得比较多。"
         }
         let structure = total <= 0
-            ? "等你有了本月记录，我会帮你梳理这段时间的变化。"
-            : "「\(top)」是这个月比较明显的一块生活拼图。"
+            ? "等本月多几笔记录，再整理这段时间的变化。"
+            : "「\(top)」是这个月比较明显的一类。"
         let advice = total <= 0
-            ? "先坚持记一周，复盘会更有感觉。"
-            : "这个月的轮廓已经出来了，继续记录几天，月记会更完整。"
+            ? "先记下一周，复盘会更有内容。"
+            : "这个月已经有一些记录，继续记几天，月记会更完整。"
         return (summary, structure, advice)
     }
 
@@ -851,21 +851,21 @@ final class HomeViewModel: ObservableObject {
                 return ["加班后吃点热乎的", "晚归路上的一口热食", "深夜买点小食"]
             }
         case .transport:
-            return ["地铁到站，今天也准时出门", "打车赶去下一站", "停车和油费记一笔"]
+            return ["地铁到站，今天也准时出门", "打车赶去这一段", "停车和油费记一笔"]
         case .shopping:
             return ["下单一个需要的", "买到常用的小东西", "快递路上记一笔"]
         case .daily:
             return ["便利店补一袋日常", "超市买点家里要用的", "日用品刚好补上"]
         case .entertainment:
-            return ["买了这场电影票", "游戏里充了一笔", "周末出去玩一趟"]
+            return ["买了这场电影票", "游戏里充了一笔", "周末出去坐一会儿"]
         case .lodging:
-            return ["今晚住在这里", "出差住宿记一笔", "短住一晚先记下"]
+            return ["今晚住在这里", "出差住宿记一笔", "短住一晚记下"]
         case .health:
-            return ["药店买点常用药", "挂号问诊记一笔", "体检护理这笔"]
+            return ["药店买点常用药", "挂号问诊记一笔", "体检护理记一笔"]
         case .home:
-            return ["水电燃气交上了", "家里添一个要用的", "修修补补记一笔"]
+            return ["水电燃气交上了", "家里添个要用的", "修修补补记一笔"]
         case .social:
-            return ["见面带份小心意", "和朋友吃了一顿", "探望时买点东西"]
+            return ["见面带点东西", "和朋友吃了一顿", "探望时买点东西"]
         case .other:
             return ["临时花了一笔", "还没想好归哪类", "先把这笔记下"]
         }
@@ -1022,14 +1022,14 @@ final class HomeViewModel: ObservableObject {
 
         let action: String
         if todayTotal > weeklyAverage && weeklyAverage > 0 {
-            action = "今天的记录比平时热闹一点，先把这段生活收下来。"
+            action = "今天的记录比平时多一点，先把明细留清楚。"
         } else {
             action = "今天这几笔已经留在账本里，明天有新花费再继续记。"
         }
 
         let encourage = settings.aiTone == .gentle
-            ? "先按今天这些记录看，日常会一点点清楚。"
-            : "继续记录，会更容易看见自己的日常轮廓。"
+            ? "先按今天这些记录看，日常会更清楚。"
+            : "继续记录，会更容易看清自己的日常。"
 
         let insight = DailyInsight(
             dayKey: key,

@@ -4,6 +4,10 @@
 
 范围：iOS 优先；Web 暂不作为主验收端。本文是治理计划，不直接承诺一次性改完所有文案。
 
+相关护栏：
+
+- `LATE_NIGHT_SCENE_ROUTING_CASES_v0.1.md`：凌晨场景误判 case 表，约束 travel 触发条件。
+
 ## 1. 背景
 
 当前产品方向已经从“记账工具”转向“记下生活，再被回望认出来”。UI 结构正在靠近这个方向，但文案系统仍存在明显漂移：
@@ -287,20 +291,21 @@
 
 第一轮只做 P0，目标是降噪，不追求完整重写。
 
-- [ ] 关闭 `顺带记下「keyword」` 正文追加。
-- [ ] 清洗 `ScenePackCopyPool` 中明显高风险词句。
-- [ ] 清洗 `NarrativeCopyResolver` 的 generic fallback。
-- [ ] 重写 `noteSuggestions` 为短具体备注。
-- [ ] 降调 `PetCompanionCopy`。
+- [x] 关闭 `顺带记下「keyword」` 正文追加。
+- [x] 清洗 `ScenePackCopyPool` 中明显高风险词句。
+- [x] 清洗 `NarrativeCopyResolver` 的 generic fallback。
+- [x] 重写 `noteSuggestions` 为短具体备注。
+- [x] 降调 `PetCompanionCopy`。
+- [x] 建立凌晨误判 case 表，明确 travel 强/弱证据。
 - [ ] 真机检查：记账页连续生成 10 次，是否仍像模板口头禅。
 - [ ] 真机检查：早上餐饮不出午餐/晚餐。
 - [ ] 真机检查：无用户备注时，不出现“你值得/温柔/治愈/掌控感”。
 
 ## 8. 第二轮执行清单
 
-- [ ] 清洗 `PlaybackCopyPool` 的周/月切片旁白。
-- [ ] 清洗 `InsightWebView` 周记/月记模板。
-- [ ] 检查 Echo 重复、缺失、无素材时强行抒情。
+- [x] 清洗 `PlaybackCopyPool` 的周/月切片旁白。
+- [x] 清洗 `InsightWebView` 周记/月记模板。
+- [x] 检查 Echo 重复、缺失、无素材时强行抒情。
 - [ ] 回归 OCR、记账保存、会员锁、播放 quota。
 
 ## 9. 文案评审表

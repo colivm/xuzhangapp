@@ -206,7 +206,7 @@ struct InsightWebView: View {
 
     private func formatWeeklyJournalText(_ blocks: (summary: String, structure: String, advice: String)) -> String {
         if blocks.summary.contains("暂无复盘") {
-            return "近 7 天还没有足够记录。多记几笔，这里会整理成一段周记。"
+            return "近 7 天记录还不多。多记几笔，这里会整理成一段周记。"
         }
         let weekItems = recentPositiveItems(days: 7)
         let countText = weekItems.isEmpty ? "这周还没留下太多记录" : "这周记下 \(weekItems.count) 笔"
@@ -227,7 +227,7 @@ struct InsightWebView: View {
     private func weeklyJournalClosing(_ blocks: (summary: String, structure: String, advice: String)) -> String {
         blocks.summary.contains("暂无复盘")
             ? "等记录多一点，再回来读这一周。"
-            : "愿意的话，下周再对照看看有没有新变化。"
+            : "下周有新记录，再回来对照。"
     }
 
     private func recentPositiveItems(days: Int) -> [HomeItem] {
@@ -788,7 +788,7 @@ struct InsightWebView: View {
         if monthlyInsightGenerated, let report = monthlyReport {
             return formatMonthlyJournalText(report, variant: monthlyNarrativeVariant)
         }
-        return "这一月还没有回顾。点下面生成，会在这里长出一封月记。"
+        return "这一月还没有回顾。生成后，这里会写成一段月记。"
     }
 
     private var monthlyJournalClosingText: String {
@@ -796,9 +796,9 @@ struct InsightWebView: View {
             return ""
         }
         if monthlyInsightGenerated, monthlyReport != nil {
-            return "愿意的话，下个月再翻开对照看看。"
+            return "下个月有新记录，再翻开对照。"
         }
-        return "先放在这里，等你想读的时候再打开。"
+        return "先放在这里，想读的时候再打开。"
     }
 
     private func formatMonthlyJournalText(_ report: HomeViewModel.MonthlyInsightReport, variant: Int) -> String {
@@ -814,11 +814,11 @@ struct InsightWebView: View {
         let opening: String
         switch variant % 3 {
         case 1:
-            opening = "换个角度读：这个月留下 \(monthItems.count) 笔，\(total.formatted(.cny)) 记在账本里，「\(top)」是最清楚的一条线。"
+            opening = "换个角度读：这个月留下 \(monthItems.count) 笔，\(total.formatted(.cny)) 记在账本里，「\(top)」是最清楚的一类。"
         case 2:
-            opening = "再轻一点写：这个月留下 \(monthItems.count) 笔，\(total.formatted(.cny)) 记在账本里，「\(top)」更靠前。"
+            opening = "换个写法：这个月留下 \(monthItems.count) 笔，\(total.formatted(.cny)) 记在账本里，「\(top)」更靠前。"
         default:
-            opening = "这个月记下来 \(monthItems.count) 笔，\(total.formatted(.cny)) 落在账本里，「\(top)」偶尔露头。"
+            opening = "这个月记下来 \(monthItems.count) 笔，\(total.formatted(.cny)) 留在账本里，「\(top)」出现得多一些。"
         }
         var text = "\(opening)\(report.structure)"
         let periodKey = EchoAnchorService.shared.periodKeyForMonth()
@@ -1341,6 +1341,8 @@ struct WeeklyShareCardView: View {
             .replacingOccurrences(of: "串起这一周", with: "留在这一周")
             .replacingOccurrences(of: "最容易被看见", with: "出现得多一些")
             .replacingOccurrences(of: "先叙到这里", with: "先记到这里")
+            .replacingOccurrences(of: "生活轮廓", with: "记录脉络")
+            .replacingOccurrences(of: "生活节奏", with: "记录节奏")
         let cleanedSubtitle = subtitle
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "¥\\s?[0-9,]+(\\.[0-9]+)?", with: "", options: .regularExpression)

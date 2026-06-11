@@ -110,8 +110,12 @@ final class EchoAnchorService {
         }
 
         let emotionCandidates = periodItems.filter { item in
-            let tag = item.emotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
-            return !tag.isEmpty && tag != HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
+            let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard (2...18).contains(tag.count) else { return false }
+            guard tag != HomeItem.inferEmotionTag(category: item.category, amount: item.amount) else { return false }
+            guard !isDirtyTraceTitle(tag) else { return false }
+            guard !privacyDenylist.contains(where: { tag.localizedCaseInsensitiveContains($0) }) else { return false }
+            return true
         }
         guard let pickedEmotion = emotionCandidates.max(by: { lhs, rhs in
             let left = stableHash("\(lhs.id.uuidString)|\(periodKey)|emotion")
@@ -121,7 +125,7 @@ final class EchoAnchorService {
             return nil
         }
         return EchoAnchor(
-            snippet: pickedEmotion.emotionTag.trimmingCharacters(in: .whitespacesAndNewlines),
+            snippet: pickedEmotion.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines),
             kind: .emotion,
             itemId: pickedEmotion.id
         )
@@ -133,11 +137,11 @@ final class EchoAnchorService {
         switch anchor.kind {
         case .title:
             if stableHash(anchor.itemId.uuidString) % 2 == 0 {
-                return "有一笔你写下「\(snippet)」，后来也能从这里认出来。"
+                return "有一笔留着「\(snippet)」。"
             }
-            return "「\(snippet)」—— 有一笔是这样留在账本里的。"
+            return "账本里有一笔：「\(snippet)」。"
         case .emotion:
-            return "有一次你标记过「\(snippet)」，这条记录因此更好认。"
+            return "有一笔标着「\(snippet)」。"
         }
     }
 

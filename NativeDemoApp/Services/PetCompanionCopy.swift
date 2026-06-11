@@ -3,7 +3,7 @@ import Foundation
 enum PetCompanionCopy {
     static let companion = [
         "我在这儿，陪你把今天记清楚。",
-        "有一笔就记一笔，{petName}在旁边。",
+        "有一笔就记一笔，{petName}在旁边看着。",
         "不急，先留下这一笔。",
         "不想被打扰的话，长按我就能把我藏起来啦。",
     ]
@@ -21,9 +21,9 @@ enum PetCompanionCopy {
     ]
 
     static let weatherHint = [
-        "开启天气后，我可以按雨天、降温这些情况给一句轻提示。",
+        "开启天气后，雨天、降温这些情况会多一句提示。",
         "允许获取天气后，提示会更贴近当天。",
-        "天冷、降温、下雨天，我可以提醒你补一句记录。（前往设置开启）",
+        "天冷、降温、下雨天，可以顺手补一句记录。（前往设置开启）",
     ]
 
     static let weatherAiFallback = [
@@ -61,7 +61,7 @@ enum PetCompanionCopy {
         "weekendHealing": [
             "周末这笔，留个简单备注也可以。",
             "周末小花费，记下场景就够。",
-            "周末记录继续，{petName}在旁边。",
+            "周末这笔先放进账本。",
         ],
         "noExpenseCalm": [
             "今天还没花钱，账本先空着也可以。",
