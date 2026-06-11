@@ -7,6 +7,8 @@
 - 账单同步接口（用户级）
 - AI 复盘转发到 `ai-proxy`
 - IAP 验单接口（App Store Server API，需配置 Apple 密钥）
+- 内容安全检查（昵称/备注/AI 输入输出的基础隐私与违规风险拦截）
+- 云端账本删除与账号注销接口
 
 ## 1. 安装与启动
 
@@ -30,6 +32,8 @@ npm run dev
 - `GET /v1/ledger`
 - `POST /v1/ledger`
 - `DELETE /v1/ledger/:id`
+- `DELETE /v1/ledger`（删除当前登录用户的云端账本）
+- `DELETE /v1/account`（注销当前登录用户账号并删除云端数据）
 - `POST /v1/iap/verify`
 - `POST /v1/ai/insight/daily`
 
@@ -39,6 +43,9 @@ npm run dev
 - 支持 PostgreSQL：设置 `DATABASE_URL` 后自动切换 DB 存储。
 - 微信登录仍为 stub；IAP 验单配置 `APPLE_*` 与 `IAP_*_PRODUCT_ID` 后可联调沙盒/生产。
 - 账单上行采用 `updatedAt` 冲突策略（新版本覆盖旧版本）。
+- 账单写入会校验 `title`、`amount` 等基础字段，并拦截手机号、证件号、银行卡号、链接/邮箱、明显不适内容和少量公共安全高风险短语。
+- AI 转发前后会做基础内容安全检查；日志只记录拦截原因和脱敏样本，不应记录完整账单正文。
+- `DELETE /v1/account` 会删除用户、会话、云端账本、短信验证码和服务端 IAP 绑定记录；Apple 订阅本身仍由 App Store 管理。
 
 ## 4. 与 iOS `NativeDemoApp` 联调
 

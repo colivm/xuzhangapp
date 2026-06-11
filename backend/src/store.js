@@ -229,3 +229,50 @@ export async function deleteLedger(userId, itemId) {
   }
   await pool.query(`DELETE FROM ledgers WHERE user_id = $1 AND item_id = $2`, [userId, itemId]);
 }
+
+export async function deleteLedgersByUserId(userId) {
+  if (!usePostgres) {
+    memory.ledgersByUserId.set(userId, []);
+    return;
+  }
+  await pool.query(`DELETE FROM ledgers WHERE user_id = $1`, [userId]);
+}
+
+export async function deleteAccountByUserId(userId) {
+  if (!usePostgres) {
+    let phoneToDelete = "";
+    for (const [phone, user] of memory.usersByPhone.entries()) {
+      if (user.userId === userId) {
+        phoneToDelete = phone;
+        break;
+      }
+    }
+    if (phoneToDelete) {
+      memory.usersByPhone.delete(phoneToDelete);
+      memory.smsCodeByPhone.delete(phoneToDelete);
+    }
+    memory.sessionsByUserId.delete(userId);
+    memory.ledgersByUserId.delete(userId);
+    for (const [key, tx] of memory.iapTransactionsByOriginalId.entries()) {
+      if (tx.userId === userId) memory.iapTransactionsByOriginalId.delete(key);
+    }
+    return;
+  }
+
+  await pool.query("BEGIN");
+  try {
+    const userResult = await pool.query(`SELECT phone FROM users WHERE user_id = $1`, [userId]);
+    const phone = userResult.rows[0]?.phone || "";
+    await pool.query(`DELETE FROM ledgers WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM sessions WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM iap_transactions WHERE user_id = $1`, [userId]);
+    if (phone) {
+      await pool.query(`DELETE FROM sms_codes WHERE phone = $1`, [phone]);
+    }
+    await pool.query(`DELETE FROM users WHERE user_id = $1`, [userId]);
+    await pool.query("COMMIT");
+  } catch (error) {
+    await pool.query("ROLLBACK");
+    throw error;
+  }
+}

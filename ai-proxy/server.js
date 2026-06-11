@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
+const { redactForLog, validateAIOutputText, validateAIRequestBody } = require("./contentSafety");
 
 const app = express();
 app.use(cors());
@@ -80,6 +81,15 @@ app.post("/v1/insight/daily", async (req, res) => {
     }
     const user = auth.user;
     const feature = String(req.body?.feature || "daily").toLowerCase();
+    const safety = validateAIRequestBody(req.body || {});
+    if (!safety.ok) {
+      auditRisk("ai_input_rejected", req, user, {
+        feature,
+        reason: safety.reason,
+        sample: redactForLog(JSON.stringify(req.body || {})),
+      });
+      return res.status(400).json({ code: safety.error, message: safety.message, reason: safety.reason });
+    }
 
     if (PREMIUM_FEATURES.has(feature) && !user.isMember) {
       auditRisk("premium_bypass", req, user, { feature });
@@ -126,6 +136,15 @@ app.post("/v1/insight/daily", async (req, res) => {
 
     const parsed = safeJSONParse(upstream.body);
     const content = parsed?.choices?.[0]?.message?.content;
+    const outputSafety = validateAIOutputText(content || upstream.body);
+    if (!outputSafety.ok) {
+      auditRisk("ai_output_rejected", req, user, {
+        feature,
+        reason: outputSafety.reason,
+        sample: redactForLog(content || upstream.body),
+      });
+      return res.status(502).json({ code: outputSafety.error, message: "AI 输出未通过内容安全检查", reason: outputSafety.reason });
+    }
     const payload = normalizeInsightPayload(content);
     if (!payload) {
       auditRisk("parse_error", req, user, { feature });

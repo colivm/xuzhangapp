@@ -271,6 +271,53 @@ final class SettingsViewModel: ObservableObject {
         persist()
     }
 
+    func deleteCloudLedger() async {
+        authMessage = nil
+        let token = KeychainService.loadAccessToken()
+        guard !token.isEmpty else {
+            authMessage = "请先登录账号。"
+            return
+        }
+        isAuthBusy = true
+        defer { isAuthBusy = false }
+        let client = AuthService(baseURL: backendBaseURL)
+        do {
+            try await client.deleteCloudLedger(accessToken: token)
+            settings.syncEnabled = false
+            persist()
+            authMessage = "云端账本已删除，本机记录仍保留。"
+        } catch {
+            authMessage = error.localizedDescription
+        }
+    }
+
+    func deleteCloudAccount() async {
+        authMessage = nil
+        let token = KeychainService.loadAccessToken()
+        guard !token.isEmpty else {
+            authMessage = "请先登录账号。"
+            return
+        }
+        isAuthBusy = true
+        defer { isAuthBusy = false }
+        let client = AuthService(baseURL: backendBaseURL)
+        do {
+            try await client.deleteAccount(accessToken: token)
+            KeychainService.clearAccessToken()
+            settings.cloudUserId = ""
+            settings.memberTier = "free"
+            settings.syncEnabled = false
+            if Self.isBackendDefaultDisplayName(settings.displayName) {
+                settings.displayName = Self.localDefaultDisplayName
+            }
+            hasCloudSession = false
+            authMessage = "账号已注销，云端数据已删除。"
+            persist()
+        } catch {
+            authMessage = error.localizedDescription
+        }
+    }
+
     func verifyIAPPurchase(_ payload: IAPPurchaseVerification) async throws {
         let token = KeychainService.loadAccessToken()
         guard !token.isEmpty else {

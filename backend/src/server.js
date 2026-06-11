@@ -2,7 +2,9 @@ import express from "express";
 import cors from "cors";
 import { config } from "./config.js";
 import {
+  deleteAccountByUserId,
   deleteLedger,
+  deleteLedgersByUserId,
   deleteSmsCode,
   getLedgersByUserId,
   getIAPTransactionByOriginalId,
@@ -28,6 +30,12 @@ import {
 import { getMemberCtaCopy } from "./memberFlow.js";
 import { buildTodayPlayback } from "./playback.js";
 import { IAPVerifyError, verifyAppStoreTransaction } from "./iapService.js";
+import {
+  redactForLog,
+  sanitizeLedgerItem,
+  validateAIOutputText,
+  validateAIRequestBody,
+} from "./contentSafety.js";
 
 const app = express();
 const isProduction = process.env.NODE_ENV === "production";
@@ -104,7 +112,16 @@ app.get("/v1/ledger", requireAuth, async (req, res) => {
 });
 
 app.post("/v1/ledger", requireAuth, async (req, res) => {
-  const item = req.body || {};
+  const validated = sanitizeLedgerItem(req.body || {});
+  if (!validated.ok) {
+    return res.status(400).json({
+      ok: false,
+      error: validated.error,
+      message: validated.message,
+      reason: validated.reason,
+    });
+  }
+  const item = validated.item;
   if (!item.id || !item.createdAt) {
     return res.status(400).json({ ok: false, error: "INVALID_LEDGER_ITEM" });
   }
@@ -114,6 +131,16 @@ app.post("/v1/ledger", requireAuth, async (req, res) => {
 
 app.delete("/v1/ledger/:id", requireAuth, async (req, res) => {
   await deleteLedger(req.user.userId, req.params.id);
+  res.json({ ok: true });
+});
+
+app.delete("/v1/ledger", requireAuth, async (req, res) => {
+  await deleteLedgersByUserId(req.user.userId);
+  res.json({ ok: true });
+});
+
+app.delete("/v1/account", requireAuth, async (req, res) => {
+  await deleteAccountByUserId(req.user.userId);
   res.json({ ok: true });
 });
 
@@ -170,6 +197,17 @@ app.post("/v1/iap/verify", requireAuth, async (req, res) => {
 });
 
 app.post("/v1/ai/insight/daily", requireAuth, async (req, res) => {
+  const safety = validateAIRequestBody(req.body || {});
+  if (!safety.ok) {
+    console.warn("[content-safety]", JSON.stringify({
+      event: "ai_input_rejected",
+      userId: req.user.userId,
+      reason: safety.reason,
+      sample: redactForLog(JSON.stringify(req.body || {})),
+      ts: new Date().toISOString(),
+    }));
+    return res.status(400).json({ ok: false, error: safety.error, message: safety.message, reason: safety.reason });
+  }
   const upstream = `${config.aiProxyBaseUrl}/v1/insight/daily`;
   try {
     const response = await fetch(upstream, {
@@ -181,6 +219,22 @@ app.post("/v1/ai/insight/daily", requireAuth, async (req, res) => {
       body: JSON.stringify(req.body || {}),
     });
     const text = await response.text();
+    const outputSafety = validateAIOutputText(text);
+    if (!outputSafety.ok) {
+      console.warn("[content-safety]", JSON.stringify({
+        event: "ai_output_rejected",
+        userId: req.user.userId,
+        reason: outputSafety.reason,
+        sample: redactForLog(text),
+        ts: new Date().toISOString(),
+      }));
+      return res.status(502).json({
+        ok: false,
+        error: outputSafety.error,
+        message: "AI 输出未通过内容安全检查",
+        reason: outputSafety.reason,
+      });
+    }
     res.status(response.status).type("application/json").send(text);
   } catch (error) {
     res.status(502).json({ ok: false, error: "UPSTREAM_ERROR", message: String(error?.message || error) });

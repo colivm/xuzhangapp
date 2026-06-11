@@ -4,6 +4,7 @@
 
 - 隐藏智谱 API Key（不在 iOS 客户端暴露）
 - 代理并清洗模型输出（统一返回 `summary/action/encourage`）
+- 代理前后做基础内容安全检查，避免隐私串或明显违规内容进入/离开模型
 - 支持可选代理口令
 - 支持服务端月度总调用上限
 
@@ -82,7 +83,12 @@
 - `PREMIUM_RATE_LIMIT_PER_MINUTE`：会员专属能力每用户限流。
 - `MONTHLY_REQUEST_LIMIT`：全局月度消耗上限。
 
-### 4.4 本地开发快速拿 token
+### 4.4 内容安全
+- AI 请求体会在转发前检查手机号、证件号、银行卡号、链接/邮箱、明显不适内容和少量公共安全高风险短语。
+- AI 返回内容会在归一化前检查；未通过时返回 `AI_OUTPUT_REJECTED`。
+- 风险日志只记录拦截原因和脱敏样本，不记录完整账单或完整 prompt。
+
+### 4.5 本地开发快速拿 token
 请求 `POST /v1/auth/dev-token`，示例 body：
 ```json
 {

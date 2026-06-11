@@ -176,10 +176,30 @@ final class AuthService: AuthServiceProtocol {
         return (decoded.memberTier ?? "free", decoded.memberExpiresAt)
     }
 
+    func deleteCloudLedger(accessToken: String) async throws {
+        try await deleteAuthorized(path: "/v1/ledger", accessToken: accessToken)
+    }
+
+    func deleteAccount(accessToken: String) async throws {
+        try await deleteAuthorized(path: "/v1/account", accessToken: accessToken)
+    }
+
     private func makeURL(path: String) throws -> URL {
         let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: trimmed + path) else { throw AuthServiceError.invalidURL }
         return url
+    }
+
+    private func deleteAuthorized(path: String, accessToken: String) async throws {
+        let url = try makeURL(path: path)
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        let (_, response, bodyText) = try await data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw AuthServiceError.badStatus(-1, "") }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw AuthServiceError.badStatus(http.statusCode, bodyText)
+        }
     }
 
     private func data(for request: URLRequest) async throws -> (Data, URLResponse, String) {

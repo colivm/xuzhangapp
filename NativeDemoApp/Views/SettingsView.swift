@@ -8,6 +8,8 @@ struct SettingsView: View {
     @State private var activeSettingsSheet: SettingsSheet?
     @State private var draftDisplayName = ""
     @State private var draftPetNickname = ""
+    @State private var showDeleteCloudLedgerConfirm = false
+    @State private var showDeleteAccountConfirm = false
     @FocusState private var focusedField: SettingsField?
     private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
     private let privacyURL = URL(string: "https://xuzhangapp.com/legal/privacy.html")!
@@ -83,6 +85,25 @@ struct SettingsView: View {
             settingsSheet(sheet)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog("删除云端账本？", isPresented: $showDeleteCloudLedgerConfirm, titleVisibility: .visible) {
+            Button("删除云端账本", role: .destructive) {
+                Task { await settingsViewModel.deleteCloudLedger() }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("只删除服务器上的同步账本，本机记录仍保留。为避免重新上传，云端同步会同时关闭。")
+        }
+        .confirmationDialog("注销账号？", isPresented: $showDeleteAccountConfirm, titleVisibility: .visible) {
+            Button("注销账号并删除云端数据", role: .destructive) {
+                Task {
+                    await settingsViewModel.deleteCloudAccount()
+                    showAccountSheet = false
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("会删除云端账本、登录账号与服务端会员绑定记录，本机账本不会自动删除。Apple 订阅仍需在 App Store 管理。")
         }
     }
 
@@ -608,6 +629,26 @@ struct SettingsView: View {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(Color.red.opacity(0.2), lineWidth: 1)
             )
+
+            Button("删除云端账本", role: .destructive) {
+                showDeleteCloudLedgerConfirm = true
+            }
+            .font(.system(size: 14))
+            .foregroundStyle(AppColors.subtext.opacity(0.9))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(AppColors.line.opacity(0.7), lineWidth: 1)
+            )
+
+            Button("注销账号并删除云端数据", role: .destructive) {
+                showDeleteAccountConfirm = true
+            }
+            .font(.system(size: 14))
+            .foregroundStyle(.red.opacity(0.82))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
         } else {
             settingField(label: "手机号") {
                 TextField("手机号", text: $settingsViewModel.loginPhone)
