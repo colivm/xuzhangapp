@@ -25,6 +25,9 @@ const RISK_LOG_ENABLED = String(process.env.RISK_LOG_ENABLED || "1") === "1";
 const AI_UPSTREAM_TIMEOUT_MS = Number(process.env.AI_UPSTREAM_TIMEOUT_MS || 30000);
 const AI_UPSTREAM_TIMEOUT_MS_MONTHLY = Number(process.env.AI_UPSTREAM_TIMEOUT_MS_MONTHLY || 45000);
 const PREMIUM_FEATURES = new Set(["quarterly", "yearly"]);
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+validateProductionConfig();
 
 const rateBuckets = new Map();
 let usage = {
@@ -164,6 +167,14 @@ app.post("/v1/insight/daily", async (req, res) => {
 
 app.post("/v1/category/recommend", (req, res) => {
   try {
+    const safety = validateAIRequestBody(req.body || {});
+    if (!safety.ok) {
+      auditRisk("category_input_rejected", req, guestUser(), {
+        reason: safety.reason,
+        sample: redactForLog(JSON.stringify(req.body || {})),
+      });
+      return res.status(400).json({ code: safety.error, message: safety.message, reason: safety.reason });
+    }
     const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
     const lastMessage = [...messages].reverse().find((x) => x && x.role === "user");
     const text = String(lastMessage?.content || req.body?.prompt || "");
@@ -245,6 +256,26 @@ function auditRisk(event, req, user, extra = {}) {
     ...extra,
   };
   console.warn("[risk]", JSON.stringify(payload));
+}
+
+function validateProductionConfig() {
+  if (!IS_PRODUCTION) return;
+  const issues = [];
+  if (!AI_UPSTREAM_API_KEY) {
+    issues.push("AI_UPSTREAM_API_KEY must be configured in production.");
+  }
+  if (!APP_PROXY_TOKEN || APP_PROXY_TOKEN.length < 16) {
+    issues.push("APP_PROXY_TOKEN must be configured in production.");
+  }
+  if (!JWT_SECRET || JWT_SECRET.length < 32) {
+    issues.push("JWT_SECRET must be set to a strong production value.");
+  }
+  if (!REQUIRE_JWT) {
+    issues.push("REQUIRE_JWT must be 1 in production.");
+  }
+  if (issues.length) {
+    throw new Error(`Unsafe production ai-proxy config:\n- ${issues.join("\n- ")}`);
+  }
 }
 
 function postJSON(urlString, body, headers, timeoutMs = AI_UPSTREAM_TIMEOUT_MS) {

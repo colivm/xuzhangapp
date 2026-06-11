@@ -45,6 +45,7 @@ import {
 
 const app = express();
 const isProduction = process.env.NODE_ENV === "production";
+validateProductionConfig();
 app.use(cors({ origin: config.allowOrigin === "*" ? true : config.allowOrigin }));
 app.use(express.json({ limit: "1mb" }));
 
@@ -56,6 +57,9 @@ app.post("/v1/auth/sms/send", async (req, res) => {
   const phone = String(req.body?.phone || "").trim();
   if (!/^1\d{10}$/.test(phone)) {
     return res.status(400).json({ ok: false, error: "INVALID_PHONE" });
+  }
+  if (!config.devAllowSmsCode) {
+    return res.status(503).json({ ok: false, error: "SMS_NOT_CONFIGURED" });
   }
   const limit = checkSmsSendRateLimit(phone, clientIP(req));
   if (!limit.ok) {
@@ -338,6 +342,29 @@ function mergeMemberSession(current, incoming) {
 
 function clientIP(req) {
   return String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+}
+
+function validateProductionConfig() {
+  if (!isProduction) return;
+  const issues = [];
+  if (!config.jwtSecret || config.jwtSecret === "dev-secret-change-me" || config.jwtSecret.length < 32) {
+    issues.push("JWT_SECRET must be set to a strong production value.");
+  }
+  if (!config.databaseUrl) {
+    issues.push("DATABASE_URL is required in production; memory store must not be used.");
+  }
+  if (config.allowOrigin === "*") {
+    issues.push("ALLOW_ORIGIN must not be '*' in production.");
+  }
+  if (!config.aiProxyToken || config.aiProxyToken.length < 16) {
+    issues.push("AI_PROXY_TOKEN must be configured in production.");
+  }
+  if (config.devAllowSmsCode) {
+    issues.push("DEV_ALLOW_SMS_CODE must be disabled before production; wire a real SMS provider first.");
+  }
+  if (issues.length) {
+    throw new Error(`Unsafe production backend config:\n- ${issues.join("\n- ")}`);
+  }
 }
 
 initStore()

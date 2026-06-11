@@ -49,6 +49,7 @@ npm run dev
 - 短信验证码有 60 秒冷却、每手机号/IP 小时级发送上限和验证码错误次数上限；生产环境应替换真实短信服务并接入更强的 IP/设备风控。
 - 埋点 props 会过滤 token/key/signed 字段，并脱敏手机号、证件号、银行卡号、链接/邮箱。
 - `DELETE /v1/account` 会删除用户、会话、云端账本、短信验证码、内存埋点和服务端 IAP 绑定记录；Apple 订阅本身仍由 App Store 管理。
+- `NODE_ENV=production` 下会启用启动门禁：必须配置强 `JWT_SECRET`、`DATABASE_URL`、非 `*` 的 `ALLOW_ORIGIN`、`AI_PROXY_TOKEN`，并且不能继续使用开发短信码。
 
 ## 4. 与 iOS `NativeDemoApp` 联调
 

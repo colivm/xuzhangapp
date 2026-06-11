@@ -12,7 +12,7 @@ export const config = {
   allowOrigin: process.env.ALLOW_ORIGIN || "*",
   aiProxyBaseUrl: process.env.AI_PROXY_BASE_URL || "http://localhost:8787",
   aiProxyToken: process.env.AI_PROXY_TOKEN || "",
-  devAllowSmsCode: process.env.DEV_ALLOW_SMS_CODE || "123456",
+  devAllowSmsCode: process.env.DEV_ALLOW_SMS_CODE || (process.env.NODE_ENV === "production" ? "" : "123456"),
   databaseUrl: process.env.DATABASE_URL || "",
   appleIssuerId: process.env.APPLE_ISSUER_ID || "",
   appleKeyId: process.env.APPLE_KEY_ID || "",

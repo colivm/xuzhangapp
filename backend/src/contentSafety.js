@@ -1,5 +1,5 @@
 const PRIVACY_PATTERNS = [
-  { re: /https?:\/\/|www\.|[\w.-]+@[\w.-]+\.\w+/i, label: "LINK_OR_EMAIL" },
+  { re: /https?:\/\/[^\s"'<>]+|www\.[^\s"'<>]+|[\w.-]+@[\w.-]+\.\w+/i, label: "LINK_OR_EMAIL" },
   { re: /(?<!\d)1[3-9]\d{9}(?!\d)/, label: "PHONE" },
   { re: /(?<!\d)\d{6}(18|19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}[0-9Xx](?!\d)/, label: "ID_CARD" },
   { re: /(?<!\d)(?:\d[ -]?){12,19}(?!\d)/, label: "BANK_CARD" },
@@ -80,6 +80,12 @@ export function sanitizeLedgerItem(rawItem) {
   if (titleRisk) {
     return { ok: false, error: "CONTENT_REJECTED", message: titleRisk.message, reason: titleRisk.code };
   }
+  if (item.emotionTag) {
+    const emotionRisk = riskReasonForText(item.emotionTag, { includePublicSafety: true });
+    if (emotionRisk) {
+      return { ok: false, error: "CONTENT_REJECTED", message: emotionRisk.message, reason: emotionRisk.code };
+    }
+  }
   if (!Number.isFinite(item.amount) || item.amount <= 0) {
     return { ok: false, error: "INVALID_LEDGER_AMOUNT", message: "金额无效" };
   }
@@ -102,9 +108,13 @@ export function validateAIOutputText(text) {
 export function redactForLog(value) {
   let text = String(value || "");
   for (const item of PRIVACY_PATTERNS) {
-    text = text.replace(item.re, `[REDACTED_${item.label}]`);
+    text = text.replace(toGlobalRegExp(item.re), `[REDACTED_${item.label}]`);
   }
   return text.slice(0, 500);
+}
+
+function toGlobalRegExp(re) {
+  return new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`);
 }
 
 function collectText(value) {
@@ -114,7 +124,7 @@ function collectText(value) {
   if (Array.isArray(value)) return value.map(collectText).join("\n");
   if (typeof value === "object") {
     return Object.entries(value)
-      .filter(([key]) => !/token|key|authorization|signed/i.test(key))
+      .filter(([key]) => !/token|key|authorization|signed|secret/i.test(key))
       .map(([, nested]) => collectText(nested))
       .join("\n");
   }
