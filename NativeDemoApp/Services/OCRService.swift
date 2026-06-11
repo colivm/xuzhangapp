@@ -115,7 +115,8 @@ final class OCRService {
         let confidence = candidates.map(\.confidence).reduce(0, +) / Float(max(candidates.count, 1))
         let provider = detectProvider(from: text)
 
-        if looksLikeListScreenshot(lines: lines, provider: provider) {
+        let isListScreenshot = looksLikeListScreenshot(lines: lines, provider: provider)
+        if isListScreenshot {
             let listDrafts = parseListReceipts(
                 ocrLines: ocrLines,
                 rawText: text,
@@ -125,6 +126,10 @@ final class OCRService {
             if !listDrafts.isEmpty {
                 return listDrafts
             }
+        }
+
+        if isListScreenshot {
+            throw OCRServiceError.detailPageRequired
         }
 
         let draft: OCRReceiptDraft?
@@ -303,7 +308,12 @@ final class OCRService {
             let windowEnd = min(lines.count, index + 5)
             let windowLines = Array(lines[windowStart..<windowEnd])
             let windowText = windowLines.joined(separator: "\n")
-            let title = amountInfo.inlineTitle ?? nearbyListTitle(lines: ocrLines, amountIndex: index, provider: provider) ?? "账单记录"
+            let candidateTitle = amountInfo.inlineTitle ?? nearbyListTitle(lines: ocrLines, amountIndex: index, provider: provider)
+            let brand = MerchantBrandCatalog.matchOCRBrand(in: "\(candidateTitle ?? "")\n\(windowText)")
+            guard let title = candidateTitle ?? brand?.displayName,
+                  isTrustworthyListTitle(title, brand: brand) else {
+                continue
+            }
             let amount = abs(amountInfo.amount)
             guard amount > 0, amount < 1_000_000 else { continue }
 
@@ -317,7 +327,6 @@ final class OCRService {
                 windowLines: windowLines,
                 windowText: windowText
             )
-            let brand = MerchantBrandCatalog.matchOCRBrand(in: "\(title)\n\(windowText)")
             let category = NarrativeCopyResolver.resolveCategory(brandId: brand?.id, fallback: inferredCategory)
             let resolvedTitle = NarrativeCopyResolver.resolveTitle(brandId: brand?.id, fallback: title)
             let dayKey = Calendar.current.startOfDay(for: date).timeIntervalSince1970
@@ -340,6 +349,13 @@ final class OCRService {
         }
 
         return Array(drafts.prefix(12))
+    }
+
+    private func isTrustworthyListTitle(_ title: String, brand: MerchantBrandDefinition?) -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != "账单记录" else { return false }
+        if isLikelyListTitle(trimmed) { return true }
+        return brand?.displayName == trimmed
     }
 
     private func listExpenseAmountInfo(in line: String) -> (amount: Double, inlineTitle: String?)? {
@@ -431,7 +447,7 @@ final class OCRService {
                 guard isSameOCRRow(line.boundingBox, amountBox) else { return false }
                 guard line.boundingBox.midX < amountBox.midX else { return false }
                 let candidate = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                return containsChinese(candidate) && isLikelyListTitle(candidate)
+                return isLikelyListTitle(candidate)
             }
             .sorted { lhs, rhs in
                 lhs.element.boundingBox.minX > rhs.element.boundingBox.minX
@@ -454,7 +470,7 @@ final class OCRService {
             if isListTimeLine(candidate) || isListStatusLine(candidate) {
                 continue
             }
-            if containsChinese(candidate), isLikelyListTitle(candidate) {
+            if isLikelyListTitle(candidate) {
                 return candidate
             }
         }

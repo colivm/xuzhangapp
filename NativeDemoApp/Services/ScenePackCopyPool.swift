@@ -23,8 +23,8 @@ enum ScenePackCopyPool {
             desc: "把通勤记成日常一句",
             category: .transport,
             tiers: [
-                ScenePackTier(maxAmount: 5, notes: ["日常地铁通勤出行", "公交短途出行打卡", "一段公共交通", "早班地铁到岗", "换乘通勤完成", "今天的路费", "刷卡进站，出发", "短途公交到家"]),
-                ScenePackTier(maxAmount: 15, notes: ["公交+地铁组合通勤", "下班高峰一段路", "打车到地铁站接驳", "通勤路上买瓶水", "今日出行主打省心", "固定路线，熟悉的感觉", "早晚通勤各记一笔", "公交地铁一段路"]),
+                ScenePackTier(maxAmount: 5, notes: ["日常地铁通勤", "公交短途出行", "一段公共交通", "早班地铁到岗", "换乘通勤完成", "今天的路费", "刷卡进站，到站", "短途公交到家"]),
+                ScenePackTier(maxAmount: 15, notes: ["公交+地铁组合通勤", "下班高峰一段路", "打车到地铁站接驳", "通勤路上买瓶水", "今天出行省点心", "固定路线，熟悉的路", "早晚通勤各记一笔", "公交地铁一段路"]),
                 ScenePackTier(maxAmount: 30, notes: ["雨天打车通勤", "加班后打车回家", "共享单车月卡里的一天", "停车/充电小费用", "今天路程稍长一点", "通勤多花了一点时间换舒适", "早晚两次出行", "为一程准时到达"]),
                 ScenePackTier(maxAmount: 9_999, notes: ["跨区通勤长途费", "出差市内交通", "高速/长途客车费", "一次较长的通勤路", "今天跑了不少路", "行程较满的一天路", "远距离往返", "为工作跑了不少路"]),
             ]
@@ -39,14 +39,14 @@ enum ScenePackCopyPool {
                 ScenePackTier(maxAmount: 15, notes: ["晨间咖啡", "简单饮品", "早餐小食", "豆浆包子早餐组合", "午前一杯奶茶", "便利店轻食补给", "早茶点心小份", "上班前快速吃一口"]),
                 ScenePackTier(maxAmount: 25, notes: ["工作日午餐简餐", "外卖点到工位", "食堂一份热乎饭", "下午茶小点心", "约同事一起简吃", "饱腹又不折腾的一顿", "忙里喝点什么", "中午一顿饭"]),
                 ScenePackTier(maxAmount: 40, notes: ["晚餐小聚一份主菜", "周末早午餐", "尝试一家新店", "买菜顺路带点卤味", "做了一顿家常饭", "一顿想吃的饭", "热腾腾的面或饭", "今天这顿记下"]),
-                ScenePackTier(maxAmount: 9_999, notes: ["朋友小聚聚餐", "生日月小小庆祝餐", "想吃了很久的一顿", "节日加菜", "家庭聚餐贡献一道", "品质好一点的一餐", "约会餐厅体验", "美食探店打卡"]),
+                ScenePackTier(maxAmount: 9_999, notes: ["朋友小聚聚餐", "生日月吃一顿", "想吃了很久的一顿", "节日加菜", "家庭聚餐贡献一道", "品质好一点的一餐", "约会餐厅体验", "试了一家新店"]),
             ]
         ),
         ScenePackDefinition(
             id: "care",
             emoji: "💊",
-            label: "照顾自己包",
-            desc: "把身体的小照顾记下来",
+            label: "身体记录包",
+            desc: "把身体小事记下来",
             category: .health,
             tiers: [
                 ScenePackTier(maxAmount: 20, notes: ["药店补一盒常备药", "日常护理小物", "一支眼药水", "维生素或小药片", "创可贴和棉签备一点", "小不舒服先记下", "身体小用品", "健康小物补齐"]),
@@ -58,7 +58,7 @@ enum ScenePackCopyPool {
         ScenePackDefinition(
             id: "home",
             emoji: "🏠",
-            label: "居家安顿包",
+            label: "居家日常包",
             desc: "家里的日常，也是一段生活",
             category: .home,
             tiers: [
@@ -75,10 +75,10 @@ enum ScenePackCopyPool {
             desc: "关系里的一小句记录",
             category: .social,
             tiers: [
-                ScenePackTier(maxAmount: 30, notes: ["顺路带了点小心意", "咖啡时间叙旧", "给这次见面留一句", "小小心意记下", "路过时想起了对方", "一起坐坐的小记录", "带点东西去见面", "日常往来一笔"]),
+                ScenePackTier(maxAmount: 30, notes: ["顺路带了点心意", "咖啡时间叙旧", "给这次见面留一句", "带了点心意记下", "路过时想起了对方", "一起坐坐的小记录", "带点东西去见面", "日常往来一笔"]),
                 ScenePackTier(maxAmount: 100, notes: ["聚会里的一段热闹", "请一顿饭叙旧", "节日里带份小礼", "同事小聚记一笔", "和朋友见面的一刻", "这次相聚留下来", "一顿饭里的熟悉感", "关系里的一点往来"]),
                 ScenePackTier(maxAmount: 300, notes: ["探望时带了份心意", "家庭聚餐的一点贡献", "一次相聚记下", "重要日子里见一面", "给牵挂的人添点东西", "团圆时刻的一笔记录", "赴约的一段记忆", "这次见面记下"]),
-                ScenePackTier(maxAmount: 9_999, notes: ["为一次重要相聚安排", "长途探望的一段记录", "重要仪式里的陪伴", "把这份记挂郑重记下", "为团圆多安排一点", "这一程是为了见面", "关系里的重要时刻", "给牵挂留下一笔温度"]),
+                ScenePackTier(maxAmount: 9_999, notes: ["为一次重要相聚安排", "长途探望的一段记录", "重要仪式里的陪伴", "把这份记挂郑重记下", "为团圆多安排一点", "这一程是为了见面", "关系里的重要时刻", "给牵挂的人留一笔"]),
             ]
         ),
         ScenePackDefinition(
@@ -97,14 +97,14 @@ enum ScenePackCopyPool {
         ScenePackDefinition(
             id: "travel",
             emoji: "✈️",
-            label: "旅行出发包",
+            label: "旅行路上包",
             desc: "路上的花费，也留一句",
             category: .transport,
             tiers: [
-                ScenePackTier(maxAmount: 20, notes: ["短途出行小消费", "沿途小吃简单打卡", "出行便携物资采购", "景点门口一瓶水", "小城漫步小花费", "街边明信片或小挂件", "公交日票/景区摆渡", "旅途中的轻量补给"]),
-                ScenePackTier(maxAmount: 80, notes: ["展馆/景点门票", "民宿小用品补买", "旅途一顿特色简餐", "城市漫步咖啡歇脚", "伴手礼试吃装", "租车/骑行小时费", "行程里的一笔小惊喜", "路边摊体验打卡"]),
+                ScenePackTier(maxAmount: 20, notes: ["短途出行小消费", "沿途小吃记一笔", "出行便携物资采购", "景点门口一瓶水", "小城漫步小花费", "街边明信片或小挂件", "公交日票/景区摆渡", "旅途中的轻量补给"]),
+                ScenePackTier(maxAmount: 80, notes: ["展馆/景点门票", "民宿小用品补买", "旅途一顿特色简餐", "城市漫步咖啡歇脚", "伴手礼试吃装", "租车/骑行小时费", "行程里的一笔小开销", "路边摊吃了一口"]),
                 ScenePackTier(maxAmount: 200, notes: ["经济型住宿这一晚", "城际大巴/高铁一段", "特色餐厅体验", "博物馆联票", "旅行装备小升级", "行程中较充实的一天", "小镇住宿加早午餐", "为风景多走一段路"]),
-                ScenePackTier(maxAmount: 9_999, notes: ["机票/高铁主段", "途中连住两晚", "行程里的重头戏", "目的地一日游团", "行李箱/装备购置", "长假出行大项", "带家人出门的一程", "一次出发记下"]),
+                ScenePackTier(maxAmount: 9_999, notes: ["机票/高铁主段", "途中连住两晚", "行程里的重头戏", "目的地一日游团", "行李箱/装备购置", "长假出行大项", "带家人出门的一程", "这次行程记下"]),
             ]
         ),
         ScenePackDefinition(
@@ -145,7 +145,7 @@ enum ScenePackCopyPool {
         let baseSeed = "\(dayKey(for: date))|\(pack.id)|\(tierIndex)|\(categoryContext.rawValue)|\(context?.key ?? "tier")"
         let baseIndex = stableIndex(seed: baseSeed, count: notes.count)
         let index = (baseIndex + max(0, variant)) % max(1, notes.count)
-        let rendered = renderPetName(notes[index], petName: petName)
+        let rendered = sanitizeLifeNote(renderPetName(notes[index], petName: petName))
         return enrichNoteWithHistory(
             rendered,
             category: categoryContext,
@@ -193,7 +193,7 @@ enum ScenePackCopyPool {
         if pack.id == "commute" || category == .transport {
             switch hour {
             case 7..<10:
-                return ("morningCommute", ["早班通勤稳稳出发", "上班路上的一段车程", "早高峰顺利到达", "清晨出门的一笔路费", "赶早路上的交通记录", "地铁公交把我送到岗", "早间路线走完了", "今天也准时出发"])
+                return ("morningCommute", ["早班准时出门", "上班路上的一段车程", "早高峰顺利到达", "清晨出门的一笔路费", "赶早路上的交通记录", "地铁公交到岗", "早间路线走完了", "今天也准时出门"])
             case 17..<21:
                 return ("eveningCommute", ["下班路上的一段车程", "晚高峰回家", "结束一天后的返程", "回家路费记一下", "下班后的回家路", "晚间通勤完成", "从工作切回生活", "回程路上松一口气"])
             default:
@@ -211,6 +211,30 @@ enum ScenePackCopyPool {
     static func normalizedPetName(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "小窝" : trimmed
+    }
+
+    private static func sanitizeLifeNote(_ note: String) -> String {
+        let replacements: [(String, String)] = [
+            ("顺带记下", "记下"),
+            ("小确幸", "小记录"),
+            ("好好", ""),
+            ("温柔", "轻一点"),
+            ("被看见", "被记下"),
+            ("被接住", "有了着落"),
+            ("接住", "记下"),
+            ("治愈", "缓一缓"),
+            ("你值得", "今天可以"),
+            ("生活角落", "日常角落"),
+            ("小奖励", "想买的这一件"),
+            ("高光", "清楚的一笔"),
+            ("打卡", "记下"),
+            ("温度", "记录"),
+        ]
+        return replacements.reduce(note) { result, pair in
+            result.replacingOccurrences(of: pair.0, with: pair.1)
+        }
+        .replacingOccurrences(of: "  ", with: " ")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func enrichNoteWithHistory(

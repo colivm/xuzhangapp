@@ -60,6 +60,14 @@ struct RecordView: View {
             }
             if amount <= 45 { return availableScenePackId("food") }
             if amount <= 120 { return availableScenePackId("home") }
+            return availableScenePackId("home")
+        }
+
+        if homeViewModel.selectedCategory == .entertainment {
+            if hasTravelContextForCurrentRecord {
+                return availableScenePackId("travel")
+            }
+            return amount <= 80 ? availableScenePackId("food") : availableScenePackId("social", fallback: "home")
         }
 
         let categoryToPackId: [HomeItem.Category: String] = [
@@ -67,7 +75,6 @@ struct RecordView: View {
             .transport: "commute",
             .shopping: "shopping",
             .daily: "home",
-            .entertainment: "travel",
             .lodging: "travel",
             .health: "care",
             .home: "home",
@@ -81,7 +88,7 @@ struct RecordView: View {
         if amount <= 15 { return "commute" }
         if amount <= 45 { return "food" }
         if amount <= 120 { return "home" }
-        return "travel"
+        return "home"
     }
 
     private func availableScenePackId(_ preferred: String, fallback: String = "food") -> String {
@@ -97,7 +104,7 @@ struct RecordView: View {
     }
 
     private func containsTravelKeyword(_ text: String) -> Bool {
-        let keywords = ["旅行", "旅途", "景区", "景点", "行程", "酒店", "民宿", "住宿", "机票", "高铁", "机场", "车站", "门票", "出发", "返程", "摆渡"]
+        let keywords = ["旅行", "旅途", "景区", "景点", "行程", "酒店", "民宿", "住宿", "机票", "高铁", "机场", "返程", "摆渡"]
         return keywords.contains { text.contains($0) }
     }
 

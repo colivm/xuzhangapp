@@ -144,7 +144,7 @@ enum NarrativeCopyResolver {
     }
 
     private static func containsTravelKeyword(_ text: String) -> Bool {
-        let keywords = ["旅行", "旅途", "景区", "景点", "行程", "酒店", "民宿", "住宿", "机票", "高铁", "机场", "车站", "门票", "出发", "返程", "摆渡"]
+        let keywords = ["旅行", "旅途", "景区", "景点", "行程", "酒店", "民宿", "住宿", "机票", "高铁", "机场", "返程", "摆渡"]
         return keywords.contains { text.contains($0) }
     }
 
