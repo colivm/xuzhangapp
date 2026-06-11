@@ -93,6 +93,20 @@ enum NarrativeCopyResolver {
             )
         }
 
+        if containsAny(lower, ["食堂", "午餐", "简餐", "热饭", "热乎饭", "外卖", "饭点", "吃顿饭", "一顿饭", "面或饭", "夜宵", "夜里饿了"]) {
+            return pick(
+                [
+                    "中午一顿饭",
+                    "饭点记一笔",
+                    "食堂吃一顿",
+                    "热饭到了手边",
+                    "忙里吃上饭",
+                    "这一顿先记下",
+                ],
+                seed: context.seed + "|meal"
+            )
+        }
+
         if containsAny(lower, ["便利蜂", "便利店", "全家", "罗森", "711", "7-11"]) {
             return pick(
                 [
@@ -154,8 +168,8 @@ enum NarrativeCopyResolver {
             return [
                 ScenePackTier(maxAmount: 30, notes: ["补点日用", "日常小物补上", "刚好需要的小东西", "小东西补齐一点", "小补给记下来", "便利袋里的一点日常"]),
                 ScenePackTier(maxAmount: 100, notes: ["日常用品补齐", "家用小物安排好", "添点方便", "买了一袋日用品", "常用的先补上", "超市补给记一笔"]),
-                ScenePackTier(maxAmount: 300, notes: ["生活用品换新一点", "把常用的补上", "日常用品补到位", "家里缺的补齐", "这一笔给日常用品", "常用物件买回来了"]),
-                ScenePackTier(maxAmount: 9_999, notes: ["长期日常安排", "添置一件常用物", "日常大项记下", "生活用品大笔支出", "家里要用的大件", "这笔给长期会用的东西"]),
+                ScenePackTier(maxAmount: 300, notes: ["日用品换新一点", "把常用的补上", "日常用品补到位", "家里缺的补齐", "这一笔给日常用品", "常用物件买回来了"]),
+                ScenePackTier(maxAmount: 9_999, notes: ["长期日常安排", "添置一件常用物", "日常大项记下", "日用品大笔支出", "家里要用的大件", "这笔给长期会用的东西"]),
             ]
         default:
             return []

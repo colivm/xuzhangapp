@@ -43,7 +43,8 @@ struct RecordPrefillService {
     func prefill(input: RecordPrefillInput) -> RecordPrefillResult? {
         guard input.amount > 0 else { return nil }
 
-        if let brand = MerchantBrandCatalog.definition(for: input.merchantBrandId) {
+        if let brand = MerchantBrandCatalog.definition(for: input.merchantBrandId),
+           !input.categoryLocked {
             let title = NarrativeCopyResolver.resolveTitle(
                 brandId: brand.id,
                 fallback: input.noteDraft

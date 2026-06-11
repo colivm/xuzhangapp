@@ -192,10 +192,11 @@ struct RecordView: View {
         if let result = homeViewModel.recordPrefillResult,
            let emotion = result.emotionTag?.trimmingCharacters(in: .whitespacesAndNewlines),
            !emotion.isEmpty,
+           !homeViewModel.categoryLockedByUser,
            (result.source == "brand" || result.confidence >= 0.65) {
             return emotion
         }
-        let brandId = previewBrand?.id
+        let brandId = homeViewModel.categoryLockedByUser ? nil : previewBrand?.id
         return NarrativeCopyResolver.resolveEmotionTag(
             context: NarrativeCopyResolver.Context(
                 brandId: brandId,
@@ -217,7 +218,7 @@ struct RecordView: View {
             .init(
                 amount: inputAmountValue,
                 itemsCount: homeViewModel.items.count,
-                hasBrand: previewBrand != nil || homeViewModel.recordPrefillResult?.source == "brand",
+                hasBrand: !homeViewModel.categoryLockedByUser && (previewBrand != nil || homeViewModel.recordPrefillResult?.source == "brand"),
                 hasNote: !homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 previewLineWasRotated: previewLineWasRotated,
                 isEditing: false,
@@ -240,7 +241,7 @@ struct RecordView: View {
 
     private var previewHint: String? {
         guard previewTier == .confirm else { return nil }
-        return currentTitleShouldBeUserEdited ? "会像这样留在账本里" : "想被将来认出来，可改几个字"
+        return currentTitleShouldBeUserEdited ? "会像这样留在账本里" : "分类不对？点下方「改分类」即可"
     }
 
     private var currentTitleShouldBeUserEdited: Bool {

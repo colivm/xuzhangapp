@@ -140,10 +140,16 @@ final class HomeViewModel: ObservableObject {
         let trimmed = inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let baseTitle = trimmed.isEmpty ? selectedCategory.defaultRecordTitle : trimmed
         let brand = MerchantBrandCatalog.matchBrand(in: baseTitle)
-        let category = NarrativeCopyResolver.resolveCategory(brandId: brand?.id, fallback: selectedCategory)
+        let category: HomeItem.Category
+        if categoryLockedByUser {
+            category = selectedCategory
+        } else {
+            category = NarrativeCopyResolver.resolveCategory(brandId: brand?.id, fallback: selectedCategory)
+        }
         let title = NarrativeCopyResolver.resolveTitle(brandId: brand?.id, fallback: baseTitle)
+        let emotionBrandId = categoryLockedByUser ? nil : brand?.id
         let emotionTag = resolvedEmotionTag(
-            brandId: brand?.id,
+            brandId: emotionBrandId,
             category: category,
             amount: amount,
             date: selectedDate,
@@ -247,7 +253,7 @@ final class HomeViewModel: ObservableObject {
         let now = Date()
         let batchId = UUID().uuidString
         let importedItems = validDrafts.map { draft in
-            let category = NarrativeCopyResolver.resolveCategory(brandId: draft.merchantBrandId, fallback: draft.category)
+            let category = draft.category
             let title = NarrativeCopyResolver.resolveTitle(brandId: draft.merchantBrandId, fallback: draft.title)
             return HomeItem(
                 title: title,
@@ -257,7 +263,7 @@ final class HomeViewModel: ObservableObject {
                 createdAt: draft.date,
                 updatedAt: now,
                 emotionTag: resolvedEmotionTag(
-                    brandId: draft.merchantBrandId,
+                    brandId: emotionBrandId(brandId: draft.merchantBrandId, category: category),
                     category: category,
                     amount: draft.amount,
                     date: draft.date,
@@ -339,13 +345,21 @@ final class HomeViewModel: ObservableObject {
         )
     }
 
+    private func emotionBrandId(brandId: String?, category: HomeItem.Category) -> String? {
+        guard brandCategory(for: brandId) == category else { return nil }
+        return brandId
+    }
+
+    private func brandCategory(for brandId: String?) -> HomeItem.Category? {
+        MerchantBrandCatalog.definition(for: brandId)?.category
+    }
+
     func updateOCRDraftCategory(id: UUID, category: HomeItem.Category) {
         guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
-        let resolvedCategory = NarrativeCopyResolver.resolveCategory(brandId: items[idx].merchantBrandId, fallback: category)
-        items[idx].category = resolvedCategory
+        items[idx].category = category
         items[idx].emotionTag = resolvedEmotionTag(
-            brandId: items[idx].merchantBrandId,
-            category: resolvedCategory,
+            brandId: nil,
+            category: category,
             amount: items[idx].amount,
             date: items[idx].createdAt,
             seed: "\(items[idx].id.uuidString)|\(items[idx].title)",
@@ -362,7 +376,7 @@ final class HomeViewModel: ObservableObject {
               items[idx].draftMeta != nil else { return }
         items[idx].amount = amount
         items[idx].emotionTag = resolvedEmotionTag(
-            brandId: items[idx].merchantBrandId,
+            brandId: emotionBrandId(brandId: items[idx].merchantBrandId, category: items[idx].category),
             category: items[idx].category,
             amount: amount,
             date: items[idx].createdAt,
@@ -439,11 +453,18 @@ final class HomeViewModel: ObservableObject {
         var resolved = updated
         let matchedBrand = MerchantBrandCatalog.matchBrand(in: updated.title)
         let brandId = matchedBrand?.id ?? updated.merchantBrandId
+        let categoryWasEdited = updated.category != original.category
+        let categoryOverridesBrand = brandCategory(for: brandId).map { updated.category != $0 } ?? false
         resolved.merchantBrandId = brandId
-        resolved.category = NarrativeCopyResolver.resolveCategory(brandId: brandId, fallback: updated.category)
+        if categoryWasEdited || categoryOverridesBrand {
+            resolved.category = updated.category
+        } else {
+            resolved.category = NarrativeCopyResolver.resolveCategory(brandId: brandId, fallback: updated.category)
+        }
         resolved.title = NarrativeCopyResolver.resolveTitle(brandId: brandId, fallback: updated.title)
+        let emotionBrandId = (categoryWasEdited || categoryOverridesBrand) ? nil : brandId
         resolved.emotionTag = resolvedEmotionTag(
-            brandId: brandId,
+            brandId: emotionBrandId,
             category: resolved.category,
             amount: resolved.amount,
             date: resolved.createdAt,
@@ -742,7 +763,8 @@ final class HomeViewModel: ObservableObject {
     func recommendCategoryResult(for amountText: String) -> CategoryRecommendResult? {
         let normalizedAmount = amountText.replacingOccurrences(of: ",", with: "")
         guard let amount = Double(normalizedAmount), amount > 0 else { return nil }
-        if let category = recordPrefillResult?.category,
+        if !categoryLockedByUser,
+           let category = recordPrefillResult?.category,
            let recordPrefillAmount,
            abs(recordPrefillAmount - amount) < 0.005 {
             return CategoryRecommendResult(recommended: category, reasonTag: recordPrefillResult?.source)
@@ -795,7 +817,7 @@ final class HomeViewModel: ObservableObject {
                 items: recentItems,
                 noteDraft: trimmedNote,
                 categoryLocked: categoryLockedByUser,
-                merchantBrandId: brand?.id,
+                merchantBrandId: categoryLockedByUser ? nil : brand?.id,
                 context: currentRecordContextSignal()
             )
         )
@@ -958,14 +980,19 @@ final class HomeViewModel: ObservableObject {
 
     func generateDailyInsight(userName: String, settings: AppSettings) async {
         let key = Self.dayKey(for: .now)
-        if insights.contains(where: { $0.dayKey == key }) {
+        let todayItems = items.filter { Calendar.current.isDateInToday($0.createdAt) }
+        let snapshotSignature = dailyInsightSnapshotSignature(for: todayItems, dayKey: key)
+        if let existing = insights.first(where: { $0.dayKey == key }),
+           existing.snapshotSignature == snapshotSignature {
             return
         }
+        guard !isGeneratingInsight else { return }
+        insights.removeAll { $0.dayKey == key }
+        persistInsights()
 
         isGeneratingInsight = true
         insightErrorMessage = nil
 
-        let todayItems = items.filter { Calendar.current.isDateInToday($0.createdAt) }
         let todayTotal = todayItems.reduce(0) { $0 + $1.amount }
         let weeklyAverage = weeklyAverageExpense()
         let topCategory = todayItems
@@ -1002,7 +1029,8 @@ final class HomeViewModel: ObservableObject {
                     dayKey: key,
                     summary: payload.summary,
                     action: payload.action,
-                    encourage: payload.encourage
+                    encourage: payload.encourage,
+                    snapshotSignature: snapshotSignature
                 )
                 insights.insert(remoteInsight, at: 0)
                 persistInsights()
@@ -1035,7 +1063,8 @@ final class HomeViewModel: ObservableObject {
             dayKey: key,
             summary: summary,
             action: action,
-            encourage: encourage
+            encourage: encourage,
+            snapshotSignature: snapshotSignature
         )
         insights.insert(insight, at: 0)
         persistInsights()
@@ -1163,6 +1192,10 @@ final class HomeViewModel: ObservableObject {
         await generateDailyInsight(userName: userName, settings: settings)
     }
 
+    func refreshTodayInsightIfNeeded(userName: String, settings: AppSettings) async {
+        await generateDailyInsight(userName: userName, settings: settings)
+    }
+
     nonisolated static func promptTemplate(todayTotal: Double, weeklyAverage: Double, monthlyTotal: Double, topCategories: String) -> String {
         """
         [System]
@@ -1276,6 +1309,22 @@ final class HomeViewModel: ObservableObject {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
+    }
+
+    private func dailyInsightSnapshotSignature(for todayItems: [HomeItem], dayKey: String) -> String {
+        let rows = todayItems
+            .filter { $0.amount > 0 }
+            .sorted { $0.id.uuidString < $1.id.uuidString }
+            .map { item in
+                [
+                    item.id.uuidString,
+                    String(format: "%.2f", item.amount),
+                    item.category.rawValue,
+                    item.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                    String(Int(item.updatedAt.timeIntervalSince1970))
+                ].joined(separator: "#")
+            }
+        return ([dayKey, "\(rows.count)"] + rows).joined(separator: "|")
     }
 
     private nonisolated static func monthKey(for date: Date) -> String {

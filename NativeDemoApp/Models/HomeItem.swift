@@ -225,6 +225,7 @@ struct DailyInsight: Identifiable, Codable, Equatable {
     var action: String
     var encourage: String
     var createdAt: Date
+    var snapshotSignature: String?
 
     init(
         id: UUID = UUID(),
@@ -232,7 +233,8 @@ struct DailyInsight: Identifiable, Codable, Equatable {
         summary: String,
         action: String,
         encourage: String,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        snapshotSignature: String? = nil
     ) {
         self.id = id
         self.dayKey = dayKey
@@ -240,5 +242,6 @@ struct DailyInsight: Identifiable, Codable, Equatable {
         self.action = action
         self.encourage = encourage
         self.createdAt = createdAt
+        self.snapshotSignature = snapshotSignature
     }
 }

@@ -110,7 +110,7 @@ struct LifeEntryPreviewCard: View {
             Spacer(minLength: 8)
 
             if isConfirm {
-                Button("改", action: onChangeCategory)
+                Button("改分类", action: onChangeCategory)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.accent.opacity(0.72))
                     .buttonStyle(.plain)

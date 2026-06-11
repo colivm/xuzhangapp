@@ -180,6 +180,12 @@ struct InsightWebView: View {
 
             Button {
                 showTodayInsightSheet = true
+                Task {
+                    await homeViewModel.refreshTodayInsightIfNeeded(
+                        userName: settingsViewModel.displayName,
+                        settings: settingsViewModel.settings
+                    )
+                }
             } label: {
                 Text("今日小记（可选） →")
                     .font(.system(size: 13, weight: .medium))
@@ -561,7 +567,7 @@ struct InsightWebView: View {
     }
 
     private var todayRegenerateButton: some View {
-        Button("换个轻读版本") {
+        Button("换个说法再读") {
             Task {
                 await homeViewModel.regenerateTodayInsight(
                     userName: settingsViewModel.displayName,
@@ -585,7 +591,7 @@ struct InsightWebView: View {
         if homeViewModel.isGeneratingInsight {
             HStack(spacing: 8) {
                 ProgressView()
-                Text("AI 正在生成中…")
+                Text("正在整理今天的小记…")
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.subtext)
             }
@@ -650,6 +656,14 @@ struct InsightWebView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .onAppear {
+            Task {
+                await homeViewModel.refreshTodayInsightIfNeeded(
+                    userName: settingsViewModel.displayName,
+                    settings: settingsViewModel.settings
+                )
+            }
+        }
     }
 
     private var todayInsightSheet: some View {
