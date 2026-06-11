@@ -25,6 +25,7 @@ import {
   clearSmsVerifyFailures,
   markSmsVerifyFailed,
 } from "./rateLimit.js";
+import { getSmsProviderMode, isSmsConfigured, sendLoginSmsCode, SmsProviderError } from "./smsService.js";
 import {
   canShowNudge,
   getPolicy as getNudgePolicy,
@@ -58,16 +59,23 @@ app.post("/v1/auth/sms/send", async (req, res) => {
   if (!/^1\d{10}$/.test(phone)) {
     return res.status(400).json({ ok: false, error: "INVALID_PHONE" });
   }
-  if (!config.devAllowSmsCode) {
+  if (!isSmsConfigured()) {
     return res.status(503).json({ ok: false, error: "SMS_NOT_CONFIGURED" });
   }
   const limit = checkSmsSendRateLimit(phone, clientIP(req));
   if (!limit.ok) {
     return res.status(429).json({ ok: false, error: limit.error, retryAfterSec: limit.retryAfterSec });
   }
-  const code = config.devAllowSmsCode;
-  await setSmsCode(phone, code, Date.now() + 5 * 60 * 1000);
-  return res.json({ ok: true, cooldownSec: 60 });
+  try {
+    const result = await sendLoginSmsCode(phone);
+    await setSmsCode(phone, result.code, result.expireAt);
+    return res.json({ ok: true, cooldownSec: 60 });
+  } catch (error) {
+    if (error instanceof SmsProviderError) {
+      return res.status(502).json({ ok: false, error: error.code, message: "短信验证码发送失败，请稍后再试。" });
+    }
+    return res.status(502).json({ ok: false, error: "SMS_SEND_FAILED", message: "短信验证码发送失败，请稍后再试。" });
+  }
 });
 
 app.post("/v1/auth/sms/verify", async (req, res) => {
@@ -360,7 +368,10 @@ function validateProductionConfig() {
     issues.push("AI_PROXY_TOKEN must be configured in production.");
   }
   if (config.devAllowSmsCode) {
-    issues.push("DEV_ALLOW_SMS_CODE must be disabled before production; wire a real SMS provider first.");
+    issues.push("DEV_ALLOW_SMS_CODE must be disabled before production.");
+  }
+  if (getSmsProviderMode() !== "aliyun" || !isSmsConfigured()) {
+    issues.push("SMS_PROVIDER=aliyun and Aliyun SMS credentials are required in production.");
   }
   if (issues.length) {
     throw new Error(`Unsafe production backend config:\n- ${issues.join("\n- ")}`);
