@@ -82,14 +82,14 @@ enum PlaybackCopyPool {
             warm: [
                 "「{topCategory}」是这周最常出现的一类。",
                 "这周「{topCategory}」在记录里更靠前。",
-                "翻遍这一周，「{topCategory}」最容易被看见。",
+                "翻遍这一周，「{topCategory}」出现得多一些。",
                 "这一周，「{topCategory}」出现得更明显。"
             ],
             plain: [
                 "「{topCategory}」是这周最常出现的一类。",
                 "这周「{topCategory}」在记录里更靠前。",
                 "这一周，「{topCategory}」出现得更明显。",
-                "翻到这一周，「{topCategory}」最容易被看见。"
+                "翻到这一周，「{topCategory}」出现得多一些。"
             ]
         ),
         "week-highlight": PlaybackCopyGroup(
@@ -114,10 +114,10 @@ enum PlaybackCopyPool {
                 "这一周到这儿。下一周有了新记录，再来听新版。"
             ],
             plain: [
-                "这一周先叙到这里。",
+                "这些记录先留在这一页。",
                 "下个自然周，再来听新的这一周。",
                 "这一周已经留在记录里。",
-                "先把这一周放在这里。"
+                "这些记录先留在这一页。"
             ]
         ),
         "week-weak-outro": PlaybackCopyGroup(
@@ -170,7 +170,7 @@ enum PlaybackCopyPool {
             plain: [
                 "中旬和下旬的节奏拉开了一点。",
                 "{leadingSegment}更热闹一点。",
-                "这个月的后半段更容易被看见。",
+                "这个月的后半段更清楚一点。",
                 "中下旬各有自己的节奏。"
             ]
         ),
@@ -183,7 +183,7 @@ enum PlaybackCopyPool {
             ],
             plain: [
                 "「{topCategory}」是这个月最明显的一块拼图。",
-                "这个月，「{topCategory}」最容易被看见。",
+                "这个月，「{topCategory}」出现得更靠前。",
                 "生活构成里，「{topCategory}」站得比较靠前。",
                 "翻到这个月，「{topCategory}」是一条清楚的线。"
             ]
@@ -206,7 +206,7 @@ enum PlaybackCopyPool {
                 "这个月讲完了，下个月见。"
             ],
             plain: [
-                "这个月先叙到这里。",
+                "这些记录先留在这个月。",
                 "这个月已经留在记录里。",
                 "下个月，会有新的月记。",
                 "这段时间先放在这里。"
@@ -222,7 +222,7 @@ enum PlaybackCopyPool {
     ]
 
     private static let monthTeasers = [
-        "{rangeLabel}里，「{topCategory}」最常被看见",
+        "{rangeLabel}里，「{topCategory}」出现得最多",
         "这个月，「{topCategory}」像一条清楚的生活线索",
         "{count} 笔记录，把这个月讲清楚",
         "{rangeLabel}的记录轮廓已经出来了"

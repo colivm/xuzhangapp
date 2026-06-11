@@ -15,6 +15,7 @@ final class HomeViewModel: ObservableObject {
     @Published var selectedCategory: HomeItem.Category = .other
     @Published private(set) var categoryLockedByUser: Bool = false
     @Published var selectedDate: Date = .now
+    @Published private(set) var selectedDateEditedByUser: Bool = false
     @Published var selectedPeriod: Period = .month
     @Published private(set) var ocrStatus: String = ""
     @Published private(set) var isGeneratingInsight: Bool = false
@@ -590,11 +591,11 @@ final class HomeViewModel: ObservableObject {
         let top = catMap.max(by: { $0.value < $1.value })
         let topCategory = top?.key.rawValue ?? "暂无"
 
-        let summary = "近 7 天里，\(topCategory)最容易被看见。"
-        let structure = "这一周的账单分成几段，节奏已经能看出来。"
+        let summary = "近 7 天里，\(topCategory)出现得多一些。"
+        let structure = "这一周的记录已经分出几段。"
         let advice = weekItems.count >= 8
-            ? "这一周的记录已经很有轮廓，继续按笔记下去，下周回放会更贴近你的真实日常。"
-            : "这一周的节奏已经记下来了，继续记录，下周回放会更完整。"
+            ? "继续按笔记下去，下周回放会更贴近真实记录。"
+            : "再多记几笔，这一周会更容易回头看。"
         return (summary, structure, advice)
     }
 
@@ -820,41 +821,107 @@ final class HomeViewModel: ObservableObject {
         selectedCategory = category
     }
 
+    func updateSelectedDate(_ date: Date, userInitiated: Bool) {
+        selectedDate = date
+        if userInitiated {
+            selectedDateEditedByUser = true
+        }
+    }
+
+    func refreshDraftSelectedDate(now: Date = .now, force: Bool = false) {
+        guard !selectedDateEditedByUser else { return }
+        guard force || abs(now.timeIntervalSince(selectedDate)) >= 30 else { return }
+        selectedDate = now
+    }
+
     func noteSuggestions(for category: HomeItem.Category, at date: Date = .now) -> [String] {
         switch category {
         case .dining:
             let hour = Calendar.current.component(.hour, from: date)
             switch hour {
             case 5..<10:
-                return ["早餐", "晨间咖啡", "上班前买点吃的"]
+                return ["早餐路上买点吃的", "早班前续一杯咖啡", "出门前吃一口热的"]
             case 10..<14:
-                return ["午餐简餐", "咖啡/奶茶", "食堂一份热饭"]
+                return ["午间简单吃一顿", "食堂一份热饭", "饭点买杯喝的"]
             case 14..<17:
-                return ["下午茶", "咖啡/奶茶", "便利店轻食"]
+                return ["下午续一杯咖啡", "便利店买点轻食", "忙到一半补一口"]
             case 17..<21:
-                return ["晚餐一顿热饭", "下班后吃点热乎的", "晚餐小聚"]
+                return ["晚餐吃一顿热饭", "下班后吃点热乎的", "和人一起吃晚饭"]
             default:
-                return ["夜宵", "加班后吃点热乎的", "深夜小食"]
+                return ["加班后吃点热乎的", "晚归路上的一口热食", "深夜买点小食"]
             }
         case .transport:
-            return ["地铁通勤", "打车出行", "停车/油费"]
+            return ["地铁到站，今天也准时出门", "打车赶去下一站", "停车和油费记一笔"]
         case .shopping:
-            return ["日常补货", "电商下单", "买到常用物品"]
+            return ["下单一个需要的", "买到常用的小东西", "快递路上记一笔"]
         case .daily:
-            return ["家用日化", "生活用品", "超市补给"]
+            return ["便利店补一袋日常", "超市买点家里要用的", "日用品刚好补上"]
         case .entertainment:
-            return ["电影票", "游戏充值", "周末一场活动"]
+            return ["买了这场电影票", "游戏里充了一笔", "周末出去玩一趟"]
         case .lodging:
-            return ["酒店住宿", "差旅住宿", "民宿短住"]
+            return ["今晚住在这里", "出差住宿记一笔", "短住一晚先记下"]
         case .health:
-            return ["药店买药", "挂号问诊", "体检/护理"]
+            return ["药店买点常用药", "挂号问诊记一笔", "体检护理这笔"]
         case .home:
-            return ["水电燃气", "家里添置", "修修补补"]
+            return ["水电燃气交上了", "家里添一个要用的", "修修补补记一笔"]
         case .social:
-            return ["带份小心意", "聚会叙旧", "探望时买点东西"]
+            return ["见面带份小心意", "和朋友吃了一顿", "探望时买点东西"]
         case .other:
-            return ["临时开销", "还没归类", "先记下一笔"]
+            return ["临时花了一笔", "还没想好归哪类", "先把这笔记下"]
         }
+    }
+
+    func frequentRecordAmounts(at date: Date = .now) -> [Double] {
+        let calendar = Calendar.current
+        let start = calendar.date(byAdding: .day, value: -180, to: date) ?? .distantPast
+        let recentItems = items.filter { item in
+            item.amount > 0 && item.createdAt >= start && item.createdAt <= date
+        }
+        guard recentItems.count >= 15 else { return [] }
+
+        let targetBucket = hourHabitBucket(for: date)
+        let targetWeekend = isHabitWeekend(date)
+        let contextItems = recentItems.filter { item in
+            hourHabitBucket(for: item.createdAt) == targetBucket &&
+            isHabitWeekend(item.createdAt) == targetWeekend
+        }
+        guard contextItems.count >= 5 else { return [] }
+
+        let grouped = Dictionary(grouping: contextItems) { item in
+            Int((item.amount * 100).rounded())
+        }
+        return grouped
+            .map { entry in
+                let cents = entry.key
+                let group = entry.value
+                (
+                    amount: Double(cents) / 100,
+                    count: group.count,
+                    latest: group.map(\.createdAt).max() ?? .distantPast
+                )
+            }
+            .filter { candidate in
+                candidate.count >= 3 &&
+                candidate.amount > 0 &&
+                candidate.amount <= 9999
+            }
+            .sorted { lhs, rhs in
+                if lhs.count == rhs.count {
+                    return lhs.latest > rhs.latest
+                }
+                return lhs.count > rhs.count
+            }
+            .prefix(3)
+            .map(\.amount)
+    }
+
+    private func hourHabitBucket(for date: Date) -> Int {
+        Calendar.current.component(.hour, from: date) / 3
+    }
+
+    private func isHabitWeekend(_ date: Date) -> Bool {
+        let weekday = Calendar.current.component(.weekday, from: date)
+        return weekday == 1 || weekday == 7
     }
 
     var todayItems: [HomeItem] {
@@ -1099,10 +1166,11 @@ final class HomeViewModel: ObservableObject {
     nonisolated static func promptTemplate(todayTotal: Double, weeklyAverage: Double, monthlyTotal: Double, topCategories: String) -> String {
         """
         [System]
-        你是“叙账”的温和消费复盘助手。请根据消费聚合数据，输出简短复盘和一条温柔收束或邀请继续记录/下月再叙，不说教、不批判、不提供投资买卖建议。
-        「议」只谈已经发生的生活：可复述结构、节奏与感受。
+        你是“叙账”的生活记录整理助手。请根据账本里的真实记录，输出简短回望和一条自然收束或邀请继续记录/下月再看，不说教、不批判、不提供投资买卖建议。
+        「议」只谈已经发生的生活：可复述时间、分类、金额和用户写下的具体细节，不替用户解释情绪。
+        可以有一点理解和鼓励，但必须贴着真实记录说；像“这一周已经留下几笔可以回看的记录”，不要写成泛泛安慰、心理分析或夸奖。
         禁止：下月/下周金额目标、预算上限、减少支出比例、达成率、任何管控式省钱建议。
-        action 字段应是温柔收束或邀请继续记录/下月再叙，不是理财计划。
+        action 字段应像账本页脚的一句自然收束或轻鼓励，不是理财计划，也不是空泛安慰话术。
 
         [User]
         日期：\(dayKey(for: .now))
@@ -1140,6 +1208,7 @@ final class HomeViewModel: ObservableObject {
         inputTitle = ""
         inputAmount = ""
         selectedDate = .now
+        selectedDateEditedByUser = false
         selectedCategory = .other
         categoryLockedByUser = false
         recordPrefillResult = nil

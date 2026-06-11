@@ -145,10 +145,10 @@ enum NarrativeCopyResolver {
         switch category {
         case .daily:
             return [
-                ScenePackTier(maxAmount: 30, notes: ["补点日用", "日常小物补上", "生活角落添一点", "刚好需要的小东西", "小东西补齐一点", "小补给记下来"]),
-                ScenePackTier(maxAmount: 100, notes: ["日常用品补齐", "生活小事记一笔", "家用小物安排好", "添点方便", "这笔很有日常感", "日常用品一袋"]),
-                ScenePackTier(maxAmount: 300, notes: ["打理日子的一笔", "生活用品换新一点", "把常用的补上", "日常用品补到位", "这一笔让日子顺一些", "给日常添点踏实"]),
-                ScenePackTier(maxAmount: 9_999, notes: ["长期日常安排", "把生活底子补稳", "添置一件常用物", "这一笔让日子更稳", "日常大项记下", "生活用品大笔支出"]),
+                ScenePackTier(maxAmount: 30, notes: ["补点日用", "日常小物补上", "刚好需要的小东西", "小东西补齐一点", "小补给记下来", "便利袋里的一点日常"]),
+                ScenePackTier(maxAmount: 100, notes: ["日常用品补齐", "家用小物安排好", "添点方便", "买了一袋日用品", "常用的先补上", "超市补给记一笔"]),
+                ScenePackTier(maxAmount: 300, notes: ["生活用品换新一点", "把常用的补上", "日常用品补到位", "家里缺的补齐", "这一笔给日常用品", "常用物件买回来了"]),
+                ScenePackTier(maxAmount: 9_999, notes: ["长期日常安排", "添置一件常用物", "日常大项记下", "生活用品大笔支出", "家里要用的大件", "这笔给长期会用的东西"]),
             ]
         default:
             return []

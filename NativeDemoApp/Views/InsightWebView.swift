@@ -206,7 +206,7 @@ struct InsightWebView: View {
 
     private func formatWeeklyJournalText(_ blocks: (summary: String, structure: String, advice: String)) -> String {
         if blocks.summary.contains("暂无复盘") {
-            return "近 7 天还没有足够记录。多记几笔，这里会慢慢长出一周的回信。"
+            return "近 7 天还没有足够记录。多记几笔，这里会整理成一段周记。"
         }
         let weekItems = recentPositiveItems(days: 7)
         let countText = weekItems.isEmpty ? "这周还没留下太多记录" : "这周记下 \(weekItems.count) 笔"
@@ -816,7 +816,7 @@ struct InsightWebView: View {
         case 1:
             opening = "换个角度读：这个月留下 \(monthItems.count) 笔，\(total.formatted(.cny)) 记在账本里，「\(top)」是最清楚的一条线。"
         case 2:
-            opening = "再轻一点写：\(monthItems.count) 笔记录像一页月记，\(total.formatted(.cny)) 里，「\(top)」先被看见。"
+            opening = "再轻一点写：这个月留下 \(monthItems.count) 笔，\(total.formatted(.cny)) 记在账本里，「\(top)」更靠前。"
         default:
             opening = "这个月记下来 \(monthItems.count) 笔，\(total.formatted(.cny)) 落在账本里，「\(top)」偶尔露头。"
         }
@@ -1181,9 +1181,9 @@ struct WeeklyShareCardView: View {
         let accent, titleSub, textMain, textMuted: Color
         let footer, footerSub: Color
         static let journal = ShareCardTheme(
-            bgStart: Color(hex: "eef0f4"), bgEnd: Color(hex: "f7f3ec"),
-            panelBg: Color.white.opacity(0.72), panelBorder: Color(hex: "eadfce"),
-            accent: Color(hex: "7fb3a2"),
+            bgStart: Color(hex: "eef3ef"), bgEnd: Color(hex: "f8efe4"),
+            panelBg: Color(hex: "fffdf8").opacity(0.86), panelBorder: Color(hex: "eadfce"),
+            accent: Color(hex: "6fa995"),
             titleSub: Color(hex: "8c96a8"), textMain: Color(hex: "253041"), textMuted: Color(hex: "6f7b8f"),
             footer: Color(hex: "4c5968"), footerSub: Color(hex: "9aa4b2"))
     }
@@ -1194,8 +1194,8 @@ struct WeeklyShareCardView: View {
         recordCount: Int,
         dailyTrend: [(String, Double)],
         topCategoryRatio: Double,
-        headline: String = "这一周你记录得很认真",
-        subtitle: String = "这一周先留在这里，之后再回来对照。",
+        headline: String = "这一周留下几笔记录",
+        subtitle: String = "这些记录先留在这一页，之后再回来对照。",
         anchorLine: String? = nil,
         periodText: String? = nil,
         isPetMode: Bool = true,
@@ -1252,7 +1252,7 @@ struct WeeklyShareCardView: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 Text("周记摘页")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(t.titleSub.opacity(0.92))
 
                 Text(periodText)
@@ -1265,38 +1265,38 @@ struct WeeklyShareCardView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(t.textMuted.opacity(0.82))
                     .lineLimit(1)
-                    .padding(.top, 30)
+                    .padding(.top, 26)
 
                 Text(journalTitle)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundStyle(t.textMain)
                     .lineSpacing(6)
                     .lineLimit(3)
                     .minimumScaleFactor(0.76)
-                    .padding(.top, 10)
-                    .frame(minHeight: 98, alignment: .topLeading)
+                    .padding(.top, 9)
+                    .frame(minHeight: 78, alignment: .topLeading)
 
                 Rectangle()
-                    .fill(t.panelBorder.opacity(0.62))
+                    .fill(t.panelBorder.opacity(0.54))
                     .frame(height: 1)
-                    .padding(.top, 16)
-                    .padding(.bottom, 18)
+                    .padding(.top, 12)
+                    .padding(.bottom, 16)
 
                 Text(journalBody)
-                    .font(.system(size: 18, weight: .medium, design: .rounded))
+                    .font(.system(size: 17, weight: .medium, design: .rounded))
                     .foregroundStyle(t.textMain.opacity(0.92))
-                    .lineSpacing(7)
+                    .lineSpacing(6)
                     .lineLimit(8)
                     .minimumScaleFactor(0.74)
 
                 if let anchor = displayAnchorLine {
                     Text(anchor)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundStyle(t.accent)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(t.accent.opacity(0.92))
                         .lineSpacing(4)
-                        .lineLimit(2)
+                        .lineLimit(3)
                         .minimumScaleFactor(0.76)
-                        .padding(.top, 20)
+                        .padding(.top, 18)
                 }
 
                 Text(auxiliaryLine)
@@ -1309,7 +1309,7 @@ struct WeeklyShareCardView: View {
                 rhythmTexture
                     .padding(.bottom, 18)
 
-                Text("来自 叙账 · 认真记录，回头再看")
+                Text("来自 叙账 · 一笔一笔，回头再看")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(t.footerSub)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1328,9 +1328,9 @@ struct WeeklyShareCardView: View {
 
     private var journalTitle: String {
         if recordCount <= 2 {
-            return "这周先留下几笔记录"
+            return "这一周，先留下几笔"
         }
-        return "这周记下 \(recordCount) 笔记录"
+        return "这一周的 \(recordCount) 笔"
     }
 
     private var journalBody: String {
@@ -1338,13 +1338,19 @@ struct WeeklyShareCardView: View {
             .replacingOccurrences(of: "，([^，。]+)约占\\d+%", with: "，$1出现得比较多", options: .regularExpression)
             .replacingOccurrences(of: "约占\\d+%", with: "出现得比较多", options: .regularExpression)
             .replacingOccurrences(of: " 笔记录", with: " 次记录")
+            .replacingOccurrences(of: "串起这一周", with: "留成这一页")
+            .replacingOccurrences(of: "最容易被看见", with: "出现得多一些")
+            .replacingOccurrences(of: "先叙到这里", with: "先留在这一页")
         let cleanedSubtitle = subtitle
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "¥\\s?[0-9,]+(\\.[0-9]+)?", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "这一周先叙到这里。", with: "之后再回来对照。")
+            .replacingOccurrences(of: "先把这一周放在这里。", with: "之后再回来对照。")
+            .replacingOccurrences(of: "这些记录先留在这一页。", with: "之后再回来对照。")
             .replacingOccurrences(of: "\\s{2,}", with: " ", options: .regularExpression)
-        let middle = cleanedHeadline.isEmpty ? "这一周已经留下了可以回看的记录。" : cleanedHeadline
+        let middle = cleanedHeadline.isEmpty ? "这一周已经留下几笔可以回看的记录。" : cleanedHeadline
         let closing = cleanedSubtitle.contains("建议") || cleanedSubtitle.contains("数据不足") || cleanedSubtitle.isEmpty
-            ? "先把这一周放在这里，之后再回来对照。"
+            ? "之后再回来对照。"
             : cleanedSubtitle
         return "\(middle)\n\(closing)"
     }
@@ -1357,7 +1363,7 @@ struct WeeklyShareCardView: View {
 
     private var auxiliaryLine: String {
         let top = topCategory.trimmingCharacters(in: .whitespacesAndNewlines)
-        return top.isEmpty ? "\(recordCount) 笔记录被收进这一页。" : "\(recordCount) 笔记录 · \(top) 被看见。"
+        return top.isEmpty ? "\(recordCount) 笔记录留在这一页。" : "\(recordCount) 笔记录 · \(top) 出现得多一些。"
     }
 
     private var rhythmTexture: some View {

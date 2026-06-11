@@ -28,6 +28,7 @@ struct RecordView: View {
         case note
     }
 
+    private let draftClock = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
     private let recordAccent = AppColors.accent
     private let recordInk = AppColors.text
 
@@ -439,7 +440,12 @@ struct RecordView: View {
                     scrollNoteFieldIntoView(scrollProxy)
                 }
             }
+            .onReceive(draftClock) { now in
+                guard selectedEntryMode == .manual else { return }
+                homeViewModel.refreshDraftSelectedDate(now: now)
+            }
             .onAppear {
+                homeViewModel.refreshDraftSelectedDate(force: true)
                 guard !didAutoFocusAmountPad else { return }
                 didAutoFocusAmountPad = true
                 focusAmountPad()
@@ -546,7 +552,7 @@ struct RecordView: View {
             if hasValidAmount {
                 recordDateQuietActions
                 if datePanelExpanded {
-                    WarmRecordDatePanel(selection: $homeViewModel.selectedDate) {
+                    WarmRecordDatePanel(selection: recordDateBinding) {
                         dismissKeyboard()
                     }
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -558,19 +564,8 @@ struct RecordView: View {
         }
     }
 
-    private var recordWarmupAmounts: [String] {
-        switch homeViewModel.selectedCategory {
-        case .transport:
-            return ["6", "12", "25"]
-        case .dining:
-            return ["18", "32", "58"]
-        case .daily:
-            return ["29", "68", "99"]
-        case .shopping:
-            return ["39", "88", "128"]
-        default:
-            return ["12", "36", "68"]
-        }
+    private var recordWarmupAmounts: [Double] {
+        homeViewModel.frequentRecordAmounts(at: homeViewModel.selectedDate)
     }
 
     private var lifeEntryPreview: some View {
@@ -734,7 +729,7 @@ struct RecordView: View {
     private var amountField: some View {
         VStack(alignment: .leading, spacing: 10) {
             amountStage
-            if !hasAmountDraft {
+            if !hasAmountDraft, !recordWarmupAmounts.isEmpty {
                 amountWarmupChips
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -748,30 +743,51 @@ struct RecordView: View {
     }
 
     private var amountWarmupChips: some View {
-        HStack(spacing: 8) {
-            ForEach(recordWarmupAmounts, id: \.self) { amount in
-                Button {
-                    homeViewModel.inputAmount = amount
-                    focusAmountPad(delay: 0.02)
-                } label: {
-                    Text("¥\(amount)")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(recordInk.opacity(0.78))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(Color.white.opacity(0.50))
-                        )
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(AppColors.line.opacity(0.42), lineWidth: 1)
-                        )
+        VStack(alignment: .leading, spacing: 7) {
+            Text("常记金额")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.68))
+                .padding(.horizontal, 12)
+
+            HStack(spacing: 8) {
+                ForEach(recordWarmupAmounts, id: \.self) { amount in
+                    Button {
+                        homeViewModel.inputAmount = amountInputText(amount)
+                        focusAmountPad(delay: 0.02)
+                    } label: {
+                        Text("¥\(amountChipText(amount))")
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(recordInk.opacity(0.78))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.white.opacity(0.50))
+                            )
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(AppColors.line.opacity(0.42), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
+            .padding(.horizontal, 12)
         }
-        .padding(.horizontal, 12)
+    }
+
+    private func amountChipText(_ amount: Double) -> String {
+        if amount.rounded() == amount {
+            return String(format: "%.0f", amount)
+        }
+        return String(format: "%.2f", amount)
+    }
+
+    private func amountInputText(_ amount: Double) -> String {
+        if amount.rounded() == amount {
+            return String(format: "%.0f", amount)
+        }
+        return String(format: "%.2f", amount)
     }
 
     private var amountStage: some View {
@@ -808,8 +824,17 @@ struct RecordView: View {
                     Text(homeViewModel.inputAmount.isEmpty ? "0.00" : homeViewModel.inputAmount)
                         .font(.system(size: 42, weight: .bold, design: .rounded))
                         .foregroundStyle(homeViewModel.inputAmount.isEmpty ? AppColors.subtext.opacity(0.46) : recordInk)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
                         .contentTransition(.numericText())
+
+                    if shouldShowAmountCursor {
+                        amountCursor
+                            .offset(y: 6)
+                            .transition(.opacity)
+                    }
+
+                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 18)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -834,6 +859,23 @@ struct RecordView: View {
         .frame(height: 90)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 4)
+    }
+
+    private var shouldShowAmountCursor: Bool {
+        selectedEntryMode == .manual && amountPadActive
+    }
+
+    private var amountCursor: some View {
+        TimelineView(.periodic(from: .now, by: 0.56)) { context in
+            let tick = Int(context.date.timeIntervalSinceReferenceDate / 0.56)
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(recordAccent.opacity(0.72))
+                .frame(width: 2, height: 42)
+                .opacity(tick.isMultiple(of: 2) ? 1 : 0.16)
+                .animation(.easeInOut(duration: 0.18), value: tick)
+        }
+        .frame(width: 7, height: 46, alignment: .center)
+        .accessibilityHidden(true)
     }
 
     private var amountFieldRadius: CGFloat {
@@ -1213,6 +1255,13 @@ struct RecordView: View {
             Spacer()
         }
         .padding(.top, -4)
+    }
+
+    private var recordDateBinding: Binding<Date> {
+        Binding(
+            get: { homeViewModel.selectedDate },
+            set: { homeViewModel.updateSelectedDate($0, userInitiated: true) }
+        )
     }
 
     // MARK: - Member Scene Packs

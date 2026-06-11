@@ -38,7 +38,7 @@ final class PetCompanionService {
         if !weatherService.hasLocationPermissionReady {
             weatherService.requestWhenInUseAndRefresh()
             if shouldNudgeWeather() {
-                return "还没拿到定位权限呢，先用通用温柔提醒陪你记录～"
+                return "还没拿到定位权限，先按普通记录来。"
             }
             return PetCompanionCopy.random(PetCompanionCopy.recordSaved, settings: settings)
         }
@@ -65,7 +65,7 @@ final class PetCompanionService {
         if settings.weatherCompanionEnabled, !weatherService.hasLocationPermissionReady {
             weatherService.requestWhenInUseAndRefresh()
             if shouldNudgeWeather() {
-                return "定位权限还没准备好，先用通用提醒陪你呀～"
+                return "定位权限还没准备好，先按普通记录来。"
             }
             return companionMessage(settings: settings)
         }

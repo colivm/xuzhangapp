@@ -58,10 +58,6 @@ struct StatsWebView: View {
         filteredItems.filter { $0.amount > 0 }.reduce(0) { $0 + $1.amount }
     }
 
-    private var allPositiveSettledItems: [HomeItem] {
-        homeViewModel.items.filter { $0.amount > 0 && $0.draftMeta == nil }
-    }
-
     private var emptyRecordListText: String {
         if homeViewModel.items.isEmpty {
             return "这一段还没有痕迹，先去记下一笔。"
@@ -82,7 +78,7 @@ struct StatsWebView: View {
     private var overviewNarrativeText: String {
         let count = filteredItems.count
         guard count > 0 else {
-            return "这一段还安静着，先留下几笔，之后就能慢慢看见生活的纹理。"
+            return "这一段还没有记录。先留下几笔，之后会整理成一段场记。"
         }
         let trendData = computeTrendData()
         let trendText = trendData.isEmpty ? "多记几天，节奏会更清楚。" : trendInsightText(data: trendData)
@@ -214,8 +210,8 @@ struct StatsWebView: View {
         let items = heroScopedItems
         guard !items.isEmpty else {
             return selectedPeriod == .week
-                ? "这一周还安静着，先留下几笔，之后就能慢慢看见生活的纹理。"
-                : "这个月还安静着，先留下几笔，之后就能慢慢看见生活的纹理。"
+                ? "这一周还没有记录。先留下几笔，之后会整理成一段场记。"
+                : "这个月还没有记录。先留下几笔，之后会整理成一段场记。"
         }
         let grouped = Dictionary(grouping: items, by: \.category)
         let topCategory = grouped
@@ -486,7 +482,10 @@ struct StatsWebView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             recordListContent(fromTraceDetail: true)
                         }
-                        .paperChapterPanel(radius: 22, padding: 16, showsAccentLine: false)
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(traceDetailListBackground)
+                        .overlay(traceDetailListBorder)
                     }
                     .padding(18)
                     .padding(.bottom, 28)
@@ -608,6 +607,31 @@ struct StatsWebView: View {
     private var filterControlBorder: some View {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
             .stroke(Color.white.opacity(0.45), lineWidth: 0.8)
+    }
+
+    private var traceDetailListBackground: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.58),
+                        AppColors.paperWarm.opacity(0.20),
+                        Color.white.opacity(0.48)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.thinMaterial)
+            )
+    }
+
+    private var traceDetailListBorder: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .stroke(Color.white.opacity(0.55), lineWidth: 1)
+            .allowsHitTesting(false)
     }
 
     private var overviewPanel: some View {
@@ -1226,27 +1250,72 @@ struct StatsWebView: View {
 
     private func computeTrendData() -> [TrendPoint] {
         let cal = Calendar.current
-        var points: [TrendPoint] = []
-        for dayOffset in stride(from: 29, through: 0, by: -1) {
-            guard let date = cal.date(byAdding: .day, value: -dayOffset, to: Date()) else { continue }
-            let dayItems = allPositiveSettledItems.filter { cal.isDate($0.createdAt, inSameDayAs: date) }
-            let total = dayItems.reduce(0) { $0 + $1.amount }
-            let label = cal.component(.day, from: date)
-            points.append(TrendPoint(day: "\(label)", value: total))
+        let trendItems = filteredItems.filter { $0.amount > 0 && $0.draftMeta == nil }
+        guard !trendItems.isEmpty else { return [] }
+
+        if !useCustomRange, selectedPeriod == .year {
+            let currentYear = cal.component(.year, from: Date())
+            let points = (1...12).map { month -> TrendPoint in
+                let total = trendItems
+                    .filter {
+                        cal.component(.year, from: $0.createdAt) == currentYear &&
+                        cal.component(.month, from: $0.createdAt) == month
+                    }
+                    .reduce(0) { $0 + $1.amount }
+                return TrendPoint(day: "\(month)月", value: total)
+            }
+            return points.contains { $0.value > 0 } ? points : []
+        }
+
+        guard let interval = trendDateInterval(calendar: cal) else { return [] }
+        let startDay = cal.startOfDay(for: interval.start)
+        let inclusiveEnd = cal.date(byAdding: .second, value: -1, to: interval.end) ?? interval.end
+        let endDay = cal.startOfDay(for: inclusiveEnd)
+        let dayCount = max(cal.dateComponents([.day], from: startDay, to: endDay).day ?? 0, 0)
+        let points = (0...dayCount).compactMap { offset -> TrendPoint? in
+            guard let date = cal.date(byAdding: .day, value: offset, to: startDay) else { return nil }
+            let total = trendItems
+                .filter { cal.isDate($0.createdAt, inSameDayAs: date) }
+                .reduce(0) { $0 + $1.amount }
+            return TrendPoint(day: "\(cal.component(.day, from: date))", value: total)
         }
         return points.contains { $0.value > 0 } ? points : []
     }
 
-    private func trendInsightText(data: [TrendPoint]) -> String {
-        let total = data.reduce(0) { $0 + $1.value }
-        let avg = data.isEmpty ? 0 : total / Double(data.count)
-        let recent = data.suffix(7)
-        let recentAvg = recent.isEmpty ? 0 : recent.reduce(0) { $0 + $1.value } / Double(recent.count)
-        if recentAvg > avg * 1.15 {
-            return "最近一周留下的记录更密一些。"
-        } else if recentAvg < avg * 0.85 {
-            return "最近一周记录轻了一点。"
+    private func trendDateInterval(calendar cal: Calendar) -> DateInterval? {
+        if useCustomRange {
+            let start = cal.startOfDay(for: min(customStartDate, customEndDate))
+            let endBase = cal.startOfDay(for: max(customStartDate, customEndDate))
+            let end = cal.date(byAdding: .day, value: 1, to: endBase) ?? endBase
+            return DateInterval(start: start, end: end)
         }
-        return "近 30 天的节奏比较平稳。"
+
+        switch selectedPeriod {
+        case .week:
+            return PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: Date())
+        case .month:
+            guard let month = cal.dateInterval(of: .month, for: Date()) else { return nil }
+            return DateInterval(start: month.start, end: min(month.end, Date()))
+        case .year:
+            return cal.dateInterval(of: .year, for: Date())
+        }
+    }
+
+    private func trendInsightText(data: [TrendPoint]) -> String {
+        let active = data.filter { $0.value > 0 }
+        guard let peak = active.max(by: { $0.value < $1.value }) else {
+            return "这一段还没有足够走势。"
+        }
+        if active.count == 1 {
+            return "这一段主要落在 \(peak.day)。"
+        }
+        let firstHalf = data.prefix(max(data.count / 2, 1)).reduce(0) { $0 + $1.value }
+        let secondHalf = data.suffix(max(data.count - data.count / 2, 1)).reduce(0) { $0 + $1.value }
+        if secondHalf > firstHalf * 1.18 {
+            return "这一段后半更密一些。"
+        } else if firstHalf > secondHalf * 1.18 {
+            return "这一段前半更密一些。"
+        }
+        return "\(peak.day) 最明显，其余日子比较分散。"
     }
 }
