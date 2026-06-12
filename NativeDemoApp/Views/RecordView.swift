@@ -248,7 +248,7 @@ struct RecordView: View {
             activeScenePack = pack
             homeViewModel.applyScenePackDraft(title: title, category: pack.category)
         } else {
-            activeScenePack = nil
+            activeScenePack = pack.category == homeViewModel.selectedCategory ? pack : nil
             homeViewModel.inputTitle = title
         }
         if !keepSelectedCategory {
@@ -335,7 +335,7 @@ struct RecordView: View {
            !homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "\(activeScenePack.emoji) \(activeScenePack.label) · \(homeViewModel.selectedDate.zhBillDateTime)"
         }
-        "\(homeViewModel.selectedCategory.displayName) · \(homeViewModel.selectedDate.zhBillDateTime)"
+        return "\(homeViewModel.selectedCategory.displayName) · \(homeViewModel.selectedDate.zhBillDateTime)"
     }
 
     private var previewTier: RecordPreviewTier {
@@ -458,9 +458,12 @@ struct RecordView: View {
             }
             return
         }
-        let quickPackId = guessScenePackId()
         let packs = visibleScenePacks
-        guard let quickPack = packs.first(where: { $0.id == quickPackId }) ?? packs.first else { return }
+        let currentPack = activeScenePack.flatMap { active in
+            active.category == homeViewModel.selectedCategory ? packs.first(where: { $0.id == active.id }) : nil
+        }
+        let quickPackId = guessScenePackId()
+        guard let quickPack = currentPack ?? packs.first(where: { $0.id == quickPackId }) ?? packs.first else { return }
         previewLineWasRotated = true
         applyScenePack(quickPack, keepSelectedCategory: true)
     }

@@ -5,6 +5,7 @@ struct HomeView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     var onQuickRecord: () -> Void = {}
     var onNavigateStats: (() -> Void)? = nil
+    var onNavigateWeeklyTrace: (() -> Void)? = nil
     var onNavigateSettings: (() -> Void)? = nil
     var onShowMemberPricing: (() -> Void)? = nil
     @State private var showPlayback = false
@@ -14,12 +15,21 @@ struct HomeView: View {
     @State private var todayPlaybackQuotaMessage: String?
     @State private var petHint: String = "有一笔就记一笔，晚点也能补。"
     @State private var petBubbleVisible = false
+    @State private var todayBillsFocusPulse = false
+    @State private var todayBillsFocusTick = 0
     private let dailyQuotaStore = DailyFeatureQuotaStore()
 
     var body: some View {
         ZStack(alignment: .top) {
-            ScrollView {
-                homeContent
+            ScrollViewReader { proxy in
+                ScrollView {
+                    homeContent
+                }
+                .onChange(of: todayBillsFocusTick) { _, _ in
+                    withAnimation(.easeInOut(duration: 0.38)) {
+                        proxy.scrollTo("todayBillsPanel", anchor: .center)
+                    }
+                }
             }
 
             if showFirstRecordToast {
@@ -27,6 +37,13 @@ struct HomeView: View {
                     .padding(.horizontal, 18)
                     .padding(.top, 10)
                     .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
+            if settingsViewModel.petCompanionEnabled {
+                todayPetStamp
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 102)
             }
         }
         .scrollIndicators(.hidden)
@@ -91,6 +108,7 @@ struct HomeView: View {
             homeActionRow
             routeGuidanceContent
             todayBillsPanel
+            lifeRhythmPanel
         }
         .padding(.horizontal, 12)
         .padding(.top, 2)
@@ -134,13 +152,8 @@ struct HomeView: View {
             todayBillsContent
         }
         .glassPanel(radius: 24, padding: 22)
-        .overlay(alignment: .bottomTrailing) {
-            if settingsViewModel.petCompanionEnabled, !homeViewModel.recentThreeItems.isEmpty {
-                todayPetStamp
-                    .padding(.trailing, 12)
-                    .padding(.bottom, 14)
-            }
-        }
+        .overlay(todayBillsFocusOverlay)
+        .id("todayBillsPanel")
     }
 
     @ViewBuilder
@@ -174,6 +187,54 @@ struct HomeView: View {
         }
     }
 
+    private var lifeRhythmPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("最近的生活")
+                .font(.system(size: 21, weight: .bold))
+                .foregroundStyle(AppColors.text)
+            lifeRhythmContent
+        }
+        .glassPanel(radius: 24, padding: 22)
+    }
+
+    @ViewBuilder
+    private var lifeRhythmContent: some View {
+        if let card = homeViewModel.latestActionCard, !card.text.isEmpty {
+            Text(card.text)
+                .font(.system(size: 14))
+                .foregroundStyle(AppColors.text.opacity(0.88))
+            Text(card.updatedAt, style: .relative)
+                .font(.system(size: 11))
+                .foregroundStyle(AppColors.subtext)
+        } else if homeViewModel.recentThreeItems.isEmpty {
+            Text("先记几笔，这里会慢慢长出最近的生活线索。")
+                .font(.system(size: 14))
+                .foregroundStyle(AppColors.subtext)
+        } else {
+            lifeRhythmFallback
+        }
+    }
+
+    private var lifeRhythmFallback: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            let daysWithRecords = countDaysWithRecords()
+            if daysWithRecords > 0 {
+                Text("已记录 \(daysWithRecords) 天")
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext.opacity(0.9))
+            }
+            Text(lifeRhythmFallbackText)
+                .font(.system(size: 13))
+                .foregroundStyle(AppColors.subtext)
+        }
+    }
+
+    private var lifeRhythmFallbackText: String {
+        homeViewModel.weekTopCategoryText != "暂无"
+            ? "最近「\(homeViewModel.weekTopCategoryText)」出现得多一点，像这段日子的一个小主题。"
+            : "先记几笔，这里会慢慢长出最近的生活线索。"
+    }
+
     private var todayStoryHero: some View {
         let narrative = homeViewModel.todayStoryNarrative
         return VStack(alignment: .leading, spacing: 10) {
@@ -194,8 +255,19 @@ struct HomeView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 8) {
-                narrativePill(narrative.todayTotalText)
-                narrativePill(narrative.weekTotalText)
+                Button {
+                    handleTodayTotalTap()
+                } label: {
+                    narrativePill(narrative.todayTotalText)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    onNavigateWeeklyTrace?()
+                } label: {
+                    narrativePill(narrative.weekTotalText)
+                }
+                .buttonStyle(.plain)
             }
             .padding(.top, 2)
         }
@@ -298,6 +370,42 @@ struct HomeView: View {
                 Circle()
                     .stroke(AppColors.accent.opacity(0.20), lineWidth: 1)
             )
+    }
+
+    private var todayBillsFocusOverlay: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        AppColors.accent.opacity(todayBillsFocusPulse ? 0.68 : 0.0),
+                        Color.white.opacity(todayBillsFocusPulse ? 0.72 : 0.0),
+                        AppColors.accent.opacity(todayBillsFocusPulse ? 0.52 : 0.0)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: todayBillsFocusPulse ? 2 : 0.5
+            )
+            .shadow(color: AppColors.accent.opacity(todayBillsFocusPulse ? 0.28 : 0), radius: 18, x: 0, y: 0)
+            .allowsHitTesting(false)
+            .animation(.easeInOut(duration: 0.34), value: todayBillsFocusPulse)
+    }
+
+    private func handleTodayTotalTap() {
+        if homeViewModel.todayItems.count > 3 {
+            showTodayRecordsSheet = true
+            return
+        }
+
+        todayBillsFocusTick += 1
+        withAnimation(.easeInOut(duration: 0.2)) {
+            todayBillsFocusPulse = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.35) {
+            withAnimation(.easeInOut(duration: 0.32)) {
+                todayBillsFocusPulse = false
+            }
+        }
     }
 
     private var firstRecordToast: some View {
@@ -427,21 +535,20 @@ struct HomeView: View {
                     }
                 }
             } label: {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(AppColors.floatingPetPanel.opacity(0.86))
-                    Text("叙")
-                        .font(.system(size: 20, weight: .bold, design: .serif))
-                        .foregroundStyle(AppColors.accentDark.opacity(0.76))
-                }
-                .frame(width: 46, height: 46)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .stroke(Color.white.opacity(0.46), lineWidth: 1)
-                )
+                Text("🐱")
+                    .font(.system(size: 26))
+                    .frame(width: 52, height: 52)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(AppColors.floatingPetPanel)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.white.opacity(0.45), lineWidth: 1)
+                    )
             }
             .buttonStyle(.plain)
-            .shadow(color: AppColors.subtext.opacity(0.10), radius: 10, y: 5)
+            .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
         }
     }
 
@@ -521,6 +628,12 @@ struct HomeView: View {
                     .padding(.top, -10)
             }
         }
+    }
+
+    private func countDaysWithRecords() -> Int {
+        let calendar = Calendar.current
+        let days = Set(homeViewModel.items.map { calendar.startOfDay(for: $0.createdAt) })
+        return days.count
     }
 
     private var todayRecordsSheet: some View {

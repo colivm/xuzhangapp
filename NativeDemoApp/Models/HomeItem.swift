@@ -34,7 +34,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
             case .daily: return "🧸"
             case .entertainment: return "🎡"
             case .lodging: return "🏨"
-            case .health: return "💊"
+            case .health: return "🏃"
             case .home: return "🏠"
             case .social: return "🎁"
             case .other: return "🌟"
@@ -183,6 +183,13 @@ extension Date {
         Date.zhBillTimeFormatter.string(from: self)
     }
 
+    var zhBillDateOnly: String {
+        if !Calendar.current.isDate(self, equalTo: Date(), toGranularity: .year) {
+            return Date.zhBillDateOnlyWithYearFormatter.string(from: self)
+        }
+        return Date.zhBillDateOnlyFormatter.string(from: self)
+    }
+
     private static let zhBillDateTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
@@ -204,6 +211,22 @@ extension Date {
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    private static let zhBillDateOnlyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "M月d日"
+        return formatter
+    }()
+
+    private static let zhBillDateOnlyWithYearFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy年M月d日"
         return formatter
     }()
 }

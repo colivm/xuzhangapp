@@ -6,6 +6,7 @@ struct StatsWebView: View {
 
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
+    var openTraceRequestID: UUID? = nil
     var onShowMemberPricing: (() -> Void)? = nil
     var onOpenInsight: (() -> Void)? = nil
 
@@ -17,8 +18,10 @@ struct StatsWebView: View {
     @State private var quotaRefreshID = UUID()
     @State private var isFiltersExpanded = false
     @State private var showTraceDetailSheet = false
+    @State private var showCategoryFilterSheet = false
     @State private var isTrendExpandedInSheet = false
-    @State private var pendingEditingItemAfterTraceClose: HomeItem?
+    @State private var traceInlineEditingItemID: UUID?
+    @State private var handledOpenTraceRequestID: UUID?
     private let playbackService = PlaybackService()
     private let quotaStore = SummaryPlaybackQuotaStore()
 
@@ -88,12 +91,21 @@ struct StatsWebView: View {
     @State private var showPeriodSheet = false
     @State private var customStartDate = Date()
     @State private var customEndDate = Date()
+    @State private var customDateFocus: CustomDateEndpoint = .start
     @State private var useCustomRange = false
+
+    private enum CustomDateEndpoint {
+        case start
+        case end
+    }
 
     var body: some View {
         statsScrollView
             .sheet(isPresented: $showPeriodSheet) {
                 periodPickerSheet
+            }
+            .sheet(isPresented: $showCategoryFilterSheet) {
+                categoryFilterSheet
             }
             .sheet(isPresented: $showTraceDetailSheet) {
                 traceDetailSheet
@@ -104,10 +116,11 @@ struct StatsWebView: View {
             .sheet(item: $summaryPlayback) { playback in
                 summaryPlaybackSheet(playback)
             }
-            .onChange(of: showTraceDetailSheet) { _, isPresented in
-                if !isPresented {
-                    presentPendingEditorIfNeeded()
-                }
+            .onAppear {
+                handleOpenTraceRequestIfNeeded()
+            }
+            .onChange(of: openTraceRequestID) { _, _ in
+                handleOpenTraceRequestIfNeeded()
             }
             .alert("播放次数已用完", isPresented: summaryQuotaAlertBinding) {
                 summaryQuotaAlertActions
@@ -412,7 +425,7 @@ struct StatsWebView: View {
 
     private var traceAppendixStrip: some View {
         Button {
-            showTraceDetailSheet = true
+            openTraceDetail()
         } label: {
             HStack(spacing: 7) {
                 Text("细查这一段")
@@ -438,6 +451,24 @@ struct StatsWebView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private func openTraceDetail() {
+        traceInlineEditingItemID = nil
+        showTraceDetailSheet = true
+    }
+
+    private func handleOpenTraceRequestIfNeeded() {
+        guard let openTraceRequestID,
+              handledOpenTraceRequestID != openTraceRequestID
+        else { return }
+        handledOpenTraceRequestID = openTraceRequestID
+        useCustomRange = false
+        selectedPeriod = .week
+        selectedCategory = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            openTraceDetail()
+        }
     }
 
     private var traceDetailSheet: some View {
@@ -575,14 +606,12 @@ struct StatsWebView: View {
     private var categoryFilter: some View {
         VStack(alignment: .leading, spacing: 4) {
             filterLabel("分类")
-            Menu {
-                Button("全部分类") { selectedCategory = nil }
-                ForEach(HomeItem.Category.allCases) { cat in
-                    Button(cat.rawValue) { selectedCategory = cat }
-                }
+            Button {
+                showCategoryFilterSheet = true
             } label: {
                 filterButtonLabel(selectedCategory?.rawValue ?? "全部分类")
             }
+            .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity)
     }
@@ -714,17 +743,10 @@ struct StatsWebView: View {
 
     private func openEditor(for item: HomeItem, fromTraceDetail: Bool = false) {
         if fromTraceDetail {
-            pendingEditingItemAfterTraceClose = item
-            showTraceDetailSheet = false
+            withAnimation(.easeInOut(duration: 0.2)) {
+                traceInlineEditingItemID = item.id
+            }
         } else {
-            editingItem = item
-        }
-    }
-
-    private func presentPendingEditorIfNeeded() {
-        guard let item = pendingEditingItemAfterTraceClose else { return }
-        pendingEditingItemAfterTraceClose = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
             editingItem = item
         }
     }
@@ -741,6 +763,15 @@ struct StatsWebView: View {
                 homeViewModel.delete(at: IndexSet(integer: idx))
             }
             editingItem = nil
+        }
+    }
+
+    private func deleteRecord(_ item: HomeItem) {
+        if traceInlineEditingItemID == item.id {
+            traceInlineEditingItemID = nil
+        }
+        if let idx = homeViewModel.items.firstIndex(where: { $0.id == item.id }) {
+            homeViewModel.delete(at: IndexSet(integer: idx))
         }
     }
 
@@ -1014,14 +1045,24 @@ struct StatsWebView: View {
     }
 
     private var customDateRangePicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("自定义日期")
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(AppColors.text.opacity(0.8))
-            DatePicker("开始", selection: $customStartDate, displayedComponents: [.date])
-                .datePickerStyle(.compact)
-            DatePicker("结束", selection: $customEndDate, displayedComponents: [.date])
-                .datePickerStyle(.compact)
+
+            HStack(spacing: 8) {
+                customDateEndpointButton("开始", date: customStartDate, endpoint: .start)
+                customDateEndpointButton("结束", date: customEndDate, endpoint: .end)
+            }
+
+            if customDateFocus == .start {
+                WarmRecordDatePanel(selection: $customStartDate)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            } else {
+                WarmRecordDatePanel(selection: $customEndDate)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
             applyCustomDateButton
         }
         .padding(14)
@@ -1029,6 +1070,134 @@ struct StatsWebView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.white.opacity(0.62))
         )
+    }
+
+    private func customDateEndpointButton(_ title: String, date: Date, endpoint: CustomDateEndpoint) -> some View {
+        let isSelected = customDateFocus == endpoint
+        return Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                customDateFocus = endpoint
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer(minLength: 4)
+                Text(date.zhBillDateOnly)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(customDateEndpointBackground(isSelected: isSelected))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func customDateEndpointBackground(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(isSelected ? AppColors.accent.opacity(0.14) : Color.white.opacity(0.62))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(isSelected ? AppColors.accent.opacity(0.28) : Color.white.opacity(0.4), lineWidth: 1)
+            )
+    }
+
+    private var categoryFilterSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("选择分类")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+
+                    Button {
+                        selectedCategory = nil
+                        showCategoryFilterSheet = false
+                    } label: {
+                        categorySheetOptionLabel(
+                            title: "全部分类",
+                            subtitle: "看这一段完整的生活记录",
+                            emoji: "✨",
+                            isSelected: selectedCategory == nil
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 10)], spacing: 10) {
+                        ForEach(HomeItem.Category.allCases) { category in
+                            Button {
+                                selectedCategory = category
+                                showCategoryFilterSheet = false
+                            } label: {
+                                categorySheetOptionLabel(
+                                    title: category.label,
+                                    subtitle: category.rawValue,
+                                    emoji: category.emoji,
+                                    isSelected: selectedCategory == category
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(22)
+            }
+            .scrollIndicators(.hidden)
+            .background(AppColors.bg.ignoresSafeArea())
+            .navigationTitle("分类")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { showCategoryFilterSheet = false }
+                }
+            }
+            .presentationDetents([.medium])
+        }
+    }
+
+    private func categorySheetOptionLabel(title: String, subtitle: String, emoji: String, isSelected: Bool) -> some View {
+        HStack(spacing: 10) {
+            Text(emoji)
+                .font(.system(size: 22))
+                .frame(width: 34, height: 34)
+                .background(
+                    Circle()
+                        .fill(isSelected ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.56))
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                Text(subtitle)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+            }
+
+            Spacer(minLength: 4)
+
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(AppColors.accent)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+        .background(categorySheetOptionBackground(isSelected: isSelected))
+    }
+
+    private func categorySheetOptionBackground(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(isSelected ? AppColors.accent.opacity(0.12) : Color.white.opacity(0.66))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(isSelected ? AppColors.accent.opacity(0.28) : Color.white.opacity(0.46), lineWidth: 1)
+            )
     }
 
     private var applyCustomDateButton: some View {
@@ -1093,28 +1262,48 @@ struct StatsWebView: View {
     }
 
     private func traceDetailBillRecordRow(_ item: HomeItem, isFirst: Bool) -> some View {
-        HStack(alignment: .center, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
             billRecordRow(item, isFirst: isFirst)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    openEditor(for: item, fromTraceDetail: true)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        deleteRecord(item)
+                    } label: {
+                        Label("删除", systemImage: "trash")
+                    }
 
-            Button {
-                openEditor(for: item, fromTraceDetail: true)
-            } label: {
-                Image(systemName: "pencil")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppColors.accent.opacity(0.88))
-                    .frame(width: 38, height: 38)
-                    .background(
-                        Circle()
-                            .fill(Color.white.opacity(0.60))
-                    )
-                    .overlay(
-                        Circle()
-                            .stroke(AppColors.accent.opacity(0.18), lineWidth: 1)
-                    )
+                    Button {
+                        openEditor(for: item, fromTraceDetail: true)
+                    } label: {
+                        Label("编辑", systemImage: "pencil")
+                    }
+                    .tint(AppColors.accent)
+                }
+
+            if traceInlineEditingItemID == item.id {
+                TraceInlineRecordEditor(
+                    item: item,
+                    onSave: { updated in
+                        let didSave = homeViewModel.updateItem(updated)
+                        if didSave {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                traceInlineEditingItemID = nil
+                            }
+                        }
+                        return didSave
+                    },
+                    onCancel: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            traceInlineEditingItemID = nil
+                        }
+                    }
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("编辑账单")
         }
     }
 
@@ -1332,5 +1521,250 @@ struct StatsWebView: View {
             return "这一段前半更密一些。"
         }
         return "\(peak.day) 最明显，其余日子比较分散。"
+    }
+}
+
+private struct TraceInlineRecordEditor: View {
+    let item: HomeItem
+    var onSave: (HomeItem) -> Bool
+    var onCancel: () -> Void
+
+    @State private var amountText: String
+    @State private var titleText: String
+    @State private var selectedCategory: HomeItem.Category
+    @State private var selectedDate: Date
+    @State private var validationMessage: String?
+    @State private var isCategoryPanelExpanded = false
+    @State private var isDatePanelExpanded = false
+
+    init(
+        item: HomeItem,
+        onSave: @escaping (HomeItem) -> Bool,
+        onCancel: @escaping () -> Void
+    ) {
+        self.item = item
+        self.onSave = onSave
+        self.onCancel = onCancel
+        _amountText = State(initialValue: String(format: "%.2f", item.amount))
+        _titleText = State(initialValue: item.title)
+        _selectedCategory = State(initialValue: item.category)
+        _selectedDate = State(initialValue: item.createdAt)
+    }
+
+    private var parsedAmount: Double {
+        Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
+    }
+
+    private var cleanTitle: String {
+        titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                amountField
+                categorySelector
+            }
+
+            TextField("这一笔想怎么被记住？", text: $titleText)
+                .font(.system(size: 15))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(inlineFieldBackground)
+                .onChange(of: titleText) { _, value in
+                    if value.count > 32 {
+                        titleText = String(value.prefix(32))
+                    }
+                    validationMessage = nil
+                }
+
+            inlineDateSelector
+
+            if isCategoryPanelExpanded {
+                categoryGrid
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            if isDatePanelExpanded {
+                WarmRecordDatePanel(selection: $selectedDate)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            if let validationMessage {
+                Text(validationMessage)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext.opacity(0.86))
+            }
+
+            HStack(spacing: 10) {
+                Button("取消") {
+                    onCancel()
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AppColors.subtext)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(inlineSecondaryButtonBackground)
+
+                Button {
+                    save()
+                } label: {
+                    Text("保存")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            AppColors.accent,
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(parsedAmount <= 0)
+                .opacity(parsedAmount <= 0 ? 0.55 : 1)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.58))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppColors.accent.opacity(0.16), lineWidth: 1)
+        )
+    }
+
+    private var amountField: some View {
+        HStack(spacing: 3) {
+            Text("¥")
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppColors.subtext.opacity(0.8))
+            TextField("0.00", text: $amountText)
+                .keyboardType(.decimalPad)
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(inlineFieldBackground)
+    }
+
+    private var categorySelector: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                isDatePanelExpanded = false
+                isCategoryPanelExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(selectedCategory.displayName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundStyle(AppColors.text.opacity(0.84))
+            .padding(.horizontal, 11)
+            .padding(.vertical, 11)
+            .background(inlineFieldBackground)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var inlineDateSelector: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                isCategoryPanelExpanded = false
+                isDatePanelExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text("时间")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer()
+                Text(selectedDate.zhBillDateTime)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(AppColors.text.opacity(0.86))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(inlineFieldBackground)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var categoryGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 82, maximum: 128), spacing: 8)], spacing: 8) {
+            ForEach(HomeItem.Category.allCases) { category in
+                categoryGridButton(category)
+            }
+        }
+    }
+
+    private func categoryGridButton(_ category: HomeItem.Category) -> some View {
+        let isSelected = selectedCategory == category
+        return Button {
+            selectedCategory = category
+            withAnimation(.easeInOut(duration: 0.18)) {
+                isCategoryPanelExpanded = false
+            }
+        } label: {
+            Text(category.displayName)
+                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? AppColors.text : AppColors.subtext)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 9)
+                .background(categoryGridButtonBackground(isSelected: isSelected))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func categoryGridButtonBackground(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(isSelected ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.58))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(isSelected ? AppColors.accent.opacity(0.34) : Color.white.opacity(0.38), lineWidth: 1)
+            )
+    }
+
+    private var inlineFieldBackground: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color.white.opacity(0.72))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.white.opacity(0.54), lineWidth: 1)
+            )
+    }
+
+    private var inlineSecondaryButtonBackground: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color.white.opacity(0.62))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.white.opacity(0.46), lineWidth: 1)
+            )
+    }
+
+    private func save() {
+        var updated = item
+        updated.amount = parsedAmount
+        updated.title = cleanTitle.isEmpty ? selectedCategory.defaultRecordTitle : cleanTitle
+        updated.category = selectedCategory
+        updated.createdAt = selectedDate
+        updated.updatedAt = Date()
+        if !onSave(updated) {
+            validationMessage = "这句备注里可能有隐私信息，先改成更简单的记录。"
+        }
     }
 }

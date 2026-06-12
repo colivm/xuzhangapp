@@ -171,13 +171,10 @@ struct OCRConfirmSheet: View {
             Text("分类")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
-            Picker("分类", selection: $rows[index].draft.category) {
-                ForEach(HomeItem.Category.allCases) { category in
-                    Text(category.displayName).tag(category)
-                }
+
+            OCRCategoryChips(selectedCategory: row.draft.category) { category in
+                rows[index].draft.category = category
             }
-            .pickerStyle(.menu)
-            .font(.system(size: 13, weight: .medium))
 
             Spacer()
 
@@ -482,19 +479,9 @@ private struct OCRDraftRow: View {
     }
 
     private var categoryPicker: some View {
-        Picker("分类", selection: Binding(
-            get: { item.category },
-            set: { onCategoryChange(item.id, $0) }
-        )) {
-            ForEach(HomeItem.Category.allCases) { category in
-                Text(category.displayName)
-                    .lineLimit(1)
-                    .tag(category)
-            }
+        OCRCategoryChips(selectedCategory: item.category) { category in
+            onCategoryChange(item.id, category)
         }
-        .pickerStyle(.menu)
-        .font(.system(size: 12))
-        .frame(minWidth: 76, alignment: .leading)
     }
 
     private var deleteButton: some View {
@@ -533,5 +520,44 @@ private struct OCRDraftRow: View {
     private func commitAmount() {
         guard let value = Double(amountText.replacingOccurrences(of: ",", with: "")), value > 0 else { return }
         onAmountChange(item.id, value)
+    }
+}
+
+private struct OCRCategoryChips: View {
+    let selectedCategory: HomeItem.Category
+    let onSelect: (HomeItem.Category) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) {
+                ForEach(HomeItem.Category.allCases) { category in
+                    Button {
+                        onSelect(category)
+                    } label: {
+                        categoryLabel(category)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .frame(maxWidth: 220, alignment: .leading)
+    }
+
+    private func categoryLabel(_ category: HomeItem.Category) -> some View {
+        let isSelected = selectedCategory == category
+        return Text(category.displayName)
+            .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+            .foregroundStyle(isSelected ? AppColors.text : AppColors.subtext)
+            .lineLimit(1)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isSelected ? AppColors.accent.opacity(0.16) : Color.white.opacity(0.58))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(isSelected ? AppColors.accent.opacity(0.3) : Color.white.opacity(0.38), lineWidth: 1)
+            )
     }
 }

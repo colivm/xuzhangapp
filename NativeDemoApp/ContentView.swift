@@ -150,6 +150,7 @@ struct ContentView: View {
     @State private var selectedTab: AppTab = .today
     @State private var showMemberPricing = false
     @State private var showMinimalOnboarding = false
+    @State private var statsTraceOpenRequestID: UUID?
 
     enum AppTab: Int, CaseIterable, Identifiable {
         case today
@@ -304,6 +305,10 @@ struct ContentView: View {
             case .today:
                 HomeView(onQuickRecord: { selectedTab = .record },
                          onNavigateStats: { selectedTab = .stats },
+                         onNavigateWeeklyTrace: {
+                             statsTraceOpenRequestID = UUID()
+                             selectedTab = .stats
+                         },
                          onNavigateSettings: { selectedTab = .settings },
                          onShowMemberPricing: { showMemberPricing = true })
                     .transition(.asymmetric(
@@ -318,6 +323,7 @@ struct ContentView: View {
                 ))
             case .stats:
                 StatsWebView(
+                    openTraceRequestID: statsTraceOpenRequestID,
                     onShowMemberPricing: { showMemberPricing = true },
                     onOpenInsight: { selectedTab = .insight }
                 )

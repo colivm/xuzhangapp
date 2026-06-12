@@ -44,7 +44,7 @@ enum ScenePackCopyPool {
         ),
         ScenePackDefinition(
             id: "care",
-            emoji: "💊",
+            emoji: "🧘",
             label: "身体记录包",
             desc: "用药护理运动恢复",
             category: .health,
