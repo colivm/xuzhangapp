@@ -27,9 +27,13 @@ struct ScenePackAngleSheet: View {
                             }
                         } label: {
                             HStack {
-                                Text(isMoreExpanded ? "收起低频场景" : "展开低频场景")
+                                Text(isMoreExpanded ? "收起未常用场景" : "展开未常用场景")
                                     .font(.system(size: 14, weight: .medium))
                                     .foregroundStyle(AppColors.text)
+                                Text("\(secondaryScenePacks.count) 个未用或静默")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(AppColors.subtext)
+                                    .lineLimit(1)
                                 Spacer()
                                 Image(systemName: isMoreExpanded ? "chevron.up" : "chevron.down")
                                     .font(.system(size: 12, weight: .bold))
@@ -42,7 +46,7 @@ struct ScenePackAngleSheet: View {
                     }
 
                     if isMoreExpanded {
-                        Section("低频场景") {
+                        Section("未常用场景") {
                             ForEach(secondaryScenePacks, id: \.id) { pack in
                                 packRow(pack)
                             }
@@ -79,7 +83,7 @@ struct ScenePackAngleSheet: View {
                         Text(scenePackDesc(pack))
                             .font(.system(size: 12))
                             .foregroundStyle(AppColors.subtext)
-                            .lineLimit(2)
+                            .lineLimit(1)
                     }
 
                     Spacer()

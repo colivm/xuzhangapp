@@ -45,12 +45,13 @@ struct ScenePackSectionView: View {
 
     private var helperText: some View {
         let collapsedText = isPetMode
-            ? "金额填好后，按当前分类和小宠物偏好换一句备注。"
-            : "金额填好后，按当前分类换一句更贴近日常的备注。"
-        let text = isExpanded ? "点选场景包会同步调整分类；常用的会自动排到前面。" : collapsedText
+            ? "按分类和小宠物偏好换一句。"
+            : "按当前分类换一句生活备注。"
+        let text = isExpanded ? "点选会调分类；常用自动靠前。" : collapsedText
         return Text(text)
             .font(.system(size: 12))
             .foregroundStyle(AppColors.subtext.opacity(0.88))
+            .lineLimit(1)
     }
 
     private var quickGenerateButton: some View {
@@ -113,11 +114,12 @@ struct ScenePackSectionView: View {
     private var moreToggleButton: some View {
         Button(action: onToggleMore) {
             HStack {
-                Text(isMoreExpanded ? "收起低频场景" : "展开低频场景")
+                Text(isMoreExpanded ? "收起未常用场景" : "展开未常用场景")
                     .font(.system(size: 13, weight: .medium))
-                Text("母婴、健身、数码等")
+                Text("\(secondaryScenePacks.count) 个未用或静默")
                     .font(.system(size: 11))
                     .foregroundStyle(AppColors.subtext.opacity(0.7))
+                    .lineLimit(1)
                 Spacer()
                 Image(systemName: isMoreExpanded ? "chevron.up" : "chevron.down")
                     .font(.system(size: 11, weight: .bold))

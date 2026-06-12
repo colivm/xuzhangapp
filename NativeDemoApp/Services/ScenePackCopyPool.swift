@@ -20,7 +20,7 @@ enum ScenePackCopyPool {
             id: "commute",
             emoji: "🚇",
             label: "打工人通勤包",
-            desc: "把通勤记成日常一句",
+            desc: "地铁公交打车都能写",
             category: .transport,
             tiers: [
                 ScenePackTier(maxAmount: 5, notes: ["日常地铁通勤", "公交短途出行", "一段公共交通", "早班地铁到岗", "换乘通勤完成", "今天的路费", "刷卡进站，到站", "短途公交到家"]),
@@ -33,7 +33,7 @@ enum ScenePackCopyPool {
             id: "food",
             emoji: "🍵",
             label: "吃货专属包",
-            desc: "吃喝里的一句记录",
+            desc: "早餐咖啡正餐都合适",
             category: .dining,
             tiers: [
                 ScenePackTier(maxAmount: 15, notes: ["晨间咖啡", "简单饮品", "早餐小食", "豆浆包子早餐组合", "午前一杯奶茶", "便利店轻食补给", "早茶点心小份", "上班前快速吃一口"]),
@@ -46,7 +46,7 @@ enum ScenePackCopyPool {
             id: "care",
             emoji: "💊",
             label: "身体记录包",
-            desc: "把身体小事记下来",
+            desc: "用药护理运动恢复",
             category: .health,
             tiers: [
                 ScenePackTier(maxAmount: 20, notes: ["药店补一盒常备药", "日常护理小物", "一支眼药水", "维生素或小药片", "创可贴和棉签备一点", "小不舒服先记下", "身体小用品", "健康小物补齐"]),
@@ -59,7 +59,7 @@ enum ScenePackCopyPool {
             id: "home",
             emoji: "🏠",
             label: "居家日常包",
-            desc: "家里的日常，也记清楚",
+            desc: "缴费维修家务补给",
             category: .home,
             tiers: [
                 ScenePackTier(maxAmount: 20, notes: ["家里补个小物件", "厨房小用品补上", "一卷纸巾", "清洁小物", "给家添一点方便", "小修小补", "家里缺的补一点", "家里的小消耗"]),
@@ -72,7 +72,7 @@ enum ScenePackCopyPool {
             id: "social",
             emoji: "🎁",
             label: "心意往来包",
-            desc: "关系里的一小句记录",
+            desc: "送礼聚会探望往来",
             category: .social,
             tiers: [
                 ScenePackTier(maxAmount: 30, notes: ["顺路带了点心意", "咖啡时间叙旧", "给这次见面留一句", "带了点心意记下", "路过时想起了对方", "一起坐坐这一回", "带点东西去见面", "日常往来一笔"]),
@@ -85,7 +85,7 @@ enum ScenePackCopyPool {
             id: "shopping",
             emoji: "🛍️",
             label: "日常添置包",
-            desc: "把常用物品记清楚",
+            desc: "小物大件都能记清",
             category: .shopping,
             tiers: [
                 ScenePackTier(maxAmount: 30, notes: ["买个小物件", "给日常添一点方便", "看到合适的小东西", "小补给记一下", "刚好需要，就带回来了", "一点新鲜感", "给自己添个小物", "今天的小添置"]),
@@ -98,7 +98,7 @@ enum ScenePackCopyPool {
             id: "travel",
             emoji: "✈️",
             label: "旅行路上包",
-            desc: "路上的花费，也留一句",
+            desc: "门票住宿路费行程",
             category: .transport,
             tiers: [
                 ScenePackTier(maxAmount: 20, notes: ["短途出行小消费", "沿途小吃记一笔", "出行便携物资采购", "景点门口一瓶水", "小城漫步小花费", "街边明信片或小挂件", "公交日票/景区摆渡", "旅途中的轻量补给"]),
@@ -111,7 +111,7 @@ enum ScenePackCopyPool {
             id: "pet",
             emoji: "🐱",
             label: "铲屎官宠物包",
-            desc: "{petName} 相关的小日常",
+            desc: "{petName}吃喝护理玩具",
             category: .daily,
             tiers: [
                 ScenePackTier(maxAmount: 20, notes: ["给{petName}买了小零食", "给{petName}买点小点心", "补货宠物消耗小用品", "囤一包冻干", "给{petName}挑个小玩具", "猫砂/尿垫补货", "给{petName}加一罐罐头", "毛孩的小零食时间"]),
@@ -124,7 +124,7 @@ enum ScenePackCopyPool {
             id: "baby",
             emoji: "🍼",
             label: "母婴照护包",
-            desc: "宝宝和照护用品记清楚",
+            desc: "尿不湿辅食衣物照护",
             category: .daily,
             tiers: [
                 ScenePackTier(maxAmount: 30, notes: ["补一点宝宝小用品", "买了婴儿湿巾", "辅食小补给", "尿不湿临时补一包", "宝宝日常消耗记下", "小衣物小配件补上", "照护路上的一笔", "今天给宝宝添一点"]),
@@ -137,26 +137,13 @@ enum ScenePackCopyPool {
             id: "fitness",
             emoji: "🏃",
             label: "运动健身包",
-            desc: "把运动和恢复留一句",
+            desc: "训练装备恢复补给",
             category: .health,
             tiers: [
                 ScenePackTier(maxAmount: 30, notes: ["运动后补点水和能量", "健身路上的小补给", "一节运动前准备", "护具小物补上", "今天动起来了", "跑步后补给一下", "运动小消费记下", "给身体一点照顾"]),
                 ScenePackTier(maxAmount: 100, notes: ["健身装备小添置", "瑜伽或球类场地费", "运动恢复用品补齐", "买了训练小工具", "今天的运动安排", "给锻炼添点装备", "一场运动记下来", "运动习惯继续保持"]),
                 ScenePackTier(maxAmount: 300, notes: ["课程体验先记下", "运动鞋服添一件", "健身月卡相关", "训练装备升级一点", "恢复按摩安排一次", "身体状态认真照顾", "运动计划里的一笔", "给长期锻炼做准备"]),
                 ScenePackTier(maxAmount: 9_999, notes: ["健身年卡或大课包", "运动装备大件添置", "长期训练计划启动", "康复和训练一起安排", "给身体投入一笔大的", "一段运动计划记下", "健康习惯的长期支出", "认真对待身体的一笔"]),
-            ]
-        ),
-        ScenePackDefinition(
-            id: "digital",
-            emoji: "💻",
-            label: "数码订阅包",
-            desc: "设备、会员和软件都能记",
-            category: .entertainment,
-            tiers: [
-                ScenePackTier(maxAmount: 30, notes: ["小额订阅续上了", "云空间补一点", "应用内小功能解锁", "数码配件小补给", "一笔线上服务记下", "会员到期续一下", "软件小工具安排上", "今天的数字生活"]),
-                ScenePackTier(maxAmount: 100, notes: ["月度会员续费", "常用软件订阅", "数据线或充电配件", "线上工具继续用", "数码小配件换新", "内容会员续上", "工作学习工具订阅", "这项服务继续留着"]),
-                ScenePackTier(maxAmount: 500, notes: ["数码配件升级", "软件年费续上", "耳机键盘这类添置", "常用设备配件安排好", "线上服务一年继续", "提高效率的一笔", "设备周边换新", "数字工具投入一点"]),
-                ScenePackTier(maxAmount: 9_999, notes: ["新设备入手记下", "电脑手机相关大项", "长期会用的数码装备", "设备升级的一笔", "生产力工具认真安排", "数码大件换新", "这件设备会陪一阵子", "给工作生活添一件大工具"]),
             ]
         ),
     ]

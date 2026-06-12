@@ -24,6 +24,8 @@ struct RecordView: View {
     @State private var didAutoFocusAmountPad = false
     @AppStorage("scene_pack_order_v1") private var scenePackOrderStorage = ""
     @AppStorage("scene_pack_more_expanded_v1") private var scenePackMoreExpanded = false
+    @AppStorage("scene_pack_usage_v1") private var scenePackUsageStorage = ""
+    @AppStorage("scene_pack_pinned_v1") private var scenePackPinnedStorage = ""
     @FocusState private var focusedField: RecordField?
 
     private enum RecordField {
@@ -34,7 +36,13 @@ struct RecordView: View {
     private let draftClock = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
     private let recordAccent = AppColors.accent
     private let recordInk = AppColors.text
-    private let lowFrequencyScenePackIds: Set<String> = ["travel", "pet", "baby", "fitness", "digital"]
+    private let extensionScenePackIds: Set<String> = ["travel", "pet", "baby", "fitness"]
+    private let scenePackSilenceInterval: TimeInterval = 45 * 24 * 60 * 60
+
+    private struct ScenePackUsageStat {
+        var count: Int
+        var lastUsedAt: TimeInterval
+    }
 
     private var visibleScenePacks: [ScenePackDefinition] {
         let enabledPacks = ScenePackCopyPool.definitions.filter { pack in
@@ -47,16 +55,14 @@ struct RecordView: View {
     }
 
     private var primaryScenePacks: [ScenePackDefinition] {
-        let promotedIds = Set(scenePackOrderIds)
         return visibleScenePacks.filter { pack in
-            !lowFrequencyScenePackIds.contains(pack.id) || promotedIds.contains(pack.id)
+            !shouldFoldScenePack(pack)
         }
     }
 
     private var secondaryScenePacks: [ScenePackDefinition] {
-        let promotedIds = Set(scenePackOrderIds)
         return visibleScenePacks.filter { pack in
-            lowFrequencyScenePackIds.contains(pack.id) && !promotedIds.contains(pack.id)
+            shouldFoldScenePack(pack)
         }
     }
 
@@ -79,6 +85,54 @@ struct RecordView: View {
         var orderIds = scenePackOrderIds.filter { $0 != pack.id }
         orderIds.insert(pack.id, at: 0)
         scenePackOrderStorage = orderIds.prefix(12).joined(separator: ",")
+    }
+
+    private func pinScenePack(_ pack: ScenePackDefinition) {
+        promoteScenePack(pack)
+        var pinnedIds = scenePackPinnedIds.filter { $0 != pack.id }
+        pinnedIds.insert(pack.id, at: 0)
+        scenePackPinnedStorage = pinnedIds.prefix(12).joined(separator: ",")
+    }
+
+    private func shouldFoldScenePack(_ pack: ScenePackDefinition) -> Bool {
+        guard extensionScenePackIds.contains(pack.id) else { return false }
+        if scenePackPinnedIds.contains(pack.id) { return false }
+        guard let stat = scenePackUsageStats[pack.id] else { return true }
+        if stat.count >= 3 { return false }
+        let lastUsed = Date(timeIntervalSince1970: stat.lastUsedAt)
+        return Date().timeIntervalSince(lastUsed) > scenePackSilenceInterval
+    }
+
+    private var scenePackPinnedIds: [String] {
+        scenePackPinnedStorage
+            .split(separator: ",")
+            .map(String.init)
+            .filter { !$0.isEmpty }
+    }
+
+    private var scenePackUsageStats: [String: ScenePackUsageStat] {
+        scenePackUsageStorage
+            .split(separator: ";")
+            .reduce(into: [String: ScenePackUsageStat]()) { result, chunk in
+                let parts = chunk.split(separator: "|")
+                guard parts.count == 3,
+                      let count = Int(parts[1]),
+                      let lastUsedAt = TimeInterval(String(parts[2])) else { return }
+                result[String(parts[0])] = ScenePackUsageStat(count: count, lastUsedAt: lastUsedAt)
+            }
+    }
+
+    private func markScenePackUsed(_ pack: ScenePackDefinition) {
+        var stats = scenePackUsageStats
+        let current = stats[pack.id] ?? ScenePackUsageStat(count: 0, lastUsedAt: 0)
+        stats[pack.id] = ScenePackUsageStat(
+            count: current.count + 1,
+            lastUsedAt: Date().timeIntervalSince1970
+        )
+        scenePackUsageStorage = stats
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)|\($0.value.count)|\(Int($0.value.lastUsedAt))" }
+            .joined(separator: ";")
     }
 
     private var isMember: Bool {
@@ -154,6 +208,7 @@ struct RecordView: View {
     private func applyScenePack(_ pack: ScenePackDefinition, keepSelectedCategory: Bool = false) {
         dismissKeyboard()
         promoteScenePack(pack)
+        markScenePackUsed(pack)
         let amount = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
         let categoryContext = keepSelectedCategory ? homeViewModel.selectedCategory : pack.category
         let variantKey = scenePackVariantKey(
@@ -515,7 +570,7 @@ struct RecordView: View {
                     isMoreExpanded: $scenePackMoreExpanded,
                     scenePackDesc: scenePackDesc,
                     onPromotePack: { pack in
-                        promoteScenePack(pack)
+                        pinScenePack(pack)
                     },
                     onSelectPack: { pack in
                         previewLineWasRotated = true
