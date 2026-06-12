@@ -52,6 +52,7 @@
 		F10000010000000000000001 /* MinimalOnboardingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000020000000000000001 /* MinimalOnboardingSheet.swift */; };
 		F12000010000000000000001 /* RecordPreviewTier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F12000020000000000000001 /* RecordPreviewTier.swift */; };
 		F12000030000000000000001 /* ScenePackAngleSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F12000040000000000000001 /* ScenePackAngleSheet.swift */; };
+		F13000010000000000000001 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = F13000020000000000000001 /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -103,6 +104,7 @@
 		F10000020000000000000001 /* MinimalOnboardingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinimalOnboardingSheet.swift; sourceTree = "<group>"; };
 		F12000020000000000000001 /* RecordPreviewTier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordPreviewTier.swift; sourceTree = "<group>"; };
 		F12000040000000000000001 /* ScenePackAngleSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackAngleSheet.swift; sourceTree = "<group>"; };
+		F13000020000000000000001 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -134,6 +136,7 @@
 				A10000350000000000000001 /* ViewModels */,
 				A10000360000000000000001 /* Views */,
 				A100001B0000000000000001 /* Assets.xcassets */,
+				F13000020000000000000001 /* LaunchScreen.storyboard */,
 				A10000370000000000000001 /* Preview Content */,
 				A100001D0000000000000001 /* Info.plist */,
 			);
@@ -293,6 +296,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A100000B0000000000000001 /* Assets.xcassets in Resources */,
+				F13000010000000000000001 /* LaunchScreen.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -43,6 +43,15 @@ struct SettingsView: View {
         settingsViewModel.settings.hasMemberAccess
     }
 
+    private var hasPaidMemberTier: Bool {
+        switch settingsViewModel.memberTier.lowercased() {
+        case "monthly", "yearly", "lifetime":
+            return true
+        default:
+            return false
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
@@ -803,23 +812,25 @@ struct SettingsView: View {
                 }
             } else {
                 accountInfoRow(title: "当前档位", value: AppSettings.memberTierDisplayName(settingsViewModel.memberTier))
-                Button {
-                    showAccountSheet = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        showMemberPricing = true
+                if !hasPaidMemberTier {
+                    Button {
+                        showAccountSheet = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                            showMemberPricing = true
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("想多留几段回望？了解会员")
+                                .font(.system(size: 14, weight: .medium))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .foregroundStyle(AppColors.accent.opacity(0.9))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 4)
                     }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("想多留几段回望？了解会员")
-                            .font(.system(size: 14, weight: .medium))
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .bold))
-                    }
-                    .foregroundStyle(AppColors.accent.opacity(0.9))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 4)
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
     }

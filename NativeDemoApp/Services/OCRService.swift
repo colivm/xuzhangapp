@@ -792,9 +792,17 @@ final class OCRService {
         // 支付宝列表自带分类，优先信平台分类；微信通常没有分类，用商户名/标题做本地推断。
         if mode == .alipay,
            let alipayCategory = alipayListCategory(from: windowLines) {
+            if alipayCategory == .other,
+               let localCategory = inferCategoryIfConfident(from: alipayLocalCategoryText(title: title, windowLines: windowLines)) {
+                return localCategory
+            }
             return alipayCategory
         }
         return inferCategory(from: "\(title)\n\(windowText)")
+    }
+
+    private func alipayLocalCategoryText(title: String, windowLines: [String]) -> String {
+        ([title] + windowLines.filter { !isAlipayCategoryLine($0) }).joined(separator: "\n")
     }
 
     private func alipayListCategory(from lines: [String]) -> HomeItem.Category? {
@@ -1146,6 +1154,10 @@ final class OCRService {
     }
 
     private func inferCategory(from text: String) -> HomeItem.Category {
+        inferCategoryIfConfident(from: text) ?? .daily
+    }
+
+    private func inferCategoryIfConfident(from text: String) -> HomeItem.Category? {
         let lower = text.lowercased()
         if lower.contains("微信红包") || lower.contains("红包") || lower.contains("转账") {
             return .social
@@ -1180,7 +1192,7 @@ final class OCRService {
         if lower.contains("酒店") || lower.contains("住宿") || lower.contains("民宿") {
             return .lodging
         }
-        return .daily
+        return nil
     }
 
     private func matchesGameExpense(_ text: String) -> Bool {
