@@ -61,6 +61,8 @@ enum OCRServiceError: LocalizedError {
 }
 
 final class OCRService {
+    private(set) var lastRecognizedText: String = ""
+
     private enum ListAmountInfo {
         case expense(amount: Double, inlineTitle: String?)
         case ignored
@@ -86,6 +88,7 @@ final class OCRService {
     }
 
     func recognizeReceipt(from imageData: Data) async throws -> [OCRReceiptDraft] {
+        lastRecognizedText = ""
         guard let image = UIImage(data: imageData), let cgImage = image.cgImage else {
             throw OCRServiceError.invalidImage
         }
@@ -121,6 +124,7 @@ final class OCRService {
         let ocrLines = recognizedLines.map { $0.line }
         let lines = ocrLines.map { $0.text }
         let text = lines.joined(separator: "\n")
+        lastRecognizedText = text
 
         guard !lines.isEmpty else {
             throw OCRServiceError.noRecognizedText
@@ -514,11 +518,16 @@ final class OCRService {
         if explicitSign == "+" || rawValue.hasPrefix("+") {
             return .ignored
         }
+        let numericAmount = Double(
+            rawValue
+                .replacingOccurrences(of: "+", with: "")
+                .replacingOccurrences(of: "-", with: "")
+        ) ?? 0
         let hasMinus = explicitSign == "-" || rawValue.hasPrefix("-")
         let hasCurrency = normalized.contains("¥")
         let hasExpenseWord = normalized.contains("支出") || normalized.contains("付款") || normalized.contains("支付")
         let paidWithoutMinus = !hasMinus && ["等待确认收货", "交易成功", "支付成功"].contains { statusScope.contains($0) }
-        let positiveListExpense = allowPositiveExpense && (hasCurrency || hasExpenseWord)
+        let positiveListExpense = allowPositiveExpense && (hasCurrency || hasExpenseWord || (isPureAmountLine(normalized) && numericAmount < 1_000))
         guard hasMinus || paidWithoutMinus || positiveListExpense else { return nil }
 
         let title: String?
@@ -533,10 +542,7 @@ final class OCRService {
         } else {
             title = nil
         }
-        let numericValue = rawValue
-            .replacingOccurrences(of: "+", with: "")
-            .replacingOccurrences(of: "-", with: "")
-        return .expense(amount: -(Double(numericValue) ?? 0), inlineTitle: title)
+        return .expense(amount: -numericAmount, inlineTitle: title)
     }
 
     private func looseListAmountInfo(
@@ -575,11 +581,10 @@ final class OCRService {
         let hasCurrency = full.contains("¥") || normalized.contains("¥")
         let hasExpenseWord = normalized.contains("支出") || normalized.contains("付款") || normalized.contains("支付")
         let paidWithoutMinus = !hasMinus && ["等待确认收货", "交易成功", "支付成功"].contains { statusContext.contains($0) }
-        let positiveListExpense = allowPositiveExpense && (hasCurrency || hasExpenseWord)
-        guard hasMinus || paidWithoutMinus || positiveListExpense else { return nil }
-
         let amount = Double(nsText.substring(with: match.range(at: 2))) ?? 0
         guard amount > 0 else { return nil }
+        let positiveListExpense = allowPositiveExpense && (hasCurrency || hasExpenseWord || (isPureAmountLine(normalized) && amount < 1_000))
+        guard hasMinus || paidWithoutMinus || positiveListExpense else { return nil }
 
         let beforeAmount = nsText.substring(to: match.range.location)
         let title = looseInlineTitle(from: beforeAmount)
@@ -709,12 +714,17 @@ final class OCRService {
     private func normalizedListText(_ value: String) -> String {
         value
             .replacingOccurrences(of: "−", with: "-")
+            .replacingOccurrences(of: "－", with: "-")
+            .replacingOccurrences(of: "﹣", with: "-")
+            .replacingOccurrences(of: "‒", with: "-")
+            .replacingOccurrences(of: "﹘", with: "-")
             .replacingOccurrences(of: "—", with: "-")
             .replacingOccurrences(of: "–", with: "-")
             .replacingOccurrences(of: "￥", with: "¥")
             .replacingOccurrences(of: "\u{00A5}", with: "¥")
             .replacingOccurrences(of: "\u{FFE5}", with: "¥")
             .replacingOccurrences(of: ",", with: "")
+            .replacingOccurrences(of: #"(?<![\p{Han}A-Za-z0-9])一\s*(?=\d)"#, with: "-", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
