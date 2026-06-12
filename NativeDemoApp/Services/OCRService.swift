@@ -140,6 +140,9 @@ final class OCRService {
         if (listDrafts.count >= 2 && !isDetailScreenshot) || (isListScreenshot && !listDrafts.isEmpty) {
             return listDrafts
         }
+        if isListScreenshot {
+            throw OCRServiceError.detailPageRequired
+        }
 
         let draft: OCRReceiptDraft?
         switch provider {
@@ -197,8 +200,12 @@ final class OCRService {
         let hasDetailHint = looksLikeDetailScreenshot(lines: lines)
         let amountLineCount = listAmountLineCount(in: lines)
         let currencyCount = currencyCandidates(in: text).count
+        let expenseAmountCount = listExpenseLikeLineCount(in: lines)
 
         if hasListHint && !hasDetailHint {
+            return true
+        }
+        if expenseAmountCount >= 2 && !hasDetailHint {
             return true
         }
         if amountLineCount >= 3 && !hasDetailHint {
@@ -208,6 +215,17 @@ final class OCRService {
             return true
         }
         return false
+    }
+
+    private func listExpenseLikeLineCount(in lines: [String]) -> Int {
+        lines.reduce(0) { count, line in
+            guard !shouldSkipListAmountLine(line) else { return count }
+            let normalized = normalizedListText(line)
+            if normalized.range(of: #"(?<!\d)-\s*(?:¥\s*)?[0-9]{1,6}(?:\.[0-9]{1,2})?"#, options: .regularExpression) != nil {
+                return count + 1
+            }
+            return count
+        }
     }
 
     private func looksLikeDetailScreenshot(lines: [String]) -> Bool {
@@ -456,13 +474,10 @@ final class OCRService {
     // - "瑞幸咖啡 18.00" followed by "交易成功" is also an expense.
     // - "瑞幸咖啡 18.00 交易关闭" is ignored because the order was not paid.
     private func listAmountInfo(in line: String, statusContext: String = "", allowPositiveExpense: Bool = false) -> ListAmountInfo? {
-        let normalized = line
-            .replacingOccurrences(of: "−", with: "-")
-            .replacingOccurrences(of: "—", with: "-")
-            .replacingOccurrences(of: "–", with: "-")
-            .replacingOccurrences(of: "￥", with: "¥")
-            .replacingOccurrences(of: ",", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = normalizedListText(line)
+        if isMonthlySummaryLine(normalized) {
+            return .ignored
+        }
         let statusPattern = #"(等待确认收货|交易成功|支付成功|退款成功|已全额退款|已退款(?:\(¥?\s*[0-9]+(?:\.[0-9]{1,2})?\))?|交易关闭)"#
         let pattern = #"^(?:(.+?)\s*)?([-+])?\s*(?:¥\s*)?([-+]?\s*[0-9]{1,6}(?:\.[0-9]{1,2})?)(?:\s*"# + statusPattern + #")?$"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
@@ -529,6 +544,9 @@ final class OCRService {
         statusContext: String,
         allowPositiveExpense: Bool
     ) -> ListAmountInfo? {
+        if isMonthlySummaryLine(normalized) {
+            return .ignored
+        }
         if normalized.contains("收入") || normalized.contains("退款") || normalized.contains("转入") || normalized.contains("提现") || normalized.contains("还款") {
             return .ignored
         }
@@ -680,12 +698,41 @@ final class OCRService {
     }
 
     private func shouldSkipListAmountLine(_ line: String) -> Bool {
-        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasPrefix("支出 ¥") || trimmed.hasPrefix("支出¥") || trimmed.hasPrefix("支出 ￥") || trimmed.hasPrefix("支出￥") {
+        let trimmed = normalizedListText(line)
+        if isMonthlySummaryLine(trimmed) {
             return true
         }
-        let skipWords = ["收入 ¥", "收入￥", "本月收入", "月收入", "本月支出", "月支出", "本月已省", "转入", "提现", "还款"]
+        let skipWords = ["本月收入", "月收入", "本月支出", "月支出", "本月已省", "转入", "提现", "还款"]
         return skipWords.contains { trimmed.contains($0) }
+    }
+
+    private func normalizedListText(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "−", with: "-")
+            .replacingOccurrences(of: "—", with: "-")
+            .replacingOccurrences(of: "–", with: "-")
+            .replacingOccurrences(of: "￥", with: "¥")
+            .replacingOccurrences(of: "\u{00A5}", with: "¥")
+            .replacingOccurrences(of: "\u{FFE5}", with: "¥")
+            .replacingOccurrences(of: ",", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func isMonthlySummaryLine(_ value: String) -> Bool {
+        let compact = normalizedListText(value).replacingOccurrences(of: " ", with: "")
+        if compact.contains("收入¥") || compact.contains("收入￥") {
+            return true
+        }
+        if compact.contains("支出¥") || compact.contains("支出￥") {
+            return true
+        }
+        if compact.range(of: #"^(?:20\d{2}年)?\d{1,2}月.*(?:支出|收入)"#, options: .regularExpression) != nil {
+            return true
+        }
+        if compact.range(of: #"^(?:本月|月)(?:支出|收入)"#, options: .regularExpression) != nil {
+            return true
+        }
+        return false
     }
 
     private func listCategory(
