@@ -72,6 +72,8 @@ export function sanitizeLedgerItem(rawItem) {
   if (emotionTag) item.emotionTag = emotionTag;
   if (merchantBrandId) item.merchantBrandId = merchantBrandId;
   if (raw.userEditedTitle === true) item.userEditedTitle = true;
+  const draftMeta = sanitizeDraftMeta(raw.draftMeta);
+  if (draftMeta) item.draftMeta = draftMeta;
 
   if (!item.title) {
     return { ok: false, error: "INVALID_LEDGER_TITLE", message: "账单标题不能为空" };
@@ -90,6 +92,16 @@ export function sanitizeLedgerItem(rawItem) {
     return { ok: false, error: "INVALID_LEDGER_AMOUNT", message: "金额无效" };
   }
   return { ok: true, item };
+}
+
+function sanitizeDraftMeta(rawDraftMeta) {
+  if (!rawDraftMeta || typeof rawDraftMeta !== "object") return null;
+  const batchId = normalizeUserText(rawDraftMeta.batchId, 80);
+  const importedAt = normalizeUserText(rawDraftMeta.importedAt, 40);
+  const status = normalizeUserText(rawDraftMeta.status, 16);
+  if (!batchId || !importedAt) return null;
+  if (!["pending", "resolved"].includes(status)) return null;
+  return { batchId, importedAt, status };
 }
 
 export function validateAIRequestBody(body) {

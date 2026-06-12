@@ -55,7 +55,7 @@ enum OCRServiceError: LocalizedError {
         case .noRecognizedText:
             return "没有识别到账单文字，请重新截图。"
         case .detailPageRequired:
-            return "没能识别到账单金额，请换一张更清晰的账单截图，或手动补一下金额。"
+            return "没能识别到账单金额，请换一张更清晰的账单列表或单笔详情截图。"
         }
     }
 }
@@ -64,6 +64,20 @@ final class OCRService {
     private enum ListAmountInfo {
         case expense(amount: Double, inlineTitle: String?)
         case ignored
+    }
+
+    private enum ListParseMode {
+        case alipay
+        case wechat
+        case generic
+
+        var provider: OCRProvider {
+            switch self {
+            case .alipay: return .alipay
+            case .wechat: return .wechat
+            case .generic: return .generic
+            }
+        }
     }
 
     private struct OCRLine {
@@ -126,9 +140,6 @@ final class OCRService {
             if !listDrafts.isEmpty {
                 return listDrafts
             }
-        }
-
-        if isListScreenshot {
             throw OCRServiceError.detailPageRequired
         }
 
@@ -165,10 +176,17 @@ final class OCRService {
         if text.contains("搜索交易记录") || text.contains("收支分析") || text.contains("本月已省") || text.contains("贴纸") {
             return .alipay
         }
+        let alipayCategoryHints = [
+            "餐饮美食", "日用百货", "服饰装扮", "文化休闲", "爱车养车", "充值缴费",
+            "教育培训", "商业服务", "转账红包", "投资理财",
+        ]
+        if alipayCategoryHints.contains(where: { text.contains($0) }) {
+            return .alipay
+        }
         if text.contains("微信支付") || text.contains("微信") || text.contains("零钱") || text.contains("财付通") {
             return .wechat
         }
-        if text.contains("查找交易") || text.contains("收支统计") || text.contains("全部账单") {
+        if text.contains("查找交易") || text.contains("收支统计") {
             return .wechat
         }
         return .generic
@@ -206,7 +224,7 @@ final class OCRService {
             let line = lines[index]
             guard !shouldSkipListAmountLine(line) else { return count }
             let context = adjacentListStatusContext(lines: lines, index: index)
-            guard case .some(.expense) = listAmountInfo(in: line, statusContext: context) else {
+            guard case .some(.expense) = listAmountInfo(in: line, statusContext: context, allowPositiveExpense: true) else {
                 return count
             }
             return count + 1
@@ -287,17 +305,43 @@ final class OCRService {
         confidence: Double,
         provider: OCRProvider
     ) -> [OCRReceiptDraft] {
+        var combined: [OCRReceiptDraft] = []
+        var seenKeys = Set<String>()
+        for mode in listParseModes(provider: provider, rawText: rawText) {
+            let drafts = parseListReceipts(
+                ocrLines: ocrLines,
+                rawText: rawText,
+                confidence: confidence,
+                mode: mode
+            )
+            for draft in drafts {
+                let key = listDraftDedupKey(draft)
+                guard !seenKeys.contains(key) else { continue }
+                seenKeys.insert(key)
+                combined.append(draft)
+            }
+        }
+        return Array(combined.prefix(12))
+    }
+
+    private func parseListReceipts(
+        ocrLines: [OCRLine],
+        rawText: String,
+        confidence: Double,
+        mode: ListParseMode
+    ) -> [OCRReceiptDraft] {
         var drafts: [OCRReceiptDraft] = []
         var seenKeys = Set<String>()
         let referenceDate = statementReferenceDate(in: rawText) ?? .now
         let lines = ocrLines.map(\.text)
+        let allowPositiveExpense = shouldAllowPositiveListExpense(rawText: rawText, mode: mode)
 
         for index in ocrLines.indices {
             let line = ocrLines[index].text
             guard !shouldSkipListAmountLine(line) else { continue }
             let amountInfo: (amount: Double, inlineTitle: String?)
             let statusContext = adjacentListStatusContext(lines: lines, index: index)
-            switch listAmountInfo(in: line, statusContext: statusContext) {
+            switch listAmountInfo(in: line, statusContext: statusContext, allowPositiveExpense: allowPositiveExpense) {
             case .some(.expense(let amount, let inlineTitle)):
                 amountInfo = (amount, inlineTitle)
             case .some(.ignored), .none:
@@ -308,7 +352,7 @@ final class OCRService {
             let windowEnd = min(lines.count, index + 5)
             let windowLines = Array(lines[windowStart..<windowEnd])
             let windowText = windowLines.joined(separator: "\n")
-            let candidateTitle = amountInfo.inlineTitle ?? nearbyListTitle(lines: ocrLines, amountIndex: index, provider: provider)
+            let candidateTitle = amountInfo.inlineTitle ?? nearbyListTitle(lines: ocrLines, amountIndex: index, mode: mode)
             let brand = MerchantBrandCatalog.matchOCRBrand(in: "\(candidateTitle ?? "")\n\(windowText)")
             guard let title = candidateTitle ?? brand?.displayName,
                   isTrustworthyListTitle(title, brand: brand) else {
@@ -322,7 +366,7 @@ final class OCRService {
                 ?? firstDate(in: rawText)
                 ?? referenceDate
             let inferredCategory = listCategory(
-                provider: provider,
+                mode: mode,
                 title: title,
                 windowLines: windowLines,
                 windowText: windowText
@@ -342,13 +386,54 @@ final class OCRService {
                     category: category,
                     confidence: confidence,
                     rawText: windowText,
-                    provider: provider,
+                    provider: mode.provider,
                     merchantBrandId: brand?.id
                 )
             )
         }
 
         return Array(drafts.prefix(12))
+    }
+
+    private func listParseModes(provider: OCRProvider, rawText: String) -> [ListParseMode] {
+        switch provider {
+        case .alipay:
+            return [.alipay]
+        case .wechat:
+            return [.wechat]
+        case .generic:
+            if hasAlipayListSignal(rawText) { return [.alipay, .generic] }
+            if hasWeChatListSignal(rawText) { return [.wechat, .generic] }
+            return [.alipay, .wechat, .generic]
+        }
+    }
+
+    private func hasAlipayListSignal(_ text: String) -> Bool {
+        let hints = [
+            "支付宝", "花呗", "余额宝", "搜索交易记录", "收支分析", "本月已省", "贴纸",
+            "餐饮美食", "日用百货", "服饰装扮", "文化休闲", "爱车养车", "充值缴费",
+            "教育培训", "商业服务", "转账红包", "投资理财",
+        ]
+        return hints.contains { text.contains($0) }
+    }
+
+    private func hasWeChatListSignal(_ text: String) -> Bool {
+        let hints = ["微信", "微信支付", "财付通", "零钱", "查找交易", "收支统计"]
+        return hints.contains { text.contains($0) }
+    }
+
+    private func listDraftDedupKey(_ draft: OCRReceiptDraft) -> String {
+        let dayKey = Calendar.current.startOfDay(for: draft.date).timeIntervalSince1970
+        return "\(Int((draft.amount * 100).rounded()))|\(Int(dayKey))|\(draft.title)"
+    }
+
+    private func shouldAllowPositiveListExpense(rawText: String, mode: ListParseMode) -> Bool {
+        if mode != .generic { return true }
+        let listHints = [
+            "账单", "全部账单", "账单列表", "交易记录", "全部交易", "收支统计", "收支分析",
+            "本月支出", "本月收入", "筛选", "月账单",
+        ]
+        return listHints.contains { rawText.contains($0) }
     }
 
     private func isTrustworthyListTitle(_ title: String, brand: MerchantBrandDefinition?) -> Bool {
@@ -369,15 +454,16 @@ final class OCRService {
     // - "瑞幸咖啡 18.00 交易成功" is an expense even without a minus sign.
     // - "瑞幸咖啡 18.00" followed by "交易成功" is also an expense.
     // - "瑞幸咖啡 18.00 交易关闭" is ignored because the order was not paid.
-    private func listAmountInfo(in line: String, statusContext: String = "") -> ListAmountInfo? {
+    private func listAmountInfo(in line: String, statusContext: String = "", allowPositiveExpense: Bool = false) -> ListAmountInfo? {
         let normalized = line
             .replacingOccurrences(of: "−", with: "-")
             .replacingOccurrences(of: "—", with: "-")
+            .replacingOccurrences(of: "–", with: "-")
             .replacingOccurrences(of: "￥", with: "¥")
             .replacingOccurrences(of: ",", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let statusPattern = #"(等待确认收货|交易成功|支付成功|已全额退款|已退款(?:\(¥?\s*[0-9]+(?:\.[0-9]{1,2})?\))?|交易关闭)"#
-        let pattern = #"^(?:(.+?)\s*)?(-)?\s*(?:¥\s*)?([0-9]{1,6}(?:\.[0-9]{1,2})?)(?:\s*"# + statusPattern + #")?$"#
+        let pattern = #"^(?:(.+?)\s*)?([-+])?\s*(?:¥\s*)?([-+]?\s*[0-9]{1,6}(?:\.[0-9]{1,2})?)(?:\s*"# + statusPattern + #")?$"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
         let nsText = normalized as NSString
         guard let match = regex.firstMatch(in: normalized, range: NSRange(location: 0, length: nsText.length)),
@@ -397,14 +483,27 @@ final class OCRService {
             // 退款正数行按产品规则忽略，避免和原支出重复抵消。
             return .ignored
         }
+        if normalized.contains("收入") || normalized.contains("退款") || normalized.contains("转入") || normalized.contains("提现") || normalized.contains("还款") {
+            return .ignored
+        }
 
-        let hasMinus = match.range(at: 2).location != NSNotFound
+        let explicitSign = match.range(at: 2).location != NSNotFound
+            ? nsText.substring(with: match.range(at: 2))
+            : ""
+        let rawValue = nsText.substring(with: match.range(at: 3)).replacingOccurrences(of: " ", with: "")
+        if explicitSign == "+" || rawValue.hasPrefix("+") {
+            return .ignored
+        }
+        let hasMinus = explicitSign == "-" || rawValue.hasPrefix("-")
+        let hasCurrency = normalized.contains("¥")
+        let hasExpenseWord = normalized.contains("支出") || normalized.contains("付款") || normalized.contains("支付")
         let paidWithoutMinus = !hasMinus && ["等待确认收货", "交易成功", "支付成功"].contains { statusScope.contains($0) }
-        guard hasMinus || paidWithoutMinus else { return nil }
+        let positiveListExpense = allowPositiveExpense && (hasCurrency || hasExpenseWord)
+        guard hasMinus || paidWithoutMinus || positiveListExpense else { return nil }
 
         let title: String?
         if match.range(at: 1).location != NSNotFound {
-            let rawTitle = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let rawTitle = normalizedInlineListTitle(nsText.substring(with: match.range(at: 1)))
             if isAmountOnlyCluster(rawTitle) {
                 // Vision may merge the right-side amount column into lines like "-52.00 -4.50".
                 // Treating the first amount as a title shifts the whole WeChat list by one row.
@@ -414,8 +513,29 @@ final class OCRService {
         } else {
             title = nil
         }
-        let value = nsText.substring(with: match.range(at: 3))
-        return .expense(amount: -(Double(value) ?? 0), inlineTitle: title)
+        let numericValue = rawValue
+            .replacingOccurrences(of: "+", with: "")
+            .replacingOccurrences(of: "-", with: "")
+        return .expense(amount: -(Double(numericValue) ?? 0), inlineTitle: title)
+    }
+
+    private func normalizedInlineListTitle(_ value: String) -> String {
+        let removeTokens = [
+            "支出", "付款", "支付", "消费", "收入",
+            "餐饮美食", "日用百货", "服饰装扮", "文化休闲", "爱车养车", "充值缴费",
+            "教育培训", "商业服务", "转账红包", "投资理财",
+        ]
+        var title = value
+            .replacingOccurrences(of: "｜", with: " ")
+            .replacingOccurrences(of: "|", with: " ")
+            .replacingOccurrences(of: "·", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        for token in removeTokens {
+            title = title.replacingOccurrences(of: token, with: " ")
+        }
+        return title
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func adjacentListStatusContext(lines: [String], index: Int) -> String {
@@ -426,8 +546,8 @@ final class OCRService {
             .joined(separator: "\n")
     }
 
-    private func nearbyListTitle(lines: [OCRLine], amountIndex: Int, provider: OCRProvider) -> String? {
-        switch provider {
+    private func nearbyListTitle(lines: [OCRLine], amountIndex: Int, mode: ListParseMode) -> String? {
+        switch mode {
         case .alipay:
             return nearbyTitle(lines: lines, amountIndex: amountIndex, offsets: [-1, -2, -3, 1])
         case .wechat:
@@ -503,18 +623,22 @@ final class OCRService {
     }
 
     private func shouldSkipListAmountLine(_ line: String) -> Bool {
-        let skipWords = ["收入 ¥", "收入￥", "支出 ¥", "支出￥", "本月已省", "转入", "提现", "还款"]
-        return skipWords.contains { line.contains($0) }
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("支出 ¥") || trimmed.hasPrefix("支出¥") || trimmed.hasPrefix("支出 ￥") || trimmed.hasPrefix("支出￥") {
+            return true
+        }
+        let skipWords = ["收入 ¥", "收入￥", "本月收入", "月收入", "本月支出", "月支出", "本月已省", "转入", "提现", "还款"]
+        return skipWords.contains { trimmed.contains($0) }
     }
 
     private func listCategory(
-        provider: OCRProvider,
+        mode: ListParseMode,
         title: String,
         windowLines: [String],
         windowText: String
     ) -> HomeItem.Category {
         // 支付宝列表自带分类，优先信平台分类；微信通常没有分类，用商户名/标题做本地推断。
-        if provider == .alipay,
+        if mode == .alipay,
            let alipayCategory = alipayListCategory(from: windowLines) {
             return alipayCategory
         }
@@ -845,31 +969,31 @@ final class OCRService {
 
     private func inferCategory(from text: String) -> HomeItem.Category {
         let lower = text.lowercased()
-        if lower.contains("转账") || lower.contains("红包") {
-            return .other
+        if lower.contains("微信红包") || lower.contains("红包") || lower.contains("转账") {
+            return .social
         }
-        if lower.contains("咖啡") || lower.contains("餐") || lower.contains("外卖") || lower.contains("饭") || lower.contains("茶") || lower.contains("美团") || lower.contains("饿了么") || lower.contains("把子肉") || lower.contains("馄饨") || lower.contains("餐饮美食") || lower.contains("火锅") || lower.contains("海鲜") || lower.contains("大排档") || lower.contains("烧烤") || lower.contains("小吃") || lower.contains("饭店") || lower.contains("餐厅") {
+        if lower.contains("咖啡") || lower.contains("小咖咖啡") || lower.contains("luckin") || lower.contains("餐") || lower.contains("外卖") || lower.contains("饭") || lower.contains("茶") || lower.contains("美团") || lower.contains("饿了么") || lower.contains("把子肉") || lower.contains("馄饨") || lower.contains("餐饮美食") || lower.contains("火锅") || lower.contains("海鲜") || lower.contains("大排档") || lower.contains("烧烤") || lower.contains("小吃") || lower.contains("饭店") || lower.contains("餐厅") || lower.contains("烤鸭") {
             return .dining
         }
-        if lower.contains("地铁") || lower.contains("公交") || lower.contains("打车") || lower.contains("滴滴") || lower.contains("铁路") || lower.contains("停车") || lower.contains("车服") || lower.contains("充车") || lower.contains("充电") || lower.contains("顺易通信") {
+        if lower.contains("地铁") || lower.contains("公交") || lower.contains("打车") || lower.contains("滴滴") || lower.contains("铁路") || lower.contains("停车") || lower.contains("车服") || lower.contains("充车") || lower.contains("充电") || lower.contains("顺易通信") || lower.contains("顺易通") || lower.contains("爱车养车") || lower.contains("天润城") {
             return .transport
         }
         if lower.contains("药店") || lower.contains("买药") || lower.contains("医院") || lower.contains("挂号") || lower.contains("体检") || lower.contains("牙科") || lower.contains("口腔") || lower.contains("诊所") {
             return .health
         }
-        if lower.contains("房租") || lower.contains("水电") || lower.contains("电费") || lower.contains("燃气") || lower.contains("物业") || lower.contains("宽带") || lower.contains("维修") || lower.contains("家电") {
+        if lower.contains("房租") || lower.contains("水电") || lower.contains("电费") || lower.contains("燃气") || lower.contains("物业") || lower.contains("宽带") || lower.contains("维修") || lower.contains("家电") || lower.contains("网上国网") || lower.contains("国网") || lower.contains("五矿物业") || lower.contains("阿里云服务") || lower.contains("云服务") {
             return .home
         }
         if lower.contains("礼物") || lower.contains("送礼") || lower.contains("请客") || lower.contains("份子钱") || lower.contains("随礼") {
             return .social
         }
-        if lower.contains("日用百货") || lower.contains("便利蜂") || lower.contains("便利店") || lower.contains("超市") {
+        if lower.contains("日用百货") || lower.contains("便利蜂") || lower.contains("便利店") || lower.contains("超市") || lower.contains("水西门") || lower.contains("闲鱼") {
             return .daily
         }
-        if lower.contains("商城") || lower.contains("购物") || lower.contains("淘宝") || lower.contains("京东") || lower.contains("闪购") {
+        if lower.contains("商城") || lower.contains("购物") || lower.contains("淘宝") || lower.contains("京东") || lower.contains("闪购") || lower.contains("迪卡侬") || lower.contains("服饰装扮") {
             return .shopping
         }
-        if lower.contains("电影") || lower.contains("游戏") || lower.contains("会员") || lower.contains("影院") || lower.contains("文化休闲") || lower.contains("酷享影") || lower.contains("抖音") {
+        if lower.contains("电影") || lower.contains("游戏") || lower.contains("会员") || lower.contains("影院") || lower.contains("文化休闲") || lower.contains("酷享影") || lower.contains("抖音") || lower.contains("碧蓝航线") {
             return .entertainment
         }
         if lower.contains("酒店") || lower.contains("住宿") || lower.contains("民宿") {

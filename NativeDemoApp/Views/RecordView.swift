@@ -1325,7 +1325,7 @@ struct RecordView: View {
             }
             .buttonStyle(.plain)
 
-            Text("导入微信/支付宝账单截图，识别后先确认，再写入账单。")
+            Text("导入微信/支付宝账单列表或单笔详情截图，识别后先确认，再写入账单。")
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
 
