@@ -21,8 +21,10 @@ final class SettingsViewModel: ObservableObject {
     @Published private(set) var authMessage: String?
     @Published private(set) var contentSafetyMessage: String?
     @Published private(set) var isAuthBusy: Bool = false
+    @Published private(set) var smsCooldownRemaining: Int = 0
     /// 是否已保存访问令牌（与 Keychain 同步，用于界面展示）。
     @Published private(set) var hasCloudSession: Bool = false
+    private var smsCooldownTask: Task<Void, Never>?
 
     init() {
         settings = LocalStore.loadSettings()
@@ -213,6 +215,11 @@ final class SettingsViewModel: ObservableObject {
 
     func sendSMSLoginCode() async {
         authMessage = nil
+        guard !isAuthBusy else { return }
+        if smsCooldownRemaining > 0 {
+            authMessage = "请 \(smsCooldownRemaining) 秒后再试。"
+            return
+        }
         let phone = loginPhone.trimmingCharacters(in: .whitespacesAndNewlines)
         guard phone.count == 11, phone.hasPrefix("1") else {
             authMessage = "请输入 11 位手机号。"
@@ -224,13 +231,15 @@ final class SettingsViewModel: ObservableObject {
         do {
             try await client.sendSMSCode(phone: phone)
             authMessage = "验证码已发送，请查看短信。"
+            startSMSCooldown(60)
         } catch {
-            authMessage = error.localizedDescription
+            authMessage = sendSMSMessage(for: error)
         }
     }
 
     func verifySMSLogin() async {
         authMessage = nil
+        guard !isAuthBusy else { return }
         let phone = loginPhone.trimmingCharacters(in: .whitespacesAndNewlines)
         let code = loginCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard phone.count == 11 else {
@@ -260,11 +269,12 @@ final class SettingsViewModel: ObservableObject {
             authMessage = "登录成功。"
             loginCode = ""
         } catch {
-            authMessage = error.localizedDescription
+            authMessage = verifySMSMessage(for: error)
         }
     }
 
     func logoutCloud() {
+        stopSMSCooldown()
         KeychainService.clearAccessToken()
         settings.cloudUserId = ""
         settings.memberTier = "free"
@@ -352,6 +362,74 @@ final class SettingsViewModel: ObservableObject {
 
     private func persist() {
         LocalStore.saveSettings(settings)
+    }
+
+    private func startSMSCooldown(_ seconds: Int) {
+        smsCooldownTask?.cancel()
+        smsCooldownRemaining = max(0, seconds)
+        guard smsCooldownRemaining > 0 else { return }
+        smsCooldownTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                await MainActor.run {
+                    guard let self, self.smsCooldownRemaining > 0 else { return }
+                    self.smsCooldownRemaining -= 1
+                    if self.smsCooldownRemaining == 0 {
+                        self.smsCooldownTask?.cancel()
+                        self.smsCooldownTask = nil
+                    }
+                }
+            }
+        }
+    }
+
+    private func stopSMSCooldown() {
+        smsCooldownTask?.cancel()
+        smsCooldownTask = nil
+        smsCooldownRemaining = 0
+    }
+
+    private struct SMSAPIErrorBody: Decodable {
+        let error: String?
+        let retryAfterSec: Int?
+    }
+
+    private func parsedSMSAPIError(_ body: String) -> SMSAPIErrorBody? {
+        guard let data = body.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(SMSAPIErrorBody.self, from: data)
+    }
+
+    private func sendSMSMessage(for error: Error) -> String {
+        guard let serviceError = error as? AuthServiceError,
+              case AuthServiceError.badStatus(let code, let body) = serviceError else {
+            return "验证码发送失败，请稍后再试。"
+        }
+        guard code == 429 else {
+            return "验证码发送失败，请稍后再试。"
+        }
+        let payload = parsedSMSAPIError(body)
+        let retryAfter = max(1, payload?.retryAfterSec ?? 60)
+        startSMSCooldown(retryAfter)
+        switch payload?.error {
+        case "SMS_RATE_LIMIT":
+            return "发送次数已达上限，请 \(retryAfter) 秒后再试。"
+        case "SMS_COOLDOWN":
+            return "发送太频繁，请 \(retryAfter) 秒后再试。"
+        default:
+            return "请 \(retryAfter) 秒后再试。"
+        }
+    }
+
+    private func verifySMSMessage(for error: Error) -> String {
+        guard let serviceError = error as? AuthServiceError,
+              case AuthServiceError.badStatus(let code, let body) = serviceError else {
+            return "登录失败，请检查验证码后再试。"
+        }
+        if code == 429 {
+            let retryAfter = max(1, parsedSMSAPIError(body)?.retryAfterSec ?? 60)
+            return "验证太频繁，请 \(retryAfter) 秒后再试。"
+        }
+        return "登录失败，请检查手机号和验证码。"
     }
 
     private func sanitizedDisplayName(_ value: String) -> String {

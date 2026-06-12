@@ -543,7 +543,7 @@ struct SettingsView: View {
 
                     accountSheetContent
 
-                    if let msg = settingsViewModel.authMessage {
+                    if settingsViewModel.hasCloudSession, let msg = settingsViewModel.authMessage {
                         Text(msg)
                             .font(.system(size: 12))
                             .foregroundStyle(AppColors.subtext)
@@ -569,39 +569,147 @@ struct SettingsView: View {
             accountSessionSection
             accountDangerZone
         } else {
-            settingField(label: "手机号") {
-                TextField("手机号", text: $settingsViewModel.loginPhone)
-                    .keyboardType(.phonePad)
-            }
-
-            settingField(label: "验证码") {
-                TextField("验证码", text: $settingsViewModel.loginCode)
-                    .keyboardType(.numberPad)
-            }
-
-            webButton("发送验证码") {
-                Task { await settingsViewModel.sendSMSLoginCode() }
-            }
-
-            Button("验证并登录") {
-                Task { await settingsViewModel.verifySMSLogin() }
-            }
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(
-                LinearGradient(
-                    colors: [AppColors.accent.opacity(0.92), AppColors.accent],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-            )
-            .shadow(color: AppColors.accent.opacity(0.25), radius: 8, y: 4)
-
-            legalInlineText(prefix: "登录即表示你已阅读并同意")
+            accountLoginSection
         }
+    }
+
+    private var accountLoginSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            accountLoginHeader
+
+            VStack(alignment: .leading, spacing: 12) {
+                settingField(label: "手机号") {
+                    TextField("手机号", text: $settingsViewModel.loginPhone)
+                        .keyboardType(.phonePad)
+                        .textContentType(.telephoneNumber)
+                }
+
+                settingField(label: "验证码") {
+                    HStack(spacing: 10) {
+                        TextField("验证码", text: $settingsViewModel.loginCode)
+                            .keyboardType(.numberPad)
+                            .textContentType(.oneTimeCode)
+
+                        Button(loginSendCodeTitle) {
+                            Task { await settingsViewModel.sendSMSLoginCode() }
+                        }
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(loginSendCodeDisabled ? AppColors.subtext.opacity(0.58) : AppColors.accent)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(loginSendCodeDisabled ? Color.white.opacity(0.36) : AppColors.accent.opacity(0.12))
+                        )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(loginSendCodeDisabled ? AppColors.line.opacity(0.38) : AppColors.accent.opacity(0.22), lineWidth: 1)
+                        )
+                        .buttonStyle(.plain)
+                        .disabled(loginSendCodeDisabled)
+                    }
+                }
+
+                Button("验证并登录") {
+                    Task { await settingsViewModel.verifySMSLogin() }
+                }
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(
+                        colors: loginButtonDisabled
+                            ? [AppColors.subtext.opacity(0.28), AppColors.subtext.opacity(0.22)]
+                            : [AppColors.accent.opacity(0.92), AppColors.accent],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                )
+                .shadow(color: loginButtonDisabled ? .clear : AppColors.accent.opacity(0.25), radius: 8, y: 4)
+                .disabled(loginButtonDisabled)
+
+                if let msg = settingsViewModel.authMessage {
+                    Text(msg)
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext.opacity(0.92))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                legalInlineText(prefix: "登录即表示你已阅读并同意")
+
+                Button("稍后再说，先不登录") {
+                    showAccountSheet = false
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.86))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+                .buttonStyle(.plain)
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.white.opacity(0.56))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(AppColors.line.opacity(0.56), lineWidth: 1)
+            )
+        }
+    }
+
+    private var accountLoginHeader: some View {
+        HStack(spacing: 12) {
+            narrativeSealAvatar
+            VStack(alignment: .leading, spacing: 5) {
+                Text("欢迎回来，继续把记录留清楚")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.86)
+                Text("登录后可同步会员与云端备份")
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext.opacity(0.88))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(AppColors.settingsIdentityPanel)
+        )
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(settingsInkAccent.opacity(0.34))
+                .frame(width: 3)
+                .padding(.vertical, 18)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(AppColors.line.opacity(0.72), lineWidth: 1)
+        )
+    }
+
+    private var loginSendCodeTitle: String {
+        let remaining = settingsViewModel.smsCooldownRemaining
+        return remaining > 0 ? "\(remaining)s 后重发" : "发送验证码"
+    }
+
+    private var loginPhoneIsValid: Bool {
+        let phone = settingsViewModel.loginPhone.trimmingCharacters(in: .whitespacesAndNewlines)
+        return phone.count == 11 && phone.hasPrefix("1")
+    }
+
+    private var loginSendCodeDisabled: Bool {
+        settingsViewModel.isAuthBusy || settingsViewModel.smsCooldownRemaining > 0 || !loginPhoneIsValid
+    }
+
+    private var loginButtonDisabled: Bool {
+        settingsViewModel.isAuthBusy
     }
 
     private var accountIdentityHeader: some View {
