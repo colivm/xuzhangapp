@@ -347,17 +347,30 @@ final class SettingsViewModel: ObservableObject {
         isAuthBusy = true
         defer { isAuthBusy = false }
         let client = AuthService(baseURL: backendBaseURL)
-        _ = try await client.verifyIAPPurchase(
+        let verified = try await client.verifyIAPPurchase(
             accessToken: token,
             productId: payload.productId,
             transactionId: payload.transactionId,
             signedTransactionInfo: payload.signedTransactionInfo
         )
-        let tier = try await client.fetchMemberMe(accessToken: token)
-        settings.memberTier = tier.tier
-        settings.memberExpiresAt = tier.expiresAt
+        settings.memberTier = verified.tier
+        settings.memberExpiresAt = verified.expiresAt
         persist()
-        authMessage = "会员状态已更新。"
+        do {
+            let tier = try await client.fetchMemberMe(accessToken: token)
+            let verifiedHasAccess = AppSettings.hasMemberAccess(tier: verified.tier, expiresAt: verified.expiresAt)
+            let fetchedHasAccess = AppSettings.hasMemberAccess(tier: tier.tier, expiresAt: tier.expiresAt)
+            if verifiedHasAccess && !fetchedHasAccess {
+                authMessage = "会员已恢复，状态刷新稍后会再同步。"
+            } else {
+                settings.memberTier = tier.tier
+                settings.memberExpiresAt = tier.expiresAt
+                persist()
+                authMessage = "会员状态已更新。"
+            }
+        } catch {
+            authMessage = "会员已恢复，状态刷新稍后会再同步。"
+        }
     }
 
     private func persist() {

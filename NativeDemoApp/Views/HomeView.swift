@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
+    @EnvironmentObject private var settingsViewModel: SettingsViewModel
     var onQuickRecord: () -> Void = {}
     var onNavigateStats: (() -> Void)? = nil
     var onNavigateSettings: (() -> Void)? = nil
@@ -11,6 +12,8 @@ struct HomeView: View {
     @State private var showTodayRecordsSheet = false
     @State private var editingItem: HomeItem?
     @State private var todayPlaybackQuotaMessage: String?
+    @State private var petHint: String = "有一笔就记一笔，晚点也能补。"
+    @State private var petBubbleVisible = false
     private let dailyQuotaStore = DailyFeatureQuotaStore()
 
     var body: some View {
@@ -33,6 +36,24 @@ struct HomeView: View {
         }
         .onChange(of: homeViewModel.activeRouteGuidance) { _, guidance in
             handleRouteGuidance(guidance)
+        }
+        .onChange(of: settingsViewModel.petCompanionEnabled) { _, enabled in
+            if !enabled {
+                petBubbleVisible = false
+            }
+        }
+        .onChange(of: homeViewModel.petMessage) { _, message in
+            guard let message, settingsViewModel.petCompanionEnabled else { return }
+            petHint = message
+            withAnimation(.easeInOut(duration: 0.24)) {
+                petBubbleVisible = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    petBubbleVisible = false
+                }
+            }
+            homeViewModel.petMessage = nil
         }
         .sheet(isPresented: $showPlayback) {
             BillPlaybackSheet(
@@ -65,15 +86,14 @@ struct HomeView: View {
     }
 
     private var homeContent: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             todayStoryHero
             homeActionRow
             routeGuidanceContent
             todayBillsPanel
-            lifeRhythmPanel
         }
         .padding(.horizontal, 12)
-        .padding(.top, 4)
+        .padding(.top, 2)
         .padding(.bottom, 120)
         .frame(maxWidth: 430)
         .frame(maxWidth: .infinity, alignment: .center)
@@ -109,11 +129,18 @@ struct HomeView: View {
     private var todayBillsPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("今天留下的痕迹")
-                .font(.system(size: 22, weight: .bold))
+                .font(.system(size: 21, weight: .bold))
                 .foregroundStyle(AppColors.text)
             todayBillsContent
         }
-        .glassPanel(radius: 24, padding: 24)
+        .glassPanel(radius: 24, padding: 22)
+        .overlay(alignment: .bottomTrailing) {
+            if settingsViewModel.petCompanionEnabled, !homeViewModel.recentThreeItems.isEmpty {
+                todayPetStamp
+                    .padding(.trailing, 12)
+                    .padding(.bottom, 14)
+            }
+        }
     }
 
     @ViewBuilder
@@ -132,10 +159,14 @@ struct HomeView: View {
                     Button {
                         showTodayRecordsSheet = true
                     } label: {
-                        Text("查看今天全部 \(homeViewModel.todayItems.count) 笔 →")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(AppColors.subtext.opacity(0.82))
-                            .padding(.top, 8)
+                        HStack(spacing: 5) {
+                            Text("查看今天全部 \(homeViewModel.todayItems.count) 笔")
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppColors.subtext.opacity(0.9))
+                        .padding(.top, 8)
                     }
                     .buttonStyle(.plain)
                 }
@@ -143,70 +174,22 @@ struct HomeView: View {
         }
     }
 
-    private var lifeRhythmPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("近期记录")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(AppColors.text)
-            lifeRhythmContent
-        }
-        .glassPanel(radius: 24, padding: 24)
-    }
-
-    @ViewBuilder
-    private var lifeRhythmContent: some View {
-        if let card = homeViewModel.latestActionCard, !card.text.isEmpty {
-            Text(card.text)
-                .font(.system(size: 14))
-                .foregroundStyle(AppColors.text.opacity(0.88))
-            Text(card.updatedAt, style: .relative)
-                .font(.system(size: 11))
-                .foregroundStyle(AppColors.subtext)
-        } else if homeViewModel.recentThreeItems.isEmpty {
-            Text("先记几笔，这里会列出最近的记录。")
-                .font(.system(size: 14))
-                .foregroundStyle(AppColors.subtext)
-        } else {
-            lifeRhythmFallback
-        }
-    }
-
-    private var lifeRhythmFallback: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            let daysWithRecords = countDaysWithRecords()
-            if daysWithRecords > 0 {
-                Text("已坚持记录 \(daysWithRecords) 天")
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext.opacity(0.9))
-            }
-            Text(lifeRhythmFallbackText)
-                .font(.system(size: 13))
-                .foregroundStyle(AppColors.subtext)
-        }
-    }
-
-    private var lifeRhythmFallbackText: String {
-        homeViewModel.weekTopCategoryText != "暂无"
-            ? "最近「\(homeViewModel.weekTopCategoryText)」出现得多一点，是这段时间的一个小主题。"
-            : "先记几笔，这里会列出最近的记录。"
-    }
-
     private var todayStoryHero: some View {
         let narrative = homeViewModel.todayStoryNarrative
-        return VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 10) {
             Text("今日小记")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(AppColors.subtext)
+                .foregroundStyle(AppColors.subtext.opacity(0.88))
 
             Text(narrative.title)
-                .font(.system(size: 27, weight: .bold))
+                .font(.system(size: 26, weight: .bold))
                 .foregroundStyle(AppColors.text)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(narrative.subtitle)
                 .font(.system(size: 14))
-                .foregroundStyle(AppColors.text.opacity(0.78))
+                .foregroundStyle(AppColors.text.opacity(0.84))
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -217,7 +200,7 @@ struct HomeView: View {
             .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassPanelWithTint(radius: 24, padding: 24)
+        .glassPanelWithTint(radius: 24, padding: 22)
     }
 
     private func narrativePill(_ text: String) -> some View {
@@ -269,7 +252,7 @@ struct HomeView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 13)
-            .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(
@@ -309,7 +292,7 @@ struct HomeView: View {
             .frame(width: 34, height: 34)
             .background(
                 Circle()
-                    .fill(AppColors.accent.opacity(0.13))
+                    .fill(AppColors.accent.opacity(0.16))
             )
             .overlay(
                 Circle()
@@ -406,6 +389,62 @@ struct HomeView: View {
         showPlayback = true
     }
 
+    private var todayPetStamp: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            if petBubbleVisible {
+                Text(petHint)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.text.opacity(0.9))
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.white.opacity(0.48), lineWidth: 1)
+                    )
+                    .frame(maxWidth: 210, alignment: .trailing)
+                    .transition(.scale(scale: 0.96, anchor: .bottomTrailing).combined(with: .opacity))
+            }
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.24)) {
+                    petBubbleVisible.toggle()
+                }
+                if petBubbleVisible {
+                    Task {
+                        if let message = await PetCompanionService.shared.petClickMessage(
+                            settings: settingsViewModel.settings,
+                            todayItems: homeViewModel.items
+                        ) {
+                            await MainActor.run {
+                                petHint = message
+                                petBubbleVisible = true
+                            }
+                        }
+                    }
+                }
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(AppColors.floatingPetPanel.opacity(0.86))
+                    Text("叙")
+                        .font(.system(size: 20, weight: .bold, design: .serif))
+                        .foregroundStyle(AppColors.accentDark.opacity(0.76))
+                }
+                .frame(width: 46, height: 46)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .stroke(Color.white.opacity(0.46), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .shadow(color: AppColors.subtext.opacity(0.10), radius: 10, y: 5)
+        }
+    }
+
     // MARK: - Empty State Art
 
     private var emptyStateArt: some View {
@@ -465,13 +504,13 @@ struct HomeView: View {
             HStack(spacing: 6) {
                 Text(item.category.rawValue)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppColors.subtext.opacity(0.82))
+                    .foregroundStyle(AppColors.subtext.opacity(0.9))
 
                 Text("·").foregroundStyle(AppColors.subtext)
 
                 Text(item.createdAt.zhBillDateTime)
                     .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(AppColors.subtext.opacity(0.92))
             }
         }
         .padding(.vertical, 10)
@@ -548,13 +587,6 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Helpers
-
-    private func countDaysWithRecords() -> Int {
-        let cal = Calendar.current
-        let days = Set(homeViewModel.items.map { cal.startOfDay(for: $0.createdAt) })
-        return days.count
-    }
 }
 
 // MARK: - Glass Panel with Hero Tint

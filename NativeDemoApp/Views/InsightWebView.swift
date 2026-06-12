@@ -1102,10 +1102,25 @@ struct InsightWebView: View {
 
     private func quietTextButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppColors.subtext.opacity(0.88))
-                .padding(.vertical, 4)
+            HStack(spacing: 4) {
+                Text(title.replacingOccurrences(of: " →", with: ""))
+                if title.contains("→") {
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(AppColors.subtext.opacity(0.9))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.34))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(AppColors.accent.opacity(0.12), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }

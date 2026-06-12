@@ -356,12 +356,12 @@ final class OCRService {
         var drafts: [OCRReceiptDraft] = []
         var seenKeys = Set<String>()
         let referenceDate = statementReferenceDate(in: rawText) ?? .now
-        let lines = ocrLines.map(\.text)
         let allowPositiveExpense = shouldAllowPositiveListExpense(rawText: rawText, mode: mode)
 
         for index in ocrLines.indices {
             let line = ocrLines[index].text
             guard !shouldSkipListAmountLine(line) else { continue }
+            guard !shouldSkipListAmountCandidate(ocrLines: ocrLines, index: index) else { continue }
             let amountInfo: (amount: Double, inlineTitle: String?)
             let statusContext = adjacentListStatusContext(ocrLines: ocrLines, index: index)
             switch listAmountInfo(in: line, statusContext: statusContext, allowPositiveExpense: allowPositiveExpense) {
@@ -371,11 +371,12 @@ final class OCRService {
                 continue
             }
 
-            let windowStart = max(0, index - 3)
-            let windowEnd = min(lines.count, index + 5)
-            let windowLines = Array(lines[windowStart..<windowEnd])
+            let recordContext = listRecordContext(ocrLines: ocrLines, amountIndex: index)
+            let windowLines = recordContext.lines.map(\.text)
             let windowText = windowLines.joined(separator: "\n")
-            let candidateTitle = amountInfo.inlineTitle ?? nearbyListTitle(lines: ocrLines, amountIndex: index, mode: mode)
+            let candidateTitle = amountInfo.inlineTitle
+                ?? nearbyListTitle(lines: recordContext.lines, amountIndex: recordContext.amountIndex, mode: mode)
+                ?? nearbyListTitle(lines: ocrLines, amountIndex: index, mode: mode)
             let brand = listBrand(title: candidateTitle, windowText: windowText)
             guard let title = candidateTitle ?? brand?.displayName,
                   isTrustworthyListTitle(title, brand: brand) else {
@@ -387,7 +388,6 @@ final class OCRService {
             let date = listDate(ocrLines: ocrLines, amountIndex: index, now: referenceDate)
                 ?? listDate(in: windowText, now: referenceDate)
                 ?? firstDate(in: windowText)
-                ?? firstDate(in: rawText)
                 ?? referenceDate
             let inferredCategory = listCategory(
                 mode: mode,
@@ -582,6 +582,12 @@ final class OCRService {
         let nsText = normalized as NSString
         let matches = regex.matches(in: normalized, range: NSRange(location: 0, length: nsText.length))
         guard let match = matches.last, match.numberOfRanges > 2 else { return nil }
+        let trailingText = nsText.substring(from: match.range.location + match.range.length)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trailingText.isEmpty || isListStatusLine(trailingText) else {
+            // Avoid reading merchant names such as "天润城5-7街区" as title "天润城5" + amount 7.
+            return nil
+        }
 
         let full = nsText.substring(with: match.range(at: 0))
         let explicitSign = match.range(at: 1).location != NSNotFound
@@ -664,15 +670,116 @@ final class OCRService {
         .joined(separator: "\n")
     }
 
+    private func shouldSkipListAmountCandidate(ocrLines: [OCRLine], index: Int) -> Bool {
+        guard ocrLines.indices.contains(index) else { return true }
+        let line = ocrLines[index]
+        let normalized = normalizedListText(line.text)
+        guard listAmountInfo(in: normalized, allowPositiveExpense: true) != nil else { return false }
+        if normalized.contains("-") || normalized.contains("−") || normalized.contains("－") {
+            return false
+        }
+
+        let summaryContext = ocrLines.enumerated().compactMap { candidateIndex, candidate -> String? in
+            guard candidateIndex != index else { return nil }
+            let verticalDistance = abs(candidate.boundingBox.midY - line.boundingBox.midY)
+            guard verticalDistance <= 0.13 else { return nil }
+            return candidate.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        .joined(separator: "\n")
+
+        return isStatementSummaryContext(summaryContext)
+    }
+
+    private func isStatementSummaryContext(_ value: String) -> Bool {
+        let compact = normalizedListText(value)
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "\n", with: "")
+        let summaryWords = [
+            "收支分析", "总金额", "识别条数", "支出¥", "收入¥", "支出￥", "收入￥",
+            "本月支出", "本月收入", "月支出", "月收入",
+        ]
+        if summaryWords.contains(where: { compact.contains($0) }) {
+            return true
+        }
+        if compact.range(of: #"^\d{1,2}月(?:支出|收入)"#, options: .regularExpression) != nil {
+            return true
+        }
+        return false
+    }
+
+    private func listRecordContext(ocrLines: [OCRLine], amountIndex: Int) -> (lines: [OCRLine], amountIndex: Int) {
+        guard ocrLines.indices.contains(amountIndex) else { return ([], 0) }
+        let amountLine = ocrLines[amountIndex]
+        let amountBox = amountLine.boundingBox
+        let rowHeight = max(amountBox.height, 0.018)
+        let nextAmountBelowY = nearestListAmountYBelow(ocrLines: ocrLines, amountIndex: amountIndex)
+        let upperY = min(1, amountBox.midY + max(0.028, rowHeight * 1.8))
+        let lowerY = nextAmountBelowY.map { max(0, $0 + rowHeight * 1.25) } ?? max(0, amountBox.midY - 0.17)
+
+        let scopedLines = ocrLines.enumerated().compactMap { index, line -> OCRLine? in
+            guard line.boundingBox.midY <= upperY, line.boundingBox.midY >= lowerY else { return nil }
+            if index != amountIndex, shouldSkipListAmountCandidate(ocrLines: ocrLines, index: index) {
+                return nil
+            }
+            return line
+        }
+        .sorted { lhs, rhs in
+            if isSameOCRRow(lhs.boundingBox, rhs.boundingBox) {
+                return lhs.boundingBox.minX < rhs.boundingBox.minX
+            }
+            return lhs.boundingBox.minY > rhs.boundingBox.minY
+        }
+
+        let localIndex = scopedLines.firstIndex { $0.text == amountLine.text && $0.boundingBox == amountLine.boundingBox } ?? 0
+        return (scopedLines, localIndex)
+    }
+
+    private func nearestListAmountYBelow(ocrLines: [OCRLine], amountIndex: Int) -> CGFloat? {
+        guard ocrLines.indices.contains(amountIndex) else { return nil }
+        let amountBox = ocrLines[amountIndex].boundingBox
+        return ocrLines.enumerated().compactMap { index, line -> CGFloat? in
+            guard index != amountIndex else { return nil }
+            guard line.boundingBox.midY < amountBox.midY else { return nil }
+            guard !shouldSkipListAmountLine(line.text) else { return nil }
+            guard !shouldSkipListAmountCandidate(ocrLines: ocrLines, index: index) else { return nil }
+            guard listAmountInfo(in: line.text, allowPositiveExpense: true) != nil else { return nil }
+            return line.boundingBox.midY
+        }
+        .max()
+    }
+
     private func nearbyListTitle(lines: [OCRLine], amountIndex: Int, mode: ListParseMode) -> String? {
         switch mode {
         case .alipay:
-            return nearbyTitle(lines: lines, amountIndex: amountIndex, offsets: [-1, -2, -3, 1])
+            return alipayListTitle(lines: lines, amountIndex: amountIndex)
         case .wechat:
             return wechatListTitle(lines: lines, amountIndex: amountIndex)
         case .generic:
             return nearbyTitle(lines: lines, amountIndex: amountIndex, offsets: [-1, -2, 1, -3, 2])
         }
+    }
+
+    private func alipayListTitle(lines: [OCRLine], amountIndex: Int) -> String? {
+        guard lines.indices.contains(amountIndex) else { return nil }
+        let amountBox = lines[amountIndex].boundingBox
+        let sameRowTitle = lines.enumerated()
+            .filter { index, line in
+                guard index != amountIndex else { return false }
+                guard isSameOCRRow(line.boundingBox, amountBox) else { return false }
+                guard line.boundingBox.midX < amountBox.midX else { return false }
+                let candidate = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return isLikelyListTitle(candidate)
+            }
+            .sorted { lhs, rhs in
+                lhs.element.boundingBox.minX > rhs.element.boundingBox.minX
+            }
+            .first?.element.text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let sameRowTitle {
+            return sameRowTitle
+        }
+
+        return nearbyTitle(lines: lines, amountIndex: amountIndex, offsets: [-1, -2, 1])
     }
 
     private func wechatListTitle(lines: [OCRLine], amountIndex: Int) -> String? {
@@ -730,6 +837,7 @@ final class OCRService {
     private func isLikelyListTitle(_ value: String) -> Bool {
         guard isUsableTitle(value), !isPureAmountLine(value), !isListTimeLine(value), !isListStatusLine(value) else { return false }
         guard !isAmountOnlyCluster(value) else { return false }
+        if value.range(of: #"^\d{1,2}月$"#, options: .regularExpression) != nil { return false }
         let blocked = [
             "¥", "￥", "金额", "时间", "订单", "单号", "支付", "付款", "收款", "交易", "账单", "详情",
             "当前状态", "成功", "失败", "付款方式", "筛选", "全部", "月支出", "月收入", "余额", "零钱",
@@ -792,13 +900,30 @@ final class OCRService {
         // 支付宝列表自带分类，优先信平台分类；微信通常没有分类，用商户名/标题做本地推断。
         if mode == .alipay,
            let alipayCategory = alipayListCategory(from: windowLines) {
-            if alipayCategory == .other,
-               let localCategory = inferCategoryIfConfident(from: alipayLocalCategoryText(title: title, windowLines: windowLines)) {
+            if let localCategory = inferCategoryIfConfident(from: alipayLocalCategoryText(title: title, windowLines: windowLines)),
+               shouldPreferLocalCategory(localCategory, overAlipayCategory: alipayCategory) {
                 return localCategory
             }
             return alipayCategory
         }
         return inferCategory(from: "\(title)\n\(windowText)")
+    }
+
+    private func shouldPreferLocalCategory(
+        _ localCategory: HomeItem.Category,
+        overAlipayCategory alipayCategory: HomeItem.Category
+    ) -> Bool {
+        guard localCategory != alipayCategory else { return false }
+        switch alipayCategory {
+        case .other:
+            return true
+        case .daily:
+            return [.dining, .health, .home, .transport].contains(localCategory)
+        case .shopping:
+            return [.dining, .health, .home, .transport].contains(localCategory)
+        default:
+            return false
+        }
     }
 
     private func alipayLocalCategoryText(title: String, windowLines: [String]) -> String {

@@ -1,26 +1,44 @@
 import SwiftUI
+import UIKit
 
 struct ScenePackAngleSheet: View {
     let primaryScenePacks: [ScenePackDefinition]
     let secondaryScenePacks: [ScenePackDefinition]
     @Binding var isMoreExpanded: Bool
     let scenePackDesc: (ScenePackDefinition) -> String
-    let onPromotePack: (ScenePackDefinition) -> Void
+    let onReorderPacks: (_ orderedPackIds: [String], _ movedPackIds: Set<String>) -> Void
     let onSelectPack: (ScenePackDefinition) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedPackID: String?
+
+    private var displayedScenePacks: [ScenePackDefinition] {
+        isMoreExpanded ? primaryScenePacks + secondaryScenePacks : primaryScenePacks
+    }
 
     var body: some View {
         NavigationStack {
             List {
-                Section("常用场景") {
-                    ForEach(primaryScenePacks, id: \.id) { pack in
-                        packRow(pack)
+                Section {
+                    HStack(spacing: 8) {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(AppColors.accent.opacity(0.82))
+                        Text("长按右侧拖动可调换顺序")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
+                        Spacer()
                     }
+                    .padding(.vertical, 2)
                 }
 
-                if !secondaryScenePacks.isEmpty {
-                    Section {
+                Section("场景包") {
+                    ForEach(displayedScenePacks, id: \.id) { pack in
+                        packRow(pack)
+                    }
+                    .onMove(perform: reorderDisplayedPacks)
+
+                    if !secondaryScenePacks.isEmpty {
                         Button {
                             withAnimation(.easeInOut(duration: 0.18)) {
                                 isMoreExpanded.toggle()
@@ -44,16 +62,9 @@ struct ScenePackAngleSheet: View {
                         }
                         .buttonStyle(.plain)
                     }
-
-                    if isMoreExpanded {
-                        Section("未常用场景") {
-                            ForEach(secondaryScenePacks, id: \.id) { pack in
-                                packRow(pack)
-                            }
-                        }
-                    }
                 }
             }
+            .environment(\.editMode, .constant(.active))
             .navigationTitle("换个角度")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -65,49 +76,61 @@ struct ScenePackAngleSheet: View {
         .presentationDetents([.medium, .large])
     }
 
+    private func reorderDisplayedPacks(from source: IndexSet, to destination: Int) {
+        let currentPacks = displayedScenePacks
+        let movedPackIds = Set(source.compactMap { index in
+            currentPacks.indices.contains(index) ? currentPacks[index].id : nil
+        })
+        var reorderedPacks = currentPacks
+        reorderedPacks.move(fromOffsets: source, toOffset: destination)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        onReorderPacks(reorderedPacks.map(\.id), movedPackIds)
+    }
+
     private func packRow(_ pack: ScenePackDefinition) -> some View {
-        HStack(spacing: 8) {
-            Button {
-                onSelectPack(pack)
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation(.easeInOut(duration: 0.12)) {
+                selectedPackID = pack.id
+            }
+            onSelectPack(pack)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
                 dismiss()
-            } label: {
-                HStack(spacing: 12) {
-                    Text(pack.emoji)
-                        .font(.system(size: 22))
-                        .frame(width: 30)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Text(pack.emoji)
+                    .font(.system(size: 22))
+                    .frame(width: 30)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(pack.label)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(AppColors.text)
-                        Text(scenePackDesc(pack))
-                            .font(.system(size: 12))
-                            .foregroundStyle(AppColors.subtext)
-                            .lineLimit(1)
-                    }
-
-                    Spacer()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(pack.label)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                    Text(scenePackDesc(pack))
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext)
+                        .lineLimit(1)
                 }
-                .padding(.vertical, 4)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
 
-            Button {
-                onPromotePack(pack)
-            } label: {
-                Image(systemName: "arrow.up.to.line.compact")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppColors.subtext.opacity(0.84))
-                    .frame(width: 34, height: 34)
-                    .background(
-                        Circle()
-                            .fill(Color.white.opacity(0.72))
-                    )
+                Spacer()
+
+                if selectedPackID == pack.id {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppColors.accent)
+                        .transition(.scale.combined(with: .opacity))
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("置顶\(pack.label)")
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(selectedPackID == pack.id ? AppColors.accent.opacity(0.13) : Color.clear)
+            )
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 }

@@ -140,6 +140,7 @@ final class AuthService: AuthServiceProtocol {
     func fetchMemberMe(accessToken: String) async throws -> (tier: String, expiresAt: String?) {
         let url = try makeURL(path: "/v1/member/me")
         var request = URLRequest(url: url)
+        request.timeoutInterval = 20
         request.httpMethod = "GET"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         let (data, response, bodyText) = try await data(for: request)
@@ -160,6 +161,7 @@ final class AuthService: AuthServiceProtocol {
     ) async throws -> (tier: String, expiresAt: String?) {
         let url = try makeURL(path: "/v1/iap/verify")
         var request = URLRequest(url: url)
+        request.timeoutInterval = 25
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")

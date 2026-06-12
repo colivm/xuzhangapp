@@ -15,13 +15,13 @@ struct AppColors {
     static let paperBorder = Color(red: 0.902, green: 0.760, blue: 0.584)
     static let paperCrease = Color(red: 0.760, green: 0.560, blue: 0.360)
     static let text = Color(red: 0.145, green: 0.188, blue: 0.255)                 // #253041
-    static let subtext = Color(red: 0.435, green: 0.482, blue: 0.561)           // #6f7b8f
+    static let subtext = Color(red: 0.365, green: 0.412, blue: 0.494)           // #5d697e
     static let heroGradientPink = Color(red: 1.0, green: 0.77, blue: 0.87)            // pink tint
     static let heroGradientTeal = Color(red: 0.69, green: 0.88, blue: 0.86)           // teal tint
     static let tabActiveBg = Color(red: 0.67, green: 0.87, blue: 0.75).opacity(0.42)
     static let lockGold = Color(red: 0.788, green: 0.651, blue: 0.290)           // #c9a64a
     static let tabInactiveBg = Color(red: 0.749, green: 0.851, blue: 0.817).opacity(0.30)
-    static let tabInactiveGlyph = Color(red: 0.467, green: 0.592, blue: 0.598).opacity(0.50)
+    static let tabInactiveGlyph = Color(red: 0.467, green: 0.592, blue: 0.598).opacity(0.62)
     static let floatingPetPanel = Color(red: 0.749, green: 0.851, blue: 0.817).opacity(0.37)
     static let settingsIdentityPanel = Color(red: 0.988, green: 0.964, blue: 0.920).opacity(0.54)
     static let settingsChapterPanel = Color(red: 0.972, green: 0.962, blue: 0.944).opacity(0.50)
@@ -148,8 +148,6 @@ struct ContentView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @State private var selectedTab: AppTab = .today
-    @State private var petHint: String = "有一笔就记一笔，晚点也能补。"
-    @State private var petBubbleVisible: Bool = false
     @State private var showMemberPricing = false
     @State private var showMinimalOnboarding = false
 
@@ -202,10 +200,6 @@ struct ContentView: View {
             }
             .ignoresSafeArea(.keyboard, edges: .bottom)
 
-            // ── Pet Widget ──
-            if selectedTab == .today, settingsViewModel.petCompanionEnabled {
-                petWidget
-            }
         }
         .sheet(isPresented: $showMemberPricing) {
             MemberPricingView()
@@ -238,25 +232,6 @@ struct ContentView: View {
                 userName: settingsViewModel.displayName,
                 settings: settingsViewModel.settings
             )
-        }
-        .onChange(of: selectedTab) { _, tab in
-            if tab == .today { petHint = "今天花到哪儿了？有一笔就先记一笔。" }
-            petBubbleVisible = false
-        }
-        .onChange(of: settingsViewModel.petCompanionEnabled) { _, enabled in
-            if !enabled {
-                petBubbleVisible = false
-            }
-        }
-        .onChange(of: homeViewModel.petMessage) { _, msg in
-            guard let msg, settingsViewModel.petCompanionEnabled, !showMinimalOnboarding else { return }
-            petHint = msg
-            petBubbleVisible = true
-            // Auto-dismiss after 4 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                petBubbleVisible = false
-            }
-            homeViewModel.petMessage = nil
         }
     }
 
@@ -299,17 +274,17 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(selectedTab.title)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppColors.subtext)
+                .foregroundStyle(AppColors.subtext.opacity(0.88))
 
             Text(selectedTab.pageTitle)
-                .font(.system(size: 33, weight: .semibold, design: .default))
+                .font(.system(size: 32, weight: .semibold, design: .default))
                 .foregroundStyle(AppColors.text)
                 .animation(.easeInOut(duration: 0.28), value: selectedTab)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
         .background(
             Rectangle()
                 .fill(.thinMaterial)
@@ -391,7 +366,7 @@ struct ContentView: View {
                             .foregroundStyle(
                                 selectedTab == tab
                                     ? AppColors.accent.opacity(0.9)
-                                    : AppColors.subtext
+                                    : AppColors.subtext.opacity(0.88)
                             )
                     }
                     .frame(maxWidth: .infinity, minHeight: 52)
@@ -662,72 +637,6 @@ struct ContentView: View {
             }
             .stroke(Color.white.opacity(0.88), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
         }
-    }
-
-    // MARK: - Pet Widget
-
-    private var petWidget: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            if petBubbleVisible {
-                petBubble
-            }
-
-            Button {
-                withAnimation(.easeInOut(duration: 0.28)) {
-                    petBubbleVisible.toggle()
-                }
-                if petBubbleVisible {
-                    Task {
-                        if let message = await PetCompanionService.shared.petClickMessage(
-                            settings: settingsViewModel.settings,
-                            todayItems: homeViewModel.items
-                        ) {
-                            petHint = message
-                            petBubbleVisible = true
-                        }
-                    }
-                }
-            } label: {
-                Text("🐱")
-                    .font(.system(size: 26))
-            }
-            .frame(width: 52, height: 52)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(AppColors.floatingPetPanel)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.white.opacity(0.45), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-        .padding(.trailing, 16)
-        .padding(.bottom, 102)
-    }
-
-    private var petBubble: some View {
-        Text(petHint)
-            .font(.system(size: 12))
-            .foregroundStyle(AppColors.text.opacity(0.88))
-            .padding(.horizontal, 11)
-            .padding(.vertical, 9)
-            .background(petBubbleBackground)
-            .overlay(petBubbleBorder)
-            .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
-            .frame(maxWidth: 220, alignment: .trailing)
-            .transition(.scale.combined(with: .opacity))
-    }
-
-    private var petBubbleBackground: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(.ultraThinMaterial)
-    }
-
-    private var petBubbleBorder: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .stroke(Color.white.opacity(0.45), lineWidth: 1)
     }
 }
 

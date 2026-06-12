@@ -1,5 +1,6 @@
 ﻿import SwiftUI
 import PhotosUI
+import UIKit
 
 struct RecordView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
@@ -21,6 +22,8 @@ struct RecordView: View {
     @State private var datePanelExpanded = false
     @State private var previewLineWasRotated = false
     @State private var showScenePackAngleSheet = false
+    @State private var activeScenePack: ScenePackDefinition?
+    @State private var scenePackFeedback: String?
     @State private var didAutoFocusAmountPad = false
     @AppStorage("scene_pack_order_v1") private var scenePackOrderStorage = ""
     @AppStorage("scene_pack_more_expanded_v1") private var scenePackMoreExpanded = false
@@ -87,10 +90,21 @@ struct RecordView: View {
         scenePackOrderStorage = orderIds.prefix(12).joined(separator: ",")
     }
 
-    private func pinScenePack(_ pack: ScenePackDefinition) {
-        promoteScenePack(pack)
-        var pinnedIds = scenePackPinnedIds.filter { $0 != pack.id }
-        pinnedIds.insert(pack.id, at: 0)
+    private func reorderScenePacks(orderedPackIds: [String], movedPackIds: Set<String>) {
+        guard !orderedPackIds.isEmpty else { return }
+        let orderedSet = Set(orderedPackIds)
+        var orderedIterator = orderedPackIds.makeIterator()
+        let allVisibleIds = visibleScenePacks.map(\.id)
+        let reorderedIds = allVisibleIds.map { id in
+            orderedSet.contains(id) ? (orderedIterator.next() ?? id) : id
+        }
+        scenePackOrderStorage = reorderedIds.prefix(12).joined(separator: ",")
+
+        let movedExtensionIds = movedPackIds.intersection(extensionScenePackIds)
+        guard !movedExtensionIds.isEmpty else { return }
+        let movedOrderedIds = orderedPackIds.filter { movedExtensionIds.contains($0) }
+        var pinnedIds = scenePackPinnedIds.filter { !movedExtensionIds.contains($0) }
+        pinnedIds.insert(contentsOf: movedOrderedIds, at: 0)
         scenePackPinnedStorage = pinnedIds.prefix(12).joined(separator: ",")
     }
 
@@ -219,7 +233,7 @@ struct RecordView: View {
         )
         let variant = scenePackVariants[variantKey, default: 0]
         scenePackVariants[variantKey] = variant + 1
-        homeViewModel.inputTitle = ScenePackCopyPool.note(
+        let title = ScenePackCopyPool.note(
             for: pack,
             amount: amount,
             date: homeViewModel.selectedDate,
@@ -231,7 +245,14 @@ struct RecordView: View {
             allowTravelSpecificCopy: !keepSelectedCategory || containsTravelKeyword(homeViewModel.inputTitle)
         )
         if !keepSelectedCategory {
-            homeViewModel.selectCategory(pack.category)
+            activeScenePack = pack
+            homeViewModel.applyScenePackDraft(title: title, category: pack.category)
+        } else {
+            activeScenePack = nil
+            homeViewModel.inputTitle = title
+        }
+        if !keepSelectedCategory {
+            showScenePackAppliedFeedback(pack)
         }
     }
 
@@ -309,6 +330,11 @@ struct RecordView: View {
     }
 
     private var previewMeta: String {
+        if let activeScenePack,
+           activeScenePack.category == homeViewModel.selectedCategory,
+           !homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "\(activeScenePack.emoji) \(activeScenePack.label) · \(homeViewModel.selectedDate.zhBillDateTime)"
+        }
         "\(homeViewModel.selectedCategory.displayName) · \(homeViewModel.selectedDate.zhBillDateTime)"
     }
 
@@ -448,9 +474,9 @@ struct RecordView: View {
     var body: some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
-                VStack(spacing: 14) {
+                VStack(spacing: 12) {
                     // ── Record Panel (matching web recordPage) ──
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 14) {
                         recordPanelHeader
 
                         if selectedEntryMode == .manual {
@@ -459,7 +485,7 @@ struct RecordView: View {
                             ocrForm
                         }
                     }
-                    .recordEntryPanel(radius: 24, padding: 24)
+                    .recordEntryPanel(radius: 24, padding: 22)
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 4)
@@ -514,6 +540,7 @@ struct RecordView: View {
             .onChange(of: homeViewModel.inputAmount) { _, _ in
                 if !hasValidAmount {
                     previewLineWasRotated = false
+                    activeScenePack = nil
                     categoryGridExpanded = false
                     noteEditorExpanded = false
                     datePanelExpanded = false
@@ -569,14 +596,21 @@ struct RecordView: View {
                     secondaryScenePacks: secondaryScenePacks,
                     isMoreExpanded: $scenePackMoreExpanded,
                     scenePackDesc: scenePackDesc,
-                    onPromotePack: { pack in
-                        pinScenePack(pack)
+                    onReorderPacks: { orderedPackIds, movedPackIds in
+                        reorderScenePacks(orderedPackIds: orderedPackIds, movedPackIds: movedPackIds)
                     },
                     onSelectPack: { pack in
                         previewLineWasRotated = true
                         applyScenePack(pack)
                     }
                 )
+            }
+            .overlay(alignment: .top) {
+                if let scenePackFeedback {
+                    scenePackFeedbackToast(scenePackFeedback)
+                        .padding(.top, 10)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
             .onChange(of: showOCRConfirmSheet) { _, isPresented in
                 if !isPresented {
@@ -660,7 +694,7 @@ struct RecordView: View {
 
     @ViewBuilder
     private var manualForm: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             amountField
             if hasValidAmount {
                 lifeEntryPreview
@@ -846,7 +880,7 @@ struct RecordView: View {
     // MARK: - Amount Field
 
     private var amountField: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             amountStage
             if !hasAmountDraft, !recordWarmupSuggestions.isEmpty {
                 amountWarmupChips
@@ -922,7 +956,7 @@ struct RecordView: View {
                             endRadius: 135
                         )
                     )
-                    .frame(height: 112)
+                    .frame(height: 96)
                     .blur(radius: 4)
                     .padding(.horizontal, 10)
                     .allowsHitTesting(false)
@@ -964,7 +998,7 @@ struct RecordView: View {
                 }
                 .padding(.horizontal, 18)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(minHeight: 82)
+                .frame(minHeight: 72)
                 .contentShape(RoundedRectangle(cornerRadius: amountFieldRadius, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -1213,6 +1247,7 @@ struct RecordView: View {
         return Button {
             dismissKeyboard()
             withAnimation(.easeInOut(duration: 0.12)) {
+                activeScenePack = nil
                 homeViewModel.selectCategory(category)
                 categoryGridExpanded = false
             }
@@ -1403,6 +1438,37 @@ struct RecordView: View {
             get: { homeViewModel.selectedDate },
             set: { homeViewModel.updateSelectedDate($0, userInitiated: true) }
         )
+    }
+
+    private func showScenePackAppliedFeedback(_ pack: ScenePackDefinition) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        withAnimation(.easeInOut(duration: 0.18)) {
+            scenePackFeedback = "已换到 \(pack.emoji) \(pack.label)"
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.35) {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                if scenePackFeedback?.contains(pack.label) == true {
+                    scenePackFeedback = nil
+                }
+            }
+        }
+    }
+
+    private func scenePackFeedbackToast(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(AppColors.text.opacity(0.88))
+            .padding(.horizontal, 13)
+            .padding(.vertical, 9)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(AppColors.accent.opacity(0.22), lineWidth: 1)
+            )
+            .shadow(color: AppColors.subtext.opacity(0.12), radius: 12, y: 6)
     }
 
     // MARK: - Member Scene Packs

@@ -79,6 +79,20 @@ enum NarrativeCopyResolver {
         guard !noteText.isEmpty else { return nil }
         let lower = noteText.lowercased()
 
+        if containsAny(lower, ["运动", "健身", "训练", "跑步", "瑜伽", "球类", "补给", "能量", "护具", "恢复", "锻炼"]) {
+            return pick(
+                [
+                    "运动后补给",
+                    "训练恢复补给",
+                    "运动小补给",
+                    "给锻炼添点装备",
+                    "运动习惯继续保持",
+                    "身体恢复安排",
+                ],
+                seed: context.seed + "|fitness"
+            )
+        }
+
         if containsAny(lower, ["饮料", "喝的", "可乐", "雪碧", "汽水", "果汁", "茶饮", "奶茶", "咖啡", "拿铁", "美式", "冰饮"]) {
             return pick(
                 [

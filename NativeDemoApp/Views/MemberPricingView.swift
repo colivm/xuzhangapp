@@ -24,13 +24,14 @@ struct MemberPricingView: View {
 
     private let benefits = [
         ("🎬 周/月回放无限回看", "在「痕迹」里不限次数回看本周和本月，把一段时间的花费讲清楚。"),
-        ("📝 场景备注包 + 宠物专属昵称", "通勤、吃喝、购物、旅行、健康、居家等生活场景一键备注；开启宠物陪伴后可使用宠物相关备注与昵称。"),
+        ("🌤 今日回放不限次", "当天记录可以反复听，不受每日 1 次免费额度限制。"),
         ("📷 OCR 账单识别不限次", "导入微信/支付宝账单截图，识别后先确认，再写入账单。免费用户每日 3 次，会员不限次。"),
-        ("☁️ 云端备份 + 纯净无广告", "登录后可同步账单与会员状态，换机时更容易恢复；App 内不放广告。"),
-        ("💬 小 AI 说 · 播后可选深聊", "回放结束后，想再多一句建议时可以继续聊，语气保持温和、不说教。"),
+        ("💬 AI 复盘额度提升", "回放结束后，想再多一句建议时可以继续聊，语气保持温和、不说教。"),
+        ("🧭 场景包换角度", "同一笔记录可以切换通勤、吃喝、购物、旅行、健康、居家等生活视角。"),
+        ("📚 回望内容长期保留", "历史回放内容保留更久，适合慢慢复盘自己的消费节奏。"),
     ]
 
-    private let freeQuotaFootnote = "免费体验：本周回放每自然周 1 次 · 本月回放终生 3 次 · OCR 每日 3 次 · 今日回放每日 1 次。开通会员后，周/月回放与 OCR 可不限次使用。"
+    private let freeQuotaFootnote = "免费体验：本周回放每自然周 1 次 · 本月回放终生 3 次 · OCR 每日 3 次 · 今日回放每日 1 次。开通会员后，周/月/今日回放与 OCR 可不限次使用。"
 
     private var isMember: Bool {
         settingsViewModel.settings.hasMemberAccess
@@ -95,7 +96,7 @@ struct MemberPricingView: View {
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(AppColors.text)
 
-            Text("会员解锁周/月回放无限回看、OCR 不限次和云端备份。")
+            Text("会员解锁周/月/今日回放、OCR 不限次和 AI 复盘额度提升。")
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
 
@@ -258,7 +259,7 @@ struct MemberPricingView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.text.opacity(0.72))
             }
-            Text("所有会员权益已解锁，感谢你的信任与陪伴。")
+            Text("会员增量权益已解锁，感谢你的信任与陪伴。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
         }

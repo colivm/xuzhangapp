@@ -414,17 +414,27 @@ struct StatsWebView: View {
         Button {
             showTraceDetailSheet = true
         } label: {
-            HStack {
-                Text("细查这一段 →")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppColors.text.opacity(0.72))
+            HStack(spacing: 7) {
+                Text("细查这一段")
+                    .font(.system(size: 13, weight: .semibold))
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 11, weight: .semibold))
                 Spacer()
             }
+            .foregroundStyle(AppColors.text.opacity(0.78))
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(AppColors.traceAppendixBg)
+                    .fill(Color.white.opacity(0.36))
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(.thinMaterial)
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -900,7 +910,7 @@ struct StatsWebView: View {
             case .week:
                 summaryQuotaMessage = "本周回放已经看完啦。下个自然周会再刷新 1 次免费次数。开通会员可无限回看周/月回放。"
             case .month:
-                summaryQuotaMessage = "你的 3 次新用户「本月回放」已用完。开通会员可无限播放，并享场景备注包与无限 OCR。本周回放仍会在每个自然周刷新 1 次免费次数。"
+                summaryQuotaMessage = "你的 3 次新用户「本月回放」已用完。开通会员可无限播放周/月回放，并享无限 OCR 与更高 AI 复盘额度。本周回放仍会在每个自然周刷新 1 次免费次数。"
             }
             return
         }

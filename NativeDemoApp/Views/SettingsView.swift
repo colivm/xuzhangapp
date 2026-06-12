@@ -291,14 +291,14 @@ struct SettingsView: View {
 
     private var identityCardMeta: String {
         let sync = settingsViewModel.syncEnabled ? "已同步云端" : "本地保存"
-        let expiry = hasExpiredPaidMemberTier ? " · 已到期" : ""
+        let expiry = hasExpiredPaidMemberTier ? " · 会员待续期" : ""
         return "\(sync) · \(memberTierName)\(expiry)"
     }
 
     private var accountRowSummary: String {
         guard settingsViewModel.hasCloudSession else { return "未登录 · 可选" }
         if hasMemberAccess { return "已登录 · \(memberTierName)" }
-        if hasPaidMemberTier { return "已登录 · 已到期" }
+        if hasPaidMemberTier { return "已登录 · 待续期" }
         return "已登录 · 免费版"
     }
 
@@ -884,17 +884,17 @@ struct SettingsView: View {
     }
 
     private var accountHeaderMemberMeta: String {
-        let expiry = hasExpiredPaidMemberTier ? " · 已到期" : ""
+        let expiry = hasExpiredPaidMemberTier ? " · 待续期" : ""
         return "\(memberTierName) · 已登录\(expiry)"
     }
 
     private var accountMemberSection: some View {
-        accountPanel("会员") {
+        accountPanel("会员增量") {
             if let validity = settingsViewModel.settings.memberValidityText {
                 accountInfoRow(title: "有效期", value: validity)
             }
 
-            if hasMemberAccess {
+            if hasMemberAccess || hasPaidMemberTier {
                 RoundedRectangle(cornerRadius: 999, style: .continuous)
                     .fill(settingsInkAccent.opacity(0.22))
                     .frame(height: 3)
@@ -903,9 +903,9 @@ struct SettingsView: View {
                         memberBenefitRow(benefit)
                     }
                 }
-            } else {
-                if hasPaidMemberTier {
-                    settingHelper("会员已到期，续费后可恢复权益。")
+
+                if hasExpiredPaidMemberTier {
+                    settingHelper("会员待续期，续费后可恢复权益。")
                     Button {
                         showAccountSheet = false
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -923,26 +923,26 @@ struct SettingsView: View {
                         .padding(.vertical, 4)
                     }
                     .buttonStyle(.plain)
-                } else {
-                    accountInfoRow(title: "当前档位", value: memberTierName)
-                    Button {
-                        showAccountSheet = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                            showMemberPricing = true
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text("想多留几段回望？了解会员")
-                                .font(.system(size: 14, weight: .medium))
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 10, weight: .bold))
-                        }
-                        .foregroundStyle(AppColors.accent.opacity(0.9))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 4)
-                    }
-                    .buttonStyle(.plain)
                 }
+            } else {
+                accountInfoRow(title: "当前档位", value: memberTierName)
+                Button {
+                    showAccountSheet = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        showMemberPricing = true
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("想多留几段回望？了解会员")
+                            .font(.system(size: 14, weight: .medium))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundStyle(AppColors.accent.opacity(0.9))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -1055,12 +1055,10 @@ struct SettingsView: View {
         [
             "周/月回放无限",
             "今日回放不限",
-            "OCR 识票不限",
-            "场景备注包",
-            "换一句/换角度",
-            "宠物专属昵称",
-            "云端备份同步",
-            "纯净无广告",
+            "OCR 导入不限",
+            "AI 复盘额度提升",
+            "场景包换角度",
+            "回望内容长期保留",
         ]
     }
 
