@@ -363,7 +363,7 @@ final class OCRService {
             let line = ocrLines[index].text
             guard !shouldSkipListAmountLine(line) else { continue }
             let amountInfo: (amount: Double, inlineTitle: String?)
-            let statusContext = adjacentListStatusContext(lines: lines, index: index)
+            let statusContext = adjacentListStatusContext(ocrLines: ocrLines, index: index)
             switch listAmountInfo(in: line, statusContext: statusContext, allowPositiveExpense: allowPositiveExpense) {
             case .some(.expense(let amount, let inlineTitle)):
                 amountInfo = (amount, inlineTitle)
@@ -624,6 +624,30 @@ final class OCRService {
             .map { lines[$0].trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { isListStatusLine($0) }
             .joined(separator: "\n")
+    }
+
+    private func adjacentListStatusContext(ocrLines: [OCRLine], index: Int) -> String {
+        guard ocrLines.indices.contains(index) else { return "" }
+        let amountBox = ocrLines[index].boundingBox
+        let rowHeight = max(amountBox.height, 0.018)
+        let maxLowerDistance = max(0.055, rowHeight * 2.8)
+
+        return ocrLines.enumerated().compactMap { candidateIndex, line -> String? in
+            guard candidateIndex != index else { return nil }
+            let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard isListStatusLine(text) else { return nil }
+
+            if isSameOCRRow(line.boundingBox, amountBox) {
+                return text
+            }
+
+            let isBelowAmount = line.boundingBox.midY < amountBox.midY
+            let verticalDistance = amountBox.midY - line.boundingBox.midY
+            let isNearBelow = isBelowAmount && verticalDistance <= maxLowerDistance
+            let isRightColumnStatus = line.boundingBox.midX >= amountBox.midX - 0.08
+            return isNearBelow && isRightColumnStatus ? text : nil
+        }
+        .joined(separator: "\n")
     }
 
     private func nearbyListTitle(lines: [OCRLine], amountIndex: Int, mode: ListParseMode) -> String? {
