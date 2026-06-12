@@ -11,6 +11,7 @@ struct RecordView: View {
     @State private var ocrProgress = 0.0
     @State private var ocrConfirmDrafts: [OCRReceiptDraft] = []
     @State private var showOCRConfirmSheet = false
+    @State private var didImportOCRConfirmSheet = false
     @State private var scenePackExpanded = false
     @State private var scenePackVariants: [String: Int] = [:]
     @State private var amountPadActive = false
@@ -457,7 +458,11 @@ struct RecordView: View {
             }
             .sheet(isPresented: $showOCRConfirmSheet) {
                 OCRConfirmSheet(drafts: ocrConfirmDrafts) { selectedDrafts in
-                    homeViewModel.importOCRDrafts(selectedDrafts, isMember: isMember)
+                    let importedCount = homeViewModel.importOCRDrafts(selectedDrafts, isMember: isMember)
+                    if importedCount > 0 {
+                        didImportOCRConfirmSheet = true
+                    }
+                    return importedCount
                 }
             }
             .sheet(isPresented: $showScenePackAngleSheet) {
@@ -472,6 +477,10 @@ struct RecordView: View {
             .onChange(of: showOCRConfirmSheet) { _, isPresented in
                 if !isPresented {
                     ocrConfirmDrafts = []
+                    if !didImportOCRConfirmSheet {
+                        homeViewModel.clearOCRRecognitionStatus()
+                    }
+                    didImportOCRConfirmSheet = false
                 }
             }
         }

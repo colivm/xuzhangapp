@@ -346,6 +346,10 @@ final class HomeViewModel: ObservableObject {
         ocrStatus = ""
     }
 
+    func clearOCRRecognitionStatus() {
+        ocrStatus = ""
+    }
+
     private func resolvedEmotionTag(
         brandId: String?,
         category: HomeItem.Category,

@@ -376,7 +376,7 @@ final class OCRService {
             let windowLines = Array(lines[windowStart..<windowEnd])
             let windowText = windowLines.joined(separator: "\n")
             let candidateTitle = amountInfo.inlineTitle ?? nearbyListTitle(lines: ocrLines, amountIndex: index, mode: mode)
-            let brand = MerchantBrandCatalog.matchOCRBrand(in: "\(candidateTitle ?? "")\n\(windowText)")
+            let brand = listBrand(title: candidateTitle, windowText: windowText)
             guard let title = candidateTitle ?? brand?.displayName,
                   isTrustworthyListTitle(title, brand: brand) else {
                 continue
@@ -384,7 +384,8 @@ final class OCRService {
             let amount = abs(amountInfo.amount)
             guard amount > 0, amount < 1_000_000 else { continue }
 
-            let date = listDate(in: windowText, now: referenceDate)
+            let date = listDate(ocrLines: ocrLines, amountIndex: index, now: referenceDate)
+                ?? listDate(in: windowText, now: referenceDate)
                 ?? firstDate(in: windowText)
                 ?? firstDate(in: rawText)
                 ?? referenceDate
@@ -464,6 +465,19 @@ final class OCRService {
         guard !trimmed.isEmpty, trimmed != "账单记录" else { return false }
         if isLikelyListTitle(trimmed) { return true }
         return brand?.displayName == trimmed
+    }
+
+    private func listBrand(title: String?, windowText: String) -> MerchantBrandDefinition? {
+        if let title {
+            let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let titleBrand = MerchantBrandCatalog.matchOCRBrand(in: trimmedTitle) {
+                return titleBrand
+            }
+            if !trimmedTitle.isEmpty {
+                return nil
+            }
+        }
+        return MerchantBrandCatalog.matchOCRBrand(in: windowText)
     }
 
     private func listExpenseAmountInfo(in line: String) -> (amount: Double, inlineTitle: String?)? {
@@ -989,6 +1003,32 @@ final class OCRService {
         relativeListDate(in: text, now: now)
             ?? monthDayListDate(in: text, now: now)
             ?? dashedMonthDayListDate(in: text, now: now)
+    }
+
+    private func listDate(ocrLines: [OCRLine], amountIndex: Int, now: Date) -> Date? {
+        guard ocrLines.indices.contains(amountIndex) else { return nil }
+        let amountBox = ocrLines[amountIndex].boundingBox
+        let nextAmountBelowY = ocrLines.enumerated()
+            .filter { index, line in
+                guard index != amountIndex else { return false }
+                guard line.boundingBox.midY < amountBox.midY else { return false }
+                guard !shouldSkipListAmountLine(line.text) else { return false }
+                return listAmountInfo(in: line.text, allowPositiveExpense: true) != nil
+            }
+            .map { $0.element.boundingBox.midY }
+            .max()
+
+        let candidates = ocrLines.enumerated().compactMap { index, line -> (distance: CGFloat, date: Date)? in
+            guard index != amountIndex else { return nil }
+            guard line.boundingBox.midY < amountBox.midY else { return nil }
+            if let nextAmountBelowY, line.boundingBox.midY < nextAmountBelowY {
+                return nil
+            }
+            guard line.boundingBox.midX < amountBox.midX + 0.08 else { return nil }
+            guard let date = listDate(in: line.text, now: now) ?? firstDate(in: line.text) else { return nil }
+            return (amountBox.midY - line.boundingBox.midY, date)
+        }
+        return candidates.sorted { $0.distance < $1.distance }.first?.date
     }
 
     private func statementReferenceDate(in text: String) -> Date? {
