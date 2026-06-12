@@ -129,18 +129,16 @@ final class OCRService {
         let confidence = candidates.map(\.confidence).reduce(0, +) / Float(max(candidates.count, 1))
         let provider = detectProvider(from: text)
 
+        let listDrafts = parseListReceipts(
+            ocrLines: ocrLines,
+            rawText: text,
+            confidence: Double(confidence),
+            provider: provider
+        )
         let isListScreenshot = looksLikeListScreenshot(lines: lines, provider: provider)
-        if isListScreenshot {
-            let listDrafts = parseListReceipts(
-                ocrLines: ocrLines,
-                rawText: text,
-                confidence: Double(confidence),
-                provider: provider
-            )
-            if !listDrafts.isEmpty {
-                return listDrafts
-            }
-            throw OCRServiceError.detailPageRequired
+        let isDetailScreenshot = looksLikeDetailScreenshot(lines: lines)
+        if (listDrafts.count >= 2 && !isDetailScreenshot) || (isListScreenshot && !listDrafts.isEmpty) {
+            return listDrafts
         }
 
         let draft: OCRReceiptDraft?
@@ -153,20 +151,17 @@ final class OCRService {
             draft = parseGeneric(lines: lines, rawText: text, confidence: Double(confidence))
         }
 
-        if let draft, draft.amount > 0 {
+        if let draft, draft.amount > 0, !isListScreenshot {
             return [draft]
         }
 
-        let fallbackDrafts = parseListReceipts(
-            ocrLines: ocrLines,
-            rawText: text,
-            confidence: Double(confidence),
-            provider: provider
-        )
-        guard !fallbackDrafts.isEmpty else {
-            throw OCRServiceError.detailPageRequired
+        if !listDrafts.isEmpty {
+            return listDrafts
         }
-        return fallbackDrafts
+        if let draft, draft.amount > 0 {
+            return [draft]
+        }
+        throw OCRServiceError.detailPageRequired
     }
 
     private func detectProvider(from text: String) -> OCRProvider {
@@ -198,12 +193,8 @@ final class OCRService {
             "账单列表", "全部交易", "交易记录", "本月支出", "本月收入", "筛选", "月账单", "全部账单",
             "查找交易", "搜索交易记录", "收支统计", "收支分析", "全部", "支出", "转账", "退款", "订单",
         ]
-        let detailHints = [
-            "账单详情", "交易详情", "订单详情", "商品说明", "商品名称", "商家名称", "商户名称", "商户全称",
-            "交易对象", "收款方", "收款账户", "创建时间", "付款时间", "支付时间", "交易时间", "当前状态",
-        ]
         let hasListHint = listHints.contains { text.contains($0) }
-        let hasDetailHint = detailHints.contains { text.contains($0) }
+        let hasDetailHint = looksLikeDetailScreenshot(lines: lines)
         let amountLineCount = listAmountLineCount(in: lines)
         let currencyCount = currencyCandidates(in: text).count
 
@@ -217,6 +208,16 @@ final class OCRService {
             return true
         }
         return false
+    }
+
+    private func looksLikeDetailScreenshot(lines: [String]) -> Bool {
+        let text = lines.joined(separator: "\n")
+        let detailHints = [
+            "账单详情", "交易详情", "订单详情", "商品说明", "商品名称", "商家名称", "商户名称", "商户全称",
+            "交易对象", "收款方", "收款账户", "创建时间", "付款时间", "支付时间", "交易时间", "当前状态",
+            "订单号", "商户单号", "交易单号", "支付方式",
+        ]
+        return detailHints.contains { text.contains($0) }
     }
 
     private func listAmountLineCount(in lines: [String]) -> Int {
@@ -462,13 +463,17 @@ final class OCRService {
             .replacingOccurrences(of: "￥", with: "¥")
             .replacingOccurrences(of: ",", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let statusPattern = #"(等待确认收货|交易成功|支付成功|已全额退款|已退款(?:\(¥?\s*[0-9]+(?:\.[0-9]{1,2})?\))?|交易关闭)"#
+        let statusPattern = #"(等待确认收货|交易成功|支付成功|退款成功|已全额退款|已退款(?:\(¥?\s*[0-9]+(?:\.[0-9]{1,2})?\))?|交易关闭)"#
         let pattern = #"^(?:(.+?)\s*)?([-+])?\s*(?:¥\s*)?([-+]?\s*[0-9]{1,6}(?:\.[0-9]{1,2})?)(?:\s*"# + statusPattern + #")?$"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
         let nsText = normalized as NSString
         guard let match = regex.firstMatch(in: normalized, range: NSRange(location: 0, length: nsText.length)),
               match.numberOfRanges > 4 else {
-            return nil
+            return looseListAmountInfo(
+                in: normalized,
+                statusContext: statusContext,
+                allowPositiveExpense: allowPositiveExpense
+            )
         }
 
         let status = match.range(at: 4).location != NSNotFound
@@ -479,7 +484,7 @@ final class OCRService {
             // 关闭订单展示了金额但没有实际支出，不能导入为账单。
             return .ignored
         }
-        if statusScope.contains("已退款") || statusScope.contains("已全额退款") {
+        if statusScope.contains("已退款") || statusScope.contains("已全额退款") || statusScope.contains("退款成功") {
             // 退款正数行按产品规则忽略，避免和原支出重复抵消。
             return .ignored
         }
@@ -517,6 +522,58 @@ final class OCRService {
             .replacingOccurrences(of: "+", with: "")
             .replacingOccurrences(of: "-", with: "")
         return .expense(amount: -(Double(numericValue) ?? 0), inlineTitle: title)
+    }
+
+    private func looseListAmountInfo(
+        in normalized: String,
+        statusContext: String,
+        allowPositiveExpense: Bool
+    ) -> ListAmountInfo? {
+        if normalized.contains("收入") || normalized.contains("退款") || normalized.contains("转入") || normalized.contains("提现") || normalized.contains("还款") {
+            return .ignored
+        }
+        if statusContext.contains("交易关闭") {
+            return .ignored
+        }
+        if statusContext.contains("已退款") || statusContext.contains("已全额退款") || statusContext.contains("退款成功") {
+            return .ignored
+        }
+
+        let amountPattern = #"([-+])?\s*(?:¥\s*)?([0-9]{1,6}(?:\.[0-9]{1,2})?)"#
+        guard let regex = try? NSRegularExpression(pattern: amountPattern) else { return nil }
+        let nsText = normalized as NSString
+        let matches = regex.matches(in: normalized, range: NSRange(location: 0, length: nsText.length))
+        guard let match = matches.last, match.numberOfRanges > 2 else { return nil }
+
+        let full = nsText.substring(with: match.range(at: 0))
+        let explicitSign = match.range(at: 1).location != NSNotFound
+            ? nsText.substring(with: match.range(at: 1))
+            : ""
+        if explicitSign == "+" || full.trimmingCharacters(in: .whitespaces).hasPrefix("+") {
+            return .ignored
+        }
+
+        let hasMinus = explicitSign == "-" || full.trimmingCharacters(in: .whitespaces).hasPrefix("-")
+        let hasCurrency = full.contains("¥") || normalized.contains("¥")
+        let hasExpenseWord = normalized.contains("支出") || normalized.contains("付款") || normalized.contains("支付")
+        let paidWithoutMinus = !hasMinus && ["等待确认收货", "交易成功", "支付成功"].contains { statusContext.contains($0) }
+        let positiveListExpense = allowPositiveExpense && (hasCurrency || hasExpenseWord)
+        guard hasMinus || paidWithoutMinus || positiveListExpense else { return nil }
+
+        let amount = Double(nsText.substring(with: match.range(at: 2))) ?? 0
+        guard amount > 0 else { return nil }
+
+        let beforeAmount = nsText.substring(to: match.range.location)
+        let title = looseInlineTitle(from: beforeAmount)
+        return .expense(amount: -amount, inlineTitle: title)
+    }
+
+    private func looseInlineTitle(from value: String) -> String? {
+        let cleaned = normalizedInlineListTitle(value)
+            .replacingOccurrences(of: #"\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s+\d{1,2}:\d{2})?"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return isLikelyListTitle(cleaned) ? cleaned : nil
     }
 
     private func normalizedInlineListTitle(_ value: String) -> String {
@@ -797,7 +854,7 @@ final class OCRService {
     }
 
     private func isListStatusLine(_ value: String) -> Bool {
-        let statusWords = ["交易成功", "支付成功", "已退款", "已全额退款", "等待确认收货", "交易关闭"]
+        let statusWords = ["交易成功", "支付成功", "已退款", "已全额退款", "退款成功", "等待确认收货", "交易关闭"]
         return statusWords.contains { value.contains($0) }
     }
 
