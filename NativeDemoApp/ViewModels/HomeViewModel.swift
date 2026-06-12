@@ -10,6 +10,17 @@ final class HomeViewModel: ObservableObject {
         var id: String { rawValue }
     }
 
+    struct FrequentRecordAmountSuggestion: Identifiable {
+        let amount: Double
+        let category: HomeItem.Category
+        let count: Int
+        let latest: Date
+
+        var id: String {
+            "\(Int((amount * 100).rounded()))-\(category.rawValue)"
+        }
+    }
+
     @Published var inputTitle: String = ""
     @Published var inputAmount: String = ""
     @Published var selectedCategory: HomeItem.Category = .other
@@ -808,6 +819,10 @@ final class HomeViewModel: ObservableObject {
         if let brand = MerchantBrandCatalog.matchBrand(in: trimmedNote), !categoryLockedByUser {
             return CategoryRecommendResult(recommended: brand.category, reasonTag: "brand")
         }
+        if let frequentSuggestion = frequentRecordAmountSuggestion(for: amount, at: selectedDate),
+           !categoryLockedByUser {
+            return CategoryRecommendResult(recommended: frequentSuggestion.category, reasonTag: "frequent")
+        }
         let start = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? .distantPast
         let recentItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
         return categoryRecommendService.recommend(
@@ -843,6 +858,10 @@ final class HomeViewModel: ObservableObject {
         if let brand, !categoryLockedByUser {
             applyRecommendedCategory(brand.category)
         }
+        let frequentSuggestion = frequentRecordAmountSuggestion(for: amount, at: selectedDate)
+        if let frequentSuggestion, !categoryLockedByUser {
+            applyRecommendedCategory(frequentSuggestion.category)
+        }
 
         let start = Calendar.current.date(byAdding: .day, value: -180, to: Date()) ?? .distantPast
         let recentItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
@@ -863,6 +882,9 @@ final class HomeViewModel: ObservableObject {
         guard let result else { return }
         if let category = result.category, result.confidence >= 0.55 {
             applyRecommendedCategory(category)
+        }
+        if let frequentSuggestion, !categoryLockedByUser {
+            applyRecommendedCategory(frequentSuggestion.category)
         }
         if applySuggestedTitle, let title = result.title, result.confidence >= 0.65, trimmedNote.isEmpty {
             inputTitle = title
@@ -948,6 +970,10 @@ final class HomeViewModel: ObservableObject {
     }
 
     func frequentRecordAmounts(at date: Date = .now) -> [Double] {
+        frequentRecordAmountSuggestions(at: date).map(\.amount)
+    }
+
+    func frequentRecordAmountSuggestions(at date: Date = .now) -> [FrequentRecordAmountSuggestion] {
         let calendar = Calendar.current
         let start = calendar.date(byAdding: .day, value: -180, to: date) ?? .distantPast
         let recentItems = items.filter { item in
@@ -966,18 +992,15 @@ final class HomeViewModel: ObservableObject {
         let grouped = Dictionary(grouping: contextItems) { item in
             Int((item.amount * 100).rounded())
         }
-        struct FrequentAmountCandidate {
-            let amount: Double
-            let count: Int
-            let latest: Date
-        }
 
-        let candidates: [FrequentAmountCandidate] = grouped.map { entry in
+        let candidates: [FrequentRecordAmountSuggestion] = grouped.compactMap { entry in
             let cents = entry.key
             let group = entry.value
             let latestDate = group.map { $0.createdAt }.max() ?? .distantPast
-            return FrequentAmountCandidate(
+            guard let category = frequentCategory(in: group) else { return nil }
+            return FrequentRecordAmountSuggestion(
                 amount: Double(cents) / 100,
+                category: category,
                 count: group.count,
                 latest: latestDate
             )
@@ -996,7 +1019,38 @@ final class HomeViewModel: ObservableObject {
             return lhs.count > rhs.count
         }
 
-        return sortedCandidates.prefix(3).map { $0.amount }
+        return Array(sortedCandidates.prefix(3))
+    }
+
+    private func frequentRecordAmountSuggestion(for amount: Double, at date: Date) -> FrequentRecordAmountSuggestion? {
+        frequentRecordAmountSuggestions(at: date).first { suggestion in
+            abs(suggestion.amount - amount) < 0.005
+        }
+    }
+
+    private func frequentCategory(in items: [HomeItem]) -> HomeItem.Category? {
+        struct CategoryCandidate {
+            let category: HomeItem.Category
+            let count: Int
+            let latest: Date
+        }
+
+        return Dictionary(grouping: items, by: \.category)
+            .map { entry in
+                CategoryCandidate(
+                    category: entry.key,
+                    count: entry.value.count,
+                    latest: entry.value.map(\.createdAt).max() ?? .distantPast
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.count == rhs.count {
+                    return lhs.latest > rhs.latest
+                }
+                return lhs.count > rhs.count
+            }
+            .first?
+            .category
     }
 
     private func hourHabitBucket(for date: Date) -> Int {

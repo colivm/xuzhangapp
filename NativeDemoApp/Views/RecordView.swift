@@ -22,6 +22,8 @@ struct RecordView: View {
     @State private var previewLineWasRotated = false
     @State private var showScenePackAngleSheet = false
     @State private var didAutoFocusAmountPad = false
+    @AppStorage("scene_pack_order_v1") private var scenePackOrderStorage = ""
+    @AppStorage("scene_pack_more_expanded_v1") private var scenePackMoreExpanded = false
     @FocusState private var focusedField: RecordField?
 
     private enum RecordField {
@@ -32,11 +34,51 @@ struct RecordView: View {
     private let draftClock = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
     private let recordAccent = AppColors.accent
     private let recordInk = AppColors.text
+    private let lowFrequencyScenePackIds: Set<String> = ["travel", "pet", "baby", "fitness", "digital"]
 
     private var visibleScenePacks: [ScenePackDefinition] {
-        ScenePackCopyPool.definitions.filter { pack in
+        let enabledPacks = ScenePackCopyPool.definitions.filter { pack in
             settingsViewModel.petCompanionEnabled || pack.id != "pet"
         }
+        let orderIds = scenePackOrderIds
+        return enabledPacks.sorted { lhs, rhs in
+            scenePackSortRank(lhs, orderIds: orderIds) < scenePackSortRank(rhs, orderIds: orderIds)
+        }
+    }
+
+    private var primaryScenePacks: [ScenePackDefinition] {
+        let promotedIds = Set(scenePackOrderIds)
+        return visibleScenePacks.filter { pack in
+            !lowFrequencyScenePackIds.contains(pack.id) || promotedIds.contains(pack.id)
+        }
+    }
+
+    private var secondaryScenePacks: [ScenePackDefinition] {
+        let promotedIds = Set(scenePackOrderIds)
+        return visibleScenePacks.filter { pack in
+            lowFrequencyScenePackIds.contains(pack.id) && !promotedIds.contains(pack.id)
+        }
+    }
+
+    private var scenePackOrderIds: [String] {
+        scenePackOrderStorage
+            .split(separator: ",")
+            .map(String.init)
+            .filter { !$0.isEmpty }
+    }
+
+    private func scenePackSortRank(_ pack: ScenePackDefinition, orderIds: [String]) -> Int {
+        if let index = orderIds.firstIndex(of: pack.id) {
+            return index
+        }
+        let defaultIndex = ScenePackCopyPool.definitions.firstIndex { $0.id == pack.id } ?? 999
+        return 1_000 + defaultIndex
+    }
+
+    private func promoteScenePack(_ pack: ScenePackDefinition) {
+        var orderIds = scenePackOrderIds.filter { $0 != pack.id }
+        orderIds.insert(pack.id, at: 0)
+        scenePackOrderStorage = orderIds.prefix(12).joined(separator: ",")
     }
 
     private var isMember: Bool {
@@ -111,6 +153,7 @@ struct RecordView: View {
 
     private func applyScenePack(_ pack: ScenePackDefinition, keepSelectedCategory: Bool = false) {
         dismissKeyboard()
+        promoteScenePack(pack)
         let amount = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
         let categoryContext = keepSelectedCategory ? homeViewModel.selectedCategory : pack.category
         let variantKey = scenePackVariantKey(
@@ -467,12 +510,18 @@ struct RecordView: View {
             }
             .sheet(isPresented: $showScenePackAngleSheet) {
                 ScenePackAngleSheet(
-                    scenePacks: visibleScenePacks,
-                    scenePackDesc: scenePackDesc
-                ) { pack in
-                    previewLineWasRotated = true
-                    applyScenePack(pack)
-                }
+                    primaryScenePacks: primaryScenePacks,
+                    secondaryScenePacks: secondaryScenePacks,
+                    isMoreExpanded: $scenePackMoreExpanded,
+                    scenePackDesc: scenePackDesc,
+                    onPromotePack: { pack in
+                        promoteScenePack(pack)
+                    },
+                    onSelectPack: { pack in
+                        previewLineWasRotated = true
+                        applyScenePack(pack)
+                    }
+                )
             }
             .onChange(of: showOCRConfirmSheet) { _, isPresented in
                 if !isPresented {
@@ -578,8 +627,8 @@ struct RecordView: View {
         }
     }
 
-    private var recordWarmupAmounts: [Double] {
-        homeViewModel.frequentRecordAmounts(at: homeViewModel.selectedDate)
+    private var recordWarmupSuggestions: [HomeViewModel.FrequentRecordAmountSuggestion] {
+        homeViewModel.frequentRecordAmountSuggestions(at: homeViewModel.selectedDate)
     }
 
     private var lifeEntryPreview: some View {
@@ -592,7 +641,7 @@ struct RecordView: View {
             amountText: inputAmountValue.formatted(.cny),
             primaryActionTitle: previewQuickActionTitle,
             showsPrimaryAction: isMember,
-            showAngleAction: previewLineWasRotated && previewTier == .confirm,
+            showAngleAction: isMember && previewLineWasRotated && previewTier == .confirm,
             onTap: {
                 dismissKeyboard()
                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -744,7 +793,7 @@ struct RecordView: View {
     private var amountField: some View {
         VStack(alignment: .leading, spacing: 10) {
             amountStage
-            if !hasAmountDraft, !recordWarmupAmounts.isEmpty {
+            if !hasAmountDraft, !recordWarmupSuggestions.isEmpty {
                 amountWarmupChips
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -765,12 +814,13 @@ struct RecordView: View {
                 .padding(.horizontal, 12)
 
             HStack(spacing: 8) {
-                ForEach(recordWarmupAmounts, id: \.self) { amount in
+                ForEach(recordWarmupSuggestions) { suggestion in
                     Button {
-                        homeViewModel.inputAmount = amountInputText(amount)
+                        homeViewModel.inputAmount = amountInputText(suggestion.amount)
+                        homeViewModel.applyRecommendedCategory(suggestion.category)
                         focusAmountPad(delay: 0.02)
                     } label: {
-                        Text("¥\(amountChipText(amount))")
+                        Text("¥\(amountChipText(suggestion.amount))")
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
                             .foregroundStyle(recordInk.opacity(0.78))
                             .frame(maxWidth: .infinity)
@@ -836,6 +886,12 @@ struct RecordView: View {
                         .padding(.trailing, 2)
                         .offset(y: 1)
 
+                    if shouldShowAmountCursor && !hasAmountDraft {
+                        amountCursor
+                            .offset(y: 6)
+                            .transition(.opacity)
+                    }
+
                     Text(homeViewModel.inputAmount.isEmpty ? "0.00" : homeViewModel.inputAmount)
                         .font(.system(size: 42, weight: .bold, design: .rounded))
                         .foregroundStyle(homeViewModel.inputAmount.isEmpty ? AppColors.subtext.opacity(0.46) : recordInk)
@@ -843,7 +899,7 @@ struct RecordView: View {
                         .minimumScaleFactor(0.72)
                         .contentTransition(.numericText())
 
-                    if shouldShowAmountCursor {
+                    if shouldShowAmountCursor && hasAmountDraft {
                         amountCursor
                             .offset(y: 6)
                             .transition(.opacity)
@@ -1103,6 +1159,7 @@ struct RecordView: View {
             dismissKeyboard()
             withAnimation(.easeInOut(duration: 0.12)) {
                 homeViewModel.selectCategory(category)
+                categoryGridExpanded = false
             }
         } label: {
             categoryChipLabel(category: category, isRecommended: isRecommended, isSelected: isSelected)
@@ -1301,8 +1358,10 @@ struct RecordView: View {
         let packs = visibleScenePacks
         let quickPack = packs.first(where: { $0.id == quickPackId }) ?? packs[0]
         ScenePackSectionView(
-            scenePacks: packs,
+            primaryScenePacks: primaryScenePacks,
+            secondaryScenePacks: secondaryScenePacks,
             isExpanded: scenePackExpanded,
+            isMoreExpanded: scenePackMoreExpanded,
             isPetMode: settingsViewModel.petCompanionEnabled,
             recordInk: recordInk,
             onQuickGenerate: {
@@ -1311,6 +1370,9 @@ struct RecordView: View {
             onToggleExpanded: {
                 dismissKeyboard()
                 withAnimation(.easeInOut(duration: 0.2)) { scenePackExpanded.toggle() }
+            },
+            onToggleMore: {
+                withAnimation(.easeInOut(duration: 0.18)) { scenePackMoreExpanded.toggle() }
             },
             onSelectPack: { pack in
                 applyScenePack(pack)

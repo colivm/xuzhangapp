@@ -1,12 +1,15 @@
 import SwiftUI
 
 struct ScenePackSectionView: View {
-    let scenePacks: [ScenePackDefinition]
+    let primaryScenePacks: [ScenePackDefinition]
+    let secondaryScenePacks: [ScenePackDefinition]
     let isExpanded: Bool
+    let isMoreExpanded: Bool
     let isPetMode: Bool
     let recordInk: Color
     let onQuickGenerate: () -> Void
     let onToggleExpanded: () -> Void
+    let onToggleMore: () -> Void
     let onSelectPack: (ScenePackDefinition) -> Void
     let scenePackDesc: (ScenePackDefinition) -> String
 
@@ -27,7 +30,7 @@ struct ScenePackSectionView: View {
 
     private var header: some View {
         HStack {
-            Text(isPetMode ? "小宠物的记账小帮手" : "生活备注小帮手")
+            Text("换个角度写备注")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(recordInk.opacity(0.88))
             Spacer()
@@ -41,7 +44,10 @@ struct ScenePackSectionView: View {
     }
 
     private var helperText: some View {
-        let text = isExpanded ? "点选场景包会同步调整分类。" : "金额填好后，可自动补一句备注。"
+        let collapsedText = isPetMode
+            ? "金额填好后，按当前分类和小宠物偏好换一句备注。"
+            : "金额填好后，按当前分类换一句更贴近日常的备注。"
+        let text = isExpanded ? "点选场景包会同步调整分类；常用的会自动排到前面。" : collapsedText
         return Text(text)
             .font(.system(size: 12))
             .foregroundStyle(AppColors.subtext.opacity(0.88))
@@ -50,7 +56,7 @@ struct ScenePackSectionView: View {
     private var quickGenerateButton: some View {
         Button(action: onQuickGenerate) {
             HStack(spacing: 4) {
-                Text("✨ 一键生成备注")
+                Text("✨ 换一句生活备注")
                     .font(.system(size: 14, weight: .semibold))
                 Text("保留当前分类")
                     .font(.system(size: 11))
@@ -67,8 +73,8 @@ struct ScenePackSectionView: View {
     }
 
     private var toggleButton: some View {
-        let title = isExpanded ? "收起更多场景" : "展开更多场景"
-        let subtitle = isExpanded ? "回到简洁输入" : "手动选择备注风格"
+        let title = isExpanded ? "收起场景包" : "挑一个场景包"
+        let subtitle = isExpanded ? "回到简洁输入" : "通勤、吃饭、居家都能换"
         return Button(action: onToggleExpanded) {
             HStack {
                 Text(title)
@@ -90,10 +96,41 @@ struct ScenePackSectionView: View {
     @ViewBuilder
     private var expandedPackList: some View {
         if isExpanded {
-            ForEach(scenePacks, id: \.id) { pack in
+            ForEach(primaryScenePacks, id: \.id) { pack in
                 scenePackButton(pack)
             }
+            if !secondaryScenePacks.isEmpty {
+                moreToggleButton
+                if isMoreExpanded {
+                    ForEach(secondaryScenePacks, id: \.id) { pack in
+                        scenePackButton(pack)
+                    }
+                }
+            }
         }
+    }
+
+    private var moreToggleButton: some View {
+        Button(action: onToggleMore) {
+            HStack {
+                Text(isMoreExpanded ? "收起低频场景" : "展开低频场景")
+                    .font(.system(size: 13, weight: .medium))
+                Text("母婴、健身、数码等")
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppColors.subtext.opacity(0.7))
+                Spacer()
+                Image(systemName: isMoreExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(AppColors.subtext.opacity(0.72))
+            }
+            .scenePackButtonStyle(
+                foreground: recordInk.opacity(0.74),
+                fill: Color.white.opacity(0.50),
+                stroke: Color.white.opacity(0.44),
+                verticalPadding: 9
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func scenePackButton(_ pack: ScenePackDefinition) -> some View {
@@ -137,5 +174,6 @@ private extension View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(stroke, lineWidth: 1)
             )
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }

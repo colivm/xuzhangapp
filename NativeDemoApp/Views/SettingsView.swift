@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var draftPetNickname = ""
     @State private var showDeleteCloudLedgerConfirm = false
     @State private var showDeleteAccountConfirm = false
+    @State private var isAccountDangerExpanded = false
     @FocusState private var focusedField: SettingsField?
     private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
     private let privacyURL = URL(string: "https://xuzhangapp.com/legal/privacy.html")!
@@ -532,28 +533,15 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("账号与会员")
-                        .font(.system(size: 28, weight: .bold))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(AppColors.text)
 
-                    sectionBody(settingsViewModel.hasCloudSession
-                                ? "管理你的云端登录状态和会员权益。"
-                                : "登录后可同步会员状态，默认本地功能仍可直接使用。")
-
-                    settingField(label: "本地昵称") {
-                        TextField("叙账用户", text: $draftDisplayName)
-                            .focused($focusedField, equals: .displayName)
-                            .submitLabel(.done)
-                            .onSubmit { commitDisplayName() }
+                    if !settingsViewModel.hasCloudSession {
+                        sectionBody("登录后可同步会员状态，默认本地功能仍可直接使用。")
+                            .lineLimit(1)
                     }
-                    settingHelper("头像使用内置叙账印章，不上传头像图片；昵称不要写手机号、证件号或链接。")
 
                     accountSheetContent
-
-                    if let msg = settingsViewModel.contentSafetyMessage {
-                        Text(msg)
-                            .font(.system(size: 12))
-                            .foregroundStyle(AppColors.subtext)
-                    }
 
                     if let msg = settingsViewModel.authMessage {
                         Text(msg)
@@ -567,112 +555,19 @@ struct SettingsView: View {
             }
             .scrollIndicators(.hidden)
         }
+        .onAppear {
+            isAccountDangerExpanded = false
+        }
     }
 
     @ViewBuilder
     private var accountSheetContent: some View {
         if settingsViewModel.hasCloudSession {
-            HStack {
-                Text("账号状态")
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppColors.subtext)
-                Spacer()
-                Text("已登录")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppColors.text)
-            }
-            .padding(.vertical, 4)
-
-            HStack {
-                Text("显示名称")
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppColors.subtext)
-                Spacer()
-                Text(settingsViewModel.displayName)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppColors.text)
-            }
-
-            HStack {
-                Text("会员档位")
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppColors.subtext)
-                Spacer()
-                Text(AppSettings.memberTierDisplayName(settingsViewModel.memberTier))
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppColors.text)
-            }
-
-            if let validity = settingsViewModel.settings.memberValidityText {
-                HStack {
-                    Text("会员有效期")
-                        .font(.system(size: 14))
-                        .foregroundStyle(AppColors.subtext)
-                    Spacer()
-                    Text(validity)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(AppColors.text)
-                }
-            }
-
-            if hasMemberAccess {
-                Text("会员权益已生效，周/月复盘和 OCR 次数不会再被免费额度限制。")
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext.opacity(0.82))
-                    .padding(.vertical, 6)
-            } else {
-                Button {
-                    showAccountSheet = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        showMemberPricing = true
-                    }
-                } label: {
-                    HStack {
-                        Text("想多留几段回望？了解会员")
-                            .font(.system(size: 14, weight: .medium))
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(AppColors.subtext)
-                    }
-                    .foregroundStyle(AppColors.accent.opacity(0.9))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                }
-                .buttonStyle(.plain)
-            }
-
-            Button("退出登录", role: .destructive) {
-                settingsViewModel.logoutCloud()
-            }
-            .font(.system(size: 14))
-            .foregroundStyle(.red.opacity(0.8))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 11)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.red.opacity(0.2), lineWidth: 1)
-            )
-
-            Button("删除云端账本", role: .destructive) {
-                showDeleteCloudLedgerConfirm = true
-            }
-            .font(.system(size: 14))
-            .foregroundStyle(AppColors.subtext.opacity(0.9))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(AppColors.line.opacity(0.7), lineWidth: 1)
-            )
-
-            Button("注销账号并删除云端数据", role: .destructive) {
-                showDeleteAccountConfirm = true
-            }
-            .font(.system(size: 14))
-            .foregroundStyle(.red.opacity(0.82))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            accountIdentityHeader
+            accountIdentitySection
+            accountMemberSection
+            accountSessionSection
+            accountDangerZone
         } else {
             settingField(label: "手机号") {
                 TextField("手机号", text: $settingsViewModel.loginPhone)
@@ -707,6 +602,235 @@ struct SettingsView: View {
 
             legalInlineText(prefix: "登录即表示你已阅读并同意")
         }
+    }
+
+    private var accountIdentityHeader: some View {
+        HStack(spacing: 12) {
+            narrativeSealAvatar
+            VStack(alignment: .leading, spacing: 5) {
+                Text(settingsViewModel.displayName.isEmpty ? "叙账用户" : settingsViewModel.displayName)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+
+                HStack(spacing: 6) {
+                    Text("\(AppSettings.memberTierDisplayName(settingsViewModel.memberTier)) · 已登录")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                        .lineLimit(1)
+                    if hasMemberAccess {
+                        accountMemberBadge
+                    }
+                }
+
+                Text("云端备份已准备好，照常记就好。")
+                    .font(.system(size: 12))
+                    .italic()
+                    .foregroundStyle(AppColors.subtext.opacity(0.88))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(AppColors.settingsIdentityPanel)
+        )
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(settingsInkAccent.opacity(0.34))
+                .frame(width: 3)
+                .padding(.vertical, 18)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(AppColors.line.opacity(0.72), lineWidth: 1)
+        )
+        .shadow(color: AppColors.subtext.opacity(0.07), radius: 14, y: 7)
+    }
+
+    private var accountMemberBadge: some View {
+        Text("已解锁")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(settingsInkAccent.opacity(0.86))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(settingsInkAccent.opacity(0.11))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(settingsInkAccent.opacity(0.18), lineWidth: 1)
+            )
+    }
+
+    private var accountIdentitySection: some View {
+        accountPanel("身份") {
+            settingField(label: "昵称") {
+                TextField("叙账用户", text: $draftDisplayName)
+                    .focused($focusedField, equals: .displayName)
+                    .submitLabel(.done)
+                    .onSubmit { commitDisplayName() }
+            }
+            settingHelper("不要写手机号、证件号或链接。")
+            if let msg = settingsViewModel.contentSafetyMessage {
+                settingHelper(msg)
+            }
+        }
+    }
+
+    private var accountMemberSection: some View {
+        accountPanel("会员") {
+            if let validity = settingsViewModel.settings.memberValidityText {
+                accountInfoRow(title: "有效期", value: validity)
+            }
+
+            if hasMemberAccess {
+                LazyVGrid(columns: accountMemberBenefitColumns, alignment: .leading, spacing: 8) {
+                    ForEach(accountMemberBenefits, id: \.self) { benefit in
+                        memberBenefitRow(benefit)
+                    }
+                }
+            } else {
+                accountInfoRow(title: "当前档位", value: AppSettings.memberTierDisplayName(settingsViewModel.memberTier))
+                Button {
+                    showAccountSheet = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        showMemberPricing = true
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("想多留几段回望？了解会员")
+                            .font(.system(size: 14, weight: .medium))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundStyle(AppColors.accent.opacity(0.9))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var accountSessionSection: some View {
+        accountPanel("账号") {
+            Button {
+                settingsViewModel.logoutCloud()
+            } label: {
+                Text("退出登录")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppColors.text.opacity(0.82))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .background(webButtonBackground)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(AppColors.line.opacity(0.6), lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var accountDangerZone: some View {
+        accountPanel("危险操作") {
+            DisclosureGroup(isExpanded: $isAccountDangerExpanded) {
+                VStack(spacing: 8) {
+                    Button("删除云端账本", role: .destructive) {
+                        showDeleteCloudLedgerConfirm = true
+                    }
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppColors.subtext.opacity(0.9))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(AppColors.line.opacity(0.7), lineWidth: 1)
+                    )
+
+                    Button("注销账号并删除云端数据", role: .destructive) {
+                        showDeleteAccountConfirm = true
+                    }
+                    .font(.system(size: 14))
+                    .foregroundStyle(.red.opacity(0.82))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                }
+                .padding(.top, 8)
+            } label: {
+                Text("删除与注销")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppColors.text.opacity(0.82))
+            }
+            .tint(AppColors.subtext.opacity(0.82))
+        }
+    }
+
+    private func accountPanel<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(AppColors.subtext.opacity(0.82))
+            content()
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.56))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppColors.line.opacity(0.56), lineWidth: 1)
+        )
+    }
+
+    private func accountInfoRow(title: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .font(.system(size: 13))
+                .foregroundStyle(AppColors.subtext)
+            Spacer(minLength: 12)
+            Text(value)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AppColors.text.opacity(0.88))
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private func memberBenefitRow(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppColors.accent.opacity(0.84))
+            Text(text)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AppColors.text.opacity(0.86))
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var accountMemberBenefitColumns: [GridItem] {
+        [
+            GridItem(.flexible(), alignment: .leading),
+            GridItem(.flexible(), alignment: .leading),
+        ]
+    }
+
+    private var accountMemberBenefits: [String] {
+        [
+            "周/月回放无限",
+            "今日回放不限",
+            "OCR 识票不限",
+            "场景备注包",
+            "换一句/换角度",
+            "宠物专属昵称",
+            "云端备份同步",
+            "纯净无广告",
+        ]
     }
 
     // MARK: - AI Settings
