@@ -1150,6 +1150,9 @@ final class OCRService {
         if lower.contains("微信红包") || lower.contains("红包") || lower.contains("转账") {
             return .social
         }
+        if matchesGameExpense(lower) {
+            return .entertainment
+        }
         if lower.contains("咖啡") || lower.contains("小咖咖啡") || lower.contains("luckin") || lower.contains("餐") || lower.contains("外卖") || lower.contains("饭") || lower.contains("茶") || lower.contains("美团") || lower.contains("饿了么") || lower.contains("把子肉") || lower.contains("馄饨") || lower.contains("餐饮美食") || lower.contains("火锅") || lower.contains("海鲜") || lower.contains("大排档") || lower.contains("烧烤") || lower.contains("小吃") || lower.contains("饭店") || lower.contains("餐厅") || lower.contains("烤鸭") {
             return .dining
         }
@@ -1178,6 +1181,24 @@ final class OCRService {
             return .lodging
         }
         return .daily
+    }
+
+    private func matchesGameExpense(_ text: String) -> Bool {
+        let gameTitles = [
+            "碧蓝航线", "原神", "星穹铁道", "崩坏", "明日方舟", "王者荣耀", "和平精英", "英雄联盟",
+            "逆水寒", "阴阳师", "梦幻西游", "第五人格", "蛋仔派对", "光遇", "三国杀", "炉石传说",
+            "steam", "psn", "playstation", "xbox", "switch", "nintendo"
+        ]
+        let strongGameTerms = [
+            "代肝", "陪玩", "抽卡", "氪金", "游戏币", "游戏充值", "游戏服务", "赛季票"
+        ]
+        let contextualGameTerms = [
+            "上号", "充值", "点券", "皮肤", "月卡", "通行证", "账号交易"
+        ]
+        let gameContext = text.contains("游戏") || text.contains("手游") || text.contains("端游") || text.contains("网游")
+        return gameTitles.contains { text.contains($0) }
+            || strongGameTerms.contains { text.contains($0) }
+            || (gameContext && contextualGameTerms.contains { text.contains($0) })
     }
 }
 

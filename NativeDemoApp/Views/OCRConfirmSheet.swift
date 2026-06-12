@@ -9,7 +9,6 @@ struct OCRConfirmSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var rows: [ConfirmRow]
-    @State private var batchCategory: HomeItem.Category = .dining
 
     let onConfirm: ([OCRReceiptDraft]) -> Int
 
@@ -46,7 +45,7 @@ struct OCRConfirmSheet: View {
                             }
                         }
 
-                        toolbar
+                        receiptFoldDivider
 
                         VStack(spacing: 10) {
                             ForEach(rows.indices, id: \.self) { index in
@@ -92,49 +91,6 @@ struct OCRConfirmSheet: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.large])
-    }
-
-    private var toolbar: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Button("全选") {
-                    for index in rows.indices {
-                        rows[index].selected = true
-                    }
-                }
-                Button("反选") {
-                    for index in rows.indices {
-                        rows[index].selected.toggle()
-                    }
-                }
-                Spacer()
-            }
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(AppColors.accent)
-
-            HStack {
-                Text("把已选账单改为")
-                    .font(.system(size: 13))
-                    .foregroundStyle(AppColors.subtext)
-                Spacer()
-                Picker("批量修改分类", selection: $batchCategory) {
-                    ForEach(HomeItem.Category.allCases) { category in
-                        Text(category.displayName).tag(category)
-                    }
-                }
-                .pickerStyle(.menu)
-                .onChange(of: batchCategory) { _, category in
-                    for index in rows.indices where rows[index].selected {
-                        rows[index].draft.category = category
-                    }
-                }
-            }
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.66))
-        )
     }
 
     private func confirmRow(_ index: Int) -> some View {
@@ -241,6 +197,20 @@ struct OCRConfirmSheet: View {
         let stroke = isSelected ? AppColors.accent.opacity(0.24) : Color.white.opacity(0.45)
         return RoundedRectangle(cornerRadius: 16, style: .continuous)
             .stroke(stroke, lineWidth: 1)
+    }
+
+    private var receiptFoldDivider: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<18, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                    .fill(index.isMultiple(of: 2) ? AppColors.accent.opacity(0.20) : AppColors.line.opacity(0.56))
+                    .frame(width: 10, height: 2)
+                    .rotationEffect(.degrees(index.isMultiple(of: 2) ? -18 : 18))
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 2)
+        .accessibilityHidden(true)
     }
 
     private func statBlock(title: String, value: String) -> some View {
