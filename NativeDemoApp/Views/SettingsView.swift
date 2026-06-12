@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var showDeleteCloudLedgerConfirm = false
     @State private var showDeleteAccountConfirm = false
     @State private var isAccountDangerExpanded = false
+    @State private var showNicknameEditor = false
     @FocusState private var focusedField: SettingsField?
     private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
     private let privacyURL = URL(string: "https://xuzhangapp.com/legal/privacy.html")!
@@ -52,6 +53,10 @@ struct SettingsView: View {
         }
     }
 
+    private var hasExpiredPaidMemberTier: Bool {
+        hasPaidMemberTier && !hasMemberAccess
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
@@ -74,6 +79,9 @@ struct SettingsView: View {
         .onChange(of: focusedField) { oldValue, newValue in
             if oldValue == .displayName, newValue != .displayName {
                 commitDisplayName()
+                if settingsViewModel.hasCloudSession {
+                    showNicknameEditor = false
+                }
             }
             if oldValue == .petNickname, newValue != .petNickname {
                 commitPetNickname()
@@ -132,30 +140,27 @@ struct SettingsView: View {
     // MARK: - Account Entry
 
     private var settingsIdentityCard: some View {
-        Button {
-            showAccountSheet = true
-        } label: {
-            HStack(spacing: 12) {
-                narrativeSealAvatar
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(settingsViewModel.displayName.isEmpty ? "叙账用户" : settingsViewModel.displayName)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(AppColors.text)
-                    Text("本地保存 · \(AppSettings.memberTierDisplayName(settingsViewModel.memberTier))")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
-                    Text(settingsViewModel.hasCloudSession ? "云端备份已准备好，照常记就好。" : "想备份或续聊时，再点这里登录。")
-                        .font(.system(size: 12))
-                        .italic()
-                        .foregroundStyle(AppColors.subtext.opacity(0.88))
-                        .lineLimit(2)
-                }
-                Spacer()
+        HStack(spacing: 12) {
+            narrativeSealAvatar
+            VStack(alignment: .leading, spacing: 4) {
+                Text(settingsDisplayName)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                Text(identityCardMeta)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .lineLimit(1)
+                Text(settingsViewModel.hasCloudSession ? "云端备份已准备好，照常记就好。" : "想备份或续聊时，再点这里登录。")
+                    .font(.system(size: 12))
+                    .italic()
+                    .foregroundStyle(AppColors.subtext.opacity(0.88))
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
+            Spacer()
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(AppColors.settingsIdentityPanel)
@@ -189,34 +194,40 @@ struct SettingsView: View {
     }
 
     private var settingsChapterPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("你的叙账")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(AppColors.subtext.opacity(0.82))
+        VStack(alignment: .leading, spacing: 14) {
             VStack(spacing: 0) {
-                settingsEntryRow(mark: "你", title: "账号与会员", summary: settingsViewModel.hasCloudSession ? "已登录" : "未登录 · 可选") {
+                settingsSectionLabel("你的叙账")
+                settingsEntryRow(mark: "你", title: "账号与会员", summary: accountRowSummary) {
                     showAccountSheet = true
                 }
-                settingsEntryRow(mark: "云", title: "备份与联网", summary: "云端备份、联网梳理") {
+                settingsEntryRow(mark: "云", title: "备份与联网", summary: backupRowSummary) {
                     activeSettingsSheet = .backup
                 }
-                settingsEntryRow(mark: "伴", title: "陪伴与语气", summary: "宠物、天气互动") {
+                settingsEntryRow(mark: "伴", title: "陪伴与语气", summary: companionRowSummary) {
                     activeSettingsSheet = .companion
                 }
+            }
+            VStack(spacing: 0) {
+                settingsSectionLabel("偏好与安心")
                 settingsEntryRow(mark: "色", title: "外观", summary: appearanceSummary) {
                     activeSettingsSheet = .appearance
                 }
-                settingsEntryRow(mark: "安", title: "数据与隐私", summary: "本地昵称、说明与协议") {
+                settingsEntryRow(mark: "安", title: "数据与隐私", summary: "说明与协议") {
                     activeSettingsSheet = .privacy
                 }
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(AppColors.settingsChapterPanel)
-        )
+        .padding(10)
+        .glassPanel(radius: 20, padding: 0)
+    }
+
+    private func settingsSectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(AppColors.subtext.opacity(0.82))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+            .padding(.bottom, 2)
     }
 
     private func settingsEntryRow(mark: String, title: String, summary: String, action: @escaping () -> Void) -> some View {
@@ -267,6 +278,49 @@ struct SettingsView: View {
         case .system: return "跟随系统"
         case .light: return "浅色"
         case .dark: return "深色"
+        }
+    }
+
+    private var settingsDisplayName: String {
+        settingsViewModel.displayName.isEmpty ? "叙账用户" : settingsViewModel.displayName
+    }
+
+    private var memberTierName: String {
+        AppSettings.memberTierDisplayName(settingsViewModel.memberTier)
+    }
+
+    private var identityCardMeta: String {
+        let sync = settingsViewModel.syncEnabled ? "已同步云端" : "本地保存"
+        let expiry = hasExpiredPaidMemberTier ? " · 已到期" : ""
+        return "\(sync) · \(memberTierName)\(expiry)"
+    }
+
+    private var accountRowSummary: String {
+        guard settingsViewModel.hasCloudSession else { return "未登录 · 可选" }
+        if hasMemberAccess { return "已登录 · \(memberTierName)" }
+        if hasPaidMemberTier { return "已登录 · 已到期" }
+        return "已登录 · 免费版"
+    }
+
+    private var backupRowSummary: String {
+        switch (settingsViewModel.syncEnabled, settingsViewModel.useRemoteAI) {
+        case (true, true): return "云端开 · AI 开"
+        case (true, false): return "云端备份已开"
+        case (false, true): return "联网梳理已开"
+        case (false, false): return "仅本地保存"
+        }
+    }
+
+    private var companionRowSummary: String {
+        guard settingsViewModel.petCompanionEnabled else { return "宠物已关" }
+        if settingsViewModel.weatherCompanionEnabled { return "宠物开 · 天气互动" }
+        return "宠物开 · \(aiToneSummary)"
+    }
+
+    private var aiToneSummary: String {
+        switch settingsViewModel.aiTone {
+        case .gentle: return "温和"
+        case .neutral: return "中性"
         }
     }
 
@@ -573,7 +627,6 @@ struct SettingsView: View {
     private var accountSheetContent: some View {
         if settingsViewModel.hasCloudSession {
             accountIdentityHeader
-            accountIdentitySection
             accountMemberSection
             accountSessionSection
             accountDangerZone
@@ -722,31 +775,78 @@ struct SettingsView: View {
     }
 
     private var accountIdentityHeader: some View {
-        HStack(spacing: 12) {
-            narrativeSealAvatar
-            VStack(alignment: .leading, spacing: 5) {
-                Text(settingsViewModel.displayName.isEmpty ? "叙账用户" : settingsViewModel.displayName)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(1)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                narrativeSealAvatar
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 8) {
+                        Text(settingsDisplayName)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(AppColors.text)
+                            .lineLimit(1)
 
-                HStack(spacing: 6) {
-                    Text("\(AppSettings.memberTierDisplayName(settingsViewModel.memberTier)) · 已登录")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
+                        Button {
+                            if showNicknameEditor {
+                                commitDisplayName()
+                                showNicknameEditor = false
+                                focusedField = nil
+                            } else {
+                                draftDisplayName = settingsViewModel.displayName
+                                showNicknameEditor = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                                    focusedField = .displayName
+                                }
+                            }
+                        } label: {
+                            Image(systemName: showNicknameEditor ? "checkmark" : "pencil")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(AppColors.subtext.opacity(0.78))
+                                .frame(width: 24, height: 24)
+                                .background(
+                                    Circle()
+                                        .fill(Color.white.opacity(0.50))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    HStack(spacing: 6) {
+                        Text(accountHeaderMemberMeta)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
+                            .lineLimit(1)
+                        if hasMemberAccess {
+                            accountMemberBadge
+                        }
+                    }
+
+                    Text("云端备份已准备好，照常记就好。")
+                        .font(.system(size: 12))
+                        .italic()
+                        .foregroundStyle(AppColors.subtext.opacity(0.88))
                         .lineLimit(1)
-                    if hasMemberAccess {
-                        accountMemberBadge
+                }
+                Spacer(minLength: 0)
+            }
+
+            if showNicknameEditor {
+                VStack(alignment: .leading, spacing: 6) {
+                    settingField(label: "昵称") {
+                        TextField("叙账用户", text: $draftDisplayName)
+                            .focused($focusedField, equals: .displayName)
+                            .submitLabel(.done)
+                            .onSubmit {
+                                commitDisplayName()
+                                showNicknameEditor = false
+                            }
+                    }
+                    settingHelper("不要写手机号、证件号或链接。")
+                    if let msg = settingsViewModel.contentSafetyMessage {
+                        settingHelper(msg)
                     }
                 }
-
-                Text("云端备份已准备好，照常记就好。")
-                    .font(.system(size: 12))
-                    .italic()
-                    .foregroundStyle(AppColors.subtext.opacity(0.88))
-                    .lineLimit(1)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
@@ -783,19 +883,9 @@ struct SettingsView: View {
             )
     }
 
-    private var accountIdentitySection: some View {
-        accountPanel("身份") {
-            settingField(label: "昵称") {
-                TextField("叙账用户", text: $draftDisplayName)
-                    .focused($focusedField, equals: .displayName)
-                    .submitLabel(.done)
-                    .onSubmit { commitDisplayName() }
-            }
-            settingHelper("不要写手机号、证件号或链接。")
-            if let msg = settingsViewModel.contentSafetyMessage {
-                settingHelper(msg)
-            }
-        }
+    private var accountHeaderMemberMeta: String {
+        let expiry = hasExpiredPaidMemberTier ? " · 已到期" : ""
+        return "\(memberTierName) · 已登录\(expiry)"
     }
 
     private var accountMemberSection: some View {
@@ -805,14 +895,36 @@ struct SettingsView: View {
             }
 
             if hasMemberAccess {
+                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                    .fill(settingsInkAccent.opacity(0.22))
+                    .frame(height: 3)
                 LazyVGrid(columns: accountMemberBenefitColumns, alignment: .leading, spacing: 8) {
                     ForEach(accountMemberBenefits, id: \.self) { benefit in
                         memberBenefitRow(benefit)
                     }
                 }
             } else {
-                accountInfoRow(title: "当前档位", value: AppSettings.memberTierDisplayName(settingsViewModel.memberTier))
-                if !hasPaidMemberTier {
+                if hasPaidMemberTier {
+                    settingHelper("会员已到期，续费后可恢复权益。")
+                    Button {
+                        showAccountSheet = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                            showMemberPricing = true
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("续费会员")
+                                .font(.system(size: 14, weight: .medium))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .foregroundStyle(AppColors.accent.opacity(0.9))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    accountInfoRow(title: "当前档位", value: memberTierName)
                     Button {
                         showAccountSheet = false
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
