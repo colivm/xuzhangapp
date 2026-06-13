@@ -125,12 +125,69 @@ struct HomeItem: Identifiable, Codable, Equatable {
            !Self.containsTravelKeyword(title) {
             return Self.inferEmotionTag(category: category, amount: amount)
         }
+        if category == .dining,
+           Self.isWeekend(createdAt),
+           Self.containsWorkMealKeyword(trimmed),
+           !Self.containsWeekendWorkMealCue(title) {
+            return Self.weekendDiningTag(for: createdAt, amount: amount)
+        }
+        if category == .transport,
+           Self.isWeekend(createdAt),
+           Self.containsWorkRouteKeyword(trimmed),
+           !Self.containsWeekendWorkRouteCue(title) {
+            return Self.weekendRouteTag(for: createdAt)
+        }
         return trimmed
     }
 
     private static func containsTravelKeyword(_ text: String) -> Bool {
         let keywords = ["旅行", "旅途", "景区", "景点", "行程", "酒店", "民宿", "住宿", "机票", "高铁", "机场", "返程", "摆渡"]
         return keywords.contains { text.contains($0) }
+    }
+
+    private static func isWeekend(_ date: Date) -> Bool {
+        let weekday = Calendar.current.component(.weekday, from: date)
+        return weekday == 1 || weekday == 7
+    }
+
+    private static func containsWorkMealKeyword(_ text: String) -> Bool {
+        ["食堂", "工位", "工作日", "工作餐", "忙里", "加班后"].contains { text.contains($0) }
+    }
+
+    private static func containsWeekendWorkMealCue(_ text: String) -> Bool {
+        if text.contains("周末食堂") { return true }
+        let mealCue = ["食堂", "午餐", "饭", "餐", "外卖", "热饭"].contains { text.contains($0) }
+        let workCue = ["加班", "公司", "单位", "工位", "工作餐"].contains { text.contains($0) }
+        return mealCue && workCue
+    }
+
+    private static func containsWorkRouteKeyword(_ text: String) -> Bool {
+        ["上班", "下班", "到岗", "通勤", "加班", "工作", "早高峰", "晚高峰"].contains { text.contains($0) }
+    }
+
+    private static func containsWeekendWorkRouteCue(_ text: String) -> Bool {
+        let routeCue = ["地铁", "公交", "打车", "车", "路", "通勤"].contains { text.contains($0) }
+        let workCue = ["加班", "公司", "单位", "工位", "到岗", "上班", "下班"].contains { text.contains($0) }
+        return routeCue && workCue
+    }
+
+    private static func weekendDiningTag(for date: Date, amount: Double) -> String {
+        let hour = Calendar.current.component(.hour, from: date)
+        switch hour {
+        case 5..<10: return "周末早餐"
+        case 11..<14: return "周末午餐"
+        case 17..<21: return "周末晚饭"
+        default: return amount >= 40 ? "认真吃了一顿" : "简单吃一顿"
+        }
+    }
+
+    private static func weekendRouteTag(for date: Date) -> String {
+        let hour = Calendar.current.component(.hour, from: date)
+        switch hour {
+        case 5..<11: return "早上出门"
+        case 17..<22: return "傍晚一段路"
+        default: return "日常出行"
+        }
     }
 }
 

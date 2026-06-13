@@ -110,6 +110,7 @@ final class SettingsViewModel: ObservableObject {
         settings.displayName = result.value
         contentSafetyMessage = nil
         persist()
+        Task { await syncDisplayNameToCloud(result.value) }
         return true
     }
 
@@ -261,6 +262,9 @@ final class SettingsViewModel: ObservableObject {
             settings.memberTier = session.memberTier
             settings.memberExpiresAt = session.memberExpiresAt
             persist()
+            if let account = try? await client.fetchAccountMe(accessToken: session.accessToken) {
+                applyCloudAccount(account)
+            }
             let tier = try await client.fetchMemberMe(accessToken: session.accessToken)
             settings.memberTier = tier.tier
             settings.memberExpiresAt = tier.expiresAt
@@ -353,14 +357,13 @@ final class SettingsViewModel: ObservableObject {
             transactionId: payload.transactionId,
             signedTransactionInfo: payload.signedTransactionInfo
         )
-        settings.memberTier = verified.tier
-        settings.memberExpiresAt = verified.expiresAt
-        persist()
+        applyVerifiedMemberState(tier: verified.tier, expiresAt: verified.expiresAt, fallbackPayload: payload)
         do {
             let tier = try await client.fetchMemberMe(accessToken: token)
             let verifiedHasAccess = AppSettings.hasMemberAccess(tier: verified.tier, expiresAt: verified.expiresAt)
             let fetchedHasAccess = AppSettings.hasMemberAccess(tier: tier.tier, expiresAt: tier.expiresAt)
-            if verifiedHasAccess && !fetchedHasAccess {
+            let localHasAccess = hasActiveLocalEntitlement(payload)
+            if (verifiedHasAccess || localHasAccess) && !fetchedHasAccess {
                 authMessage = "会员已恢复，状态刷新稍后会再同步。"
             } else {
                 settings.memberTier = tier.tier
@@ -373,8 +376,116 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    func refreshMemberFromLocalEntitlements(synchronize: Bool = false) async {
+        do {
+            let payloads = try await IAPService.shared.currentEntitlements(synchronize: synchronize)
+            guard let payload = bestLocalEntitlement(from: payloads),
+                  hasActiveLocalEntitlement(payload) else { return }
+            let currentHasAccess = settings.hasMemberAccess
+            applyLocalEntitlement(payload)
+            if !currentHasAccess {
+                authMessage = "已检测到 App Store 会员权益，状态已恢复。"
+            }
+        } catch {
+            if synchronize {
+                authMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func refreshCloudAccountProfile() async {
+        let token = KeychainService.loadAccessToken()
+        guard !token.isEmpty else { return }
+        let client = AuthService(baseURL: backendBaseURL)
+        do {
+            let account = try await client.fetchAccountMe(accessToken: token)
+            applyCloudAccount(account)
+        } catch {
+            authMessage = error.localizedDescription
+        }
+    }
+
     private func persist() {
         LocalStore.saveSettings(settings)
+    }
+
+    private func applyCloudAccount(_ account: AuthUserDTO) {
+        settings.displayName = sanitizedDisplayName(account.displayName)
+        settings.cloudUserId = account.userId
+        if let memberTier = account.memberTier {
+            settings.memberTier = memberTier
+        }
+        settings.memberExpiresAt = account.memberExpiresAt
+        persist()
+    }
+
+    private func syncDisplayNameToCloud(_ displayName: String) async {
+        let token = KeychainService.loadAccessToken()
+        guard !token.isEmpty else { return }
+        let client = AuthService(baseURL: backendBaseURL)
+        do {
+            let account = try await client.updateDisplayName(accessToken: token, displayName: displayName)
+            applyCloudAccount(account)
+            authMessage = "昵称已同步。"
+        } catch {
+            authMessage = "昵称已保存在本机，云端同步失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func applyVerifiedMemberState(
+        tier: String,
+        expiresAt: String?,
+        fallbackPayload: IAPPurchaseVerification
+    ) {
+        let verifiedHasAccess = AppSettings.hasMemberAccess(tier: tier, expiresAt: expiresAt)
+        if verifiedHasAccess || !hasActiveLocalEntitlement(fallbackPayload) {
+            settings.memberTier = tier
+            settings.memberExpiresAt = expiresAt
+        } else {
+            applyLocalEntitlement(fallbackPayload, shouldPersist: false)
+        }
+        persist()
+    }
+
+    private func applyLocalEntitlement(_ payload: IAPPurchaseVerification, shouldPersist: Bool = true) {
+        settings.memberTier = payload.tier.rawValue
+        switch payload.tier {
+        case .lifetime:
+            settings.memberExpiresAt = nil
+        case .monthly, .yearly:
+            settings.memberExpiresAt = payload.expirationDate.map { AppSettings.isoString(from: $0) }
+        }
+        if shouldPersist {
+            persist()
+        }
+    }
+
+    private func hasActiveLocalEntitlement(_ payload: IAPPurchaseVerification, now: Date = Date()) -> Bool {
+        switch payload.tier {
+        case .lifetime:
+            return true
+        case .monthly, .yearly:
+            guard let expirationDate = payload.expirationDate else { return true }
+            return expirationDate > now
+        }
+    }
+
+    private func bestLocalEntitlement(from payloads: [IAPPurchaseVerification]) -> IAPPurchaseVerification? {
+        payloads.sorted { lhs, rhs in
+            entitlementRank(lhs) > entitlementRank(rhs)
+        }
+        .first
+    }
+
+    private func entitlementRank(_ payload: IAPPurchaseVerification) -> Int {
+        let tierWeight: Int
+        switch payload.tier {
+        case .lifetime: tierWeight = 3_000_000_000
+        case .yearly: tierWeight = 2_000_000_000
+        case .monthly: tierWeight = 1_000_000_000
+        }
+        let expiry = Int(payload.expirationDate?.timeIntervalSince1970 ?? 0)
+        return tierWeight + expiry
     }
 
     private func startSMSCooldown(_ seconds: Int) {

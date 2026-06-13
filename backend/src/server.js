@@ -10,10 +10,12 @@ import {
   getIAPTransactionByOriginalId,
   getOrCreateUserByPhone,
   getSessionByUserId,
+  getUserById,
   getSmsCode,
   initStore,
   setSessionByUserId,
   setSmsCode,
+  updateUserDisplayName,
   upsertIAPTransaction,
   upsertLedger,
 } from "./store.js";
@@ -118,6 +120,37 @@ app.post("/v1/auth/wechat/login", (_req, res) => {
 app.get("/v1/member/me", requireAuth, async (req, res) => {
   const session = await getSessionByUserId(req.user.userId);
   res.json({ ok: true, ...session });
+});
+
+app.get("/v1/account/me", requireAuth, async (req, res) => {
+  const user = await getUserById(req.user.userId);
+  if (!user) return res.status(404).json({ ok: false, error: "USER_NOT_FOUND" });
+  const session = await getSessionByUserId(req.user.userId);
+  res.json({
+    ok: true,
+    user: {
+      userId: user.userId,
+      displayName: user.displayName,
+      memberTier: session?.memberTier || "free",
+      memberExpiresAt: session?.memberExpiresAt || null,
+    },
+  });
+});
+
+app.patch("/v1/account/me", requireAuth, async (req, res) => {
+  const displayName = String(req.body?.displayName || "").trim();
+  if (displayName.length < 1 || displayName.length > 12) {
+    return res.status(400).json({ ok: false, error: "INVALID_DISPLAY_NAME" });
+  }
+  const user = await updateUserDisplayName(req.user.userId, displayName);
+  if (!user) return res.status(404).json({ ok: false, error: "USER_NOT_FOUND" });
+  res.json({
+    ok: true,
+    user: {
+      userId: user.userId,
+      displayName: user.displayName,
+    },
+  });
 });
 
 if (!isProduction) {

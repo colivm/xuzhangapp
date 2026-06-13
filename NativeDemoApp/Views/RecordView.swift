@@ -248,7 +248,7 @@ struct RecordView: View {
             activeScenePack = pack
             homeViewModel.applyScenePackDraft(title: title, category: pack.category)
         } else {
-            activeScenePack = pack.category == homeViewModel.selectedCategory ? pack : nil
+            activeScenePack = nil
             homeViewModel.inputTitle = title
         }
         if !keepSelectedCategory {
@@ -270,6 +270,23 @@ struct RecordView: View {
 
     private func scenePackDesc(_ pack: ScenePackDefinition) -> String {
         ScenePackCopyPool.renderPetName(pack.desc, petName: settingsViewModel.petNickname)
+    }
+
+    private func scenePackReason(_ pack: ScenePackDefinition) -> String {
+        let hour = Calendar.current.component(.hour, from: homeViewModel.selectedDate)
+        if pack.category == homeViewModel.selectedCategory {
+            if pack.id == "food", hour >= 22 || hour < 6 {
+                return "深夜 · \(pack.category.label)"
+            }
+            return "当前分类"
+        }
+        if pack.id == "travel", hasTravelContextForCurrentRecord {
+            return "旅途线索"
+        }
+        if scenePackUsageStats[pack.id] != nil {
+            return "常用靠前"
+        }
+        return pack.category.label
     }
 
     enum EntryMode: String, CaseIterable, Identifiable {
@@ -448,6 +465,89 @@ struct RecordView: View {
         }
     }
 
+    private func baseScenePack(for category: HomeItem.Category) -> ScenePackDefinition? {
+        let packId: String?
+        switch category {
+        case .dining: packId = "food"
+        case .transport: packId = "commute"
+        case .shopping: packId = "shopping"
+        case .lodging: packId = "travel"
+        case .health: packId = "care"
+        case .home: packId = "home"
+        case .social: packId = "social"
+        case .daily, .entertainment, .other: packId = nil
+        }
+        guard let packId else { return nil }
+        return visibleScenePacks.first { $0.id == packId }
+    }
+
+    private func nextCategoryCopyTitle() -> String {
+        let amount = inputAmountValue
+        let category = homeViewModel.selectedCategory
+        let variantKey = categoryCopyVariantKey(
+            category: category,
+            amount: amount,
+            date: homeViewModel.selectedDate
+        )
+        let variant = scenePackVariants[variantKey, default: 0]
+        scenePackVariants[variantKey] = variant + 1
+
+        if let pack = baseScenePack(for: category) {
+            return ScenePackCopyPool.note(
+                for: pack,
+                amount: amount,
+                date: homeViewModel.selectedDate,
+                categoryContext: category,
+                petName: settingsViewModel.petNickname,
+                historyItems: homeViewModel.items,
+                allowPetCopy: settingsViewModel.petCompanionEnabled,
+                variant: variant,
+                allowTravelSpecificCopy: containsTravelKeyword(homeViewModel.inputTitle)
+            )
+        }
+
+        return genericCategoryCopy(
+            for: category,
+            amount: amount,
+            date: homeViewModel.selectedDate,
+            variant: variant
+        )
+    }
+
+    private func categoryCopyVariantKey(
+        category: HomeItem.Category,
+        amount: Double,
+        date: Date
+    ) -> String {
+        let day = Calendar.current.startOfDay(for: date).timeIntervalSince1970
+        let hour = Calendar.current.component(.hour, from: date)
+        let amountBucket = Int((amount * 100).rounded())
+        return "category|\(category.rawValue)|\(amountBucket)|\(Int(day))|\(hour)"
+    }
+
+    private func genericCategoryCopy(
+        for category: HomeItem.Category,
+        amount: Double,
+        date: Date,
+        variant: Int
+    ) -> String {
+        let notes: [String]
+        switch category {
+        case .daily:
+            notes = amount <= 50
+                ? ["日用小补给", "日常小物补上", "刚好需要的小东西", "小补给记下来", "常用的先补一点", "便利袋里的一点日常"]
+                : ["日常用品补齐", "把常用的补上", "日用品换新一点", "这笔给日常用品", "常用物件买回来了", "日常安排记一笔"]
+        case .entertainment:
+            notes = ["这次放松安排", "给自己留点轻松", "娱乐小消费记下", "这一段休闲时间", "放松一下也记下", "今天的娱乐安排"]
+        case .other:
+            notes = ["这笔先放进账本", "日常小记录", "临时花了一笔", "这一笔先记下", "单独记录一下", "今天补上一笔", "小额支出记下", "这笔记录已放好"]
+        default:
+            notes = [previewFallbackTitle(for: category)]
+        }
+        guard !notes.isEmpty else { return previewFallbackTitle(for: category) }
+        return notes[variant % notes.count]
+    }
+
     private func handlePreviewQuickAction() {
         dismissKeyboard()
         guard hasValidAmount else { return }
@@ -458,14 +558,9 @@ struct RecordView: View {
             }
             return
         }
-        let packs = visibleScenePacks
-        let currentPack = activeScenePack.flatMap { active in
-            active.category == homeViewModel.selectedCategory ? packs.first(where: { $0.id == active.id }) : nil
-        }
-        let quickPackId = guessScenePackId()
-        guard let quickPack = currentPack ?? packs.first(where: { $0.id == quickPackId }) ?? packs.first else { return }
         previewLineWasRotated = true
-        applyScenePack(quickPack, keepSelectedCategory: true)
+        activeScenePack = nil
+        homeViewModel.inputTitle = nextCategoryCopyTitle()
     }
 
     private func refreshRecommendedCategory(applySuggestedTitle: Bool = true) {
@@ -1478,9 +1573,6 @@ struct RecordView: View {
 
     @ViewBuilder
     private var memberScenePackSection: some View {
-        let quickPackId = guessScenePackId()
-        let packs = visibleScenePacks
-        let quickPack = packs.first(where: { $0.id == quickPackId }) ?? packs[0]
         ScenePackSectionView(
             primaryScenePacks: primaryScenePacks,
             secondaryScenePacks: secondaryScenePacks,
@@ -1489,7 +1581,10 @@ struct RecordView: View {
             isPetMode: settingsViewModel.petCompanionEnabled,
             recordInk: recordInk,
             onQuickGenerate: {
-                applyScenePack(quickPack, keepSelectedCategory: true)
+                dismissKeyboard()
+                previewLineWasRotated = true
+                activeScenePack = nil
+                homeViewModel.inputTitle = nextCategoryCopyTitle()
             },
             onToggleExpanded: {
                 dismissKeyboard()
@@ -1501,7 +1596,8 @@ struct RecordView: View {
             onSelectPack: { pack in
                 applyScenePack(pack)
             },
-            scenePackDesc: scenePackDesc
+            scenePackDesc: scenePackDesc,
+            scenePackReason: scenePackReason
         )
     }
 

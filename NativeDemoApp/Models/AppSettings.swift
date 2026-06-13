@@ -197,6 +197,10 @@ extension AppSettings {
         fractionalISODateFormatter.date(from: value) ?? isoDateFormatter.date(from: value)
     }
 
+    static func isoString(from date: Date) -> String {
+        fractionalISODateFormatter.string(from: date)
+    }
+
     var colorScheme: ColorScheme? {
         switch appearance {
         case .system:

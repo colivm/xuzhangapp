@@ -12,6 +12,15 @@ struct ScenePackSectionView: View {
     let onToggleMore: () -> Void
     let onSelectPack: (ScenePackDefinition) -> Void
     let scenePackDesc: (ScenePackDefinition) -> String
+    let scenePackReason: (ScenePackDefinition) -> String
+
+    private var recommendedScenePacks: [ScenePackDefinition] {
+        Array(primaryScenePacks.prefix(3))
+    }
+
+    private var tuckedScenePacks: [ScenePackDefinition] {
+        Array(primaryScenePacks.dropFirst(3)) + secondaryScenePacks
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -47,7 +56,7 @@ struct ScenePackSectionView: View {
         let collapsedText = isPetMode
             ? "按分类和小宠物偏好换一句。"
             : "按当前分类换一句生活备注。"
-        let text = isExpanded ? "点选会调分类；常用自动靠前。" : collapsedText
+        let text = isExpanded ? "先给 3 个角度；点选后只影响这次写法。" : collapsedText
         return Text(text)
             .font(.system(size: 12))
             .foregroundStyle(AppColors.subtext.opacity(0.88))
@@ -74,8 +83,8 @@ struct ScenePackSectionView: View {
     }
 
     private var toggleButton: some View {
-        let title = isExpanded ? "收起场景包" : "挑一个场景包"
-        let subtitle = isExpanded ? "回到简洁输入" : "通勤、吃饭、居家都能换"
+        let title = isExpanded ? "收起场景角度" : "推荐 3 个场景角度"
+        let subtitle = isExpanded ? "回到简洁输入" : "常用靠前，少用会收起"
         return Button(action: onToggleExpanded) {
             HStack {
                 Text(title)
@@ -97,13 +106,13 @@ struct ScenePackSectionView: View {
     @ViewBuilder
     private var expandedPackList: some View {
         if isExpanded {
-            ForEach(primaryScenePacks, id: \.id) { pack in
+            ForEach(recommendedScenePacks, id: \.id) { pack in
                 scenePackButton(pack)
             }
-            if !secondaryScenePacks.isEmpty {
+            if !tuckedScenePacks.isEmpty {
                 moreToggleButton
                 if isMoreExpanded {
-                    ForEach(secondaryScenePacks, id: \.id) { pack in
+                    ForEach(tuckedScenePacks, id: \.id) { pack in
                         scenePackButton(pack)
                     }
                 }
@@ -114,9 +123,9 @@ struct ScenePackSectionView: View {
     private var moreToggleButton: some View {
         Button(action: onToggleMore) {
             HStack {
-                Text(isMoreExpanded ? "收起未常用场景" : "展开未常用场景")
+                Text(isMoreExpanded ? "收起更多角度" : "展开更多角度")
                     .font(.system(size: 13, weight: .medium))
-                Text("\(secondaryScenePacks.count) 个未用或静默")
+                Text("\(tuckedScenePacks.count) 个备用")
                     .font(.system(size: 11))
                     .foregroundStyle(AppColors.subtext.opacity(0.7))
                     .lineLimit(1)
@@ -139,13 +148,30 @@ struct ScenePackSectionView: View {
         Button {
             onSelectPack(pack)
         } label: {
-            HStack {
-                Text("\(pack.emoji) \(pack.label)")
-                    .font(.system(size: 14, weight: .medium))
-                Text(scenePackDesc(pack))
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppColors.subtext.opacity(0.7))
-                    .lineLimit(1)
+            HStack(alignment: .center, spacing: 10) {
+                Text(pack.emoji)
+                    .font(.system(size: 21))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(pack.label)
+                            .font(.system(size: 14, weight: .semibold))
+                        Text(scenePackReason(pack))
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(AppColors.accent.opacity(0.88))
+                            .lineLimit(1)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(AppColors.accent.opacity(0.10))
+                            )
+                    }
+                    Text(scenePackDesc(pack))
+                        .font(.system(size: 11))
+                        .foregroundStyle(AppColors.subtext.opacity(0.7))
+                        .lineLimit(1)
+                }
                 Spacer()
             }
             .scenePackButtonStyle(

@@ -64,6 +64,15 @@ private struct MemberMeResponse: Decodable {
     let memberExpiresAt: String?
 }
 
+private struct AccountMeResponse: Decodable {
+    let ok: Bool
+    let user: AuthUserDTO?
+}
+
+private struct UpdateAccountBody: Encodable {
+    let displayName: String
+}
+
 private struct IAPVerifyBody: Encodable {
     let productId: String
     let transactionId: String
@@ -151,6 +160,40 @@ final class AuthService: AuthServiceProtocol {
         let decoded = try JSONDecoder().decode(MemberMeResponse.self, from: data)
         guard decoded.ok else { throw AuthServiceError.decodeFailed }
         return (decoded.memberTier ?? "free", decoded.memberExpiresAt)
+    }
+
+    func fetchAccountMe(accessToken: String) async throws -> AuthUserDTO {
+        let url = try makeURL(path: "/v1/account/me")
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        let (data, response, bodyText) = try await data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw AuthServiceError.badStatus(-1, "") }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw AuthServiceError.badStatus(http.statusCode, bodyText)
+        }
+        let decoded = try JSONDecoder().decode(AccountMeResponse.self, from: data)
+        guard decoded.ok, let user = decoded.user else { throw AuthServiceError.decodeFailed }
+        return user
+    }
+
+    func updateDisplayName(accessToken: String, displayName: String) async throws -> AuthUserDTO {
+        let url = try makeURL(path: "/v1/account/me")
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(UpdateAccountBody(displayName: displayName))
+        let (data, response, bodyText) = try await data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw AuthServiceError.badStatus(-1, "") }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw AuthServiceError.badStatus(http.statusCode, bodyText)
+        }
+        let decoded = try JSONDecoder().decode(AccountMeResponse.self, from: data)
+        guard decoded.ok, let user = decoded.user else { throw AuthServiceError.decodeFailed }
+        return user
     }
 
     func verifyIAPPurchase(

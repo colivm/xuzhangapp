@@ -155,6 +155,45 @@ export async function getOrCreateUserByPhone(phone) {
   return { userId, displayName, phone };
 }
 
+export async function getUserById(userId) {
+  if (!usePostgres) {
+    for (const user of memory.usersByPhone.values()) {
+      if (user.userId === userId) return user;
+    }
+    return null;
+  }
+  const result = await pool.query(`SELECT user_id, display_name, phone FROM users WHERE user_id = $1`, [userId]);
+  if (!result.rowCount) return null;
+  return {
+    userId: result.rows[0].user_id,
+    displayName: result.rows[0].display_name,
+    phone: result.rows[0].phone,
+  };
+}
+
+export async function updateUserDisplayName(userId, displayName) {
+  if (!usePostgres) {
+    for (const [phone, user] of memory.usersByPhone.entries()) {
+      if (user.userId === userId) {
+        const next = { ...user, displayName };
+        memory.usersByPhone.set(phone, next);
+        return next;
+      }
+    }
+    return null;
+  }
+  const result = await pool.query(
+    `UPDATE users SET display_name = $2 WHERE user_id = $1 RETURNING user_id, display_name, phone`,
+    [userId, displayName]
+  );
+  if (!result.rowCount) return null;
+  return {
+    userId: result.rows[0].user_id,
+    displayName: result.rows[0].display_name,
+    phone: result.rows[0].phone,
+  };
+}
+
 export async function getSessionByUserId(userId) {
   if (!usePostgres) return memory.sessionsByUserId.get(userId) || { memberTier: "free", memberExpiresAt: null };
   const result = await pool.query(`SELECT member_tier, member_expires_at FROM sessions WHERE user_id = $1`, [userId]);

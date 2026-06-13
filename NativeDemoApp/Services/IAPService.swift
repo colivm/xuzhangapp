@@ -12,6 +12,7 @@ struct IAPPurchaseVerification: Equatable {
     let transactionId: String
     let signedTransactionInfo: String
     let tier: IAPTier
+    let expirationDate: Date?
 }
 
 enum IAPServiceError: LocalizedError {
@@ -95,11 +96,21 @@ final class IAPService: ObservableObject {
     }
 
     func restorePurchases() async throws -> [IAPPurchaseVerification] {
-        try await AppStore.sync()
+        try await currentEntitlements(synchronize: true)
+    }
+
+    func currentEntitlements(synchronize: Bool = false) async throws -> [IAPPurchaseVerification] {
+        if synchronize {
+            try await AppStore.sync()
+        }
         var payloads: [IAPPurchaseVerification] = []
         for await result in Transaction.currentEntitlements {
             let transaction = try verifiedTransaction(from: result)
+            guard transaction.revocationDate == nil else { continue }
             guard let tier = tier(for: transaction.productID) else { continue }
+            if tier != .lifetime, let expirationDate = transaction.expirationDate, expirationDate <= Date() {
+                continue
+            }
             pendingTransactions[String(transaction.id)] = transaction
             payloads.append(verificationPayload(for: transaction, signedTransactionInfo: result.jwsRepresentation, tier: tier))
         }
@@ -141,7 +152,8 @@ final class IAPService: ObservableObject {
             productId: transaction.productID,
             transactionId: String(transaction.id),
             signedTransactionInfo: signedTransactionInfo,
-            tier: tier
+            tier: tier,
+            expirationDate: transaction.expirationDate
         )
     }
 

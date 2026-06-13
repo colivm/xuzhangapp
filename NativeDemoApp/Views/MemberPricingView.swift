@@ -73,6 +73,7 @@ struct MemberPricingView: View {
                 }
             }
             .task {
+                await settingsViewModel.refreshMemberFromLocalEntitlements()
                 await loadStoreProducts()
             }
             .alert("会员购买", isPresented: Binding(

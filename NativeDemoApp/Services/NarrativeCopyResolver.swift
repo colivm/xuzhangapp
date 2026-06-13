@@ -107,15 +107,65 @@ enum NarrativeCopyResolver {
             )
         }
 
-        if containsAny(lower, ["食堂", "午餐", "简餐", "热饭", "热乎饭", "外卖", "饭点", "吃顿饭", "一顿饭", "面或饭", "夜宵", "夜里饿了"]) {
+        if context.category == .transport,
+           containsAny(lower, ["地铁", "公交", "打车", "出租", "网约车", "单车", "路费", "车程", "通勤", "上班", "下班", "到岗", "返程", "回家"]) {
+            if isWeekend(context.date), !containsWorkCue(lower) {
+                return pick(
+                    weekendRouteNotes(for: context.date),
+                    seed: context.seed + "|weekendRoute"
+                )
+            }
+
+            if containsAny(lower, ["上班", "早班", "到岗", "早高峰"]) {
+                return pick(
+                    ["早上出门", "早间一段路", "准时到达", "这程先记下", "路费记一笔", "今天出门了"],
+                    seed: context.seed + "|morningRoute"
+                )
+            }
+
+            if containsAny(lower, ["下班", "晚高峰", "回家", "返程"]) {
+                return pick(
+                    ["回家路上", "晚间一段路", "回程记一笔", "路费记一下", "这程到家", "晚上出行"],
+                    seed: context.seed + "|eveningRoute"
+                )
+            }
+
+            return pick(
+                ["日常出行", "这程记下", "路费一笔", "一段路程", "今天的一段路", "出行记录"],
+                seed: context.seed + "|route"
+            )
+        }
+
+        if containsAny(lower, ["食堂", "午餐", "简餐", "热饭", "热乎饭", "外卖", "饭点", "吃顿饭", "一顿饭", "面或饭", "夜宵", "夜里饿了", "晚饭", "早餐"]) {
+            if isWeekend(context.date), !containsWeekendWorkMealCue(lower) {
+                return pick(
+                    weekendMealNotes(for: context.date, note: lower),
+                    seed: context.seed + "|weekendMeal"
+                )
+            }
+
+            if containsAny(lower, ["夜宵", "夜里饿了", "深夜", "夜里", "凌晨"]) {
+                return pick(
+                    [
+                        "夜里补一点",
+                        "深夜这顿记下",
+                        "晚点吃上了",
+                        "夜里一口热的",
+                        "这顿先垫一下",
+                        "夜里吃点东西",
+                    ],
+                    seed: context.seed + "|nightMeal"
+                )
+            }
+
             return pick(
                 [
                     "中午一顿饭",
                     "饭点记一笔",
-                    "食堂吃一顿",
                     "热饭到了手边",
-                    "忙里吃上饭",
+                    "今天吃上饭",
                     "这一顿先记下",
+                    "简单吃一顿",
                 ],
                 seed: context.seed + "|meal"
             )
@@ -151,6 +201,51 @@ enum NarrativeCopyResolver {
 
     private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
         keywords.contains { text.contains($0.lowercased()) }
+    }
+
+    private static func isWeekend(_ date: Date) -> Bool {
+        let weekday = Calendar.current.component(.weekday, from: date)
+        return weekday == 1 || weekday == 7
+    }
+
+    private static func containsWeekendWorkMealCue(_ text: String) -> Bool {
+        if text.contains("周末食堂") { return true }
+        let mealCue = ["食堂", "午餐", "饭", "餐", "外卖", "热饭"].contains { text.contains($0) }
+        let workCue = ["加班", "公司", "单位", "工位", "工作餐"].contains { text.contains($0) }
+        return mealCue && workCue
+    }
+
+    private static func containsWorkCue(_ text: String) -> Bool {
+        ["加班", "公司", "单位", "工位", "工作餐", "到岗"].contains { text.contains($0) }
+    }
+
+    private static func weekendRouteNotes(for date: Date) -> [String] {
+        let hour = Calendar.current.component(.hour, from: date)
+        switch hour {
+        case 5..<11:
+            return ["早上出门", "早间一段路", "这程先记下", "路费记一笔", "短途出行", "早上的路"]
+        case 17..<22:
+            return ["傍晚一段路", "回程记一笔", "晚上出行", "这程到家", "路费记一下", "晚间一段路"]
+        default:
+            return ["日常出行", "这程记下", "一段路程", "今天的一段路", "路费一笔", "出行记录"]
+        }
+    }
+
+    private static func weekendMealNotes(for date: Date, note: String) -> [String] {
+        if containsAny(note, ["夜宵", "夜里饿了", "深夜", "夜里", "凌晨"]) {
+            return ["周末夜里补一点", "夜里吃点东西", "深夜这顿记下", "晚点吃上了", "这口先垫一下", "夜里一口热的"]
+        }
+        let hour = Calendar.current.component(.hour, from: date)
+        switch hour {
+        case 5..<10:
+            return ["周末早餐", "早上简单吃点", "早餐先记下", "早间小食", "今天早餐有着落", "早上补点能量"]
+        case 11..<14:
+            return ["周末午餐", "午间吃点热乎的", "这顿午饭记下", "周末饭点留一笔", "中午简单吃一顿", "午间一顿饭"]
+        case 17..<21:
+            return ["周末晚饭", "晚餐吃点热乎的", "今晚这顿记下", "晚饭时间坐一会儿", "这顿晚饭有着落", "周末晚餐"]
+        default:
+            return ["周末吃一顿", "简单吃点东西", "这顿先记下", "饭点留一笔", "吃点热乎的", "今天这顿记下"]
+        }
     }
 
     private static func scenePack(for context: Context) -> ScenePackDefinition? {

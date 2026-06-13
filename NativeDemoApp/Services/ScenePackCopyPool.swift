@@ -165,15 +165,23 @@ enum ScenePackCopyPool {
             for: pack,
             category: categoryContext,
             date: date,
-            allowTravelSpecificCopy: allowTravelSpecificCopy
+            allowTravelSpecificCopy: allowTravelSpecificCopy,
+            historyItems: historyItems
         )
         let notes = context?.notes ?? tier.notes
         let baseSeed = "\(dayKey(for: date))|\(pack.id)|\(tierIndex)|\(categoryContext.rawValue)|\(context?.key ?? "tier")"
         let baseIndex = stableIndex(seed: baseSeed, count: notes.count)
         let index = (baseIndex + max(0, variant)) % max(1, notes.count)
         let rendered = sanitizeLifeNote(renderPetName(notes[index], petName: petName))
-        return enrichNoteWithHistory(
+        let contextualized = contextualizeNote(
             rendered,
+            pack: pack,
+            category: categoryContext,
+            date: date,
+            historyItems: historyItems
+        )
+        return enrichNoteWithHistory(
+            contextualized,
             category: categoryContext,
             date: date,
             items: historyItems,
@@ -190,7 +198,8 @@ enum ScenePackCopyPool {
         for pack: ScenePackDefinition,
         category: HomeItem.Category,
         date: Date,
-        allowTravelSpecificCopy: Bool
+        allowTravelSpecificCopy: Bool,
+        historyItems: [HomeItem]
     ) -> (key: String, notes: [String])? {
         let hour = Calendar.current.component(.hour, from: date)
 
@@ -204,30 +213,211 @@ enum ScenePackCopyPool {
         if pack.id == "food" || category == .dining {
             switch hour {
             case 5..<10:
-                return ("breakfast", ["早餐简单吃一口", "晨间咖啡和小食", "上班前补点能量", "早饭热乎一下", "清晨的一份轻食", "早餐路上买一点", "豆浆包子早餐", "早间小食"])
+                if shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
+                    return ("breakfast", ["早餐简单吃一口", "晨间咖啡和小食", "上班前补点能量", "早饭热乎一下", "清晨的一份轻食", "早餐路上买一点", "豆浆包子早餐", "早间小食"])
+                }
+                return ("weekendBreakfast", ["早餐简单吃一口", "晨间咖啡和小食", "早饭热乎一下", "清晨的一份轻食", "早餐路上买一点", "豆浆包子早餐", "早间小食", "周末早餐有着落"])
             case 11..<14:
-                return ("lunch", ["工作日午餐简餐", "中午一顿饭", "外卖点到工位", "食堂一份热乎饭", "中午吃一顿", "忙里抽空吃顿饭", "中午简单吃一顿", "饱腹又不折腾的一顿"])
+                if shouldUseWorkdayMealCopy(date: date, historyItems: historyItems) {
+                    return ("lunch", ["工作日午餐简餐", "中午一顿饭", "外卖点到工位", "食堂一份热乎饭", "中午吃一顿", "忙里抽空吃顿饭", "中午简单吃一顿", "饱腹又不折腾的一顿"])
+                }
+                return ("weekendLunch", ["周末午餐简单吃一顿", "午间吃点热乎的", "周末中午补点能量", "今天午饭先记下", "中午吃得简单一点", "午间一顿饭", "周末饭点留一笔", "这顿午饭记下"])
             case 14..<17:
-                return ("tea", ["下午茶小点心", "午后一杯饮品", "忙里偷闲喝点什么", "咖啡时间缓一缓", "给下午添点甜", "便利店轻食补给", "下午补一点能量", "茶歇时刻记一下"])
+                if shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
+                    return ("tea", ["下午茶小点心", "午后一杯饮品", "忙里偷闲喝点什么", "咖啡时间缓一缓", "给下午添点甜", "便利店轻食补给", "下午补一点能量", "茶歇时刻记一下"])
+                }
+                return ("weekendTea", ["下午茶小点心", "午后一杯饮品", "咖啡时间缓一缓", "给下午添点甜", "便利店轻食补给", "下午补一点能量", "茶歇时刻记一下", "周末下午吃点小的"])
             case 17..<21:
-                return ("dinner", ["晚餐一顿热饭", "下班后的一顿热饭", "晚餐小聚一份主菜", "做了一顿家常饭", "热腾腾的面或饭", "今晚吃得挺实在", "给一天收个尾", "晚饭时间坐一会儿"])
+                if shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
+                    return ("dinner", ["晚餐一顿热饭", "下班后的一顿热饭", "晚餐小聚一份主菜", "做了一顿家常饭", "热腾腾的面或饭", "今晚吃得挺实在", "给一天收个尾", "晚饭时间坐一会儿"])
+                }
+                return ("weekendDinner", ["晚餐一顿热饭", "晚餐小聚一份主菜", "做了一顿家常饭", "热腾腾的面或饭", "今晚吃得挺实在", "给一天收个尾", "晚饭时间坐一会儿", "周末晚饭记下"])
             default:
-                return ("nightSnack", ["夜里补了一点夜宵", "加班后吃点热乎的", "深夜小食", "晚归路上的一口热食", "夜宵时间记下", "夜里补点吃的", "夜里饿了吃一口", "深夜一顿热食"])
+                if shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
+                    return ("nightSnack", ["夜里补了一点夜宵", "加班后吃点热乎的", "深夜小食", "晚归路上的一口热食", "夜宵时间记下", "夜里补点吃的", "夜里饿了吃一口", "深夜一顿热食"])
+                }
+                return ("nightSnackNeutral", ["夜里补了一点夜宵", "深夜小食", "晚归路上的一口热食", "夜宵时间记下", "夜里补点吃的", "夜里饿了吃一口", "深夜一顿热食", "夜里这口先垫一下"])
             }
         }
 
         if pack.id == "commute" || category == .transport {
             switch hour {
             case 7..<10:
-                return ("morningCommute", ["早班准时出门", "上班路上的一段车程", "早高峰顺利到达", "清晨出门的一笔路费", "赶早路上的交通记录", "地铁公交到岗", "早间路线走完了", "今天也准时出门"])
+                if shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
+                    return ("morningCommute", ["早班准时出门", "上班路上的一段车程", "早高峰顺利到达", "清晨出门的一笔路费", "赶早路上的交通记录", "地铁公交到岗", "早间路线走完了", "今天也准时出门"])
+                }
+                return ("weekendMorningRoute", ["早上出门的一段路", "清晨出门的一笔路费", "早间路线走完了", "今天也准时出门", "短途出行记一下", "公交地铁一段路", "这一程顺利到达", "早上的路费"])
             case 17..<21:
-                return ("eveningCommute", ["下班路上的一段车程", "晚高峰回家", "结束一天后的返程", "回家路费记一下", "下班后的回家路", "晚间通勤完成", "下班回到家这边", "回程路上少赶一点"])
+                if shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
+                    return ("eveningCommute", ["下班路上的一段车程", "晚高峰回家", "结束一天后的返程", "回家路费记一下", "下班后的回家路", "晚间通勤完成", "下班回到家这边", "回程路上少赶一点"])
+                }
+                return ("weekendEveningRoute", ["傍晚的一段路", "回家路费记一下", "晚间出行完成", "回到家这边", "回程路上少赶一点", "这一程顺利到达", "晚上路费记一下", "短途回程"])
             default:
                 return nil
             }
         }
 
         return nil
+    }
+
+    private static func shouldUseWorkdayMealCopy(date: Date, historyItems: [HomeItem]) -> Bool {
+        guard isWeekend(date) else { return true }
+        guard shouldUseWorkdayCopy(date: date, historyItems: historyItems) else { return false }
+        return historyItems.contains { item in
+            guard item.source == .manual,
+                  item.category == .dining,
+                  isWeekend(item.createdAt) else { return false }
+            return containsWeekendWorkMealCue("\(item.title) \(item.emotionTag)")
+        }
+    }
+
+    private static func shouldUseWorkdayCopy(date: Date, historyItems: [HomeItem]) -> Bool {
+        guard isWeekend(date) else { return true }
+        return historyItems.contains { item in
+            guard item.source == .manual, isWeekend(item.createdAt) else { return false }
+            return containsWeekendWorkCue("\(item.title) \(item.emotionTag)")
+        }
+    }
+
+    private static func isWeekend(_ date: Date) -> Bool {
+        let weekday = Calendar.current.component(.weekday, from: date)
+        return weekday == 1 || weekday == 7
+    }
+
+    private static func containsWeekendWorkMealCue(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        if lower.contains("周末食堂") { return true }
+        let mealCue = ["食堂", "午餐", "饭", "餐", "外卖", "热饭"].contains { lower.contains($0) }
+        let workCue = ["加班", "公司", "单位", "工位", "工作餐"].contains { lower.contains($0) }
+        return mealCue && workCue
+    }
+
+    private static func containsWeekendWorkCue(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return ["加班", "公司", "单位", "工位", "工作餐", "到岗", "下班", "上班", "通勤"].contains {
+            lower.contains($0)
+        }
+    }
+
+    private static func contextualizeNote(
+        _ note: String,
+        pack: ScenePackDefinition,
+        category: HomeItem.Category,
+        date: Date,
+        historyItems: [HomeItem]
+    ) -> String {
+        var text = note
+        if !shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
+            text = neutralizeWorkdayCue(text, category: category, date: date)
+        }
+        if pack.id != "travel",
+           category != .lodging,
+           containsTravelKeyword(text),
+           !containsTravelIntent(in: historyItems, near: date) {
+            text = neutralizeTravelCue(text, category: category)
+        }
+        return sanitizeLifeNote(text)
+    }
+
+    private static func neutralizeWorkdayCue(_ note: String, category: HomeItem.Category, date: Date) -> String {
+        var text = note
+        let replacements: [(String, String)] = [
+            ("工作日午餐简餐", "中午简单吃一顿"),
+            ("外卖点到工位", "外卖简单吃一顿"),
+            ("食堂一份热乎饭", "午间吃点热乎的"),
+            ("上班前快速吃一口", "早上快速吃一口"),
+            ("上班前补点能量", "早上补点能量"),
+            ("下班后的一顿热饭", "晚餐一顿热饭"),
+            ("加班后吃点热乎的", "夜里吃点热乎的"),
+            ("加班后打车回家", "晚点打车回家"),
+            ("为工作跑了不少路", "今天跑了不少路"),
+            ("出差市内交通", "市内交通一段"),
+            ("早班地铁到岗", "早间地铁到站"),
+            ("地铁公交到岗", "地铁公交到站"),
+            ("上班路上的一段车程", "早上出门的一段路"),
+            ("下班路上的一段车程", "傍晚的一段路"),
+            ("下班后的回家路", "晚间回家路"),
+            ("下班回到家这边", "回到家这边"),
+            ("晚间通勤完成", "晚间出行完成"),
+            ("早晚通勤各记一笔", "今天出行记一笔"),
+            ("通勤路上买瓶水", "路上买瓶水"),
+            ("通勤多花了一点时间", "路上多花了一点时间"),
+            ("一次较长的通勤路", "一次较长的出行"),
+            ("跨区通勤长途费", "跨区出行长途费"),
+            ("打工人通勤包", "日常出行包"),
+        ]
+        for replacement in replacements {
+            text = text.replacingOccurrences(of: replacement.0, with: replacement.1)
+        }
+        if category == .transport, containsWorkdayRouteKeyword(text) {
+            return routeFallback(for: date)
+        }
+        if category == .dining, containsWorkdayMealKeyword(text) {
+            return diningFallback(for: date)
+        }
+        return text
+    }
+
+    private static func neutralizeTravelCue(_ note: String, category: HomeItem.Category) -> String {
+        guard category != .lodging else { return note }
+        var text = note
+        let replacements: [(String, String)] = [
+            ("旅途中的轻量补给", "路上的轻量补给"),
+            ("旅途一顿特色简餐", "路上一顿简餐"),
+            ("旅行装备小升级", "出行装备小升级"),
+            ("这次行程记下", "这笔行程记下"),
+            ("行程里的一笔小开销", "路上的一笔小开销"),
+            ("行程中较充实的一天", "今天安排得比较满"),
+            ("长假出行大项", "出行大项记下"),
+        ]
+        for replacement in replacements {
+            text = text.replacingOccurrences(of: replacement.0, with: replacement.1)
+        }
+        return text
+    }
+
+    private static func containsWorkdayRouteKeyword(_ text: String) -> Bool {
+        ["上班", "下班", "到岗", "通勤", "加班", "工作"].contains { text.contains($0) }
+    }
+
+    private static func containsWorkdayMealKeyword(_ text: String) -> Bool {
+        ["食堂", "工位", "工作日", "工作餐", "加班", "忙里"].contains { text.contains($0) }
+    }
+
+    private static func containsTravelKeyword(_ text: String) -> Bool {
+        ["旅行", "旅途", "景区", "景点", "行程", "酒店", "民宿", "住宿", "机票", "高铁", "机场", "返程", "摆渡"].contains {
+            text.contains($0)
+        }
+    }
+
+    private static func containsTravelIntent(in items: [HomeItem], near date: Date) -> Bool {
+        let calendar = Calendar.current
+        let start = calendar.date(byAdding: .day, value: -3, to: date) ?? date
+        let end = calendar.date(byAdding: .day, value: 3, to: date) ?? date
+        return items.contains { item in
+            item.createdAt >= start
+                && item.createdAt <= end
+                && containsTravelKeyword("\(item.title) \(item.emotionTag)")
+        }
+    }
+
+    private static func routeFallback(for date: Date) -> String {
+        let hour = Calendar.current.component(.hour, from: date)
+        switch hour {
+        case 5..<11: return "早上出门的一段路"
+        case 17..<22: return "傍晚的一段路"
+        default: return "今天的一段路"
+        }
+    }
+
+    private static func diningFallback(for date: Date) -> String {
+        let hour = Calendar.current.component(.hour, from: date)
+        switch hour {
+        case 5..<10: return "早上简单吃点"
+        case 11..<14: return "午间吃点热乎的"
+        case 17..<21: return "晚餐一顿热饭"
+        default: return "夜里吃点东西"
+        }
     }
 
     static func renderPetName(_ text: String, petName: String) -> String {

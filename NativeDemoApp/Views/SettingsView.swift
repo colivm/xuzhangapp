@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var draftPetNickname = ""
     @State private var showDeleteCloudLedgerConfirm = false
     @State private var showDeleteAccountConfirm = false
+    @State private var showEnableCloudSyncConfirm = false
     @State private var isAccountDangerExpanded = false
     @State private var showNicknameEditor = false
     @FocusState private var focusedField: SettingsField?
@@ -75,6 +76,27 @@ struct SettingsView: View {
         .onAppear {
             draftDisplayName = settingsViewModel.displayName
             draftPetNickname = settingsViewModel.petNickname
+            Task {
+                await settingsViewModel.refreshCloudAccountProfile()
+                await settingsViewModel.refreshMemberFromLocalEntitlements()
+                if settingsViewModel.syncEnabled {
+                    await homeViewModel.syncCloudLedgerNow()
+                }
+            }
+        }
+        .onChange(of: settingsViewModel.hasCloudSession) { _, hasSession in
+            guard hasSession else { return }
+            Task {
+                await settingsViewModel.refreshCloudAccountProfile()
+                if settingsViewModel.syncEnabled {
+                    await homeViewModel.syncCloudLedgerNow()
+                }
+            }
+        }
+        .onChange(of: settingsViewModel.displayName) { _, name in
+            if focusedField != .displayName {
+                draftDisplayName = name
+            }
         }
         .onChange(of: focusedField) { oldValue, newValue in
             if oldValue == .displayName, newValue != .displayName {
@@ -112,6 +134,14 @@ struct SettingsView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("只删除服务器上的同步账本，本机记录仍保留。为避免重新上传，云端同步会同时关闭。")
+        }
+        .confirmationDialog("开启云端备份？", isPresented: $showEnableCloudSyncConfirm, titleVisibility: .visible) {
+            Button("开启并同步") {
+                enableCloudSyncAndMerge()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("开启后会先把云端账单同步到本地，再上传本机账单完成合并；同一笔账单冲突时以更新时间较新的记录为准。")
         }
         .confirmationDialog("注销账号？", isPresented: $showDeleteAccountConfirm, titleVisibility: .visible) {
             Button("保留本机账本并注销", role: .destructive) {
@@ -311,6 +341,19 @@ struct SettingsView: View {
         }
     }
 
+    private var cloudSyncHelperText: String {
+        if homeViewModel.isSyncingCloudLedger {
+            return "正在同步云端账单，请稍等。"
+        }
+        if let message = homeViewModel.syncStatusMessage, !message.isEmpty {
+            return message
+        }
+        if settingsViewModel.syncEnabled {
+            return "已开启。新增、编辑和删除账单会同步到云端。"
+        }
+        return "开启后会先同步云端数据到本地，再上传本机账单；冲突时以更新时间较新的记录为准。"
+    }
+
     private var companionRowSummary: String {
         guard settingsViewModel.petCompanionEnabled else { return "宠物已关" }
         if settingsViewModel.weatherCompanionEnabled { return "宠物开 · 天气互动" }
@@ -321,6 +364,28 @@ struct SettingsView: View {
         switch settingsViewModel.aiTone {
         case .gentle: return "温和"
         case .neutral: return "中性"
+        }
+    }
+
+    private func requestCloudSyncChange(_ enabled: Bool) {
+        if !enabled {
+            settingsViewModel.syncEnabled = false
+            return
+        }
+        guard settingsViewModel.hasCloudSession else {
+            showAccountSheet = true
+            return
+        }
+        if settingsViewModel.syncEnabled {
+            return
+        }
+        showEnableCloudSyncConfirm = true
+    }
+
+    private func enableCloudSyncAndMerge() {
+        settingsViewModel.syncEnabled = true
+        Task {
+            await homeViewModel.syncCloudLedgerNow()
         }
     }
 
@@ -367,9 +432,9 @@ struct SettingsView: View {
         case .backup:
             settingToggle("云端备份（可选）", isOn: Binding(
                 get: { settingsViewModel.syncEnabled },
-                set: { settingsViewModel.syncEnabled = $0 }
+                set: { requestCloudSyncChange($0) }
             ))
-            settingHelper("开启后账单会同步到云端，换机时可恢复。")
+            settingHelper(cloudSyncHelperText)
             settingToggle("允许联网梳理复盘（可选）", isOn: Binding(
                 get: { settingsViewModel.useRemoteAI },
                 set: { settingsViewModel.useRemoteAI = $0 }
@@ -497,9 +562,9 @@ struct SettingsView: View {
             // Cloud sync
             settingToggle("云端备份（可选）", isOn: Binding(
                 get: { settingsViewModel.syncEnabled },
-                set: { settingsViewModel.syncEnabled = $0 }
+                set: { requestCloudSyncChange($0) }
             ))
-            settingHelper("开启后账单会同步到云端，换机时可恢复。")
+            settingHelper(cloudSyncHelperText)
 
             // AI toggle
             settingToggle("允许联网梳理复盘（可选）", isOn: Binding(

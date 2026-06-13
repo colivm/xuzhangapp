@@ -534,7 +534,7 @@ final class HomeViewModel: ObservableObject {
     func syncCloudLedgerNow() async {
         let context = cloudContext()
         guard let context else {
-            syncStatusMessage = "未登录云端，已跳过同步。"
+            syncStatusMessage = "未登录或未开启云端备份，已跳过同步。"
             return
         }
         isSyncingCloudLedger = true
@@ -549,7 +549,7 @@ final class HomeViewModel: ObservableObject {
             for item in merged {
                 try? await service.upload(item)
             }
-            syncStatusMessage = "云端账单已同步。"
+            syncStatusMessage = "云端账单已同步，冲突记录已按本地优先合并。"
         } catch {
             syncStatusMessage = error.localizedDescription
         }
@@ -603,7 +603,7 @@ final class HomeViewModel: ObservableObject {
             subtitle = "晚上再回头看，这一天会更清楚。"
         case 1:
             title = "今天的第一笔记录"
-            let emotion = records.first?.emotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let emotion = records.first?.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             subtitle = "\(!emotion.isEmpty ? emotion : "这笔生活被记下来了")，这一天刚翻开第一页。"
         case 2:
             title = "今天已记下 2 笔"
@@ -1385,7 +1385,7 @@ final class HomeViewModel: ObservableObject {
         let settings = LocalStore.loadSettings()
         let baseURL = settings.backendBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let token = KeychainService.loadAccessToken()
-        guard !baseURL.isEmpty, !token.isEmpty else { return nil }
+        guard settings.syncEnabled, !baseURL.isEmpty, !token.isEmpty else { return nil }
         return (baseURL, token)
     }
 

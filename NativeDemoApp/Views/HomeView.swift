@@ -753,6 +753,10 @@ struct BillPlaybackSheet: View {
         }.sorted { $0.createdAt < $1.createdAt }
     }
 
+    private var playbackMoments: [PlaybackMoment] {
+        buildPlaybackMoments()
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             dragHandle
@@ -781,7 +785,7 @@ struct BillPlaybackSheet: View {
         }
         .onChange(of: isPlaying) { _, playing in
             guard playing, !todayItems.isEmpty, !playbackDone else { return }
-            let count = todayItems.count
+            let count = playbackMoments.count
             Task {
                 let interval = duration / Double(count)
                 for i in 0..<count {
@@ -823,7 +827,7 @@ struct BillPlaybackSheet: View {
     private var playbackContent: some View {
         VStack(spacing: 0) {
             playbackHeader
-            playbackTimeline
+            playbackMomentList
         }
     }
 
@@ -832,7 +836,7 @@ struct BillPlaybackSheet: View {
             Text("今日生活回放")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(AppColors.text)
-            Text("10 秒看完今天的记录")
+            Text("十秒听一遍今天")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
         }
@@ -840,15 +844,16 @@ struct BillPlaybackSheet: View {
         .padding(.bottom, 6)
     }
 
-    private var playbackTimeline: some View {
+    private var playbackMomentList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(Array(todayItems.enumerated()), id: \.element.id) { index, item in
-                        playbackTimelineRow(item: item, index: index)
+                VStack(spacing: 8) {
+                    ForEach(Array(playbackMoments.enumerated()), id: \.element.id) { index, moment in
+                        playbackMomentRow(moment, index: index)
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
             }
             .onChange(of: activeIndex) { _, index in
                 guard index >= 0 else { return }
@@ -859,78 +864,47 @@ struct BillPlaybackSheet: View {
         }
     }
 
-    private func playbackTimelineRow(item: HomeItem, index: Int) -> some View {
+    private func playbackMomentRow(_ moment: PlaybackMoment, index: Int) -> some View {
         let isActive = index == activeIndex
         let isRevealed = index <= activeIndex || activeIndex == -1
 
-        return VStack(spacing: 0) {
-            playbackTimelineMainRow(item: item, index: index, isActive: isActive)
-            playbackTimelineNoteRow(item: item)
+        return VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Text(moment.eyebrow)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppColors.accent.opacity(0.82))
+                Spacer()
+                if let amount = moment.amountText {
+                    Text(amount)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppColors.text.opacity(0.72))
+                }
+            }
+
+            Text(moment.title)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(moment.body)
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext.opacity(0.92))
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, isActive ? 10 : 7)
-        .padding(.horizontal, 20)
-        .background(activeTimelineBackground(isActive: isActive))
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(activeMomentBackground(isActive: isActive))
+        .overlay(activeMomentBorder(isActive: isActive))
         .scaleEffect(isActive && !playbackDone ? 1.01 : 1.0, anchor: .leading)
         .opacity(isRevealed ? 1 : 0.35)
         .animation(.spring(response: 0.35, dampingFraction: 0.65), value: activeIndex)
         .id(index)
-        .overlay(alignment: .top) {
-            if index > 0 {
-                Rectangle()
-                    .fill(Color.white.opacity(0.25))
-                    .frame(height: 0.6)
-                    .padding(.horizontal, 12)
-            }
-        }
-    }
-
-    private func playbackTimelineMainRow(item: HomeItem, index: Int, isActive: Bool) -> some View {
-        let isRevealed = index <= activeIndex
-        let textColor = isRevealed ? AppColors.text : AppColors.subtext
-        let dotColor = isRevealed ? AppColors.accent : Color.white.opacity(0.4)
-        let categoryWeight: Font.Weight = isActive ? .semibold : .regular
-
-        return HStack(alignment: .firstTextBaseline) {
-            HStack(spacing: 5) {
-                Circle()
-                    .fill(dotColor)
-                    .frame(width: 7, height: 7)
-                Text(formatClockTime(item.createdAt))
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .foregroundStyle(textColor)
-                Text("·")
-                    .foregroundStyle(AppColors.subtext.opacity(0.35))
-                Text(item.category.rawValue)
-                    .font(.system(size: 14, weight: categoryWeight))
-                    .foregroundStyle(textColor)
-            }
-            Spacer()
-            Text(item.amount.formatted(.cny))
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .foregroundStyle(AppColors.text)
-        }
-    }
-
-    private func playbackTimelineNoteRow(item: HomeItem) -> some View {
-        HStack(spacing: 4) {
-            Text(item.title)
-                .font(.system(size: 11))
-            let emotionTag = item.displayEmotionTag
-            if !emotionTag.isEmpty {
-                Text("·")
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppColors.subtext.opacity(0.4))
-                Text(emotionTag)
-                    .font(.system(size: 11))
-            }
-            Spacer()
-        }
-        .foregroundStyle(AppColors.subtext.opacity(0.6))
-        .padding(.top, 2)
     }
 
     @ViewBuilder
-    private func activeTimelineBackground(isActive: Bool) -> some View {
+    private func activeMomentBackground(isActive: Bool) -> some View {
         if isActive && !playbackDone {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(.ultraThinMaterial)
@@ -938,7 +912,15 @@ struct BillPlaybackSheet: View {
                     RoundedRectangle(cornerRadius: 14)
                         .fill(AppColors.accent.opacity(0.05))
                 )
+        } else {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.32))
         }
+    }
+
+    private func activeMomentBorder(isActive: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .stroke(isActive && !playbackDone ? AppColors.accent.opacity(0.24) : Color.white.opacity(0.32), lineWidth: 1)
     }
 
     @ViewBuilder
@@ -1062,7 +1044,7 @@ struct BillPlaybackSheet: View {
     }
 
     private var progressFraction: CGFloat {
-        playbackDone ? 1 : CGFloat(max(0, activeIndex)) / CGFloat(max(1, todayItems.count - 1))
+        playbackDone ? 1 : CGFloat(max(0, activeIndex)) / CGFloat(max(1, playbackMoments.count - 1))
     }
 
     private func restartPlayback() {
@@ -1075,6 +1057,92 @@ struct BillPlaybackSheet: View {
         let f = DateFormatter()
         f.dateFormat = "HH:mm"
         return f.string(from: date)
+    }
+
+    private struct PlaybackMoment: Identifiable {
+        let id: String
+        let eyebrow: String
+        let title: String
+        let body: String
+        let amountText: String?
+    }
+
+    private func buildPlaybackMoments() -> [PlaybackMoment] {
+        guard !todayItems.isEmpty else { return [] }
+        let total = todayItems.reduce(0) { $0 + $1.amount }
+        let topCategory = topCategoryText()
+        let first = todayItems.first
+        let representative = representativeItem()
+        var moments: [PlaybackMoment] = [
+            PlaybackMoment(
+                id: "opening",
+                eyebrow: "开场",
+                title: "今天记了 \(todayItems.count) 笔",
+                body: "合计 \(total.formatted(.cny))，这一天有几处已经被放进账本。",
+                amountText: nil
+            )
+        ]
+
+        if let first {
+            moments.append(
+                PlaybackMoment(
+                    id: "first-\(first.id)",
+                    eyebrow: formatClockTime(first.createdAt),
+                    title: first.title,
+                    body: "今天从「\(first.category.rawValue)」开始留下第一处记录。",
+                    amountText: first.amount.formatted(.cny)
+                )
+            )
+        }
+
+        if todayItems.count > 1 {
+            moments.append(
+                PlaybackMoment(
+                    id: "theme",
+                    eyebrow: "今日主题",
+                    title: "\(topCategory)出现得多一点",
+                    body: "这不是一份报告，只是今天比较清楚的一条生活线。",
+                    amountText: nil
+                )
+            )
+        }
+
+        if todayItems.count > 1, let representative {
+            moments.append(
+                PlaybackMoment(
+                    id: "close-\(representative.id)",
+                    eyebrow: "收尾",
+                    title: closingTitle(for: representative),
+                    body: closingBody(for: representative),
+                    amountText: representative.amount.formatted(.cny)
+                )
+            )
+        }
+
+        return Array(moments.prefix(4))
+    }
+
+    private func topCategoryText() -> String {
+        Dictionary(grouping: todayItems, by: \.category)
+            .map { (category: $0.key, count: $0.value.count, amount: $0.value.reduce(0) { $0 + $1.amount }) }
+            .sorted {
+                if $0.count == $1.count { return $0.amount > $1.amount }
+                return $0.count > $1.count
+            }
+            .first?.category.rawValue ?? "日常"
+    }
+
+    private func representativeItem() -> HomeItem? {
+        todayItems.last ?? todayItems.first
+    }
+
+    private func closingTitle(for item: HomeItem) -> String {
+        let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        return tag.isEmpty ? item.title : tag
+    }
+
+    private func closingBody(for item: HomeItem) -> String {
+        "最后留给「\(item.title)」。今天不用分析太多，先被好好记住就够了。"
     }
 }
 
