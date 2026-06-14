@@ -549,7 +549,7 @@ final class HomeViewModel: ObservableObject {
             for item in merged {
                 try? await service.upload(item)
             }
-            syncStatusMessage = "云端账单已同步，冲突记录已按本地优先合并。"
+            syncStatusMessage = "云端账单已同步；同一笔冲突已按更新时间较新的记录保留。"
         } catch {
             syncStatusMessage = error.localizedDescription
         }
@@ -1164,13 +1164,14 @@ final class HomeViewModel: ObservableObject {
                 isGeneratingInsight = false
                 return
             } catch {
-                insightErrorMessage = "远程 AI 不可用，已回退本地建议。\(error.localizedDescription)"
+                insightErrorMessage = remoteAIInsightFallbackMessage(for: error)
             }
             }
         }
 
+        let displayName = dailyInsightDisplayName(from: userName)
         let summary = settings.aiTone == .gentle
-            ? "\(userName)，今天的记录里「\(topCategory)」最常出现。"
+            ? "\(displayName.map { "\($0)，" } ?? "")今天的记录里「\(topCategory)」最常出现。"
             : "今天更常记录到「\(topCategory)」。"
 
         let action: String
@@ -1195,6 +1196,27 @@ final class HomeViewModel: ObservableObject {
         persistInsights()
         analyticsService.track("ai_daily_generated", props: ["mode": "local_fallback", "items": String(todayItems.count)])
         isGeneratingInsight = false
+    }
+
+    private func dailyInsightDisplayName(from userName: String) -> String? {
+        let trimmed = userName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != "叙账用户" else { return nil }
+        let compact = trimmed.replacingOccurrences(of: " ", with: "")
+        if compact.hasPrefix("用户") {
+            let suffix = compact.dropFirst(2)
+            if !suffix.isEmpty, suffix.allSatisfy(\.isNumber) {
+                return nil
+            }
+        }
+        return trimmed
+    }
+
+    private func remoteAIInsightFallbackMessage(for error: Error) -> String {
+        let message = error.localizedDescription
+        if message.contains("手机号") || message.contains("证件号") || message.contains("卡号") || message.contains("链接") {
+            return "远程 AI 已跳过：内容里可能包含敏感号码或链接，已回退本地建议。"
+        }
+        return "远程 AI 暂时不可用，已回退本地建议。"
     }
 
     func markWeeklyShareGenerated() {

@@ -570,7 +570,9 @@ final class SettingsViewModel: ObservableObject {
 
     private static func isBackendDefaultDisplayName(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("用户 ") else { return false }
-        return trimmed.dropFirst(3).allSatisfy(\.isNumber)
+        let compact = trimmed.replacingOccurrences(of: " ", with: "")
+        guard compact.hasPrefix("用户") else { return false }
+        let suffix = compact.dropFirst(2)
+        return !suffix.isEmpty && suffix.allSatisfy(\.isNumber)
     }
 }

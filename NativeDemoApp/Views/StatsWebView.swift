@@ -22,6 +22,8 @@ struct StatsWebView: View {
     @State private var isTrendExpandedInSheet = false
     @State private var traceInlineEditingItemID: UUID?
     @State private var handledOpenTraceRequestID: UUID?
+    @State private var traceSwipedItemID: UUID?
+    @State private var traceAutoCommitRequestID: UUID?
     private let playbackService = PlaybackService()
     private let quotaStore = SummaryPlaybackQuotaStore()
 
@@ -475,8 +477,9 @@ struct StatsWebView: View {
         NavigationStack {
             ZStack {
                 AppColors.bg.ignoresSafeArea()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
+                ScrollViewReader { traceProxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
                         Text("细查这一段")
                             .font(.system(size: 22, weight: .bold))
                             .foregroundStyle(AppColors.text)
@@ -528,11 +531,17 @@ struct StatsWebView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(traceDetailListBackground)
                         .overlay(traceDetailListBorder)
+                        }
+                        .padding(18)
+                        .padding(.bottom, 28)
                     }
-                    .padding(18)
-                    .padding(.bottom, 28)
+                    .scrollIndicators(.hidden)
+                    .onChange(of: traceInlineEditingItemID) { _, itemID in
+                        guard let itemID else { return }
+                        scrollTraceEditorIntoView(itemID, proxy: traceProxy, delay: 0.34)
+                    }
+                    .simultaneousGesture(traceDetailScrollDismissGesture)
                 }
-                .scrollIndicators(.hidden)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -743,7 +752,7 @@ struct StatsWebView: View {
 
     private func openEditor(for item: HomeItem, fromTraceDetail: Bool = false) {
         if fromTraceDetail {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(traceEditSpring) {
                 traceInlineEditingItemID = item.id
             }
         } else {
@@ -1262,49 +1271,190 @@ struct StatsWebView: View {
     }
 
     private func traceDetailBillRecordRow(_ item: HomeItem, isFirst: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            billRecordRow(item, isFirst: isFirst)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    openEditor(for: item, fromTraceDetail: true)
-                }
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        deleteRecord(item)
-                    } label: {
-                        Label("删除", systemImage: "trash")
-                    }
+        let isEditing = traceInlineEditingItemID == item.id
+        let isSwiped = traceSwipedItemID == item.id && !isEditing
+        return ZStack(alignment: .trailing) {
+            if !isEditing {
+                traceSwipeActions(for: item, isVisible: isSwiped)
+                    .padding(.trailing, 4)
+            }
 
-                    Button {
-                        openEditor(for: item, fromTraceDetail: true)
-                    } label: {
-                        Label("编辑", systemImage: "pencil")
-                    }
-                    .tint(AppColors.accent)
-                }
-
-            if traceInlineEditingItemID == item.id {
-                TraceInlineRecordEditor(
-                    item: item,
-                    onSave: { updated in
-                        let didSave = homeViewModel.updateItem(updated)
-                        if didSave {
-                            withAnimation(.easeInOut(duration: 0.2)) {
+            VStack(alignment: .leading, spacing: isEditing ? 14 : 8) {
+                traceDetailRecordSummary(item, isEditing: isEditing)
+                if traceInlineEditingItemID == item.id {
+                    TraceInlineRecordEditor(
+                        item: item,
+                        autoCommitRequestID: traceAutoCommitRequestID,
+                        onSave: { updated in
+                            let didSave = homeViewModel.updateItem(updated)
+                            if didSave {
+                                withAnimation(traceEditSpring) {
+                                    traceInlineEditingItemID = nil
+                                    traceSwipedItemID = nil
+                                }
+                            }
+                            return didSave
+                        },
+                        onCancel: {
+                            withAnimation(traceEditSpring) {
                                 traceInlineEditingItemID = nil
+                                traceSwipedItemID = nil
                             }
                         }
-                        return didSave
-                    },
-                    onCancel: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            traceInlineEditingItemID = nil
-                        }
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, isEditing ? 16 : 12)
+            .background(traceDetailRecordBackground(isEditing: isEditing))
+            .overlay(traceDetailRecordBorder(isEditing: isEditing))
+            .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+            .offset(x: isSwiped ? -76 : 0)
+            .simultaneousGesture(traceRowSwipeGesture(for: item, isEditing: isEditing))
+            .onTapGesture {
+                if traceSwipedItemID == item.id {
+                    withAnimation(traceEditSpring) {
+                        traceSwipedItemID = nil
                     }
-                )
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                } else if !isEditing {
+                    openEditor(for: item, fromTraceDetail: true)
+                }
             }
         }
+        .id(item.id)
+        .animation(traceEditSpring, value: isEditing)
+        .animation(traceEditSpring, value: isSwiped)
+    }
+
+    private var traceEditSpring: Animation {
+        .spring(response: 0.38, dampingFraction: 0.90, blendDuration: 0.08)
+    }
+
+    private func traceDetailRecordSummary(_ item: HomeItem, isEditing: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(item.title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(2)
+                    .opacity(isEditing ? 0.42 : 1)
+                    .offset(y: isEditing ? -2 : 0)
+
+                Spacer(minLength: 8)
+
+                Text(item.amount.formatted(.cny))
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.text)
+                    .opacity(isEditing ? 0.34 : 1)
+                    .offset(x: isEditing ? -16 : 0, y: isEditing ? 8 : 0)
+            }
+
+            if !item.displayEmotionTag.isEmpty {
+                Text(item.displayEmotionTag)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.accent.opacity(0.74))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.08)))
+                    .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.18), lineWidth: 0.7))
+                    .opacity(isEditing ? 0.35 : 1)
+            }
+
+            HStack(spacing: 6) {
+                Text(item.category.rawValue)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.82))
+                Text("·").foregroundStyle(AppColors.subtext)
+                Text(item.createdAt.zhBillDateTime)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer()
+            }
+            .opacity(isEditing ? 0 : 1)
+            .offset(y: isEditing ? -5 : 0)
+            .frame(height: isEditing ? 0 : nil)
+        }
+    }
+
+    private func traceDetailRecordBackground(isEditing: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 19, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: isEditing
+                        ? [AppColors.accent.opacity(0.105), Color.white.opacity(0.62), AppColors.paperWarm.opacity(0.22)]
+                        : [Color.white.opacity(0.36), Color.white.opacity(0.18)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+    }
+
+    private func traceDetailRecordBorder(isEditing: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 19, style: .continuous)
+            .stroke(isEditing ? AppColors.accent.opacity(0.24) : Color.white.opacity(0.28), lineWidth: 1)
+    }
+
+    private func scrollTraceEditorIntoView(_ itemID: UUID, proxy: ScrollViewProxy, delay: Double) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard traceInlineEditingItemID == itemID else { return }
+            withAnimation(traceEditSpring) {
+                proxy.scrollTo(itemID, anchor: .center)
+            }
+        }
+    }
+
+    private var traceDetailScrollDismissGesture: some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .local)
+            .onChanged { value in
+                guard traceInlineEditingItemID != nil else { return }
+                guard abs(value.translation.height) > abs(value.translation.width) + 8 else { return }
+                traceAutoCommitRequestID = UUID()
+            }
+    }
+
+    private func traceSwipeActions(for item: HomeItem, isVisible: Bool) -> some View {
+        Button(role: .destructive) {
+            withAnimation(traceEditSpring) {
+                traceSwipedItemID = nil
+                deleteRecord(item)
+            }
+        } label: {
+            traceSwipeActionLabel("删除", systemImage: "trash", tint: Color.red.opacity(0.82))
+        }
+        .buttonStyle(.plain)
+        .frame(width: 68, alignment: .trailing)
+        .opacity(isVisible ? 1 : 0)
+    }
+
+    private func traceSwipeActionLabel(_ title: String, systemImage: String, tint: Color) -> some View {
+        VStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .semibold))
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .foregroundStyle(.white)
+        .frame(width: 58, height: 62)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(tint)
+        )
+        .shadow(color: tint.opacity(0.16), radius: 8, y: 4)
+    }
+
+    private func traceRowSwipeGesture(for item: HomeItem, isEditing: Bool) -> some Gesture {
+        DragGesture(minimumDistance: 14, coordinateSpace: .local)
+            .onEnded { value in
+                guard !isEditing else { return }
+                withAnimation(traceEditSpring) {
+                    if value.translation.width < -36 {
+                        traceSwipedItemID = item.id
+                    } else if value.translation.width > 24 {
+                        traceSwipedItemID = nil
+                    }
+                }
+            }
     }
 
     // MARK: - Category Filter Chip
@@ -1526,6 +1676,7 @@ struct StatsWebView: View {
 
 private struct TraceInlineRecordEditor: View {
     let item: HomeItem
+    var autoCommitRequestID: UUID?
     var onSave: (HomeItem) -> Bool
     var onCancel: () -> Void
 
@@ -1535,14 +1686,23 @@ private struct TraceInlineRecordEditor: View {
     @State private var selectedDate: Date
     @State private var validationMessage: String?
     @State private var isCategoryPanelExpanded = false
-    @State private var isDatePanelExpanded = false
+    @State private var isDatePopoverVisible = false
+    @State private var isSpecificDatePanelVisible = false
+    @FocusState private var focusedField: InlineEditField?
+
+    private enum InlineEditField {
+        case amount
+        case title
+    }
 
     init(
         item: HomeItem,
+        autoCommitRequestID: UUID? = nil,
         onSave: @escaping (HomeItem) -> Bool,
         onCancel: @escaping () -> Void
     ) {
         self.item = item
+        self.autoCommitRequestID = autoCommitRequestID
         self.onSave = onSave
         self.onCancel = onCancel
         _amountText = State(initialValue: String(format: "%.2f", item.amount))
@@ -1571,6 +1731,7 @@ private struct TraceInlineRecordEditor: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(inlineFieldBackground)
+                .focused($focusedField, equals: .title)
                 .onChange(of: titleText) { _, value in
                     if value.count > 32 {
                         titleText = String(value.prefix(32))
@@ -1582,11 +1743,6 @@ private struct TraceInlineRecordEditor: View {
 
             if isCategoryPanelExpanded {
                 categoryGrid
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
-            if isDatePanelExpanded {
-                WarmRecordDatePanel(selection: $selectedDate)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
@@ -1624,15 +1780,16 @@ private struct TraceInlineRecordEditor: View {
                 .opacity(parsedAmount <= 0 ? 0.55 : 1)
             }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.58))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(AppColors.accent.opacity(0.16), lineWidth: 1)
-        )
+        .padding(.top, -4)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.46) {
+                focusedField = .amount
+            }
+        }
+        .onChange(of: autoCommitRequestID) { _, requestID in
+            guard requestID != nil else { return }
+            softCommitAndCollapse()
+        }
     }
 
     private var amountField: some View {
@@ -1644,6 +1801,7 @@ private struct TraceInlineRecordEditor: View {
                 .keyboardType(.decimalPad)
                 .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundStyle(AppColors.text)
+                .focused($focusedField, equals: .amount)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
@@ -1653,7 +1811,8 @@ private struct TraceInlineRecordEditor: View {
     private var categorySelector: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.18)) {
-                isDatePanelExpanded = false
+                isDatePopoverVisible = false
+                isSpecificDatePanelVisible = false
                 isCategoryPanelExpanded.toggle()
             }
         } label: {
@@ -1675,9 +1834,10 @@ private struct TraceInlineRecordEditor: View {
 
     private var inlineDateSelector: some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.18)) {
+            withAnimation(traceInlinePopoverSpring) {
                 isCategoryPanelExpanded = false
-                isDatePanelExpanded.toggle()
+                isSpecificDatePanelVisible = false
+                isDatePopoverVisible.toggle()
             }
         } label: {
             HStack(spacing: 8) {
@@ -1699,6 +1859,130 @@ private struct TraceInlineRecordEditor: View {
             .background(inlineFieldBackground)
         }
         .buttonStyle(.plain)
+        .overlay(alignment: .topTrailing) {
+            if isDatePopoverVisible {
+                traceDatePopover
+                    .offset(x: -2, y: -118)
+                    .zIndex(10)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottomTrailing)))
+            }
+        }
+        .zIndex(isDatePopoverVisible ? 20 : 0)
+    }
+
+    private var traceDatePopover: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 7) {
+                traceDateQuickButton("今天") {
+                    applyQuickDate(.today)
+                }
+                traceDateQuickButton("昨天") {
+                    applyQuickDate(.yesterday)
+                }
+                traceDateQuickButton("现在") {
+                    selectedDate = Date()
+                    closeDatePopover()
+                }
+            }
+
+            Button {
+                withAnimation(traceInlinePopoverSpring) {
+                    isSpecificDatePanelVisible.toggle()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("具体时间")
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .bold))
+                        .rotationEffect(.degrees(isSpecificDatePanelVisible ? 180 : 0))
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppColors.text.opacity(0.80))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.56))
+                )
+            }
+            .buttonStyle(.plain)
+
+            if isSpecificDatePanelVisible {
+                WarmRecordDatePanel(selection: $selectedDate)
+                    .frame(width: 250)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topTrailing)))
+            }
+        }
+        .padding(10)
+        .frame(width: isSpecificDatePanelVisible ? 274 : 238, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(AppColors.paperWarm.opacity(0.30))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.58), lineWidth: 1)
+        )
+        .shadow(color: AppColors.subtext.opacity(0.12), radius: 18, x: 0, y: 10)
+    }
+
+    private func traceDateQuickButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppColors.text.opacity(0.82))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.62))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(AppColors.accent.opacity(0.12), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private enum TraceQuickDate {
+        case today
+        case yesterday
+    }
+
+    private func applyQuickDate(_ quickDate: TraceQuickDate) {
+        let calendar = Calendar.current
+        let currentComponents = calendar.dateComponents([.hour, .minute, .second], from: selectedDate)
+        let base: Date
+        switch quickDate {
+        case .today:
+            base = Date()
+        case .yesterday:
+            base = calendar.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+        }
+        let day = calendar.startOfDay(for: base)
+        selectedDate = calendar.date(
+            bySettingHour: currentComponents.hour ?? calendar.component(.hour, from: Date()),
+            minute: currentComponents.minute ?? calendar.component(.minute, from: Date()),
+            second: currentComponents.second ?? 0,
+            of: day
+        ) ?? base
+        closeDatePopover()
+    }
+
+    private func closeDatePopover() {
+        withAnimation(traceInlinePopoverSpring) {
+            isDatePopoverVisible = false
+            isSpecificDatePanelVisible = false
+        }
+    }
+
+    private var traceInlinePopoverSpring: Animation {
+        .spring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.06)
     }
 
     private var categoryGrid: some View {
@@ -1766,5 +2050,14 @@ private struct TraceInlineRecordEditor: View {
         if !onSave(updated) {
             validationMessage = "这句备注里可能有隐私信息，先改成更简单的记录。"
         }
+    }
+
+    private func softCommitAndCollapse() {
+        focusedField = nil
+        guard parsedAmount > 0 else {
+            validationMessage = "金额先留在这里，补完整再收起。"
+            return
+        }
+        save()
     }
 }

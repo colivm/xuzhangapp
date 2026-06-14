@@ -24,7 +24,10 @@ enum AIReportServiceError: LocalizedError {
         case .invalidEndpoint(let endpoint):
             return "AI 服务地址配置异常：\(endpoint)"
         case .badStatus(let code, let body):
-            return "AI 请求失败 (\(code))：\(body)"
+            if body.contains("AI_INPUT_REJECTED") || body.contains("BANK_CARD") {
+                return "内容里可能包含手机号、证件号、卡号或链接，远程 AI 已跳过。"
+            }
+            return "AI 请求失败（\(code)），已回退本地建议。"
         case .invalidResponse:
             return "AI 返回格式异常。"
         }

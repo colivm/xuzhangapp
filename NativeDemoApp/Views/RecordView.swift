@@ -25,6 +25,7 @@ struct RecordView: View {
     @State private var activeScenePack: ScenePackDefinition?
     @State private var scenePackFeedback: String?
     @State private var didAutoFocusAmountPad = false
+    @State private var voiceCaptureActive = false
     @AppStorage("scene_pack_order_v1") private var scenePackOrderStorage = ""
     @AppStorage("scene_pack_more_expanded_v1") private var scenePackMoreExpanded = false
     @AppStorage("scene_pack_usage_v1") private var scenePackUsageStorage = ""
@@ -422,12 +423,13 @@ struct RecordView: View {
     }
 
     private var recordContentBottomPadding: CGFloat {
-        focusedField == .note || amountPadActive ? 360 : 120
+        focusedField == .note || amountPadActive ? 430 : 120
     }
 
     private func dismissKeyboard() {
         amountPadActive = false
         focusedField = nil
+        voiceCaptureActive = false
     }
 
     private func focusAmountPad(delay: Double = 0.18) {
@@ -448,6 +450,24 @@ struct RecordView: View {
                 proxy.scrollTo("recordNoteField", anchor: .bottom)
             }
         }
+    }
+
+    private func saveManualRecord() {
+        guard hasValidAmount else { return }
+        dismissKeyboard()
+        let didSave = homeViewModel.addManualRecord(userEditedTitle: currentTitleShouldBeUserEdited)
+        guard didSave else {
+            withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
+                recordDetailsExpanded = true
+                noteEditorExpanded = true
+            }
+            return
+        }
+        recordDetailsExpanded = false
+        categoryGridExpanded = false
+        noteEditorExpanded = false
+        datePanelExpanded = false
+        onSaved?()
     }
 
     private func previewFallbackTitle(for category: HomeItem.Category) -> String {
@@ -794,10 +814,17 @@ struct RecordView: View {
     private var manualForm: some View {
         VStack(alignment: .leading, spacing: 12) {
             amountField
+            if voiceCaptureActive {
+                voiceCaptureCapsule
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
             if hasValidAmount {
                 lifeEntryPreview
             }
-            saveRow
+            if !amountPadActive {
+                saveRow
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
             ocrSideDoor
             if hasValidAmount {
                 recordDateQuietActions
@@ -1136,6 +1163,41 @@ struct RecordView: View {
         .accessibilityHidden(true)
     }
 
+    private var voiceCaptureCapsule: some View {
+        HStack(spacing: 10) {
+            TimelineView(.periodic(from: .now, by: 0.42)) { context in
+                let tick = Int(context.date.timeIntervalSinceReferenceDate / 0.42)
+                HStack(spacing: 3) {
+                    ForEach(0..<5, id: \.self) { index in
+                        Capsule(style: .continuous)
+                            .fill(recordAccent.opacity(0.36 + Double(index) * 0.06))
+                            .frame(width: 4, height: CGFloat(10 + ((tick + index) % 3) * 5))
+                            .animation(.spring(response: 0.28, dampingFraction: 0.8), value: tick)
+                    }
+                }
+                .frame(width: 34, height: 24)
+            }
+            Text("正在听这一笔")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(recordInk.opacity(0.76))
+            Spacer(minLength: 0)
+            Text("松开后整理")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.72))
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 9)
+        .background(
+            Capsule(style: .continuous)
+                .fill(AppColors.accent.opacity(0.10))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(AppColors.accent.opacity(0.16), lineWidth: 1)
+        )
+        .padding(.horizontal, 12)
+    }
+
     private var amountFieldRadius: CGFloat {
         20
     }
@@ -1197,31 +1259,13 @@ struct RecordView: View {
 
     private var amountKeyboardDock: some View {
         VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                Text("金额")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppColors.subtext)
-                Spacer()
+            amountAccessoryBar
+
+            HStack(spacing: 8) {
                 quickKeyButton(".00") { applyDot00() }
-                    .frame(maxWidth: 72)
                 quickKeyButton("+10") { applyAmountDelta(10) }
-                    .frame(maxWidth: 72)
                 quickKeyButton("+50") { applyAmountDelta(50) }
-                    .frame(maxWidth: 72)
-                Button {
-                    dismissKeyboard()
-                } label: {
-                    Image(systemName: "keyboard.chevron.compact.down")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(recordAccent)
-                        .frame(width: 42, height: 34)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color.white.opacity(0.78))
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("收起键盘")
+                keyboardCloseButton
             }
 
             LazyVGrid(
@@ -1251,6 +1295,108 @@ struct RecordView: View {
                 .frame(height: 1)
         }
         .shadow(color: Color.black.opacity(0.12), radius: 18, x: 0, y: -6)
+    }
+
+    private var amountAccessoryBar: some View {
+        HStack(spacing: 10) {
+            PhotosPicker(selection: $selectedPhoto, matching: .images, photoLibrary: .shared()) {
+                accessoryIcon("camera")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("添加图片")
+
+            Button {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                    voiceCaptureActive.toggle()
+                }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            } label: {
+                accessoryIcon(voiceCaptureActive ? "waveform" : "mic")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("语音输入")
+
+            Button {
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
+                    categoryGridExpanded = true
+                    recordDetailsExpanded = true
+                    noteEditorExpanded = false
+                }
+            } label: {
+                accessoryIcon("tag")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("改分类")
+
+            Spacer(minLength: 8)
+
+            Button {
+                saveManualRecord()
+            } label: {
+                Text("放进账本")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(hasValidAmount ? .white : AppColors.accent.opacity(0.58))
+                    .frame(minWidth: 112)
+                    .padding(.vertical, 10)
+                    .background(accessorySaveBackground)
+                    .overlay(accessorySaveBorder)
+            }
+            .buttonStyle(.plain)
+            .disabled(!hasValidAmount)
+            .opacity(hasValidAmount ? 1 : 0.72)
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+    }
+
+    private func accessoryIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(recordAccent.opacity(0.92))
+            .frame(width: 38, height: 34)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white.opacity(0.76))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
+            )
+    }
+
+    private var keyboardCloseButton: some View {
+        Button {
+            dismissKeyboard()
+        } label: {
+            Image(systemName: "keyboard.chevron.compact.down")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(recordAccent)
+                .frame(width: 42, height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.78))
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("收起键盘")
+    }
+
+    private var accessorySaveBackground: some View {
+        Capsule(style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: hasValidAmount
+                        ? [Color(red: 0.57, green: 0.75, blue: 0.69).opacity(0.92), recordAccent.opacity(0.82)]
+                        : [Color.white.opacity(0.76), AppColors.paperWarm.opacity(0.42)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+    }
+
+    private var accessorySaveBorder: some View {
+        Capsule(style: .continuous)
+            .stroke(hasValidAmount ? Color.white.opacity(0.30) : AppColors.accent.opacity(0.16), lineWidth: 1)
     }
 
     private func amountPadButton(_ title: String, isAccent: Bool = false, action: @escaping () -> Void) -> some View {
@@ -1452,21 +1598,7 @@ struct RecordView: View {
 
     private var saveRow: some View {
         Button {
-            guard hasValidAmount else { return }
-            dismissKeyboard()
-            let didSave = homeViewModel.addManualRecord(userEditedTitle: currentTitleShouldBeUserEdited)
-            guard didSave else {
-                withAnimation(.easeInOut(duration: 0.16)) {
-                    recordDetailsExpanded = true
-                    noteEditorExpanded = true
-                }
-                return
-            }
-            recordDetailsExpanded = false
-            categoryGridExpanded = false
-            noteEditorExpanded = false
-            datePanelExpanded = false
-            onSaved?()
+            saveManualRecord()
         } label: {
             ZStack {
                 if hasValidAmount {

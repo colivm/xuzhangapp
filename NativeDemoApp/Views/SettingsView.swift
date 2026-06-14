@@ -60,13 +60,13 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) {
+            VStack(spacing: 20) {
                 settingsIdentityCard
-                settingsChapterPanel
+                settingsFeatureGrid
                 settingsFooterLinks
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 4)
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
             .padding(.bottom, 120)
             .frame(maxWidth: 430)
             .frame(maxWidth: .infinity, alignment: .center)
@@ -170,137 +170,219 @@ struct SettingsView: View {
     // MARK: - Account Entry
 
     private var settingsIdentityCard: some View {
-        HStack(spacing: 12) {
-            narrativeSealAvatar
-            VStack(alignment: .leading, spacing: 4) {
-                Text(settingsDisplayName)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(1)
-                Text(identityCardMeta)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.subtext)
-                    .lineLimit(1)
-                Text(settingsViewModel.hasCloudSession ? "云端备份已准备好，照常记就好。" : "想备份或续聊时，再点这里登录。")
-                    .font(.system(size: 12))
-                    .italic()
-                    .foregroundStyle(AppColors.subtext.opacity(0.88))
-                    .lineLimit(1)
+        Button {
+            showAccountSheet = true
+        } label: {
+            ZStack {
+                settingsEnvelopeBackground
+
+                HStack(spacing: 14) {
+                    narrativeSealAvatar
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(settingsDisplayName)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(AppColors.text)
+                            .lineLimit(1)
+                        Text(identityCardMeta)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(settingsInkAccent.opacity(0.92))
+                            .lineLimit(1)
+                        Text(settingsViewModel.hasCloudSession ? "云端备份已准备好，照常记就好。" : "不用登录也能记；换机备份时再放进云端。")
+                            .font(.system(size: 12))
+                            .foregroundStyle(AppColors.text.opacity(0.82))
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 26)
+                .padding(.top, 26)
+                .padding(.bottom, 54)
             }
-            Spacer()
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(AppColors.settingsIdentityPanel)
-        )
-        .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 999, style: .continuous)
-                .fill(settingsInkAccent.opacity(0.34))
-                .frame(width: 3)
-                .padding(.vertical, 18)
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(AppColors.line.opacity(0.72), lineWidth: 1)
-        )
-        .shadow(color: AppColors.subtext.opacity(0.08), radius: 18, y: 8)
+        .buttonStyle(.plain)
+        .frame(height: 170)
     }
 
     private var narrativeSealAvatar: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(red: 1.0, green: 0.96, blue: 0.88).opacity(0.88))
-                .frame(width: 44, height: 44)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(settingsCream.opacity(0.74))
+                .frame(width: 56, height: 56)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(settingsInkAccent.opacity(0.32), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(settingsInkAccent.opacity(0.28), lineWidth: 1)
                 )
             Text("叙")
-                .font(.system(size: 20, weight: .bold, design: .serif))
+                .font(.system(size: 25, weight: .bold, design: .serif))
                 .foregroundStyle(settingsInkAccent.opacity(0.82))
         }
     }
 
-    private var settingsChapterPanel: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(spacing: 0) {
-                settingsSectionLabel("你的叙账")
-                settingsEntryRow(mark: "你", title: "账号与会员", summary: accountRowSummary) {
-                    showAccountSheet = true
-                }
-                settingsEntryRow(mark: "云", title: "备份与联网", summary: backupRowSummary) {
-                    activeSettingsSheet = .backup
-                }
-                settingsEntryRow(mark: "伴", title: "陪伴与语气", summary: companionRowSummary) {
-                    activeSettingsSheet = .companion
-                }
+    private var settingsEnvelopeBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(settingsCream.opacity(0.88))
+
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.52),
+                    settingsMint.opacity(0.36),
+                    settingsSage.opacity(0.26)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Path { path in
+                path.move(to: CGPoint(x: 0, y: 52))
+                path.addLine(to: CGPoint(x: 190, y: 118))
+                path.addLine(to: CGPoint(x: 380, y: 52))
+                path.addLine(to: CGPoint(x: 380, y: 170))
+                path.addLine(to: CGPoint(x: 0, y: 170))
+                path.closeSubpath()
             }
-            VStack(spacing: 0) {
-                settingsSectionLabel("偏好与安心")
-                settingsEntryRow(mark: "色", title: "外观", summary: appearanceSummary) {
-                    activeSettingsSheet = .appearance
-                }
-                settingsEntryRow(mark: "安", title: "数据与隐私", summary: "说明与协议") {
-                    activeSettingsSheet = .privacy
-                }
+            .fill(
+                LinearGradient(
+                    colors: [settingsCream.opacity(0.58), settingsSage.opacity(0.25)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .blur(radius: 0.1)
+
+            Path { path in
+                path.move(to: CGPoint(x: 0, y: 0))
+                path.addLine(to: CGPoint(x: 380, y: 0))
+                path.addQuadCurve(to: CGPoint(x: 190, y: 92), control: CGPoint(x: 356, y: 108))
+                path.addQuadCurve(to: CGPoint(x: 0, y: 0), control: CGPoint(x: 24, y: 108))
+                path.closeSubpath()
+            }
+            .fill(Color.white.opacity(0.54))
+            .shadow(color: Color.black.opacity(0.07), radius: 12, x: 0, y: 8)
+
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .stroke(Color.white.opacity(0.62), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .shadow(color: settingsSage.opacity(0.30), radius: 18, x: 0, y: 10)
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+
+    private var settingsFeatureGrid: some View {
+        LazyVGrid(columns: settingsFeatureColumns, spacing: 14) {
+            settingsFeatureTile(
+                title: "账号会员",
+                subtitle: accountRowSummary,
+                systemImage: "person.crop.circle.badge.checkmark",
+                style: .light
+            ) {
+                showAccountSheet = true
+            }
+
+            settingsFeatureTile(
+                title: "云端备份",
+                subtitle: backupRowSummary,
+                systemImage: settingsViewModel.syncEnabled ? "checkmark.shield" : "icloud",
+                style: settingsViewModel.syncEnabled ? .solid : .mint
+            ) {
+                activeSettingsSheet = .backup
+            }
+
+            settingsFeatureTile(
+                title: "陪伴语气",
+                subtitle: companionRowSummary,
+                systemImage: "gearshape",
+                style: .mint
+            ) {
+                activeSettingsSheet = .companion
+            }
+
+            settingsFeatureTile(
+                title: "外观设置",
+                subtitle: appearanceSummary,
+                systemImage: "sparkles",
+                style: .cream
+            ) {
+                activeSettingsSheet = .appearance
             }
         }
-        .padding(10)
-        .glassPanel(radius: 20, padding: 0)
     }
 
-    private func settingsSectionLabel(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(AppColors.subtext.opacity(0.82))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 4)
-            .padding(.bottom, 2)
+    private var settingsFeatureColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: 14),
+            GridItem(.flexible(), spacing: 14)
+        ]
     }
 
-    private func settingsEntryRow(mark: String, title: String, summary: String, action: @escaping () -> Void) -> some View {
+    private enum SettingsTileStyle {
+        case solid
+        case light
+        case cream
+        case mint
+    }
+
+    private func settingsFeatureTile(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        style: SettingsTileStyle,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                Text(mark)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(settingsMarkColor(mark).opacity(0.82))
-                    .frame(width: 26, height: 26)
-                    .background(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(settingsMarkColor(mark).opacity(0.10))
-                    )
-                Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                Spacer()
-                Text(summary)
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext.opacity(0.82))
-                    .lineLimit(1)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(AppColors.subtext.opacity(0.45))
+            VStack(spacing: 16) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 38, weight: .light))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(settingsTileIconColor(style))
+                    .frame(height: 46)
+
+                VStack(spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 19, weight: .bold))
+                        .foregroundStyle(settingsTileTextColor(style))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                    Text(subtitle)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(settingsTileSubtextColor(style))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.84)
+                }
             }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity)
+            .aspectRatio(1, contentMode: .fit)
+            .padding(18)
+            .background(settingsTileBackground(style))
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(Color.white.opacity(style == .solid ? 0.22 : 0.58), lineWidth: 1)
+            )
+            .shadow(color: settingsTileShadowColor(style), radius: 18, x: 0, y: 10)
         }
         .buttonStyle(.plain)
     }
 
     private var settingsFooterLinks: some View {
-        HStack(spacing: 8) {
-            Button("重新查看新手引导") { onShowMinimalOnboarding() }
+        HStack(spacing: 7) {
+            Button("新手引导") { onShowMinimalOnboarding() }
             Text("·")
-            Link("隐私政策", destination: privacyURL)
+            Button("数据隐私") { activeSettingsSheet = .privacy }
             Text("·")
             Link("用户协议", destination: termsURL)
+            Text("·")
+            Link("隐私政策", destination: privacyURL)
         }
-        .font(.system(size: 11))
-        .foregroundStyle(AppColors.subtext.opacity(0.74))
-        .padding(.horizontal, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(AppColors.subtext.opacity(0.72))
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
+        .padding(.horizontal, 10)
+        .padding(.top, 72)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var appearanceSummary: String {
@@ -343,15 +425,15 @@ struct SettingsView: View {
 
     private var cloudSyncHelperText: String {
         if homeViewModel.isSyncingCloudLedger {
-            return "正在同步云端账单，请稍等。"
+            return "正在合并云端账本。"
         }
         if let message = homeViewModel.syncStatusMessage, !message.isEmpty {
             return message
         }
         if settingsViewModel.syncEnabled {
-            return "已开启。新增、编辑和删除账单会同步到云端。"
+            return "已开启；新增、编辑、删除会自动同步。"
         }
-        return "开启后会先同步云端数据到本地，再上传本机账单；冲突时以更新时间较新的记录为准。"
+        return "首次开启会先合并云端与本机；冲突保留更新时间较新的记录。"
     }
 
     private var companionRowSummary: String {
@@ -391,6 +473,107 @@ struct SettingsView: View {
 
     private var settingsInkAccent: Color {
         Color(red: 0.66, green: 0.47, blue: 0.30)
+    }
+
+    private var settingsInkText: Color {
+        Color(red: 28/255, green: 30/255, blue: 32/255)
+    }
+
+    private var settingsMutedText: Color {
+        Color(red: 108/255, green: 114/255, blue: 110/255)
+    }
+
+    private var settingsSage: Color {
+        Color(red: 184/255, green: 199/255, blue: 187/255)
+    }
+
+    private var settingsDeepSage: Color {
+        Color(red: 168/255, green: 184/255, blue: 170/255)
+    }
+
+    private var settingsMint: Color {
+        Color(red: 241/255, green: 246/255, blue: 242/255)
+    }
+
+    private var settingsCream: Color {
+        Color(red: 249/255, green: 247/255, blue: 241/255)
+    }
+
+    @ViewBuilder
+    private func settingsTileBackground(_ style: SettingsTileStyle) -> some View {
+        switch style {
+        case .solid:
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            settingsDeepSage.opacity(0.98),
+                            Color(red: 140/255, green: 170/255, blue: 150/255).opacity(0.96)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        case .light:
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [settingsCream.opacity(0.96), Color.white.opacity(0.82)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        case .cream:
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [settingsCream.opacity(0.98), Color(red: 247/255, green: 245/255, blue: 240/255)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        case .mint:
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [settingsMint.opacity(0.98), Color.white.opacity(0.80)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        }
+    }
+
+    private func settingsTileTextColor(_ style: SettingsTileStyle) -> Color {
+        style == .solid ? .white : settingsInkText
+    }
+
+    private func settingsTileSubtextColor(_ style: SettingsTileStyle) -> Color {
+        style == .solid ? Color.white.opacity(0.88) : settingsInkText.opacity(0.82)
+    }
+
+    private func settingsTileIconColor(_ style: SettingsTileStyle) -> Color {
+        switch style {
+        case .solid:
+            return Color.white.opacity(0.80)
+        case .cream:
+            return settingsInkAccent.opacity(0.70)
+        case .mint:
+            return Color(red: 132/255, green: 160/255, blue: 141/255).opacity(0.82)
+        case .light:
+            return settingsInkAccent.opacity(0.72)
+        }
+    }
+
+    private func settingsTileShadowColor(_ style: SettingsTileStyle) -> Color {
+        switch style {
+        case .solid:
+            return settingsSage.opacity(0.24)
+        case .mint:
+            return settingsSage.opacity(0.15)
+        default:
+            return Color.black.opacity(0.035)
+        }
     }
 
     private func settingsMarkColor(_ mark: String) -> Color {
@@ -434,7 +617,7 @@ struct SettingsView: View {
                 get: { settingsViewModel.syncEnabled },
                 set: { requestCloudSyncChange($0) }
             ))
-            settingHelper(cloudSyncHelperText)
+            cloudSyncHelper()
             settingToggle("允许联网梳理复盘（可选）", isOn: Binding(
                 get: { settingsViewModel.useRemoteAI },
                 set: { settingsViewModel.useRemoteAI = $0 }
@@ -564,7 +747,7 @@ struct SettingsView: View {
                 get: { settingsViewModel.syncEnabled },
                 set: { requestCloudSyncChange($0) }
             ))
-            settingHelper(cloudSyncHelperText)
+            cloudSyncHelper()
 
             // AI toggle
             settingToggle("允许联网梳理复盘（可选）", isOn: Binding(
@@ -1250,6 +1433,37 @@ struct SettingsView: View {
             .font(.system(size: 11))
             .foregroundStyle(AppColors.subtext.opacity(0.74))
             .padding(.top, -8)
+    }
+
+    private func cloudSyncHelper() -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: homeViewModel.isSyncingCloudLedger ? "arrow.triangle.2.circlepath" : "icloud")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(settingsInkAccent.opacity(0.82))
+                .frame(width: 22, height: 22)
+                .background(
+                    Circle()
+                        .fill(settingsInkAccent.opacity(0.10))
+                )
+
+            Text(cloudSyncHelperText)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.text.opacity(0.72))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.52))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(settingsInkAccent.opacity(0.12), lineWidth: 1)
+        )
+        .padding(.top, -4)
     }
 
     private func webButton(_ title: String, action: @escaping () -> Void) -> some View {

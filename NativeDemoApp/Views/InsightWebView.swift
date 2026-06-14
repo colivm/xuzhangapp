@@ -80,6 +80,8 @@ struct InsightWebView: View {
         VStack(alignment: .leading, spacing: 0) {
             insightJournalCard
             insightChapterFootnote
+            keywordBubbleSection
+                .padding(.bottom, 16)
             insightNextChapter
         }
         .padding(.horizontal, 12)
@@ -154,6 +156,28 @@ struct InsightWebView: View {
             .padding(.leading, 22)
             .padding(.top, 12)
             .padding(.bottom, 14)
+    }
+
+    @ViewBuilder
+    private var keywordBubbleSection: some View {
+        let keywords = monthlyKeywordBubbles()
+        if keywords.count >= 3 {
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("这个月常出现的生活词")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(AppColors.text.opacity(0.88))
+                    Text("不是排名，只是这个月留下的几种生活纹理。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext.opacity(0.78))
+                }
+                .padding(.horizontal, 4)
+
+                KeywordBubbleCloudView(keywords: keywords)
+                    .frame(height: 252)
+            }
+            .glassPanel(radius: 22, padding: 16)
+        }
     }
 
     private var insightNextChapter: some View {
@@ -249,6 +273,59 @@ struct InsightWebView: View {
         let cal = Calendar.current
         let start = cal.date(byAdding: .day, value: -(days - 1), to: Date()) ?? Date()
         return homeViewModel.items.filter { $0.createdAt >= start && $0.amount > 0 }
+    }
+
+    private func monthlyKeywordBubbles() -> [KeywordBubbleData] {
+        let items = currentMonthPositiveItems
+        guard !items.isEmpty else { return [] }
+
+        var counts: [String: Int] = [:]
+        for item in items {
+            addKeyword(item.category.rawValue, weight: 2, into: &counts)
+            if !item.displayEmotionTag.isEmpty {
+                addKeyword(item.displayEmotionTag, weight: 1, into: &counts)
+            }
+            for keyword in titleKeywords(from: item.title) {
+                addKeyword(keyword, weight: 1, into: &counts)
+            }
+        }
+
+        return counts
+            .map { KeywordBubbleData(text: $0.key, count: $0.value) }
+            .sorted {
+                if $0.count == $1.count { return $0.text < $1.text }
+                return $0.count > $1.count
+            }
+            .prefix(14)
+            .map { $0 }
+    }
+
+    private func addKeyword(_ raw: String, weight: Int, into counts: inout [String: Int]) {
+        let text = normalizedKeyword(raw)
+        guard !text.isEmpty else { return }
+        counts[text, default: 0] += max(weight, 1)
+    }
+
+    private func normalizedKeyword(_ raw: String) -> String {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noiseWords = ["记录", "记下", "记下来", "消费", "安排", "这一笔", "这笔", "一下", "一点", "小消费", "日常记录"]
+        for word in noiseWords {
+            text = text.replacingOccurrences(of: word, with: "")
+        }
+        text = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters))
+        if text.count < 2 || text.count > 8 { return "" }
+        if text.rangeOfCharacter(from: .decimalDigits) != nil { return "" }
+        return text
+    }
+
+    private func titleKeywords(from title: String) -> [String] {
+        let normalized = normalizedKeyword(title)
+        if !normalized.isEmpty, normalized.count <= 6 {
+            return [normalized]
+        }
+
+        let candidates = ["咖啡", "奶茶", "早餐", "午餐", "晚餐", "夜宵", "打车", "地铁", "公交", "停车", "超市", "便利店", "水果", "药", "运动", "健身", "宠物", "电影", "外卖", "食堂", "热饭"]
+        return candidates.filter { title.contains($0) }
     }
 
     private func shortDateText(_ date: Date) -> String {
@@ -1193,6 +1270,215 @@ struct InsightWebView: View {
             }
             isSavingWeeklyShareCard = false
         }
+    }
+}
+
+// MARK: - Keyword Bubble Cloud
+
+private struct KeywordBubbleData: Identifiable, Equatable {
+    let id: String
+    let text: String
+    let count: Int
+
+    init(text: String, count: Int) {
+        self.id = text
+        self.text = text
+        self.count = count
+    }
+}
+
+private struct KeywordBubbleCloudView: View {
+    let keywords: [KeywordBubbleData]
+
+    private struct BubbleLayout: Identifiable {
+        let id: String
+        let keyword: KeywordBubbleData
+        let center: CGPoint
+        let radius: CGFloat
+        let fontSize: CGFloat
+        let weight: Double
+        let delay: Double
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let layout = bubbleLayout(in: proxy.size)
+            ZStack {
+                ForEach(layout) { bubble in
+                    KeywordBubbleView(
+                        text: bubble.keyword.text,
+                        count: bubble.keyword.count,
+                        radius: bubble.radius,
+                        fontSize: bubble.fontSize,
+                        weight: bubble.weight,
+                        delay: bubble.delay
+                    )
+                    .position(bubble.center)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .accessibilityElement(children: .contain)
+        }
+    }
+
+    private func bubbleLayout(in size: CGSize) -> [BubbleLayout] {
+        guard size.width > 80, size.height > 120 else { return [] }
+        let sorted = keywords
+            .sorted {
+                if $0.count == $1.count { return $0.text < $1.text }
+                return $0.count > $1.count
+            }
+            .prefix(14)
+
+        guard let maxCount = sorted.map(\.count).max(),
+              let minCount = sorted.map(\.count).min() else { return [] }
+
+        let center = CGPoint(x: size.width * 0.52, y: size.height * 0.43)
+        let countRange = max(maxCount - minCount, 1)
+        var placed: [BubbleLayout] = []
+
+        for (index, keyword) in sorted.enumerated() {
+            let weight = Double(keyword.count - minCount) / Double(countRange)
+            let easedWeight = sqrt(weight)
+            let radius = CGFloat(29 + easedWeight * 28)
+            let fontSize = CGFloat(12 + easedWeight * 6)
+            let delay = Double(stableHash(keyword.text) % 2_000) / 1_000
+            let layout = BubbleLayout(
+                id: keyword.id,
+                keyword: keyword,
+                center: position(
+                    for: keyword.text,
+                    index: index,
+                    radius: radius,
+                    preferredCenter: center,
+                    bounds: size,
+                    placed: placed
+                ),
+                radius: radius,
+                fontSize: min(fontSize, 18),
+                weight: weight,
+                delay: delay
+            )
+            placed.append(layout)
+        }
+
+        return placed
+    }
+
+    private func position(
+        for text: String,
+        index: Int,
+        radius: CGFloat,
+        preferredCenter: CGPoint,
+        bounds: CGSize,
+        placed: [BubbleLayout]
+    ) -> CGPoint {
+        let inset = radius + 2
+        let safeBounds = CGRect(
+            x: inset,
+            y: inset,
+            width: max(bounds.width - inset * 2, 1),
+            height: max(bounds.height - inset * 2, 1)
+        )
+
+        if index == 0 {
+            return CGPoint(
+                x: min(max(preferredCenter.x, safeBounds.minX), safeBounds.maxX),
+                y: min(max(preferredCenter.y, safeBounds.minY), safeBounds.maxY)
+            )
+        }
+
+        let seed = stableHash(text)
+        let baseAngle = CGFloat(seed % 360) * .pi / 180
+        let verticalSquash: CGFloat = 0.78
+        let gap: CGFloat = 6
+
+        for attempt in 0..<220 {
+            let angle = baseAngle + CGFloat(attempt) * 0.53
+            let distance = CGFloat(34 + attempt * 4)
+            let raw = CGPoint(
+                x: preferredCenter.x + cos(angle) * distance,
+                y: preferredCenter.y + sin(angle) * distance * verticalSquash
+            )
+            let candidate = CGPoint(
+                x: min(max(raw.x, safeBounds.minX), safeBounds.maxX),
+                y: min(max(raw.y, safeBounds.minY), safeBounds.maxY)
+            )
+            let collides = placed.contains { other in
+                hypot(candidate.x - other.center.x, candidate.y - other.center.y) < radius + other.radius + gap
+            }
+            if !collides {
+                return candidate
+            }
+        }
+
+        let fallbackAngle = baseAngle + CGFloat(index) * 1.15
+        let fallbackDistance = CGFloat(42 + index * 18)
+        return CGPoint(
+            x: min(max(preferredCenter.x + cos(fallbackAngle) * fallbackDistance, safeBounds.minX), safeBounds.maxX),
+            y: min(max(preferredCenter.y + sin(fallbackAngle) * fallbackDistance * verticalSquash, safeBounds.minY), safeBounds.maxY)
+        )
+    }
+
+    private func stableHash(_ text: String) -> UInt64 {
+        text.unicodeScalars.reduce(UInt64(14_695_981_039_346_656_037)) { partial, scalar in
+            (partial ^ UInt64(scalar.value)) &* 1_099_511_628_211
+        }
+    }
+}
+
+private struct KeywordBubbleView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var breathing = false
+
+    let text: String
+    let count: Int
+    let radius: CGFloat
+    let fontSize: CGFloat
+    let weight: Double
+    let delay: Double
+
+    private var diameter: CGFloat { radius * 2 }
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: fontSize, weight: weight > 0.72 ? .bold : .semibold, design: .rounded))
+            .foregroundStyle(weight > 0.72 ? AppColors.text : AppColors.text.opacity(0.82))
+            .lineLimit(1)
+            .minimumScaleFactor(0.66)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 8)
+            .frame(width: diameter, height: diameter)
+            .background(bubbleBackground)
+            .scaleEffect(reduceMotion ? 1 : (breathing ? 1.03 : 1))
+            .opacity(reduceMotion ? 1 : (breathing ? 0.94 : 1))
+            .shadow(color: AppColors.accent.opacity(weight > 0.6 ? 0.15 : 0.08), radius: 12, x: 0, y: 8)
+            .accessibilityLabel("\(text)，出现 \(count) 次")
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 4).delay(delay).repeatForever(autoreverses: true)) {
+                    breathing = true
+                }
+            }
+    }
+
+    private var bubbleBackground: some View {
+        Circle()
+            .fill(fillColor)
+            .overlay(
+                Circle()
+                    .stroke(AppColors.accent.opacity(weight <= 0.08 ? 0.18 : 0.10), lineWidth: weight <= 0.08 ? 0.5 : 0.8)
+            )
+    }
+
+    private var fillColor: Color {
+        if weight > 0.72 {
+            return Color(red: 0.55, green: 0.72, blue: 0.66).opacity(0.96)
+        }
+        if weight > 0.16 {
+            return Color(red: 0.72, green: 0.86, blue: 0.80).opacity(0.40 + weight * 0.16)
+        }
+        return Color.white.opacity(0.72)
     }
 }
 
