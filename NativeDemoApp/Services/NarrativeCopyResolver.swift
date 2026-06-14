@@ -50,6 +50,10 @@ enum NarrativeCopyResolver {
             return note
         }
 
+        if let note = HomeItem.refinedEmotionTag(title: context.note, category: context.category, amount: context.amount) {
+            return note
+        }
+
         if let note = noteAwareEmotionTag(context: context) {
             return note
         }
@@ -78,6 +82,10 @@ enum NarrativeCopyResolver {
         let noteText = context.note.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !noteText.isEmpty else { return nil }
         let lower = noteText.lowercased()
+
+        if let note = HomeItem.refinedEmotionTag(title: lower, category: context.category, amount: context.amount) {
+            return note
+        }
 
         if containsAny(lower, ["运动", "健身", "训练", "跑步", "瑜伽", "球类", "补给", "能量", "护具", "恢复", "锻炼"]) {
             return pick(

@@ -81,7 +81,8 @@ struct InsightWebView: View {
             insightJournalCard
             insightChapterFootnote
             keywordBubbleSection
-                .padding(.bottom, 16)
+                .padding(.top, -2)
+                .padding(.bottom, 12)
             insightNextChapter
         }
         .padding(.horizontal, 12)
@@ -149,34 +150,61 @@ struct InsightWebView: View {
     }
 
     private var insightChapterFootnote: some View {
-        Text("周记写到这里。想读更长的，再翻开下面。")
-            .font(.system(size: 13))
-            .italic()
-            .foregroundStyle(AppColors.subtext.opacity(0.72))
-            .padding(.leading, 22)
-            .padding(.top, 12)
-            .padding(.bottom, 14)
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(AppColors.accent.opacity(0.20))
+                .frame(width: 2, height: 30)
+            Text("这一章先翻到这里，下面留几枚这个月反复冒头的小词。")
+                .font(.system(size: 13))
+                .italic()
+                .foregroundStyle(AppColors.subtext.opacity(0.72))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.leading, 24)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
     }
 
     @ViewBuilder
     private var keywordBubbleSection: some View {
         let keywords = monthlyKeywordBubbles()
         if keywords.count >= 3 {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("这个月常出现的生活词")
-                        .font(.system(size: 18, weight: .bold))
+                    Text("这个月常冒头的词")
+                        .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(AppColors.text.opacity(0.88))
-                    Text("不是排名，只是这个月留下的几种生活纹理。")
+                    Text("先放你亲手写下的标题，只留最有画面感的几枚。")
                         .font(.system(size: 12))
                         .foregroundStyle(AppColors.subtext.opacity(0.78))
                 }
                 .padding(.horizontal, 4)
 
                 KeywordBubbleCloudView(keywords: keywords)
-                    .frame(height: 252)
+                    .frame(height: 206)
             }
-            .glassPanel(radius: 22, padding: 16)
+            .padding(.horizontal, 16)
+            .padding(.top, 15)
+            .padding(.bottom, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.58),
+                                AppColors.monthlyInsightBg.opacity(0.38),
+                                AppColors.accent.opacity(0.055)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color.white.opacity(0.56), lineWidth: 1)
+            )
+            .shadow(color: AppColors.subtext.opacity(0.055), radius: 18, x: 0, y: 8)
         }
     }
 
@@ -279,53 +307,99 @@ struct InsightWebView: View {
         let items = currentMonthPositiveItems
         guard !items.isEmpty else { return [] }
 
-        var counts: [String: Int] = [:]
+        var bubbles: [String: KeywordBubbleDraft] = [:]
+
         for item in items {
-            addKeyword(item.category.rawValue, weight: 2, into: &counts)
-            if !item.displayEmotionTag.isEmpty {
-                addKeyword(item.displayEmotionTag, weight: 1, into: &counts)
-            }
-            for keyword in titleKeywords(from: item.title) {
-                addKeyword(keyword, weight: 1, into: &counts)
+            if item.userEditedTitle == true {
+                for keyword in titleKeywords(from: item.title, allowsFullTitle: true) {
+                    addKeyword(keyword, weight: 5, category: item.category, priority: 0, into: &bubbles)
+                }
             }
         }
 
-        return counts
-            .map { KeywordBubbleData(text: $0.key, count: $0.value) }
+        for item in items {
+            addKeyword(item.category.rawValue, weight: 3, category: item.category, priority: 1, into: &bubbles)
+            if !item.displayEmotionTag.isEmpty {
+                addKeyword(item.displayEmotionTag, weight: 1, category: item.category, priority: 2, into: &bubbles)
+            }
+            if item.userEditedTitle != true {
+                for keyword in titleKeywords(from: item.title, allowsFullTitle: false) {
+                    addKeyword(keyword, weight: 1, category: item.category, priority: 2, into: &bubbles)
+                }
+            }
+        }
+
+        return bubbles.values
+            .map {
+                KeywordBubbleData(
+                    text: $0.text,
+                    count: $0.count,
+                    category: $0.category,
+                    priority: $0.priority
+                )
+            }
             .sorted {
+                if $0.priority != $1.priority { return $0.priority < $1.priority }
                 if $0.count == $1.count { return $0.text < $1.text }
                 return $0.count > $1.count
             }
-            .prefix(14)
+            .prefix(6)
             .map { $0 }
     }
 
-    private func addKeyword(_ raw: String, weight: Int, into counts: inout [String: Int]) {
+    private func addKeyword(
+        _ raw: String,
+        weight: Int,
+        category: HomeItem.Category,
+        priority: Int,
+        into bubbles: inout [String: KeywordBubbleDraft]
+    ) {
         let text = normalizedKeyword(raw)
         guard !text.isEmpty else { return }
-        counts[text, default: 0] += max(weight, 1)
+        if var existing = bubbles[text] {
+            existing.count += max(weight, 1)
+            existing.priority = min(existing.priority, priority)
+            bubbles[text] = existing
+        } else {
+            bubbles[text] = KeywordBubbleDraft(text: text, count: max(weight, 1), category: category, priority: priority)
+        }
     }
 
     private func normalizedKeyword(_ raw: String) -> String {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        let noiseWords = ["记录", "记下", "记下来", "消费", "安排", "这一笔", "这笔", "一下", "一点", "小消费", "日常记录"]
+        let noiseWords = ["记录", "记下", "记下来", "消费", "安排", "这一笔", "这笔", "一笔", "一条", "一下", "一点", "小消费", "日常记录", "临时花了"]
         for word in noiseWords {
             text = text.replacingOccurrences(of: word, with: "")
         }
         text = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters))
-        if text.count < 2 || text.count > 8 { return "" }
+        if text.count < 2 || text.count > 9 { return "" }
+        if isFillerKeyword(text) { return "" }
         if text.rangeOfCharacter(from: .decimalDigits) != nil { return "" }
         return text
     }
 
-    private func titleKeywords(from title: String) -> [String] {
+    private func titleKeywords(from title: String, allowsFullTitle: Bool) -> [String] {
         let normalized = normalizedKeyword(title)
-        if !normalized.isEmpty, normalized.count <= 6 {
+        if allowsFullTitle, !normalized.isEmpty, normalized.count <= 9, !isGenericRecordTitle(normalized) {
             return [normalized]
         }
 
         let candidates = ["咖啡", "奶茶", "早餐", "午餐", "晚餐", "夜宵", "打车", "地铁", "公交", "停车", "超市", "便利店", "水果", "药", "运动", "健身", "宠物", "电影", "外卖", "食堂", "热饭"]
         return candidates.filter { title.contains($0) }
+    }
+
+    private func isGenericRecordTitle(_ title: String) -> Bool {
+        HomeItem.Category.allCases.contains { category in
+            title == category.rawValue || title == category.label || title == category.defaultRecordTitle
+        }
+    }
+
+    private func isFillerKeyword(_ text: String) -> Bool {
+        let fillers: Set<String> = [
+            "一笔", "几笔", "这笔", "小记", "今天", "昨天", "本周", "本月",
+            "生活", "日常", "花了", "花钱", "补一下", "临时", "简单"
+        ]
+        return fillers.contains(text)
     }
 
     private func shortDateText(_ date: Date) -> String {
@@ -1275,15 +1349,26 @@ struct InsightWebView: View {
 
 // MARK: - Keyword Bubble Cloud
 
+private struct KeywordBubbleDraft {
+    let text: String
+    var count: Int
+    let category: HomeItem.Category
+    var priority: Int
+}
+
 private struct KeywordBubbleData: Identifiable, Equatable {
     let id: String
     let text: String
     let count: Int
+    let category: HomeItem.Category
+    let priority: Int
 
-    init(text: String, count: Int) {
-        self.id = text
+    init(text: String, count: Int, category: HomeItem.Category, priority: Int) {
+        self.id = "\(category.rawValue)-\(text)"
         self.text = text
         self.count = count
+        self.category = category
+        self.priority = priority
     }
 }
 
@@ -1298,6 +1383,7 @@ private struct KeywordBubbleCloudView: View {
         let fontSize: CGFloat
         let weight: Double
         let delay: Double
+        let palette: KeywordBubblePalette
     }
 
     var body: some View {
@@ -1311,7 +1397,8 @@ private struct KeywordBubbleCloudView: View {
                         radius: bubble.radius,
                         fontSize: bubble.fontSize,
                         weight: bubble.weight,
-                        delay: bubble.delay
+                        delay: bubble.delay,
+                        palette: bubble.palette
                     )
                     .position(bubble.center)
                 }
@@ -1325,10 +1412,11 @@ private struct KeywordBubbleCloudView: View {
         guard size.width > 80, size.height > 120 else { return [] }
         let sorted = keywords
             .sorted {
+                if $0.priority != $1.priority { return $0.priority < $1.priority }
                 if $0.count == $1.count { return $0.text < $1.text }
                 return $0.count > $1.count
             }
-            .prefix(14)
+            .prefix(7)
 
         guard let maxCount = sorted.map(\.count).max(),
               let minCount = sorted.map(\.count).min() else { return [] }
@@ -1340,7 +1428,7 @@ private struct KeywordBubbleCloudView: View {
         for (index, keyword) in sorted.enumerated() {
             let weight = Double(keyword.count - minCount) / Double(countRange)
             let easedWeight = sqrt(weight)
-            let radius = CGFloat(29 + easedWeight * 28)
+            let radius = CGFloat(34 + easedWeight * 24)
             let fontSize = CGFloat(12 + easedWeight * 6)
             let delay = Double(stableHash(keyword.text) % 2_000) / 1_000
             let layout = BubbleLayout(
@@ -1357,7 +1445,8 @@ private struct KeywordBubbleCloudView: View {
                 radius: radius,
                 fontSize: min(fontSize, 18),
                 weight: weight,
-                delay: delay
+                delay: delay,
+                palette: KeywordBubblePalette.palette(for: keyword.category, isTitle: keyword.priority == 0)
             )
             placed.append(layout)
         }
@@ -1373,7 +1462,8 @@ private struct KeywordBubbleCloudView: View {
         bounds: CGSize,
         placed: [BubbleLayout]
     ) -> CGPoint {
-        let inset = radius + 2
+        let motionPadding: CGFloat = 14
+        let inset = radius + motionPadding
         let safeBounds = CGRect(
             x: inset,
             y: inset,
@@ -1391,33 +1481,76 @@ private struct KeywordBubbleCloudView: View {
         let seed = stableHash(text)
         let baseAngle = CGFloat(seed % 360) * .pi / 180
         let verticalSquash: CGFloat = 0.78
-        let gap: CGFloat = 6
+        let gap: CGFloat = 18
+        var bestCandidate: CGPoint?
+        var bestScore = -CGFloat.greatestFiniteMagnitude
 
-        for attempt in 0..<220 {
+        for attempt in 0..<260 {
             let angle = baseAngle + CGFloat(attempt) * 0.53
             let distance = CGFloat(34 + attempt * 4)
             let raw = CGPoint(
                 x: preferredCenter.x + cos(angle) * distance,
                 y: preferredCenter.y + sin(angle) * distance * verticalSquash
             )
-            let candidate = CGPoint(
-                x: min(max(raw.x, safeBounds.minX), safeBounds.maxX),
-                y: min(max(raw.y, safeBounds.minY), safeBounds.maxY)
-            )
-            let collides = placed.contains { other in
-                hypot(candidate.x - other.center.x, candidate.y - other.center.y) < radius + other.radius + gap
+            let candidate = clamped(raw, in: safeBounds)
+            let score = clearanceScore(for: candidate, radius: radius, placed: placed, gap: gap)
+            if score > bestScore {
+                bestScore = score
+                bestCandidate = candidate
             }
-            if !collides {
+            if score >= 0 {
                 return candidate
             }
         }
 
-        let fallbackAngle = baseAngle + CGFloat(index) * 1.15
-        let fallbackDistance = CGFloat(42 + index * 18)
+        for anchor in fallbackAnchors(index: index, bounds: bounds) {
+            let candidate = clamped(anchor, in: safeBounds)
+            let score = clearanceScore(for: candidate, radius: radius, placed: placed, gap: gap)
+            if score > bestScore {
+                bestScore = score
+                bestCandidate = candidate
+            }
+            if score >= 0 {
+                return candidate
+            }
+        }
+
+        return bestCandidate ?? CGPoint(x: safeBounds.midX, y: safeBounds.midY)
+    }
+
+    private func clamped(_ point: CGPoint, in rect: CGRect) -> CGPoint {
         return CGPoint(
-            x: min(max(preferredCenter.x + cos(fallbackAngle) * fallbackDistance, safeBounds.minX), safeBounds.maxX),
-            y: min(max(preferredCenter.y + sin(fallbackAngle) * fallbackDistance * verticalSquash, safeBounds.minY), safeBounds.maxY)
+            x: min(max(point.x, rect.minX), rect.maxX),
+            y: min(max(point.y, rect.minY), rect.maxY)
         )
+    }
+
+    private func clearanceScore(
+        for candidate: CGPoint,
+        radius: CGFloat,
+        placed: [BubbleLayout],
+        gap: CGFloat
+    ) -> CGFloat {
+        guard !placed.isEmpty else { return .greatestFiniteMagnitude }
+        return placed
+            .map { other in
+                hypot(candidate.x - other.center.x, candidate.y - other.center.y) - (radius + other.radius + gap)
+            }
+            .min() ?? .greatestFiniteMagnitude
+    }
+
+    private func fallbackAnchors(index: Int, bounds: CGSize) -> [CGPoint] {
+        let anchors = [
+            CGPoint(x: bounds.width * 0.18, y: bounds.height * 0.30),
+            CGPoint(x: bounds.width * 0.78, y: bounds.height * 0.34),
+            CGPoint(x: bounds.width * 0.24, y: bounds.height * 0.70),
+            CGPoint(x: bounds.width * 0.74, y: bounds.height * 0.72),
+            CGPoint(x: bounds.width * 0.50, y: bounds.height * 0.78),
+            CGPoint(x: bounds.width * 0.16, y: bounds.height * 0.55),
+            CGPoint(x: bounds.width * 0.84, y: bounds.height * 0.56)
+        ]
+        let offset = index % anchors.count
+        return anchors.indices.map { anchors[($0 + offset) % anchors.count] }
     }
 
     private func stableHash(_ text: String) -> UInt64 {
@@ -1427,9 +1560,93 @@ private struct KeywordBubbleCloudView: View {
     }
 }
 
+private struct KeywordBubblePalette {
+    let base: Color
+    let rim: Color
+    let glow: Color
+    let text: Color
+
+    static func palette(for category: HomeItem.Category, isTitle: Bool) -> KeywordBubblePalette {
+        let baseOpacity = isTitle ? 0.38 : 0.26
+        let rimOpacity = isTitle ? 0.34 : 0.24
+        let glowOpacity = isTitle ? 0.22 : 0.16
+        switch category {
+        case .dining:
+            return .init(
+                base: Color(red: 0.93, green: 0.75, blue: 0.44).opacity(baseOpacity),
+                rim: Color(red: 0.82, green: 0.58, blue: 0.30).opacity(rimOpacity),
+                glow: Color(red: 0.95, green: 0.72, blue: 0.36).opacity(glowOpacity),
+                text: AppColors.text.opacity(0.86)
+            )
+        case .transport:
+            return .init(
+                base: Color(red: 0.54, green: 0.68, blue: 0.84).opacity(baseOpacity),
+                rim: Color(red: 0.43, green: 0.57, blue: 0.75).opacity(rimOpacity),
+                glow: Color(red: 0.48, green: 0.68, blue: 0.92).opacity(glowOpacity),
+                text: AppColors.text.opacity(0.85)
+            )
+        case .shopping:
+            return .init(
+                base: Color(red: 0.90, green: 0.56, blue: 0.64).opacity(baseOpacity),
+                rim: Color(red: 0.77, green: 0.44, blue: 0.52).opacity(rimOpacity),
+                glow: Color(red: 0.95, green: 0.61, blue: 0.70).opacity(glowOpacity),
+                text: AppColors.text.opacity(0.85)
+            )
+        case .daily:
+            return .init(
+                base: Color(red: 0.78, green: 0.68, blue: 0.48).opacity(baseOpacity),
+                rim: Color(red: 0.65, green: 0.55, blue: 0.38).opacity(rimOpacity),
+                glow: Color(red: 0.86, green: 0.75, blue: 0.50).opacity(glowOpacity),
+                text: AppColors.text.opacity(0.85)
+            )
+        case .entertainment:
+            return .init(
+                base: Color(red: 0.63, green: 0.52, blue: 0.82).opacity(baseOpacity),
+                rim: Color(red: 0.53, green: 0.43, blue: 0.72).opacity(rimOpacity),
+                glow: Color(red: 0.72, green: 0.58, blue: 0.92).opacity(glowOpacity),
+                text: AppColors.text.opacity(0.85)
+            )
+        case .lodging:
+            return .init(
+                base: Color(red: 0.60, green: 0.66, blue: 0.50).opacity(baseOpacity),
+                rim: Color(red: 0.49, green: 0.56, blue: 0.42).opacity(rimOpacity),
+                glow: Color(red: 0.68, green: 0.72, blue: 0.56).opacity(glowOpacity),
+                text: AppColors.text.opacity(0.85)
+            )
+        case .health:
+            return .init(
+                base: AppColors.accent.opacity(baseOpacity),
+                rim: AppColors.accentDark.opacity(rimOpacity),
+                glow: AppColors.accent.opacity(glowOpacity),
+                text: AppColors.text.opacity(0.86)
+            )
+        case .home:
+            return .init(
+                base: Color(red: 0.70, green: 0.62, blue: 0.46).opacity(baseOpacity),
+                rim: Color(red: 0.58, green: 0.50, blue: 0.36).opacity(rimOpacity),
+                glow: Color(red: 0.76, green: 0.67, blue: 0.48).opacity(glowOpacity),
+                text: AppColors.text.opacity(0.85)
+            )
+        case .social:
+            return .init(
+                base: Color(red: 0.88, green: 0.58, blue: 0.42).opacity(baseOpacity),
+                rim: Color(red: 0.76, green: 0.46, blue: 0.32).opacity(rimOpacity),
+                glow: Color(red: 0.94, green: 0.62, blue: 0.44).opacity(glowOpacity),
+                text: AppColors.text.opacity(0.85)
+            )
+        case .other:
+            return .init(
+                base: AppColors.accent.opacity(isTitle ? 0.24 : 0.16),
+                rim: AppColors.subtext.opacity(isTitle ? 0.18 : 0.12),
+                glow: AppColors.accent.opacity(isTitle ? 0.14 : 0.10),
+                text: AppColors.text.opacity(0.84)
+            )
+        }
+    }
+}
+
 private struct KeywordBubbleView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var breathing = false
 
     let text: String
     let count: Int
@@ -1437,48 +1654,92 @@ private struct KeywordBubbleView: View {
     let fontSize: CGFloat
     let weight: Double
     let delay: Double
+    let palette: KeywordBubblePalette
 
     private var diameter: CGFloat { radius * 2 }
 
     var body: some View {
-        Text(text)
-            .font(.system(size: fontSize, weight: weight > 0.72 ? .bold : .semibold, design: .rounded))
-            .foregroundStyle(weight > 0.72 ? AppColors.text : AppColors.text.opacity(0.82))
-            .lineLimit(1)
-            .minimumScaleFactor(0.66)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 8)
-            .frame(width: diameter, height: diameter)
-            .background(bubbleBackground)
-            .scaleEffect(reduceMotion ? 1 : (breathing ? 1.03 : 1))
-            .opacity(reduceMotion ? 1 : (breathing ? 0.94 : 1))
-            .shadow(color: AppColors.accent.opacity(weight > 0.6 ? 0.15 : 0.08), radius: 12, x: 0, y: 8)
-            .accessibilityLabel("\(text)，出现 \(count) 次")
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(.easeInOut(duration: 4).delay(delay).repeatForever(autoreverses: true)) {
-                    breathing = true
-                }
-            }
+        TimelineView(.animation(minimumInterval: 1 / 30)) { timeline in
+            let phase = reduceMotion ? 0 : phaseValue(at: timeline.date)
+            Text(text)
+                .font(.system(size: fontSize, weight: weight > 0.72 ? .bold : .semibold, design: .rounded))
+                .foregroundStyle(palette.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.66)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 8)
+                .frame(width: diameter, height: diameter)
+                .background(bubbleBackground(phase: phase))
+                .scaleEffect(reduceMotion ? 1 : 1 + sin(phase) * 0.018)
+                .opacity(reduceMotion ? 1 : 0.95 + cos(phase) * 0.035)
+                .offset(
+                    x: reduceMotion ? 0 : cos(phase * 0.72) * 1.8,
+                    y: reduceMotion ? 0 : sin(phase) * 5.5
+                )
+                .shadow(color: palette.glow.opacity(0.70), radius: weight > 0.6 ? 22 : 16, x: 0, y: 12)
+                .accessibilityLabel("\(text)，出现 \(count) 次")
+        }
     }
 
-    private var bubbleBackground: some View {
-        Circle()
-            .fill(fillColor)
-            .overlay(
-                Circle()
-                    .stroke(AppColors.accent.opacity(weight <= 0.08 ? 0.18 : 0.10), lineWidth: weight <= 0.08 ? 0.5 : 0.8)
-            )
+    private func phaseValue(at date: Date) -> Double {
+        let duration = 4.2 + (delay * 0.9)
+        return ((date.timeIntervalSinceReferenceDate + delay) / duration) * .pi * 2
     }
 
-    private var fillColor: Color {
-        if weight > 0.72 {
-            return Color(red: 0.55, green: 0.72, blue: 0.66).opacity(0.96)
+    private func bubbleBackground(phase: Double) -> some View {
+        let lightCenter = UnitPoint(
+            x: 0.36 + sin(phase * 0.6) * 0.08,
+            y: 0.28 + cos(phase * 0.5) * 0.06
+        )
+
+        return ZStack {
+            Circle()
+                .fill(.ultraThinMaterial)
+
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color.white.opacity(0.74),
+                            palette.base,
+                            palette.rim.opacity(0.42),
+                            Color.white.opacity(0.08)
+                        ],
+                        center: lightCenter,
+                        startRadius: 0,
+                        endRadius: diameter * 0.64
+                    )
+                )
+
+            Circle()
+                .strokeBorder(
+                    AngularGradient(
+                        colors: [
+                            Color.white.opacity(0.74),
+                            palette.rim.opacity(0.48),
+                            Color.white.opacity(0.16),
+                            palette.base.opacity(0.44),
+                            Color.white.opacity(0.74)
+                        ],
+                        center: .center,
+                        angle: .degrees(phase * 12)
+                    ),
+                    lineWidth: weight > 0.72 ? 1.2 : 0.9
+                )
+
+            Circle()
+                .trim(from: 0.03, to: 0.24)
+                .stroke(Color.white.opacity(0.38), lineWidth: 1.2)
+                .rotationEffect(.degrees(phase * 11 + 210))
+                .blur(radius: 0.3)
+
+            Circle()
+                .fill(palette.glow)
+                .blur(radius: 15)
+                .scaleEffect(0.82 + sin(phase * 0.85) * 0.04)
+                .opacity(0.55)
         }
-        if weight > 0.16 {
-            return Color(red: 0.72, green: 0.86, blue: 0.80).opacity(0.40 + weight * 0.16)
-        }
-        return Color.white.opacity(0.72)
+        .clipShape(Circle())
     }
 }
 

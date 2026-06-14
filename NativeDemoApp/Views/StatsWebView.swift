@@ -24,6 +24,7 @@ struct StatsWebView: View {
     @State private var handledOpenTraceRequestID: UUID?
     @State private var traceSwipedItemID: UUID?
     @State private var traceAutoCommitRequestID: UUID?
+    @State private var showTraceCustomDatePanel = false
     private let playbackService = PlaybackService()
     private let quotaStore = SummaryPlaybackQuotaStore()
 
@@ -489,9 +490,16 @@ struct StatsWebView: View {
                             .foregroundStyle(AppColors.subtext)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        HStack(alignment: .top, spacing: 8) {
-                            periodFilter
-                            categoryFilter
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(alignment: .top, spacing: 8) {
+                                tracePeriodFilter
+                                traceCategoryFilter
+                            }
+
+                            if showTraceCustomDatePanel {
+                                traceCustomDatePanel
+                                    .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
                         }
 
                         VStack(alignment: .leading, spacing: 10) {
@@ -540,7 +548,6 @@ struct StatsWebView: View {
                         guard let itemID else { return }
                         scrollTraceEditorIntoView(itemID, proxy: traceProxy, delay: 0.34)
                     }
-                    .simultaneousGesture(traceDetailScrollDismissGesture)
                 }
             }
             .toolbar {
@@ -623,6 +630,281 @@ struct StatsWebView: View {
             .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var tracePeriodFilter: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            filterLabel("时间")
+            Menu {
+                Button("本周") {
+                    applyTracePeriod(.week)
+                }
+                Button("本月") {
+                    applyTracePeriod(.month)
+                }
+                Button("本年") {
+                    applyTracePeriod(.year)
+                }
+                Button("具体时间段") {
+                    withAnimation(traceEditSpring) {
+                        showTraceCustomDatePanel.toggle()
+                        traceInlineEditingItemID = nil
+                        traceSwipedItemID = nil
+                    }
+                }
+            } label: {
+                filterButtonLabel(useCustomRange ? "具体时间段" : selectedPeriod.rawValue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var traceCategoryFilter: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            filterLabel("分类")
+            Menu {
+                Button("全部分类") {
+                    applyTraceCategory(nil)
+                }
+                ForEach(HomeItem.Category.allCases) { category in
+                    Button(category.displayName) {
+                        applyTraceCategory(category)
+                    }
+                }
+            } label: {
+                filterButtonLabel(selectedCategory?.rawValue ?? "全部分类")
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var traceCustomDatePanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            traceQuickRangeGrid
+
+            HStack(spacing: 8) {
+                traceInlineDatePicker(title: "开始", selection: $customStartDate)
+                traceInlineDatePicker(title: "结束", selection: $customEndDate)
+            }
+
+            HStack(spacing: 8) {
+                Button("取消") {
+                    withAnimation(traceEditSpring) {
+                        showTraceCustomDatePanel = false
+                    }
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.86))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.white.opacity(0.45))
+                )
+
+                Button("应用") {
+                    withAnimation(traceEditSpring) {
+                        if customStartDate > customEndDate {
+                            let start = customStartDate
+                            customStartDate = customEndDate
+                            customEndDate = start
+                        }
+                        useCustomRange = true
+                        showTraceCustomDatePanel = false
+                        traceInlineEditingItemID = nil
+                        traceSwipedItemID = nil
+                    }
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(AppColors.accent.opacity(0.86))
+                )
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.42))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.46), lineWidth: 1)
+        )
+    }
+
+    private var traceQuickRangeGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 7)], spacing: 7) {
+            traceQuickRangeButton("今天") {
+                setTraceCustomRange(.today)
+            }
+            traceQuickRangeButton("昨天") {
+                setTraceCustomRange(.yesterday)
+            }
+            traceQuickRangeButton("本周") {
+                setTraceCustomRange(.thisWeek)
+            }
+            traceQuickRangeButton("本月") {
+                setTraceCustomRange(.thisMonth)
+            }
+            traceQuickRangeButton("近7天") {
+                setTraceCustomRange(.last7Days)
+            }
+            traceQuickRangeButton("近30天") {
+                setTraceCustomRange(.last30Days)
+            }
+        }
+    }
+
+    private func traceQuickRangeButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppColors.text.opacity(0.78))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.52))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(AppColors.accent.opacity(0.12), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private enum TraceCustomRangePreset {
+        case today
+        case yesterday
+        case thisWeek
+        case thisMonth
+        case last7Days
+        case last30Days
+    }
+
+    private func setTraceCustomRange(_ preset: TraceCustomRangePreset) {
+        let calendar = Calendar.current
+        let now = Date()
+        let today = calendar.startOfDay(for: now)
+        let range: (Date, Date)
+
+        switch preset {
+        case .today:
+            range = (today, today)
+        case .yesterday:
+            let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
+            range = (yesterday, yesterday)
+        case .thisWeek:
+            let interval = PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: now)
+            range = (interval?.start ?? today, today)
+        case .thisMonth:
+            let interval = calendar.dateInterval(of: .month, for: now)
+            range = (interval?.start ?? today, today)
+        case .last7Days:
+            range = (calendar.date(byAdding: .day, value: -6, to: today) ?? today, today)
+        case .last30Days:
+            range = (calendar.date(byAdding: .day, value: -29, to: today) ?? today, today)
+        }
+
+        withAnimation(.easeInOut(duration: 0.16)) {
+            customStartDate = range.0
+            customEndDate = range.1
+        }
+    }
+
+    private func traceInlineDatePicker(title: String, selection: Binding<Date>) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+
+            HStack(spacing: 6) {
+                traceDateStepButton(systemName: "chevron.left") {
+                    shiftTraceDate(selection, by: -1)
+                }
+
+                Text(traceCompactDateText(selection.wrappedValue))
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(AppColors.text.opacity(0.88))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
+                    .frame(maxWidth: .infinity)
+
+                traceDateStepButton(systemName: "chevron.right") {
+                    shiftTraceDate(selection, by: 1)
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(Color.white.opacity(0.58))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(Color.white.opacity(0.46), lineWidth: 1)
+            )
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.34))
+        )
+    }
+
+    private func traceDateStepButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(AppColors.accent.opacity(0.86))
+                .frame(width: 28, height: 28)
+                .background(
+                    Circle()
+                        .fill(AppColors.accent.opacity(0.09))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func shiftTraceDate(_ selection: Binding<Date>, by days: Int) {
+        let next = Calendar.current.date(byAdding: .day, value: days, to: selection.wrappedValue) ?? selection.wrappedValue
+        withAnimation(.easeInOut(duration: 0.16)) {
+            selection.wrappedValue = next
+        }
+    }
+
+    private func traceCompactDateText(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let month = calendar.component(.month, from: date)
+        let day = calendar.component(.day, from: date)
+        return "\(month)月\(day)日 \(weekdayText(for: date))"
+    }
+
+    private func applyTracePeriod(_ period: StatsPeriod) {
+        withAnimation(traceEditSpring) {
+            useCustomRange = false
+            selectedPeriod = period
+            showTraceCustomDatePanel = false
+            traceInlineEditingItemID = nil
+            traceSwipedItemID = nil
+        }
+    }
+
+    private func applyTraceCategory(_ category: HomeItem.Category?) {
+        withAnimation(traceEditSpring) {
+            selectedCategory = category
+            traceInlineEditingItemID = nil
+            traceSwipedItemID = nil
+        }
     }
 
     private func filterLabel(_ title: String) -> some View {
@@ -734,19 +1016,87 @@ struct StatsWebView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
         } else {
-            ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
-                if fromTraceDetail {
-                    traceDetailBillRecordRow(item, isFirst: index == 0)
-                } else {
-                    Button {
-                        openEditor(for: item)
-                    } label: {
-                        billRecordRow(item, isFirst: index == 0)
-                            .contentShape(Rectangle())
+            ForEach(traceDayGroups) { group in
+                traceDayHeader(group)
+                    .padding(.top, group.id == traceDayGroups.first?.id ? 0 : 6)
+
+                ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
+                    if fromTraceDetail {
+                        traceDetailBillRecordRow(item, isFirst: index == 0)
+                    } else {
+                        Button {
+                            openEditor(for: item)
+                        } label: {
+                            billRecordRow(item, isFirst: index == 0)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
+        }
+    }
+
+    private struct TraceDayGroup: Identifiable {
+        let id: String
+        let date: Date
+        let items: [HomeItem]
+    }
+
+    private var traceDayGroups: [TraceDayGroup] {
+        let calendar = Calendar.current
+        let groups = Dictionary(grouping: filteredItems) { item in
+            calendar.startOfDay(for: item.createdAt)
+        }
+        return groups
+            .map { day, items in
+                TraceDayGroup(
+                    id: String(Int(day.timeIntervalSince1970)),
+                    date: day,
+                    items: items.sorted { $0.createdAt > $1.createdAt }
+                )
+            }
+            .sorted { $0.date > $1.date }
+    }
+
+    private func traceDayHeader(_ group: TraceDayGroup) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(traceDayTitle(group.date))
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(AppColors.text.opacity(0.82))
+            Text(traceDaySubtitle(group))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.82))
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 4)
+        .padding(.bottom, 2)
+        .padding(.horizontal, 2)
+    }
+
+    private func traceDayTitle(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return "今天" }
+        if calendar.isDateInYesterday(date) { return "昨天" }
+        let month = calendar.component(.month, from: date)
+        let day = calendar.component(.day, from: date)
+        return "\(month)月\(day)日 · \(weekdayText(for: date))"
+    }
+
+    private func traceDaySubtitle(_ group: TraceDayGroup) -> String {
+        let total = group.items.reduce(0) { $0 + $1.amount }
+        return "\(group.items.count) 笔 · \(total.formatted(.cny))"
+    }
+
+    private func weekdayText(for date: Date) -> String {
+        switch Calendar.current.component(.weekday, from: date) {
+        case 1: return "周日"
+        case 2: return "周一"
+        case 3: return "周二"
+        case 4: return "周三"
+        case 5: return "周四"
+        case 6: return "周五"
+        default: return "周六"
         }
     }
 
@@ -1279,7 +1629,7 @@ struct StatsWebView: View {
                     .padding(.trailing, 4)
             }
 
-            VStack(alignment: .leading, spacing: isEditing ? 14 : 8) {
+            VStack(alignment: .leading, spacing: isEditing ? 10 : 8) {
                 traceDetailRecordSummary(item, isEditing: isEditing)
                 if traceInlineEditingItemID == item.id {
                     TraceInlineRecordEditor(
@@ -1306,7 +1656,7 @@ struct StatsWebView: View {
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, isEditing ? 16 : 12)
+            .padding(.vertical, isEditing ? 14 : 12)
             .background(traceDetailRecordBackground(isEditing: isEditing))
             .overlay(traceDetailRecordBorder(isEditing: isEditing))
             .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
@@ -1338,7 +1688,7 @@ struct StatsWebView: View {
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(AppColors.text)
                     .lineLimit(2)
-                    .opacity(isEditing ? 0.42 : 1)
+                    .opacity(isEditing ? 0.28 : 1)
                     .offset(y: isEditing ? -2 : 0)
 
                 Spacer(minLength: 8)
@@ -1346,8 +1696,8 @@ struct StatsWebView: View {
                 Text(item.amount.formatted(.cny))
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(AppColors.text)
-                    .opacity(isEditing ? 0.34 : 1)
-                    .offset(x: isEditing ? -16 : 0, y: isEditing ? 8 : 0)
+                    .opacity(isEditing ? 0.24 : 1)
+                    .offset(x: isEditing ? -10 : 0, y: isEditing ? 5 : 0)
             }
 
             if !item.displayEmotionTag.isEmpty {
@@ -1378,11 +1728,11 @@ struct StatsWebView: View {
     }
 
     private func traceDetailRecordBackground(isEditing: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 19, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: isEditing
-                        ? [AppColors.accent.opacity(0.105), Color.white.opacity(0.62), AppColors.paperWarm.opacity(0.22)]
+            RoundedRectangle(cornerRadius: 19, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: isEditing
+                        ? [AppColors.accent.opacity(0.075), Color.white.opacity(0.46), AppColors.paperWarm.opacity(0.16)]
                         : [Color.white.opacity(0.36), Color.white.opacity(0.18)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -1402,15 +1752,6 @@ struct StatsWebView: View {
                 proxy.scrollTo(itemID, anchor: .center)
             }
         }
-    }
-
-    private var traceDetailScrollDismissGesture: some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .local)
-            .onChanged { value in
-                guard traceInlineEditingItemID != nil else { return }
-                guard abs(value.translation.height) > abs(value.translation.width) + 8 else { return }
-                traceAutoCommitRequestID = UUID()
-            }
     }
 
     private func traceSwipeActions(for item: HomeItem, isVisible: Bool) -> some View {
@@ -1519,16 +1860,19 @@ struct StatsWebView: View {
     @ViewBuilder
     private var trendChart: some View {
         let trendData = computeTrendData()
+        let activeData = trendData.filter { $0.value > 0 }
         VStack(alignment: .leading, spacing: 6) {
-            Text("一点走势")
+            Text(activeData.count >= 2 ? "一点走势" : "暂时不画走势")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
 
             if trendData.isEmpty {
-                Text("近 30 天还没有足够的痕迹。")
+                Text("这一段还没有能连起来看的记录。")
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.subtext)
                     .padding(.vertical, 12)
+            } else if activeData.count < 2 {
+                traceTrendQuietSummary(activeData.first)
             } else {
                 GeometryReader { geo in
                     let w = geo.size.width
@@ -1596,6 +1940,25 @@ struct StatsWebView: View {
         }
     }
 
+    private func traceTrendQuietSummary(_ point: TrendPoint?) -> some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(AppColors.accent.opacity(0.68))
+                .frame(width: 8, height: 8)
+            Text(point.map { "这一段只有 \($0.day) 有记录，先等多几天再看走势。" } ?? "多留下几天，走势会自然出来。")
+                .font(.system(size: 13))
+                .foregroundStyle(AppColors.text.opacity(0.72))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.38))
+        )
+    }
+
     private struct TrendPoint: Identifiable {
         let id = UUID()
         let day: String
@@ -1658,10 +2021,10 @@ struct StatsWebView: View {
     private func trendInsightText(data: [TrendPoint]) -> String {
         let active = data.filter { $0.value > 0 }
         guard let peak = active.max(by: { $0.value < $1.value }) else {
-            return "这一段还没有足够走势。"
+            return "这一段还没有能连起来看的记录。"
         }
         if active.count == 1 {
-            return "这一段主要落在 \(peak.day)。"
+            return "这一段只有 \(peak.day) 有记录，先不用急着看走势。"
         }
         let firstHalf = data.prefix(max(data.count / 2, 1)).reduce(0) { $0 + $1.value }
         let secondHalf = data.suffix(max(data.count - data.count / 2, 1)).reduce(0) { $0 + $1.value }
@@ -1720,7 +2083,7 @@ private struct TraceInlineRecordEditor: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 amountField
                 categorySelector
@@ -1729,8 +2092,8 @@ private struct TraceInlineRecordEditor: View {
             TextField("这一笔想怎么被记住？", text: $titleText)
                 .font(.system(size: 15))
                 .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(inlineFieldBackground)
+                .padding(.vertical, 9)
+                .background(inlineFieldChrome)
                 .focused($focusedField, equals: .title)
                 .onChange(of: titleText) { _, value in
                     if value.count > 32 {
@@ -1752,27 +2115,28 @@ private struct TraceInlineRecordEditor: View {
                     .foregroundStyle(AppColors.subtext.opacity(0.86))
             }
 
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
                 Button("取消") {
                     onCancel()
                 }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(AppColors.subtext)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppColors.subtext.opacity(0.88))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
                 .background(inlineSecondaryButtonBackground)
 
                 Button {
                     save()
                 } label: {
                     Text("保存")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 7)
                         .background(
                             AppColors.accent,
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            in: Capsule(style: .continuous)
                         )
                 }
                 .buttonStyle(.plain)
@@ -1780,12 +2144,7 @@ private struct TraceInlineRecordEditor: View {
                 .opacity(parsedAmount <= 0 ? 0.55 : 1)
             }
         }
-        .padding(.top, -4)
-        .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.46) {
-                focusedField = .amount
-            }
-        }
+        .padding(.top, -6)
         .onChange(of: autoCommitRequestID) { _, requestID in
             guard requestID != nil else { return }
             softCommitAndCollapse()
@@ -1804,8 +2163,8 @@ private struct TraceInlineRecordEditor: View {
                 .focused($focusedField, equals: .amount)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(inlineFieldBackground)
+        .padding(.vertical, 8)
+        .background(inlineFieldChrome)
     }
 
     private var categorySelector: some View {
@@ -1826,8 +2185,8 @@ private struct TraceInlineRecordEditor: View {
             }
             .foregroundStyle(AppColors.text.opacity(0.84))
             .padding(.horizontal, 11)
-            .padding(.vertical, 11)
-            .background(inlineFieldBackground)
+            .padding(.vertical, 10)
+            .background(inlineFieldChrome)
         }
         .buttonStyle(.plain)
     }
@@ -1855,8 +2214,8 @@ private struct TraceInlineRecordEditor: View {
                     .foregroundStyle(AppColors.subtext)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(inlineFieldBackground)
+            .padding(.vertical, 9)
+            .background(inlineFieldChrome)
         }
         .buttonStyle(.plain)
         .overlay(alignment: .topTrailing) {
@@ -2022,21 +2381,23 @@ private struct TraceInlineRecordEditor: View {
             )
     }
 
-    private var inlineFieldBackground: some View {
+    private var inlineFieldChrome: some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color.white.opacity(0.72))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.54), lineWidth: 1)
-            )
+            .fill(Color.white.opacity(0.46))
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(AppColors.accent.opacity(0.18))
+                    .frame(height: 1)
+                    .padding(.horizontal, 10)
+            }
     }
 
     private var inlineSecondaryButtonBackground: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color.white.opacity(0.62))
+        Capsule(style: .continuous)
+            .fill(Color.white.opacity(0.46))
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.46), lineWidth: 1)
+                Capsule(style: .continuous)
+                    .stroke(Color.white.opacity(0.44), lineWidth: 1)
             )
     }
 
