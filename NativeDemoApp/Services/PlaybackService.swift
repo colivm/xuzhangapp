@@ -56,21 +56,169 @@ struct WeeklyShareCardPayload {
     let periodText: String
 }
 
+struct PlaybackMoment: Equatable {
+    enum Source: String, Equatable {
+        case title
+        case emotionTag
+    }
+
+    let item: HomeItem
+    let text: String
+    let source: Source
+    let score: Int
+}
+
+struct PlaybackMomentSelection: Equatable {
+    let materials: [PlaybackMoment]
+    let primary: PlaybackMoment?
+    let scentWords: [String]
+
+    func first(excluding itemID: UUID?) -> PlaybackMoment? {
+        materials.first { material in
+            guard let itemID else { return true }
+            return material.item.id != itemID
+        }
+    }
+
+    func voiceText(for range: SummaryPlaybackRange) -> String {
+        primary?.text ?? PlaybackMomentSelector.honestNoVoiceText(for: range)
+    }
+
+    var scentText: String {
+        scentWords.isEmpty ? PlaybackMomentSelector.honestNoScentText : scentWords.joined(separator: "、")
+    }
+}
+
+final class PlaybackMomentSelector {
+    static let honestNoScentText = "记录还少"
+
+    func select(
+        from items: [HomeItem],
+        periodKey: String,
+        range: SummaryPlaybackRange,
+        now: Date = Date(),
+        echoAnchor: EchoAnchor? = nil
+    ) -> PlaybackMomentSelection {
+        let materials = playbackMaterials(in: items, periodKey: periodKey, now: now)
+        let primary = preferredMaterial(from: materials, echoAnchor: echoAnchor)
+        let scentWords = playbackScentWords(from: items, materials: materials)
+        return PlaybackMomentSelection(materials: materials, primary: primary, scentWords: scentWords)
+    }
+
+    static func honestNoVoiceText(for range: SummaryPlaybackRange) -> String {
+        switch range {
+        case .week:
+            return "这周还没有留下具体备注"
+        case .month:
+            return "这个月还没有留下具体备注"
+        }
+    }
+
+    private func playbackMaterials(in items: [HomeItem], periodKey: String, now: Date) -> [PlaybackMoment] {
+        items.compactMap { item -> PlaybackMoment? in
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
+            let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+            var score = stableMaterialScore(item: item, periodKey: periodKey, now: now)
+
+            if EchoAnchorService.shared.isEligibleLifeTraceTitle(title, item: item) {
+                score += 70
+                if item.userEditedTitle == true { score += 24 }
+                if item.source == .manual { score += 8 }
+                if emotion != defaultEmotion { score += 8 }
+                return PlaybackMoment(item: item, text: title, source: .title, score: score)
+            }
+
+            guard (2...18).contains(emotion.count),
+                  emotion != defaultEmotion,
+                  !EchoAnchorService.shared.isDirtyTraceTitle(emotion) else {
+                return nil
+            }
+            score += 48
+            if item.userEditedTitle == true { score += 8 }
+            return PlaybackMoment(item: item, text: emotion, source: .emotionTag, score: score)
+        }
+        .sorted {
+            if $0.score == $1.score {
+                return $0.item.createdAt > $1.item.createdAt
+            }
+            return $0.score > $1.score
+        }
+    }
+
+    private func preferredMaterial(from materials: [PlaybackMoment], echoAnchor: EchoAnchor?) -> PlaybackMoment? {
+        if let echoAnchor,
+           let matched = materials.first(where: { $0.item.id == echoAnchor.itemId }) {
+            return matched
+        }
+        return materials.first
+    }
+
+    private func playbackScentWords(from items: [HomeItem], materials: [PlaybackMoment]) -> [String] {
+        var counts: [String: Int] = [:]
+        var firstSeen: [String: Int] = [:]
+
+        func add(_ raw: String) {
+            let text = raw
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "「」『』“”\"'，,。.!！?？、：:；;（）()[]【】"))
+            guard (2...18).contains(text.count),
+                  !EchoAnchorService.shared.isDirtyTraceTitle(text) else {
+                return
+            }
+            if firstSeen[text] == nil { firstSeen[text] = firstSeen.count }
+            counts[text, default: 0] += 1
+        }
+
+        materials.forEach { add($0.text) }
+        for item in items {
+            let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
+            let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !emotion.isEmpty, emotion != defaultEmotion { add(emotion) }
+            if EchoAnchorService.shared.isEligibleLifeTraceTitle(item.title, item: item) { add(item.title) }
+            add(item.category.rawValue)
+        }
+
+        return counts
+            .sorted {
+                if $0.value == $1.value {
+                    return (firstSeen[$0.key] ?? 0) < (firstSeen[$1.key] ?? 0)
+                }
+                return $0.value > $1.value
+            }
+            .prefix(5)
+            .map(\.key)
+    }
+
+    private func stableMaterialScore(item: HomeItem, periodKey: String, now: Date) -> Int {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in "\(item.id.uuidString)|\(periodKey)|\(Int(now.timeIntervalSince1970 / 86_400))".utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return Int(hash % 7)
+    }
+}
+
 final class SummaryPlaybackQuotaStore {
     private enum Keys {
         static let playbackWeekKey = "playbackWeekKey"
         static let playbackWeekUsed = "playbackWeekUsed"
+        static let playbackWeekUsedCount = "playbackWeekUsedCount"
         static let lifetimeMonthChapterRemaining = "lifetimeMonthChapterRemaining"
         static let lifetimeWeekPlaybackCompleted = "lifetimeWeekPlaybackCompleted"
+        static let quotaSchemaVersion = "summaryPlaybackQuotaSchemaVersion"
+        static let lastLoginQuotaSyncUserId = "summaryPlaybackLastLoginQuotaSyncUserId"
     }
+
+    static let weeklyFreeLimit = 3
+    static let lifetimeMonthFreeLimit = 10
 
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if defaults.object(forKey: Keys.lifetimeMonthChapterRemaining) == nil {
-            defaults.set(3, forKey: Keys.lifetimeMonthChapterRemaining)
-        }
+        migrateQuotaIfNeeded()
     }
 
     func currentWeekKey(now: Date = Date()) -> String {
@@ -82,7 +230,7 @@ final class SummaryPlaybackQuotaStore {
     func weekRemaining(isMember: Bool, now: Date = Date()) -> Int {
         guard !isMember else { return Int.max }
         syncWeekIfNeeded(now: now)
-        return defaults.bool(forKey: Keys.playbackWeekUsed) ? 0 : 1
+        return max(0, Self.weeklyFreeLimit - defaults.integer(forKey: Keys.playbackWeekUsedCount))
     }
 
     func monthRemaining(isMember: Bool) -> Int {
@@ -109,7 +257,9 @@ final class SummaryPlaybackQuotaStore {
         switch range {
         case .week:
             syncWeekIfNeeded(now: now)
-            defaults.set(true, forKey: Keys.playbackWeekUsed)
+            let used = defaults.integer(forKey: Keys.playbackWeekUsedCount)
+            defaults.set(min(Self.weeklyFreeLimit, used + 1), forKey: Keys.playbackWeekUsedCount)
+            defaults.set(defaults.integer(forKey: Keys.playbackWeekUsedCount) >= Self.weeklyFreeLimit, forKey: Keys.playbackWeekUsed)
         case .month:
             let remaining = monthRemaining(isMember: false)
             if remaining > 0 {
@@ -122,12 +272,44 @@ final class SummaryPlaybackQuotaStore {
         defaults.bool(forKey: Keys.lifetimeWeekPlaybackCompleted)
     }
 
+    func syncLocalUsageAfterLogin(userId: String, now: Date = Date()) {
+        migrateQuotaIfNeeded()
+        syncWeekIfNeeded(now: now)
+        let trimmed = userId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            defaults.set(trimmed, forKey: Keys.lastLoginQuotaSyncUserId)
+        }
+    }
+
     private func syncWeekIfNeeded(now: Date) {
         let key = currentWeekKey(now: now)
         if defaults.string(forKey: Keys.playbackWeekKey) != key {
             defaults.set(key, forKey: Keys.playbackWeekKey)
             defaults.set(false, forKey: Keys.playbackWeekUsed)
+            defaults.set(0, forKey: Keys.playbackWeekUsedCount)
         }
+    }
+
+    private func migrateQuotaIfNeeded() {
+        let version = defaults.integer(forKey: Keys.quotaSchemaVersion)
+        guard version < 2 else { return }
+
+        if defaults.object(forKey: Keys.playbackWeekUsedCount) == nil {
+            defaults.set(defaults.bool(forKey: Keys.playbackWeekUsed) ? 1 : 0, forKey: Keys.playbackWeekUsedCount)
+        } else {
+            let used = defaults.integer(forKey: Keys.playbackWeekUsedCount)
+            defaults.set(min(max(used, 0), Self.weeklyFreeLimit), forKey: Keys.playbackWeekUsedCount)
+        }
+
+        if defaults.object(forKey: Keys.lifetimeMonthChapterRemaining) == nil {
+            defaults.set(Self.lifetimeMonthFreeLimit, forKey: Keys.lifetimeMonthChapterRemaining)
+        } else {
+            let legacyRemaining = defaults.integer(forKey: Keys.lifetimeMonthChapterRemaining)
+            let migratedRemaining = min(Self.lifetimeMonthFreeLimit, max(0, legacyRemaining) + 7)
+            defaults.set(migratedRemaining, forKey: Keys.lifetimeMonthChapterRemaining)
+        }
+
+        defaults.set(2, forKey: Keys.quotaSchemaVersion)
     }
 }
 
@@ -200,6 +382,8 @@ final class DailyFeatureQuotaStore {
 }
 
 final class PlaybackService {
+    private let momentSelector = PlaybackMomentSelector()
+
     func buildTodayPlayback(from items: [HomeItem], now: Date = Date()) -> PlaybackSnapshot {
         let calendar = Calendar.current
         let rows = items
@@ -252,20 +436,18 @@ final class PlaybackService {
         }
 
         let echoAnchor = EchoAnchorService.shared.pickEchoAnchor(items: rows, periodKey: weekKey, now: now)
-        let materials = playbackMaterials(in: rows, periodKey: weekKey, now: now)
-        let primaryVoice = preferredMaterial(from: materials, echoAnchor: echoAnchor)
+        let selection = momentSelector.select(from: rows, periodKey: weekKey, range: .week, now: now, echoAnchor: echoAnchor)
+        let primaryVoice = selection.primary
         let primaryVoiceID = primaryVoice?.item.id
-        let secondaryVoice = materials.first { material in
-            guard let primaryVoiceID else { return true }
-            return material.item.id != primaryVoiceID
-        }
+        let secondaryVoice = selection.first(excluding: primaryVoiceID)
         let busiestRows = busiest.map { day in rows.filter { calendar.isDate($0.createdAt, inSameDayAs: day.date) } } ?? []
-        let busiestMaterial = playbackMaterials(in: busiestRows, periodKey: weekKey, now: now).first ?? primaryVoice
-        let scentWords = playbackScentWords(from: rows, materials: materials)
-        let voiceTitle1 = primaryVoice?.text ?? honestNoVoiceText(for: .week)
+        let busiestSelection = momentSelector.select(from: busiestRows, periodKey: weekKey, range: .week, now: now)
+        let busiestMaterial = busiestSelection.primary ?? primaryVoice
+        let scentWords = selection.scentWords
+        let voiceTitle1 = selection.voiceText(for: .week)
         let voiceTitle2 = secondaryVoice?.text ?? voiceTitle1
         let busiestTitle = busiestMaterial?.text ?? voiceTitle1
-        let scentText = scentWords.isEmpty ? honestNoScentText : scentWords.joined(separator: "、")
+        let scentText = selection.scentText
         let echoSentence = echoAnchor
             .map { EchoAnchorService.shared.formatEchoAnchorSentence($0) }
             .flatMap { $0.isEmpty ? nil : $0 }
@@ -279,7 +461,7 @@ final class PlaybackService {
             "busiestTitle": busiestTitle,
             "voiceTitle1": voiceTitle1,
             "voiceTitle2": voiceTitle2,
-            "scentWord1": scentWords.indices.contains(0) ? scentWords[0] : honestNoScentText,
+            "scentWord1": scentWords.indices.contains(0) ? scentWords[0] : PlaybackMomentSelector.honestNoScentText,
             "scentWord2": scentWords.indices.contains(1) ? scentWords[1] : "",
             "scentWord3": scentWords.indices.contains(2) ? scentWords[2] : "",
             "scentWords": scentText,
@@ -477,27 +659,21 @@ final class PlaybackService {
         let monthKey = Self.monthKeyFormatter.string(from: now)
         let monthSeed = playbackCopySeed(base: "month-\(monthKey)", suffix: copySeed)
         let echoAnchor = EchoAnchorService.shared.pickEchoAnchor(items: rows, periodKey: monthKey, now: now)
-        let materials = playbackMaterials(in: rows, periodKey: monthKey, now: now)
-        let primaryVoice = preferredMaterial(from: materials, echoAnchor: echoAnchor)
+        let selection = momentSelector.select(from: rows, periodKey: monthKey, range: .month, now: now, echoAnchor: echoAnchor)
+        let primaryVoice = selection.primary
         let earlyRows = rows.filter { calendar.component(.day, from: $0.createdAt) <= 10 }
         let lateRows = rows.filter { calendar.component(.day, from: $0.createdAt) >= 11 }
-        let earlyVoice = playbackMaterials(in: earlyRows, periodKey: monthKey, now: now).first ?? primaryVoice
+        let earlySelection = momentSelector.select(from: earlyRows, periodKey: monthKey, range: .month, now: now)
+        let lateSelection = momentSelector.select(from: lateRows, periodKey: monthKey, range: .month, now: now)
+        let earlyVoice = earlySelection.primary ?? primaryVoice
         let earlyVoiceID = earlyVoice?.item.id
-        let lateVoice = playbackMaterials(in: lateRows, periodKey: monthKey, now: now)
-            .first { material in
-                guard let earlyVoiceID else { return true }
-                return material.item.id != earlyVoiceID
-            }
-            ?? materials.first { material in
-                guard let earlyVoiceID else { return true }
-                return material.item.id != earlyVoiceID
-            }
+        let lateVoice = lateSelection.first(excluding: earlyVoiceID)
+            ?? selection.first(excluding: earlyVoiceID)
             ?? primaryVoice
-        let scentWords = playbackScentWords(from: rows, materials: materials)
-        let scentText = scentWords.isEmpty ? honestNoScentText : scentWords.joined(separator: "、")
-        let voiceTitle1 = primaryVoice?.text ?? honestNoVoiceText(for: .month)
-        let earlyVoiceTitle = earlyVoice?.text ?? honestNoVoiceText(for: .month)
-        let lateVoiceTitle = lateVoice?.text ?? honestNoVoiceText(for: .month)
+        let scentText = selection.scentText
+        let voiceTitle1 = selection.voiceText(for: .month)
+        let earlyVoiceTitle = earlyVoice?.text ?? PlaybackMomentSelector.honestNoVoiceText(for: .month)
+        let lateVoiceTitle = lateVoice?.text ?? PlaybackMomentSelector.honestNoVoiceText(for: .month)
         let monthValues: [String: String] = [
             "rangeLabel": rangeLabel,
             "count": "\(rows.count)",
@@ -661,12 +837,6 @@ final class PlaybackService {
         let amount: Double
     }
 
-    private struct PlaybackMaterial {
-        let item: HomeItem
-        let text: String
-        let score: Int
-    }
-
     private static let moneyFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -767,104 +937,6 @@ final class PlaybackService {
             }
             return MonthSegment(label: label, count: rows.count, amount: rows.reduce(0) { $0 + $1.amount })
         }
-    }
-
-    private func playbackMaterials(in items: [HomeItem], periodKey: String, now: Date) -> [PlaybackMaterial] {
-        items.compactMap { item -> PlaybackMaterial? in
-            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
-            let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
-            var score = stableMaterialScore(item: item, periodKey: periodKey, now: now)
-
-            if EchoAnchorService.shared.isEligibleLifeTraceTitle(title, item: item) {
-                score += 70
-                if item.userEditedTitle == true { score += 24 }
-                if item.source == .manual { score += 8 }
-                if emotion != defaultEmotion { score += 8 }
-                return PlaybackMaterial(item: item, text: title, score: score)
-            }
-
-            guard (2...18).contains(emotion.count),
-                  emotion != defaultEmotion,
-                  !EchoAnchorService.shared.isDirtyTraceTitle(emotion) else {
-                return nil
-            }
-            score += 48
-            if item.userEditedTitle == true { score += 8 }
-            return PlaybackMaterial(item: item, text: emotion, score: score)
-        }
-        .sorted {
-            if $0.score == $1.score {
-                return $0.item.createdAt > $1.item.createdAt
-            }
-            return $0.score > $1.score
-        }
-    }
-
-    private func preferredMaterial(from materials: [PlaybackMaterial], echoAnchor: EchoAnchor?) -> PlaybackMaterial? {
-        if let echoAnchor,
-           let matched = materials.first(where: { $0.item.id == echoAnchor.itemId }) {
-            return matched
-        }
-        return materials.first
-    }
-
-    private func playbackScentWords(from items: [HomeItem], materials: [PlaybackMaterial]) -> [String] {
-        var counts: [String: Int] = [:]
-        var firstSeen: [String: Int] = [:]
-
-        func add(_ raw: String) {
-            let text = raw
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .trimmingCharacters(in: CharacterSet(charactersIn: "「」『』“”\"'，,。.!！?？、：:；;（）()[]【】"))
-            guard (2...18).contains(text.count),
-                  !EchoAnchorService.shared.isDirtyTraceTitle(text) else {
-                return
-            }
-            if firstSeen[text] == nil { firstSeen[text] = firstSeen.count }
-            counts[text, default: 0] += 1
-        }
-
-        materials.forEach { add($0.text) }
-        for item in items {
-            let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
-            let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !emotion.isEmpty, emotion != defaultEmotion { add(emotion) }
-            if EchoAnchorService.shared.isEligibleLifeTraceTitle(item.title, item: item) { add(item.title) }
-            add(item.category.rawValue)
-        }
-
-        return counts
-            .sorted {
-                if $0.value == $1.value {
-                    return (firstSeen[$0.key] ?? 0) < (firstSeen[$1.key] ?? 0)
-                }
-                return $0.value > $1.value
-            }
-            .prefix(5)
-            .map(\.key)
-    }
-
-    private var honestNoScentText: String {
-        "记录还少"
-    }
-
-    private func honestNoVoiceText(for range: SummaryPlaybackRange) -> String {
-        switch range {
-        case .week:
-            return "这周还没有留下具体备注"
-        case .month:
-            return "这个月还没有留下具体备注"
-        }
-    }
-
-    private func stableMaterialScore(item: HomeItem, periodKey: String, now: Date) -> Int {
-        var hash: UInt64 = 14_695_981_039_346_656_037
-        for byte in "\(item.id.uuidString)|\(periodKey)|\(Int(now.timeIntervalSince1970 / 86_400))".utf8 {
-            hash ^= UInt64(byte)
-            hash &*= 1_099_511_628_211
-        }
-        return Int(hash % 7)
     }
 
     private func weekTeaserLine(busiest: DayActivity?, rows: [HomeItem], voiceTitle: String, scentWords: String, copySeed: String) -> String {

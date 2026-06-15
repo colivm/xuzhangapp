@@ -1370,11 +1370,11 @@ struct SettingsView: View {
 
     private var accountMemberBenefits: [String] {
         [
-            "周/月回放无限",
+            "周/月生活回放无限",
+            "每月生活章持续解锁",
             "今日回放不限",
             "OCR 导入不限",
-            "AI 复盘额度提升",
-            "场景包换角度",
+            "AI 回顾额度提升",
             "回望内容长期保留",
         ]
     }

@@ -26,6 +26,7 @@ struct StatsWebView: View {
     @State private var traceAutoCommitRequestID: UUID?
     @State private var showTraceCustomDatePanel = false
     private let playbackService = PlaybackService()
+    private let momentSelector = PlaybackMomentSelector()
     private let quotaStore = SummaryPlaybackQuotaStore()
 
     enum StatsPeriod: String, CaseIterable, Identifiable {
@@ -226,7 +227,7 @@ struct StatsWebView: View {
                 ? "这一周还没有记录。先留下几笔，之后会整理成一段场记。"
                 : "这个月还没有记录。先留下几笔，之后会整理成一段场记。"
         }
-        if let voice = traceRepresentativeItems.compactMap({ traceLifeSentence(from: $0) }).first {
+        if let voice = heroMomentSelection.primary?.text {
             return selectedPeriod == .week
                 ? "这一周先记住「\(voice)」。数字放在旁边，生活句留在前面。"
                 : "这个月先记住「\(voice)」。统计放在旁边，生活句留在前面。"
@@ -239,19 +240,33 @@ struct StatsWebView: View {
         return "这一段还没有具体备注，先看到「\(topCategory)」出现得多一点。"
     }
 
-    private func traceLifeSentence(from item: HomeItem) -> String? {
-        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if EchoAnchorService.shared.isEligibleLifeTraceTitle(title, item: item) {
-            return title
+    private var heroMomentSelection: PlaybackMomentSelection {
+        let periodKey = heroMomentPeriodKey
+        let echoAnchor = heroMomentEchoAnchor(periodKey: periodKey)
+        return momentSelector.select(
+            from: heroScopedItems,
+            periodKey: periodKey,
+            range: heroRange,
+            now: .now,
+            echoAnchor: echoAnchor
+        )
+    }
+
+    private var heroMomentPeriodKey: String {
+        if useCustomRange || selectedPeriod == .year {
+            return "trace-\(selectedPeriod.rawValue)-\(heroScopedItems.count)"
         }
-        let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
-        let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
-        if (2...18).contains(emotion.count),
-           emotion != defaultEmotion,
-           !EchoAnchorService.shared.isDirtyTraceTitle(emotion) {
-            return emotion
+        switch heroRange {
+        case .week:
+            return quotaStore.currentWeekKey()
+        case .month:
+            return EchoAnchorService.shared.periodKeyForMonth()
         }
-        return nil
+    }
+
+    private func heroMomentEchoAnchor(periodKey: String) -> EchoAnchor? {
+        guard !useCustomRange, selectedPeriod != .year else { return nil }
+        return EchoAnchorService.shared.pickEchoAnchor(items: heroScopedItems, periodKey: periodKey)
     }
 
     private var heroRange: SummaryPlaybackRange {
@@ -1155,6 +1170,7 @@ struct StatsWebView: View {
             playback: playback,
             petEnabled: settingsViewModel.petCompanionEnabled,
             isMember: hasMemberAccess,
+            memberPitch: summaryMemberPitch(for: playback),
             weeklySharePayload: weeklySharePayload(for: playback),
             shareNickname: settingsViewModel.displayName,
             onCompleted: { progress in
@@ -1173,6 +1189,45 @@ struct StatsWebView: View {
         )
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
+    }
+
+    private func summaryMemberPitch(for playback: SummaryPlayback) -> SummaryPlaybackMemberPitch? {
+        guard !hasMemberAccess else { return nil }
+        switch playback.range {
+        case .week:
+            if !quotaStore.hasCompletedWeekPlaybackEver() {
+                return SummaryPlaybackMemberPitch(
+                    headline: "这是你的第一段周记。",
+                    detail: "下周还想继续这样回看，就可以把每周生活回放长期留住。",
+                    cta: "保留每周生活回放"
+                )
+            }
+            if quotaStore.weekRemaining(isMember: false) <= 1 {
+                return SummaryPlaybackMemberPitch(
+                    headline: "这周的免费回放快用完了。",
+                    detail: "会员可以无限回看周记和月记，不用等下个自然周刷新。",
+                    cta: "解锁无限回放"
+                )
+            }
+            return SummaryPlaybackMemberPitch(
+                headline: "像不像你的这周？",
+                detail: "这类回看会随着记录变多更贴近你。",
+                cta: "了解会员"
+            )
+        case .month:
+            if quotaStore.monthRemaining(isMember: false) <= 1 {
+                return SummaryPlaybackMemberPitch(
+                    headline: "10 次月章已经听到最后一次。",
+                    detail: "后面的月份也可以这样被整理出来，会员可继续解锁每月生活章。",
+                    cta: "继续解锁月章"
+                )
+            }
+            return SummaryPlaybackMemberPitch(
+                headline: "像不像你的这个月？",
+                detail: "会员可以把更多月份继续整理成生活章。",
+                cta: "了解会员"
+            )
+        }
     }
 
     private func weeklySharePayload(for playback: SummaryPlayback) -> WeeklyShareCardPayload? {
@@ -1277,7 +1332,7 @@ struct StatsWebView: View {
     private func summaryCardSubtitle(preview: SummaryPlayback, range: SummaryPlaybackRange, hasData: Bool, isMonthLocked: Bool) -> String {
         guard hasData else { return "先留下几笔，这里就能讲出这一段。" }
         if isMonthLocked {
-            return "会员专属 · 你的 3 次新用户体验已用完"
+            return "会员专属 · 你的 10 次新用户体验已用完"
         }
         if !preview.teaserLine.isEmpty {
             return preview.teaserLine
@@ -1300,11 +1355,11 @@ struct StatsWebView: View {
         switch range {
         case .week:
             let remaining = quotaStore.weekRemaining(isMember: false)
-            return remaining > 0 ? "本周剩余 1 次 · 会员可无限" : "本周剩余 0 次 · 下个自然周刷新"
+            return remaining > 0 ? "本周剩余 \(remaining)/\(SummaryPlaybackQuotaStore.weeklyFreeLimit) 次 · 会员可无限" : "本周剩余 0 次 · 下个自然周刷新"
         case .month:
             let remaining = quotaStore.monthRemaining(isMember: false)
             return remaining > 0
-                ? "新用户专享剩余 \(remaining)/3 次 · 用完后需会员"
+                ? "新用户专享剩余 \(remaining)/\(SummaryPlaybackQuotaStore.lifetimeMonthFreeLimit) 次 · 用完后需会员"
                 : "本月回放体验已用完 · 会员可无限回看"
         }
     }
@@ -1314,9 +1369,9 @@ struct StatsWebView: View {
         guard quotaStore.canPlay(range, isMember: hasMemberAccess) else {
             switch range {
             case .week:
-                summaryQuotaMessage = "本周回放已经看完啦。下个自然周会再刷新 1 次免费次数。开通会员可无限回看周/月回放。"
+                summaryQuotaMessage = "本周 3 次免费回放已经看完啦。下个自然周会刷新。开通会员可无限回看周/月回放。"
             case .month:
-                summaryQuotaMessage = "你的 3 次新用户「本月回放」已用完。开通会员可无限播放周/月回放，并享无限 OCR 与更高 AI 复盘额度。本周回放仍会在每个自然周刷新 1 次免费次数。"
+                summaryQuotaMessage = "你的 10 次新用户「本月回放」已用完。开通会员可无限播放周/月回放，并享无限 OCR 与更高 AI 复盘额度。本周回放仍会在每个自然周刷新 3 次。"
             }
             return
         }

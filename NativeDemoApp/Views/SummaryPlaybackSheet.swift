@@ -1,9 +1,16 @@
 import SwiftUI
 
+struct SummaryPlaybackMemberPitch: Equatable {
+    let headline: String
+    let detail: String
+    let cta: String
+}
+
 struct SummaryPlaybackSheet: View {
     let playback: SummaryPlayback
     let petEnabled: Bool
     let isMember: Bool
+    var memberPitch: SummaryPlaybackMemberPitch?
     var weeklySharePayload: WeeklyShareCardPayload?
     var shareNickname: String = "叙账用户"
     var onCompleted: (Double) -> Void
@@ -448,16 +455,24 @@ struct SummaryPlaybackSheet: View {
 
     private var doneActions: some View {
         VStack(spacing: 10) {
-            Text(playback.range == .week ? "像不像你的这周？" : "像不像你的这个月？")
+            Text(doneHeadline)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(AppColors.text.opacity(0.82))
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let detail = doneDetail {
+                Text(detail)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if playback.range == .week {
                 Button {
                     handlePrimaryDoneAction()
                 } label: {
-                    Text(isMember ? "下周再来" : "了解会员")
+                    Text(primaryDoneTitle)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -504,7 +519,7 @@ struct SummaryPlaybackSheet: View {
                 Button {
                     handlePrimaryDoneAction()
                 } label: {
-                    Text(isMember ? "再看一遍" : "了解会员")
+                    Text(primaryDoneTitle)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -529,6 +544,25 @@ struct SummaryPlaybackSheet: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    private var doneHeadline: String {
+        if isMember {
+            return playback.range == .week ? "像不像你的这周？" : "像不像你的这个月？"
+        }
+        return memberPitch?.headline ?? (playback.range == .week ? "像不像你的这周？" : "像不像你的这个月？")
+    }
+
+    private var doneDetail: String? {
+        guard !isMember else { return nil }
+        return memberPitch?.detail
+    }
+
+    private var primaryDoneTitle: String {
+        if isMember {
+            return playback.range == .week ? "下周再来" : "再看一遍"
+        }
+        return memberPitch?.cta ?? "了解会员"
     }
 
     private func handlePrimaryDoneAction() {

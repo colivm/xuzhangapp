@@ -261,6 +261,7 @@ final class SettingsViewModel: ObservableObject {
             settings.cloudUserId = session.userId
             settings.memberTier = session.memberTier
             settings.memberExpiresAt = session.memberExpiresAt
+            SummaryPlaybackQuotaStore().syncLocalUsageAfterLogin(userId: session.userId)
             persist()
             if let account = try? await client.fetchAccountMe(accessToken: session.accessToken) {
                 applyCloudAccount(account)
@@ -412,6 +413,7 @@ final class SettingsViewModel: ObservableObject {
     private func applyCloudAccount(_ account: AuthUserDTO) {
         settings.displayName = sanitizedDisplayName(account.displayName)
         settings.cloudUserId = account.userId
+        SummaryPlaybackQuotaStore().syncLocalUsageAfterLogin(userId: account.userId)
         if let memberTier = account.memberTier {
             settings.memberTier = memberTier
         }
