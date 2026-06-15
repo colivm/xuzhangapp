@@ -25,7 +25,7 @@ enum AIReportServiceError: LocalizedError {
             return "AI 服务地址配置异常：\(endpoint)"
         case .badStatus(let code, let body):
             if body.contains("AI_INPUT_REJECTED") || body.contains("BANK_CARD") {
-                return "内容里可能包含手机号、证件号、卡号或链接，远程 AI 已跳过。"
+                return "远程 AI 触发内容保护，已回退本地建议。"
             }
             return "AI 请求失败（\(code)），已回退本地建议。"
         case .invalidResponse:
@@ -74,7 +74,7 @@ final class AIReportService {
         禁止：下月/下周金额目标、预算上限、减少支出比例、达成率、任何管控式省钱建议。
         action 字段应像账本页脚的一句自然收束或轻鼓励，不是理财计划，也不是空泛安慰话术。
         不要输出投资建议，不要说教。
-        不要输出任何手机号、证件号、银行卡、链接或疑似隐私编号。
+        不要输出任何具体联系方式、隐私编号、账号信息或链接。
         """
 
         let userContent = """

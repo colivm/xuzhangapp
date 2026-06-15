@@ -16,7 +16,6 @@ struct InsightWebView: View {
     @State private var monthlyTrialModal: MonthlyTrialModal?
     @State private var isSavingWeeklyShareCard = false
     @State private var weeklyShareSaveMessage: String?
-    @State private var weeklyRhythmMessage: String?
     @State private var isTodayInsightExpanded = false
     @State private var showMonthlyInsightSheet = false
     @State private var showTodayInsightSheet = false
@@ -111,23 +110,14 @@ struct InsightWebView: View {
                 .foregroundStyle(AppColors.subtext.opacity(0.86))
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 14) {
-                quietTextButton("梳理本周节奏 →") {
-                    let text = homeViewModel.buildWeeklyRhythmText()
-                    homeViewModel.setLatestActionCard(text, scope: "weekly")
-                    homeViewModel.markWeeklyRhythmReviewed()
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        weeklyRhythmMessage = text
-                    }
-                }
-                quietTextButton("保存周记摘页") {
-                    showWeeklySharePrivacyConfirm = true
-                }
-                if !homeViewModel.weekTopCategoryText.isEmpty && homeViewModel.weekTopCategoryText != "暂无" {
-                    quietTextButton("标记常花类目") {
-                        homeViewModel.markWeeklyTag()
-                    }
-                }
+            Text(homeViewModel.buildWeeklyRhythmText())
+                .font(.system(size: 13))
+                .lineSpacing(4)
+                .foregroundStyle(AppColors.text.opacity(0.78))
+                .padding(.top, 2)
+
+            quietTextButton("保存周记摘页") {
+                showWeeklySharePrivacyConfirm = true
             }
             .padding(.top, 2)
 
@@ -135,14 +125,6 @@ struct InsightWebView: View {
                 Text(weeklyShareSaveMessage)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.subtext)
-            }
-
-            if let weeklyRhythmMessage {
-                Text(weeklyRhythmMessage)
-                    .font(.system(size: 13))
-                    .lineSpacing(4)
-                    .foregroundStyle(AppColors.text.opacity(0.78))
-                    .padding(.top, 2)
             }
         }
         .padding(.leading, 4)
@@ -531,35 +513,18 @@ struct InsightWebView: View {
 
             weeklyInsightText(weeklyBlocks)
 
-            primaryActionButton("梳理本周节奏") {
-                let text = homeViewModel.buildWeeklyRhythmText()
-                homeViewModel.setLatestActionCard(text, scope: "weekly")
-                homeViewModel.markWeeklyRhythmReviewed()
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    weeklyRhythmMessage = text
-                }
-            }
+            Text(homeViewModel.buildWeeklyRhythmText())
+                .font(.system(size: 13))
+                .lineSpacing(4)
+                .foregroundStyle(AppColors.text.opacity(0.78))
 
-            HStack(spacing: 14) {
-                quietTextButton("保存周记摘页") {
-                    showWeeklySharePrivacyConfirm = true
-                }
-                if !homeViewModel.weekTopCategoryText.isEmpty && homeViewModel.weekTopCategoryText != "暂无" {
-                    quietTextButton("标记常花类目") {
-                        homeViewModel.markWeeklyTag()
-                    }
-                }
+            quietTextButton("保存周记摘页") {
+                showWeeklySharePrivacyConfirm = true
             }
             if let weeklyShareSaveMessage {
                 Text(weeklyShareSaveMessage)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.subtext)
-            }
-            if let weeklyRhythmMessage {
-                Text(weeklyRhythmMessage)
-                    .font(.system(size: 13))
-                    .foregroundStyle(AppColors.text.opacity(0.78))
-                    .padding(.top, 2)
             }
         }
         .glassPanel(radius: 24, padding: 20)
@@ -2028,12 +1993,13 @@ struct WeeklyShareCardView: View {
 
     private var displayNickname: String {
         let trimmed = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "这一周" : "\(trimmed) · 这一周"
+        guard !trimmed.isEmpty, isShareCardNickname(trimmed) else { return "这一周" }
+        return "\(trimmed) · 这一周"
     }
 
     private var journalTitle: String {
-        if displayAnchorLine != nil {
-            return "这一周，留下这一句"
+        if shareAnchorPhrase != nil {
+            return "这周记下了这一笔"
         }
         let title = compactShareTitle(cleanedHeadlineLine)
         if !title.isEmpty {
@@ -2043,6 +2009,9 @@ struct WeeklyShareCardView: View {
     }
 
     private var journalBody: String {
+        if let phrase = shareAnchorPhrase {
+            return "账本里写着「\(phrase)」。\n这一周先放在这里。"
+        }
         let middle = cleanedHeadlineLine.isEmpty ? "这一周已经留下几笔可以回看的记录。" : cleanedHeadlineLine
         let closing = cleanedSubtitleLine.contains("建议") || cleanedSubtitleLine.contains("数据不足") || cleanedSubtitleLine.isEmpty
             ? "之后有新记录，再回来对照。"
@@ -2084,14 +2053,31 @@ struct WeeklyShareCardView: View {
     }
 
     private var displayAnchorLine: String? {
+        nil
+    }
+
+    private var shareAnchorPhrase: String? {
         guard let anchor = anchorLine?.trimmingCharacters(in: .whitespacesAndNewlines),
               !anchor.isEmpty else { return nil }
-        return anchor
+        let phrase = anchor
+            .replacingOccurrences(of: "有一笔是这样留在账本里的：", with: "")
+            .replacingOccurrences(of: "有一笔是这样留在账本里的:", with: "")
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters))
+        guard (2...18).contains(phrase.count),
+              !phrase.contains("还没有"),
+              !phrase.contains("记录还少") else {
+            return nil
+        }
+        return phrase
+    }
+
+    private func isShareCardNickname(_ text: String) -> Bool {
+        let allowed = CharacterSet.letters.union(.decimalDigits).union(CharacterSet(charactersIn: "_-"))
+        return text.rangeOfCharacter(from: allowed.inverted) == nil
     }
 
     private var auxiliaryLine: String {
-        let top = topCategory.trimmingCharacters(in: .whitespacesAndNewlines)
-        return top.isEmpty ? "附记：\(recordCount) 笔记录" : "附记：\(recordCount) 笔记录 · \(top)"
+        "附记：\(recordCount) 笔记录"
     }
 
     private var rhythmTexture: some View {

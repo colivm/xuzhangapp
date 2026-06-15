@@ -1185,7 +1185,10 @@ struct StatsWebView: View {
                 useCustomRange = false
                 selectedPeriod = .week
             },
-            onOpenInsight: onOpenInsight
+            onOpenInsight: onOpenInsight,
+            onSaveMemoryLine: { line, range in
+                homeViewModel.markPlaybackMemoryLine(line, range: range)
+            }
         )
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)

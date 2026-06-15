@@ -108,9 +108,9 @@ final class PlaybackMomentSelector {
     static func honestNoVoiceText(for range: SummaryPlaybackRange) -> String {
         switch range {
         case .week:
-            return "这周还没有留下具体备注"
+            return "这周的几笔记录"
         case .month:
-            return "这个月还没有留下具体备注"
+            return "这个月的几笔记录"
         }
     }
 
@@ -443,11 +443,16 @@ final class PlaybackService {
         let busiestRows = busiest.map { day in rows.filter { calendar.isDate($0.createdAt, inSameDayAs: day.date) } } ?? []
         let busiestSelection = momentSelector.select(from: busiestRows, periodKey: weekKey, range: .week, now: now)
         let busiestMaterial = busiestSelection.primary ?? primaryVoice
+        let recurringLine = recurringTraceLine(
+            current: rows,
+            previous: previousWeekItems(from: items, now: now),
+            rangeName: "上周"
+        )
+        let scentText = copyWithRecurringLine(selection.scentText, recurringLine)
         let scentWords = selection.scentWords
         let voiceTitle1 = selection.voiceText(for: .week)
         let voiceTitle2 = secondaryVoice?.text ?? voiceTitle1
         let busiestTitle = busiestMaterial?.text ?? voiceTitle1
-        let scentText = selection.scentText
         let echoSentence = echoAnchor
             .map { EchoAnchorService.shared.formatEchoAnchorSentence($0) }
             .flatMap { $0.isEmpty ? nil : $0 }
@@ -655,7 +660,11 @@ final class PlaybackService {
         let previousRows = previousMonthItems(from: items, now: now)
         let previousTotal = previousRows.reduce(0) { $0 + $1.amount }
         let momPercent = monthOverMonthText(current: total, previous: previousTotal)
-        let changeText = monthlyChangeText(current: rows, previous: previousRows, segments: segments)
+        let recurringLine = recurringTraceLine(current: rows, previous: previousRows, rangeName: "上个月")
+        let changeText = copyWithRecurringLine(
+            monthlyChangeText(current: rows, previous: previousRows, segments: segments),
+            recurringLine
+        )
         let monthKey = Self.monthKeyFormatter.string(from: now)
         let monthSeed = playbackCopySeed(base: "month-\(monthKey)", suffix: copySeed)
         let echoAnchor = EchoAnchorService.shared.pickEchoAnchor(items: rows, periodKey: monthKey, now: now)
@@ -957,7 +966,7 @@ final class PlaybackService {
         if let voices = summary.chapters.first(where: { $0.id == "week-voices" }) {
             if let title = voices.metrics["voiceTitle1"]?.trimmingCharacters(in: .whitespacesAndNewlines),
                !title.isEmpty {
-                return "有一笔是这样留在账本里的：\(title)"
+                return title
             }
             let narration = voices.narration.plain.trimmingCharacters(in: .whitespacesAndNewlines)
             if !narration.isEmpty {
@@ -996,6 +1005,97 @@ final class PlaybackService {
             return []
         }
         return positiveItems(items, from: previous.start, to: previous.end)
+    }
+
+    private func previousWeekItems(from items: [HomeItem], now: Date) -> [HomeItem] {
+        let calendar = Self.isoCalendar
+        guard let currentWeek = calendar.dateInterval(of: .weekOfYear, for: now),
+              let previousStart = calendar.date(byAdding: .weekOfYear, value: -1, to: currentWeek.start),
+              let previous = calendar.dateInterval(of: .weekOfYear, for: previousStart) else {
+            return []
+        }
+        return positiveItems(items, from: previous.start, to: previous.end)
+    }
+
+    private func copyWithRecurringLine(_ base: String, _ recurringLine: String?) -> String {
+        guard let recurringLine,
+              !recurringLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return base
+        }
+        return "\(base) \(recurringLine)"
+    }
+
+    private func recurringTraceLine(current: [HomeItem], previous: [HomeItem], rangeName: String) -> String? {
+        guard current.count >= 2, previous.count >= 2 else { return nil }
+
+        let currentTitles = traceTokenCounts(current, source: .title)
+        let previousTitles = traceTokenCounts(previous, source: .title)
+        if let title = strongestSharedToken(current: currentTitles, previous: previousTitles) {
+            return "\(rangeName)也写过「\(title)」，这次它又回来了。"
+        }
+
+        let currentEmotions = traceTokenCounts(current, source: .emotionTag)
+        let previousEmotions = traceTokenCounts(previous, source: .emotionTag)
+        if let emotion = strongestSharedToken(current: currentEmotions, previous: previousEmotions) {
+            return "\(rangeName)也标过「\(emotion)」，这次还能看见。"
+        }
+
+        let currentCategories = categoryCounts(current)
+        let previousCategories = categoryCounts(previous)
+        if let category = strongestSharedToken(current: currentCategories, previous: previousCategories, minimumCount: 2) {
+            return "「\(category)」这条线延续到了这次记录里。"
+        }
+
+        return nil
+    }
+
+    private enum TraceTokenSource {
+        case title
+        case emotionTag
+    }
+
+    private func traceTokenCounts(_ items: [HomeItem], source: TraceTokenSource) -> [String: Int] {
+        var counts: [String: Int] = [:]
+        for item in items {
+            let token: String?
+            switch source {
+            case .title:
+                token = EchoAnchorService.shared.isEligibleLifeTraceTitle(item.title, item: item)
+                    ? item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    : nil
+            case .emotionTag:
+                let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+                token = (2...18).contains(emotion.count)
+                    && emotion != HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
+                    && !EchoAnchorService.shared.isDirtyTraceTitle(emotion)
+                    ? emotion
+                    : nil
+            }
+            if let token, !token.isEmpty {
+                counts[token, default: 0] += 1
+            }
+        }
+        return counts
+    }
+
+    private func categoryCounts(_ items: [HomeItem]) -> [String: Int] {
+        items.reduce(into: [:]) { result, item in
+            result[item.category.rawValue, default: 0] += 1
+        }
+    }
+
+    private func strongestSharedToken(current: [String: Int], previous: [String: Int], minimumCount: Int = 1) -> String? {
+        current.keys
+            .filter { token in
+                (current[token] ?? 0) >= minimumCount && (previous[token] ?? 0) >= minimumCount
+            }
+            .sorted {
+                let leftScore = (current[$0] ?? 0) + (previous[$0] ?? 0)
+                let rightScore = (current[$1] ?? 0) + (previous[$1] ?? 0)
+                if leftScore == rightScore { return $0 < $1 }
+                return leftScore > rightScore
+            }
+            .first
     }
 
     private func monthOverMonthText(current: Double, previous: Double) -> String? {

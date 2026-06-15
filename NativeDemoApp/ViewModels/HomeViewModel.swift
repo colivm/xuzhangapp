@@ -714,7 +714,7 @@ final class HomeViewModel: ObservableObject {
                     )
                     _ = AIUsageLimiter.consumeOnce(limitPerMonth: settings.remoteAIMonthlyLimit)
                 } catch {
-                    insightErrorMessage = error.localizedDescription
+                    insightErrorMessage = remoteAIInsightFallbackMessage(for: error)
                     report.source = .errorFallback
                 }
             } else {
@@ -1243,8 +1243,8 @@ final class HomeViewModel: ObservableObject {
 
     private func remoteAIInsightFallbackMessage(for error: Error) -> String {
         let message = error.localizedDescription
-        if message.contains("手机号") || message.contains("证件号") || message.contains("卡号") || message.contains("链接") {
-            return "远程 AI 已跳过：内容里可能包含敏感号码或链接，已回退本地建议。"
+        if message.contains("内容保护") || message.contains("隐私") || message.contains("链接") {
+            return "远程 AI 已跳过，已回退本地建议。"
         }
         return "远程 AI 暂时不可用，已回退本地建议。"
     }
@@ -1529,10 +1529,12 @@ final class HomeViewModel: ObservableObject {
             return "这周还没有足够账单，先不用急着复盘。多记几笔后，节奏会更清楚。"
         }
         let top = weekTopCategoryText
-        let total = weekItems.reduce(0) { $0 + $1.amount }
         let activeDays = Set(weekItems.map { cal.startOfDay(for: $0.createdAt) }).count
-        let rhythm = activeDays >= 5 ? "记录分布得比较均匀" : "记录集中在 \(activeDays) 天里"
-        return "这周共 \(weekItems.count) 笔，合计 \(total.formatted(.cny))，\(rhythm)。 「\(top)」是最显眼的一段，这一周已经有了可回看的记录。"
+        let rhythm = activeDays >= 5 ? "这周几乎每天都有记录" : "这周的记录主要落在 \(activeDays) 天里"
+        if top == "暂无" {
+            return "\(rhythm)，先把这一周放在这里。"
+        }
+        return "\(rhythm)，「\(top)」出现得多一点。先把这一周放在这里。"
     }
 
     func markWeeklyTag() {
@@ -1562,6 +1564,12 @@ final class HomeViewModel: ObservableObject {
         let result = "月度小结：\(blocks.summary)"
         setLatestActionCard(result, scope: "monthly")
         analyticsService.track("monthly_summary_saved")
+    }
+
+    func markPlaybackMemoryLine(_ line: String, range: SummaryPlaybackRange) {
+        let scope = range == .week ? "weekly" : "monthly"
+        setLatestActionCard(line, scope: scope)
+        analyticsService.track("playback_memory_line_saved", props: ["range": range.rawValue])
     }
 
     func regenerateMonthlyInsight() {

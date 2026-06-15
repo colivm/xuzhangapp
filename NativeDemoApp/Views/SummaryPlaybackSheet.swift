@@ -17,6 +17,7 @@ struct SummaryPlaybackSheet: View {
     var onShowMemberPricing: (() -> Void)? = nil
     var onOpenWeekly: (() -> Void)? = nil
     var onOpenInsight: (() -> Void)? = nil
+    var onSaveMemoryLine: ((String, SummaryPlaybackRange) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var activeIndex = 0
@@ -26,6 +27,7 @@ struct SummaryPlaybackSheet: View {
     @State private var playbackTask: Task<Void, Never>?
     @State private var isSavingShareCard = false
     @State private var shareSaveMessage: String?
+    @State private var memorySaveMessage: String?
     @State private var showShareCardPrivacyConfirm = false
 
     private var currentChapter: SummaryChapter? {
@@ -481,6 +483,8 @@ struct SummaryPlaybackSheet: View {
                 }
                 .buttonStyle(.plain)
 
+                memoryLineButton
+
                 Button {
                     showShareCardPrivacyConfirm = true
                 } label: {
@@ -527,6 +531,8 @@ struct SummaryPlaybackSheet: View {
                         .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(.plain)
+
+                memoryLineButton
             }
 
             if playback.range == .month {
@@ -543,7 +549,64 @@ struct SummaryPlaybackSheet: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            if let memorySaveMessage {
+                Text(memorySaveMessage)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
+    }
+
+    @ViewBuilder
+    private var memoryLineButton: some View {
+        if let line = playbackMemoryLine, onSaveMemoryLine != nil {
+            Button {
+                onSaveMemoryLine?(line, playback.range)
+                memorySaveMessage = "已放到首页「最近的生活」。"
+            } label: {
+                Text("留下这一句到首页")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var playbackMemoryLine: String? {
+        let candidates = playback.chapters.flatMap { chapter in
+            [
+                chapter.metrics["voiceTitle1"],
+                chapter.metrics["earlyVoiceTitle"],
+                chapter.metrics["lateVoiceTitle"],
+                chapter.metrics["busiestTitle"]
+            ]
+        }
+
+        guard let phrase = candidates.compactMap(cleanMemoryPhrase).first else { return nil }
+        return playback.range == .week
+            ? "这周留下：「\(phrase)」。"
+            : "这个月留下：「\(phrase)」。"
+    }
+
+    private func cleanMemoryPhrase(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (2...18).contains(text.count),
+              !isLowConfidenceMemoryPhrase(text),
+              !EchoAnchorService.shared.isDirtyTraceTitle(text) else {
+            return nil
+        }
+        return text
+    }
+
+    private func isLowConfidenceMemoryPhrase(_ text: String) -> Bool {
+        let lows = ["几笔记录", "记录还少", "还没有", "没有足够", "暂无", "数据不足"]
+        return lows.contains { text.contains($0) }
     }
 
     private var doneHeadline: String {
