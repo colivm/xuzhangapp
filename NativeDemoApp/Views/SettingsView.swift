@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var showDeleteCloudLedgerConfirm = false
     @State private var showDeleteAccountConfirm = false
     @State private var showEnableCloudSyncConfirm = false
+    @State private var confirmationHost: SettingsConfirmationHost = .main
     @State private var isAccountDangerExpanded = false
     @State private var showNicknameEditor = false
     @FocusState private var focusedField: SettingsField?
@@ -39,6 +40,12 @@ struct SettingsView: View {
             case .privacy: return "数据与隐私"
             }
         }
+    }
+
+    private enum SettingsConfirmationHost {
+        case main
+        case settingsSheet
+        case accountSheet
     }
 
     private var hasMemberAccess: Bool {
@@ -118,16 +125,16 @@ struct SettingsView: View {
             }
         }
         .sheet(isPresented: $showAccountSheet) {
-            accountSheet
+            settingsConfirmations(accountSheet, host: .accountSheet)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(item: $activeSettingsSheet) { sheet in
-            settingsSheet(sheet)
+            settingsConfirmations(settingsSheet(sheet), host: .settingsSheet)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .confirmationDialog("删除云端账本？", isPresented: $showDeleteCloudLedgerConfirm, titleVisibility: .visible) {
+        .confirmationDialog("删除云端账本？", isPresented: confirmationBinding($showDeleteCloudLedgerConfirm, host: .main), titleVisibility: .visible) {
             Button("删除云端账本", role: .destructive) {
                 Task { await settingsViewModel.deleteCloudLedger() }
             }
@@ -135,7 +142,7 @@ struct SettingsView: View {
         } message: {
             Text("只删除服务器上的同步账本，本机记录仍保留。为避免重新上传，云端同步会同时关闭。")
         }
-        .confirmationDialog("开启云端备份？", isPresented: $showEnableCloudSyncConfirm, titleVisibility: .visible) {
+        .confirmationDialog("开启云端备份？", isPresented: confirmationBinding($showEnableCloudSyncConfirm, host: .main), titleVisibility: .visible) {
             Button("开启并同步") {
                 enableCloudSyncAndMerge()
             }
@@ -143,7 +150,7 @@ struct SettingsView: View {
         } message: {
             Text("开启后会先把云端账单同步到本地，再上传本机账单完成合并；同一笔账单冲突时以更新时间较新的记录为准。")
         }
-        .confirmationDialog("注销账号？", isPresented: $showDeleteAccountConfirm, titleVisibility: .visible) {
+        .confirmationDialog("注销账号？", isPresented: confirmationBinding($showDeleteAccountConfirm, host: .main), titleVisibility: .visible) {
             Button("保留本机账本并注销", role: .destructive) {
                 Task {
                     let didDelete = await settingsViewModel.deleteCloudAccount()
@@ -461,6 +468,7 @@ struct SettingsView: View {
         if settingsViewModel.syncEnabled {
             return
         }
+        confirmationHost = activeSettingsSheet == nil ? .main : .settingsSheet
         showEnableCloudSyncConfirm = true
     }
 
@@ -607,6 +615,65 @@ struct SettingsView: View {
             }
             .scrollIndicators(.hidden)
         }
+    }
+
+    private func settingsConfirmations<Content: View>(
+        _ content: Content,
+        host: SettingsConfirmationHost
+    ) -> some View {
+        content
+            .confirmationDialog("删除云端账本？", isPresented: confirmationBinding($showDeleteCloudLedgerConfirm, host: host), titleVisibility: .visible) {
+                Button("删除云端账本", role: .destructive) {
+                    Task { await settingsViewModel.deleteCloudLedger() }
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("只删除服务器上的同步账本，本机记录仍保留。为避免重新上传，云端同步会同时关闭。")
+            }
+            .confirmationDialog("开启云端备份？", isPresented: confirmationBinding($showEnableCloudSyncConfirm, host: host), titleVisibility: .visible) {
+                Button("开启并同步") {
+                    enableCloudSyncAndMerge()
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("开启后会先把云端账单同步到本地，再上传本机账单完成合并；同一笔账单冲突时以更新时间较新的记录为准。")
+            }
+            .confirmationDialog("注销账号？", isPresented: confirmationBinding($showDeleteAccountConfirm, host: host), titleVisibility: .visible) {
+                Button("保留本机账本并注销", role: .destructive) {
+                    Task {
+                        let didDelete = await settingsViewModel.deleteCloudAccount()
+                        if didDelete {
+                            showAccountSheet = false
+                        }
+                    }
+                }
+                Button("清空本机账本并注销", role: .destructive) {
+                    Task {
+                        let didDelete = await settingsViewModel.deleteCloudAccount()
+                        if didDelete {
+                            homeViewModel.clearLocalLedgerData()
+                            showAccountSheet = false
+                        }
+                    }
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("这会退出登录，并清空服务器上的账号、云端账本和会员绑定状态。Apple 订阅不会自动取消，之后可用同一 Apple ID 登录后恢复购买。")
+            }
+    }
+
+    private func confirmationBinding(
+        _ flag: Binding<Bool>,
+        host: SettingsConfirmationHost
+    ) -> Binding<Bool> {
+        Binding(
+            get: { flag.wrappedValue && confirmationHost == host },
+            set: { isPresented in
+                if !isPresented {
+                    flag.wrappedValue = false
+                }
+            }
+        )
     }
 
     @ViewBuilder
@@ -1220,6 +1287,7 @@ struct SettingsView: View {
             DisclosureGroup(isExpanded: $isAccountDangerExpanded) {
                 VStack(spacing: 8) {
                     Button("删除云端账本", role: .destructive) {
+                        confirmationHost = .accountSheet
                         showDeleteCloudLedgerConfirm = true
                     }
                     .font(.system(size: 14))
@@ -1232,6 +1300,7 @@ struct SettingsView: View {
                     )
 
                     Button("注销账号并删除云端数据", role: .destructive) {
+                        confirmationHost = .accountSheet
                         showDeleteAccountConfirm = true
                     }
                     .font(.system(size: 14))
