@@ -14,6 +14,7 @@ final class HomeViewModel: ObservableObject {
         let amount: Double
         let category: HomeItem.Category
         let count: Int
+        let confidence: Double
         let latest: Date
 
         var id: String {
@@ -158,34 +159,29 @@ final class HomeViewModel: ObservableObject {
         recordInputMessage = nil
         let trimmed = noteResult.value
         let baseTitle = trimmed.isEmpty ? selectedCategory.defaultRecordTitle : trimmed
-        let brand = MerchantBrandCatalog.matchBrand(in: baseTitle)
-        let category: HomeItem.Category
-        if categoryLockedByUser {
-            category = selectedCategory
-        } else {
-            category = NarrativeCopyResolver.resolveCategory(brandId: brand?.id, fallback: selectedCategory)
-        }
-        let title = NarrativeCopyResolver.resolveTitle(brandId: brand?.id, fallback: baseTitle)
-        let emotionBrandId = categoryLockedByUser ? nil : brand?.id
-        let emotionTag = resolvedEmotionTag(
-            brandId: emotionBrandId,
-            category: category,
-            amount: amount,
-            date: selectedDate,
-            seed: title,
-            note: title
+        let resolution = RecordDraftResolutionService.resolve(
+            RecordDraftResolutionInput(
+                rawTitle: baseTitle,
+                fallbackCategory: selectedCategory,
+                amount: amount,
+                date: selectedDate,
+                merchantBrandId: MerchantBrandCatalog.matchBrand(in: baseTitle)?.id,
+                categoryLockedByUser: categoryLockedByUser,
+                userEditedTitle: userEditedTitle,
+                source: "manual"
+            )
         )
 
         let newItem = HomeItem(
-            title: title,
+            title: resolution.title,
             amount: amount,
-            category: category,
+            category: resolution.category,
             source: .manual,
             createdAt: selectedDate,
             updatedAt: Date(),
-            emotionTag: emotionTag,
-            merchantBrandId: brand?.id,
-            userEditedTitle: userEditedTitle ? true : nil
+            emotionTag: resolution.emotionTag,
+            merchantBrandId: resolution.merchantBrandId,
+            userEditedTitle: userEditedTitle && resolution.title == baseTitle ? true : nil
         )
         items.insert(newItem, at: 0)
         resetInput()
@@ -285,24 +281,27 @@ final class HomeViewModel: ObservableObject {
         let now = Date()
         let batchId = UUID().uuidString
         let importedItems = validDrafts.map { draft in
-            let category = draft.category
-            let title = NarrativeCopyResolver.resolveTitle(brandId: draft.merchantBrandId, fallback: draft.title)
+            let resolution = RecordDraftResolutionService.resolve(
+                RecordDraftResolutionInput(
+                    rawTitle: draft.title,
+                    fallbackCategory: draft.category,
+                    amount: draft.amount,
+                    date: draft.date,
+                    merchantBrandId: draft.merchantBrandId,
+                    categoryLockedByUser: false,
+                    userEditedTitle: false,
+                    source: "ocr"
+                )
+            )
             return HomeItem(
-                title: title,
+                title: resolution.title,
                 amount: draft.amount,
-                category: category,
+                category: resolution.category,
                 source: .ocr,
                 createdAt: draft.date,
                 updatedAt: now,
-                emotionTag: resolvedEmotionTag(
-                    brandId: emotionBrandId(brandId: draft.merchantBrandId, category: category),
-                    category: category,
-                    amount: draft.amount,
-                    date: draft.date,
-                    seed: "\(draft.id.uuidString)|\(title)",
-                    note: title
-                ),
-                merchantBrandId: draft.merchantBrandId,
+                emotionTag: resolution.emotionTag,
+                merchantBrandId: resolution.merchantBrandId,
                 draftMeta: HomeItem.DraftMeta(
                     batchId: batchId,
                     importedAt: now,
@@ -361,46 +360,28 @@ final class HomeViewModel: ObservableObject {
         ocrStatus = ""
     }
 
-    private func resolvedEmotionTag(
-        brandId: String?,
-        category: HomeItem.Category,
-        amount: Double,
-        date: Date,
-        seed: String,
-        note: String = ""
-    ) -> String {
-        NarrativeCopyResolver.resolveEmotionTag(
-            context: NarrativeCopyResolver.Context(
-                brandId: brandId,
-                category: category,
-                amount: amount,
-                date: date,
-                seed: seed,
-                note: note
-            )
-        )
-    }
-
-    private func emotionBrandId(brandId: String?, category: HomeItem.Category) -> String? {
-        guard brandCategory(for: brandId) == category else { return nil }
-        return brandId
-    }
-
     private func brandCategory(for brandId: String?) -> HomeItem.Category? {
         MerchantBrandCatalog.definition(for: brandId)?.category
     }
 
     func updateOCRDraftCategory(id: UUID, category: HomeItem.Category) {
         guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
-        items[idx].category = category
-        items[idx].emotionTag = resolvedEmotionTag(
-            brandId: nil,
-            category: category,
-            amount: items[idx].amount,
-            date: items[idx].createdAt,
-            seed: "\(items[idx].id.uuidString)|\(items[idx].title)",
-            note: items[idx].title
+        let resolution = RecordDraftResolutionService.resolve(
+            RecordDraftResolutionInput(
+                rawTitle: items[idx].title,
+                fallbackCategory: category,
+                amount: items[idx].amount,
+                date: items[idx].createdAt,
+                merchantBrandId: items[idx].merchantBrandId,
+                categoryLockedByUser: true,
+                userEditedTitle: items[idx].userEditedTitle == true,
+                source: "ocrCategory"
+            )
         )
+        items[idx].title = resolution.title
+        items[idx].category = resolution.category
+        items[idx].emotionTag = resolution.emotionTag
+        items[idx].merchantBrandId = resolution.merchantBrandId
         items[idx].updatedAt = Date()
         persistItems()
         Task { await syncUpsertToCloud(items[idx]) }
@@ -411,14 +392,22 @@ final class HomeViewModel: ObservableObject {
               let idx = items.firstIndex(where: { $0.id == id }),
               items[idx].draftMeta != nil else { return }
         items[idx].amount = amount
-        items[idx].emotionTag = resolvedEmotionTag(
-            brandId: emotionBrandId(brandId: items[idx].merchantBrandId, category: items[idx].category),
-            category: items[idx].category,
-            amount: amount,
-            date: items[idx].createdAt,
-            seed: "\(items[idx].id.uuidString)|\(items[idx].title)",
-            note: items[idx].title
+        let resolution = RecordDraftResolutionService.resolve(
+            RecordDraftResolutionInput(
+                rawTitle: items[idx].title,
+                fallbackCategory: items[idx].category,
+                amount: amount,
+                date: items[idx].createdAt,
+                merchantBrandId: items[idx].merchantBrandId,
+                categoryLockedByUser: true,
+                userEditedTitle: items[idx].userEditedTitle == true,
+                source: "ocrAmount"
+            )
         )
+        items[idx].title = resolution.title
+        items[idx].category = resolution.category
+        items[idx].emotionTag = resolution.emotionTag
+        items[idx].merchantBrandId = resolution.merchantBrandId
         items[idx].updatedAt = Date()
         persistItems()
         Task { await syncUpsertToCloud(items[idx]) }
@@ -494,29 +483,30 @@ final class HomeViewModel: ObservableObject {
             return false
         }
         recordInputMessage = nil
-        resolved.title = titleResult.value
-        let matchedBrand = MerchantBrandCatalog.matchBrand(in: resolved.title)
+        let cleanTitle = titleResult.value
+        let matchedBrand = MerchantBrandCatalog.matchBrand(in: cleanTitle)
         let brandId = matchedBrand?.id ?? updated.merchantBrandId
         let categoryWasEdited = updated.category != original.category
         let categoryOverridesBrand = brandCategory(for: brandId).map { updated.category != $0 } ?? false
-        resolved.merchantBrandId = brandId
-        if categoryWasEdited || categoryOverridesBrand {
-            resolved.category = updated.category
-        } else {
-            resolved.category = NarrativeCopyResolver.resolveCategory(brandId: brandId, fallback: updated.category)
-        }
-        resolved.title = NarrativeCopyResolver.resolveTitle(brandId: brandId, fallback: resolved.title)
-        let emotionBrandId = (categoryWasEdited || categoryOverridesBrand) ? nil : brandId
-        resolved.emotionTag = resolvedEmotionTag(
-            brandId: emotionBrandId,
-            category: resolved.category,
-            amount: resolved.amount,
-            date: resolved.createdAt,
-            seed: "\(resolved.id.uuidString)|\(resolved.title)",
-            note: resolved.title
-        )
-        let titleWasEdited = titleResult.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let titleWasEdited = cleanTitle.trimmingCharacters(in: .whitespacesAndNewlines)
             != original.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shouldTreatTitleAsUserEdited = resolved.userEditedTitle == true || titleWasEdited
+        let resolution = RecordDraftResolutionService.resolve(
+            RecordDraftResolutionInput(
+                rawTitle: cleanTitle,
+                fallbackCategory: updated.category,
+                amount: resolved.amount,
+                date: resolved.createdAt,
+                merchantBrandId: brandId,
+                categoryLockedByUser: categoryWasEdited || categoryOverridesBrand,
+                userEditedTitle: shouldTreatTitleAsUserEdited,
+                source: "edit"
+            )
+        )
+        resolved.title = resolution.title
+        resolved.category = resolution.category
+        resolved.emotionTag = resolution.emotionTag
+        resolved.merchantBrandId = resolution.merchantBrandId
         if resolved.userEditedTitle == true || titleWasEdited {
             resolved.userEditedTitle = true
         }
@@ -808,20 +798,21 @@ final class HomeViewModel: ObservableObject {
     func recommendCategoryResult(for amountText: String) -> CategoryRecommendResult? {
         let normalizedAmount = amountText.replacingOccurrences(of: ",", with: "")
         guard let amount = Double(normalizedAmount), amount > 0 else { return nil }
-        if !categoryLockedByUser,
-           let category = recordPrefillResult?.category,
-           let recordPrefillAmount,
-           abs(recordPrefillAmount - amount) < 0.005 {
-            return CategoryRecommendResult(recommended: category, reasonTag: recordPrefillResult?.source)
-        }
         let noteResult = UserContentRiskService.shared.validateManualNote(inputTitle, allowEmpty: true)
         let trimmedNote = noteResult.isAllowed ? noteResult.value : ""
         if let brand = MerchantBrandCatalog.matchBrand(in: trimmedNote), !categoryLockedByUser {
             return CategoryRecommendResult(recommended: brand.category, reasonTag: "brand")
         }
         if let frequentSuggestion = frequentRecordAmountSuggestion(for: amount, at: selectedDate),
+           frequentSuggestionCanOverrideNote(frequentSuggestion, note: trimmedNote),
            !categoryLockedByUser {
             return CategoryRecommendResult(recommended: frequentSuggestion.category, reasonTag: "frequent")
+        }
+        if !categoryLockedByUser,
+           let category = recordPrefillResult?.category,
+           let recordPrefillAmount,
+           abs(recordPrefillAmount - amount) < 0.005 {
+            return CategoryRecommendResult(recommended: category, reasonTag: recordPrefillResult?.source)
         }
         let start = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? .distantPast
         let recentItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
@@ -855,13 +846,7 @@ final class HomeViewModel: ObservableObject {
         let noteResult = UserContentRiskService.shared.validateManualNote(inputTitle, allowEmpty: true)
         let trimmedNote = noteResult.isAllowed ? noteResult.value : ""
         let brand = MerchantBrandCatalog.matchBrand(in: trimmedNote)
-        if let brand, !categoryLockedByUser {
-            applyRecommendedCategory(brand.category)
-        }
         let frequentSuggestion = frequentRecordAmountSuggestion(for: amount, at: selectedDate)
-        if let frequentSuggestion, !categoryLockedByUser {
-            applyRecommendedCategory(frequentSuggestion.category)
-        }
 
         let start = Calendar.current.date(byAdding: .day, value: -180, to: Date()) ?? .distantPast
         let recentItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
@@ -879,16 +864,64 @@ final class HomeViewModel: ObservableObject {
         recordPrefillResult = result
         recordPrefillAmount = amount
 
-        guard let result else { return }
-        if let category = result.category, result.confidence >= 0.55 {
+        if let category = resolvePrefillCategory(
+            brand: brand,
+            frequent: frequentSuggestion,
+            note: trimmedNote,
+            habitResult: result
+        ) {
             applyRecommendedCategory(category)
         }
-        if let frequentSuggestion, !categoryLockedByUser {
-            applyRecommendedCategory(frequentSuggestion.category)
-        }
-        if applySuggestedTitle, let title = result.title, result.confidence >= 0.65, trimmedNote.isEmpty {
+        if applySuggestedTitle,
+           let result,
+           let title = result.title,
+           result.confidence >= 0.65,
+           trimmedNote.isEmpty,
+            (result.category == nil || result.category == selectedCategory),
+           RecordSemanticLexicon.isTitle(title, compatibleWith: selectedCategory) {
             inputTitle = title
         }
+    }
+
+    private func resolvePrefillCategory(
+        brand: MerchantBrandDefinition?,
+        frequent: FrequentRecordAmountSuggestion?,
+        note: String,
+        habitResult: RecordPrefillResult?
+    ) -> HomeItem.Category? {
+        guard !categoryLockedByUser else { return nil }
+        // Cascade order is intentionally single-apply:
+        // brand > confident frequent exact amount in the same time context > habit >= 0.55 > generic only when note semantics agree.
+        // TODO(next PR): make habit exact-amount grouping share the same source as frequent, replacing the current ±30% loose match.
+        if let brand { return brand.category }
+        if let frequent, frequentSuggestionCanOverrideNote(frequent, note: note) {
+            return frequent.category
+        }
+        if let category = habitResult?.category,
+           habitResult?.source == "generic",
+           noteSemantics(note, supports: category) {
+            return category
+        }
+        if let category = habitResult?.category,
+           habitResult?.source != "generic",
+           (habitResult?.confidence ?? 0) >= 0.55 {
+            return category
+        }
+        return nil
+    }
+
+    private func frequentSuggestionCanOverrideNote(
+        _ suggestion: FrequentRecordAmountSuggestion,
+        note: String
+    ) -> Bool {
+        guard suggestion.confidence >= 0.67 else { return false }
+        let semanticCategories = RecordSemanticLexicon.matchingCategories(in: note)
+        guard !semanticCategories.isEmpty else { return true }
+        return semanticCategories.contains(suggestion.category)
+    }
+
+    private func noteSemantics(_ note: String, supports category: HomeItem.Category) -> Bool {
+        RecordSemanticLexicon.matchingCategories(in: note).contains(category)
     }
 
     func clearRecordInputMessage() {
@@ -1009,14 +1042,16 @@ final class HomeViewModel: ObservableObject {
             guard let category = frequentCategory(in: group) else { return nil }
             return FrequentRecordAmountSuggestion(
                 amount: Double(cents) / 100,
-                category: category,
-                count: group.count,
+                category: category.category,
+                count: category.count,
+                confidence: category.confidence,
                 latest: latestDate
             )
         }
 
         let validCandidates = candidates.filter { candidate in
             candidate.count >= 3 &&
+            candidate.confidence >= 0.67 &&
             candidate.amount > 0 &&
             candidate.amount <= 9999
         }
@@ -1037,14 +1072,14 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    private func frequentCategory(in items: [HomeItem]) -> HomeItem.Category? {
+    private func frequentCategory(in items: [HomeItem]) -> (category: HomeItem.Category, count: Int, confidence: Double)? {
         struct CategoryCandidate {
             let category: HomeItem.Category
             let count: Int
             let latest: Date
         }
 
-        return Dictionary(grouping: items, by: \.category)
+        let ranked = Dictionary(grouping: items, by: \.category)
             .map { entry in
                 CategoryCandidate(
                     category: entry.key,
@@ -1058,8 +1093,13 @@ final class HomeViewModel: ObservableObject {
                 }
                 return lhs.count > rhs.count
             }
-            .first?
-            .category
+        guard let top = ranked.first else { return nil }
+        let secondCount = ranked.dropFirst().first?.count ?? 0
+        let confidence = Double(top.count) / Double(max(items.count, 1))
+        guard top.count >= 3, confidence >= 0.67, top.count >= secondCount + 2 else {
+            return nil
+        }
+        return (top.category, top.count, confidence)
     }
 
     private func hourHabitBucket(for date: Date) -> Int {

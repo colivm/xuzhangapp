@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "fare-475-weekday-morning",
+      "mode": "manual",
+      "amount": 4.75,
+      "time": "08:29",
+      "history": "frequentExactAmount:transport",
+      "inputTitle": "",
+      "expectedCategory": "交通",
+      "expectedTitle": "not:咖啡",
+      "expectedEmotionRule": "transport"
+    },
+    {
+      "id": "ocr-luckin-18",
+      "mode": "ocr",
+      "amount": 18,
+      "rawText": "瑞幸咖啡 luckin 付款金额 ¥18.00",
+      "expectedCategory": "餐饮",
+      "expectedTitle": "瑞幸咖啡",
+      "expectedFrequentOverride": false
+    },
+    {
+      "id": "manual-subway-transport",
+      "mode": "manual",
+      "amount": 4.75,
+      "inputTitle": "地铁",
+      "selectedCategory": "交通",
+      "expectedTitle": "地铁",
+      "expectedEmotionRule": "transport"
+    },
+    {
+      "id": "manual-coffee-locked-transport",
+      "mode": "manual",
+      "amount": 4.75,
+      "inputTitle": "咖啡",
+      "selectedCategory": "交通",
+      "userEditedTitle": false,
+      "expectedCategory": "交通",
+      "expectedTitle": "not:咖啡",
+      "expectedEmotionRule": "not:drink"
+    },
+    {
+      "id": "ocr-charging-transport",
+      "mode": "ocr",
+      "amount": 30,
+      "rawText": "商户名称 充电桩 服务 付款金额 ¥30.00",
+      "expectedCategory": "交通"
+    }
+  ]
+}

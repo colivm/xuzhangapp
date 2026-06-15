@@ -145,6 +145,8 @@ struct HomeItem: Identifiable, Codable, Equatable {
     }
 
     static func refinedEmotionTag(title: String, category: Category, amount: Double) -> String? {
+        // TODO: migrate dining/transport detail rules into RecordSceneLexicon scene-level data.
+        // This switch is category-scoped, so a transport record titled "咖啡" cannot return a dining tag.
         let text = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !text.isEmpty else { return nil }
 

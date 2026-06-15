@@ -55,11 +55,12 @@ struct RecordPrefillService {
                     category: brand.category,
                     amount: input.amount,
                     date: input.referenceDate,
-                    seed: title
+                    seed: title,
+                    note: title
                 )
             )
             return RecordPrefillResult(
-                category: nil,
+                category: brand.category,
                 title: title,
                 emotionTag: emotion,
                 confidence: 1,
@@ -90,7 +91,8 @@ struct RecordPrefillService {
                     category: topCategory.category,
                     amount: input.amount,
                     date: input.referenceDate,
-                    seed: topTitle ?? topCategory.category.rawValue
+                    seed: topTitle ?? topCategory.category.rawValue,
+                    note: topTitle ?? ""
                 )
             )
             : nil
@@ -178,11 +180,13 @@ struct RecordPrefillService {
     private func mostCommonTitle(in items: [HomeItem], category: HomeItem.Category) -> String? {
         let counts = items
             .filter { $0.category == category }
-            .map(\.title)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { Self.isHabitTitle($0, category: category) }
-            .reduce(into: [String: Int]()) { result, title in
-                result[title, default: 0] += 1
+            .reduce(into: [String: Int]()) { result, item in
+                let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard Self.isHabitTitle(title, category: category),
+                      RecordSemanticLexicon.isTitle(title, compatibleWith: category) else {
+                    return
+                }
+                result[title, default: 0] += item.userEditedTitle == true ? 2 : 1
             }
         return counts.sorted { lhs, rhs in
             if lhs.value == rhs.value {

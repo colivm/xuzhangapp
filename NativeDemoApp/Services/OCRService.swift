@@ -1290,34 +1290,44 @@ final class OCRService {
         if matchesGameExpense(lower) {
             return .entertainment
         }
-        if lower.contains("咖啡") || lower.contains("小咖咖啡") || lower.contains("luckin") || lower.contains("餐") || lower.contains("外卖") || lower.contains("饭") || lower.contains("茶") || lower.contains("美团") || lower.contains("饿了么") || lower.contains("把子肉") || lower.contains("馄饨") || lower.contains("餐饮美食") || lower.contains("火锅") || lower.contains("海鲜") || lower.contains("大排档") || lower.contains("烧烤") || lower.contains("小吃") || lower.contains("饭店") || lower.contains("餐厅") || lower.contains("烤鸭") {
-            return .dining
+        var scores = Dictionary(uniqueKeysWithValues: HomeItem.Category.allCases.map { ($0, 0.0) })
+        for rule in RecordSemanticLexicon.keywordRules {
+            if rule.keywords.contains(where: { lower.contains($0.lowercased()) }) {
+                scores[rule.category, default: 0] += rule.score
+            }
         }
-        if lower.contains("地铁") || lower.contains("公交") || lower.contains("打车") || lower.contains("滴滴") || lower.contains("铁路") || lower.contains("停车") || lower.contains("车服") || lower.contains("充车") || lower.contains("充电") || lower.contains("顺易通信") || lower.contains("顺易通") || lower.contains("爱车养车") || lower.contains("天润城") {
-            return .transport
+        for rule in RecordSemanticLexicon.ocrKeywordRules {
+            if rule.keywords.contains(where: { lower.contains($0.lowercased()) }) {
+                scores[rule.category, default: 0] += rule.score
+            }
         }
-        if lower.contains("药店") || lower.contains("买药") || lower.contains("医院") || lower.contains("挂号") || lower.contains("体检") || lower.contains("牙科") || lower.contains("口腔") || lower.contains("诊所") {
-            return .health
-        }
-        if lower.contains("房租") || lower.contains("水电") || lower.contains("电费") || lower.contains("燃气") || lower.contains("物业") || lower.contains("宽带") || lower.contains("维修") || lower.contains("家电") || lower.contains("网上国网") || lower.contains("国网") || lower.contains("五矿物业") || lower.contains("阿里云服务") || lower.contains("云服务") {
-            return .home
-        }
-        if lower.contains("礼物") || lower.contains("送礼") || lower.contains("请客") || lower.contains("份子钱") || lower.contains("随礼") {
-            return .social
-        }
-        if lower.contains("日用百货") || lower.contains("便利蜂") || lower.contains("便利店") || lower.contains("超市") || lower.contains("水西门") || lower.contains("闲鱼") {
-            return .daily
-        }
-        if lower.contains("商城") || lower.contains("购物") || lower.contains("淘宝") || lower.contains("京东") || lower.contains("闪购") || lower.contains("迪卡侬") || lower.contains("服饰装扮") {
-            return .shopping
-        }
-        if lower.contains("电影") || lower.contains("游戏") || lower.contains("会员") || lower.contains("影院") || lower.contains("文化休闲") || lower.contains("酷享影") || lower.contains("抖音") || lower.contains("碧蓝航线") {
-            return .entertainment
-        }
-        if lower.contains("酒店") || lower.contains("住宿") || lower.contains("民宿") {
-            return .lodging
+        let ranked = scores
+            .filter { $0.value > 0 }
+            .sorted { lhs, rhs in
+                if lhs.value == rhs.value {
+                    return categoryPriority(lhs.key) < categoryPriority(rhs.key)
+                }
+                return lhs.value > rhs.value
+            }
+        if let top = ranked.first {
+            return top.key
         }
         return nil
+    }
+
+    private func categoryPriority(_ category: HomeItem.Category) -> Int {
+        switch category {
+        case .dining: return 0
+        case .transport: return 1
+        case .shopping: return 2
+        case .daily: return 3
+        case .entertainment: return 4
+        case .lodging: return 5
+        case .health: return 6
+        case .home: return 7
+        case .social: return 8
+        case .other: return 9
+        }
     }
 
     private func matchesGameExpense(_ text: String) -> Bool {

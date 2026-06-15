@@ -289,29 +289,16 @@ struct CategoryRecommendService {
         let normalized = note.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return }
 
-        let rules: [(HomeItem.Category, Double, [String])] = [
-            (.transport, 4, ["地铁", "公交", "打车", "停车", "加油", "出租", "网约车"]),
-            (.dining, 4.8, ["咖啡", "奶茶", "午餐", "晚餐", "夜宵", "宵夜", "外卖", "早餐", "餐", "饭", "面包", "热饮", "饮品"]),
-            (.shopping, 4.5, ["淘宝", "京东", "拼多多", "商城", "购物", "下单", "快递", "衣服", "鞋", "包", "化妆品", "护肤", "数码", "耳机", "手机", "电脑", "家居", "买了", "购入", "添置"]),
-            (.daily, 3, ["超市", "买菜", "日用品", "日化", "纸巾", "洗衣"]),
-            (.entertainment, 3, ["电影", "游戏", "ktv", "KTV", "演唱会", "剧本杀", "门票", "景区", "景点"]),
-            (.entertainment, 5.5, ["碧蓝航线", "原神", "星穹铁道", "崩坏", "明日方舟", "王者荣耀", "和平精英", "英雄联盟", "逆水寒", "阴阳师", "梦幻西游", "第五人格", "蛋仔派对", "光遇", "三国杀", "炉石传说", "steam", "psn", "playstation", "xbox", "switch", "nintendo", "代肝", "陪玩", "抽卡", "氪金", "游戏币", "游戏充值", "游戏服务", "赛季票"]),
-            (.lodging, 4, ["酒店", "民宿", "住宿", "宾馆", "旅店"]),
-            (.health, 4, ["药店", "买药", "医院", "挂号", "问诊", "体检", "牙科", "口腔", "诊所", "疫苗", "医保", "康复"]),
-            (.home, 4, ["房租", "水电", "电费", "燃气", "物业", "宽带", "家电", "家具", "维修", "家政", "搬家", "保洁"]),
-            (.social, 4, ["红包", "礼物", "送礼", "请客", "份子钱", "随礼", "家人", "父母", "生日礼物", "聚会"]),
-        ]
-
-        for (category, score, keywords) in rules {
-            if keywords.contains(where: { normalized.contains($0.lowercased()) }) {
-                addNote(score, to: category, scores: &scores)
+        for rule in RecordSemanticLexicon.keywordRules {
+            if rule.keywords.contains(where: { normalized.contains($0.lowercased()) }) {
+                addNote(rule.score, to: rule.category, scores: &scores)
             }
         }
-
-        if ["高铁", "机票", "机场", "车站", "返程", "出发"].contains(where: { normalized.contains($0.lowercased()) }) {
-            addNote(3.2, to: .transport, scores: &scores)
-            addNote(1.2, to: .lodging, scores: &scores)
-            addNote(1.0, to: .entertainment, scores: &scores)
+        for rule in RecordSemanticLexicon.comboRules {
+            guard rule.keywords.contains(where: { normalized.contains($0.lowercased()) }) else { continue }
+            for (category, score) in rule.scores {
+                addNote(score, to: category, scores: &scores)
+            }
         }
     }
 

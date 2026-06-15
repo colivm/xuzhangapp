@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -57,6 +58,19 @@ SOFT_TERMS = [
     "轮廓",
 ]
 
+LEGAL_CATEGORIES = {
+    "餐饮",
+    "交通",
+    "购物",
+    "日用",
+    "娱乐",
+    "住宿",
+    "健康",
+    "居家",
+    "人情",
+    "其他",
+}
+
 SANITIZER_FUNC_NAMES = [
     "sanitizeLifeNote",
     "sanitizeBrandNote",
@@ -76,6 +90,12 @@ def parse_args() -> argparse.Namespace:
         "--strict-soft",
         action="store_true",
         help="Treat soft terms as failures instead of warnings.",
+    )
+    parser.add_argument(
+        "--lexicon",
+        action="append",
+        default=[],
+        help="Validate a RecordSceneLexicon JSON file in addition to copy-bearing files.",
     )
     return parser.parse_args()
 
@@ -163,6 +183,102 @@ def scan_file(path: Path, strict_soft: bool) -> tuple[list[str], list[str]]:
     return failures, warnings
 
 
+def validate_keyword_list(
+    payload: dict,
+    section: str,
+    failures: list[str],
+    *,
+    requires_score: bool = True,
+    requires_id: bool = False,
+) -> None:
+    rules = payload.get(section)
+    if not isinstance(rules, list) or not rules:
+        failures.append(f"{section}: expected non-empty rule list")
+        return
+
+    for index, rule in enumerate(rules):
+        prefix = f"{section}[{index}]"
+        if not isinstance(rule, dict):
+            failures.append(f"{prefix}: expected object")
+            continue
+
+        category = rule.get("category")
+        if category not in LEGAL_CATEGORIES:
+            failures.append(f"{prefix}.category: illegal category `{category}`")
+
+        if requires_id:
+            rule_id = rule.get("id")
+            if not isinstance(rule_id, str) or not rule_id.strip():
+                failures.append(f"{prefix}.id: expected non-empty string")
+
+        if requires_score and not isinstance(rule.get("score"), (int, float)):
+            failures.append(f"{prefix}.score: expected number")
+
+        keywords = rule.get("keywords")
+        if not isinstance(keywords, list) or not keywords:
+            failures.append(f"{prefix}.keywords: expected non-empty list")
+            continue
+        for keyword_index, keyword in enumerate(keywords):
+            if not isinstance(keyword, str) or not keyword.strip():
+                failures.append(f"{prefix}.keywords[{keyword_index}]: expected non-empty string")
+
+
+def scan_blocked_terms(value: object, location: str, failures: list[str]) -> None:
+    if isinstance(value, str):
+        for term in BLOCKED_TERMS:
+            if term in value:
+                failures.append(f"{location}: blocked term `{term}`")
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            scan_blocked_terms(item, f"{location}[{index}]", failures)
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            scan_blocked_terms(item, f"{location}.{key}", failures)
+
+
+def validate_lexicon(path: Path) -> list[str]:
+    failures: list[str] = []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except json.JSONDecodeError as exc:
+        return [f"{display_path(path)}:{exc.lineno}: invalid JSON: {exc.msg}"]
+
+    if not isinstance(payload, dict):
+        return [f"{display_path(path)}: expected top-level object"]
+
+    validate_keyword_list(payload, "keywordRules", failures)
+    validate_keyword_list(payload, "ocrKeywordRules", failures)
+    validate_keyword_list(payload, "emotionKeywordRules", failures, requires_score=False, requires_id=True)
+
+    combo_rules = payload.get("comboRules", [])
+    if not isinstance(combo_rules, list):
+        failures.append("comboRules: expected list")
+    for index, rule in enumerate(combo_rules if isinstance(combo_rules, list) else []):
+        prefix = f"comboRules[{index}]"
+        if not isinstance(rule, dict):
+            failures.append(f"{prefix}: expected object")
+            continue
+        keywords = rule.get("keywords")
+        if not isinstance(keywords, list) or not keywords:
+            failures.append(f"{prefix}.keywords: expected non-empty list")
+        scores = rule.get("scores")
+        if not isinstance(scores, dict) or not scores:
+            failures.append(f"{prefix}.scores: expected non-empty object")
+            continue
+        for category, score in scores.items():
+            if category not in LEGAL_CATEGORIES:
+                failures.append(f"{prefix}.scores: illegal category `{category}`")
+            if not isinstance(score, (int, float)):
+                failures.append(f"{prefix}.scores.{category}: expected number")
+
+    scan_blocked_terms(payload, display_path(path), failures)
+    return [f"{display_path(path)}: {failure}" for failure in failures]
+
+
 def main() -> int:
     args = parse_args()
     files = expand_paths(args.paths)
@@ -176,6 +292,15 @@ def main() -> int:
         failures, warnings = scan_file(path, strict_soft=args.strict_soft)
         all_failures.extend(failures)
         all_warnings.extend(warnings)
+
+    for raw_lexicon in args.lexicon:
+        lexicon_path = Path(raw_lexicon)
+        if not lexicon_path.is_absolute():
+            lexicon_path = ROOT / lexicon_path
+        if not lexicon_path.is_file():
+            all_failures.append(f"{display_path(lexicon_path)}: file not found")
+            continue
+        all_failures.extend(validate_lexicon(lexicon_path))
 
     for warning in all_warnings:
         print(f"warning: {warning}")

@@ -82,12 +82,17 @@ enum NarrativeCopyResolver {
         let noteText = context.note.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !noteText.isEmpty else { return nil }
         let lower = noteText.lowercased()
+        let semanticCategories = RecordSemanticLexicon.matchingCategories(in: lower)
+        let emotionRuleIDs = RecordSemanticLexicon.matchingEmotionRuleIDs(in: lower)
+        let hasIncompatibleSemanticCue = !semanticCategories.isEmpty && !RecordSemanticLexicon.isTitle(lower, compatibleWith: context.category)
 
         if let note = HomeItem.refinedEmotionTag(title: lower, category: context.category, amount: context.amount) {
             return note
         }
 
-        if containsAny(lower, ["运动", "健身", "训练", "跑步", "瑜伽", "球类", "补给", "能量", "护具", "恢复", "锻炼"]) {
+        if !hasIncompatibleSemanticCue,
+           [.health, .daily, .shopping].contains(context.category),
+           emotionRuleIDs.contains("fitness") {
             return pick(
                 [
                     "运动后补给",
@@ -101,7 +106,9 @@ enum NarrativeCopyResolver {
             )
         }
 
-        if containsAny(lower, ["饮料", "喝的", "可乐", "雪碧", "汽水", "果汁", "茶饮", "奶茶", "咖啡", "拿铁", "美式", "冰饮"]) {
+        if !hasIncompatibleSemanticCue,
+           [.dining, .daily].contains(context.category),
+           emotionRuleIDs.contains("drink") {
             return pick(
                 [
                     "买杯喝的",
@@ -116,7 +123,7 @@ enum NarrativeCopyResolver {
         }
 
         if context.category == .transport,
-           containsAny(lower, ["地铁", "公交", "打车", "出租", "网约车", "单车", "路费", "车程", "通勤", "上班", "下班", "到岗", "返程", "回家"]) {
+           emotionRuleIDs.contains("transport") {
             if isWeekend(context.date), !containsWorkCue(lower) {
                 return pick(
                     weekendRouteNotes(for: context.date),
@@ -144,7 +151,9 @@ enum NarrativeCopyResolver {
             )
         }
 
-        if containsAny(lower, ["食堂", "午餐", "简餐", "热饭", "热乎饭", "外卖", "饭点", "吃顿饭", "一顿饭", "面或饭", "夜宵", "夜里饿了", "晚饭", "早餐"]) {
+        if !hasIncompatibleSemanticCue,
+           context.category == .dining,
+           emotionRuleIDs.contains("meal") {
             if isWeekend(context.date), !containsWeekendWorkMealCue(lower) {
                 return pick(
                     weekendMealNotes(for: context.date, note: lower),
@@ -179,7 +188,9 @@ enum NarrativeCopyResolver {
             )
         }
 
-        if containsAny(lower, ["便利蜂", "便利店", "全家", "罗森", "711", "7-11"]) {
+        if !hasIncompatibleSemanticCue,
+           context.category == .daily,
+           emotionRuleIDs.contains("convenience") {
             return pick(
                 [
                     "便利店补给",

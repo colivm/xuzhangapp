@@ -309,17 +309,50 @@ struct RecordView: View {
         if let brand = MerchantBrandCatalog.matchBrand(in: title) {
             return brand
         }
-        if let title = homeViewModel.recordPrefillResult?.title {
+        if let title = compatiblePrefillTitle {
             return MerchantBrandCatalog.matchBrand(in: title)
         }
         return nil
     }
 
+    private var prefillResultMatchesSelectedCategory: Bool {
+        guard let result = homeViewModel.recordPrefillResult else { return false }
+        return result.category == nil || result.category == homeViewModel.selectedCategory
+    }
+
+    private var compatiblePrefillTitle: String? {
+        guard prefillResultMatchesSelectedCategory,
+              let title = homeViewModel.recordPrefillResult?.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty,
+              RecordSemanticLexicon.isTitle(title, compatibleWith: homeViewModel.selectedCategory) else {
+            return nil
+        }
+        return title
+    }
+
+    private var inputTitleCompatibleWithSelectedCategory: Bool {
+        let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return false }
+        return RecordSemanticLexicon.isTitle(title, compatibleWith: homeViewModel.selectedCategory)
+    }
+
+    private var hasPreviewNote: Bool {
+        inputTitleCompatibleWithSelectedCategory || compatiblePrefillTitle != nil
+    }
+
+    private var previewTitleIsExplicitUserEdit: Bool {
+        let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, inputTitleCompatibleWithSelectedCategory else { return false }
+        if title == homeViewModel.recordPrefillResult?.title?.trimmingCharacters(in: .whitespacesAndNewlines) {
+            return false
+        }
+        return noteEditorExpanded || homeViewModel.categoryLockedByUser
+    }
+
     private var previewHeadline: String {
         let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !title.isEmpty { return title }
-        if let prefillTitle = homeViewModel.recordPrefillResult?.title?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !prefillTitle.isEmpty {
+        if !title.isEmpty, inputTitleCompatibleWithSelectedCategory { return title }
+        if let prefillTitle = compatiblePrefillTitle {
             return prefillTitle
         }
         return previewFallbackTitle(for: homeViewModel.selectedCategory)
@@ -330,20 +363,24 @@ struct RecordView: View {
            let emotion = result.emotionTag?.trimmingCharacters(in: .whitespacesAndNewlines),
            !emotion.isEmpty,
            !homeViewModel.categoryLockedByUser,
+           prefillResultMatchesSelectedCategory,
            (result.source == "brand" || result.confidence >= 0.65) {
             return emotion
         }
-        let brandId = homeViewModel.categoryLockedByUser ? nil : previewBrand?.id
-        return NarrativeCopyResolver.resolveEmotionTag(
-            context: NarrativeCopyResolver.Context(
-                brandId: brandId,
-                category: homeViewModel.selectedCategory,
+        let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolution = RecordDraftResolutionService.resolve(
+            RecordDraftResolutionInput(
+                rawTitle: title,
+                fallbackCategory: homeViewModel.selectedCategory,
                 amount: inputAmountValue,
                 date: homeViewModel.selectedDate,
-                seed: "\(inputAmountValue)|\(homeViewModel.selectedDate.timeIntervalSince1970)|\(homeViewModel.selectedCategory.rawValue)|\(brandId ?? "")",
-                note: homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                merchantBrandId: previewBrand?.id,
+                categoryLockedByUser: homeViewModel.categoryLockedByUser,
+                userEditedTitle: previewTitleIsExplicitUserEdit,
+                source: "preview"
             )
         )
+        return resolution.emotionTag
     }
 
     private var previewMeta: String {
@@ -361,7 +398,7 @@ struct RecordView: View {
                 amount: inputAmountValue,
                 itemsCount: homeViewModel.items.count,
                 hasBrand: !homeViewModel.categoryLockedByUser && (previewBrand != nil || homeViewModel.recordPrefillResult?.source == "brand"),
-                hasNote: !homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                hasNote: hasPreviewNote,
                 previewLineWasRotated: previewLineWasRotated,
                 isEditing: false,
                 prefillSource: homeViewModel.recordPrefillResult?.source,
@@ -469,18 +506,11 @@ struct RecordView: View {
     }
 
     private func previewFallbackTitle(for category: HomeItem.Category) -> String {
-        switch category {
-        case .dining: return "这顿饭记下来了"
-        case .transport: return "这段路记下来了"
-        case .shopping: return "这次购物记下来了"
-        case .daily: return "这次日用补给"
-        case .entertainment: return "这次放松安排"
-        case .lodging: return "这晚住宿记下来了"
-        case .health: return "这次健康支出"
-        case .home: return "这笔居家开销"
-        case .social: return "这次人情往来"
-        case .other: return "这笔记录已放好"
-        }
+        RecordSemanticLexicon.fallbackTitle(
+            for: category,
+            amount: inputAmountValue,
+            date: homeViewModel.selectedDate
+        )
     }
 
     private func baseScenePack(for category: HomeItem.Category) -> ScenePackDefinition? {
