@@ -321,6 +321,10 @@ struct RecordView: View {
     }
 
     private var compatiblePrefillTitle: String? {
+        if noteEditorExpanded,
+           homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return nil
+        }
         guard prefillResultMatchesSelectedCategory,
               let title = homeViewModel.recordPrefillResult?.title?.trimmingCharacters(in: .whitespacesAndNewlines),
               !title.isEmpty,
@@ -723,6 +727,9 @@ struct RecordView: View {
             }
             .onAppear {
                 homeViewModel.refreshDraftSelectedDate(force: true)
+                Task {
+                    await settingsViewModel.refreshMemberFromLocalEntitlements()
+                }
                 guard !didAutoFocusAmountPad else { return }
                 didAutoFocusAmountPad = true
                 focusAmountPad()

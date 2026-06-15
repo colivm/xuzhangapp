@@ -50,7 +50,7 @@ enum NarrativeCopyResolver {
             return note
         }
 
-        if let note = HomeItem.refinedEmotionTag(title: context.note, category: context.category, amount: context.amount) {
+        if let note = HomeItem.refinedEmotionTag(title: context.note, category: context.category, amount: context.amount, date: context.date) {
             return note
         }
 
@@ -86,7 +86,7 @@ enum NarrativeCopyResolver {
         let emotionRuleIDs = RecordSemanticLexicon.matchingEmotionRuleIDs(in: lower)
         let hasIncompatibleSemanticCue = !semanticCategories.isEmpty && !RecordSemanticLexicon.isTitle(lower, compatibleWith: context.category)
 
-        if let note = HomeItem.refinedEmotionTag(title: lower, category: context.category, amount: context.amount) {
+        if let note = HomeItem.refinedEmotionTag(title: lower, category: context.category, amount: context.amount, date: context.date) {
             return note
         }
 

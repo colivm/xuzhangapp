@@ -229,6 +229,8 @@ struct ContentView: View {
             }
         }
         .task {
+            await settingsViewModel.refreshMemberFromLocalEntitlements()
+            await settingsViewModel.refreshCloudAccountProfile()
             await homeViewModel.generateDailyInsight(
                 userName: settingsViewModel.displayName,
                 settings: settingsViewModel.settings

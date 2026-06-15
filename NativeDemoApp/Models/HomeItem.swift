@@ -137,14 +137,14 @@ struct HomeItem: Identifiable, Codable, Equatable {
            !Self.containsWeekendWorkRouteCue(title) {
             return Self.weekendRouteTag(for: createdAt)
         }
-        if let refined = Self.refinedEmotionTag(title: title, category: category, amount: amount),
+        if let refined = Self.refinedEmotionTag(title: title, category: category, amount: amount, date: createdAt),
            Self.shouldPreferRefinedTag(current: trimmed, refined: refined) {
             return refined
         }
         return trimmed
     }
 
-    static func refinedEmotionTag(title: String, category: Category, amount: Double) -> String? {
+    static func refinedEmotionTag(title: String, category: Category, amount: Double, date: Date? = nil) -> String? {
         // TODO: migrate dining/transport detail rules into RecordSceneLexicon scene-level data.
         // This switch is category-scoped, so a transport record titled "咖啡" cannot return a dining tag.
         let text = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -183,7 +183,23 @@ struct HomeItem: Identifiable, Codable, Equatable {
             }
         case .dining:
             if containsAny(text, ["夜宵", "深夜", "夜里", "凌晨"]) { return "夜里补一点" }
-            if containsAny(text, ["早餐", "早饭", "豆浆", "包子"]) { return "早餐先记下" }
+            if containsAny(text, ["早餐", "早饭"]) { return "早餐先记下" }
+            if containsAny(text, ["豆浆", "包子"]) {
+                guard let date else { return "热乎一口记下" }
+                let hour = Calendar.current.component(.hour, from: date)
+                switch hour {
+                case 5..<10:
+                    return "早餐先记下"
+                case 11..<14:
+                    return "中午垫一口"
+                case 17..<21:
+                    return "晚饭先垫一下"
+                case 21...23, 0..<5:
+                    return "夜里一口热的"
+                default:
+                    return "热乎一口记下"
+                }
+            }
             if containsAny(text, ["午餐", "午饭", "中午"]) { return "中午一顿饭" }
             if containsAny(text, ["晚餐", "晚饭"]) { return "晚饭时间坐一会儿" }
             if containsAny(text, ["咖啡", "拿铁", "美式", "奶茶", "饮品", "茶"]) { return "买杯喝的" }

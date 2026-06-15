@@ -171,6 +171,13 @@ final class HomeViewModel: ObservableObject {
                 source: "manual"
             )
         )
+        let emotionTag = refinedEmotionTagForNewRecord(
+            title: resolution.title,
+            category: resolution.category,
+            amount: amount,
+            date: selectedDate,
+            defaultTag: resolution.emotionTag
+        )
 
         let newItem = HomeItem(
             title: resolution.title,
@@ -179,7 +186,7 @@ final class HomeViewModel: ObservableObject {
             source: .manual,
             createdAt: selectedDate,
             updatedAt: Date(),
-            emotionTag: resolution.emotionTag,
+            emotionTag: emotionTag,
             merchantBrandId: resolution.merchantBrandId,
             userEditedTitle: userEditedTitle && resolution.title == baseTitle ? true : nil
         )
@@ -203,6 +210,50 @@ final class HomeViewModel: ObservableObject {
         enqueuePetMessage(for: newItem)
         Task { await syncUpsertToCloud(newItem) }
         return true
+    }
+
+    private func refinedEmotionTagForNewRecord(
+        title: String,
+        category: HomeItem.Category,
+        amount: Double,
+        date: Date,
+        defaultTag: String
+    ) -> String {
+        guard category == .transport,
+              isPublicTransportTitle(title),
+              let previous = recentTransportNeighbor(before: date) else {
+            return defaultTag
+        }
+        let previousTitle = previous.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if publicTransportMode(in: previousTitle) != publicTransportMode(in: title) {
+            return "换乘通勤完成"
+        }
+        return "城市线路走完一段"
+    }
+
+    private func recentTransportNeighbor(before date: Date) -> HomeItem? {
+        items
+            .filter { item in
+                item.category == .transport
+                    && isPublicTransportTitle(item.title)
+                    && abs(item.createdAt.timeIntervalSince(date)) <= 20 * 60
+            }
+            .sorted { lhs, rhs in
+                abs(lhs.createdAt.timeIntervalSince(date)) < abs(rhs.createdAt.timeIntervalSince(date))
+            }
+            .first
+    }
+
+    private func isPublicTransportTitle(_ title: String) -> Bool {
+        let text = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return ["地铁", "公交", "巴士", "公共交通", "通勤"].contains { text.contains($0) }
+    }
+
+    private func publicTransportMode(in title: String) -> String {
+        let text = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if text.contains("地铁") { return "metro" }
+        if text.contains("公交") || text.contains("巴士") { return "bus" }
+        return "public"
     }
 
     var ocrDraftItems: [HomeItem] {
