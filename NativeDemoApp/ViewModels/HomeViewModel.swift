@@ -248,23 +248,13 @@ final class HomeViewModel: ObservableObject {
             let count = drafts.count
             let total = drafts.reduce(0) { $0 + $1.amount }
             let message = "识别到 \(count) 条，合计 \(formatCurrency(total))。请确认后导入。"
-            ocrStatus = count <= 1 ? ocrDebugStatus(message) : message
+            ocrStatus = message
             return drafts
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? "识别失败，请重试或手动录入。"
-            ocrStatus = ocrDebugStatus(message)
+            ocrStatus = message
             return []
         }
-    }
-
-    private func ocrDebugStatus(_ message: String) -> String {
-        let lines = ocrService.lastRecognizedText
-            .split(separator: "\n")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .prefix(18)
-        guard !lines.isEmpty else { return message }
-        return "\(message)\nOCR原文：\n\(lines.joined(separator: " / "))"
     }
 
     func importOCRDrafts(_ drafts: [OCRReceiptDraft], isMember: Bool) -> Int {

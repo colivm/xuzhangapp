@@ -61,8 +61,6 @@ enum OCRServiceError: LocalizedError {
 }
 
 final class OCRService {
-    private(set) var lastRecognizedText: String = ""
-
     private enum ListAmountInfo {
         case expense(amount: Double, inlineTitle: String?)
         case ignored
@@ -88,7 +86,6 @@ final class OCRService {
     }
 
     func recognizeReceipt(from imageData: Data) async throws -> [OCRReceiptDraft] {
-        lastRecognizedText = ""
         guard let image = UIImage(data: imageData), let cgImage = image.cgImage else {
             throw OCRServiceError.invalidImage
         }
@@ -124,7 +121,6 @@ final class OCRService {
         let ocrLines = recognizedLines.map { $0.line }
         let lines = ocrLines.map { $0.text }
         let text = lines.joined(separator: "\n")
-        lastRecognizedText = text
 
         guard !lines.isEmpty else {
             throw OCRServiceError.noRecognizedText
