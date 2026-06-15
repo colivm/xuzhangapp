@@ -1732,7 +1732,6 @@ struct StatsWebView: View {
             .overlay(traceDetailRecordBorder(isEditing: isEditing))
             .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
             .offset(x: isSwiped ? -76 : 0)
-            .simultaneousGesture(traceRowSwipeGesture(for: item, isEditing: isEditing))
             .onTapGesture {
                 if traceSwipedItemID == item.id {
                     withAnimation(traceEditSpring) {
@@ -1740,6 +1739,11 @@ struct StatsWebView: View {
                     }
                 } else if !isEditing {
                     openEditor(for: item, fromTraceDetail: true)
+                }
+            }
+            .overlay(alignment: .trailing) {
+                if !isEditing {
+                    traceSwipeHandle(for: item)
                 }
             }
         }
@@ -1839,6 +1843,13 @@ struct StatsWebView: View {
         .opacity(isVisible ? 1 : 0)
     }
 
+    private func traceSwipeHandle(for item: HomeItem) -> some View {
+        Color.clear
+            .frame(width: 42)
+            .contentShape(Rectangle())
+            .gesture(traceRowSwipeGesture(for: item))
+    }
+
     private func traceSwipeActionLabel(_ title: String, systemImage: String, tint: Color) -> some View {
         VStack(spacing: 5) {
             Image(systemName: systemImage)
@@ -1855,14 +1866,17 @@ struct StatsWebView: View {
         .shadow(color: tint.opacity(0.16), radius: 8, y: 4)
     }
 
-    private func traceRowSwipeGesture(for item: HomeItem, isEditing: Bool) -> some Gesture {
-        DragGesture(minimumDistance: 14, coordinateSpace: .local)
+    private func traceRowSwipeGesture(for item: HomeItem) -> some Gesture {
+        DragGesture(minimumDistance: 22, coordinateSpace: .local)
             .onEnded { value in
-                guard !isEditing else { return }
+                let horizontal = value.translation.width
+                let vertical = value.translation.height
+                let isHorizontalSwipe = abs(horizontal) > max(44, abs(vertical) * 1.35)
+                guard isHorizontalSwipe else { return }
                 withAnimation(traceEditSpring) {
-                    if value.translation.width < -36 {
+                    if horizontal < 0 {
                         traceSwipedItemID = item.id
-                    } else if value.translation.width > 24 {
+                    } else {
                         traceSwipedItemID = nil
                     }
                 }

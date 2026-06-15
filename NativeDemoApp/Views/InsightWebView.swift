@@ -154,7 +154,7 @@ struct InsightWebView: View {
             RoundedRectangle(cornerRadius: 999, style: .continuous)
                 .fill(AppColors.accent.opacity(0.20))
                 .frame(width: 2, height: 30)
-            Text("这一章先翻到这里，下面留几枚这个月反复冒头的小词。")
+            Text("这一章先翻到这里，下面只挑几枚有记录支撑的小词。")
                 .font(.system(size: 13))
                 .italic()
                 .foregroundStyle(AppColors.subtext.opacity(0.72))
@@ -171,10 +171,10 @@ struct InsightWebView: View {
         if keywords.count >= 3 {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("这个月常冒头的词")
+                    Text("这个月留下的证据词")
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(AppColors.text.opacity(0.88))
-                    Text("先放你亲手写下的标题，只留最有画面感的几枚。")
+                    Text("优先放你亲手写下的备注；同一类太多时，先让位置给别的生活面。")
                         .font(.system(size: 12))
                         .foregroundStyle(AppColors.subtext.opacity(0.78))
                 }
@@ -307,72 +307,184 @@ struct InsightWebView: View {
         let items = currentMonthPositiveItems
         guard !items.isEmpty else { return [] }
 
-        var bubbles: [String: KeywordBubbleDraft] = [:]
-
-        for item in items {
-            if item.userEditedTitle == true {
-                for keyword in titleKeywords(from: item.title, allowsFullTitle: true) {
-                    addKeyword(keyword, weight: 5, category: item.category, priority: 0, into: &bubbles)
-                }
-            }
+        let targetCount: Int
+        if items.count >= 5 {
+            targetCount = 6
+        } else if items.count >= 3 {
+            targetCount = 3
+        } else {
+            return []
         }
 
-        for item in items {
-            addKeyword(item.category.rawValue, weight: 3, category: item.category, priority: 1, into: &bubbles)
-            if !item.displayEmotionTag.isEmpty {
-                addKeyword(item.displayEmotionTag, weight: 1, category: item.category, priority: 2, into: &bubbles)
-            }
-            if item.userEditedTitle != true {
-                for keyword in titleKeywords(from: item.title, allowsFullTitle: false) {
-                    addKeyword(keyword, weight: 1, category: item.category, priority: 2, into: &bubbles)
-                }
-            }
-        }
+        let candidates = monthlyBubbleCandidates(from: items)
+        let selected = diversifiedBubbleCandidates(candidates, targetCount: targetCount)
 
-        return bubbles.values
+        return selected
             .map {
                 KeywordBubbleData(
                     text: $0.text,
-                    count: $0.count,
+                    count: $0.score,
                     category: $0.category,
                     priority: $0.priority
                 )
             }
-            .sorted {
-                if $0.priority != $1.priority { return $0.priority < $1.priority }
-                if $0.count == $1.count { return $0.text < $1.text }
-                return $0.count > $1.count
+    }
+
+    private func monthlyBubbleCandidates(from items: [HomeItem]) -> [KeywordBubbleDraft] {
+        var candidates: [KeywordBubbleDraft] = []
+        let userTitleItems = items.compactMap { item -> (item: HomeItem, text: String)? in
+            guard item.userEditedTitle == true,
+                  let text = preferredBubbleTitle(from: item, allowsFullTitle: true) else {
+                return nil
             }
-            .prefix(6)
-            .map { $0 }
-    }
-
-    private func addKeyword(
-        _ raw: String,
-        weight: Int,
-        category: HomeItem.Category,
-        priority: Int,
-        into bubbles: inout [String: KeywordBubbleDraft]
-    ) {
-        let text = normalizedKeyword(raw)
-        guard !text.isEmpty else { return }
-        if var existing = bubbles[text] {
-            existing.count += max(weight, 1)
-            existing.priority = min(existing.priority, priority)
-            bubbles[text] = existing
-        } else {
-            bubbles[text] = KeywordBubbleDraft(text: text, count: max(weight, 1), category: category, priority: priority)
+            return (item, text)
         }
+        let heroID = userTitleItems.max {
+            if $0.item.amount == $1.item.amount {
+                return $0.text.count < $1.text.count
+            }
+            return $0.item.amount < $1.item.amount
+        }?.item.id
+
+        for entry in userTitleItems {
+            let isHero = entry.item.id == heroID
+            let score = isHero
+                ? 10_000 + Int(entry.item.amount.rounded()) + entry.text.count * 8
+                : 7_000 + entry.text.count * 120 + Int(entry.item.amount.rounded())
+            candidates.append(
+                KeywordBubbleDraft(
+                    text: entry.text,
+                    score: score,
+                    category: entry.item.category,
+                    priority: isHero ? 0 : 1,
+                    source: isHero ? .hero : .userTitle
+                )
+            )
+        }
+
+        for item in items where item.id != heroID {
+            if let text = preferredBubbleTitle(from: item, allowsFullTitle: false) {
+                candidates.append(
+                    KeywordBubbleDraft(
+                        text: text,
+                        score: 4_000 + Int(item.amount.rounded()) + text.count * 10,
+                        category: item.category,
+                        priority: 2,
+                        source: .amountTitle
+                    )
+                )
+            }
+
+            let emotion = normalizedKeyword(item.displayEmotionTag, maxLength: 10)
+            if !emotion.isEmpty,
+               emotion != HomeItem.inferEmotionTag(category: item.category, amount: item.amount) {
+                candidates.append(
+                    KeywordBubbleDraft(
+                        text: emotion,
+                        score: 2_000 + Int(item.amount.rounded() / 2),
+                        category: item.category,
+                        priority: 3,
+                        source: .emotion
+                    )
+                )
+            }
+        }
+
+        let categoryBuckets = Dictionary(grouping: items, by: \.category)
+        for (category, rows) in categoryBuckets {
+            candidates.append(
+                KeywordBubbleDraft(
+                    text: category.rawValue,
+                    score: 1_000 + rows.count * 80 + Int(rows.reduce(0) { $0 + $1.amount }.rounded() / 10),
+                    category: category,
+                    priority: 4,
+                    source: .category
+                )
+            )
+        }
+
+        return bestCandidatePerText(candidates)
     }
 
-    private func normalizedKeyword(_ raw: String) -> String {
+    private func bestCandidatePerText(_ candidates: [KeywordBubbleDraft]) -> [KeywordBubbleDraft] {
+        var best: [String: KeywordBubbleDraft] = [:]
+        for candidate in candidates {
+            if let existing = best[candidate.text] {
+                if candidate.priority < existing.priority || (candidate.priority == existing.priority && candidate.score > existing.score) {
+                    best[candidate.text] = candidate
+                }
+            } else {
+                best[candidate.text] = candidate
+            }
+        }
+        return Array(best.values).sorted(by: bubbleCandidateSort)
+    }
+
+    private func diversifiedBubbleCandidates(_ candidates: [KeywordBubbleDraft], targetCount: Int) -> [KeywordBubbleDraft] {
+        var selected: [KeywordBubbleDraft] = []
+        var categoryCounts: [HomeItem.Category: Int] = [:]
+        var firstThreeCategories = Set<HomeItem.Category>()
+
+        func canPick(_ candidate: KeywordBubbleDraft, strict: Bool) -> Bool {
+            if selected.contains(where: { $0.text == candidate.text }) { return false }
+            if strict {
+                if (categoryCounts[candidate.category] ?? 0) >= 2 { return false }
+                if selected.count < 3,
+                   firstThreeCategories.contains(candidate.category),
+                   candidate.source != .userTitle {
+                    return false
+                }
+            } else if (categoryCounts[candidate.category] ?? 0) >= 3 {
+                return false
+            }
+            return true
+        }
+
+        func pick(_ candidate: KeywordBubbleDraft) {
+            selected.append(candidate)
+            categoryCounts[candidate.category, default: 0] += 1
+            if selected.count <= 3 {
+                firstThreeCategories.insert(candidate.category)
+            }
+        }
+
+        for candidate in candidates where selected.count < targetCount {
+            if canPick(candidate, strict: true) { pick(candidate) }
+        }
+
+        for candidate in candidates where selected.count < targetCount {
+            if canPick(candidate, strict: false) { pick(candidate) }
+        }
+
+        return selected.sorted(by: bubbleCandidateSort)
+    }
+
+    private func bubbleCandidateSort(_ lhs: KeywordBubbleDraft, _ rhs: KeywordBubbleDraft) -> Bool {
+        if lhs.priority != rhs.priority { return lhs.priority < rhs.priority }
+        if lhs.score != rhs.score { return lhs.score > rhs.score }
+        return lhs.text < rhs.text
+    }
+
+    private func preferredBubbleTitle(from item: HomeItem, allowsFullTitle: Bool) -> String? {
+        let keywords = titleKeywords(from: item.title, allowsFullTitle: allowsFullTitle)
+        guard let first = keywords.first else { return nil }
+        if !allowsFullTitle,
+           item.userEditedTitle != true,
+           !EchoAnchorService.shared.isEligibleLifeTraceTitle(item.title, item: item),
+           first == item.category.rawValue {
+            return nil
+        }
+        return first
+    }
+
+    private func normalizedKeyword(_ raw: String, maxLength: Int = 12) -> String {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let noiseWords = ["记录", "记下", "记下来", "消费", "安排", "这一笔", "这笔", "一笔", "一条", "一下", "一点", "小消费", "日常记录", "临时花了"]
         for word in noiseWords {
             text = text.replacingOccurrences(of: word, with: "")
         }
         text = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters))
-        if text.count < 2 || text.count > 9 { return "" }
+        if text.count < 2 || text.count > maxLength { return "" }
         if isFillerKeyword(text) { return "" }
         if text.rangeOfCharacter(from: .decimalDigits) != nil { return "" }
         return text
@@ -380,7 +492,7 @@ struct InsightWebView: View {
 
     private func titleKeywords(from title: String, allowsFullTitle: Bool) -> [String] {
         let normalized = normalizedKeyword(title)
-        if allowsFullTitle, !normalized.isEmpty, normalized.count <= 9, !isGenericRecordTitle(normalized) {
+        if allowsFullTitle, !normalized.isEmpty, normalized.count <= 12, !isGenericRecordTitle(normalized) {
             return [normalized]
         }
 
@@ -1350,10 +1462,19 @@ struct InsightWebView: View {
 // MARK: - Keyword Bubble Cloud
 
 private struct KeywordBubbleDraft {
+    enum Source {
+        case hero
+        case userTitle
+        case amountTitle
+        case emotion
+        case category
+    }
+
     let text: String
-    var count: Int
+    let score: Int
     let category: HomeItem.Category
     var priority: Int
+    let source: Source
 }
 
 private struct KeywordBubbleData: Identifiable, Equatable {
@@ -1875,12 +1996,12 @@ struct WeeklyShareCardView: View {
 
                 if let anchor = displayAnchorLine {
                     Text(anchor)
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
                         .foregroundStyle(t.accent.opacity(0.92))
-                        .lineSpacing(4)
-                        .lineLimit(3)
+                        .lineSpacing(5)
+                        .lineLimit(4)
                         .minimumScaleFactor(0.76)
-                        .padding(.top, 18)
+                        .padding(.top, 16)
                 }
 
                 Text(auxiliaryLine)
@@ -1911,14 +2032,26 @@ struct WeeklyShareCardView: View {
     }
 
     private var journalTitle: String {
-        if recordCount <= 2 {
-            return "这一周，先留下几笔"
+        if displayAnchorLine != nil {
+            return "这一周，留下这一句"
         }
-        return "这一周的 \(recordCount) 笔"
+        let title = compactShareTitle(cleanedHeadlineLine)
+        if !title.isEmpty {
+            return title
+        }
+        return recordCount <= 2 ? "这一周，先留下一页" : "这一周，留下一页"
     }
 
     private var journalBody: String {
-        let cleanedHeadline = headline
+        let middle = cleanedHeadlineLine.isEmpty ? "这一周已经留下几笔可以回看的记录。" : cleanedHeadlineLine
+        let closing = cleanedSubtitleLine.contains("建议") || cleanedSubtitleLine.contains("数据不足") || cleanedSubtitleLine.isEmpty
+            ? "之后有新记录，再回来对照。"
+            : cleanedSubtitleLine
+        return "\(middle)\n\(closing)"
+    }
+
+    private var cleanedHeadlineLine: String {
+        headline
             .replacingOccurrences(of: "，([^，。]+)约占\\d+%", with: "，$1出现得比较多", options: .regularExpression)
             .replacingOccurrences(of: "约占\\d+%", with: "出现得比较多", options: .regularExpression)
             .replacingOccurrences(of: " 笔记录", with: " 次记录")
@@ -1927,7 +2060,11 @@ struct WeeklyShareCardView: View {
             .replacingOccurrences(of: "先叙到这里", with: "先记到这里")
             .replacingOccurrences(of: "生活轮廓", with: "记录脉络")
             .replacingOccurrences(of: "生活节奏", with: "记录节奏")
-        let cleanedSubtitle = subtitle
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var cleanedSubtitleLine: String {
+        subtitle
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "¥\\s?[0-9,]+(\\.[0-9]+)?", with: "", options: .regularExpression)
             .replacingOccurrences(of: "这一周先叙到这里。", with: "之后有新记录，再回来对照。")
@@ -1935,11 +2072,15 @@ struct WeeklyShareCardView: View {
             .replacingOccurrences(of: "这些记录先留在这一页。", with: "之后有新记录，再回来对照。")
             .replacingOccurrences(of: "这些记录先放在这里。", with: "之后有新记录，再回来对照。")
             .replacingOccurrences(of: "\\s{2,}", with: " ", options: .regularExpression)
-        let middle = cleanedHeadline.isEmpty ? "这一周已经留下几笔可以回看的记录。" : cleanedHeadline
-        let closing = cleanedSubtitle.contains("建议") || cleanedSubtitle.contains("数据不足") || cleanedSubtitle.isEmpty
-            ? "之后有新记录，再回来对照。"
-            : cleanedSubtitle
-        return "\(middle)\n\(closing)"
+    }
+
+    private func compactShareTitle(_ text: String) -> String {
+        let trimmed = text
+            .replacingOccurrences(of: "。", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        if trimmed.count <= 18 { return trimmed }
+        return String(trimmed.prefix(18))
     }
 
     private var displayAnchorLine: String? {
@@ -1950,7 +2091,7 @@ struct WeeklyShareCardView: View {
 
     private var auxiliaryLine: String {
         let top = topCategory.trimmingCharacters(in: .whitespacesAndNewlines)
-        return top.isEmpty ? "\(recordCount) 笔记录留在这一周。" : "\(recordCount) 笔记录 · \(top) 出现得多一些。"
+        return top.isEmpty ? "附记：\(recordCount) 笔记录" : "附记：\(recordCount) 笔记录 · \(top)"
     }
 
     private var rhythmTexture: some View {
