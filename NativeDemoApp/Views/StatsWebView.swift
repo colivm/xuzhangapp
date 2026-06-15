@@ -1746,7 +1746,7 @@ struct StatsWebView: View {
             }
             .overlay(alignment: .trailing) {
                 if !isEditing {
-                    traceSwipeHandle(for: item)
+                    traceSwipeHandle(for: item, isSwiped: isSwiped)
                 }
             }
         }
@@ -1846,9 +1846,10 @@ struct StatsWebView: View {
         .opacity(isVisible ? 1 : 0)
     }
 
-    private func traceSwipeHandle(for item: HomeItem) -> some View {
+    private func traceSwipeHandle(for item: HomeItem, isSwiped: Bool) -> some View {
         Color.clear
-            .frame(width: 42)
+            .frame(maxWidth: isSwiped ? .infinity : nil)
+            .frame(width: isSwiped ? nil : 42)
             .contentShape(Rectangle())
             .gesture(traceRowSwipeGesture(for: item))
     }
