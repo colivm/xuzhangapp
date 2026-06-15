@@ -219,10 +219,6 @@ struct StatsWebView: View {
         return score
     }
 
-    private var heroTotalExpense: Double {
-        heroScopedItems.filter { $0.amount > 0 }.reduce(0) { $0 + $1.amount }
-    }
-
     private var heroNarrativeText: String {
         let items = heroScopedItems
         guard !items.isEmpty else {
@@ -230,12 +226,32 @@ struct StatsWebView: View {
                 ? "这一周还没有记录。先留下几笔，之后会整理成一段场记。"
                 : "这个月还没有记录。先留下几笔，之后会整理成一段场记。"
         }
+        if let voice = traceRepresentativeItems.compactMap({ traceLifeSentence(from: $0) }).first {
+            return selectedPeriod == .week
+                ? "这一周先记住「\(voice)」。数字放在旁边，生活句留在前面。"
+                : "这个月先记住「\(voice)」。统计放在旁边，生活句留在前面。"
+        }
         let grouped = Dictionary(grouping: items, by: \.category)
         let topCategory = grouped
             .map { (category: $0.key, total: $0.value.reduce(0) { $0 + $1.amount }) }
             .sorted { $0.total > $1.total }
             .first?.category.rawValue ?? "日常"
-        return "这一段留下 \(items.count) 笔，合计 \(heroTotalExpense.formatted(.cny))。「\(topCategory)」出现得多一点，像这段日子的一个小主题。"
+        return "这一段还没有具体备注，先看到「\(topCategory)」出现得多一点。"
+    }
+
+    private func traceLifeSentence(from item: HomeItem) -> String? {
+        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if EchoAnchorService.shared.isEligibleLifeTraceTitle(title, item: item) {
+            return title
+        }
+        let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
+        if (2...18).contains(emotion.count),
+           emotion != defaultEmotion,
+           !EchoAnchorService.shared.isDirtyTraceTitle(emotion) {
+            return emotion
+        }
+        return nil
     }
 
     private var heroRange: SummaryPlaybackRange {

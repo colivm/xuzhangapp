@@ -200,6 +200,12 @@ struct SummaryPlaybackSheet: View {
     private func chapterSupportView(for chapter: SummaryChapter) -> some View {
         if hasNoSupportLine(chapter) {
             EmptyView()
+        } else if isVoiceChapter(chapter), let title = voiceTitle(for: chapter) {
+            highlightChapterSupport(title: title, chapter: chapter)
+        } else if isScentChapter(chapter), let words = chapter.metrics["scentWords"] {
+            scentChapterSupport(words)
+        } else if isPresenceChapter(chapter) {
+            presenceChapterSupport(chapter)
         } else if isCategoryChapter(chapter) {
             categoryChapterSupport(chapter)
         } else if isHighlightChapter(chapter), let title = chapter.metrics["title"] {
@@ -221,6 +227,33 @@ struct SummaryPlaybackSheet: View {
     private func categoryChapterSupport(_ chapter: SummaryChapter) -> some View {
         let category = chapter.metrics["category"] ?? "生活"
         return supportHint("生活主料：\(category)")
+    }
+
+    private func presenceChapterSupport(_ chapter: SummaryChapter) -> some View {
+        let count = chapter.metrics["count"] ?? "\(playback.count)"
+        let total = chapter.metrics["total"] ?? playback.total.formatted(.cny)
+        return supportHint("\(playback.rangeLabel) · \(count) 笔 · \(total)")
+    }
+
+    private func scentChapterSupport(_ words: String) -> some View {
+        let chips = words
+            .split(separator: "、")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return VStack(alignment: .leading, spacing: 8) {
+            ForEach(chips, id: \.self) { word in
+                Text(word)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.white.opacity(0.52))
+                    )
+            }
+        }
     }
 
     private func highlightChapterTitle(_ title: String) -> some View {
@@ -283,53 +316,71 @@ struct SummaryPlaybackSheet: View {
             }
             return "\(leading) 更热闹一点"
         }
-        if chapter.id == "month-early" {
-            return chapter.metrics["label"].map { "\($0)先铺开一点" }
-        }
         return nil
     }
 
     private func shouldShowRangeLabel(for chapter: SummaryChapter) -> Bool {
-        chapter.id == "week-intro"
+        chapter.id == "week-intro" || chapter.id == "week-presence" || chapter.id == "month-opening"
     }
 
     private func isIntroChapter(_ chapter: SummaryChapter) -> Bool {
-        chapter.id.contains("intro")
+        chapter.id.contains("intro") || isPresenceChapter(chapter)
     }
 
     private func isRhythmChapter(_ chapter: SummaryChapter) -> Bool {
-        chapter.id.contains("rhythm") || chapter.id == "month-middle-late"
+        chapter.id.contains("rhythm")
     }
 
     private func isCategoryChapter(_ chapter: SummaryChapter) -> Bool {
-        chapter.id.contains("category") || chapter.id == "month-composition"
+        chapter.id.contains("category")
     }
 
     private func isHighlightChapter(_ chapter: SummaryChapter) -> Bool {
         chapter.id.contains("highlight")
     }
 
+    private func isVoiceChapter(_ chapter: SummaryChapter) -> Bool {
+        chapter.id == "week-voices"
+            || chapter.id == "month-early-voice"
+            || chapter.id == "month-late-voice"
+    }
+
+    private func isScentChapter(_ chapter: SummaryChapter) -> Bool {
+        chapter.id == "week-scent" || chapter.id == "month-scent"
+    }
+
+    private func isPresenceChapter(_ chapter: SummaryChapter) -> Bool {
+        chapter.id == "week-presence" || chapter.id == "month-opening"
+    }
+
     private func isOutroChapter(_ chapter: SummaryChapter) -> Bool {
-        chapter.id.contains("outro") || chapter.id == "month-action"
+        chapter.id.contains("outro")
     }
 
     private func hasNoSupportLine(_ chapter: SummaryChapter) -> Bool {
-        isOutroChapter(chapter) || chapter.id == "month-change"
+        isOutroChapter(chapter)
+    }
+
+    private func voiceTitle(for chapter: SummaryChapter) -> String? {
+        ["voiceTitle1", "earlyVoiceTitle", "lateVoiceTitle", "title"]
+            .compactMap { chapter.metrics[$0]?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
     }
 
     private func chapterAccent(for chapter: SummaryChapter?) -> Color {
         guard let chapter else { return AppColors.accent }
-        if isCategoryChapter(chapter) { return AppColors.accentDark }
+        if isScentChapter(chapter) || isCategoryChapter(chapter) { return AppColors.accentDark }
         if isRhythmChapter(chapter) { return Color(red: 0.22, green: 0.50, blue: 0.58) }
-        if isHighlightChapter(chapter) { return Color(red: 0.70, green: 0.36, blue: 0.28) }
+        if isVoiceChapter(chapter) || isHighlightChapter(chapter) { return Color(red: 0.70, green: 0.36, blue: 0.28) }
         if isOutroChapter(chapter) { return Color(red: 0.42, green: 0.46, blue: 0.64) }
         return AppColors.accent
     }
 
     private func chapterSymbol(for chapter: SummaryChapter) -> String {
+        if isScentChapter(chapter) { return "text.quote" }
         if isCategoryChapter(chapter) { return "chart.pie.fill" }
         if isRhythmChapter(chapter) { return "waveform.path.ecg" }
-        if isHighlightChapter(chapter) { return "quote.bubble.fill" }
+        if isVoiceChapter(chapter) || isHighlightChapter(chapter) { return "quote.bubble.fill" }
         if isOutroChapter(chapter) { return "sparkles" }
         return "calendar"
     }
@@ -340,10 +391,10 @@ struct SummaryPlaybackSheet: View {
         if let chapter, isRhythmChapter(chapter) {
             warmBase = [Color(red: 0.88, green: 0.97, blue: 0.96), Color(red: 1.00, green: 0.93, blue: 0.86), AppColors.bg]
             coolBase = [Color(red: 0.86, green: 0.93, blue: 0.96), Color(red: 0.94, green: 0.97, blue: 0.98), AppColors.bg]
-        } else if let chapter, isCategoryChapter(chapter) {
+        } else if let chapter, isScentChapter(chapter) || isCategoryChapter(chapter) {
             warmBase = [Color(red: 1.00, green: 0.94, blue: 0.84), Color(red: 0.92, green: 0.97, blue: 0.90), AppColors.bg]
             coolBase = [Color(red: 0.91, green: 0.94, blue: 0.89), Color(red: 0.95, green: 0.97, blue: 0.94), AppColors.bg]
-        } else if let chapter, isHighlightChapter(chapter) {
+        } else if let chapter, isVoiceChapter(chapter) || isHighlightChapter(chapter) {
             warmBase = [Color(red: 1.00, green: 0.90, blue: 0.86), Color(red: 1.00, green: 0.95, blue: 0.88), AppColors.bg]
             coolBase = [Color(red: 0.93, green: 0.90, blue: 0.88), Color(red: 0.97, green: 0.95, blue: 0.93), AppColors.bg]
         } else if let chapter, isOutroChapter(chapter) {

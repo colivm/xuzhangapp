@@ -228,27 +228,13 @@ final class PlaybackService {
         let total = rows.reduce(0) { $0 + $1.amount }
         let top = topCategoryStats(rows).first
         let ratio = total > 0 ? Int(round(((top?.amount ?? 0) / total) * 100)) : 0
-        let highlight = highlightItem(in: rows)
         let active = dailyActivity(rows, start: start, days: 7)
         let busiest = active.max { lhs, rhs in
             lhs.count == rhs.count ? lhs.amount < rhs.amount : lhs.count < rhs.count
         }
-        let quietest = active.min { lhs, rhs in
-            lhs.amount == rhs.amount ? lhs.count < rhs.count : lhs.amount < rhs.amount
-        }
         let title = "本周回放"
         let weekKey = SummaryPlaybackQuotaStore().currentWeekKey(now: now)
         let weekSeed = playbackCopySeed(base: "week-\(weekKey)", suffix: copySeed)
-        let echoAnchor = EchoAnchorService.shared.pickEchoAnchor(items: rows, periodKey: weekKey, now: now)
-        let weekValues: [String: String] = [
-            "rangeLabel": rangeLabel,
-            "count": "\(rows.count)",
-            "total": Self.money(total),
-            "busiestDay": busiest?.label ?? "本周",
-            "quietestDay": quietest?.label ?? "某一天",
-            "topCategory": top?.category ?? "日常",
-            "ratio": "\(ratio)"
-        ]
 
         guard !rows.isEmpty else {
             return SummaryPlayback(
@@ -265,13 +251,50 @@ final class PlaybackService {
             )
         }
 
+        let echoAnchor = EchoAnchorService.shared.pickEchoAnchor(items: rows, periodKey: weekKey, now: now)
+        let materials = playbackMaterials(in: rows, periodKey: weekKey, now: now)
+        let primaryVoice = preferredMaterial(from: materials, echoAnchor: echoAnchor)
+        let primaryVoiceID = primaryVoice?.item.id
+        let secondaryVoice = materials.first { material in
+            guard let primaryVoiceID else { return true }
+            return material.item.id != primaryVoiceID
+        }
+        let busiestRows = busiest.map { day in rows.filter { calendar.isDate($0.createdAt, inSameDayAs: day.date) } } ?? []
+        let busiestMaterial = playbackMaterials(in: busiestRows, periodKey: weekKey, now: now).first ?? primaryVoice
+        let scentWords = playbackScentWords(from: rows, materials: materials)
+        let voiceTitle1 = primaryVoice?.text ?? honestNoVoiceText(for: .week)
+        let voiceTitle2 = secondaryVoice?.text ?? voiceTitle1
+        let busiestTitle = busiestMaterial?.text ?? voiceTitle1
+        let scentText = scentWords.isEmpty ? honestNoScentText : scentWords.joined(separator: "、")
+        let echoSentence = echoAnchor
+            .map { EchoAnchorService.shared.formatEchoAnchorSentence($0) }
+            .flatMap { $0.isEmpty ? nil : $0 }
+        let weekValues: [String: String] = [
+            "rangeLabel": rangeLabel,
+            "count": "\(rows.count)",
+            "total": Self.money(total),
+            "busiestDay": busiest?.label ?? "本周",
+            "busiestDayShort": busiest.map { Self.shortWeekdayFormatter.string(from: $0.date) } ?? "本周",
+            "busiestCount": "\(busiest?.count ?? 0)",
+            "busiestTitle": busiestTitle,
+            "voiceTitle1": voiceTitle1,
+            "voiceTitle2": voiceTitle2,
+            "scentWord1": scentWords.indices.contains(0) ? scentWords[0] : honestNoScentText,
+            "scentWord2": scentWords.indices.contains(1) ? scentWords[1] : "",
+            "scentWord3": scentWords.indices.contains(2) ? scentWords[2] : "",
+            "scentWords": scentText,
+            "topCategory": top?.category ?? "日常",
+            "ratio": "\(ratio)",
+            "echoLine": echoSentence ?? ""
+        ]
+
         var chapters: [SummaryChapter] = [
             SummaryChapter(
-                id: "week-intro",
+                id: "week-presence",
                 title: "这一周",
                 metrics: ["count": "\(rows.count)", "total": Self.money(total), "range": rangeLabel],
                 narration: PlaybackCopyPool.narration(
-                    chapterId: rows.count < 3 ? "week-weak-intro" : "week-intro",
+                    chapterId: rows.count < 3 ? "week-weak-presence" : "week-presence",
                     seed: weekSeed,
                     values: weekValues
                 ),
@@ -283,10 +306,10 @@ final class PlaybackService {
             chapters.append(
                 SummaryChapter(
                     id: "week-rhythm",
-                    title: "节奏起伏",
+                    title: "哪天最热",
                     metrics: [
                         "busiestDay": busiest?.label ?? "本周",
-                        "quietestDay": quietest?.label ?? "本周",
+                        "busiestTitle": busiestTitle,
                         "count": "\(busiest?.count ?? 0)"
                     ],
                     narration: PlaybackCopyPool.narration(
@@ -297,56 +320,58 @@ final class PlaybackService {
                     durationSec: 7
                 )
             )
-        }
-
-        chapters.append(
-            SummaryChapter(
-                id: "week-top-category",
-                title: "主要类目",
-                metrics: [
-                    "category": top?.category ?? "日常",
-                    "ratio": "\(ratio)",
-                    "amount": Self.money(top?.amount ?? 0)
-                ],
-                narration: PlaybackCopyPool.narration(
-                    chapterId: "week-top-category",
-                    seed: weekSeed,
-                    values: weekValues
-                ),
-                durationSec: 7
-            )
-        )
-
-        if rows.count >= 3, let highlight {
-            // Echo priority: weekly playback owns the visible anchor when a highlight chapter exists.
-            let displayHighlight = echoAnchor.flatMap { anchor in
-                rows.first { $0.id == anchor.itemId }
-            } ?? highlight
-            let day = Self.weekdayFormatter.string(from: displayHighlight.createdAt)
-            let highlightValues = weekValues.merging([
-                "highlightTitle": displayHighlight.title,
-                "highlightAmount": Self.money(displayHighlight.amount),
-                "highlightDayLabel": day
-            ]) { current, _ in current }
-            let echoSentence = echoAnchor
-                .map { EchoAnchorService.shared.formatEchoAnchorSentence($0) }
-                .flatMap { $0.isEmpty ? nil : $0 }
             chapters.append(
                 SummaryChapter(
-                    id: "week-highlight",
-                    title: "印象一笔",
+                    id: "week-voices",
+                    title: "留下的话",
                     metrics: [
-                        "title": displayHighlight.title,
-                        "amount": Self.money(displayHighlight.amount),
-                        "day": day
+                        "voiceTitle1": voiceTitle1,
+                        "voiceTitle2": voiceTitle2,
+                        "amount": primaryVoice.map { Self.money($0.item.amount) } ?? "",
+                        "day": primaryVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? ""
                     ],
                     narration: echoSentence.map { SummaryNarration(warm: $0, plain: $0) }
                         ?? PlaybackCopyPool.narration(
-                            chapterId: "week-highlight",
+                            chapterId: "week-voices",
                             seed: weekSeed,
-                            values: highlightValues
+                            values: weekValues
                         ),
                     durationSec: 7
+                )
+            )
+            chapters.append(
+                SummaryChapter(
+                    id: "week-scent",
+                    title: "常冒头的词",
+                    metrics: [
+                        "scentWords": scentText,
+                        "topCategory": top?.category ?? "日常",
+                        "ratio": "\(ratio)"
+                    ],
+                    narration: PlaybackCopyPool.narration(
+                        chapterId: "week-scent",
+                        seed: weekSeed,
+                        values: weekValues
+                    ),
+                    durationSec: 7
+                )
+            )
+        } else {
+            chapters.append(
+                SummaryChapter(
+                    id: "week-voices",
+                    title: "留下的话",
+                    metrics: [
+                        "voiceTitle1": voiceTitle1,
+                        "amount": primaryVoice.map { Self.money($0.item.amount) } ?? "",
+                        "day": primaryVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? ""
+                    ],
+                    narration: PlaybackCopyPool.narration(
+                        chapterId: "week-weak-voices",
+                        seed: weekSeed,
+                        values: weekValues
+                    ),
+                    durationSec: 6
                 )
             )
         }
@@ -355,8 +380,8 @@ final class PlaybackService {
         chapters.append(
             SummaryChapter(
                 id: "week-outro",
-                title: weak ? "再多一点" : "下周再叙",
-                metrics: ["count": "\(rows.count)", "total": Self.money(total)],
+                title: weak ? "再多一点" : "先记到这里",
+                metrics: ["count": "\(rows.count)", "total": Self.money(total), "topCategory": top?.category ?? "日常"],
                 narration: PlaybackCopyPool.narration(
                     chapterId: weak ? "week-weak-outro" : "week-outro",
                     seed: weekSeed,
@@ -371,7 +396,13 @@ final class PlaybackService {
             range: .week,
             title: title,
             rangeLabel: rangeLabel,
-            teaserLine: weekTeaserLine(busiest: busiest, top: top, rows: rows, copySeed: weekSeed),
+            teaserLine: weekTeaserLine(
+                busiest: busiest,
+                rows: rows,
+                voiceTitle: voiceTitle1,
+                scentWords: scentText,
+                copySeed: weekSeed
+            ),
             count: rows.count,
             total: total,
             topCategory: top?.category,
@@ -439,13 +470,34 @@ final class PlaybackService {
 
         let activeDays = Set(rows.map { calendar.startOfDay(for: $0.createdAt) }).count
         let segments = monthSegments(rows, in: start, calendar: calendar)
-        let leadingSegment = segments.max { $0.amount < $1.amount }
         let previousRows = previousMonthItems(from: items, now: now)
         let previousTotal = previousRows.reduce(0) { $0 + $1.amount }
         let momPercent = monthOverMonthText(current: total, previous: previousTotal)
         let changeText = monthlyChangeText(current: rows, previous: previousRows, segments: segments)
         let monthKey = Self.monthKeyFormatter.string(from: now)
         let monthSeed = playbackCopySeed(base: "month-\(monthKey)", suffix: copySeed)
+        let echoAnchor = EchoAnchorService.shared.pickEchoAnchor(items: rows, periodKey: monthKey, now: now)
+        let materials = playbackMaterials(in: rows, periodKey: monthKey, now: now)
+        let primaryVoice = preferredMaterial(from: materials, echoAnchor: echoAnchor)
+        let earlyRows = rows.filter { calendar.component(.day, from: $0.createdAt) <= 10 }
+        let lateRows = rows.filter { calendar.component(.day, from: $0.createdAt) >= 11 }
+        let earlyVoice = playbackMaterials(in: earlyRows, periodKey: monthKey, now: now).first ?? primaryVoice
+        let earlyVoiceID = earlyVoice?.item.id
+        let lateVoice = playbackMaterials(in: lateRows, periodKey: monthKey, now: now)
+            .first { material in
+                guard let earlyVoiceID else { return true }
+                return material.item.id != earlyVoiceID
+            }
+            ?? materials.first { material in
+                guard let earlyVoiceID else { return true }
+                return material.item.id != earlyVoiceID
+            }
+            ?? primaryVoice
+        let scentWords = playbackScentWords(from: rows, materials: materials)
+        let scentText = scentWords.isEmpty ? honestNoScentText : scentWords.joined(separator: "、")
+        let voiceTitle1 = primaryVoice?.text ?? honestNoVoiceText(for: .month)
+        let earlyVoiceTitle = earlyVoice?.text ?? honestNoVoiceText(for: .month)
+        let lateVoiceTitle = lateVoice?.text ?? honestNoVoiceText(for: .month)
         let monthValues: [String: String] = [
             "rangeLabel": rangeLabel,
             "count": "\(rows.count)",
@@ -456,65 +508,66 @@ final class PlaybackService {
             "earlyAmount": Self.money(segments[0].amount),
             "midAmount": Self.money(segments[1].amount),
             "lateAmount": Self.money(segments[2].amount),
-            "leadingSegment": leadingSegment?.label ?? "其中一段",
             "topCategory": top?.category ?? "日常",
             "ratio": "\(ratio)",
-            "changeHint": changeText
+            "changeHint": changeText,
+            "voiceTitle1": voiceTitle1,
+            "earlyVoiceTitle": earlyVoiceTitle,
+            "lateVoiceTitle": lateVoiceTitle,
+            "scentWords": scentText
         ]
 
         let chapters: [SummaryChapter] = [
             SummaryChapter(
-                id: "month-intro",
-                title: "\(rangeLabel) 总览",
+                id: "month-opening",
+                title: "\(rangeLabel) 开场",
                 metrics: [
                     "count": "\(rows.count)",
                     "total": Self.money(total),
                     "activeDays": "\(activeDays)",
-                    "momPercent": momPercent ?? ""
+                    "momPercent": momPercent ?? "",
+                    "range": rangeLabel,
+                    "voiceTitle1": voiceTitle1
                 ],
                 narration: PlaybackCopyPool.narration(
-                    chapterId: "month-intro",
+                    chapterId: "month-opening",
                     seed: monthSeed,
                     values: monthValues
                 ),
                 durationSec: 8
             ),
             SummaryChapter(
-                id: "month-early",
-                title: "上旬",
-                metrics: ["label": segments[0].label, "amount": Self.money(segments[0].amount), "count": "\(segments[0].count)"],
-                narration: PlaybackCopyPool.narration(
-                    chapterId: "month-early",
-                    seed: monthSeed,
-                    values: monthValues
-                ),
-                durationSec: 8
-            ),
-            SummaryChapter(
-                id: "month-middle-late",
-                title: "中下旬",
+                id: "month-early-voice",
+                title: "月初的一句",
                 metrics: [
+                    "earlyVoiceTitle": earlyVoiceTitle,
+                    "label": segments[0].label,
+                    "amount": Self.money(segments[0].amount),
+                    "count": "\(segments[0].count)",
+                    "day": earlyVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? ""
+                ],
+                narration: PlaybackCopyPool.narration(
+                    chapterId: "month-early-voice",
+                    seed: monthSeed,
+                    values: monthValues
+                ),
+                durationSec: 8
+            ),
+            SummaryChapter(
+                id: "month-late-voice",
+                title: "后半月的一句",
+                metrics: [
+                    "lateVoiceTitle": lateVoiceTitle,
                     "middle": Self.money(segments[1].amount),
                     "late": Self.money(segments[2].amount),
-                    "leading": leadingSegment?.label ?? "本月"
+                    "day": lateVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? ""
                 ],
                 narration: PlaybackCopyPool.narration(
-                    chapterId: "month-middle-late",
+                    chapterId: "month-late-voice",
                     seed: monthSeed,
                     values: monthValues
                 ),
-                durationSec: 9
-            ),
-            SummaryChapter(
-                id: "month-composition",
-                title: "生活构成",
-                metrics: ["category": top?.category ?? "日常", "ratio": "\(ratio)", "amount": Self.money(top?.amount ?? 0)],
-                narration: PlaybackCopyPool.narration(
-                    chapterId: "month-composition",
-                    seed: monthSeed,
-                    values: monthValues
-                ),
-                durationSec: 9
+                durationSec: 8
             ),
             SummaryChapter(
                 id: "month-change",
@@ -528,15 +581,30 @@ final class PlaybackService {
                 durationSec: 8
             ),
             SummaryChapter(
-                id: "month-action",
-                title: "月末小结",
-                metrics: ["total": Self.money(total), "topCategory": top?.category ?? "日常"],
+                id: "month-scent",
+                title: "常冒头的词",
+                metrics: [
+                    "scentWords": scentText,
+                    "topCategory": top?.category ?? "日常",
+                    "ratio": "\(ratio)"
+                ],
                 narration: PlaybackCopyPool.narration(
-                    chapterId: "month-action",
+                    chapterId: "month-scent",
                     seed: monthSeed,
                     values: monthValues
                 ),
                 durationSec: 8
+            ),
+            SummaryChapter(
+                id: "month-outro",
+                title: "下月再叙",
+                metrics: ["count": "\(rows.count)", "total": Self.money(total)],
+                narration: PlaybackCopyPool.narration(
+                    chapterId: "month-outro",
+                    seed: monthSeed,
+                    values: monthValues
+                ),
+                durationSec: 7
             )
         ]
 
@@ -545,7 +613,13 @@ final class PlaybackService {
             range: .month,
             title: title,
             rangeLabel: rangeLabel,
-            teaserLine: monthTeaserLine(segments: segments, top: top, changeText: changeText, copySeed: monthSeed),
+            teaserLine: monthTeaserLine(
+                voiceTitle: voiceTitle1,
+                scentWords: scentText,
+                changeText: changeText,
+                copySeed: monthSeed,
+                rangeLabel: rangeLabel
+            ),
             count: rows.count,
             total: total,
             topCategory: top?.category,
@@ -585,6 +659,12 @@ final class PlaybackService {
         let label: String
         let count: Int
         let amount: Double
+    }
+
+    private struct PlaybackMaterial {
+        let item: HomeItem
+        let text: String
+        let score: Int
     }
 
     private static let moneyFormatter: NumberFormatter = {
@@ -660,28 +740,6 @@ final class PlaybackService {
             .sorted { $0.amount > $1.amount }
     }
 
-    private func highlightItem(in items: [HomeItem]) -> HomeItem? {
-        let candidates = items.filter { item in
-            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !title.isEmpty else { return false }
-            let genericTitles = [
-                item.category.rawValue,
-                item.category.label,
-                item.category.displayName,
-                item.category.defaultRecordTitle,
-                "\(item.category.rawValue)消费",
-                "未命名记录"
-            ]
-            return !genericTitles.contains(title)
-        }
-        if let titled = candidates.max(by: { lhs, rhs in
-            lhs.amount == rhs.amount ? lhs.title.count < rhs.title.count : lhs.amount < rhs.amount
-        }) {
-            return titled
-        }
-        return items.max { $0.amount < $1.amount }
-    }
-
     private func dailyActivity(_ items: [HomeItem], start: Date, days: Int) -> [DayActivity] {
         let calendar = Self.isoCalendar
         return (0..<days).compactMap { offset in
@@ -711,45 +769,146 @@ final class PlaybackService {
         }
     }
 
-    private func weekTeaserLine(busiest: DayActivity?, top: CategoryAmount?, rows: [HomeItem], copySeed: String) -> String {
+    private func playbackMaterials(in items: [HomeItem], periodKey: String, now: Date) -> [PlaybackMaterial] {
+        items.compactMap { item -> PlaybackMaterial? in
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
+            let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+            var score = stableMaterialScore(item: item, periodKey: periodKey, now: now)
+
+            if EchoAnchorService.shared.isEligibleLifeTraceTitle(title, item: item) {
+                score += 70
+                if item.userEditedTitle == true { score += 24 }
+                if item.source == .manual { score += 8 }
+                if emotion != defaultEmotion { score += 8 }
+                return PlaybackMaterial(item: item, text: title, score: score)
+            }
+
+            guard (2...18).contains(emotion.count),
+                  emotion != defaultEmotion,
+                  !EchoAnchorService.shared.isDirtyTraceTitle(emotion) else {
+                return nil
+            }
+            score += 48
+            if item.userEditedTitle == true { score += 8 }
+            return PlaybackMaterial(item: item, text: emotion, score: score)
+        }
+        .sorted {
+            if $0.score == $1.score {
+                return $0.item.createdAt > $1.item.createdAt
+            }
+            return $0.score > $1.score
+        }
+    }
+
+    private func preferredMaterial(from materials: [PlaybackMaterial], echoAnchor: EchoAnchor?) -> PlaybackMaterial? {
+        if let echoAnchor,
+           let matched = materials.first(where: { $0.item.id == echoAnchor.itemId }) {
+            return matched
+        }
+        return materials.first
+    }
+
+    private func playbackScentWords(from items: [HomeItem], materials: [PlaybackMaterial]) -> [String] {
+        var counts: [String: Int] = [:]
+        var firstSeen: [String: Int] = [:]
+
+        func add(_ raw: String) {
+            let text = raw
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "「」『』“”\"'，,。.!！?？、：:；;（）()[]【】"))
+            guard (2...18).contains(text.count),
+                  !EchoAnchorService.shared.isDirtyTraceTitle(text) else {
+                return
+            }
+            if firstSeen[text] == nil { firstSeen[text] = firstSeen.count }
+            counts[text, default: 0] += 1
+        }
+
+        materials.forEach { add($0.text) }
+        for item in items {
+            let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
+            let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !emotion.isEmpty, emotion != defaultEmotion { add(emotion) }
+            if EchoAnchorService.shared.isEligibleLifeTraceTitle(item.title, item: item) { add(item.title) }
+            add(item.category.rawValue)
+        }
+
+        return counts
+            .sorted {
+                if $0.value == $1.value {
+                    return (firstSeen[$0.key] ?? 0) < (firstSeen[$1.key] ?? 0)
+                }
+                return $0.value > $1.value
+            }
+            .prefix(5)
+            .map(\.key)
+    }
+
+    private var honestNoScentText: String {
+        "记录还少"
+    }
+
+    private func honestNoVoiceText(for range: SummaryPlaybackRange) -> String {
+        switch range {
+        case .week:
+            return "这周还没有留下具体备注"
+        case .month:
+            return "这个月还没有留下具体备注"
+        }
+    }
+
+    private func stableMaterialScore(item: HomeItem, periodKey: String, now: Date) -> Int {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in "\(item.id.uuidString)|\(periodKey)|\(Int(now.timeIntervalSince1970 / 86_400))".utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return Int(hash % 7)
+    }
+
+    private func weekTeaserLine(busiest: DayActivity?, rows: [HomeItem], voiceTitle: String, scentWords: String, copySeed: String) -> String {
         if rows.count < 3 {
             return "这周已有 \(rows.count) 笔记录，再多一点就能讲得更完整。"
         }
         let values = [
             "busiestDayShort": busiest?.label ?? "本周",
-            "topCategory": top?.category ?? "日常",
             "count": "\(rows.count)",
-            "rangeLabel": "这一周"
+            "rangeLabel": "这一周",
+            "voiceTitle1": voiceTitle,
+            "scentWords": scentWords
         ]
         return PlaybackCopyPool.weekTeaser(seed: copySeed, values: values)
     }
 
     private func weeklyShareAnchorLine(from summary: SummaryPlayback) -> String? {
-        if let highlight = summary.chapters.first(where: { $0.id == "week-highlight" }) {
-            let narration = highlight.narration.plain.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !narration.isEmpty {
-                return narration
-            }
-            if let title = highlight.metrics["title"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        if let voices = summary.chapters.first(where: { $0.id == "week-voices" }) {
+            if let title = voices.metrics["voiceTitle1"]?.trimmingCharacters(in: .whitespacesAndNewlines),
                !title.isEmpty {
                 return "有一笔是这样留在账本里的：\(title)"
+            }
+            let narration = voices.narration.plain.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !narration.isEmpty {
+                return narration
             }
         }
         return nil
     }
 
-    private func monthTeaserLine(segments: [MonthSegment], top: CategoryAmount?, changeText: String, copySeed: String) -> String {
-        let leading = segments.max { $0.amount < $1.amount }?.label ?? "这个月"
-        if let top {
-            let values = [
-                "busiestDayShort": leading,
-                "topCategory": top.category,
-                "count": "\(segments.reduce(0) { $0 + $1.count })",
-                "rangeLabel": "这个月"
-            ]
-            return PlaybackCopyPool.monthTeaser(seed: copySeed, values: values)
-        }
-        return changeText
+    private func monthTeaserLine(
+        voiceTitle: String,
+        scentWords: String,
+        changeText: String,
+        copySeed: String,
+        rangeLabel: String
+    ) -> String {
+        let values = [
+            "voiceTitle1": voiceTitle,
+            "scentWords": scentWords,
+            "changeHint": changeText,
+            "rangeLabel": rangeLabel
+        ]
+        return PlaybackCopyPool.monthTeaser(seed: copySeed, values: values)
     }
 
     private func playbackCopySeed(base: String, suffix: String) -> String {
@@ -889,4 +1048,3 @@ final class PlaybackService {
         moneyFormatter.string(from: NSNumber(value: value)) ?? "¥\(Int(value.rounded()))"
     }
 }
-
