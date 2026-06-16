@@ -2201,7 +2201,7 @@ struct TraceInlineRecordEditor: View {
             if let validationMessage {
                 Text(validationMessage)
                     .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext.opacity(0.86))
+                    .foregroundStyle(Color(red: 94/255, green: 108/255, blue: 119/255))
             }
 
             HStack(spacing: 8) {
@@ -2210,7 +2210,7 @@ struct TraceInlineRecordEditor: View {
                     onCancel()
                 }
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(AppColors.subtext.opacity(0.88))
+                .foregroundStyle(Color(red: 82/255, green: 94/255, blue: 104/255))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
                 .background(inlineSecondaryButtonBackground)
@@ -2244,7 +2244,7 @@ struct TraceInlineRecordEditor: View {
         HStack(spacing: 3) {
             Text("¥")
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppColors.subtext.opacity(0.8))
+                .foregroundStyle(Color(red: 85/255, green: 99/255, blue: 110/255))
             TextField("0.00", text: $amountText)
                 .keyboardType(.decimalPad)
                 .font(.system(size: 20, weight: .bold, design: .rounded))
@@ -2272,7 +2272,7 @@ struct TraceInlineRecordEditor: View {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .semibold))
             }
-            .foregroundStyle(AppColors.text.opacity(0.84))
+            .foregroundStyle(AppColors.text.opacity(0.92))
             .padding(.horizontal, 11)
             .padding(.vertical, 10)
             .background(inlineFieldChrome)
@@ -2291,16 +2291,16 @@ struct TraceInlineRecordEditor: View {
             HStack(spacing: 8) {
                 Text("时间")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(Color(red: 85/255, green: 99/255, blue: 110/255))
                 Spacer()
                 Text(selectedDate.zhBillDateTime)
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(AppColors.text.opacity(0.86))
+                    .foregroundStyle(AppColors.text.opacity(0.94))
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(Color(red: 85/255, green: 99/255, blue: 110/255))
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
@@ -2472,10 +2472,14 @@ struct TraceInlineRecordEditor: View {
 
     private var inlineFieldChrome: some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color.white.opacity(0.46))
+            .fill(Color.white.opacity(0.74))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.white.opacity(0.86), lineWidth: 1)
+            )
             .overlay(alignment: .bottom) {
                 Rectangle()
-                    .fill(AppColors.accent.opacity(0.18))
+                    .fill(AppColors.accent.opacity(0.28))
                     .frame(height: 1)
                     .padding(.horizontal, 10)
             }
@@ -2483,11 +2487,12 @@ struct TraceInlineRecordEditor: View {
 
     private var inlineSecondaryButtonBackground: some View {
         Capsule(style: .continuous)
-            .fill(Color.white.opacity(0.46))
+            .fill(Color.white.opacity(0.76))
             .overlay(
                 Capsule(style: .continuous)
-                    .stroke(Color.white.opacity(0.44), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.80), lineWidth: 1)
             )
+            .shadow(color: AppColors.subtext.opacity(0.07), radius: 7, x: 0, y: 3)
     }
 
     private func save() {

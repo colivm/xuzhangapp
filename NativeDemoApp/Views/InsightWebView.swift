@@ -1931,71 +1931,59 @@ struct WeeklyShareCardView: View {
             )
 
             paperStack
-                .padding(.horizontal, 30)
-                .padding(.vertical, 26)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 18)
 
             lowerPaperTexture
-                .padding(.horizontal, 28)
-                .padding(.bottom, 34)
+                .padding(.horizontal, 26)
+                .padding(.bottom, 20)
                 .frame(maxHeight: .infinity, alignment: .bottom)
 
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("生活复盘")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(t.textMain.opacity(0.86))
-                        Text(periodText)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(t.titleSub.opacity(0.82))
-                            .lineLimit(1)
-                    }
-                    Spacer()
-                    Text("叙账")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(t.accentDeep.opacity(0.80))
-                }
+                weeklyCardHeader
 
                 Text("这一周")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(t.textMuted.opacity(0.82))
                     .lineLimit(1)
-                    .padding(.top, 42)
+                    .padding(.top, 34)
 
                 Text(insight.fact)
                     .font(.system(size: 29, weight: .bold, design: .rounded))
                     .foregroundStyle(t.textMain)
-                    .lineSpacing(6)
+                    .lineSpacing(5)
                     .lineLimit(3)
                     .minimumScaleFactor(0.66)
                     .padding(.top, 10)
-                    .frame(minHeight: 104, alignment: .topLeading)
+                    .frame(minHeight: 78, alignment: .topLeading)
 
-                Rectangle()
-                    .fill(t.panelBorder.opacity(0.54))
-                    .frame(height: 1)
-                    .padding(.top, 18)
-                    .padding(.bottom, 18)
+                weeklyChartPanel
+                    .padding(.top, 8)
 
                 Text(insight.care)
-                    .font(.system(size: 18, weight: .medium, design: .rounded))
-                    .foregroundStyle(t.accentDeep.opacity(0.92))
-                    .lineSpacing(6)
+                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .foregroundStyle(t.textMain.opacity(0.96))
+                    .lineSpacing(5)
                     .lineLimit(3)
                     .minimumScaleFactor(0.74)
+                    .padding(.top, 16)
 
                 Text(insight.footnote)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(t.textMuted.opacity(0.86))
-                    .padding(.top, 24)
+                    .padding(.top, 5)
 
-                Spacer(minLength: 18)
+                weeklyMetricRow
+                    .padding(.top, 12)
 
                 rhythmTexture
-                    .padding(.bottom, 14)
-
+                    .padding(.top, 10)
+                    .padding(.bottom, 8)
+                
                 shareTags
-                    .padding(.bottom, 18)
+                    .padding(.bottom, 10)
+
+                Spacer(minLength: 12)
 
                 HStack(alignment: .center, spacing: 10) {
                     Text("叙账 · 基于你这周的真实记录")
@@ -2008,10 +1996,183 @@ struct WeeklyShareCardView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 42)
-            .padding(.vertical, 38)
+            .padding(.top, 38)
+            .padding(.bottom, 22)
         }
         .frame(width: 390, height: 580)
         .clipped()
+    }
+
+    private var weeklyCardHeader: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text("『生活档案』· 这一周的手札")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(t.textMain.opacity(0.88))
+                Text(periodText)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(t.titleSub.opacity(0.86))
+                    .lineLimit(1)
+            }
+            Spacer()
+            Text("叙账")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(t.accentDeep.opacity(0.72))
+        }
+    }
+
+    private var weeklyChartPanel: some View {
+        HStack(spacing: 18) {
+            weeklyBarChart
+                .frame(maxWidth: .infinity)
+            weeklyDonutLegend
+                .frame(width: 118)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .frame(height: 88)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.48))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(t.panelBorder.opacity(0.74), lineWidth: 1)
+        )
+    }
+
+    private var weeklyBarChart: some View {
+        let maxValue = max(dailyTrend.map(\.1).max() ?? 0, 1)
+        return ZStack(alignment: .bottomLeading) {
+            VStack(spacing: 13) {
+                ForEach(0..<4, id: \.self) { _ in
+                    Rectangle()
+                        .fill(t.panelBorder.opacity(0.42))
+                        .frame(height: 1)
+                }
+            }
+            .padding(.bottom, 16)
+
+            HStack(alignment: .bottom, spacing: 8) {
+                ForEach(Array(dailyTrend.prefix(7).enumerated()), id: \.offset) { _, point in
+                    VStack(spacing: 5) {
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [t.accent.opacity(0.86), t.accentDeep.opacity(0.72)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .frame(width: 11, height: max(8, CGFloat(point.1 / maxValue) * 40))
+                        Text(shortWeekday(point.0))
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(t.textMuted.opacity(0.76))
+                            .frame(width: 14)
+                    }
+                }
+            }
+        }
+    }
+
+    private var weeklyDonutLegend: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .stroke(t.panelBorder.opacity(0.55), lineWidth: 13)
+                Circle()
+                    .trim(from: 0, to: min(max(topCategoryRatio, 0.12), 0.92))
+                    .stroke(t.accentDeep.opacity(0.74), style: StrokeStyle(lineWidth: 13, lineCap: .butt))
+                    .rotationEffect(.degrees(-90))
+                Circle()
+                    .trim(from: 0, to: 0.18)
+                    .stroke(Color(hex: "f1cf89").opacity(0.88), style: StrokeStyle(lineWidth: 13, lineCap: .butt))
+                    .rotationEffect(.degrees(184))
+                Circle()
+                    .trim(from: 0, to: 0.12)
+                    .stroke(Color(hex: "eda76f").opacity(0.82), style: StrokeStyle(lineWidth: 13, lineCap: .butt))
+                    .rotationEffect(.degrees(254))
+            }
+            .frame(width: 54, height: 54)
+
+            VStack(alignment: .leading, spacing: 5) {
+                legendRow(color: t.accentDeep.opacity(0.78), text: topCategory)
+                legendRow(color: t.accent.opacity(0.70), text: "小购买")
+                legendRow(color: Color(hex: "f1cf89"), text: "咖啡")
+                legendRow(color: Color(hex: "eda76f"), text: "其他")
+            }
+        }
+    }
+
+    private func legendRow(color: Color, text: String) -> some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(color)
+                .frame(width: 7, height: 7)
+            Text(text)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(t.textMain.opacity(0.84))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+    }
+
+    private var weeklyMetricRow: some View {
+        HStack(spacing: 14) {
+            metricSparkline(icon: "bus", value: "\(recordCount)次", fill: t.accentDeep.opacity(0.18))
+            Divider()
+                .frame(height: 34)
+                .overlay(t.panelBorder.opacity(0.70))
+            metricSparkline(icon: "calendar", value: "\(activeRecordDays)天", fill: Color(hex: "dce9df").opacity(0.60))
+        }
+    }
+
+    private func metricSparkline(icon: String, value: String, fill: Color) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 5) {
+                Text(icon == "bus" ? "🚌" : "🗓️")
+                    .font(.system(size: 14))
+                Text(value)
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(t.textMain)
+            }
+            sparkline(fill: fill)
+                .frame(height: 18)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func sparkline(fill: Color) -> some View {
+        ZStack(alignment: .bottom) {
+            Path { path in
+                path.move(to: CGPoint(x: 0, y: 16))
+                path.addCurve(to: CGPoint(x: 54, y: 11), control1: CGPoint(x: 18, y: 8), control2: CGPoint(x: 34, y: 20))
+                path.addCurve(to: CGPoint(x: 104, y: 10), control1: CGPoint(x: 72, y: 0), control2: CGPoint(x: 82, y: 25))
+            }
+            .stroke(t.accentDeep.opacity(0.62), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+
+            LinearGradient(
+                colors: [fill, Color.clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+    }
+
+    private var activeRecordDays: Int {
+        max(1, dailyTrend.filter { $0.1 > 0 }.count)
+    }
+
+    private func shortWeekday(_ raw: String) -> String {
+        if raw.contains("一") { return "一" }
+        if raw.contains("二") { return "二" }
+        if raw.contains("三") { return "三" }
+        if raw.contains("四") { return "四" }
+        if raw.contains("五") { return "五" }
+        if raw.contains("六") { return "六" }
+        if raw.contains("日") || raw.contains("天") { return "日" }
+        return String(raw.suffix(1))
     }
 
     private var paperStack: some View {
@@ -2069,35 +2230,50 @@ struct WeeklyShareCardView: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(t.accentDeep.opacity(0.48))
         }
-        .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
     }
 
     private var shareTags: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            ForEach(Array(tagRows.enumerated()), id: \.offset) { _, row in
-                HStack(spacing: 8) {
-                    ForEach(row, id: \.self) { tag in
-                        Text(tag)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(t.accentDeep.opacity(0.72))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.78)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(Color.white.opacity(0.34))
-                            )
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .stroke(t.accent.opacity(0.20), lineWidth: 0.8)
-                            )
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(tagRows.enumerated()), id: \.offset) { rowIndex, row in
+                HStack(spacing: 7) {
+                    ForEach(Array(row.enumerated()), id: \.element) { columnIndex, tag in
+                        shareTagPill(tag, row: rowIndex, column: columnIndex)
                     }
                 }
+                .offset(x: rowIndex == 0 ? 0 : 6, y: rowIndex == 0 ? 0 : -1)
             }
         }
-        .rotationEffect(.degrees(-3.5))
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func shareTagPill(_ tag: String, row: Int, column: Int) -> some View {
+        Text(tag)
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .foregroundStyle(t.accentDeep.opacity(0.72))
+            .lineLimit(1)
+            .minimumScaleFactor(0.78)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.38))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(t.accent.opacity(0.24), lineWidth: 0.8)
+            )
+            .rotationEffect(.degrees(tagAngle(row: row, column: column)))
+            .offset(y: (row + column).isMultiple(of: 2) ? 0 : 1)
+    }
+
+    private func tagAngle(row: Int, column: Int) -> Double {
+        let angles: [[Double]] = [
+            [-3.2, 2.0],
+            [2.6, -2.2]
+        ]
+        guard row < angles.count, column < angles[row].count else { return 0 }
+        return angles[row][column]
     }
 
     private var tagRows: [[String]] {

@@ -464,6 +464,7 @@ private struct OCRDraftRow: View {
     let onDelete: (UUID) -> Void
 
     @State private var amountText: String
+    @State private var isEditingAmount = false
 
     init(
         item: HomeItem,
@@ -492,11 +493,19 @@ private struct OCRDraftRow: View {
         VStack(alignment: .leading, spacing: 12) {
             headerRow
             categoryRow
-            amountEditor
+            if isEditingAmount {
+                amountPad
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
         .padding(14)
         .background(rowBackground)
         .overlay(rowBorder)
+        .animation(.easeInOut(duration: 0.16), value: isEditingAmount)
+        .onChange(of: item.amount) { _, newValue in
+            guard !isEditingAmount else { return }
+            amountText = amountInputText(newValue)
+        }
     }
 
     private var rowBackground: some View {
@@ -544,10 +553,36 @@ private struct OCRDraftRow: View {
     }
 
     private var amountDisplay: some View {
-        Text(item.amount.formatted(.cny.precision(.fractionLength(2))))
-            .font(.system(size: 18, weight: .bold))
-            .foregroundStyle(AppColors.text)
-            .minimumScaleFactor(0.75)
+        Button {
+            amountText = amountInputText(item.amount)
+            isEditingAmount = true
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text("¥")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.subtext.opacity(0.78))
+                Text(amountText.isEmpty ? "0.00" : amountText)
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.text)
+                    .minimumScaleFactor(0.75)
+                if isEditingAmount {
+                    amountCursor
+                        .offset(y: 4)
+                }
+            }
+            .padding(.horizontal, isEditingAmount ? 8 : 0)
+            .padding(.vertical, isEditingAmount ? 5 : 0)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isEditingAmount ? Color.white.opacity(0.78) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(isEditingAmount ? AppColors.accent.opacity(0.26) : Color.clear, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("修改金额")
     }
 
     private var categoryRow: some View {
@@ -583,29 +618,156 @@ private struct OCRDraftRow: View {
         .buttonStyle(.plain)
     }
 
-    private var amountEditor: some View {
-        TextField("金额", text: $amountText)
-            .keyboardType(.decimalPad)
-            .multilineTextAlignment(.trailing)
-            .font(.system(size: 14, weight: .bold))
-            .foregroundStyle(AppColors.text)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.white.opacity(0.72))
-            )
-            .onSubmit { commitAmount() }
-            .onChange(of: amountText) { _, newValue in
-                guard let value = Double(newValue.replacingOccurrences(of: ",", with: "")), value > 0 else { return }
-                onAmountChange(item.id, value)
+    private var amountPad: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                amountQuickButton(".00") { applyDot00() }
+                amountQuickButton("+10") { applyAmountDelta(10) }
+                amountQuickButton("+50") { applyAmountDelta(50) }
+                amountCloseButton
             }
+
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3),
+                spacing: 8
+            ) {
+                ForEach(["1", "2", "3", "4", "5", "6", "7", "8", "9"], id: \.self) { key in
+                    amountPadButton(key) { appendAmountKey(key) }
+                }
+                amountPadButton(".") { appendAmountKey(".") }
+                amountPadButton("0") { appendAmountKey("0") }
+                amountPadButton("⌫", isAccent: true) { deleteAmountKey() }
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(red: 0.94, green: 0.95, blue: 0.96).opacity(0.86))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.72), lineWidth: 1)
+        )
+    }
+
+    private var amountCloseButton: some View {
+        Button {
+            commitAmount()
+            isEditingAmount = false
+        } label: {
+            Image(systemName: "keyboard.chevron.compact.down")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(AppColors.accent)
+                .frame(width: 42, height: 32)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.82))
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("收起键盘")
+    }
+
+    private func amountQuickButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppColors.text.opacity(0.86))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.82))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func amountPadButton(_ title: String, isAccent: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .foregroundStyle(isAccent ? AppColors.accent : AppColors.text.opacity(0.92))
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(Color.white.opacity(isAccent ? 0.74 : 0.94))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .stroke(isAccent ? AppColors.accent.opacity(0.22) : Color.white.opacity(0.7), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var amountCursor: some View {
+        TimelineView(.periodic(from: .now, by: 0.56)) { context in
+            let tick = Int(context.date.timeIntervalSinceReferenceDate / 0.56)
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(AppColors.accent.opacity(0.72))
+                .frame(width: 2, height: 22)
+                .opacity(tick.isMultiple(of: 2) ? 1 : 0.16)
+        }
+        .frame(width: 5, height: 24)
     }
 
     private func commitAmount() {
         guard let value = Double(amountText.replacingOccurrences(of: ",", with: "")), value > 0 else { return }
         onAmountChange(item.id, value)
+    }
+
+    private func appendAmountKey(_ key: String) {
+        var value = amountText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if key == "." {
+            guard !value.contains(".") else { return }
+            amountText = value.isEmpty ? "0." : value + "."
+            commitAmount()
+            return
+        }
+
+        if value == "0" {
+            value = ""
+        }
+        let next = value + key
+        guard isValidAmountDraft(next) else { return }
+        amountText = next
+        commitAmount()
+    }
+
+    private func deleteAmountKey() {
+        guard !amountText.isEmpty else { return }
+        amountText.removeLast()
+        commitAmount()
+    }
+
+    private func applyAmountDelta(_ delta: Double) {
+        let base = Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
+        amountText = amountInputText(max(0, base + delta))
+        commitAmount()
+    }
+
+    private func applyDot00() {
+        let base = Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
+        amountText = String(format: "%.2f", base)
+        commitAmount()
+    }
+
+    private func isValidAmountDraft(_ value: String) -> Bool {
+        guard value.count <= 9 else { return false }
+        if let dotIndex = value.firstIndex(of: ".") {
+            let decimals = value[value.index(after: dotIndex)...]
+            return decimals.count <= 2
+        }
+        return true
+    }
+
+    private func amountInputText(_ amount: Double) -> String {
+        if amount.rounded() == amount {
+            return String(format: "%.0f", amount)
+        }
+        return String(format: "%.2f", amount)
     }
 }
 

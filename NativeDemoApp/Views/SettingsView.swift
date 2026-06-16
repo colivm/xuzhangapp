@@ -204,78 +204,120 @@ struct SettingsView: View {
 
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 26)
-                .padding(.top, 26)
-                .padding(.bottom, 54)
+                .padding(.horizontal, 28)
+                .padding(.top, 28)
+                .padding(.bottom, 42)
             }
         }
         .buttonStyle(.plain)
-        .frame(height: 170)
+        .frame(height: 150)
     }
 
     private var narrativeSealAvatar: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(settingsCream.opacity(0.74))
-                .frame(width: 56, height: 56)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(settingsEnvelopeIvory.opacity(0.92))
+                .frame(width: 48, height: 48)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(settingsInkAccent.opacity(0.28), lineWidth: 1)
                 )
             Text("叙")
-                .font(.system(size: 25, weight: .bold, design: .serif))
+                .font(.system(size: 24, weight: .bold, design: .serif))
                 .foregroundStyle(settingsInkAccent.opacity(0.82))
         }
     }
 
     private var settingsEnvelopeBackground: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(settingsCream.opacity(0.88))
+        GeometryReader { proxy in
+            let size = proxy.size
+            let width = size.width
+            let height = size.height
+            let centerX = width * 0.5
+            let flapDrop = height * 0.68
+            let flapSideY = height * 0.39
 
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.52),
-                    settingsMint.opacity(0.36),
-                    settingsSage.opacity(0.26)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            ZStack {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(settingsEnvelopeIvory)
 
-            Path { path in
-                path.move(to: CGPoint(x: 0, y: 52))
-                path.addLine(to: CGPoint(x: 190, y: 118))
-                path.addLine(to: CGPoint(x: 380, y: 52))
-                path.addLine(to: CGPoint(x: 380, y: 170))
-                path.addLine(to: CGPoint(x: 0, y: 170))
-                path.closeSubpath()
-            }
-            .fill(
                 LinearGradient(
-                    colors: [settingsCream.opacity(0.58), settingsSage.opacity(0.25)],
-                    startPoint: .leading,
-                    endPoint: .trailing
+                    colors: [
+                        Color.white.opacity(0.46),
+                        settingsEnvelopeWarm.opacity(0.52),
+                        settingsEnvelopeMint.opacity(0.42)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
                 )
-            )
-            .blur(radius: 0.1)
 
-            Path { path in
-                path.move(to: CGPoint(x: 0, y: 0))
-                path.addLine(to: CGPoint(x: 380, y: 0))
-                path.addQuadCurve(to: CGPoint(x: 190, y: 92), control: CGPoint(x: 356, y: 108))
-                path.addQuadCurve(to: CGPoint(x: 0, y: 0), control: CGPoint(x: 24, y: 108))
-                path.closeSubpath()
+                Circle()
+                    .fill(settingsEnvelopeDeepSage.opacity(0.34))
+                    .frame(width: width * 0.58, height: width * 0.58)
+                    .blur(radius: 24)
+                    .offset(x: width * 0.36, y: height * 0.28)
+                    .allowsHitTesting(false)
+
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: flapSideY))
+                    path.addLine(to: CGPoint(x: centerX, y: flapDrop))
+                    path.addLine(to: CGPoint(x: width, y: flapSideY))
+                    path.addLine(to: CGPoint(x: width, y: height))
+                    path.addLine(to: CGPoint(x: 0, y: height))
+                    path.closeSubpath()
+                }
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            settingsEnvelopeWarm.opacity(0.72),
+                            Color.white.opacity(0.50),
+                            settingsEnvelopeSage.opacity(0.42)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: height))
+                    path.addLine(to: CGPoint(x: centerX, y: flapDrop))
+                    path.addLine(to: CGPoint(x: width, y: height))
+                }
+                .stroke(Color.white.opacity(0.44), lineWidth: 1)
+
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: 0))
+                    path.addLine(to: CGPoint(x: width, y: 0))
+                    path.addQuadCurve(
+                        to: CGPoint(x: centerX, y: flapDrop * 0.86),
+                        control: CGPoint(x: width * 0.94, y: height * 0.74)
+                    )
+                    path.addQuadCurve(
+                        to: CGPoint(x: 0, y: 0),
+                        control: CGPoint(x: width * 0.06, y: height * 0.74)
+                    )
+                    path.closeSubpath()
+                }
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.68),
+                            settingsEnvelopeIvory.opacity(0.80),
+                            settingsEnvelopeMint.opacity(0.44)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: Color.black.opacity(0.10), radius: 15, x: 0, y: 8)
+
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .stroke(Color.white.opacity(0.66), lineWidth: 1)
             }
-            .fill(Color.white.opacity(0.54))
-            .shadow(color: Color.black.opacity(0.07), radius: 12, x: 0, y: 8)
-
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .stroke(Color.white.opacity(0.62), lineWidth: 1)
         }
         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-        .shadow(color: settingsSage.opacity(0.30), radius: 18, x: 0, y: 10)
-        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .shadow(color: settingsEnvelopeDeepSage.opacity(0.28), radius: 18, x: 0, y: 10)
+        .shadow(color: Color.black.opacity(0.06), radius: 5, x: 0, y: 2)
     }
 
     private var settingsFeatureGrid: some View {
@@ -534,6 +576,26 @@ struct SettingsView: View {
 
     private var settingsCream: Color {
         Color(red: 249/255, green: 247/255, blue: 241/255)
+    }
+
+    private var settingsEnvelopeIvory: Color {
+        Color(red: 248/255, green: 244/255, blue: 232/255)
+    }
+
+    private var settingsEnvelopeWarm: Color {
+        Color(red: 242/255, green: 233/255, blue: 207/255)
+    }
+
+    private var settingsEnvelopeMint: Color {
+        Color(red: 224/255, green: 238/255, blue: 225/255)
+    }
+
+    private var settingsEnvelopeSage: Color {
+        Color(red: 169/255, green: 190/255, blue: 171/255)
+    }
+
+    private var settingsEnvelopeDeepSage: Color {
+        Color(red: 98/255, green: 132/255, blue: 112/255)
     }
 
     @ViewBuilder

@@ -52,7 +52,6 @@
 		C30000030000000000000001 /* NarrativeCopyResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000040000000000000001 /* NarrativeCopyResolver.swift */; };
 		D21300010000000000000001 /* RecordPrefillService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21300020000000000000001 /* RecordPrefillService.swift */; };
 		D21400010000000000000001 /* RecordDraftResolutionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21400020000000000000001 /* RecordDraftResolutionService.swift */; };
-		D21500010000000000000001 /* RecordSemanticLexicon.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21500020000000000000001 /* RecordSemanticLexicon.swift */; };
 		D21600010000000000000001 /* LifeSceneSemanticService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21600020000000000000001 /* LifeSceneSemanticService.swift */; };
 		E0A000010000000000000001 /* EchoAnchorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0A000020000000000000001 /* EchoAnchorService.swift */; };
 		E0A000030000000000000001 /* UserContentRiskService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0A000040000000000000001 /* UserContentRiskService.swift */; };
@@ -112,7 +111,6 @@
 		C30000040000000000000001 /* NarrativeCopyResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NarrativeCopyResolver.swift; sourceTree = "<group>"; };
 		D21300020000000000000001 /* RecordPrefillService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordPrefillService.swift; sourceTree = "<group>"; };
 		D21400020000000000000001 /* RecordDraftResolutionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordDraftResolutionService.swift; sourceTree = "<group>"; };
-		D21500020000000000000001 /* RecordSemanticLexicon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordSemanticLexicon.swift; sourceTree = "<group>"; };
 		D21600020000000000000001 /* LifeSceneSemanticService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeSceneSemanticService.swift; sourceTree = "<group>"; };
 		E0A000020000000000000001 /* EchoAnchorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoAnchorService.swift; sourceTree = "<group>"; };
 		E0A000040000000000000001 /* UserContentRiskService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserContentRiskService.swift; sourceTree = "<group>"; };
@@ -196,7 +194,6 @@
 				A100008A0000000000000001 /* CategoryRecommendService.swift */,
 				D21300020000000000000001 /* RecordPrefillService.swift */,
 				D21400020000000000000001 /* RecordDraftResolutionService.swift */,
-				D21500020000000000000001 /* RecordSemanticLexicon.swift */,
 				D21600020000000000000001 /* LifeSceneSemanticService.swift */,
 				E0A000020000000000000001 /* EchoAnchorService.swift */,
 				E0A000040000000000000001 /* UserContentRiskService.swift */,
@@ -383,7 +380,6 @@
 				C30000030000000000000001 /* NarrativeCopyResolver.swift in Sources */,
 				D21300010000000000000001 /* RecordPrefillService.swift in Sources */,
 				D21400010000000000000001 /* RecordDraftResolutionService.swift in Sources */,
-				D21500010000000000000001 /* RecordSemanticLexicon.swift in Sources */,
 				D21600010000000000000001 /* LifeSceneSemanticService.swift in Sources */,
 				E0A000010000000000000001 /* EchoAnchorService.swift in Sources */,
 				E0A000030000000000000001 /* UserContentRiskService.swift in Sources */,

@@ -1,6 +1,7 @@
 import Foundation
 import os.log
 
+// Central semantic lexicon for record titles, category hints, and OCR keyword cues.
 struct RecordSemanticKeywordRule: Decodable {
     let category: HomeItem.Category
     let score: Double

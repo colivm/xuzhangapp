@@ -535,11 +535,12 @@ struct HomeView: View {
             showPlayback = true
             return
         }
-        guard dailyQuotaStore.canPlayTodayPlayback(isMember: homeViewModel.hasMemberAccess) else {
+        let isMember = settingsViewModel.settings.hasMemberAccess
+        guard dailyQuotaStore.canPlayTodayPlayback(isMember: isMember) else {
             todayPlaybackQuotaMessage = "今日免费回放次数已用完（1/1）。会员可无限回看今日生活回放。"
             return
         }
-        dailyQuotaStore.markTodayPlaybackStarted(isMember: homeViewModel.hasMemberAccess)
+        dailyQuotaStore.markTodayPlaybackStarted(isMember: isMember)
         showPlayback = true
     }
 
@@ -699,27 +700,51 @@ struct HomeView: View {
 
                 ScrollViewReader { proxy in
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 18) {
+                            HStack {
+                                Button {
+                                    todayInlineEditingItemID = nil
+                                    todaySwipedItemID = nil
+                                    showTodayRecordsSheet = false
+                                } label: {
+                                    Text("关闭")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(AppColors.text.opacity(0.86))
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .background(
+                                            Capsule(style: .continuous)
+                                                .fill(Color.white.opacity(0.78))
+                                        )
+                                        .overlay(
+                                            Capsule(style: .continuous)
+                                                .stroke(Color.white.opacity(0.68), lineWidth: 1)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+
+                                Spacer()
+                            }
+
                             Text("今天留下的痕迹")
-                                .font(.system(size: 22, weight: .bold))
+                                .font(.system(size: 27, weight: .bold))
                                 .foregroundStyle(AppColors.text)
+                                .padding(.top, 8)
 
                             Text(todayRecordsMetaText)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(AppColors.subtext)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(AppColors.text.opacity(0.86))
 
-                            VStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 12) {
                                 ForEach(Array(homeViewModel.todayItems.enumerated()), id: \.element.id) { index, item in
                                     todayRecordInlineRow(item: item, isFirst: index == 0)
                                 }
                             }
-                            .padding(14)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(todayRecordListBackground)
-                            .overlay(todayRecordListBorder)
                         }
-                        .padding(18)
-                        .padding(.bottom, 28)
+                        .padding(.horizontal, 18)
+                        .padding(.top, 18)
+                        .padding(.bottom, 92)
                     }
                     .scrollIndicators(.hidden)
                     .onChange(of: todayInlineEditingItemID) { _, itemID in
@@ -728,14 +753,8 @@ struct HomeView: View {
                     }
                 }
             }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") {
-                        todayInlineEditingItemID = nil
-                        todaySwipedItemID = nil
-                        showTodayRecordsSheet = false
-                    }
-                }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                todayRecordsFooterSummary
             }
         }
         .presentationDetents([.medium, .large])
@@ -763,33 +782,16 @@ struct HomeView: View {
         )
         .overlay(
             LinearGradient(
-                colors: [Color.white.opacity(0.46), Color.white.opacity(0.10), Color.clear],
+                colors: [Color.white.opacity(0.52), Color.white.opacity(0.14), Color.clear],
                 startPoint: .top,
                 endPoint: .bottom
             )
         )
-    }
-
-    private var todayRecordListBackground: some View {
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(Color(red: 247/255, green: 251/255, blue: 247/255).opacity(0.74))
-            .overlay(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.42),
-                        Color(red: 216/255, green: 235/255, blue: 224/255).opacity(0.22),
-                        Color.white.opacity(0.18)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .shadow(color: Color(red: 76/255, green: 103/255, blue: 88/255).opacity(0.10), radius: 18, x: 0, y: 10)
-    }
-
-    private var todayRecordListBorder: some View {
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .stroke(Color.white.opacity(0.58), lineWidth: 1)
+        .overlay(alignment: .topTrailing) {
+            todayRecordsBackgroundMark
+                .padding(.top, 88)
+                .padding(.trailing, 6)
+        }
     }
 
     private func todayRecordInlineRow(item: HomeItem, isFirst: Bool) -> some View {
@@ -828,9 +830,16 @@ struct HomeView: View {
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, isEditing ? 14 : 12)
-            .background(todayRecordRowBackground(isEditing: isEditing))
+            .padding(.vertical, isEditing ? 14 : 16)
+            .background(todayRecordRowBackground(item: item, isEditing: isEditing))
             .overlay(todayRecordRowBorder(isEditing: isEditing))
+            .overlay(alignment: .trailing) {
+                if !isEditing {
+                    todayRecordWatermark(for: item)
+                        .padding(.trailing, 10)
+                        .allowsHitTesting(false)
+                }
+            }
             .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
             .offset(x: isSwiped ? -76 : 0)
             .onTapGesture {
@@ -857,24 +866,19 @@ struct HomeView: View {
 
     private func todayRecordSummary(_ item: HomeItem, isEditing: Bool, isFirst: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            if !isFirst {
-                PaperCreaseDivider()
-                    .opacity(isEditing ? 0 : 1)
-            }
-
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(item.displayTitle)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(AppColors.text)
                     .lineLimit(2)
-                    .opacity(isEditing ? 0.28 : 1)
+                    .opacity(isEditing ? 0.50 : 1)
 
                 Spacer(minLength: 8)
 
                 Text(item.amount.formatted(.cny))
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.text)
-                    .opacity(isEditing ? 0.24 : 1)
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 44/255, green: 77/255, blue: 82/255))
+                    .opacity(isEditing ? 0.46 : 1)
             }
 
             if shouldShowHomeEmotion(for: item) {
@@ -886,13 +890,19 @@ struct HomeView: View {
                     .padding(.vertical, 3)
                     .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.08)))
                     .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.18), lineWidth: 0.7))
-                    .opacity(isEditing ? 0.35 : 1)
+                    .opacity(isEditing ? 0.52 : 1)
             }
 
             HStack(spacing: 6) {
                 Text(item.category.rawValue)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppColors.subtext.opacity(0.82))
+                    .foregroundStyle(todayRecordCategoryAccent(for: item).opacity(0.88))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(todayRecordCategoryAccent(for: item).opacity(0.16))
+                    )
                 Text("·").foregroundStyle(AppColors.subtext)
                 Text(item.createdAt.zhBillDateTime)
                     .font(.system(size: 12))
@@ -910,22 +920,133 @@ struct HomeView: View {
         return tag != HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
     }
 
-    private func todayRecordRowBackground(isEditing: Bool) -> some View {
+    private func todayRecordRowBackground(item: HomeItem, isEditing: Bool) -> some View {
         RoundedRectangle(cornerRadius: 19, style: .continuous)
             .fill(
                 LinearGradient(
                     colors: isEditing
-                    ? [Color(red: 93/255, green: 132/255, blue: 112/255).opacity(0.13), Color.white.opacity(0.58), Color(red: 212/255, green: 230/255, blue: 220/255).opacity(0.32)]
-                    : [Color.white.opacity(0.56), Color(red: 238/255, green: 246/255, blue: 240/255).opacity(0.40)],
+                    ? [
+                        Color.white.opacity(0.88),
+                        Color(red: 229/255, green: 242/255, blue: 234/255).opacity(0.80),
+                        Color(red: 204/255, green: 228/255, blue: 216/255).opacity(0.54)
+                    ]
+                    : [
+                        Color.white.opacity(0.78),
+                        todayRecordCategoryAccent(for: item).opacity(0.08),
+                        Color.white.opacity(0.66)
+                    ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
+            )
+            .shadow(
+                color: Color(red: 76/255, green: 103/255, blue: 88/255).opacity(isEditing ? 0.18 : 0.10),
+                radius: isEditing ? 18 : 12,
+                x: 0,
+                y: isEditing ? 10 : 6
             )
     }
 
     private func todayRecordRowBorder(isEditing: Bool) -> some View {
         RoundedRectangle(cornerRadius: 19, style: .continuous)
-            .stroke(isEditing ? Color(red: 93/255, green: 132/255, blue: 112/255).opacity(0.30) : Color.white.opacity(0.42), lineWidth: 1)
+            .stroke(
+                isEditing
+                ? Color(red: 104/255, green: 157/255, blue: 136/255).opacity(0.54)
+                : Color.white.opacity(0.72),
+                lineWidth: isEditing ? 1.3 : 1
+            )
+    }
+
+    private var todayRecordsFooterSummary: some View {
+        Text(todayRecordsMetaText)
+            .font(.system(size: 17, weight: .bold))
+            .foregroundStyle(AppColors.text.opacity(0.94))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 18)
+            .padding(.top, 12)
+            .padding(.bottom, 12)
+            .background(
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .overlay(Color(red: 204/255, green: 231/255, blue: 221/255).opacity(0.44))
+            )
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(Color.white.opacity(0.46))
+                    .frame(height: 1)
+            }
+    }
+
+    private var todayRecordsBackgroundMark: some View {
+        ZStack {
+            Image(systemName: "leaf")
+                .font(.system(size: 96, weight: .ultraLight))
+                .rotationEffect(.degrees(-16))
+                .offset(x: 62, y: -14)
+            Image(systemName: "circle.hexagongrid")
+                .font(.system(size: 76, weight: .ultraLight))
+                .offset(x: -10, y: 20)
+        }
+        .foregroundStyle(Color(red: 82/255, green: 128/255, blue: 105/255).opacity(0.10))
+        .frame(width: 180, height: 132)
+        .allowsHitTesting(false)
+    }
+
+    private func todayRecordWatermark(for item: HomeItem) -> some View {
+        let accent = todayRecordCategoryAccent(for: item)
+        return Image(systemName: todayRecordWatermarkSymbol(for: item.category))
+            .font(.system(size: 64, weight: .ultraLight))
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(accent.opacity(0.22))
+            .frame(width: 124, height: 74, alignment: .trailing)
+            .offset(x: 8, y: 10)
+            .clipped()
+    }
+
+    private func todayRecordWatermarkSymbol(for category: HomeItem.Category) -> String {
+        switch category {
+        case .dining:
+            return "fork.knife"
+        case .transport:
+            return "tram"
+        case .shopping:
+            return "bag"
+        case .daily:
+            return "toothbrush"
+        case .home:
+            return "bed.double"
+        case .lodging:
+            return "house"
+        case .health:
+            return "cross.case"
+        case .entertainment:
+            return "sparkles"
+        case .social:
+            return "gift"
+        case .other:
+            return "leaf"
+        }
+    }
+
+    private func todayRecordCategoryAccent(for item: HomeItem) -> Color {
+        switch item.category {
+        case .dining:
+            return Color(red: 128/255, green: 166/255, blue: 137/255)
+        case .transport, .daily:
+            return Color(red: 117/255, green: 149/255, blue: 181/255)
+        case .shopping, .social:
+            return Color(red: 186/255, green: 151/255, blue: 69/255)
+        case .home, .lodging:
+            return Color(red: 139/255, green: 159/255, blue: 168/255)
+        case .health:
+            return Color(red: 132/255, green: 166/255, blue: 151/255)
+        case .entertainment:
+            return Color(red: 154/255, green: 143/255, blue: 185/255)
+        case .other:
+            return AppColors.accent
+        }
     }
 
     private var todayEditSpring: Animation {
@@ -1050,6 +1171,7 @@ private extension View {
 
 struct BillPlaybackSheet: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
+    @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @State private var activeIndex = -1
     @State private var isPlaying = false
     @State private var playbackDone = false
@@ -1109,7 +1231,7 @@ struct BillPlaybackSheet: View {
                 if self.isPlaying {
                     self.playbackDone = true
                     self.isPlaying = false
-                    if !homeViewModel.hasMemberAccess && nudgeService.canShow(scene: "playback_complete") {
+                    if !settingsViewModel.settings.hasMemberAccess && nudgeService.canShow(scene: "playback_complete") {
                         self.showMemberNudge = true
                         nudgeService.markShown(scene: "playback_complete")
                     }
