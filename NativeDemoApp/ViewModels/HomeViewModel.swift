@@ -124,6 +124,8 @@ final class HomeViewModel: ObservableObject {
     private static let routeGuidanceHandledDefaultsKey = "route_guidance_handled_v1"
     private var emittedRouteGuidanceKeys: Set<String> = []
     private var recordPrefillAmount: Double?
+    private var lastAutoRecommendedCategory: HomeItem.Category?
+    private var pendingCategoryCorrectionFrom: HomeItem.Category?
 
     init() {
         items = LocalStore.loadHomeItems().sorted { $0.createdAt > $1.createdAt }
@@ -159,9 +161,12 @@ final class HomeViewModel: ObservableObject {
         recordInputMessage = nil
         let trimmed = noteResult.value
         let titleWasIntentionallyBlank = preserveEmptyTitle && trimmed.isEmpty
+        let prefillTitle = compatiblePrefillTitleForSave(category: selectedCategory)
         let baseTitle: String
         if titleWasIntentionallyBlank {
             baseTitle = RecordSemanticLexicon.emptyNoteTitle
+        } else if trimmed.isEmpty, let prefillTitle {
+            baseTitle = prefillTitle
         } else {
             baseTitle = trimmed.isEmpty ? selectedCategory.defaultRecordTitle : trimmed
         }
@@ -194,7 +199,9 @@ final class HomeViewModel: ObservableObject {
             updatedAt: Date(),
             emotionTag: emotionTag,
             merchantBrandId: resolution.merchantBrandId,
-            userEditedTitle: userEditedTitle && resolution.title == baseTitle ? true : nil
+            userEditedTitle: userEditedTitle && resolution.title == baseTitle ? true : nil,
+            userEditedCategory: categoryLockedByUser ? true : nil,
+            categoryCorrectionFrom: categoryLockedByUser ? pendingCategoryCorrectionFrom : nil
         )
         items.insert(newItem, at: 0)
         resetInput()
@@ -235,6 +242,21 @@ final class HomeViewModel: ObservableObject {
             return "换乘通勤完成"
         }
         return "城市线路走完一段"
+    }
+
+    private func compatiblePrefillTitleForSave(category: HomeItem.Category) -> String? {
+        guard let result = recordPrefillResult,
+              result.category == nil || result.category == category,
+              let title = result.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty,
+              RecordSemanticLexicon.canDisplayPrefillTitle(
+                title,
+                category: category,
+                source: result.source
+              ) else {
+            return nil
+        }
+        return title
     }
 
     private func recentTransportNeighbor(before date: Date) -> HomeItem? {
@@ -301,7 +323,8 @@ final class HomeViewModel: ObservableObject {
             return []
         }
         do {
-            let drafts = try await ocrService.recognizeReceipt(from: imageData)
+            let rawDrafts = try await ocrService.recognizeReceipt(from: imageData)
+            let drafts = rawDrafts.map { reviewedOCRDraft($0) }
             let count = drafts.count
             let total = drafts.reduce(0) { $0 + $1.amount }
             let message = "识别到 \(count) 条，合计 \(formatCurrency(total))。请确认后导入。"
@@ -327,7 +350,8 @@ final class HomeViewModel: ObservableObject {
 
         let now = Date()
         let batchId = UUID().uuidString
-        let importedItems = validDrafts.map { draft in
+        let importedItems = validDrafts.map { rawDraft in
+            let draft = reviewedOCRDraft(rawDraft)
             let resolution = RecordDraftResolutionService.resolve(
                 RecordDraftResolutionInput(
                     rawTitle: draft.title,
@@ -335,7 +359,7 @@ final class HomeViewModel: ObservableObject {
                     amount: draft.amount,
                     date: draft.date,
                     merchantBrandId: draft.merchantBrandId,
-                    categoryLockedByUser: false,
+                    categoryLockedByUser: draft.userEditedCategory == true,
                     userEditedTitle: false,
                     source: "ocr"
                 )
@@ -353,7 +377,9 @@ final class HomeViewModel: ObservableObject {
                     batchId: batchId,
                     importedAt: now,
                     status: .pending
-                )
+                ),
+                userEditedCategory: draft.userEditedCategory == true ? true : nil,
+                categoryCorrectionFrom: draft.categoryCorrectionFrom
             )
         }
         items.insert(contentsOf: importedItems, at: 0)
@@ -411,8 +437,38 @@ final class HomeViewModel: ObservableObject {
         MerchantBrandCatalog.definition(for: brandId)?.category
     }
 
+    private func reviewedOCRDraft(_ draft: OCRReceiptDraft) -> OCRReceiptDraft {
+        var reviewed = draft
+        let brand = MerchantBrandCatalog.definition(for: draft.merchantBrandId)
+            ?? MerchantBrandCatalog.matchOCRBrand(in: "\(draft.title)\n\(draft.rawText)")
+        if reviewed.merchantBrandId == nil {
+            reviewed.merchantBrandId = brand?.id
+        }
+        guard reviewed.userEditedCategory != true else { return reviewed }
+
+        if let brand {
+            reviewed.category = brand.category
+            return reviewed
+        }
+
+        let semanticCandidate = HomeItem(
+            title: "\(draft.title)\n\(draft.rawText)",
+            amount: draft.amount,
+            category: draft.category,
+            source: .ocr,
+            createdAt: draft.date,
+            merchantBrandId: reviewed.merchantBrandId
+        )
+        let scene = LifeSceneSemanticService.classify(semanticCandidate)
+        if scene.confidenceTier == .strong {
+            reviewed.category = scene.category
+        }
+        return reviewed
+    }
+
     func updateOCRDraftCategory(id: UUID, category: HomeItem.Category) {
         guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
+        let originalCategory = items[idx].category
         let resolution = RecordDraftResolutionService.resolve(
             RecordDraftResolutionInput(
                 rawTitle: items[idx].title,
@@ -429,6 +485,10 @@ final class HomeViewModel: ObservableObject {
         items[idx].category = resolution.category
         items[idx].emotionTag = resolution.emotionTag
         items[idx].merchantBrandId = resolution.merchantBrandId
+        items[idx].userEditedCategory = true
+        if originalCategory != resolution.category {
+            items[idx].categoryCorrectionFrom = originalCategory
+        }
         items[idx].updatedAt = Date()
         persistItems()
         Task { await syncUpsertToCloud(items[idx]) }
@@ -455,6 +515,7 @@ final class HomeViewModel: ObservableObject {
         items[idx].category = resolution.category
         items[idx].emotionTag = resolution.emotionTag
         items[idx].merchantBrandId = resolution.merchantBrandId
+        items[idx].userEditedCategory = items[idx].userEditedCategory == true ? true : nil
         items[idx].updatedAt = Date()
         persistItems()
         Task { await syncUpsertToCloud(items[idx]) }
@@ -557,6 +618,14 @@ final class HomeViewModel: ObservableObject {
         if resolved.userEditedTitle == true || titleWasEdited {
             resolved.userEditedTitle = true
         }
+        if original.userEditedCategory == true || categoryWasEdited {
+            resolved.userEditedCategory = true
+        }
+        if categoryWasEdited {
+            resolved.categoryCorrectionFrom = original.category
+        } else if original.categoryCorrectionFrom != nil {
+            resolved.categoryCorrectionFrom = original.categoryCorrectionFrom
+        }
         items[idx] = resolved
         persistItems()
         analyticsService.track("record_updated", props: [
@@ -631,34 +700,68 @@ final class HomeViewModel: ObservableObject {
         let totalText = todayExpenseTotal.formatted(.cny)
         let weekText = weekExpenseTotal.formatted(.cny)
         let topCategory = topCategoryLabel(from: records)
+        let todaySceneLine = lifeSceneMemoryLine(from: records, minimumCount: 2)
 
         let title: String
         let subtitle: String
         switch count {
         case 0:
-            title = "今天先记下来"
-            subtitle = "晚上再回头看，这一天会更清楚。"
+            let emptyCopy = emptyTodayStoryCopy()
+            title = emptyCopy.title
+            subtitle = emptyCopy.subtitle
         case 1:
             title = "今天的第一笔记录"
             let emotion = records.first?.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             subtitle = "\(!emotion.isEmpty ? emotion : "这笔生活被记下来了")，这一天刚翻开第一页。"
         case 2:
             title = "今天已记下 2 笔"
-            subtitle = "主要在「\(topCategory)」上，记录变得具体。"
+            subtitle = todaySceneLine ?? "主要在「\(topCategory)」上，记录变得具体。"
         case 3:
             title = "今天记下了 3 笔"
-            subtitle = "合计 \(totalText)，今天的记录已经成形。"
+            subtitle = todaySceneLine ?? "合计 \(totalText)，今天的记录已经成形。"
         default:
             title = "今天记下了 \(count) 笔"
-            subtitle = "「\(topCategory)」居多，今天的记录已经清楚。"
+            subtitle = todaySceneLine ?? "「\(topCategory)」居多，今天的记录已经清楚。"
         }
 
         return TodayStoryNarrative(
             title: title,
             subtitle: subtitle,
-            todayTotalText: "今日合计 \(totalText)",
+            todayTotalText: count == 0 ? "今日还没记录" : "今日合计 \(totalText)",
             weekTotalText: "本周累计 \(weekText)"
         )
+    }
+
+    private func emptyTodayStoryCopy(now: Date = Date()) -> (title: String, subtitle: String) {
+        if let suggestion = frequentRecordAmountSuggestions(at: now).first {
+            return (
+                "今天可能从这一笔开始",
+                "这个时间你常记 \(shortAmountText(suggestion.amount)) · \(suggestion.category.label)，不确定也可以只输金额。"
+            )
+        }
+
+        let weekItems = filteredItems(in: .week).filter { $0.amount > 0 }
+        if let scene = LifeSceneSemanticService.dominantScene(in: weekItems),
+           scene.count >= 2 {
+            return (
+                "今天也先留一笔",
+                "这周「\(LifeSceneSemanticService.displayTheme(for: scene.signal))」出现得多，今天想到哪笔就先放进来。"
+            )
+        }
+
+        let hour = Calendar.current.component(.hour, from: now)
+        switch hour {
+        case 5..<10:
+            return ("早上先留个开头", "早餐、通勤、路上的小花费，有一笔就先记一笔。")
+        case 10..<14:
+            return ("午间先记一下", "饭点和路上的小支出最容易忘，先放一笔也好。")
+        case 17..<21:
+            return ("晚上回头补一笔", "晚饭、回家路上、临时买的东西，都可以先记下来。")
+        case 21...23, 0..<5:
+            return ("今天还有哪笔没放进来？", "睡前补一笔，明天再看今天会清楚一点。")
+        default:
+            return ("今天先记下来", "不用整理得很完整，有一笔就先放进账本。")
+        }
     }
 
     var monthTopCategoryText: String {
@@ -667,6 +770,71 @@ final class HomeViewModel: ObservableObject {
 
     var weekTopCategoryText: String {
         topCategoryLabel(in: .week)
+    }
+
+    var weekLifeThemeText: String {
+        lifeSceneMemoryLine(from: filteredItems(in: .week), minimumCount: 2) ?? ""
+    }
+
+    var quickRecordNudgeText: String {
+        if todayItems.isEmpty {
+            if let suggestion = frequentRecordAmountSuggestions(at: Date()).first {
+                return "常记 \(shortAmountText(suggestion.amount)) · \(suggestion.category.label)"
+            }
+            if let scene = LifeSceneSemanticService.dominantScene(in: filteredItems(in: .week).filter({ $0.amount > 0 })),
+               scene.count >= 2 {
+                return "接着留下「\(LifeSceneSemanticService.displayTheme(for: scene.signal))」"
+            }
+            return "只输金额也可以"
+        }
+        if let scene = LifeSceneSemanticService.dominantScene(in: todayItems),
+           scene.count >= 2 {
+            return "今天已有 \(todayItems.count) 笔 · \(LifeSceneSemanticService.displayTheme(for: scene.signal))"
+        }
+        return "今天已记 \(todayItems.count) 笔"
+    }
+
+    var recordLearningHint: String? {
+        let normalizedAmount = inputAmount.replacingOccurrences(of: ",", with: "")
+        guard let amount = Double(normalizedAmount), amount > 0 else { return nil }
+
+        let noteResult = UserContentRiskService.shared.validateManualNote(inputTitle, allowEmpty: true)
+        let trimmedNote = noteResult.isAllowed ? noteResult.value : ""
+
+        if categoryLockedByUser {
+            return "已按「\(selectedCategory.label)」记，下次相近的我会记住。"
+        }
+        if MerchantBrandCatalog.matchBrand(in: trimmedNote) != nil {
+            return nil
+        }
+        if semanticCategory(from: trimmedNote) != nil {
+            return nil
+        }
+        guard let result = recordPrefillResult,
+              let recordPrefillAmount,
+              abs(recordPrefillAmount - amount) < 0.005 else {
+            return items.count < 6 ? "先只帮你放分类，备注留给你写。" : nil
+        }
+
+        switch result.source {
+        case "scene_habit":
+            if result.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                return "这类我见过几次，已帮你带一句。"
+            }
+            return nil
+        case "habit":
+            return nil
+        case "frequent":
+            return nil
+        case "generic":
+            return items.count < 6
+                ? "先只帮你放分类，备注留给你写。"
+                : nil
+        case "brand":
+            return nil
+        default:
+            return nil
+        }
     }
 
     /// 近 7 日内生成的复盘记录（按时间新到旧）。
@@ -688,13 +856,19 @@ final class HomeViewModel: ObservableObject {
         guard !weekItems.isEmpty else {
             return ("近 7 天暂无复盘。多记几笔，就能看到更完整的消费节奏啦。", "", "")
         }
-        let catMap = Dictionary(grouping: weekItems, by: \.category).mapValues { cats in
-            cats.reduce(0) { $0 + $1.amount }
+        if let scene = LifeSceneSemanticService.dominantScene(in: weekItems),
+           scene.count >= 2 {
+            let copy = LifeSceneSemanticService.weeklyCopy(for: scene.signal, count: scene.count)
+            let summary = LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count)
+            let structure = "这一周更明显的是「\(LifeSceneSemanticService.displayTheme(for: scene.signal))」这条线。"
+            let advice = weekItems.count >= 8
+                ? "继续按笔记下去，下周回放会更贴近真实记录。"
+                : copy.cares.dropFirst().first ?? "再多记几笔，这一周会更容易回头看。"
+            return (summary, structure, advice)
         }
-        let top = catMap.max(by: { $0.value < $1.value })
-        let topCategory = top?.key.rawValue ?? "暂无"
 
-        let summary = "近 7 天里，\(topCategory)出现得多一些。"
+        let topCategory = topCategoryLabel(from: weekItems)
+        let summary = "近 7 天里，「\(topCategory)」这类记录多一些。"
         let structure = "这一周的记录已经分出几段。"
         let advice = weekItems.count >= 8
             ? "继续按笔记下去，下周回放会更贴近真实记录。"
@@ -709,12 +883,15 @@ final class HomeViewModel: ObservableObject {
         let summary: String
         if total <= 0 {
             summary = "本月还没有足够账单，多记几笔再来生成月度复盘吧。"
+        } else if let scene = LifeSceneSemanticService.dominantScene(in: filteredItems(in: .month).filter { $0.amount > 0 }),
+                  scene.count >= 2 {
+            summary = LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count)
         } else {
             summary = "这个月的记录里，「\(top)」出现得比较多。"
         }
         let structure = total <= 0
             ? "等本月多几笔记录，再整理这段时间的变化。"
-            : "「\(top)」是这个月比较明显的一类。"
+            : monthlyStructureText(fallbackTop: top)
         let advice = total <= 0
             ? "先记下一周，复盘会更有内容。"
             : "这个月已经有一些记录，继续记几天，月记会更完整。"
@@ -814,6 +991,24 @@ final class HomeViewModel: ObservableObject {
         return top.label
     }
 
+    private func lifeSceneMemoryLine(from target: [HomeItem], minimumCount: Int) -> String? {
+        let positive = target.filter { $0.amount > 0 }
+        guard let scene = LifeSceneSemanticService.dominantScene(in: positive),
+              scene.count >= minimumCount else {
+            return nil
+        }
+        return LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count)
+    }
+
+    private func monthlyStructureText(fallbackTop: String) -> String {
+        let monthItems = filteredItems(in: .month).filter { $0.amount > 0 }
+        if let scene = LifeSceneSemanticService.dominantScene(in: monthItems),
+           scene.count >= 2 {
+            return "这个月更明显的是「\(LifeSceneSemanticService.displayTheme(for: scene.signal))」这条线。"
+        }
+        return "「\(fallbackTop)」是这个月比较明显的一类。"
+    }
+
     private func enqueuePetMessage(for record: HomeItem) {
         let settings = LocalStore.loadSettings()
         guard settings.petCompanionEnabled else {
@@ -853,6 +1048,14 @@ final class HomeViewModel: ObservableObject {
         if let semanticCategory = semanticCategory(from: trimmedNote), !categoryLockedByUser {
             return CategoryRecommendResult(recommended: semanticCategory, reasonTag: "semantic")
         }
+        if !categoryLockedByUser,
+           let category = recordPrefillResult?.category,
+           recordPrefillResult?.source != "generic",
+           let recordPrefillAmount,
+           abs(recordPrefillAmount - amount) < 0.005,
+           (recordPrefillResult?.confidence ?? 0) >= 0.55 {
+            return CategoryRecommendResult(recommended: category, reasonTag: recordPrefillResult?.source)
+        }
         if let frequentSuggestion = frequentRecordAmountSuggestion(for: amount, at: selectedDate),
            frequentSuggestionCanOverrideNote(frequentSuggestion, note: trimmedNote),
            !categoryLockedByUser {
@@ -860,6 +1063,7 @@ final class HomeViewModel: ObservableObject {
         }
         if !categoryLockedByUser,
            let category = recordPrefillResult?.category,
+           recordPrefillResult?.source == "generic",
            let recordPrefillAmount,
            abs(recordPrefillAmount - amount) < 0.005 {
             return CategoryRecommendResult(recommended: category, reasonTag: recordPrefillResult?.source)
@@ -899,22 +1103,6 @@ final class HomeViewModel: ObservableObject {
         let frequentSuggestion = frequentRecordAmountSuggestion(for: amount, at: selectedDate)
         let noteSemanticCategory = semanticCategory(from: trimmedNote)
 
-        if brand == nil,
-           noteSemanticCategory == nil,
-           let frequentSuggestion,
-           frequentSuggestionCanOverrideNote(frequentSuggestion, note: trimmedNote) {
-            recordPrefillResult = RecordPrefillResult(
-                category: frequentSuggestion.category,
-                title: nil,
-                emotionTag: nil,
-                confidence: frequentSuggestion.confidence,
-                source: "frequent"
-            )
-            recordPrefillAmount = amount
-            applyRecommendedCategory(frequentSuggestion.category)
-            return
-        }
-
         let start = Calendar.current.date(byAdding: .day, value: -180, to: Date()) ?? .distantPast
         let recentItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
         let result = recordPrefillService.prefill(
@@ -930,6 +1118,20 @@ final class HomeViewModel: ObservableObject {
         )
         recordPrefillResult = result
         recordPrefillAmount = amount
+
+        if result == nil,
+           brand == nil,
+           noteSemanticCategory == nil,
+           let frequentSuggestion,
+           frequentSuggestionCanOverrideNote(frequentSuggestion, note: trimmedNote) {
+            recordPrefillResult = RecordPrefillResult(
+                category: frequentSuggestion.category,
+                title: nil,
+                emotionTag: nil,
+                confidence: frequentSuggestion.confidence,
+                source: "frequent"
+            )
+        }
 
         if let category = resolvePrefillCategory(
             brand: brand,
@@ -1003,11 +1205,13 @@ final class HomeViewModel: ObservableObject {
     }
 
     func selectCategory(_ category: HomeItem.Category) {
+        rememberCategoryCorrectionIfNeeded(to: category)
         selectedCategory = category
         categoryLockedByUser = true
     }
 
     func applyScenePackDraft(title: String, category: HomeItem.Category) {
+        rememberCategoryCorrectionIfNeeded(to: category)
         inputTitle = title
         selectedCategory = category
         categoryLockedByUser = true
@@ -1019,6 +1223,14 @@ final class HomeViewModel: ObservableObject {
     func applyRecommendedCategory(_ category: HomeItem.Category) {
         guard !categoryLockedByUser else { return }
         selectedCategory = category
+        lastAutoRecommendedCategory = category
+    }
+
+    private func rememberCategoryCorrectionIfNeeded(to category: HomeItem.Category) {
+        guard !categoryLockedByUser else { return }
+        let previous = lastAutoRecommendedCategory ?? selectedCategory
+        guard previous != .other, previous != category else { return }
+        pendingCategoryCorrectionFrom = previous
     }
 
     func updateSelectedDate(_ date: Date, userInitiated: Bool) {
@@ -1035,40 +1247,46 @@ final class HomeViewModel: ObservableObject {
     }
 
     func noteSuggestions(for category: HomeItem.Category, at date: Date = .now) -> [String] {
+        let defaults: [String]
         switch category {
         case .dining:
             let hour = Calendar.current.component(.hour, from: date)
             switch hour {
             case 5..<10:
-                return ["早餐路上买点吃的", "早班前续一杯咖啡", "出门前吃一口热的"]
+                defaults = ["早餐路上买点吃的", "早班前续一杯咖啡", "出门前吃一口热的"]
             case 10..<14:
-                return ["午间简单吃一顿", "食堂一份热饭", "饭点买杯喝的"]
+                defaults = ["午间简单吃一顿", "食堂一份热饭", "饭点买杯喝的"]
             case 14..<17:
-                return ["下午续一杯咖啡", "便利店买点轻食", "忙到一半补一口"]
+                defaults = ["下午续一杯咖啡", "便利店买点轻食", "忙到一半补一口"]
             case 17..<21:
-                return ["晚餐吃一顿热饭", "下班后吃点热乎的", "和人一起吃晚饭"]
+                defaults = ["晚餐吃一顿热饭", "下班后吃点热乎的", "和人一起吃晚饭"]
             default:
-                return ["加班后吃点热乎的", "晚归路上的一口热食", "深夜买点小食"]
+                defaults = ["加班后吃点热乎的", "晚归路上的一口热食", "深夜买点小食"]
             }
         case .transport:
-            return ["地铁到站，今天也准时出门", "打车赶去这一段", "停车和油费记一笔"]
+            defaults = ["地铁到站，今天也准时出门", "打车赶去这一段", "停车和油费记一笔"]
         case .shopping:
-            return ["下单一个需要的", "买到常用的小东西", "快递路上记一笔"]
+            defaults = ["下单一个需要的", "买到常用的小东西", "快递路上记一笔"]
         case .daily:
-            return ["便利店补一袋日常", "超市买点家里要用的", "日用品刚好补上"]
+            defaults = ["便利店补一袋日常", "超市买点家里要用的", "日用品刚好补上"]
         case .entertainment:
-            return ["买了这场电影票", "游戏里充了一笔", "周末出去坐一会儿"]
+            defaults = ["买了这场电影票", "游戏里充了一笔", "周末出去坐一会儿"]
         case .lodging:
-            return ["今晚住在这里", "出差住宿记一笔", "短住一晚记下"]
+            defaults = ["今晚住在这里", "出差住宿记一笔", "短住一晚记下"]
         case .health:
-            return ["药店买点常用药", "挂号问诊记一笔", "体检护理记一笔"]
+            defaults = ["药店买点常用药", "挂号问诊记一笔", "体检护理记一笔"]
         case .home:
-            return ["水电燃气交上了", "家里添个要用的", "修修补补记一笔"]
+            defaults = ["水电燃气交上了", "家里添个要用的", "修修补补记一笔"]
         case .social:
-            return ["见面带点东西", "和朋友吃了一顿", "探望时买点东西"]
+            defaults = ["见面带点东西", "和朋友吃了一顿", "探望时买点东西"]
         case .other:
-            return ["临时花了一笔", "还没想好归哪类", "先把这笔记下"]
+            defaults = ["临时花了一笔", "还没想好归哪类", "先把这笔记下"]
         }
+        guard let prefill = compatiblePrefillTitleForSave(category: category),
+              !defaults.contains(prefill) else {
+            return defaults
+        }
+        return [prefill] + defaults
     }
 
     func frequentRecordAmounts(at date: Date = .now) -> [Double] {
@@ -1133,6 +1351,15 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func frequentCategory(in items: [HomeItem]) -> (category: HomeItem.Category, count: Int, confidence: Double)? {
+        if let scene = LifeSceneSemanticService.dominantScene(in: items),
+           scene.signal.confidenceTier >= .medium,
+           scene.count >= 2 {
+            let confidence = Double(scene.count) / Double(max(items.count, 1))
+            if confidence >= 0.67 {
+                return (scene.signal.category, scene.count, confidence)
+            }
+        }
+
         struct CategoryCandidate {
             let category: HomeItem.Category
             let count: Int
@@ -1493,6 +1720,8 @@ final class HomeViewModel: ObservableObject {
         categoryLockedByUser = false
         recordPrefillResult = nil
         recordPrefillAmount = nil
+        lastAutoRecommendedCategory = nil
+        pendingCategoryCorrectionFrom = nil
     }
 
     private func persistItems() {
@@ -1535,6 +1764,13 @@ final class HomeViewModel: ObservableObject {
 
     private func formatCurrency(_ value: Double) -> String {
         value.formatted(.cny.precision(.fractionLength(2)))
+    }
+
+    private func shortAmountText(_ value: Double) -> String {
+        if abs(value.rounded() - value) < 0.005 {
+            return value.formatted(.cny.precision(.fractionLength(0)))
+        }
+        return value.formatted(.cny.precision(.fractionLength(2)))
     }
 
     private func mergeLedgers(local: [HomeItem], remote: [HomeItem]) -> [HomeItem] {
@@ -1601,15 +1837,26 @@ final class HomeViewModel: ObservableObject {
         let top = weekTopCategoryText
         let activeDays = Set(weekItems.map { cal.startOfDay(for: $0.createdAt) }).count
         let rhythm = activeDays >= 5 ? "这周几乎每天都有记录" : "这周的记录主要落在 \(activeDays) 天里"
+        if let sceneLine = lifeSceneMemoryLine(from: weekItems, minimumCount: 2) {
+            return "\(rhythm)，\(sceneLine)。"
+        }
         if top == "暂无" {
             return "\(rhythm)，先把这一周放在这里。"
         }
-        return "\(rhythm)，「\(top)」出现得多一点。先把这一周放在这里。"
+        return "\(rhythm)，「\(top)」这类记录多一点。先把这一周放在这里。"
     }
 
     func markWeeklyTag() {
+        let weekItems = filteredItems(in: .week).filter { $0.amount > 0 }
         let top = weekTopCategoryText
-        let result = "这周更常记录到「\(top)」，先把这个生活主题留下。"
+        let result: String
+        if let scene = LifeSceneSemanticService.dominantScene(in: weekItems),
+           scene.count >= 2 {
+            let theme = LifeSceneSemanticService.displayTheme(for: scene.signal)
+            result = "\(LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count))，先把「\(theme)」这条生活线留下。"
+        } else {
+            result = "这周更常记录到「\(top)」，先把这个生活主题留下。"
+        }
         setLatestActionCard(result, scope: "weekly")
         analyticsService.track("weekly_tag_marked", props: ["top": top])
     }
@@ -1619,6 +1866,11 @@ final class HomeViewModel: ObservableObject {
         let top = monthTopCategoryText
         guard total > 0 else {
             return "这个月还没有足够账单，先继续记几笔，月记会更像你的日子。"
+        }
+        let monthItems = filteredItems(in: .month).filter { $0.amount > 0 }
+        if let scene = LifeSceneSemanticService.dominantScene(in: monthItems),
+           scene.count >= 2 {
+            return "\(LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count))。月末再回看会更完整。"
         }
         return "这个月「\(top)」出现得比较多，先把这条线索留在这里。月末再回看会更完整。"
     }

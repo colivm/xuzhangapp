@@ -4,6 +4,7 @@ struct LifeEntryPreviewCard: View {
     let tier: RecordPreviewTier
     let headline: String
     let hint: String?
+    let learningHint: String?
     let emotion: String
     let meta: String
     let amountText: String
@@ -57,10 +58,22 @@ struct LifeEntryPreviewCard: View {
                     .foregroundStyle(AppColors.subtext.opacity(0.78))
             }
 
+            if let learningHint, !learningHint.isEmpty {
+                learningHintPill(learningHint)
+            }
+
             emotionPill
 
             metaRow
         }
+    }
+
+    private func learningHintPill(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(AppColors.subtext.opacity(0.76))
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var footContent: some View {

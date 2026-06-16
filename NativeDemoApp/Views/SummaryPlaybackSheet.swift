@@ -579,6 +579,15 @@ struct SummaryPlaybackSheet: View {
     }
 
     private var playbackMemoryLine: String? {
+        if let sceneLine = playback.chapters
+            .compactMap({ $0.metrics["sceneMemoryLine"]?.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .first(where: { !$0.isEmpty }),
+           let cleaned = cleanMemorySentence(sceneLine) {
+            return playback.range == .week
+                ? "这周留下：\(cleaned)"
+                : "这个月留下：\(cleaned)"
+        }
+
         let narrationCandidates = playback.chapters
             .filter { !$0.id.contains("presence") && !$0.id.contains("outro") }
             .flatMap { chapter in

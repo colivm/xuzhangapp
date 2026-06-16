@@ -187,9 +187,20 @@ struct CategoryRecommendService {
         let low = input.amount * 0.7
         let high = input.amount * 1.3
         let sameBand = historyItems.filter { $0.amount >= low && $0.amount <= high }
+        if sameBand.count >= 3,
+           let scene = LifeSceneSemanticService.dominantScene(in: sameBand),
+           scene.signal.confidenceTier >= .medium,
+           scene.count >= 3 {
+            addHistory(sceneHistoryBoost(for: scene, in: sameBand), to: scene.signal.category, scores: &scores)
+        }
         if sameBand.count >= 3, let top = mostFrequentCategory(in: sameBand) {
             addHistory(0.9, to: top, scores: &scores)
         }
+        applyCorrectionPenalties(
+            input: input,
+            sameBand: sameBand,
+            scores: &scores
+        )
 
         let note = input.noteDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         if note.count >= 2,
@@ -206,6 +217,54 @@ struct CategoryRecommendService {
         case 31...90: return 0.35
         default: return 0.15
         }
+    }
+
+    private func sceneHistoryBoost(
+        for scene: (signal: LifeSceneSignal, count: Int, latest: Date),
+        in items: [HomeItem]
+    ) -> Double {
+        let activeWeight = items.reduce(0.0) { partial, item in
+            partial
+                + (item.userEditedCategory == true ? 0.35 : 0)
+                + (item.userEditedTitle == true ? 0.18 : 0)
+        }
+        let base = scene.signal.confidenceTier == .strong ? 1.25 : 0.95
+        return min(base + activeWeight, 1.65)
+    }
+
+    private func applyCorrectionPenalties(
+        input: CategoryRecommendInput,
+        sameBand: [HomeItem],
+        scores: inout [HomeItem.Category: ScoreBreakdown]
+    ) {
+        let relevantCorrections = sameBand.filter { item in
+            guard let correctedFrom = item.categoryCorrectionFrom,
+                  correctedFrom != item.category else {
+                return false
+            }
+            return sameCorrectionContext(item.createdAt, input.referenceDate)
+        }
+        guard !relevantCorrections.isEmpty else { return }
+
+        var penalties: [HomeItem.Category: Double] = [:]
+        for item in relevantCorrections {
+            guard let correctedFrom = item.categoryCorrectionFrom else { continue }
+            let weight = item.userEditedCategory == true ? 0.82 : 0.55
+            penalties[correctedFrom, default: 0] += weight
+        }
+        for (category, penalty) in penalties {
+            addHistory(-min(penalty, 1.6), to: category, scores: &scores)
+        }
+    }
+
+    private func sameCorrectionContext(_ lhs: Date, _ rhs: Date) -> Bool {
+        let calendar = Calendar.current
+        let lhsWeekday = calendar.component(.weekday, from: lhs)
+        let rhsWeekday = calendar.component(.weekday, from: rhs)
+        let lhsWeekend = lhsWeekday == 1 || lhsWeekday == 7
+        let rhsWeekend = rhsWeekday == 1 || rhsWeekday == 7
+        guard lhsWeekend == rhsWeekend else { return false }
+        return calendar.component(.hour, from: lhs) / 3 == calendar.component(.hour, from: rhs) / 3
     }
 
     private func hasSimilarTitle(_ lhs: String, _ rhs: String) -> Bool {

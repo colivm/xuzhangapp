@@ -26,6 +26,8 @@ private struct LedgerDTO: Codable {
     let merchantBrandId: String?
     let draftMeta: LedgerDraftMetaDTO?
     let userEditedTitle: Bool?
+    let userEditedCategory: Bool?
+    let categoryCorrectionFrom: String?
 }
 
 private struct LedgerDraftMetaDTO: Codable {
@@ -69,7 +71,9 @@ final class LedgerSyncService {
                     status: $0.status.rawValue
                 )
             },
-            userEditedTitle: item.userEditedTitle
+            userEditedTitle: item.userEditedTitle,
+            userEditedCategory: item.userEditedCategory,
+            categoryCorrectionFrom: item.categoryCorrectionFrom?.rawValue
         )
         var request = try makeRequest(path: "/v1/ledger", method: "POST")
         request.httpBody = try JSONEncoder().encode(dto)
@@ -113,7 +117,9 @@ final class LedgerSyncService {
                 emotionTag: dto.emotionTag,
                 merchantBrandId: dto.merchantBrandId,
                 draftMeta: draftMeta,
-                userEditedTitle: dto.userEditedTitle
+                userEditedTitle: dto.userEditedTitle,
+                userEditedCategory: dto.userEditedCategory,
+                categoryCorrectionFrom: dto.categoryCorrectionFrom.flatMap { HomeItem.Category(rawValue: $0) }
             )
         }
     }

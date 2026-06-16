@@ -19,6 +19,8 @@ struct OCRReceiptDraft: Identifiable, Equatable {
     var rawText: String
     var provider: OCRProvider
     var merchantBrandId: String?
+    var userEditedCategory: Bool?
+    var categoryCorrectionFrom: HomeItem.Category?
 
     init(
         id: UUID = UUID(),
@@ -29,7 +31,9 @@ struct OCRReceiptDraft: Identifiable, Equatable {
         confidence: Double,
         rawText: String,
         provider: OCRProvider,
-        merchantBrandId: String? = nil
+        merchantBrandId: String? = nil,
+        userEditedCategory: Bool? = nil,
+        categoryCorrectionFrom: HomeItem.Category? = nil
     ) {
         self.id = id
         self.title = title
@@ -40,6 +44,8 @@ struct OCRReceiptDraft: Identifiable, Equatable {
         self.rawText = rawText
         self.provider = provider
         self.merchantBrandId = merchantBrandId
+        self.userEditedCategory = userEditedCategory
+        self.categoryCorrectionFrom = categoryCorrectionFrom
     }
 }
 
@@ -120,23 +126,36 @@ final class OCRService {
         let candidates = recognizedLines.map { $0.candidate }
         let ocrLines = recognizedLines.map { $0.line }
         let lines = ocrLines.map { $0.text }
-        let text = lines.joined(separator: "\n")
 
         guard !lines.isEmpty else {
             throw OCRServiceError.noRecognizedText
         }
 
         let confidence = candidates.map(\.confidence).reduce(0, +) / Float(max(candidates.count, 1))
-        let provider = detectProvider(from: text)
+        let contentOCRLines = ocrLines.filter { !isSystemUILine($0) }
+        let parseOCRLines = contentOCRLines.isEmpty ? ocrLines : contentOCRLines
+        let parseLines = parseOCRLines.map(\.text)
+        let parseText = parseLines.joined(separator: "\n")
+        let provider = detectProvider(from: parseText)
+
+        if looksLikePaymentSuccessResult(ocrLines: parseOCRLines),
+           let draft = parsePaymentSuccessResult(
+               ocrLines: parseOCRLines,
+               rawText: parseText,
+               confidence: Double(confidence),
+               provider: provider
+           ) {
+            return [draft]
+        }
 
         let listDrafts = parseListReceipts(
-            ocrLines: ocrLines,
-            rawText: text,
+            ocrLines: parseOCRLines,
+            rawText: parseText,
             confidence: Double(confidence),
             provider: provider
         )
-        let isListScreenshot = looksLikeListScreenshot(lines: lines, provider: provider)
-        let isDetailScreenshot = looksLikeDetailScreenshot(lines: lines)
+        let isListScreenshot = looksLikeListScreenshot(lines: parseLines, provider: provider)
+        let isDetailScreenshot = looksLikeDetailScreenshot(lines: parseLines)
         if (listDrafts.count >= 2 && !isDetailScreenshot) || (isListScreenshot && !listDrafts.isEmpty) {
             return listDrafts
         }
@@ -147,11 +166,11 @@ final class OCRService {
         let draft: OCRReceiptDraft?
         switch provider {
         case .alipay:
-            draft = parseAlipay(lines: lines, rawText: text, confidence: Double(confidence))
+            draft = parseAlipay(lines: parseLines, rawText: parseText, confidence: Double(confidence))
         case .wechat:
-            draft = parseWeChat(lines: lines, rawText: text, confidence: Double(confidence))
+            draft = parseWeChat(lines: parseLines, rawText: parseText, confidence: Double(confidence))
         case .generic:
-            draft = parseGeneric(lines: lines, rawText: text, confidence: Double(confidence))
+            draft = parseGeneric(lines: parseLines, rawText: parseText, confidence: Double(confidence))
         }
 
         if let draft, draft.amount > 0, !isListScreenshot {
@@ -220,6 +239,7 @@ final class OCRService {
     private func listExpenseLikeLineCount(in lines: [String]) -> Int {
         lines.reduce(0) { count, line in
             guard !shouldSkipListAmountLine(line) else { return count }
+            guard !isListTimeLine(line), !isStatusBarSystemText(line) else { return count }
             let normalized = normalizedListText(line)
             if normalized.range(of: #"(?<!\d)-\s*(?:¥\s*)?[0-9]{1,6}(?:\.[0-9]{1,2})?"#, options: .regularExpression) != nil {
                 return count + 1
@@ -242,6 +262,7 @@ final class OCRService {
         lines.indices.reduce(0) { count, index in
             let line = lines[index]
             guard !shouldSkipListAmountLine(line) else { return count }
+            guard !isListTimeLine(line), !isStatusBarSystemText(line) else { return count }
             let context = adjacentListStatusContext(lines: lines, index: index)
             guard case .some(.expense) = listAmountInfo(in: line, statusContext: context, allowPositiveExpense: true) else {
                 return count
@@ -253,6 +274,76 @@ final class OCRService {
     private func isSameOCRRow(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
         let rowHeight = max(lhs.height, rhs.height, 0.018)
         return abs(lhs.midY - rhs.midY) <= max(0.014, rowHeight * 0.72)
+    }
+
+    private func looksLikePaymentSuccessResult(ocrLines: [OCRLine]) -> Bool {
+        let text = ocrLines.map(\.text).joined(separator: "\n")
+        let hasSuccessHeader = ocrLines.contains { line in
+            line.text.contains("支付成功") && line.boundingBox.midY >= 0.55
+        }
+        guard hasSuccessHeader else { return false }
+
+        let listHints = ["账单列表", "全部交易", "交易记录", "收支统计", "收支分析", "筛选", "全部账单"]
+        guard !listHints.contains(where: { text.contains($0) }) else { return false }
+
+        let currencyLineCount = ocrLines.filter { !currencyCandidates(in: $0.text).isEmpty }.count
+        return (1...2).contains(currencyLineCount)
+    }
+
+    private func parsePaymentSuccessResult(
+        ocrLines: [OCRLine],
+        rawText: String,
+        confidence: Double,
+        provider: OCRProvider
+    ) -> OCRReceiptDraft? {
+        let amountCandidates = ocrLines.compactMap { line -> (amount: Double, line: OCRLine)? in
+            guard let amount = currencyCandidates(in: line.text).first else { return nil }
+            return (amount, line)
+        }
+        guard let selected = amountCandidates
+            .sorted(by: { lhs, rhs in
+                if lhs.line.boundingBox.height == rhs.line.boundingBox.height {
+                    return lhs.line.boundingBox.midY > rhs.line.boundingBox.midY
+                }
+                return lhs.line.boundingBox.height > rhs.line.boundingBox.height
+            })
+            .first else {
+            return nil
+        }
+
+        let brand = MerchantBrandCatalog.matchOCRBrand(in: rawText)
+        let title = brand?.displayName ?? paymentResultTitle(ocrLines: ocrLines, amountLine: selected.line)
+        guard let title else { return nil }
+
+        let resolvedProvider: OCRProvider = provider == .generic ? .wechat : provider
+        return brandedDraft(OCRReceiptDraft(
+            title: title,
+            amount: abs(selected.amount),
+            date: firstDate(in: rawText) ?? .now,
+            category: inferCategory(from: "\(title)\n\(rawText)"),
+            confidence: confidence,
+            rawText: rawText,
+            provider: resolvedProvider
+        ))
+    }
+
+    private func paymentResultTitle(ocrLines: [OCRLine], amountLine: OCRLine) -> String? {
+        let amountMidY = amountLine.boundingBox.midY
+        let candidates = ocrLines
+            .filter { line in
+                guard line.boundingBox.midY > amountMidY else { return false }
+                guard line.boundingBox.midY - amountMidY <= 0.28 else { return false }
+                let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !isListStatusLine(text), !isListTimeLine(text) else { return false }
+                return isUsableTitle(text)
+            }
+            .sorted { lhs, rhs in
+                let lhsDistance = abs(lhs.boundingBox.midY - amountMidY)
+                let rhsDistance = abs(rhs.boundingBox.midY - amountMidY)
+                return lhsDistance < rhsDistance
+            }
+            .map(\.text)
+        return candidates.first
     }
 
     private func parseAlipay(lines: [String], rawText: String, confidence: Double) -> OCRReceiptDraft? {
@@ -356,6 +447,7 @@ final class OCRService {
 
         for index in ocrLines.indices {
             let line = ocrLines[index].text
+            guard !isSystemUILine(ocrLines[index]) else { continue }
             guard !shouldSkipListAmountLine(line) else { continue }
             guard !shouldSkipListAmountCandidate(ocrLines: ocrLines, index: index) else { continue }
             let amountInfo: (amount: Double, inlineTitle: String?)
@@ -489,6 +581,9 @@ final class OCRService {
     // - "瑞幸咖啡 18.00 交易关闭" is ignored because the order was not paid.
     private func listAmountInfo(in line: String, statusContext: String = "", allowPositiveExpense: Bool = false) -> ListAmountInfo? {
         let normalized = normalizedListText(line)
+        if isListTimeLine(normalized) || isStatusBarSystemText(normalized) {
+            return nil
+        }
         if isMonthlySummaryLine(normalized) {
             return .ignored
         }
@@ -560,6 +655,9 @@ final class OCRService {
         statusContext: String,
         allowPositiveExpense: Bool
     ) -> ListAmountInfo? {
+        if isListTimeLine(normalized) || isStatusBarSystemText(normalized) {
+            return nil
+        }
         if isMonthlySummaryLine(normalized) {
             return .ignored
         }
@@ -669,7 +767,13 @@ final class OCRService {
     private func shouldSkipListAmountCandidate(ocrLines: [OCRLine], index: Int) -> Bool {
         guard ocrLines.indices.contains(index) else { return true }
         let line = ocrLines[index]
+        if isSystemUILine(line) {
+            return true
+        }
         let normalized = normalizedListText(line.text)
+        if isListTimeLine(normalized) || isStatusBarSystemText(normalized) {
+            return true
+        }
         guard listAmountInfo(in: normalized, allowPositiveExpense: true) != nil else { return false }
         if normalized.contains("-") || normalized.contains("−") || normalized.contains("－") {
             return false
@@ -714,6 +818,9 @@ final class OCRService {
 
         let scopedLines = ocrLines.enumerated().compactMap { index, line -> OCRLine? in
             guard line.boundingBox.midY <= upperY, line.boundingBox.midY >= lowerY else { return nil }
+            if isSystemUILine(line) {
+                return nil
+            }
             if index != amountIndex, shouldSkipListAmountCandidate(ocrLines: ocrLines, index: index) {
                 return nil
             }
@@ -735,6 +842,7 @@ final class OCRService {
         let amountBox = ocrLines[amountIndex].boundingBox
         return ocrLines.enumerated().compactMap { index, line -> CGFloat? in
             guard index != amountIndex else { return nil }
+            guard !isSystemUILine(line) else { return nil }
             guard line.boundingBox.midY < amountBox.midY else { return nil }
             guard !shouldSkipListAmountLine(line.text) else { return nil }
             guard !shouldSkipListAmountCandidate(ocrLines: ocrLines, index: index) else { return nil }
@@ -846,6 +954,9 @@ final class OCRService {
 
     private func shouldSkipListAmountLine(_ line: String) -> Bool {
         let trimmed = normalizedListText(line)
+        if isListTimeLine(trimmed) || isStatusBarSystemText(trimmed) {
+            return true
+        }
         if isMonthlySummaryLine(trimmed) {
             return true
         }
@@ -1000,24 +1111,55 @@ final class OCRService {
         return candidates.first(where: containsChinese) ?? candidates.first
     }
 
+    private func isSystemUILine(_ line: OCRLine) -> Bool {
+        let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if (isStatusBarSystemText(text) || isStatusBarBatteryText(text)), line.boundingBox.midY >= 0.88 {
+            return true
+        }
+        if text == "完成", line.boundingBox.midY <= 0.25 {
+            return true
+        }
+        return false
+    }
+
     private func normalizedOCRTitleCandidate(_ value: String) -> String {
         value
             .replacingOccurrences(of: "！", with: "!")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func isStatusBarNoiseTitle(_ value: String) -> Bool {
+    private func isStatusBarSystemText(_ value: String) -> Bool {
         let normalized = normalizedOCRTitleCandidate(value)
             .replacingOccurrences(of: " ", with: "")
             .uppercased()
+        guard !normalized.isEmpty else { return false }
+        guard !containsChinese(normalized) else { return false }
         let compact = normalized.replacingOccurrences(of: #"[^A-Z0-9:!]"#, with: "", options: .regularExpression)
         if compact.range(of: #"^\d{1,2}:\d{2}!?[A-Z0-9!]*$"#, options: .regularExpression) != nil {
             return true
         }
-        if compact.range(of: #"^!?[!A-Z]*5G[A-Z]?\d{1,3}$"#, options: .regularExpression) != nil {
+        if compact.contains("5G"), compact.count <= 12 {
+            return true
+        }
+        if compact.range(of: #"^(?:LTE|4G|3G|WIFI|WI-FI)$"#, options: .regularExpression) != nil {
+            return true
+        }
+        if compact.range(of: #"^[!:]{2,}[A-Z0-9!:]*$"#, options: .regularExpression) != nil {
             return true
         }
         return false
+    }
+
+    private func isStatusBarBatteryText(_ value: String) -> Bool {
+        let normalized = normalizedOCRTitleCandidate(value)
+            .replacingOccurrences(of: " ", with: "")
+            .uppercased()
+        guard !containsChinese(normalized) else { return false }
+        return normalized.range(of: #"^\d{1,3}%?$"#, options: .regularExpression) != nil
+    }
+
+    private func isStatusBarNoiseTitle(_ value: String) -> Bool {
+        isStatusBarSystemText(value)
     }
 
     private func isUsableTitle(_ value: String) -> Bool {

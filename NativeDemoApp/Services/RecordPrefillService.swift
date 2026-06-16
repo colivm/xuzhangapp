@@ -37,6 +37,14 @@ struct RecordPrefillResult {
 }
 
 struct RecordPrefillService {
+    private struct SceneHabit {
+        let signal: LifeSceneSignal
+        let items: [HomeItem]
+        let count: Int
+        let confidence: Double
+        let activeSupport: Double
+    }
+
     private let coldStartThreshold = 6
     private let genericCategoryService = CategoryRecommendService()
 
@@ -78,6 +86,33 @@ struct RecordPrefillService {
         let candidates = historyItems.filter { item in
             sameHabitContext(item: item, amount: input.amount, referenceDate: input.referenceDate)
         }
+        if let sceneHabit = dominantSceneHabit(in: candidates) {
+            let title = sceneHabitTitle(
+                for: sceneHabit,
+                amount: input.amount,
+                date: input.referenceDate
+            )
+            let emotion = sceneHabitRecommendationTier(sceneHabit) == .strong
+                ? NarrativeCopyResolver.resolveEmotionTag(
+                    context: NarrativeCopyResolver.Context(
+                        brandId: nil,
+                        category: sceneHabit.signal.category,
+                        amount: input.amount,
+                        date: input.referenceDate,
+                        seed: title ?? sceneHabit.signal.label,
+                        note: title ?? sceneHabit.signal.label
+                    )
+                )
+                : nil
+            return RecordPrefillResult(
+                category: sceneHabit.signal.category,
+                title: title,
+                emotionTag: emotion,
+                confidence: sceneHabit.confidence,
+                source: "scene_habit"
+            )
+        }
+
         guard let topCategory = rankedCategories(in: candidates).first else {
             return genericPrefill(input: input, historyItems: historyItems)
         }
@@ -128,6 +163,88 @@ struct RecordPrefillService {
             confidence: 0.56,
             source: "generic"
         )
+    }
+
+    private func dominantSceneHabit(in items: [HomeItem]) -> SceneHabit? {
+        guard items.count >= 3 else { return nil }
+        let totalSupport = items.reduce(0.0) { $0 + sceneSupportWeight(for: $1) }
+        let grouped = Dictionary(grouping: items) { item in
+            LifeSceneSemanticService.classify(item).kind
+        }
+        let ranked = grouped.compactMap { _, rows -> SceneHabit? in
+            guard let dominant = LifeSceneSemanticService.dominantScene(in: rows),
+                  dominant.signal.confidenceTier >= .medium else {
+                return nil
+            }
+            let support = rows.reduce(0.0) { $0 + sceneSupportWeight(for: $1) }
+            let activeSupport = rows.reduce(0.0) { $0 + activeUserSupportWeight(for: $1) }
+            return SceneHabit(
+                signal: dominant.signal,
+                items: rows,
+                count: rows.count,
+                confidence: support / max(totalSupport, 0.001),
+                activeSupport: activeSupport
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.count == rhs.count {
+                return lhs.confidence > rhs.confidence
+            }
+            return lhs.count > rhs.count
+        }
+        guard let top = ranked.first else { return nil }
+        let secondCount = ranked.dropFirst().first?.count ?? 0
+        let hasActiveConfirmation = top.activeSupport >= 1.5
+        guard (top.count >= 3 || (top.count >= 2 && hasActiveConfirmation)),
+              top.confidence >= 0.60,
+              top.count >= secondCount + 1 else {
+            return nil
+        }
+        return top
+    }
+
+    private func sceneHabitTitle(
+        for habit: SceneHabit,
+        amount: Double,
+        date: Date
+    ) -> String? {
+        if let title = mostCommonTitle(in: habit.items, category: habit.signal.category) {
+            return title
+        }
+        guard sceneHabitRecommendationTier(habit) == .strong else { return nil }
+        return LifeSceneSemanticService.noteSuggestion(
+            for: habit.signal,
+            amount: amount,
+            date: date
+        )
+    }
+
+    private func sceneHabitRecommendationTier(_ habit: SceneHabit) -> LifeSceneConfidenceTier {
+        guard habit.signal.confidenceTier >= .medium else { return .weak }
+        if habit.signal.confidenceTier == .strong,
+           habit.confidence >= 0.68 {
+            return .strong
+        }
+        if habit.signal.confidenceTier == .strong,
+           habit.activeSupport >= 1.5,
+           habit.confidence >= 0.60 {
+            return .strong
+        }
+        return .medium
+    }
+
+    private func sceneSupportWeight(for item: HomeItem) -> Double {
+        var weight = 1.0
+        if item.userEditedCategory == true { weight += 1.2 }
+        if item.userEditedTitle == true { weight += 0.6 }
+        return weight
+    }
+
+    private func activeUserSupportWeight(for item: HomeItem) -> Double {
+        var weight = 0.0
+        if item.userEditedCategory == true { weight += 1.2 }
+        if item.userEditedTitle == true { weight += 0.6 }
+        return weight
     }
 
     private func recentHistory(from items: [HomeItem]) -> [HomeItem] {

@@ -126,6 +126,10 @@ struct OCRConfirmSheet: View {
                         brandChip(brand)
                     }
 
+                    if let scene = sceneSignal(for: row.draft), scene.confidenceTier >= .medium {
+                        sceneChip(scene)
+                    }
+
                     Text(row.draft.date.zhBillDateTime)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.subtext)
@@ -166,6 +170,40 @@ struct OCRConfirmSheet: View {
         )
     }
 
+    private func sceneSignal(for draft: OCRReceiptDraft) -> LifeSceneSignal? {
+        let item = HomeItem(
+            title: "\(draft.title)\n\(draft.rawText)",
+            amount: draft.amount,
+            category: draft.category,
+            source: .ocr,
+            createdAt: draft.date,
+            merchantBrandId: draft.merchantBrandId
+        )
+        let signal = LifeSceneSemanticService.classify(item)
+        return signal.confidenceTier >= .medium ? signal : nil
+    }
+
+    private func sceneChip(_ signal: LifeSceneSignal) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 10, weight: .bold))
+            Text(LifeSceneSemanticService.displayTheme(for: signal))
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(AppColors.text.opacity(0.74))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.64))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(AppColors.line.opacity(0.35), lineWidth: 1)
+        )
+    }
+
     private func confirmRowCategory(row: ConfirmRow, index: Int) -> some View {
         HStack(spacing: 10) {
             Text("分类")
@@ -173,7 +211,11 @@ struct OCRConfirmSheet: View {
                 .foregroundStyle(AppColors.subtext)
 
             OCRCategoryChips(selectedCategory: row.draft.category) { category in
+                if rows[index].draft.category != category {
+                    rows[index].draft.categoryCorrectionFrom = rows[index].draft.category
+                }
                 rows[index].draft.category = category
+                rows[index].draft.userEditedCategory = true
             }
 
             Spacer()

@@ -64,6 +64,7 @@ struct ShareInsightSignal: Equatable {
     }
 
     enum Kind: Equatable {
+        case sceneTop(signal: LifeSceneSignal, count: Int)
         case brandTop(name: String, count: Int, brandId: String?)
         case categoryTop(category: HomeItem.Category, count: Int, context: CategoryContext)
         case busiestDay(label: String, count: Int)
@@ -86,6 +87,8 @@ struct ShareInsight: Equatable {
 enum ShareInsightCopyPool {
     static func insight(for signal: ShareInsightSignal, seed: String) -> ShareInsight {
         switch signal.kind {
+        case let .sceneTop(lifeSignal, count):
+            return sceneInsight(signal: lifeSignal, count: count, shareSignal: signal, seed: seed)
         case let .brandTop(name, count, brandId):
             return brandInsight(name: name, count: count, brandId: brandId, signal: signal, seed: seed)
         case let .categoryTop(category, count, context):
@@ -178,6 +181,27 @@ enum ShareInsightCopyPool {
             care: pick(cares, seed: seed + "|brand|\(name)"),
             footnote: footnote(for: signal),
             tags: [leadingTag, "#\(signal.recordCount)笔记录", "#\(signal.activeDays)天有记录", semanticTag]
+        )
+    }
+
+    private static func sceneInsight(
+        signal: LifeSceneSignal,
+        count: Int,
+        shareSignal: ShareInsightSignal,
+        seed: String
+    ) -> ShareInsight {
+        let copy = LifeSceneSemanticService.weeklyCopy(for: signal, count: count)
+        let tags = [
+            copy.leadingTag,
+            "#\(shareSignal.activeDays)天有记录",
+            copy.semanticTag,
+            copy.supportTag
+        ].compactMap { $0 }
+        return ShareInsight(
+            fact: copy.fact,
+            care: pick(copy.cares, seed: seed + "|scene|\(signal.kind.rawValue)"),
+            footnote: footnote(for: shareSignal),
+            tags: tags
         )
     }
 
@@ -513,7 +537,7 @@ final class PlaybackMomentSelector {
             let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
             if !emotion.isEmpty, emotion != defaultEmotion { add(emotion) }
             if EchoAnchorService.shared.isEligibleLifeTraceTitle(item.title, item: item) { add(item.title) }
-            add(item.category.rawValue)
+            add(LifeSceneSemanticService.displayTheme(for: LifeSceneSemanticService.classify(item)))
         }
 
         return counts
@@ -782,6 +806,7 @@ final class PlaybackService {
         let voiceTitle1 = selection.voiceText(for: .week)
         let voiceTitle2 = secondaryVoice?.text ?? voiceTitle1
         let busiestTitle = busiestMaterial?.text ?? voiceTitle1
+        let sceneMemoryLine = weeklySceneMemoryLine(rows)
         let echoSentence = echoAnchor
             .map { EchoAnchorService.shared.formatEchoAnchorSentence($0) }
             .flatMap { $0.isEmpty ? nil : $0 }
@@ -801,7 +826,8 @@ final class PlaybackService {
             "scentWords": scentText,
             "topCategory": top?.category ?? "日常",
             "ratio": "\(ratio)",
-            "echoLine": echoSentence ?? ""
+            "echoLine": echoSentence ?? "",
+            "sceneMemoryLine": sceneMemoryLine ?? ""
         ]
 
         var chapters: [SummaryChapter] = [
@@ -826,7 +852,8 @@ final class PlaybackService {
                     metrics: [
                         "busiestDay": busiest?.label ?? "本周",
                         "busiestTitle": busiestTitle,
-                        "count": "\(busiest?.count ?? 0)"
+                        "count": "\(busiest?.count ?? 0)",
+                        "sceneMemoryLine": sceneMemoryLine ?? ""
                     ],
                     narration: PlaybackCopyPool.narration(
                         chapterId: "week-rhythm",
@@ -844,7 +871,8 @@ final class PlaybackService {
                         "voiceTitle1": voiceTitle1,
                         "voiceTitle2": voiceTitle2,
                         "amount": primaryVoice.map { Self.money($0.item.amount) } ?? "",
-                        "day": primaryVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? ""
+                        "day": primaryVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? "",
+                        "sceneMemoryLine": sceneMemoryLine ?? ""
                     ],
                     narration: echoSentence.map { SummaryNarration(warm: $0, plain: $0) }
                         ?? PlaybackCopyPool.narration(
@@ -880,7 +908,8 @@ final class PlaybackService {
                     metrics: [
                         "voiceTitle1": voiceTitle1,
                         "amount": primaryVoice.map { Self.money($0.item.amount) } ?? "",
-                        "day": primaryVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? ""
+                        "day": primaryVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? "",
+                        "sceneMemoryLine": sceneMemoryLine ?? ""
                     ],
                     narration: PlaybackCopyPool.narration(
                         chapterId: "week-weak-voices",
@@ -984,6 +1013,15 @@ final class PlaybackService {
             )
         }
 
+        if let scene = LifeSceneSemanticService.dominantScene(in: rows),
+           scene.count >= 3 || Double(scene.count) / Double(max(rows.count, 1)) >= 0.40 {
+            return ShareInsightSignal(
+                kind: .sceneTop(signal: scene.signal, count: scene.count),
+                recordCount: base.recordCount,
+                activeDays: base.activeDays
+            )
+        }
+
         if let brand = weeklyBrandTop(rows), brand.count >= 3 {
             return ShareInsightSignal(
                 kind: .brandTop(name: brand.name, count: brand.count, brandId: brand.id),
@@ -1074,6 +1112,40 @@ final class PlaybackService {
         category: HomeItem.Category,
         rows: [HomeItem]
     ) -> ShareInsightSignal.CategoryContext {
+        if let scene = LifeSceneSemanticService.dominantScene(in: rows) {
+            switch scene.signal.kind {
+            case .breakfast:
+                return .breakfast
+            case .coffee:
+                return .coffee
+            case .quickMeal, .workMeal:
+                return .dining
+            case .commute:
+                return .commute
+            case .cityRoute:
+                return .travel
+            case .medicalVisit:
+                return .medical
+            case .medicineCare:
+                return .medicine
+            case .fitness:
+                return .fitness
+            case .bodyCare:
+                return .care
+            case .groceries:
+                return .groceries
+            case .convenienceSupply, .homeSupply:
+                return .homeSupply
+            case .shopping:
+                return .shopping
+            case .lodging:
+                return .lodging
+            case .social:
+                return .social
+            case .leisure, .errand, .general:
+                break
+            }
+        }
         let text = rows
             .map { "\($0.title) \($0.displayEmotionTag) \($0.category.rawValue)" }
             .joined(separator: " ")
@@ -1467,6 +1539,11 @@ final class PlaybackService {
     }
 
     private func weeklyShareAnchorLine(from summary: SummaryPlayback) -> String? {
+        if let sceneLine = summary.chapters
+            .compactMap({ $0.metrics["sceneMemoryLine"]?.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .first(where: { !$0.isEmpty }) {
+            return sceneLine
+        }
         if let voices = summary.chapters.first(where: { $0.id == "week-voices" }) {
             if let title = voices.metrics["voiceTitle1"]?.trimmingCharacters(in: .whitespacesAndNewlines),
                !title.isEmpty {
@@ -1478,6 +1555,14 @@ final class PlaybackService {
             }
         }
         return nil
+    }
+
+    private func weeklySceneMemoryLine(_ rows: [HomeItem]) -> String? {
+        guard let scene = LifeSceneSemanticService.dominantScene(in: rows),
+              scene.count >= 2 else {
+            return nil
+        }
+        return LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count)
     }
 
     private func monthTeaserLine(

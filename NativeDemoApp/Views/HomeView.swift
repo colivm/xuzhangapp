@@ -123,7 +123,7 @@ struct HomeView: View {
         HStack(spacing: 10) {
             homeActionCard(
                 title: "记下一笔",
-                subtitle: "只输金额也可以",
+                subtitle: homeViewModel.quickRecordNudgeText,
                 systemImage: "plus.circle.fill",
                 isPrimary: true,
                 action: onQuickRecord
@@ -238,9 +238,12 @@ struct HomeView: View {
     }
 
     private var lifeRhythmFallbackText: String {
-        homeViewModel.weekTopCategoryText != "暂无"
-            ? "最近「\(homeViewModel.weekTopCategoryText)」出现得多一点，像这段日子的一个小主题。"
-            : "先记几笔，这里会慢慢长出最近的生活线索。"
+        if !homeViewModel.weekLifeThemeText.isEmpty {
+            return homeViewModel.weekLifeThemeText
+        }
+        return homeViewModel.weekTopCategoryText != "暂无"
+            ? "最近「\(homeViewModel.weekTopCategoryText)」这类记录多一点，像这段日子的一个小主题。"
+            : "先记几笔，这里会长出最近的生活线索。"
     }
 
     private var todayStoryHero: some View {
@@ -400,6 +403,11 @@ struct HomeView: View {
     }
 
     private func handleTodayTotalTap() {
+        guard !homeViewModel.todayItems.isEmpty else {
+            onQuickRecord()
+            return
+        }
+
         if homeViewModel.todayItems.count > 3 {
             showTodayRecordsSheet = true
             return

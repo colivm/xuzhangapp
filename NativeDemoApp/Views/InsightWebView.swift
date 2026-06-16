@@ -372,13 +372,16 @@ struct InsightWebView: View {
             }
         }
 
-        let categoryBuckets = Dictionary(grouping: items, by: \.category)
-        for (category, rows) in categoryBuckets {
+        let sceneBuckets = Dictionary(grouping: items) { item in
+            LifeSceneSemanticService.classify(item).kind
+        }
+        for (_, rows) in sceneBuckets {
+            guard let scene = LifeSceneSemanticService.dominantScene(in: rows) else { continue }
             candidates.append(
                 KeywordBubbleDraft(
-                    text: category.rawValue,
+                    text: LifeSceneSemanticService.displayTheme(for: scene.signal),
                     score: 1_000 + rows.count * 80 + Int(rows.reduce(0) { $0 + $1.amount }.rounded() / 10),
-                    category: category,
+                    category: scene.signal.category,
                     priority: 4,
                     source: .category
                 )

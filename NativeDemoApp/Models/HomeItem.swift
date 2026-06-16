@@ -75,6 +75,8 @@ struct HomeItem: Identifiable, Codable, Equatable {
     var merchantBrandId: String?
     var draftMeta: DraftMeta?
     var userEditedTitle: Bool?
+    var userEditedCategory: Bool?
+    var categoryCorrectionFrom: Category?
 
     init(
         id: UUID = UUID(),
@@ -87,7 +89,9 @@ struct HomeItem: Identifiable, Codable, Equatable {
         emotionTag: String? = nil,
         merchantBrandId: String? = nil,
         draftMeta: DraftMeta? = nil,
-        userEditedTitle: Bool? = nil
+        userEditedTitle: Bool? = nil,
+        userEditedCategory: Bool? = nil,
+        categoryCorrectionFrom: Category? = nil
     ) {
         self.id = id
         self.title = title
@@ -100,6 +104,8 @@ struct HomeItem: Identifiable, Codable, Equatable {
         self.merchantBrandId = merchantBrandId
         self.draftMeta = draftMeta
         self.userEditedTitle = userEditedTitle
+        self.userEditedCategory = userEditedCategory
+        self.categoryCorrectionFrom = categoryCorrectionFrom
     }
 
     static func inferEmotionTag(category: Category, amount: Double) -> String {
@@ -341,7 +347,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
 extension HomeItem {
     enum CodingKeys: String, CodingKey {
-        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta, userEditedTitle
+        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta, userEditedTitle, userEditedCategory, categoryCorrectionFrom
     }
 
     init(from decoder: Decoder) throws {
@@ -358,6 +364,8 @@ extension HomeItem {
         merchantBrandId = try container.decodeIfPresent(String.self, forKey: .merchantBrandId)
         draftMeta = try container.decodeIfPresent(DraftMeta.self, forKey: .draftMeta)
         userEditedTitle = try container.decodeIfPresent(Bool.self, forKey: .userEditedTitle)
+        userEditedCategory = try container.decodeIfPresent(Bool.self, forKey: .userEditedCategory)
+        categoryCorrectionFrom = try container.decodeIfPresent(Category.self, forKey: .categoryCorrectionFrom)
     }
 }
 

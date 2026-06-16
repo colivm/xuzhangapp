@@ -921,6 +921,7 @@ struct RecordView: View {
             tier: previewTier,
             headline: previewHeadline,
             hint: previewHint,
+            learningHint: homeViewModel.recordLearningHint,
             emotion: previewTier == .whisper ? "" : previewEmotion,
             meta: previewCardMeta,
             amountText: inputAmountValue.formatted(.cny),
