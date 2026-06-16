@@ -68,7 +68,7 @@ enum ShareInsightCopyPool {
             leadingTag = "#护理\(count)次"
         case .commute:
             fact = "\(name)记了 \(count) 次，这周通勤不少"
-            cares = ["上班路上的时间，也算这一周的一部分", "来回跑了不少，到家先缓一缓"]
+            cares = ["通勤路上的时间，也算这一周的一部分", "来回跑了不少，到家先缓一缓"]
             semanticTag = "#通勤"
             leadingTag = "#通勤\(count)次"
         case .ride:
@@ -146,7 +146,7 @@ enum ShareInsightCopyPool {
             tag = "#吃饭"
         case .commute:
             fact = "通勤路上记了 \(count) 笔"
-            cares = ["上班路上的时间，也算这一周的一部分", "来回跑了不少，到家先缓一缓"]
+            cares = ["通勤路上的时间，也算这一周的一部分", "来回跑了不少，到家先缓一缓"]
             tag = "#通勤"
         case .travel:
             fact = "出行路上记了 \(count) 笔"

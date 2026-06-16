@@ -156,13 +156,62 @@ struct RecordPrefillService {
             )
         )
         guard let result else { return nil }
+        let title = historyItems.count >= coldStartThreshold
+            ? supportedHabitTitle(
+                for: result.recommended,
+                input: input,
+                historyItems: historyItems
+            )
+            : nil
+        let emotion = title.map {
+            NarrativeCopyResolver.resolveEmotionTag(
+                context: NarrativeCopyResolver.Context(
+                    brandId: nil,
+                    category: result.recommended,
+                    amount: input.amount,
+                    date: input.referenceDate,
+                    seed: $0,
+                    note: $0
+                )
+            )
+        }
         return RecordPrefillResult(
             category: result.recommended,
-            title: nil,
-            emotionTag: nil,
-            confidence: 0.56,
-            source: "generic"
+            title: title,
+            emotionTag: emotion,
+            confidence: title == nil ? 0.56 : 0.64,
+            source: title == nil ? "generic" : "habit"
         )
+    }
+
+    private func supportedHabitTitle(
+        for category: HomeItem.Category,
+        input: RecordPrefillInput,
+        historyItems: [HomeItem]
+    ) -> String? {
+        let sameContext = historyItems.filter { item in
+            item.category == category
+                && sameHabitContext(
+                    item: item,
+                    amount: input.amount,
+                    referenceDate: input.referenceDate
+                )
+        }
+        if sameContext.count >= 2,
+           let title = mostCommonTitle(in: sameContext, category: category, minimumScore: 2) {
+            return title
+        }
+
+        let sameTime = historyItems.filter { item in
+            item.category == category
+                && hourBucket(for: item.createdAt) == hourBucket(for: input.referenceDate)
+                && isWeekend(item.createdAt) == isWeekend(input.referenceDate)
+        }
+        if sameTime.count >= 3,
+           let title = mostCommonTitle(in: sameTime, category: category, minimumScore: 3) {
+            return title
+        }
+        return nil
     }
 
     private func dominantSceneHabit(in items: [HomeItem]) -> SceneHabit? {
@@ -304,7 +353,11 @@ struct RecordPrefillService {
         return min(max(confidence, 0), 1)
     }
 
-    private func mostCommonTitle(in items: [HomeItem], category: HomeItem.Category) -> String? {
+    private func mostCommonTitle(
+        in items: [HomeItem],
+        category: HomeItem.Category,
+        minimumScore: Int = 1
+    ) -> String? {
         let counts = items
             .filter { $0.category == category }
             .reduce(into: [String: Int]()) { result, item in
@@ -319,13 +372,15 @@ struct RecordPrefillService {
                 }
                 result[title, default: 0] += item.userEditedTitle == true ? 2 : 1
             }
-        return counts.sorted { lhs, rhs in
+        let best = counts.sorted { lhs, rhs in
             if lhs.value == rhs.value {
                 return lhs.key < rhs.key
             }
             return lhs.value > rhs.value
         }
-        .first?.key
+        .first
+        guard let best = best, best.value >= minimumScore else { return nil }
+        return best.key
     }
 
     static func isHabitTitle(_ title: String, category: HomeItem.Category) -> Bool {

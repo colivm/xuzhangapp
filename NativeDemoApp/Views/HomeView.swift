@@ -1384,14 +1384,15 @@ struct BillPlaybackSheet: View {
         guard !todayItems.isEmpty else { return [] }
         let total = todayItems.reduce(0) { $0 + $1.amount }
         let topCategory = topCategoryText()
+        let dominantScene = LifeSceneSemanticService.dominantScene(in: todayItems)
         let first = todayItems.first
         let representative = representativeItem()
         var moments: [PlaybackMoment] = [
             PlaybackMoment(
                 id: "opening",
-                eyebrow: "开场",
+                eyebrow: "今天",
                 title: "今天记了 \(todayItems.count) 笔",
-                body: "合计 \(total.formatted(.cny))，这一天有几处已经被放进账本。",
+                body: openingBody(total: total, dominantScene: dominantScene),
                 amountText: nil
             )
         ]
@@ -1401,8 +1402,8 @@ struct BillPlaybackSheet: View {
                 PlaybackMoment(
                     id: "first-\(first.id)",
                     eyebrow: formatClockTime(first.createdAt),
-                    title: first.title,
-                    body: "今天从「\(first.category.rawValue)」开始留下第一处记录。",
+                    title: playbackTitle(for: first),
+                    body: firstMomentBody(for: first),
                     amountText: first.amount.formatted(.cny)
                 )
             )
@@ -1412,9 +1413,9 @@ struct BillPlaybackSheet: View {
             moments.append(
                 PlaybackMoment(
                     id: "theme",
-                    eyebrow: "今日主题",
-                    title: "\(topCategory)出现得多一点",
-                    body: "这不是一份报告，只是今天比较清楚的一条生活线。",
+                    eyebrow: "今天多一点",
+                    title: themeTitle(topCategory: topCategory, dominantScene: dominantScene),
+                    body: themeBody(topCategory: topCategory, dominantScene: dominantScene),
                     amountText: nil
                 )
             )
@@ -1449,13 +1450,148 @@ struct BillPlaybackSheet: View {
         todayItems.last ?? todayItems.first
     }
 
+    private func openingBody(
+        total: Double,
+        dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?
+    ) -> String {
+        let categories = categoryMixText()
+        if let dominantScene = dominantScene, dominantScene.count >= 2 {
+            switch dominantScene.signal.kind {
+            case .commute:
+                return "合计 \(total.formatted(.cny))，路上的几笔也算今天的一部分。"
+            case .cityRoute:
+                return "合计 \(total.formatted(.cny))，今天跑动的地方不少。"
+            case .breakfast, .quickMeal, .workMeal:
+                return "合计 \(total.formatted(.cny))，吃饭这件小事被好好记下了。"
+            case .coffee:
+                return "合计 \(total.formatted(.cny))，忙里提神的几口也留下来了。"
+            case .convenienceSupply, .groceries, .homeSupply:
+                return "合计 \(total.formatted(.cny))，补上的都是今天用得上的。"
+            case .medicalVisit, .medicineCare, .fitness, .bodyCare:
+                return "合计 \(total.formatted(.cny))，身体这边的事也被记住了。"
+            default:
+                break
+            }
+        }
+        return "合计 \(total.formatted(.cny))，\(categories)这些小事被收进了今天。"
+    }
+
+    private func categoryMixText() -> String {
+        let ranked = Dictionary(grouping: todayItems, by: \.category)
+            .map { (category: $0.key, count: $0.value.count, amount: $0.value.reduce(0) { $0 + $1.amount }) }
+            .sorted {
+                if $0.count == $1.count { return $0.amount > $1.amount }
+                return $0.count > $1.count
+            }
+            .prefix(2)
+            .map { $0.category.rawValue }
+        guard !ranked.isEmpty else { return "日常" }
+        return ranked.joined(separator: "、")
+    }
+
+    private func playbackTitle(for item: HomeItem) -> String {
+        let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hour = Calendar.current.component(.hour, from: item.createdAt)
+        let replacements: [String: String] = [
+            "上班路上的一段车程": hour < 12 ? "早上路上这一程" : "路上这一程",
+            "下班路上的一段车程": "下班路上这一程",
+            "公共交通一段": "公交地铁这一趟",
+            "早间路线走完了": "早上这趟路走完了",
+            "晚间通勤完成": "下班这趟路到家了"
+        ]
+        return replacements[title] ?? title
+    }
+
+    private func firstMomentBody(for item: HomeItem) -> String {
+        switch LifeSceneSemanticService.classify(item).kind {
+        case .commute:
+            return "这笔从路上开始，今天的节奏也跟着动起来。"
+        case .cityRoute:
+            return "先把这趟路记下，后面回看就知道那会儿在赶路。"
+        case .breakfast:
+            return "先从早上的一口吃的开始，今天有了开头。"
+        case .quickMeal, .workMeal:
+            return "先把这一餐记下，忙不忙都算吃过了。"
+        case .coffee:
+            return "先从这杯提神的开始，今天慢慢往前走。"
+        case .convenienceSupply, .groceries, .homeSupply:
+            return "先把需要的东西补上，今天少一件惦记的事。"
+        case .medicalVisit, .medicineCare, .fitness, .bodyCare:
+            return "先把身体这边的安排记下，这笔不只是数字。"
+        default:
+            return "这笔先开了个头，今天就从这里被记住。"
+        }
+    }
+
+    private func themeTitle(
+        topCategory: String,
+        dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?
+    ) -> String {
+        guard let dominantScene = dominantScene, dominantScene.count >= 2 else {
+            return "\(topCategory)多一点"
+        }
+        switch dominantScene.signal.kind {
+        case .commute:
+            return "今天路上有几笔"
+        case .cityRoute:
+            return "今天跑动不少"
+        case .breakfast, .quickMeal, .workMeal:
+            return "今天吃饭这条线比较明显"
+        case .coffee:
+            return "今天靠几口提神往前走"
+        case .convenienceSupply, .groceries, .homeSupply:
+            return "今天补了些需要的"
+        case .shopping:
+            return "今天买到了一些东西"
+        case .medicalVisit, .medicineCare:
+            return "今天身体这边没落下"
+        case .fitness, .bodyCare:
+            return "今天也照顾了一下自己"
+        case .social:
+            return "今天有一点人情往来"
+        default:
+            return "\(topCategory)多一点"
+        }
+    }
+
+    private func themeBody(
+        topCategory: String,
+        dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?
+    ) -> String {
+        guard let dominantScene = dominantScene, dominantScene.count >= 2 else {
+            return "不是要总结什么大道理，只是今天「\(topCategory)」出现得更清楚。"
+        }
+        switch dominantScene.signal.kind {
+        case .commute:
+            return "通勤记了 \(dominantScene.count) 笔，路上花掉的时间也算今天的一部分。"
+        case .cityRoute:
+            return "出行记了 \(dominantScene.count) 笔，今天确实在城市里来回移动。"
+        case .breakfast, .quickMeal, .workMeal:
+            return "吃饭记了 \(dominantScene.count) 笔，忙的时候能吃上也挺重要。"
+        case .coffee:
+            return "咖啡饮品记了 \(dominantScene.count) 笔，清醒也有成本。"
+        case .convenienceSupply, .groceries, .homeSupply:
+            return "补给记了 \(dominantScene.count) 笔，都是把日子往前推的小东西。"
+        case .shopping:
+            return "购物记了 \(dominantScene.count) 笔，买到需要的就好。"
+        case .medicalVisit, .medicineCare:
+            return "健康相关记了 \(dominantScene.count) 笔，辛苦归辛苦，先别漏掉自己。"
+        case .fitness, .bodyCare:
+            return "身体相关记了 \(dominantScene.count) 笔，今天有在照看自己。"
+        case .social:
+            return "人情往来记了 \(dominantScene.count) 笔，日子里也有和别人相连的部分。"
+        default:
+            return "这条线出现了 \(dominantScene.count) 次，今天的轮廓就更清楚一点。"
+        }
+    }
+
     private func closingTitle(for item: HomeItem) -> String {
         let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
-        return tag.isEmpty ? item.displayTitle : tag
+        return tag.isEmpty ? playbackTitle(for: item) : tag
     }
 
     private func closingBody(for item: HomeItem) -> String {
-        "最后留给「\(item.displayTitle)」。今天不用分析太多，先被好好记住就够了。"
+        "最后停在「\(playbackTitle(for: item))」。今天不用讲得很满，记到这里就已经够具体了。"
     }
 }
 

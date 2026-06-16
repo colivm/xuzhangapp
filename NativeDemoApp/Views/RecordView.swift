@@ -491,7 +491,10 @@ struct RecordView: View {
     }
 
     private var recordContentBottomPadding: CGFloat {
-        focusedField == .note || amountPadActive ? 430 : 120
+        if focusedField == .note {
+            return 520
+        }
+        return amountPadActive ? 430 : 120
     }
 
     private func dismissKeyboard() {
@@ -511,10 +514,15 @@ struct RecordView: View {
     }
 
     private func scrollNoteFieldIntoView(_ proxy: ScrollViewProxy) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) {
+        scrollNoteFieldIntoView(proxy, delay: 0.18)
+        scrollNoteFieldIntoView(proxy, delay: 0.42)
+    }
+
+    private func scrollNoteFieldIntoView(_ proxy: ScrollViewProxy, delay: Double) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             guard focusedField == .note else { return }
             withAnimation(.easeInOut(duration: 0.24)) {
-                proxy.scrollTo("recordNoteField", anchor: .bottom)
+                proxy.scrollTo("recordNoteField", anchor: .center)
             }
         }
     }

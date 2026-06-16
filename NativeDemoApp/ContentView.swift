@@ -894,6 +894,7 @@ struct RecordEditSheet: View {
     @State private var categoryPanelExpanded = false
     @State private var datePanelExpanded = false
     @State private var safetyMessage: String?
+    @FocusState private var isNoteFieldFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
     init(item: HomeItem, onSave: @escaping (HomeItem) -> Bool, onDelete: @escaping () -> Void) {
@@ -918,32 +919,49 @@ struct RecordEditSheet: View {
         cleanTitle.isEmpty ? selectedCategory.defaultRecordTitle : cleanTitle
     }
 
+    private var editContentBottomPadding: CGFloat {
+        isNoteFieldFocused ? 340 : 40
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    amountStage
-                    editPreviewCard
-                    saveButton
-                    editQuietActions
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        amountStage
+                        editPreviewCard
+                        saveButton
+                        editQuietActions
+                    }
+                    .padding(20)
+                    .padding(.bottom, editContentBottomPadding)
                 }
-                .padding(20)
-                .padding(.bottom, 40)
-            }
-            .scrollIndicators(.hidden)
-            .background(AppColors.bg.ignoresSafeArea())
-            .navigationTitle("调整这一笔")
-            .navigationBarTitleDisplayMode(.inline)
-            .onChange(of: titleText) { _, newValue in
-                if newValue.count > 32 {
-                    titleText = String(newValue.prefix(32))
-                    return
+                .scrollIndicators(.hidden)
+                .background(AppColors.bg.ignoresSafeArea())
+                .navigationTitle("调整这一笔")
+                .navigationBarTitleDisplayMode(.inline)
+                .onChange(of: titleText) { _, newValue in
+                    if newValue.count > 32 {
+                        titleText = String(newValue.prefix(32))
+                        return
+                    }
+                    safetyMessage = nil
                 }
-                safetyMessage = nil
-            }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                .onChange(of: noteEditorExpanded) { _, isExpanded in
+                    if isExpanded {
+                        focusEditNoteField(scrollProxy)
+                    } else {
+                        isNoteFieldFocused = false
+                    }
+                }
+                .onChange(of: isNoteFieldFocused) { _, isFocused in
+                    guard isFocused else { return }
+                    scrollEditNoteFieldIntoView(scrollProxy)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("取消") { dismiss() }
+                    }
                 }
             }
         }
@@ -1079,6 +1097,7 @@ struct RecordEditSheet: View {
 
     private var editPreviewNoteField: some View {
         TextField("这一笔想怎么被记住？", text: $titleText)
+            .focused($isNoteFieldFocused)
             .font(.system(size: 16))
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -1086,6 +1105,7 @@ struct RecordEditSheet: View {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(Color.white.opacity(0.68))
             )
+            .id("recordEditNoteField")
             .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
@@ -1168,7 +1188,29 @@ struct RecordEditSheet: View {
     }
 
     private func dismissKeyboard() {
+        isNoteFieldFocused = false
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    private func focusEditNoteField(_ proxy: ScrollViewProxy) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            isNoteFieldFocused = true
+            scrollEditNoteFieldIntoView(proxy)
+        }
+    }
+
+    private func scrollEditNoteFieldIntoView(_ proxy: ScrollViewProxy) {
+        scrollEditNoteFieldIntoView(proxy, delay: 0.18)
+        scrollEditNoteFieldIntoView(proxy, delay: 0.42)
+    }
+
+    private func scrollEditNoteFieldIntoView(_ proxy: ScrollViewProxy, delay: Double) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard isNoteFieldFocused else { return }
+            withAnimation(.easeInOut(duration: 0.24)) {
+                proxy.scrollTo("recordEditNoteField", anchor: .center)
+            }
+        }
     }
 
     private var saveButton: some View {

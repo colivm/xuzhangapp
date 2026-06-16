@@ -211,7 +211,8 @@ enum RecordSemanticLexicon {
         if let bestCategory = bestMatchingCategory(in: trimmed) {
             return bestCategory == category
         }
-        return ["brand", "scene_habit"].contains(source ?? "") && isTitle(trimmed, compatibleWith: category)
+        return ["brand", "scene_habit", "habit", "frequent"].contains(source ?? "")
+            && isTitle(trimmed, compatibleWith: category)
     }
 
     private static let generatedSystemTitles: Set<String> = [

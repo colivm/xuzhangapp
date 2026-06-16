@@ -900,10 +900,20 @@ final class HomeViewModel: ObservableObject {
            noteSemanticCategory == nil,
            let frequentSuggestion,
            frequentSuggestionCanOverrideNote(frequentSuggestion, note: trimmedNote) {
+            let title = frequentHabitTitle(
+                for: frequentSuggestion,
+                amount: amount,
+                at: selectedDate
+            )
             recordPrefillResult = RecordPrefillResult(
                 category: frequentSuggestion.category,
-                title: nil,
-                emotionTag: nil,
+                title: title,
+                emotionTag: habitEmotionTag(
+                    title: title,
+                    category: frequentSuggestion.category,
+                    amount: amount,
+                    date: selectedDate
+                ),
                 confidence: frequentSuggestion.confidence,
                 source: "frequent"
             )
@@ -1124,6 +1134,70 @@ final class HomeViewModel: ObservableObject {
         frequentRecordAmountSuggestions(at: date).first { suggestion in
             abs(suggestion.amount - amount) < 0.005
         }
+    }
+
+    private func frequentHabitTitle(
+        for suggestion: FrequentRecordAmountSuggestion,
+        amount: Double,
+        at date: Date
+    ) -> String? {
+        let calendar = Calendar.current
+        let start = calendar.date(byAdding: .day, value: -180, to: date) ?? .distantPast
+        let amountCents = Int((amount * 100).rounded())
+        let supportItems = items.filter { item in
+            item.amount > 0
+                && item.createdAt >= start
+                && item.createdAt <= date
+                && item.category == suggestion.category
+                && Int((item.amount * 100).rounded()) == amountCents
+                && hourHabitBucket(for: item.createdAt) == hourHabitBucket(for: date)
+                && isHabitWeekend(item.createdAt) == isHabitWeekend(date)
+        }
+        guard supportItems.count >= 2 else { return nil }
+
+        let ranked = supportItems.reduce(into: [String: Int]()) { result, item in
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard RecordPrefillService.isHabitTitle(title, category: suggestion.category),
+                  RecordSemanticLexicon.canReuseHabitTitle(
+                    title,
+                    category: suggestion.category,
+                    userEditedTitle: item.userEditedTitle == true
+                  ) else {
+                return
+            }
+            result[title, default: 0] += item.userEditedTitle == true ? 2 : 1
+        }
+        .sorted { lhs, rhs in
+            if lhs.value == rhs.value {
+                return lhs.key < rhs.key
+            }
+            return lhs.value > rhs.value
+        }
+
+        guard let best = ranked.first, best.value >= 2 else { return nil }
+        return best.key
+    }
+
+    private func habitEmotionTag(
+        title: String?,
+        category: HomeItem.Category,
+        amount: Double,
+        date: Date
+    ) -> String? {
+        guard let title = title,
+              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return NarrativeCopyResolver.resolveEmotionTag(
+            context: NarrativeCopyResolver.Context(
+                brandId: nil,
+                category: category,
+                amount: amount,
+                date: date,
+                seed: title,
+                note: title
+            )
+        )
     }
 
     private func frequentCategory(in items: [HomeItem]) -> (category: HomeItem.Category, count: Int, confidence: Double)? {

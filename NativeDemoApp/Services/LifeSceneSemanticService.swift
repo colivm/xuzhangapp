@@ -129,7 +129,7 @@ enum LifeSceneSemanticService {
         case .commute:
             return LifeSceneWeeklyCopy(
                 fact: "通勤路上记了 \(count) 笔",
-                cares: ["上班路上的时间，也算这一周的一部分", "来回跑了不少，到家先缓一缓"],
+                cares: ["通勤路上的时间，也算这一周的一部分", "来回跑了不少，到家先缓一缓"],
                 leadingTag: "#通勤\(count)次",
                 semanticTag: "#早晚路上",
                 supportTag: "#工作日节奏"

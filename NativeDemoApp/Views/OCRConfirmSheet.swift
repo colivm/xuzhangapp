@@ -614,19 +614,43 @@ private struct OCRCategoryChips: View {
     let onSelect: (HomeItem.Category) -> Void
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 7) {
-                ForEach(HomeItem.Category.allCases) { category in
-                    Button {
-                        onSelect(category)
-                    } label: {
-                        categoryLabel(category)
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 7) {
+                    ForEach(HomeItem.Category.allCases) { category in
+                        Button {
+                            onSelect(category)
+                        } label: {
+                            categoryLabel(category)
+                        }
+                        .buttonStyle(.plain)
+                        .id(category)
                     }
-                    .buttonStyle(.plain)
                 }
+            }
+            .onAppear {
+                scrollSelectedCategoryIntoView(proxy, animated: false)
+            }
+            .onChange(of: selectedCategory) { _, _ in
+                scrollSelectedCategoryIntoView(proxy, animated: true)
             }
         }
         .frame(maxWidth: 220, alignment: .leading)
+    }
+
+    private func scrollSelectedCategoryIntoView(_ proxy: ScrollViewProxy, animated: Bool) {
+        let action = {
+            proxy.scrollTo(selectedCategory, anchor: .center)
+        }
+        if animated {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                action()
+            }
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                action()
+            }
+        }
     }
 
     private func categoryLabel(_ category: HomeItem.Category) -> some View {
