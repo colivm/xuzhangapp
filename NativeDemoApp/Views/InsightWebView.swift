@@ -1848,13 +1848,15 @@ struct WeeklyShareCardView: View {
     private var t: ShareCardTheme { .journal }
 
     struct ShareCardTheme {
-        let bgStart, bgEnd: Color; let panelBg, panelBorder: Color
-        let accent, titleSub, textMain, textMuted: Color
+        let bgStart, bgMid, bgEnd: Color; let panelBg, panelBorder: Color
+        let paperShadow, paperEdge: Color
+        let accent, accentDeep, titleSub, textMain, textMuted: Color
         let footer, footerSub: Color
         static let journal = ShareCardTheme(
-            bgStart: Color(hex: "edf4ed"), bgEnd: Color(hex: "f8efe2"),
-            panelBg: Color(hex: "fffdf6").opacity(0.90), panelBorder: Color(hex: "dfe6d8"),
-            accent: Color(hex: "8fb49e"),
+            bgStart: Color(hex: "dceadf"), bgMid: Color(hex: "f5f7ec"), bgEnd: Color(hex: "fff3df"),
+            panelBg: Color(hex: "fffdf7").opacity(0.94), panelBorder: Color(hex: "dbe4d5"),
+            paperShadow: Color(hex: "6f8374"), paperEdge: Color(hex: "f1f5e9"),
+            accent: Color(hex: "89b69a"), accentDeep: Color(hex: "47705c"),
             titleSub: Color(hex: "89968f"), textMain: Color(hex: "1f2528"), textMuted: Color(hex: "6d776f"),
             footer: Color(hex: "4c5960"), footerSub: Color(hex: "9aa49b"))
     }
@@ -1919,19 +1921,14 @@ struct WeeklyShareCardView: View {
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [t.bgStart, Color(hex: "f4f7ee"), t.bgEnd],
+                colors: [t.bgStart, t.bgMid, t.bgEnd],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
 
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(t.panelBg)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(t.panelBorder.opacity(0.62), lineWidth: 1)
-                )
-                .padding(.horizontal, 26)
-                .padding(.vertical, 24)
+            paperStack
+                .padding(.horizontal, 24)
+                .padding(.vertical, 22)
 
             lowerPaperTexture
                 .padding(.horizontal, 28)
@@ -1952,7 +1949,7 @@ struct WeeklyShareCardView: View {
                     Spacer()
                     Text("叙账")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(t.accent.opacity(0.78))
+                        .foregroundStyle(t.accentDeep.opacity(0.80))
                 }
 
                 Text("这一周")
@@ -1962,11 +1959,11 @@ struct WeeklyShareCardView: View {
                     .padding(.top, 42)
 
                 Text(insight.fact)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(.system(size: 29, weight: .bold, design: .rounded))
                     .foregroundStyle(t.textMain)
                     .lineSpacing(6)
                     .lineLimit(3)
-                    .minimumScaleFactor(0.70)
+                    .minimumScaleFactor(0.66)
                     .padding(.top, 10)
                     .frame(minHeight: 104, alignment: .topLeading)
 
@@ -1978,7 +1975,7 @@ struct WeeklyShareCardView: View {
 
                 Text(insight.care)
                     .font(.system(size: 18, weight: .medium, design: .rounded))
-                    .foregroundStyle(t.textMain.opacity(0.92))
+                    .foregroundStyle(t.accentDeep.opacity(0.92))
                     .lineSpacing(6)
                     .lineLimit(3)
                     .minimumScaleFactor(0.74)
@@ -1996,16 +1993,42 @@ struct WeeklyShareCardView: View {
                 shareTags
                     .padding(.bottom, 18)
 
-                Text("叙账 · 基于你这周的真实记录")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(t.footerSub)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(alignment: .center, spacing: 10) {
+                    Text("叙账 · 基于你这周的真实记录")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(t.footerSub)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    shareSeal
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 42)
             .padding(.vertical, 38)
         }
         .frame(width: 390, height: 580)
         .clipped()
+    }
+
+    private var paperStack: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(t.paperEdge.opacity(0.70))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(t.panelBorder.opacity(0.36), lineWidth: 1)
+                )
+                .offset(x: 9, y: 10)
+                .shadow(color: t.paperShadow.opacity(0.11), radius: 16, x: 0, y: 10)
+
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(t.panelBg)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(t.panelBorder.opacity(0.72), lineWidth: 1)
+                )
+                .shadow(color: t.paperShadow.opacity(0.13), radius: 24, x: 0, y: 16)
+        }
     }
 
     private var rhythmTexture: some View {
@@ -2019,26 +2042,36 @@ struct WeeklyShareCardView: View {
             Spacer()
             Text("这一周")
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(t.footerSub)
+                .foregroundStyle(t.accentDeep.opacity(0.48))
         }
         .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
     }
 
     private var shareTags: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 7) {
             ForEach(Array(tagRows.enumerated()), id: \.offset) { _, row in
-                HStack(spacing: 14) {
+                HStack(spacing: 8) {
                     ForEach(row, id: \.self) { tag in
                         Text(tag)
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
-                            .foregroundStyle(t.textMain.opacity(0.72))
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(t.accentDeep.opacity(0.72))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.82)
+                            .minimumScaleFactor(0.78)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.white.opacity(0.34))
+                            )
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(t.accent.opacity(0.20), lineWidth: 0.8)
+                            )
                     }
                 }
             }
         }
-        .rotationEffect(.degrees(-5))
+        .rotationEffect(.degrees(-3.5))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -2063,7 +2096,7 @@ struct WeeklyShareCardView: View {
             }
             .fill(
                 LinearGradient(
-                    colors: [t.accent.opacity(0.10), Color(hex: "edf3e7").opacity(0.38)],
+                    colors: [t.accent.opacity(0.18), Color(hex: "eef6e7").opacity(0.46), Color(hex: "fff3df").opacity(0.18)],
                     startPoint: .leading,
                     endPoint: .trailing
                 )
@@ -2077,10 +2110,35 @@ struct WeeklyShareCardView: View {
                     control2: CGPoint(x: 210, y: 76)
                 )
             }
-            .stroke(t.accent.opacity(0.18), lineWidth: 1)
+            .stroke(t.accent.opacity(0.24), lineWidth: 1)
+
+            ForEach(0..<9, id: \.self) { idx in
+                RoundedRectangle(cornerRadius: 1.2, style: .continuous)
+                    .fill(t.accentDeep.opacity(idx.isMultiple(of: 2) ? 0.08 : 0.05))
+                    .frame(width: CGFloat(18 + (idx % 3) * 10), height: 2)
+                    .offset(x: CGFloat(18 + idx * 32), y: CGFloat(72 + (idx % 3) * 9))
+            }
         }
         .frame(height: 118)
         .allowsHitTesting(false)
+    }
+
+    private var shareSeal: some View {
+        ZStack {
+            Circle()
+                .stroke(t.accentDeep.opacity(0.20), lineWidth: 1)
+            Circle()
+                .stroke(t.accentDeep.opacity(0.10), lineWidth: 4)
+                .padding(5)
+            Text("真实\n周记")
+                .font(.system(size: 8, weight: .bold, design: .rounded))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(t.accentDeep.opacity(0.45))
+                .lineSpacing(1)
+        }
+        .frame(width: 42, height: 42)
+        .rotationEffect(.degrees(9))
+        .accessibilityHidden(true)
     }
 
     func snapshot() -> UIImage? {

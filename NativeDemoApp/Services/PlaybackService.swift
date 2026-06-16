@@ -77,7 +77,7 @@ enum ShareInsightCopyPool {
                 fact: "\(label)最忙，记了 \(count) 笔",
                 care: pick(["忙完那天，给自己留点空", "把最满的一天留在这里"], seed: seed + "|day"),
                 footnote: footnote(for: signal),
-                tags: ["#数据支撑", "#节奏", "#\(shortDayLabel(label))", "#这一周"]
+                tags: ["#真实记录", "#节奏", "#\(shortDayLabel(label))", "#这一周"]
             )
         case let .lifeTitle(text):
             return ShareInsight(
@@ -133,7 +133,7 @@ enum ShareInsightCopyPool {
             fact: fact,
             care: pick(cares, seed: seed + "|brand|\(name)"),
             footnote: footnote(for: signal),
-            tags: ["#数据支撑", semanticTag, "#\(sanitizedTag(name))", "#这一周"]
+            tags: ["#真实记录", semanticTag, "#\(sanitizedTag(name))", "#这一周"]
         )
     }
 
@@ -192,7 +192,7 @@ enum ShareInsightCopyPool {
             fact: fact,
             care: pick(cares, seed: seed + "|category|\(category.rawValue)"),
             footnote: footnote(for: signal),
-            tags: ["#数据支撑", tag, "#\(category.label)", "#这一周"]
+            tags: ["#真实记录", tag, "#\(category.label)", "#这一周"]
         )
     }
 
