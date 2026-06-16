@@ -31,6 +31,77 @@
       "expectedEmotionRule": "transport"
     },
     {
+      "id": "manual-morning-commute-copy-stays-transport",
+      "mode": "manual",
+      "amount": 9.9,
+      "time": "08:17",
+      "history": "frequentExactAmount:dining",
+      "inputTitle": "早高峰顺利到达",
+      "expectedCategory": "交通",
+      "expectedEmotionRule": "transport"
+    },
+    {
+      "id": "manual-breakfast-copy-stays-dining",
+      "mode": "manual",
+      "amount": 4.75,
+      "time": "08:12",
+      "history": "frequentExactAmount:transport",
+      "inputTitle": "清晨的一份轻食",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
+      "id": "habit-dining-must-not-reuse-transport-copy",
+      "mode": "manual",
+      "amount": 9.9,
+      "time": "08:17",
+      "history": "habitCategory:dining,title:早高峰顺利到达,userEdited:false",
+      "inputTitle": "",
+      "expectedCategory": "餐饮",
+      "expectedTitle": "not:早高峰顺利到达"
+    },
+    {
+      "id": "small-amount-habit-keeps-475-and-990-separated",
+      "mode": "manual",
+      "amount": 9.9,
+      "time": "08:17",
+      "history": "amount:4.75,category:transport,count:4;sameTime:true",
+      "inputTitle": "",
+      "expectedTitle": "not:早高峰顺利到达",
+      "expectedHabitMatch": false
+    },
+    {
+      "id": "exact-amount-habit-learns-after-two-stable-repeats",
+      "mode": "manual",
+      "amount": 9.9,
+      "time": "08:17",
+      "history": "amount:9.9,category:dining,count:2;sameTime:true;totalRecent:6",
+      "inputTitle": "",
+      "expectedCategory": "餐饮",
+      "expectedTitle": "未填写备注"
+    },
+    {
+      "id": "manual-category-change-generates-category-copy",
+      "mode": "manual",
+      "amount": 9.9,
+      "time": "08:17",
+      "selectedCategory": "餐饮",
+      "categoryLockedByUser": true,
+      "inputTitle": "",
+      "expectedCategory": "餐饮",
+      "expectedTitle": "早餐先记下"
+    },
+    {
+      "id": "empty-note-stays-neutral",
+      "mode": "manual",
+      "amount": 9.9,
+      "time": "08:17",
+      "selectedCategory": "餐饮",
+      "inputTitle": "",
+      "preserveEmptyTitle": true,
+      "expectedTitle": "未填写备注"
+    },
+    {
       "id": "manual-coffee-locked-transport",
       "mode": "manual",
       "amount": 4.75,

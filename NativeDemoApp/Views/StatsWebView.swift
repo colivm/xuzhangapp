@@ -2126,7 +2126,7 @@ struct StatsWebView: View {
     }
 }
 
-private struct TraceInlineRecordEditor: View {
+struct TraceInlineRecordEditor: View {
     let item: HomeItem
     var autoCommitRequestID: UUID?
     var onSave: (HomeItem) -> Bool

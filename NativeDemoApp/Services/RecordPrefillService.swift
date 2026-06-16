@@ -37,7 +37,7 @@ struct RecordPrefillResult {
 }
 
 struct RecordPrefillService {
-    private let coldStartThreshold = 15
+    private let coldStartThreshold = 6
     private let genericCategoryService = CategoryRecommendService()
 
     func prefill(input: RecordPrefillInput) -> RecordPrefillResult? {
@@ -145,8 +145,18 @@ struct RecordPrefillService {
     }
 
     private func sameAmountContext(historyAmount: Double, inputAmount: Double) -> Bool {
-        amountBand(for: historyAmount) == amountBand(for: inputAmount)
-            || (historyAmount >= inputAmount * 0.7 && historyAmount <= inputAmount * 1.3)
+        let historyCents = Int((historyAmount * 100).rounded())
+        let inputCents = Int((inputAmount * 100).rounded())
+        if historyCents == inputCents { return true }
+
+        let lower = inputAmount * 0.8
+        let upper = inputAmount * 1.2
+        if historyAmount >= lower, historyAmount <= upper { return true }
+
+        guard inputAmount > 20, historyAmount > 20 else { return false }
+        return amountBand(for: historyAmount) == amountBand(for: inputAmount)
+            && historyAmount >= inputAmount * 0.7
+            && historyAmount <= inputAmount * 1.3
     }
 
     private func rankedCategories(in items: [HomeItem]) -> [(category: HomeItem.Category, count: Int)] {
@@ -183,7 +193,11 @@ struct RecordPrefillService {
             .reduce(into: [String: Int]()) { result, item in
                 let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard Self.isHabitTitle(title, category: category),
-                      RecordSemanticLexicon.isTitle(title, compatibleWith: category) else {
+                      RecordSemanticLexicon.canReuseHabitTitle(
+                        title,
+                        category: category,
+                        userEditedTitle: item.userEditedTitle == true
+                      ) else {
                     return
                 }
                 result[title, default: 0] += item.userEditedTitle == true ? 2 : 1
@@ -200,6 +214,7 @@ struct RecordPrefillService {
     static func isHabitTitle(_ title: String, category: HomeItem.Category) -> Bool {
         guard (2...12).contains(title.count) else { return false }
         if title == category.defaultRecordTitle { return false }
+        if RecordSemanticLexicon.isSystemGeneratedTitle(title) { return false }
         if title.hasSuffix("记录") || title.hasSuffix("消费") { return false }
         if isDirtyTraceTitle(title) { return false }
         if title.range(of: #"^-?\s*[¥￥]?\s*[0-9]+(?:\.[0-9]{1,2})?\s*$"#, options: .regularExpression) != nil {

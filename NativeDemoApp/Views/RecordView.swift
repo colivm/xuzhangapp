@@ -325,10 +325,15 @@ struct RecordView: View {
            homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return nil
         }
-        guard prefillResultMatchesSelectedCategory,
+        guard let result = homeViewModel.recordPrefillResult,
+              prefillResultMatchesSelectedCategory,
               let title = homeViewModel.recordPrefillResult?.title?.trimmingCharacters(in: .whitespacesAndNewlines),
               !title.isEmpty,
-              RecordSemanticLexicon.isTitle(title, compatibleWith: homeViewModel.selectedCategory) else {
+              RecordSemanticLexicon.canDisplayPrefillTitle(
+                title,
+                category: homeViewModel.selectedCategory,
+                source: result.source
+              ) else {
             return nil
         }
         return title
@@ -344,6 +349,16 @@ struct RecordView: View {
         inputTitleCompatibleWithSelectedCategory || compatiblePrefillTitle != nil
     }
 
+    private var hasExplicitCopyIntent: Bool {
+        homeViewModel.categoryLockedByUser || previewLineWasRotated || activeScenePack != nil
+    }
+
+    private var shouldUseNeutralRemarkFallback: Bool {
+        homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && compatiblePrefillTitle == nil
+            && !hasExplicitCopyIntent
+    }
+
     private var previewTitleIsExplicitUserEdit: Bool {
         let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, inputTitleCompatibleWithSelectedCategory else { return false }
@@ -356,6 +371,9 @@ struct RecordView: View {
     private var previewHeadline: String {
         let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         if !title.isEmpty, inputTitleCompatibleWithSelectedCategory { return title }
+        if shouldUseNeutralRemarkFallback {
+            return RecordSemanticLexicon.emptyNoteTitle
+        }
         if let prefillTitle = compatiblePrefillTitle {
             return prefillTitle
         }
@@ -363,6 +381,9 @@ struct RecordView: View {
     }
 
     private var previewEmotion: String {
+        if shouldUseNeutralRemarkFallback {
+            return ""
+        }
         if let result = homeViewModel.recordPrefillResult,
            let emotion = result.emotionTag?.trimmingCharacters(in: .whitespacesAndNewlines),
            !emotion.isEmpty,
@@ -401,12 +422,12 @@ struct RecordView: View {
             .init(
                 amount: inputAmountValue,
                 itemsCount: homeViewModel.items.count,
-                hasBrand: !homeViewModel.categoryLockedByUser && (previewBrand != nil || homeViewModel.recordPrefillResult?.source == "brand"),
+                hasBrand: !shouldUseNeutralRemarkFallback && !homeViewModel.categoryLockedByUser && (previewBrand != nil || homeViewModel.recordPrefillResult?.source == "brand"),
                 hasNote: hasPreviewNote,
                 previewLineWasRotated: previewLineWasRotated,
                 isEditing: false,
-                prefillSource: homeViewModel.recordPrefillResult?.source,
-                prefillConfidence: homeViewModel.recordPrefillResult?.confidence
+                prefillSource: shouldUseNeutralRemarkFallback ? nil : homeViewModel.recordPrefillResult?.source,
+                prefillConfidence: shouldUseNeutralRemarkFallback ? nil : homeViewModel.recordPrefillResult?.confidence
             )
         )
     }
@@ -448,7 +469,8 @@ struct RecordView: View {
     }
 
     private var previewQuickActionTitle: String {
-        if previewBrand != nil || homeViewModel.recordPrefillResult?.source == "brand" {
+        if !shouldUseNeutralRemarkFallback,
+           previewBrand != nil || homeViewModel.recordPrefillResult?.source == "brand" {
             return "换说法"
         }
         return previewTier == .confirm ? "换一句" : "帮我写一句"
@@ -491,10 +513,23 @@ struct RecordView: View {
         }
     }
 
+    private func openNoteEditor() {
+        dismissKeyboard()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            noteEditorExpanded = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+            focusedField = .note
+        }
+    }
+
     private func saveManualRecord() {
         guard hasValidAmount else { return }
         dismissKeyboard()
-        let didSave = homeViewModel.addManualRecord(userEditedTitle: currentTitleShouldBeUserEdited)
+        let didSave = homeViewModel.addManualRecord(
+            userEditedTitle: currentTitleShouldBeUserEdited,
+            preserveEmptyTitle: shouldUseNeutralRemarkFallback
+        )
         guard didSave else {
             withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
                 recordDetailsExpanded = true
@@ -615,10 +650,10 @@ struct RecordView: View {
         homeViewModel.inputTitle = nextCategoryCopyTitle()
     }
 
-    private func refreshRecommendedCategory(applySuggestedTitle: Bool = true) {
+    private func refreshRecommendedCategory() {
         guard selectedEntryMode == .manual else { return }
         guard !homeViewModel.categoryLockedByUser else { return }
-        homeViewModel.refreshRecordPrefill(applySuggestedTitle: applySuggestedTitle)
+        homeViewModel.refreshRecordPrefill()
     }
 
     var body: some View {
@@ -694,6 +729,11 @@ struct RecordView: View {
                     categoryGridExpanded = false
                     noteEditorExpanded = false
                     datePanelExpanded = false
+                } else if previewLineWasRotated,
+                          !noteEditorExpanded,
+                          activeScenePack == nil {
+                    homeViewModel.inputTitle = ""
+                    previewLineWasRotated = false
                 }
                 refreshRecommendedCategory()
             }
@@ -703,7 +743,7 @@ struct RecordView: View {
                     return
                 }
                 homeViewModel.clearRecordInputMessage()
-                refreshRecommendedCategory(applySuggestedTitle: false)
+                refreshRecommendedCategory()
             }
             .onChange(of: homeViewModel.selectedDate) { _, _ in
                 refreshRecommendedCategory()
@@ -888,11 +928,7 @@ struct RecordView: View {
             showsPrimaryAction: isMember,
             showAngleAction: isMember && previewLineWasRotated && previewTier == .confirm,
             onTap: {
-                dismissKeyboard()
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    noteEditorExpanded = true
-                }
-                focusedField = .note
+                openNoteEditor()
             },
             onChangeCategory: {
                 dismissKeyboard()
@@ -902,11 +938,7 @@ struct RecordView: View {
             },
             onPrimaryAction: handlePreviewQuickAction,
             onWriteOwn: {
-                dismissKeyboard()
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    noteEditorExpanded = true
-                }
-                focusedField = .note
+                openNoteEditor()
             },
             onAngleAction: {
                 dismissKeyboard()
@@ -988,7 +1020,11 @@ struct RecordView: View {
                     detailToggleButton("写点细节", isActive: noteEditorExpanded) {
                         withAnimation(.easeInOut(duration: 0.16)) {
                             noteEditorExpanded.toggle()
-                            if noteEditorExpanded { focusedField = .note }
+                            if noteEditorExpanded {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+                                    focusedField = .note
+                                }
+                            }
                         }
                     }
                 }

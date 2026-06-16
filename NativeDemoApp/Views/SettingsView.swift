@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var draftDisplayName = ""
     @State private var draftPetNickname = ""
     @State private var showDeleteCloudLedgerConfirm = false
+    @State private var showClearAllRecordsConfirm = false
     @State private var showDeleteAccountConfirm = false
     @State private var showEnableCloudSyncConfirm = false
     @State private var confirmationHost: SettingsConfirmationHost = .main
@@ -479,6 +480,34 @@ struct SettingsView: View {
         }
     }
 
+    private var clearAllRecordsHelperText: String {
+        let count = homeViewModel.items.count
+        if settingsViewModel.syncEnabled && settingsViewModel.hasCloudSession {
+            return count > 0 ? "当前 \(count) 笔；会同时清空本机和云端账本。" : "当前没有本机记录；云端账本也会一并清空。"
+        }
+        return count > 0 ? "当前 \(count) 笔；只清空这台设备上的本机账本。" : "当前没有本机记录。"
+    }
+
+    private var clearAllRecordsConfirmMessage: String {
+        if settingsViewModel.syncEnabled && settingsViewModel.hasCloudSession {
+            return "这会删除本机记录，并清空服务器上的同步账本；云端备份会同时关闭。这个操作不能撤销。"
+        }
+        return "这会删除这台设备上的全部本机记录、今日回放和本地复盘缓存。这个操作不能撤销。"
+    }
+
+    private func clearAllRecords() {
+        if settingsViewModel.syncEnabled && settingsViewModel.hasCloudSession {
+            Task {
+                let didClearCloud = await settingsViewModel.deleteCloudLedger()
+                if didClearCloud {
+                    homeViewModel.clearLocalLedgerData()
+                }
+            }
+        } else {
+            homeViewModel.clearLocalLedgerData()
+        }
+    }
+
     private var settingsInkAccent: Color {
         Color(red: 0.66, green: 0.47, blue: 0.30)
     }
@@ -638,6 +667,14 @@ struct SettingsView: View {
             } message: {
                 Text("开启后会先把云端账单同步到本地，再上传本机账单完成合并；同一笔账单冲突时以更新时间较新的记录为准。")
             }
+            .confirmationDialog("清空所有记录？", isPresented: confirmationBinding($showClearAllRecordsConfirm, host: host), titleVisibility: .visible) {
+                Button("清空所有记录", role: .destructive) {
+                    clearAllRecords()
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text(clearAllRecordsConfirmMessage)
+            }
             .confirmationDialog("注销账号？", isPresented: confirmationBinding($showDeleteAccountConfirm, host: host), titleVisibility: .visible) {
                 Button("保留本机账本并注销", role: .destructive) {
                     Task {
@@ -736,6 +773,11 @@ struct SettingsView: View {
             }
         case .privacy:
             sectionBody("默认本地存储，无需登录即可完整使用。开启云端备份后，仅同步必要账单数据与会员状态。")
+            destructiveSettingsButton("清空所有记录") {
+                confirmationHost = .settingsSheet
+                showClearAllRecordsConfirm = true
+            }
+            settingHelper(clearAllRecordsHelperText)
             legalLinksRow
             Text("ICP备案号：待备案")
                 .font(.system(size: 11))
@@ -1544,6 +1586,29 @@ struct SettingsView: View {
                 .padding(.vertical, 11)
                 .background(webButtonBackground)
                 .overlay(webButtonBorder)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func destructiveSettingsButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "trash")
+                    .font(.system(size: 13, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .foregroundStyle(Color.red.opacity(0.82))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.red.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.red.opacity(0.18), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }

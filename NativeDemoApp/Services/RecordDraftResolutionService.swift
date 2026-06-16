@@ -80,25 +80,6 @@ enum RecordDraftResolutionService {
         from title: String,
         fallback: HomeItem.Category
     ) -> HomeItem.Category? {
-        let matches = RecordSemanticLexicon.matchingCategories(in: title)
-        guard !matches.isEmpty, !matches.contains(fallback) else { return nil }
-        return matches.sorted { lhs, rhs in
-            semanticPriority(lhs) < semanticPriority(rhs)
-        }.first
-    }
-
-    private static func semanticPriority(_ category: HomeItem.Category) -> Int {
-        switch category {
-        case .transport: return 0
-        case .dining: return 1
-        case .shopping: return 2
-        case .daily: return 3
-        case .health: return 4
-        case .home: return 5
-        case .lodging: return 6
-        case .social: return 7
-        case .entertainment: return 8
-        case .other: return 9
-        }
+        RecordSemanticLexicon.semanticCategory(of: title, fallback: fallback)
     }
 }

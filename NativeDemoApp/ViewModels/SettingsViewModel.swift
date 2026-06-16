@@ -292,12 +292,13 @@ final class SettingsViewModel: ObservableObject {
         persist()
     }
 
-    func deleteCloudLedger() async {
+    @discardableResult
+    func deleteCloudLedger() async -> Bool {
         authMessage = nil
         let token = KeychainService.loadAccessToken()
         guard !token.isEmpty else {
             authMessage = "请先登录账号。"
-            return
+            return false
         }
         isAuthBusy = true
         defer { isAuthBusy = false }
@@ -307,8 +308,10 @@ final class SettingsViewModel: ObservableObject {
             settings.syncEnabled = false
             persist()
             authMessage = "云端账本已删除，本机记录仍保留。"
+            return true
         } catch {
             authMessage = error.localizedDescription
+            return false
         }
     }
 

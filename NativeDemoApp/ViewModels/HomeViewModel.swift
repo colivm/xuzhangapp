@@ -148,7 +148,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     @discardableResult
-    func addManualRecord(userEditedTitle: Bool = false) -> Bool {
+    func addManualRecord(userEditedTitle: Bool = false, preserveEmptyTitle: Bool = false) -> Bool {
         guard let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0 else { return false }
         let wasEmpty = items.isEmpty
         let noteResult = UserContentRiskService.shared.validateManualNote(inputTitle, allowEmpty: true)
@@ -158,7 +158,13 @@ final class HomeViewModel: ObservableObject {
         }
         recordInputMessage = nil
         let trimmed = noteResult.value
-        let baseTitle = trimmed.isEmpty ? selectedCategory.defaultRecordTitle : trimmed
+        let titleWasIntentionallyBlank = preserveEmptyTitle && trimmed.isEmpty
+        let baseTitle: String
+        if titleWasIntentionallyBlank {
+            baseTitle = RecordSemanticLexicon.emptyNoteTitle
+        } else {
+            baseTitle = trimmed.isEmpty ? selectedCategory.defaultRecordTitle : trimmed
+        }
         let resolution = RecordDraftResolutionService.resolve(
             RecordDraftResolutionInput(
                 rawTitle: baseTitle,
@@ -167,7 +173,7 @@ final class HomeViewModel: ObservableObject {
                 date: selectedDate,
                 merchantBrandId: MerchantBrandCatalog.matchBrand(in: baseTitle)?.id,
                 categoryLockedByUser: categoryLockedByUser,
-                userEditedTitle: userEditedTitle,
+                userEditedTitle: userEditedTitle || titleWasIntentionallyBlank,
                 source: "manual"
             )
         )
@@ -844,6 +850,9 @@ final class HomeViewModel: ObservableObject {
         if let brand = MerchantBrandCatalog.matchBrand(in: trimmedNote), !categoryLockedByUser {
             return CategoryRecommendResult(recommended: brand.category, reasonTag: "brand")
         }
+        if let semanticCategory = semanticCategory(from: trimmedNote), !categoryLockedByUser {
+            return CategoryRecommendResult(recommended: semanticCategory, reasonTag: "semantic")
+        }
         if let frequentSuggestion = frequentRecordAmountSuggestion(for: amount, at: selectedDate),
            frequentSuggestionCanOverrideNote(frequentSuggestion, note: trimmedNote),
            !categoryLockedByUser {
@@ -876,7 +885,7 @@ final class HomeViewModel: ObservableObject {
         return RecordContextSignal(referenceDate: selectedDate, weather: weather)
     }
 
-    func refreshRecordPrefill(applySuggestedTitle: Bool = true) {
+    func refreshRecordPrefill() {
         let normalizedAmount = inputAmount.replacingOccurrences(of: ",", with: "")
         guard let amount = Double(normalizedAmount), amount > 0 else {
             recordPrefillResult = nil
@@ -888,6 +897,23 @@ final class HomeViewModel: ObservableObject {
         let trimmedNote = noteResult.isAllowed ? noteResult.value : ""
         let brand = MerchantBrandCatalog.matchBrand(in: trimmedNote)
         let frequentSuggestion = frequentRecordAmountSuggestion(for: amount, at: selectedDate)
+        let noteSemanticCategory = semanticCategory(from: trimmedNote)
+
+        if brand == nil,
+           noteSemanticCategory == nil,
+           let frequentSuggestion,
+           frequentSuggestionCanOverrideNote(frequentSuggestion, note: trimmedNote) {
+            recordPrefillResult = RecordPrefillResult(
+                category: frequentSuggestion.category,
+                title: nil,
+                emotionTag: nil,
+                confidence: frequentSuggestion.confidence,
+                source: "frequent"
+            )
+            recordPrefillAmount = amount
+            applyRecommendedCategory(frequentSuggestion.category)
+            return
+        }
 
         let start = Calendar.current.date(byAdding: .day, value: -180, to: Date()) ?? .distantPast
         let recentItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
@@ -908,39 +934,32 @@ final class HomeViewModel: ObservableObject {
         if let category = resolvePrefillCategory(
             brand: brand,
             frequent: frequentSuggestion,
-            note: trimmedNote,
+            semanticCategory: noteSemanticCategory,
             habitResult: result
         ) {
             applyRecommendedCategory(category)
-        }
-        if applySuggestedTitle,
-           let result,
-           let title = result.title,
-           result.confidence >= 0.65,
-           trimmedNote.isEmpty,
-            (result.category == nil || result.category == selectedCategory),
-           RecordSemanticLexicon.isTitle(title, compatibleWith: selectedCategory) {
-            inputTitle = title
         }
     }
 
     private func resolvePrefillCategory(
         brand: MerchantBrandDefinition?,
         frequent: FrequentRecordAmountSuggestion?,
-        note: String,
+        semanticCategory: HomeItem.Category?,
         habitResult: RecordPrefillResult?
     ) -> HomeItem.Category? {
         guard !categoryLockedByUser else { return nil }
         // Cascade order is intentionally single-apply:
-        // brand > confident frequent exact amount in the same time context > habit >= 0.55 > generic only when note semantics agree.
+        // brand > explicit note semantics > confident frequent exact amount in the same time context > habit >= 0.55 > generic category fallback.
         // TODO(next PR): make habit exact-amount grouping share the same source as frequent, replacing the current ±30% loose match.
         if let brand { return brand.category }
-        if let frequent, frequentSuggestionCanOverrideNote(frequent, note: note) {
+        if let semanticCategory {
+            return semanticCategory
+        }
+        if let frequent {
             return frequent.category
         }
         if let category = habitResult?.category,
-           habitResult?.source == "generic",
-           noteSemantics(note, supports: category) {
+           habitResult?.source == "generic" {
             return category
         }
         if let category = habitResult?.category,
@@ -951,6 +970,10 @@ final class HomeViewModel: ObservableObject {
         return nil
     }
 
+    private func semanticCategory(from note: String) -> HomeItem.Category? {
+        RecordSemanticLexicon.semanticCategory(of: note)
+    }
+
     private func frequentSuggestionCanOverrideNote(
         _ suggestion: FrequentRecordAmountSuggestion,
         note: String
@@ -959,10 +982,6 @@ final class HomeViewModel: ObservableObject {
         let semanticCategories = RecordSemanticLexicon.matchingCategories(in: note)
         guard !semanticCategories.isEmpty else { return true }
         return semanticCategories.contains(suggestion.category)
-    }
-
-    private func noteSemantics(_ note: String, supports category: HomeItem.Category) -> Bool {
-        RecordSemanticLexicon.matchingCategories(in: note).contains(category)
     }
 
     func clearRecordInputMessage() {
@@ -1062,7 +1081,7 @@ final class HomeViewModel: ObservableObject {
         let recentItems = items.filter { item in
             item.amount > 0 && item.createdAt >= start && item.createdAt <= date
         }
-        guard recentItems.count >= 15 else { return [] }
+        guard recentItems.count >= 6 else { return [] }
 
         let targetBucket = hourHabitBucket(for: date)
         let targetWeekend = isHabitWeekend(date)
@@ -1070,7 +1089,7 @@ final class HomeViewModel: ObservableObject {
             hourHabitBucket(for: item.createdAt) == targetBucket &&
             isHabitWeekend(item.createdAt) == targetWeekend
         }
-        guard contextItems.count >= 5 else { return [] }
+        guard contextItems.count >= 3 else { return [] }
 
         let grouped = Dictionary(grouping: contextItems) { item in
             Int((item.amount * 100).rounded())
@@ -1091,8 +1110,8 @@ final class HomeViewModel: ObservableObject {
         }
 
         let validCandidates = candidates.filter { candidate in
-            candidate.count >= 3 &&
-            candidate.confidence >= 0.67 &&
+            candidate.count >= 2 &&
+            candidate.confidence >= 0.75 &&
             candidate.amount > 0 &&
             candidate.amount <= 9999
         }
@@ -1137,7 +1156,7 @@ final class HomeViewModel: ObservableObject {
         guard let top = ranked.first else { return nil }
         let secondCount = ranked.dropFirst().first?.count ?? 0
         let confidence = Double(top.count) / Double(max(items.count, 1))
-        guard top.count >= 3, confidence >= 0.67, top.count >= secondCount + 2 else {
+        guard top.count >= 2, confidence >= 0.75, top.count >= secondCount + 2 else {
             return nil
         }
         return (top.category, top.count, confidence)

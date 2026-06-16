@@ -12,6 +12,8 @@ struct HomeView: View {
     @State private var showFirstRecordToast = false
     @State private var showTodayRecordsSheet = false
     @State private var editingItem: HomeItem?
+    @State private var todayInlineEditingItemID: UUID?
+    @State private var todaySwipedItemID: UUID?
     @State private var todayPlaybackQuotaMessage: String?
     @State private var petHint: String = "有一笔就记一笔，晚点也能补。"
     @State private var petBubbleVisible = false
@@ -166,7 +168,13 @@ struct HomeView: View {
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(homeViewModel.recentThreeItems.enumerated()), id: \.element.id) { index, item in
-                    billListItem(item: item, isFirst: index == 0)
+                    Button {
+                        editingItem = item
+                    } label: {
+                        billListItem(item: item, isFirst: index == 0)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
                 if homeViewModel.todayItems.count > homeViewModel.recentThreeItems.count {
                     Button {
@@ -639,50 +647,295 @@ struct HomeView: View {
     private var todayRecordsSheet: some View {
         NavigationStack {
             ZStack {
-                AppColors.bg.ignoresSafeArea()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("今天留下的痕迹")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(AppColors.text)
+                todayRecordsGradientBackground
+                    .ignoresSafeArea()
 
-                        Text(todayRecordsMetaText)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(AppColors.subtext)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("今天留下的痕迹")
+                                .font(.system(size: 22, weight: .bold))
+                                .foregroundStyle(AppColors.text)
 
-                        VStack(alignment: .leading, spacing: 0) {
-                            ForEach(Array(homeViewModel.todayItems.enumerated()), id: \.element.id) { index, item in
-                                Button {
-                                    showTodayRecordsSheet = false
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                                        editingItem = item
-                                    }
-                                } label: {
-                                    billListItem(item: item, isFirst: index == 0)
+                            Text(todayRecordsMetaText)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(AppColors.subtext)
+
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(Array(homeViewModel.todayItems.enumerated()), id: \.element.id) { index, item in
+                                    todayRecordInlineRow(item: item, isFirst: index == 0)
                                 }
-                                .buttonStyle(.plain)
                             }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(todayRecordListBackground)
+                            .overlay(todayRecordListBorder)
                         }
-                        .paperChapterPanel(radius: 22, padding: 16, showsAccentLine: false)
+                        .padding(18)
+                        .padding(.bottom, 28)
                     }
-                    .padding(18)
-                    .padding(.bottom, 28)
+                    .scrollIndicators(.hidden)
+                    .onChange(of: todayInlineEditingItemID) { _, itemID in
+                        guard let itemID else { return }
+                        scrollTodayEditorIntoView(itemID, proxy: proxy, delay: 0.34)
+                    }
                 }
-                .scrollIndicators(.hidden)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { showTodayRecordsSheet = false }
+                    Button("关闭") {
+                        todayInlineEditingItemID = nil
+                        todaySwipedItemID = nil
+                        showTodayRecordsSheet = false
+                    }
                 }
             }
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .onDisappear {
+            todayInlineEditingItemID = nil
+            todaySwipedItemID = nil
+        }
     }
 
     private var todayRecordsMetaText: String {
         let total = homeViewModel.todayItems.reduce(0) { $0 + $1.amount }
         return "\(homeViewModel.todayItems.count) 笔 · 合计 \(total.formatted(.cny)) · 点任一条可调整"
+    }
+
+    private var todayRecordsGradientBackground: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 226/255, green: 241/255, blue: 232/255),
+                Color(red: 198/255, green: 222/255, blue: 210/255),
+                Color(red: 235/255, green: 244/255, blue: 238/255)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay(
+            LinearGradient(
+                colors: [Color.white.opacity(0.34), Color.clear],
+                startPoint: .top,
+                endPoint: .center
+            )
+        )
+    }
+
+    private var todayRecordListBackground: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(.thinMaterial)
+            .overlay(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.42), Color.white.opacity(0.16)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+    }
+
+    private var todayRecordListBorder: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .stroke(Color.white.opacity(0.48), lineWidth: 1)
+    }
+
+    private func todayRecordInlineRow(item: HomeItem, isFirst: Bool) -> some View {
+        let isEditing = todayInlineEditingItemID == item.id
+        let isSwiped = todaySwipedItemID == item.id && !isEditing
+        return ZStack(alignment: .trailing) {
+            if !isEditing {
+                todaySwipeActions(for: item, isVisible: isSwiped)
+                    .padding(.trailing, 4)
+            }
+
+            VStack(alignment: .leading, spacing: isEditing ? 10 : 8) {
+                todayRecordSummary(item, isEditing: isEditing, isFirst: isFirst)
+                if isEditing {
+                    TraceInlineRecordEditor(
+                        item: item,
+                        onSave: { updated in
+                            let didSave = homeViewModel.updateItem(updated)
+                            if didSave {
+                                withAnimation(todayEditSpring) {
+                                    todayInlineEditingItemID = nil
+                                    todaySwipedItemID = nil
+                                }
+                            }
+                            return didSave
+                        },
+                        onCancel: {
+                            withAnimation(todayEditSpring) {
+                                todayInlineEditingItemID = nil
+                                todaySwipedItemID = nil
+                            }
+                        }
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, isEditing ? 14 : 12)
+            .background(todayRecordRowBackground(isEditing: isEditing))
+            .overlay(todayRecordRowBorder(isEditing: isEditing))
+            .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+            .offset(x: isSwiped ? -76 : 0)
+            .onTapGesture {
+                if todaySwipedItemID == item.id {
+                    withAnimation(todayEditSpring) {
+                        todaySwipedItemID = nil
+                    }
+                } else if !isEditing {
+                    withAnimation(todayEditSpring) {
+                        todayInlineEditingItemID = item.id
+                    }
+                }
+            }
+            .overlay(alignment: .trailing) {
+                if !isEditing {
+                    todaySwipeHandle(for: item, isSwiped: isSwiped)
+                }
+            }
+        }
+        .id(item.id)
+        .animation(todayEditSpring, value: isEditing)
+        .animation(todayEditSpring, value: isSwiped)
+    }
+
+    private func todayRecordSummary(_ item: HomeItem, isEditing: Bool, isFirst: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !isFirst {
+                PaperCreaseDivider()
+                    .opacity(isEditing ? 0 : 1)
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(item.title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(2)
+                    .opacity(isEditing ? 0.28 : 1)
+
+                Spacer(minLength: 8)
+
+                Text(item.amount.formatted(.cny))
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.text)
+                    .opacity(isEditing ? 0.24 : 1)
+            }
+
+            let emotionTag = item.displayEmotionTag
+            if !emotionTag.isEmpty {
+                Text(emotionTag)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.accent.opacity(0.74))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.08)))
+                    .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.18), lineWidth: 0.7))
+                    .opacity(isEditing ? 0.35 : 1)
+            }
+
+            HStack(spacing: 6) {
+                Text(item.category.rawValue)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.82))
+                Text("·").foregroundStyle(AppColors.subtext)
+                Text(item.createdAt.zhBillDateTime)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer()
+            }
+            .opacity(isEditing ? 0 : 1)
+            .frame(height: isEditing ? 0 : nil)
+        }
+    }
+
+    private func todayRecordRowBackground(isEditing: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 19, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: isEditing
+                    ? [Color(red: 93/255, green: 132/255, blue: 112/255).opacity(0.11), Color.white.opacity(0.50), Color(red: 212/255, green: 230/255, blue: 220/255).opacity(0.26)]
+                    : [Color.white.opacity(0.38), Color.white.opacity(0.20)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+    }
+
+    private func todayRecordRowBorder(isEditing: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 19, style: .continuous)
+            .stroke(isEditing ? Color(red: 93/255, green: 132/255, blue: 112/255).opacity(0.28) : Color.white.opacity(0.30), lineWidth: 1)
+    }
+
+    private var todayEditSpring: Animation {
+        .spring(response: 0.38, dampingFraction: 0.90, blendDuration: 0.08)
+    }
+
+    private func todaySwipeActions(for item: HomeItem, isVisible: Bool) -> some View {
+        Button(role: .destructive) {
+            withAnimation(todayEditSpring) {
+                todaySwipedItemID = nil
+                deleteTodayRecord(item)
+            }
+        } label: {
+            VStack(spacing: 5) {
+                Image(systemName: "trash")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("删除")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .frame(width: 58, height: 62)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.red.opacity(0.82))
+            )
+            .shadow(color: Color.red.opacity(0.14), radius: 8, y: 4)
+        }
+        .buttonStyle(.plain)
+        .frame(width: 68, alignment: .trailing)
+        .opacity(isVisible ? 1 : 0)
+    }
+
+    private func todaySwipeHandle(for item: HomeItem, isSwiped: Bool) -> some View {
+        Color.clear
+            .frame(maxWidth: isSwiped ? .infinity : nil)
+            .frame(width: isSwiped ? nil : 42)
+            .contentShape(Rectangle())
+            .gesture(todayRowSwipeGesture(for: item))
+    }
+
+    private func todayRowSwipeGesture(for item: HomeItem) -> some Gesture {
+        DragGesture(minimumDistance: 22, coordinateSpace: .local)
+            .onEnded { value in
+                let horizontal = value.translation.width
+                let vertical = value.translation.height
+                let isHorizontalSwipe = abs(horizontal) > max(44, abs(vertical) * 1.35)
+                guard isHorizontalSwipe else { return }
+                withAnimation(todayEditSpring) {
+                    todaySwipedItemID = horizontal < 0 ? item.id : nil
+                }
+            }
+    }
+
+    private func scrollTodayEditorIntoView(_ itemID: UUID, proxy: ScrollViewProxy, delay: Double) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard todayInlineEditingItemID == itemID else { return }
+            withAnimation(todayEditSpring) {
+                proxy.scrollTo(itemID, anchor: .center)
+            }
+        }
+    }
+
+    private func deleteTodayRecord(_ item: HomeItem) {
+        if todayInlineEditingItemID == item.id {
+            todayInlineEditingItemID = nil
+        }
+        if let idx = homeViewModel.items.firstIndex(where: { $0.id == item.id }) {
+            homeViewModel.delete(at: IndexSet(integer: idx))
+        }
     }
 
     private func editSheet(for item: HomeItem) -> some View {
