@@ -1841,6 +1841,7 @@ struct WeeklyShareCardView: View {
     let subtitle: String
     let anchorLine: String?
     let periodText: String
+    let insight: ShareInsight
     var isPetMode: Bool = true
     var nickname: String = "叙账用户"
 
@@ -1851,11 +1852,11 @@ struct WeeklyShareCardView: View {
         let accent, titleSub, textMain, textMuted: Color
         let footer, footerSub: Color
         static let journal = ShareCardTheme(
-            bgStart: Color(hex: "eef3ef"), bgEnd: Color(hex: "f8efe4"),
-            panelBg: Color(hex: "fffdf8").opacity(0.86), panelBorder: Color(hex: "eadfce"),
-            accent: Color(hex: "6fa995"),
-            titleSub: Color(hex: "8c96a8"), textMain: Color(hex: "253041"), textMuted: Color(hex: "6f7b8f"),
-            footer: Color(hex: "4c5968"), footerSub: Color(hex: "9aa4b2"))
+            bgStart: Color(hex: "edf4ed"), bgEnd: Color(hex: "f8efe2"),
+            panelBg: Color(hex: "fffdf6").opacity(0.90), panelBorder: Color(hex: "dfe6d8"),
+            accent: Color(hex: "8fb49e"),
+            titleSub: Color(hex: "89968f"), textMain: Color(hex: "1f2528"), textMuted: Color(hex: "6d776f"),
+            footer: Color(hex: "4c5960"), footerSub: Color(hex: "9aa49b"))
     }
 
     init(
@@ -1868,6 +1869,7 @@ struct WeeklyShareCardView: View {
         subtitle: String = "之后有新记录，再回来对照。",
         anchorLine: String? = nil,
         periodText: String? = nil,
+        insight: ShareInsight? = nil,
         isPetMode: Bool = true,
         nickname: String = "叙账用户"
     ) {
@@ -1880,6 +1882,12 @@ struct WeeklyShareCardView: View {
         self.subtitle = subtitle
         self.anchorLine = anchorLine
         self.periodText = periodText ?? Self.defaultPeriodText()
+        self.insight = insight ?? ShareInsight(
+            fact: headline,
+            care: subtitle,
+            footnote: "\(recordCount) 次 · 这一周",
+            tags: ["#生活侧写", "#这一周"]
+        )
         self.isPetMode = isPetMode
         self.nickname = nickname
     }
@@ -1895,6 +1903,7 @@ struct WeeklyShareCardView: View {
             subtitle: payload.subtitle,
             anchorLine: payload.anchorLine,
             periodText: payload.periodText,
+            insight: payload.insight,
             isPetMode: isPetMode,
             nickname: nickname
         )
@@ -1909,7 +1918,11 @@ struct WeeklyShareCardView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [t.bgStart, t.bgEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
+            LinearGradient(
+                colors: [t.bgStart, Color(hex: "f4f7ee"), t.bgEnd],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
 
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(t.panelBg)
@@ -1920,66 +1933,70 @@ struct WeeklyShareCardView: View {
                 .padding(.horizontal, 26)
                 .padding(.vertical, 24)
 
+            lowerPaperTexture
+                .padding(.horizontal, 28)
+                .padding(.bottom, 34)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+
             VStack(alignment: .leading, spacing: 0) {
-                Text("周记一页")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(t.titleSub.opacity(0.92))
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("生活复盘")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(t.textMain.opacity(0.86))
+                        Text(periodText)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(t.titleSub.opacity(0.82))
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Text("叙账")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(t.accent.opacity(0.78))
+                }
 
-                Text(periodText)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(t.titleSub.opacity(0.82))
-                    .lineLimit(1)
-                    .padding(.top, 6)
-
-                Text(displayNickname)
-                    .font(.system(size: 12, weight: .medium))
+                Text("这一周")
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(t.textMuted.opacity(0.82))
                     .lineLimit(1)
-                    .padding(.top, 26)
+                    .padding(.top, 42)
 
-                Text(journalTitle)
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                Text(insight.fact)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(t.textMain)
                     .lineSpacing(6)
                     .lineLimit(3)
-                    .minimumScaleFactor(0.76)
-                    .padding(.top, 9)
-                    .frame(minHeight: 78, alignment: .topLeading)
+                    .minimumScaleFactor(0.70)
+                    .padding(.top, 10)
+                    .frame(minHeight: 104, alignment: .topLeading)
 
                 Rectangle()
                     .fill(t.panelBorder.opacity(0.54))
                     .frame(height: 1)
-                    .padding(.top, 12)
-                    .padding(.bottom, 16)
+                    .padding(.top, 18)
+                    .padding(.bottom, 18)
 
-                Text(journalBody)
-                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                Text(insight.care)
+                    .font(.system(size: 18, weight: .medium, design: .rounded))
                     .foregroundStyle(t.textMain.opacity(0.92))
                     .lineSpacing(6)
-                    .lineLimit(8)
+                    .lineLimit(3)
                     .minimumScaleFactor(0.74)
 
-                if let anchor = displayAnchorLine {
-                    Text(anchor)
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        .foregroundStyle(t.accent.opacity(0.92))
-                        .lineSpacing(5)
-                        .lineLimit(4)
-                        .minimumScaleFactor(0.76)
-                        .padding(.top, 16)
-                }
-
-                Text(auxiliaryLine)
+                Text(insight.footnote)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(t.textMuted.opacity(0.86))
-                    .padding(.top, displayAnchorLine == nil ? 22 : 14)
+                    .padding(.top, 24)
 
                 Spacer(minLength: 18)
 
                 rhythmTexture
+                    .padding(.bottom, 14)
+
+                shareTags
                     .padding(.bottom, 18)
 
-                Text("来自 叙账 · 一笔一笔，回头再看")
+                Text("叙账 · 基于你这周的真实记录")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(t.footerSub)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1989,95 +2006,6 @@ struct WeeklyShareCardView: View {
         }
         .frame(width: 390, height: 580)
         .clipped()
-    }
-
-    private var displayNickname: String {
-        let trimmed = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, isShareCardNickname(trimmed) else { return "这一周" }
-        return "\(trimmed) · 这一周"
-    }
-
-    private var journalTitle: String {
-        if shareAnchorPhrase != nil {
-            return "这周记下了这一笔"
-        }
-        let title = compactShareTitle(cleanedHeadlineLine)
-        if !title.isEmpty {
-            return title
-        }
-        return recordCount <= 2 ? "这一周，先留下一页" : "这一周，留下一页"
-    }
-
-    private var journalBody: String {
-        if let phrase = shareAnchorPhrase {
-            return "账本里写着「\(phrase)」。\n这一周先放在这里。"
-        }
-        let middle = cleanedHeadlineLine.isEmpty ? "这一周已经留下几笔可以回看的记录。" : cleanedHeadlineLine
-        let closing = cleanedSubtitleLine.contains("建议") || cleanedSubtitleLine.contains("数据不足") || cleanedSubtitleLine.isEmpty
-            ? "之后有新记录，再回来对照。"
-            : cleanedSubtitleLine
-        return "\(middle)\n\(closing)"
-    }
-
-    private var cleanedHeadlineLine: String {
-        headline
-            .replacingOccurrences(of: "，([^，。]+)约占\\d+%", with: "，$1出现得比较多", options: .regularExpression)
-            .replacingOccurrences(of: "约占\\d+%", with: "出现得比较多", options: .regularExpression)
-            .replacingOccurrences(of: " 笔记录", with: " 次记录")
-            .replacingOccurrences(of: "串起这一周", with: "留在这一周")
-            .replacingOccurrences(of: "最容易被看见", with: "出现得多一些")
-            .replacingOccurrences(of: "先叙到这里", with: "先记到这里")
-            .replacingOccurrences(of: "生活轮廓", with: "记录脉络")
-            .replacingOccurrences(of: "生活节奏", with: "记录节奏")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var cleanedSubtitleLine: String {
-        subtitle
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "¥\\s?[0-9,]+(\\.[0-9]+)?", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "这一周先叙到这里。", with: "之后有新记录，再回来对照。")
-            .replacingOccurrences(of: "先把这一周放在这里。", with: "之后有新记录，再回来对照。")
-            .replacingOccurrences(of: "这些记录先留在这一页。", with: "之后有新记录，再回来对照。")
-            .replacingOccurrences(of: "这些记录先放在这里。", with: "之后有新记录，再回来对照。")
-            .replacingOccurrences(of: "\\s{2,}", with: " ", options: .regularExpression)
-    }
-
-    private func compactShareTitle(_ text: String) -> String {
-        let trimmed = text
-            .replacingOccurrences(of: "。", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "" }
-        if trimmed.count <= 18 { return trimmed }
-        return String(trimmed.prefix(18))
-    }
-
-    private var displayAnchorLine: String? {
-        nil
-    }
-
-    private var shareAnchorPhrase: String? {
-        guard let anchor = anchorLine?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !anchor.isEmpty else { return nil }
-        let phrase = anchor
-            .replacingOccurrences(of: "有一笔是这样留在账本里的：", with: "")
-            .replacingOccurrences(of: "有一笔是这样留在账本里的:", with: "")
-            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters))
-        guard (2...18).contains(phrase.count),
-              !phrase.contains("还没有"),
-              !phrase.contains("记录还少") else {
-            return nil
-        }
-        return phrase
-    }
-
-    private func isShareCardNickname(_ text: String) -> Bool {
-        let allowed = CharacterSet.letters.union(.decimalDigits).union(CharacterSet(charactersIn: "_-"))
-        return text.rangeOfCharacter(from: allowed.inverted) == nil
-    }
-
-    private var auxiliaryLine: String {
-        "附记：\(recordCount) 笔记录"
     }
 
     private var rhythmTexture: some View {
@@ -2094,6 +2022,65 @@ struct WeeklyShareCardView: View {
                 .foregroundStyle(t.footerSub)
         }
         .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+    }
+
+    private var shareTags: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(tagRows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 14) {
+                    ForEach(row, id: \.self) { tag in
+                        Text(tag)
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(t.textMain.opacity(0.72))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                    }
+                }
+            }
+        }
+        .rotationEffect(.degrees(-5))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var tagRows: [[String]] {
+        let tags = Array(insight.tags.prefix(4))
+        guard tags.count > 2 else { return [tags] }
+        return [Array(tags.prefix(2)), Array(tags.dropFirst(2))]
+    }
+
+    private var lowerPaperTexture: some View {
+        ZStack(alignment: .bottomLeading) {
+            Path { path in
+                path.move(to: CGPoint(x: 0, y: 62))
+                path.addCurve(
+                    to: CGPoint(x: 336, y: 48),
+                    control1: CGPoint(x: 96, y: 18),
+                    control2: CGPoint(x: 198, y: 86)
+                )
+                path.addLine(to: CGPoint(x: 336, y: 116))
+                path.addLine(to: CGPoint(x: 0, y: 116))
+                path.closeSubpath()
+            }
+            .fill(
+                LinearGradient(
+                    colors: [t.accent.opacity(0.10), Color(hex: "edf3e7").opacity(0.38)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+
+            Path { path in
+                path.move(to: CGPoint(x: 0, y: 58))
+                path.addCurve(
+                    to: CGPoint(x: 336, y: 44),
+                    control1: CGPoint(x: 92, y: 14),
+                    control2: CGPoint(x: 210, y: 76)
+                )
+            }
+            .stroke(t.accent.opacity(0.18), lineWidth: 1)
+        }
+        .frame(height: 118)
+        .allowsHitTesting(false)
     }
 
     func snapshot() -> UIImage? {

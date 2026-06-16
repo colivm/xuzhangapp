@@ -44,6 +44,210 @@ struct SummaryPlayback: Identifiable, Codable, Equatable {
     let chapters: [SummaryChapter]
 }
 
+struct ShareInsightSignal: Equatable {
+    enum Kind: Equatable {
+        case brandTop(name: String, count: Int, brandId: String?)
+        case categoryTop(category: HomeItem.Category, count: Int)
+        case busiestDay(label: String, count: Int)
+        case lifeTitle(text: String)
+        case weakData(recordCount: Int)
+    }
+
+    let kind: Kind
+    let recordCount: Int
+    let activeDays: Int
+}
+
+struct ShareInsight: Equatable {
+    let fact: String
+    let care: String
+    let footnote: String
+    let tags: [String]
+}
+
+enum ShareInsightCopyPool {
+    static func insight(for signal: ShareInsightSignal, seed: String) -> ShareInsight {
+        switch signal.kind {
+        case let .brandTop(name, count, brandId):
+            return brandInsight(name: name, count: count, brandId: brandId, signal: signal, seed: seed)
+        case let .categoryTop(category, count):
+            return categoryInsight(category: category, count: count, signal: signal, seed: seed)
+        case let .busiestDay(label, count):
+            return ShareInsight(
+                fact: "\(label)最忙，记了 \(count) 笔",
+                care: pick(["忙完那天，给自己留点空", "把最满的一天留在这里"], seed: seed + "|day"),
+                footnote: footnote(for: signal),
+                tags: ["#数据支撑", "#节奏", "#\(shortDayLabel(label))", "#这一周"]
+            )
+        case let .lifeTitle(text):
+            return ShareInsight(
+                fact: text,
+                care: pick(["是这周最想留下来的一句", "这样的周，可以存一页"], seed: seed + "|life"),
+                footnote: footnote(for: signal),
+                tags: ["#生活侧写", "#手写备注", "#这一周"]
+            )
+        case let .weakData(recordCount):
+            return ShareInsight(
+                fact: "这周才记了 \(recordCount) 笔，刚开头",
+                care: pick(["多记几次，下次能讲更完整", "先从这几笔开始看见自己"], seed: seed + "|weak"),
+                footnote: footnote(for: signal),
+                tags: ["#刚开头", "#生活侧写", "#这一周"]
+            )
+        }
+    }
+
+    private static func brandInsight(
+        name: String,
+        count: Int,
+        brandId: String?,
+        signal: ShareInsightSignal,
+        seed: String
+    ) -> ShareInsight {
+        let kind = brandKind(name: name, brandId: brandId)
+        let fact: String
+        let cares: [String]
+        let semanticTag: String
+        switch kind {
+        case .coffee:
+            fact = "\(name)买了 \(count) 次，这周靠它提神"
+            cares = ["提神可以，别熬太晚", "忙归忙，记得睡够"]
+            semanticTag = "#咖啡"
+        case .delivery:
+            fact = "外卖点了 \(count) 次，是这周最多的"
+            cares = ["忙的时候靠外卖也正常", "有空做顿热的，更好"]
+            semanticTag = "#吃饭"
+        case .convenience:
+            fact = "\(name)去了 \(count) 次，是这周最多的"
+            cares = ["工作再忙，也别漏掉正经一顿", "顺路补给，也算稳住日子"]
+            semanticTag = "#便利店"
+        case .food:
+            fact = "\(name)吃了 \(count) 次，是这周最多的"
+            cares = ["忙的时候先吃上，也很要紧", "吃饭这件事，别太随便"]
+            semanticTag = "#吃饭"
+        case .general:
+            fact = "\(name)去了 \(count) 次，是这周最多的"
+            cares = ["这些反复出现的小事，也是一周的样子", "常去的地方，把这一周标了出来"]
+            semanticTag = "#常去"
+        }
+        return ShareInsight(
+            fact: fact,
+            care: pick(cares, seed: seed + "|brand|\(name)"),
+            footnote: footnote(for: signal),
+            tags: ["#数据支撑", semanticTag, "#\(sanitizedTag(name))", "#这一周"]
+        )
+    }
+
+    private static func categoryInsight(
+        category: HomeItem.Category,
+        count: Int,
+        signal: ShareInsightSignal,
+        seed: String
+    ) -> ShareInsight {
+        let fact: String
+        let cares: [String]
+        let tag: String
+        switch category {
+        case .dining:
+            fact = "吃饭占了这周大头，记了 \(count) 次"
+            cares = ["忙归忙，别漏掉一顿热的", "吃饭这件事，也是在过日子"]
+            tag = "#吃饭"
+        case .transport:
+            fact = "路上记了 \(count) 笔，总在移动"
+            cares = ["移动多的一周，记得歇一歇", "跑来跑去的日子，也被记下了"]
+            tag = "#路上"
+        case .health:
+            fact = "锻炼记了 \(count) 次，是这周最勤的事"
+            cares = ["练得努力，也要顾着身体", "身体这件事，稳定一点更长久"]
+            tag = "#锻炼"
+        case .entertainment:
+            fact = "放松安排比较多，记了 \(count) 次"
+            cares = ["该玩就玩，别亏待自己", "这一周也需要一点松口气"]
+            tag = "#放松"
+        case .shopping:
+            fact = "添置东西比较多，记了 \(count) 笔"
+            cares = ["买到需要的，也算把日子补齐", "用得上的东西，会留在日常里"]
+            tag = "#购物"
+        case .daily:
+            fact = "日常补给出现得最多，记了 \(count) 次"
+            cares = ["小事补齐了，日子就顺一点", "这些小补给，把一周垫稳了"]
+            tag = "#日常"
+        case .home:
+            fact = "家里的事记了 \(count) 笔，是这周最多的"
+            cares = ["把家里整理好，也是一种进展", "日子落回家里，就有了形状"]
+            tag = "#居家"
+        case .lodging:
+            fact = "停留和住宿记了 \(count) 笔"
+            cares = ["在外的一周，也要睡踏实", "换个地方停下，也算一段生活"]
+            tag = "#停留"
+        case .social:
+            fact = "人情往来记了 \(count) 笔"
+            cares = ["关系里的来往，也会留下痕迹", "见面和心意，组成了这一周"]
+            tag = "#人情"
+        case .other:
+            fact = "其他小事出现得最多，记了 \(count) 次"
+            cares = ["说不清也没关系，先记下来", "这一周就这样，先留一页"]
+            tag = "#小事"
+        }
+        return ShareInsight(
+            fact: fact,
+            care: pick(cares, seed: seed + "|category|\(category.rawValue)"),
+            footnote: footnote(for: signal),
+            tags: ["#数据支撑", tag, "#\(category.label)", "#这一周"]
+        )
+    }
+
+    private enum BrandKind {
+        case coffee
+        case delivery
+        case convenience
+        case food
+        case general
+    }
+
+    private static func brandKind(name: String, brandId: String?) -> BrandKind {
+        let id = brandId ?? ""
+        if ["luckin", "starbucks", "manner"].contains(id) { return .coffee }
+        if ["meituan", "eleme"].contains(id) { return .delivery }
+        if ["familymart", "lawson", "bianlifeng", "seveneleven", "meiyijia"].contains(id) { return .convenience }
+        if ["mcdonalds", "kfc"].contains(id) { return .food }
+        if name.contains("咖啡") { return .coffee }
+        if name.contains("外卖") || name.contains("美团") || name.contains("饿了") { return .delivery }
+        if name.contains("便利") || name.contains("全家") || name.contains("罗森") { return .convenience }
+        return .general
+    }
+
+    private static func footnote(for signal: ShareInsightSignal) -> String {
+        let dayText = signal.activeDays > 0 ? " · \(signal.activeDays) 天有记录" : ""
+        return "\(signal.recordCount) 次 · 这一周\(dayText)"
+    }
+
+    private static func pick(_ options: [String], seed: String) -> String {
+        guard !options.isEmpty else { return "" }
+        return options[Int(stableHash(seed) % UInt64(options.count))]
+    }
+
+    private static func stableHash(_ text: String) -> UInt64 {
+        text.unicodeScalars.reduce(UInt64(14_695_981_039_346_656_037)) { partial, scalar in
+            (partial ^ UInt64(scalar.value)) &* 1_099_511_628_211
+        }
+    }
+
+    private static func sanitizedTag(_ text: String) -> String {
+        let cleaned = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "#", with: "")
+        return String(cleaned.prefix(8))
+    }
+
+    private static func shortDayLabel(_ label: String) -> String {
+        if label.contains("星期") {
+            return label.replacingOccurrences(of: "星期", with: "周")
+        }
+        return label
+    }
+}
+
 struct WeeklyShareCardPayload {
     let weekTotal: Double
     let topCategory: String
@@ -54,6 +258,7 @@ struct WeeklyShareCardPayload {
     let subtitle: String
     let anchorLine: String?
     let periodText: String
+    let insight: ShareInsight
 }
 
 struct PlaybackMoment: Equatable {
@@ -609,11 +814,21 @@ final class PlaybackService {
         let topAmount = top?.amount ?? 0
         let ratio = total > 0 ? topAmount / total : 0
         let builtSummary = summary ?? buildWeekSummary(from: items, now: now)
-        let trend = dailyActivity(rows, start: interval.start, days: 7).map { activity in
+        let activity = dailyActivity(rows, start: interval.start, days: 7)
+        let trend = activity.map { activity in
             (Self.shortWeekdayFormatter.string(from: activity.date), activity.amount)
         }
         let period = "\(Self.dotDateFormatter.string(from: interval.start)) ~ \(Self.dotDateFormatter.string(from: calendar.date(byAdding: .day, value: -1, to: interval.end) ?? now))"
         let closing = builtSummary.chapters.last?.narration.plain ?? "这一周已经留下了可以回看的记录。"
+        let signal = weeklyShareInsightSignal(
+            rows: rows,
+            activity: activity,
+            now: now
+        )
+        let insight = ShareInsightCopyPool.insight(
+            for: signal,
+            seed: "\(builtSummary.id)|\(period)|\(rows.count)"
+        )
 
         return WeeklyShareCardPayload(
             weekTotal: total,
@@ -624,8 +839,130 @@ final class PlaybackService {
             headline: builtSummary.teaserLine,
             subtitle: closing,
             anchorLine: weeklyShareAnchorLine(from: builtSummary),
-            periodText: period
+            periodText: period,
+            insight: insight
         )
+    }
+
+    private func weeklyShareInsightSignal(
+        rows: [HomeItem],
+        activity: [DayActivity],
+        now: Date
+    ) -> ShareInsightSignal {
+        let activeDays = activeDayCount(rows)
+        let base = (recordCount: rows.count, activeDays: activeDays)
+
+        if rows.count <= 2 {
+            return ShareInsightSignal(
+                kind: .weakData(recordCount: rows.count),
+                recordCount: base.recordCount,
+                activeDays: base.activeDays
+            )
+        }
+
+        if let brand = weeklyBrandTop(rows), brand.count >= 3 {
+            return ShareInsightSignal(
+                kind: .brandTop(name: brand.name, count: brand.count, brandId: brand.id),
+                recordCount: base.recordCount,
+                activeDays: base.activeDays
+            )
+        }
+
+        if let category = weeklyCategoryTop(rows),
+           category.count >= 2 || Double(category.count) / Double(max(rows.count, 1)) >= 0.40 {
+            return ShareInsightSignal(
+                kind: .categoryTop(category: category.category, count: category.count),
+                recordCount: base.recordCount,
+                activeDays: base.activeDays
+            )
+        }
+
+        if let busiest = activity.max(by: { lhs, rhs in
+            lhs.count == rhs.count ? lhs.amount < rhs.amount : lhs.count < rhs.count
+        }), busiest.count >= 3 {
+            return ShareInsightSignal(
+                kind: .busiestDay(label: Self.shortWeekdayFormatter.string(from: busiest.date), count: busiest.count),
+                recordCount: base.recordCount,
+                activeDays: base.activeDays
+            )
+        }
+
+        if let lifeTitle = weeklyLifeTitle(rows, now: now) {
+            return ShareInsightSignal(
+                kind: .lifeTitle(text: lifeTitle),
+                recordCount: base.recordCount,
+                activeDays: base.activeDays
+            )
+        }
+
+        return ShareInsightSignal(
+            kind: .weakData(recordCount: rows.count),
+            recordCount: base.recordCount,
+            activeDays: base.activeDays
+        )
+    }
+
+    private func weeklyBrandTop(_ rows: [HomeItem]) -> (id: String, name: String, count: Int, latest: Date)? {
+        let grouped = rows.reduce(into: [String: (brand: MerchantBrandDefinition, count: Int, latest: Date)]()) { result, item in
+            let brand = MerchantBrandCatalog.definition(for: item.merchantBrandId)
+                ?? MerchantBrandCatalog.matchBrand(in: item.title)
+            guard let brand else { return }
+            let current = result[brand.id]
+            result[brand.id] = (
+                brand: brand,
+                count: (current?.count ?? 0) + 1,
+                latest: max(current?.latest ?? .distantPast, item.createdAt)
+            )
+        }
+        return grouped
+            .map { entry in
+                (id: entry.key, name: entry.value.brand.displayName, count: entry.value.count, latest: entry.value.latest)
+            }
+            .sorted { lhs, rhs in
+                if lhs.count == rhs.count { return lhs.latest > rhs.latest }
+                return lhs.count > rhs.count
+            }
+            .first
+    }
+
+    private func weeklyCategoryTop(_ rows: [HomeItem]) -> (category: HomeItem.Category, count: Int, latest: Date)? {
+        Dictionary(grouping: rows, by: \.category)
+            .map { entry in
+                (
+                    category: entry.key,
+                    count: entry.value.count,
+                    latest: entry.value.map(\.createdAt).max() ?? .distantPast
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.count == rhs.count { return lhs.latest > rhs.latest }
+                return lhs.count > rhs.count
+            }
+            .first
+    }
+
+    private func weeklyLifeTitle(_ rows: [HomeItem], now: Date) -> String? {
+        let periodKey = SummaryPlaybackQuotaStore().currentWeekKey(now: now)
+        return rows
+            .filter { $0.userEditedTitle == true }
+            .compactMap { item -> (text: String, score: Int, date: Date)? in
+                let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard EchoAnchorService.shared.isEligibleLifeTraceTitle(title, item: item) else { return nil }
+                return (title, stableMaterialScore(item: item, periodKey: periodKey, now: now), item.createdAt)
+            }
+            .sorted {
+                if $0.score == $1.score { return $0.date > $1.date }
+                return $0.score > $1.score
+            }
+            .first?.text
+    }
+
+    private func activeDayCount(_ rows: [HomeItem]) -> Int {
+        let calendar = Self.isoCalendar
+        return Set(rows.map { item in
+            let components = calendar.dateComponents([.year, .month, .day], from: item.createdAt)
+            return "\(components.year ?? 0)-\(components.month ?? 0)-\(components.day ?? 0)"
+        }).count
     }
 
     func buildMonthSummary(from items: [HomeItem], now: Date = Date(), copySeed: String = "") -> SummaryPlayback {
