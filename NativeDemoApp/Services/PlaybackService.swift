@@ -294,6 +294,17 @@ struct PlaybackMomentSelection: Equatable {
     }
 }
 
+private enum PlaybackMaterialScoring {
+    static func stableScore(item: HomeItem, periodKey: String, now: Date) -> Int {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in "\(item.id.uuidString)|\(periodKey)|\(Int(now.timeIntervalSince1970 / 86_400))".utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return Int(hash % 7)
+    }
+}
+
 final class PlaybackMomentSelector {
     static let honestNoScentText = "记录还少"
 
@@ -324,7 +335,7 @@ final class PlaybackMomentSelector {
             let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
             let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
             let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
-            var score = stableMaterialScore(item: item, periodKey: periodKey, now: now)
+            var score = PlaybackMaterialScoring.stableScore(item: item, periodKey: periodKey, now: now)
 
             if EchoAnchorService.shared.isEligibleLifeTraceTitle(title, item: item) {
                 score += 70
@@ -395,14 +406,6 @@ final class PlaybackMomentSelector {
             .map(\.key)
     }
 
-    private func stableMaterialScore(item: HomeItem, periodKey: String, now: Date) -> Int {
-        var hash: UInt64 = 14_695_981_039_346_656_037
-        for byte in "\(item.id.uuidString)|\(periodKey)|\(Int(now.timeIntervalSince1970 / 86_400))".utf8 {
-            hash ^= UInt64(byte)
-            hash &*= 1_099_511_628_211
-        }
-        return Int(hash % 7)
-    }
 }
 
 final class SummaryPlaybackQuotaStore {
@@ -948,7 +951,7 @@ final class PlaybackService {
             .compactMap { item -> (text: String, score: Int, date: Date)? in
                 let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard EchoAnchorService.shared.isEligibleLifeTraceTitle(title, item: item) else { return nil }
-                return (title, stableMaterialScore(item: item, periodKey: periodKey, now: now), item.createdAt)
+                return (title, PlaybackMaterialScoring.stableScore(item: item, periodKey: periodKey, now: now), item.createdAt)
             }
             .sorted {
                 if $0.score == $1.score { return $0.date > $1.date }
