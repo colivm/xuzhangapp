@@ -150,6 +150,20 @@ struct HomeItem: Identifiable, Codable, Equatable {
         return trimmed
     }
 
+    var hasMeaningfulTitle: Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        if trimmed == RecordSemanticLexicon.emptyNoteTitle { return false }
+        if trimmed == category.defaultRecordTitle { return false }
+        return true
+    }
+
+    var displayTitle: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !hasMeaningfulTitle else { return trimmed }
+        return "\(category.rawValue) \(createdAt.zhBillTime)"
+    }
+
     static func refinedEmotionTag(title: String, category: Category, amount: Double, date: Date? = nil) -> String? {
         // TODO: migrate dining/transport detail rules into RecordSceneLexicon scene-level data.
         // This switch is category-scoped, so a transport record titled "咖啡" cannot return a dining tag.

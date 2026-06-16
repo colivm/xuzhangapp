@@ -802,7 +802,7 @@ final class HomeViewModel: ObservableObject {
         let trimmedNote = noteResult.isAllowed ? noteResult.value : ""
 
         if categoryLockedByUser {
-            return "已按「\(selectedCategory.label)」记，下次相近的我会记住。"
+            return "这次按「\(selectedCategory.label)」放好。"
         }
         if MerchantBrandCatalog.matchBrand(in: trimmedNote) != nil {
             return nil
@@ -813,22 +813,31 @@ final class HomeViewModel: ObservableObject {
         guard let result = recordPrefillResult,
               let recordPrefillAmount,
               abs(recordPrefillAmount - amount) < 0.005 else {
-            return items.count < 6 ? "先只帮你放分类，备注留给你写。" : nil
+            return items.count < 6 ? "先帮你放到合适分类。" : nil
         }
 
         switch result.source {
         case "scene_habit":
             if result.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-                return "这类我见过几次，已帮你带一句。"
+                return "这个时间附近常这样记。"
+            }
+            if let category = result.category {
+                return "这个时间附近常是「\(category.label)」。"
             }
             return nil
         case "habit":
+            if let category = result.category {
+                return "这个时间附近常是「\(category.label)」。"
+            }
             return nil
         case "frequent":
+            if let category = result.category {
+                return "这个时间附近常是「\(category.label)」。"
+            }
             return nil
         case "generic":
             return items.count < 6
-                ? "先只帮你放分类，备注留给你写。"
+                ? "先帮你放到合适分类。"
                 : nil
         case "brand":
             return nil

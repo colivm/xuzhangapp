@@ -451,6 +451,7 @@ struct InsightWebView: View {
     }
 
     private func preferredBubbleTitle(from item: HomeItem, allowsFullTitle: Bool) -> String? {
+        guard item.hasMeaningfulTitle else { return nil }
         let keywords = titleKeywords(from: item.title, allowsFullTitle: allowsFullTitle)
         guard let first = keywords.first else { return nil }
         if !allowsFullTitle,

@@ -19,6 +19,7 @@ struct HomeView: View {
     @State private var petBubbleVisible = false
     @State private var todayBillsFocusPulse = false
     @State private var todayBillsFocusTick = 0
+    @State private var highlightedSavedItemID: UUID?
     private let dailyQuotaStore = DailyFeatureQuotaStore()
 
     var body: some View {
@@ -52,9 +53,13 @@ struct HomeView: View {
         .background(Color.clear)
         .onAppear {
             handleRouteGuidance(homeViewModel.activeRouteGuidance)
+            scheduleRecentSaveHighlight()
         }
         .onChange(of: homeViewModel.activeRouteGuidance) { _, guidance in
             handleRouteGuidance(guidance)
+        }
+        .onChange(of: homeViewModel.recentThreeItems.first?.id) { _, _ in
+            scheduleRecentSaveHighlight()
         }
         .onChange(of: settingsViewModel.petCompanionEnabled) { _, enabled in
             if !enabled {
@@ -171,7 +176,11 @@ struct HomeView: View {
                     Button {
                         editingItem = item
                     } label: {
-                        billListItem(item: item, isFirst: index == 0)
+                        billListItem(
+                            item: item,
+                            isFirst: index == 0,
+                            isHighlighted: highlightedSavedItemID == item.id
+                        )
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -424,6 +433,27 @@ struct HomeView: View {
         }
     }
 
+    private func scheduleRecentSaveHighlight() {
+        guard let item = homeViewModel.recentThreeItems.first,
+              item.source == .manual,
+              abs(item.updatedAt.timeIntervalSinceNow) <= 4 else {
+            return
+        }
+        highlightSavedItem(item.id)
+    }
+
+    private func highlightSavedItem(_ itemID: UUID) {
+        withAnimation(.easeInOut(duration: 0.22)) {
+            highlightedSavedItemID = itemID
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.45) {
+            guard highlightedSavedItemID == itemID else { return }
+            withAnimation(.easeInOut(duration: 0.32)) {
+                highlightedSavedItemID = nil
+            }
+        }
+    }
+
     private var firstRecordToast: some View {
         HStack(spacing: 10) {
             Image(systemName: "play.circle.fill")
@@ -602,10 +632,10 @@ struct HomeView: View {
 
     // MARK: - Bill List Item
 
-    private func billListItem(item: HomeItem, isFirst: Bool) -> some View {
+    private func billListItem(item: HomeItem, isFirst: Bool, isHighlighted: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(item.title)
+                Text(item.displayTitle)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(AppColors.text)
                 Spacer()
@@ -614,8 +644,8 @@ struct HomeView: View {
                     .foregroundStyle(AppColors.text)
             }
 
-            let emotionTag = item.displayEmotionTag
-            if !emotionTag.isEmpty {
+            if shouldShowHomeEmotion(for: item) {
+                let emotionTag = item.displayEmotionTag
                 Text(emotionTag)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AppColors.accent.opacity(0.74))
@@ -637,13 +667,22 @@ struct HomeView: View {
             }
         }
         .padding(.vertical, 10)
-        .padding(.horizontal, 4)
+        .padding(.horizontal, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(isHighlighted ? AppColors.accent.opacity(0.10) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(isHighlighted ? AppColors.accent.opacity(0.22) : Color.clear, lineWidth: 1)
+        )
         .overlay(alignment: .top) {
             if !isFirst {
                 PaperCreaseDivider()
                     .padding(.top, -10)
             }
         }
+        .animation(.easeInOut(duration: 0.24), value: isHighlighted)
     }
 
     private func countDaysWithRecords() -> Int {
@@ -770,6 +809,7 @@ struct HomeView: View {
                         onSave: { updated in
                             let didSave = homeViewModel.updateItem(updated)
                             if didSave {
+                                highlightSavedItem(updated.id)
                                 withAnimation(todayEditSpring) {
                                     todayInlineEditingItemID = nil
                                     todaySwipedItemID = nil
@@ -823,7 +863,7 @@ struct HomeView: View {
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(item.title)
+                Text(item.displayTitle)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(AppColors.text)
                     .lineLimit(2)
@@ -837,8 +877,8 @@ struct HomeView: View {
                     .opacity(isEditing ? 0.24 : 1)
             }
 
-            let emotionTag = item.displayEmotionTag
-            if !emotionTag.isEmpty {
+            if shouldShowHomeEmotion(for: item) {
+                let emotionTag = item.displayEmotionTag
                 Text(emotionTag)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AppColors.accent.opacity(0.74))
@@ -862,6 +902,12 @@ struct HomeView: View {
             .opacity(isEditing ? 0 : 1)
             .frame(height: isEditing ? 0 : nil)
         }
+    }
+
+    private func shouldShowHomeEmotion(for item: HomeItem) -> Bool {
+        let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tag.isEmpty else { return false }
+        return tag != HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
     }
 
     private func todayRecordRowBackground(isEditing: Bool) -> some View {
@@ -955,6 +1001,7 @@ struct HomeView: View {
         RecordEditSheet(item: item) { updated in
             let didSave = homeViewModel.updateItem(updated)
             if didSave {
+                highlightSavedItem(updated.id)
                 editingItem = nil
             }
             return didSave
@@ -1404,11 +1451,11 @@ struct BillPlaybackSheet: View {
 
     private func closingTitle(for item: HomeItem) -> String {
         let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
-        return tag.isEmpty ? item.title : tag
+        return tag.isEmpty ? item.displayTitle : tag
     }
 
     private func closingBody(for item: HomeItem) -> String {
-        "最后留给「\(item.title)」。今天不用分析太多，先被好好记住就够了。"
+        "最后留给「\(item.displayTitle)」。今天不用分析太多，先被好好记住就够了。"
     }
 }
 

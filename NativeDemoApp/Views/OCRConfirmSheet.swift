@@ -102,6 +102,14 @@ struct OCRConfirmSheet: View {
         .padding(16)
         .background(confirmRowBackground(isSelected: row.selected))
         .overlay(confirmRowBorder(isSelected: row.selected))
+        .overlay(alignment: .leading) {
+            if row.selected {
+                Capsule(style: .continuous)
+                    .fill(AppColors.accent.opacity(0.22))
+                    .frame(width: 3)
+                    .padding(.vertical, 14)
+            }
+        }
     }
 
     private func confirmRowHeader(row: ConfirmRow, index: Int) -> some View {
@@ -117,11 +125,16 @@ struct OCRConfirmSheet: View {
             .accessibilityLabel("导入此条")
 
             VStack(alignment: .leading, spacing: 8) {
-                    Text(row.draft.title)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(AppColors.text)
-                        .lineLimit(3)
+                Text("备注")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppColors.subtext.opacity(0.74))
 
+                Text(row.draft.title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(3)
+
+                HStack(spacing: 6) {
                     if let brand = brand(for: row.draft) {
                         brandChip(brand)
                     }
@@ -129,19 +142,40 @@ struct OCRConfirmSheet: View {
                     if let scene = sceneSignal(for: row.draft), scene.confidenceTier >= .medium {
                         sceneChip(scene)
                     }
-
-                    Text(row.draft.date.zhBillDateTime)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
                 }
 
-                Spacer(minLength: 8)
+                Text(row.draft.date.zhBillDateTime)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.72))
+            }
 
-            Text(row.draft.amount.formatted(.cny.precision(.fractionLength(2))))
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(AppColors.text)
-                .minimumScaleFactor(0.75)
+            Spacer(minLength: 8)
+
+            amountReviewBlock(row.draft)
         }
+    }
+
+    private func amountReviewBlock(_ draft: OCRReceiptDraft) -> some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            Text("金额")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AppColors.subtext.opacity(0.72))
+            Text(draft.amount.formatted(.cny.precision(.fractionLength(2))))
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.54))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
+        )
     }
 
     private func brand(for draft: OCRReceiptDraft) -> MerchantBrandDefinition? {
@@ -207,8 +241,8 @@ struct OCRConfirmSheet: View {
     private func confirmRowCategory(row: ConfirmRow, index: Int) -> some View {
         HStack(spacing: 10) {
             Text("分类")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(AppColors.subtext)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppColors.subtext.opacity(0.78))
 
             OCRCategoryChips(selectedCategory: row.draft.category) { category in
                 if rows[index].draft.category != category {
@@ -220,10 +254,20 @@ struct OCRConfirmSheet: View {
 
             Spacer()
 
-            Text(row.selected ? "将导入" : "已跳过")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(row.selected ? AppColors.accent : AppColors.subtext)
+            statusPill(row.selected ? "将导入" : "已跳过", isSelected: row.selected)
         }
+    }
+
+    private func statusPill(_ text: String, isSelected: Bool) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(isSelected ? AppColors.accent.opacity(0.82) : AppColors.subtext.opacity(0.82))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isSelected ? AppColors.accent.opacity(0.08) : Color.white.opacity(0.50))
+            )
     }
 
     private func confirmRowBackground(isSelected: Bool) -> some View {

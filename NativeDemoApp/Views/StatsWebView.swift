@@ -389,7 +389,7 @@ struct StatsWebView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(item.title)
+                    Text(item.displayTitle)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(AppColors.text)
                         .lineLimit(1)
@@ -1653,7 +1653,7 @@ struct StatsWebView: View {
     private func billRecordRow(_ item: HomeItem, isFirst: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(item.title)
+                Text(item.displayTitle)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(AppColors.text)
                 Spacer()
@@ -1762,7 +1762,7 @@ struct StatsWebView: View {
     private func traceDetailRecordSummary(_ item: HomeItem, isEditing: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(item.title)
+                Text(item.displayTitle)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(AppColors.text)
                     .lineLimit(2)
@@ -1914,7 +1914,7 @@ struct StatsWebView: View {
     private func recordListItem(_ item: HomeItem) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(item.title)
+                Text(item.displayTitle)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(AppColors.text)
                 Spacer()
