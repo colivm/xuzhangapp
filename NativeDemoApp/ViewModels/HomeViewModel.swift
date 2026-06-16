@@ -140,7 +140,7 @@ final class HomeViewModel: ObservableObject {
                 default: return false
                 }
             }()
-            if !expired { latestActionCard = card }
+            if !expired, !Self.isLowValueActionCardText(card.text) { latestActionCard = card }
         }
         analyticsService.track("app_open", props: ["items": String(items.count)])
         refreshTodayPlayback()
@@ -1584,7 +1584,7 @@ final class HomeViewModel: ObservableObject {
 
     func setLatestActionCard(_ text: String, scope: String = "none") {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, !Self.isLowValueActionCardText(trimmed) else { return }
         latestActionCard = ActionCardData(text: trimmed, updatedAt: Date(), scope: scope)
         persistActionCard()
     }
@@ -1651,5 +1651,28 @@ final class HomeViewModel: ObservableObject {
     private func persistActionCard() {
         guard let card = latestActionCard, let data = try? JSONEncoder().encode(card) else { return }
         UserDefaults.standard.set(data, forKey: "latest_action_card_v1")
+    }
+
+    private static func isLowValueActionCardText(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let quoted = trimmed
+            .replacingOccurrences(of: "这周留下：", with: "")
+            .replacingOccurrences(of: "这个月留下：", with: "")
+            .replacingOccurrences(of: "这周留下了一笔", with: "")
+            .replacingOccurrences(of: "这个月留下了一笔", with: "")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "「」『』“”\"' 。."))
+        let separators = CharacterSet(charactersIn: "/／、· ")
+        let parts = quoted
+            .components(separatedBy: separators)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard parts.count >= 2 else { return false }
+        let lowValueWords = Set(["公交", "地铁", "交通", "餐饮", "吃饭", "早餐", "购物", "日用", "居家", "健康", "放松", "住宿", "出行"])
+        return parts.allSatisfy { word in
+            lowValueWords.contains(word)
+                || HomeItem.Category.allCases.contains(where: { category in
+                    category.rawValue == word || category.label == word
+                })
+        }
     }
 }

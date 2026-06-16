@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct SummaryPlaybackMemberPitch: Equatable {
     let headline: String
@@ -578,7 +579,19 @@ struct SummaryPlaybackSheet: View {
     }
 
     private var playbackMemoryLine: String? {
-        let candidates = playback.chapters.flatMap { chapter in
+        let narrationCandidates = playback.chapters
+            .filter { !$0.id.contains("presence") && !$0.id.contains("outro") }
+            .flatMap { chapter in
+                [chapter.narration.warm, chapter.narration.plain]
+            }
+
+        if let sentence = narrationCandidates.compactMap(cleanMemorySentence).first {
+            return playback.range == .week
+                ? "这周留下：\(sentence)"
+                : "这个月留下：\(sentence)"
+        }
+
+        let phraseCandidates = playback.chapters.flatMap { chapter in
             [
                 chapter.metrics["voiceTitle1"],
                 chapter.metrics["earlyVoiceTitle"],
@@ -587,26 +600,64 @@ struct SummaryPlaybackSheet: View {
             ]
         }
 
-        guard let phrase = candidates.compactMap(cleanMemoryPhrase).first else { return nil }
+        guard let phrase = phraseCandidates.compactMap(cleanMemoryPhrase).first else { return nil }
         return playback.range == .week
-            ? "这周留下：「\(phrase)」。"
-            : "这个月留下：「\(phrase)」。"
+            ? "这周留下了一笔「\(phrase)」。"
+            : "这个月留下了一笔「\(phrase)」。"
     }
 
-    private func cleanMemoryPhrase(_ raw: String?) -> String? {
+    private func cleanMemorySentence(_ raw: String?) -> String? {
         guard let raw else { return nil }
-        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (2...18).contains(text.count),
+        let text = normalizedMemoryText(raw)
+        guard (8...48).contains(text.count),
               !isLowConfidenceMemoryPhrase(text),
+              !isCategoryOnlyMemoryPhrase(text),
               !EchoAnchorService.shared.isDirtyTraceTitle(text) else {
             return nil
         }
         return text
     }
 
+    private func cleanMemoryPhrase(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let text = normalizedMemoryText(raw)
+        guard (4...18).contains(text.count),
+              !isLowConfidenceMemoryPhrase(text),
+              !isCategoryOnlyMemoryPhrase(text),
+              !EchoAnchorService.shared.isDirtyTraceTitle(text) else {
+            return nil
+        }
+        return text
+    }
+
+    private func normalizedMemoryText(_ raw: String) -> String {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "「」『』“”\"' "))
+    }
+
     private func isLowConfidenceMemoryPhrase(_ text: String) -> Bool {
         let lows = ["几笔记录", "记录还少", "还没有", "没有足够", "暂无", "数据不足"]
         return lows.contains { text.contains($0) }
+    }
+
+    private func isCategoryOnlyMemoryPhrase(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if HomeItem.Category.allCases.contains(where: { trimmed == $0.rawValue || trimmed == $0.label }) {
+            return true
+        }
+        let separators = CharacterSet(charactersIn: "/／、· ")
+        let parts = trimmed
+            .components(separatedBy: separators)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard parts.count >= 2 else { return false }
+        let categoryLikeWords = Set(["公交", "地铁", "交通", "餐饮", "吃饭", "早餐", "购物", "日用", "居家", "健康", "放松", "住宿", "出行"])
+        return parts.allSatisfy { word in
+            categoryLikeWords.contains(word)
+                || HomeItem.Category.allCases.contains(where: { category in
+                    category.rawValue == word || category.label == word
+                })
+        }
     }
 
     private var doneHeadline: String {
@@ -641,7 +692,7 @@ struct SummaryPlaybackSheet: View {
 
     private func saveWeeklyStoryCard() {
         guard let payload = weeklySharePayload, !isSavingShareCard else { return }
-        let card = WeeklyShareCardView(
+        let card = WeeklyStoryShareCardView(
             payload: payload,
             isPetMode: petEnabled,
             nickname: shareNickname.isEmpty ? "叙账用户" : shareNickname
@@ -738,5 +789,216 @@ private struct RatioRing: View {
                 .frame(width: 48, height: 48)
         }
         .shadow(color: AppColors.accent.opacity(0.16), radius: 12, y: 6)
+    }
+}
+
+private struct WeeklyStoryShareCardView: View {
+    let payload: WeeklyShareCardPayload
+    var isPetMode: Bool = true
+    var nickname: String = "叙账用户"
+
+    private let paper = Color(hex: "fffdf7")
+    private let ink = Color(hex: "1f2528")
+    private let muted = Color(hex: "78847c")
+    private let green = Color(hex: "7fb39f")
+    private let deepGreen = Color(hex: "486f5d")
+    private let softGreen = Color(hex: "e8f2e9")
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(hex: "dcebe0"), Color(hex: "f6f8ed"), Color(hex: "fff2df")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            storyPaperStack
+                .padding(.horizontal, 30)
+                .padding(.vertical, 26)
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("本周故事图")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(deepGreen.opacity(0.86))
+                        Text(payload.periodText)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(muted.opacity(0.84))
+                    }
+                    Spacer()
+                    Text("叙账")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(deepGreen.opacity(0.74))
+                }
+
+                Spacer(minLength: 30)
+
+                storyFactSlip
+
+                storyCareSlip
+                    .padding(.top, -10)
+                    .padding(.leading, 28)
+
+                Spacer(minLength: 24)
+
+                storyDataRows
+
+                Spacer(minLength: 18)
+
+                HStack(alignment: .center, spacing: 8) {
+                    Text("来自 \(nickname.isEmpty ? "叙账用户" : nickname) 的真实记录")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(muted.opacity(0.82))
+                        .lineLimit(1)
+                    Spacer()
+                    Text("\(payload.recordCount) 笔")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(deepGreen.opacity(0.72))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Capsule(style: .continuous).fill(softGreen.opacity(0.82)))
+                }
+            }
+            .padding(.horizontal, 42)
+            .padding(.vertical, 38)
+        }
+        .frame(width: 390, height: 580)
+        .clipped()
+    }
+
+    private var storyPaperStack: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color(hex: "e9f1e8").opacity(0.70))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(deepGreen.opacity(0.08), lineWidth: 1)
+                )
+                .rotationEffect(.degrees(-3.2))
+                .offset(x: -18, y: 24)
+                .shadow(color: deepGreen.opacity(0.10), radius: 18, x: 0, y: 10)
+
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color(hex: "f0f5ea").opacity(0.82))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(0.56), lineWidth: 1)
+                )
+                .rotationEffect(.degrees(2.6))
+                .offset(x: 17, y: 17)
+                .shadow(color: deepGreen.opacity(0.09), radius: 16, x: 0, y: 9)
+
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color(hex: "fbfaf1").opacity(0.88))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(deepGreen.opacity(0.07), lineWidth: 1)
+                )
+                .rotationEffect(.degrees(-0.9))
+                .offset(x: -7, y: 9)
+                .shadow(color: deepGreen.opacity(0.08), radius: 14, x: 0, y: 7)
+
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(paper.opacity(0.94))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(0.70), lineWidth: 1)
+                )
+                .shadow(color: deepGreen.opacity(0.16), radius: 26, x: 0, y: 16)
+        }
+    }
+
+    private var storyFactSlip: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("这一周")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(deepGreen.opacity(0.70))
+
+            Text(payload.insight.fact)
+                .font(.system(size: 27, weight: .bold, design: .rounded))
+                .foregroundStyle(ink)
+                .lineSpacing(6)
+                .lineLimit(4)
+                .minimumScaleFactor(0.64)
+                .frame(maxWidth: .infinity, minHeight: 126, alignment: .topLeading)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.white.opacity(0.62))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(0.74), lineWidth: 1)
+        )
+        .rotationEffect(.degrees(-1.2))
+    }
+
+    private var storyCareSlip: some View {
+        Text(payload.insight.care)
+            .font(.system(size: 18, weight: .semibold, design: .rounded))
+            .foregroundStyle(deepGreen.opacity(0.92))
+            .lineSpacing(5)
+            .lineLimit(3)
+            .minimumScaleFactor(0.72)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(softGreen.opacity(0.78))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(green.opacity(0.18), lineWidth: 1)
+            )
+            .rotationEffect(.degrees(1.4))
+    }
+
+    private var storyDataRows: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(payload.insight.tags.prefix(4).enumerated()), id: \.offset) { _, tag in
+                HStack(spacing: 8) {
+                    RoundedRectangle(cornerRadius: 999, style: .continuous)
+                        .fill(green.opacity(0.44))
+                        .frame(width: 7, height: 7)
+                    Text(tag)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(ink.opacity(0.72))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.80)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.40))
+                )
+            }
+        }
+    }
+
+    func snapshot() -> UIImage? {
+        let size = CGSize(width: 390, height: 580)
+        let host = UIHostingController(rootView: self.frame(width: size.width, height: size.height))
+        host.view.frame = CGRect(origin: .zero, size: size)
+        host.view.backgroundColor = .clear
+        let win = UIWindow(frame: CGRect(origin: .zero, size: size))
+        win.rootViewController = host
+        win.isHidden = false
+        win.makeKeyAndVisible()
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+        let fmt = UIGraphicsImageRendererFormat()
+        fmt.scale = 3.0
+        let renderer = UIGraphicsImageRenderer(size: size, format: fmt)
+        let img = renderer.image { _ in
+            host.view.drawHierarchy(in: CGRect(origin: .zero, size: size), afterScreenUpdates: true)
+        }
+        win.isHidden = true
+        return img
     }
 }

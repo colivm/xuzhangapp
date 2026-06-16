@@ -707,37 +707,42 @@ struct HomeView: View {
     private var todayRecordsGradientBackground: some View {
         LinearGradient(
             colors: [
-                Color(red: 226/255, green: 241/255, blue: 232/255),
-                Color(red: 198/255, green: 222/255, blue: 210/255),
-                Color(red: 235/255, green: 244/255, blue: 238/255)
+                Color(red: 233/255, green: 243/255, blue: 236/255),
+                Color(red: 219/255, green: 235/255, blue: 225/255),
+                Color(red: 244/255, green: 248/255, blue: 244/255)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
         .overlay(
             LinearGradient(
-                colors: [Color.white.opacity(0.34), Color.clear],
+                colors: [Color.white.opacity(0.46), Color.white.opacity(0.10), Color.clear],
                 startPoint: .top,
-                endPoint: .center
+                endPoint: .bottom
             )
         )
     }
 
     private var todayRecordListBackground: some View {
         RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(.thinMaterial)
+            .fill(Color(red: 247/255, green: 251/255, blue: 247/255).opacity(0.74))
             .overlay(
                 LinearGradient(
-                    colors: [Color.white.opacity(0.42), Color.white.opacity(0.16)],
+                    colors: [
+                        Color.white.opacity(0.42),
+                        Color(red: 216/255, green: 235/255, blue: 224/255).opacity(0.22),
+                        Color.white.opacity(0.18)
+                    ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
             )
+            .shadow(color: Color(red: 76/255, green: 103/255, blue: 88/255).opacity(0.10), radius: 18, x: 0, y: 10)
     }
 
     private var todayRecordListBorder: some View {
         RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .stroke(Color.white.opacity(0.48), lineWidth: 1)
+            .stroke(Color.white.opacity(0.58), lineWidth: 1)
     }
 
     private func todayRecordInlineRow(item: HomeItem, isFirst: Bool) -> some View {
@@ -856,8 +861,8 @@ struct HomeView: View {
             .fill(
                 LinearGradient(
                     colors: isEditing
-                    ? [Color(red: 93/255, green: 132/255, blue: 112/255).opacity(0.11), Color.white.opacity(0.50), Color(red: 212/255, green: 230/255, blue: 220/255).opacity(0.26)]
-                    : [Color.white.opacity(0.38), Color.white.opacity(0.20)],
+                    ? [Color(red: 93/255, green: 132/255, blue: 112/255).opacity(0.13), Color.white.opacity(0.58), Color(red: 212/255, green: 230/255, blue: 220/255).opacity(0.32)]
+                    : [Color.white.opacity(0.56), Color(red: 238/255, green: 246/255, blue: 240/255).opacity(0.40)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -866,7 +871,7 @@ struct HomeView: View {
 
     private func todayRecordRowBorder(isEditing: Bool) -> some View {
         RoundedRectangle(cornerRadius: 19, style: .continuous)
-            .stroke(isEditing ? Color(red: 93/255, green: 132/255, blue: 112/255).opacity(0.28) : Color.white.opacity(0.30), lineWidth: 1)
+            .stroke(isEditing ? Color(red: 93/255, green: 132/255, blue: 112/255).opacity(0.30) : Color.white.opacity(0.42), lineWidth: 1)
     }
 
     private var todayEditSpring: Animation {

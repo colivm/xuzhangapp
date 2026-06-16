@@ -1888,7 +1888,7 @@ struct WeeklyShareCardView: View {
             fact: headline,
             care: subtitle,
             footnote: "\(recordCount) 次 · 这一周",
-            tags: ["#生活侧写", "#这一周"]
+            tags: ["#\(recordCount)笔记录", "#生活侧写", "#周记摘页"]
         )
         self.isPetMode = isPetMode
         self.nickname = nickname
@@ -1927,8 +1927,8 @@ struct WeeklyShareCardView: View {
             )
 
             paperStack
-                .padding(.horizontal, 24)
-                .padding(.vertical, 22)
+                .padding(.horizontal, 30)
+                .padding(.vertical, 26)
 
             lowerPaperTexture
                 .padding(.horizontal, 28)
@@ -2013,13 +2013,34 @@ struct WeeklyShareCardView: View {
     private var paperStack: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(t.paperEdge.opacity(0.70))
+                .fill(t.paperEdge.opacity(0.54))
                 .overlay(
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(t.panelBorder.opacity(0.36), lineWidth: 1)
+                        .stroke(t.panelBorder.opacity(0.28), lineWidth: 1)
                 )
-                .offset(x: 9, y: 10)
-                .shadow(color: t.paperShadow.opacity(0.11), radius: 16, x: 0, y: 10)
+                .rotationEffect(.degrees(-3.0))
+                .offset(x: -18, y: 24)
+                .shadow(color: t.paperShadow.opacity(0.10), radius: 18, x: 0, y: 10)
+
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color(hex: "f5f7ed").opacity(0.78))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(0.50), lineWidth: 1)
+                )
+                .rotationEffect(.degrees(2.4))
+                .offset(x: 17, y: 16)
+                .shadow(color: t.paperShadow.opacity(0.09), radius: 16, x: 0, y: 8)
+
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color(hex: "fbfbf0").opacity(0.82))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(t.panelBorder.opacity(0.24), lineWidth: 1)
+                )
+                .rotationEffect(.degrees(-0.8))
+                .offset(x: -7, y: 8)
+                .shadow(color: t.paperShadow.opacity(0.08), radius: 14, x: 0, y: 7)
 
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(t.panelBg)
@@ -2027,7 +2048,7 @@ struct WeeklyShareCardView: View {
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
                         .stroke(t.panelBorder.opacity(0.72), lineWidth: 1)
                 )
-                .shadow(color: t.paperShadow.opacity(0.13), radius: 24, x: 0, y: 16)
+                .shadow(color: t.paperShadow.opacity(0.16), radius: 26, x: 0, y: 16)
         }
     }
 
