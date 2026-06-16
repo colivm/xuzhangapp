@@ -349,8 +349,14 @@ struct RecordView: View {
         inputTitleCompatibleWithSelectedCategory || compatiblePrefillTitle != nil
     }
 
+    private var noteWasExplicitlyCleared: Bool {
+        noteEditorExpanded
+            && homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var hasExplicitCopyIntent: Bool {
-        homeViewModel.categoryLockedByUser || previewLineWasRotated || activeScenePack != nil
+        !noteWasExplicitlyCleared
+            && (homeViewModel.categoryLockedByUser || previewLineWasRotated || activeScenePack != nil)
     }
 
     private var shouldUseNeutralRemarkFallback: Bool {
