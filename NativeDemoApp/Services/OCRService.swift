@@ -138,6 +138,15 @@ final class OCRService {
         let parseText = parseLines.joined(separator: "\n")
         let provider = detectProvider(from: parseText)
 
+        if looksLikeAlipayOrderDisplayDetail(lines: parseLines),
+           let draft = parseAlipayOrderDisplayDetail(
+               ocrLines: parseOCRLines,
+               rawText: parseText,
+               confidence: Double(confidence)
+           ) {
+            return [draft]
+        }
+
         if looksLikePaymentSuccessResult(ocrLines: parseOCRLines),
            let draft = parsePaymentSuccessResult(
                ocrLines: parseOCRLines,
@@ -213,7 +222,7 @@ final class OCRService {
         let text = lines.joined(separator: "\n")
         let listHints = [
             "账单列表", "全部交易", "交易记录", "本月支出", "本月收入", "筛选", "月账单", "全部账单",
-            "查找交易", "搜索交易记录", "收支统计", "收支分析", "全部", "支出", "转账", "退款", "订单",
+            "查找交易", "搜索交易记录", "收支统计", "收支分析", "全部", "支出", "转账", "退款",
         ]
         let hasListHint = listHints.contains { text.contains($0) }
         let hasDetailHint = looksLikeDetailScreenshot(lines: lines)
@@ -255,7 +264,15 @@ final class OCRService {
             "交易对象", "收款方", "收款账户", "创建时间", "付款时间", "支付时间", "交易时间", "当前状态",
             "订单号", "商户单号", "交易单号", "支付方式",
         ]
-        return detailHints.contains { text.contains($0) }
+        return detailHints.contains { text.contains($0) } || looksLikeAlipayOrderDisplayDetail(lines: lines)
+    }
+
+    private func looksLikeAlipayOrderDisplayDetail(lines: [String]) -> Bool {
+        let text = lines.joined(separator: "\n")
+        guard text.contains("订单展示") else { return false }
+        let settlementHints = ["顾客实付款", "立减金", "实际到账", "实际金额以商家实际到账为准"]
+        guard settlementHints.contains(where: { text.contains($0) }) else { return false }
+        return currencyCandidates(in: text).count >= 2
     }
 
     private func listAmountLineCount(in lines: [String]) -> Int {
@@ -325,6 +342,75 @@ final class OCRService {
             rawText: rawText,
             provider: resolvedProvider
         ))
+    }
+
+    private func parseAlipayOrderDisplayDetail(
+        ocrLines: [OCRLine],
+        rawText: String,
+        confidence: Double
+    ) -> OCRReceiptDraft? {
+        let amountCandidates = ocrLines.compactMap { line -> (amount: Double, line: OCRLine)? in
+            guard !isAlipaySettlementBreakdownLine(line.text),
+                  let amount = currencyCandidates(in: line.text).first else {
+                return nil
+            }
+            return (amount, line)
+        }
+        guard let selected = amountCandidates
+            .sorted(by: { lhs, rhs in
+                if lhs.line.boundingBox.height == rhs.line.boundingBox.height {
+                    return lhs.amount > rhs.amount
+                }
+                return lhs.line.boundingBox.height > rhs.line.boundingBox.height
+            })
+            .first else {
+            return nil
+        }
+
+        let title = alipayOrderDisplayTitle(ocrLines: ocrLines, amountLine: selected.line)
+            ?? MerchantBrandCatalog.matchOCRBrand(in: rawText)?.displayName
+            ?? fallbackTitle(from: ocrLines.map(\.text))
+        guard let title else { return nil }
+
+        return brandedDraft(OCRReceiptDraft(
+            title: title,
+            amount: abs(selected.amount),
+            date: firstDate(in: rawText) ?? .now,
+            category: inferCategory(from: "\(title)\n\(rawText)"),
+            confidence: confidence,
+            rawText: rawText,
+            provider: .alipay
+        ))
+    }
+
+    private func alipayOrderDisplayTitle(ocrLines: [OCRLine], amountLine: OCRLine) -> String? {
+        let amountMidY = amountLine.boundingBox.midY
+        let candidates = ocrLines
+            .filter { line in
+                guard line.boundingBox.midY > amountMidY else { return false }
+                guard line.boundingBox.midY - amountMidY <= 0.32 else { return false }
+                let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !isAlipayOrderDisplayNoiseLine(text) else { return false }
+                return isUsableTitle(text)
+            }
+            .sorted { lhs, rhs in
+                abs(lhs.boundingBox.midY - amountMidY) < abs(rhs.boundingBox.midY - amountMidY)
+            }
+            .map(\.text)
+        return candidates.first
+    }
+
+    private func isAlipaySettlementBreakdownLine(_ text: String) -> Bool {
+        let hints = ["顾客实付款", "立减金", "优惠", "红包", "实际到账", "商家实际到账"]
+        return hints.contains { text.contains($0) }
+    }
+
+    private func isAlipayOrderDisplayNoiseLine(_ text: String) -> Bool {
+        let blocked = [
+            "订单展示", "回首页", "返回", "上滑返回", "顾客实付款", "立减金",
+            "实际到账", "实际金额以商家实际到账为准"
+        ]
+        return blocked.contains { text.contains($0) }
     }
 
     private func paymentResultTitle(ocrLines: [OCRLine], amountLine: OCRLine) -> String? {
