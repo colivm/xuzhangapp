@@ -56,22 +56,19 @@ struct InsightWebView: View {
                 monthlyTrialOverlay(modal)
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
+
+            if showWeeklySharePrivacyConfirm {
+                weeklySharePrivacyOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
         }
         .animation(.easeInOut(duration: 0.2), value: monthlyTrialModal?.id)
+        .animation(.easeInOut(duration: 0.2), value: showWeeklySharePrivacyConfirm)
         .sheet(isPresented: $showMonthlyInsightSheet) {
             monthlyInsightSheet
         }
         .sheet(isPresented: $showTodayInsightSheet) {
             todayInsightSheet
-        }
-        .confirmationDialog("保存周记摘页？", isPresented: $showWeeklySharePrivacyConfirm, titleVisibility: .visible) {
-            Button("保存到相册") {
-                homeViewModel.markWeeklyShareGenerated()
-                generateAndShareWeeklyCard()
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("摘页可能包含昵称、金额区间和你写下的回望文字。保存后请先确认内容，再发给别人。")
         }
     }
 
@@ -1213,6 +1210,123 @@ struct InsightWebView: View {
     private var trialOverlayCardBorder: some View {
         RoundedRectangle(cornerRadius: 22, style: .continuous)
             .stroke(Color.white.opacity(0.66), lineWidth: 1)
+    }
+
+    private var weeklySharePrivacyOverlay: some View {
+        ZStack {
+            Color(red: 28/255, green: 36/255, blue: 42/255)
+                .opacity(0.24)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    showWeeklySharePrivacyConfirm = false
+                }
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppColors.accent.opacity(0.92))
+                        .frame(width: 38, height: 38)
+                        .background(
+                            Circle()
+                                .fill(AppColors.accent.opacity(0.12))
+                        )
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("保存周记摘页")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+
+                        Text("摘页里可能有昵称、金额区间和你写下的回望。保存后先看一眼内容，再发给别人。")
+                            .font(.system(size: 14))
+                            .lineSpacing(4)
+                            .foregroundStyle(AppColors.subtext.opacity(0.92))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        showWeeklySharePrivacyConfirm = false
+                    } label: {
+                        Text("先不保存")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(AppColors.text.opacity(0.82))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(Color.white.opacity(0.66))
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        showWeeklySharePrivacyConfirm = false
+                        homeViewModel.markWeeklyShareGenerated()
+                        generateAndShareWeeklyCard()
+                    } label: {
+                        Text("保存到相册")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(
+                                LinearGradient(
+                                    colors: [AppColors.accent.opacity(0.92), AppColors.accentDark.opacity(0.90)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSavingWeeklyShareCard)
+                    .opacity(isSavingWeeklyShareCard ? 0.62 : 1)
+                }
+            }
+            .padding(22)
+            .frame(maxWidth: 370)
+            .background(weeklySharePrivacyCardBackground)
+            .overlay(weeklySharePrivacyCardBorder)
+            .shadow(color: Color(red: 47/255, green: 67/255, blue: 58/255).opacity(0.18), radius: 24, x: 0, y: 12)
+            .padding(.horizontal, 24)
+        }
+    }
+
+    private var weeklySharePrivacyCardBackground: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.84),
+                        AppColors.paperWarm.opacity(0.34),
+                        AppColors.paperMist.opacity(0.38)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+    }
+
+    private var weeklySharePrivacyCardBorder: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.82),
+                        AppColors.accent.opacity(0.16),
+                        AppColors.paperBorder.opacity(0.12)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
     }
 
     private var defaultMonthlyAIStatus: AIStatusPill? {
