@@ -93,11 +93,11 @@ struct HomeView: View {
         .sheet(item: $editingItem) { item in
             editSheet(for: item)
         }
-        .alert("今天的免费回放已用完", isPresented: Binding(
+        .alert("今天先手动记也可以", isPresented: Binding(
             get: { todayPlaybackQuotaMessage != nil },
             set: { if !$0 { todayPlaybackQuotaMessage = nil } }
         )) {
-            Button("了解会员") {
+            Button("让回放不中断") {
                 todayPlaybackQuotaMessage = nil
                 onShowMemberPricing?()
             }
@@ -537,7 +537,7 @@ struct HomeView: View {
         }
         let isMember = settingsViewModel.settings.hasMemberAccess
         guard dailyQuotaStore.canPlayTodayPlayback(isMember: isMember) else {
-            todayPlaybackQuotaMessage = "今天的免费回放次数已用完。明天可继续播放，会员可不限次数回看。"
+            todayPlaybackQuotaMessage = "今天的免费回放次数已用完。明天可继续播放；会员适合想在当天反复整理回望的人。"
             return
         }
         dailyQuotaStore.markTodayPlaybackStarted(isMember: isMember)

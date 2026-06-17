@@ -1556,7 +1556,7 @@ struct SettingsView: View {
     }
 
     private var accountMemberSection: some View {
-        accountPanel("会员增量") {
+        accountPanel("让账本更懂你") {
             if let validity = settingsViewModel.settings.memberValidityText {
                 accountInfoRow(title: "有效期", value: validity)
             }
@@ -1593,6 +1593,7 @@ struct SettingsView: View {
                 }
             } else {
                 accountInfoRow(title: "当前档位", value: memberTierName)
+                settingHelper("免费版可以完整记账。会员会让回放、OCR 和生活场景持续跟上你的记录节奏。")
                 Button {
                     showAccountSheet = false
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -1600,7 +1601,7 @@ struct SettingsView: View {
                     }
                 } label: {
                     HStack(spacing: 6) {
-                        Text("想多留几段回望？了解会员")
+                        Text("让账本更懂我的生活")
                             .font(.system(size: 14, weight: .medium))
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .bold))
@@ -1723,11 +1724,11 @@ struct SettingsView: View {
     private var accountMemberBenefits: [String] {
         [
             "周/月生活回放无限",
-            "每月生活章持续解锁",
+            "每月生活章持续整理",
             "今日回放不限",
             "OCR 导入不限",
             "AI 回顾额度提升",
-            "回望内容长期保留",
+            "生活场景换角度",
         ]
     }
 

@@ -272,7 +272,7 @@ final class HomeViewModel: ObservableObject {
 
     func recognizeOCRDrafts(imageData: Data, isMember: Bool) async -> [OCRReceiptDraft] {
         guard dailyQuotaStore.canUseOCR(isMember: isMember) else {
-            ocrStatus = "今天的免费识别次数已用完。你仍可以手动记账，会员可继续导入截图。"
+            ocrStatus = "今天的免费识别次数已用完。你仍可以手动记账；会员适合经常导入账单的人，不用被次数打断。"
             return []
         }
         do {
@@ -297,7 +297,7 @@ final class HomeViewModel: ObservableObject {
             return 0
         }
         guard dailyQuotaStore.canUseOCR(isMember: isMember) else {
-            ocrStatus = "今天的免费识别次数已用完。你仍可以手动记账，会员可继续导入截图。"
+            ocrStatus = "今天的免费识别次数已用完。你仍可以手动记账；会员适合经常导入账单的人，不用被次数打断。"
             return 0
         }
 

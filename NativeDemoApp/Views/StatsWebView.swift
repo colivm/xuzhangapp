@@ -1219,27 +1219,27 @@ struct StatsWebView: View {
             if quotaStore.weekRemaining(isMember: false) <= 1 {
                 return SummaryPlaybackMemberPitch(
                     headline: "这周的免费回放快用完了。",
-                    detail: "会员可以无限回看周记和月记，不用等下个自然周刷新。",
-                    cta: "解锁无限回放"
+                    detail: "会员会让周记和月章持续留下来，不用等下个自然周刷新。",
+                    cta: "让回放继续留下"
                 )
             }
             return SummaryPlaybackMemberPitch(
                 headline: "像不像你的这周？",
                 detail: "这类回看会随着记录变多更贴近你。",
-                cta: "了解会员"
+                cta: "让账本更懂我"
             )
         case .month:
             if quotaStore.monthRemaining(isMember: false) <= 1 {
                 return SummaryPlaybackMemberPitch(
                     headline: "10 次月章已经听到最后一次。",
-                    detail: "后面的月份也可以这样被整理出来，会员可继续解锁每月生活章。",
-                    cta: "继续解锁月章"
+                    detail: "后面的月份也可以继续被整理出来，形成一段更长的生活脉络。",
+                    cta: "继续留下月章"
                 )
             }
             return SummaryPlaybackMemberPitch(
                 headline: "像不像你的这个月？",
                 detail: "会员可以把更多月份继续整理成生活章。",
-                cta: "了解会员"
+                cta: "让账本更懂我"
             )
         }
     }
@@ -1258,7 +1258,7 @@ struct StatsWebView: View {
 
     @ViewBuilder
     private var summaryQuotaAlertActions: some View {
-            Button("了解会员") {
+            Button("让回放不中断") {
                 let shouldOpenMember = summaryQuotaMessage?.contains("会员") ?? false
                 summaryQuotaMessage = nil
                 if shouldOpenMember { onShowMemberPricing?() }
@@ -1383,9 +1383,9 @@ struct StatsWebView: View {
         guard quotaStore.canPlay(range, isMember: hasMemberAccess) else {
             switch range {
             case .week:
-                summaryQuotaMessage = "本周 3 次免费回放已经看完啦。下个自然周会刷新。开通会员可无限回看周/月回放。"
+                summaryQuotaMessage = "本周 3 次免费回放已经看完啦。下个自然周会刷新；会员适合想连续回看周/月生活节奏的人。"
             case .month:
-                summaryQuotaMessage = "你的 10 次新用户「本月回放」已用完。开通会员可无限播放周/月回放，并享无限 OCR 与更高 AI 复盘额度。本周回放仍会在每个自然周刷新 3 次。"
+                summaryQuotaMessage = "你的 10 次新用户「本月回放」已用完。会员可以继续整理更多月份，也让 OCR 和 AI 回顾不被次数打断。本周回放仍会在每个自然周刷新 3 次。"
             }
             return
         }

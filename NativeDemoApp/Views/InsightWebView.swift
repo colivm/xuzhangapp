@@ -1175,7 +1175,7 @@ struct InsightWebView: View {
             }
         } label: {
             trialOverlayButtonLabel(
-                "解锁无限次复盘",
+                "让复盘不中断",
                 foreground: .white,
                 background: AppColors.accent.opacity(0.86),
                 weight: .semibold

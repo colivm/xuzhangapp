@@ -19,20 +19,20 @@ struct MemberPricingView: View {
         MemberPlan(id: "monthly", name: "月度会员", price: "¥9", period: "月", featured: false,
                    badge: nil, dailyHint: "首月推介 ¥6，按月订阅，随时可取消"),
         MemberPlan(id: "lifetime", name: "永久会员", price: "¥168", period: "永久", featured: false,
-                   badge: nil, dailyHint: "一次解锁，终身陪伴"),
+                   badge: nil, dailyHint: "一次拥有，长期陪伴"),
     ]
 
     private let benefits = [
-        ("🎬 周/月生活回放无限", "通勤、吃饭、跑医院、给家里补东西，这些线索可以持续回看。"),
-        ("📖 每月生活章持续解锁", "免费 10 次用完后，会员还能继续整理更多月份。"),
-        ("🌤 今日回放不限次", "当天记录可以反复听，适合晚上把今天过一遍。"),
-        ("📷 OCR 导入不限次", "微信/支付宝账单截图可继续本地识别，导入前仍可确认。"),
-        ("💬 AI 回顾额度提升", "想多问一句时，可以继续生成更完整的回顾建议。"),
-        ("🧭 场景包换角度", "同一笔记录可以切换通勤、吃喝、购物、旅行、健康、居家等生活视角。"),
-        ("📚 分享图持续生成", "周记、月章和故事图更适合连续分享和回看。"),
+        ("周/月生活回放无限", "通勤、吃饭、跑医院、给家里补东西，这些线索可以持续回看。"),
+        ("每月生活章持续整理", "免费 10 次用完后，会员还能继续整理更多月份。"),
+        ("今日回放不限次", "当天记录可以反复听，适合晚上把今天过一遍。"),
+        ("OCR 导入不限次", "微信/支付宝账单截图可继续本地识别，导入前仍可确认。"),
+        ("AI 回顾额度提升", "想多问一句时，可以继续生成更完整的回顾建议。"),
+        ("生活场景换角度", "同一笔记录可以切换通勤、吃喝、购物、旅行、健康、居家等生活视角。"),
+        ("分享图持续生成", "周记、月章和故事图更适合连续分享和回看。"),
     ]
 
-    private let freeQuotaFootnote = "免费体验：本周回放每自然周 3 次 · 本月回放终生 10 次 · OCR 每日 3 次 · 今日回放每日 1 次。开通会员后，周/月/今日回放与 OCR 可不限次使用。"
+    private let freeQuotaFootnote = "免费版已经可以完整记账、手动整理和体验基础回放。会员适合连续记录后，想让更多生活线索长期被看见的人。"
 
     private var isMember: Bool {
         settingsViewModel.settings.hasMemberAccess
@@ -45,6 +45,7 @@ struct MemberPricingView: View {
                     // ── Hero ──
                     if !isMember {
                         heroSection
+                        memberValueSection
                     }
 
                     // ── Benefits ──
@@ -94,12 +95,13 @@ struct MemberPricingView: View {
 
     private var heroSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("让账本持续变成你的生活回声")
+            Text("让账本不只记金额，也记得你在过怎样的生活")
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(AppColors.text)
 
-            Text("会员适合已经开始连续记录的人：更多回放、不限 OCR、更多生活总结，不打断你的节奏。")
+            Text("免费版已经能好好记录。会员更像一层持续的理解力：把记录串成回望，把同一笔钱放回生活语境里。")
                 .font(.system(size: 13))
+                .lineSpacing(3)
                 .foregroundStyle(AppColors.subtext)
 
             if !isMember {
@@ -109,7 +111,7 @@ struct MemberPricingView: View {
                 Button {
                     handlePurchase(plans[0]) // yearly default
                 } label: {
-                    Text("立即开通年度会员（推荐）")
+                    Text("让账本更懂我的生活")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -154,6 +156,59 @@ struct MemberPricingView: View {
         )
     }
 
+    private var memberValueSection: some View {
+        VStack(spacing: 10) {
+            memberValueRow(
+                symbol: "calendar.badge.clock",
+                title: "连续性",
+                detail: "周记、月章和分享图可以一直延展，不用因为次数停在刚有感觉的时候。"
+            )
+            memberValueRow(
+                symbol: "sparkles",
+                title: "理解力",
+                detail: "生活场景会让备注、情绪标签和回望更贴近日常，不只是多一个分类。"
+            )
+            memberValueRow(
+                symbol: "bolt.heart",
+                title: "不打断",
+                detail: "OCR、今日回放和 AI 回顾不用反复算额度，想到就继续整理。"
+            )
+        }
+    }
+
+    private func memberValueRow(symbol: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AppColors.accent.opacity(0.92))
+                .frame(width: 30, height: 30)
+                .background(
+                    Circle()
+                        .fill(AppColors.accent.opacity(0.12))
+                )
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppColors.text.opacity(0.9))
+                Text(detail)
+                    .font(.system(size: 12))
+                    .lineSpacing(3)
+                    .foregroundStyle(AppColors.subtext.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(13)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.58))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.42), lineWidth: 1)
+        )
+    }
+
     // MARK: - Benefits
 
     private var benefitsSection: some View {
@@ -162,7 +217,7 @@ struct MemberPricingView: View {
                 withAnimation(.easeInOut(duration: 0.2)) { benefitsExpanded.toggle() }
             } label: {
                 HStack {
-                    Text("查看会员权益详情")
+                    Text("查看会员具体包含什么")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(AppColors.text.opacity(0.86))
                     Spacer()
@@ -265,7 +320,7 @@ struct MemberPricingView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.text.opacity(0.72))
             }
-            Text("会员增量权益已解锁，感谢你的信任与陪伴。")
+            Text("会员增量权益已开启，感谢你的信任与陪伴。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
         }

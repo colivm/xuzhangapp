@@ -6,6 +6,7 @@ struct RecordView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     var onSaved: (() -> Void)? = nil
+    var onShowMemberPricing: (() -> Void)? = nil
     @State private var selectedEntryMode: EntryMode = .manual
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isOCRRecognizing = false
@@ -1012,6 +1013,11 @@ struct RecordView: View {
         VStack(alignment: .leading, spacing: 12) {
             if categoryGridExpanded { categorySection }
             if noteEditorExpanded { noteSection }
+            if isMember {
+                memberScenePackSection
+            } else {
+                memberScenePackPreview
+            }
         }
     }
 
@@ -1068,7 +1074,11 @@ struct RecordView: View {
 
                 if categoryGridExpanded { categorySection }
                 if noteEditorExpanded { noteSection }
-                if isMember { memberScenePackSection }
+                if isMember {
+                    memberScenePackSection
+                } else {
+                    memberScenePackPreview
+                }
             }
         }
     }
@@ -1778,6 +1788,126 @@ struct RecordView: View {
             },
             scenePackDesc: scenePackDesc,
             scenePackReason: scenePackReason
+        )
+    }
+
+    private var memberScenePackPreview: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppColors.lockGold.opacity(0.92))
+                    .frame(width: 30, height: 30)
+                    .background(
+                        Circle()
+                            .fill(AppColors.lockGold.opacity(0.12))
+                    )
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text("生活场景会让备注更像你")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(recordInk.opacity(0.9))
+                        Text("会员")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(Capsule(style: .continuous).fill(AppColors.lockGold.opacity(0.9)))
+                    }
+
+                    Text("免费版照样能记好每一笔。会员会把同一笔钱放进通勤、认真吃饭、照顾家里这些生活语境里。")
+                        .font(.system(size: 12))
+                        .lineSpacing(3)
+                        .foregroundStyle(AppColors.subtext.opacity(0.88))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack(spacing: 8) {
+                ForEach(scenePackPreviewPacks, id: \.id) { pack in
+                    scenePackPreviewChip(pack)
+                }
+            }
+
+            Button {
+                dismissKeyboard()
+                onShowMemberPricing?()
+            } label: {
+                HStack(spacing: 6) {
+                    Text("看看更多生活场景")
+                        .font(.system(size: 14, weight: .semibold))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 11)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            AppColors.accent.opacity(0.92),
+                            AppColors.lockGold.opacity(0.74)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            AppColors.lockGold.opacity(0.08),
+                            Color.white.opacity(0.58),
+                            AppColors.accent.opacity(0.07)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(AppColors.lockGold.opacity(0.18), lineWidth: 1)
+        )
+    }
+
+    private var scenePackPreviewPacks: [ScenePackDefinition] {
+        let preferredIds = ["commute", "food", "home"]
+        let preferred = preferredIds.compactMap { id in
+            visibleScenePacks.first { $0.id == id }
+        }
+        if preferred.count >= 3 {
+            return Array(preferred.prefix(3))
+        }
+        return Array(visibleScenePacks.prefix(3))
+    }
+
+    private func scenePackPreviewChip(_ pack: ScenePackDefinition) -> some View {
+        VStack(spacing: 5) {
+            Text(pack.emoji)
+                .font(.system(size: 18))
+            Text(pack.label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(recordInk.opacity(0.78))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.66))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.46), lineWidth: 1)
         )
     }
 

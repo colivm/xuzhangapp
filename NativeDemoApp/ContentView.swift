@@ -336,7 +336,10 @@ struct ContentView: View {
                         removal: .opacity.combined(with: .offset(y: 8))
                     ))
             case .record:
-                RecordView(onSaved: { selectedTab = .today })
+                RecordView(
+                    onSaved: { selectedTab = .today },
+                    onShowMemberPricing: { showMemberPricing = true }
+                )
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .offset(y: 8)),
                     removal: .opacity.combined(with: .offset(y: 8))
