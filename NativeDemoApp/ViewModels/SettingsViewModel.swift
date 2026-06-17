@@ -372,10 +372,12 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
-    func verifyIAPPurchase(_ payload: IAPPurchaseVerification) async throws {
+    func verifyIAPPurchase(_ payload: IAPPurchaseVerification, showsMessage: Bool = true) async throws {
         let token = KeychainService.loadAccessToken()
         guard !token.isEmpty else {
-            authMessage = "请先登录账号，再开通会员，这样换机后也能找回权益。"
+            if showsMessage {
+                authMessage = "请先登录账号，再开通会员，这样换机后也能找回权益。"
+            }
             throw SettingsViewModelError.loginRequired
         }
         isAuthBusy = true
@@ -394,30 +396,43 @@ final class SettingsViewModel: ObservableObject {
             let fetchedHasAccess = AppSettings.hasMemberAccess(tier: tier.tier, expiresAt: tier.expiresAt)
             let localHasAccess = hasActiveLocalEntitlement(payload)
             if (verifiedHasAccess || localHasAccess) && !fetchedHasAccess {
-                authMessage = "会员已恢复，状态刷新稍后会再同步。"
+                if showsMessage {
+                    authMessage = "会员已恢复，状态刷新稍后会再同步。"
+                }
             } else {
                 settings.memberTier = tier.tier
                 settings.memberExpiresAt = tier.expiresAt
                 persist()
-                authMessage = "会员状态已更新。"
+                if showsMessage {
+                    authMessage = "会员状态已更新。"
+                }
             }
         } catch {
-            authMessage = "会员已恢复，状态刷新稍后会再同步。"
+            if showsMessage {
+                authMessage = "会员已恢复，状态刷新稍后会再同步。"
+            }
         }
     }
 
-    func refreshMemberFromLocalEntitlements(synchronize: Bool = false) async {
+    func refreshMemberFromLocalEntitlements(
+        synchronize: Bool = false,
+        syncToCloud: Bool = true,
+        showsMessage: Bool = false
+    ) async {
         do {
             let payloads = try await IAPService.shared.currentEntitlements(synchronize: synchronize)
             guard let payload = bestLocalEntitlement(from: payloads),
                   hasActiveLocalEntitlement(payload) else { return }
             let currentHasAccess = settings.hasMemberAccess
             applyLocalEntitlement(payload)
-            if !currentHasAccess {
+            if syncToCloud, hasCloudSession {
+                try? await verifyIAPPurchase(payload, showsMessage: false)
+            }
+            if !currentHasAccess, showsMessage {
                 authMessage = "已检测到 App Store 会员权益，状态已恢复。"
             }
         } catch {
-            if synchronize {
+            if synchronize, showsMessage {
                 authMessage = "暂时没恢复到本机会员状态，请稍后再试。"
             }
         }

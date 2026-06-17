@@ -147,10 +147,12 @@ extension View {
 struct ContentView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .today
     @State private var showMemberPricing = false
     @State private var showMinimalOnboarding = false
     @State private var statsTraceOpenRequestID: UUID?
+    @State private var lastMemberStatusRefreshAt: Date?
 
     enum AppTab: Int, CaseIterable, Identifiable {
         case today
@@ -228,14 +230,30 @@ struct ContentView: View {
                 showMinimalOnboarding = true
             }
         }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task {
+                await refreshAccountAndMemberStatusIfNeeded(force: true)
+            }
+        }
         .task {
-            await settingsViewModel.refreshMemberFromLocalEntitlements()
-            await settingsViewModel.refreshCloudAccountProfile()
+            await refreshAccountAndMemberStatusIfNeeded(force: true)
             await homeViewModel.generateDailyInsight(
                 userName: settingsViewModel.displayName,
                 settings: settingsViewModel.settings
             )
         }
+    }
+
+    private func refreshAccountAndMemberStatusIfNeeded(force: Bool = false) async {
+        if !force,
+           let lastMemberStatusRefreshAt,
+           Date().timeIntervalSince(lastMemberStatusRefreshAt) < 900 {
+            return
+        }
+        lastMemberStatusRefreshAt = Date()
+        await settingsViewModel.refreshCloudAccountProfile()
+        await settingsViewModel.refreshMemberFromLocalEntitlements(syncToCloud: true)
     }
 
     // MARK: - Background Gradient
