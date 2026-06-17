@@ -127,6 +127,9 @@ struct HomeItem: Identifiable, Codable, Equatable {
     var displayEmotionTag: String {
         let trimmed = emotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
+        if !RecordSemanticLexicon.isTitle(trimmed, compatibleWith: category) {
+            return Self.inferEmotionTag(category: category, amount: amount)
+        }
         if Self.containsTravelKeyword(trimmed),
            category != .lodging,
            !Self.containsTravelKeyword(title) {
@@ -579,7 +582,7 @@ enum RecordSemanticLexicon {
         version: 0,
         keywordRules: [
             .init(category: .transport, score: 4.0, keywords: ["地铁", "公交", "打车", "滴滴", "充电", "高铁", "机票", "机场", "路费", "通勤"]),
-            .init(category: .dining, score: 4.8, keywords: ["咖啡", "奶茶", "早餐", "午餐", "晚餐", "外卖", "饭", "轻食", "拿铁", "美式"]),
+            .init(category: .dining, score: 4.8, keywords: ["咖啡", "奶茶", "早餐", "早饭", "午餐", "晚餐", "夜宵", "宵夜", "外卖", "饭", "餐", "一顿", "这顿", "吃", "垫一下", "垫一口", "夜里补", "热食", "热乎", "轻食", "小食", "点心", "补点能量", "吃一口", "饮品", "拿铁", "美式"]),
             .init(category: .shopping, score: 4.0, keywords: ["淘宝", "京东", "购物", "下单", "快递", "衣服", "鞋", "数码"]),
             .init(category: .daily, score: 3.0, keywords: ["超市", "日用品", "纸巾", "洗衣", "打印", "理发", "宠物"]),
             .init(category: .entertainment, score: 3.0, keywords: ["电影", "影院", "游戏", "会员", "演唱会", "门票"]),
@@ -698,8 +701,7 @@ enum RecordSemanticLexicon {
         if let bestCategory = bestMatchingCategory(in: trimmed) {
             return bestCategory == category
         }
-        return ["brand", "scene_habit", "habit", "frequent"].contains(source ?? "")
-            && isTitle(trimmed, compatibleWith: category)
+        return false
     }
 
     private static let generatedSystemTitles: Set<String> = [

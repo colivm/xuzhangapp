@@ -25,6 +25,7 @@ struct RecordView: View {
     @State private var activeScenePack: ScenePackDefinition?
     @State private var scenePackFeedback: String?
     @State private var didAutoFocusAmountPad = false
+    @State private var lastDraftIntent: RecordDraftIntent = .automatic
     @AppStorage("scene_pack_order_v1") private var scenePackOrderStorage = ""
     @AppStorage("scene_pack_more_expanded_v1") private var scenePackMoreExpanded = false
     @AppStorage("scene_pack_usage_v1") private var scenePackUsageStorage = ""
@@ -34,6 +35,12 @@ struct RecordView: View {
     private enum RecordField {
         case amount
         case note
+    }
+
+    private enum RecordDraftIntent {
+        case automatic
+        case note
+        case category
     }
 
     private let draftClock = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
@@ -221,6 +228,7 @@ struct RecordView: View {
 
     private func applyScenePack(_ pack: ScenePackDefinition, keepSelectedCategory: Bool = false) {
         dismissKeyboard()
+        lastDraftIntent = .category
         promoteScenePack(pack)
         markScenePackUsed(pack)
         let amount = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
@@ -346,7 +354,9 @@ struct RecordView: View {
     }
 
     private var hasPreviewNote: Bool {
-        inputTitleCompatibleWithSelectedCategory || compatiblePrefillTitle != nil
+        inputTitleCompatibleWithSelectedCategory
+            || (lastDraftIntent == .note && !homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            || compatiblePrefillTitle != nil
     }
 
     private var noteWasExplicitlyCleared: Bool {
@@ -367,16 +377,21 @@ struct RecordView: View {
 
     private var previewTitleIsExplicitUserEdit: Bool {
         let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty, inputTitleCompatibleWithSelectedCategory else { return false }
+        guard !title.isEmpty,
+              inputTitleCompatibleWithSelectedCategory || lastDraftIntent == .note else { return false }
         if title == homeViewModel.recordPrefillResult?.title?.trimmingCharacters(in: .whitespacesAndNewlines) {
             return false
         }
         return noteEditorExpanded || homeViewModel.categoryLockedByUser
     }
 
+    private var categoryLockedForCurrentIntent: Bool {
+        homeViewModel.categoryLockedByUser && lastDraftIntent != .note
+    }
+
     private var previewHeadline: String {
         let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !title.isEmpty, inputTitleCompatibleWithSelectedCategory { return title }
+        if !title.isEmpty, inputTitleCompatibleWithSelectedCategory || lastDraftIntent == .note { return title }
         if shouldUseNeutralRemarkFallback {
             return RecordSemanticLexicon.emptyNoteTitle
         }
@@ -386,41 +401,39 @@ struct RecordView: View {
         return previewFallbackTitle(for: homeViewModel.selectedCategory)
     }
 
-    private var previewEmotion: String {
-        if shouldUseNeutralRemarkFallback {
-            return ""
-        }
-        if let result = homeViewModel.recordPrefillResult,
-           let emotion = result.emotionTag?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !emotion.isEmpty,
-           !homeViewModel.categoryLockedByUser,
-           prefillResultMatchesSelectedCategory,
-           (result.source == "brand" || result.confidence >= 0.65) {
-            return emotion
-        }
+    private var previewDraftResolution: RecordDraftResolution? {
+        guard !shouldUseNeutralRemarkFallback else { return nil }
         let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolution = RecordDraftResolutionService.resolve(
+        let draftTitle = title.isEmpty ? previewHeadline : title
+        return RecordDraftResolutionService.resolve(
             RecordDraftResolutionInput(
-                rawTitle: title,
+                rawTitle: draftTitle,
                 fallbackCategory: homeViewModel.selectedCategory,
                 amount: inputAmountValue,
                 date: homeViewModel.selectedDate,
                 merchantBrandId: previewBrand?.id,
-                categoryLockedByUser: homeViewModel.categoryLockedByUser,
+                categoryLockedByUser: categoryLockedForCurrentIntent,
                 userEditedTitle: previewTitleIsExplicitUserEdit,
                 source: "preview"
             )
         )
-        return resolution.emotionTag
+    }
+
+    private var previewEmotion: String {
+        if shouldUseNeutralRemarkFallback {
+            return ""
+        }
+        return previewDraftResolution?.emotionTag ?? ""
     }
 
     private var previewMeta: String {
+        let displayCategory = previewDraftResolution?.category ?? homeViewModel.selectedCategory
         if let activeScenePack,
-           activeScenePack.category == homeViewModel.selectedCategory,
+           activeScenePack.category == displayCategory,
            !homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "\(activeScenePack.emoji) \(activeScenePack.label) · \(homeViewModel.selectedDate.zhBillDateTime)"
         }
-        return "\(homeViewModel.selectedCategory.displayName) · \(homeViewModel.selectedDate.zhBillDateTime)"
+        return "\(displayCategory.displayName) · \(homeViewModel.selectedDate.zhBillDateTime)"
     }
 
     private var previewTier: RecordPreviewTier {
@@ -542,7 +555,8 @@ struct RecordView: View {
         dismissKeyboard()
         let didSave = homeViewModel.addManualRecord(
             userEditedTitle: currentTitleShouldBeUserEdited,
-            preserveEmptyTitle: shouldUseNeutralRemarkFallback
+            preserveEmptyTitle: shouldUseNeutralRemarkFallback,
+            categoryLockedForSave: categoryLockedForCurrentIntent
         )
         guard didSave else {
             withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
@@ -555,6 +569,7 @@ struct RecordView: View {
         categoryGridExpanded = false
         noteEditorExpanded = false
         datePanelExpanded = false
+        lastDraftIntent = .automatic
         onSaved?()
     }
 
@@ -660,6 +675,7 @@ struct RecordView: View {
             return
         }
         previewLineWasRotated = true
+        lastDraftIntent = .category
         activeScenePack = nil
         homeViewModel.inputTitle = nextCategoryCopyTitle()
     }
@@ -739,6 +755,7 @@ struct RecordView: View {
             .onChange(of: homeViewModel.inputAmount) { _, _ in
                 if !hasValidAmount {
                     previewLineWasRotated = false
+                    lastDraftIntent = .automatic
                     activeScenePack = nil
                     categoryGridExpanded = false
                     noteEditorExpanded = false
@@ -748,6 +765,7 @@ struct RecordView: View {
                           activeScenePack == nil {
                     homeViewModel.inputTitle = ""
                     previewLineWasRotated = false
+                    lastDraftIntent = .automatic
                 }
                 refreshRecommendedCategory()
             }
@@ -755,6 +773,10 @@ struct RecordView: View {
                 if homeViewModel.inputTitle.count > 32 {
                     homeViewModel.inputTitle = String(homeViewModel.inputTitle.prefix(32))
                     return
+                }
+                if focusedField == .note {
+                    lastDraftIntent = .note
+                    homeViewModel.preferNoteSemanticsForCurrentDraft()
                 }
                 homeViewModel.clearRecordInputMessage()
                 refreshRecommendedCategory()
@@ -1496,6 +1518,7 @@ struct RecordView: View {
         return Button {
             dismissKeyboard()
             withAnimation(.easeInOut(duration: 0.12)) {
+                lastDraftIntent = .category
                 activeScenePack = nil
                 homeViewModel.selectCategory(category)
                 categoryGridExpanded = false
@@ -1578,6 +1601,8 @@ struct RecordView: View {
                     ForEach(homeViewModel.noteSuggestions(for: homeViewModel.selectedCategory, at: homeViewModel.selectedDate), id: \.self) { suggestion in
                         Button(suggestion) {
                             dismissKeyboard()
+                            lastDraftIntent = .note
+                            homeViewModel.preferNoteSemanticsForCurrentDraft()
                             homeViewModel.inputTitle = suggestion
                         }
                         .font(.system(size: 13, weight: .medium))
@@ -1720,6 +1745,7 @@ struct RecordView: View {
             onQuickGenerate: {
                 dismissKeyboard()
                 previewLineWasRotated = true
+                lastDraftIntent = .category
                 activeScenePack = nil
                 homeViewModel.inputTitle = nextCategoryCopyTitle()
             },

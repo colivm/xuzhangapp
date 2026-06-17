@@ -150,9 +150,14 @@ final class HomeViewModel: ObservableObject {
     }
 
     @discardableResult
-    func addManualRecord(userEditedTitle: Bool = false, preserveEmptyTitle: Bool = false) -> Bool {
+    func addManualRecord(
+        userEditedTitle: Bool = false,
+        preserveEmptyTitle: Bool = false,
+        categoryLockedForSave: Bool? = nil
+    ) -> Bool {
         guard let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0 else { return false }
         let wasEmpty = items.isEmpty
+        let shouldLockCategory = categoryLockedForSave ?? categoryLockedByUser
         let noteResult = UserContentRiskService.shared.validateManualNote(inputTitle, allowEmpty: true)
         guard noteResult.isAllowed else {
             recordInputMessage = noteResult.message
@@ -177,19 +182,11 @@ final class HomeViewModel: ObservableObject {
                 amount: amount,
                 date: selectedDate,
                 merchantBrandId: MerchantBrandCatalog.matchBrand(in: baseTitle)?.id,
-                categoryLockedByUser: categoryLockedByUser,
+                categoryLockedByUser: shouldLockCategory,
                 userEditedTitle: userEditedTitle || titleWasIntentionallyBlank,
                 source: "manual"
             )
         )
-        let emotionTag = refinedEmotionTagForNewRecord(
-            title: resolution.title,
-            category: resolution.category,
-            amount: amount,
-            date: selectedDate,
-            defaultTag: resolution.emotionTag
-        )
-
         let newItem = HomeItem(
             title: resolution.title,
             amount: amount,
@@ -197,11 +194,11 @@ final class HomeViewModel: ObservableObject {
             source: .manual,
             createdAt: selectedDate,
             updatedAt: Date(),
-            emotionTag: emotionTag,
+            emotionTag: resolution.emotionTag,
             merchantBrandId: resolution.merchantBrandId,
             userEditedTitle: userEditedTitle && resolution.title == baseTitle ? true : nil,
-            userEditedCategory: categoryLockedByUser ? true : nil,
-            categoryCorrectionFrom: categoryLockedByUser ? pendingCategoryCorrectionFrom : nil
+            userEditedCategory: shouldLockCategory ? true : nil,
+            categoryCorrectionFrom: shouldLockCategory ? pendingCategoryCorrectionFrom : nil
         )
         items.insert(newItem, at: 0)
         resetInput()
@@ -225,25 +222,6 @@ final class HomeViewModel: ObservableObject {
         return true
     }
 
-    private func refinedEmotionTagForNewRecord(
-        title: String,
-        category: HomeItem.Category,
-        amount: Double,
-        date: Date,
-        defaultTag: String
-    ) -> String {
-        guard category == .transport,
-              isPublicTransportTitle(title),
-              let previous = recentTransportNeighbor(before: date) else {
-            return defaultTag
-        }
-        let previousTitle = previous.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if publicTransportMode(in: previousTitle) != publicTransportMode(in: title) {
-            return "换乘通勤完成"
-        }
-        return "城市线路走完一段"
-    }
-
     private func compatiblePrefillTitleForSave(category: HomeItem.Category) -> String? {
         guard let result = recordPrefillResult,
               result.category == nil || result.category == category,
@@ -257,31 +235,6 @@ final class HomeViewModel: ObservableObject {
             return nil
         }
         return title
-    }
-
-    private func recentTransportNeighbor(before date: Date) -> HomeItem? {
-        items
-            .filter { item in
-                item.category == .transport
-                    && isPublicTransportTitle(item.title)
-                    && abs(item.createdAt.timeIntervalSince(date)) <= 20 * 60
-            }
-            .sorted { lhs, rhs in
-                abs(lhs.createdAt.timeIntervalSince(date)) < abs(rhs.createdAt.timeIntervalSince(date))
-            }
-            .first
-    }
-
-    private func isPublicTransportTitle(_ title: String) -> Bool {
-        let text = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return ["地铁", "公交", "巴士", "公共交通", "通勤"].contains { text.contains($0) }
-    }
-
-    private func publicTransportMode(in title: String) -> String {
-        let text = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if text.contains("地铁") { return "metro" }
-        if text.contains("公交") || text.contains("巴士") { return "bus" }
-        return "public"
     }
 
     var ocrDraftItems: [HomeItem] {
@@ -927,6 +880,35 @@ final class HomeViewModel: ObservableObject {
         ) {
             applyRecommendedCategory(category)
         }
+        recordPrefillResult = sanitizedPrefillResult(
+            recordPrefillResult,
+            for: selectedCategory
+        )
+    }
+
+    private func sanitizedPrefillResult(
+        _ result: RecordPrefillResult?,
+        for category: HomeItem.Category
+    ) -> RecordPrefillResult? {
+        guard let result else { return nil }
+        guard let title = result.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty else {
+            return result
+        }
+        guard RecordSemanticLexicon.canDisplayPrefillTitle(
+            title,
+            category: category,
+            source: result.source
+        ) else {
+            return RecordPrefillResult(
+                category: result.category,
+                title: nil,
+                emotionTag: nil,
+                confidence: result.confidence,
+                source: result.source
+            )
+        }
+        return result
     }
 
     private func resolvePrefillCategory(
@@ -996,6 +978,11 @@ final class HomeViewModel: ObservableObject {
         categoryLockedByUser = true
     }
 
+    func preferNoteSemanticsForCurrentDraft() {
+        categoryLockedByUser = false
+        pendingCategoryCorrectionFrom = nil
+    }
+
     func applyScenePackDraft(title: String, category: HomeItem.Category) {
         rememberCategoryCorrectionIfNeeded(to: category)
         inputTitle = title
@@ -1050,7 +1037,7 @@ final class HomeViewModel: ObservableObject {
                 defaults = ["加班后吃点热乎的", "晚归路上的一口热食", "深夜买点小食"]
             }
         case .transport:
-            defaults = ["地铁到站，今天也准时出门", "打车赶去这一段", "停车和油费记一笔"]
+            defaults = ["地铁到站，路上这一段", "打车走完这一程", "停车和油费记一笔"]
         case .shopping:
             defaults = ["下单一个需要的", "买到常用的小东西", "快递路上记一笔"]
         case .daily:

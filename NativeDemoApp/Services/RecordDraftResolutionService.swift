@@ -55,7 +55,7 @@ enum RecordDraftResolutionService {
         if title != resolvedTitle { trace.append("title:semanticRepair") }
 
         let emotionBrandId = MerchantBrandCatalog.definition(for: brandId)?.category == category ? brandId : nil
-        let emotionTag = NarrativeCopyResolver.resolveEmotionTag(
+        let resolvedEmotionTag = NarrativeCopyResolver.resolveEmotionTag(
             context: NarrativeCopyResolver.Context(
                 brandId: emotionBrandId,
                 category: category,
@@ -65,6 +65,9 @@ enum RecordDraftResolutionService {
                 note: title
             )
         )
+        let emotionTag = RecordSemanticLexicon.isTitle(resolvedEmotionTag, compatibleWith: category)
+            ? resolvedEmotionTag
+            : HomeItem.inferEmotionTag(category: category, amount: input.amount)
 
         return RecordDraftResolution(
             category: category,

@@ -113,6 +113,17 @@
       "expectedEmotionRule": "not:drink"
     },
     {
+      "id": "late-night-small-fare-must-not-reuse-dining-copy",
+      "mode": "manual",
+      "amount": 1.6,
+      "time": "23:21",
+      "history": "habitCategory:dining,title:深夜一顿热食,userEdited:true;frequentExactAmount:transport",
+      "inputTitle": "",
+      "expectedCategory": "交通",
+      "expectedTitle": "not:深夜一顿热食",
+      "expectedEmotionRule": "not:meal"
+    },
+    {
       "id": "ocr-charging-transport",
       "mode": "ocr",
       "amount": 30,

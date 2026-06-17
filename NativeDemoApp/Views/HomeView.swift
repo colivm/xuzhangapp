@@ -832,7 +832,7 @@ struct HomeView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, isEditing ? 14 : 16)
             .background(todayRecordRowBackground(item: item, isEditing: isEditing))
-            .overlay(todayRecordRowBorder(isEditing: isEditing))
+            .overlay(todayRecordRowBorder(item: item, isEditing: isEditing))
             .overlay(alignment: .trailing) {
                 if !isEditing {
                     todayRecordWatermark(for: item)
@@ -843,20 +843,18 @@ struct HomeView: View {
             .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
             .offset(x: isSwiped ? -76 : 0)
             .onTapGesture {
-                if todaySwipedItemID == item.id {
-                    withAnimation(todayEditSpring) {
-                        todaySwipedItemID = nil
-                    }
-                } else if !isEditing {
+                if !isEditing && !isSwiped {
                     withAnimation(todayEditSpring) {
                         todayInlineEditingItemID = item.id
                     }
                 }
             }
-            .overlay(alignment: .trailing) {
-                if !isEditing {
-                    todaySwipeHandle(for: item, isSwiped: isSwiped)
-                }
+            .allowsHitTesting(!isSwiped)
+
+            if !isEditing {
+                todaySwipeHandle(for: item, isSwiped: isSwiped)
+                    .padding(.trailing, isSwiped ? 82 : 0)
+                    .zIndex(2)
             }
         }
         .id(item.id)
@@ -869,7 +867,7 @@ struct HomeView: View {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(item.displayTitle)
                     .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
+                    .foregroundStyle(todayRecordPrimaryInk)
                     .lineLimit(2)
                     .opacity(isEditing ? 0.50 : 1)
 
@@ -877,36 +875,40 @@ struct HomeView: View {
 
                 Text(item.amount.formatted(.cny))
                     .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(red: 44/255, green: 77/255, blue: 82/255))
+                    .foregroundStyle(todayRecordAmountInk)
                     .opacity(isEditing ? 0.46 : 1)
             }
 
             if shouldShowHomeEmotion(for: item) {
                 let emotionTag = item.displayEmotionTag
                 Text(emotionTag)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppColors.accent.opacity(0.74))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(todayRecordEmotionInk)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.08)))
-                    .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.18), lineWidth: 0.7))
+                    .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.13)))
+                    .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.28), lineWidth: 0.7))
                     .opacity(isEditing ? 0.52 : 1)
             }
 
             HStack(spacing: 6) {
                 Text(item.category.rawValue)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(todayRecordCategoryAccent(for: item).opacity(0.88))
+                    .foregroundStyle(todayRecordCategoryAccent(for: item).opacity(0.96))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(todayRecordCategoryAccent(for: item).opacity(0.16))
+                            .fill(todayRecordCategoryAccent(for: item).opacity(0.20))
+                    )
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(todayRecordCategoryAccent(for: item).opacity(0.16), lineWidth: 0.7)
                     )
                 Text("·").foregroundStyle(AppColors.subtext)
                 Text(item.createdAt.zhBillDateTime)
                     .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(AppColors.subtext.opacity(0.96))
                 Spacer()
             }
             .opacity(isEditing ? 0 : 1)
@@ -921,40 +923,103 @@ struct HomeView: View {
     }
 
     private func todayRecordRowBackground(item: HomeItem, isEditing: Bool) -> some View {
+        let accent = todayRecordCategoryAccent(for: item)
         RoundedRectangle(cornerRadius: 19, style: .continuous)
-            .fill(
+            .fill(.ultraThinMaterial)
+            .background(
+                RoundedRectangle(cornerRadius: 19, style: .continuous)
+                    .fill(Color.white.opacity(isEditing ? 0.62 : 0.52))
+            )
+            .overlay(
                 LinearGradient(
                     colors: isEditing
                     ? [
-                        Color.white.opacity(0.88),
+                        Color.white.opacity(0.64),
                         Color(red: 229/255, green: 242/255, blue: 234/255).opacity(0.80),
                         Color(red: 204/255, green: 228/255, blue: 216/255).opacity(0.54)
                     ]
                     : [
-                        Color.white.opacity(0.78),
-                        todayRecordCategoryAccent(for: item).opacity(0.08),
-                        Color.white.opacity(0.66)
+                        Color.white.opacity(0.72),
+                        Color.white.opacity(0.42),
+                        accent.opacity(0.14)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
+                .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+            )
+            .overlay(alignment: .topLeading) {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(isEditing ? 0.58 : 0.76),
+                        Color.white.opacity(0.22),
+                        Color.white.opacity(0.0)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .frame(height: 48)
+                .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+            }
+            .overlay(alignment: .bottomTrailing) {
+                RadialGradient(
+                    colors: [
+                        accent.opacity(isEditing ? 0.14 : 0.18),
+                        Color.white.opacity(0.0)
+                    ],
+                    center: .bottomTrailing,
+                    startRadius: 0,
+                    endRadius: 150
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
             )
             .shadow(
-                color: Color(red: 76/255, green: 103/255, blue: 88/255).opacity(isEditing ? 0.18 : 0.10),
-                radius: isEditing ? 18 : 12,
+                color: Color(red: 43/255, green: 66/255, blue: 58/255).opacity(isEditing ? 0.18 : 0.12),
+                radius: isEditing ? 20 : 16,
                 x: 0,
-                y: isEditing ? 10 : 6
+                y: isEditing ? 12 : 8
+            )
+            .shadow(
+                color: Color.white.opacity(isEditing ? 0.20 : 0.28),
+                radius: 7,
+                x: -2,
+                y: -2
             )
     }
 
-    private func todayRecordRowBorder(isEditing: Bool) -> some View {
+    private func todayRecordRowBorder(item: HomeItem, isEditing: Bool) -> some View {
+        let accent = todayRecordCategoryAccent(for: item)
         RoundedRectangle(cornerRadius: 19, style: .continuous)
             .stroke(
-                isEditing
-                ? Color(red: 104/255, green: 157/255, blue: 136/255).opacity(0.54)
-                : Color.white.opacity(0.72),
-                lineWidth: isEditing ? 1.3 : 1
+                LinearGradient(
+                    colors: isEditing
+                    ? [
+                        Color.white.opacity(0.88),
+                        Color(red: 104/255, green: 157/255, blue: 136/255).opacity(0.54),
+                        accent.opacity(0.22)
+                    ]
+                    : [
+                        Color.white.opacity(0.92),
+                        Color.white.opacity(0.50),
+                        accent.opacity(0.20)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: isEditing ? 1.3 : 1.1
             )
+    }
+
+    private var todayRecordPrimaryInk: Color {
+        Color(red: 30/255, green: 39/255, blue: 53/255)
+    }
+
+    private var todayRecordAmountInk: Color {
+        Color(red: 31/255, green: 59/255, blue: 64/255)
+    }
+
+    private var todayRecordEmotionInk: Color {
+        Color(red: 74/255, green: 124/255, blue: 104/255)
     }
 
     private var todayRecordsFooterSummary: some View {

@@ -350,32 +350,43 @@ struct StatsWebView: View {
     }
 
     private var traceRangeKicker: some View {
-        HStack(spacing: 6) {
-            traceRangeText("本周", period: .week)
-            Text("·")
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(AppColors.subtext.opacity(0.55))
-            traceRangeText("本月", period: .month)
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                traceRangeTab("本周", period: .week)
+                traceRangeTab("本月", period: .month)
+            }
+            .frame(height: 44)
+
+            GeometryReader { proxy in
+                let tabWidth = proxy.size.width / 2
+                ZStack(alignment: .leading) {
+                    Capsule(style: .continuous)
+                        .fill(AppColors.line.opacity(0.45))
+                        .frame(height: 1)
+
+                    Capsule(style: .continuous)
+                        .fill(AppColors.accent.opacity(0.62))
+                        .frame(width: tabWidth, height: 2)
+                        .offset(x: (!useCustomRange && selectedPeriod == .month) ? tabWidth : 0)
+                        .animation(traceEditSpring, value: selectedPeriod)
+                        .animation(traceEditSpring, value: useCustomRange)
+                }
+            }
+            .frame(height: 3)
         }
+        .frame(maxWidth: .infinity)
     }
 
-    private func traceRangeText(_ title: String, period: StatsPeriod) -> some View {
+    private func traceRangeTab(_ title: String, period: StatsPeriod) -> some View {
         let isSelected = !useCustomRange && selectedPeriod == period
         return Button {
-            useCustomRange = false
-            selectedPeriod = period
+            applyTracePeriod(period)
         } label: {
             Text(title)
-                .font(.system(size: 12, weight: isSelected ? .bold : .semibold))
-                .foregroundStyle(isSelected ? AppColors.text.opacity(0.92) : AppColors.subtext.opacity(0.78))
-                .overlay(alignment: .bottom) {
-                    if isSelected {
-                        Rectangle()
-                            .fill(AppColors.accent.opacity(0.35))
-                            .frame(height: 1)
-                            .offset(y: 3)
-                    }
-                }
+                .font(.system(size: 15, weight: isSelected ? .bold : .semibold))
+                .foregroundStyle(isSelected ? AppColors.text.opacity(0.94) : AppColors.subtext.opacity(0.76))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

@@ -919,6 +919,28 @@ struct RecordEditSheet: View {
         cleanTitle.isEmpty ? selectedCategory.defaultRecordTitle : cleanTitle
     }
 
+    private var previewEmotion: String {
+        editPreviewResolution.emotionTag
+    }
+
+    private var editPreviewResolution: RecordDraftResolution {
+        let title = cleanTitle.isEmpty ? selectedCategory.defaultRecordTitle : cleanTitle
+        let matchedBrand = MerchantBrandCatalog.matchBrand(in: title)
+        let categoryOverridesBrand = matchedBrand.map { selectedCategory != $0.category } ?? false
+        return RecordDraftResolutionService.resolve(
+            RecordDraftResolutionInput(
+                rawTitle: title,
+                fallbackCategory: selectedCategory,
+                amount: parsedAmount,
+                date: selectedDate,
+                merchantBrandId: matchedBrand?.id ?? item.merchantBrandId,
+                categoryLockedByUser: selectedCategory != item.category || categoryOverridesBrand,
+                userEditedTitle: title != item.title,
+                source: "edit_preview"
+            )
+        )
+    }
+
     private var editContentBottomPadding: CGFloat {
         isNoteFieldFocused ? 340 : 40
     }
@@ -1019,7 +1041,7 @@ struct RecordEditSheet: View {
     }
 
     private var editPreviewEmotionPill: some View {
-        Text(HomeItem.inferEmotionTag(category: selectedCategory, amount: parsedAmount))
+        Text(previewEmotion)
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(AppColors.accent.opacity(0.95))
             .padding(.horizontal, 9)

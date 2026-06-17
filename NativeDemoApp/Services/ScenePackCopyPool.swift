@@ -23,9 +23,9 @@ enum ScenePackCopyPool {
             desc: "地铁公交打车都能写",
             category: .transport,
             tiers: [
-                ScenePackTier(maxAmount: 5, notes: ["日常地铁通勤", "公交短途出行", "一段公共交通", "早班地铁到岗", "换乘通勤完成", "今天的路费", "刷卡进站，到站", "短途公交到家"]),
+                ScenePackTier(maxAmount: 5, notes: ["日常地铁通勤", "公交短途出行", "一段公共交通", "早间地铁到站", "公交地铁一段路", "今天的路费", "刷卡进站，到站", "短途公交到家"]),
                 ScenePackTier(maxAmount: 15, notes: ["公交+地铁组合通勤", "下班高峰一段路", "打车到地铁站接驳", "通勤路上买瓶水", "今天出行少折腾", "固定路线，熟悉的路", "早晚通勤各记一笔", "公交地铁一段路"]),
-                ScenePackTier(maxAmount: 30, notes: ["雨天打车通勤", "加班后打车回家", "共享单车月卡里的一天", "停车/充电小费用", "今天路程稍长一点", "通勤多花了一点时间", "早晚两次出行", "这一程准时到达"]),
+                ScenePackTier(maxAmount: 30, notes: ["雨天打车通勤", "加班后打车回家", "共享单车月卡里的一天", "停车/充电小费用", "今天路程稍长一点", "路上多花了一点时间", "早晚两次出行", "这一程走完了"]),
                 ScenePackTier(maxAmount: 9_999, notes: ["跨区通勤长途费", "出差市内交通", "高速/长途客车费", "一次较长的通勤路", "今天跑了不少路", "行程较满的一天路", "远距离往返", "为工作跑了不少路"]),
             ]
         ),
@@ -244,14 +244,14 @@ enum ScenePackCopyPool {
             switch hour {
             case 7..<10:
                 if shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
-                    return ("morningCommute", ["早班准时出门", "早上路上这一程", "早高峰顺利到达", "清晨出门的一笔路费", "赶早路上的交通记录", "地铁公交到站", "早上这趟路走完了", "今天也准时出门"])
+                    return ("morningCommute", ["早上路上这一程", "早间的一笔路费", "早高峰这一段", "清晨出门的一笔路费", "赶早路上的交通记录", "地铁公交到站", "早上这趟路走完了", "今天的出行记下"])
                 }
-                return ("weekendMorningRoute", ["早上出门的一段路", "清晨出门的一笔路费", "早上这趟路走完了", "今天也准时出门", "短途出行记一下", "公交地铁一段路", "这一程顺利到达", "早上的路费"])
+                return ("weekendMorningRoute", ["早上出门的一段路", "清晨出门的一笔路费", "早上这趟路走完了", "今天的出行记下", "短途出行记一下", "公交地铁一段路", "这一程走完了", "早上的路费"])
             case 17..<21:
                 if shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
                     return ("eveningCommute", ["下班路上这一程", "晚高峰回家", "结束一天后的返程", "回家路费记一下", "下班后的回家路", "下班这趟路到家了", "下班回到家这边", "回程路上少赶一点"])
                 }
-                return ("weekendEveningRoute", ["傍晚的一段路", "回家路费记一下", "晚间出行完成", "回到家这边", "回程路上少赶一点", "这一程顺利到达", "晚上路费记一下", "短途回程"])
+                return ("weekendEveningRoute", ["傍晚的一段路", "回家路费记一下", "晚间出行完成", "回到家这边", "回程路上少赶一点", "这一程走完了", "晚上路费记一下", "短途回程"])
             default:
                 return nil
             }

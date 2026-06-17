@@ -133,7 +133,7 @@ enum NarrativeCopyResolver {
 
             if containsAny(lower, ["上班", "早班", "到岗", "早高峰"]) {
                 return pick(
-                    ["早上出门", "早间一段路", "准时到达", "这程先记下", "路费记一笔", "今天出门了"],
+                    ["早间一段路", "早上的路费", "这程先记下", "路费记一笔", "路上这一段", "今天的出行"],
                     seed: context.seed + "|morningRoute"
                 )
             }
@@ -242,7 +242,7 @@ enum NarrativeCopyResolver {
         let hour = Calendar.current.component(.hour, from: date)
         switch hour {
         case 5..<11:
-            return ["早上出门", "早间一段路", "这程先记下", "路费记一笔", "短途出行", "早上的路"]
+            return ["早间一段路", "这程先记下", "路费记一笔", "短途出行", "早上的路", "路上这一段"]
         case 17..<22:
             return ["傍晚一段路", "回程记一笔", "晚上出行", "这程到家", "路费记一下", "晚间一段路"]
         default:
