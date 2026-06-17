@@ -924,7 +924,7 @@ struct HomeView: View {
 
     private func todayRecordRowBackground(item: HomeItem, isEditing: Bool) -> some View {
         let accent = todayRecordCategoryAccent(for: item)
-        RoundedRectangle(cornerRadius: 19, style: .continuous)
+        return RoundedRectangle(cornerRadius: 19, style: .continuous)
             .fill(.ultraThinMaterial)
             .background(
                 RoundedRectangle(cornerRadius: 19, style: .continuous)
@@ -989,7 +989,7 @@ struct HomeView: View {
 
     private func todayRecordRowBorder(item: HomeItem, isEditing: Bool) -> some View {
         let accent = todayRecordCategoryAccent(for: item)
-        RoundedRectangle(cornerRadius: 19, style: .continuous)
+        return RoundedRectangle(cornerRadius: 19, style: .continuous)
             .stroke(
                 LinearGradient(
                     colors: isEditing
