@@ -501,6 +501,9 @@ final class OCRService {
         confidence: Double,
         provider: OCRProvider
     ) -> [OCRReceiptDraft] {
+        if looksLikeAlipayOrderDisplayDetail(lines: ocrLines.map(\.text)) {
+            return []
+        }
         var combined: [OCRReceiptDraft] = []
         var seenKeys = Set<String>()
         for mode in listParseModes(provider: provider, rawText: rawText) {
@@ -533,6 +536,7 @@ final class OCRService {
 
         for index in ocrLines.indices {
             let line = ocrLines[index].text
+            guard !isAlipaySettlementBreakdownLine(line) else { continue }
             guard !isSystemUILine(ocrLines[index]) else { continue }
             guard !shouldSkipListAmountLine(line) else { continue }
             guard !shouldSkipListAmountCandidate(ocrLines: ocrLines, index: index) else { continue }
@@ -1034,6 +1038,7 @@ final class OCRService {
             "银行卡", "微信支付", "支付宝", "支出", "收入", "本月", "搜索", "查找", "等待确认收货",
             "日用百货", "文化休闲", "餐饮美食", "教育培训", "服饰装扮", "爱车养车", "充值缴费",
             "商业服务", "转账红包", "投资理财", "已全额退款", "已退款", "交易关闭",
+            "顾客实付款", "立减金", "优惠", "红包", "实际到账", "商家实际到账",
         ]
         return !blocked.contains { value.contains($0) }
     }
