@@ -714,7 +714,7 @@ struct SummaryPlaybackSheet: View {
                 try await PhotoLibrarySaveService.shared.saveImageToLibrary(image)
                 shareSaveMessage = "已保存到相册。"
             } catch {
-                shareSaveMessage = (error as? LocalizedError)?.errorDescription ?? "保存失败，请稍后再试。"
+                shareSaveMessage = (error as? LocalizedError)?.errorDescription ?? "暂时没保存成功。请检查相册权限后再试。"
             }
             isSavingShareCard = false
         }

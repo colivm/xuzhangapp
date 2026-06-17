@@ -63,11 +63,11 @@ final class UserContentRiskService {
             return .init(
                 isAllowed: allowEmpty,
                 value: "",
-                message: allowEmpty ? nil : "补一句简单备注再保存。"
+                message: allowEmpty ? nil : "备注还没填，补一句再保存。"
             )
         }
         if let reason = riskReason(for: normalized) {
-            return .init(isAllowed: false, value: normalized, message: "这句备注里有\(reason)，先改成不含隐私的信息。")
+            return .init(isAllowed: false, value: normalized, message: "这句备注可能包含敏感信息，请删掉隐私内容后再保存。")
         }
         return .init(isAllowed: true, value: normalized, message: nil)
     }

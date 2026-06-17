@@ -429,16 +429,16 @@ struct MemberPricingView: View {
                 let payload = try await iapService.purchase(tier: tier)
                 try await settingsViewModel.verifyIAPPurchase(payload)
                 await iapService.finish(transactionId: payload.transactionId)
-                purchaseNotice = "购买成功，会员状态已更新。"
+                purchaseNotice = "会员已开通，回放和导入额度已更新。"
             } catch {
-                purchaseNotice = error.localizedDescription
+                purchaseNotice = "购买没有完成。请确认支付状态后再试。"
             }
         }
     }
 
     private func restorePurchases() {
         guard settingsViewModel.hasCloudSession else {
-            purchaseNotice = "请先在设置页登录账号，再恢复购买。"
+            purchaseNotice = "请先在设置页登录账号，再恢复购买，这样能确认你的会员权益。"
             return
         }
         isPurchasing = true
@@ -447,16 +447,16 @@ struct MemberPricingView: View {
             do {
                 let payloads = try await iapService.restorePurchases()
                 guard !payloads.isEmpty else {
-                    purchaseNotice = "没有找到可恢复的会员购买。"
+                    purchaseNotice = "暂时没有找到可恢复的购买记录。请确认使用的是购买时的 Apple ID。"
                     return
                 }
                 for payload in payloads {
                     try await settingsViewModel.verifyIAPPurchase(payload)
                     await iapService.finish(transactionId: payload.transactionId)
                 }
-                purchaseNotice = "已恢复购买，会员状态已更新。"
+                purchaseNotice = "会员权益已恢复，可以继续使用。"
             } catch {
-                purchaseNotice = error.localizedDescription
+                purchaseNotice = "恢复购买没有完成，请稍后再试。"
             }
         }
     }
@@ -465,7 +465,7 @@ struct MemberPricingView: View {
         do {
             try await iapService.loadProducts()
         } catch {
-            purchaseNotice = error.localizedDescription
+            purchaseNotice = "会员价格暂时没加载出来，请稍后再试。"
         }
     }
 

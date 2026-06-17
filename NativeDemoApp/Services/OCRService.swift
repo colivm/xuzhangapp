@@ -57,11 +57,11 @@ enum OCRServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidImage:
-            return "图片读取失败，请重新选择。"
+            return "这张图片没打开成功，请重新选择一张。"
         case .noRecognizedText:
-            return "没有识别到账单文字，请重新截图。"
+            return "没看到账单文字。请截取包含商户、金额和时间的页面再试。"
         case .detailPageRequired:
-            return "没能识别到账单金额，请换一张更清晰的账单列表或单笔详情截图。"
+            return "没找到金额。请换一张更清晰、包含金额的账单截图。"
         }
     }
 }

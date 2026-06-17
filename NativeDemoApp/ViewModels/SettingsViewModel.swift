@@ -8,7 +8,7 @@ enum SettingsViewModelError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .loginRequired:
-            return "请先登录账号，再开通或恢复会员。"
+            return "请先登录账号，再开通或恢复会员，这样换机后也能找回权益。"
         }
     }
 }
@@ -218,7 +218,7 @@ final class SettingsViewModel: ObservableObject {
         authMessage = nil
         guard !isAuthBusy else { return }
         if smsCooldownRemaining > 0 {
-            authMessage = "请 \(smsCooldownRemaining) 秒后再试。"
+            authMessage = "验证码发送太频繁，请 \(smsCooldownRemaining) 秒后再试。"
             return
         }
         let phone = loginPhone.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -310,7 +310,7 @@ final class SettingsViewModel: ObservableObject {
             authMessage = "云端账本已删除，本机记录仍保留。"
             return true
         } catch {
-            authMessage = error.localizedDescription
+            authMessage = "云端账本暂时没删除成功，请稍后再试。"
             return false
         }
     }
@@ -337,11 +337,11 @@ final class SettingsViewModel: ObservableObject {
                 settings.displayName = Self.localDefaultDisplayName
             }
             hasCloudSession = false
-            authMessage = "账号已注销，服务器数据和会员绑定状态已清空。"
+            authMessage = "账号已注销，云端数据和会员关联已删除。"
             persist()
             return true
         } catch {
-            authMessage = error.localizedDescription
+            authMessage = "账号暂时没注销成功，请稍后再试。"
             return false
         }
     }
@@ -349,7 +349,7 @@ final class SettingsViewModel: ObservableObject {
     func verifyIAPPurchase(_ payload: IAPPurchaseVerification) async throws {
         let token = KeychainService.loadAccessToken()
         guard !token.isEmpty else {
-            authMessage = "请先登录账号，再开通会员。"
+            authMessage = "请先登录账号，再开通会员，这样换机后也能找回权益。"
             throw SettingsViewModelError.loginRequired
         }
         isAuthBusy = true
@@ -392,7 +392,7 @@ final class SettingsViewModel: ObservableObject {
             }
         } catch {
             if synchronize {
-                authMessage = error.localizedDescription
+                authMessage = "暂时没恢复到本机会员状态，请稍后再试。"
             }
         }
     }
@@ -405,7 +405,7 @@ final class SettingsViewModel: ObservableObject {
             let account = try await client.fetchAccountMe(accessToken: token)
             applyCloudAccount(account)
         } catch {
-            authMessage = error.localizedDescription
+            authMessage = "账号信息暂时没刷新成功，请稍后再试。"
         }
     }
 
@@ -433,7 +433,7 @@ final class SettingsViewModel: ObservableObject {
             applyCloudAccount(account)
             authMessage = "昵称已同步。"
         } catch {
-            authMessage = "昵称已保存在本机，云端同步失败：\(error.localizedDescription)"
+            authMessage = "昵称已保存在本机。云端暂时没同步成功，稍后会再试。"
         }
     }
 
@@ -531,10 +531,10 @@ final class SettingsViewModel: ObservableObject {
     private func sendSMSMessage(for error: Error) -> String {
         guard let serviceError = error as? AuthServiceError,
               case AuthServiceError.badStatus(let code, let body) = serviceError else {
-            return "验证码发送失败，请稍后再试。"
+            return "验证码暂时没发出去，请检查手机号或稍后再试。"
         }
         guard code == 429 else {
-            return "验证码发送失败，请稍后再试。"
+            return "验证码暂时没发出去，请检查手机号或稍后再试。"
         }
         let payload = parsedSMSAPIError(body)
         let retryAfter = max(1, payload?.retryAfterSec ?? 60)
@@ -545,20 +545,20 @@ final class SettingsViewModel: ObservableObject {
         case "SMS_COOLDOWN":
             return "发送太频繁，请 \(retryAfter) 秒后再试。"
         default:
-            return "请 \(retryAfter) 秒后再试。"
+            return "验证码发送太频繁，请 \(retryAfter) 秒后再试。"
         }
     }
 
     private func verifySMSMessage(for error: Error) -> String {
         guard let serviceError = error as? AuthServiceError,
               case AuthServiceError.badStatus(let code, let body) = serviceError else {
-            return "登录失败，请检查验证码后再试。"
+            return "登录没有成功，请检查手机号和验证码后再试。"
         }
         if code == 429 {
             let retryAfter = max(1, parsedSMSAPIError(body)?.retryAfterSec ?? 60)
             return "验证太频繁，请 \(retryAfter) 秒后再试。"
         }
-        return "登录失败，请检查手机号和验证码。"
+        return "登录没有成功，请检查手机号和验证码后再试。"
     }
 
     private func sanitizedDisplayName(_ value: String) -> String {

@@ -7,9 +7,9 @@ enum LedgerSyncError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidBaseURL:
-            return "后端地址无效，无法同步。"
+            return "同步设置暂时不可用，请稍后再试。"
         case .badStatus(let code, let body):
-            return "同步失败 (\(code))：\(body)"
+            return "同步没有完成，请稍后再试。你的本机记录已保留。"
         }
     }
 }

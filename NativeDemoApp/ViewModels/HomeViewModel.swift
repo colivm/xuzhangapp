@@ -272,7 +272,7 @@ final class HomeViewModel: ObservableObject {
 
     func recognizeOCRDrafts(imageData: Data, isMember: Bool) async -> [OCRReceiptDraft] {
         guard dailyQuotaStore.canUseOCR(isMember: isMember) else {
-            ocrStatus = "今日免费账单识别次数已用完（3/3）。会员可无限智能导入。"
+            ocrStatus = "今天的免费识别次数已用完。你仍可以手动记账，会员可继续导入截图。"
             return []
         }
         do {
@@ -284,7 +284,7 @@ final class HomeViewModel: ObservableObject {
             ocrStatus = message
             return drafts
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? "识别失败，请重试或手动录入。"
+            let message = (error as? LocalizedError)?.errorDescription ?? "这张图暂时没识别出来。可以再试一次，或手动记一笔。"
             ocrStatus = message
             return []
         }
@@ -297,7 +297,7 @@ final class HomeViewModel: ObservableObject {
             return 0
         }
         guard dailyQuotaStore.canUseOCR(isMember: isMember) else {
-            ocrStatus = "今日免费账单识别次数已用完（3/3）。会员可无限智能导入。"
+            ocrStatus = "今天的免费识别次数已用完。你仍可以手动记账，会员可继续导入截图。"
             return 0
         }
 
@@ -593,7 +593,7 @@ final class HomeViewModel: ObservableObject {
     func syncCloudLedgerNow() async {
         let context = cloudContext()
         guard let context else {
-            syncStatusMessage = "未登录或未开启云端备份，已跳过同步。"
+            syncStatusMessage = "当前只保存在本机。登录并开启云端备份后，可以同步到云端。"
             return
         }
         isSyncingCloudLedger = true
@@ -608,9 +608,9 @@ final class HomeViewModel: ObservableObject {
             for item in merged {
                 try? await service.upload(item)
             }
-            syncStatusMessage = "云端账单已同步；同一笔冲突已按更新时间较新的记录保留。"
+            syncStatusMessage = "账本已同步。重复的记录已自动保留最新版本。"
         } catch {
-            syncStatusMessage = error.localizedDescription
+            syncStatusMessage = "同步没有完成，请稍后再试。你的本机记录已保留。"
         }
     }
 
@@ -1584,7 +1584,7 @@ final class HomeViewModel: ObservableObject {
             try await service.upload(item)
             syncStatusMessage = "已同步到云端。"
         } catch {
-            syncStatusMessage = error.localizedDescription
+            syncStatusMessage = "这笔记录已保存在本机，云端暂时没同步成功。"
         }
     }
 
@@ -1595,7 +1595,7 @@ final class HomeViewModel: ObservableObject {
             try await service.delete(id: id)
             syncStatusMessage = "云端账单已删除。"
         } catch {
-            syncStatusMessage = error.localizedDescription
+            syncStatusMessage = "本机已更新，云端暂时没同步删除。"
         }
     }
 

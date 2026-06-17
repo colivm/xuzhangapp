@@ -9,9 +9,9 @@ enum PhotoLibrarySaveError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .permissionDenied:
-            return "没有相册写入权限。"
+            return "无法保存到相册。请在系统设置中允许叙账访问相册。"
         case .saveFailed:
-            return "保存失败，请稍后再试。"
+            return "暂时没保存成功。请检查相册权限后再试。"
         }
     }
 }
