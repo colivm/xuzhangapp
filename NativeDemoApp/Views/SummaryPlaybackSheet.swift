@@ -72,8 +72,15 @@ struct SummaryPlaybackSheet: View {
             }
             .padding(.horizontal, 22)
             .padding(.bottom, 24)
+
+            if showShareCardPrivacyConfirm {
+                shareCardPrivacyOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .zIndex(20)
+            }
         }
         .animation(.easeInOut(duration: 0.28), value: currentChapter?.id)
+        .animation(.spring(response: 0.28, dampingFraction: 0.88), value: showShareCardPrivacyConfirm)
         .onAppear {
             startPlayback()
         }
@@ -84,19 +91,127 @@ struct SummaryPlaybackSheet: View {
             reportCompletionIfNeeded(progress: progressFraction)
             playbackTask?.cancel()
         }
-        .confirmationDialog("保存本周故事图？", isPresented: $showShareCardPrivacyConfirm, titleVisibility: .visible) {
-            Button("保存到相册") {
-                saveWeeklyStoryCard()
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("故事图可能包含昵称、金额区间和你写下的回望文字。保存后请先确认内容，再发给别人。")
-        }
     }
 
     private var backgroundGradient: LinearGradient {
         let palette = chapterPalette(for: currentChapter)
         return LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    private var shareCardPrivacyOverlay: some View {
+        ZStack {
+            Color(red: 28/255, green: 36/255, blue: 42/255)
+                .opacity(0.24)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    showShareCardPrivacyConfirm = false
+                }
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppColors.accent.opacity(0.92))
+                        .frame(width: 38, height: 38)
+                        .background(
+                            Circle()
+                                .fill(AppColors.accent.opacity(0.12))
+                        )
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("保存本周故事图")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+
+                        Text("故事图可能有昵称、金额区间和你写下的回望。保存后先看一眼内容，再发给别人。")
+                            .font(.system(size: 14))
+                            .lineSpacing(4)
+                            .foregroundStyle(AppColors.subtext.opacity(0.92))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        showShareCardPrivacyConfirm = false
+                    } label: {
+                        Text("先不保存")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(AppColors.text.opacity(0.82))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(Color.white.opacity(0.66))
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        showShareCardPrivacyConfirm = false
+                        saveWeeklyStoryCard()
+                    } label: {
+                        Text("保存到相册")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(
+                                LinearGradient(
+                                    colors: [AppColors.accent.opacity(0.92), AppColors.accentDark.opacity(0.90)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSavingShareCard)
+                    .opacity(isSavingShareCard ? 0.62 : 1)
+                }
+            }
+            .padding(22)
+            .frame(maxWidth: 370)
+            .background(shareCardPrivacyCardBackground)
+            .overlay(shareCardPrivacyCardBorder)
+            .shadow(color: Color(red: 47/255, green: 67/255, blue: 58/255).opacity(0.18), radius: 24, x: 0, y: 12)
+            .padding(.horizontal, 24)
+        }
+    }
+
+    private var shareCardPrivacyCardBackground: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.84),
+                        AppColors.paperWarm.opacity(0.34),
+                        AppColors.paperMist.opacity(0.38)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+    }
+
+    private var shareCardPrivacyCardBorder: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.82),
+                        AppColors.accent.opacity(0.16),
+                        AppColors.paperBorder.opacity(0.12)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
     }
 
     private var header: some View {

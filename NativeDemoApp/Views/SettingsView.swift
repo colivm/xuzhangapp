@@ -49,6 +49,26 @@ struct SettingsView: View {
         case accountSheet
     }
 
+    private enum SettingsConfirmationKind: Hashable {
+        case deleteCloudLedger
+        case enableCloudSync
+        case clearAllRecords
+        case deleteAccount
+    }
+
+    private enum SettingsConfirmationActionStyle {
+        case primary
+        case secondary
+        case destructive
+    }
+
+    private struct SettingsConfirmationAction: Identifiable {
+        let id: String
+        let title: String
+        let style: SettingsConfirmationActionStyle
+        let handler: () -> Void
+    }
+
     private var hasMemberAccess: Bool {
         settingsViewModel.settings.hasMemberAccess
     }
@@ -135,43 +155,8 @@ struct SettingsView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .confirmationDialog("删除云端账本？", isPresented: confirmationBinding($showDeleteCloudLedgerConfirm, host: .main), titleVisibility: .visible) {
-            Button("删除云端账本", role: .destructive) {
-                Task { await settingsViewModel.deleteCloudLedger() }
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("只删除服务器上的同步账本，本机记录仍保留。为避免重新上传，云端同步会同时关闭。")
-        }
-        .confirmationDialog("开启云端备份？", isPresented: confirmationBinding($showEnableCloudSyncConfirm, host: .main), titleVisibility: .visible) {
-            Button("开启并同步") {
-                enableCloudSyncAndMerge()
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("开启后会先把云端账单同步到本地，再上传本机账单完成合并；同一笔账单冲突时以更新时间较新的记录为准。")
-        }
-        .confirmationDialog("注销账号？", isPresented: confirmationBinding($showDeleteAccountConfirm, host: .main), titleVisibility: .visible) {
-            Button("保留本机账本并注销", role: .destructive) {
-                Task {
-                    let didDelete = await settingsViewModel.deleteCloudAccount()
-                    if didDelete {
-                        showAccountSheet = false
-                    }
-                }
-            }
-            Button("清空本机账本并注销", role: .destructive) {
-                Task {
-                    let didDelete = await settingsViewModel.deleteCloudAccount()
-                    if didDelete {
-                        homeViewModel.clearLocalLedgerData()
-                        showAccountSheet = false
-                    }
-                }
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("这会退出登录，并清空服务器上的账号、云端账本和会员绑定状态。Apple 订阅不会自动取消，之后可用同一 Apple ID 登录后恢复购买。")
+        .overlay {
+            settingsConfirmationOverlay(host: .main)
         }
     }
 
@@ -712,67 +697,267 @@ struct SettingsView: View {
         _ content: Content,
         host: SettingsConfirmationHost
     ) -> some View {
-        content
-            .confirmationDialog("删除云端账本？", isPresented: confirmationBinding($showDeleteCloudLedgerConfirm, host: host), titleVisibility: .visible) {
-                Button("删除云端账本", role: .destructive) {
-                    Task { await settingsViewModel.deleteCloudLedger() }
-                }
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("只删除服务器上的同步账本，本机记录仍保留。为避免重新上传，云端同步会同时关闭。")
-            }
-            .confirmationDialog("开启云端备份？", isPresented: confirmationBinding($showEnableCloudSyncConfirm, host: host), titleVisibility: .visible) {
-                Button("开启并同步") {
-                    enableCloudSyncAndMerge()
-                }
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("开启后会先把云端账单同步到本地，再上传本机账单完成合并；同一笔账单冲突时以更新时间较新的记录为准。")
-            }
-            .confirmationDialog("清空所有记录？", isPresented: confirmationBinding($showClearAllRecordsConfirm, host: host), titleVisibility: .visible) {
-                Button("清空所有记录", role: .destructive) {
-                    clearAllRecords()
-                }
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text(clearAllRecordsConfirmMessage)
-            }
-            .confirmationDialog("注销账号？", isPresented: confirmationBinding($showDeleteAccountConfirm, host: host), titleVisibility: .visible) {
-                Button("保留本机账本并注销", role: .destructive) {
-                    Task {
-                        let didDelete = await settingsViewModel.deleteCloudAccount()
-                        if didDelete {
-                            showAccountSheet = false
-                        }
-                    }
-                }
-                Button("清空本机账本并注销", role: .destructive) {
-                    Task {
-                        let didDelete = await settingsViewModel.deleteCloudAccount()
-                        if didDelete {
-                            homeViewModel.clearLocalLedgerData()
-                            showAccountSheet = false
-                        }
-                    }
-                }
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("这会退出登录，并清空服务器上的账号、云端账本和会员绑定状态。Apple 订阅不会自动取消，之后可用同一 Apple ID 登录后恢复购买。")
-            }
+        ZStack {
+            content
+            settingsConfirmationOverlay(host: host)
+        }
     }
 
-    private func confirmationBinding(
-        _ flag: Binding<Bool>,
-        host: SettingsConfirmationHost
-    ) -> Binding<Bool> {
-        Binding(
-            get: { flag.wrappedValue && confirmationHost == host },
-            set: { isPresented in
-                if !isPresented {
-                    flag.wrappedValue = false
+    private func activeSettingsConfirmation(for host: SettingsConfirmationHost) -> SettingsConfirmationKind? {
+        guard confirmationHost == host else { return nil }
+        if showDeleteCloudLedgerConfirm { return .deleteCloudLedger }
+        if showEnableCloudSyncConfirm { return .enableCloudSync }
+        if showClearAllRecordsConfirm { return .clearAllRecords }
+        if showDeleteAccountConfirm { return .deleteAccount }
+        return nil
+    }
+
+    @ViewBuilder
+    private func settingsConfirmationOverlay(host: SettingsConfirmationHost) -> some View {
+        if let kind = activeSettingsConfirmation(for: host) {
+            ZStack {
+                Color(red: 28/255, green: 36/255, blue: 42/255)
+                    .opacity(0.24)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        dismissSettingsConfirmation(kind)
+                    }
+
+                settingsConfirmationCard(kind)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
+            .animation(.spring(response: 0.28, dampingFraction: 0.88), value: kind)
+            .zIndex(40)
+        }
+    }
+
+    private func settingsConfirmationCard(_ kind: SettingsConfirmationKind) -> some View {
+        let details = settingsConfirmationDetails(for: kind)
+        return VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: details.symbol)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(details.accent.opacity(0.94))
+                    .frame(width: 38, height: 38)
+                    .background(
+                        Circle()
+                            .fill(details.accent.opacity(0.12))
+                    )
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(details.title)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+
+                    Text(details.message)
+                        .font(.system(size: 14))
+                        .lineSpacing(4)
+                        .foregroundStyle(AppColors.subtext.opacity(0.92))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-        )
+
+            VStack(spacing: 10) {
+                ForEach(details.actions) { action in
+                    settingsConfirmationButton(action)
+                }
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: 370)
+        .background(settingsConfirmationCardBackground)
+        .overlay(settingsConfirmationCardBorder)
+        .shadow(color: Color(red: 47/255, green: 67/255, blue: 58/255).opacity(0.18), radius: 24, x: 0, y: 12)
+        .padding(.horizontal, 24)
+    }
+
+    private func settingsConfirmationDetails(
+        for kind: SettingsConfirmationKind
+    ) -> (symbol: String, title: String, message: String, accent: Color, actions: [SettingsConfirmationAction]) {
+        switch kind {
+        case .deleteCloudLedger:
+            return (
+                "icloud.slash",
+                "删除云端账本",
+                "只删除服务器上的同步账本，本机记录仍保留。为避免重新上传，云端同步会同时关闭。",
+                Color(red: 0.78, green: 0.28, blue: 0.24),
+                [
+                    SettingsConfirmationAction(id: "cancel", title: "取消", style: .secondary) {
+                        dismissSettingsConfirmation(.deleteCloudLedger)
+                    },
+                    SettingsConfirmationAction(id: "deleteCloudLedger", title: "删除云端账本", style: .destructive) {
+                        dismissSettingsConfirmation(.deleteCloudLedger)
+                        Task { await settingsViewModel.deleteCloudLedger() }
+                    }
+                ]
+            )
+        case .enableCloudSync:
+            return (
+                "icloud.and.arrow.up",
+                "开启云端备份",
+                "会先把云端账本和本机记录合并，再把最新结果同步上去。重复或冲突记录会保留更新时间较新的版本。",
+                AppColors.accent,
+                [
+                    SettingsConfirmationAction(id: "cancel", title: "先不开启", style: .secondary) {
+                        dismissSettingsConfirmation(.enableCloudSync)
+                    },
+                    SettingsConfirmationAction(id: "enableCloudSync", title: "开启并同步", style: .primary) {
+                        dismissSettingsConfirmation(.enableCloudSync)
+                        enableCloudSyncAndMerge()
+                    }
+                ]
+            )
+        case .clearAllRecords:
+            return (
+                "trash",
+                "清空所有记录",
+                clearAllRecordsConfirmMessage,
+                Color(red: 0.78, green: 0.28, blue: 0.24),
+                [
+                    SettingsConfirmationAction(id: "cancel", title: "取消", style: .secondary) {
+                        dismissSettingsConfirmation(.clearAllRecords)
+                    },
+                    SettingsConfirmationAction(id: "clearAllRecords", title: "清空所有记录", style: .destructive) {
+                        dismissSettingsConfirmation(.clearAllRecords)
+                        clearAllRecords()
+                    }
+                ]
+            )
+        case .deleteAccount:
+            return (
+                "person.crop.circle.badge.xmark",
+                "注销账号",
+                "这会退出登录，并清空服务器上的账号、云端账本和会员绑定状态。Apple 订阅不会自动取消，之后可用同一 Apple ID 登录后恢复购买。",
+                Color(red: 0.78, green: 0.28, blue: 0.24),
+                [
+                    SettingsConfirmationAction(id: "keepLocal", title: "保留本机账本并注销", style: .destructive) {
+                        dismissSettingsConfirmation(.deleteAccount)
+                        Task {
+                            let didDelete = await settingsViewModel.deleteCloudAccount()
+                            if didDelete {
+                                showAccountSheet = false
+                            }
+                        }
+                    },
+                    SettingsConfirmationAction(id: "clearLocal", title: "清空本机账本并注销", style: .destructive) {
+                        dismissSettingsConfirmation(.deleteAccount)
+                        Task {
+                            let didDelete = await settingsViewModel.deleteCloudAccount()
+                            if didDelete {
+                                homeViewModel.clearLocalLedgerData()
+                                showAccountSheet = false
+                            }
+                        }
+                    },
+                    SettingsConfirmationAction(id: "cancel", title: "取消", style: .secondary) {
+                        dismissSettingsConfirmation(.deleteAccount)
+                    }
+                ]
+            )
+        }
+    }
+
+    private func settingsConfirmationButton(_ action: SettingsConfirmationAction) -> some View {
+        Button {
+            action.handler()
+        } label: {
+            Text(action.title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(settingsConfirmationButtonForeground(for: action.style))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .background {
+                    settingsConfirmationButtonBackground(for: action.style)
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func settingsConfirmationButtonForeground(for style: SettingsConfirmationActionStyle) -> Color {
+        switch style {
+        case .primary, .destructive:
+            return .white
+        case .secondary:
+            return AppColors.text.opacity(0.82)
+        }
+    }
+
+    @ViewBuilder
+    private func settingsConfirmationButtonBackground(for style: SettingsConfirmationActionStyle) -> some View {
+        switch style {
+        case .primary:
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [AppColors.accent.opacity(0.92), AppColors.accentDark.opacity(0.90)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        case .secondary:
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.66))
+        case .destructive:
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.84, green: 0.34, blue: 0.30),
+                            Color(red: 0.68, green: 0.22, blue: 0.20)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        }
+    }
+
+    private var settingsConfirmationCardBackground: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.84),
+                        AppColors.paperWarm.opacity(0.34),
+                        AppColors.paperMist.opacity(0.38)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+    }
+
+    private var settingsConfirmationCardBorder: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.82),
+                        AppColors.accent.opacity(0.16),
+                        AppColors.paperBorder.opacity(0.12)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
+    }
+
+    private func dismissSettingsConfirmation(_ kind: SettingsConfirmationKind) {
+        switch kind {
+        case .deleteCloudLedger:
+            showDeleteCloudLedgerConfirm = false
+        case .enableCloudSync:
+            showEnableCloudSyncConfirm = false
+        case .clearAllRecords:
+            showClearAllRecordsConfirm = false
+        case .deleteAccount:
+            showDeleteAccountConfirm = false
+        }
     }
 
     @ViewBuilder
