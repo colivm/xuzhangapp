@@ -5,12 +5,30 @@ struct ScenePackAngleSheet: View {
     let primaryScenePacks: [ScenePackDefinition]
     let secondaryScenePacks: [ScenePackDefinition]
     @Binding var isMoreExpanded: Bool
+    var allowsReorder: Bool = true
+    var lockedPackIds: Set<String> = []
+    var moreCollapsedTitle: String = "展开未常用场景"
+    var moreExpandedTitle: String = "收起未常用场景"
+    var moreSubtitle: String?
+    var lockedBadgeText: String?
+    var selectionLimit: Int?
+    var selectionIntroText: String?
+    var confirmSelectionTitle: String = "选好这 3 个"
+    var initialSelectedPackIds: [String] = []
     let scenePackDesc: (ScenePackDefinition) -> String
     let onReorderPacks: (_ orderedPackIds: [String], _ movedPackIds: Set<String>) -> Void
     let onSelectPack: (ScenePackDefinition) -> Void
+    var onSelectLockedPack: ((ScenePackDefinition) -> Void)? = nil
+    var onConfirmSelection: (([String]) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedPackID: String?
+    @State private var selectedPackIds: Set<String> = []
+    @State private var didSeedSelection = false
+
+    private var isSelectionMode: Bool {
+        selectionLimit != nil
+    }
 
     private var displayedScenePacks: [ScenePackDefinition] {
         isMoreExpanded ? primaryScenePacks + secondaryScenePacks : primaryScenePacks
@@ -19,24 +37,41 @@ struct ScenePackAngleSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    HStack(spacing: 8) {
-                        Image(systemName: "line.3.horizontal")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(AppColors.accent.opacity(0.82))
-                        Text("长按右侧拖动可调换顺序")
-                            .font(.system(size: 12, weight: .medium))
+                if let selectionIntroText {
+                    Section {
+                        Text(selectionIntroText)
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(AppColors.subtext)
-                        Spacer()
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(.vertical, 2)
+                }
+
+                if allowsReorder {
+                    Section {
+                        HStack(spacing: 8) {
+                            Image(systemName: "line.3.horizontal")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(AppColors.accent.opacity(0.82))
+                            Text("长按右侧拖动可调换顺序")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(AppColors.subtext)
+                            Spacer()
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
 
                 Section("场景包") {
-                    ForEach(displayedScenePacks, id: \.id) { pack in
-                        packRow(pack)
+                    if allowsReorder {
+                        ForEach(displayedScenePacks, id: \.id) { pack in
+                            packRow(pack, isLocked: lockedPackIds.contains(pack.id))
+                        }
+                        .onMove(perform: reorderDisplayedPacks)
+                    } else {
+                        ForEach(displayedScenePacks, id: \.id) { pack in
+                            packRow(pack, isLocked: lockedPackIds.contains(pack.id))
+                        }
                     }
-                    .onMove(perform: reorderDisplayedPacks)
 
                     if !secondaryScenePacks.isEmpty {
                         Button {
@@ -45,10 +80,10 @@ struct ScenePackAngleSheet: View {
                             }
                         } label: {
                             HStack {
-                                Text(isMoreExpanded ? "收起未常用场景" : "展开未常用场景")
+                                Text(isMoreExpanded ? moreExpandedTitle : moreCollapsedTitle)
                                     .font(.system(size: 14, weight: .medium))
                                     .foregroundStyle(AppColors.text)
-                                Text("\(secondaryScenePacks.count) 个未用或静默")
+                                Text(moreSubtitle ?? "\(secondaryScenePacks.count) 个未用或静默")
                                     .font(.system(size: 12))
                                     .foregroundStyle(AppColors.subtext)
                                     .lineLimit(1)
@@ -62,9 +97,38 @@ struct ScenePackAngleSheet: View {
                         }
                         .buttonStyle(.plain)
                     }
+
+                    if let selectionLimit {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("已选 \(selectedPackIds.count)/\(selectionLimit)")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(AppColors.subtext)
+
+                            Button {
+                                let orderedIds = displayedScenePacks
+                                    .map(\.id)
+                                    .filter { selectedPackIds.contains($0) }
+                                onConfirmSelection?(orderedIds)
+                                dismiss()
+                            } label: {
+                                Text(confirmSelectionTitle)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .fill(AppColors.accent.opacity(selectedPackIds.count == selectionLimit ? 0.92 : 0.38))
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(selectedPackIds.count != selectionLimit)
+                        }
+                        .padding(.vertical, 6)
+                    }
                 }
             }
-            .environment(\.editMode, .constant(.active))
+            .environment(\.editMode, allowsReorder ? .constant(.active) : .constant(.inactive))
             .navigationTitle("换个角度")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -74,6 +138,11 @@ struct ScenePackAngleSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .onAppear {
+            guard !didSeedSelection else { return }
+            selectedPackIds = Set(initialSelectedPackIds)
+            didSeedSelection = true
+        }
     }
 
     private func reorderDisplayedPacks(from source: IndexSet, to destination: Int) {
@@ -87,8 +156,17 @@ struct ScenePackAngleSheet: View {
         onReorderPacks(reorderedPacks.map(\.id), movedPackIds)
     }
 
-    private func packRow(_ pack: ScenePackDefinition) -> some View {
+    private func packRow(_ pack: ScenePackDefinition, isLocked: Bool = false) -> some View {
         Button {
+            if isSelectionMode {
+                togglePackSelection(pack)
+                return
+            }
+            if isLocked {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                onSelectLockedPack?(pack)
+                return
+            }
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withAnimation(.easeInOut(duration: 0.12)) {
                 selectedPackID = pack.id
@@ -115,7 +193,22 @@ struct ScenePackAngleSheet: View {
 
                 Spacer()
 
-                if selectedPackID == pack.id {
+                if isSelectionMode, selectedPackIds.contains(pack.id) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppColors.accent)
+                        .transition(.scale.combined(with: .opacity))
+                } else if isLocked, let lockedBadgeText {
+                    Text(lockedBadgeText)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppColors.lockGold.opacity(0.92))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(AppColors.lockGold.opacity(0.10))
+                        )
+                } else if selectedPackID == pack.id {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(AppColors.accent)
@@ -127,10 +220,32 @@ struct ScenePackAngleSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(selectedPackID == pack.id ? AppColors.accent.opacity(0.13) : Color.clear)
+                    .fill(isPackVisuallySelected(pack) ? AppColors.accent.opacity(0.13) : Color.clear)
             )
+            .opacity(isLocked ? 0.72 : 1)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private func togglePackSelection(_ pack: ScenePackDefinition) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        withAnimation(.easeInOut(duration: 0.12)) {
+            if selectedPackIds.contains(pack.id) {
+                selectedPackIds.remove(pack.id)
+                return
+            }
+            if let selectionLimit, selectedPackIds.count >= selectionLimit {
+                return
+            }
+            selectedPackIds.insert(pack.id)
+        }
+    }
+
+    private func isPackVisuallySelected(_ pack: ScenePackDefinition) -> Bool {
+        if isSelectionMode {
+            return selectedPackIds.contains(pack.id)
+        }
+        return selectedPackID == pack.id
     }
 }

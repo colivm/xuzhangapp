@@ -262,18 +262,33 @@ final class SettingsViewModel: ObservableObject {
         defer { isAuthBusy = false }
         let client = AuthService(baseURL: backendBaseURL)
         do {
+            let previousCloudUserId = settings.cloudUserId
             let session = try await client.loginWithSMS(phone: phone, code: code)
+            let isSameAccountLogin = hasCloudSession
+                && !previousCloudUserId.isEmpty
+                && previousCloudUserId == session.userId
             KeychainService.saveAccessToken(session.accessToken)
             settings.displayName = sanitizedDisplayName(session.displayName)
             settings.cloudUserId = session.userId
             settings.memberTier = session.memberTier
             settings.memberExpiresAt = session.memberExpiresAt
-            settings.syncEnabled = false
-            hasPendingLoginCloudSyncDecision = session.cloudSyncEnabled ?? LocalStore.loadCloudSyncPreference(for: session.userId)
+            if !isSameAccountLogin {
+                settings.syncEnabled = false
+            }
+            let remoteSyncEnabled = session.cloudSyncEnabled ?? LocalStore.loadCloudSyncPreference(for: session.userId)
+            if remoteSyncEnabled, isSameAccountLogin {
+                settings.syncEnabled = true
+                hasPendingLoginCloudSyncDecision = false
+            } else {
+                hasPendingLoginCloudSyncDecision = remoteSyncEnabled
+            }
             SummaryPlaybackQuotaStore().syncLocalUsageAfterLogin(userId: session.userId)
             persist()
             if let account = try? await client.fetchAccountMe(accessToken: session.accessToken) {
-                applyCloudAccount(account)
+                applyCloudAccount(
+                    account,
+                    silentlyEnableCloudSyncForCurrentAccount: isSameAccountLogin
+                )
             }
             let tier = try await client.fetchMemberMe(accessToken: session.accessToken)
             settings.memberTier = tier.tier
@@ -464,7 +479,16 @@ final class SettingsViewModel: ObservableObject {
         persist()
     }
 
-    private func applyCloudAccount(_ account: AuthUserDTO, shouldApplyCloudSyncPreference: Bool = true) {
+    private func applyCloudAccount(
+        _ account: AuthUserDTO,
+        shouldApplyCloudSyncPreference: Bool = true,
+        silentlyEnableCloudSyncForCurrentAccount: Bool = false
+    ) {
+        let previousCloudUserId = settings.cloudUserId
+        let isSameAccountRefresh = silentlyEnableCloudSyncForCurrentAccount
+            || (hasCloudSession
+            && !previousCloudUserId.isEmpty
+            && previousCloudUserId == account.userId)
         settings.displayName = sanitizedDisplayName(account.displayName)
         settings.cloudUserId = account.userId
         SummaryPlaybackQuotaStore().syncLocalUsageAfterLogin(userId: account.userId)
@@ -473,12 +497,18 @@ final class SettingsViewModel: ObservableObject {
         }
         settings.memberExpiresAt = account.memberExpiresAt
         if shouldApplyCloudSyncPreference {
-            applyAccountCloudSyncPreference(account.cloudSyncEnabled)
+            applyAccountCloudSyncPreference(
+                account.cloudSyncEnabled,
+                silentlyEnableIfSameAccount: isSameAccountRefresh
+            )
         }
         persist()
     }
 
-    private func applyAccountCloudSyncPreference(_ remoteEnabled: Bool?) {
+    private func applyAccountCloudSyncPreference(
+        _ remoteEnabled: Bool?,
+        silentlyEnableIfSameAccount: Bool = false
+    ) {
         if let remoteEnabled, !settings.cloudUserId.isEmpty {
             if !remoteEnabled,
                settings.syncEnabled,
@@ -494,6 +524,11 @@ final class SettingsViewModel: ObservableObject {
         if enabled {
             if !settings.cloudUserId.isEmpty {
                 LocalStore.saveCloudSyncPreference(true, for: settings.cloudUserId)
+            }
+            if silentlyEnableIfSameAccount {
+                settings.syncEnabled = true
+                hasPendingLoginCloudSyncDecision = false
+                return
             }
             if !settings.syncEnabled {
                 hasPendingLoginCloudSyncDecision = true

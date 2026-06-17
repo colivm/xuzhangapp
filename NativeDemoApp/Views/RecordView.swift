@@ -16,6 +16,7 @@ struct RecordView: View {
     @State private var didImportOCRConfirmSheet = false
     @State private var scenePackExpanded = false
     @State private var freeScenePackExpanded = false
+    @State private var freeScenePackMoreExpanded = false
     @State private var scenePackVariants: [String: Int] = [:]
     @State private var amountPadActive = false
     @State private var recordDetailsExpanded = false
@@ -32,6 +33,8 @@ struct RecordView: View {
     @AppStorage("scene_pack_more_expanded_v1") private var scenePackMoreExpanded = false
     @AppStorage("scene_pack_usage_v1") private var scenePackUsageStorage = ""
     @AppStorage("scene_pack_pinned_v1") private var scenePackPinnedStorage = ""
+    @AppStorage("free_scene_pack_ids_v1") private var freeScenePackStorage = ""
+    @AppStorage("free_scene_pack_changed_at_v1") private var freeScenePackChangedAt = 0.0
     @FocusState private var focusedField: RecordField?
 
     private enum RecordField {
@@ -48,7 +51,7 @@ struct RecordView: View {
     private let draftClock = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
     private let recordAccent = AppColors.accent
     private let recordInk = AppColors.text
-    private let freeScenePackIds: Set<String> = ["commute", "food", "home"]
+    private let defaultFreeScenePackIds = ["commute", "food", "shopping"]
     private let extensionScenePackIds: Set<String> = ["travel", "pet", "baby", "fitness"]
     private let scenePackSilenceInterval: TimeInterval = 45 * 24 * 60 * 60
 
@@ -80,8 +83,83 @@ struct RecordView: View {
     }
 
     private var freeScenePacks: [ScenePackDefinition] {
-        visibleScenePacks.filter { freeScenePackIds.contains($0.id) }
+        effectiveFreeScenePackIds.compactMap { id in
+            visibleScenePacks.first { $0.id == id }
+        }
     }
+
+    private var freeLockedScenePacks: [ScenePackDefinition] {
+        let freeIds = Set(effectiveFreeScenePackIds)
+        return visibleScenePacks.filter { !freeIds.contains($0.id) }
+    }
+
+    private var effectiveFreeScenePackIds: [String] {
+        let storedIds = normalizedScenePackIds(from: freeScenePackStorage)
+        if storedIds.count == 3 {
+            return storedIds
+        }
+
+        let frequentIds = scenePackUsageStats
+            .sorted {
+                if $0.value.count == $1.value.count {
+                    return $0.value.lastUsedAt > $1.value.lastUsedAt
+                }
+                return $0.value.count > $1.value.count
+            }
+            .map(\.key)
+        return normalizedScenePackIds(from: (frequentIds + defaultFreeScenePackIds).joined(separator: ","))
+    }
+
+    private var hasStoredFreeScenePackSelection: Bool {
+        normalizedScenePackIds(from: freeScenePackStorage).count == 3
+    }
+
+    private var hasScenePackUsageData: Bool {
+        !scenePackUsageStats.isEmpty
+    }
+
+    private var shouldPromptFreeScenePackSelection: Bool {
+        !hasStoredFreeScenePackSelection && !hasScenePackUsageData
+    }
+
+    private func normalizedScenePackIds(from storage: String) -> [String] {
+        var seen: Set<String> = []
+        return storage
+            .split(separator: ",")
+            .map(String.init)
+            .filter { id in
+                guard !seen.contains(id),
+                      visibleScenePacks.contains(where: { $0.id == id }) else { return false }
+                seen.insert(id)
+                return true
+            }
+            .prefix(3)
+            .map { $0 }
+    }
+
+    private var canChangeFreeScenePack: Bool {
+        freeScenePackChangedAt <= 0
+            || Date().timeIntervalSince1970 - freeScenePackChangedAt >= 30 * 24 * 60 * 60
+    }
+
+    private var freeScenePackLockActionText: String {
+        canChangeFreeScenePack ? "本月可换" : "下月可换"
+    }
+
+    private var freeScenePackCooldownText: String {
+        guard !canChangeFreeScenePack else {
+            return "本月可换 1 个常用角度。"
+        }
+        let nextDate = Date(timeIntervalSince1970: freeScenePackChangedAt + 30 * 24 * 60 * 60)
+        return "已为这个月留好角度，\(Self.scenePackCooldownFormatter.string(from: nextDate))后可再换。"
+    }
+
+    private static let scenePackCooldownFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M月d日"
+        return formatter
+    }()
 
     private var scenePackOrderIds: [String] {
         scenePackOrderStorage
@@ -161,6 +239,72 @@ struct RecordView: View {
             .sorted { $0.key < $1.key }
             .map { "\($0.key)|\($0.value.count)|\(Int($0.value.lastUsedAt))" }
             .joined(separator: ";")
+    }
+
+    private func handleFreeScenePackSelection(_ pack: ScenePackDefinition) {
+        if effectiveFreeScenePackIds.contains(pack.id) {
+            applyScenePack(pack)
+            return
+        }
+        replaceFreeScenePack(with: pack)
+    }
+
+    private func replaceFreeScenePack(with pack: ScenePackDefinition) {
+        guard canChangeFreeScenePack else {
+            showScenePackFeedback("本月的免费角度已换过，下月可以再调整。")
+            return
+        }
+        var ids = effectiveFreeScenePackIds.filter { $0 != pack.id }
+        let currentFreePacks = ids.compactMap { id in
+            visibleScenePacks.first { $0.id == id }
+        }
+        let replaceId = currentFreePacks
+            .sorted { lhs, rhs in
+                let lhsStat = scenePackUsageStats[lhs.id] ?? ScenePackUsageStat(count: 0, lastUsedAt: 0)
+                let rhsStat = scenePackUsageStats[rhs.id] ?? ScenePackUsageStat(count: 0, lastUsedAt: 0)
+                if lhsStat.count == rhsStat.count {
+                    return lhsStat.lastUsedAt < rhsStat.lastUsedAt
+                }
+                return lhsStat.count < rhsStat.count
+            }
+            .first?
+            .id
+        if let replaceId, let index = ids.firstIndex(of: replaceId) {
+            ids[index] = pack.id
+        } else {
+            ids.insert(pack.id, at: 0)
+        }
+        freeScenePackStorage = Array(ids.prefix(3)).joined(separator: ",")
+        freeScenePackChangedAt = Date().timeIntervalSince1970
+        showScenePackFeedback("已把「\(pack.label)」放到本月免费角度。")
+        applyScenePack(pack)
+    }
+
+    private func confirmInitialFreeScenePacks(_ packIds: [String]) {
+        let normalizedIds = normalizedScenePackIds(from: packIds.joined(separator: ","))
+        guard normalizedIds.count == 3 else { return }
+        freeScenePackStorage = normalizedIds.joined(separator: ",")
+        freeScenePackChangedAt = Date().timeIntervalSince1970
+        guard let pack = bestInitialFreeScenePack(from: normalizedIds) else {
+            showScenePackFeedback("本月 3 个常用角度已放好。")
+            return
+        }
+        previewLineWasRotated = true
+        applyScenePack(pack)
+    }
+
+    private func bestInitialFreeScenePack(from packIds: [String]) -> ScenePackDefinition? {
+        let selectedPacks = packIds.compactMap { id in
+            visibleScenePacks.first { $0.id == id }
+        }
+        let guessedPackId = guessScenePackId()
+        if let guessedPack = selectedPacks.first(where: { $0.id == guessedPackId }) {
+            return guessedPack
+        }
+        if let categoryMatch = selectedPacks.first(where: { $0.category == homeViewModel.selectedCategory }) {
+            return categoryMatch
+        }
+        return selectedPacks.first
     }
 
     private var isMember: Bool {
@@ -827,10 +971,20 @@ struct RecordView: View {
                 }
             }
             .sheet(isPresented: $showScenePackAngleSheet) {
+                let isChoosingInitialFreePacks = !isMember && shouldPromptFreeScenePackSelection
                 ScenePackAngleSheet(
-                    primaryScenePacks: primaryScenePacks,
-                    secondaryScenePacks: secondaryScenePacks,
-                    isMoreExpanded: $scenePackMoreExpanded,
+                    primaryScenePacks: isChoosingInitialFreePacks ? visibleScenePacks : (isMember ? primaryScenePacks : freeScenePacks),
+                    secondaryScenePacks: isChoosingInitialFreePacks ? [] : (isMember ? secondaryScenePacks : freeLockedScenePacks),
+                    isMoreExpanded: isMember ? $scenePackMoreExpanded : $freeScenePackMoreExpanded,
+                    allowsReorder: isMember,
+                    lockedPackIds: (isMember || isChoosingInitialFreePacks) ? [] : Set(freeLockedScenePacks.map(\.id)),
+                    moreCollapsedTitle: isMember ? "展开未常用场景" : "展开会员专属场景",
+                    moreExpandedTitle: isMember ? "收起未常用场景" : "收起会员专属场景",
+                    moreSubtitle: isMember ? nil : "\(freeLockedScenePacks.count) 个可预览",
+                    lockedBadgeText: (isMember || isChoosingInitialFreePacks) ? nil : "会员专属",
+                    selectionLimit: isChoosingInitialFreePacks ? 3 : nil,
+                    selectionIntroText: isChoosingInitialFreePacks ? "先选 3 个这个月最可能用到的角度。选好后本月就放在上面，可直接套用。" : nil,
+                    confirmSelectionTitle: "选好这 3 个",
                     scenePackDesc: scenePackDesc,
                     onReorderPacks: { orderedPackIds, movedPackIds in
                         reorderScenePacks(orderedPackIds: orderedPackIds, movedPackIds: movedPackIds)
@@ -838,6 +992,12 @@ struct RecordView: View {
                     onSelectPack: { pack in
                         previewLineWasRotated = true
                         applyScenePack(pack)
+                    },
+                    onSelectLockedPack: { pack in
+                        showScenePackFeedback("「\(pack.label)」会员可用，先用上面 3 个角度。")
+                    },
+                    onConfirmSelection: { packIds in
+                        confirmInitialFreeScenePacks(packIds)
                     }
                 )
             }
@@ -970,7 +1130,7 @@ struct RecordView: View {
             amountText: inputAmountValue.formatted(.cny),
             primaryActionTitle: previewQuickActionTitle,
             showsPrimaryAction: isMember,
-            showAngleAction: isMember && previewLineWasRotated && previewTier == .confirm,
+            showAngleAction: previewTier == .confirm,
             onTap: {
                 openNoteEditor()
             },
@@ -1021,9 +1181,6 @@ struct RecordView: View {
             if noteEditorExpanded { noteSection }
             if isMember {
                 memberScenePackSection
-            } else {
-                freeScenePackSection
-                memberScenePackPreview
             }
         }
     }
@@ -1083,9 +1240,6 @@ struct RecordView: View {
                 if noteEditorExpanded { noteSection }
                 if isMember {
                     memberScenePackSection
-                } else {
-                    freeScenePackSection
-                    memberScenePackPreview
                 }
             }
         }
@@ -1555,6 +1709,11 @@ struct RecordView: View {
             withAnimation(.easeInOut(duration: 0.12)) {
                 lastDraftIntent = .category
                 activeScenePack = nil
+                let existingTitle = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !existingTitle.isEmpty,
+                   !RecordSemanticLexicon.isTitle(existingTitle, compatibleWith: category) {
+                    homeViewModel.inputTitle = ""
+                }
                 homeViewModel.selectCategory(category)
                 categoryGridExpanded = false
             }
@@ -1736,13 +1895,21 @@ struct RecordView: View {
     }
 
     private func showScenePackAppliedFeedback(_ pack: ScenePackDefinition) {
+        showScenePackFeedback("已换到 \(pack.emoji) \(pack.label)", guardText: pack.label)
+    }
+
+    private func showScenePackFeedback(_ text: String, guardText: String? = nil) {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         withAnimation(.easeInOut(duration: 0.18)) {
-            scenePackFeedback = "已换到 \(pack.emoji) \(pack.label)"
+            scenePackFeedback = text
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.35) {
             withAnimation(.easeInOut(duration: 0.18)) {
-                if scenePackFeedback?.contains(pack.label) == true {
+                if let guardText {
+                    if scenePackFeedback?.contains(guardText) == true {
+                        scenePackFeedback = nil
+                    }
+                } else if scenePackFeedback == text {
                     scenePackFeedback = nil
                 }
             }
@@ -1777,7 +1944,8 @@ struct RecordView: View {
             isMoreExpanded: scenePackMoreExpanded,
             isPetMode: settingsViewModel.petCompanionEnabled,
             recordInk: recordInk,
-            badgeText: "会员可用",
+            badgeText: "已解锁",
+            expandedToggleSubtitle: "常用靠前，少用会收起",
             onQuickGenerate: {
                 dismissKeyboard()
                 previewLineWasRotated = true
@@ -1803,27 +1971,33 @@ struct RecordView: View {
     private var freeScenePackSection: some View {
         ScenePackSectionView(
             primaryScenePacks: freeScenePacks,
-            secondaryScenePacks: [],
+            secondaryScenePacks: freeLockedScenePacks,
             isExpanded: freeScenePackExpanded,
-            isMoreExpanded: false,
+            isMoreExpanded: freeScenePackMoreExpanded,
             isPetMode: settingsViewModel.petCompanionEnabled,
             recordInk: recordInk,
-            badgeText: "免费可用",
+            badgeText: "本月可用",
+            moreBadgeText: "会员角度",
+            lockedPackIds: Set(freeLockedScenePacks.map(\.id)),
+            lockedPackActionText: freeScenePackLockActionText,
             showsQuickGenerate: false,
-            collapsedHelperText: "通勤、吃饭、日用先免费体验。",
-            expandedHelperText: "这 3 个常用角度免费可用；更多生活场景会员继续解锁。",
-            collapsedToggleTitle: "展开 3 个免费角度",
+            collapsedHelperText: freeScenePackCooldownText,
+            expandedHelperText: "先用这 3 个；想换一个常用角度，本月可以调整一次。",
+            collapsedToggleTitle: "展开 3 个常用角度",
             expandedToggleTitle: "收起免费角度",
-            collapsedToggleSubtitle: "常用先体验",
+            collapsedToggleSubtitle: "够用先不打扰",
             expandedToggleSubtitle: "继续简洁记账",
             onQuickGenerate: {},
             onToggleExpanded: {
                 dismissKeyboard()
                 withAnimation(.easeInOut(duration: 0.2)) { freeScenePackExpanded.toggle() }
             },
-            onToggleMore: {},
+            onToggleMore: {
+                dismissKeyboard()
+                withAnimation(.easeInOut(duration: 0.18)) { freeScenePackMoreExpanded.toggle() }
+            },
             onSelectPack: { pack in
-                applyScenePack(pack)
+                handleFreeScenePackSelection(pack)
             },
             scenePackDesc: scenePackDesc,
             scenePackReason: scenePackReason
@@ -1925,7 +2099,8 @@ struct RecordView: View {
         if preferred.count >= 3 {
             return Array(preferred.prefix(3))
         }
-        return Array(visibleScenePacks.filter { !freeScenePackIds.contains($0.id) }.prefix(3))
+        let freeIds = Set(effectiveFreeScenePackIds)
+        return Array(visibleScenePacks.filter { !freeIds.contains($0.id) }.prefix(3))
     }
 
     private func scenePackPreviewChip(_ pack: ScenePackDefinition) -> some View {

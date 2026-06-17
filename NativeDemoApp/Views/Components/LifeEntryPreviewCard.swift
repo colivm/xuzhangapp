@@ -136,10 +136,10 @@ struct LifeEntryPreviewCard: View {
         HStack(spacing: 0) {
             if showsPrimaryAction {
                 quietAction(primaryActionTitle, action: onPrimaryAction)
-                if showAngleAction && isConfirm {
-                    separator
-                    quietAction("换个角度", action: onAngleAction)
-                }
+                separator
+            }
+            if showAngleAction && isConfirm {
+                quietAction("换个角度", action: onAngleAction)
                 separator
             }
             quietAction("自己写一句", action: onWriteOwn)

@@ -7,7 +7,10 @@ struct ScenePackSectionView: View {
     let isMoreExpanded: Bool
     let isPetMode: Bool
     let recordInk: Color
-    var badgeText: String = "会员专属"
+    var badgeText: String? = "会员专属"
+    var moreBadgeText: String?
+    var lockedPackIds: Set<String> = []
+    var lockedPackActionText: String?
     var showsQuickGenerate: Bool = true
     var collapsedHelperText: String?
     var expandedHelperText: String?
@@ -53,12 +56,14 @@ struct ScenePackSectionView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(recordInk.opacity(0.88))
             Spacer()
-            Text(badgeText)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Capsule(style: .continuous).fill(AppColors.lockGold))
+            if let badgeText, !badgeText.isEmpty {
+                Text(badgeText)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule(style: .continuous).fill(AppColors.lockGold))
+            }
         }
     }
 
@@ -130,7 +135,7 @@ struct ScenePackSectionView: View {
                 moreToggleButton
                 if isMoreExpanded {
                     ForEach(tuckedScenePacks, id: \.id) { pack in
-                        scenePackButton(pack)
+                        scenePackButton(pack, isLocked: lockedPackIds.contains(pack.id))
                     }
                 }
             }
@@ -146,6 +151,18 @@ struct ScenePackSectionView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(AppColors.subtext.opacity(0.7))
                     .lineLimit(1)
+                if let moreBadgeText, !moreBadgeText.isEmpty {
+                    Text(moreBadgeText)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(AppColors.lockGold.opacity(0.92))
+                        .lineLimit(1)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(AppColors.lockGold.opacity(0.11))
+                        )
+                }
                 Spacer()
                 Image(systemName: isMoreExpanded ? "chevron.up" : "chevron.down")
                     .font(.system(size: 11, weight: .bold))
@@ -161,7 +178,7 @@ struct ScenePackSectionView: View {
         .buttonStyle(.plain)
     }
 
-    private func scenePackButton(_ pack: ScenePackDefinition) -> some View {
+    private func scenePackButton(_ pack: ScenePackDefinition, isLocked: Bool = false) -> some View {
         Button {
             onSelectPack(pack)
         } label: {
@@ -175,13 +192,13 @@ struct ScenePackSectionView: View {
                             .font(.system(size: 14, weight: .semibold))
                         Text(scenePackReason(pack))
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(AppColors.accent.opacity(0.88))
+                            .foregroundStyle(isLocked ? AppColors.lockGold.opacity(0.92) : AppColors.accent.opacity(0.88))
                             .lineLimit(1)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 2)
                             .background(
                                 Capsule(style: .continuous)
-                                    .fill(AppColors.accent.opacity(0.10))
+                                    .fill(isLocked ? AppColors.lockGold.opacity(0.10) : AppColors.accent.opacity(0.10))
                             )
                     }
                     Text(scenePackDesc(pack))
@@ -190,9 +207,15 @@ struct ScenePackSectionView: View {
                         .lineLimit(1)
                 }
                 Spacer()
+                if isLocked, let lockedPackActionText {
+                    Text(lockedPackActionText)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppColors.lockGold.opacity(0.88))
+                        .lineLimit(1)
+                }
             }
             .scenePackButtonStyle(
-                foreground: recordInk.opacity(0.88),
+                foreground: recordInk.opacity(isLocked ? 0.72 : 0.88),
                 fill: Color.white.opacity(0.72),
                 stroke: Color.white.opacity(0.5),
                 verticalPadding: 10
