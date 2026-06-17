@@ -47,6 +47,7 @@ struct RecordView: View {
     private let draftClock = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
     private let recordAccent = AppColors.accent
     private let recordInk = AppColors.text
+    private let freeScenePackIds: Set<String> = ["commute", "food", "home"]
     private let extensionScenePackIds: Set<String> = ["travel", "pet", "baby", "fitness"]
     private let scenePackSilenceInterval: TimeInterval = 45 * 24 * 60 * 60
 
@@ -75,6 +76,10 @@ struct RecordView: View {
         return visibleScenePacks.filter { pack in
             shouldFoldScenePack(pack)
         }
+    }
+
+    private var freeScenePacks: [ScenePackDefinition] {
+        visibleScenePacks.filter { freeScenePackIds.contains($0.id) }
     }
 
     private var scenePackOrderIds: [String] {
@@ -1016,6 +1021,7 @@ struct RecordView: View {
             if isMember {
                 memberScenePackSection
             } else {
+                freeScenePackSection
                 memberScenePackPreview
             }
         }
@@ -1077,6 +1083,7 @@ struct RecordView: View {
                 if isMember {
                     memberScenePackSection
                 } else {
+                    freeScenePackSection
                     memberScenePackPreview
                 }
             }
@@ -1791,6 +1798,32 @@ struct RecordView: View {
         )
     }
 
+    private var freeScenePackSection: some View {
+        ScenePackSectionView(
+            primaryScenePacks: freeScenePacks,
+            secondaryScenePacks: [],
+            isExpanded: scenePackExpanded,
+            isMoreExpanded: false,
+            isPetMode: settingsViewModel.petCompanionEnabled,
+            recordInk: recordInk,
+            badgeText: "免费可用",
+            showsQuickGenerate: false,
+            collapsedHelperText: "通勤、吃饭、日用先免费体验。",
+            expandedHelperText: "这 3 个常用角度免费可用；更多生活场景会员继续展开。",
+            onQuickGenerate: {},
+            onToggleExpanded: {
+                dismissKeyboard()
+                withAnimation(.easeInOut(duration: 0.2)) { scenePackExpanded.toggle() }
+            },
+            onToggleMore: {},
+            onSelectPack: { pack in
+                applyScenePack(pack)
+            },
+            scenePackDesc: scenePackDesc,
+            scenePackReason: scenePackReason
+        )
+    }
+
     private var memberScenePackPreview: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 10) {
@@ -1816,7 +1849,7 @@ struct RecordView: View {
                             .background(Capsule(style: .continuous).fill(AppColors.lockGold.opacity(0.9)))
                     }
 
-                    Text("免费版照样能记好每一笔。会员会把同一笔钱放进通勤、认真吃饭、照顾家里这些生活语境里。")
+                    Text("通勤、吃饭、日用已经能直接体验。会员会继续打开健康、购物、旅行、社交这些更细的生活语境。")
                         .font(.system(size: 12))
                         .lineSpacing(3)
                         .foregroundStyle(AppColors.subtext.opacity(0.88))
@@ -1825,7 +1858,7 @@ struct RecordView: View {
             }
 
             HStack(spacing: 8) {
-                ForEach(scenePackPreviewPacks, id: \.id) { pack in
+                ForEach(memberScenePackPreviewPacks, id: \.id) { pack in
                     scenePackPreviewChip(pack)
                 }
             }
@@ -1878,15 +1911,15 @@ struct RecordView: View {
         )
     }
 
-    private var scenePackPreviewPacks: [ScenePackDefinition] {
-        let preferredIds = ["commute", "food", "home"]
+    private var memberScenePackPreviewPacks: [ScenePackDefinition] {
+        let preferredIds = ["care", "shopping", "travel"]
         let preferred = preferredIds.compactMap { id in
             visibleScenePacks.first { $0.id == id }
         }
         if preferred.count >= 3 {
             return Array(preferred.prefix(3))
         }
-        return Array(visibleScenePacks.prefix(3))
+        return Array(visibleScenePacks.filter { !freeScenePackIds.contains($0.id) }.prefix(3))
     }
 
     private func scenePackPreviewChip(_ pack: ScenePackDefinition) -> some View {

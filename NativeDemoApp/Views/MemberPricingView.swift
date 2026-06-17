@@ -28,11 +28,11 @@ struct MemberPricingView: View {
         ("今日回放不限次", "当天记录可以反复听，适合晚上把今天过一遍。"),
         ("OCR 导入不限次", "微信/支付宝账单截图可继续本地识别，导入前仍可确认。"),
         ("AI 回顾额度提升", "想多问一句时，可以继续生成更完整的回顾建议。"),
-        ("生活场景换角度", "同一笔记录可以切换通勤、吃喝、购物、旅行、健康、居家等生活视角。"),
+        ("更多生活场景换角度", "通勤、吃饭、日用免费可用；会员继续打开购物、旅行、健康、社交等生活视角。"),
         ("分享图持续生成", "周记、月章和故事图更适合连续分享和回看。"),
     ]
 
-    private let freeQuotaFootnote = "免费版已经可以完整记账、手动整理和体验基础回放。会员适合连续记录后，想让更多生活线索长期被看见的人。"
+    private let freeQuotaFootnote = "免费版已经可以完整记账、手动整理、体验基础回放，并使用通勤/吃饭/日用 3 个常用场景包。会员适合连续记录后，想让更多生活线索长期被看见的人。"
 
     private var isMember: Bool {
         settingsViewModel.settings.hasMemberAccess
@@ -166,7 +166,7 @@ struct MemberPricingView: View {
             memberValueRow(
                 symbol: "sparkles",
                 title: "理解力",
-                detail: "生活场景会让备注、情绪标签和回望更贴近日常，不只是多一个分类。"
+                detail: "通勤、吃饭、日用先免费体验；会员继续打开健康、购物、旅行、社交等更多生活语境。"
             )
             memberValueRow(
                 symbol: "bolt.heart",

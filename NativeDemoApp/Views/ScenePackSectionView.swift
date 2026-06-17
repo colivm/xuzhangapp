@@ -7,6 +7,10 @@ struct ScenePackSectionView: View {
     let isMoreExpanded: Bool
     let isPetMode: Bool
     let recordInk: Color
+    var badgeText: String = "会员专属"
+    var showsQuickGenerate: Bool = true
+    var collapsedHelperText: String?
+    var expandedHelperText: String?
     let onQuickGenerate: () -> Void
     let onToggleExpanded: () -> Void
     let onToggleMore: () -> Void
@@ -26,7 +30,9 @@ struct ScenePackSectionView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             helperText
-            quickGenerateButton
+            if showsQuickGenerate {
+                quickGenerateButton
+            }
             toggleButton
             expandedPackList
         }
@@ -43,7 +49,7 @@ struct ScenePackSectionView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(recordInk.opacity(0.88))
             Spacer()
-            Text("会员专属")
+            Text(badgeText)
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 8)
@@ -53,10 +59,13 @@ struct ScenePackSectionView: View {
     }
 
     private var helperText: some View {
-        let collapsedText = isPetMode
+        let fallbackCollapsedText = isPetMode
             ? "按分类和小宠物偏好换一句。"
             : "按当前分类换一句生活备注。"
-        let text = isExpanded ? "先给 3 个角度；点选后只影响这次写法。" : collapsedText
+        let collapsedText = collapsedHelperText ?? fallbackCollapsedText
+        let text = isExpanded
+            ? (expandedHelperText ?? "先给 3 个角度；点选后只影响这次写法。")
+            : collapsedText
         return Text(text)
             .font(.system(size: 12))
             .foregroundStyle(AppColors.subtext.opacity(0.88))
