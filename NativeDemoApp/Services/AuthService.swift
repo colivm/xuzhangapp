@@ -5,6 +5,7 @@ struct AuthUserDTO: Codable, Equatable {
     let displayName: String
     let memberTier: String?
     let memberExpiresAt: String?
+    let cloudSyncEnabled: Bool?
 }
 
 struct UserSession: Codable, Equatable {
@@ -15,6 +16,7 @@ struct UserSession: Codable, Equatable {
     let loginType: LoginType
     var memberTier: String
     var memberExpiresAt: String?
+    var cloudSyncEnabled: Bool?
 }
 
 enum LoginType: String, Codable {
@@ -70,7 +72,8 @@ private struct AccountMeResponse: Decodable {
 }
 
 private struct UpdateAccountBody: Encodable {
-    let displayName: String
+    let displayName: String?
+    let cloudSyncEnabled: Bool?
 }
 
 private struct IAPVerifyBody: Encodable {
@@ -141,7 +144,8 @@ final class AuthService: AuthServiceProtocol {
             refreshToken: nil,
             loginType: .phone,
             memberTier: user.memberTier ?? "free",
-            memberExpiresAt: user.memberExpiresAt
+            memberExpiresAt: user.memberExpiresAt,
+            cloudSyncEnabled: user.cloudSyncEnabled
         )
     }
 
@@ -185,7 +189,25 @@ final class AuthService: AuthServiceProtocol {
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONEncoder().encode(UpdateAccountBody(displayName: displayName))
+        request.httpBody = try JSONEncoder().encode(UpdateAccountBody(displayName: displayName, cloudSyncEnabled: nil))
+        let (data, response, bodyText) = try await data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw AuthServiceError.badStatus(-1, "") }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw AuthServiceError.badStatus(http.statusCode, bodyText)
+        }
+        let decoded = try JSONDecoder().decode(AccountMeResponse.self, from: data)
+        guard decoded.ok, let user = decoded.user else { throw AuthServiceError.decodeFailed }
+        return user
+    }
+
+    func updateCloudSyncEnabled(accessToken: String, enabled: Bool) async throws -> AuthUserDTO {
+        let url = try makeURL(path: "/v1/account/me")
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(UpdateAccountBody(displayName: nil, cloudSyncEnabled: enabled))
         let (data, response, bodyText) = try await data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AuthServiceError.badStatus(-1, "") }
         guard (200 ..< 300).contains(http.statusCode) else {

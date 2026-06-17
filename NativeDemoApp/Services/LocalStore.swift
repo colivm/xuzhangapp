@@ -3,6 +3,7 @@ import Foundation
 enum LocalStore {
     private static let settingsKey = "app_settings_v1"
     private static let cloudSyncPreferencesKey = "cloud_sync_preferences_v1"
+    private static let cloudSyncServerMigrationKey = "cloud_sync_server_migrations_v1"
     private static let homeItemsBackupKey = "home_items_v1_backup"
     private static let homeItemsFile = "home_items_v1.json"
     private static let dailyInsightsFile = "daily_insights_v1.json"
@@ -48,6 +49,24 @@ enum LocalStore {
         var preferences = cloudSyncPreferences()
         preferences.removeValue(forKey: userId)
         UserDefaults.standard.set(preferences, forKey: cloudSyncPreferencesKey)
+    }
+
+    static func hasMigratedCloudSyncPreferenceToAccount(for userId: String) -> Bool {
+        migratedCloudSyncPreferenceUserIds().contains(userId)
+    }
+
+    static func markCloudSyncPreferenceMigratedToAccount(for userId: String) {
+        guard !userId.isEmpty else { return }
+        var ids = migratedCloudSyncPreferenceUserIds()
+        ids.insert(userId)
+        UserDefaults.standard.set(Array(ids), forKey: cloudSyncServerMigrationKey)
+    }
+
+    static func removeCloudSyncPreferenceMigration(for userId: String) {
+        guard !userId.isEmpty else { return }
+        var ids = migratedCloudSyncPreferenceUserIds()
+        ids.remove(userId)
+        UserDefaults.standard.set(Array(ids), forKey: cloudSyncServerMigrationKey)
     }
 
     static func loadHomeItems() -> [HomeItem] {
@@ -97,6 +116,10 @@ enum LocalStore {
             }
             return (value as? NSNumber)?.boolValue
         }
+    }
+
+    private static func migratedCloudSyncPreferenceUserIds() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: cloudSyncServerMigrationKey) ?? [])
     }
 
     static func loadDailyInsights() -> [DailyInsight] {

@@ -109,6 +109,7 @@ struct SettingsView: View {
             Task {
                 await settingsViewModel.refreshCloudAccountProfile()
                 await settingsViewModel.refreshMemberFromLocalEntitlements()
+                handleCloudSessionBecameActive()
                 if settingsViewModel.syncEnabled {
                     await homeViewModel.syncCloudLedgerNow()
                 }

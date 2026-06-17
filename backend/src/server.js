@@ -15,6 +15,7 @@ import {
   initStore,
   setSessionByUserId,
   setSmsCode,
+  updateUserCloudSyncEnabled,
   updateUserDisplayName,
   upsertIAPTransaction,
   upsertLedger,
@@ -104,6 +105,7 @@ app.post("/v1/auth/sms/verify", async (req, res) => {
       displayName: user.displayName,
       memberTier: session?.memberTier || "free",
       memberExpiresAt: session?.memberExpiresAt || null,
+      cloudSyncEnabled: Boolean(user.cloudSyncEnabled),
     },
     accessToken,
   });
@@ -133,22 +135,40 @@ app.get("/v1/account/me", requireAuth, async (req, res) => {
       displayName: user.displayName,
       memberTier: session?.memberTier || "free",
       memberExpiresAt: session?.memberExpiresAt || null,
+      cloudSyncEnabled: Boolean(user.cloudSyncEnabled),
     },
   });
 });
 
 app.patch("/v1/account/me", requireAuth, async (req, res) => {
-  const displayName = String(req.body?.displayName || "").trim();
-  if (displayName.length < 1 || displayName.length > 12) {
-    return res.status(400).json({ ok: false, error: "INVALID_DISPLAY_NAME" });
-  }
-  const user = await updateUserDisplayName(req.user.userId, displayName);
+  const hasDisplayName = Object.prototype.hasOwnProperty.call(req.body || {}, "displayName");
+  const hasCloudSyncEnabled = Object.prototype.hasOwnProperty.call(req.body || {}, "cloudSyncEnabled");
+  let user = await getUserById(req.user.userId);
   if (!user) return res.status(404).json({ ok: false, error: "USER_NOT_FOUND" });
+  if (hasDisplayName) {
+    const displayName = String(req.body?.displayName || "").trim();
+    if (displayName.length < 1 || displayName.length > 12) {
+      return res.status(400).json({ ok: false, error: "INVALID_DISPLAY_NAME" });
+    }
+    user = await updateUserDisplayName(req.user.userId, displayName);
+    if (!user) return res.status(404).json({ ok: false, error: "USER_NOT_FOUND" });
+  }
+  if (hasCloudSyncEnabled) {
+    if (typeof req.body.cloudSyncEnabled !== "boolean") {
+      return res.status(400).json({ ok: false, error: "INVALID_CLOUD_SYNC_ENABLED" });
+    }
+    user = await updateUserCloudSyncEnabled(req.user.userId, req.body.cloudSyncEnabled);
+    if (!user) return res.status(404).json({ ok: false, error: "USER_NOT_FOUND" });
+  }
+  const session = await getSessionByUserId(req.user.userId);
   res.json({
     ok: true,
     user: {
       userId: user.userId,
       displayName: user.displayName,
+      memberTier: session?.memberTier || "free",
+      memberExpiresAt: session?.memberExpiresAt || null,
+      cloudSyncEnabled: Boolean(user.cloudSyncEnabled),
     },
   });
 });

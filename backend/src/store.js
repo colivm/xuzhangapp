@@ -30,7 +30,8 @@ export async function initStore() {
       CREATE TABLE IF NOT EXISTS users (
         user_id TEXT PRIMARY KEY,
         phone TEXT UNIQUE NOT NULL,
-        display_name TEXT NOT NULL
+        display_name TEXT NOT NULL,
+        cloud_sync_enabled BOOLEAN NOT NULL DEFAULT FALSE
       );
       CREATE TABLE IF NOT EXISTS sessions (
         user_id TEXT PRIMARY KEY,
@@ -60,6 +61,7 @@ export async function initStore() {
         verified_at TEXT NOT NULL
       );
     `);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS cloud_sync_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
     usePostgres = true;
   }
 
@@ -129,19 +131,20 @@ export async function getOrCreateUserByPhone(phone) {
   if (!usePostgres) {
     const existing = memory.usersByPhone.get(phone);
     if (existing) return existing;
-    const user = { userId: randomUUID(), displayName: `用户${phone.slice(-4)}`, phone };
+    const user = { userId: randomUUID(), displayName: `用户${phone.slice(-4)}`, phone, cloudSyncEnabled: false };
     memory.usersByPhone.set(phone, user);
     memory.sessionsByUserId.set(user.userId, { memberTier: "free", memberExpiresAt: null });
     memory.ledgersByUserId.set(user.userId, []);
     return user;
   }
 
-  const existing = await pool.query(`SELECT user_id, display_name, phone FROM users WHERE phone = $1`, [phone]);
+  const existing = await pool.query(`SELECT user_id, display_name, phone, cloud_sync_enabled FROM users WHERE phone = $1`, [phone]);
   if (existing.rowCount) {
     return {
       userId: existing.rows[0].user_id,
       displayName: existing.rows[0].display_name,
       phone: existing.rows[0].phone,
+      cloudSyncEnabled: Boolean(existing.rows[0].cloud_sync_enabled),
     };
   }
   const userId = randomUUID();
@@ -152,7 +155,7 @@ export async function getOrCreateUserByPhone(phone) {
      ON CONFLICT (user_id) DO NOTHING`,
     [userId]
   );
-  return { userId, displayName, phone };
+  return { userId, displayName, phone, cloudSyncEnabled: false };
 }
 
 export async function getUserById(userId) {
@@ -162,12 +165,13 @@ export async function getUserById(userId) {
     }
     return null;
   }
-  const result = await pool.query(`SELECT user_id, display_name, phone FROM users WHERE user_id = $1`, [userId]);
+  const result = await pool.query(`SELECT user_id, display_name, phone, cloud_sync_enabled FROM users WHERE user_id = $1`, [userId]);
   if (!result.rowCount) return null;
   return {
     userId: result.rows[0].user_id,
     displayName: result.rows[0].display_name,
     phone: result.rows[0].phone,
+    cloudSyncEnabled: Boolean(result.rows[0].cloud_sync_enabled),
   };
 }
 
@@ -183,7 +187,7 @@ export async function updateUserDisplayName(userId, displayName) {
     return null;
   }
   const result = await pool.query(
-    `UPDATE users SET display_name = $2 WHERE user_id = $1 RETURNING user_id, display_name, phone`,
+    `UPDATE users SET display_name = $2 WHERE user_id = $1 RETURNING user_id, display_name, phone, cloud_sync_enabled`,
     [userId, displayName]
   );
   if (!result.rowCount) return null;
@@ -191,6 +195,32 @@ export async function updateUserDisplayName(userId, displayName) {
     userId: result.rows[0].user_id,
     displayName: result.rows[0].display_name,
     phone: result.rows[0].phone,
+    cloudSyncEnabled: Boolean(result.rows[0].cloud_sync_enabled),
+  };
+}
+
+export async function updateUserCloudSyncEnabled(userId, cloudSyncEnabled) {
+  const enabled = Boolean(cloudSyncEnabled);
+  if (!usePostgres) {
+    for (const [phone, user] of memory.usersByPhone.entries()) {
+      if (user.userId === userId) {
+        const next = { ...user, cloudSyncEnabled: enabled };
+        memory.usersByPhone.set(phone, next);
+        return next;
+      }
+    }
+    return null;
+  }
+  const result = await pool.query(
+    `UPDATE users SET cloud_sync_enabled = $2 WHERE user_id = $1 RETURNING user_id, display_name, phone, cloud_sync_enabled`,
+    [userId, enabled]
+  );
+  if (!result.rowCount) return null;
+  return {
+    userId: result.rows[0].user_id,
+    displayName: result.rows[0].display_name,
+    phone: result.rows[0].phone,
+    cloudSyncEnabled: Boolean(result.rows[0].cloud_sync_enabled),
   };
 }
 

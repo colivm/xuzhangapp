@@ -269,7 +269,7 @@ final class SettingsViewModel: ObservableObject {
             settings.memberTier = session.memberTier
             settings.memberExpiresAt = session.memberExpiresAt
             settings.syncEnabled = false
-            hasPendingLoginCloudSyncDecision = LocalStore.loadCloudSyncPreference(for: session.userId)
+            hasPendingLoginCloudSyncDecision = session.cloudSyncEnabled ?? LocalStore.loadCloudSyncPreference(for: session.userId)
             SummaryPlaybackQuotaStore().syncLocalUsageAfterLogin(userId: session.userId)
             persist()
             if let account = try? await client.fetchAccountMe(accessToken: session.accessToken) {
@@ -358,6 +358,7 @@ final class SettingsViewModel: ObservableObject {
             settings.syncEnabled = false
             hasPendingLoginCloudSyncDecision = false
             LocalStore.removeCloudSyncPreference(for: deletedUserId)
+            LocalStore.removeCloudSyncPreferenceMigration(for: deletedUserId)
             if Self.isBackendDefaultDisplayName(settings.displayName) {
                 settings.displayName = Self.localDefaultDisplayName
             }
@@ -442,11 +443,13 @@ final class SettingsViewModel: ObservableObject {
         settings.syncEnabled = enabled
         if rememberForAccount, !settings.cloudUserId.isEmpty {
             LocalStore.saveCloudSyncPreference(enabled, for: settings.cloudUserId)
+            LocalStore.markCloudSyncPreferenceMigratedToAccount(for: settings.cloudUserId)
+            syncCloudSyncPreferenceToAccount(enabled)
         }
         persist()
     }
 
-    private func applyCloudAccount(_ account: AuthUserDTO) {
+    private func applyCloudAccount(_ account: AuthUserDTO, shouldApplyCloudSyncPreference: Bool = true) {
         settings.displayName = sanitizedDisplayName(account.displayName)
         settings.cloudUserId = account.userId
         SummaryPlaybackQuotaStore().syncLocalUsageAfterLogin(userId: account.userId)
@@ -454,7 +457,55 @@ final class SettingsViewModel: ObservableObject {
             settings.memberTier = memberTier
         }
         settings.memberExpiresAt = account.memberExpiresAt
+        if shouldApplyCloudSyncPreference {
+            applyAccountCloudSyncPreference(account.cloudSyncEnabled)
+        }
         persist()
+    }
+
+    private func applyAccountCloudSyncPreference(_ remoteEnabled: Bool?) {
+        if let remoteEnabled, !settings.cloudUserId.isEmpty {
+            if !remoteEnabled,
+               settings.syncEnabled,
+               !LocalStore.hasMigratedCloudSyncPreferenceToAccount(for: settings.cloudUserId) {
+                LocalStore.saveCloudSyncPreference(true, for: settings.cloudUserId)
+                LocalStore.markCloudSyncPreferenceMigratedToAccount(for: settings.cloudUserId)
+                syncCloudSyncPreferenceToAccount(true)
+                return
+            }
+            LocalStore.markCloudSyncPreferenceMigratedToAccount(for: settings.cloudUserId)
+        }
+        let enabled = remoteEnabled ?? LocalStore.loadCloudSyncPreference(for: settings.cloudUserId)
+        if enabled {
+            if !settings.cloudUserId.isEmpty {
+                LocalStore.saveCloudSyncPreference(true, for: settings.cloudUserId)
+            }
+            if !settings.syncEnabled {
+                hasPendingLoginCloudSyncDecision = true
+            }
+            return
+        }
+        settings.syncEnabled = false
+        hasPendingLoginCloudSyncDecision = false
+        if !settings.cloudUserId.isEmpty {
+            LocalStore.saveCloudSyncPreference(false, for: settings.cloudUserId)
+        }
+    }
+
+    private func syncCloudSyncPreferenceToAccount(_ enabled: Bool) {
+        let token = KeychainService.loadAccessToken()
+        guard !token.isEmpty else { return }
+        let client = AuthService(baseURL: backendBaseURL)
+        Task {
+            do {
+                let account = try await client.updateCloudSyncEnabled(accessToken: token, enabled: enabled)
+                applyCloudAccount(account, shouldApplyCloudSyncPreference: false)
+            } catch {
+                authMessage = enabled
+                    ? "云端备份已在本机开启，账号开关稍后会再同步。"
+                    : "云端备份已在本机关闭，账号开关稍后会再同步。"
+            }
+        }
     }
 
     private func syncDisplayNameToCloud(_ displayName: String) async {
@@ -463,7 +514,7 @@ final class SettingsViewModel: ObservableObject {
         let client = AuthService(baseURL: backendBaseURL)
         do {
             let account = try await client.updateDisplayName(accessToken: token, displayName: displayName)
-            applyCloudAccount(account)
+            applyCloudAccount(account, shouldApplyCloudSyncPreference: false)
             authMessage = "昵称已同步。"
         } catch {
             authMessage = "昵称已保存在本机。云端暂时没同步成功，稍后会再试。"
