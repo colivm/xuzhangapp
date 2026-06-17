@@ -2,6 +2,7 @@ import Foundation
 
 enum LocalStore {
     private static let settingsKey = "app_settings_v1"
+    private static let cloudSyncPreferencesKey = "cloud_sync_preferences_v1"
     private static let homeItemsBackupKey = "home_items_v1_backup"
     private static let homeItemsFile = "home_items_v1.json"
     private static let dailyInsightsFile = "daily_insights_v1.json"
@@ -25,6 +26,28 @@ enum LocalStore {
         } catch {
             print("Failed to save settings: \(error)")
         }
+    }
+
+    static func loadCloudSyncPreference(for userId: String) -> Bool {
+        cloudSyncPreferences()[userId] ?? false
+    }
+
+    static func hasCloudSyncPreference(for userId: String) -> Bool {
+        cloudSyncPreferences()[userId] != nil
+    }
+
+    static func saveCloudSyncPreference(_ enabled: Bool, for userId: String) {
+        guard !userId.isEmpty else { return }
+        var preferences = cloudSyncPreferences()
+        preferences[userId] = enabled
+        UserDefaults.standard.set(preferences, forKey: cloudSyncPreferencesKey)
+    }
+
+    static func removeCloudSyncPreference(for userId: String) {
+        guard !userId.isEmpty else { return }
+        var preferences = cloudSyncPreferences()
+        preferences.removeValue(forKey: userId)
+        UserDefaults.standard.set(preferences, forKey: cloudSyncPreferencesKey)
     }
 
     static func loadHomeItems() -> [HomeItem] {
@@ -64,6 +87,16 @@ enum LocalStore {
     private static func saveHomeItemsBackup(_ items: [HomeItem]) {
         guard let data = try? JSONEncoder().encode(items) else { return }
         UserDefaults.standard.set(data, forKey: homeItemsBackupKey)
+    }
+
+    private static func cloudSyncPreferences() -> [String: Bool] {
+        let raw = UserDefaults.standard.dictionary(forKey: cloudSyncPreferencesKey) ?? [:]
+        return raw.compactMapValues { value in
+            if let bool = value as? Bool {
+                return bool
+            }
+            return (value as? NSNumber)?.boolValue
+        }
     }
 
     static func loadDailyInsights() -> [DailyInsight] {

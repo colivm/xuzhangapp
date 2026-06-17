@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var showClearAllRecordsConfirm = false
     @State private var showDeleteAccountConfirm = false
     @State private var showEnableCloudSyncConfirm = false
+    @State private var showLoginCloudSyncMergeConfirm = false
     @State private var confirmationHost: SettingsConfirmationHost = .main
     @State private var isAccountDangerExpanded = false
     @State private var showNicknameEditor = false
@@ -52,6 +53,7 @@ struct SettingsView: View {
     private enum SettingsConfirmationKind: Hashable {
         case deleteCloudLedger
         case enableCloudSync
+        case loginCloudSyncMerge
         case clearAllRecords
         case deleteAccount
     }
@@ -116,6 +118,7 @@ struct SettingsView: View {
             guard hasSession else { return }
             Task {
                 await settingsViewModel.refreshCloudAccountProfile()
+                handleCloudSessionBecameActive()
                 if settingsViewModel.syncEnabled {
                     await homeViewModel.syncCloudLedgerNow()
                 }
@@ -496,12 +499,50 @@ struct SettingsView: View {
         if settingsViewModel.syncEnabled {
             return
         }
-        confirmationHost = activeSettingsSheet == nil ? .main : .settingsSheet
+        if showAccountSheet {
+            confirmationHost = .accountSheet
+        } else if activeSettingsSheet != nil {
+            confirmationHost = .settingsSheet
+        } else {
+            confirmationHost = .main
+        }
         showEnableCloudSyncConfirm = true
     }
 
     private func enableCloudSyncAndMerge() {
-        settingsViewModel.syncEnabled = true
+        settingsViewModel.enableCloudSyncForCurrentAccount()
+        Task {
+            await homeViewModel.syncCloudLedgerNow()
+        }
+    }
+
+    private func handleCloudSessionBecameActive() {
+        guard settingsViewModel.hasPendingLoginCloudSyncDecision else { return }
+        if homeViewModel.items.isEmpty {
+            settingsViewModel.enableCloudSyncForCurrentAccount()
+            return
+        }
+        confirmationHost = showAccountSheet ? .accountSheet : .main
+        showLoginCloudSyncMergeConfirm = true
+    }
+
+    private func mergeLocalLedgerIntoCurrentAccount() {
+        showLoginCloudSyncMergeConfirm = false
+        settingsViewModel.enableCloudSyncForCurrentAccount()
+        Task {
+            await homeViewModel.syncCloudLedgerNow()
+        }
+    }
+
+    private func keepLocalLedgerOnlyForCurrentLogin() {
+        showLoginCloudSyncMergeConfirm = false
+        settingsViewModel.keepCloudSyncOffForCurrentLogin()
+    }
+
+    private func replaceLocalLedgerWithCurrentAccountCloud() {
+        showLoginCloudSyncMergeConfirm = false
+        homeViewModel.clearLocalLedgerData()
+        settingsViewModel.enableCloudSyncForCurrentAccount()
         Task {
             await homeViewModel.syncCloudLedgerNow()
         }
@@ -707,6 +748,7 @@ struct SettingsView: View {
         guard confirmationHost == host else { return nil }
         if showDeleteCloudLedgerConfirm { return .deleteCloudLedger }
         if showEnableCloudSyncConfirm { return .enableCloudSync }
+        if showLoginCloudSyncMergeConfirm { return .loginCloudSyncMerge }
         if showClearAllRecordsConfirm { return .clearAllRecords }
         if showDeleteAccountConfirm { return .deleteAccount }
         return nil
@@ -804,6 +846,24 @@ struct SettingsView: View {
                     SettingsConfirmationAction(id: "enableCloudSync", title: "开启并同步", style: .primary) {
                         dismissSettingsConfirmation(.enableCloudSync)
                         enableCloudSyncAndMerge()
+                    }
+                ]
+            )
+        case .loginCloudSyncMerge:
+            return (
+                "arrow.triangle.2.circlepath",
+                "这台设备已有本地账本",
+                "当前账号的云端备份偏好是开启的。要把这台设备上的本地记录和当前账号的云端账本合并吗？",
+                AppColors.accent,
+                [
+                    SettingsConfirmationAction(id: "mergeLocal", title: "合并到当前账号", style: .primary) {
+                        mergeLocalLedgerIntoCurrentAccount()
+                    },
+                    SettingsConfirmationAction(id: "keepLocal", title: "先不同步，只看本机", style: .secondary) {
+                        keepLocalLedgerOnlyForCurrentLogin()
+                    },
+                    SettingsConfirmationAction(id: "replaceLocal", title: "清空本机后同步云端", style: .destructive) {
+                        replaceLocalLedgerWithCurrentAccountCloud()
                     }
                 ]
             )
@@ -953,6 +1013,8 @@ struct SettingsView: View {
             showDeleteCloudLedgerConfirm = false
         case .enableCloudSync:
             showEnableCloudSyncConfirm = false
+        case .loginCloudSyncMerge:
+            keepLocalLedgerOnlyForCurrentLogin()
         case .clearAllRecords:
             showClearAllRecordsConfirm = false
         case .deleteAccount:

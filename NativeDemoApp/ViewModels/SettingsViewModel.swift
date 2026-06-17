@@ -22,6 +22,7 @@ final class SettingsViewModel: ObservableObject {
     @Published private(set) var contentSafetyMessage: String?
     @Published private(set) var isAuthBusy: Bool = false
     @Published private(set) var smsCooldownRemaining: Int = 0
+    @Published private(set) var hasPendingLoginCloudSyncDecision: Bool = false
     /// 是否已保存访问令牌（与 Keychain 同步，用于界面展示）。
     @Published private(set) var hasCloudSession: Bool = false
     private var smsCooldownTask: Task<Void, Never>?
@@ -29,6 +30,13 @@ final class SettingsViewModel: ObservableObject {
     init() {
         settings = LocalStore.loadSettings()
         hasCloudSession = !KeychainService.loadAccessToken().isEmpty
+        if !hasCloudSession {
+            settings.syncEnabled = false
+            settings.cloudUserId = ""
+        } else if !settings.cloudUserId.isEmpty,
+                  !LocalStore.hasCloudSyncPreference(for: settings.cloudUserId) {
+            LocalStore.saveCloudSyncPreference(settings.syncEnabled, for: settings.cloudUserId)
+        }
         if !hasCloudSession && Self.isBackendDefaultDisplayName(settings.displayName) {
             settings.displayName = Self.localDefaultDisplayName
         }
@@ -72,8 +80,7 @@ final class SettingsViewModel: ObservableObject {
     var syncEnabled: Bool {
         get { settings.syncEnabled }
         set {
-            settings.syncEnabled = newValue
-            persist()
+            setCloudSyncEnabled(newValue, rememberForAccount: true)
         }
     }
 
@@ -261,6 +268,8 @@ final class SettingsViewModel: ObservableObject {
             settings.cloudUserId = session.userId
             settings.memberTier = session.memberTier
             settings.memberExpiresAt = session.memberExpiresAt
+            settings.syncEnabled = false
+            hasPendingLoginCloudSyncDecision = LocalStore.loadCloudSyncPreference(for: session.userId)
             SummaryPlaybackQuotaStore().syncLocalUsageAfterLogin(userId: session.userId)
             persist()
             if let account = try? await client.fetchAccountMe(accessToken: session.accessToken) {
@@ -284,12 +293,26 @@ final class SettingsViewModel: ObservableObject {
         settings.cloudUserId = ""
         settings.memberTier = "free"
         settings.memberExpiresAt = nil
+        settings.syncEnabled = false
+        hasPendingLoginCloudSyncDecision = false
         if Self.isBackendDefaultDisplayName(settings.displayName) {
             settings.displayName = Self.localDefaultDisplayName
         }
         hasCloudSession = false
         authMessage = "已退出登录。"
         persist()
+    }
+
+    func enableCloudSyncForCurrentAccount() {
+        hasPendingLoginCloudSyncDecision = false
+        setCloudSyncEnabled(true, rememberForAccount: true)
+    }
+
+    func keepCloudSyncOffForCurrentLogin() {
+        hasPendingLoginCloudSyncDecision = false
+        settings.syncEnabled = false
+        persist()
+        authMessage = "已先保留本机账本，不会自动同步到当前账号。"
     }
 
     @discardableResult
@@ -305,8 +328,7 @@ final class SettingsViewModel: ObservableObject {
         let client = AuthService(baseURL: backendBaseURL)
         do {
             try await client.deleteCloudLedger(accessToken: token)
-            settings.syncEnabled = false
-            persist()
+            setCloudSyncEnabled(false, rememberForAccount: true)
             authMessage = "云端账本已删除，本机记录仍保留。"
             return true
         } catch {
@@ -326,6 +348,7 @@ final class SettingsViewModel: ObservableObject {
         isAuthBusy = true
         defer { isAuthBusy = false }
         let client = AuthService(baseURL: backendBaseURL)
+        let deletedUserId = settings.cloudUserId
         do {
             try await client.deleteAccount(accessToken: token)
             KeychainService.clearAccessToken()
@@ -333,6 +356,8 @@ final class SettingsViewModel: ObservableObject {
             settings.memberTier = "free"
             settings.memberExpiresAt = nil
             settings.syncEnabled = false
+            hasPendingLoginCloudSyncDecision = false
+            LocalStore.removeCloudSyncPreference(for: deletedUserId)
             if Self.isBackendDefaultDisplayName(settings.displayName) {
                 settings.displayName = Self.localDefaultDisplayName
             }
@@ -411,6 +436,14 @@ final class SettingsViewModel: ObservableObject {
 
     private func persist() {
         LocalStore.saveSettings(settings)
+    }
+
+    private func setCloudSyncEnabled(_ enabled: Bool, rememberForAccount: Bool) {
+        settings.syncEnabled = enabled
+        if rememberForAccount, !settings.cloudUserId.isEmpty {
+            LocalStore.saveCloudSyncPreference(enabled, for: settings.cloudUserId)
+        }
+        persist()
     }
 
     private func applyCloudAccount(_ account: AuthUserDTO) {
