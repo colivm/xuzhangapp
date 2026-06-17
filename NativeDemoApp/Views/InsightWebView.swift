@@ -1904,6 +1904,8 @@ struct WeeklyShareCardView: View {
     let weekTotal: Double
     let topCategory: String
     let recordCount: Int
+    let primaryMetricCount: Int
+    let primaryMetricEmoji: String
     let dailyTrend: [(String, Double)]
     let topCategoryRatio: Double
     let headline: String
@@ -1934,6 +1936,8 @@ struct WeeklyShareCardView: View {
         weekTotal: Double,
         topCategory: String,
         recordCount: Int,
+        primaryMetricCount: Int? = nil,
+        primaryMetricEmoji: String = "📝",
         dailyTrend: [(String, Double)],
         topCategoryRatio: Double,
         headline: String = "这一周留下几笔记录",
@@ -1947,6 +1951,8 @@ struct WeeklyShareCardView: View {
         self.weekTotal = weekTotal
         self.topCategory = topCategory
         self.recordCount = recordCount
+        self.primaryMetricCount = primaryMetricCount ?? recordCount
+        self.primaryMetricEmoji = primaryMetricEmoji
         self.dailyTrend = dailyTrend
         self.topCategoryRatio = topCategoryRatio
         self.headline = headline
@@ -1956,8 +1962,8 @@ struct WeeklyShareCardView: View {
         self.insight = insight ?? ShareInsight(
             fact: headline,
             care: subtitle,
-            footnote: "\(recordCount) 次 · 这一周",
-            tags: ["#\(recordCount)笔记录", "#生活侧写", "#周记摘页"]
+            footnote: "本周共 \(recordCount) 笔",
+            tags: ["#\(recordCount)笔记录", "#刚开头", "#周记摘页"]
         )
         self.isPetMode = isPetMode
         self.nickname = nickname
@@ -1968,6 +1974,8 @@ struct WeeklyShareCardView: View {
             weekTotal: payload.weekTotal,
             topCategory: payload.topCategory,
             recordCount: payload.recordCount,
+            primaryMetricCount: payload.primaryMetricCount,
+            primaryMetricEmoji: payload.primaryMetricEmoji,
             dailyTrend: payload.dailyTrend,
             topCategoryRatio: payload.topCategoryRatio,
             headline: payload.headline,
@@ -2184,18 +2192,18 @@ struct WeeklyShareCardView: View {
 
     private var weeklyMetricRow: some View {
         HStack(spacing: 14) {
-            metricSparkline(icon: "bus", value: "\(recordCount)次", fill: t.accentDeep.opacity(0.18))
+            metricSparkline(emoji: primaryMetricEmoji, value: "\(primaryMetricCount)笔", fill: t.accentDeep.opacity(0.18))
             Divider()
                 .frame(height: 34)
                 .overlay(t.panelBorder.opacity(0.70))
-            metricSparkline(icon: "calendar", value: "\(activeRecordDays)天", fill: Color(hex: "dce9df").opacity(0.60))
+            metricSparkline(emoji: "🗓️", value: "\(activeRecordDays)天", fill: Color(hex: "dce9df").opacity(0.60))
         }
     }
 
-    private func metricSparkline(icon: String, value: String, fill: Color) -> some View {
+    private func metricSparkline(emoji: String, value: String, fill: Color) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 5) {
-                Text(icon == "bus" ? "🚌" : "🗓️")
+                Text(emoji)
                     .font(.system(size: 14))
                 Text(value)
                     .font(.system(size: 17, weight: .bold, design: .rounded))
@@ -2290,10 +2298,6 @@ struct WeeklyShareCardView: View {
                     .frame(width: pt.1 > 0 ? 8 : 5, height: pt.1 > 0 ? 8 : 5)
                     .accessibilityLabel("\(idx)")
             }
-            Spacer()
-            Text("这一周")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(t.accentDeep.opacity(0.48))
         }
         .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
     }

@@ -89,6 +89,8 @@ struct WeeklyShareCardPayload {
     let weekTotal: Double
     let topCategory: String
     let recordCount: Int
+    let primaryMetricCount: Int
+    let primaryMetricEmoji: String
     let dailyTrend: [(String, Double)]
     let topCategoryRatio: Double
     let headline: String
@@ -380,11 +382,14 @@ final class PlaybackService {
             for: signal,
             seed: "\(builtSummary.id)|\(period)|\(rows.count)"
         )
+        let primaryMetric = weeklySharePrimaryMetric(from: signal)
 
         return WeeklyShareCardPayload(
             weekTotal: total,
             topCategory: top?.category ?? "日常",
             recordCount: rows.count,
+            primaryMetricCount: primaryMetric.count,
+            primaryMetricEmoji: primaryMetric.emoji,
             dailyTrend: trend,
             topCategoryRatio: ratio,
             headline: builtSummary.teaserLine,
@@ -393,6 +398,124 @@ final class PlaybackService {
             periodText: period,
             insight: insight
         )
+    }
+
+    private func weeklySharePrimaryMetric(from signal: ShareInsightSignal) -> (count: Int, emoji: String) {
+        switch signal.kind {
+        case let .sceneTop(scene, count):
+            return (count, weeklyShareEmoji(for: scene.kind))
+        case let .brandTop(name, count, brandId):
+            return (count, weeklyShareBrandEmoji(name: name, brandId: brandId))
+        case let .categoryTop(category, count, context):
+            return (count, weeklyShareEmoji(for: category, context: context))
+        case let .busiestDay(_, count):
+            return (count, "📌")
+        case .lifeTitle:
+            return (signal.recordCount, "📝")
+        case let .weakData(recordCount):
+            return (recordCount, "📝")
+        }
+    }
+
+    private func weeklyShareEmoji(for kind: LifeSceneKind) -> String {
+        switch kind {
+        case .breakfast:
+            return "🥣"
+        case .quickMeal, .workMeal:
+            return "🍜"
+        case .coffee:
+            return "☕"
+        case .commute, .cityRoute:
+            return "🚌"
+        case .convenienceSupply, .groceries, .homeSupply:
+            return "🛒"
+        case .shopping:
+            return "🛍️"
+        case .medicalVisit:
+            return "🏥"
+        case .medicineCare, .bodyCare:
+            return "💊"
+        case .fitness:
+            return "🏃"
+        case .lodging:
+            return "🧳"
+        case .social:
+            return "🎁"
+        case .leisure:
+            return "🎮"
+        case .errand, .general:
+            return "📝"
+        }
+    }
+
+    private func weeklyShareEmoji(
+        for category: HomeItem.Category,
+        context: ShareInsightSignal.CategoryContext
+    ) -> String {
+        switch context {
+        case .breakfast:
+            return "🥣"
+        case .coffee:
+            return "☕"
+        case .dining:
+            return "🍜"
+        case .commute, .travel:
+            return "🚌"
+        case .medical:
+            return "🏥"
+        case .medicine, .care:
+            return "💊"
+        case .fitness:
+            return "🏃"
+        case .groceries, .homeSupply:
+            return "🛒"
+        case .shopping:
+            return "🛍️"
+        case .lodging:
+            return "🧳"
+        case .social:
+            return "🎁"
+        case .general:
+            return weeklyShareEmoji(for: category)
+        }
+    }
+
+    private func weeklyShareEmoji(for category: HomeItem.Category) -> String {
+        switch category {
+        case .transport:
+            return "🚌"
+        case .dining:
+            return "🍜"
+        case .health:
+            return "🏃"
+        case .shopping:
+            return "🛍️"
+        case .daily, .home:
+            return "🛒"
+        case .lodging:
+            return "🧳"
+        case .social:
+            return "🎁"
+        case .entertainment:
+            return "🎮"
+        case .other:
+            return "📝"
+        }
+    }
+
+    private func weeklyShareBrandEmoji(name: String, brandId: String?) -> String {
+        let id = brandId ?? ""
+        if ["luckin", "starbucks", "manner"].contains(id) { return "☕" }
+        if ["metro_transit", "didi", "alipay_ride"].contains(id) { return "🚌" }
+        if ["meituan", "eleme", "mcdonalds", "kfc"].contains(id) { return "🍜" }
+        if ["familymart", "lawson", "bianlifeng", "seveneleven", "meiyijia"].contains(id) { return "🛒" }
+        if name.contains("咖啡") { return "☕" }
+        if name.contains("地铁") || name.contains("公交") || name.contains("滴滴") || name.contains("打车") { return "🚌" }
+        if name.contains("医院") || name.contains("门诊") || name.contains("体检") { return "🏥" }
+        if name.contains("药店") || name.contains("药房") || name.contains("买药") { return "💊" }
+        if name.contains("外卖") || name.contains("美团") || name.contains("饿了") { return "🍜" }
+        if name.contains("便利") || name.contains("全家") || name.contains("罗森") { return "🛒" }
+        return "📝"
     }
 
     private func weeklyShareInsightSignal(
