@@ -972,7 +972,7 @@ struct HomeView: View {
                     endRadius: 150
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
-            )
+            }
             .shadow(
                 color: Color(red: 43/255, green: 66/255, blue: 58/255).opacity(isEditing ? 0.18 : 0.12),
                 radius: isEditing ? 20 : 16,
