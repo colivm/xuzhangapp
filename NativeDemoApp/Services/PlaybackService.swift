@@ -84,6 +84,11 @@ struct ShareInsight: Equatable {
     let tags: [String]
 }
 
+struct WeeklyShareCategorySlice: Equatable {
+    let label: String
+    let count: Int
+    let ratio: Double
+}
 
 struct WeeklyShareCardPayload {
     let weekTotal: Double
@@ -92,6 +97,8 @@ struct WeeklyShareCardPayload {
     let primaryMetricCount: Int
     let primaryMetricEmoji: String
     let dailyTrend: [(String, Double)]
+    let dailyCountTrend: [(String, Int)]
+    let categorySlices: [WeeklyShareCategorySlice]
     let topCategoryRatio: Double
     let headline: String
     let subtitle: String
@@ -371,6 +378,10 @@ final class PlaybackService {
         let trend = activity.map { activity in
             (Self.shortWeekdayFormatter.string(from: activity.date), activity.amount)
         }
+        let countTrend = activity.map { activity in
+            (Self.shortWeekdayFormatter.string(from: activity.date), activity.count)
+        }
+        let categorySlices = weeklyShareCategorySlices(from: rows)
         let period = "\(Self.dotDateFormatter.string(from: interval.start)) ~ \(Self.dotDateFormatter.string(from: calendar.date(byAdding: .day, value: -1, to: interval.end) ?? now))"
         let closing = builtSummary.chapters.last?.narration.plain ?? "这一周已经留下了可以回看的记录。"
         let signal = weeklyShareInsightSignal(
@@ -391,6 +402,8 @@ final class PlaybackService {
             primaryMetricCount: primaryMetric.count,
             primaryMetricEmoji: primaryMetric.emoji,
             dailyTrend: trend,
+            dailyCountTrend: countTrend,
+            categorySlices: categorySlices,
             topCategoryRatio: ratio,
             headline: builtSummary.teaserLine,
             subtitle: closing,
@@ -398,6 +411,84 @@ final class PlaybackService {
             periodText: period,
             insight: insight
         )
+    }
+
+    private func weeklyShareCategorySlices(from rows: [HomeItem]) -> [WeeklyShareCategorySlice] {
+        let totalCount = max(rows.count, 1)
+        let grouped = Dictionary(grouping: rows) { item in
+            weeklyShareCompositionLabel(for: item)
+        }
+            .map { entry in
+                (
+                    label: entry.key,
+                    count: entry.value.count,
+                    latest: entry.value.map(\.createdAt).max() ?? .distantPast
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.count == rhs.count { return lhs.latest > rhs.latest }
+                return lhs.count > rhs.count
+            }
+
+        let visible = Array(grouped.prefix(3))
+        let remaining = grouped.dropFirst(3).reduce(0) { $0 + $1.count }
+        let slices = visible.map { item in
+            WeeklyShareCategorySlice(
+                label: item.label,
+                count: item.count,
+                ratio: Double(item.count) / Double(totalCount)
+            )
+        }
+        guard remaining > 0 else { return slices }
+        return slices + [
+            WeeklyShareCategorySlice(
+                label: "其他",
+                count: remaining,
+                ratio: Double(remaining) / Double(totalCount)
+            )
+        ]
+    }
+
+    private func weeklyShareCompositionLabel(for item: HomeItem) -> String {
+        let scene = LifeSceneSemanticService.classify(item)
+        switch scene.kind {
+        case .breakfast:
+            return "早餐"
+        case .coffee:
+            return "咖啡"
+        case .quickMeal, .workMeal:
+            return "吃饭"
+        case .commute:
+            return "通勤"
+        case .cityRoute:
+            return "出行"
+        case .convenienceSupply:
+            return "小补给"
+        case .groceries:
+            return "食材"
+        case .homeSupply:
+            return "家用"
+        case .shopping:
+            return "购物"
+        case .medicalVisit:
+            return "就医"
+        case .medicineCare:
+            return "用药"
+        case .fitness:
+            return "锻炼"
+        case .bodyCare:
+            return "护理"
+        case .lodging:
+            return "住宿"
+        case .social:
+            return "人情"
+        case .leisure:
+            return "放松"
+        case .errand:
+            return "办事"
+        case .general:
+            return item.category.label
+        }
     }
 
     private func weeklySharePrimaryMetric(from signal: ShareInsightSignal) -> (count: Int, emoji: String) {

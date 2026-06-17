@@ -311,7 +311,7 @@ enum ShareInsightCopyPool {
 
     private static func footnote(for signal: ShareInsightSignal) -> String {
         let dayText = signal.activeDays > 0 ? " · \(signal.activeDays) 天有记录" : ""
-        return "本周共 \(signal.recordCount) 笔\(dayText)"
+        return "\(signal.recordCount) 笔 · 这一周\(dayText)"
     }
 
     private static func pick(_ options: [String], seed: String) -> String {

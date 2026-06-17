@@ -1907,6 +1907,8 @@ struct WeeklyShareCardView: View {
     let primaryMetricCount: Int
     let primaryMetricEmoji: String
     let dailyTrend: [(String, Double)]
+    let dailyCountTrend: [(String, Int)]
+    let categorySlices: [WeeklyShareCategorySlice]
     let topCategoryRatio: Double
     let headline: String
     let subtitle: String
@@ -1939,6 +1941,8 @@ struct WeeklyShareCardView: View {
         primaryMetricCount: Int? = nil,
         primaryMetricEmoji: String = "📝",
         dailyTrend: [(String, Double)],
+        dailyCountTrend: [(String, Int)]? = nil,
+        categorySlices: [WeeklyShareCategorySlice] = [],
         topCategoryRatio: Double,
         headline: String = "这一周留下几笔记录",
         subtitle: String = "之后有新记录，再回来对照。",
@@ -1954,6 +1958,8 @@ struct WeeklyShareCardView: View {
         self.primaryMetricCount = primaryMetricCount ?? recordCount
         self.primaryMetricEmoji = primaryMetricEmoji
         self.dailyTrend = dailyTrend
+        self.dailyCountTrend = dailyCountTrend ?? dailyTrend.map { ($0.0, Int($0.1.rounded())) }
+        self.categorySlices = categorySlices
         self.topCategoryRatio = topCategoryRatio
         self.headline = headline
         self.subtitle = subtitle
@@ -1962,7 +1968,7 @@ struct WeeklyShareCardView: View {
         self.insight = insight ?? ShareInsight(
             fact: headline,
             care: subtitle,
-            footnote: "本周共 \(recordCount) 笔",
+            footnote: "\(recordCount) 笔 · 这一周",
             tags: ["#\(recordCount)笔记录", "#刚开头", "#周记摘页"]
         )
         self.isPetMode = isPetMode
@@ -1977,6 +1983,8 @@ struct WeeklyShareCardView: View {
             primaryMetricCount: payload.primaryMetricCount,
             primaryMetricEmoji: payload.primaryMetricEmoji,
             dailyTrend: payload.dailyTrend,
+            dailyCountTrend: payload.dailyCountTrend,
+            categorySlices: payload.categorySlices,
             topCategoryRatio: payload.topCategoryRatio,
             headline: payload.headline,
             subtitle: payload.subtitle,
@@ -2015,28 +2023,22 @@ struct WeeklyShareCardView: View {
             VStack(alignment: .leading, spacing: 0) {
                 weeklyCardHeader
 
-                Text("这一周")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(t.textMuted.opacity(0.82))
-                    .lineLimit(1)
-                    .padding(.top, 34)
-
-                Text(insight.fact)
+                Text(shareHeadline)
                     .font(.system(size: 29, weight: .bold, design: .rounded))
                     .foregroundStyle(t.textMain)
                     .lineSpacing(5)
                     .lineLimit(3)
                     .minimumScaleFactor(0.66)
-                    .padding(.top, 10)
-                    .frame(minHeight: 78, alignment: .topLeading)
+                    .padding(.top, 34)
+                    .frame(minHeight: 92, alignment: .topLeading)
 
                 weeklyChartPanel
                     .padding(.top, 8)
 
                 Text(insight.care)
-                    .font(.system(size: 19, weight: .bold, design: .rounded))
-                    .foregroundStyle(t.textMain.opacity(0.96))
-                    .lineSpacing(5)
+                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                    .foregroundStyle(t.textMain.opacity(0.82))
+                    .lineSpacing(4)
                     .lineLimit(3)
                     .minimumScaleFactor(0.74)
                     .padding(.top, 16)
@@ -2094,6 +2096,48 @@ struct WeeklyShareCardView: View {
         }
     }
 
+    private var shareHeadline: String {
+        let fact = insight.fact.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !fact.isEmpty else { return "这一周，留下了 \(recordCount) 笔记录" }
+        if fact.contains("周") { return fact }
+        return "这一周，\(fact)"
+    }
+
+    private var displayCategorySlices: [WeeklyShareCategorySlice] {
+        if !categorySlices.isEmpty { return categorySlices }
+        return [
+            WeeklyShareCategorySlice(
+                label: topCategory,
+                count: max(primaryMetricCount, recordCount),
+                ratio: min(max(topCategoryRatio, 0.12), 1)
+            )
+        ]
+    }
+
+    private func donutStart(at index: Int) -> Double {
+        guard index > 0 else { return 0 }
+        return min(displayCategorySlices.prefix(index).reduce(0) { $0 + max($1.ratio, 0) }, 1)
+    }
+
+    private func donutEnd(at index: Int) -> Double {
+        guard index < displayCategorySlices.count else { return 1 }
+        let end = donutStart(at: index) + max(displayCategorySlices[index].ratio, 0)
+        return min(max(end, 0.04), 1)
+    }
+
+    private func donutColor(at index: Int) -> Color {
+        switch index {
+        case 0:
+            return t.accentDeep.opacity(0.78)
+        case 1:
+            return t.accent.opacity(0.70)
+        case 2:
+            return Color(hex: "f1cf89").opacity(0.88)
+        default:
+            return Color(hex: "eda76f").opacity(0.82)
+        }
+    }
+
     private var weeklyChartPanel: some View {
         HStack(spacing: 18) {
             weeklyBarChart
@@ -2115,7 +2159,7 @@ struct WeeklyShareCardView: View {
     }
 
     private var weeklyBarChart: some View {
-        let maxValue = max(dailyTrend.map(\.1).max() ?? 0, 1)
+        let maxValue = max(dailyCountTrend.map(\.1).max() ?? 0, 1)
         return ZStack(alignment: .bottomLeading) {
             VStack(spacing: 13) {
                 ForEach(0..<4, id: \.self) { _ in
@@ -2127,7 +2171,7 @@ struct WeeklyShareCardView: View {
             .padding(.bottom, 16)
 
             HStack(alignment: .bottom, spacing: 8) {
-                ForEach(Array(dailyTrend.prefix(7).enumerated()), id: \.offset) { _, point in
+                ForEach(Array(dailyCountTrend.prefix(7).enumerated()), id: \.offset) { _, point in
                     VStack(spacing: 5) {
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
                             .fill(
@@ -2137,7 +2181,7 @@ struct WeeklyShareCardView: View {
                                     endPoint: .bottom
                                 )
                             )
-                            .frame(width: 11, height: max(8, CGFloat(point.1 / maxValue) * 40))
+                            .frame(width: 11, height: max(8, CGFloat(point.1) / CGFloat(maxValue) * 40))
                         Text(shortWeekday(point.0))
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(t.textMuted.opacity(0.76))
@@ -2153,26 +2197,22 @@ struct WeeklyShareCardView: View {
             ZStack {
                 Circle()
                     .stroke(t.panelBorder.opacity(0.55), lineWidth: 13)
-                Circle()
-                    .trim(from: 0, to: min(max(topCategoryRatio, 0.12), 0.92))
-                    .stroke(t.accentDeep.opacity(0.74), style: StrokeStyle(lineWidth: 13, lineCap: .butt))
-                    .rotationEffect(.degrees(-90))
-                Circle()
-                    .trim(from: 0, to: 0.18)
-                    .stroke(Color(hex: "f1cf89").opacity(0.88), style: StrokeStyle(lineWidth: 13, lineCap: .butt))
-                    .rotationEffect(.degrees(184))
-                Circle()
-                    .trim(from: 0, to: 0.12)
-                    .stroke(Color(hex: "eda76f").opacity(0.82), style: StrokeStyle(lineWidth: 13, lineCap: .butt))
-                    .rotationEffect(.degrees(254))
+                ForEach(Array(displayCategorySlices.enumerated()), id: \.offset) { index, _ in
+                    Circle()
+                        .trim(from: donutStart(at: index), to: donutEnd(at: index))
+                        .stroke(
+                            donutColor(at: index),
+                            style: StrokeStyle(lineWidth: 13, lineCap: .butt)
+                        )
+                        .rotationEffect(.degrees(-90))
+                }
             }
             .frame(width: 54, height: 54)
 
             VStack(alignment: .leading, spacing: 5) {
-                legendRow(color: t.accentDeep.opacity(0.78), text: topCategory)
-                legendRow(color: t.accent.opacity(0.70), text: "小购买")
-                legendRow(color: Color(hex: "f1cf89"), text: "咖啡")
-                legendRow(color: Color(hex: "eda76f"), text: "其他")
+                ForEach(Array(displayCategorySlices.enumerated()), id: \.offset) { index, slice in
+                    legendRow(color: donutColor(at: index), text: slice.label)
+                }
             }
         }
     }
@@ -2234,7 +2274,7 @@ struct WeeklyShareCardView: View {
     }
 
     private var activeRecordDays: Int {
-        max(1, dailyTrend.filter { $0.1 > 0 }.count)
+        max(1, dailyCountTrend.filter { $0.1 > 0 }.count)
     }
 
     private func shortWeekday(_ raw: String) -> String {
@@ -2292,7 +2332,7 @@ struct WeeklyShareCardView: View {
 
     private var rhythmTexture: some View {
         HStack(spacing: 8) {
-            ForEach(Array(dailyTrend.enumerated()), id: \.offset) { idx, pt in
+            ForEach(Array(dailyCountTrend.enumerated()), id: \.offset) { idx, pt in
                 Circle()
                     .fill(t.accent.opacity(pt.1 > 0 ? 0.40 : 0.13))
                     .frame(width: pt.1 > 0 ? 8 : 5, height: pt.1 > 0 ? 8 : 5)
