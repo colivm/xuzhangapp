@@ -551,7 +551,7 @@ struct SettingsView: View {
     }
 
     private var settingsInkAccent: Color {
-        Color(red: 0.66, green: 0.47, blue: 0.30)
+        Color(red: 0.62, green: 0.50, blue: 0.30)
     }
 
     private var settingsInkText: Color {
@@ -583,11 +583,11 @@ struct SettingsView: View {
     }
 
     private var settingsEnvelopeWarm: Color {
-        Color(red: 242/255, green: 233/255, blue: 207/255)
+        Color(red: 248/255, green: 238/255, blue: 216/255)
     }
 
     private var settingsEnvelopeMint: Color {
-        Color(red: 224/255, green: 238/255, blue: 225/255)
+        Color(red: 232/255, green: 243/255, blue: 233/255)
     }
 
     private var settingsEnvelopeSage: Color {
@@ -595,7 +595,7 @@ struct SettingsView: View {
     }
 
     private var settingsEnvelopeDeepSage: Color {
-        Color(red: 98/255, green: 132/255, blue: 112/255)
+        Color(red: 92/255, green: 124/255, blue: 108/255)
     }
 
     @ViewBuilder
@@ -606,8 +606,8 @@ struct SettingsView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            settingsDeepSage.opacity(0.98),
-                            Color(red: 140/255, green: 170/255, blue: 150/255).opacity(0.96)
+                            Color(red: 146/255, green: 172/255, blue: 154/255).opacity(0.98),
+                            Color(red: 125/255, green: 158/255, blue: 139/255).opacity(0.96)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing

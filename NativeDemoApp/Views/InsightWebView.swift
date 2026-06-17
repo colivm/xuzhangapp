@@ -1661,75 +1661,26 @@ private struct KeywordBubblePalette {
         let rimOpacity = isTitle ? 0.34 : 0.24
         let glowOpacity = isTitle ? 0.22 : 0.16
         switch category {
-        case .dining:
+        case .dining, .shopping, .social:
             return .init(
-                base: Color(red: 0.93, green: 0.75, blue: 0.44).opacity(baseOpacity),
-                rim: Color(red: 0.82, green: 0.58, blue: 0.30).opacity(rimOpacity),
-                glow: Color(red: 0.95, green: 0.72, blue: 0.36).opacity(glowOpacity),
+                base: Color(red: 0.84, green: 0.70, blue: 0.44).opacity(baseOpacity),
+                rim: Color(red: 0.70, green: 0.56, blue: 0.34).opacity(rimOpacity),
+                glow: Color(red: 0.90, green: 0.78, blue: 0.52).opacity(glowOpacity),
                 text: AppColors.text.opacity(0.86)
             )
-        case .transport:
+        case .transport, .entertainment:
             return .init(
-                base: Color(red: 0.54, green: 0.68, blue: 0.84).opacity(baseOpacity),
-                rim: Color(red: 0.43, green: 0.57, blue: 0.75).opacity(rimOpacity),
-                glow: Color(red: 0.48, green: 0.68, blue: 0.92).opacity(glowOpacity),
+                base: Color(red: 0.58, green: 0.67, blue: 0.76).opacity(baseOpacity),
+                rim: Color(red: 0.45, green: 0.54, blue: 0.65).opacity(rimOpacity),
+                glow: Color(red: 0.63, green: 0.75, blue: 0.83).opacity(glowOpacity),
                 text: AppColors.text.opacity(0.85)
             )
-        case .shopping:
+        case .daily, .lodging, .health, .home, .other:
             return .init(
-                base: Color(red: 0.90, green: 0.56, blue: 0.64).opacity(baseOpacity),
-                rim: Color(red: 0.77, green: 0.44, blue: 0.52).opacity(rimOpacity),
-                glow: Color(red: 0.95, green: 0.61, blue: 0.70).opacity(glowOpacity),
-                text: AppColors.text.opacity(0.85)
-            )
-        case .daily:
-            return .init(
-                base: Color(red: 0.78, green: 0.68, blue: 0.48).opacity(baseOpacity),
-                rim: Color(red: 0.65, green: 0.55, blue: 0.38).opacity(rimOpacity),
-                glow: Color(red: 0.86, green: 0.75, blue: 0.50).opacity(glowOpacity),
-                text: AppColors.text.opacity(0.85)
-            )
-        case .entertainment:
-            return .init(
-                base: Color(red: 0.63, green: 0.52, blue: 0.82).opacity(baseOpacity),
-                rim: Color(red: 0.53, green: 0.43, blue: 0.72).opacity(rimOpacity),
-                glow: Color(red: 0.72, green: 0.58, blue: 0.92).opacity(glowOpacity),
-                text: AppColors.text.opacity(0.85)
-            )
-        case .lodging:
-            return .init(
-                base: Color(red: 0.60, green: 0.66, blue: 0.50).opacity(baseOpacity),
-                rim: Color(red: 0.49, green: 0.56, blue: 0.42).opacity(rimOpacity),
-                glow: Color(red: 0.68, green: 0.72, blue: 0.56).opacity(glowOpacity),
-                text: AppColors.text.opacity(0.85)
-            )
-        case .health:
-            return .init(
-                base: AppColors.accent.opacity(baseOpacity),
+                base: AppColors.accent.opacity(isTitle ? 0.34 : 0.22),
                 rim: AppColors.accentDark.opacity(rimOpacity),
-                glow: AppColors.accent.opacity(glowOpacity),
+                glow: AppColors.accent.opacity(isTitle ? 0.20 : 0.13),
                 text: AppColors.text.opacity(0.86)
-            )
-        case .home:
-            return .init(
-                base: Color(red: 0.70, green: 0.62, blue: 0.46).opacity(baseOpacity),
-                rim: Color(red: 0.58, green: 0.50, blue: 0.36).opacity(rimOpacity),
-                glow: Color(red: 0.76, green: 0.67, blue: 0.48).opacity(glowOpacity),
-                text: AppColors.text.opacity(0.85)
-            )
-        case .social:
-            return .init(
-                base: Color(red: 0.88, green: 0.58, blue: 0.42).opacity(baseOpacity),
-                rim: Color(red: 0.76, green: 0.46, blue: 0.32).opacity(rimOpacity),
-                glow: Color(red: 0.94, green: 0.62, blue: 0.44).opacity(glowOpacity),
-                text: AppColors.text.opacity(0.85)
-            )
-        case .other:
-            return .init(
-                base: AppColors.accent.opacity(isTitle ? 0.24 : 0.16),
-                rim: AppColors.subtext.opacity(isTitle ? 0.18 : 0.12),
-                glow: AppColors.accent.opacity(isTitle ? 0.14 : 0.10),
-                text: AppColors.text.opacity(0.84)
             )
         }
     }

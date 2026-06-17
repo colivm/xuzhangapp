@@ -1280,6 +1280,22 @@ struct RecordView: View {
                     endPoint: .bottomTrailing
                 )
             )
+            .background(
+                RoundedRectangle(cornerRadius: amountFieldRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(alignment: .topLeading) {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(hasAmountDraft ? 0.58 : 0.42),
+                        Color.white.opacity(0.0)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .frame(height: 42)
+                .clipShape(RoundedRectangle(cornerRadius: amountFieldRadius, style: .continuous))
+            }
     }
 
     private var amountFieldBorder: some View {
@@ -1287,9 +1303,9 @@ struct RecordView: View {
             .stroke(
                 LinearGradient(
                     colors: [
-                        AppColors.accent.opacity(hasAmountDraft ? 0.30 : 0.42),
-                        AppColors.paperBorder.opacity(hasAmountDraft ? 0.14 : 0.26),
-                        Color.white.opacity(hasAmountDraft ? 0.26 : 0.34)
+                        Color.white.opacity(hasAmountDraft ? 0.74 : 0.56),
+                        AppColors.accent.opacity(hasAmountDraft ? 0.24 : 0.34),
+                        AppColors.paperBorder.opacity(hasAmountDraft ? 0.12 : 0.20)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -1301,15 +1317,15 @@ struct RecordView: View {
     private var amountFieldBackgroundColors: [Color] {
         if hasAmountDraft {
             return [
-                Color.white.opacity(0.78),
-                AppColors.paperWarm.opacity(0.42),
-                AppColors.tracePlaybackButtonBg.opacity(0.30)
+                Color.white.opacity(0.72),
+                AppColors.paperWarm.opacity(0.30),
+                AppColors.tracePlaybackButtonBg.opacity(0.22)
             ]
         }
         return [
-            AppColors.paperWarm.opacity(0.68),
-            AppColors.tracePlaybackButtonBg.opacity(0.62),
-            Color.white.opacity(0.58)
+            AppColors.paperWarm.opacity(0.58),
+            AppColors.paperMist.opacity(0.42),
+            Color.white.opacity(0.50)
         ]
     }
 
@@ -1359,14 +1375,15 @@ struct RecordView: View {
         .background(
             Rectangle()
                 .fill(.ultraThinMaterial)
-                .overlay(Color(red: 0.94, green: 0.95, blue: 0.96).opacity(0.86))
+                .overlay(AppColors.paperMist.opacity(0.64))
+                .overlay(Color.white.opacity(0.18))
         )
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(AppColors.line.opacity(0.55))
                 .frame(height: 1)
         }
-        .shadow(color: Color.black.opacity(0.12), radius: 18, x: 0, y: -6)
+        .shadow(color: Color(red: 43/255, green: 66/255, blue: 58/255).opacity(0.10), radius: 18, x: 0, y: -6)
     }
 
     private var amountAccessoryBar: some View {
@@ -1413,7 +1430,7 @@ struct RecordView: View {
             .fill(
                 LinearGradient(
                     colors: hasValidAmount
-                        ? [Color(red: 0.57, green: 0.75, blue: 0.69).opacity(0.92), recordAccent.opacity(0.82)]
+                        ? [Color(red: 0.52, green: 0.72, blue: 0.66).opacity(0.94), recordAccent.opacity(0.86)]
                         : [Color.white.opacity(0.76), AppColors.paperWarm.opacity(0.42)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing

@@ -116,7 +116,11 @@ struct MemberPricingView: View {
                         .padding(.vertical, 14)
                         .background(
                             LinearGradient(
-                                colors: [AppColors.accent.opacity(0.92), AppColors.accent],
+                                colors: [
+                                    Color(red: 0.45, green: 0.64, blue: 0.57).opacity(0.96),
+                                    AppColors.accent.opacity(0.94),
+                                    AppColors.lockGold.opacity(0.72)
+                                ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
@@ -344,13 +348,17 @@ struct MemberPricingView: View {
             .padding(.vertical, 14)
             .background(
                 LinearGradient(
-                    colors: [AppColors.accent.opacity(0.92), AppColors.accent],
+                    colors: [
+                        Color(red: 0.45, green: 0.64, blue: 0.57).opacity(0.96),
+                        AppColors.accent.opacity(0.94),
+                        AppColors.lockGold.opacity(0.72)
+                    ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ),
                 in: RoundedRectangle(cornerRadius: 14, style: .continuous)
             )
-            .shadow(color: AppColors.accent.opacity(0.3), radius: 8, y: 4)
+            .shadow(color: AppColors.lockGold.opacity(0.18), radius: 10, y: 5)
         }
         .buttonStyle(.plain)
         .disabled(isPurchasing)

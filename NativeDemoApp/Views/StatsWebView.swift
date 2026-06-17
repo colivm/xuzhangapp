@@ -1666,11 +1666,11 @@ struct StatsWebView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(item.displayTitle)
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
+                    .foregroundStyle(Color(red: 30/255, green: 39/255, blue: 53/255))
                 Spacer()
                 Text(item.amount.formatted(.cny))
                     .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.text)
+                    .foregroundStyle(Color(red: 31/255, green: 59/255, blue: 64/255))
             }
 
             let emotionTag = item.displayEmotionTag
@@ -1791,12 +1791,12 @@ struct StatsWebView: View {
 
             if !item.displayEmotionTag.isEmpty {
                 Text(item.displayEmotionTag)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppColors.accent.opacity(0.74))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color(red: 74/255, green: 124/255, blue: 104/255))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.08)))
-                    .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.18), lineWidth: 0.7))
+                    .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.13)))
+                    .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.28), lineWidth: 0.7))
                     .opacity(isEditing ? 0.35 : 1)
             }
 
@@ -1817,21 +1817,46 @@ struct StatsWebView: View {
     }
 
     private func traceDetailRecordBackground(isEditing: Bool) -> some View {
-            RoundedRectangle(cornerRadius: 19, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: isEditing
-                        ? [AppColors.accent.opacity(0.075), Color.white.opacity(0.46), AppColors.paperWarm.opacity(0.16)]
-                        : [Color.white.opacity(0.36), Color.white.opacity(0.18)],
+        RoundedRectangle(cornerRadius: 19, style: .continuous)
+            .fill(.ultraThinMaterial)
+            .background(
+                RoundedRectangle(cornerRadius: 19, style: .continuous)
+                    .fill(Color.white.opacity(isEditing ? 0.48 : 0.40))
+            )
+            .overlay(
+                LinearGradient(
+                    colors: isEditing
+                    ? [AppColors.accent.opacity(0.12), Color.white.opacity(0.48), AppColors.paperWarm.opacity(0.18)]
+                    : [Color.white.opacity(0.54), Color.white.opacity(0.28), AppColors.accent.opacity(0.08)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
+                .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
             )
+            .overlay(alignment: .topLeading) {
+                LinearGradient(
+                    colors: [Color.white.opacity(isEditing ? 0.52 : 0.68), Color.white.opacity(0.0)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .frame(height: 42)
+                .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+            }
+            .shadow(color: Color(red: 43/255, green: 66/255, blue: 58/255).opacity(isEditing ? 0.14 : 0.09), radius: isEditing ? 16 : 12, x: 0, y: isEditing ? 9 : 6)
     }
 
     private func traceDetailRecordBorder(isEditing: Bool) -> some View {
         RoundedRectangle(cornerRadius: 19, style: .continuous)
-            .stroke(isEditing ? AppColors.accent.opacity(0.24) : Color.white.opacity(0.28), lineWidth: 1)
+            .stroke(
+                LinearGradient(
+                    colors: isEditing
+                    ? [Color.white.opacity(0.82), AppColors.accent.opacity(0.28), AppColors.paperBorder.opacity(0.14)]
+                    : [Color.white.opacity(0.76), Color.white.opacity(0.36), AppColors.accent.opacity(0.12)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: isEditing ? 1.2 : 1
+            )
     }
 
     private func scrollTraceEditorIntoView(_ itemID: UUID, proxy: ScrollViewProxy, delay: Double) {
