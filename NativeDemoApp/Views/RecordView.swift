@@ -15,6 +15,7 @@ struct RecordView: View {
     @State private var showOCRConfirmSheet = false
     @State private var didImportOCRConfirmSheet = false
     @State private var scenePackExpanded = false
+    @State private var freeScenePackExpanded = false
     @State private var scenePackVariants: [String: Int] = [:]
     @State private var amountPadActive = false
     @State private var recordDetailsExpanded = false
@@ -1776,6 +1777,7 @@ struct RecordView: View {
             isMoreExpanded: scenePackMoreExpanded,
             isPetMode: settingsViewModel.petCompanionEnabled,
             recordInk: recordInk,
+            badgeText: "会员可用",
             onQuickGenerate: {
                 dismissKeyboard()
                 previewLineWasRotated = true
@@ -1802,18 +1804,22 @@ struct RecordView: View {
         ScenePackSectionView(
             primaryScenePacks: freeScenePacks,
             secondaryScenePacks: [],
-            isExpanded: scenePackExpanded,
+            isExpanded: freeScenePackExpanded,
             isMoreExpanded: false,
             isPetMode: settingsViewModel.petCompanionEnabled,
             recordInk: recordInk,
             badgeText: "免费可用",
             showsQuickGenerate: false,
             collapsedHelperText: "通勤、吃饭、日用先免费体验。",
-            expandedHelperText: "这 3 个常用角度免费可用；更多生活场景会员继续展开。",
+            expandedHelperText: "这 3 个常用角度免费可用；更多生活场景会员继续解锁。",
+            collapsedToggleTitle: "展开 3 个免费角度",
+            expandedToggleTitle: "收起免费角度",
+            collapsedToggleSubtitle: "常用先体验",
+            expandedToggleSubtitle: "继续简洁记账",
             onQuickGenerate: {},
             onToggleExpanded: {
                 dismissKeyboard()
-                withAnimation(.easeInOut(duration: 0.2)) { scenePackExpanded.toggle() }
+                withAnimation(.easeInOut(duration: 0.2)) { freeScenePackExpanded.toggle() }
             },
             onToggleMore: {},
             onSelectPack: { pack in
@@ -1838,7 +1844,7 @@ struct RecordView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
-                        Text("生活场景会让备注更像你")
+                        Text("更多场景会让备注更像你")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(recordInk.opacity(0.9))
                         Text("会员")
@@ -1849,7 +1855,7 @@ struct RecordView: View {
                             .background(Capsule(style: .continuous).fill(AppColors.lockGold.opacity(0.9)))
                     }
 
-                    Text("通勤、吃饭、日用已经能直接体验。会员会继续打开健康、购物、旅行、社交这些更细的生活语境。")
+                    Text("通勤、吃饭、日用已经能直接体验。会员继续解锁健康、购物、旅行、社交这些更细的生活语境。")
                         .font(.system(size: 12))
                         .lineSpacing(3)
                         .foregroundStyle(AppColors.subtext.opacity(0.88))
@@ -1868,7 +1874,7 @@ struct RecordView: View {
                 onShowMemberPricing?()
             } label: {
                 HStack(spacing: 6) {
-                    Text("看看更多生活场景")
+                    Text("解锁更多生活场景")
                         .font(.system(size: 14, weight: .semibold))
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .bold))

@@ -11,6 +11,10 @@ struct ScenePackSectionView: View {
     var showsQuickGenerate: Bool = true
     var collapsedHelperText: String?
     var expandedHelperText: String?
+    var collapsedToggleTitle: String?
+    var expandedToggleTitle: String?
+    var collapsedToggleSubtitle: String?
+    var expandedToggleSubtitle: String?
     let onQuickGenerate: () -> Void
     let onToggleExpanded: () -> Void
     let onToggleMore: () -> Void
@@ -92,8 +96,12 @@ struct ScenePackSectionView: View {
     }
 
     private var toggleButton: some View {
-        let title = isExpanded ? "收起场景角度" : "推荐 3 个场景角度"
-        let subtitle = isExpanded ? "回到简洁输入" : "常用靠前，少用会收起"
+        let title = isExpanded
+            ? (expandedToggleTitle ?? "收起场景角度")
+            : (collapsedToggleTitle ?? "推荐 3 个场景角度")
+        let subtitle = isExpanded
+            ? (expandedToggleSubtitle ?? "回到简洁输入")
+            : (collapsedToggleSubtitle ?? "常用靠前，少用会收起")
         return Button(action: onToggleExpanded) {
             HStack {
                 Text(title)
