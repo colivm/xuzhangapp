@@ -534,7 +534,7 @@ struct StatsWebView: View {
 
     private var traceLifeInsight: LifeInsightResult {
         _ = lifeInsightRefreshID
-        lifeInsightService.buildTraceInsight(
+        return lifeInsightService.buildTraceInsight(
             items: traceClueItems,
             periodLabel: traceInsightPeriodLabel
         )
