@@ -59,7 +59,8 @@ struct InsightWebView: View {
 
             if showWeeklySharePrivacyConfirm {
                 weeklySharePrivacyOverlay
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .transition(.opacity)
+                    .zIndex(30)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: monthlyTrialModal?.id)
@@ -1215,7 +1216,7 @@ struct InsightWebView: View {
     private var weeklySharePrivacyOverlay: some View {
         ZStack {
             Color(red: 28/255, green: 36/255, blue: 42/255)
-                .opacity(0.24)
+                .opacity(0.38)
                 .ignoresSafeArea()
                 .onTapGesture {
                     showWeeklySharePrivacyConfirm = false
@@ -1299,9 +1300,9 @@ struct InsightWebView: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.84),
-                        AppColors.paperWarm.opacity(0.34),
-                        AppColors.paperMist.opacity(0.38)
+                        Color.white.opacity(0.96),
+                        AppColors.paperWarm.opacity(0.72),
+                        AppColors.paperMist.opacity(0.70)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -1309,7 +1310,7 @@ struct InsightWebView: View {
             )
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(.ultraThinMaterial)
+                    .fill(.regularMaterial)
             )
     }
 
