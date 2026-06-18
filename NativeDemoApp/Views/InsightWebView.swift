@@ -8,6 +8,7 @@ struct InsightWebView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     var onNavigateSettings: (() -> Void)? = nil
     var onShowMemberPricing: (() -> Void)? = nil
+    var onOpenAppearanceSettings: (() -> Void)? = nil
     @State private var monthlyInsightGenerated = false
     @State private var showAdvancedInsight = false
     @State private var monthlyTrialUsed = UserDefaults.standard.integer(forKey: "monthly_trial_used_v1")
@@ -16,6 +17,7 @@ struct InsightWebView: View {
     @State private var monthlyTrialModal: MonthlyTrialModal?
     @State private var isSavingWeeklyShareCard = false
     @State private var weeklyShareSaveMessage: String?
+    @State private var showWeeklyShareThemeNudge = false
     @State private var isTodayInsightExpanded = false
     @State private var showMonthlyInsightSheet = false
     @State private var showTodayInsightSheet = false
@@ -128,6 +130,33 @@ struct InsightWebView: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
+    @ViewBuilder
+    private var weeklyShareThemeNudge: some View {
+        if showWeeklyShareThemeNudge {
+            Button {
+                showWeeklyShareThemeNudge = false
+                onOpenAppearanceSettings?()
+            } label: {
+                Text("用典藏主题导出分享图 →")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.accentDark.opacity(0.82))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 2)
+        }
+    }
+
+    private var shouldShowWeeklyShareThemeNudge: Bool {
+        guard settingsViewModel.memberTier.lowercased() != "lifetime" else { return false }
+        return !Self.permanentThemeIds.contains(settingsViewModel.colorThemeId)
+    }
+
+    private static let permanentThemeIds: Set<String> = [
+        "lifetime_archive_gold",
+        "lifetime_gilded_circuit",
+        "lifetime_neon_cathedral"
+    ]
+
     private var insightJournalCard: some View {
         let weeklyBlocks = homeViewModel.localWeeklyInsightBlocks()
         return VStack(alignment: .leading, spacing: 13) {
@@ -162,6 +191,7 @@ struct InsightWebView: View {
                 Text(weeklyShareSaveMessage)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.subtext)
+                weeklyShareThemeNudge
             }
         }
         .padding(.leading, 4)
@@ -681,6 +711,7 @@ struct InsightWebView: View {
                 Text(weeklyShareSaveMessage)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.subtext)
+                weeklyShareThemeNudge
             }
         }
         .glassPanel(radius: 24, padding: 20)
@@ -2471,12 +2502,15 @@ struct InsightWebView: View {
         guard let img = card.snapshot() else { return }
         isSavingWeeklyShareCard = true
         weeklyShareSaveMessage = nil
+        showWeeklyShareThemeNudge = false
         Task {
             do {
                 try await PhotoLibrarySaveService.shared.saveImageToLibrary(img)
                 weeklyShareSaveMessage = "已保存到相册。"
+                showWeeklyShareThemeNudge = shouldShowWeeklyShareThemeNudge
             } catch {
                 weeklyShareSaveMessage = (error as? LocalizedError)?.errorDescription ?? "暂时没保存成功。请检查相册权限后再试。"
+                showWeeklyShareThemeNudge = false
             }
             isSavingWeeklyShareCard = false
         }

@@ -190,8 +190,10 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .today
     @State private var showMemberPricing = false
+    @State private var pricingHighlightPlanId: String?
     @State private var showMinimalOnboarding = false
     @State private var statsTraceOpenRequestID: UUID?
+    @State private var settingsAppearanceOpenRequestID: UUID?
     @State private var lastMemberStatusRefreshAt: Date?
 
     enum AppTab: Int, CaseIterable, Identifiable {
@@ -245,8 +247,11 @@ struct ContentView: View {
 
         }
         .sheet(isPresented: $showMemberPricing) {
-            MemberPricingView()
+            MemberPricingView(highlightPlanId: pricingHighlightPlanId)
                 .environmentObject(settingsViewModel)
+                .onDisappear {
+                    pricingHighlightPlanId = nil
+                }
         }
         .sheet(isPresented: $showMinimalOnboarding) {
             MinimalOnboardingSheet(
@@ -272,6 +277,7 @@ struct ContentView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
+            settingsViewModel.refreshThemeAccess(showsMessage: true)
             Task {
                 await refreshAccountAndMemberStatusIfNeeded(force: true)
             }
@@ -370,7 +376,7 @@ struct ContentView: View {
                              selectedTab = .stats
                          },
                          onNavigateSettings: { selectedTab = .settings },
-                         onShowMemberPricing: { showMemberPricing = true })
+                         onShowMemberPricing: { showMemberPricingSheet() })
                     .transition(.asymmetric(
                         insertion: .opacity.combined(with: .move(edge: .leading).combined(with: .offset(y: 8))),
                         removal: .opacity.combined(with: .offset(y: 8))
@@ -378,7 +384,7 @@ struct ContentView: View {
             case .record:
                 RecordView(
                     onSaved: { selectedTab = .today },
-                    onShowMemberPricing: { showMemberPricing = true }
+                    onShowMemberPricing: { showMemberPricingSheet() }
                 )
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .offset(y: 8)),
@@ -387,7 +393,7 @@ struct ContentView: View {
             case .stats:
                 StatsWebView(
                     openTraceRequestID: statsTraceOpenRequestID,
-                    onShowMemberPricing: { showMemberPricing = true },
+                    onShowMemberPricing: { showMemberPricingSheet() },
                     onOpenInsight: { selectedTab = .insight }
                 )
                     .transition(.asymmetric(
@@ -395,8 +401,14 @@ struct ContentView: View {
                         removal: .opacity.combined(with: .offset(y: 8))
                     ))
             case .insight:
-                InsightWebView(onNavigateSettings: { selectedTab = .settings },
-                               onShowMemberPricing: { showMemberPricing = true })
+                InsightWebView(
+                    onNavigateSettings: { selectedTab = .settings },
+                    onShowMemberPricing: { showMemberPricingSheet() },
+                    onOpenAppearanceSettings: {
+                        settingsAppearanceOpenRequestID = UUID()
+                        selectedTab = .settings
+                    }
+                )
                     .transition(.asymmetric(
                         insertion: .opacity.combined(with: .offset(y: 8)),
                         removal: .opacity.combined(with: .offset(y: 8))
@@ -404,6 +416,8 @@ struct ContentView: View {
             case .settings:
                 SettingsView(
                     showMemberPricing: $showMemberPricing,
+                    pricingHighlightPlanId: $pricingHighlightPlanId,
+                    openAppearanceRequestID: settingsAppearanceOpenRequestID,
                     onShowMinimalOnboarding: {
                         showMinimalOnboarding = true
                     }
@@ -416,6 +430,11 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.32), value: selectedTab)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func showMemberPricingSheet(highlightPlanId: String? = nil) {
+        pricingHighlightPlanId = highlightPlanId
+        showMemberPricing = true
     }
 
     // MARK: - Tab Bar

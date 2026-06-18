@@ -5,6 +5,8 @@ struct SettingsView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @Binding var showMemberPricing: Bool
+    @Binding var pricingHighlightPlanId: String?
+    var openAppearanceRequestID: UUID?
     var onShowMinimalOnboarding: () -> Void = {}
     @State private var showAccountSheet = false
     @State private var activeSettingsSheet: SettingsSheet?
@@ -17,7 +19,12 @@ struct SettingsView: View {
     @State private var showLoginCloudSyncMergeConfirm = false
     @State private var confirmationHost: SettingsConfirmationHost = .main
     @State private var isAccountDangerExpanded = false
-    @State private var expandedThemeFamilies: Set<String> = ["cyber", "mood_weather"]
+    @State private var expandedThemeFamily: String?
+    @State private var vaultHelperIndex = 0
+    @State private var lifetimePreviewTheme: ThemeDefinition?
+    @State private var lifetimePreviewDismissTask: Task<Void, Never>?
+    @State private var lifetimeTrialOfferTheme: ThemeDefinition?
+    @State private var handledAppearanceRequestID: UUID?
     @State private var showNicknameEditor = false
     @FocusState private var focusedField: SettingsField?
     private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
@@ -90,6 +97,12 @@ struct SettingsView: View {
         hasPaidMemberTier && !hasMemberAccess
     }
 
+    private let vaultHelperLines = [
+        "多数永久会员从「档案金章」开始当日常皮。",
+        "爱看构成和节奏，试试「金线电路」。",
+        "晚上复盘，「琥珀礼拜堂」更护眼。"
+    ]
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -108,6 +121,8 @@ struct SettingsView: View {
         .onAppear {
             draftDisplayName = settingsViewModel.displayName
             draftPetNickname = settingsViewModel.petNickname
+            settingsViewModel.refreshThemeAccess(showsMessage: true)
+            openAppearanceSheetIfNeeded(openAppearanceRequestID)
             Task {
                 await settingsViewModel.refreshCloudAccountProfile()
                 await settingsViewModel.refreshMemberFromLocalEntitlements()
@@ -161,8 +176,27 @@ struct SettingsView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
+        .onChange(of: openAppearanceRequestID) { _, requestID in
+            openAppearanceSheetIfNeeded(requestID)
+        }
         .overlay {
-            settingsConfirmationOverlay(host: .main)
+            ZStack {
+                settingsConfirmationOverlay(host: .main)
+                lifetimeThemePreviewOverlay
+            }
+        }
+        .alert(item: $lifetimeTrialOfferTheme) { theme in
+            Alert(
+                title: Text("试一天典藏皮"),
+                message: Text("这次不会改变会员状态，只临时试用 24 小时。试用结束后会回到默认主题。"),
+                primaryButton: .default(Text("开始试用")) {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    _ = settingsViewModel.startLifetimeThemeTrial(themeId: theme.id)
+                },
+                secondaryButton: .cancel(Text("以后再说")) {
+                    openMemberPricing(highlightPlanId: "lifetime")
+                }
+            )
         }
     }
 
@@ -183,10 +217,23 @@ struct SettingsView: View {
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(AppColors.text)
                             .lineLimit(1)
-                        Text(identityCardMeta)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(settingsInkAccent.opacity(0.92))
-                            .lineLimit(1)
+                        HStack(spacing: 6) {
+                            Text(identityCardMeta)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(settingsInkAccent.opacity(0.92))
+                                .lineLimit(1)
+                            if settingsViewModel.memberTier.lowercased() == "lifetime" {
+                                Text("典藏")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(Color(hex: "A68445"))
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(
+                                        Capsule(style: .continuous)
+                                            .fill(AppColors.lockGold.opacity(0.12))
+                                    )
+                            }
+                        }
                         Text(settingsViewModel.hasCloudSession ? "云端备份已准备好，照常记就好。" : "不用登录也能记；换机备份时再放进云端。")
                             .font(.system(size: 12))
                             .foregroundStyle(AppColors.text.opacity(0.82))
@@ -575,6 +622,51 @@ struct SettingsView: View {
         }
     }
 
+    private func openMemberPricing(highlightPlanId: String? = nil) {
+        pricingHighlightPlanId = highlightPlanId
+        showMemberPricing = true
+    }
+
+    private func openAppearanceSheetIfNeeded(_ requestID: UUID?) {
+        guard let requestID, handledAppearanceRequestID != requestID else { return }
+        handledAppearanceRequestID = requestID
+        activeSettingsSheet = .appearance
+    }
+
+    private func handleLockedThemeTap(_ theme: ThemeDefinition, style: ThemeSwatchStyle) {
+        guard style == .lifetime else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                openMemberPricing()
+            }
+            return
+        }
+        if settingsViewModel.canStartLifetimeThemeTrial(for: theme.id) {
+            lifetimeTrialOfferTheme = theme
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                openMemberPricing(highlightPlanId: "lifetime")
+            }
+        }
+    }
+
+    private func showLifetimeThemePreview(_ theme: ThemeDefinition) {
+        lifetimePreviewDismissTask?.cancel()
+        lifetimePreviewTheme = theme
+        lifetimePreviewDismissTask = Task {
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                lifetimePreviewTheme = nil
+            }
+        }
+    }
+
+    private func dismissLifetimeThemePreview() {
+        lifetimePreviewDismissTask?.cancel()
+        lifetimePreviewDismissTask = nil
+        lifetimePreviewTheme = nil
+    }
+
     private var settingsInkAccent: Color {
         AppColors.accentDark
     }
@@ -757,7 +849,7 @@ struct SettingsView: View {
     private func settingsConfirmationOverlay(host: SettingsConfirmationHost) -> some View {
         if let kind = activeSettingsConfirmation(for: host) {
             ZStack {
-                Color(red: 28/255, green: 36/255, blue: 42/255)
+                Color(hex: "1C242A")
                     .opacity(0.24)
                     .ignoresSafeArea()
                     .onTapGesture {
@@ -808,7 +900,7 @@ struct SettingsView: View {
         .frame(maxWidth: 370)
         .background(settingsConfirmationCardBackground)
         .overlay(settingsConfirmationCardBorder)
-        .shadow(color: Color(red: 47/255, green: 67/255, blue: 58/255).opacity(0.18), radius: 24, x: 0, y: 12)
+        .shadow(color: Color(hex: "2F433A").opacity(0.18), radius: 24, x: 0, y: 12)
         .padding(.horizontal, 24)
     }
 
@@ -821,7 +913,7 @@ struct SettingsView: View {
                 "icloud.slash",
                 "删除云端账本",
                 "只删除服务器上的同步账本，本机记录仍保留。为避免重新上传，云端同步会同时关闭。",
-                Color(red: 0.78, green: 0.28, blue: 0.24),
+                Color(hex: "C7473D"),
                 [
                     SettingsConfirmationAction(id: "cancel", title: "取消", style: .secondary) {
                         dismissSettingsConfirmation(.deleteCloudLedger)
@@ -871,7 +963,7 @@ struct SettingsView: View {
                 "trash",
                 "清空所有记录",
                 clearAllRecordsConfirmMessage,
-                Color(red: 0.78, green: 0.28, blue: 0.24),
+                Color(hex: "C7473D"),
                 [
                     SettingsConfirmationAction(id: "cancel", title: "取消", style: .secondary) {
                         dismissSettingsConfirmation(.clearAllRecords)
@@ -887,7 +979,7 @@ struct SettingsView: View {
                 "person.crop.circle.badge.xmark",
                 "注销账号",
                 "这会退出登录，并清空服务器上的账号、云端账本和会员绑定状态。Apple 订阅不会自动取消，之后可用同一 Apple ID 登录后恢复购买。",
-                Color(red: 0.78, green: 0.28, blue: 0.24),
+                Color(hex: "C7473D"),
                 [
                     SettingsConfirmationAction(id: "keepLocal", title: "保留本机账本并注销", style: .destructive) {
                         dismissSettingsConfirmation(.deleteAccount)
@@ -961,8 +1053,8 @@ struct SettingsView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 0.84, green: 0.34, blue: 0.30),
-                            Color(red: 0.68, green: 0.22, blue: 0.20)
+                            Color(hex: "D6574D"),
+                            Color(hex: "AD3833")
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -1218,71 +1310,16 @@ struct SettingsView: View {
     // MARK: - Appearance
 
     private var appearanceSheetContent: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("明暗")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                webAppearanceButton("跟随系统", isActive: settingsViewModel.appearance == .system) {
-                    settingsViewModel.appearance = .system
-                }
-                HStack(spacing: 6) {
-                    webAppearanceButton("浅色", isActive: settingsViewModel.appearance == .light) {
-                        settingsViewModel.appearance = .light
-                    }
-                    webAppearanceButton("深色", isActive: settingsViewModel.appearance == .dark) {
-                        settingsViewModel.appearance = .dark
-                    }
-                }
-                settingHelper("跟随系统时，明暗会随 iOS 设置切换。")
-            }
+        VStack(alignment: .leading, spacing: 22) {
+            appearanceModeSection
 
             Divider().overlay(AppColors.line.opacity(0.7))
 
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("色彩主题")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(AppColors.text)
-                        Text("只改界面颜色，不影响账本数据。")
-                            .font(.system(size: 12))
-                            .foregroundStyle(AppColors.subtext)
-                    }
-                    Spacer()
-                    Text("当前：\(settingsViewModel.currentThemeName)")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(AppColors.tertiary)
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("日常（免费）")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppColors.text.opacity(0.88))
-                    themeSwatchGrid(themes: freeThemes, columns: 3)
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 6) {
-                        Text("会员主题")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(AppColors.text.opacity(0.88))
-                        if !hasMemberAccess {
-                            Image(systemName: "lock.fill")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(AppColors.lockGold)
-                        }
-                    }
-                    Text(hasMemberAccess ? "已解锁标准主题库；永久会员可用限定主题。" : "会员解锁 25+ 款；永久会员再享 3 款限定。")
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppColors.subtext)
-
-                    VStack(spacing: 8) {
-                        ForEach(themeFamilySections, id: \.key) { section in
-                            themeFamilyDisclosure(section)
-                        }
-                    }
-                }
+            VStack(alignment: .leading, spacing: 20) {
+                themeSectionHeader
+                dailyThemeSection
+                memberThemeSection
+                lifetimeThemeVault
 
                 if let msg = settingsViewModel.themeMessage {
                     Text(msg)
@@ -1311,15 +1348,305 @@ struct SettingsView: View {
         }
     }
 
+    private enum ThemeSwatchStyle {
+        case daily
+        case standard
+        case lifetime
+    }
+
+    private var appearanceModeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("明暗")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(AppColors.text)
+
+            HStack(spacing: 6) {
+                appearanceModePill("跟随", symbol: "circle.lefthalf.filled", isActive: settingsViewModel.appearance == .system) {
+                    settingsViewModel.appearance = .system
+                }
+                appearanceModePill("浅色", symbol: "sun.max", isActive: settingsViewModel.appearance == .light) {
+                    settingsViewModel.appearance = .light
+                }
+                appearanceModePill("深色", symbol: "moon", isActive: settingsViewModel.appearance == .dark) {
+                    settingsViewModel.appearance = .dark
+                }
+            }
+            .padding(4)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(AppColors.surfaceMuted.opacity(0.74))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(AppColors.line.opacity(0.52), lineWidth: 1)
+            )
+
+            settingHelper("跟随系统时，明暗会随 iOS 设置切换。")
+        }
+    }
+
+    private func appearanceModePill(
+        _ title: String,
+        symbol: String,
+        isActive: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: symbol)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 13, weight: isActive ? .semibold : .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(isActive ? AppColors.text : AppColors.subtext)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isActive ? AppColors.panelStrong.opacity(0.88) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(isActive ? AppColors.accent.opacity(0.22) : Color.clear, lineWidth: 1)
+            )
+            .shadow(color: isActive ? AppColors.accent.opacity(0.12) : .clear, radius: 8, y: 3)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var themeSectionHeader: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("色彩主题")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(AppColors.text)
+            Text("只改界面颜色，不影响账本数据。")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext)
+            Text("当前：\(settingsViewModel.currentThemeName)")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.accentDark.opacity(0.68))
+            if settingsViewModel.isLifetimeThemeTrialActive {
+                Text("试用中 · 24 小时后自动回到默认主题")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color(hex: "8B6F38"))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule(style: .continuous).fill(AppColors.lockGold.opacity(0.12)))
+            }
+        }
+    }
+
+    private var dailyThemeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("日常")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                Spacer()
+                Text("免费")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.tertiary)
+            }
+            themeSwatchGrid(themes: freeThemes, columns: 3, style: .daily)
+        }
+    }
+
+    private var memberThemeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Text("会员主题")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                if !hasMemberAccess {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(AppColors.lockGold)
+                }
+            }
+            Text("标准主题库；永久会员另有典藏款。")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext)
+
+            VStack(spacing: 6) {
+                ForEach(themeFamilySections, id: \.key) { section in
+                    themeFamilyDisclosure(section)
+                }
+            }
+        }
+    }
+
+    private var lifetimeThemeVault: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("永久限定")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                Spacer()
+                Text(settingsViewModel.memberTier.lowercased() == "lifetime" ? "已解锁 ✓" : "✦ 永久会员")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color(hex: "8B6F38"))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(Capsule(style: .continuous).fill(AppColors.lockGold.opacity(0.12)))
+            }
+
+            Text("三款典藏皮肤，随永久会员账号保留，不可转让。")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext)
+
+            Text(vaultHelperLines[vaultHelperIndex % vaultHelperLines.count])
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext.opacity(0.86))
+                .transition(.opacity)
+
+            themeSwatchGrid(themes: lifetimeThemes, columns: 3, style: .lifetime)
+
+            if settingsViewModel.memberTier.lowercased() != "lifetime" {
+                Button {
+                    openMemberPricing(highlightPlanId: "lifetime")
+                } label: {
+                    Text("了解永久会员 →")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color(hex: "8B6F38"))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, -2)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(hex: "F5F0E8"),
+                            Color(hex: "EEECF2")
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(AppColors.lockGold.opacity(0.25), lineWidth: 1)
+        )
+        .padding(.vertical, 4)
+        .onReceive(Timer.publish(every: 6.5, on: .main, in: .common).autoconnect()) { _ in
+            withAnimation(.easeInOut(duration: 0.24)) {
+                vaultHelperIndex = (vaultHelperIndex + 1) % vaultHelperLines.count
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var lifetimeThemePreviewOverlay: some View {
+        if let theme = lifetimePreviewTheme {
+            let background = lifetimePreviewBackground(for: theme) ?? AppColors.bg
+            let accent = lifetimePreviewAccent(for: theme) ?? AppColors.lockGold
+            ZStack {
+                Color.black.opacity(0.16)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        dismissLifetimeThemePreview()
+                    }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Text("典藏预览")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(AppColors.subtext)
+                        Spacer()
+                        Button {
+                            dismissLifetimeThemePreview()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(AppColors.subtext)
+                                .frame(width: 28, height: 28)
+                                .background(Circle().fill(AppColors.panelStrong.opacity(0.82)))
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [background, AppColors.paperWarm.opacity(0.88)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(height: 180)
+                        .overlay(alignment: .topLeading) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(theme.displayName)
+                                    .font(.system(size: 22, weight: .bold))
+                                    .foregroundStyle(AppColors.text)
+                                Text(lifetimeThemeCaption(theme))
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(accent)
+                            }
+                            .padding(18)
+                        }
+                        .overlay(alignment: .bottomTrailing) {
+                            HStack(spacing: 6) {
+                                Circle().fill(accent).frame(width: 20, height: 20)
+                                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                                    .fill(AppColors.panelStrong.opacity(0.78))
+                                    .frame(width: 74, height: 10)
+                            }
+                            .padding(18)
+                        }
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [AppColors.lockGold.opacity(0.55), Color(hex: "A68445").opacity(0.55)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1.2
+                                )
+                        )
+
+                    Text("长按只是预览，不会写入当前主题。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext)
+                }
+                .padding(18)
+                .frame(maxWidth: 360)
+                .background(
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .fill(AppColors.panel.opacity(0.96))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .stroke(AppColors.line.opacity(0.62), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.16), radius: 26, y: 12)
+                .padding(.horizontal, 24)
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
+            .zIndex(80)
+        }
+    }
+
     private var freeThemes: [ThemeDefinition] {
         ThemeResolver.shared.themes.filter { $0.tier == .free }
     }
 
+    private var lifetimeThemes: [ThemeDefinition] {
+        ThemeResolver.shared.themes.filter { $0.tier == .lifetime }
+    }
+
     private var themeFamilySections: [(key: String, title: String, themes: [ThemeDefinition])] {
-        let paidThemes = ThemeResolver.shared.themes.filter { $0.tier != .free }
-        let preferredOrder = ["cyber", "mood_weather", "paperverse", "bio", "orbital", "brutal", "lifetime"]
+        let standardThemes = ThemeResolver.shared.themes.filter { $0.tier == .standard }
+        let preferredOrder = ["cyber", "mood_weather", "paperverse", "bio", "orbital", "brutal"]
         return preferredOrder.compactMap { family in
-            let themes = paidThemes.filter { $0.family == family }
+            let themes = standardThemes.filter { $0.family == family }
             guard !themes.isEmpty else { return nil }
             return (family, themeFamilyTitle(family), themes)
         }
@@ -1333,113 +1660,288 @@ struct SettingsView: View {
         case "bio": return "自然演算"
         case "orbital": return "太空通勤"
         case "brutal": return "工业柔光"
-        case "lifetime": return "永久限定"
         default: return family
         }
+    }
+
+    private func themeFamilySubtitle(_ themes: [ThemeDefinition]) -> String {
+        themes.prefix(3).map(\.displayName).joined(separator: "、")
     }
 
     private func themeFamilyDisclosure(
         _ section: (key: String, title: String, themes: [ThemeDefinition])
     ) -> some View {
-        DisclosureGroup(
-            isExpanded: Binding(
-                get: { expandedThemeFamilies.contains(section.key) },
-                set: { isExpanded in
-                    if isExpanded {
-                        expandedThemeFamilies.insert(section.key)
-                    } else {
-                        expandedThemeFamilies.remove(section.key)
-                    }
+        let isExpanded = expandedThemeFamily == section.key
+        return VStack(spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    expandedThemeFamily = isExpanded ? nil : section.key
                 }
-            )
-        ) {
-            themeSwatchGrid(themes: section.themes, columns: 2)
-                .padding(.top, 8)
-        } label: {
-            HStack {
-                Text("\(section.title)（\(section.themes.count)）")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                Spacer()
+            } label: {
+                HStack(spacing: 12) {
+                    themeFamilyStripe(section.key)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(section.title)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(AppColors.text)
+                        Text(themeFamilySubtitle(section.themes))
+                            .font(.system(size: 11))
+                            .foregroundStyle(AppColors.tertiary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    Text("\(section.themes.count) 款")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.tertiary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppColors.accent)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .frame(height: 56)
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, 8)
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                Divider()
+                    .overlay(AppColors.line.opacity(0.7))
+                    .padding(.leading, 12)
+                themeSwatchGrid(themes: section.themes, columns: 2, style: .standard)
+                    .padding(.leading, 12)
+                    .padding(.top, 12)
+                    .padding(.bottom, 6)
+                    .transition(.opacity)
+            }
         }
         .padding(.horizontal, 12)
-        .background(AppColors.surfaceMuted.opacity(0.72), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(AppColors.surfaceMuted.opacity(0.62))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(AppColors.line.opacity(0.38), lineWidth: 1)
+        )
     }
 
-    private func themeSwatchGrid(themes: [ThemeDefinition], columns: Int) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: columns), spacing: 12) {
+    private func themeSwatchGrid(themes: [ThemeDefinition], columns: Int, style: ThemeSwatchStyle) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: columns), spacing: 14) {
             ForEach(themes) { theme in
-                themeSwatch(theme)
+                themeSwatch(theme, style: style)
             }
         }
     }
 
-    private func themeSwatch(_ theme: ThemeDefinition) -> some View {
+    private func themeSwatch(_ theme: ThemeDefinition, style: ThemeSwatchStyle) -> some View {
         let isSelected = settingsViewModel.colorThemeId == theme.id
         let isUnlocked = settingsViewModel.isThemeUnlocked(theme.id)
         let tokens = theme.modes.light ?? theme.modes.dark
-        let background = tokens?.background.color ?? AppColors.bg
-        let accent = tokens?.accent.color ?? AppColors.accent
+        let background = lifetimePreviewBackground(for: theme) ?? tokens?.background.color ?? AppColors.bg
+        let warm = tokens?.surfaceWarm.color ?? AppColors.paperWarm
+        let accent = lifetimePreviewAccent(for: theme) ?? tokens?.accent.color ?? AppColors.accent
         let surface = tokens?.surface.color ?? AppColors.panel
+        let size: CGFloat = style == .lifetime ? 64 : 56
+        let radius: CGFloat = style == .lifetime ? 16 : 14
+        let nameWeight: Font.Weight = style == .lifetime ? .semibold : .medium
         return Button {
             if settingsViewModel.setTheme(theme.id) {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             } else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    showMemberPricing = true
-                }
+                handleLockedThemeTap(theme, style: style)
             }
         } label: {
-            VStack(spacing: 7) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(background)
-                        .frame(width: 56, height: 56)
+            VStack(spacing: style == .lifetime ? 8 : 7) {
+                ZStack(alignment: .bottom) {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [background, warm],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: size, height: size)
                         .overlay(alignment: .topTrailing) {
                             Circle()
                                 .fill(accent)
-                                .frame(width: 18, height: 18)
+                                .frame(width: style == .lifetime ? 18 : 16, height: style == .lifetime ? 18 : 16)
                                 .padding(7)
                         }
                         .overlay(alignment: .bottom) {
                             RoundedRectangle(cornerRadius: 999, style: .continuous)
                                 .fill(surface.opacity(0.86))
-                                .frame(width: 38, height: 7)
-                                .padding(.bottom, 9)
+                                .frame(width: style == .lifetime ? 40 : 34, height: style == .lifetime ? 7 : 6)
+                                .padding(.bottom, style == .lifetime ? 10 : 9)
                         }
-                        .opacity(isUnlocked ? 1 : 0.55)
-                        .overlay {
+                        .opacity(isUnlocked ? 1 : 0.92)
+                        .overlay(alignment: style == .lifetime ? .topTrailing : .bottomLeading) {
                             if !isUnlocked {
                                 Image(systemName: "lock.fill")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(AppColors.lockGold)
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(style == .lifetime ? Color(hex: "8B6F38") : AppColors.lockGold)
+                                    .frame(width: 18, height: 18)
+                                    .background(
+                                        Circle()
+                                            .fill(style == .lifetime ? AppColors.lockGold.opacity(0.20) : AppColors.panelStrong.opacity(0.86))
+                                    )
+                                    .padding(6)
                             }
                         }
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(accent)
-                            .background(Circle().fill(AppColors.bg))
-                            .offset(x: 22, y: -22)
+                            .font(.system(size: style == .lifetime ? 17 : 16, weight: .semibold))
+                            .foregroundStyle(style == .lifetime ? Color(hex: "A68445") : accent)
+                            .background(Circle().fill(AppColors.panelStrong))
+                            .offset(x: size / 2 - 6, y: -size / 2 + 8)
+                    }
+                    if isSelected, style == .daily {
+                        RoundedRectangle(cornerRadius: 999, style: .continuous)
+                            .fill(accent)
+                            .frame(width: size - 14, height: 2)
+                            .padding(.bottom, -5)
                     }
                 }
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(isSelected ? accent : AppColors.line, lineWidth: isSelected ? 2 : 1)
+                    swatchBorder(style: style, isSelected: isSelected, accent: accent, radius: radius)
                 )
+                .shadow(color: isSelected ? accent.opacity(0.14) : Color.black.opacity(0.025), radius: isSelected ? 9 : 5, y: 4)
 
-                Text(theme.displayName)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppColors.text)
+                swatchNameText(theme, style: style, accent: accent)
+                    .font(.system(size: 11, weight: nameWeight))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.78)
+
+                if style == .lifetime {
+                    Text(lifetimeThemeCaption(theme))
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(AppColors.tertiary)
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
+        .onLongPressGesture(minimumDuration: 0.5) {
+            guard style == .lifetime else { return }
+            showLifetimeThemePreview(theme)
+        }
         .accessibilityLabel(theme.displayName)
+    }
+
+    @ViewBuilder
+    private func swatchBorder(
+        style: ThemeSwatchStyle,
+        isSelected: Bool,
+        accent: Color,
+        radius: CGFloat
+    ) -> some View {
+        if style == .lifetime {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            isSelected ? Color(hex: "A68445") : Color(hex: "C9A961"),
+                            Color(hex: "A68445")
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: isSelected ? 2 : 1.5
+                )
+        } else {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .stroke(isSelected ? accent.opacity(0.88) : AppColors.line.opacity(0.48), lineWidth: isSelected ? 2 : 1)
+        }
+    }
+
+    private func swatchNameText(_ theme: ThemeDefinition, style: ThemeSwatchStyle, accent: Color) -> Text {
+        guard style == .lifetime, theme.displayName.hasPrefix("永享·") else {
+            return Text(theme.displayName).foregroundColor(AppColors.text)
+        }
+        let suffix = String(theme.displayName.dropFirst("永享·".count))
+        return Text("永享·").foregroundColor(accent) + Text(suffix).foregroundColor(AppColors.text)
+    }
+
+    private func lifetimeThemeCaption(_ theme: ThemeDefinition) -> String {
+        switch theme.id {
+        case "lifetime_gilded_circuit": return "结构感"
+        case "lifetime_archive_gold": return "最耐用"
+        case "lifetime_neon_cathedral": return "夜间复盘"
+        default: return "典藏款"
+        }
+    }
+
+    private func lifetimePreviewBackground(for theme: ThemeDefinition) -> Color? {
+        switch theme.id {
+        case "lifetime_gilded_circuit": return Color(hex: "EEF1F4")
+        case "lifetime_archive_gold": return Color(hex: "F2EBE0")
+        case "lifetime_neon_cathedral": return Color(hex: "100E1A")
+        default: return nil
+        }
+    }
+
+    private func lifetimePreviewAccent(for theme: ThemeDefinition) -> Color? {
+        switch theme.id {
+        case "lifetime_gilded_circuit": return Color(hex: "B8985C")
+        case "lifetime_archive_gold": return Color(hex: "A68445")
+        case "lifetime_neon_cathedral": return Color(hex: "D4A574")
+        default: return nil
+        }
+    }
+
+    private func themeFamilyStripe(_ family: String) -> some View {
+        HStack(spacing: 3) {
+            ForEach(Array(themeFamilyStripeColors(family).enumerated()), id: \.offset) { _, color in
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(color)
+                    .frame(width: 3, height: 20)
+            }
+        }
+        .frame(width: 17, alignment: .leading)
+    }
+
+    private func themeFamilyStripeColors(_ family: String) -> [Color] {
+        switch family {
+        case "cyber":
+            return [
+                Color(hex: "B84888"),
+                Color(hex: "5A9858"),
+                Color(hex: "48A8B8")
+            ]
+        case "mood_weather":
+            return [
+                Color(hex: "C87848"),
+                Color(hex: "88A8B8"),
+                Color(hex: "58A888")
+            ]
+        case "paperverse":
+            return [
+                Color(hex: "B84848"),
+                Color(hex: "486878"),
+                Color(hex: "9090A8")
+            ]
+        case "bio":
+            return [
+                Color(hex: "6A9870"),
+                Color(hex: "C88878"),
+                Color(hex: "78B068")
+            ]
+        case "orbital":
+            return [
+                Color(hex: "D88858"),
+                Color(hex: "586878"),
+                Color(hex: "688898")
+            ]
+        case "brutal":
+            return [
+                Color(hex: "606060"),
+                Color(hex: "D85018"),
+                Color(hex: "6888B0")
+            ]
+        default:
+            return [AppColors.accent.opacity(0.65), AppColors.accent, AppColors.accentDark]
+        }
     }
 
     private var appearancePanel: some View {
@@ -1789,7 +2291,7 @@ struct SettingsView: View {
                     Button {
                         showAccountSheet = false
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                            showMemberPricing = true
+                            openMemberPricing()
                         }
                     } label: {
                         HStack(spacing: 6) {
@@ -1810,7 +2312,7 @@ struct SettingsView: View {
                 Button {
                     showAccountSheet = false
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        showMemberPricing = true
+                        openMemberPricing()
                     }
                 } label: {
                     HStack(spacing: 6) {
@@ -2228,7 +2730,7 @@ private extension View {
                     .stroke(AppColors.line.opacity(0.88), lineWidth: 1)
                     .allowsHitTesting(false)
             )
-            .shadow(color: Color(red: 117/255, green: 131/255, blue: 156/255).opacity(0.11), radius: 22, x: 0, y: 8)
+            .shadow(color: Color(hex: "75839C").opacity(0.11), radius: 22, x: 0, y: 8)
     }
 
     func webCardPadding() -> some View {
@@ -2241,7 +2743,7 @@ private extension View {
 
 struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
-        SettingsView(showMemberPricing: .constant(false))
+        SettingsView(showMemberPricing: .constant(false), pricingHighlightPlanId: .constant(nil), openAppearanceRequestID: nil)
             .environmentObject(SettingsViewModel())
             .environmentObject(HomeViewModel())
     }

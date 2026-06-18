@@ -33,6 +33,11 @@ final class SettingsViewModel: ObservableObject {
     /// 是否已保存访问令牌（与 Keychain 同步，用于界面展示）。
     @Published private(set) var hasCloudSession: Bool = false
     private var smsCooldownTask: Task<Void, Never>?
+    private enum ThemeTrialKeys {
+        static let usedAt = "lifetimeThemeTrialUsedAt"
+        static let themeId = "lifetimeThemeTrialThemeId"
+        static let duration: TimeInterval = 24 * 60 * 60
+    }
 
     init() {
         settings = LocalStore.loadSettings()
@@ -248,6 +253,19 @@ final class SettingsViewModel: ObservableObject {
         ThemeResolver.shared.definition(for: settings.colorThemeId)?.displayName ?? "叙账默认"
     }
 
+    var activeLifetimeThemeTrialThemeId: String? {
+        guard let themeId = UserDefaults.standard.string(forKey: ThemeTrialKeys.themeId),
+              let definition = ThemeResolver.shared.definition(for: themeId),
+              definition.tier == .lifetime else { return nil }
+        let usedAt = UserDefaults.standard.double(forKey: ThemeTrialKeys.usedAt)
+        guard usedAt > 0, Date().timeIntervalSince1970 < usedAt + ThemeTrialKeys.duration else { return nil }
+        return themeId
+    }
+
+    var isLifetimeThemeTrialActive: Bool {
+        activeLifetimeThemeTrialThemeId != nil
+    }
+
     @discardableResult
     func setTheme(_ themeId: String, showsLockedMessage: Bool = true) -> Bool {
         let resolvedId = validThemeId(themeId)
@@ -273,6 +291,11 @@ final class SettingsViewModel: ObservableObject {
         persist()
     }
 
+    func refreshThemeAccess(showsMessage: Bool = false) {
+        enforceCurrentThemeAccess(showsMessage: showsMessage)
+        persist()
+    }
+
     func isThemeUnlocked(_ themeId: String) -> Bool {
         guard let definition = ThemeResolver.shared.definition(for: themeId) else {
             return themeId == ThemeResolver.defaultThemeId
@@ -284,8 +307,31 @@ final class SettingsViewModel: ObservableObject {
         case .standard:
             return settings.hasMemberAccess
         case .lifetime:
+            if definition.tier == .lifetime, activeLifetimeThemeTrialThemeId == themeId {
+                return true
+            }
             return settings.memberTier.lowercased() == "lifetime"
         }
+    }
+
+    func canStartLifetimeThemeTrial(for themeId: String) -> Bool {
+        guard settings.memberTier.lowercased() != "lifetime",
+              UserDefaults.standard.object(forKey: ThemeTrialKeys.usedAt) == nil,
+              let definition = ThemeResolver.shared.definition(for: themeId),
+              definition.tier == .lifetime else { return false }
+        return true
+    }
+
+    @discardableResult
+    func startLifetimeThemeTrial(themeId: String) -> Bool {
+        guard canStartLifetimeThemeTrial(for: themeId) else { return false }
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: ThemeTrialKeys.usedAt)
+        UserDefaults.standard.set(themeId, forKey: ThemeTrialKeys.themeId)
+        settings.colorThemeId = themeId
+        themeMessage = "典藏主题试用中，24 小时后会自动回到默认主题。"
+        applyThemeResolver()
+        persist()
+        return true
     }
 
     func lockedThemeMessage(for themeId: String) -> String {
@@ -299,7 +345,7 @@ final class SettingsViewModel: ObservableObject {
         case .standard:
             return "开通会员解锁主题。"
         case .lifetime:
-            return "年度/永久会员专属。"
+            return "永久会员专属。"
         }
     }
 
@@ -356,7 +402,7 @@ final class SettingsViewModel: ObservableObject {
             SummaryPlaybackQuotaStore().syncLocalUsageAfterLogin(userId: session.userId)
             persist()
             if let account = try? await client.fetchAccountMe(accessToken: session.accessToken) {
-                applyCloudAccount(account)
+                applyCloudAccount(account, allowsPendingCloudSyncDecision: true)
             }
             let tier = try await client.fetchMemberMe(accessToken: session.accessToken)
             settings.memberTier = tier.tier
@@ -540,7 +586,7 @@ final class SettingsViewModel: ObservableObject {
         let client = AuthService(baseURL: backendBaseURL)
         do {
             let account = try await client.fetchAccountMe(accessToken: token)
-            applyCloudAccount(account)
+            applyCloudAccount(account, allowsPendingCloudSyncDecision: false)
         } catch {
             authMessage = "账号信息暂时没刷新成功，请稍后再试。"
         }
@@ -556,15 +602,25 @@ final class SettingsViewModel: ObservableObject {
 
     private func enforceCurrentThemeAccess(showsMessage: Bool) {
         let resolvedId = validThemeId(settings.colorThemeId)
+        let wasExpiredTrial = isExpiredLifetimeThemeTrial(themeId: resolvedId)
         let shouldFallback = resolvedId != settings.colorThemeId || !isThemeUnlocked(resolvedId)
         settings.colorThemeId = shouldFallback ? ThemeResolver.defaultThemeId : resolvedId
         if shouldFallback {
             settings.shareCardUsesAppTheme = false
             if showsMessage {
-                themeMessage = "会员主题已回到默认，开通后可以再切回来。"
+                themeMessage = wasExpiredTrial ? "典藏主题试用已结束，已回到默认主题。" : "会员主题已回到默认，开通后可以再切回来。"
             }
         }
         applyThemeResolver()
+    }
+
+    private func isExpiredLifetimeThemeTrial(themeId: String) -> Bool {
+        guard let storedId = UserDefaults.standard.string(forKey: ThemeTrialKeys.themeId),
+              storedId == themeId,
+              let definition = ThemeResolver.shared.definition(for: themeId),
+              definition.tier == .lifetime else { return false }
+        let usedAt = UserDefaults.standard.double(forKey: ThemeTrialKeys.usedAt)
+        return usedAt > 0 && Date().timeIntervalSince1970 >= usedAt + ThemeTrialKeys.duration
     }
 
     private func applyThemeResolver() {
@@ -581,7 +637,11 @@ final class SettingsViewModel: ObservableObject {
         persist()
     }
 
-    private func applyCloudAccount(_ account: AuthUserDTO, shouldApplyCloudSyncPreference: Bool = true) {
+    private func applyCloudAccount(
+        _ account: AuthUserDTO,
+        shouldApplyCloudSyncPreference: Bool = true,
+        allowsPendingCloudSyncDecision: Bool = true
+    ) {
         settings.displayName = sanitizedDisplayName(account.displayName)
         settings.cloudUserId = account.userId
         SummaryPlaybackQuotaStore().syncLocalUsageAfterLogin(userId: account.userId)
@@ -591,12 +651,18 @@ final class SettingsViewModel: ObservableObject {
         settings.memberExpiresAt = account.memberExpiresAt
         enforceCurrentThemeAccess(showsMessage: true)
         if shouldApplyCloudSyncPreference {
-            applyAccountCloudSyncPreference(account.cloudSyncEnabled)
+            applyAccountCloudSyncPreference(
+                account.cloudSyncEnabled,
+                allowsPendingCloudSyncDecision: allowsPendingCloudSyncDecision
+            )
         }
         persist()
     }
 
-    private func applyAccountCloudSyncPreference(_ remoteEnabled: Bool?) {
+    private func applyAccountCloudSyncPreference(
+        _ remoteEnabled: Bool?,
+        allowsPendingCloudSyncDecision: Bool
+    ) {
         if let remoteEnabled, !settings.cloudUserId.isEmpty {
             if !remoteEnabled,
                settings.syncEnabled,
@@ -613,7 +679,7 @@ final class SettingsViewModel: ObservableObject {
             if !settings.cloudUserId.isEmpty {
                 LocalStore.saveCloudSyncPreference(true, for: settings.cloudUserId)
             }
-            if !settings.syncEnabled {
+            if !settings.syncEnabled, allowsPendingCloudSyncDecision {
                 hasPendingLoginCloudSyncDecision = true
             }
             return
@@ -632,7 +698,11 @@ final class SettingsViewModel: ObservableObject {
         Task {
             do {
                 let account = try await client.updateCloudSyncEnabled(accessToken: token, enabled: enabled)
-                applyCloudAccount(account, shouldApplyCloudSyncPreference: false)
+                applyCloudAccount(
+                    account,
+                    shouldApplyCloudSyncPreference: false,
+                    allowsPendingCloudSyncDecision: false
+                )
             } catch {
                 authMessage = enabled
                     ? "云端备份已在本机开启，账号开关稍后会再同步。"

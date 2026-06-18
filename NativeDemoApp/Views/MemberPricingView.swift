@@ -6,6 +6,7 @@ struct MemberPricingView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var iapService = IAPService.shared
+    let highlightPlanId: String?
     @State private var benefitsExpanded = false
     @State private var morePlansExpanded = false
     @State private var purchaseNotice: String?
@@ -39,7 +40,11 @@ struct MemberPricingView: View {
         ("截图导入", "每日 3 次 OCR", "会员经常导入也不中断"),
     ]
 
-    private let freeQuotaFootnote = "免费版已经可以完整记账、手动整理，并体验基础回放和 3 个常用场景。会员另可解锁 25+ 界面色彩主题；永久会员再享 3 款专属皮肤。"
+    init(highlightPlanId: String? = nil) {
+        self.highlightPlanId = highlightPlanId
+    }
+
+    private let freeQuotaFootnote = "免费版已经可以完整记账、手动整理，并体验基础回放和 3 个常用场景。会员另可解锁 25+ 界面色彩主题；永久会员另享 3 款仅永久可用的典藏皮肤；年度会员可使用 25+ 标准主题。"
 
     private var isMember: Bool {
         settingsViewModel.settings.hasMemberAccess
@@ -47,34 +52,39 @@ struct MemberPricingView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // ── Hero ──
-                    if !isMember {
-                        heroSection
-                        memberValueSection
-                        memberBoundarySection
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // ── Hero ──
+                        if !isMember {
+                            heroSection
+                            memberValueSection
+                            memberBoundarySection
+                        }
+
+                        // ── Benefits ──
+                        benefitsSection
+
+                        // ── Pricing ──
+                        if !isMember {
+                            pricingSection
+                        } else {
+                            currentMemberBadge
+                        }
+
+                        // ── Privacy ──
+                        freeQuotaNote
+                        privacyNote
                     }
-
-                    // ── Benefits ──
-                    benefitsSection
-
-                    // ── Pricing ──
-                    if !isMember {
-                        pricingSection
-                    } else {
-                        currentMemberBadge
-                    }
-
-                    // ── Privacy ──
-                    freeQuotaNote
-                    privacyNote
+                    .padding(20)
+                    .padding(.bottom, 40)
                 }
-                .padding(20)
-                .padding(.bottom, 40)
+                .scrollIndicators(.hidden)
+                .background(AppColors.bg.ignoresSafeArea())
+                .onAppear {
+                    applyHighlightIfNeeded(proxy)
+                }
             }
-            .scrollIndicators(.hidden)
-            .background(AppColors.bg.ignoresSafeArea())
             .navigationTitle(isMember ? "会员详情" : "会员方案")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -472,16 +482,21 @@ struct MemberPricingView: View {
     }
 
     private func regularPlanButton(_ plan: MemberPlan) -> some View {
+        let isHighlighted = highlightPlanId == plan.id
         Button {
             handlePurchase(plan)
         } label: {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("\(plan.name)：\(displayPrice(for: plan)) / \(plan.period)")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(AppColors.text.opacity(0.88))
                 Text(plan.dailyHint)
                     .font(.system(size: 11))
                     .foregroundStyle(AppColors.subtext)
+                if plan.id == "lifetime" {
+                    lifetimeThemeBullet
+                        .padding(.top, 2)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
@@ -492,11 +507,37 @@ struct MemberPricingView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
+                    .stroke(
+                        isHighlighted ? Color(hex: "A68445").opacity(0.58) : Color.white.opacity(0.35),
+                        lineWidth: isHighlighted ? 1.4 : 1
+                    )
             )
+            .shadow(color: isHighlighted ? AppColors.lockGold.opacity(0.16) : .clear, radius: 12, y: 6)
         }
         .buttonStyle(.plain)
         .disabled(isPurchasing)
+        .id("member-plan-\(plan.id)")
+    }
+
+    private var lifetimeThemeBullet: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("✦ 3 款永久典藏界面（档案金章 / 金线电路 / 琥珀礼拜堂）")
+                .foregroundStyle(Color(hex: "A68445"))
+            Text("随账号永久保留，年度会员不可用")
+                .foregroundStyle(AppColors.subtext)
+        }
+        .font(.system(size: 11))
+        .lineSpacing(2)
+    }
+
+    private func applyHighlightIfNeeded(_ proxy: ScrollViewProxy) {
+        guard highlightPlanId == "lifetime" else { return }
+        morePlansExpanded = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            withAnimation(.easeInOut(duration: 0.28)) {
+                proxy.scrollTo("member-plan-lifetime", anchor: .center)
+            }
+        }
     }
 
     private var restorePurchaseButton: some View {
