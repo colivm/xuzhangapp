@@ -25,9 +25,12 @@ struct StatsWebView: View {
     @State private var traceAutoCommitRequestID: UUID?
     @State private var showTraceCustomDatePanel = false
     @State private var traceViewMode: TraceViewMode = .life
+    @State private var traceDeepInsightExpanded = false
+    @State private var lifeInsightRefreshID = UUID()
     private let playbackService = PlaybackService()
     private let momentSelector = PlaybackMomentSelector()
     private let quotaStore = SummaryPlaybackQuotaStore()
+    private let lifeInsightService = LifeInsightService.shared
 
     enum StatsPeriod: String, CaseIterable, Identifiable {
         case week = "本周"
@@ -529,6 +532,30 @@ struct StatsWebView: View {
         heroScopedItems.filter { $0.amount > 0 && $0.draftMeta == nil }
     }
 
+    private var traceInsightPeriodLabel: String {
+        selectedPeriod == .week ? "这一周" : "这个月"
+    }
+
+    private var traceLifeInsight: LifeInsightResult {
+        lifeInsightService.buildTraceInsight(
+            items: traceClueItems,
+            periodLabel: traceInsightPeriodLabel
+        )
+    }
+
+    private var traceLifeInsightFreeRemaining: Int {
+        _ = lifeInsightRefreshID
+        return lifeInsightService.freeRemaining(isMember: hasMemberAccess)
+    }
+
+    private var hasTraceInsightData: Bool {
+        !traceClueItems.isEmpty
+    }
+
+    private var canUseTraceDeepInsight: Bool {
+        hasTraceInsightData && (hasMemberAccess || traceLifeInsightFreeRemaining > 0)
+    }
+
     private var traceCategoryClues: [TraceCategoryClue] {
         let items = traceClueItems
         guard !items.isEmpty else { return [] }
@@ -736,6 +763,7 @@ struct StatsWebView: View {
             traceClueCompositionCard
             traceClueRhythmCard
             traceClueInsightCard
+            traceDeepInsightCard
             traceAppendixStrip
         }
     }
@@ -863,6 +891,182 @@ struct StatsWebView: View {
             }
         }
         .glassPanel(radius: 22, padding: 17)
+    }
+
+    private var traceDeepInsightCard: some View {
+        let insight = traceLifeInsight
+        let isUnlocked = hasMemberAccess || traceDeepInsightExpanded
+        return VStack(alignment: .leading, spacing: 13) {
+            HStack(alignment: .center, spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(AppColors.accent.opacity(0.13))
+                        .frame(width: 30, height: 30)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppColors.accent.opacity(0.88))
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("多看一层")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                    Text(hasMemberAccess ? "会员可继续追问这段账本" : "本周免费 \(traceLifeInsightFreeRemaining)/\(LifeInsightService.freeWeeklyLimit) 次")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppColors.subtext.opacity(0.78))
+                }
+
+                Spacer()
+            }
+
+            Text(insight.leadQuestion)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AppColors.text.opacity(0.86))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(isUnlocked ? insight.previewLine : insight.teaser)
+                .font(.system(size: 13))
+                .lineSpacing(3)
+                .foregroundStyle(AppColors.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if isUnlocked {
+                VStack(spacing: 8) {
+                    ForEach(Array(insight.fullLines.enumerated()), id: \.offset) { index, line in
+                        traceDeepInsightLine(line, index: index)
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+
+                traceInsightQuestionChips(insight.questionChips)
+                    .transition(.opacity)
+            }
+
+            Button {
+                handleTraceDeepInsightTap()
+            } label: {
+                let buttonIsOpen = hasMemberAccess || canUseTraceDeepInsight || isUnlocked
+                HStack(spacing: 8) {
+                    Text(traceDeepInsightButtonTitle(isUnlocked: isUnlocked))
+                        .font(.system(size: 14, weight: .semibold))
+                    Image(systemName: buttonIsOpen ? "arrow.right" : "lock.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(buttonIsOpen ? AppColors.accent.opacity(0.92) : AppColors.lockGold)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 11)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.42))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke((buttonIsOpen ? AppColors.accent : AppColors.lockGold).opacity(0.18), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(!hasTraceInsightData)
+        }
+        .padding(17)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.thinMaterial)
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            AppColors.accent.opacity(0.08),
+                            Color.white.opacity(0.18),
+                            AppColors.lockGold.opacity(hasMemberAccess || isUnlocked ? 0.04 : 0.08)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(AppColors.accent.opacity(0.16), lineWidth: 1)
+        )
+        .shadow(color: AppColors.subtext.opacity(0.08), radius: 14, y: 8)
+    }
+
+    private func traceDeepInsightLine(_ text: String, index: Int) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Text("\(index + 1)")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.accent.opacity(0.82))
+                .frame(width: 22, height: 22)
+                .background(
+                    Circle()
+                        .fill(AppColors.accent.opacity(0.11))
+                )
+            Text(text)
+                .font(.system(size: 13, weight: .medium))
+                .lineSpacing(3)
+                .foregroundStyle(AppColors.text.opacity(0.78))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.34))
+        )
+    }
+
+    private func traceInsightQuestionChips(_ chips: [String]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(chips, id: \.self) { chip in
+                    Text(chip)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppColors.text.opacity(0.76))
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.38))
+                        )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(Color.white.opacity(0.42), lineWidth: 1)
+                        )
+                }
+            }
+        }
+    }
+
+    private func traceDeepInsightButtonTitle(isUnlocked: Bool) -> String {
+        if !hasTraceInsightData { return "先留下几笔" }
+        if hasMemberAccess { return "继续追问这段账本" }
+        if isUnlocked { return "本周体验已展开" }
+        if canUseTraceDeepInsight { return "试一次多看一层" }
+        return "解锁完整线索"
+    }
+
+    private func handleTraceDeepInsightTap() {
+        guard hasTraceInsightData else { return }
+        if hasMemberAccess {
+            withAnimation(traceEditSpring) {
+                traceDeepInsightExpanded = true
+            }
+            return
+        }
+
+        if traceDeepInsightExpanded { return }
+
+        guard canUseTraceDeepInsight else {
+            onShowMemberPricing?()
+            return
+        }
+
+        lifeInsightService.markDeepInsightUsed(isMember: false)
+        withAnimation(traceEditSpring) {
+            traceDeepInsightExpanded = true
+            lifeInsightRefreshID = UUID()
+        }
     }
 
     private func traceClueEvidenceChip(_ text: String) -> some View {
