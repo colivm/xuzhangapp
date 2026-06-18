@@ -19,12 +19,12 @@ struct StatsWebView: View {
     @State private var isFiltersExpanded = false
     @State private var showTraceDetailSheet = false
     @State private var showCategoryFilterSheet = false
-    @State private var isTrendExpandedInSheet = false
     @State private var traceInlineEditingItemID: UUID?
     @State private var handledOpenTraceRequestID: UUID?
     @State private var traceSwipedItemID: UUID?
     @State private var traceAutoCommitRequestID: UUID?
     @State private var showTraceCustomDatePanel = false
+    @State private var traceViewMode: TraceViewMode = .life
     private let playbackService = PlaybackService()
     private let momentSelector = PlaybackMomentSelector()
     private let quotaStore = SummaryPlaybackQuotaStore()
@@ -103,6 +103,28 @@ struct StatsWebView: View {
         case end
     }
 
+    private enum TraceViewMode: String, CaseIterable, Identifiable {
+        case life = "生活"
+        case clues = "线索"
+
+        var id: String { rawValue }
+    }
+
+    private struct TraceCategoryClue: Identifiable {
+        let id = UUID()
+        let category: HomeItem.Category
+        let count: Int
+        let total: Double
+        let ratio: Double
+    }
+
+    private struct TraceRhythmPoint: Identifiable {
+        let id = UUID()
+        let label: String
+        let count: Int
+        let isToday: Bool
+    }
+
     var body: some View {
         statsScrollView
             .sheet(isPresented: $showPeriodSheet) {
@@ -142,8 +164,13 @@ struct StatsWebView: View {
 
     private var statsContent: some View {
         VStack(spacing: 12) {
-            traceChapterCard
-            traceAppendixStrip
+            traceViewModeKicker
+            if traceViewMode == .life {
+                traceChapterCard
+                traceAppendixStrip
+            } else {
+                traceClueBoard
+            }
         }
         .padding(.horizontal, 12)
         .padding(.top, 4)
@@ -377,6 +404,50 @@ struct StatsWebView: View {
         .frame(maxWidth: .infinity)
     }
 
+    private var traceViewModeKicker: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                traceViewModeTab(.life)
+                traceViewModeTab(.clues)
+            }
+            .frame(height: 42)
+
+            GeometryReader { proxy in
+                let tabWidth = proxy.size.width / 2
+                ZStack(alignment: .leading) {
+                    Capsule(style: .continuous)
+                        .fill(AppColors.line.opacity(0.40))
+                        .frame(height: 1)
+
+                    Capsule(style: .continuous)
+                        .fill(AppColors.accent.opacity(0.62))
+                        .frame(width: tabWidth, height: 2)
+                        .offset(x: traceViewMode == .clues ? tabWidth : 0)
+                        .animation(traceEditSpring, value: traceViewMode)
+                }
+            }
+            .frame(height: 3)
+        }
+        .padding(.horizontal, 8)
+        .padding(.bottom, 2)
+    }
+
+    private func traceViewModeTab(_ mode: TraceViewMode) -> some View {
+        let isSelected = traceViewMode == mode
+        return Button {
+            withAnimation(traceEditSpring) {
+                traceViewMode = mode
+            }
+        } label: {
+            Text(mode.rawValue)
+                .font(.system(size: 16, weight: isSelected ? .bold : .semibold))
+                .foregroundStyle(isSelected ? AppColors.text.opacity(0.94) : AppColors.subtext.opacity(0.76))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     private func traceRangeTab(_ title: String, period: StatsPeriod) -> some View {
         let isSelected = !useCustomRange && selectedPeriod == period
         return Button {
@@ -450,6 +521,167 @@ struct StatsWebView: View {
         }
     }
 
+    private var traceClueMist: Color {
+        Color(red: 0.68, green: 0.80, blue: 0.75)
+    }
+
+    private var traceClueItems: [HomeItem] {
+        heroScopedItems.filter { $0.amount > 0 && $0.draftMeta == nil }
+    }
+
+    private var traceCategoryClues: [TraceCategoryClue] {
+        let items = traceClueItems
+        guard !items.isEmpty else { return [] }
+        let totalCount = Double(items.count)
+        return Dictionary(grouping: items, by: \.category)
+            .map { category, groupedItems in
+                TraceCategoryClue(
+                    category: category,
+                    count: groupedItems.count,
+                    total: groupedItems.reduce(0) { $0 + $1.amount },
+                    ratio: Double(groupedItems.count) / totalCount
+                )
+            }
+            .sorted {
+                if $0.count == $1.count { return $0.total > $1.total }
+                return $0.count > $1.count
+            }
+    }
+
+    private var traceClueHeadline: String {
+        let items = traceClueItems
+        guard !items.isEmpty else { return "线索还在等第一笔记录" }
+        guard let top = traceCategoryClues.first else {
+            return "这一段的记录还比较分散"
+        }
+        if let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count >= 2 {
+            return "\(top.category.rawValue)最明显，\(peak.label)更密一些"
+        }
+        return "\(top.category.rawValue)是这一段最清楚的线索"
+    }
+
+    private var traceClueSubline: String {
+        let items = traceClueItems
+        guard !items.isEmpty else { return "先留下几笔，账本会把生活里的走向慢慢标出来。" }
+        let total = items.reduce(0) { $0 + $1.amount }
+        let activeDays = traceActiveDayCount(from: items)
+        return "\(items.count) 笔记录，合计 \(total.formatted(.cny))，有 \(activeDays) 天留下痕迹。"
+    }
+
+    private var tracePrimaryEvidence: String {
+        if let top = traceCategoryClues.first {
+            return "\(top.category.rawValue) \(top.count) 笔"
+        }
+        return "暂无分类线索"
+    }
+
+    private var traceSecondaryEvidence: String {
+        let activeDays = traceActiveDayCount(from: traceClueItems)
+        return "\(activeDays) 天有记录"
+    }
+
+    private var traceTertiaryEvidence: String {
+        guard let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 else {
+            return "节奏未形成"
+        }
+        return "\(peak.label)最密"
+    }
+
+    private var traceRhythmSummary: String {
+        let active = traceRhythmPoints.filter { $0.count > 0 }.count
+        guard active > 0 else { return "还在形成" }
+        return "\(active) 个节点亮起"
+    }
+
+    private var traceClueInsightLines: [String] {
+        let items = traceClueItems
+        guard !items.isEmpty else {
+            return [
+                "先留下几笔，线索会从分类、时间和频次里慢慢浮出来。",
+                "这里不会只盯着金额，会优先看这一段生活出现了什么。",
+                "多记几天后，会看到哪些日子更密、哪些分类更常出现。"
+            ]
+        }
+        var lines: [String] = []
+        if let top = traceCategoryClues.first {
+            let percent = Int((top.ratio * 100).rounded())
+            lines.append("\(top.category.rawValue)占了 \(percent)%，是这一段最清楚的生活面。")
+        }
+        if let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 {
+            lines.append("\(peak.label)留下 \(peak.count) 笔，像是这一段最忙的节点。")
+        }
+        let total = items.reduce(0) { $0 + $1.amount }
+        if items.count >= 2 {
+            let average = total / Double(items.count)
+            lines.append("平均每笔约 \(average.formatted(.cny))，金额不是主角，频次更能看出节奏。")
+        } else {
+            lines.append("现在只有一笔，先不用急着判断，线索会随着记录变多。")
+        }
+        return Array(lines.prefix(3))
+    }
+
+    private var traceRhythmPoints: [TraceRhythmPoint] {
+        let items = traceClueItems
+        guard !items.isEmpty else { return [] }
+        let calendar = Calendar.current
+        if selectedPeriod == .month, let interval = calendar.dateInterval(of: .month, for: Date()) {
+            let today = Date()
+            let end = min(interval.end, today)
+            let labels = ["第1周", "第2周", "第3周", "第4周", "末段"]
+            return labels.indices.compactMap { index in
+                guard let start = calendar.date(byAdding: .day, value: index * 7, to: interval.start) else { return nil }
+                let rawEnd = calendar.date(byAdding: .day, value: 7, to: start) ?? start
+                let pointEnd = min(rawEnd, end)
+                guard start < pointEnd else { return nil }
+                let count = items.filter { $0.createdAt >= start && $0.createdAt < pointEnd }.count
+                return TraceRhythmPoint(
+                    label: labels[index],
+                    count: count,
+                    isToday: today >= start && today < pointEnd
+                )
+            }
+        }
+
+        guard let interval = PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: Date()) else { return [] }
+        let labels = ["一", "二", "三", "四", "五", "六", "日"]
+        return labels.indices.compactMap { index in
+            guard let day = Calendar.current.date(byAdding: .day, value: index, to: interval.start),
+                  let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: day) else { return nil }
+            let count = items.filter { $0.createdAt >= day && $0.createdAt < nextDay }.count
+            return TraceRhythmPoint(
+                label: labels[index],
+                count: count,
+                isToday: Calendar.current.isDateInToday(day)
+            )
+        }
+    }
+
+    private func traceActiveDayCount(from items: [HomeItem]) -> Int {
+        let calendar = Calendar.current
+        return Set(items.map { calendar.startOfDay(for: $0.createdAt) }).count
+    }
+
+    private func traceClueColor(for category: HomeItem.Category) -> Color {
+        switch category {
+        case .dining:
+            return Color(red: 0.76, green: 0.55, blue: 0.38)
+        case .transport:
+            return Color(red: 0.38, green: 0.61, blue: 0.70)
+        case .shopping:
+            return Color(red: 0.78, green: 0.62, blue: 0.74)
+        case .health:
+            return Color(red: 0.55, green: 0.70, blue: 0.52)
+        case .home:
+            return Color(red: 0.66, green: 0.58, blue: 0.48)
+        case .social:
+            return Color(red: 0.80, green: 0.62, blue: 0.44)
+        case .lodging:
+            return Color(red: 0.56, green: 0.62, blue: 0.76)
+        default:
+            return AppColors.accent
+        }
+    }
+
     private var traceEmptyState: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("✦")
@@ -498,6 +730,246 @@ struct StatsWebView: View {
         .buttonStyle(.plain)
     }
 
+    private var traceClueBoard: some View {
+        VStack(spacing: 12) {
+            traceClueHeroCard
+            traceClueCompositionCard
+            traceClueRhythmCard
+            traceClueInsightCard
+            traceAppendixStrip
+        }
+    }
+
+    private var traceClueHeroCard: some View {
+        let items = traceClueItems
+        return VStack(alignment: .leading, spacing: 14) {
+            traceRangeKicker
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text("这一段的线索")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.subtext.opacity(0.82))
+
+                Text(traceClueHeadline)
+                    .font(.system(size: 25, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(traceClueSubline)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 8) {
+                traceClueEvidenceChip(tracePrimaryEvidence)
+                traceClueEvidenceChip(traceSecondaryEvidence)
+                traceClueEvidenceChip(traceTertiaryEvidence)
+            }
+
+            if items.isEmpty {
+                Text("先留下几笔，线索会慢慢浮出来。")
+                    .font(.system(size: 13))
+                    .foregroundStyle(AppColors.subtext)
+                    .padding(.top, 2)
+            }
+        }
+        .paperChapterPanel(radius: 24, padding: 20)
+    }
+
+    private var traceClueCompositionCard: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack {
+                Text("生活构成")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                Spacer()
+                Text("\(traceClueItems.count) 笔")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColors.subtext.opacity(0.78))
+            }
+
+            if traceCategoryClues.isEmpty {
+                traceQuietCluePlaceholder("还没有足够记录形成构成。")
+            } else {
+                traceCompositionRibbon
+                VStack(spacing: 8) {
+                    ForEach(Array(traceCategoryClues.prefix(4))) { clue in
+                        traceCategoryClueRow(clue)
+                    }
+                }
+            }
+        }
+        .glassPanel(radius: 22, padding: 17)
+    }
+
+    private var traceCompositionRibbon: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            HStack(spacing: 3) {
+                ForEach(Array(traceCategoryClues.prefix(4))) { clue in
+                    RoundedRectangle(cornerRadius: 999, style: .continuous)
+                        .fill(traceClueColor(for: clue.category).opacity(0.78))
+                        .frame(width: max(10, width * clue.ratio))
+                }
+            }
+        }
+        .frame(height: 13)
+        .clipShape(Capsule(style: .continuous))
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.38))
+        )
+    }
+
+    private var traceClueRhythmCard: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack {
+                Text(selectedPeriod == .week ? "一周节奏" : "这一月的节奏")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                Spacer()
+                Text(traceRhythmSummary)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.80))
+            }
+
+            if traceRhythmPoints.isEmpty {
+                traceQuietCluePlaceholder("多记几天，节奏会自然出来。")
+            } else {
+                HStack(alignment: .bottom, spacing: 9) {
+                    ForEach(traceRhythmPoints) { point in
+                        traceRhythmColumn(point)
+                    }
+                }
+                .frame(height: 92)
+                .padding(.top, 2)
+            }
+        }
+        .glassPanel(radius: 22, padding: 17)
+    }
+
+    private var traceClueInsightCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("变化线索")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(AppColors.text)
+
+            VStack(spacing: 8) {
+                ForEach(Array(traceClueInsightLines.enumerated()), id: \.offset) { index, line in
+                    traceClueInsightRow(line, index: index)
+                }
+            }
+        }
+        .glassPanel(radius: 22, padding: 17)
+    }
+
+    private func traceClueEvidenceChip(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(AppColors.text.opacity(0.82))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.42))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(AppColors.accent.opacity(0.13), lineWidth: 1)
+            )
+    }
+
+    private func traceCategoryClueRow(_ clue: TraceCategoryClue) -> some View {
+        HStack(spacing: 9) {
+            Circle()
+                .fill(traceClueColor(for: clue.category).opacity(0.82))
+                .frame(width: 9, height: 9)
+            Text(clue.category.rawValue)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppColors.text.opacity(0.84))
+            Spacer()
+            Text("\(clue.count) 笔")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.86))
+            Text("\(Int((clue.ratio * 100).rounded()))%")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppColors.text.opacity(0.74))
+                .frame(width: 40, alignment: .trailing)
+        }
+    }
+
+    private func traceRhythmColumn(_ point: TraceRhythmPoint) -> some View {
+        let maxCount = max(traceRhythmPoints.map(\.count).max() ?? 1, 1)
+        let ratio = CGFloat(point.count) / CGFloat(maxCount)
+        let barHeight = max(8, 54 * ratio)
+        return VStack(spacing: 7) {
+            Spacer(minLength: 0)
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: point.count > 0
+                            ? [AppColors.accent.opacity(point.isToday ? 0.88 : 0.66), traceClueMist.opacity(0.55)]
+                            : [Color.white.opacity(0.42), Color.white.opacity(0.24)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 16, height: barHeight)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 999, style: .continuous)
+                        .stroke(Color.white.opacity(0.42), lineWidth: 1)
+                )
+            Text(point.label)
+                .font(.system(size: 11, weight: point.isToday ? .bold : .medium))
+                .foregroundStyle(point.isToday ? AppColors.text.opacity(0.80) : AppColors.subtext.opacity(0.76))
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func traceClueInsightRow(_ text: String, index: Int) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(["✦", "•", "∴"][min(index, 2)])
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(index == 0 ? AppColors.accent.opacity(0.82) : AppColors.subtext.opacity(0.66))
+                .frame(width: 18)
+            Text(text)
+                .font(.system(size: 13, weight: .medium))
+                .lineSpacing(3)
+                .foregroundStyle(AppColors.text.opacity(0.78))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(index == 0 ? 0.42 : 0.30))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.38), lineWidth: 1)
+        )
+    }
+
+    private func traceQuietCluePlaceholder(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(AppColors.subtext)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.32))
+            )
+    }
+
     private func openTraceDetail() {
         traceInlineEditingItemID = nil
         showTraceDetailSheet = true
@@ -543,36 +1015,6 @@ struct StatsWebView: View {
                                     .transition(.opacity.combined(with: .move(edge: .top)))
                             }
                         }
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.18)) {
-                                    isTrendExpandedInSheet.toggle()
-                                }
-                            } label: {
-                                HStack {
-                                    Text(trendInsightText(data: computeTrendData()))
-                                        .font(.system(size: 13))
-                                        .foregroundStyle(AppColors.text.opacity(0.78))
-                                        .fixedSize(horizontal: false, vertical: true)
-                                    Spacer()
-                                    Text(isTrendExpandedInSheet ? "收起走势" : "展开走势")
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(AppColors.accent.opacity(0.82))
-                                }
-                            }
-                            .buttonStyle(.plain)
-
-                            if isTrendExpandedInSheet {
-                                trendChart
-                                    .transition(.opacity.combined(with: .move(edge: .top)))
-                            }
-                        }
-                        .padding(14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(Color.white.opacity(0.36))
-                        )
 
                         VStack(alignment: .leading, spacing: 12) {
                             recordListContent(fromTraceDetail: true)
