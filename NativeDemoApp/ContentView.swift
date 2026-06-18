@@ -3,31 +3,71 @@ import UIKit
 
 // MARK: - Color Constants (matching web CSS variables)
 
+@MainActor
 struct AppColors {
-    static let accent = Color(red: 0.498, green: 0.702, blue: 0.635)          // #7fb3a2
-    static let accentDark = Color(red: 0.471, green: 0.682, blue: 0.620)        // #78ae9e
-    static let bg = Color(red: 0.933, green: 0.941, blue: 0.957)                // #eef0f4
-    static let panel = Color.white.opacity(0.62)
-    static let panelStrong = Color.white.opacity(0.82)
-    static let line = Color.white.opacity(0.52)
-    static let paperWarm = Color(red: 0.992, green: 0.952, blue: 0.878)
-    static let paperMist = Color(red: 0.938, green: 0.958, blue: 0.932)
-    static let paperBorder = Color(red: 0.902, green: 0.760, blue: 0.584)
-    static let paperCrease = Color(red: 0.760, green: 0.560, blue: 0.360)
-    static let text = Color(red: 0.145, green: 0.188, blue: 0.255)                 // #253041
-    static let subtext = Color(red: 0.365, green: 0.412, blue: 0.494)           // #5d697e
-    static let heroGradientPink = Color(red: 1.0, green: 0.77, blue: 0.87)            // pink tint
-    static let heroGradientTeal = Color(red: 0.69, green: 0.88, blue: 0.86)           // teal tint
-    static let tabActiveBg = Color(red: 0.67, green: 0.87, blue: 0.75).opacity(0.42)
-    static let lockGold = Color(red: 0.788, green: 0.651, blue: 0.290)           // #c9a64a
-    static let tabInactiveBg = Color(red: 0.749, green: 0.851, blue: 0.817).opacity(0.30)
-    static let tabInactiveGlyph = Color(red: 0.467, green: 0.592, blue: 0.598).opacity(0.62)
-    static let floatingPetPanel = Color(red: 0.749, green: 0.851, blue: 0.817).opacity(0.37)
-    static let settingsIdentityPanel = Color(red: 0.988, green: 0.964, blue: 0.920).opacity(0.54)
-    static let settingsChapterPanel = Color(red: 0.972, green: 0.962, blue: 0.944).opacity(0.50)
-    static let tracePlaybackButtonBg = Color(red: 0.774, green: 0.866, blue: 0.836).opacity(0.25)
-    static let traceAppendixBg = Color(red: 0.749, green: 0.851, blue: 0.817).opacity(0.19)
-    static let monthlyInsightBg = Color(red: 1.0, green: 0.979, blue: 0.944).opacity(0.62)
+    private static var theme: ResolvedThemeTokens { ThemeResolver.current }
+
+    static var accent: Color { theme.accent }
+    static var accentDark: Color { theme.accentDark }
+    static var bg: Color { theme.background }
+    static var bgGradientEnd: Color { theme.backgroundGradientEnd }
+    static var panel: Color { theme.panel }
+    static var panelStrong: Color { theme.panelStrong }
+    static var line: Color { theme.line }
+    static var paperWarm: Color { theme.paperWarm }
+    static var paperMist: Color { theme.paperMist }
+    static var paperBorder: Color { theme.paperBorder }
+    static var paperCrease: Color { theme.paperCrease }
+    static var surfaceMuted: Color { theme.surfaceMuted }
+    static var stroke: Color { theme.stroke }
+    static var text: Color { theme.textPrimary }
+    static var subtext: Color { theme.textSecondary }
+    static var tertiary: Color { theme.textTertiary }
+    static var heroGradientPink: Color { theme.heroGradientPink }
+    static var heroGradientTeal: Color { theme.heroGradientTeal }
+    static var tabActiveBg: Color { theme.tabActiveBg }
+    static var lockGold: Color { theme.lockGold }
+    static var tabInactiveBg: Color { theme.tabInactiveBg }
+    static var tabInactiveGlyph: Color { theme.tabInactiveGlyph }
+    static var floatingPetPanel: Color { theme.floatingPetPanel }
+    static var settingsIdentityPanel: Color { theme.settingsIdentityPanel }
+    static var settingsChapterPanel: Color { theme.settingsChapterPanel }
+    static var tracePlaybackButtonBg: Color { theme.tracePlaybackButtonBg }
+    static var traceAppendixBg: Color { theme.traceAppendixBg }
+    static var monthlyInsightBg: Color { theme.monthlyInsightBg }
+    static var settingsEnvelopeIvory: Color { theme.settingsEnvelopeIvory }
+    static var settingsEnvelopeWarm: Color { theme.settingsEnvelopeWarm }
+    static var settingsEnvelopeMint: Color { theme.settingsEnvelopeMint }
+    static var settingsEnvelopeSage: Color { theme.settingsEnvelopeSage }
+    static var settingsEnvelopeDeepSage: Color { theme.settingsEnvelopeDeepSage }
+    static var categoryColors: [Color] { theme.categoryColors }
+
+    static func categoryColor(_ category: HomeItem.Category) -> Color {
+        let index: Int
+        switch category {
+        case .transport:
+            index = 0
+        case .dining:
+            index = 1
+        case .daily:
+            index = 2
+        case .shopping:
+            index = 3
+        case .health:
+            index = 4
+        case .social:
+            index = 5
+        case .home:
+            index = 6
+        case .lodging:
+            index = 7
+        case .entertainment:
+            index = 3
+        case .other:
+            index = 2
+        }
+        return categoryColors.indices.contains(index) ? categoryColors[index] : accent
+    }
 }
 
 // MARK: - Glass Panel Modifier
@@ -282,7 +322,7 @@ struct ContentView: View {
 
             // subtle top light
             LinearGradient(
-                colors: [Color.white.opacity(0.07), AppColors.bg],
+                colors: [Color.white.opacity(0.07), AppColors.bgGradientEnd],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -402,7 +442,7 @@ struct ContentView: View {
                     .overlay(alignment: .topTrailing) {
                         if tab == .stats, shouldShowStatsGuidanceBadge {
                             Circle()
-                                .fill(Color(red: 1.0, green: 110/255, blue: 136/255))
+                                .fill(AppColors.lockGold)
                                 .frame(width: 8, height: 8)
                                 .offset(x: -18, y: 4)
                         }
@@ -495,7 +535,7 @@ struct ContentView: View {
             .stroke(Color.white.opacity(0.88), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
 
             Circle()
-                .fill(Color(red: 1.0, green: 181/255, blue: 159/255))
+                .fill(AppColors.lockGold.opacity(0.72))
                 .frame(width: 3.8, height: 3.8)
                 .offset(y: -5.4)
         }

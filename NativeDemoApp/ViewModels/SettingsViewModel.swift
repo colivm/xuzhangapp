@@ -5,6 +5,7 @@ import Combine
 enum SettingsViewModelError: LocalizedError {
     case loginRequired
     case memberEntitlementUnavailable
+    case themeLocked(String)
 
     var errorDescription: String? {
         switch self {
@@ -12,6 +13,8 @@ enum SettingsViewModelError: LocalizedError {
             return "请先登录账号，再开通或恢复会员，这样换机后也能找回权益。"
         case .memberEntitlementUnavailable:
             return "当前账号暂时没有可用会员权益。请确认购买是否完成，或使用购买时的账号恢复。"
+        case .themeLocked(let message):
+            return message
         }
     }
 }
@@ -23,6 +26,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var loginCode: String = ""
     @Published private(set) var authMessage: String?
     @Published private(set) var contentSafetyMessage: String?
+    @Published private(set) var themeMessage: String?
     @Published private(set) var isAuthBusy: Bool = false
     @Published private(set) var smsCooldownRemaining: Int = 0
     @Published private(set) var hasPendingLoginCloudSyncDecision: Bool = false
@@ -45,6 +49,8 @@ final class SettingsViewModel: ObservableObject {
         }
         settings.displayName = sanitizedDisplayName(settings.displayName)
         settings.petNickname = sanitizedPetNickname(settings.petNickname)
+        settings.colorThemeId = validThemeId(settings.colorThemeId)
+        enforceCurrentThemeAccess(showsMessage: false)
         persist()
     }
 
@@ -68,6 +74,19 @@ final class SettingsViewModel: ObservableObject {
         get { settings.appearance }
         set {
             settings.appearance = newValue
+            applyThemeResolver()
+            persist()
+        }
+    }
+
+    var colorThemeId: String {
+        settings.colorThemeId
+    }
+
+    var shareCardUsesAppTheme: Bool {
+        get { settings.shareCardUsesAppTheme }
+        set {
+            settings.shareCardUsesAppTheme = newValue && settings.hasMemberAccess
             persist()
         }
     }
@@ -216,12 +235,72 @@ final class SettingsViewModel: ObservableObject {
             if newValue.lowercased() == "free" {
                 settings.memberExpiresAt = nil
             }
+            enforceCurrentThemeAccess(showsMessage: true)
             persist()
         }
     }
 
     var colorScheme: ColorScheme? {
         settings.colorScheme
+    }
+
+    var currentThemeName: String {
+        ThemeResolver.shared.definition(for: settings.colorThemeId)?.displayName ?? "叙账默认"
+    }
+
+    @discardableResult
+    func setTheme(_ themeId: String, showsLockedMessage: Bool = true) -> Bool {
+        let resolvedId = validThemeId(themeId)
+        guard isThemeUnlocked(resolvedId) else {
+            if showsLockedMessage {
+                themeMessage = lockedThemeMessage(for: resolvedId)
+            }
+            return false
+        }
+        settings.colorThemeId = resolvedId
+        themeMessage = nil
+        applyThemeResolver()
+        persist()
+        return true
+    }
+
+    func restoreDefaultAppearanceAndTheme() {
+        settings.appearance = .system
+        settings.colorThemeId = ThemeResolver.defaultThemeId
+        settings.shareCardUsesAppTheme = false
+        themeMessage = nil
+        applyThemeResolver()
+        persist()
+    }
+
+    func isThemeUnlocked(_ themeId: String) -> Bool {
+        guard let definition = ThemeResolver.shared.definition(for: themeId) else {
+            return themeId == ThemeResolver.defaultThemeId
+        }
+        let requiredTier = definition.unlockTier ?? definition.tier
+        switch requiredTier {
+        case .free:
+            return true
+        case .standard:
+            return settings.hasMemberAccess
+        case .lifetime:
+            return settings.memberTier.lowercased() == "lifetime"
+        }
+    }
+
+    func lockedThemeMessage(for themeId: String) -> String {
+        guard let definition = ThemeResolver.shared.definition(for: themeId) else {
+            return "这个主题暂时不可用。"
+        }
+        let requiredTier = definition.unlockTier ?? definition.tier
+        switch requiredTier {
+        case .free:
+            return "这个主题暂时不可用。"
+        case .standard:
+            return "开通会员解锁主题。"
+        case .lifetime:
+            return "年度/永久会员专属。"
+        }
     }
 
     func sendSMSLoginCode() async {
@@ -271,6 +350,7 @@ final class SettingsViewModel: ObservableObject {
             settings.cloudUserId = session.userId
             settings.memberTier = session.memberTier
             settings.memberExpiresAt = session.memberExpiresAt
+            enforceCurrentThemeAccess(showsMessage: true)
             settings.syncEnabled = false
             hasPendingLoginCloudSyncDecision = session.cloudSyncEnabled ?? LocalStore.loadCloudSyncPreference(for: session.userId)
             SummaryPlaybackQuotaStore().syncLocalUsageAfterLogin(userId: session.userId)
@@ -281,6 +361,7 @@ final class SettingsViewModel: ObservableObject {
             let tier = try await client.fetchMemberMe(accessToken: session.accessToken)
             settings.memberTier = tier.tier
             settings.memberExpiresAt = tier.expiresAt
+            enforceCurrentThemeAccess(showsMessage: true)
             persist()
             hasCloudSession = true
             authMessage = "登录成功。"
@@ -297,6 +378,7 @@ final class SettingsViewModel: ObservableObject {
         settings.memberTier = "free"
         settings.memberExpiresAt = nil
         settings.syncEnabled = false
+        enforceCurrentThemeAccess(showsMessage: true)
         hasPendingLoginCloudSyncDecision = false
         if Self.isBackendDefaultDisplayName(settings.displayName) {
             settings.displayName = Self.localDefaultDisplayName
@@ -359,6 +441,7 @@ final class SettingsViewModel: ObservableObject {
             settings.memberTier = "free"
             settings.memberExpiresAt = nil
             settings.syncEnabled = false
+            enforceCurrentThemeAccess(showsMessage: true)
             hasPendingLoginCloudSyncDecision = false
             LocalStore.removeCloudSyncPreference(for: deletedUserId)
             LocalStore.removeCloudSyncPreferenceMigration(for: deletedUserId)
@@ -407,6 +490,7 @@ final class SettingsViewModel: ObservableObject {
         }
         settings.memberTier = resolvedTier
         settings.memberExpiresAt = resolvedExpiresAt
+        enforceCurrentThemeAccess(showsMessage: true)
         persist()
         guard AppSettings.hasMemberAccess(tier: resolvedTier, expiresAt: resolvedExpiresAt) else {
             if showsMessage {
@@ -466,6 +550,27 @@ final class SettingsViewModel: ObservableObject {
         LocalStore.saveSettings(settings)
     }
 
+    private func validThemeId(_ themeId: String) -> String {
+        ThemeResolver.shared.definition(for: themeId) == nil ? ThemeResolver.defaultThemeId : themeId
+    }
+
+    private func enforceCurrentThemeAccess(showsMessage: Bool) {
+        let resolvedId = validThemeId(settings.colorThemeId)
+        let shouldFallback = resolvedId != settings.colorThemeId || !isThemeUnlocked(resolvedId)
+        settings.colorThemeId = shouldFallback ? ThemeResolver.defaultThemeId : resolvedId
+        if shouldFallback {
+            settings.shareCardUsesAppTheme = false
+            if showsMessage {
+                themeMessage = "会员主题已回到默认，开通后可以再切回来。"
+            }
+        }
+        applyThemeResolver()
+    }
+
+    private func applyThemeResolver() {
+        ThemeResolver.shared.apply(themeId: settings.colorThemeId, appearance: settings.appearance)
+    }
+
     private func setCloudSyncEnabled(_ enabled: Bool, rememberForAccount: Bool) {
         settings.syncEnabled = enabled
         if rememberForAccount, !settings.cloudUserId.isEmpty {
@@ -484,6 +589,7 @@ final class SettingsViewModel: ObservableObject {
             settings.memberTier = memberTier
         }
         settings.memberExpiresAt = account.memberExpiresAt
+        enforceCurrentThemeAccess(showsMessage: true)
         if shouldApplyCloudSyncPreference {
             applyAccountCloudSyncPreference(account.cloudSyncEnabled)
         }

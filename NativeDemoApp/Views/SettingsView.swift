@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
@@ -16,6 +17,7 @@ struct SettingsView: View {
     @State private var showLoginCloudSyncMergeConfirm = false
     @State private var confirmationHost: SettingsConfirmationHost = .main
     @State private var isAccountDangerExpanded = false
+    @State private var expandedThemeFamilies: Set<String> = ["cyber", "mood_weather"]
     @State private var showNicknameEditor = false
     @FocusState private var focusedField: SettingsField?
     private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
@@ -425,11 +427,7 @@ struct SettingsView: View {
     }
 
     private var appearanceSummary: String {
-        switch settingsViewModel.appearance {
-        case .system: return "跟随系统"
-        case .light: return "浅色"
-        case .dark: return "深色"
-        }
+        "\(settingsViewModel.appearance.title) · \(settingsViewModel.currentThemeName)"
     }
 
     private var settingsDisplayName: String {
@@ -578,51 +576,51 @@ struct SettingsView: View {
     }
 
     private var settingsInkAccent: Color {
-        Color(red: 0.62, green: 0.50, blue: 0.30)
+        AppColors.accentDark
     }
 
     private var settingsInkText: Color {
-        Color(red: 28/255, green: 30/255, blue: 32/255)
+        AppColors.text
     }
 
     private var settingsMutedText: Color {
-        Color(red: 108/255, green: 114/255, blue: 110/255)
+        AppColors.subtext
     }
 
     private var settingsSage: Color {
-        Color(red: 184/255, green: 199/255, blue: 187/255)
+        AppColors.accent.opacity(0.62)
     }
 
     private var settingsDeepSage: Color {
-        Color(red: 168/255, green: 184/255, blue: 170/255)
+        AppColors.accentDark.opacity(0.64)
     }
 
     private var settingsMint: Color {
-        Color(red: 241/255, green: 246/255, blue: 242/255)
+        AppColors.surfaceMuted
     }
 
     private var settingsCream: Color {
-        Color(red: 249/255, green: 247/255, blue: 241/255)
+        AppColors.paperWarm
     }
 
     private var settingsEnvelopeIvory: Color {
-        Color(red: 248/255, green: 244/255, blue: 232/255)
+        AppColors.settingsEnvelopeIvory
     }
 
     private var settingsEnvelopeWarm: Color {
-        Color(red: 248/255, green: 238/255, blue: 216/255)
+        AppColors.settingsEnvelopeWarm
     }
 
     private var settingsEnvelopeMint: Color {
-        Color(red: 232/255, green: 243/255, blue: 233/255)
+        AppColors.settingsEnvelopeMint
     }
 
     private var settingsEnvelopeSage: Color {
-        Color(red: 169/255, green: 190/255, blue: 171/255)
+        AppColors.settingsEnvelopeSage
     }
 
     private var settingsEnvelopeDeepSage: Color {
-        Color(red: 92/255, green: 124/255, blue: 108/255)
+        AppColors.settingsEnvelopeDeepSage
     }
 
     @ViewBuilder
@@ -633,8 +631,8 @@ struct SettingsView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 146/255, green: 172/255, blue: 154/255).opacity(0.98),
-                            Color(red: 125/255, green: 158/255, blue: 139/255).opacity(0.96)
+                            AppColors.accentDark.opacity(0.98),
+                            AppColors.accent.opacity(0.92)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -653,7 +651,7 @@ struct SettingsView: View {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [settingsCream.opacity(0.98), Color(red: 247/255, green: 245/255, blue: 240/255)],
+                        colors: [settingsCream.opacity(0.98), AppColors.surfaceMuted.opacity(0.82)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -685,7 +683,7 @@ struct SettingsView: View {
         case .cream:
             return settingsInkAccent.opacity(0.70)
         case .mint:
-            return Color(red: 132/255, green: 160/255, blue: 141/255).opacity(0.82)
+            return AppColors.accent.opacity(0.82)
         case .light:
             return settingsInkAccent.opacity(0.72)
         }
@@ -705,13 +703,13 @@ struct SettingsView: View {
     private func settingsMarkColor(_ mark: String) -> Color {
         switch mark {
         case "云":
-            return Color(red: 0.47, green: 0.56, blue: 0.68)
+            return AppColors.categoryColor(.transport)
         case "伴":
             return AppColors.accent.opacity(0.88)
         case "色":
-            return Color(red: 0.70, green: 0.55, blue: 0.36)
+            return AppColors.lockGold
         case "安":
-            return Color(red: 0.56, green: 0.53, blue: 0.62)
+            return AppColors.categoryColor(.shopping)
         default:
             return settingsInkAccent
         }
@@ -1038,17 +1036,7 @@ struct SettingsView: View {
             ))
             settingHelper("关闭后仍可使用本地回望，不强制登录。")
         case .appearance:
-            webAppearanceButton("跟随系统", isActive: settingsViewModel.appearance == .system) {
-                settingsViewModel.appearance = .system
-            }
-            HStack(spacing: 4) {
-                webAppearanceButton("浅色", isActive: settingsViewModel.appearance == .light) {
-                    settingsViewModel.appearance = .light
-                }
-                webAppearanceButton("深色", isActive: settingsViewModel.appearance == .dark) {
-                    settingsViewModel.appearance = .dark
-                }
-            }
+            appearanceSheetContent
         case .companion:
             settingToggle("开启宠物陪伴", isOn: Binding(
                 get: { settingsViewModel.petCompanionEnabled },
@@ -1228,6 +1216,231 @@ struct SettingsView: View {
     }
 
     // MARK: - Appearance
+
+    private var appearanceSheetContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("明暗")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                webAppearanceButton("跟随系统", isActive: settingsViewModel.appearance == .system) {
+                    settingsViewModel.appearance = .system
+                }
+                HStack(spacing: 6) {
+                    webAppearanceButton("浅色", isActive: settingsViewModel.appearance == .light) {
+                        settingsViewModel.appearance = .light
+                    }
+                    webAppearanceButton("深色", isActive: settingsViewModel.appearance == .dark) {
+                        settingsViewModel.appearance = .dark
+                    }
+                }
+                settingHelper("跟随系统时，明暗会随 iOS 设置切换。")
+            }
+
+            Divider().overlay(AppColors.line.opacity(0.7))
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("色彩主题")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(AppColors.text)
+                        Text("只改界面颜色，不影响账本数据。")
+                            .font(.system(size: 12))
+                            .foregroundStyle(AppColors.subtext)
+                    }
+                    Spacer()
+                    Text("当前：\(settingsViewModel.currentThemeName)")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppColors.tertiary)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("日常（免费）")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppColors.text.opacity(0.88))
+                    themeSwatchGrid(themes: freeThemes, columns: 3)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 6) {
+                        Text("会员主题")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(AppColors.text.opacity(0.88))
+                        if !hasMemberAccess {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(AppColors.lockGold)
+                        }
+                    }
+                    Text(hasMemberAccess ? "已解锁标准主题库；永久会员可用限定主题。" : "会员解锁 25+ 款；永久会员再享 3 款限定。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext)
+
+                    VStack(spacing: 8) {
+                        ForEach(themeFamilySections, id: \.key) { section in
+                            themeFamilyDisclosure(section)
+                        }
+                    }
+                }
+
+                if let msg = settingsViewModel.themeMessage {
+                    Text(msg)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.lockGold)
+                        .padding(.top, 2)
+                }
+
+                settingToggle("分享图使用当前主题", isOn: Binding(
+                    get: { settingsViewModel.shareCardUsesAppTheme },
+                    set: { settingsViewModel.shareCardUsesAppTheme = $0 }
+                ))
+
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    settingsViewModel.restoreDefaultAppearanceAndTheme()
+                } label: {
+                    Text("恢复默认主题")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(AppColors.tertiary)
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 2)
+            }
+        }
+    }
+
+    private var freeThemes: [ThemeDefinition] {
+        ThemeResolver.shared.themes.filter { $0.tier == .free }
+    }
+
+    private var themeFamilySections: [(key: String, title: String, themes: [ThemeDefinition])] {
+        let paidThemes = ThemeResolver.shared.themes.filter { $0.tier != .free }
+        let preferredOrder = ["cyber", "mood_weather", "paperverse", "bio", "orbital", "brutal", "lifetime"]
+        return preferredOrder.compactMap { family in
+            let themes = paidThemes.filter { $0.family == family }
+            guard !themes.isEmpty else { return nil }
+            return (family, themeFamilyTitle(family), themes)
+        }
+    }
+
+    private func themeFamilyTitle(_ family: String) -> String {
+        switch family {
+        case "cyber": return "赛博朋克"
+        case "mood_weather": return "情绪气象"
+        case "paperverse": return "纸境东方"
+        case "bio": return "自然演算"
+        case "orbital": return "太空通勤"
+        case "brutal": return "工业柔光"
+        case "lifetime": return "永久限定"
+        default: return family
+        }
+    }
+
+    private func themeFamilyDisclosure(
+        _ section: (key: String, title: String, themes: [ThemeDefinition])
+    ) -> some View {
+        DisclosureGroup(
+            isExpanded: Binding(
+                get: { expandedThemeFamilies.contains(section.key) },
+                set: { isExpanded in
+                    if isExpanded {
+                        expandedThemeFamilies.insert(section.key)
+                    } else {
+                        expandedThemeFamilies.remove(section.key)
+                    }
+                }
+            )
+        ) {
+            themeSwatchGrid(themes: section.themes, columns: 2)
+                .padding(.top, 8)
+        } label: {
+            HStack {
+                Text("\(section.title)（\(section.themes.count)）")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                Spacer()
+            }
+            .padding(.vertical, 8)
+        }
+        .padding(.horizontal, 12)
+        .background(AppColors.surfaceMuted.opacity(0.72), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func themeSwatchGrid(themes: [ThemeDefinition], columns: Int) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: columns), spacing: 12) {
+            ForEach(themes) { theme in
+                themeSwatch(theme)
+            }
+        }
+    }
+
+    private func themeSwatch(_ theme: ThemeDefinition) -> some View {
+        let isSelected = settingsViewModel.colorThemeId == theme.id
+        let isUnlocked = settingsViewModel.isThemeUnlocked(theme.id)
+        let tokens = theme.modes.light ?? theme.modes.dark
+        let background = tokens?.background.color ?? AppColors.bg
+        let accent = tokens?.accent.color ?? AppColors.accent
+        let surface = tokens?.surface.color ?? AppColors.panel
+        return Button {
+            if settingsViewModel.setTheme(theme.id) {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    showMemberPricing = true
+                }
+            }
+        } label: {
+            VStack(spacing: 7) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(background)
+                        .frame(width: 56, height: 56)
+                        .overlay(alignment: .topTrailing) {
+                            Circle()
+                                .fill(accent)
+                                .frame(width: 18, height: 18)
+                                .padding(7)
+                        }
+                        .overlay(alignment: .bottom) {
+                            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                                .fill(surface.opacity(0.86))
+                                .frame(width: 38, height: 7)
+                                .padding(.bottom, 9)
+                        }
+                        .opacity(isUnlocked ? 1 : 0.55)
+                        .overlay {
+                            if !isUnlocked {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(AppColors.lockGold)
+                            }
+                        }
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(accent)
+                            .background(Circle().fill(AppColors.bg))
+                            .offset(x: 22, y: -22)
+                    }
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(isSelected ? accent : AppColors.line, lineWidth: isSelected ? 2 : 1)
+                )
+
+                Text(theme.displayName)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(theme.displayName)
+    }
 
     private var appearancePanel: some View {
         VStack(alignment: .leading, spacing: 12) {

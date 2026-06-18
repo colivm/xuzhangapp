@@ -2459,10 +2459,14 @@ struct InsightWebView: View {
               let payload = PlaybackService().buildWeeklyShareCardPayload(from: homeViewModel.items) else { return }
         let petMode = settingsViewModel.petCompanionEnabled
         let nick = settingsViewModel.displayName.isEmpty ? "叙账用户" : settingsViewModel.displayName
+        let shareTheme: WeeklyShareCardView.ShareCardTheme = settingsViewModel.shareCardUsesAppTheme && settingsViewModel.settings.hasMemberAccess
+            ? .appTheme(ThemeResolver.current)
+            : .journal
         let card = WeeklyShareCardView(
             payload: payload,
             isPetMode: petMode,
-            nickname: nick
+            nickname: nick,
+            theme: shareTheme
         )
         guard let img = card.snapshot() else { return }
         isSavingWeeklyShareCard = true
@@ -2854,8 +2858,9 @@ struct WeeklyShareCardView: View {
     let insight: ShareInsight
     var isPetMode: Bool = true
     var nickname: String = "叙账用户"
+    let cardTheme: ShareCardTheme
 
-    private var t: ShareCardTheme { .journal }
+    private var t: ShareCardTheme { cardTheme }
 
     struct ShareCardTheme {
         let bgStart, bgMid, bgEnd: Color; let panelBg, panelBorder: Color
@@ -2869,6 +2874,25 @@ struct WeeklyShareCardView: View {
             accent: Color(hex: "89b69a"), accentDeep: Color(hex: "47705c"),
             titleSub: Color(hex: "89968f"), textMain: Color(hex: "1f2528"), textMuted: Color(hex: "6d776f"),
             footer: Color(hex: "4c5960"), footerSub: Color(hex: "9aa49b"))
+
+        static func appTheme(_ theme: ResolvedThemeTokens) -> ShareCardTheme {
+            ShareCardTheme(
+                bgStart: theme.background,
+                bgMid: theme.surfaceWarm,
+                bgEnd: theme.backgroundGradientEnd,
+                panelBg: theme.panelStrong,
+                panelBorder: theme.stroke.opacity(0.72),
+                paperShadow: theme.textSecondary,
+                paperEdge: theme.surfaceMuted,
+                accent: theme.accent,
+                accentDeep: theme.accentDark,
+                titleSub: theme.textTertiary,
+                textMain: theme.textPrimary,
+                textMuted: theme.textSecondary,
+                footer: theme.textSecondary,
+                footerSub: theme.textTertiary
+            )
+        }
     }
 
     init(
@@ -2887,7 +2911,8 @@ struct WeeklyShareCardView: View {
         periodText: String? = nil,
         insight: ShareInsight? = nil,
         isPetMode: Bool = true,
-        nickname: String = "叙账用户"
+        nickname: String = "叙账用户",
+        theme: ShareCardTheme = .journal
     ) {
         self.weekTotal = weekTotal
         self.topCategory = topCategory
@@ -2910,9 +2935,10 @@ struct WeeklyShareCardView: View {
         )
         self.isPetMode = isPetMode
         self.nickname = nickname
+        self.cardTheme = theme
     }
 
-    init(payload: WeeklyShareCardPayload, isPetMode: Bool = true, nickname: String = "叙账用户") {
+    init(payload: WeeklyShareCardPayload, isPetMode: Bool = true, nickname: String = "叙账用户", theme: ShareCardTheme = .journal) {
         self.init(
             weekTotal: payload.weekTotal,
             topCategory: payload.topCategory,
@@ -2929,7 +2955,8 @@ struct WeeklyShareCardView: View {
             periodText: payload.periodText,
             insight: payload.insight,
             isPetMode: isPetMode,
-            nickname: nickname
+            nickname: nickname,
+            theme: theme
         )
     }
 

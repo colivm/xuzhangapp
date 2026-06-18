@@ -4,6 +4,7 @@ import SwiftUI
 struct AppSettings: Codable, Equatable {
     static let productionBackendBaseURL = "https://api.xuzhangapp.com"
     static let productionAIEndpoint = "https://api.xuzhangapp.com/v1/ai/insight/daily"
+    static let defaultColorThemeId = "xuzhang_default"
 
     enum Appearance: String, Codable, CaseIterable, Identifiable {
         case system
@@ -61,6 +62,10 @@ struct AppSettings: Codable, Equatable {
     var memberTier: String
     /// 会员有效期，后端返回的 ISO8601 字符串；永久会员为空。
     var memberExpiresAt: String?
+    /// 当前界面色彩主题 ID。
+    var colorThemeId: String
+    /// 分享图是否跟随 App 当前主题。
+    var shareCardUsesAppTheme: Bool
 
     mutating func applyProductionEndpoints() {
         backendBaseURL = Self.productionBackendBaseURL
@@ -84,7 +89,9 @@ struct AppSettings: Codable, Equatable {
         backendBaseURL: productionBackendBaseURL,
         cloudUserId: "",
         memberTier: "free",
-        memberExpiresAt: nil
+        memberExpiresAt: nil,
+        colorThemeId: defaultColorThemeId,
+        shareCardUsesAppTheme: false
     )
 }
 
@@ -107,6 +114,8 @@ extension AppSettings {
         case cloudUserId
         case memberTier
         case memberExpiresAt
+        case colorThemeId
+        case shareCardUsesAppTheme
     }
 
     init(from decoder: Decoder) throws {
@@ -128,6 +137,8 @@ extension AppSettings {
         cloudUserId = try container.decodeIfPresent(String.self, forKey: .cloudUserId) ?? ""
         memberTier = try container.decodeIfPresent(String.self, forKey: .memberTier) ?? "free"
         memberExpiresAt = try container.decodeIfPresent(String.self, forKey: .memberExpiresAt)
+        colorThemeId = try container.decodeIfPresent(String.self, forKey: .colorThemeId) ?? Self.defaultColorThemeId
+        shareCardUsesAppTheme = try container.decodeIfPresent(Bool.self, forKey: .shareCardUsesAppTheme) ?? false
         applyProductionEndpoints()
     }
 }

@@ -2,14 +2,15 @@
 
 // MARK: - Stats View (matching web statsPage)
 
+@MainActor
 private enum TraceColors {
-    static let primaryText = AppColors.text
-    static let secondaryText = AppColors.subtext
-    static let tertiaryText = Color(red: 0.541, green: 0.584, blue: 0.659)
-    static let surfaceWarm = Color(red: 0.961, green: 0.941, blue: 0.910)
-    static let surfaceGlass = Color.white.opacity(0.72)
-    static let surfaceMuted = Color(red: 0.941, green: 0.949, blue: 0.961)
-    static let stroke = Color(red: 0.910, green: 0.929, blue: 0.949)
+    static var primaryText: Color { AppColors.text }
+    static var secondaryText: Color { AppColors.subtext }
+    static var tertiaryText: Color { AppColors.tertiary }
+    static var surfaceWarm: Color { AppColors.paperWarm }
+    static var surfaceGlass: Color { AppColors.panel }
+    static var surfaceMuted: Color { AppColors.surfaceMuted }
+    static var stroke: Color { AppColors.stroke }
 }
 
 struct StatsWebView: View {
@@ -516,18 +517,11 @@ struct StatsWebView: View {
     }
 
     private func traceAccentColor(for category: HomeItem.Category) -> Color {
-        switch category {
-        case .dining:
-            return Color(red: 0.78, green: 0.58, blue: 0.34).opacity(0.78)
-        case .transport:
-            return Color(red: 0.40, green: 0.62, blue: 0.70).opacity(0.78)
-        default:
-            return AppColors.accent.opacity(0.56)
-        }
+        AppColors.categoryColor(category).opacity(0.78)
     }
 
     private var traceClueMist: Color {
-        Color(red: 0.68, green: 0.80, blue: 0.75)
+        AppColors.accent.opacity(0.42)
     }
 
     private var traceClueItems: [HomeItem] {
@@ -699,26 +693,7 @@ struct StatsWebView: View {
     }
 
     private func traceClueColor(for category: HomeItem.Category) -> Color {
-        switch category {
-        case .dining:
-            return Color(red: 0.722, green: 0.584, blue: 0.478)
-        case .transport:
-            return Color(red: 0.416, green: 0.624, blue: 0.659)
-        case .daily:
-            return Color(red: 0.561, green: 0.659, blue: 0.533)
-        case .shopping:
-            return Color(red: 0.659, green: 0.573, blue: 0.659)
-        case .health:
-            return Color(red: 0.498, green: 0.659, blue: 0.510)
-        case .home:
-            return Color(red: 0.659, green: 0.596, blue: 0.533)
-        case .social:
-            return Color(red: 0.769, green: 0.651, blue: 0.478)
-        case .lodging:
-            return Color(red: 0.541, green: 0.588, blue: 0.667)
-        default:
-            return AppColors.accent
-        }
+        AppColors.categoryColor(category)
     }
 
     private var traceEmptyState: some View {
@@ -2444,11 +2419,11 @@ struct StatsWebView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(item.displayTitle)
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Color(red: 30/255, green: 39/255, blue: 53/255))
+                    .foregroundStyle(AppColors.text)
                 Spacer()
                 Text(item.amount.formatted(.cny))
                     .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(red: 31/255, green: 59/255, blue: 64/255))
+                    .foregroundStyle(AppColors.accentDark)
             }
 
             let emotionTag = item.displayEmotionTag
@@ -2570,7 +2545,7 @@ struct StatsWebView: View {
             if !item.displayEmotionTag.isEmpty {
                 Text(item.displayEmotionTag)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color(red: 74/255, green: 124/255, blue: 104/255))
+                    .foregroundStyle(AppColors.accent)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.13)))
@@ -2620,7 +2595,7 @@ struct StatsWebView: View {
                 .frame(height: 42)
                 .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
             }
-            .shadow(color: Color(red: 43/255, green: 66/255, blue: 58/255).opacity(isEditing ? 0.14 : 0.09), radius: isEditing ? 16 : 12, x: 0, y: isEditing ? 9 : 6)
+            .shadow(color: AppColors.subtext.opacity(isEditing ? 0.14 : 0.09), radius: isEditing ? 16 : 12, x: 0, y: isEditing ? 9 : 6)
     }
 
     private func traceDetailRecordBorder(isEditing: Bool) -> some View {

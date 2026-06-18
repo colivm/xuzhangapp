@@ -29,6 +29,7 @@ struct MemberPricingView: View {
         ("OCR 导入不限次", "微信/支付宝账单截图可继续本地识别，经常导入也不用被次数打断。"),
         ("AI 回顾问得更深", "可以继续追问：哪几天最累、哪些小支出重复出现、这个月节奏哪里变了。"),
         ("全部生活场景换角度", "旅行、运动、宠物、宝宝、人情等场景都能打开，不只停在 3 个常用角度。"),
+        ("25+ 色彩主题 + 分享图同款", "痕迹、今天、复盘页统一换肤；永久会员再享 3 款限定主题。"),
         ("分享图持续生成", "周记、月章和故事图可以连续留下来，适合长期回看和分享。"),
     ]
 
@@ -38,7 +39,7 @@ struct MemberPricingView: View {
         ("截图导入", "每日 3 次 OCR", "会员经常导入也不中断"),
     ]
 
-    private let freeQuotaFootnote = "免费版已经可以完整记账、手动整理，并体验基础回放和 3 个常用场景。会员适合连续记录后，想让更多生活线索长期被看见的人。"
+    private let freeQuotaFootnote = "免费版已经可以完整记账、手动整理，并体验基础回放和 3 个常用场景。会员另可解锁 25+ 界面色彩主题；永久会员再享 3 款专属皮肤。"
 
     private var isMember: Bool {
         settingsViewModel.settings.hasMemberAccess
@@ -127,7 +128,7 @@ struct MemberPricingView: View {
                         .background(
                             LinearGradient(
                                 colors: [
-                                    Color(red: 0.45, green: 0.64, blue: 0.57).opacity(0.96),
+                                    AppColors.accentDark.opacity(0.96),
                                     AppColors.accent.opacity(0.94),
                                     AppColors.lockGold.opacity(0.72)
                                 ],
@@ -455,7 +456,7 @@ struct MemberPricingView: View {
             .background(
                 LinearGradient(
                     colors: [
-                        Color(red: 0.45, green: 0.64, blue: 0.57).opacity(0.96),
+                        AppColors.accentDark.opacity(0.96),
                         AppColors.accent.opacity(0.94),
                         AppColors.lockGold.opacity(0.72)
                     ],

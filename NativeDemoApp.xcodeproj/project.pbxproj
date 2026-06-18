@@ -62,6 +62,10 @@
 		F12000010000000000000001 /* RecordPreviewTier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F12000020000000000000001 /* RecordPreviewTier.swift */; };
 		F12000030000000000000001 /* ScenePackAngleSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F12000040000000000000001 /* ScenePackAngleSheet.swift */; };
 		F13000010000000000000001 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = F13000020000000000000001 /* LaunchScreen.storyboard */; };
+		T10000010000000000000001 /* ThemeTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = T10000110000000000000001 /* ThemeTokens.swift */; };
+		T10000020000000000000001 /* ThemeResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = T10000120000000000000001 /* ThemeResolver.swift */; };
+		T10000030000000000000001 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = T10000130000000000000001 /* AppTheme.swift */; };
+		T10000040000000000000001 /* ThemeCatalog.json in Resources */ = {isa = PBXBuildFile; fileRef = T10000140000000000000001 /* ThemeCatalog.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -123,6 +127,10 @@
 		F12000020000000000000001 /* RecordPreviewTier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordPreviewTier.swift; sourceTree = "<group>"; };
 		F12000040000000000000001 /* ScenePackAngleSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackAngleSheet.swift; sourceTree = "<group>"; };
 		F13000020000000000000001 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		T10000110000000000000001 /* ThemeTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeTokens.swift; sourceTree = "<group>"; };
+		T10000120000000000000001 /* ThemeResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeResolver.swift; sourceTree = "<group>"; };
+		T10000130000000000000001 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		T10000140000000000000001 /* ThemeCatalog.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ThemeCatalog.json; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -153,6 +161,7 @@
 				A10000340000000000000001 /* Services */,
 				A10000350000000000000001 /* ViewModels */,
 				A10000360000000000000001 /* Views */,
+				T10000310000000000000001 /* Theme */,
 				A100001B0000000000000001 /* Assets.xcassets */,
 				A10000381000000000000001 /* Resources */,
 				F13000020000000000000001 /* LaunchScreen.storyboard */,
@@ -272,6 +281,17 @@
 			path = Components;
 			sourceTree = "<group>";
 		};
+		T10000310000000000000001 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				T10000140000000000000001 /* ThemeCatalog.json */,
+				T10000110000000000000001 /* ThemeTokens.swift */,
+				T10000120000000000000001 /* ThemeResolver.swift */,
+				T10000130000000000000001 /* AppTheme.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -334,6 +354,7 @@
 				A100000B1000000000000001 /* RecordSceneLexicon.json in Resources */,
 				A100000B2000000000000001 /* RecordSceneLexicon.regression.json in Resources */,
 				F13000010000000000000001 /* LaunchScreen.storyboard in Resources */,
+				T10000040000000000000001 /* ThemeCatalog.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -395,6 +416,9 @@
 				F10000010000000000000001 /* MinimalOnboardingSheet.swift in Sources */,
 				F12000010000000000000001 /* RecordPreviewTier.swift in Sources */,
 				F12000030000000000000001 /* ScenePackAngleSheet.swift in Sources */,
+				T10000010000000000000001 /* ThemeTokens.swift in Sources */,
+				T10000020000000000000001 /* ThemeResolver.swift in Sources */,
+				T10000030000000000000001 /* AppTheme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

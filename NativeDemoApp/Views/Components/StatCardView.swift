@@ -10,7 +10,7 @@ struct StatCardView: View {
             Image(systemName: iconName)
                 .font(.title3)
                 .frame(width: 36, height: 36)
-                .background(Color(red: 0.47, green: 0.69, blue: 0.63).opacity(0.18))
+                .background(AppColors.accent.opacity(0.18))
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             VStack(alignment: .leading, spacing: 4) {

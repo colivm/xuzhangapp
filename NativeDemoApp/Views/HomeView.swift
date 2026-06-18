@@ -773,9 +773,9 @@ struct HomeView: View {
     private var todayRecordsGradientBackground: some View {
         LinearGradient(
             colors: [
-                Color(red: 233/255, green: 243/255, blue: 236/255),
-                Color(red: 219/255, green: 235/255, blue: 225/255),
-                Color(red: 244/255, green: 248/255, blue: 244/255)
+                AppColors.bg,
+                AppColors.surfaceMuted,
+                AppColors.paperMist
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -935,8 +935,8 @@ struct HomeView: View {
                     colors: isEditing
                     ? [
                         Color.white.opacity(0.64),
-                        Color(red: 229/255, green: 242/255, blue: 234/255).opacity(0.80),
-                        Color(red: 204/255, green: 228/255, blue: 216/255).opacity(0.54)
+                        AppColors.surfaceMuted.opacity(0.80),
+                        AppColors.accent.opacity(0.18)
                     ]
                     : [
                         Color.white.opacity(0.72),
@@ -974,7 +974,7 @@ struct HomeView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
             }
             .shadow(
-                color: Color(red: 43/255, green: 66/255, blue: 58/255).opacity(isEditing ? 0.18 : 0.12),
+                color: AppColors.subtext.opacity(isEditing ? 0.18 : 0.12),
                 radius: isEditing ? 20 : 16,
                 x: 0,
                 y: isEditing ? 12 : 8
@@ -995,7 +995,7 @@ struct HomeView: View {
                     colors: isEditing
                     ? [
                         Color.white.opacity(0.88),
-                        Color(red: 104/255, green: 157/255, blue: 136/255).opacity(0.54),
+                        AppColors.accent.opacity(0.34),
                         accent.opacity(0.22)
                     ]
                     : [
@@ -1011,15 +1011,15 @@ struct HomeView: View {
     }
 
     private var todayRecordPrimaryInk: Color {
-        Color(red: 30/255, green: 39/255, blue: 53/255)
+        AppColors.text
     }
 
     private var todayRecordAmountInk: Color {
-        Color(red: 31/255, green: 59/255, blue: 64/255)
+        AppColors.accentDark
     }
 
     private var todayRecordEmotionInk: Color {
-        Color(red: 74/255, green: 124/255, blue: 104/255)
+        AppColors.accent
     }
 
     private var todayRecordsFooterSummary: some View {
@@ -1035,7 +1035,7 @@ struct HomeView: View {
             .background(
                 Rectangle()
                     .fill(.ultraThinMaterial)
-                    .overlay(Color(red: 204/255, green: 231/255, blue: 221/255).opacity(0.44))
+                    .overlay(AppColors.accent.opacity(0.12))
             )
             .overlay(alignment: .top) {
                 Rectangle()
@@ -1054,7 +1054,7 @@ struct HomeView: View {
                 .font(.system(size: 76, weight: .ultraLight))
                 .offset(x: -10, y: 20)
         }
-        .foregroundStyle(Color(red: 82/255, green: 128/255, blue: 105/255).opacity(0.10))
+        .foregroundStyle(AppColors.accent.opacity(0.10))
         .frame(width: 180, height: 132)
         .allowsHitTesting(false)
     }
@@ -1096,22 +1096,7 @@ struct HomeView: View {
     }
 
     private func todayRecordCategoryAccent(for item: HomeItem) -> Color {
-        switch item.category {
-        case .dining:
-            return Color(red: 128/255, green: 166/255, blue: 137/255)
-        case .transport, .daily:
-            return Color(red: 117/255, green: 149/255, blue: 181/255)
-        case .shopping, .social:
-            return Color(red: 186/255, green: 151/255, blue: 69/255)
-        case .home, .lodging:
-            return Color(red: 139/255, green: 159/255, blue: 168/255)
-        case .health:
-            return Color(red: 132/255, green: 166/255, blue: 151/255)
-        case .entertainment:
-            return Color(red: 154/255, green: 143/255, blue: 185/255)
-        case .other:
-            return AppColors.accent
-        }
+        AppColors.categoryColor(item.category)
     }
 
     private var todayEditSpring: Animation {
