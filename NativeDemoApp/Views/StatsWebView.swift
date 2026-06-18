@@ -2,6 +2,16 @@
 
 // MARK: - Stats View (matching web statsPage)
 
+private enum TraceColors {
+    static let primaryText = AppColors.text
+    static let secondaryText = AppColors.subtext
+    static let tertiaryText = Color(red: 0.541, green: 0.584, blue: 0.659)
+    static let surfaceWarm = Color(red: 0.961, green: 0.941, blue: 0.910)
+    static let surfaceGlass = Color.white.opacity(0.72)
+    static let surfaceMuted = Color(red: 0.941, green: 0.949, blue: 0.961)
+    static let stroke = Color(red: 0.910, green: 0.929, blue: 0.949)
+}
+
 struct StatsWebView: View {
 
     @EnvironmentObject private var homeViewModel: HomeViewModel
@@ -26,6 +36,7 @@ struct StatsWebView: View {
     @State private var showTraceCustomDatePanel = false
     @State private var traceViewMode: TraceViewMode = .life
     @State private var traceDeepInsightExpanded = false
+    @State private var traceInsightFocusedQuestion: String?
     @State private var lifeInsightRefreshID = UUID()
     private let playbackService = PlaybackService()
     private let momentSelector = PlaybackMomentSelector()
@@ -166,7 +177,7 @@ struct StatsWebView: View {
     }
 
     private var statsContent: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             traceViewModeKicker
             if traceViewMode == .life {
                 traceChapterCard
@@ -176,7 +187,7 @@ struct StatsWebView: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.top, 4)
+        .padding(.top, 6)
         .padding(.bottom, 120)
         .frame(maxWidth: 430)
         .frame(maxWidth: .infinity, alignment: .center)
@@ -380,31 +391,17 @@ struct StatsWebView: View {
     }
 
     private var traceRangeKicker: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                traceRangeTab("本周", period: .week)
-                traceRangeTab("本月", period: .month)
-            }
-            .frame(height: 44)
-
-            GeometryReader { proxy in
-                let tabWidth = proxy.size.width / 2
-                ZStack(alignment: .leading) {
-                    Capsule(style: .continuous)
-                        .fill(AppColors.line.opacity(0.45))
-                        .frame(height: 1)
-
-                    Capsule(style: .continuous)
-                        .fill(AppColors.accent.opacity(0.62))
-                        .frame(width: tabWidth, height: 2)
-                        .offset(x: (!useCustomRange && selectedPeriod == .month) ? tabWidth : 0)
-                        .animation(traceEditSpring, value: selectedPeriod)
-                        .animation(traceEditSpring, value: useCustomRange)
-                }
-            }
-            .frame(height: 3)
+        HStack(spacing: 4) {
+            traceRangeTab("本周", period: .week)
+            traceRangeTab("本月", period: .month)
         }
+        .padding(4)
+        .frame(height: 44)
         .frame(maxWidth: .infinity)
+        .background(
+            Capsule(style: .continuous)
+                .fill(TraceColors.surfaceMuted)
+        )
     }
 
     private var traceViewModeKicker: some View {
@@ -418,20 +415,20 @@ struct StatsWebView: View {
             GeometryReader { proxy in
                 let tabWidth = proxy.size.width / 2
                 ZStack(alignment: .leading) {
-                    Capsule(style: .continuous)
-                        .fill(AppColors.line.opacity(0.40))
-                        .frame(height: 1)
+                    Rectangle()
+                        .fill(Color.clear)
+                        .frame(height: 2)
 
                     Capsule(style: .continuous)
-                        .fill(AppColors.accent.opacity(0.62))
+                        .fill(AppColors.accent.opacity(0.82))
                         .frame(width: tabWidth, height: 2)
                         .offset(x: traceViewMode == .clues ? tabWidth : 0)
                         .animation(traceEditSpring, value: traceViewMode)
                 }
             }
-            .frame(height: 3)
+            .frame(height: 2)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 18)
         .padding(.bottom, 2)
     }
 
@@ -444,7 +441,7 @@ struct StatsWebView: View {
         } label: {
             Text(mode.rawValue)
                 .font(.system(size: 16, weight: isSelected ? .bold : .semibold))
-                .foregroundStyle(isSelected ? AppColors.text.opacity(0.94) : AppColors.subtext.opacity(0.76))
+                .foregroundStyle(isSelected ? TraceColors.primaryText : TraceColors.tertiaryText)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
         }
@@ -457,10 +454,15 @@ struct StatsWebView: View {
             applyTracePeriod(period)
         } label: {
             Text(title)
-                .font(.system(size: 15, weight: isSelected ? .bold : .semibold))
-                .foregroundStyle(isSelected ? AppColors.text.opacity(0.94) : AppColors.subtext.opacity(0.76))
+                .font(.system(size: 15, weight: isSelected ? .bold : .medium))
+                .foregroundStyle(isSelected ? TraceColors.primaryText : TraceColors.secondaryText)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(isSelected ? Color.white.opacity(0.92) : Color.clear)
+                        .shadow(color: isSelected ? AppColors.subtext.opacity(0.06) : .clear, radius: 8, x: 0, y: 3)
+                )
         }
         .buttonStyle(.plain)
     }
@@ -537,6 +539,7 @@ struct StatsWebView: View {
     }
 
     private var traceLifeInsight: LifeInsightResult {
+        _ = lifeInsightRefreshID
         lifeInsightService.buildTraceInsight(
             items: traceClueItems,
             periodLabel: traceInsightPeriodLabel
@@ -544,7 +547,6 @@ struct StatsWebView: View {
     }
 
     private var traceLifeInsightFreeRemaining: Int {
-        _ = lifeInsightRefreshID
         return lifeInsightService.freeRemaining(isMember: hasMemberAccess)
     }
 
@@ -582,7 +584,7 @@ struct StatsWebView: View {
             return "这一段的记录还比较分散"
         }
         if let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count >= 2 {
-            return "\(top.category.rawValue)最明显，\(peak.label)更密一些"
+            return "\(top.category.rawValue)最明显，\(traceRhythmNarrativeLabel(peak))记录更集中"
         }
         return "\(top.category.rawValue)是这一段最清楚的线索"
     }
@@ -593,6 +595,14 @@ struct StatsWebView: View {
         let total = items.reduce(0) { $0 + $1.amount }
         let activeDays = traceActiveDayCount(from: items)
         return "\(items.count) 笔记录，合计 \(total.formatted(.cny))，有 \(activeDays) 天留下痕迹。"
+    }
+
+    private var traceHeroMetaParts: (count: String, activeDays: String, total: String)? {
+        let items = traceClueItems
+        guard !items.isEmpty else { return nil }
+        let total = items.reduce(0) { $0 + $1.amount }
+        let activeDays = traceActiveDayCount(from: items)
+        return ("\(items.count) 笔", "\(activeDays) 天有痕迹", "合计 \(total.formatted(.cny))")
     }
 
     private var tracePrimaryEvidence: String {
@@ -611,13 +621,13 @@ struct StatsWebView: View {
         guard let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 else {
             return "节奏未形成"
         }
-        return "\(peak.label)最密"
+        return "\(traceRhythmNarrativeLabel(peak))最集中"
     }
 
     private var traceRhythmSummary: String {
         let active = traceRhythmPoints.filter { $0.count > 0 }.count
         guard active > 0 else { return "还在形成" }
-        return "\(active) 个节点亮起"
+        return "\(active) 天有记录"
     }
 
     private var traceClueInsightLines: [String] {
@@ -635,7 +645,7 @@ struct StatsWebView: View {
             lines.append("\(top.category.rawValue)占了 \(percent)%，是这一段最清楚的生活面。")
         }
         if let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 {
-            lines.append("\(peak.label)留下 \(peak.count) 笔，像是这一段最忙的节点。")
+            lines.append("\(traceRhythmNarrativeLabel(peak))留下 \(peak.count) 笔，像是这一段最忙的节点。")
         }
         let total = items.reduce(0) { $0 + $1.amount }
         if items.count >= 2 {
@@ -691,19 +701,21 @@ struct StatsWebView: View {
     private func traceClueColor(for category: HomeItem.Category) -> Color {
         switch category {
         case .dining:
-            return Color(red: 0.76, green: 0.55, blue: 0.38)
+            return Color(red: 0.722, green: 0.584, blue: 0.478)
         case .transport:
-            return Color(red: 0.38, green: 0.61, blue: 0.70)
+            return Color(red: 0.416, green: 0.624, blue: 0.659)
+        case .daily:
+            return Color(red: 0.561, green: 0.659, blue: 0.533)
         case .shopping:
-            return Color(red: 0.78, green: 0.62, blue: 0.74)
+            return Color(red: 0.659, green: 0.573, blue: 0.659)
         case .health:
-            return Color(red: 0.55, green: 0.70, blue: 0.52)
+            return Color(red: 0.498, green: 0.659, blue: 0.510)
         case .home:
-            return Color(red: 0.66, green: 0.58, blue: 0.48)
+            return Color(red: 0.659, green: 0.596, blue: 0.533)
         case .social:
-            return Color(red: 0.80, green: 0.62, blue: 0.44)
+            return Color(red: 0.769, green: 0.651, blue: 0.478)
         case .lodging:
-            return Color(red: 0.56, green: 0.62, blue: 0.76)
+            return Color(red: 0.541, green: 0.588, blue: 0.667)
         default:
             return AppColors.accent
         }
@@ -733,32 +745,20 @@ struct StatsWebView: View {
         } label: {
             HStack(spacing: 7) {
                 Text("细查这一段")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 13, weight: .medium))
                 Image(systemName: "arrow.right")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 11, weight: .medium))
                 Spacer()
             }
-            .foregroundStyle(AppColors.text.opacity(0.78))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white.opacity(0.36))
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(.thinMaterial)
-                    )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
-            )
+            .foregroundStyle(TraceColors.tertiaryText)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 8)
         }
         .buttonStyle(.plain)
     }
 
     private var traceClueBoard: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             traceClueHeroCard
             traceClueCompositionCard
             traceClueRhythmCard
@@ -770,28 +770,38 @@ struct StatsWebView: View {
 
     private var traceClueHeroCard: some View {
         let items = traceClueItems
-        return VStack(alignment: .leading, spacing: 14) {
+        return VStack(alignment: .leading, spacing: 16) {
             traceRangeKicker
 
-            VStack(alignment: .leading, spacing: 7) {
-                Text("这一段的线索")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppColors.subtext.opacity(0.82))
-
+            VStack(alignment: .leading, spacing: 8) {
                 Text(traceClueHeadline)
                     .font(.system(size: 25, weight: .bold))
-                    .foregroundStyle(AppColors.text)
-                    .lineSpacing(3)
+                    .foregroundStyle(TraceColors.primaryText)
+                    .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(traceClueSubline)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppColors.subtext)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let meta = traceHeroMetaParts {
+                    HStack(spacing: 6) {
+                        Text(meta.count)
+                        Text("·")
+                        Text(meta.activeDays)
+                        Text("·")
+                        Text(meta.total)
+                    }
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(TraceColors.tertiaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                } else {
+                    Text(traceClueSubline)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(TraceColors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             HStack(spacing: 8) {
-                traceClueEvidenceChip(tracePrimaryEvidence)
+                traceClueEvidenceChip(tracePrimaryEvidence, isPrimary: true)
                 traceClueEvidenceChip(traceSecondaryEvidence)
                 traceClueEvidenceChip(traceTertiaryEvidence)
             }
@@ -799,23 +809,23 @@ struct StatsWebView: View {
             if items.isEmpty {
                 Text("先留下几笔，线索会慢慢浮出来。")
                     .font(.system(size: 13))
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(TraceColors.secondaryText)
                     .padding(.top, 2)
             }
         }
-        .paperChapterPanel(radius: 24, padding: 20)
+        .traceWarmPanel(radius: 26, padding: 24)
     }
 
     private var traceClueCompositionCard: some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack {
                 Text("生活构成")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(AppColors.text)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(TraceColors.primaryText)
                 Spacer()
                 Text("\(traceClueItems.count) 笔")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(AppColors.subtext.opacity(0.78))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(TraceColors.tertiaryText)
             }
 
             if traceCategoryClues.isEmpty {
@@ -829,7 +839,7 @@ struct StatsWebView: View {
                 }
             }
         }
-        .glassPanel(radius: 22, padding: 17)
+        .traceGlassPanel(radius: 20, padding: 18)
     }
 
     private var traceCompositionRibbon: some View {
@@ -838,16 +848,16 @@ struct StatsWebView: View {
             HStack(spacing: 3) {
                 ForEach(Array(traceCategoryClues.prefix(4))) { clue in
                     RoundedRectangle(cornerRadius: 999, style: .continuous)
-                        .fill(traceClueColor(for: clue.category).opacity(0.78))
+                        .fill(traceClueColor(for: clue.category).opacity(0.65))
                         .frame(width: max(10, width * clue.ratio))
                 }
             }
         }
-        .frame(height: 13)
+        .frame(height: 10)
         .clipShape(Capsule(style: .continuous))
         .background(
             Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.38))
+                .fill(TraceColors.surfaceMuted)
         )
     }
 
@@ -855,12 +865,12 @@ struct StatsWebView: View {
         VStack(alignment: .leading, spacing: 13) {
             HStack {
                 Text(selectedPeriod == .week ? "一周节奏" : "这一月的节奏")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(AppColors.text)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(TraceColors.primaryText)
                 Spacer()
                 Text(traceRhythmSummary)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.subtext.opacity(0.80))
+                    .foregroundStyle(TraceColors.tertiaryText)
             }
 
             if traceRhythmPoints.isEmpty {
@@ -875,22 +885,22 @@ struct StatsWebView: View {
                 .padding(.top, 2)
             }
         }
-        .glassPanel(radius: 22, padding: 17)
+        .traceGlassPanel(radius: 20, padding: 18)
     }
 
     private var traceClueInsightCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("变化线索")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(AppColors.text)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(TraceColors.primaryText)
 
-            VStack(spacing: 8) {
+            VStack(spacing: 10) {
                 ForEach(Array(traceClueInsightLines.enumerated()), id: \.offset) { index, line in
                     traceClueInsightRow(line, index: index)
                 }
             }
         }
-        .glassPanel(radius: 22, padding: 17)
+        .traceGlassPanel(radius: 20, padding: 18)
     }
 
     private var traceDeepInsightCard: some View {
@@ -900,20 +910,20 @@ struct StatsWebView: View {
             HStack(alignment: .center, spacing: 10) {
                 ZStack {
                     Circle()
-                        .fill(AppColors.accent.opacity(0.13))
-                        .frame(width: 30, height: 30)
+                        .fill(AppColors.accent.opacity(0.10))
+                        .frame(width: 28, height: 28)
                     Image(systemName: "sparkles")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppColors.accent.opacity(0.88))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppColors.accent.opacity(0.80))
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("多看一层")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(AppColors.text)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(TraceColors.primaryText)
                     Text(hasMemberAccess ? "会员可继续追问这段账本" : "本周免费 \(traceLifeInsightFreeRemaining)/\(LifeInsightService.freeWeeklyLimit) 次")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(AppColors.subtext.opacity(0.78))
+                        .foregroundStyle(TraceColors.tertiaryText)
                 }
 
                 Spacer()
@@ -921,16 +931,20 @@ struct StatsWebView: View {
 
             Text(insight.leadQuestion)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(AppColors.text.opacity(0.86))
+                .foregroundStyle(TraceColors.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(isUnlocked ? insight.previewLine : insight.teaser)
-                .font(.system(size: 13))
+                .font(.system(size: 13, weight: .regular))
                 .lineSpacing(3)
-                .foregroundStyle(AppColors.subtext)
+                .foregroundStyle(TraceColors.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
             if isUnlocked {
+                Divider()
+                    .overlay(TraceColors.surfaceMuted)
+                    .padding(.top, 2)
+
                 VStack(spacing: 8) {
                     ForEach(Array(insight.fullLines.enumerated()), id: \.offset) { index, line in
                         traceDeepInsightLine(line, index: index)
@@ -940,71 +954,62 @@ struct StatsWebView: View {
 
                 traceInsightQuestionChips(insight.questionChips)
                     .transition(.opacity)
+
+                if let focusedQuestion = traceInsightFocusedQuestion {
+                    traceFocusedInsightAnswer(question: focusedQuestion, insight: insight)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
 
             Button {
                 handleTraceDeepInsightTap()
             } label: {
                 let buttonIsOpen = hasMemberAccess || canUseTraceDeepInsight || isUnlocked
-                HStack(spacing: 8) {
-                    Text(traceDeepInsightButtonTitle(isUnlocked: isUnlocked))
-                        .font(.system(size: 14, weight: .semibold))
-                    Image(systemName: buttonIsOpen ? "arrow.right" : "lock.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                    Spacer(minLength: 0)
+                if buttonIsOpen {
+                    HStack(spacing: 8) {
+                        Text(traceDeepInsightButtonTitle(isUnlocked: isUnlocked))
+                            .font(.system(size: 14, weight: .semibold))
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 11, weight: .semibold))
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 14)
+                    .background(traceDeepCTAButtonBackground(isOpen: true))
+                } else {
+                    HStack(spacing: 7) {
+                        Text(traceDeepInsightButtonTitle(isUnlocked: isUnlocked))
+                            .font(.system(size: 13, weight: .semibold))
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .frame(minHeight: 36)
+                    .foregroundStyle(AppColors.lockGold)
+                    .padding(.horizontal, 12)
+                    .background(traceDeepCTAButtonBackground(isOpen: false))
                 }
-                .foregroundStyle(buttonIsOpen ? AppColors.accent.opacity(0.92) : AppColors.lockGold)
-                .padding(.horizontal, 13)
-                .padding(.vertical, 11)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.white.opacity(0.42))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke((buttonIsOpen ? AppColors.accent : AppColors.lockGold).opacity(0.18), lineWidth: 1)
-                )
             }
             .buttonStyle(.plain)
             .disabled(!hasTraceInsightData)
         }
-        .padding(17)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.thinMaterial)
-                .overlay(
-                    LinearGradient(
-                        colors: [
-                            AppColors.accent.opacity(0.08),
-                            Color.white.opacity(0.18),
-                            AppColors.lockGold.opacity(hasMemberAccess || isUnlocked ? 0.04 : 0.08)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(AppColors.accent.opacity(0.16), lineWidth: 1)
-        )
-        .shadow(color: AppColors.subtext.opacity(0.08), radius: 14, y: 8)
+        .traceGlassPanel(radius: 20, padding: 18)
     }
 
     private func traceDeepInsightLine(_ text: String, index: Int) -> some View {
         HStack(alignment: .top, spacing: 9) {
             Text("\(index + 1)")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(AppColors.accent.opacity(0.82))
-                .frame(width: 22, height: 22)
+                .foregroundStyle(index == 0 ? AppColors.accentDark : TraceColors.secondaryText)
+                .frame(width: 20, height: 20)
                 .background(
                     Circle()
-                        .fill(AppColors.accent.opacity(0.11))
+                        .fill(index == 0 ? AppColors.accent.opacity(0.10) : TraceColors.surfaceMuted)
                 )
             Text(text)
                 .font(.system(size: 13, weight: .medium))
                 .lineSpacing(3)
-                .foregroundStyle(AppColors.text.opacity(0.78))
+                .foregroundStyle(TraceColors.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
@@ -1012,7 +1017,7 @@ struct StatsWebView: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.34))
+                .fill(TraceColors.surfaceMuted)
         )
     }
 
@@ -1020,22 +1025,65 @@ struct StatsWebView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(chips, id: \.self) { chip in
-                    Text(chip)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(AppColors.text.opacity(0.76))
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(Color.white.opacity(0.38))
-                        )
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(Color.white.opacity(0.42), lineWidth: 1)
-                        )
+                    Button {
+                        handleTraceInsightQuestionTap(chip)
+                    } label: {
+                        Text(chip)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(traceInsightFocusedQuestion == chip ? AppColors.accentDark : TraceColors.secondaryText)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 8)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(traceInsightFocusedQuestion == chip ? AppColors.accent.opacity(0.12) : TraceColors.surfaceMuted)
+                            )
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(
+                                        traceInsightFocusedQuestion == chip ? AppColors.accent.opacity(0.20) : Color.clear,
+                                        lineWidth: 1
+                                    )
+                            )
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
+    }
+
+    private func traceFocusedInsightAnswer(question: String, insight: LifeInsightResult) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(question)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(TraceColors.primaryText)
+                .lineLimit(2)
+
+            Text(traceInsightAnswer(for: question, insight: insight))
+                .font(.system(size: 13, weight: .medium))
+                .lineSpacing(3)
+                .foregroundStyle(TraceColors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(TraceColors.surfaceMuted)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(TraceColors.stroke, lineWidth: 1)
+        )
+    }
+
+    private func traceDeepCTAButtonBackground(isOpen: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(isOpen ? AppColors.accent : Color.clear)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(isOpen ? Color.clear : AppColors.lockGold.opacity(0.34), lineWidth: 1)
+            )
     }
 
     private func traceDeepInsightButtonTitle(isUnlocked: Bool) -> String {
@@ -1051,11 +1099,18 @@ struct StatsWebView: View {
         if hasMemberAccess {
             withAnimation(traceEditSpring) {
                 traceDeepInsightExpanded = true
+                focusNextTraceInsightQuestion()
+                lifeInsightRefreshID = UUID()
             }
             return
         }
 
-        if traceDeepInsightExpanded { return }
+        if traceDeepInsightExpanded {
+            withAnimation(traceEditSpring) {
+                focusNextTraceInsightQuestion()
+            }
+            return
+        }
 
         guard canUseTraceDeepInsight else {
             onShowMemberPricing?()
@@ -1065,14 +1120,84 @@ struct StatsWebView: View {
         lifeInsightService.markDeepInsightUsed(isMember: false)
         withAnimation(traceEditSpring) {
             traceDeepInsightExpanded = true
+            focusNextTraceInsightQuestion()
             lifeInsightRefreshID = UUID()
         }
     }
 
-    private func traceClueEvidenceChip(_ text: String) -> some View {
+    private func handleTraceInsightQuestionTap(_ question: String) {
+        guard hasTraceInsightData else { return }
+        if hasMemberAccess || traceDeepInsightExpanded {
+            withAnimation(traceEditSpring) {
+                traceInsightFocusedQuestion = question
+            }
+            return
+        }
+
+        guard canUseTraceDeepInsight else {
+            onShowMemberPricing?()
+            return
+        }
+
+        lifeInsightService.markDeepInsightUsed(isMember: false)
+        withAnimation(traceEditSpring) {
+            traceDeepInsightExpanded = true
+            traceInsightFocusedQuestion = question
+            lifeInsightRefreshID = UUID()
+        }
+    }
+
+    private func focusNextTraceInsightQuestion() {
+        let chips = traceLifeInsight.questionChips
+        guard !chips.isEmpty else { return }
+        guard let current = traceInsightFocusedQuestion,
+              let index = chips.firstIndex(of: current) else {
+            traceInsightFocusedQuestion = chips[0]
+            return
+        }
+        traceInsightFocusedQuestion = chips[(index + 1) % chips.count]
+    }
+
+    private func traceInsightAnswer(for question: String, insight: LifeInsightResult) -> String {
+        if question.contains("哪天") || question.contains("不太像") || question.contains("更密") {
+            if let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 {
+                return "\(traceRhythmNarrativeLabel(peak))留下 \(peak.count) 笔，是这一段里最密的一天。可以从那天的备注往回看，它更像一个具体生活节点。"
+            }
+            return "这一段还没有明显峰值，先让记录再多一点，哪天不太一样会更容易浮出来。"
+        }
+
+        if question.contains("重复") || question.contains("习惯") {
+            if let top = traceCategoryClues.first {
+                return "\(top.category.rawValue)出现 \(top.count) 笔，是当前最稳定的重复线索。它不一定是问题，更像这段时间反复出现的生活面。"
+            }
+            return "现在重复还不明显，等同类记录连续出现，账本会更容易看出习惯。"
+        }
+
+        if question.contains("名字") {
+            return insight.periodName
+        }
+
+        if question.contains("为什么") {
+            if let top = traceCategoryClues.first {
+                return "\(top.category.rawValue)变明显，通常不是单笔金额造成的，而是出现频次把它推到了前面。先看它出现在哪几天，会比只看总额更接近生活本身。"
+            }
+            return insight.previewLine
+        }
+
+        return insight.previewLine
+    }
+
+    private func traceRhythmNarrativeLabel(_ point: TraceRhythmPoint) -> String {
+        if selectedPeriod == .week, point.label.count == 1 {
+            return "周\(point.label)"
+        }
+        return point.label
+    }
+
+    private func traceClueEvidenceChip(_ text: String, isPrimary: Bool = false) -> some View {
         Text(text)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(AppColors.text.opacity(0.82))
+            .font(.system(size: 12, weight: isPrimary ? .semibold : .medium))
+            .foregroundStyle(isPrimary ? TraceColors.primaryText : TraceColors.secondaryText)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
             .padding(.horizontal, 10)
@@ -1080,29 +1205,26 @@ struct StatsWebView: View {
             .frame(maxWidth: .infinity)
             .background(
                 Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.42))
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(AppColors.accent.opacity(0.13), lineWidth: 1)
+                    .fill(isPrimary ? AppColors.accent.opacity(0.12) : TraceColors.surfaceMuted)
             )
     }
 
     private func traceCategoryClueRow(_ clue: TraceCategoryClue) -> some View {
+        let isTop = traceCategoryClues.first?.category == clue.category
         HStack(spacing: 9) {
             Circle()
                 .fill(traceClueColor(for: clue.category).opacity(0.82))
-                .frame(width: 9, height: 9)
+                .frame(width: 7, height: 7)
             Text(clue.category.rawValue)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(AppColors.text.opacity(0.84))
+                .font(.system(size: 13, weight: isTop ? .semibold : .regular))
+                .foregroundStyle(TraceColors.secondaryText)
             Spacer()
             Text("\(clue.count) 笔")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppColors.subtext.opacity(0.86))
+                .foregroundStyle(TraceColors.tertiaryText)
             Text("\(Int((clue.ratio * 100).rounded()))%")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppColors.text.opacity(0.74))
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(TraceColors.tertiaryText)
                 .frame(width: 40, alignment: .trailing)
         }
     }
@@ -1113,24 +1235,31 @@ struct StatsWebView: View {
         let barHeight = max(8, 54 * ratio)
         return VStack(spacing: 7) {
             Spacer(minLength: 0)
-            RoundedRectangle(cornerRadius: 999, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: point.count > 0
-                            ? [AppColors.accent.opacity(point.isToday ? 0.88 : 0.66), traceClueMist.opacity(0.55)]
-                            : [Color.white.opacity(0.42), Color.white.opacity(0.24)],
-                        startPoint: .top,
-                        endPoint: .bottom
+            ZStack(alignment: .top) {
+                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                    .fill(
+                        point.count > 0
+                            ? AnyShapeStyle(
+                                LinearGradient(
+                                    colors: [AppColors.accent.opacity(point.isToday ? 0.82 : 0.64), traceClueMist.opacity(0.54)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            : AnyShapeStyle(TraceColors.surfaceMuted)
                     )
-                )
-                .frame(width: 16, height: barHeight)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 999, style: .continuous)
-                        .stroke(Color.white.opacity(0.42), lineWidth: 1)
-                )
+                    .frame(width: point.isToday ? 18 : 16, height: barHeight)
+
+                if point.isToday && point.count > 0 {
+                    Circle()
+                        .fill(TraceColors.primaryText)
+                        .frame(width: 2.5, height: 2.5)
+                        .offset(y: 3)
+                }
+            }
             Text(point.label)
-                .font(.system(size: 11, weight: point.isToday ? .bold : .medium))
-                .foregroundStyle(point.isToday ? AppColors.text.opacity(0.80) : AppColors.subtext.opacity(0.76))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(point.isToday ? AppColors.accentDark : TraceColors.tertiaryText)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
@@ -1138,14 +1267,15 @@ struct StatsWebView: View {
 
     private func traceClueInsightRow(_ text: String, index: Int) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Text(["✦", "•", "∴"][min(index, 2)])
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(index == 0 ? AppColors.accent.opacity(0.82) : AppColors.subtext.opacity(0.66))
+            Circle()
+                .fill(TraceColors.tertiaryText)
+                .frame(width: 6, height: 6)
+                .padding(.top, 6)
                 .frame(width: 18)
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 13, weight: .regular))
                 .lineSpacing(3)
-                .foregroundStyle(AppColors.text.opacity(0.78))
+                .foregroundStyle(TraceColors.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
@@ -1153,11 +1283,11 @@ struct StatsWebView: View {
         .padding(.vertical, 11)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(index == 0 ? 0.42 : 0.30))
+                .fill(TraceColors.surfaceMuted)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.white.opacity(0.38), lineWidth: 1)
+                .stroke(TraceColors.stroke, lineWidth: 1)
         )
     }
 
@@ -1187,8 +1317,8 @@ struct StatsWebView: View {
         useCustomRange = false
         selectedPeriod = .week
         selectedCategory = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            openTraceDetail()
+        withAnimation(traceEditSpring) {
+            traceViewMode = .life
         }
     }
 
@@ -2807,6 +2937,63 @@ struct StatsWebView: View {
             return "这一段前半更密一些。"
         }
         return "\(peak.day) 最明显，其余日子比较分散。"
+    }
+}
+
+private extension View {
+    func traceGlassPanel(radius: CGFloat = 24, padding: CGFloat = 20) -> some View {
+        self
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(TraceColors.surfaceGlass)
+            )
+            .overlay(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(Color.white.opacity(0.62), lineWidth: 1)
+                    .blendMode(.screen)
+                    .allowsHitTesting(false)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(TraceColors.stroke, lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            .shadow(color: Color(red: 0.561, green: 0.659, blue: 0.604).opacity(0.06), radius: 14, x: 0, y: 4)
+    }
+
+    func traceWarmPanel(radius: CGFloat = 26, padding: CGFloat = 24) -> some View {
+        self
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                TraceColors.surfaceWarm,
+                                Color.white.opacity(0.76),
+                                AppColors.paperMist.opacity(0.44)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                    .fill(AppColors.paperCrease.opacity(0.18))
+                    .frame(width: 2)
+                    .padding(.vertical, 20)
+                    .padding(.leading, 14)
+                    .allowsHitTesting(false)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(AppColors.paperBorder.opacity(0.18), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
     }
 }
 

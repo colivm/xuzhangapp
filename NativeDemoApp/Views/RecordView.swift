@@ -1218,9 +1218,6 @@ struct RecordView: View {
         VStack(alignment: .leading, spacing: 12) {
             if categoryGridExpanded { categorySection }
             if noteEditorExpanded { noteSection }
-            if isMember {
-                memberScenePackSection
-            }
         }
     }
 
@@ -1277,9 +1274,6 @@ struct RecordView: View {
 
                 if categoryGridExpanded { categorySection }
                 if noteEditorExpanded { noteSection }
-                if isMember {
-                    memberScenePackSection
-                }
             }
         }
     }

@@ -13,7 +13,7 @@ struct OCRConfirmSheet: View {
     let onConfirm: ([OCRReceiptDraft]) -> Int
 
     init(drafts: [OCRReceiptDraft], onConfirm: @escaping ([OCRReceiptDraft]) -> Int) {
-        _rows = State(initialValue: drafts.map { ConfirmRow(id: $0.id, draft: $0, selected: true) })
+        _rows = State(initialValue: drafts.map { ConfirmRow(id: $0.id, draft: $0, selected: $0.defaultSelected) })
         self.onConfirm = onConfirm
     }
 
@@ -23,6 +23,10 @@ struct OCRConfirmSheet: View {
 
     private var selectedTotal: Double {
         selectedRows.reduce(0) { $0 + $1.draft.amount }
+    }
+
+    private var reviewNotes: [String] {
+        Array(Set(rows.compactMap { $0.draft.reviewNote })).sorted()
     }
 
     var body: some View {
@@ -43,6 +47,10 @@ struct OCRConfirmSheet: View {
                                 statBlock(title: "识别条数", value: "\(rows.count)")
                                 statBlock(title: "总金额", value: selectedTotal.formatted(.cny.precision(.fractionLength(2))))
                             }
+                        }
+
+                        if !reviewNotes.isEmpty {
+                            reviewSummary
                         }
 
                         receiptFoldDivider
@@ -93,10 +101,45 @@ struct OCRConfirmSheet: View {
         .presentationDetents([.large])
     }
 
+    private var reviewSummary: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "checklist.checked")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppColors.accent.opacity(0.82))
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("已做识别整理")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColors.text.opacity(0.82))
+
+                ForEach(reviewNotes.prefix(2), id: \.self) { note in
+                    Text(note)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext.opacity(0.88))
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(AppColors.accent.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
+        )
+    }
+
     private func confirmRow(_ index: Int) -> some View {
         let row = rows[index]
         return VStack(alignment: .leading, spacing: 12) {
             confirmRowHeader(row: row, index: index)
+            if let note = row.draft.reviewNote {
+                reviewNoteRow(note, status: row.draft.reviewStatus)
+            }
             confirmRowCategory(row: row, index: index)
         }
         .padding(16)
@@ -236,6 +279,49 @@ struct OCRConfirmSheet: View {
             Capsule(style: .continuous)
                 .stroke(AppColors.line.opacity(0.35), lineWidth: 1)
         )
+    }
+
+    private func reviewNoteRow(_ note: String, status: OCRDraftReviewStatus) -> some View {
+        HStack(alignment: .top, spacing: 7) {
+            Image(systemName: reviewStatusIcon(status))
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(reviewStatusColor(status))
+                .padding(.top, 2)
+
+            Text(note)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.88))
+                .lineLimit(2)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(reviewStatusColor(status).opacity(0.08))
+        )
+    }
+
+    private func reviewStatusIcon(_ status: OCRDraftReviewStatus) -> String {
+        switch status {
+        case .ready:
+            return "checkmark.seal.fill"
+        case .needsReview:
+            return "exclamationmark.circle.fill"
+        case .possibleDuplicate:
+            return "arrow.triangle.merge"
+        }
+    }
+
+    private func reviewStatusColor(_ status: OCRDraftReviewStatus) -> Color {
+        switch status {
+        case .ready:
+            return AppColors.accent.opacity(0.82)
+        case .needsReview:
+            return Color.orange.opacity(0.86)
+        case .possibleDuplicate:
+            return AppColors.accent.opacity(0.82)
+        }
     }
 
     private func confirmRowCategory(row: ConfirmRow, index: Int) -> some View {

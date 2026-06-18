@@ -9,6 +9,12 @@ enum OCRProvider: String {
     case generic = "generic"
 }
 
+enum OCRDraftReviewStatus: String, Equatable {
+    case ready
+    case needsReview
+    case possibleDuplicate
+}
+
 struct OCRReceiptDraft: Identifiable, Equatable {
     let id: UUID
     var title: String
@@ -21,6 +27,9 @@ struct OCRReceiptDraft: Identifiable, Equatable {
     var merchantBrandId: String?
     var userEditedCategory: Bool?
     var categoryCorrectionFrom: HomeItem.Category?
+    var reviewNote: String?
+    var defaultSelected: Bool
+    var reviewStatus: OCRDraftReviewStatus
 
     init(
         id: UUID = UUID(),
@@ -33,7 +42,10 @@ struct OCRReceiptDraft: Identifiable, Equatable {
         provider: OCRProvider,
         merchantBrandId: String? = nil,
         userEditedCategory: Bool? = nil,
-        categoryCorrectionFrom: HomeItem.Category? = nil
+        categoryCorrectionFrom: HomeItem.Category? = nil,
+        reviewNote: String? = nil,
+        defaultSelected: Bool = true,
+        reviewStatus: OCRDraftReviewStatus = .ready
     ) {
         self.id = id
         self.title = title
@@ -46,6 +58,9 @@ struct OCRReceiptDraft: Identifiable, Equatable {
         self.merchantBrandId = merchantBrandId
         self.userEditedCategory = userEditedCategory
         self.categoryCorrectionFrom = categoryCorrectionFrom
+        self.reviewNote = reviewNote
+        self.defaultSelected = defaultSelected
+        self.reviewStatus = reviewStatus
     }
 }
 
@@ -84,6 +99,12 @@ final class OCRService {
             case .generic: return .generic
             }
         }
+    }
+
+    private enum OCRPageType: Equatable {
+        case detail
+        case list
+        case unknown
     }
 
     private struct OCRLine {
@@ -144,7 +165,7 @@ final class OCRService {
                rawText: parseText,
                confidence: Double(confidence)
            ) {
-            return [draft]
+            return finalizeOCRDrafts([draft], pageType: .detail)
         }
 
         if looksLikePaymentSuccessResult(ocrLines: parseOCRLines),
@@ -154,7 +175,7 @@ final class OCRService {
                confidence: Double(confidence),
                provider: provider
            ) {
-            return [draft]
+            return finalizeOCRDrafts([draft], pageType: .detail)
         }
 
         let listDrafts = parseListReceipts(
@@ -166,7 +187,7 @@ final class OCRService {
         let isListScreenshot = looksLikeListScreenshot(lines: parseLines, provider: provider)
         let isDetailScreenshot = looksLikeDetailScreenshot(lines: parseLines)
         if (listDrafts.count >= 2 && !isDetailScreenshot) || (isListScreenshot && !listDrafts.isEmpty) {
-            return listDrafts
+            return finalizeOCRDrafts(listDrafts, pageType: .list)
         }
         if isListScreenshot {
             throw OCRServiceError.detailPageRequired
@@ -183,14 +204,14 @@ final class OCRService {
         }
 
         if let draft, draft.amount > 0, !isListScreenshot {
-            return [draft]
+            return finalizeOCRDrafts([draft], pageType: isDetailScreenshot ? .detail : .unknown)
         }
 
         if !listDrafts.isEmpty {
-            return listDrafts
+            return finalizeOCRDrafts(listDrafts, pageType: isDetailScreenshot ? .detail : .unknown)
         }
         if let draft, draft.amount > 0 {
-            return [draft]
+            return finalizeOCRDrafts([draft], pageType: isDetailScreenshot ? .detail : .unknown)
         }
         throw OCRServiceError.detailPageRequired
     }
@@ -493,6 +514,90 @@ final class OCRService {
         resolved.category = NarrativeCopyResolver.resolveCategory(brandId: brand.id, fallback: draft.category)
         resolved.title = NarrativeCopyResolver.resolveTitle(brandId: brand.id, fallback: draft.title)
         return resolved
+    }
+
+    private func finalizeOCRDrafts(_ drafts: [OCRReceiptDraft], pageType: OCRPageType) -> [OCRReceiptDraft] {
+        let validDrafts = drafts.filter { $0.amount > 0 }
+        guard !validDrafts.isEmpty else { return [] }
+
+        if pageType == .detail {
+            var draft = bestSingleDetailDraft(from: validDrafts)
+            if validDrafts.count > 1 {
+                draft.reviewNote = "识别为单笔详情，已整理为 1 笔"
+                draft.reviewStatus = .needsReview
+            }
+            return [reviewedOCRSelectionState(draft)]
+        }
+
+        let mergedDrafts = mergeExactDuplicateDrafts(validDrafts)
+        return mergedDrafts.map { reviewedOCRSelectionState($0) }
+    }
+
+    private func reviewedOCRSelectionState(_ draft: OCRReceiptDraft) -> OCRReceiptDraft {
+        var reviewed = draft
+        if reviewed.confidence < 0.42 {
+            reviewed.reviewStatus = .needsReview
+            if reviewed.reviewNote == nil {
+                reviewed.reviewNote = "识别置信度偏低，请核对金额和备注"
+            }
+        }
+        return reviewed
+    }
+
+    private func bestSingleDetailDraft(from drafts: [OCRReceiptDraft]) -> OCRReceiptDraft {
+        drafts.max { lhs, rhs in
+            detailDraftScore(lhs) < detailDraftScore(rhs)
+        } ?? drafts[0]
+    }
+
+    private func detailDraftScore(_ draft: OCRReceiptDraft) -> Double {
+        var score = draft.confidence
+        if draft.merchantBrandId != nil { score += 0.16 }
+        if !normalizedDraftTitle(draft.title).isEmpty { score += 0.08 }
+        score += min(draft.amount / 10_000, 0.20)
+        return score
+    }
+
+    private func mergeExactDuplicateDrafts(_ drafts: [OCRReceiptDraft]) -> [OCRReceiptDraft] {
+        var merged: [OCRReceiptDraft] = []
+        for draft in drafts {
+            if let index = merged.firstIndex(where: { isExactDuplicateOCRDraft($0, draft) }) {
+                if draft.confidence > merged[index].confidence {
+                    var replacement = draft
+                    replacement.reviewNote = merged[index].reviewNote
+                    replacement.reviewStatus = merged[index].reviewStatus
+                    merged[index] = replacement
+                }
+                merged[index].reviewNote = "疑似同一笔，已合并重复识别"
+                merged[index].reviewStatus = .possibleDuplicate
+            } else {
+                merged.append(draft)
+            }
+        }
+        return merged
+    }
+
+    private func isExactDuplicateOCRDraft(_ lhs: OCRReceiptDraft, _ rhs: OCRReceiptDraft) -> Bool {
+        guard amountCents(lhs.amount) == amountCents(rhs.amount) else { return false }
+        guard Calendar.current.isDate(lhs.date, inSameDayAs: rhs.date) else { return false }
+        let lhsTitle = normalizedDraftTitle(lhs.title)
+        let rhsTitle = normalizedDraftTitle(rhs.title)
+        guard !lhsTitle.isEmpty, lhsTitle == rhsTitle else { return false }
+
+        let lhsRawText = normalizedDraftTitle(lhs.rawText)
+        let rhsRawText = normalizedDraftTitle(rhs.rawText)
+        return !lhsRawText.isEmpty && lhsRawText == rhsRawText
+    }
+
+    private func amountCents(_ amount: Double) -> Int {
+        Int((amount * 100).rounded())
+    }
+
+    private func normalizedDraftTitle(_ title: String) -> String {
+        let removable = CharacterSet.whitespacesAndNewlines
+            .union(.punctuationCharacters)
+            .union(.symbols)
+        return String(title.lowercased().unicodeScalars.filter { !removable.contains($0) })
     }
 
     private func parseListReceipts(
