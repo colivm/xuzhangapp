@@ -20,6 +20,7 @@ struct ScenePackAngleSheet: View {
         let freeScenePacks: [ScenePackDefinition]
         let moreScenePacks: [ScenePackDefinition]
         let replaceableScenePacks: [ScenePackDefinition]
+        let lockedSceneHint: LockedSceneHint?
         let isInFirstWeek: Bool
         let canReplacePackCombination: Bool
         let daysUntilNextReplace: Int
@@ -29,6 +30,12 @@ struct ScenePackAngleSheet: View {
         let onSelectFreePack: (ScenePackDefinition) -> Void
         let onReplaceFreePack: (_ slot: Int, _ oldId: String, _ newPack: ScenePackDefinition) -> Void
         let onShowMemberPricing: () -> Void
+    }
+
+    struct LockedSceneHint {
+        let pack: ScenePackDefinition
+        let title: String
+        let detail: String
     }
 
     private struct PendingReplacement: Identifiable {
@@ -70,6 +77,7 @@ struct ScenePackAngleSheet: View {
         freeScenePacks: [ScenePackDefinition],
         moreScenePacks: [ScenePackDefinition],
         replaceableScenePacks: [ScenePackDefinition],
+        lockedSceneHint: LockedSceneHint? = nil,
         isInFirstWeek: Bool,
         canReplacePackCombination: Bool,
         daysUntilNextReplace: Int,
@@ -85,6 +93,7 @@ struct ScenePackAngleSheet: View {
                 freeScenePacks: freeScenePacks,
                 moreScenePacks: moreScenePacks,
                 replaceableScenePacks: replaceableScenePacks,
+                lockedSceneHint: lockedSceneHint,
                 isInFirstWeek: isInFirstWeek,
                 canReplacePackCombination: canReplacePackCombination,
                 daysUntilNextReplace: daysUntilNextReplace,
@@ -176,6 +185,12 @@ struct ScenePackAngleSheet: View {
         if isReplacingPack {
             replacementContent(configuration)
         } else {
+            if let hint = configuration.lockedSceneHint {
+                Section {
+                    lockedSceneHintRow(hint, configuration: configuration)
+                }
+            }
+
             if configuration.isInFirstWeek {
                 Section {
                     HStack(spacing: 8) {
@@ -368,7 +383,7 @@ struct ScenePackAngleSheet: View {
                     Text(pack.label)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(AppColors.text)
-                    Text(configuration.isExtensionLockedPack(pack) ? "会员可解锁" : "可替换到我的 3 个角度")
+                    Text(configuration.isExtensionLockedPack(pack) ? lockedPackSubtitle(for: pack) : "可替换到我的 3 个角度")
                         .font(.system(size: 12))
                         .foregroundStyle(AppColors.subtext)
                         .lineLimit(1)
@@ -386,6 +401,68 @@ struct ScenePackAngleSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private func lockedSceneHintRow(
+        _ hint: LockedSceneHint,
+        configuration: FreeConfiguration
+    ) -> some View {
+        Button {
+            dismiss()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                configuration.onShowMemberPricing()
+            }
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Text(hint.pack.emoji)
+                    .font(.system(size: 22))
+                    .frame(width: 30)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(hint.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                    Text(hint.detail)
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 8)
+
+                Text("了解会员")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColors.lockGold)
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(AppColors.lockGold.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(AppColors.lockGold.opacity(0.18), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func lockedPackSubtitle(for pack: ScenePackDefinition) -> String {
+        switch pack.id {
+        case "travel":
+            return "把路费、住宿、门票放回行程里"
+        case "pet":
+            return "把毛孩子的日常也记得更像生活"
+        case "baby":
+            return "照护、奶粉、衣物不只是一笔支出"
+        case "fitness":
+            return "区分补给、装备、课程和恢复"
+        default:
+            return "会员可解锁更多生活语境"
+        }
     }
 
     private func replacementSlotRow(_ pack: ScenePackDefinition, slot: Int) -> some View {

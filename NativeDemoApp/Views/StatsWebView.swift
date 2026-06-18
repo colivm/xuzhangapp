@@ -1369,12 +1369,14 @@ struct StatsWebView: View {
         switch range {
         case .week:
             let remaining = quotaStore.weekRemaining(isMember: false)
-            return remaining > 0 ? "本周剩余 \(remaining)/\(SummaryPlaybackQuotaStore.weeklyFreeLimit) 次 · 会员可无限" : "本周剩余 0 次 · 下个自然周刷新"
+            return remaining > 0
+                ? "本周回放剩余 \(remaining)/\(SummaryPlaybackQuotaStore.weeklyFreeLimit) 次 · 会员可连续回看周/月节奏"
+                : "本周回放剩余 0/\(SummaryPlaybackQuotaStore.weeklyFreeLimit) 次 · 下个自然周刷新"
         case .month:
             let remaining = quotaStore.monthRemaining(isMember: false)
             return remaining > 0
-                ? "新用户专享剩余 \(remaining)/\(SummaryPlaybackQuotaStore.lifetimeMonthFreeLimit) 次 · 用完后需会员"
-                : "本月回放体验已用完 · 会员可无限回看"
+                ? "新用户月章剩余 \(remaining)/\(SummaryPlaybackQuotaStore.lifetimeMonthFreeLimit) 次 · 会员可继续整理更多月份"
+                : "新用户月章剩余 0/\(SummaryPlaybackQuotaStore.lifetimeMonthFreeLimit) 次 · 会员可继续整理更多月份"
         }
     }
 
@@ -1383,9 +1385,9 @@ struct StatsWebView: View {
         guard quotaStore.canPlay(range, isMember: hasMemberAccess) else {
             switch range {
             case .week:
-                summaryQuotaMessage = "本周 3 次免费回放已经看完啦。下个自然周会刷新；会员适合想连续回看周/月生活节奏的人。"
+                summaryQuotaMessage = "本周回放剩余 0/3 次。下个自然周会刷新；会员适合想连续回看周/月生活节奏的人。"
             case .month:
-                summaryQuotaMessage = "你的 10 次新用户「本月回放」已用完。会员可以继续整理更多月份，也让 OCR 和 AI 回顾不被次数打断。本周回放仍会在每个自然周刷新 3 次。"
+                summaryQuotaMessage = "新用户月章剩余 0/10 次。会员可以继续整理更多月份，也让 OCR 和 AI 回顾不被次数打断。本周回放仍会在每个自然周刷新 3 次。"
             }
             return
         }

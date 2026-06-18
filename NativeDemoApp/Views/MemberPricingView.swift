@@ -24,15 +24,21 @@ struct MemberPricingView: View {
 
     private let benefits = [
         ("周/月生活回放无限", "通勤、吃饭、跑医院、给家里补东西，这些线索可以持续回看。"),
-        ("每月生活章持续整理", "免费 10 次用完后，会员还能继续整理更多月份。"),
-        ("今日回放不限次", "当天记录可以反复听，适合晚上把今天过一遍。"),
-        ("OCR 导入不限次", "微信/支付宝账单截图可继续本地识别，导入前仍可确认。"),
-        ("AI 回顾额度提升", "想多问一句时，可以继续生成更完整的回顾建议。"),
-        ("更多生活场景换角度", "会员会把同一笔钱放进健康、购物、旅行、社交等更细的生活语境里。"),
-        ("分享图持续生成", "周记、月章和故事图更适合连续分享和回看。"),
+        ("每月生活章持续整理", "免费 10 次用完后，后面的月份也能继续接上，不让生活脉络断掉。"),
+        ("今日回放不限次", "当天记录可以反复听，适合晚上把今天多整理几遍。"),
+        ("OCR 导入不限次", "微信/支付宝账单截图可继续本地识别，经常导入也不用被次数打断。"),
+        ("AI 回顾问得更深", "可以继续追问：哪几天最累、哪些小支出重复出现、这个月节奏哪里变了。"),
+        ("全部生活场景换角度", "旅行、运动、宠物、宝宝、人情等场景都能打开，不只停在 3 个常用角度。"),
+        ("分享图持续生成", "周记、月章和故事图可以连续留下来，适合长期回看和分享。"),
     ]
 
-    private let freeQuotaFootnote = "免费版已经可以完整记账、手动整理和体验基础回放。会员适合连续记录后，想让更多生活线索长期被看见的人。"
+    private let boundaryRows = [
+        ("记账场景", "免费 3 个常用角度", "会员打开全部生活场景"),
+        ("回放整理", "基础额度可体验", "会员周/月/今日持续回看"),
+        ("截图导入", "每日 3 次 OCR", "会员经常导入也不中断"),
+    ]
+
+    private let freeQuotaFootnote = "免费版已经可以完整记账、手动整理，并体验基础回放和 3 个常用场景。会员适合连续记录后，想让更多生活线索长期被看见的人。"
 
     private var isMember: Bool {
         settingsViewModel.settings.hasMemberAccess
@@ -46,6 +52,7 @@ struct MemberPricingView: View {
                     if !isMember {
                         heroSection
                         memberValueSection
+                        memberBoundarySection
                     }
 
                     // ── Benefits ──
@@ -206,6 +213,49 @@ struct MemberPricingView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.42), lineWidth: 1)
+        )
+    }
+
+    private var memberBoundarySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("免费已经能用，会员打开连续性")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(AppColors.text.opacity(0.9))
+
+            VStack(spacing: 0) {
+                ForEach(boundaryRows.indices, id: \.self) { index in
+                    let row = boundaryRows[index]
+                    HStack(alignment: .top, spacing: 10) {
+                        Text(row.0)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(AppColors.text.opacity(0.74))
+                            .frame(width: 62, alignment: .leading)
+                        Text(row.1)
+                            .font(.system(size: 12))
+                            .foregroundStyle(AppColors.subtext)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(row.2)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(AppColors.accent.opacity(0.9))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.vertical, 9)
+
+                    if index < boundaryRows.count - 1 {
+                        Divider()
+                            .background(AppColors.line.opacity(0.45))
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.58))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.white.opacity(0.42), lineWidth: 1)
         )
     }

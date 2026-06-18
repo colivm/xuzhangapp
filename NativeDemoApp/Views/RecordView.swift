@@ -28,6 +28,7 @@ struct RecordView: View {
     @State private var didAutoFocusAmountPad = false
     @State private var lastDraftIntent: RecordDraftIntent = .automatic
     @State private var freeScenePackRefreshToken = 0
+    @State private var freeLockedSceneHint: ScenePackAngleSheet.LockedSceneHint?
     @AppStorage("scene_pack_order_v1") private var scenePackOrderStorage = ""
     @AppStorage("scene_pack_more_expanded_v1") private var scenePackMoreExpanded = false
     @AppStorage("scene_pack_usage_v1") private var scenePackUsageStorage = ""
@@ -92,6 +93,10 @@ struct RecordView: View {
     private var freeReplaceableScenePacks: [ScenePackDefinition] {
         _ = freeScenePackRefreshToken
         return freeScenePackService.replaceableCandidates(from: visibleScenePacks)
+    }
+
+    private var freeScenePackIds: Set<String> {
+        Set(freeScenePacks.map(\.id))
     }
 
     private var scenePackOrderIds: [String] {
@@ -242,6 +247,92 @@ struct RecordView: View {
     private func containsTravelKeyword(_ text: String) -> Bool {
         let keywords = ["旅行", "旅途", "景区", "景点", "行程", "酒店", "民宿", "住宿", "机票", "高铁", "机场", "返程", "摆渡"]
         return keywords.contains { text.contains($0) }
+    }
+
+    private func prepareFreeLockedSceneHintIfNeeded() {
+        guard !isMember, hasValidAmount else {
+            freeLockedSceneHint = nil
+            return
+        }
+        guard let pack = lockedScenePackForCurrentRecord(),
+              freeScenePackService.canShowLockedSceneHint(for: pack.id) else {
+            freeLockedSceneHint = nil
+            return
+        }
+        freeLockedSceneHint = ScenePackAngleSheet.LockedSceneHint(
+            pack: pack,
+            title: lockedSceneHintTitle(for: pack),
+            detail: lockedSceneHintDetail(for: pack)
+        )
+        freeScenePackService.recordLockedSceneHintShown(for: pack.id)
+    }
+
+    private func lockedScenePackForCurrentRecord() -> ScenePackDefinition? {
+        let text = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let targetId: String?
+        if containsPetKeyword(text) {
+            targetId = "pet"
+        } else if containsBabyKeyword(text) {
+            targetId = "baby"
+        } else if containsFitnessKeyword(text) {
+            targetId = "fitness"
+        } else if homeViewModel.selectedCategory == .lodging || containsTravelKeyword(text) {
+            targetId = "travel"
+        } else {
+            targetId = nil
+        }
+        guard let targetId,
+              !freeScenePackIds.contains(targetId),
+              let pack = visibleScenePacks.first(where: { $0.id == targetId }),
+              freeScenePackService.isExtensionLockedPack(pack) else { return nil }
+        return pack
+    }
+
+    private func containsPetKeyword(_ text: String) -> Bool {
+        let petName = settingsViewModel.petNickname.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !petName.isEmpty, text.contains(petName) { return true }
+        let keywords = ["宠物", "猫粮", "狗粮", "猫砂", "狗窝", "猫窝", "牵引绳", "冻干", "驱虫", "宠物医院", "洗护美容", "毛孩子", "毛孩"]
+        return keywords.contains { text.contains($0) }
+    }
+
+    private func containsBabyKeyword(_ text: String) -> Bool {
+        let keywords = ["宝宝", "孩子", "婴儿", "奶粉", "尿不湿", "纸尿裤", "辅食", "湿巾", "童装", "早教", "儿童座椅", "推车"]
+        return keywords.contains { text.contains($0) }
+    }
+
+    private func containsFitnessKeyword(_ text: String) -> Bool {
+        let keywords = ["运动", "健身", "锻炼", "训练", "跑步", "瑜伽", "游泳", "球场", "私教", "护具", "运动鞋", "运动服", "健身卡", "健身房"]
+        return keywords.contains { text.contains($0) }
+    }
+
+    private func lockedSceneHintTitle(for pack: ScenePackDefinition) -> String {
+        switch pack.id {
+        case "travel":
+            return "这笔更像旅行场景"
+        case "pet":
+            return "这笔更像宠物日常"
+        case "baby":
+            return "这笔更像照护场景"
+        case "fitness":
+            return "这笔更像运动健身"
+        default:
+            return "这笔可以换个生活角度"
+        }
+    }
+
+    private func lockedSceneHintDetail(for pack: ScenePackDefinition) -> String {
+        switch pack.id {
+        case "travel":
+            return "会员可直接换到旅行包，把路费、住宿和门票放回行程里。"
+        case "pet":
+            return "会员可直接换到宠物包，让毛孩子的开销也更像生活记录。"
+        case "baby":
+            return "会员可直接换到宝宝包，照护、奶粉和衣物会写得更贴近场景。"
+        case "fitness":
+            return "会员可直接换到运动包，区分补给、装备、课程和恢复。"
+        default:
+            return "会员可打开全部生活角度，不只停在 3 个常用包。"
+        }
     }
 
     private func applyScenePack(
@@ -734,6 +825,12 @@ struct RecordView: View {
         )
     }
 
+    private func openFreeScenePackAngleSheet() {
+        dismissKeyboard()
+        prepareFreeLockedSceneHintIfNeeded()
+        showScenePackAngleSheet = true
+    }
+
     private func preferredFreeScenePack() -> ScenePackDefinition? {
         let packs = freeScenePacks
         guard !packs.isEmpty else { return nil }
@@ -911,6 +1008,7 @@ struct RecordView: View {
                         freeScenePacks: freeScenePacks,
                         moreScenePacks: freeMoreScenePacks,
                         replaceableScenePacks: freeReplaceableScenePacks,
+                        lockedSceneHint: freeLockedSceneHint,
                         isInFirstWeek: freeScenePackService.isInFirstWeek(),
                         canReplacePackCombination: freeScenePackService.canReplacePackCombination(),
                         daysUntilNextReplace: freeScenePackService.daysUntilNextReplace(),
@@ -1087,8 +1185,7 @@ struct RecordView: View {
             },
             onFreePrimaryAction: handleFreePreviewQuickAction,
             onFreeAngleAction: {
-                dismissKeyboard()
-                showScenePackAngleSheet = true
+                openFreeScenePackAngleSheet()
             }
         )
     }

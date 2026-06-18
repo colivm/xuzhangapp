@@ -10,9 +10,11 @@ final class FreeScenePackService {
     private let firstOpenKey = "free_scene_pack_first_open_at"
     private let lastReplaceKey = "free_scene_pack_last_replace_at"
     private let orderKey = "free_scene_pack_order_v1"
+    private let lockedHintKey = "free_scene_pack_locked_hint_v1"
 
     private let firstWeekInterval: TimeInterval = 7 * 24 * 60 * 60
     private let replaceCooldownInterval: TimeInterval = 30 * 24 * 60 * 60
+    private let lockedHintCooldownInterval: TimeInterval = 3 * 24 * 60 * 60
     private let extensionLockedIds: Set<String> = ["travel", "pet", "baby", "fitness"]
 
     init(
@@ -112,6 +114,19 @@ final class FreeScenePackService {
         extensionLockedIds.contains(pack.id)
     }
 
+    func canShowLockedSceneHint(for packId: String) -> Bool {
+        guard extensionLockedIds.contains(packId) else { return false }
+        let lastShownAt = lockedHintTimestamps()[packId] ?? 0
+        return now().timeIntervalSince1970 >= lastShownAt + lockedHintCooldownInterval
+    }
+
+    func recordLockedSceneHintShown(for packId: String) {
+        guard extensionLockedIds.contains(packId) else { return }
+        var timestamps = lockedHintTimestamps()
+        timestamps[packId] = now().timeIntervalSince1970
+        defaults.set(encodeLockedHintTimestamps(timestamps), forKey: lockedHintKey)
+    }
+
     private func decodeIds(_ storage: String?) -> [String] {
         (storage ?? "")
             .split(separator: ",")
@@ -138,5 +153,24 @@ final class FreeScenePackService {
 
     private func persistOrderedIds(_ ids: [String]) {
         defaults.set(ids.prefix(3).joined(separator: ","), forKey: orderKey)
+    }
+
+    private func lockedHintTimestamps() -> [String: TimeInterval] {
+        (defaults.string(forKey: lockedHintKey) ?? "")
+            .split(separator: ";")
+            .reduce(into: [String: TimeInterval]()) { result, chunk in
+                let parts = chunk.split(separator: "|")
+                guard parts.count == 2,
+                      let timestamp = TimeInterval(String(parts[1])) else { return }
+                result[String(parts[0])] = timestamp
+            }
+    }
+
+    private func encodeLockedHintTimestamps(_ timestamps: [String: TimeInterval]) -> String {
+        timestamps
+            .filter { extensionLockedIds.contains($0.key) }
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)|\(Int($0.value))" }
+            .joined(separator: ";")
     }
 }

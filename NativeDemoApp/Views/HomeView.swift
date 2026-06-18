@@ -537,7 +537,7 @@ struct HomeView: View {
         }
         let isMember = settingsViewModel.settings.hasMemberAccess
         guard dailyQuotaStore.canPlayTodayPlayback(isMember: isMember) else {
-            todayPlaybackQuotaMessage = "今天的免费回放次数已用完。明天可继续播放；会员适合想在当天反复整理回望的人。"
+            todayPlaybackQuotaMessage = "今日免费回放剩余 0/1 次。明天可继续播放；会员适合晚上反复整理当天记录，不用等刷新。"
             return
         }
         dailyQuotaStore.markTodayPlaybackStarted(isMember: isMember)

@@ -579,7 +579,9 @@ struct InsightWebView: View {
     @ViewBuilder
     private func monthlyTrialText(left: Int, isMember: Bool, exhausted: Bool) -> some View {
         if !isMember {
-            let text = exhausted ? "免费试用次数已用完" : "剩余 \(left)/\(trialTotal) 次月度回顾"
+            let text = exhausted
+                ? "月度回顾剩余 0/\(trialTotal) 次 · 会员可继续多问几句"
+                : "月度回顾剩余 \(left)/\(trialTotal) 次 · 可先看看这个月的生活线索"
 
             Text(text)
                 .font(.system(size: 12))
@@ -610,7 +612,7 @@ struct InsightWebView: View {
     }
 
     private var monthlyUpgradeLinkLabel: some View {
-        Text("想多聊几句？了解会员")
+        Text("想继续追问这个月？了解会员")
             .font(.system(size: 14, weight: .medium))
             .foregroundStyle(AppColors.accent.opacity(0.9))
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -943,7 +945,7 @@ struct InsightWebView: View {
                     Button {
                         onShowMemberPricing?()
                     } label: {
-                        monthlyFootnotePrimary("想多聊几句？了解会员 →")
+                        monthlyFootnotePrimary("想继续追问这个月？了解会员 →")
                     }
                     .buttonStyle(.plain)
                 } else {
@@ -959,7 +961,7 @@ struct InsightWebView: View {
                 }
 
                 if !isMember {
-                    Text(exhausted ? "免费次数已用完" : "剩余 \(left)/\(trialTotal) 次")
+                    Text(exhausted ? "剩余 0/\(trialTotal) 次" : "剩余 \(left)/\(trialTotal) 次")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.subtext.opacity(0.58))
                 }
