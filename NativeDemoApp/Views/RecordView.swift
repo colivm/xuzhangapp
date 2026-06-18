@@ -15,7 +15,6 @@ struct RecordView: View {
     @State private var showOCRConfirmSheet = false
     @State private var didImportOCRConfirmSheet = false
     @State private var scenePackExpanded = false
-    @State private var freeScenePackExpanded = false
     @State private var scenePackVariants: [String: Int] = [:]
     @State private var amountPadActive = false
     @State private var recordDetailsExpanded = false
@@ -48,7 +47,6 @@ struct RecordView: View {
     private let draftClock = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
     private let recordAccent = AppColors.accent
     private let recordInk = AppColors.text
-    private let freeScenePackIds: Set<String> = ["commute", "food", "home"]
     private let extensionScenePackIds: Set<String> = ["travel", "pet", "baby", "fitness"]
     private let scenePackSilenceInterval: TimeInterval = 45 * 24 * 60 * 60
 
@@ -77,10 +75,6 @@ struct RecordView: View {
         return visibleScenePacks.filter { pack in
             shouldFoldScenePack(pack)
         }
-    }
-
-    private var freeScenePacks: [ScenePackDefinition] {
-        visibleScenePacks.filter { freeScenePackIds.contains($0.id) }
     }
 
     private var scenePackOrderIds: [String] {
@@ -810,9 +804,6 @@ struct RecordView: View {
             }
             .onAppear {
                 homeViewModel.refreshDraftSelectedDate(force: true)
-                Task {
-                    await settingsViewModel.refreshMemberFromLocalEntitlements()
-                }
                 guard !didAutoFocusAmountPad else { return }
                 didAutoFocusAmountPad = true
                 focusAmountPad()
@@ -1021,9 +1012,6 @@ struct RecordView: View {
             if noteEditorExpanded { noteSection }
             if isMember {
                 memberScenePackSection
-            } else {
-                freeScenePackSection
-                memberScenePackPreview
             }
         }
     }
@@ -1083,9 +1071,6 @@ struct RecordView: View {
                 if noteEditorExpanded { noteSection }
                 if isMember {
                     memberScenePackSection
-                } else {
-                    freeScenePackSection
-                    memberScenePackPreview
                 }
             }
         }
@@ -1797,156 +1782,6 @@ struct RecordView: View {
             },
             scenePackDesc: scenePackDesc,
             scenePackReason: scenePackReason
-        )
-    }
-
-    private var freeScenePackSection: some View {
-        ScenePackSectionView(
-            primaryScenePacks: freeScenePacks,
-            secondaryScenePacks: [],
-            isExpanded: freeScenePackExpanded,
-            isMoreExpanded: false,
-            isPetMode: settingsViewModel.petCompanionEnabled,
-            recordInk: recordInk,
-            badgeText: "免费可用",
-            showsQuickGenerate: false,
-            collapsedHelperText: "通勤、吃饭、日用先免费体验。",
-            expandedHelperText: "这 3 个常用角度免费可用；更多生活场景会员继续解锁。",
-            collapsedToggleTitle: "展开 3 个免费角度",
-            expandedToggleTitle: "收起免费角度",
-            collapsedToggleSubtitle: "常用先体验",
-            expandedToggleSubtitle: "继续简洁记账",
-            onQuickGenerate: {},
-            onToggleExpanded: {
-                dismissKeyboard()
-                withAnimation(.easeInOut(duration: 0.2)) { freeScenePackExpanded.toggle() }
-            },
-            onToggleMore: {},
-            onSelectPack: { pack in
-                applyScenePack(pack)
-            },
-            scenePackDesc: scenePackDesc,
-            scenePackReason: scenePackReason
-        )
-    }
-
-    private var memberScenePackPreview: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(AppColors.lockGold.opacity(0.92))
-                    .frame(width: 30, height: 30)
-                    .background(
-                        Circle()
-                            .fill(AppColors.lockGold.opacity(0.12))
-                    )
-
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text("更多场景会让备注更像你")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(recordInk.opacity(0.9))
-                        Text("会员")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background(Capsule(style: .continuous).fill(AppColors.lockGold.opacity(0.9)))
-                    }
-
-                    Text("通勤、吃饭、日用已经能直接体验。会员继续解锁健康、购物、旅行、社交这些更细的生活语境。")
-                        .font(.system(size: 12))
-                        .lineSpacing(3)
-                        .foregroundStyle(AppColors.subtext.opacity(0.88))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            HStack(spacing: 8) {
-                ForEach(memberScenePackPreviewPacks, id: \.id) { pack in
-                    scenePackPreviewChip(pack)
-                }
-            }
-
-            Button {
-                dismissKeyboard()
-                onShowMemberPricing?()
-            } label: {
-                HStack(spacing: 6) {
-                    Text("解锁更多生活场景")
-                        .font(.system(size: 14, weight: .semibold))
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .bold))
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 11)
-                .background(
-                    LinearGradient(
-                        colors: [
-                            AppColors.accent.opacity(0.92),
-                            AppColors.lockGold.opacity(0.74)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 13, style: .continuous)
-                )
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            AppColors.lockGold.opacity(0.08),
-                            Color.white.opacity(0.58),
-                            AppColors.accent.opacity(0.07)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(AppColors.lockGold.opacity(0.18), lineWidth: 1)
-        )
-    }
-
-    private var memberScenePackPreviewPacks: [ScenePackDefinition] {
-        let preferredIds = ["care", "shopping", "travel"]
-        let preferred = preferredIds.compactMap { id in
-            visibleScenePacks.first { $0.id == id }
-        }
-        if preferred.count >= 3 {
-            return Array(preferred.prefix(3))
-        }
-        return Array(visibleScenePacks.filter { !freeScenePackIds.contains($0.id) }.prefix(3))
-    }
-
-    private func scenePackPreviewChip(_ pack: ScenePackDefinition) -> some View {
-        VStack(spacing: 5) {
-            Text(pack.emoji)
-                .font(.system(size: 18))
-            Text(pack.label)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(recordInk.opacity(0.78))
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.66))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.46), lineWidth: 1)
         )
     }
 

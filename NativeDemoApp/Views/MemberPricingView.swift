@@ -28,11 +28,11 @@ struct MemberPricingView: View {
         ("今日回放不限次", "当天记录可以反复听，适合晚上把今天过一遍。"),
         ("OCR 导入不限次", "微信/支付宝账单截图可继续本地识别，导入前仍可确认。"),
         ("AI 回顾额度提升", "想多问一句时，可以继续生成更完整的回顾建议。"),
-        ("更多生活场景换角度", "通勤、吃饭、日用免费可用；会员继续打开购物、旅行、健康、社交等生活视角。"),
+        ("更多生活场景换角度", "会员会把同一笔钱放进健康、购物、旅行、社交等更细的生活语境里。"),
         ("分享图持续生成", "周记、月章和故事图更适合连续分享和回看。"),
     ]
 
-    private let freeQuotaFootnote = "免费版已经可以完整记账、手动整理、体验基础回放，并使用通勤/吃饭/日用 3 个常用场景包。会员适合连续记录后，想让更多生活线索长期被看见的人。"
+    private let freeQuotaFootnote = "免费版已经可以完整记账、手动整理和体验基础回放。会员适合连续记录后，想让更多生活线索长期被看见的人。"
 
     private var isMember: Bool {
         settingsViewModel.settings.hasMemberAccess
@@ -75,6 +75,7 @@ struct MemberPricingView: View {
                 }
             }
             .task {
+                await settingsViewModel.refreshCloudAccountProfile()
                 await settingsViewModel.refreshMemberFromLocalEntitlements()
                 await loadStoreProducts()
             }
@@ -166,7 +167,7 @@ struct MemberPricingView: View {
             memberValueRow(
                 symbol: "sparkles",
                 title: "理解力",
-                detail: "通勤、吃饭、日用先免费体验；会员继续打开健康、购物、旅行、社交等更多生活语境。"
+                detail: "会员会继续打开健康、购物、旅行、社交等更多生活语境，不只是多一个分类。"
             )
             memberValueRow(
                 symbol: "bolt.heart",
@@ -486,7 +487,7 @@ struct MemberPricingView: View {
                 await iapService.finish(transactionId: payload.transactionId)
                 purchaseNotice = "会员已开通，回放和导入额度已更新。"
             } catch {
-                purchaseNotice = "购买没有完成。请确认支付状态后再试。"
+                purchaseNotice = (error as? LocalizedError)?.errorDescription ?? "购买没有完成。请确认支付状态后再试。"
             }
         }
     }
@@ -505,13 +506,24 @@ struct MemberPricingView: View {
                     purchaseNotice = "暂时没有找到可恢复的购买记录。请确认使用的是购买时的 Apple ID。"
                     return
                 }
+                var restoredPayload: IAPPurchaseVerification?
                 for payload in payloads {
-                    try await settingsViewModel.verifyIAPPurchase(payload)
-                    await iapService.finish(transactionId: payload.transactionId)
+                    do {
+                        try await settingsViewModel.verifyIAPPurchase(payload)
+                        restoredPayload = payload
+                        break
+                    } catch {
+                        continue
+                    }
                 }
+                guard let restoredPayload else {
+                    purchaseNotice = "当前账号暂时没有可恢复的会员权益。请确认使用的是购买时的账号。"
+                    return
+                }
+                await iapService.finish(transactionId: restoredPayload.transactionId)
                 purchaseNotice = "会员权益已恢复，可以继续使用。"
             } catch {
-                purchaseNotice = "恢复购买没有完成，请稍后再试。"
+                purchaseNotice = (error as? LocalizedError)?.errorDescription ?? "恢复购买没有完成，请稍后再试。"
             }
         }
     }

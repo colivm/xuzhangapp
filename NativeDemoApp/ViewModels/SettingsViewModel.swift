@@ -4,11 +4,14 @@ import Combine
 
 enum SettingsViewModelError: LocalizedError {
     case loginRequired
+    case memberEntitlementUnavailable
 
     var errorDescription: String? {
         switch self {
         case .loginRequired:
             return "请先登录账号，再开通或恢复会员，这样换机后也能找回权益。"
+        case .memberEntitlementUnavailable:
+            return "当前账号暂时没有可用会员权益。请确认购买是否完成，或使用购买时的账号恢复。"
         }
     }
 }
@@ -389,28 +392,30 @@ final class SettingsViewModel: ObservableObject {
             transactionId: payload.transactionId,
             signedTransactionInfo: payload.signedTransactionInfo
         )
-        applyVerifiedMemberState(tier: verified.tier, expiresAt: verified.expiresAt, fallbackPayload: payload)
+        var resolvedTier = verified.tier
+        var resolvedExpiresAt = verified.expiresAt
         do {
             let tier = try await client.fetchMemberMe(accessToken: token)
             let verifiedHasAccess = AppSettings.hasMemberAccess(tier: verified.tier, expiresAt: verified.expiresAt)
             let fetchedHasAccess = AppSettings.hasMemberAccess(tier: tier.tier, expiresAt: tier.expiresAt)
-            let localHasAccess = hasActiveLocalEntitlement(payload)
-            if (verifiedHasAccess || localHasAccess) && !fetchedHasAccess {
-                if showsMessage {
-                    authMessage = "会员已恢复，状态刷新稍后会再同步。"
-                }
-            } else {
-                settings.memberTier = tier.tier
-                settings.memberExpiresAt = tier.expiresAt
-                persist()
-                if showsMessage {
-                    authMessage = "会员状态已更新。"
-                }
+            if fetchedHasAccess || !verifiedHasAccess {
+                resolvedTier = tier.tier
+                resolvedExpiresAt = tier.expiresAt
             }
         } catch {
+            // The verify endpoint is still authoritative for this operation.
+        }
+        settings.memberTier = resolvedTier
+        settings.memberExpiresAt = resolvedExpiresAt
+        persist()
+        guard AppSettings.hasMemberAccess(tier: resolvedTier, expiresAt: resolvedExpiresAt) else {
             if showsMessage {
-                authMessage = "会员已恢复，状态刷新稍后会再同步。"
+                authMessage = "当前账号暂时没有可用会员权益。请确认购买是否完成，或使用购买时的账号恢复。"
             }
+            throw SettingsViewModelError.memberEntitlementUnavailable
+        }
+        if showsMessage {
+            authMessage = "会员状态已更新。"
         }
     }
 
@@ -424,11 +429,18 @@ final class SettingsViewModel: ObservableObject {
             guard let payload = bestLocalEntitlement(from: payloads),
                   hasActiveLocalEntitlement(payload) else { return }
             let currentHasAccess = settings.hasMemberAccess
-            applyLocalEntitlement(payload)
-            if syncToCloud, hasCloudSession {
-                try? await verifyIAPPurchase(payload, showsMessage: false)
+            guard hasCloudSession else { return }
+            if syncToCloud {
+                do {
+                    try await verifyIAPPurchase(payload, showsMessage: false)
+                } catch {
+                    if synchronize, showsMessage {
+                        authMessage = "当前账号暂时没有可恢复的会员权益。请确认使用的是购买时的账号。"
+                    }
+                    return
+                }
             }
-            if !currentHasAccess, showsMessage {
+            if !currentHasAccess, settings.hasMemberAccess, showsMessage {
                 authMessage = "已检测到 App Store 会员权益，状态已恢复。"
             }
         } catch {
@@ -533,34 +545,6 @@ final class SettingsViewModel: ObservableObject {
             authMessage = "昵称已同步。"
         } catch {
             authMessage = "昵称已保存在本机。云端暂时没同步成功，稍后会再试。"
-        }
-    }
-
-    private func applyVerifiedMemberState(
-        tier: String,
-        expiresAt: String?,
-        fallbackPayload: IAPPurchaseVerification
-    ) {
-        let verifiedHasAccess = AppSettings.hasMemberAccess(tier: tier, expiresAt: expiresAt)
-        if verifiedHasAccess || !hasActiveLocalEntitlement(fallbackPayload) {
-            settings.memberTier = tier
-            settings.memberExpiresAt = expiresAt
-        } else {
-            applyLocalEntitlement(fallbackPayload, shouldPersist: false)
-        }
-        persist()
-    }
-
-    private func applyLocalEntitlement(_ payload: IAPPurchaseVerification, shouldPersist: Bool = true) {
-        settings.memberTier = payload.tier.rawValue
-        switch payload.tier {
-        case .lifetime:
-            settings.memberExpiresAt = nil
-        case .monthly, .yearly:
-            settings.memberExpiresAt = payload.expirationDate.map { AppSettings.isoString(from: $0) }
-        }
-        if shouldPersist {
-            persist()
         }
     }
 
