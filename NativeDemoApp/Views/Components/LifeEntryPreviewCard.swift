@@ -11,11 +11,15 @@ struct LifeEntryPreviewCard: View {
     let primaryActionTitle: String
     let showsPrimaryAction: Bool
     let showAngleAction: Bool
+    var showsFreePrimaryAction: Bool = false
+    var showFreeAngleAction: Bool = false
     var onTap: () -> Void
     var onChangeCategory: () -> Void
     var onPrimaryAction: () -> Void
     var onWriteOwn: () -> Void
     var onAngleAction: () -> Void
+    var onFreePrimaryAction: (() -> Void)? = nil
+    var onFreeAngleAction: (() -> Void)? = nil
 
     private var isWhisper: Bool { tier == .whisper }
     private var isConfirm: Bool { tier == .confirm }
@@ -139,6 +143,17 @@ struct LifeEntryPreviewCard: View {
                 if showAngleAction && isConfirm {
                     separator
                     quietAction("换个角度", action: onAngleAction)
+                }
+                separator
+            } else if showsFreePrimaryAction {
+                quietAction(primaryActionTitle) {
+                    onFreePrimaryAction?()
+                }
+                if showFreeAngleAction && isConfirm {
+                    separator
+                    quietAction("换个角度") {
+                        onFreeAngleAction?()
+                    }
                 }
                 separator
             }

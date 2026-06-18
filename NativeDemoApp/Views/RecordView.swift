@@ -27,6 +27,7 @@ struct RecordView: View {
     @State private var scenePackFeedback: String?
     @State private var didAutoFocusAmountPad = false
     @State private var lastDraftIntent: RecordDraftIntent = .automatic
+    @State private var freeScenePackRefreshToken = 0
     @AppStorage("scene_pack_order_v1") private var scenePackOrderStorage = ""
     @AppStorage("scene_pack_more_expanded_v1") private var scenePackMoreExpanded = false
     @AppStorage("scene_pack_usage_v1") private var scenePackUsageStorage = ""
@@ -47,6 +48,7 @@ struct RecordView: View {
     private let draftClock = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
     private let recordAccent = AppColors.accent
     private let recordInk = AppColors.text
+    private let freeScenePackService = FreeScenePackService.shared
     private let extensionScenePackIds: Set<String> = ["travel", "pet", "baby", "fitness"]
     private let scenePackSilenceInterval: TimeInterval = 45 * 24 * 60 * 60
 
@@ -75,6 +77,21 @@ struct RecordView: View {
         return visibleScenePacks.filter { pack in
             shouldFoldScenePack(pack)
         }
+    }
+
+    private var freeScenePacks: [ScenePackDefinition] {
+        _ = freeScenePackRefreshToken
+        return freeScenePackService.orderedFreePacks(from: visibleScenePacks)
+    }
+
+    private var freeMoreScenePacks: [ScenePackDefinition] {
+        let freeIds = Set(freeScenePacks.map(\.id))
+        return visibleScenePacks.filter { !freeIds.contains($0.id) }
+    }
+
+    private var freeReplaceableScenePacks: [ScenePackDefinition] {
+        _ = freeScenePackRefreshToken
+        return freeScenePackService.replaceableCandidates(from: visibleScenePacks)
     }
 
     private var scenePackOrderIds: [String] {
@@ -227,11 +244,17 @@ struct RecordView: View {
         return keywords.contains { text.contains($0) }
     }
 
-    private func applyScenePack(_ pack: ScenePackDefinition, keepSelectedCategory: Bool = false) {
+    private func applyScenePack(
+        _ pack: ScenePackDefinition,
+        keepSelectedCategory: Bool = false,
+        trackMemberSceneUsage: Bool = true
+    ) {
         dismissKeyboard()
         lastDraftIntent = .category
-        promoteScenePack(pack)
-        markScenePackUsed(pack)
+        if trackMemberSceneUsage {
+            promoteScenePack(pack)
+            markScenePackUsed(pack)
+        }
         let amount = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
         let categoryContext = keepSelectedCategory ? homeViewModel.selectedCategory : pack.category
         let variantKey = scenePackVariantKey(
@@ -681,6 +704,56 @@ struct RecordView: View {
         homeViewModel.inputTitle = nextCategoryCopyTitle()
     }
 
+    private func handleFreePreviewQuickAction() {
+        dismissKeyboard()
+        guard hasValidAmount else { return }
+
+        previewLineWasRotated = true
+        lastDraftIntent = .category
+        activeScenePack = nil
+
+        if let pack = preferredFreeScenePack() {
+            applyScenePack(pack, keepSelectedCategory: true, trackMemberSceneUsage: false)
+            return
+        }
+
+        let amount = inputAmountValue
+        let category = homeViewModel.selectedCategory
+        let variantKey = categoryCopyVariantKey(
+            category: category,
+            amount: amount,
+            date: homeViewModel.selectedDate
+        )
+        let variant = scenePackVariants[variantKey, default: 0]
+        scenePackVariants[variantKey] = variant + 1
+        homeViewModel.inputTitle = genericCategoryCopy(
+            for: category,
+            amount: amount,
+            date: homeViewModel.selectedDate,
+            variant: variant
+        )
+    }
+
+    private func preferredFreeScenePack() -> ScenePackDefinition? {
+        let packs = freeScenePacks
+        guard !packs.isEmpty else { return nil }
+
+        let guessedPackId = guessScenePackId()
+        if let guessedPack = packs.first(where: { $0.id == guessedPackId }) {
+            return guessedPack
+        }
+
+        if let compatiblePack = packs.first(where: { $0.category == homeViewModel.selectedCategory }) {
+            return compatiblePack
+        }
+
+        let amount = inputAmountValue
+        let variantKey = "free-scene-pack|\(homeViewModel.selectedCategory.rawValue)|\(Int((amount * 100).rounded()))"
+        let variant = scenePackVariants[variantKey, default: 0]
+        scenePackVariants[variantKey] = variant + 1
+        return packs[variant % packs.count]
+    }
+
     private func refreshRecommendedCategory() {
         guard selectedEntryMode == .manual else { return }
         guard !homeViewModel.categoryLockedByUser else { return }
@@ -803,6 +876,7 @@ struct RecordView: View {
                 homeViewModel.refreshDraftSelectedDate(now: now)
             }
             .onAppear {
+                freeScenePackService.recordFirstOpenIfNeeded()
                 homeViewModel.refreshDraftSelectedDate(force: true)
                 guard !didAutoFocusAmountPad else { return }
                 didAutoFocusAmountPad = true
@@ -818,19 +892,49 @@ struct RecordView: View {
                 }
             }
             .sheet(isPresented: $showScenePackAngleSheet) {
-                ScenePackAngleSheet(
-                    primaryScenePacks: primaryScenePacks,
-                    secondaryScenePacks: secondaryScenePacks,
-                    isMoreExpanded: $scenePackMoreExpanded,
-                    scenePackDesc: scenePackDesc,
-                    onReorderPacks: { orderedPackIds, movedPackIds in
-                        reorderScenePacks(orderedPackIds: orderedPackIds, movedPackIds: movedPackIds)
-                    },
-                    onSelectPack: { pack in
-                        previewLineWasRotated = true
-                        applyScenePack(pack)
-                    }
-                )
+                if isMember {
+                    ScenePackAngleSheet(
+                        primaryScenePacks: primaryScenePacks,
+                        secondaryScenePacks: secondaryScenePacks,
+                        isMoreExpanded: $scenePackMoreExpanded,
+                        scenePackDesc: scenePackDesc,
+                        onReorderPacks: { orderedPackIds, movedPackIds in
+                            reorderScenePacks(orderedPackIds: orderedPackIds, movedPackIds: movedPackIds)
+                        },
+                        onSelectPack: { pack in
+                            previewLineWasRotated = true
+                            applyScenePack(pack)
+                        }
+                    )
+                } else {
+                    ScenePackAngleSheet(
+                        freeScenePacks: freeScenePacks,
+                        moreScenePacks: freeMoreScenePacks,
+                        replaceableScenePacks: freeReplaceableScenePacks,
+                        isInFirstWeek: freeScenePackService.isInFirstWeek(),
+                        canReplacePackCombination: freeScenePackService.canReplacePackCombination(),
+                        daysUntilNextReplace: freeScenePackService.daysUntilNextReplace(),
+                        scenePackDesc: scenePackDesc,
+                        isExtensionLockedPack: { pack in
+                            freeScenePackService.isExtensionLockedPack(pack)
+                        },
+                        onReorderFreePacks: { orderedPackIds in
+                            freeScenePackService.reorderFreePacks(orderedPackIds, from: visibleScenePacks)
+                            freeScenePackRefreshToken += 1
+                        },
+                        onSelectFreePack: { pack in
+                            previewLineWasRotated = true
+                            applyScenePack(pack, keepSelectedCategory: true, trackMemberSceneUsage: false)
+                        },
+                        onReplaceFreePack: { slot, oldId, newPack in
+                            freeScenePackService.replacePack(atSlot: slot, oldId: oldId, newId: newPack.id, from: visibleScenePacks)
+                            freeScenePackRefreshToken += 1
+                        },
+                        onShowMemberPricing: {
+                            onShowMemberPricing?()
+                        }
+                    )
+                }
             }
             .overlay(alignment: .top) {
                 if let scenePackFeedback {
@@ -962,6 +1066,8 @@ struct RecordView: View {
             primaryActionTitle: previewQuickActionTitle,
             showsPrimaryAction: isMember,
             showAngleAction: isMember && previewLineWasRotated && previewTier == .confirm,
+            showsFreePrimaryAction: !isMember && hasValidAmount && previewTier == .confirm,
+            showFreeAngleAction: !isMember && hasValidAmount && previewTier == .confirm,
             onTap: {
                 openNoteEditor()
             },
@@ -976,6 +1082,11 @@ struct RecordView: View {
                 openNoteEditor()
             },
             onAngleAction: {
+                dismissKeyboard()
+                showScenePackAngleSheet = true
+            },
+            onFreePrimaryAction: handleFreePreviewQuickAction,
+            onFreeAngleAction: {
                 dismissKeyboard()
                 showScenePackAngleSheet = true
             }

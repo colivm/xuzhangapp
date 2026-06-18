@@ -1047,7 +1047,7 @@ final class HomeViewModel: ObservableObject {
         case .lodging:
             defaults = ["今晚住在这里", "出差住宿记一笔", "短住一晚记下"]
         case .health:
-            defaults = ["药店买点常用药", "挂号问诊记一笔", "体检护理记一笔"]
+            defaults = healthNoteSuggestions()
         case .home:
             defaults = ["水电燃气交上了", "家里添个要用的", "修修补补记一笔"]
         case .social:
@@ -1055,11 +1055,33 @@ final class HomeViewModel: ObservableObject {
         case .other:
             defaults = ["临时花了一笔", "还没想好归哪类", "先把这笔记下"]
         }
-        guard let prefill = compatiblePrefillTitleForSave(category: category),
-              !defaults.contains(prefill) else {
+        guard let prefill = compatiblePrefillTitleForSave(category: category) else {
             return defaults
         }
-        return [prefill] + defaults
+        return uniqueNoteSuggestions([prefill] + defaults)
+    }
+
+    private func healthNoteSuggestions() -> [String] {
+        let title = inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if containsFitnessCue(title) {
+            return ["运动前小准备", "运动后补给一下", "一场运动记下来"]
+        }
+        return ["药店补点常备药", "问诊挂号记一笔", "体检项目记下来"]
+    }
+
+    private func containsFitnessCue(_ text: String) -> Bool {
+        let cues = ["运动", "健身", "锻炼", "训练", "跑步", "瑜伽", "游泳", "球场", "课程", "护具", "运动鞋", "运动服", "补给", "恢复", "能量", "月卡", "年卡"]
+        return cues.contains { text.contains($0) }
+    }
+
+    private func uniqueNoteSuggestions(_ suggestions: [String]) -> [String] {
+        var seen = Set<String>()
+        return suggestions.filter { suggestion in
+            let trimmed = suggestion.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !seen.contains(trimmed) else { return false }
+            seen.insert(trimmed)
+            return true
+        }
     }
 
     func frequentRecordAmounts(at date: Date = .now) -> [Double] {
