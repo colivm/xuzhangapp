@@ -22,6 +22,12 @@ struct InsightWebView: View {
     @State private var monthlyActionMessage: String?
     @State private var monthlyNarrativeVariant = 0
     @State private var showWeeklySharePrivacyConfirm = false
+    @State private var showAICommandSheet = false
+    @State private var aiCommandText = ""
+    @State private var aiCommandAmountText = ""
+    @State private var aiCommandResult: AICommandResult?
+    @State private var aiCommandMessage: String?
+    @State private var aiCommandSavedCount: Int?
     private let trialTotal = 5
 
     private struct AIStatusPill: Equatable {
@@ -39,6 +45,34 @@ struct InsightWebView: View {
         let id = UUID()
         var title: String
         var body: String
+    }
+
+    private enum AICommandKind: Equatable {
+        case query
+        case duplicateCheck
+        case batchCreate
+        case needsAmount
+        case unsupported
+    }
+
+    private struct AICommandBar: Identifiable, Equatable {
+        let id = UUID()
+        var label: String
+        var amount: Double
+        var count: Int
+    }
+
+    private struct AICommandResult: Identifiable, Equatable {
+        let id = UUID()
+        var kind: AICommandKind
+        var title: String
+        var summary: String
+        var detail: String
+        var items: [HomeItem]
+        var bars: [AICommandBar]
+        var drafts: [AICommandRecordDraft]
+        var amountSource: String?
+        var needsAmount: Bool
     }
 
     private var hasMemberAccess: Bool {
@@ -71,12 +105,17 @@ struct InsightWebView: View {
         .sheet(isPresented: $showTodayInsightSheet) {
             todayInsightSheet
         }
+        .sheet(isPresented: $showAICommandSheet) {
+            aiCommandSheet
+        }
     }
 
     private var insightContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             insightJournalCard
             insightChapterFootnote
+            aiCommandEntryCard
+                .padding(.bottom, 12)
             keywordBubbleSection
                 .padding(.top, -2)
                 .padding(.bottom, 12)
@@ -143,6 +182,121 @@ struct InsightWebView: View {
         .padding(.leading, 24)
         .padding(.top, 10)
         .padding(.bottom, 10)
+    }
+
+    private var aiCommandEntryCard: some View {
+        Button {
+            showAICommandSheet = true
+            if aiCommandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                aiCommandText = "帮我看一下过去三天餐饮类的消费"
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(AppColors.accent.opacity(0.12))
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(AppColors.accentDark)
+                    }
+                    .frame(width: 38, height: 38)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 8) {
+                            Text("让 AI 整理账本")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(AppColors.text)
+                            if !hasMemberAccess {
+                                Text("会员能力")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(AppColors.lockGold)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(
+                                        Capsule(style: .continuous)
+                                            .fill(AppColors.lockGold.opacity(0.10))
+                                    )
+                            }
+                        }
+
+                        Text("一句话查账、汇总、补记。会先生成预览，确认后才保存。")
+                            .font(.system(size: 13))
+                            .lineSpacing(3)
+                            .foregroundStyle(AppColors.subtext)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    Image(systemName: "text.magnifyingglass")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppColors.accentDark.opacity(0.88))
+                    Text("试试：过去三天餐饮花了多少？")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(AppColors.text.opacity(0.78))
+                    Spacer(minLength: 6)
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(AppColors.subtext.opacity(0.62))
+                }
+                .padding(.horizontal, 13)
+                .padding(.vertical, 11)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.48))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.white.opacity(0.54), lineWidth: 1)
+                )
+
+                HStack(spacing: 7) {
+                    aiCommandMiniChip("查餐饮")
+                    aiCommandMiniChip("看交通")
+                    aiCommandMiniChip("找重复")
+                    aiCommandMiniChip("补通勤")
+                }
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.70),
+                                AppColors.paperMist.opacity(0.52),
+                                AppColors.accent.opacity(0.075)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .background(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.white.opacity(0.58), lineWidth: 1)
+            )
+            .shadow(color: AppColors.subtext.opacity(0.08), radius: 18, x: 0, y: 8)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func aiCommandMiniChip(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(AppColors.subtext)
+            .lineLimit(1)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.42))
+            )
     }
 
     @ViewBuilder
@@ -929,6 +1083,786 @@ struct InsightWebView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+
+    private var aiCommandSheet: some View {
+        NavigationStack {
+            ZStack {
+                AppColors.bg.ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        aiCommandSheetHeader
+                        aiCommandInputPanel
+                        aiCommandSuggestionRow
+                        if let aiCommandMessage {
+                            Text(aiCommandMessage)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(AppColors.subtext)
+                                .padding(.horizontal, 4)
+                        }
+                        aiCommandResultPanel
+                    }
+                    .padding(18)
+                    .padding(.bottom, 34)
+                }
+                .scrollIndicators(.hidden)
+            }
+            .navigationTitle("AI 指令台")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") {
+                        showAICommandSheet = false
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppColors.accentDark)
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var aiCommandSheetHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(AppColors.accent.opacity(0.12))
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppColors.accentDark)
+                }
+                .frame(width: 42, height: 42)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("把账本里的事交代清楚")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                    Text("先理解、再预览；涉及新增记录时，确认后才会保存。")
+                        .font(.system(size: 13))
+                        .foregroundStyle(AppColors.subtext)
+                }
+            }
+        }
+        .paperChapterPanel(radius: 22, padding: 18, showsAccentLine: false)
+    }
+
+    private var aiCommandInputPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("你想让它做什么？")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppColors.text.opacity(0.86))
+
+            TextField("例如：帮我看一下过去三天餐饮类的消费", text: $aiCommandText, axis: .vertical)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(2...4)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.62))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.64), lineWidth: 1)
+                )
+
+            HStack(spacing: 10) {
+                Button {
+                    runAICommand()
+                } label: {
+                    aiCommandPrimaryLabel("生成预览", systemImage: "sparkles")
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    aiCommandText = ""
+                    aiCommandAmountText = ""
+                    aiCommandResult = nil
+                    aiCommandMessage = nil
+                    aiCommandSavedCount = nil
+                } label: {
+                    Text("清空")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppColors.subtext)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 11)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.white.opacity(0.46))
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .glassPanel(radius: 22, padding: 18)
+    }
+
+    private var aiCommandSuggestionRow: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                aiCommandPresetChip("过去三天餐饮花了多少？")
+                aiCommandPresetChip("看一下这周交通")
+                aiCommandPresetChip("找找最近有没有重复账单")
+                aiCommandPresetChip("补记过去一周工作日通勤，早晚各一次")
+            }
+            .padding(.horizontal, 2)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private func aiCommandPresetChip(_ title: String) -> some View {
+        Button {
+            aiCommandText = title
+            runAICommand(title)
+        } label: {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+                .lineLimit(1)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.56))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(Color.white.opacity(0.52), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var aiCommandResultPanel: some View {
+        if let result = aiCommandResult {
+            VStack(alignment: .leading, spacing: 14) {
+                aiCommandIntentCard(result)
+                if !result.bars.isEmpty {
+                    aiCommandBarChart(result.bars)
+                }
+                if !result.items.isEmpty {
+                    aiCommandItemsPreview(result.items)
+                }
+                if result.needsAmount {
+                    aiCommandAmountInput(result)
+                }
+                if !result.drafts.isEmpty {
+                    aiCommandDraftPreview(result)
+                }
+                aiCommandResultActions(result)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("可以先从一个小问题开始")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                Text("比如查一段时间的餐饮、交通，或者让它先生成一批待确认的通勤记录。")
+                    .font(.system(size: 13))
+                    .lineSpacing(3)
+                    .foregroundStyle(AppColors.subtext)
+            }
+            .glassPanel(radius: 20, padding: 18)
+        }
+    }
+
+    private func aiCommandIntentCard(_ result: AICommandResult) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Text("我理解的是")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer()
+                Text(aiCommandKindText(result.kind))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(result.kind == .batchCreate ? AppColors.lockGold : AppColors.accentDark)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill((result.kind == .batchCreate ? AppColors.lockGold : AppColors.accent).opacity(0.10))
+                    )
+            }
+
+            Text(result.title)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(AppColors.text)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(result.summary)
+                .font(.system(size: 14, weight: .medium))
+                .lineSpacing(4)
+                .foregroundStyle(AppColors.text.opacity(0.84))
+
+            if !result.detail.isEmpty {
+                Text(result.detail)
+                    .font(.system(size: 12))
+                    .lineSpacing(3)
+                    .foregroundStyle(AppColors.subtext)
+            }
+        }
+        .glassPanel(radius: 22, padding: 18)
+    }
+
+    private func aiCommandBarChart(_ bars: [AICommandBar]) -> some View {
+        let maxAmount = max(bars.map(\.amount).max() ?? 0, 1)
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("简图")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(AppColors.subtext)
+
+            HStack(alignment: .bottom, spacing: 9) {
+                ForEach(bars) { bar in
+                    VStack(spacing: 7) {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [AppColors.accent.opacity(0.86), AppColors.paperMist.opacity(0.72)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .frame(height: CGFloat(max(8, min(82, (bar.amount / maxAmount) * 82))))
+                            .overlay(alignment: .top) {
+                                if bar.count > 0 {
+                                    Text("\(bar.count)")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(.white.opacity(0.92))
+                                        .padding(.top, 4)
+                                }
+                            }
+                        Text(bar.label)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: 120)
+        }
+        .glassPanel(radius: 20, padding: 16)
+    }
+
+    private func aiCommandItemsPreview(_ items: [HomeItem]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("相关记录")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer()
+                Text("\(items.count) 笔")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+            }
+
+            ForEach(items.prefix(8)) { item in
+                aiCommandItemRow(item)
+            }
+        }
+        .glassPanel(radius: 20, padding: 16)
+    }
+
+    private func aiCommandItemRow(_ item: HomeItem) -> some View {
+        HStack(spacing: 10) {
+            Text(item.category.emoji)
+                .font(.system(size: 15))
+                .frame(width: 30, height: 30)
+                .background(
+                    Circle()
+                        .fill(AppColors.accent.opacity(0.08))
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.displayTitle)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                Text(item.createdAt.zhBillDateTime)
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppColors.subtext)
+            }
+
+            Spacer(minLength: 8)
+
+            Text(item.amount.formatted(.cny))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppColors.text.opacity(0.86))
+        }
+        .padding(.vertical, 7)
+    }
+
+    private func aiCommandAmountInput(_ result: AICommandResult) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("还差一个金额")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AppColors.text)
+            Text("没有找到最近的通勤金额。填一个单程金额后，我再生成待确认列表。")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext)
+
+            HStack(spacing: 10) {
+                TextField("单程金额", text: $aiCommandAmountText)
+                    .keyboardType(.decimalPad)
+                    .font(.system(size: 15, weight: .semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 11)
+                    .background(
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .fill(Color.white.opacity(0.58))
+                    )
+
+                Button {
+                    runAICommand(aiCommandText)
+                } label: {
+                    aiCommandPrimaryLabel("生成", systemImage: "list.bullet.rectangle")
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .glassPanel(radius: 20, padding: 16)
+    }
+
+    private func aiCommandDraftPreview(_ result: AICommandResult) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("待确认记录")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer()
+                if let amountSource = result.amountSource {
+                    Text(amountSource)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                }
+            }
+
+            ForEach(result.drafts.prefix(12)) { draft in
+                aiCommandDraftRow(draft)
+            }
+        }
+        .glassPanel(radius: 20, padding: 16)
+    }
+
+    private func aiCommandDraftRow(_ draft: AICommandRecordDraft) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(AppColors.accentDark.opacity(0.86))
+                .frame(width: 28, height: 28)
+                .background(
+                    Circle()
+                        .fill(AppColors.accent.opacity(0.10))
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(draft.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppColors.text)
+                Text(draft.date.zhBillDateTime)
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppColors.subtext)
+            }
+
+            Spacer(minLength: 8)
+
+            Text(draft.amount.formatted(.cny))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppColors.text.opacity(0.86))
+        }
+        .padding(.vertical, 7)
+    }
+
+    @ViewBuilder
+    private func aiCommandResultActions(_ result: AICommandResult) -> some View {
+        if result.kind == .unsupported {
+            EmptyView()
+        } else if result.kind == .needsAmount {
+            EmptyView()
+        } else if !result.drafts.isEmpty {
+            VStack(alignment: .leading, spacing: 9) {
+                Button {
+                    saveAICommandDrafts(result.drafts)
+                } label: {
+                    aiCommandPrimaryLabel(
+                        hasMemberAccess ? "确认保存 \(result.drafts.count) 条" : "开通会员保存全部",
+                        systemImage: hasMemberAccess ? "checkmark.circle.fill" : "lock.fill"
+                    )
+                }
+                .buttonStyle(.plain)
+
+                if let aiCommandSavedCount {
+                    Text("已保存 \(aiCommandSavedCount) 条到账本。")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                } else if !hasMemberAccess {
+                    Text("查询可以先看结果；批量补记属于会员能力，避免免费用户误触生成大量记录。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext)
+                }
+            }
+        } else {
+            Button {
+                runAICommand(aiCommandText)
+            } label: {
+                aiCommandSecondaryLabel("按这条继续整理", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func aiCommandPrimaryLabel(_ title: String, systemImage: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .bold))
+            Text(title)
+                .font(.system(size: 14, weight: .bold))
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [AppColors.accent.opacity(0.94), AppColors.accentDark.opacity(0.94)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .shadow(color: AppColors.accent.opacity(0.18), radius: 10, x: 0, y: 5)
+    }
+
+    private func aiCommandSecondaryLabel(_ title: String, systemImage: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+        }
+        .foregroundStyle(AppColors.subtext)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 11)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.52))
+        )
+    }
+
+    private func runAICommand(_ override: String? = nil) {
+        let command = (override ?? aiCommandText).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !command.isEmpty else {
+            aiCommandMessage = "先写一句你想让它整理什么。"
+            return
+        }
+        aiCommandSavedCount = nil
+        aiCommandMessage = nil
+        aiCommandResult = buildAICommandResult(for: command)
+    }
+
+    private func buildAICommandResult(for command: String) -> AICommandResult {
+        let normalized = command.lowercased()
+        if containsAny(normalized, ["补记", "补上", "生成", "新增"]) && containsAny(normalized, ["通勤", "交通", "上班", "下班", "早晚"]) {
+            return buildCommuteDraftResult(command: normalized)
+        }
+        if containsAny(normalized, ["重复", "重复账单", "重复记录"]) {
+            return buildDuplicateCheckResult()
+        }
+        if containsAny(normalized, ["餐饮", "吃饭", "饭", "咖啡", "奶茶"]) {
+            return buildQueryResult(
+                title: "过去 \(queryDays(from: normalized)) 天的餐饮记录",
+                category: .dining,
+                days: queryDays(from: normalized)
+            )
+        }
+        if containsAny(normalized, ["交通", "通勤", "出行", "地铁", "公交", "打车"]) {
+            return buildQueryResult(
+                title: "最近 \(queryDays(from: normalized, fallback: 7)) 天的出行记录",
+                category: .transport,
+                days: queryDays(from: normalized, fallback: 7)
+            )
+        }
+        if containsAny(normalized, ["本月", "这个月", "月"]) {
+            return buildQueryResult(
+                title: "这个月的账本概览",
+                category: nil,
+                days: daysSinceMonthStart()
+            )
+        }
+        return AICommandResult(
+            kind: .unsupported,
+            title: "这条指令还需要再具体一点",
+            summary: "可以先问一段时间、一个分类，或明确说要补记哪类记录。",
+            detail: "例子：过去三天餐饮花了多少？或者：补记过去一周工作日通勤，早晚各一次。",
+            items: [],
+            bars: [],
+            drafts: [],
+            amountSource: nil,
+            needsAmount: false
+        )
+    }
+
+    private func buildQueryResult(title: String, category: HomeItem.Category?, days: Int) -> AICommandResult {
+        let items = filteredAICommandItems(days: days, category: category)
+        let total = items.reduce(0) { $0 + $1.amount }
+        let categoryText = category?.label ?? "全部"
+        let summary = items.isEmpty
+            ? "这段时间没有找到\(categoryText)记录。"
+            : "找到 \(items.count) 笔，合计 \(total.formatted(.cny))。"
+        let detail: String
+        if let top = items.max(by: { $0.amount < $1.amount }) {
+            detail = "金额最高的是「\(top.displayTitle)」，\(top.amount.formatted(.cny))，时间在 \(top.createdAt.zhBillDateTime)。"
+        } else {
+            detail = "换个范围或分类再问一次，结果会更明确。"
+        }
+        return AICommandResult(
+            kind: .query,
+            title: title,
+            summary: summary,
+            detail: detail,
+            items: items.sorted { $0.createdAt > $1.createdAt },
+            bars: dailyBars(days: min(days, 7), items: items),
+            drafts: [],
+            amountSource: nil,
+            needsAmount: false
+        )
+    }
+
+    private func buildDuplicateCheckResult() -> AICommandResult {
+        let items = filteredAICommandItems(days: 30, category: nil)
+        let groups = Dictionary(grouping: items) { item in
+            let cents = Int((item.amount * 100).rounded())
+            let day = Calendar.current.startOfDay(for: item.createdAt).timeIntervalSince1970
+            return "\(item.category.rawValue)-\(cents)-\(Int(day))"
+        }
+        let suspects = groups.values
+            .filter { $0.count > 1 }
+            .flatMap { $0 }
+            .sorted { $0.createdAt > $1.createdAt }
+        let summary = suspects.isEmpty
+            ? "最近 30 天没发现明显重复的同日同类同金额记录。"
+            : "发现 \(suspects.count) 笔可能重复的记录，先列出来给你核对。"
+        let detail = suspects.isEmpty
+            ? "这只是本地规则筛查，不会删除任何记录。"
+            : "判断依据是同一天、同分类、同金额；需要你再确认标题和来源。"
+        return AICommandResult(
+            kind: .duplicateCheck,
+            title: "重复记录初筛",
+            summary: summary,
+            detail: detail,
+            items: suspects,
+            bars: suspects.isEmpty ? [] : dailyBars(days: 7, items: suspects),
+            drafts: [],
+            amountSource: nil,
+            needsAmount: false
+        )
+    }
+
+    private func buildCommuteDraftResult(command: String) -> AICommandResult {
+        let commandAmount = amountFromCommand(command)
+        let typedAmount = Double(aiCommandAmountText.replacingOccurrences(of: ",", with: ""))
+        let amount: Double?
+        if let commandAmount {
+            amount = commandAmount
+        } else {
+            amount = typedAmount
+        }
+        let inferred = inferredCommuteAmount()
+        let resolvedAmount: Double?
+        if let amount {
+            resolvedAmount = amount
+        } else {
+            resolvedAmount = inferred?.amount
+        }
+        guard let resolvedAmount, resolvedAmount > 0 else {
+            return AICommandResult(
+                kind: .needsAmount,
+                title: "可以补通勤，但还缺单程金额",
+                summary: "我会按最近 5 个工作日，早晚各一次，先生成 10 条待确认记录。",
+                detail: "没有找到足够明确的历史通勤金额，填一个单程金额后再生成。",
+                items: [],
+                bars: [],
+                drafts: [],
+                amountSource: nil,
+                needsAmount: true
+            )
+        }
+
+        let weekdays = recentWeekdays(limit: 5)
+        let drafts = weekdays.flatMap { day in
+            [
+                AICommandRecordDraft(
+                    title: "早高峰通勤",
+                    amount: resolvedAmount,
+                    category: .transport,
+                    date: dateBySetting(hour: 8, minute: 30, on: day)
+                ),
+                AICommandRecordDraft(
+                    title: "晚高峰通勤",
+                    amount: resolvedAmount,
+                    category: .transport,
+                    date: dateBySetting(hour: 18, minute: 30, on: day)
+                )
+            ]
+        }
+        let total = drafts.reduce(0) { $0 + $1.amount }
+        let amountSource: String
+        if amount != nil {
+            amountSource = "按输入金额"
+        } else if let inferred {
+            amountSource = "参考历史 \(inferred.count) 次"
+        } else {
+            amountSource = "按单程金额"
+        }
+        return AICommandResult(
+            kind: .batchCreate,
+            title: "补上最近 5 个工作日通勤",
+            summary: "将生成 \(drafts.count) 条出行记录，合计 \(total.formatted(.cny))。",
+            detail: "早上 08:30、晚上 18:30 各一条。保存前可先核对，不会自动写入账本。",
+            items: [],
+            bars: dailyBarsForDrafts(drafts),
+            drafts: drafts,
+            amountSource: amountSource,
+            needsAmount: false
+        )
+    }
+
+    private func saveAICommandDrafts(_ drafts: [AICommandRecordDraft]) {
+        guard hasMemberAccess else {
+            onShowMemberPricing?()
+            return
+        }
+        let count = homeViewModel.importAICommandDrafts(drafts)
+        aiCommandSavedCount = count
+        aiCommandMessage = count > 0 ? "已确认保存，账本会按时间排序。" : "没有可保存的记录。"
+        if count > 0 {
+            aiCommandResult = nil
+        }
+    }
+
+    private func filteredAICommandItems(days: Int, category: HomeItem.Category?) -> [HomeItem] {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -(max(days, 1) - 1), to: Date()) ?? Date())
+        return homeViewModel.items.filter { item in
+            item.amount > 0
+                && item.createdAt >= start
+                && (category == nil || item.category == category)
+        }
+    }
+
+    private func dailyBars(days: Int, items: [HomeItem]) -> [AICommandBar] {
+        let calendar = Calendar.current
+        return (0..<max(days, 1)).compactMap { offset in
+            guard let day = calendar.date(byAdding: .day, value: offset - (max(days, 1) - 1), to: Date()) else { return nil }
+            let dayItems = items.filter { calendar.isDate($0.createdAt, inSameDayAs: day) }
+            return AICommandBar(
+                label: shortDateText(day),
+                amount: dayItems.reduce(0) { $0 + $1.amount },
+                count: dayItems.count
+            )
+        }
+    }
+
+    private func dailyBarsForDrafts(_ drafts: [AICommandRecordDraft]) -> [AICommandBar] {
+        let calendar = Calendar.current
+        return recentWeekdays(limit: 5).map { day in
+            let dayDrafts = drafts.filter { calendar.isDate($0.date, inSameDayAs: day) }
+            return AICommandBar(
+                label: shortDateText(day),
+                amount: dayDrafts.reduce(0) { $0 + $1.amount },
+                count: dayDrafts.count
+            )
+        }
+    }
+
+    private func inferredCommuteAmount() -> (amount: Double, count: Int)? {
+        let candidates = filteredAICommandItems(days: 90, category: .transport)
+            .filter { item in
+                let text = "\(item.title) \(item.displayEmotionTag)"
+                return item.amount > 0
+                    && item.amount <= 80
+                    && (containsAny(text, ["通勤", "地铁", "公交", "早高峰", "晚高峰", "上班", "下班"]) || item.amount <= 15)
+            }
+        guard !candidates.isEmpty else { return nil }
+        let grouped = Dictionary(grouping: candidates) { Int(($0.amount * 100).rounded()) }
+        guard let best = grouped.max(by: { lhs, rhs in
+            if lhs.value.count == rhs.value.count {
+                let leftDate = lhs.value.map(\.createdAt).max() ?? .distantPast
+                let rightDate = rhs.value.map(\.createdAt).max() ?? .distantPast
+                return leftDate < rightDate
+            }
+            return lhs.value.count < rhs.value.count
+        }) else { return nil }
+        return (Double(best.key) / 100, best.value.count)
+    }
+
+    private func recentWeekdays(limit: Int) -> [Date] {
+        let calendar = Calendar.current
+        var cursor = Date()
+        var result: [Date] = []
+        while result.count < limit {
+            let weekday = calendar.component(.weekday, from: cursor)
+            if weekday >= 2 && weekday <= 6 {
+                result.append(calendar.startOfDay(for: cursor))
+            }
+            cursor = calendar.date(byAdding: .day, value: -1, to: cursor) ?? cursor
+        }
+        return result.reversed()
+    }
+
+    private func dateBySetting(hour: Int, minute: Int, on day: Date) -> Date {
+        Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day
+    }
+
+    private func queryDays(from text: String, fallback: Int = 3) -> Int {
+        if containsAny(text, ["三天", "3天", "3 天"]) { return 3 }
+        if containsAny(text, ["一周", "7天", "7 天", "七天"]) { return 7 }
+        if containsAny(text, ["本月", "这个月"]) { return daysSinceMonthStart() }
+        return fallback
+    }
+
+    private func daysSinceMonthStart() -> Int {
+        let calendar = Calendar.current
+        let start = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
+        return max(1, (calendar.dateComponents([.day], from: start, to: Date()).day ?? 0) + 1)
+    }
+
+    private func amountFromCommand(_ text: String) -> Double? {
+        let pattern = #"(\d+(?:\.\d{1,2})?)\s*(元|块)?"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let amountRange = Range(match.range(at: 1), in: text) else {
+            return nil
+        }
+        let value = Double(text[amountRange])
+        if let value, value > 0, value < 1000 {
+            return value
+        }
+        return nil
+    }
+
+    private func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.contains($0) }
+    }
+
+    private func aiCommandKindText(_ kind: AICommandKind) -> String {
+        switch kind {
+        case .query:
+            return "查账"
+        case .duplicateCheck:
+            return "核对"
+        case .batchCreate:
+            return "待保存"
+        case .needsAmount:
+            return "需确认"
+        case .unsupported:
+            return "未识别"
+        }
     }
 
     @ViewBuilder

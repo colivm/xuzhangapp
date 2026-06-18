@@ -1,6 +1,28 @@
 import Foundation
 import Combine
 
+struct AICommandRecordDraft: Identifiable, Equatable {
+    let id: UUID
+    var title: String
+    var amount: Double
+    var category: HomeItem.Category
+    var date: Date
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        amount: Double,
+        category: HomeItem.Category,
+        date: Date
+    ) {
+        self.id = id
+        self.title = title
+        self.amount = amount
+        self.category = category
+        self.date = date
+    }
+}
+
 @MainActor
 final class HomeViewModel: ObservableObject {
     enum Period: String, CaseIterable, Identifiable {
@@ -348,6 +370,66 @@ final class HomeViewModel: ObservableObject {
         refreshTodayPlayback()
         refreshRouteGuidanceIfNeeded()
         updateOCRSuccessStatus(prefix: "已导入 \(importedItems.count) 条，进入待整理", isMember: isMember)
+        if let firstItem = importedItems.first {
+            enqueuePetMessage(for: firstItem)
+        }
+        Task {
+            for item in importedItems {
+                await syncUpsertToCloud(item)
+            }
+        }
+        return importedItems.count
+    }
+
+    @discardableResult
+    func importAICommandDrafts(_ drafts: [AICommandRecordDraft]) -> Int {
+        let validDrafts = drafts.filter { $0.amount > 0 }
+        guard !validDrafts.isEmpty else { return 0 }
+
+        let wasEmpty = items.isEmpty
+        let now = Date()
+        let importedItems = validDrafts.map { draft in
+            let resolution = RecordDraftResolutionService.resolve(
+                RecordDraftResolutionInput(
+                    rawTitle: draft.title,
+                    fallbackCategory: draft.category,
+                    amount: draft.amount,
+                    date: draft.date,
+                    merchantBrandId: MerchantBrandCatalog.matchBrand(in: draft.title)?.id,
+                    categoryLockedByUser: true,
+                    userEditedTitle: true,
+                    source: "ai_command"
+                )
+            )
+            return HomeItem(
+                title: resolution.title,
+                amount: draft.amount,
+                category: resolution.category,
+                source: .manual,
+                createdAt: draft.date,
+                updatedAt: now,
+                emotionTag: resolution.emotionTag,
+                merchantBrandId: resolution.merchantBrandId,
+                userEditedTitle: true,
+                userEditedCategory: true
+            )
+        }
+
+        items.insert(contentsOf: importedItems, at: 0)
+        persistItems()
+        analyticsService.track(
+            "ai_command_records_saved",
+            props: [
+                "count": String(importedItems.count),
+                "source": "ai_command",
+            ]
+        )
+        refreshTodayPlayback()
+        if wasEmpty {
+            emitRouteGuidance(.firstRecordTodayPlayback)
+        } else {
+            refreshRouteGuidanceIfNeeded()
+        }
         if let firstItem = importedItems.first {
             enqueuePetMessage(for: firstItem)
         }
