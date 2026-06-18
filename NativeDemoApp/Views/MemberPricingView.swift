@@ -483,7 +483,7 @@ struct MemberPricingView: View {
 
     private func regularPlanButton(_ plan: MemberPlan) -> some View {
         let isHighlighted = highlightPlanId == plan.id
-        Button {
+        return Button {
             handlePurchase(plan)
         } label: {
             VStack(alignment: .leading, spacing: 4) {
