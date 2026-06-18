@@ -1186,7 +1186,7 @@ struct StatsWebView: View {
 
     private func traceCategoryClueRow(_ clue: TraceCategoryClue) -> some View {
         let isTop = traceCategoryClues.first?.category == clue.category
-        HStack(spacing: 9) {
+        return HStack(spacing: 9) {
             Circle()
                 .fill(traceClueColor(for: clue.category).opacity(0.82))
                 .frame(width: 7, height: 7)

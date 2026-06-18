@@ -2721,21 +2721,21 @@ private struct KeywordBubblePalette {
                 base: Color(red: 0.84, green: 0.70, blue: 0.44).opacity(baseOpacity),
                 rim: Color(red: 0.70, green: 0.56, blue: 0.34).opacity(rimOpacity),
                 glow: Color(red: 0.90, green: 0.78, blue: 0.52).opacity(glowOpacity),
-                text: AppColors.text.opacity(0.86)
+                text: Color(red: 0.12, green: 0.15, blue: 0.17).opacity(0.86)
             )
         case .transport, .entertainment:
             return .init(
                 base: Color(red: 0.58, green: 0.67, blue: 0.76).opacity(baseOpacity),
                 rim: Color(red: 0.45, green: 0.54, blue: 0.65).opacity(rimOpacity),
                 glow: Color(red: 0.63, green: 0.75, blue: 0.83).opacity(glowOpacity),
-                text: AppColors.text.opacity(0.85)
+                text: Color(red: 0.12, green: 0.15, blue: 0.17).opacity(0.85)
             )
         case .daily, .lodging, .health, .home, .other:
             return .init(
-                base: AppColors.accent.opacity(isTitle ? 0.34 : 0.22),
-                rim: AppColors.accentDark.opacity(rimOpacity),
-                glow: AppColors.accent.opacity(isTitle ? 0.20 : 0.13),
-                text: AppColors.text.opacity(0.86)
+                base: Color(red: 0.50, green: 0.70, blue: 0.64).opacity(isTitle ? 0.34 : 0.22),
+                rim: Color(red: 0.47, green: 0.68, blue: 0.62).opacity(rimOpacity),
+                glow: Color(red: 0.50, green: 0.70, blue: 0.64).opacity(isTitle ? 0.20 : 0.13),
+                text: Color(red: 0.12, green: 0.15, blue: 0.17).opacity(0.86)
             )
         }
     }
