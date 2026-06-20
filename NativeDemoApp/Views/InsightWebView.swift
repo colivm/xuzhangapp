@@ -346,7 +346,7 @@ struct InsightWebView: View {
 
     private var aiCommandEntryCard: some View {
         let story = weeklyStorySnapshot
-        Button {
+        return Button {
             showAICommandSheet = true
             if aiCommandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 aiCommandText = "帮我写一段这周的生活周记"

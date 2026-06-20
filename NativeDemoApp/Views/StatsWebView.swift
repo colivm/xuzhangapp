@@ -619,6 +619,7 @@ struct StatsWebView: View {
     }
 
     private var traceNarrativePeriodPrefix: String {
+        if useCustomRange { return "这一段" }
         switch selectedPeriod {
         case .week:
             return "这一周"
@@ -626,8 +627,6 @@ struct StatsWebView: View {
             return "这个月"
         case .year:
             return "这一年"
-        case .custom:
-            return "这一段"
         }
     }
 
