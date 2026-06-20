@@ -73,6 +73,13 @@ struct SettingsView: View {
         case destructive
     }
 
+    private struct AccountMemoryStats {
+        let recordStreakDays: Int
+        let traceCount: Int
+        let weeklyStoryCount: Int
+        let monthlyStoryCount: Int
+    }
+
     private struct SettingsConfirmationAction: Identifiable {
         let id: String
         let title: String
@@ -98,9 +105,9 @@ struct SettingsView: View {
     }
 
     private let vaultHelperLines = [
-        "多数永久会员从「档案金章」开始当日常皮。",
-        "爱看构成和节奏，试试「金线电路」。",
-        "晚上复盘，「琥珀礼拜堂」更护眼。"
+        "多数永久会员从「档案馆」开始建立自己的生活档案。",
+        "爱看构成和节奏，试试「观察者」。",
+        "晚上复盘，「夜读」更适合慢慢翻。"
     ]
 
     var body: some View {
@@ -493,9 +500,26 @@ struct SettingsView: View {
 
     private var accountRowSummary: String {
         guard settingsViewModel.hasCloudSession else { return "未登录 · 可选" }
+        let stats = accountMemoryStats
+        if stats.traceCount > 0 {
+            return "连续 \(stats.recordStreakDays) 天 · \(stats.traceCount) 条痕迹"
+        }
         if hasMemberAccess { return "已登录 · \(memberTierName)" }
         if hasPaidMemberTier { return "已登录 · 待续期" }
         return "已登录 · 免费版"
+    }
+
+    private var accountMemoryStats: AccountMemoryStats {
+        let items = homeViewModel.items.filter { $0.amount > 0 }
+        let dayStarts = Set(items.map { Calendar.current.startOfDay(for: $0.createdAt) })
+        let monthKeys = Set(items.map { accountMonthKey(for: $0.createdAt) })
+        let weekKeys = Set(items.map { accountWeekKey(for: $0.createdAt) })
+        return AccountMemoryStats(
+            recordStreakDays: accountLongestRecordStreak(from: dayStarts),
+            traceCount: items.count,
+            weeklyStoryCount: weekKeys.count,
+            monthlyStoryCount: monthKeys.count
+        )
     }
 
     private var backupRowSummary: String {
@@ -1430,10 +1454,10 @@ struct SettingsView: View {
 
     private func themeSectionHeader(proxy: ScrollViewProxy?) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text("色彩主题")
+            Text("生活风格")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(AppColors.text)
-            Text("只改界面颜色，不影响账本数据。")
+            Text("不是换颜色，而是给你的生活记录选择一种气质。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
             Button {
@@ -1468,7 +1492,7 @@ struct SettingsView: View {
     private var dailyThemeSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("日常")
+                Text("基础风格")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppColors.text)
                 Spacer()
@@ -1486,7 +1510,7 @@ struct SettingsView: View {
     private var memberThemeSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                Text("会员主题")
+                Text("生活风格系统")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppColors.text)
                 if !hasMemberAccess {
@@ -1495,7 +1519,7 @@ struct SettingsView: View {
                         .foregroundStyle(AppColors.lockGold)
                 }
             }
-            Text("标准主题库；永久会员另有典藏款。")
+            Text("每一种风格对应一种记录气质：纸面、档案、夜读、观察、旅行和展览。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
 
@@ -1511,7 +1535,7 @@ struct SettingsView: View {
     private var lifetimeThemeVault: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("永久限定")
+                Text("永久典藏风格")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(AppColors.text)
                 Spacer()
@@ -1523,7 +1547,7 @@ struct SettingsView: View {
                     .background(Capsule(style: .continuous).fill(AppColors.lockGold.opacity(0.12)))
             }
 
-            Text("三款典藏皮肤，随永久会员账号保留，不可转让。")
+            Text("三套长期使用的生活档案风格，随永久会员账号保留。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
 
@@ -1616,7 +1640,7 @@ struct SettingsView: View {
                         .frame(height: 180)
                         .overlay(alignment: .topLeading) {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text(theme.displayName)
+                                Text(themeDisplayName(theme))
                                     .font(.system(size: 22, weight: .bold))
                                     .foregroundStyle(AppColors.text)
                                 Text(lifetimeThemeCaption(theme))
@@ -1678,7 +1702,7 @@ struct SettingsView: View {
 
     private var themeFamilySections: [(key: String, title: String, themes: [ThemeDefinition])] {
         let standardThemes = ThemeResolver.shared.themes.filter { $0.tier == .standard }
-        let preferredOrder = ["cyber", "mood_weather", "paperverse", "bio", "orbital", "brutal"]
+        let preferredOrder = ["paperverse", "mood_weather", "cyber", "orbital", "bio", "brutal"]
         return preferredOrder.compactMap { family in
             let themes = standardThemes.filter { $0.family == family }
             guard !themes.isEmpty else { return nil }
@@ -1751,18 +1775,30 @@ struct SettingsView: View {
 
     private func themeFamilyTitle(_ family: String) -> String {
         switch family {
-        case "cyber": return "赛博朋克"
-        case "mood_weather": return "情绪气象"
-        case "paperverse": return "纸境东方"
-        case "bio": return "自然演算"
-        case "orbital": return "太空通勤"
-        case "brutal": return "工业柔光"
+        case "paperverse": return "纸境"
+        case "mood_weather": return "夜读"
+        case "cyber": return "观察者"
+        case "orbital": return "旅行手账"
+        case "bio": return "博物馆"
+        case "brutal": return "档案馆"
         default: return family
         }
     }
 
     private func themeFamilySubtitle(_ themes: [ThemeDefinition]) -> String {
-        themes.prefix(3).map(\.displayName).joined(separator: "、")
+        guard let family = themes.first?.family else {
+            return themes.prefix(3).map { themeDisplayName($0) }.joined(separator: "、")
+        }
+        switch family {
+        case "paperverse": return "安静纸面，适合长期记录"
+        case "mood_weather": return "适合夜间复盘和情绪回看"
+        case "cyber": return "更像观察仪表，适合看结构"
+        case "orbital": return "适合路上、出差和旅行账本"
+        case "bio": return "像展柜一样收藏生活细节"
+        case "brutal": return "秩序感更强，适合归档整理"
+        default:
+            return themes.prefix(3).map { themeDisplayName($0) }.joined(separator: "、")
+        }
     }
 
     private func themeFamilyDisclosure(
@@ -1926,7 +1962,7 @@ struct SettingsView: View {
             guard style == .lifetime else { return }
             showLifetimeThemePreview(theme)
         }
-        .accessibilityLabel(theme.displayName)
+        .accessibilityLabel(themeDisplayName(theme))
         .id(themeScrollID(theme.id))
     }
 
@@ -1957,18 +1993,56 @@ struct SettingsView: View {
     }
 
     private func swatchNameText(_ theme: ThemeDefinition, style: ThemeSwatchStyle, accent: Color) -> Text {
-        guard style == .lifetime, theme.displayName.hasPrefix("永享·") else {
-            return Text(theme.displayName).foregroundColor(AppColors.text)
+        let displayName = themeDisplayName(theme)
+        guard style == .lifetime, displayName.hasPrefix("永享·") else {
+            return Text(displayName).foregroundColor(AppColors.text)
         }
-        let suffix = String(theme.displayName.dropFirst("永享·".count))
+        let suffix = String(displayName.dropFirst("永享·".count))
         return Text("永享·").foregroundColor(accent) + Text(suffix).foregroundColor(AppColors.text)
+    }
+
+    private func themeDisplayName(_ theme: ThemeDefinition) -> String {
+        switch theme.id {
+        case "xuzhang_default": return "默认手账"
+        case "paperverse_blank": return "纸境"
+        case "mood_weather_clear": return "晨间留白"
+        case "paperverse_seal": return "朱砂印"
+        case "paperverse_ink_wash": return "湿墨"
+        case "paperverse_typecase": return "活字格"
+        case "paperverse_faint_spectrum": return "淡彩谱"
+        case "mood_weather_dusk": return "夜读晚霞"
+        case "mood_weather_mist": return "薄雾晨读"
+        case "mood_weather_storm": return "雨夜复盘"
+        case "mood_weather_aurora": return "极光夜读"
+        case "mood_weather_tide": return "潮汐日志"
+        case "cyber_neon_abyss": return "观察者"
+        case "cyber_vector_camouflage": return "结构网格"
+        case "cyber_holographic_dusk": return "全息观察"
+        case "cyber_crystal_overload": return "晶体仪表"
+        case "cyber_silicon_vesper": return "夜间观测"
+        case "orbital_window_dawn": return "旅行手账"
+        case "orbital_zero_g": return "轻装清单"
+        case "orbital_deep_stamp": return "远行邮戳"
+        case "orbital_sleep_mode": return "途中夜航"
+        case "bio_moss_terminal": return "博物馆"
+        case "bio_coral_data": return "珊瑚展柜"
+        case "bio_mycelium": return "菌丝标本"
+        case "bio_photosynth": return "光合展厅"
+        case "brutal_concrete": return "档案馆"
+        case "brutal_safety_orange": return "编号标签"
+        case "brutal_grid_paper": return "索引卡"
+        case "lifetime_archive_gold": return "永享·档案馆"
+        case "lifetime_gilded_circuit": return "永享·观察者"
+        case "lifetime_neon_cathedral": return "永享·夜读"
+        default: return theme.displayName
+        }
     }
 
     private func lifetimeThemeCaption(_ theme: ThemeDefinition) -> String {
         switch theme.id {
-        case "lifetime_gilded_circuit": return "结构感"
-        case "lifetime_archive_gold": return "最耐用"
-        case "lifetime_neon_cathedral": return "夜间复盘"
+        case "lifetime_gilded_circuit": return "看结构"
+        case "lifetime_archive_gold": return "长期归档"
+        case "lifetime_neon_cathedral": return "夜间回看"
         default: return "典藏款"
         }
     }
@@ -2372,21 +2446,14 @@ struct SettingsView: View {
     }
 
     private var accountMemberSection: some View {
-        accountPanel("让账本更懂你") {
+        accountPanel("我的生活档案") {
+            accountMemoryCard
+
             if let validity = settingsViewModel.settings.memberValidityText {
                 accountInfoRow(title: "有效期", value: validity)
             }
 
             if hasMemberAccess || hasPaidMemberTier {
-                RoundedRectangle(cornerRadius: 999, style: .continuous)
-                    .fill(settingsInkAccent.opacity(0.22))
-                    .frame(height: 3)
-                LazyVGrid(columns: accountMemberBenefitColumns, alignment: .leading, spacing: 8) {
-                    ForEach(accountMemberBenefits, id: \.self) { benefit in
-                        memberBenefitRow(benefit)
-                    }
-                }
-
                 if hasExpiredPaidMemberTier {
                     settingHelper("会员待续期，续费后可恢复权益。")
                     Button {
@@ -2409,7 +2476,7 @@ struct SettingsView: View {
                 }
             } else {
                 accountInfoRow(title: "当前档位", value: memberTierName)
-                settingHelper("免费版可以完整记账。会员会让回放、OCR 和生活场景持续跟上你的记录节奏。")
+                settingHelper("免费版适合轻度记录。会员会持续整理这些痕迹，让周记、月章和生活回放不断档。")
                 Button {
                     showAccountSheet = false
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -2429,6 +2496,57 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    private var accountMemoryCard: some View {
+        let stats = accountMemoryStats
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(hasMemberAccess ? "已解锁完整生活档案" : "你的生活档案正在形成")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                    Text(hasMemberAccess ? "AI 正在持续整理和连接每一天。" : "开通会员后，这些痕迹会继续整理成周记、月章和回放。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext.opacity(0.9))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: hasMemberAccess ? "checkmark.seal.fill" : "sparkles")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(settingsInkAccent.opacity(0.86))
+            }
+
+            LazyVGrid(columns: accountMemoryMetricColumns, spacing: 10) {
+                accountMemoryMetric(value: "\(stats.recordStreakDays)", label: "连续记录天")
+                accountMemoryMetric(value: "\(stats.traceCount)", label: "AI整理生活痕迹")
+                accountMemoryMetric(value: "\(stats.weeklyStoryCount)", label: "可整理周记")
+                accountMemoryMetric(value: "\(stats.monthlyStoryCount)", label: "保存月份故事")
+            }
+
+            Text("这些不是设置项，是你已经留下来的生活沉淀。")
+                .font(.system(size: 11))
+                .foregroundStyle(AppColors.subtext.opacity(0.78))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            settingsInkAccent.opacity(0.10),
+                            Color.white.opacity(0.58)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(settingsInkAccent.opacity(0.16), lineWidth: 1)
+        )
     }
 
     private var accountSessionSection: some View {
@@ -2516,6 +2634,68 @@ struct SettingsView: View {
                 .foregroundStyle(AppColors.text.opacity(0.88))
                 .multilineTextAlignment(.trailing)
         }
+    }
+
+    private var accountMemoryMetricColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: 10),
+            GridItem(.flexible(), spacing: 10),
+        ]
+    }
+
+    private func accountMemoryMetric(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value)
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.84))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(Color.white.opacity(0.56))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(Color.white.opacity(0.44), lineWidth: 1)
+        )
+    }
+
+    private func accountLongestRecordStreak(from dayStarts: Set<Date>) -> Int {
+        guard !dayStarts.isEmpty else { return 0 }
+        let sortedDays = dayStarts.sorted()
+        var longest = 1
+        var current = 1
+        for index in sortedDays.indices.dropFirst() {
+            let previous = sortedDays[sortedDays.index(before: index)]
+            let day = sortedDays[index]
+            let gap = Calendar.current.dateComponents([.day], from: previous, to: day).day ?? 0
+            if gap == 1 {
+                current += 1
+            } else if gap > 1 {
+                current = 1
+            }
+            longest = max(longest, current)
+        }
+        return longest
+    }
+
+    private func accountMonthKey(for date: Date) -> String {
+        let components = Calendar.current.dateComponents([.year, .month], from: date)
+        return "\(components.year ?? 0)-\(components.month ?? 0)"
+    }
+
+    private func accountWeekKey(for date: Date) -> String {
+        let components = Calendar.current.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+        return "\(components.yearForWeekOfYear ?? 0)-\(components.weekOfYear ?? 0)"
     }
 
     private func memberBenefitRow(_ text: String) -> some View {

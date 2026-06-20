@@ -49,6 +49,17 @@ struct InsightWebView: View {
         var body: String
     }
 
+    private struct WeeklyStorySnapshot {
+        let headline: String
+        let recordCount: Int
+        let total: Double
+        let mealCount: Int
+        let activeDays: Int
+        let closing: String
+
+        var hasData: Bool { recordCount > 0 }
+    }
+
     private enum AICommandKind: Equatable {
         case query
         case duplicateCheck
@@ -334,77 +345,54 @@ struct InsightWebView: View {
     }
 
     private var aiCommandEntryCard: some View {
+        let story = weeklyStorySnapshot
         Button {
             showAICommandSheet = true
             if aiCommandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                aiCommandText = "帮我看一下过去三天餐饮类的消费"
+                aiCommandText = "帮我写一段这周的生活周记"
             }
         } label: {
             VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(AppColors.accent.opacity(0.12))
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(AppColors.accentDark)
+                HStack(spacing: 8) {
+                    Text("本周故事")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppColors.accentDark.opacity(0.9))
+                    if !hasMemberAccess {
+                        Text("会员可持续保存")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(AppColors.lockGold)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Capsule(style: .continuous).fill(AppColors.lockGold.opacity(0.10)))
                     }
-                    .frame(width: 38, height: 38)
-
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack(spacing: 8) {
-                            Text("让 AI 整理账本")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(AppColors.text)
-                            if !hasMemberAccess {
-                                Text("会员能力")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(AppColors.lockGold)
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3)
-                                    .background(
-                                        Capsule(style: .continuous)
-                                            .fill(AppColors.lockGold.opacity(0.10))
-                                    )
-                            }
-                        }
-
-                        Text("一句话查账、汇总、补记。会先生成预览，确认后才保存。")
-                            .font(.system(size: 13))
-                            .lineSpacing(3)
-                            .foregroundStyle(AppColors.subtext)
-                    }
+                    Spacer(minLength: 0)
                 }
 
-                HStack(spacing: 10) {
-                    Image(systemName: "text.magnifyingglass")
+                Text(story.headline)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                weeklyStoryMetricGrid(story)
+
+                Text(story.closing)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppColors.text.opacity(0.78))
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    Text(story.hasData ? "让 AI 继续解读" : "开始写下这一周")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppColors.accentDark.opacity(0.88))
-                    Text("试试：过去三天餐饮花了多少？")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(AppColors.text.opacity(0.78))
-                    Spacer(minLength: 6)
-                    Image(systemName: "arrow.up.right")
+                    Image(systemName: "arrow.right")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(AppColors.subtext.opacity(0.62))
+                    Spacer(minLength: 0)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .semibold))
                 }
-                .padding(.horizontal, 13)
-                .padding(.vertical, 11)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.white.opacity(0.48))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.white.opacity(0.54), lineWidth: 1)
-                )
-
-                HStack(spacing: 7) {
-                    aiCommandMiniChip("查餐饮")
-                    aiCommandMiniChip("看交通")
-                    aiCommandMiniChip("找重复")
-                    aiCommandMiniChip("补通勤")
-                }
+                .foregroundStyle(AppColors.accentDark.opacity(0.9))
+                .padding(.top, 2)
             }
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -435,17 +423,38 @@ struct InsightWebView: View {
         .buttonStyle(.plain)
     }
 
-    private func aiCommandMiniChip(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(AppColors.subtext)
-            .lineLimit(1)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 6)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.42))
-            )
+    private func weeklyStoryMetricGrid(_ story: WeeklyStorySnapshot) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+            weeklyStoryMetric("\(story.recordCount)", "笔记录")
+            weeklyStoryMetric(story.total.formatted(.cny), "支出")
+            weeklyStoryMetric("\(story.mealCount)", "次餐饮")
+            weeklyStoryMetric("\(story.activeDays)", "天有记录")
+        }
+    }
+
+    private func weeklyStoryMetric(_ value: String, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.68)
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.82))
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(Color.white.opacity(0.48))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(Color.white.opacity(0.50), lineWidth: 1)
+        )
     }
 
     @ViewBuilder
@@ -454,10 +463,10 @@ struct InsightWebView: View {
         if keywords.count >= 3 {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("这个月留下的证据词")
+                    Text("这个月的碎碎念")
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(AppColors.text.opacity(0.88))
-                    Text("优先放你亲手写下的备注；同一类太多时，先让位置给别的生活面。")
+                    Text("留给未来自己的话：优先放你亲手写下的备注，也让不同生活面都露一点头。")
                         .font(.system(size: 12))
                         .foregroundStyle(AppColors.subtext.opacity(0.78))
                 }
@@ -578,6 +587,85 @@ struct InsightWebView: View {
         blocks.summary.contains("暂无复盘")
             ? "等记录多一点，再回来读这一周。"
             : "下周有新记录，再回来对照。"
+    }
+
+    private var weeklyStorySnapshot: WeeklyStorySnapshot {
+        let items = recentPositiveItems(days: 7)
+        guard !items.isEmpty else {
+            return WeeklyStorySnapshot(
+                headline: "这一周的故事还在开头",
+                recordCount: 0,
+                total: 0,
+                mealCount: 0,
+                activeDays: 0,
+                closing: "先留下几笔，AI 会把它们慢慢整理成一段能回看的周记。"
+            )
+        }
+
+        let grouped = Dictionary(grouping: items, by: \.category)
+        let top = grouped
+            .map { (category: $0.key, count: $0.value.count, total: $0.value.reduce(0) { $0 + $1.amount }) }
+            .sorted {
+                if $0.count == $1.count { return $0.total > $1.total }
+                return $0.count > $1.count
+            }
+            .first
+        let mealCount = grouped[.dining]?.count ?? 0
+        let activeDays = Set(items.map { Calendar.current.startOfDay(for: $0.createdAt) }).count
+        let total = items.reduce(0) { $0 + $1.amount }
+        let headline: String
+        switch top?.category {
+        case .transport:
+            headline = "这一周，你都在赶路"
+        case .dining:
+            headline = "这一周，你认真把自己喂饱"
+        case .shopping:
+            headline = "这一周，你给生活添了不少东西"
+        case .daily:
+            headline = "这一周，日常补给一直在发生"
+        case .health:
+            headline = "这一周，你有在照顾身体"
+        case .lodging:
+            headline = "这一周，有几段停留被记下"
+        case .entertainment:
+            headline = "这一周，你也给自己留了点休闲"
+        case .home:
+            headline = "这一周，家里的事占了不少"
+        case .social:
+            headline = "这一周，人情往来也留下了痕迹"
+        case .other:
+            headline = "这一周，生活留下了一些杂色"
+        case nil:
+            headline = "这一周，生活留下了一些痕迹"
+        }
+
+        return WeeklyStorySnapshot(
+            headline: headline,
+            recordCount: items.count,
+            total: total,
+            mealCount: mealCount,
+            activeDays: activeDays,
+            closing: weeklyStoryClosing(topCategory: top?.category, mealCount: mealCount, activeDays: activeDays)
+        )
+    }
+
+    private func weeklyStoryClosing(topCategory: HomeItem.Category?, mealCount: Int, activeDays: Int) -> String {
+        if mealCount >= 3 {
+            return "忙归忙，至少没有饿着自己。"
+        }
+        if activeDays >= 5 {
+            return "不是每天都很完整，但这一周确实被你认真留下来了。"
+        }
+        switch topCategory {
+        case .transport:
+            return "路上的时间不少，也说明你一直在往前走。"
+        case .health:
+            return "照顾身体这件事，也被这一周记住了。"
+        case .social:
+            return "这些往来以后再看，会比金额更有温度。"
+        default:
+            return "这些小事连起来，就是这一周真实的样子。"
+        }
     }
 
     private func recentPositiveItems(days: Int) -> [HomeItem] {

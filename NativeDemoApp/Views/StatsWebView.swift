@@ -578,18 +578,57 @@ struct StatsWebView: View {
         guard let top = traceCategoryClues.first else {
             return "这一段的记录还比较分散"
         }
-        if let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count >= 2 {
-            return "\(top.category.rawValue)最明显，\(traceRhythmNarrativeLabel(peak))记录更集中"
+        let period = traceNarrativePeriodPrefix
+        switch top.category {
+        case .transport:
+            return "\(period)，你主要在奔波"
+        case .dining:
+            return "\(period)，吃饭留下了最多痕迹"
+        case .shopping:
+            return "\(period)，添置东西更常出现"
+        case .daily:
+            return "\(period)，日常补给占了不少"
+        case .health:
+            return "\(period)，你在照顾身体"
+        case .lodging:
+            return "\(period)，停留和住宿更明显"
+        case .entertainment:
+            return "\(period)，休闲时刻更常出现"
+        case .home:
+            return "\(period)，家里的安排更集中"
+        case .social:
+            return "\(period)，人情往来更清楚"
+        case .other:
+            return "\(period)，有一条线索正在变清楚"
         }
-        return "\(top.category.rawValue)是这一段最清楚的线索"
     }
 
     private var traceClueSubline: String {
         let items = traceClueItems
         guard !items.isEmpty else { return "先留下几笔，账本会把生活里的走向慢慢标出来。" }
+        if let top = traceCategoryClues.first {
+            let percent = Int((top.ratio * 100).rounded())
+            if let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count >= 2 {
+                return "\(top.category.rawValue)记录占 \(percent)%，\(traceRhythmNarrativeLabel(peak))是最忙的一天。"
+            }
+            return "\(top.category.rawValue)记录占 \(percent)%，是这一段最清楚的生活线索。"
+        }
         let total = items.reduce(0) { $0 + $1.amount }
         let activeDays = traceActiveDayCount(from: items)
         return "\(items.count) 笔记录，合计 \(total.formatted(.cny))，有 \(activeDays) 天留下痕迹。"
+    }
+
+    private var traceNarrativePeriodPrefix: String {
+        switch selectedPeriod {
+        case .week:
+            return "这一周"
+        case .month:
+            return "这个月"
+        case .year:
+            return "这一年"
+        case .custom:
+            return "这一段"
+        }
     }
 
     private var traceHeroMetaParts: (count: String, activeDays: String, total: String)? {
@@ -756,6 +795,12 @@ struct StatsWebView: View {
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
 
+                Text(traceClueSubline)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(TraceColors.secondaryText)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 if let meta = traceHeroMetaParts {
                     HStack(spacing: 6) {
                         Text(meta.count)
@@ -768,11 +813,6 @@ struct StatsWebView: View {
                     .foregroundStyle(TraceColors.tertiaryText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
-                } else {
-                    Text(traceClueSubline)
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(TraceColors.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 

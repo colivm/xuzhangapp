@@ -24,27 +24,26 @@ struct MemberPricingView: View {
     ]
 
     private let benefits = [
-        ("周/月生活回放无限", "通勤、吃饭、跑医院、给家里补东西，这些线索可以持续回看。"),
-        ("每月生活章持续整理", "免费 10 次用完后，后面的月份也能继续接上，不让生活脉络断掉。"),
-        ("今日回放不限次", "当天记录可以反复听，适合晚上把今天多整理几遍。"),
-        ("OCR 导入不限次", "微信/支付宝账单截图可继续本地识别，经常导入也不用被次数打断。"),
-        ("AI 回顾问得更深", "可以继续追问：哪几天最累、哪些小支出重复出现、这个月节奏哪里变了。"),
-        ("全部生活场景换角度", "旅行、运动、宠物、宝宝、人情等场景都能打开，不只停在 3 个常用角度。"),
-        ("25+ 色彩主题 + 分享图同款", "痕迹、今天、复盘页统一换肤；永久会员再享 3 款限定主题。"),
-        ("分享图持续生成", "周记、月章和故事图可以连续留下来，适合长期回看和分享。"),
+        ("无限生活回放", "过去的每一天都值得被记住。通勤、聚餐、旅行、看病、送礼、养宠……生活轨迹持续保留，随时回看。"),
+        ("AI 深度生活分析", "看见那些你自己都没察觉的规律：哪些支出正在悄悄增加、最近压力最大的时间段、什么事情最值得你投入时间和金钱、生活节奏正在发生哪些变化。"),
+        ("持续生成生活故事", "不只是记账，而是记录成长。周记、月记、年度故事自动串联，多年以后依然能翻阅今天。"),
+        ("OCR 无限导入", "把整理交给 AI。微信、支付宝账单截图直接导入，一年账单也能快速整理完成。"),
+        ("全部生活场景", "你的生活，不只有消费。日常生活、旅行、健身运动、宝宝成长、宠物记录、人情往来与自定义主题，都能从不同角度重新认识自己。"),
+        ("今日无限回放", "睡前重新看看今天。重要的事、见过的人、花过的钱，让每一天都有痕迹。"),
+        ("25+ 生活风格", "让记录变得更有温度。纸境、档案馆、夜读、观察者、旅行手账和博物馆，打造属于自己的生活记录本。"),
     ]
 
     private let boundaryRows = [
-        ("记账场景", "免费 3 个常用角度", "会员打开全部生活场景"),
-        ("回放整理", "基础额度可体验", "会员周/月/今日持续回看"),
-        ("截图导入", "每日 3 次 OCR", "会员经常导入也不中断"),
+        ("生活场景", "免费 3 个常用角度", "会员打开全部生活场景"),
+        ("生活回放", "基础额度可体验", "会员持续保存和回看"),
+        ("账单导入", "每日 3 次 OCR", "会员一年账单也能连续整理"),
     ]
 
     init(highlightPlanId: String? = nil) {
         self.highlightPlanId = highlightPlanId
     }
 
-    private let freeQuotaFootnote = "免费版已经可以完整记账、手动整理，并体验基础回放和 3 个常用场景。会员另可解锁 25+ 界面色彩主题；永久会员另享 3 款仅永久可用的典藏皮肤；年度会员可使用 25+ 标准主题。"
+    private let freeQuotaFootnote = "免费版适合轻度记录。会员适合希望长期保存生活轨迹、获得 AI 深度分析与持续回顾的用户。所有账单数据均由你掌控。"
 
     private var isMember: Bool {
         settingsViewModel.settings.hasMemberAccess
@@ -114,11 +113,11 @@ struct MemberPricingView: View {
 
     private var heroSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("让账本不只记金额，也记得你在过怎样的生活")
+            Text("把流水变成故事，把记录变成回忆")
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(AppColors.text)
 
-            Text("免费版已经能好好记录。会员更像一层持续的理解力：把记录串成回望，把同一笔钱放回生活语境里。")
+            Text("会员让 AI 持续整理你的生活脉络，帮你看见消费背后的习惯、情绪和变化。")
                 .font(.system(size: 13))
                 .lineSpacing(3)
                 .foregroundStyle(AppColors.subtext)
@@ -130,7 +129,7 @@ struct MemberPricingView: View {
                 Button {
                     handlePurchase(plans[0]) // yearly default
                 } label: {
-                    Text("让账本更懂我的生活")
+                    Text("开启完整生活档案")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -178,19 +177,19 @@ struct MemberPricingView: View {
     private var memberValueSection: some View {
         VStack(spacing: 10) {
             memberValueRow(
-                symbol: "calendar.badge.clock",
-                title: "连续性",
-                detail: "周记、月章和分享图可以一直延展，不用因为次数停在刚有感觉的时候。"
+                symbol: "book.closed",
+                title: "多年以后，你未必记得今天花了多少钱",
+                detail: "但你会想知道，那时的自己正在过怎样的生活。"
             )
             memberValueRow(
                 symbol: "sparkles",
-                title: "理解力",
-                detail: "会员会继续打开健康、购物、旅行、社交等更多生活语境，不只是多一个分类。"
+                title: "AI 帮你看懂生活",
+                detail: "发现消费习惯、情绪变化和生活节奏，而不只是记录每一笔账。"
             )
             memberValueRow(
-                symbol: "bolt.heart",
-                title: "不打断",
-                detail: "OCR、今日回放和 AI 回顾不用反复算额度，想到就继续整理。"
+                symbol: "clock.arrow.circlepath",
+                title: "长期连续记录",
+                detail: "回放、故事和账单整理持续接上，生活脉络不会因为额度断档。"
             )
         }
     }
@@ -230,7 +229,7 @@ struct MemberPricingView: View {
 
     private var memberBoundarySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("免费已经能用，会员打开连续性")
+            Text("免费适合轻度记录，会员适合长期回看")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(AppColors.text.opacity(0.9))
 
@@ -279,7 +278,7 @@ struct MemberPricingView: View {
                 withAnimation(.easeInOut(duration: 0.2)) { benefitsExpanded.toggle() }
             } label: {
                 HStack {
-                    Text("查看会员具体包含什么")
+                    Text("会员权益")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(AppColors.text.opacity(0.86))
                     Spacer()
@@ -374,15 +373,18 @@ struct MemberPricingView: View {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 32))
                 .foregroundStyle(AppColors.accent)
-            Text("你已开通\(AppSettings.memberTierDisplayName(settingsViewModel.memberTier))")
+            Text("感谢成为 xLife 会员")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(AppColors.text)
+            Text("你的生活故事正在持续整理中")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext)
             if let validity = settingsViewModel.settings.memberValidityText {
                 Text(validity)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.text.opacity(0.72))
             }
-            Text("会员增量权益已开启，感谢你的信任与陪伴。")
+            Text("AI 将继续为你整理和连接每一天。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
         }
@@ -402,7 +404,7 @@ struct MemberPricingView: View {
     // MARK: - Privacy
 
     private var privacyNote: some View {
-        Text("默认不登录也能记账。开启云端备份后，仅同步必要账单数据与会员状态；OCR 原图不会上传。")
+        Text("默认不登录也能记账。开启云端备份后，仅同步必要账单数据与会员状态；OCR 原始图片不会上传服务器。")
             .font(.system(size: 11))
             .foregroundStyle(AppColors.subtext.opacity(0.75))
             .lineSpacing(3)
@@ -521,7 +523,7 @@ struct MemberPricingView: View {
 
     private var lifetimeThemeBullet: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("✦ 3 款永久典藏界面（档案金章 / 金线电路 / 琥珀礼拜堂）")
+            Text("✦ 3 款永久典藏风格（档案馆 / 观察者 / 夜读）")
                 .foregroundStyle(Color(hex: "A68445"))
             Text("随账号永久保留，年度会员不可用")
                 .foregroundStyle(AppColors.subtext)
