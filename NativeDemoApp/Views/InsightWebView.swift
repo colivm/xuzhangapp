@@ -77,6 +77,125 @@ struct InsightWebView: View {
         var needsAmount: Bool
     }
 
+    private struct AICommandTimeRange: Equatable {
+        var label: String
+        var start: Date
+        var end: Date
+        var barDays: Int
+        var isFallback: Bool = false
+
+        func contains(_ date: Date) -> Bool {
+            date >= start && date < end
+        }
+    }
+
+    private struct AICommandCategoryIntent: Equatable {
+        var category: HomeItem.Category
+        var label: String
+    }
+
+    private struct AICommandDuplicateGroup: Identifiable, Equatable {
+        let id: String
+        var items: [HomeItem]
+        var score: Int
+        var reason: String
+    }
+
+    private struct AICommandInputPanelView: View {
+        @Binding var commandText: String
+        let onRun: (String) -> Void
+        let onClear: () -> Void
+        @State private var draftText: String
+
+        init(commandText: Binding<String>, onRun: @escaping (String) -> Void, onClear: @escaping () -> Void) {
+            _commandText = commandText
+            self.onRun = onRun
+            self.onClear = onClear
+            _draftText = State(initialValue: commandText.wrappedValue)
+        }
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("你想让它做什么？")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.text.opacity(0.86))
+
+                TextField("例如：帮我看一下过去三天餐饮类的消费", text: $draftText, axis: .vertical)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(2...4)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 13)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.white.opacity(0.62))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.white.opacity(0.64), lineWidth: 1)
+                    )
+                    .onChange(of: commandText) { _, value in
+                        guard value != draftText else { return }
+                        draftText = value
+                    }
+
+                HStack(spacing: 10) {
+                    Button {
+                        let trimmed = draftText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        commandText = trimmed
+                        onRun(trimmed)
+                    } label: {
+                        aiCommandPrimaryLabel("生成预览", systemImage: "sparkles")
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        draftText = ""
+                        commandText = ""
+                        onClear()
+                    } label: {
+                        Text("清空")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(AppColors.subtext)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 11)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(Color.white.opacity(0.46))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .glassPanel(radius: 22, padding: 18)
+        }
+
+        private func aiCommandPrimaryLabel(_ title: String, systemImage: String) -> some View {
+            HStack(spacing: 7) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .bold))
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [AppColors.accent.opacity(0.94), AppColors.accentDark.opacity(0.94)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .shadow(color: AppColors.accent.opacity(0.18), radius: 10, x: 0, y: 5)
+        }
+    }
+
     private var hasMemberAccess: Bool {
         settingsViewModel.settings.hasMemberAccess
     }
@@ -1180,55 +1299,11 @@ struct InsightWebView: View {
     }
 
     private var aiCommandInputPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("你想让它做什么？")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(AppColors.text.opacity(0.86))
-
-            TextField("例如：帮我看一下过去三天餐饮类的消费", text: $aiCommandText, axis: .vertical)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(AppColors.text)
-                .lineLimit(2...4)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 13)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(0.62))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.white.opacity(0.64), lineWidth: 1)
-                )
-
-            HStack(spacing: 10) {
-                Button {
-                    runAICommand()
-                } label: {
-                    aiCommandPrimaryLabel("生成预览", systemImage: "sparkles")
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    aiCommandText = ""
-                    aiCommandAmountText = ""
-                    aiCommandResult = nil
-                    aiCommandMessage = nil
-                    aiCommandSavedCount = nil
-                } label: {
-                    Text("清空")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppColors.subtext)
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 11)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color.white.opacity(0.46))
-                        )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .glassPanel(radius: 22, padding: 18)
+        AICommandInputPanelView(
+            commandText: $aiCommandText,
+            onRun: { runAICommand($0) },
+            onClear: clearAICommandInput
+        )
     }
 
     private var aiCommandSuggestionRow: some View {
@@ -1595,34 +1670,26 @@ struct InsightWebView: View {
         aiCommandResult = buildAICommandResult(for: command)
     }
 
+    private func clearAICommandInput() {
+        aiCommandAmountText = ""
+        aiCommandResult = nil
+        aiCommandMessage = nil
+        aiCommandSavedCount = nil
+    }
+
     private func buildAICommandResult(for command: String) -> AICommandResult {
         let normalized = command.lowercased()
         if containsAny(normalized, ["补记", "补上", "生成", "新增"]) && containsAny(normalized, ["通勤", "交通", "上班", "下班", "早晚"]) {
             return buildCommuteDraftResult(command: normalized)
         }
         if containsAny(normalized, ["重复", "重复账单", "重复记录"]) {
-            return buildDuplicateCheckResult()
+            return buildDuplicateCheckResult(range: aiCommandTimeRange(from: normalized, defaultRecentDays: 7))
         }
-        if containsAny(normalized, ["餐饮", "吃饭", "饭", "咖啡", "奶茶"]) {
-            return buildQueryResult(
-                title: "过去 \(queryDays(from: normalized)) 天的餐饮记录",
-                category: .dining,
-                days: queryDays(from: normalized)
-            )
-        }
-        if containsAny(normalized, ["交通", "通勤", "出行", "地铁", "公交", "打车"]) {
-            return buildQueryResult(
-                title: "最近 \(queryDays(from: normalized, fallback: 7)) 天的出行记录",
-                category: .transport,
-                days: queryDays(from: normalized, fallback: 7)
-            )
-        }
-        if containsAny(normalized, ["本月", "这个月", "月"]) {
-            return buildQueryResult(
-                title: "这个月的账本概览",
-                category: nil,
-                days: daysSinceMonthStart()
-            )
+
+        let range = aiCommandTimeRange(from: normalized)
+        let categoryIntent = aiCommandCategoryIntent(from: normalized)
+        if categoryIntent != nil || containsAny(normalized, ["查", "看", "多少", "花了", "消费", "账本", "整理", "概览", "最近", "这阵子", "今天", "昨天", "本周", "上周", "本月", "上个月"]) {
+            return buildQueryResult(range: range, categoryIntent: categoryIntent)
         }
         return AICommandResult(
             kind: .unsupported,
@@ -1637,56 +1704,49 @@ struct InsightWebView: View {
         )
     }
 
-    private func buildQueryResult(title: String, category: HomeItem.Category?, days: Int) -> AICommandResult {
-        let items = filteredAICommandItems(days: days, category: category)
+    private func buildQueryResult(range: AICommandTimeRange, categoryIntent: AICommandCategoryIntent?) -> AICommandResult {
+        let items = filteredAICommandItems(range: range, category: categoryIntent?.category)
         let total = items.reduce(0) { $0 + $1.amount }
-        let categoryText = category?.label ?? "全部"
+        let categoryText = categoryIntent?.label ?? "全部"
+        let rangeNote = range.isFallback ? "「最近/这阵子」先按最近 7 天整理。" : "\(range.label)已整理。"
         let summary = items.isEmpty
-            ? "这段时间没有找到\(categoryText)记录。"
-            : "找到 \(items.count) 笔，合计 \(total.formatted(.cny))。"
+            ? "\(range.label)没有找到\(categoryText)记录。"
+            : "\(range.label)找到 \(items.count) 笔\(categoryText)记录，合计 \(total.formatted(.cny))。"
         let detail: String
         if let top = items.max(by: { $0.amount < $1.amount }) {
-            detail = "金额最高的是「\(top.displayTitle)」，\(top.amount.formatted(.cny))，时间在 \(top.createdAt.zhBillDateTime)。"
+            detail = "\(rangeNote) 金额最高的是「\(top.displayTitle)」，\(top.amount.formatted(.cny))，时间在 \(top.createdAt.zhBillDateTime)。"
         } else {
-            detail = "换个范围或分类再问一次，结果会更明确。"
+            detail = "\(rangeNote) 换个范围或分类再问一次，结果会更明确。"
         }
         return AICommandResult(
             kind: .query,
-            title: title,
+            title: "\(range.label)的\(categoryText)记录",
             summary: summary,
             detail: detail,
-            items: items.sorted { $0.createdAt > $1.createdAt },
-            bars: dailyBars(days: min(days, 7), items: items),
+            items: sortedAICommandEvidenceItems(items),
+            bars: dailyBars(range: range, items: items),
             drafts: [],
             amountSource: nil,
             needsAmount: false
         )
     }
 
-    private func buildDuplicateCheckResult() -> AICommandResult {
-        let items = filteredAICommandItems(days: 30, category: nil)
-        let groups = Dictionary(grouping: items) { item in
-            let cents = Int((item.amount * 100).rounded())
-            let day = Calendar.current.startOfDay(for: item.createdAt).timeIntervalSince1970
-            return "\(item.category.rawValue)-\(cents)-\(Int(day))"
-        }
-        let suspects = groups.values
-            .filter { $0.count > 1 }
-            .flatMap { $0 }
-            .sorted { $0.createdAt > $1.createdAt }
+    private func buildDuplicateCheckResult(range: AICommandTimeRange) -> AICommandResult {
+        let groups = duplicateGroups(in: range)
+        let suspects = uniqueAICommandItems(groups.flatMap(\.items))
         let summary = suspects.isEmpty
-            ? "最近 30 天没发现明显重复的同日同类同金额记录。"
-            : "发现 \(suspects.count) 笔可能重复的记录，先列出来给你核对。"
+            ? "\(range.label)没发现明显重复记录。"
+            : "\(range.label)发现 \(groups.count) 组、\(suspects.count) 笔可能重复的记录，先列出来给你核对。"
         let detail = suspects.isEmpty
-            ? "这只是本地规则筛查，不会删除任何记录。"
-            : "判断依据是同一天、同分类、同金额；需要你再确认标题和来源。"
+            ? "这只是本地规则筛查，不会合并或删除任何记录。"
+            : "已按疑似程度排序。判断依据：\(groups.prefix(3).map(\.reason).joined(separator: "；"))。不会自动合并或删除。"
         return AICommandResult(
             kind: .duplicateCheck,
             title: "重复记录初筛",
             summary: summary,
             detail: detail,
             items: suspects,
-            bars: suspects.isEmpty ? [] : dailyBars(days: 7, items: suspects),
+            bars: suspects.isEmpty ? [] : dailyBars(range: range, items: suspects),
             drafts: [],
             amountSource: nil,
             needsAmount: false
@@ -1694,6 +1754,7 @@ struct InsightWebView: View {
     }
 
     private func buildCommuteDraftResult(command: String) -> AICommandResult {
+        let range = commuteDraftRange(from: command)
         let commandAmount = amountFromCommand(command)
         let typedAmount = Double(aiCommandAmountText.replacingOccurrences(of: ",", with: ""))
         let amount: Double?
@@ -1713,7 +1774,7 @@ struct InsightWebView: View {
             return AICommandResult(
                 kind: .needsAmount,
                 title: "可以补通勤，但还缺单程金额",
-                summary: "我会按最近 5 个工作日，早晚各一次，先生成 10 条待确认记录。",
+                summary: "我会按\(range.label)工作日，早晚各一次，先生成待确认记录。",
                 detail: "没有找到足够明确的历史通勤金额，填一个单程金额后再生成。",
                 items: [],
                 bars: [],
@@ -1723,8 +1784,8 @@ struct InsightWebView: View {
             )
         }
 
-        let weekdays = recentWeekdays(limit: 5)
-        let drafts = weekdays.flatMap { day in
+        let draftWeekdays = Array(weekdays(in: range).suffix(5))
+        let drafts = draftWeekdays.flatMap { day in
             [
                 AICommandRecordDraft(
                     title: "早高峰通勤",
@@ -1740,6 +1801,19 @@ struct InsightWebView: View {
                 )
             ]
         }
+        guard !drafts.isEmpty else {
+            return AICommandResult(
+                kind: .unsupported,
+                title: "\(range.label)没有可补的工作日",
+                summary: "这条补记指令需要落在工作日上，换成本周、上周或最近一周会更稳。",
+                detail: "不会自动新增任何记录。",
+                items: [],
+                bars: [],
+                drafts: [],
+                amountSource: nil,
+                needsAmount: false
+            )
+        }
         let total = drafts.reduce(0) { $0 + $1.amount }
         let amountSource: String
         if amount != nil {
@@ -1751,11 +1825,11 @@ struct InsightWebView: View {
         }
         return AICommandResult(
             kind: .batchCreate,
-            title: "补上最近 5 个工作日通勤",
+            title: "补上\(range.label)通勤",
             summary: "将生成 \(drafts.count) 条出行记录，合计 \(total.formatted(.cny))。",
-            detail: "早上 08:30、晚上 18:30 各一条。保存前可先核对，不会自动写入账本。",
+            detail: "按日期从早到晚排序，早上 08:30、晚上 18:30 各一条。保存前可先核对，不会自动写入账本。",
             items: [],
-            bars: dailyBarsForDrafts(drafts),
+            bars: dailyBarsForDrafts(drafts, weekdays: draftWeekdays),
             drafts: drafts,
             amountSource: amountSource,
             needsAmount: false
@@ -1775,20 +1849,20 @@ struct InsightWebView: View {
         }
     }
 
-    private func filteredAICommandItems(days: Int, category: HomeItem.Category?) -> [HomeItem] {
-        let calendar = Calendar.current
-        let start = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -(max(days, 1) - 1), to: Date()) ?? Date())
+    private func filteredAICommandItems(range: AICommandTimeRange, category: HomeItem.Category?) -> [HomeItem] {
         return homeViewModel.items.filter { item in
             item.amount > 0
-                && item.createdAt >= start
+                && range.contains(item.createdAt)
                 && (category == nil || item.category == category)
         }
     }
 
-    private func dailyBars(days: Int, items: [HomeItem]) -> [AICommandBar] {
+    private func dailyBars(range: AICommandTimeRange, items: [HomeItem]) -> [AICommandBar] {
         let calendar = Calendar.current
-        return (0..<max(days, 1)).compactMap { offset in
-            guard let day = calendar.date(byAdding: .day, value: offset - (max(days, 1) - 1), to: Date()) else { return nil }
+        let days = max(1, min(range.barDays, 7))
+        let finalDay = calendar.date(byAdding: .day, value: -1, to: range.end) ?? Date()
+        return (0..<days).compactMap { offset in
+            guard let day = calendar.date(byAdding: .day, value: offset - (days - 1), to: finalDay) else { return nil }
             let dayItems = items.filter { calendar.isDate($0.createdAt, inSameDayAs: day) }
             return AICommandBar(
                 label: shortDateText(day),
@@ -1798,9 +1872,9 @@ struct InsightWebView: View {
         }
     }
 
-    private func dailyBarsForDrafts(_ drafts: [AICommandRecordDraft]) -> [AICommandBar] {
+    private func dailyBarsForDrafts(_ drafts: [AICommandRecordDraft], weekdays: [Date]) -> [AICommandBar] {
         let calendar = Calendar.current
-        return recentWeekdays(limit: 5).map { day in
+        return weekdays.map { day in
             let dayDrafts = drafts.filter { calendar.isDate($0.date, inSameDayAs: day) }
             return AICommandBar(
                 label: shortDateText(day),
@@ -1811,7 +1885,7 @@ struct InsightWebView: View {
     }
 
     private func inferredCommuteAmount() -> (amount: Double, count: Int)? {
-        let candidates = filteredAICommandItems(days: 90, category: .transport)
+        let candidates = filteredAICommandItems(range: aiCommandRecentRange(days: 90, label: "最近 90 天"), category: .transport)
             .filter { item in
                 let text = "\(item.title) \(item.displayEmotionTag)"
                 return item.amount > 0
@@ -1831,39 +1905,164 @@ struct InsightWebView: View {
         return (Double(best.key) / 100, best.value.count)
     }
 
-    private func recentWeekdays(limit: Int) -> [Date] {
-        let calendar = Calendar.current
-        var cursor = Date()
-        var result: [Date] = []
-        while result.count < limit {
-            let weekday = calendar.component(.weekday, from: cursor)
-            if weekday >= 2 && weekday <= 6 {
-                result.append(calendar.startOfDay(for: cursor))
-            }
-            cursor = calendar.date(byAdding: .day, value: -1, to: cursor) ?? cursor
-        }
-        return result.reversed()
-    }
-
     private func dateBySetting(hour: Int, minute: Int, on day: Date) -> Date {
         Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day
     }
 
-    private func queryDays(from text: String, fallback: Int = 3) -> Int {
-        if containsAny(text, ["三天", "3天", "3 天"]) { return 3 }
-        if containsAny(text, ["一周", "7天", "7 天", "七天"]) { return 7 }
-        if containsAny(text, ["本月", "这个月"]) { return daysSinceMonthStart() }
-        return fallback
+    private func aiCommandTimeRange(from text: String, defaultRecentDays: Int = 3) -> AICommandTimeRange {
+        let calendar = Calendar.current
+        let now = Date()
+        let todayStart = calendar.startOfDay(for: now)
+
+        if containsAny(text, ["今天", "今日"]) {
+            let end = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? now
+            return AICommandTimeRange(label: "今天", start: todayStart, end: end, barDays: 1)
+        }
+        if containsAny(text, ["昨天", "昨日"]) {
+            let start = calendar.date(byAdding: .day, value: -1, to: todayStart) ?? todayStart
+            return AICommandTimeRange(label: "昨天", start: start, end: todayStart, barDays: 1)
+        }
+        if containsAny(text, ["过去三天", "近三天", "最近三天", "3天", "3 天", "三天"]) {
+            return aiCommandRecentRange(days: 3, label: "过去 3 天")
+        }
+        if containsAny(text, ["本周", "这周", "这一周"]) {
+            let start = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? todayStart
+            let end = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? now
+            return AICommandTimeRange(label: "本周", start: start, end: end, barDays: daysBetween(start, end))
+        }
+        if containsAny(text, ["上周", "上一周"]) {
+            let end = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? todayStart
+            let start = calendar.date(byAdding: .day, value: -7, to: end) ?? end
+            return AICommandTimeRange(label: "上周", start: start, end: end, barDays: 7)
+        }
+        if containsAny(text, ["最近7天", "最近 7 天", "最近七天", "过去7天", "过去 7 天", "近7天", "近 7 天", "七天", "一周", "过去一周", "最近一周"]) {
+            return aiCommandRecentRange(days: 7, label: "最近 7 天")
+        }
+        if containsAny(text, ["本月", "这个月", "这月"]) {
+            let start = calendar.dateInterval(of: .month, for: now)?.start ?? todayStart
+            let end = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? now
+            return AICommandTimeRange(label: "本月", start: start, end: end, barDays: daysBetween(start, end))
+        }
+        if containsAny(text, ["上个月", "上月"]) {
+            let end = calendar.dateInterval(of: .month, for: now)?.start ?? todayStart
+            let start = calendar.date(byAdding: .month, value: -1, to: end) ?? end
+            return AICommandTimeRange(label: "上个月", start: start, end: end, barDays: daysBetween(start, end))
+        }
+        if containsAny(text, ["这阵子", "最近", "近来", "这段时间"]) {
+            var range = aiCommandRecentRange(days: 7, label: "最近 7 天")
+            range.isFallback = true
+            return range
+        }
+        return aiCommandRecentRange(days: defaultRecentDays, label: defaultRecentDays == 7 ? "最近 7 天" : "过去 \(defaultRecentDays) 天")
     }
 
-    private func daysSinceMonthStart() -> Int {
+    private func aiCommandRecentRange(days: Int, label: String) -> AICommandTimeRange {
         let calendar = Calendar.current
-        let start = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
-        return max(1, (calendar.dateComponents([.day], from: start, to: Date()).day ?? 0) + 1)
+        let now = Date()
+        let todayStart = calendar.startOfDay(for: now)
+        let safeDays = max(1, days)
+        let start = calendar.date(byAdding: .day, value: -(safeDays - 1), to: todayStart) ?? todayStart
+        let end = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? now
+        return AICommandTimeRange(label: label, start: start, end: end, barDays: safeDays)
+    }
+
+    private func commuteDraftRange(from text: String) -> AICommandTimeRange {
+        let explicitRange = aiCommandTimeRange(from: text, defaultRecentDays: 7)
+        if containsAny(text, ["上周", "上一周", "本周", "这周", "最近", "过去", "7天", "七天", "一周"]) {
+            return explicitRange
+        }
+        return aiCommandRecentRange(days: 7, label: "最近一周")
+    }
+
+    private func weekdays(in range: AICommandTimeRange) -> [Date] {
+        let calendar = Calendar.current
+        var days: [Date] = []
+        var cursor = calendar.startOfDay(for: range.start)
+        while cursor < range.end {
+            let weekday = calendar.component(.weekday, from: cursor)
+            if weekday >= 2 && weekday <= 6 {
+                days.append(cursor)
+            }
+            cursor = calendar.date(byAdding: .day, value: 1, to: cursor) ?? range.end
+        }
+        return days
+    }
+
+    private func daysBetween(_ start: Date, _ end: Date) -> Int {
+        max(1, Calendar.current.dateComponents([.day], from: start, to: end).day ?? 0)
+    }
+
+    private func aiCommandCategoryIntent(from text: String) -> AICommandCategoryIntent? {
+        let lexicon: [(HomeItem.Category, String, [String])] = [
+            (.dining, "餐饮", ["餐饮", "吃饭", "吃的", "饭", "外卖", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "咖啡", "奶茶"]),
+            (.transport, "交通", ["交通", "出行", "通勤", "地铁", "公交", "打车", "出租", "网约车", "滴滴", "停车", "加油", "路费"]),
+            (.daily, "日用", ["日用", "超市", "纸巾", "清洁", "生活用品", "洗衣", "洗护", "日用品"]),
+            (.health, "健康", ["健康", "药", "买药", "医院", "挂号", "门诊", "运动补给", "补剂", "体检"])
+        ]
+        guard let matched = lexicon.first(where: { containsAny(text, $0.2) }) else { return nil }
+        return AICommandCategoryIntent(category: matched.0, label: matched.1)
+    }
+
+    private func sortedAICommandEvidenceItems(_ items: [HomeItem]) -> [HomeItem] {
+        items.sorted { lhs, rhs in
+            if lhs.amount == rhs.amount {
+                return lhs.createdAt > rhs.createdAt
+            }
+            return lhs.amount > rhs.amount
+        }
+    }
+
+    private func uniqueAICommandItems(_ items: [HomeItem]) -> [HomeItem] {
+        var seen = Set<UUID>()
+        return items.filter { item in
+            if seen.contains(item.id) { return false }
+            seen.insert(item.id)
+            return true
+        }
+    }
+
+    private func duplicateGroups(in range: AICommandTimeRange) -> [AICommandDuplicateGroup] {
+        let calendar = Calendar.current
+        let items = filteredAICommandItems(range: range, category: nil)
+        let exactGroups = Dictionary(grouping: items) { item in
+            let cents = Int((item.amount * 100).rounded())
+            let day = calendar.startOfDay(for: item.createdAt).timeIntervalSince1970
+            return "\(item.category.rawValue)-\(cents)-\(Int(day))"
+        }
+        return exactGroups.values
+            .filter { $0.count > 1 }
+            .map { group in
+                let sorted = group.sorted { $0.createdAt < $1.createdAt }
+                let sameTitleCount = Set(sorted.map { normalizedDuplicateTitle($0.displayTitle) }).count
+                let score = 80 + min(15, (sorted.count - 2) * 5) + (sameTitleCount <= 1 ? 5 : 0)
+                let first = sorted[0]
+                let reason = "\(first.createdAt.zhBillDateTime) 附近 \(first.category.rawValue) \(first.amount.formatted(.cny)) 重复 \(sorted.count) 笔"
+                return AICommandDuplicateGroup(
+                    id: sorted.map { $0.id.uuidString }.joined(separator: "-"),
+                    items: sorted,
+                    score: score,
+                    reason: reason
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.score == rhs.score {
+                    let leftDate = lhs.items.map(\.createdAt).max() ?? .distantPast
+                    let rightDate = rhs.items.map(\.createdAt).max() ?? .distantPast
+                    return leftDate > rightDate
+                }
+                return lhs.score > rhs.score
+            }
+    }
+
+    private func normalizedDuplicateTitle(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "　", with: "")
     }
 
     private func amountFromCommand(_ text: String) -> Double? {
-        let pattern = #"(\d+(?:\.\d{1,2})?)\s*(元|块)?"#
+        let pattern = #"(?:单程|每次|每趟|一次)?\s*(\d+(?:\.\d{1,2})?)\s*(?:元|块)"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         guard let match = regex.firstMatch(in: text, range: range),

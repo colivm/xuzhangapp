@@ -284,6 +284,7 @@ enum RecordSemanticLexicon {
             if (5..<10).contains(hour) { return "早餐先记下" }
             if (11..<14).contains(hour) { return "中午一顿饭" }
             if (17..<21).contains(hour) { return "晚饭记一笔" }
+            if (21...23).contains(hour) || (0..<5).contains(hour) { return "夜里吃点东西" }
             return amount >= 40 ? "认真吃一顿" : "日常餐饮"
         case .shopping:
             return amount >= 100 ? "添置一件东西" : "日常添置"

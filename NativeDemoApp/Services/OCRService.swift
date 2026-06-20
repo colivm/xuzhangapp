@@ -660,8 +660,10 @@ final class OCRService {
             let candidateTitle = amountInfo.inlineTitle
                 ?? nearbyListTitle(lines: recordContext.lines, amountIndex: recordContext.amountIndex, mode: mode)
                 ?? nearbyListTitle(lines: ocrLines, amountIndex: index, mode: mode)
-            let brand = listBrand(title: candidateTitle, windowText: windowText)
-            guard let title = candidateTitle ?? brand?.displayName,
+            let fallbackTitle = listFallbackTitle(windowLines: windowLines, rejectedTitle: candidateTitle)
+            let titleCandidate = candidateTitle ?? fallbackTitle
+            let brand = listBrand(title: titleCandidate, windowText: windowText)
+            guard let title = titleCandidate ?? brand?.displayName,
                   isTrustworthyListTitle(title, brand: brand) else {
                 continue
             }
@@ -748,6 +750,20 @@ final class OCRService {
         guard !trimmed.isEmpty, trimmed != "账单记录" else { return false }
         if isLikelyListTitle(trimmed) { return true }
         return brand?.displayName == trimmed
+    }
+
+    private func listFallbackTitle(windowLines: [String], rejectedTitle: String?) -> String? {
+        let rejected = rejectedTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let rejected, isLikelyListTitle(rejected) {
+            return rejected
+        }
+        let candidates = windowLines.compactMap { line -> String? in
+            let trimmed = normalizedOCRTitleCandidate(line)
+            guard trimmed != rejected else { return nil }
+            guard isLikelyListTitle(trimmed) else { return nil }
+            return trimmed
+        }
+        return candidates.first(where: { !isGenericPaymentTitle($0) }) ?? candidates.first
     }
 
     private func listBrand(title: String?, windowText: String) -> MerchantBrandDefinition? {
@@ -902,7 +918,8 @@ final class OCRService {
 
     private func looseInlineTitle(from value: String) -> String? {
         let cleaned = normalizedInlineListTitle(value)
-            .replacingOccurrences(of: #"\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s+\d{1,2}:\d{2})?"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s*\d{1,2}:\d{2})?"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"(今天|昨日|昨天|前天)\s*\d{1,2}:\d{2}"#, with: " ", options: .regularExpression)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return isLikelyListTitle(cleaned) ? cleaned : nil
@@ -910,7 +927,7 @@ final class OCRService {
 
     private func normalizedInlineListTitle(_ value: String) -> String {
         let removeTokens = [
-            "支出", "付款", "支付", "消费", "收入",
+            "支出", "消费", "收入",
             "餐饮美食", "日用百货", "服饰装扮", "文化休闲", "爱车养车", "充值缴费",
             "教育培训", "商业服务", "转账红包", "投资理财",
         ]
@@ -1138,14 +1155,30 @@ final class OCRService {
         guard !isAmountOnlyCluster(value) else { return false }
         if value.range(of: #"^\d{1,2}月$"#, options: .regularExpression) != nil { return false }
         let blocked = [
-            "¥", "￥", "金额", "时间", "订单", "单号", "支付", "付款", "收款", "交易", "账单", "详情",
+            "¥", "￥", "金额", "时间", "单号", "收款", "交易", "账单", "详情",
             "当前状态", "成功", "失败", "付款方式", "筛选", "全部", "月支出", "月收入", "余额", "零钱",
             "银行卡", "微信支付", "支付宝", "支出", "收入", "本月", "搜索", "查找", "等待确认收货",
             "日用百货", "文化休闲", "餐饮美食", "教育培训", "服饰装扮", "爱车养车", "充值缴费",
             "商业服务", "转账红包", "投资理财", "已全额退款", "已退款", "交易关闭",
             "顾客实付款", "立减金", "优惠", "红包", "实际到账", "商家实际到账",
         ]
-        return !blocked.contains { value.contains($0) }
+        guard !blocked.contains(where: { value.contains($0) }) else { return false }
+        return !isGenericPaymentTitle(value)
+    }
+
+    private func isGenericPaymentTitle(_ value: String) -> Bool {
+        let compact = value
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "　", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let genericExact = [
+            "支付", "付款", "订单", "统一支付"
+        ]
+        if genericExact.contains(compact) { return true }
+        if compact.range(of: #"^(订单|支付|付款)\d*$"#, options: .regularExpression) != nil {
+            return true
+        }
+        return false
     }
 
     private func shouldSkipListAmountLine(_ line: String) -> Bool {
@@ -1362,7 +1395,7 @@ final class OCRService {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2, trimmed.count <= 40 else { return false }
         if isStatusBarNoiseTitle(trimmed) { return false }
-        if NarrativeCopyResolver.isNoisyTimeTitle(trimmed) || isListStatusLine(trimmed) { return false }
+        if NarrativeCopyResolver.isNoisyTimeTitle(trimmed) || isListTimeLine(trimmed) || isListStatusLine(trimmed) { return false }
         if isPureAmountLine(trimmed) { return false }
         if isAmountOnlyCluster(trimmed) { return false }
         guard containsChinese(trimmed) || containsAlphabetic(trimmed) else { return false }
@@ -1406,13 +1439,16 @@ final class OCRService {
         if trimmed.range(of: #"^\d{1,2}:\d{2}(?::\d{2})?$"#, options: .regularExpression) != nil {
             return true
         }
-        if trimmed.range(of: #"^\d{1,2}[-/.]\d{1,2}\s+\d{1,2}:\d{2}"#, options: .regularExpression) != nil {
+        if trimmed.range(of: #"^\d{1,2}[-/.]\d{1,2}\s*\d{1,2}:\d{2}"#, options: .regularExpression) != nil {
+            return true
+        }
+        if trimmed.range(of: #"^\d{1,2}月\d{1,2}日?\s*\d{1,2}:\d{2}"#, options: .regularExpression) != nil {
             return true
         }
         if trimmed.range(of: #"^(周一|周二|周三|周四|周五|周六|周日|星期一|星期二|星期三|星期四|星期五|星期六|星期日)\s+\d{1,2}:\d{2}"#, options: .regularExpression) != nil {
             return true
         }
-        return trimmed.range(of: #"^(今天|昨天|前天)\s+\d{1,2}:\d{2}"#, options: .regularExpression) != nil
+        return trimmed.range(of: #"^(今天|昨日|昨天|前天)\s*\d{1,2}:\d{2}"#, options: .regularExpression) != nil
     }
 
     private func isListStatusLine(_ value: String) -> Bool {

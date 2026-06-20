@@ -207,6 +207,9 @@ struct HomeItem: Identifiable, Codable, Equatable {
             }
         case .dining:
             if containsAny(text, ["夜宵", "深夜", "夜里", "凌晨"]) { return "夜里补一点" }
+            if let lateNightTag = lateNightDiningEmotionTag(title: text, date: date) {
+                return lateNightTag
+            }
             if containsAny(text, ["早餐", "早饭"]) { return "早餐先记下" }
             if containsAny(text, ["豆浆", "包子"]) {
                 guard let date else { return "热乎一口记下" }
@@ -292,6 +295,33 @@ struct HomeItem: Identifiable, Codable, Equatable {
         return nil
     }
 
+    static func lateNightDiningEmotionTag(title: String, date: Date?) -> String? {
+        guard let date else { return nil }
+        let hour = Calendar.current.component(.hour, from: date)
+        guard (21...23).contains(hour) || (0..<5).contains(hour) else { return nil }
+
+        let text = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !text.isEmpty else { return "夜里吃点东西" }
+
+        let hasExplicitDayMeal = containsAny(text, ["早餐", "早饭", "午餐", "午饭", "中午"])
+        let hasNightCue = containsAny(text, ["夜宵", "宵夜", "深夜", "夜里", "凌晨", "晚归", "加班", "下班后"])
+        guard hasNightCue || !hasExplicitDayMeal else { return nil }
+
+        if containsAny(text, ["加班", "晚归", "下班后"]) {
+            if containsAny(text, ["热乎", "热饭", "热食", "热汤", "热的"]) {
+                return "加班后吃点热乎的"
+            }
+            return "晚点吃上了"
+        }
+        if containsAny(text, ["热乎", "热饭", "热食", "热汤", "热的", "面", "粉", "馄饨", "麻辣烫"]) {
+            return "夜里一口热的"
+        }
+        if containsAny(text, ["饭", "餐", "吃", "外卖", "小食", "点心", "垫一下", "垫一口"]) {
+            return "夜里吃点东西"
+        }
+        return nil
+    }
+
     private static func shouldPreferRefinedTag(current: String, refined: String) -> Bool {
         guard current != refined else { return false }
         let genericExact = [
@@ -301,7 +331,9 @@ struct HomeItem: Identifiable, Codable, Equatable {
             "运动小补给", "身体恢复安排", "给身体一点照顾", "今天的运动安排",
             "日常餐饮", "认真吃了一顿", "去远一点", "日常出行", "计划内添置", "日常添置",
             "日用补齐", "日用记录", "一次娱乐安排", "轻量娱乐", "住宿安排", "短暂停留",
-            "居家安排", "居家补给", "人情往来", "见面记录", "单独记录", "日常记录"
+            "居家安排", "居家补给", "人情往来", "见面记录", "单独记录", "日常记录",
+            "中午一顿饭", "饭点记一笔", "热饭到了手边", "今天吃上饭", "这一顿先记下",
+            "简单吃一顿", "认真吃一顿", "晚饭记一笔"
         ]
         if genericExact.contains(current) { return true }
         let genericFragments = ["恢复用品", "恢复补给", "健康相关", "身体相关", "护理用品", "日常记录"]
@@ -755,6 +787,7 @@ enum RecordSemanticLexicon {
             if (5..<10).contains(hour) { return "早餐先记下" }
             if (11..<14).contains(hour) { return "中午一顿饭" }
             if (17..<21).contains(hour) { return "晚饭记一笔" }
+            if (21...23).contains(hour) || (0..<5).contains(hour) { return "夜里吃点东西" }
             return amount >= 40 ? "认真吃一顿" : "日常餐饮"
         case .shopping:
             return amount >= 100 ? "添置一件东西" : "日常添置"

@@ -33,6 +33,7 @@ struct StatsWebView: View {
     @State private var traceInlineEditingItemID: UUID?
     @State private var handledOpenTraceRequestID: UUID?
     @State private var traceSwipedItemID: UUID?
+    @State private var traceDeletingItemID: UUID?
     @State private var traceAutoCommitRequestID: UUID?
     @State private var showTraceCustomDatePanel = false
     @State private var traceViewMode: TraceViewMode = .life
@@ -1922,8 +1923,17 @@ struct StatsWebView: View {
         if traceInlineEditingItemID == item.id {
             traceInlineEditingItemID = nil
         }
-        if let idx = homeViewModel.items.firstIndex(where: { $0.id == item.id }) {
-            homeViewModel.delete(at: IndexSet(integer: idx))
+        traceSwipedItemID = nil
+        withAnimation(.easeInOut(duration: 0.45)) {
+            traceDeletingItemID = item.id
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            if let idx = homeViewModel.items.firstIndex(where: { $0.id == item.id }) {
+                homeViewModel.delete(at: IndexSet(integer: idx))
+            }
+            if traceDeletingItemID == item.id {
+                traceDeletingItemID = nil
+            }
         }
     }
 
@@ -2461,10 +2471,12 @@ struct StatsWebView: View {
     private func traceDetailBillRecordRow(_ item: HomeItem, isFirst: Bool) -> some View {
         let isEditing = traceInlineEditingItemID == item.id
         let isSwiped = traceSwipedItemID == item.id && !isEditing
+        let isDeleting = traceDeletingItemID == item.id
         return ZStack(alignment: .trailing) {
             if !isEditing {
                 traceSwipeActions(for: item, isVisible: isSwiped)
-                    .padding(.trailing, 4)
+                    .padding(.trailing, 10)
+                    .zIndex(2)
             }
 
             VStack(alignment: .leading, spacing: isEditing ? 10 : 8) {
@@ -2499,6 +2511,10 @@ struct StatsWebView: View {
             .overlay(traceDetailRecordBorder(isEditing: isEditing))
             .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
             .offset(x: isSwiped ? -76 : 0)
+            .scaleEffect(isDeleting ? 0.96 : 1, anchor: .trailing)
+            .opacity(isDeleting ? 0 : 1)
+            .frame(height: isDeleting ? 0 : nil)
+            .clipped()
             .onTapGesture {
                 if traceSwipedItemID == item.id {
                     withAnimation(traceEditSpring) {
@@ -2509,14 +2525,16 @@ struct StatsWebView: View {
                 }
             }
             .overlay(alignment: .trailing) {
-                if !isEditing {
+                if !isEditing && !isSwiped {
                     traceSwipeHandle(for: item, isSwiped: isSwiped)
+                        .zIndex(3)
                 }
             }
         }
         .id(item.id)
         .animation(traceEditSpring, value: isEditing)
         .animation(traceEditSpring, value: isSwiped)
+        .animation(.easeInOut(duration: 0.45), value: isDeleting)
     }
 
     private var traceEditSpring: Animation {
@@ -2623,16 +2641,17 @@ struct StatsWebView: View {
 
     private func traceSwipeActions(for item: HomeItem, isVisible: Bool) -> some View {
         Button(role: .destructive) {
-            withAnimation(traceEditSpring) {
-                traceSwipedItemID = nil
-                deleteRecord(item)
-            }
+            deleteRecord(item)
         } label: {
             traceSwipeActionLabel("删除", systemImage: "trash", tint: Color.red.opacity(0.82))
         }
         .buttonStyle(.plain)
-        .frame(width: 68, alignment: .trailing)
+        .frame(width: 76, alignment: .trailing)
         .opacity(isVisible ? 1 : 0)
+        .scaleEffect(isVisible ? 1 : 0.82, anchor: .trailing)
+        .offset(x: isVisible ? 0 : 18)
+        .allowsHitTesting(isVisible)
+        .animation(traceEditSpring, value: isVisible)
     }
 
     private func traceSwipeHandle(for item: HomeItem, isSwiped: Bool) -> some View {
@@ -2644,19 +2663,17 @@ struct StatsWebView: View {
     }
 
     private func traceSwipeActionLabel(_ title: String, systemImage: String, tint: Color) -> some View {
-        VStack(spacing: 5) {
+        ZStack {
             Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .semibold))
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 20, weight: .semibold))
         }
         .foregroundStyle(.white)
-        .frame(width: 58, height: 62)
+        .frame(width: 54, height: 54)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            Circle()
                 .fill(tint)
         )
-        .shadow(color: tint.opacity(0.16), radius: 8, y: 4)
+        .shadow(color: tint.opacity(0.22), radius: 12, y: 6)
     }
 
     private func traceRowSwipeGesture(for item: HomeItem) -> some Gesture {

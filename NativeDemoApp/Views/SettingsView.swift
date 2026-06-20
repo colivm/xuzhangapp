@@ -194,7 +194,7 @@ struct SettingsView: View {
                     _ = settingsViewModel.startLifetimeThemeTrial(themeId: theme.id)
                 },
                 secondaryButton: .cancel(Text("以后再说")) {
-                    openMemberPricing(highlightPlanId: "lifetime")
+                    openMemberPricingFromSettingsSheet(highlightPlanId: "lifetime")
                 }
             )
         }
@@ -627,6 +627,13 @@ struct SettingsView: View {
         showMemberPricing = true
     }
 
+    private func openMemberPricingFromSettingsSheet(highlightPlanId: String? = nil) {
+        activeSettingsSheet = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            openMemberPricing(highlightPlanId: highlightPlanId)
+        }
+    }
+
     private func openAppearanceSheetIfNeeded(_ requestID: UUID?) {
         guard let requestID, handledAppearanceRequestID != requestID else { return }
         handledAppearanceRequestID = requestID
@@ -636,7 +643,7 @@ struct SettingsView: View {
     private func handleLockedThemeTap(_ theme: ThemeDefinition, style: ThemeSwatchStyle) {
         guard style == .lifetime else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                openMemberPricing()
+                openMemberPricingFromSettingsSheet()
             }
             return
         }
@@ -644,7 +651,7 @@ struct SettingsView: View {
             lifetimeTrialOfferTheme = theme
         } else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                openMemberPricing(highlightPlanId: "lifetime")
+                openMemberPricingFromSettingsSheet(highlightPlanId: "lifetime")
             }
         }
     }
@@ -810,18 +817,24 @@ struct SettingsView: View {
     private func settingsSheet(_ sheet: SettingsSheet) -> some View {
         ZStack {
             AppColors.bg.ignoresSafeArea()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(sheet.title)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(AppColors.text)
-                    settingsSheetContent(sheet)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(sheet.title)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(AppColors.text)
+                        settingsSheetContent(sheet, proxy: proxy)
+                    }
+                    .webCardPadding()
+                    .webCardBackground()
+                    .padding(16)
                 }
-                .webCardPadding()
-                .webCardBackground()
-                .padding(16)
+                .scrollIndicators(.hidden)
+                .onAppear {
+                    guard sheet == .appearance else { return }
+                    prepareCurrentThemeLocation(proxy)
+                }
             }
-            .scrollIndicators(.hidden)
         }
     }
 
@@ -1114,7 +1127,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func settingsSheetContent(_ sheet: SettingsSheet) -> some View {
+    private func settingsSheetContent(_ sheet: SettingsSheet, proxy: ScrollViewProxy? = nil) -> some View {
         switch sheet {
         case .backup:
             settingToggle("云端备份（可选）", isOn: Binding(
@@ -1128,7 +1141,7 @@ struct SettingsView: View {
             ))
             settingHelper("关闭后仍可使用本地回望，不强制登录。")
         case .appearance:
-            appearanceSheetContent
+            appearanceSheetContent(proxy: proxy)
         case .companion:
             settingToggle("开启宠物陪伴", isOn: Binding(
                 get: { settingsViewModel.petCompanionEnabled },
@@ -1309,14 +1322,14 @@ struct SettingsView: View {
 
     // MARK: - Appearance
 
-    private var appearanceSheetContent: some View {
+    private func appearanceSheetContent(proxy: ScrollViewProxy? = nil) -> some View {
         VStack(alignment: .leading, spacing: 22) {
             appearanceModeSection
 
             Divider().overlay(AppColors.line.opacity(0.7))
 
             VStack(alignment: .leading, spacing: 20) {
-                themeSectionHeader
+                themeSectionHeader(proxy: proxy)
                 dailyThemeSection
                 memberThemeSection
                 lifetimeThemeVault
@@ -1415,7 +1428,7 @@ struct SettingsView: View {
         .buttonStyle(.plain)
     }
 
-    private var themeSectionHeader: some View {
+    private func themeSectionHeader(proxy: ScrollViewProxy?) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text("色彩主题")
                 .font(.system(size: 15, weight: .semibold))
@@ -1423,9 +1436,24 @@ struct SettingsView: View {
             Text("只改界面颜色，不影响账本数据。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
-            Text("当前：\(settingsViewModel.currentThemeName)")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(AppColors.accentDark.opacity(0.68))
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                focusCurrentTheme(proxy)
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "scope")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text("当前：\(settingsViewModel.currentThemeName)")
+                        .font(.system(size: 11, weight: .semibold))
+                    Image(systemName: "arrow.down")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .foregroundStyle(AppColors.accentDark.opacity(0.78))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.08)))
+            }
+            .buttonStyle(.plain)
             if settingsViewModel.isLifetimeThemeTrialActive {
                 Text("试用中 · 24 小时后自动回到默认主题")
                     .font(.system(size: 11, weight: .semibold))
@@ -1450,6 +1478,9 @@ struct SettingsView: View {
             }
             themeSwatchGrid(themes: freeThemes, columns: 3, style: .daily)
         }
+        .id(themeSectionScrollID(for: .daily))
+        .padding(10)
+        .background(themeSectionHighlight(for: .daily))
     }
 
     private var memberThemeSection: some View {
@@ -1474,6 +1505,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .id(themeSectionScrollID(for: .standard))
     }
 
     private var lifetimeThemeVault: some View {
@@ -1504,7 +1536,7 @@ struct SettingsView: View {
 
             if settingsViewModel.memberTier.lowercased() != "lifetime" {
                 Button {
-                    openMemberPricing(highlightPlanId: "lifetime")
+                    openMemberPricingFromSettingsSheet(highlightPlanId: "lifetime")
                 } label: {
                     Text("了解永久会员 →")
                         .font(.system(size: 12, weight: .semibold))
@@ -1531,9 +1563,11 @@ struct SettingsView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(AppColors.lockGold.opacity(0.25), lineWidth: 1)
+                .stroke(currentThemeSectionStyle == .lifetime ? AppColors.lockGold.opacity(0.62) : AppColors.lockGold.opacity(0.25), lineWidth: currentThemeSectionStyle == .lifetime ? 1.8 : 1)
         )
+        .shadow(color: currentThemeSectionStyle == .lifetime ? AppColors.lockGold.opacity(0.16) : .clear, radius: 12, y: 5)
         .padding(.vertical, 4)
+        .id(themeSectionScrollID(for: .lifetime))
         .onReceive(Timer.publish(every: 6.5, on: .main, in: .common).autoconnect()) { _ in
             withAnimation(.easeInOut(duration: 0.24)) {
                 vaultHelperIndex = (vaultHelperIndex + 1) % vaultHelperLines.count
@@ -1652,6 +1686,69 @@ struct SettingsView: View {
         }
     }
 
+    private func prepareCurrentThemeLocation(_ proxy: ScrollViewProxy) {
+        expandFamilyForCurrentTheme()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            focusCurrentTheme(proxy)
+        }
+    }
+
+    private func focusCurrentTheme(_ proxy: ScrollViewProxy?) {
+        expandFamilyForCurrentTheme()
+        guard let proxy else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            withAnimation(.easeInOut(duration: 0.24)) {
+                proxy.scrollTo(currentThemeScrollTarget, anchor: .center)
+            }
+        }
+    }
+
+    private func expandFamilyForCurrentTheme() {
+        guard let definition = ThemeResolver.shared.definition(for: settingsViewModel.colorThemeId),
+              definition.tier == .standard else {
+            return
+        }
+        expandedThemeFamily = definition.family
+    }
+
+    private var currentThemeScrollTarget: String {
+        guard let definition = ThemeResolver.shared.definition(for: settingsViewModel.colorThemeId) else {
+            return themeSectionScrollID(for: .daily)
+        }
+        return themeScrollID(definition.id)
+    }
+
+    private func themeSectionScrollID(for style: ThemeSwatchStyle) -> String {
+        "theme-section-\(style)"
+    }
+
+    private func themeFamilyScrollID(_ family: String) -> String {
+        "theme-family-\(family)"
+    }
+
+    private func themeScrollID(_ themeId: String) -> String {
+        "theme-\(themeId)"
+    }
+
+    private func themeSectionHighlight(for style: ThemeSwatchStyle) -> some View {
+        let isActive = currentThemeSectionStyle == style
+        return RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(isActive ? AppColors.accent.opacity(0.08) : Color.clear)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(isActive ? AppColors.accent.opacity(0.28) : Color.clear, lineWidth: 1)
+            )
+    }
+
+    private var currentThemeSectionStyle: ThemeSwatchStyle? {
+        guard let definition = ThemeResolver.shared.definition(for: settingsViewModel.colorThemeId) else { return nil }
+        switch definition.tier {
+        case .free: return .daily
+        case .standard: return .standard
+        case .lifetime: return .lifetime
+        }
+    }
+
     private func themeFamilyTitle(_ family: String) -> String {
         switch family {
         case "cyber": return "赛博朋克"
@@ -1672,6 +1769,7 @@ struct SettingsView: View {
         _ section: (key: String, title: String, themes: [ThemeDefinition])
     ) -> some View {
         let isExpanded = expandedThemeFamily == section.key
+        let containsSelected = section.themes.contains { $0.id == settingsViewModel.colorThemeId }
         return VStack(spacing: 0) {
             Button {
                 withAnimation(.easeInOut(duration: 0.22)) {
@@ -1717,12 +1815,14 @@ struct SettingsView: View {
         .padding(.horizontal, 12)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(AppColors.surfaceMuted.opacity(0.62))
+                .fill(containsSelected ? AppColors.accent.opacity(0.10) : AppColors.surfaceMuted.opacity(0.62))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(AppColors.line.opacity(0.38), lineWidth: 1)
+                .stroke(containsSelected ? AppColors.accent.opacity(0.42) : AppColors.line.opacity(0.38), lineWidth: containsSelected ? 1.5 : 1)
         )
+        .shadow(color: containsSelected ? AppColors.accent.opacity(0.10) : .clear, radius: 10, y: 4)
+        .id(themeFamilyScrollID(section.key))
     }
 
     private func themeSwatchGrid(themes: [ThemeDefinition], columns: Int, style: ThemeSwatchStyle) -> some View {
@@ -1827,6 +1927,7 @@ struct SettingsView: View {
             showLifetimeThemePreview(theme)
         }
         .accessibilityLabel(theme.displayName)
+        .id(themeScrollID(theme.id))
     }
 
     @ViewBuilder

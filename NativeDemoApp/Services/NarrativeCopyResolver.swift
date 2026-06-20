@@ -45,6 +45,11 @@ enum NarrativeCopyResolver {
     }
 
     static func resolveEmotionTag(context: Context) -> String {
+        if context.category == .dining,
+           let lateNightTag = HomeItem.lateNightDiningEmotionTag(title: context.note, date: context.date) {
+            return lateNightTag
+        }
+
         if let brand = MerchantBrandCatalog.definition(for: context.brandId),
            let note = note(from: brand.tiers, amount: context.amount, seed: context.seed) {
             return note
@@ -154,6 +159,10 @@ enum NarrativeCopyResolver {
         if !hasIncompatibleSemanticCue,
            context.category == .dining,
            emotionRuleIDs.contains("meal") {
+            if let lateNightTag = HomeItem.lateNightDiningEmotionTag(title: lower, date: context.date) {
+                return lateNightTag
+            }
+
             if isWeekend(context.date), !containsWeekendWorkMealCue(lower) {
                 return pick(
                     weekendMealNotes(for: context.date, note: lower),

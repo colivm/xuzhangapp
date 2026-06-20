@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var editingItem: HomeItem?
     @State private var todayInlineEditingItemID: UUID?
     @State private var todaySwipedItemID: UUID?
+    @State private var todayDeletingItemID: UUID?
     @State private var todayPlaybackQuotaMessage: String?
     @State private var petHint: String = "有一笔就记一笔，晚点也能补。"
     @State private var petBubbleVisible = false
@@ -797,10 +798,12 @@ struct HomeView: View {
     private func todayRecordInlineRow(item: HomeItem, isFirst: Bool) -> some View {
         let isEditing = todayInlineEditingItemID == item.id
         let isSwiped = todaySwipedItemID == item.id && !isEditing
+        let isDeleting = todayDeletingItemID == item.id
         return ZStack(alignment: .trailing) {
             if !isEditing {
                 todaySwipeActions(for: item, isVisible: isSwiped)
-                    .padding(.trailing, 4)
+                    .padding(.trailing, 10)
+                    .zIndex(2)
             }
 
             VStack(alignment: .leading, spacing: isEditing ? 10 : 8) {
@@ -842,6 +845,10 @@ struct HomeView: View {
             }
             .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
             .offset(x: isSwiped ? -76 : 0)
+            .scaleEffect(isDeleting ? 0.96 : 1, anchor: .trailing)
+            .opacity(isDeleting ? 0 : 1)
+            .frame(height: isDeleting ? 0 : nil)
+            .clipped()
             .onTapGesture {
                 if !isEditing && !isSwiped {
                     withAnimation(todayEditSpring) {
@@ -849,17 +856,16 @@ struct HomeView: View {
                     }
                 }
             }
-            .allowsHitTesting(!isSwiped)
 
-            if !isEditing {
+            if !isEditing && !isSwiped {
                 todaySwipeHandle(for: item, isSwiped: isSwiped)
-                    .padding(.trailing, isSwiped ? 82 : 0)
-                    .zIndex(2)
+                    .zIndex(3)
             }
         }
         .id(item.id)
         .animation(todayEditSpring, value: isEditing)
         .animation(todayEditSpring, value: isSwiped)
+        .animation(.easeInOut(duration: 0.45), value: isDeleting)
     }
 
     private func todayRecordSummary(_ item: HomeItem, isEditing: Bool, isFirst: Bool) -> some View {
@@ -1105,28 +1111,27 @@ struct HomeView: View {
 
     private func todaySwipeActions(for item: HomeItem, isVisible: Bool) -> some View {
         Button(role: .destructive) {
-            withAnimation(todayEditSpring) {
-                todaySwipedItemID = nil
-                deleteTodayRecord(item)
-            }
+            deleteTodayRecord(item)
         } label: {
-            VStack(spacing: 5) {
+            ZStack {
                 Image(systemName: "trash")
-                    .font(.system(size: 14, weight: .semibold))
-                Text("删除")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 20, weight: .semibold))
             }
             .foregroundStyle(.white)
-            .frame(width: 58, height: 62)
+            .frame(width: 54, height: 54)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                Circle()
                     .fill(Color.red.opacity(0.82))
             )
-            .shadow(color: Color.red.opacity(0.14), radius: 8, y: 4)
+            .shadow(color: Color.red.opacity(0.22), radius: 12, y: 6)
         }
         .buttonStyle(.plain)
-        .frame(width: 68, alignment: .trailing)
+        .frame(width: 76, alignment: .trailing)
         .opacity(isVisible ? 1 : 0)
+        .scaleEffect(isVisible ? 1 : 0.82, anchor: .trailing)
+        .offset(x: isVisible ? 0 : 18)
+        .allowsHitTesting(isVisible)
+        .animation(todayEditSpring, value: isVisible)
     }
 
     private func todaySwipeHandle(for item: HomeItem, isSwiped: Bool) -> some View {
@@ -1163,8 +1168,17 @@ struct HomeView: View {
         if todayInlineEditingItemID == item.id {
             todayInlineEditingItemID = nil
         }
-        if let idx = homeViewModel.items.firstIndex(where: { $0.id == item.id }) {
-            homeViewModel.delete(at: IndexSet(integer: idx))
+        todaySwipedItemID = nil
+        withAnimation(.easeInOut(duration: 0.45)) {
+            todayDeletingItemID = item.id
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            if let idx = homeViewModel.items.firstIndex(where: { $0.id == item.id }) {
+                homeViewModel.delete(at: IndexSet(integer: idx))
+            }
+            if todayDeletingItemID == item.id {
+                todayDeletingItemID = nil
+            }
         }
     }
 
