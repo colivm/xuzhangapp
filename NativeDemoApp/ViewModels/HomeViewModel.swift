@@ -2,24 +2,32 @@ import Foundation
 import Combine
 
 struct AICommandRecordDraft: Identifiable, Equatable {
+    enum Status: Equatable {
+        case ready
+        case conflict(String)
+    }
+
     let id: UUID
     var title: String
     var amount: Double
     var category: HomeItem.Category
     var date: Date
+    var status: Status
 
     init(
         id: UUID = UUID(),
         title: String,
         amount: Double,
         category: HomeItem.Category,
-        date: Date
+        date: Date,
+        status: Status = .ready
     ) {
         self.id = id
         self.title = title
         self.amount = amount
         self.category = category
         self.date = date
+        self.status = status
     }
 }
 
@@ -383,7 +391,11 @@ final class HomeViewModel: ObservableObject {
 
     @discardableResult
     func importAICommandDrafts(_ drafts: [AICommandRecordDraft]) -> Int {
-        let validDrafts = drafts.filter { $0.amount > 0 }
+        let validDrafts = drafts.filter {
+            guard $0.amount > 0 else { return false }
+            if case .conflict = $0.status { return false }
+            return true
+        }
         guard !validDrafts.isEmpty else { return 0 }
 
         let wasEmpty = items.isEmpty

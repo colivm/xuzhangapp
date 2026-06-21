@@ -49,6 +49,10 @@ struct MemberPricingView: View {
         settingsViewModel.settings.hasMemberAccess
     }
 
+    private var isLifetimeMember: Bool {
+        settingsViewModel.memberTier.lowercased() == "lifetime" && isMember
+    }
+
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
@@ -117,10 +121,16 @@ struct MemberPricingView: View {
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(AppColors.text)
 
-            Text("会员让 AI 持续整理你的生活脉络，帮你看见消费背后的习惯、情绪和变化。")
+            Text("多年以后，你未必记得今天花了多少钱，但会想知道，那时的自己正在过怎样的生活。")
                 .font(.system(size: 13))
                 .lineSpacing(3)
                 .foregroundStyle(AppColors.subtext)
+
+            Text("会员让 AI 持续整理你的生活脉络，帮你看见消费背后的习惯、情绪和变化。")
+                .font(.system(size: 12))
+                .lineSpacing(3)
+                .foregroundStyle(AppColors.subtext.opacity(0.88))
+                .padding(.top, 2)
 
             if !isMember {
                 legalPurchaseNote
@@ -369,35 +379,56 @@ struct MemberPricingView: View {
     // MARK: - Current Member Badge
 
     private var currentMemberBadge: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 32))
-                .foregroundStyle(AppColors.accent)
-            Text("感谢成为 xLife 会员")
-                .font(.system(size: 15, weight: .semibold))
+        VStack(spacing: 10) {
+            Image(systemName: isLifetimeMember ? "crown.fill" : "checkmark.seal.fill")
+                .font(.system(size: 34))
+                .foregroundStyle(isLifetimeMember ? AppColors.lockGold : AppColors.accent)
+            Text(isLifetimeMember ? "你的永久生活档案已开启" : "感谢成为 xLife 会员")
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(AppColors.text)
-            Text("你的生活故事正在持续整理中")
+            Text(isLifetimeMember ? "这些日子会随账号长期保留，AI 会继续替你整理和连接。" : "你的生活故事正在持续整理中")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             if let validity = settingsViewModel.settings.memberValidityText {
                 Text(validity)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.text.opacity(0.72))
+            } else if isLifetimeMember {
+                Text("永久有效")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color(hex: "8B6F38"))
             }
-            Text("AI 将继续为你整理和连接每一天。")
+            Text(isLifetimeMember ? "你买下的不是一组功能，而是把生活长期留住的能力。" : "AI 将继续为你整理和连接每一天。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
         .padding(.horizontal, 16)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(AppColors.accent.opacity(0.08))
+                .fill(
+                    LinearGradient(
+                        colors: isLifetimeMember ? [
+                            AppColors.lockGold.opacity(0.14),
+                            Color.white.opacity(0.52),
+                            AppColors.accent.opacity(0.06)
+                        ] : [
+                            AppColors.accent.opacity(0.08),
+                            AppColors.accent.opacity(0.08)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(AppColors.accent.opacity(0.22), lineWidth: 1)
+                .stroke(isLifetimeMember ? AppColors.lockGold.opacity(0.42) : AppColors.accent.opacity(0.22), lineWidth: isLifetimeMember ? 1.2 : 1)
         )
     }
 

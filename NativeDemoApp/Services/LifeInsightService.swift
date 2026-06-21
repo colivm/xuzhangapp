@@ -72,26 +72,35 @@ final class LifeInsightService {
         let total = validItems.reduce(0) { $0 + $1.amount }
         let average = total / Double(validItems.count)
 
-        let topText = top.map { "\($0.category.rawValue)出现 \($0.count) 笔" } ?? "记录比较分散"
-        let leadQuestion = "这段时间，\(topText)，要不要看看它说明了什么？"
+        let focusName = top.map { focusName(for: $0.category, items: validItems) } ?? "这段记录"
+        let leadQuestion = "要不要顺着「\(focusName)」往下看一层？"
 
         let teaser: String
         if let top {
-            teaser = "\(top.category.rawValue)是最清楚的线索，账本还能继续看：它是偶然出现，还是正在变成这一段生活的固定节奏。"
+            let secondName = second.map { focusName(for: $0.category, items: validItems) }
+            if let peak, let secondName {
+                teaser = "我会继续看它集中在哪些日子、和「\(secondName)」有没有一起出现，以及它像不像这段时间正在形成的生活节奏。"
+            } else if let peak {
+                teaser = "我会继续看它为什么在\(peak.label)更密，以及这是不是一段固定生活节奏。"
+            } else {
+                teaser = "我会继续看它是偶然出现，还是正在变成这一段生活里反复发生的事。"
+            }
         } else {
             teaser = "这段记录比较分散，账本会先从日期和频次里找一个值得追问的点。"
         }
 
         var fullLines: [String] = []
         if let top {
-            let ratio = Int((Double(top.count) / Double(validItems.count) * 100).rounded())
-            fullLines.append("\(top.category.rawValue)占了 \(ratio)%，更像这段时间最稳定出现的生活面。")
+            let name = focusName(for: top.category, items: validItems)
+            fullLines.append(deeperReasonLine(for: top.category, name: name))
         }
         if let peak {
-            fullLines.append("\(peak.label)留下 \(peak.count) 笔，是这段时间最密的一天，可以回头看看那天发生了什么。")
+            fullLines.append("\(peak.label)是密度最高的节点，适合回头看那天是不是有行程、外出或补给集中在一起。")
         }
         if let second, let top, second.count > 0 {
-            fullLines.append("\(top.category.rawValue)和\(second.category.rawValue)一起出现，说明这段生活不是单一开销，而是几条节奏叠在一起。")
+            let topName = focusName(for: top.category, items: validItems)
+            let secondName = focusName(for: second.category, items: validItems)
+            fullLines.append("「\(topName)」和「\(secondName)」同时靠前，可以追问它们是不是被同一个生活场景带出来。")
         } else {
             fullLines.append("平均每笔约 \(average.formatted(.cny))，金额只是证据，真正值得看的是它们出现的时间和频次。")
         }
@@ -104,7 +113,12 @@ final class LifeInsightService {
             teaser: teaser,
             previewLine: fullLines.first ?? teaser,
             fullLines: Array(fullLines.prefix(3)),
-            questionChips: questionChips(for: top?.category, peakLabel: peak?.label),
+            questionChips: questionChips(
+                top: top?.category,
+                second: second?.category,
+                peakLabel: peak?.label,
+                items: validItems
+            ),
             periodName: periodName(top: top?.category, peakLabel: peak?.label, periodLabel: periodLabel)
         )
     }
@@ -156,14 +170,23 @@ final class LifeInsightService {
         }
     }
 
-    private func questionChips(for category: HomeItem.Category?, peakLabel: String?) -> [String] {
-        var chips = ["哪天最不像平时？", "哪些是重复习惯？", "给这段时间起个名字"]
-        if let category {
-            chips.insert("\(category.rawValue)为什么变明显？", at: 0)
-        } else if let peakLabel {
-            chips.insert("\(peakLabel)为什么更密？", at: 0)
+    private func questionChips(
+        top: HomeItem.Category?,
+        second: HomeItem.Category?,
+        peakLabel: String?,
+        items: [HomeItem]
+    ) -> [String] {
+        let primary = top.map { "\(focusName(for: $0, items: items))为什么变明显？" }
+            ?? "哪类记录最值得看？"
+        let rhythm = peakLabel.map { "\($0)发生了什么？" }
+            ?? "哪天最不像平时？"
+        let relation: String
+        if let top, let second {
+            relation = "\(focusName(for: top, items: items))和\(focusName(for: second, items: items))有关吗？"
+        } else {
+            relation = "哪些是重复习惯？"
         }
-        return Array(chips.prefix(4))
+        return [primary, rhythm, relation]
     }
 
     private func periodName(top: HomeItem.Category?, peakLabel: String?, periodLabel: String) -> String {
@@ -174,5 +197,47 @@ final class LifeInsightService {
             return "\(top.rawValue)更明显的\(periodLabel)"
         }
         return "慢慢浮出线索的\(periodLabel)"
+    }
+
+    private func focusName(for category: HomeItem.Category, items: [HomeItem]) -> String {
+        let categoryItems = items.filter { $0.category == category }
+        let joined = categoryItems.map { "\($0.title) \($0.emotionTag)" }.joined(separator: " ")
+        switch category {
+        case .transport:
+            return containsAny(joined, ["通勤", "上班", "下班", "地铁", "公交"]) ? "通勤交通" : "交通"
+        case .health:
+            return containsAny(joined, ["健身", "运动", "跑步", "瑜伽", "私教", "游泳"]) ? "运动健身" : "健康"
+        case .dining:
+            return containsAny(joined, ["咖啡", "奶茶"]) ? "饮品餐饮" : "餐饮"
+        default:
+            return category.rawValue
+        }
+    }
+
+    private func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.contains($0) }
+    }
+
+    private func deeperReasonLine(for category: HomeItem.Category, name: String) -> String {
+        switch category {
+        case .dining:
+            return "「\(name)」更像这段时间的日程底色：忙的时候靠它续上，松一点的时候也会用它安顿自己。"
+        case .transport:
+            return "「\(name)」背后通常是移动变多了，账本记录下来的其实是你被生活带去的路线。"
+        case .health:
+            return "「\(name)」说明身体重新进入日程，不管是训练、恢复还是照顾自己，都值得被单独看见。"
+        case .shopping, .daily:
+            return "「\(name)」像一轮生活补给，很多小东西一起出现，往往说明这段时间在重新整理秩序。"
+        case .entertainment:
+            return "「\(name)」不是简单花钱玩，它可能是在给紧绷的日子留一点出口。"
+        case .home:
+            return "「\(name)」说明注意力回到住处和日常环境，生活在悄悄往稳定处收。"
+        case .social:
+            return "「\(name)」背后是关系在发生，金额只是痕迹，真正留下来的是见面和往来。"
+        case .lodging:
+            return "「\(name)」通常意味着位置变化，这段时间可能有旅行、出差或临时停留。"
+        case .other:
+            return "这些记录还没归进固定分类，但反复出现本身已经说明它们有一个共同主题。"
+        }
     }
 }

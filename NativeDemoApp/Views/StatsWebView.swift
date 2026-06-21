@@ -667,25 +667,25 @@ struct StatsWebView: View {
         let items = traceClueItems
         guard !items.isEmpty else {
             return [
-                "先留下几笔，线索会从分类、时间和频次里慢慢浮出来。",
-                "这里不会只盯着金额，会优先看这一段生活出现了什么。",
-                "多记几天后，会看到哪些日子更密、哪些分类更常出现。"
+                "先留下几笔，线索会先从分类、时间和频次里浮出来。",
+                "这里先列事实证据，不急着解释原因。",
+                "多记几天后，会看到哪类更多、哪天更密。"
             ]
         }
         var lines: [String] = []
         if let top = traceCategoryClues.first {
             let percent = Int((top.ratio * 100).rounded())
-            lines.append("\(top.category.rawValue)占了 \(percent)%，是这一段最清楚的生活面。")
+            lines.append("\(top.category.rawValue)占 \(percent)%，共 \(top.count) 笔，是占比最高的分类。")
         }
         if let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 {
-            lines.append("\(traceRhythmNarrativeLabel(peak))留下 \(peak.count) 笔，像是这一段最忙的节点。")
+            lines.append("\(traceRhythmNarrativeLabel(peak))留下 \(peak.count) 笔，是记录最密的时间点。")
         }
         let total = items.reduce(0) { $0 + $1.amount }
         if items.count >= 2 {
             let average = total / Double(items.count)
-            lines.append("平均每笔约 \(average.formatted(.cny))，金额不是主角，频次更能看出节奏。")
+            lines.append("共 \(items.count) 笔，平均每笔约 \(average.formatted(.cny))。")
         } else {
-            lines.append("现在只有一笔，先不用急着判断，线索会随着记录变多。")
+            lines.append("现在只有一笔，先不做趋势判断。")
         }
         return Array(lines.prefix(3))
     }
@@ -1174,11 +1174,25 @@ struct StatsWebView: View {
     }
 
     private func traceInsightAnswer(for question: String, insight: LifeInsightResult) -> String {
-        if question.contains("哪天") || question.contains("不太像") || question.contains("更密") {
+        if question.contains("哪天") || question.contains("不太像") || question.contains("更密") || question.contains("发生了什么") {
             if let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 {
                 return "\(traceRhythmNarrativeLabel(peak))留下 \(peak.count) 笔，是这一段里最密的一天。可以从那天的备注往回看，它更像一个具体生活节点。"
             }
             return "这一段还没有明显峰值，先让记录再多一点，哪天不太一样会更容易浮出来。"
+        }
+
+        if question.contains("有关吗") || question.contains("一起") {
+            let clues = Array(traceCategoryClues.prefix(2))
+            if clues.count == 2 {
+                let first = clues[0]
+                let second = clues[1]
+                let overlapDays = traceDaysContaining(categories: [first.category, second.category])
+                if overlapDays > 0 {
+                    return "\(first.category.rawValue)和\(second.category.rawValue)在 \(overlapDays) 天里同时出现，说明它们可能被同一种生活安排带出来，比如外出、工作日节奏或某次集中补给。"
+                }
+                return "\(first.category.rawValue)和\(second.category.rawValue)都靠前，但没有明显落在同一天，更像两条并行的生活线索。"
+            }
+            return insight.previewLine
         }
 
         if question.contains("重复") || question.contains("习惯") {
@@ -1194,12 +1208,79 @@ struct StatsWebView: View {
 
         if question.contains("为什么") {
             if let top = traceCategoryClues.first {
-                return "\(top.category.rawValue)变明显，通常不是单笔金额造成的，而是出现频次把它推到了前面。先看它出现在哪几天，会比只看总额更接近生活本身。"
+                return traceWhyCategoryBecameVisible(top)
             }
             return insight.previewLine
         }
 
         return insight.previewLine
+    }
+
+    private func traceWhyCategoryBecameVisible(_ clue: TraceCategoryClue) -> String {
+        let categoryItems = traceClueItems.filter { $0.category == clue.category }
+        let peak = traceRhythmPoints.max(by: { $0.count < $1.count })
+        let second = traceCategoryClues.dropFirst().first
+        let categoryName = traceCategoryLifeName(for: clue.category, items: categoryItems)
+        let base: String
+        switch clue.category {
+        case .dining:
+            base = "「\(categoryName)」变明显，通常不是因为某一顿特别贵，而是这一段生活被吃饭、外卖、咖啡这些小节点不断打断或撑住了。它更像日程密度的影子。"
+        case .transport:
+            base = "「\(categoryName)」变明显，往往说明你在移动：通勤、办事、见人、往返变多了。它背后看的不是车费，而是这段时间你被拉去哪些地方。"
+        case .health:
+            base = "「\(categoryName)」变明显，更像你开始把身体放回日程里：可能是健身、看诊、买药或恢复性的安排，不只是消费变多。"
+        case .shopping, .daily:
+            base = "「\(categoryName)」变明显，像是生活在补库存：添置、日用、临时需要一起冒出来。它通常对应某个阶段的整理、消耗或重新准备。"
+        case .entertainment:
+            base = "「\(categoryName)」变明显，说明这段时间你给自己留了更多松动空间。它不一定是浪费，可能是在给压力找出口。"
+        case .home:
+            base = "「\(categoryName)」变明显，像是注意力回到居住环境：修补、布置、家用安排开始占据生活。"
+        case .social:
+            base = "「\(categoryName)」变明显，背后通常是关系在发生：见面、送礼、人情往来比金额本身更重要。"
+        case .lodging:
+            base = "「\(categoryName)」变明显，说明这段时间有停留和位置变化，可能是旅行、出差或临时过夜安排。"
+        case .other:
+            base = "这类记录变明显，说明有些事还没被归进固定生活面。可以回头看看备注，里面可能藏着真正的主题。"
+        }
+
+        var tails: [String] = []
+        if let peak, peak.count > 0 {
+            tails.append("尤其\(traceRhythmNarrativeLabel(peak))最密，原因可能就在那天的行程里。")
+        }
+        if let second {
+            tails.append("它还和「\(second.category.rawValue)」一起靠前，像是同一段生活场景带出来的两条痕迹。")
+        }
+        return ([base] + tails).joined(separator: " ")
+    }
+
+    private func traceCategoryLifeName(for category: HomeItem.Category, items: [HomeItem]) -> String {
+        let text = items.map { "\($0.title) \($0.emotionTag)" }.joined(separator: " ")
+        switch category {
+        case .transport:
+            return traceContainsAny(text, ["通勤", "上班", "下班", "地铁", "公交"]) ? "通勤交通" : "交通"
+        case .health:
+            return traceContainsAny(text, ["健身", "运动", "跑步", "瑜伽", "私教", "游泳"]) ? "运动健身" : "健康"
+        case .dining:
+            return traceContainsAny(text, ["咖啡", "奶茶"]) ? "饮品餐饮" : "餐饮"
+        default:
+            return category.rawValue
+        }
+    }
+
+    private func traceContainsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.contains($0) }
+    }
+
+    private func traceDaysContaining(categories: [HomeItem.Category]) -> Int {
+        guard !categories.isEmpty else { return 0 }
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: traceClueItems) { item in
+            calendar.startOfDay(for: item.createdAt)
+        }
+        return grouped.values.filter { dayItems in
+            let dayCategories = Set(dayItems.map(\.category))
+            return categories.allSatisfy { dayCategories.contains($0) }
+        }.count
     }
 
     private func traceRhythmNarrativeLabel(_ point: TraceRhythmPoint) -> String {

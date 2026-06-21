@@ -49,17 +49,6 @@ struct InsightWebView: View {
         var body: String
     }
 
-    private struct WeeklyStorySnapshot {
-        let headline: String
-        let recordCount: Int
-        let total: Double
-        let mealCount: Int
-        let activeDays: Int
-        let closing: String
-
-        var hasData: Bool { recordCount > 0 }
-    }
-
     private enum AICommandKind: Equatable {
         case query
         case duplicateCheck
@@ -117,6 +106,7 @@ struct InsightWebView: View {
         let onRun: (String) -> Void
         let onClear: () -> Void
         @State private var draftText: String
+        @FocusState private var isFocused: Bool
 
         init(commandText: Binding<String>, onRun: @escaping (String) -> Void, onClear: @escaping () -> Void) {
             _commandText = commandText
@@ -137,6 +127,8 @@ struct InsightWebView: View {
                     .lineLimit(2...4)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .focused($isFocused)
+                    .submitLabel(.done)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 13)
                     .background(
@@ -151,11 +143,15 @@ struct InsightWebView: View {
                         guard value != draftText else { return }
                         draftText = value
                     }
+                    .onSubmit {
+                        isFocused = false
+                    }
 
                 HStack(spacing: 10) {
                     Button {
                         let trimmed = draftText.trimmingCharacters(in: .whitespacesAndNewlines)
                         commandText = trimmed
+                        isFocused = false
                         onRun(trimmed)
                     } label: {
                         aiCommandPrimaryLabel("生成预览", systemImage: "sparkles")
@@ -165,6 +161,7 @@ struct InsightWebView: View {
                     Button {
                         draftText = ""
                         commandText = ""
+                        isFocused = false
                         onClear()
                     } label: {
                         Text("清空")
@@ -181,6 +178,14 @@ struct InsightWebView: View {
                 }
             }
             .glassPanel(radius: 22, padding: 18)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成") {
+                        isFocused = false
+                    }
+                }
+            }
         }
 
         private func aiCommandPrimaryLabel(_ title: String, systemImage: String) -> some View {
@@ -246,8 +251,6 @@ struct InsightWebView: View {
         VStack(alignment: .leading, spacing: 0) {
             insightJournalCard
             insightChapterFootnote
-            aiCommandEntryCard
-                .padding(.bottom, 12)
             keywordBubbleSection
                 .padding(.top, -2)
                 .padding(.bottom, 12)
@@ -312,8 +315,14 @@ struct InsightWebView: View {
                 .foregroundStyle(AppColors.text.opacity(0.78))
                 .padding(.top, 2)
 
-            quietTextButton("保存周记摘页") {
-                showWeeklySharePrivacyConfirm = true
+            HStack(spacing: 8) {
+                quietTextButton("保存周记摘页") {
+                    showWeeklySharePrivacyConfirm = true
+                }
+
+                quietTextButton("让 AI 继续解读 →") {
+                    openWeeklyAICommand()
+                }
             }
             .padding(.top, 2)
 
@@ -344,117 +353,11 @@ struct InsightWebView: View {
         .padding(.bottom, 10)
     }
 
-    private var aiCommandEntryCard: some View {
-        let story = weeklyStorySnapshot
-        return Button {
-            showAICommandSheet = true
-            if aiCommandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                aiCommandText = "帮我写一段这周的生活周记"
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 8) {
-                    Text("本周故事")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(AppColors.accentDark.opacity(0.9))
-                    if !hasMemberAccess {
-                        Text("会员可持续保存")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(AppColors.lockGold)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(Capsule(style: .continuous).fill(AppColors.lockGold.opacity(0.10)))
-                    }
-                    Spacer(minLength: 0)
-                }
-
-                Text(story.headline)
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(AppColors.text)
-                    .lineSpacing(4)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                weeklyStoryMetricGrid(story)
-
-                Text(story.closing)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppColors.text.opacity(0.78))
-                    .lineSpacing(4)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 8) {
-                    Text(story.hasData ? "让 AI 继续解读" : "开始写下这一周")
-                        .font(.system(size: 13, weight: .semibold))
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 11, weight: .bold))
-                    Spacer(minLength: 0)
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 13, weight: .semibold))
-                }
-                .foregroundStyle(AppColors.accentDark.opacity(0.9))
-                .padding(.top, 2)
-            }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.70),
-                                AppColors.paperMist.opacity(0.52),
-                                AppColors.accent.opacity(0.075)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .background(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                    )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color.white.opacity(0.58), lineWidth: 1)
-            )
-            .shadow(color: AppColors.subtext.opacity(0.08), radius: 18, x: 0, y: 8)
+    private func openWeeklyAICommand() {
+        showAICommandSheet = true
+        if aiCommandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            aiCommandText = "请基于我最近一周的记录，继续解读生活节奏、压力变化和最值得保留的瞬间。"
         }
-        .buttonStyle(.plain)
-    }
-
-    private func weeklyStoryMetricGrid(_ story: WeeklyStorySnapshot) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-            weeklyStoryMetric("\(story.recordCount)", "笔记录")
-            weeklyStoryMetric(story.total.formatted(.cny), "支出")
-            weeklyStoryMetric("\(story.mealCount)", "次餐饮")
-            weeklyStoryMetric("\(story.activeDays)", "天有记录")
-        }
-    }
-
-    private func weeklyStoryMetric(_ value: String, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(value)
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(AppColors.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.68)
-            Text(label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(AppColors.subtext.opacity(0.82))
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 11)
-        .padding(.vertical, 9)
-        .background(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .fill(Color.white.opacity(0.48))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .stroke(Color.white.opacity(0.50), lineWidth: 1)
-        )
     }
 
     @ViewBuilder
@@ -587,85 +490,6 @@ struct InsightWebView: View {
         blocks.summary.contains("暂无复盘")
             ? "等记录多一点，再回来读这一周。"
             : "下周有新记录，再回来对照。"
-    }
-
-    private var weeklyStorySnapshot: WeeklyStorySnapshot {
-        let items = recentPositiveItems(days: 7)
-        guard !items.isEmpty else {
-            return WeeklyStorySnapshot(
-                headline: "这一周的故事还在开头",
-                recordCount: 0,
-                total: 0,
-                mealCount: 0,
-                activeDays: 0,
-                closing: "先留下几笔，AI 会把它们慢慢整理成一段能回看的周记。"
-            )
-        }
-
-        let grouped = Dictionary(grouping: items, by: \.category)
-        let top = grouped
-            .map { (category: $0.key, count: $0.value.count, total: $0.value.reduce(0) { $0 + $1.amount }) }
-            .sorted {
-                if $0.count == $1.count { return $0.total > $1.total }
-                return $0.count > $1.count
-            }
-            .first
-        let mealCount = grouped[.dining]?.count ?? 0
-        let activeDays = Set(items.map { Calendar.current.startOfDay(for: $0.createdAt) }).count
-        let total = items.reduce(0) { $0 + $1.amount }
-        let headline: String
-        switch top?.category {
-        case .transport:
-            headline = "这一周，你都在赶路"
-        case .dining:
-            headline = "这一周，你认真把自己喂饱"
-        case .shopping:
-            headline = "这一周，你给生活添了不少东西"
-        case .daily:
-            headline = "这一周，日常补给一直在发生"
-        case .health:
-            headline = "这一周，你有在照顾身体"
-        case .lodging:
-            headline = "这一周，有几段停留被记下"
-        case .entertainment:
-            headline = "这一周，你也给自己留了点休闲"
-        case .home:
-            headline = "这一周，家里的事占了不少"
-        case .social:
-            headline = "这一周，人情往来也留下了痕迹"
-        case .other:
-            headline = "这一周，生活留下了一些杂色"
-        case nil:
-            headline = "这一周，生活留下了一些痕迹"
-        }
-
-        return WeeklyStorySnapshot(
-            headline: headline,
-            recordCount: items.count,
-            total: total,
-            mealCount: mealCount,
-            activeDays: activeDays,
-            closing: weeklyStoryClosing(topCategory: top?.category, mealCount: mealCount, activeDays: activeDays)
-        )
-    }
-
-    private func weeklyStoryClosing(topCategory: HomeItem.Category?, mealCount: Int, activeDays: Int) -> String {
-        if mealCount >= 3 {
-            return "忙归忙，至少没有饿着自己。"
-        }
-        if activeDays >= 5 {
-            return "不是每天都很完整，但这一周确实被你认真留下来了。"
-        }
-        switch topCategory {
-        case .transport:
-            return "路上的时间不少，也说明你一直在往前走。"
-        case .health:
-            return "照顾身体这件事，也被这一周记住了。"
-        case .social:
-            return "这些往来以后再看，会比金额更有温度。"
-        default:
-            return "这些小事连起来，就是这一周真实的样子。"
-        }
     }
 
     private func recentPositiveItems(days: Int) -> [HomeItem] {
@@ -1344,12 +1168,14 @@ struct InsightWebView: View {
                     .padding(.bottom, 34)
                 }
                 .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle("AI 指令台")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("完成") {
+                        dismissKeyboard()
                         showAICommandSheet = false
                     }
                     .font(.system(size: 14, weight: .semibold))
@@ -1409,6 +1235,7 @@ struct InsightWebView: View {
 
     private func aiCommandPresetChip(_ title: String) -> some View {
         Button {
+            dismissKeyboard()
             aiCommandText = title
             runAICommand(title)
         } label: {
@@ -1578,6 +1405,9 @@ struct InsightWebView: View {
                 Text(item.createdAt.zhBillDateTime)
                     .font(.system(size: 11))
                     .foregroundStyle(AppColors.subtext)
+                Text(item.source.displayName)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.72))
             }
 
             Spacer(minLength: 8)
@@ -1642,14 +1472,18 @@ struct InsightWebView: View {
     }
 
     private func aiCommandDraftRow(_ draft: AICommandRecordDraft) -> some View {
+        let isConflict: Bool = {
+            if case .conflict = draft.status { return true }
+            return false
+        }()
         HStack(spacing: 10) {
-            Image(systemName: "plus.circle.fill")
+            Image(systemName: isConflict ? "exclamationmark.triangle.fill" : "plus.circle.fill")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(AppColors.accentDark.opacity(0.86))
+                .foregroundStyle(isConflict ? AppColors.lockGold.opacity(0.95) : AppColors.accentDark.opacity(0.86))
                 .frame(width: 28, height: 28)
                 .background(
                     Circle()
-                        .fill(AppColors.accent.opacity(0.10))
+                        .fill((isConflict ? AppColors.lockGold : AppColors.accent).opacity(0.10))
                 )
 
             VStack(alignment: .leading, spacing: 3) {
@@ -1659,6 +1493,12 @@ struct InsightWebView: View {
                 Text(draft.date.zhBillDateTime)
                     .font(.system(size: 11))
                     .foregroundStyle(AppColors.subtext)
+                if case let .conflict(message) = draft.status {
+                    Text(message)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color(hex: "8B6F38"))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Spacer(minLength: 8)
@@ -1668,6 +1508,13 @@ struct InsightWebView: View {
                 .foregroundStyle(AppColors.text.opacity(0.86))
         }
         .padding(.vertical, 7)
+        .padding(.horizontal, isConflict ? 9 : 0)
+        .background {
+            if isConflict {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(AppColors.lockGold.opacity(0.10))
+            }
+        }
     }
 
     @ViewBuilder
@@ -1677,20 +1524,30 @@ struct InsightWebView: View {
         } else if result.kind == .needsAmount {
             EmptyView()
         } else if !result.drafts.isEmpty {
+            let saveableDrafts = result.drafts.filter { draft in
+                if case .conflict = draft.status { return false }
+                return draft.amount > 0
+            }
             VStack(alignment: .leading, spacing: 9) {
                 Button {
-                    saveAICommandDrafts(result.drafts)
+                    saveAICommandDrafts(saveableDrafts)
                 } label: {
                     aiCommandPrimaryLabel(
-                        hasMemberAccess ? "确认保存 \(result.drafts.count) 条" : "开通会员保存全部",
+                        hasMemberAccess ? "确认保存 \(saveableDrafts.count) 条" : "开通会员保存全部",
                         systemImage: hasMemberAccess ? "checkmark.circle.fill" : "lock.fill"
                     )
                 }
                 .buttonStyle(.plain)
+                .disabled(saveableDrafts.isEmpty && hasMemberAccess)
+                .opacity(saveableDrafts.isEmpty && hasMemberAccess ? 0.52 : 1)
 
                 if let aiCommandSavedCount {
                     Text("已保存 \(aiCommandSavedCount) 条到账本。")
                         .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                } else if saveableDrafts.count < result.drafts.count {
+                    Text("高亮的记录疑似已经存在，已先排除；真要补记，可以改成单笔手动添加。")
+                        .font(.system(size: 12))
                         .foregroundStyle(AppColors.subtext)
                 } else if !hasMemberAccess {
                     Text("查询可以先看结果；批量补记属于会员能力，避免免费用户误触生成大量记录。")
@@ -1823,10 +1680,10 @@ struct InsightWebView: View {
         let groups = duplicateGroups(in: range)
         let suspects = uniqueAICommandItems(groups.flatMap(\.items))
         let summary = suspects.isEmpty
-            ? "\(range.label)没发现明显重复记录。"
-            : "\(range.label)发现 \(groups.count) 组、\(suspects.count) 笔可能重复的记录，先列出来给你核对。"
+            ? "\(range.label)没发现高置信导入重复。"
+            : "\(range.label)发现 \(groups.count) 组、\(suspects.count) 笔可能重复的智能导入记录，先列出来给你核对。"
         let detail = suspects.isEmpty
-            ? "这只是本地规则筛查，不会合并或删除任何记录。"
+            ? "主要检查同一张账单截图重复导入造成的同日、同金额、同分类记录；手动逐笔记录默认不草率判重。"
             : "已按疑似程度排序。判断依据：\(groups.prefix(3).map(\.reason).joined(separator: "；"))。不会自动合并或删除。"
         return AICommandResult(
             kind: .duplicateCheck,
@@ -1874,20 +1731,7 @@ struct InsightWebView: View {
 
         let draftWeekdays = Array(weekdays(in: range).suffix(5))
         let drafts = draftWeekdays.flatMap { day in
-            [
-                AICommandRecordDraft(
-                    title: "早高峰通勤",
-                    amount: resolvedAmount,
-                    category: .transport,
-                    date: dateBySetting(hour: 8, minute: 30, on: day)
-                ),
-                AICommandRecordDraft(
-                    title: "晚高峰通勤",
-                    amount: resolvedAmount,
-                    category: .transport,
-                    date: dateBySetting(hour: 18, minute: 30, on: day)
-                )
-            ]
+            commuteDrafts(for: day, amount: resolvedAmount)
         }
         guard !drafts.isEmpty else {
             return AICommandResult(
@@ -1902,7 +1746,11 @@ struct InsightWebView: View {
                 needsAmount: false
             )
         }
-        let total = drafts.reduce(0) { $0 + $1.amount }
+        let saveableDrafts = drafts.filter { draft in
+            if case .conflict = draft.status { return false }
+            return true
+        }
+        let total = saveableDrafts.reduce(0) { $0 + $1.amount }
         let amountSource: String
         if amount != nil {
             amountSource = "按输入金额"
@@ -1914,8 +1762,10 @@ struct InsightWebView: View {
         return AICommandResult(
             kind: .batchCreate,
             title: "补上\(range.label)通勤",
-            summary: "将生成 \(drafts.count) 条出行记录，合计 \(total.formatted(.cny))。",
-            detail: "按日期从早到晚排序，早上 08:30、晚上 18:30 各一条。保存前可先核对，不会自动写入账本。",
+            summary: "可新增 \(saveableDrafts.count) 条出行记录，合计 \(total.formatted(.cny))。",
+            detail: drafts.count == saveableDrafts.count
+                ? "按工作日早晚生成，保存前可先核对，不会自动写入账本。"
+                : "已发现部分工作日早晚通勤可能已经存在，先用高亮标出并排除保存。",
             items: [],
             bars: dailyBarsForDrafts(drafts, weekdays: draftWeekdays),
             drafts: drafts,
@@ -1963,7 +1813,11 @@ struct InsightWebView: View {
     private func dailyBarsForDrafts(_ drafts: [AICommandRecordDraft], weekdays: [Date]) -> [AICommandBar] {
         let calendar = Calendar.current
         return weekdays.map { day in
-            let dayDrafts = drafts.filter { calendar.isDate($0.date, inSameDayAs: day) }
+            let dayDrafts = drafts.filter {
+                guard calendar.isDate($0.date, inSameDayAs: day) else { return false }
+                if case .conflict = $0.status { return false }
+                return true
+            }
             return AICommandBar(
                 label: shortDateText(day),
                 amount: dayDrafts.reduce(0) { $0 + $1.amount },
@@ -1972,12 +1826,85 @@ struct InsightWebView: View {
         }
     }
 
+    private func commuteDrafts(for day: Date, amount: Double) -> [AICommandRecordDraft] {
+        [
+            commuteDraft(
+                title: "早高峰通勤",
+                date: dateBySetting(hour: 8, minute: 30, on: day),
+                amount: amount,
+                window: 6...10
+            ),
+            commuteDraft(
+                title: "晚高峰通勤",
+                date: dateBySetting(hour: 18, minute: 30, on: day),
+                amount: amount,
+                window: 16...21
+            )
+        ]
+    }
+
+    private func commuteDraft(
+        title: String,
+        date: Date,
+        amount: Double,
+        window: ClosedRange<Int>
+    ) -> AICommandRecordDraft {
+        if let existing = existingCommuteLikeItem(on: date, amount: amount, window: window) {
+            return AICommandRecordDraft(
+                title: title,
+                amount: amount,
+                category: .transport,
+                date: date,
+                status: .conflict("\(existing.createdAt.zhBillTime) 已有「\(existing.displayTitle)」\(existing.amount.formatted(.cny))，像同一段通勤，先不重复补。")
+            )
+        }
+        return AICommandRecordDraft(
+            title: title,
+            amount: amount,
+            category: .transport,
+            date: date
+        )
+    }
+
+    private func existingCommuteLikeItem(on date: Date, amount: Double, window: ClosedRange<Int>) -> HomeItem? {
+        let calendar = Calendar.current
+        guard isWeekday(date) else { return nil }
+        return homeViewModel.items
+            .filter { item in
+                guard item.amount > 0,
+                      item.category == .transport,
+                      calendar.isDate(item.createdAt, inSameDayAs: date),
+                      window.contains(calendar.component(.hour, from: item.createdAt)),
+                      commuteAmountMatchesHabit(existing: item.amount, proposed: amount) else {
+                    return false
+                }
+                let text = "\(item.title) \(item.displayEmotionTag)"
+                return containsAny(text, ["通勤", "地铁", "公交", "早高峰", "晚高峰", "上班", "下班"])
+                    || item.amount <= max(20, amount * 1.5)
+            }
+            .sorted { lhs, rhs in
+                abs(lhs.amount - amount) < abs(rhs.amount - amount)
+            }
+            .first
+    }
+
+    private func commuteAmountMatchesHabit(existing: Double, proposed: Double) -> Bool {
+        let centsDelta = abs(existing - proposed)
+        if centsDelta < 0.01 { return true }
+        let tolerance = max(1.0, min(6.0, proposed * 0.22))
+        return centsDelta <= tolerance
+    }
+
     private func inferredCommuteAmount() -> (amount: Double, count: Int)? {
         let candidates = filteredAICommandItems(range: aiCommandRecentRange(days: 90, label: "最近 90 天"), category: .transport)
             .filter { item in
                 let text = "\(item.title) \(item.displayEmotionTag)"
+                let hour = Calendar.current.component(.hour, from: item.createdAt)
+                let isRushHour = (6...10).contains(hour) || (16...21).contains(hour)
                 return item.amount > 0
                     && item.amount <= 80
+                    && isWeekday(item.createdAt)
+                    && isRushHour
                     && (containsAny(text, ["通勤", "地铁", "公交", "早高峰", "晚高峰", "上班", "下班"]) || item.amount <= 15)
             }
         guard !candidates.isEmpty else { return nil }
@@ -2067,13 +1994,17 @@ struct InsightWebView: View {
         var days: [Date] = []
         var cursor = calendar.startOfDay(for: range.start)
         while cursor < range.end {
-            let weekday = calendar.component(.weekday, from: cursor)
-            if weekday >= 2 && weekday <= 6 {
+            if isWeekday(cursor) {
                 days.append(cursor)
             }
             cursor = calendar.date(byAdding: .day, value: 1, to: cursor) ?? range.end
         }
         return days
+    }
+
+    private func isWeekday(_ date: Date) -> Bool {
+        let weekday = Calendar.current.component(.weekday, from: date)
+        return weekday >= 2 && weekday <= 6
     }
 
     private func daysBetween(_ start: Date, _ end: Date) -> Int {
@@ -2112,19 +2043,31 @@ struct InsightWebView: View {
     private func duplicateGroups(in range: AICommandTimeRange) -> [AICommandDuplicateGroup] {
         let calendar = Calendar.current
         let items = filteredAICommandItems(range: range, category: nil)
+            .filter { $0.source == .ocr || $0.draftMeta != nil }
         let exactGroups = Dictionary(grouping: items) { item in
             let cents = Int((item.amount * 100).rounded())
             let day = calendar.startOfDay(for: item.createdAt).timeIntervalSince1970
-            return "\(item.category.rawValue)-\(cents)-\(Int(day))"
+            let minuteBucket = calendar.component(.hour, from: item.createdAt) * 60 + calendar.component(.minute, from: item.createdAt)
+            let normalizedMinuteBucket = minuteBucket / 5
+            return "\(item.category.rawValue)-\(cents)-\(Int(day))-\(normalizedMinuteBucket)-\(normalizedDuplicateTitle(item.displayTitle))"
         }
         return exactGroups.values
             .filter { $0.count > 1 }
+            .filter { group in
+                let sources = Set(group.map(\.source))
+                let allImported = sources.allSatisfy { $0 == .ocr }
+                guard allImported || group.contains(where: { $0.draftMeta != nil }) else { return false }
+                return group.allSatisfy { item in
+                    group.contains { other in
+                        item.id != other.id && strictDuplicateMatch(item, other, calendar: calendar)
+                    }
+                }
+            }
             .map { group in
                 let sorted = group.sorted { $0.createdAt < $1.createdAt }
-                let sameTitleCount = Set(sorted.map { normalizedDuplicateTitle($0.displayTitle) }).count
-                let score = 80 + min(15, (sorted.count - 2) * 5) + (sameTitleCount <= 1 ? 5 : 0)
+                let score = 92 + min(8, (sorted.count - 2) * 4)
                 let first = sorted[0]
-                let reason = "\(first.createdAt.zhBillDateTime) 附近 \(first.category.rawValue) \(first.amount.formatted(.cny)) 重复 \(sorted.count) 笔"
+                let reason = "\(first.createdAt.zhBillDateTime) 附近 \(first.category.rawValue) \(first.amount.formatted(.cny)) 出现 \(sorted.count) 条智能导入记录"
                 return AICommandDuplicateGroup(
                     id: sorted.map { $0.id.uuidString }.joined(separator: "-"),
                     items: sorted,
@@ -2140,6 +2083,18 @@ struct InsightWebView: View {
                 }
                 return lhs.score > rhs.score
             }
+    }
+
+    private func strictDuplicateMatch(_ lhs: HomeItem, _ rhs: HomeItem, calendar: Calendar) -> Bool {
+        guard lhs.category == rhs.category,
+              abs(lhs.amount - rhs.amount) < 0.01,
+              calendar.isDate(lhs.createdAt, inSameDayAs: rhs.createdAt),
+              abs(lhs.createdAt.timeIntervalSince(rhs.createdAt)) <= 5 * 60 else {
+            return false
+        }
+        let leftTitle = normalizedDuplicateTitle(lhs.displayTitle)
+        let rightTitle = normalizedDuplicateTitle(rhs.displayTitle)
+        return leftTitle == rightTitle || leftTitle.contains(rightTitle) || rightTitle.contains(leftTitle)
     }
 
     private func normalizedDuplicateTitle(_ text: String) -> String {
@@ -2166,6 +2121,10 @@ struct InsightWebView: View {
 
     private func containsAny(_ text: String, _ keywords: [String]) -> Bool {
         keywords.contains { text.contains($0) }
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     private func aiCommandKindText(_ kind: AICommandKind) -> String {

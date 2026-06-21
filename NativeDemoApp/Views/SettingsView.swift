@@ -91,6 +91,10 @@ struct SettingsView: View {
         settingsViewModel.settings.hasMemberAccess
     }
 
+    private var isLifetimeMember: Bool {
+        settingsViewModel.memberTier.lowercased() == "lifetime" && hasMemberAccess
+    }
+
     private var hasPaidMemberTier: Bool {
         switch settingsViewModel.memberTier.lowercased() {
         case "monthly", "yearly", "lifetime":
@@ -229,8 +233,8 @@ struct SettingsView: View {
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(settingsInkAccent.opacity(0.92))
                                 .lineLimit(1)
-                            if settingsViewModel.memberTier.lowercased() == "lifetime" {
-                                Text("典藏")
+                            if isLifetimeMember {
+                                Text("永久典藏")
                                     .font(.system(size: 10, weight: .bold))
                                     .foregroundStyle(Color(hex: "A68445"))
                                     .padding(.horizontal, 7)
@@ -241,7 +245,7 @@ struct SettingsView: View {
                                     )
                             }
                         }
-                        Text(settingsViewModel.hasCloudSession ? "云端备份已准备好，照常记就好。" : "不用登录也能记；换机备份时再放进云端。")
+                        Text(identityCardSubtitle)
                             .font(.system(size: 12))
                             .foregroundStyle(AppColors.text.opacity(0.82))
                             .lineLimit(2)
@@ -252,10 +256,45 @@ struct SettingsView: View {
                 .padding(.horizontal, 28)
                 .padding(.top, 28)
                 .padding(.bottom, 42)
+
+                if isLifetimeMember {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            lifetimeIdentitySeal
+                        }
+                    }
+                    .padding(.trailing, 18)
+                    .padding(.bottom, 14)
+                }
             }
         }
         .buttonStyle(.plain)
         .frame(height: 150)
+    }
+
+    private var identityCardSubtitle: String {
+        if isLifetimeMember {
+            return "典藏主题、完整回放和长期故事已经为你保留。"
+        }
+        return settingsViewModel.hasCloudSession ? "云端备份已准备好，照常记就好。" : "不用登录也能记；换机备份时再放进云端。"
+    }
+
+    private var lifetimeIdentitySeal: some View {
+        Text("永久有效")
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(Color(hex: "8B6F38"))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(AppColors.lockGold.opacity(0.14))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(AppColors.lockGold.opacity(0.42), lineWidth: 1)
+            )
     }
 
     private var narrativeSealAvatar: some View {
@@ -493,6 +532,9 @@ struct SettingsView: View {
     }
 
     private var identityCardMeta: String {
+        if isLifetimeMember {
+            return "永久档案馆 · 随账号保留"
+        }
         let sync = settingsViewModel.syncEnabled ? "已同步云端" : "本地保存"
         let expiry = hasExpiredPaidMemberTier ? " · 会员待续期" : ""
         return "\(sync) · \(memberTierName)\(expiry)"
@@ -501,6 +543,9 @@ struct SettingsView: View {
     private var accountRowSummary: String {
         guard settingsViewModel.hasCloudSession else { return "未登录 · 可选" }
         let stats = accountMemoryStats
+        if isLifetimeMember {
+            return stats.traceCount > 0 ? "永久典藏 · \(stats.traceCount) 条痕迹" : "永久典藏 · 已解锁"
+        }
         if stats.traceCount > 0 {
             return "连续 \(stats.recordStreakDays) 天 · \(stats.traceCount) 条痕迹"
         }
@@ -856,7 +901,7 @@ struct SettingsView: View {
                 .scrollIndicators(.hidden)
                 .onAppear {
                     guard sheet == .appearance else { return }
-                    prepareCurrentThemeLocation(proxy)
+                    expandFamilyForCurrentTheme()
                 }
             }
         }
@@ -2049,18 +2094,18 @@ struct SettingsView: View {
 
     private func lifetimePreviewBackground(for theme: ThemeDefinition) -> Color? {
         switch theme.id {
-        case "lifetime_gilded_circuit": return Color(hex: "EEF1F4")
-        case "lifetime_archive_gold": return Color(hex: "F2EBE0")
-        case "lifetime_neon_cathedral": return Color(hex: "100E1A")
+        case "lifetime_gilded_circuit": return Color(hex: "EEF1F2")
+        case "lifetime_archive_gold": return Color(hex: "F4EFE5")
+        case "lifetime_neon_cathedral": return Color(hex: "10141C")
         default: return nil
         }
     }
 
     private func lifetimePreviewAccent(for theme: ThemeDefinition) -> Color? {
         switch theme.id {
-        case "lifetime_gilded_circuit": return Color(hex: "B8985C")
-        case "lifetime_archive_gold": return Color(hex: "A68445")
-        case "lifetime_neon_cathedral": return Color(hex: "D4A574")
+        case "lifetime_gilded_circuit": return Color(hex: "1F6F78")
+        case "lifetime_archive_gold": return Color(hex: "9A7032")
+        case "lifetime_neon_cathedral": return Color(hex: "CBA66D")
         default: return nil
         }
     }
@@ -2425,32 +2470,37 @@ struct SettingsView: View {
     }
 
     private var accountMemberBadge: some View {
-        Text("已解锁")
+        Text(isLifetimeMember ? "永久典藏" : "已解锁")
             .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(settingsInkAccent.opacity(0.86))
+            .foregroundStyle(isLifetimeMember ? Color(hex: "8B6F38") : settingsInkAccent.opacity(0.86))
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(
                 Capsule(style: .continuous)
-                    .fill(settingsInkAccent.opacity(0.11))
+                    .fill(isLifetimeMember ? AppColors.lockGold.opacity(0.14) : settingsInkAccent.opacity(0.11))
             )
             .overlay(
                 Capsule(style: .continuous)
-                    .stroke(settingsInkAccent.opacity(0.18), lineWidth: 1)
+                    .stroke(isLifetimeMember ? AppColors.lockGold.opacity(0.42) : settingsInkAccent.opacity(0.18), lineWidth: 1)
             )
     }
 
     private var accountHeaderMemberMeta: String {
+        if isLifetimeMember {
+            return "永久会员 · 已登录"
+        }
         let expiry = hasExpiredPaidMemberTier ? " · 待续期" : ""
         return "\(memberTierName) · 已登录\(expiry)"
     }
 
     private var accountMemberSection: some View {
-        accountPanel("我的生活档案") {
+        accountPanel(isLifetimeMember ? "永久典藏档案" : "我的生活档案") {
             accountMemoryCard
 
             if let validity = settingsViewModel.settings.memberValidityText {
                 accountInfoRow(title: "有效期", value: validity)
+            } else if isLifetimeMember {
+                accountInfoRow(title: "会员身份", value: "永久有效")
             }
 
             if hasMemberAccess || hasPaidMemberTier {
@@ -2503,18 +2553,18 @@ struct SettingsView: View {
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(hasMemberAccess ? "已解锁完整生活档案" : "你的生活档案正在形成")
+                    Text(accountMemoryTitle)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(AppColors.text)
-                    Text(hasMemberAccess ? "AI 正在持续整理和连接每一天。" : "开通会员后，这些痕迹会继续整理成周记、月章和回放。")
+                    Text(accountMemorySubtitle)
                         .font(.system(size: 12))
                         .foregroundStyle(AppColors.subtext.opacity(0.9))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: hasMemberAccess ? "checkmark.seal.fill" : "sparkles")
+                Image(systemName: isLifetimeMember ? "crown.fill" : (hasMemberAccess ? "checkmark.seal.fill" : "sparkles"))
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(settingsInkAccent.opacity(0.86))
+                    .foregroundStyle(isLifetimeMember ? AppColors.lockGold.opacity(0.95) : settingsInkAccent.opacity(0.86))
             }
 
             LazyVGrid(columns: accountMemoryMetricColumns, spacing: 10) {
@@ -2524,7 +2574,7 @@ struct SettingsView: View {
                 accountMemoryMetric(value: "\(stats.monthlyStoryCount)", label: "保存月份故事")
             }
 
-            Text("这些不是设置项，是你已经留下来的生活沉淀。")
+            Text(isLifetimeMember ? "这是随账号保留的完整生活档案，不只是一个设置开关。" : "这些不是设置项，是你已经留下来的生活沉淀。")
                 .font(.system(size: 11))
                 .foregroundStyle(AppColors.subtext.opacity(0.78))
                 .fixedSize(horizontal: false, vertical: true)
@@ -2535,7 +2585,7 @@ struct SettingsView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            settingsInkAccent.opacity(0.10),
+                            (isLifetimeMember ? AppColors.lockGold : settingsInkAccent).opacity(isLifetimeMember ? 0.14 : 0.10),
                             Color.white.opacity(0.58)
                         ],
                         startPoint: .topLeading,
@@ -2545,8 +2595,22 @@ struct SettingsView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(settingsInkAccent.opacity(0.16), lineWidth: 1)
+                .stroke(isLifetimeMember ? AppColors.lockGold.opacity(0.42) : settingsInkAccent.opacity(0.16), lineWidth: isLifetimeMember ? 1.2 : 1)
         )
+    }
+
+    private var accountMemoryTitle: String {
+        if isLifetimeMember {
+            return "永久档案馆已启封"
+        }
+        return hasMemberAccess ? "已解锁完整生活档案" : "你的生活档案正在形成"
+    }
+
+    private var accountMemorySubtitle: String {
+        if isLifetimeMember {
+            return "AI 会长期整理这些日子，典藏主题和完整回放随账号保留。"
+        }
+        return hasMemberAccess ? "AI 正在持续整理和连接每一天。" : "开通会员后，这些痕迹会继续整理成周记、月章和回放。"
     }
 
     private var accountSessionSection: some View {
