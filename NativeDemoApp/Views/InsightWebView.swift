@@ -1476,7 +1476,7 @@ struct InsightWebView: View {
             if case .conflict = draft.status { return true }
             return false
         }()
-        HStack(spacing: 10) {
+        return HStack(spacing: 10) {
             Image(systemName: isConflict ? "exclamationmark.triangle.fill" : "plus.circle.fill")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(isConflict ? AppColors.lockGold.opacity(0.95) : AppColors.accentDark.opacity(0.86))

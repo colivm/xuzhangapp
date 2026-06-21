@@ -2530,6 +2530,24 @@ struct SettingsView: View {
                         .padding(.vertical, 4)
                     }
                     .buttonStyle(.plain)
+                } else if hasMemberAccess {
+                    Button {
+                        showAccountSheet = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                            openMemberPricing()
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("查看完整生活档案包含")
+                                .font(.system(size: 14, weight: .medium))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .foregroundStyle(AppColors.accent.opacity(0.9))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
                 }
             } else {
                 accountInfoRow(title: "当前档位", value: memberTierName)
