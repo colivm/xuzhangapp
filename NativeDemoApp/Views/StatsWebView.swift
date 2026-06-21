@@ -660,7 +660,7 @@ struct StatsWebView: View {
     private var traceRhythmSummary: String {
         let active = traceRhythmPoints.filter { $0.count > 0 }.count
         guard active > 0 else { return "还在形成" }
-        return "\(active) 天有记录"
+        return selectedPeriod == .week ? "\(active) 天有记录" : "\(active) 周有记录"
     }
 
     private var traceClueInsightLines: [String] {
@@ -936,7 +936,7 @@ struct StatsWebView: View {
                     Text("多看一层")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(TraceColors.primaryText)
-                    Text(hasMemberAccess ? "会员可继续追问这段账本" : "本周免费 \(traceLifeInsightFreeRemaining)/\(LifeInsightService.freeWeeklyLimit) 次")
+                    Text(hasMemberAccess ? "会员可继续追问这段账本" : "每月赠送 \(traceLifeInsightFreeRemaining)/\(LifeInsightService.freeMonthlyLimit) 次完整解读")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(TraceColors.tertiaryText)
                 }
@@ -1104,7 +1104,7 @@ struct StatsWebView: View {
     private func traceDeepInsightButtonTitle(isUnlocked: Bool) -> String {
         if !hasTraceInsightData { return "先留下几笔" }
         if hasMemberAccess { return "继续追问这段账本" }
-        if isUnlocked { return "本周体验已展开" }
+        if isUnlocked { return "继续展开这条线索" }
         if canUseTraceDeepInsight { return "试一次多看一层" }
         return "解锁完整线索"
     }

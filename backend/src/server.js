@@ -238,11 +238,19 @@ app.post("/v1/iap/verify", requireAuth, async (req, res) => {
       productId,
       transactionId,
       signedTransactionInfo: req.body?.signedTransactionInfo,
+      expectedAppAccountToken: req.user.userId,
     });
 
     const existing = await getIAPTransactionByOriginalId(verified.originalTransactionId);
     if (existing && existing.userId !== req.user.userId) {
       return res.status(409).json({ ok: false, error: "TRANSACTION_ALREADY_BOUND" });
+    }
+    if (!verified.hasAppAccountToken && !existing) {
+      return res.status(409).json({
+        ok: false,
+        error: "APP_ACCOUNT_TOKEN_MISSING",
+        message: "Transaction is not bound to the current xLife account.",
+      });
     }
 
     await upsertIAPTransaction({

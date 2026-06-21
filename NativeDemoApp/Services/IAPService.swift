@@ -36,7 +36,7 @@ enum IAPServiceError: LocalizedError {
         case .unverifiedTransaction:
             return "交易校验失败，请稍后重试。"
         case .transactionExpired:
-            return "这笔 App Store 订阅已经过期。请使用购买时的 Apple ID 恢复有效订阅，或重新开通会员。"
+            return "这笔 App Store 订阅已经过期。请使用购买时绑定的手机号账号恢复有效订阅，或重新开通会员。"
         }
     }
 }
@@ -76,14 +76,19 @@ final class IAPService: ObservableObject {
         productsByTier[tier]?.displayPrice ?? fallback
     }
 
-    func purchase(tier: IAPTier) async throws -> IAPPurchaseVerification {
+    func purchase(tier: IAPTier, appAccountToken: UUID?) async throws -> IAPPurchaseVerification {
         if productsByTier[tier] == nil {
             try await loadProducts()
         }
         guard let product = productsByTier[tier] else {
             throw IAPServiceError.productNotFound
         }
-        let result = try await product.purchase()
+        let result: Product.PurchaseResult
+        if let appAccountToken {
+            result = try await product.purchase(options: [.appAccountToken(appAccountToken)])
+        } else {
+            result = try await product.purchase()
+        }
         switch result {
         case .success(let verification):
             let transaction = try verifiedTransaction(from: verification)

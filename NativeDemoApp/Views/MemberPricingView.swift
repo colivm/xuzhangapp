@@ -757,11 +757,15 @@ struct MemberPricingView: View {
             return
         }
         guard let tier = IAPTier(rawValue: plan.id) else { return }
+        guard let appAccountToken = UUID(uuidString: settingsViewModel.cloudUserId) else {
+            purchaseNotice = "当前账号状态异常，请重新登录手机号账号后再开通会员。"
+            return
+        }
         isPurchasing = true
         Task {
             defer { isPurchasing = false }
             do {
-                let payload = try await iapService.purchase(tier: tier)
+                let payload = try await iapService.purchase(tier: tier, appAccountToken: appAccountToken)
                 try await settingsViewModel.verifyIAPPurchase(payload)
                 await iapService.finish(transactionId: payload.transactionId)
                 purchaseNotice = "会员已开通，回放和导入额度已更新。"
@@ -782,7 +786,7 @@ struct MemberPricingView: View {
             do {
                 let payloads = try await iapService.restorePurchases()
                 guard !payloads.isEmpty else {
-                    purchaseNotice = "暂时没有找到可恢复的购买记录。请确认使用的是购买时的 Apple ID。"
+                    purchaseNotice = "暂时没有找到可恢复的购买记录。请确认已登录购买时绑定的手机号账号。"
                     return
                 }
                 var restoredPayload: IAPPurchaseVerification?

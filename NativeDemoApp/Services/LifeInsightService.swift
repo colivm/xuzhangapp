@@ -12,11 +12,11 @@ struct LifeInsightResult {
 final class LifeInsightService {
     static let shared = LifeInsightService()
 
-    static let freeWeeklyLimit = 1
+    static let freeMonthlyLimit = 5
 
     private enum Keys {
-        static let freeWeekKey = "life_insight_free_week_key"
-        static let freeWeekUsedCount = "life_insight_free_week_used_count"
+        static let freeMonthKey = "life_insight_free_month_key"
+        static let freeMonthUsedCount = "life_insight_free_month_used_count"
     }
 
     private let defaults: UserDefaults
@@ -29,8 +29,8 @@ final class LifeInsightService {
 
     func freeRemaining(isMember: Bool, now: Date = Date()) -> Int {
         guard !isMember else { return Int.max }
-        syncWeekIfNeeded(now: now)
-        return max(0, Self.freeWeeklyLimit - defaults.integer(forKey: Keys.freeWeekUsedCount))
+        syncMonthIfNeeded(now: now)
+        return max(0, Self.freeMonthlyLimit - defaults.integer(forKey: Keys.freeMonthUsedCount))
     }
 
     func canUseDeepInsight(isMember: Bool, now: Date = Date()) -> Bool {
@@ -39,9 +39,9 @@ final class LifeInsightService {
 
     func markDeepInsightUsed(isMember: Bool, now: Date = Date()) {
         guard !isMember else { return }
-        syncWeekIfNeeded(now: now)
-        let used = defaults.integer(forKey: Keys.freeWeekUsedCount)
-        defaults.set(min(Self.freeWeeklyLimit, used + 1), forKey: Keys.freeWeekUsedCount)
+        syncMonthIfNeeded(now: now)
+        let used = defaults.integer(forKey: Keys.freeMonthUsedCount)
+        defaults.set(min(Self.freeMonthlyLimit, used + 1), forKey: Keys.freeMonthUsedCount)
     }
 
     func buildTraceInsight(items: [HomeItem], periodLabel: String, now: Date = Date()) -> LifeInsightResult {
@@ -123,19 +123,17 @@ final class LifeInsightService {
         )
     }
 
-    private func syncWeekIfNeeded(now: Date) {
-        let key = weekKey(now: now)
-        if defaults.string(forKey: Keys.freeWeekKey) != key {
-            defaults.set(key, forKey: Keys.freeWeekKey)
-            defaults.set(0, forKey: Keys.freeWeekUsedCount)
+    private func syncMonthIfNeeded(now: Date) {
+        let key = monthKey(now: now)
+        if defaults.string(forKey: Keys.freeMonthKey) != key {
+            defaults.set(key, forKey: Keys.freeMonthKey)
+            defaults.set(0, forKey: Keys.freeMonthUsedCount)
         }
     }
 
-    private func weekKey(now: Date) -> String {
-        var iso = Calendar(identifier: .iso8601)
-        iso.timeZone = calendar.timeZone
-        let comps = iso.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)
-        return "\(comps.yearForWeekOfYear ?? 0)-W\(String(format: "%02d", comps.weekOfYear ?? 0))"
+    private func monthKey(now: Date) -> String {
+        let comps = calendar.dateComponents([.year, .month], from: now)
+        return "\(comps.year ?? 0)-\(String(format: "%02d", comps.month ?? 0))"
     }
 
     private func categoryStats(from items: [HomeItem]) -> [(category: HomeItem.Category, count: Int, total: Double)] {

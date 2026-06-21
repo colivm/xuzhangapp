@@ -40,9 +40,15 @@ enum AuthServiceError: LocalizedError {
         case .iapVerifyFailed(let code, let message):
             switch code {
             case "TRANSACTION_EXPIRED":
-                return "这笔 App Store 订阅已经过期。请使用购买时的 Apple ID 恢复有效订阅，或重新开通会员。"
+                return "这笔 App Store 订阅已经过期。请使用购买时绑定的手机号账号恢复有效订阅，或重新开通会员。"
             case "TRANSACTION_ALREADY_BOUND":
                 return "这笔 App Store 交易已经绑定到另一个叙账账号。请登录购买时绑定的账号，或联系客服处理。"
+            case "APP_ACCOUNT_MISMATCH":
+                return "这笔 App Store 订阅属于另一个叙账账号，请登录购买时的手机号账号恢复。"
+            case "APP_ACCOUNT_TOKEN_MISSING":
+                return "这笔订阅还没有绑定到当前手机号账号，请重新开通或联系客服处理。"
+            case "APP_ACCOUNT_TOKEN_REQUIRED":
+                return "请先登录手机号账号，再开通或恢复会员。"
             case "TRANSACTION_REVOKED":
                 return "这笔 App Store 交易已被撤销，暂时不能恢复会员权益。"
             case "PRODUCT_MISMATCH", "TRANSACTION_MISMATCH":

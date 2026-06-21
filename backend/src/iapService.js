@@ -13,7 +13,7 @@ export function tierForProductId(productId) {
   return Object.entries(config.iapProductIds).find(([, id]) => id && id === productId)?.[0] || "";
 }
 
-export async function verifyAppStoreTransaction({ productId, transactionId, signedTransactionInfo }) {
+export async function verifyAppStoreTransaction({ productId, transactionId, signedTransactionInfo, expectedAppAccountToken }) {
   ensureAppleConfig();
   if (!tierForProductId(productId)) {
     throw new IAPVerifyError("UNKNOWN_PRODUCT", "Unknown IAP productId.", 400);
@@ -22,6 +22,7 @@ export async function verifyAppStoreTransaction({ productId, transactionId, sign
   const transactionInfo = await resolveTransactionInfo({ transactionId, signedTransactionInfo });
   const payload = decodeJWSPayload(transactionInfo.signedTransactionInfo);
   validateTransactionPayload(payload, { productId, transactionId });
+  const appAccountToken = validateAppAccountToken(payload, expectedAppAccountToken);
 
   const tier = tierForProductId(payload.productId);
   const memberExpiresAt = tier === "lifetime" ? null : expiresAtFromPayload(payload);
@@ -37,6 +38,8 @@ export async function verifyAppStoreTransaction({ productId, transactionId, sign
     memberExpiresAt,
     environment: payload.environment || transactionInfo.environment || null,
     signedTransactionInfo: transactionInfo.signedTransactionInfo,
+    appAccountToken,
+    hasAppAccountToken: Boolean(appAccountToken),
   };
 }
 
@@ -77,10 +80,7 @@ async function fetchTransactionInfo(transactionId) {
 }
 
 async function resolveTransactionInfo({ transactionId, signedTransactionInfo }) {
-  const signed = String(signedTransactionInfo || "").trim();
-  if (signed) {
-    return { signedTransactionInfo: signed, environment: null };
-  }
+  void signedTransactionInfo;
   return fetchTransactionInfo(transactionId);
 }
 
@@ -115,6 +115,25 @@ function validateTransactionPayload(payload, { productId, transactionId }) {
   if (payload.revocationDate) {
     throw new IAPVerifyError("TRANSACTION_REVOKED", "Transaction has been revoked.", 400);
   }
+}
+
+function validateAppAccountToken(payload, expectedAppAccountToken) {
+  const expected = normalizeAppAccountToken(expectedAppAccountToken);
+  const actual = normalizeAppAccountToken(payload.appAccountToken);
+  if (!expected) {
+    throw new IAPVerifyError("APP_ACCOUNT_TOKEN_REQUIRED", "Current account is required to verify App Store membership.", 400);
+  }
+  if (!actual) {
+    return null;
+  }
+  if (actual !== expected) {
+    throw new IAPVerifyError("APP_ACCOUNT_MISMATCH", "Transaction belongs to another xLife account.", 409);
+  }
+  return actual;
+}
+
+function normalizeAppAccountToken(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function expiresAtFromPayload(payload) {

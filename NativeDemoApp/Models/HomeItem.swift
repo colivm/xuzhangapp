@@ -206,6 +206,11 @@ struct HomeItem: Identifiable, Codable, Equatable {
                 return "恢复护理安排"
             }
         case .dining:
+            if containsAny(text, ["夜市", "夜摊", "夜市摊", "大排档"]) {
+                if containsAny(text, ["烤", "烧烤", "串", "生蚝", "海鲜", "小龙虾"]) { return "夜市摊上吃点热的" }
+                if containsAny(text, ["炒饭", "炒粉", "炒面", "米粉", "粉", "面", "饭"]) { return "夜市里的一份热乎" }
+                return "夜市里吃点东西"
+            }
             if containsAny(text, ["夜宵", "深夜", "夜里", "凌晨"]) { return "夜里补一点" }
             if let lateNightTag = lateNightDiningEmotionTag(title: text, date: date) {
                 return lateNightTag
@@ -230,7 +235,8 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["午餐", "午饭", "中午"]) { return "中午一顿饭" }
             if containsAny(text, ["晚餐", "晚饭"]) { return "晚饭时间坐一会儿" }
             if containsAny(text, ["咖啡", "拿铁", "美式", "奶茶", "饮品", "茶"]) { return "买杯喝的" }
-            if containsAny(text, ["火锅", "烤肉", "烧烤", "串串"]) { return "认真吃一顿" }
+            if containsAny(text, ["烤生蚝", "烤鱿鱼", "烤冷面", "烧烤", "串串", "烤串", "大排档"]) { return "路边摊吃点热闹" }
+            if containsAny(text, ["火锅", "烤肉"]) { return "认真吃一顿" }
             if containsAny(text, ["面", "粉", "馄饨", "饺子", "盖饭", "米线", "麻辣烫"]) { return "热乎一碗记下" }
             if containsAny(text, ["甜品", "蛋糕", "面包", "冰淇淋", "冰粉", "糖水"]) { return "给今天一点甜" }
             if containsAny(text, ["水果", "酸奶", "轻食", "沙拉"]) { return "轻轻补一点" }
@@ -312,6 +318,10 @@ struct HomeItem: Identifiable, Codable, Equatable {
                 return "加班后吃点热乎的"
             }
             return "晚点吃上了"
+        }
+        if containsAny(text, ["夜市", "夜摊", "大排档"]) {
+            if containsAny(text, ["烤", "烧烤", "串", "生蚝", "海鲜", "小龙虾"]) { return "夜市摊上吃点热的" }
+            return "夜市里吃点东西"
         }
         if containsAny(text, ["热乎", "热饭", "热食", "热汤", "热的", "面", "粉", "馄饨", "麻辣烫"]) {
             return "夜里一口热的"
