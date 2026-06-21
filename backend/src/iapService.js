@@ -13,14 +13,14 @@ export function tierForProductId(productId) {
   return Object.entries(config.iapProductIds).find(([, id]) => id && id === productId)?.[0] || "";
 }
 
-export async function verifyAppStoreTransaction({ productId, transactionId }) {
+export async function verifyAppStoreTransaction({ productId, transactionId, signedTransactionInfo }) {
   ensureAppleConfig();
   if (!tierForProductId(productId)) {
     throw new IAPVerifyError("UNKNOWN_PRODUCT", "Unknown IAP productId.", 400);
   }
 
-  const applePayload = await fetchTransactionInfo(transactionId);
-  const payload = decodeJWSPayload(applePayload.signedTransactionInfo);
+  const transactionInfo = await resolveTransactionInfo({ transactionId, signedTransactionInfo });
+  const payload = decodeJWSPayload(transactionInfo.signedTransactionInfo);
   validateTransactionPayload(payload, { productId, transactionId });
 
   const tier = tierForProductId(payload.productId);
@@ -35,8 +35,8 @@ export async function verifyAppStoreTransaction({ productId, transactionId }) {
     originalTransactionId: String(payload.originalTransactionId || payload.transactionId || transactionId),
     memberTier: tier,
     memberExpiresAt,
-    environment: payload.environment || applePayload.environment || null,
-    signedTransactionInfo: applePayload.signedTransactionInfo,
+    environment: payload.environment || transactionInfo.environment || null,
+    signedTransactionInfo: transactionInfo.signedTransactionInfo,
   };
 }
 
@@ -74,6 +74,14 @@ async function fetchTransactionInfo(transactionId) {
     throw new IAPVerifyError("APPLE_BAD_RESPONSE", "Apple response missing signedTransactionInfo.", 502);
   }
   return json;
+}
+
+async function resolveTransactionInfo({ transactionId, signedTransactionInfo }) {
+  const signed = String(signedTransactionInfo || "").trim();
+  if (signed) {
+    return { signedTransactionInfo: signed, environment: null };
+  }
+  return fetchTransactionInfo(transactionId);
 }
 
 function makeAppStoreServerToken() {

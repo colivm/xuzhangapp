@@ -90,8 +90,10 @@ struct InsightWebView: View {
     }
 
     private struct AICommandCategoryIntent: Equatable {
-        var category: HomeItem.Category
+        var categories: [HomeItem.Category]
         var label: String
+        var keywords: [String]
+        var requiresKeywordMatch: Bool = false
     }
 
     private struct AICommandDuplicateGroup: Identifiable, Equatable {
@@ -1650,7 +1652,7 @@ struct InsightWebView: View {
     }
 
     private func buildQueryResult(range: AICommandTimeRange, categoryIntent: AICommandCategoryIntent?) -> AICommandResult {
-        let items = filteredAICommandItems(range: range, category: categoryIntent?.category)
+        let items = filteredAICommandItems(range: range, intent: categoryIntent)
         let total = items.reduce(0) { $0 + $1.amount }
         let categoryText = categoryIntent?.label ?? "全部"
         let rangeNote = range.isFallback ? "「最近/这阵子」先按最近 7 天整理。" : "\(range.label)已整理。"
@@ -1788,11 +1790,34 @@ struct InsightWebView: View {
     }
 
     private func filteredAICommandItems(range: AICommandTimeRange, category: HomeItem.Category?) -> [HomeItem] {
+        let intent = category.map { AICommandCategoryIntent(categories: [$0], label: $0.label, keywords: []) }
+        return filteredAICommandItems(range: range, intent: intent)
+    }
+
+    private func filteredAICommandItems(range: AICommandTimeRange, intent: AICommandCategoryIntent?) -> [HomeItem] {
         return homeViewModel.items.filter { item in
-            item.amount > 0
-                && range.contains(item.createdAt)
-                && (category == nil || item.category == category)
+            guard item.amount > 0, range.contains(item.createdAt) else { return false }
+            guard let intent else { return true }
+            let categoryMatched = intent.categories.contains(item.category)
+            let keywordMatched = aiCommandItemMatchesKeywords(item, keywords: intent.keywords)
+            return intent.requiresKeywordMatch
+                ? categoryMatched && keywordMatched
+                : categoryMatched || keywordMatched
         }
+    }
+
+    private func aiCommandItemMatchesKeywords(_ item: HomeItem, keywords: [String]) -> Bool {
+        guard !keywords.isEmpty else { return false }
+        let text = [
+            item.title,
+            item.emotionTag,
+            item.displayEmotionTag,
+            item.category.rawValue,
+            item.category.label
+        ]
+            .joined(separator: " ")
+            .lowercased()
+        return containsAny(text, keywords)
     }
 
     private func dailyBars(range: AICommandTimeRange, items: [HomeItem]) -> [AICommandBar] {
@@ -2012,14 +2037,45 @@ struct InsightWebView: View {
     }
 
     private func aiCommandCategoryIntent(from text: String) -> AICommandCategoryIntent? {
-        let lexicon: [(HomeItem.Category, String, [String])] = [
-            (.dining, "餐饮", ["餐饮", "吃饭", "吃的", "饭", "外卖", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "咖啡", "奶茶"]),
-            (.transport, "交通", ["交通", "出行", "通勤", "地铁", "公交", "打车", "出租", "网约车", "滴滴", "停车", "加油", "路费"]),
-            (.daily, "日用", ["日用", "超市", "纸巾", "清洁", "生活用品", "洗衣", "洗护", "日用品"]),
-            (.health, "健康", ["健康", "药", "买药", "医院", "挂号", "门诊", "运动补给", "补剂", "体检"])
+        let lexicon: [AICommandCategoryIntent] = [
+            AICommandCategoryIntent(
+                categories: [.health, .shopping, .entertainment, .daily],
+                label: "运动",
+                keywords: ["运动", "健身", "训练", "跑步", "瑜伽", "游泳", "球场", "私教", "课程", "护具", "运动鞋", "运动服", "健身卡", "月卡", "年卡", "补给", "能量", "恢复", "按摩", "锻炼"],
+                requiresKeywordMatch: true
+            ),
+            AICommandCategoryIntent(
+                categories: [.dining],
+                label: "餐饮",
+                keywords: ["餐饮", "吃饭", "吃的", "饭", "美食", "外卖", "食堂", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "简餐", "咖啡", "奶茶", "饮品", "饭店", "餐厅", "面", "粉", "包子", "盒饭"]
+            ),
+            AICommandCategoryIntent(
+                categories: [.transport],
+                label: "交通",
+                keywords: ["交通", "出行", "通勤", "地铁", "公交", "打车", "出租", "网约车", "滴滴", "停车", "加油", "路费", "高铁", "火车", "机票", "机场"]
+            ),
+            AICommandCategoryIntent(
+                categories: [.daily, .home],
+                label: "日用",
+                keywords: ["日用", "超市", "便利店", "纸巾", "清洁", "生活用品", "洗衣", "洗护", "日用品", "买菜", "水果", "蔬菜", "居家"]
+            ),
+            AICommandCategoryIntent(
+                categories: [.health],
+                label: "健康",
+                keywords: ["健康", "药", "买药", "医院", "挂号", "门诊", "体检", "护理", "牙", "眼镜"]
+            ),
+            AICommandCategoryIntent(
+                categories: [.shopping],
+                label: "购物",
+                keywords: ["购物", "衣服", "鞋", "包", "淘宝", "京东", "拼多多", "买到", "添置"]
+            ),
+            AICommandCategoryIntent(
+                categories: [.entertainment],
+                label: "娱乐",
+                keywords: ["娱乐", "电影", "游戏", "演出", "门票", "放松", "唱歌", "ktv"]
+            )
         ]
-        guard let matched = lexicon.first(where: { containsAny(text, $0.2) }) else { return nil }
-        return AICommandCategoryIntent(category: matched.0, label: matched.1)
+        return lexicon.first { containsAny(text, $0.keywords) }
     }
 
     private func sortedAICommandEvidenceItems(_ items: [HomeItem]) -> [HomeItem] {

@@ -249,6 +249,7 @@ struct ContentView: View {
         .sheet(isPresented: $showMemberPricing) {
             MemberPricingView(highlightPlanId: pricingHighlightPlanId)
                 .environmentObject(settingsViewModel)
+                .environmentObject(homeViewModel)
                 .onDisappear {
                     pricingHighlightPlanId = nil
                 }

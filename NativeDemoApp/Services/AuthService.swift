@@ -27,6 +27,7 @@ enum LoginType: String, Codable {
 enum AuthServiceError: LocalizedError {
     case invalidURL
     case badStatus(Int, String)
+    case iapVerifyFailed(code: String, message: String)
     case decodeFailed
     case unsupported
 
@@ -36,6 +37,19 @@ enum AuthServiceError: LocalizedError {
             return "后端服务地址配置异常。"
         case .badStatus(let code, let body):
             return "请求失败 (\(code))：\(body)"
+        case .iapVerifyFailed(let code, let message):
+            switch code {
+            case "TRANSACTION_EXPIRED":
+                return "这笔 App Store 订阅已经过期。请使用购买时的 Apple ID 恢复有效订阅，或重新开通会员。"
+            case "TRANSACTION_ALREADY_BOUND":
+                return "这笔 App Store 交易已经绑定到另一个叙账账号。请登录购买时绑定的账号，或联系客服处理。"
+            case "TRANSACTION_REVOKED":
+                return "这笔 App Store 交易已被撤销，暂时不能恢复会员权益。"
+            case "PRODUCT_MISMATCH", "TRANSACTION_MISMATCH":
+                return "这笔 App Store 交易和当前会员商品不一致，请重新发起购买或恢复。"
+            default:
+                return message.isEmpty ? "会员交易暂时没有校验成功，请稍后再试。" : message
+            }
         case .decodeFailed:
             return "服务器返回格式异常。"
         case .unsupported:
@@ -86,6 +100,8 @@ private struct IAPVerifyResponse: Decodable {
     let ok: Bool
     let memberTier: String?
     let memberExpiresAt: String?
+    let error: String?
+    let message: String?
 }
 
 protocol AuthServiceProtocol {
@@ -238,6 +254,10 @@ final class AuthService: AuthServiceProtocol {
         let (data, response, bodyText) = try await data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AuthServiceError.badStatus(-1, "") }
         guard (200 ..< 300).contains(http.statusCode) else {
+            if let decoded = try? JSONDecoder().decode(IAPVerifyResponse.self, from: data),
+               let error = decoded.error {
+                throw AuthServiceError.iapVerifyFailed(code: error, message: decoded.message ?? "")
+            }
             throw AuthServiceError.badStatus(http.statusCode, bodyText)
         }
         let decoded = try JSONDecoder().decode(IAPVerifyResponse.self, from: data)

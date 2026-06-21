@@ -4,6 +4,7 @@ import SwiftUI
 
 struct MemberPricingView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
+    @EnvironmentObject private var homeViewModel: HomeViewModel
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var iapService = IAPService.shared
     let highlightPlanId: String?
@@ -62,11 +63,7 @@ struct MemberPricingView: View {
                         if !isMember {
                             heroSection
                             memberValueSection
-                            memberBoundarySection
                         }
-
-                        // ── Benefits ──
-                        benefitsSection
 
                         // ── Pricing ──
                         if !isMember {
@@ -74,6 +71,10 @@ struct MemberPricingView: View {
                         } else {
                             currentMemberBadge
                         }
+
+                        memberBoundarySection
+                        benefitsSection
+                        lifetimeArchiveSection
 
                         // ── Privacy ──
                         freeQuotaNote
@@ -432,6 +433,159 @@ struct MemberPricingView: View {
         )
     }
 
+    private var lifetimeArchiveSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.lockGold)
+                Text("永久会员专属")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.lockGold)
+                Spacer()
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(lifetimeArchiveStats.traceCount > 0 ? "你的生活档案正在形成" : "从第一笔开始，生活档案会慢慢形成")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                Text("因为生活档案会越来越值钱。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext)
+            }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
+                lifetimeArchiveMetric("\(lifetimeArchiveStats.continuousDays)天", "连续记录")
+                lifetimeArchiveMetric("\(lifetimeArchiveStats.traceCount)条", "生活痕迹")
+                lifetimeArchiveMetric("\(lifetimeArchiveStats.weekCount)篇", "周记素材")
+                lifetimeArchiveMetric("\(lifetimeArchiveStats.monthCount)个月", "故事跨度")
+            }
+
+            HStack(alignment: .center, spacing: 8) {
+                lifetimeStage("17天", "记录")
+                lifetimeStageArrow
+                lifetimeStage("170天", "习惯")
+                lifetimeStageArrow
+                lifetimeStage("1700天", "人生")
+            }
+            .padding(.vertical, 4)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("这些数字不会越来越小。它们会陪你一起长大。")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.text.opacity(0.82))
+                Text("有些账单会被忘记。但那些日子，不应该。")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            AppColors.lockGold.opacity(0.16),
+                            Color.white.opacity(0.62),
+                            AppColors.accent.opacity(0.08)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppColors.lockGold.opacity(0.28), lineWidth: 1)
+        )
+    }
+
+    private func lifetimeArchiveMetric(_ value: String, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text)
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 9)
+        .padding(.horizontal, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.52))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.38), lineWidth: 1)
+        )
+    }
+
+    private func lifetimeStage(_ day: String, _ meaning: String) -> some View {
+        VStack(spacing: 3) {
+            Text(day)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text)
+            Text(meaning)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var lifetimeStageArrow: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(AppColors.lockGold.opacity(0.72))
+    }
+
+    private var lifetimeArchiveStats: (continuousDays: Int, traceCount: Int, weekCount: Int, monthCount: Int) {
+        let positiveItems = homeViewModel.items.filter { $0.amount > 0 }
+        guard !positiveItems.isEmpty else {
+            return (0, 0, 0, 0)
+        }
+
+        let calendar = Calendar.current
+        let days = Set(positiveItems.map { calendar.startOfDay(for: $0.createdAt) })
+        let continuousDays = continuousRecordDays(from: days, calendar: calendar)
+        let weekKeys = Set(positiveItems.map { weekKey(for: $0.createdAt, calendar: calendar) })
+        let monthKeys = Set(positiveItems.map { monthKey(for: $0.createdAt, calendar: calendar) })
+        return (
+            max(1, continuousDays),
+            positiveItems.count,
+            weekKeys.count,
+            monthKeys.count
+        )
+    }
+
+    private func continuousRecordDays(from days: Set<Date>, calendar: Calendar) -> Int {
+        guard !days.isEmpty else { return 0 }
+        var cursor = calendar.startOfDay(for: Date())
+        if !days.contains(cursor), let latest = days.max() {
+            cursor = latest
+        }
+        var count = 0
+        while days.contains(cursor) {
+            count += 1
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = previous
+        }
+        return count
+    }
+
+    private func weekKey(for date: Date, calendar: Calendar) -> String {
+        let year = calendar.component(.yearForWeekOfYear, from: date)
+        let week = calendar.component(.weekOfYear, from: date)
+        return "\(year)-\(week)"
+    }
+
+    private func monthKey(for date: Date, calendar: Calendar) -> String {
+        let year = calendar.component(.year, from: date)
+        let month = calendar.component(.month, from: date)
+        return "\(year)-\(month)"
+    }
+
     // MARK: - Privacy
 
     private var privacyNote: some View {
@@ -686,5 +840,6 @@ struct MemberPricingView_Previews: PreviewProvider {
     static var previews: some View {
         MemberPricingView()
             .environmentObject(SettingsViewModel())
+            .environmentObject(HomeViewModel())
     }
 }

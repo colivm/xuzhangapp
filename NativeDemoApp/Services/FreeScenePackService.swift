@@ -74,7 +74,7 @@ final class FreeScenePackService {
     func replacePack(atSlot slot: Int, oldId: String, newId: String, from definitions: [ScenePackDefinition]) {
         var ids = currentPackIds(from: definitions)
         guard ids.indices.contains(slot), ids[slot] == oldId, !ids.contains(newId) else { return }
-        guard !extensionLockedIds.contains(newId) else { return }
+        guard isInFirstWeek() || !extensionLockedIds.contains(newId) else { return }
         guard definitions.contains(where: { $0.id == newId }) else { return }
 
         ids[slot] = newId
@@ -105,8 +105,9 @@ final class FreeScenePackService {
 
     func replaceableCandidates(from definitions: [ScenePackDefinition]) -> [ScenePackDefinition] {
         let currentIds = Set(currentPackIds(from: definitions))
+        let allowsExtensionPacks = isInFirstWeek()
         return definitions.filter { pack in
-            !currentIds.contains(pack.id) && !extensionLockedIds.contains(pack.id)
+            !currentIds.contains(pack.id) && (allowsExtensionPacks || !extensionLockedIds.contains(pack.id))
         }
     }
 

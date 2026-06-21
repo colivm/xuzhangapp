@@ -5,6 +5,7 @@ import UIKit
 struct RecordView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
+    @Environment(\.colorScheme) private var colorScheme
     var onSaved: (() -> Void)? = nil
     var onShowMemberPricing: (() -> Void)? = nil
     @State private var selectedEntryMode: EntryMode = .manual
@@ -250,7 +251,7 @@ struct RecordView: View {
     }
 
     private func prepareFreeLockedSceneHintIfNeeded() {
-        guard !isMember, hasValidAmount else {
+        guard !isMember, hasValidAmount, !freeScenePackService.isInFirstWeek() else {
             freeLockedSceneHint = nil
             return
         }
@@ -1417,7 +1418,7 @@ struct RecordView: View {
 
                     Text(homeViewModel.inputAmount.isEmpty ? "0.00" : homeViewModel.inputAmount)
                         .font(.system(size: 42, weight: .bold, design: .rounded))
-                        .foregroundStyle(homeViewModel.inputAmount.isEmpty ? AppColors.subtext.opacity(0.46) : recordInk)
+                        .foregroundStyle(amountDisplayTextColor(isPlaceholder: homeViewModel.inputAmount.isEmpty))
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
                         .contentTransition(.numericText())
@@ -1614,16 +1615,18 @@ struct RecordView: View {
     }
 
     private var keyboardCloseButton: some View {
-        Button {
+        let foreground = amountKeyboardTextColor(isAccent: true)
+        let fill = amountKeyboardKeyFill(isAccent: true)
+        return Button {
             dismissKeyboard()
         } label: {
             Image(systemName: "keyboard.chevron.compact.down")
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(recordAccent)
+                .foregroundStyle(foreground)
                 .frame(width: 42, height: 34)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.78))
+                        .fill(fill)
                 )
         }
         .buttonStyle(.plain)
@@ -1673,15 +1676,24 @@ struct RecordView: View {
     }
 
     private func amountPadForeground(isAccent: Bool) -> Color {
-        isAccent ? recordAccent : recordInk.opacity(0.92)
+        amountKeyboardTextColor(isAccent: isAccent)
+    }
+
+    private func amountDisplayTextColor(isPlaceholder: Bool) -> Color {
+        if colorScheme == .dark {
+            return isPlaceholder
+                ? Color(red: 0.28, green: 0.25, blue: 0.19).opacity(0.64)
+                : Color(red: 0.10, green: 0.09, blue: 0.07)
+        }
+        return isPlaceholder ? AppColors.subtext.opacity(0.46) : recordInk
     }
 
     private func amountPadFill(isAccent: Bool) -> Color {
-        isAccent ? Color.white.opacity(0.72) : Color.white.opacity(0.92)
+        amountKeyboardKeyFill(isAccent: isAccent)
     }
 
     private func amountPadStroke(isAccent: Bool) -> Color {
-        isAccent ? recordAccent.opacity(0.22) : Color.white.opacity(0.7)
+        amountKeyboardKeyStroke(isAccent: isAccent)
     }
 
     private func quickKeyButton(_ title: String, isAccent: Bool = false, action: @escaping () -> Void) -> some View {
@@ -1692,7 +1704,7 @@ struct RecordView: View {
     }
 
     private func quickKeyButtonLabel(_ title: String, isAccent: Bool) -> some View {
-        let foreground = isAccent ? recordAccent : recordInk.opacity(0.88)
+        let foreground = amountKeyboardTextColor(isAccent: isAccent)
         return Text(title)
             .font(.system(size: 13, weight: .semibold, design: .rounded))
             .foregroundStyle(foreground)
@@ -1703,15 +1715,42 @@ struct RecordView: View {
     }
 
     private func quickKeyButtonBackground(isAccent: Bool) -> some View {
-        let fill = isAccent ? recordAccent.opacity(0.12) : Color.white.opacity(0.78)
+        let fill = amountKeyboardKeyFill(isAccent: isAccent)
         return RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(fill)
     }
 
     private func quickKeyButtonBorder(isAccent: Bool) -> some View {
-        let stroke = isAccent ? recordAccent.opacity(0.25) : AppColors.line.opacity(0.76)
+        let stroke = amountKeyboardKeyStroke(isAccent: isAccent)
         return RoundedRectangle(cornerRadius: 12, style: .continuous)
             .stroke(stroke, lineWidth: 1)
+    }
+
+    private func amountKeyboardTextColor(isAccent: Bool) -> Color {
+        if colorScheme == .dark {
+            return isAccent
+                ? Color(red: 0.47, green: 0.34, blue: 0.12)
+                : Color(red: 0.13, green: 0.12, blue: 0.10)
+        }
+        return isAccent ? recordAccent : recordInk.opacity(0.92)
+    }
+
+    private func amountKeyboardKeyFill(isAccent: Bool) -> Color {
+        if colorScheme == .dark {
+            return isAccent
+                ? Color(red: 0.92, green: 0.86, blue: 0.74).opacity(0.94)
+                : Color(red: 0.95, green: 0.94, blue: 0.90).opacity(0.96)
+        }
+        return isAccent ? Color.white.opacity(0.72) : Color.white.opacity(0.92)
+    }
+
+    private func amountKeyboardKeyStroke(isAccent: Bool) -> Color {
+        if colorScheme == .dark {
+            return isAccent
+                ? Color(red: 0.58, green: 0.43, blue: 0.17).opacity(0.34)
+                : Color.black.opacity(0.12)
+        }
+        return isAccent ? recordAccent.opacity(0.25) : AppColors.line.opacity(0.76)
     }
 
     // MARK: - Category Section

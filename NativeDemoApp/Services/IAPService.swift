@@ -21,6 +21,7 @@ enum IAPServiceError: LocalizedError {
     case purchaseCancelled
     case purchasePending
     case unverifiedTransaction
+    case transactionExpired
 
     var errorDescription: String? {
         switch self {
@@ -34,6 +35,8 @@ enum IAPServiceError: LocalizedError {
             return "购买正在处理中，请稍后在会员页恢复购买。"
         case .unverifiedTransaction:
             return "交易校验失败，请稍后重试。"
+        case .transactionExpired:
+            return "这笔 App Store 订阅已经过期。请使用购买时的 Apple ID 恢复有效订阅，或重新开通会员。"
         }
     }
 }
@@ -84,6 +87,10 @@ final class IAPService: ObservableObject {
         switch result {
         case .success(let verification):
             let transaction = try verifiedTransaction(from: verification)
+            guard !isExpiredSubscription(transaction, tier: tier) else {
+                await transaction.finish()
+                throw IAPServiceError.transactionExpired
+            }
             pendingTransactions[String(transaction.id)] = transaction
             return verificationPayload(for: transaction, signedTransactionInfo: verification.jwsRepresentation, tier: tier)
         case .userCancelled:
@@ -108,7 +115,7 @@ final class IAPService: ObservableObject {
             let transaction = try verifiedTransaction(from: result)
             guard transaction.revocationDate == nil else { continue }
             guard let tier = tier(for: transaction.productID) else { continue }
-            if tier != .lifetime, let expirationDate = transaction.expirationDate, expirationDate <= Date() {
+            if isExpiredSubscription(transaction, tier: tier) {
                 continue
             }
             pendingTransactions[String(transaction.id)] = transaction
@@ -159,6 +166,10 @@ final class IAPService: ObservableObject {
 
     private func tier(for productId: String) -> IAPTier? {
         productIDsByTier.first(where: { $0.value == productId })?.key
+    }
+
+    private func isExpiredSubscription(_ transaction: Transaction, tier: IAPTier) -> Bool {
+        tier != .lifetime && (transaction.expirationDate ?? .distantPast) <= Date()
     }
 }
 

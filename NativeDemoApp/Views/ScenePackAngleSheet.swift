@@ -197,7 +197,7 @@ struct ScenePackAngleSheet: View {
                         Image(systemName: "info.circle.fill")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(AppColors.accent.opacity(0.78))
-                        Text("首周可随意替换角度，排序随时可调")
+                        Text("首周可随意替换角度；首周结束后，每次替换会冷却 30 天")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(AppColors.text.opacity(0.78))
                         Spacer()
@@ -231,7 +231,7 @@ struct ScenePackAngleSheet: View {
                 replaceButton(configuration)
             } footer: {
                 if configuration.isInFirstWeek {
-                    EmptyView()
+                    Text("现在替换不会进入冷却。首周结束后，免费版每 30 天可换一次。")
                 } else if configuration.canReplacePackCombination {
                     Text("替换后 30 天可再换 · 会员可随时用全部角度")
                 } else {
@@ -362,8 +362,9 @@ struct ScenePackAngleSheet: View {
         _ pack: ScenePackDefinition,
         configuration: FreeConfiguration
     ) -> some View {
-        Button {
-            if configuration.isExtensionLockedPack(pack) {
+        let isLocked = isLockedMorePack(pack, configuration: configuration)
+        return Button {
+            if isLocked {
                 dismiss()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
                     configuration.onShowMemberPricing()
@@ -383,7 +384,7 @@ struct ScenePackAngleSheet: View {
                     Text(pack.label)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(AppColors.text)
-                    Text(configuration.isExtensionLockedPack(pack) ? lockedPackSubtitle(for: pack) : "可替换到我的 3 个角度")
+                    Text(isLocked ? lockedPackSubtitle(for: pack) : "可替换到我的 3 个角度")
                         .font(.system(size: 12))
                         .foregroundStyle(AppColors.subtext)
                         .lineLimit(1)
@@ -391,9 +392,9 @@ struct ScenePackAngleSheet: View {
 
                 Spacer()
 
-                Image(systemName: configuration.isExtensionLockedPack(pack) ? "lock.fill" : "arrow.triangle.2.circlepath")
+                Image(systemName: isLocked ? "lock.fill" : "arrow.triangle.2.circlepath")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(configuration.isExtensionLockedPack(pack) ? AppColors.subtext.opacity(0.72) : AppColors.accent.opacity(0.72))
+                    .foregroundStyle(isLocked ? AppColors.subtext.opacity(0.72) : AppColors.accent.opacity(0.72))
             }
             .padding(.vertical, 6)
             .padding(.horizontal, 8)
@@ -401,6 +402,13 @@ struct ScenePackAngleSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private func isLockedMorePack(
+        _ pack: ScenePackDefinition,
+        configuration: FreeConfiguration
+    ) -> Bool {
+        configuration.isExtensionLockedPack(pack) && !configuration.isInFirstWeek
     }
 
     private func lockedSceneHintRow(
@@ -497,7 +505,8 @@ struct ScenePackAngleSheet: View {
     }
 
     private func replaceButton(_ configuration: FreeConfiguration) -> some View {
-        Button {
+        let canReplace = configuration.isInFirstWeek || configuration.canReplacePackCombination
+        return Button {
             withAnimation(.easeInOut(duration: 0.18)) {
                 isReplacingPack = true
                 selectedReplaceSlot = nil
@@ -507,17 +516,23 @@ struct ScenePackAngleSheet: View {
                 Text("替换其中一个角度")
                     .font(.system(size: 14, weight: .semibold))
                 Spacer()
-                if !configuration.isInFirstWeek && !configuration.canReplacePackCombination {
+                if configuration.isInFirstWeek {
+                    Text("首周自由换")
+                        .font(.system(size: 12, weight: .medium))
+                } else if !configuration.canReplacePackCombination {
                     Text("还有 \(configuration.daysUntilNextReplace) 天")
+                        .font(.system(size: 12, weight: .medium))
+                } else {
+                    Text("换后冷却 30 天")
                         .font(.system(size: 12, weight: .medium))
                 }
             }
-            .foregroundStyle(configuration.canReplacePackCombination ? AppColors.accent : AppColors.subtext.opacity(0.58))
+            .foregroundStyle(canReplace ? AppColors.accent : AppColors.subtext.opacity(0.58))
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!configuration.canReplacePackCombination)
+        .disabled(!canReplace)
     }
 
     private func packRowContent(
