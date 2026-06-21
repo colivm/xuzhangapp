@@ -520,7 +520,14 @@ struct SettingsView: View {
     }
 
     private var appearanceSummary: String {
-        "\(settingsViewModel.appearance.title) · \(settingsViewModel.currentThemeName)"
+        "\(settingsViewModel.appearance.title) · \(currentThemeLifestyleName)"
+    }
+
+    private var currentThemeLifestyleName: String {
+        guard let definition = ThemeResolver.shared.definition(for: settingsViewModel.colorThemeId) else {
+            return settingsViewModel.currentThemeName
+        }
+        return themeDisplayName(definition)
     }
 
     private var settingsDisplayName: String {
@@ -1512,7 +1519,7 @@ struct SettingsView: View {
                 HStack(spacing: 5) {
                     Image(systemName: "scope")
                         .font(.system(size: 10, weight: .semibold))
-                    Text("当前：\(settingsViewModel.currentThemeName)")
+                    Text("当前：\(currentThemeLifestyleName)")
                         .font(.system(size: 11, weight: .semibold))
                     Image(systemName: "arrow.down")
                         .font(.system(size: 9, weight: .bold))
@@ -2569,7 +2576,7 @@ struct SettingsView: View {
 
             LazyVGrid(columns: accountMemoryMetricColumns, spacing: 10) {
                 accountMemoryMetric(value: "\(stats.recordStreakDays)", label: "连续记录天")
-                accountMemoryMetric(value: "\(stats.traceCount)", label: "AI整理生活痕迹")
+                accountMemoryMetric(value: "\(stats.traceCount)", label: "已留下生活痕迹")
                 accountMemoryMetric(value: "\(stats.weeklyStoryCount)", label: "可整理周记")
                 accountMemoryMetric(value: "\(stats.monthlyStoryCount)", label: "保存月份故事")
             }

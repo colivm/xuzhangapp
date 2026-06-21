@@ -356,7 +356,7 @@ struct InsightWebView: View {
     private func openWeeklyAICommand() {
         showAICommandSheet = true
         if aiCommandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            aiCommandText = "请基于我最近一周的记录，继续解读生活节奏、压力变化和最值得保留的瞬间。"
+            aiCommandText = "帮我继续解读最近这段生活，看看生活节奏、压力变化和最值得保留的瞬间。"
         }
     }
 

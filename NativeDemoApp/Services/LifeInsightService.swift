@@ -72,8 +72,8 @@ final class LifeInsightService {
         let total = validItems.reduce(0) { $0 + $1.amount }
         let average = total / Double(validItems.count)
 
-        let focusName = top.map { focusName(for: $0.category, items: validItems) } ?? "这段记录"
-        let leadQuestion = "要不要顺着「\(focusName)」往下看一层？"
+        let primaryFocusName = top.map { focusName(for: $0.category, items: validItems) } ?? "这段记录"
+        let leadQuestion = "要不要顺着「\(primaryFocusName)」往下看一层？"
 
         let teaser: String
         if let top {

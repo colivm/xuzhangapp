@@ -27,16 +27,16 @@ struct MemberPricingView: View {
         ("无限生活回放", "过去的每一天都值得被记住。通勤、聚餐、旅行、看病、送礼、养宠……生活轨迹持续保留，随时回看。"),
         ("AI 深度生活分析", "看见那些你自己都没察觉的规律：哪些支出正在悄悄增加、最近压力最大的时间段、什么事情最值得你投入时间和金钱、生活节奏正在发生哪些变化。"),
         ("持续生成生活故事", "不只是记账，而是记录成长。周记、月记、年度故事自动串联，多年以后依然能翻阅今天。"),
-        ("OCR 无限导入", "把整理交给 AI。微信、支付宝账单截图直接导入，一年账单也能快速整理完成。"),
+        ("账单连续整理", "把重复整理交给 AI。微信、支付宝截图可以连续导入，一年账单也能快速变成可回看的生活档案。"),
         ("全部生活场景", "你的生活，不只有消费。日常生活、旅行、健身运动、宝宝成长、宠物记录、人情往来与自定义主题，都能从不同角度重新认识自己。"),
         ("今日无限回放", "睡前重新看看今天。重要的事、见过的人、花过的钱，让每一天都有痕迹。"),
         ("25+ 生活风格", "让记录变得更有温度。纸境、档案馆、夜读、观察者、旅行手账和博物馆，打造属于自己的生活记录本。"),
     ]
 
     private let boundaryRows = [
-        ("生活场景", "免费 3 个常用角度", "会员打开全部生活场景"),
-        ("生活回放", "基础额度可体验", "会员持续保存和回看"),
-        ("账单导入", "每日 3 次 OCR", "会员一年账单也能连续整理"),
+        ("生活场景", "轻度记录常用角度", "完整打开旅行、运动、宝宝、宠物、人情等生活面"),
+        ("生活回放", "基础体验最近片段", "持续保存周/月/年度故事，不让生活断档"),
+        ("账单整理", "适合少量截图", "大段账单也能连续整理成可回看的档案"),
     ]
 
     init(highlightPlanId: String? = nil) {
@@ -239,7 +239,7 @@ struct MemberPricingView: View {
 
     private var memberBoundarySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("免费适合轻度记录，会员适合长期回看")
+            Text("完整生活档案包含")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(AppColors.text.opacity(0.9))
 
@@ -288,7 +288,7 @@ struct MemberPricingView: View {
                 withAnimation(.easeInOut(duration: 0.2)) { benefitsExpanded.toggle() }
             } label: {
                 HStack {
-                    Text("会员权益")
+                    Text("你会得到什么")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(AppColors.text.opacity(0.86))
                     Spacer()
