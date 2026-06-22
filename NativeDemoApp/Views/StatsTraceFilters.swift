@@ -318,7 +318,7 @@ extension StatsWebView {
         return "\(month)月\(day)日 \(weekdayText(for: date))"
     }
 
-    private func applyTracePeriod(_ period: StatsPeriod) {
+    func applyTracePeriod(_ period: StatsPeriod) {
         withAnimation(traceEditSpring) {
             useCustomRange = false
             selectedPeriod = period
