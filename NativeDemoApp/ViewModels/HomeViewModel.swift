@@ -714,7 +714,20 @@ final class HomeViewModel: ObservableObject {
         )
         resolved.title = resolution.title
         resolved.category = resolution.category
-        resolved.emotionTag = resolution.emotionTag
+        if resolved.memoryContext == nil,
+           Calendar.current.isDate(resolved.createdAt, inSameDayAs: original.createdAt) {
+            resolved.memoryContext = original.memoryContext
+        }
+        resolved.emotionTag = memoryEnhancedEmotionTag(
+            title: resolution.title,
+            category: resolution.category,
+            amount: resolved.amount,
+            date: resolved.createdAt,
+            baseEmotionTag: resolution.emotionTag,
+            existingItems: items,
+            excluding: resolved.id,
+            weatherOverride: storedWeatherSnapshot(from: resolved.memoryContext)
+        )
         resolved.merchantBrandId = resolution.merchantBrandId
         if resolved.userEditedTitle == true || titleWasEdited {
             resolved.userEditedTitle = true
@@ -996,12 +1009,13 @@ final class HomeViewModel: ObservableObject {
         date: Date,
         baseEmotionTag: String,
         existingItems: [HomeItem]? = nil,
-        excluding excludedID: UUID? = nil
+        excluding excludedID: UUID? = nil,
+        weatherOverride: WeatherSnapshot? = nil
     ) -> String {
         let settings = LocalStore.loadSettings()
-        let weather = settings.weatherCompanionEnabled && shouldAttachLiveContext(to: date)
+        let weather = weatherOverride ?? (settings.weatherCompanionEnabled && shouldAttachLiveContext(to: date)
             ? WeatherCompanionService.shared.cachedSnapshot
-            : nil
+            : nil)
         let memoryItems = (existingItems ?? items).filter { item in
             guard let excludedID else { return true }
             return item.id != excludedID
@@ -1016,6 +1030,27 @@ final class HomeViewModel: ObservableObject {
                 existingItems: memoryItems,
                 weather: weather
             )
+        )
+    }
+
+    private func storedWeatherSnapshot(from context: HomeItem.MemoryContext?) -> WeatherSnapshot? {
+        guard let context else { return nil }
+        let code: Int?
+        switch context.weatherKind {
+        case "rain":
+            code = 61
+        case "snow":
+            code = 71
+        case "hot", "cold", "normal":
+            code = nil
+        default:
+            code = nil
+        }
+        guard code != nil || context.temperatureCelsius != nil else { return nil }
+        return WeatherSnapshot(
+            temp: context.temperatureCelsius,
+            weatherCode: code,
+            ts: Date()
         )
     }
 

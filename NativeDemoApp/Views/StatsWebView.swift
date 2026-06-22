@@ -534,9 +534,13 @@ struct StatsWebView: View {
     }
 
     private var traceLifeInsight: LifeInsightResult {
+        traceLifeInsight(from: traceClueItems)
+    }
+
+    private func traceLifeInsight(from items: [HomeItem]) -> LifeInsightResult {
         _ = lifeInsightRefreshID
         return lifeInsightService.buildTraceInsight(
-            items: traceClueItems,
+            items: items,
             periodLabel: traceInsightPeriodLabel
         )
     }
@@ -545,16 +549,42 @@ struct StatsWebView: View {
         return lifeInsightService.freeRemaining(isMember: hasMemberAccess)
     }
 
+    private var traceInsightUnlockKey: String {
+        traceInsightUnlockKey(from: traceClueItems)
+    }
+
+    private func traceInsightUnlockKey(from items: [HomeItem]) -> String {
+        let sorted = items.sorted { $0.createdAt < $1.createdAt }
+        let first = Int((sorted.first?.createdAt.timeIntervalSince1970 ?? 0).rounded())
+        let last = Int((sorted.last?.createdAt.timeIntervalSince1970 ?? 0).rounded())
+        let cents = Int((items.reduce(0) { $0 + $1.amount } * 100).rounded())
+        return [
+            selectedPeriod.rawValue,
+            traceInsightPeriodLabel,
+            "\(items.count)",
+            "\(first)",
+            "\(last)",
+            "\(cents)"
+        ].joined(separator: "|")
+    }
+
+    private var hasUnlockedTraceDeepInsight: Bool {
+        lifeInsightService.hasUnlockedTrace(traceInsightUnlockKey, isMember: hasMemberAccess)
+    }
+
     private var hasTraceInsightData: Bool {
         !traceClueItems.isEmpty
     }
 
     private var canUseTraceDeepInsight: Bool {
-        hasTraceInsightData && (hasMemberAccess || traceLifeInsightFreeRemaining > 0)
+        hasTraceInsightData && (hasUnlockedTraceDeepInsight || traceLifeInsightFreeRemaining > 0)
     }
 
     private var traceCategoryClues: [TraceCategoryClue] {
-        let items = traceClueItems
+        traceCategoryClues(from: traceClueItems)
+    }
+
+    private func traceCategoryClues(from items: [HomeItem]) -> [TraceCategoryClue] {
         guard !items.isEmpty else { return [] }
         let totalCount = Double(items.count)
         return Dictionary(grouping: items, by: \.category)
@@ -573,9 +603,12 @@ struct StatsWebView: View {
     }
 
     private var traceClueHeadline: String {
-        let items = traceClueItems
+        traceClueHeadline(items: traceClueItems, clues: traceCategoryClues)
+    }
+
+    private func traceClueHeadline(items: [HomeItem], clues: [TraceCategoryClue]) -> String {
         guard !items.isEmpty else { return "线索还在等第一笔记录" }
-        guard let top = traceCategoryClues.first else {
+        guard let top = clues.first else {
             return "这一段的记录还比较分散"
         }
         let period = traceNarrativePeriodPrefix
@@ -604,11 +637,18 @@ struct StatsWebView: View {
     }
 
     private var traceClueSubline: String {
-        let items = traceClueItems
+        traceClueSubline(items: traceClueItems, clues: traceCategoryClues, rhythmPoints: traceRhythmPoints)
+    }
+
+    private func traceClueSubline(
+        items: [HomeItem],
+        clues: [TraceCategoryClue],
+        rhythmPoints: [TraceRhythmPoint]
+    ) -> String {
         guard !items.isEmpty else { return "先留下几笔，账本会把生活里的走向慢慢标出来。" }
-        if let top = traceCategoryClues.first {
+        if let top = clues.first {
             let percent = Int((top.ratio * 100).rounded())
-            if let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count >= 2 {
+            if let peak = rhythmPoints.max(by: { $0.count < $1.count }), peak.count >= 2 {
                 return "\(top.category.rawValue)记录占 \(percent)%，\(traceRhythmNarrativeLabel(peak))是最忙的一天。"
             }
             return "\(top.category.rawValue)记录占 \(percent)%，是这一段最清楚的生活线索。"
@@ -631,7 +671,10 @@ struct StatsWebView: View {
     }
 
     private var traceHeroMetaParts: (count: String, activeDays: String, total: String)? {
-        let items = traceClueItems
+        traceHeroMetaParts(items: traceClueItems)
+    }
+
+    private func traceHeroMetaParts(items: [HomeItem]) -> (count: String, activeDays: String, total: String)? {
         guard !items.isEmpty else { return nil }
         let total = items.reduce(0) { $0 + $1.amount }
         let activeDays = traceActiveDayCount(from: items)
@@ -639,32 +682,55 @@ struct StatsWebView: View {
     }
 
     private var tracePrimaryEvidence: String {
-        if let top = traceCategoryClues.first {
+        tracePrimaryEvidence(clues: traceCategoryClues)
+    }
+
+    private func tracePrimaryEvidence(clues: [TraceCategoryClue]) -> String {
+        if let top = clues.first {
             return "\(top.category.rawValue) \(top.count) 笔"
         }
         return "暂无分类线索"
     }
 
     private var traceSecondaryEvidence: String {
-        let activeDays = traceActiveDayCount(from: traceClueItems)
+        traceSecondaryEvidence(items: traceClueItems)
+    }
+
+    private func traceSecondaryEvidence(items: [HomeItem]) -> String {
+        let activeDays = traceActiveDayCount(from: items)
         return "\(activeDays) 天有记录"
     }
 
     private var traceTertiaryEvidence: String {
-        guard let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 else {
+        traceTertiaryEvidence(rhythmPoints: traceRhythmPoints)
+    }
+
+    private func traceTertiaryEvidence(rhythmPoints: [TraceRhythmPoint]) -> String {
+        guard let peak = rhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 else {
             return "节奏未形成"
         }
         return "\(traceRhythmNarrativeLabel(peak))最集中"
     }
 
     private var traceRhythmSummary: String {
-        let active = traceRhythmPoints.filter { $0.count > 0 }.count
+        traceRhythmSummary(rhythmPoints: traceRhythmPoints)
+    }
+
+    private func traceRhythmSummary(rhythmPoints: [TraceRhythmPoint]) -> String {
+        let active = rhythmPoints.filter { $0.count > 0 }.count
         guard active > 0 else { return "还在形成" }
         return selectedPeriod == .week ? "\(active) 天有记录" : "\(active) 周有记录"
     }
 
     private var traceClueInsightLines: [String] {
-        let items = traceClueItems
+        traceClueInsightLines(items: traceClueItems, clues: traceCategoryClues, rhythmPoints: traceRhythmPoints)
+    }
+
+    private func traceClueInsightLines(
+        items: [HomeItem],
+        clues: [TraceCategoryClue],
+        rhythmPoints: [TraceRhythmPoint]
+    ) -> [String] {
         guard !items.isEmpty else {
             return [
                 "先记几笔，不用急着总结。",
@@ -676,12 +742,12 @@ struct StatsWebView: View {
         if let contextLine = traceContextualMemoryLine(from: items) {
             lines.append(contextLine)
         }
-        if let top = traceCategoryClues.first {
+        if let top = clues.first {
             let percent = Int((top.ratio * 100).rounded())
             lines.append("\(top.category.rawValue)出现 \(top.count) 笔，占这一段 \(percent)%。这是最先浮出来的一面。")
         }
-        if let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 {
-            lines.append("\(traceRhythmNarrativeLabel(peak))记录最集中，适合回头看那天具体发生了什么。")
+        if let peak = rhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 {
+            lines.append("\(traceRhythmNarrativeLabel(peak))记录最集中，适合回头看\(traceRhythmPeriodReference)具体发生了什么。")
         }
         let total = items.reduce(0) { $0 + $1.amount }
         if items.count >= 2 {
@@ -712,7 +778,10 @@ struct StatsWebView: View {
     }
 
     private var traceRhythmPoints: [TraceRhythmPoint] {
-        let items = traceClueItems
+        traceRhythmPoints(from: traceClueItems)
+    }
+
+    private func traceRhythmPoints(from items: [HomeItem]) -> [TraceRhythmPoint] {
         guard !items.isEmpty else { return [] }
         let calendar = Calendar.current
         if selectedPeriod == .month, let interval = calendar.dateInterval(of: .month, for: Date()) {
@@ -793,35 +862,42 @@ struct StatsWebView: View {
     }
 
     private var traceClueBoard: some View {
+        let items = traceClueItems
+        let clues = traceCategoryClues(from: items)
+        let rhythmPoints = traceRhythmPoints(from: items)
+        let insight = traceLifeInsight(from: items)
         VStack(spacing: 16) {
-            traceClueHeroCard
-            traceClueCompositionCard
-            traceClueRhythmCard
-            traceClueInsightCard
-            traceDeepInsightCard
+            traceClueHeroCard(items: items, clues: clues, rhythmPoints: rhythmPoints)
+            traceClueCompositionCard(items: items, clues: clues)
+            traceClueRhythmCard(rhythmPoints: rhythmPoints)
+            traceClueInsightCard(items: items, clues: clues, rhythmPoints: rhythmPoints)
+            traceDeepInsightCard(insight: insight, items: items, clues: clues, rhythmPoints: rhythmPoints)
             traceAppendixStrip
         }
     }
 
-    private var traceClueHeroCard: some View {
-        let items = traceClueItems
+    private func traceClueHeroCard(
+        items: [HomeItem],
+        clues: [TraceCategoryClue],
+        rhythmPoints: [TraceRhythmPoint]
+    ) -> some View {
         return VStack(alignment: .leading, spacing: 16) {
             traceRangeKicker
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(traceClueHeadline)
+                Text(traceClueHeadline(items: items, clues: clues))
                     .font(.system(size: 25, weight: .bold))
                     .foregroundStyle(TraceColors.primaryText)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(traceClueSubline)
+                Text(traceClueSubline(items: items, clues: clues, rhythmPoints: rhythmPoints))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(TraceColors.secondaryText)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if let meta = traceHeroMetaParts {
+                if let meta = traceHeroMetaParts(items: items) {
                     HStack(spacing: 6) {
                         Text(meta.count)
                         Text("·")
@@ -837,9 +913,9 @@ struct StatsWebView: View {
             }
 
             HStack(spacing: 8) {
-                traceClueEvidenceChip(tracePrimaryEvidence, isPrimary: true)
-                traceClueEvidenceChip(traceSecondaryEvidence)
-                traceClueEvidenceChip(traceTertiaryEvidence)
+                traceClueEvidenceChip(tracePrimaryEvidence(clues: clues), isPrimary: true)
+                traceClueEvidenceChip(traceSecondaryEvidence(items: items))
+                traceClueEvidenceChip(traceTertiaryEvidence(rhythmPoints: rhythmPoints))
             }
 
             if items.isEmpty {
@@ -852,25 +928,25 @@ struct StatsWebView: View {
         .traceWarmPanel(radius: 26, padding: 24)
     }
 
-    private var traceClueCompositionCard: some View {
+    private func traceClueCompositionCard(items: [HomeItem], clues: [TraceCategoryClue]) -> some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack {
                 Text("生活构成")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(TraceColors.primaryText)
                 Spacer()
-                Text("\(traceClueItems.count) 笔")
+                Text("\(items.count) 笔")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(TraceColors.tertiaryText)
             }
 
-            if traceCategoryClues.isEmpty {
+            if clues.isEmpty {
                 traceQuietCluePlaceholder("还没有足够记录形成构成。")
             } else {
-                traceCompositionRibbon
+                traceCompositionRibbon(clues: clues)
                 VStack(spacing: 8) {
-                    ForEach(Array(traceCategoryClues.prefix(4))) { clue in
-                        traceCategoryClueRow(clue)
+                    ForEach(Array(clues.prefix(4))) { clue in
+                        traceCategoryClueRow(clue, topCategory: clues.first?.category)
                     }
                 }
             }
@@ -878,11 +954,11 @@ struct StatsWebView: View {
         .traceGlassPanel(radius: 20, padding: 18)
     }
 
-    private var traceCompositionRibbon: some View {
+    private func traceCompositionRibbon(clues: [TraceCategoryClue]) -> some View {
         GeometryReader { proxy in
             let width = proxy.size.width
             HStack(spacing: 3) {
-                ForEach(Array(traceCategoryClues.prefix(4))) { clue in
+                ForEach(Array(clues.prefix(4))) { clue in
                     RoundedRectangle(cornerRadius: 999, style: .continuous)
                         .fill(traceClueColor(for: clue.category).opacity(0.65))
                         .frame(width: max(10, width * clue.ratio))
@@ -897,24 +973,25 @@ struct StatsWebView: View {
         )
     }
 
-    private var traceClueRhythmCard: some View {
+    private func traceClueRhythmCard(rhythmPoints: [TraceRhythmPoint]) -> some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack {
                 Text(selectedPeriod == .week ? "一周节奏" : "这一月的节奏")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(TraceColors.primaryText)
                 Spacer()
-                Text(traceRhythmSummary)
+                Text(traceRhythmSummary(rhythmPoints: rhythmPoints))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(TraceColors.tertiaryText)
             }
 
-            if traceRhythmPoints.isEmpty {
+            if rhythmPoints.isEmpty {
                 traceQuietCluePlaceholder("多记几天，节奏会自然出来。")
             } else {
+                let maxCount = max(rhythmPoints.map(\.count).max() ?? 1, 1)
                 HStack(alignment: .bottom, spacing: 9) {
-                    ForEach(traceRhythmPoints) { point in
-                        traceRhythmColumn(point)
+                    ForEach(rhythmPoints) { point in
+                        traceRhythmColumn(point, maxCount: maxCount)
                     }
                 }
                 .frame(height: 92)
@@ -924,14 +1001,18 @@ struct StatsWebView: View {
         .traceGlassPanel(radius: 20, padding: 18)
     }
 
-    private var traceClueInsightCard: some View {
+    private func traceClueInsightCard(
+        items: [HomeItem],
+        clues: [TraceCategoryClue],
+        rhythmPoints: [TraceRhythmPoint]
+    ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("变化线索")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(TraceColors.primaryText)
 
             VStack(spacing: 10) {
-                ForEach(Array(traceClueInsightLines.enumerated()), id: \.offset) { index, line in
+                ForEach(Array(traceClueInsightLines(items: items, clues: clues, rhythmPoints: rhythmPoints).enumerated()), id: \.offset) { index, line in
                     traceClueInsightRow(line, index: index)
                 }
             }
@@ -939,9 +1020,13 @@ struct StatsWebView: View {
         .traceGlassPanel(radius: 20, padding: 18)
     }
 
-    private var traceDeepInsightCard: some View {
-        let insight = traceLifeInsight
-        let isUnlocked = hasMemberAccess || traceDeepInsightExpanded
+    private func traceDeepInsightCard(
+        insight: LifeInsightResult,
+        items: [HomeItem],
+        clues: [TraceCategoryClue],
+        rhythmPoints: [TraceRhythmPoint]
+    ) -> some View {
+        let isUnlocked = hasUnlockedTraceDeepInsight || traceDeepInsightExpanded
         return VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .center, spacing: 10) {
                 ZStack {
@@ -992,7 +1077,13 @@ struct StatsWebView: View {
                     .transition(.opacity)
 
                 if let focusedQuestion = traceInsightFocusedQuestion {
-                    traceFocusedInsightAnswer(question: focusedQuestion, insight: insight)
+                    traceFocusedInsightAnswer(
+                        question: focusedQuestion,
+                        insight: insight,
+                        items: items,
+                        clues: clues,
+                        rhythmPoints: rhythmPoints
+                    )
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
@@ -1087,14 +1178,20 @@ struct StatsWebView: View {
         }
     }
 
-    private func traceFocusedInsightAnswer(question: String, insight: LifeInsightResult) -> some View {
+    private func traceFocusedInsightAnswer(
+        question: String,
+        insight: LifeInsightResult,
+        items: [HomeItem],
+        clues: [TraceCategoryClue],
+        rhythmPoints: [TraceRhythmPoint]
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(question)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(TraceColors.primaryText)
                 .lineLimit(2)
 
-            Text(traceInsightAnswer(for: question, insight: insight))
+            Text(traceInsightAnswer(for: question, insight: insight, items: items, clues: clues, rhythmPoints: rhythmPoints))
                 .font(.system(size: 13, weight: .medium))
                 .lineSpacing(3)
                 .foregroundStyle(TraceColors.secondaryText)
@@ -1132,7 +1229,7 @@ struct StatsWebView: View {
 
     private func handleTraceDeepInsightTap() {
         guard hasTraceInsightData else { return }
-        if hasMemberAccess {
+        if hasUnlockedTraceDeepInsight {
             withAnimation(traceEditSpring) {
                 traceDeepInsightExpanded = true
                 focusNextTraceInsightQuestion()
@@ -1154,6 +1251,7 @@ struct StatsWebView: View {
         }
 
         lifeInsightService.markDeepInsightUsed(isMember: false)
+        lifeInsightService.markTraceUnlocked(traceInsightUnlockKey, isMember: false)
         withAnimation(traceEditSpring) {
             traceDeepInsightExpanded = true
             focusNextTraceInsightQuestion()
@@ -1163,7 +1261,7 @@ struct StatsWebView: View {
 
     private func handleTraceInsightQuestionTap(_ question: String) {
         guard hasTraceInsightData else { return }
-        if hasMemberAccess || traceDeepInsightExpanded {
+        if hasUnlockedTraceDeepInsight || traceDeepInsightExpanded {
             withAnimation(traceEditSpring) {
                 traceInsightFocusedQuestion = question
             }
@@ -1176,6 +1274,7 @@ struct StatsWebView: View {
         }
 
         lifeInsightService.markDeepInsightUsed(isMember: false)
+        lifeInsightService.markTraceUnlocked(traceInsightUnlockKey, isMember: false)
         withAnimation(traceEditSpring) {
             traceDeepInsightExpanded = true
             traceInsightFocusedQuestion = question
@@ -1194,20 +1293,26 @@ struct StatsWebView: View {
         traceInsightFocusedQuestion = chips[(index + 1) % chips.count]
     }
 
-    private func traceInsightAnswer(for question: String, insight: LifeInsightResult) -> String {
+    private func traceInsightAnswer(
+        for question: String,
+        insight: LifeInsightResult,
+        items: [HomeItem],
+        clues: [TraceCategoryClue],
+        rhythmPoints: [TraceRhythmPoint]
+    ) -> String {
         if question.contains("哪天") || question.contains("不太像") || question.contains("更密") || question.contains("发生了什么") {
-            if let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 {
-                return "\(traceRhythmNarrativeLabel(peak))留下 \(peak.count) 笔，是这一段最集中的一天。先回头看那天去了哪里、见了谁，很多原因会比金额本身更清楚。"
+            if let peakDay = tracePeakCalendarDay(from: items) {
+                return "\(traceCalendarDayNarrativeLabel(peakDay.date))留下 \(peakDay.count) 笔，是这一段最集中的一天。先回头看那天去了哪里、见了谁，很多原因会比金额本身更清楚。"
             }
             return "这一段还没有特别突出的日子。再多几笔之后，哪天不太一样会更容易看出来。"
         }
 
         if question.contains("有关吗") || question.contains("一起") || question.contains("同一段事") || question.contains("同天") {
-            let clues = Array(traceCategoryClues.prefix(2))
-            if clues.count == 2 {
-                let first = clues[0]
-                let second = clues[1]
-                let overlapDays = traceDaysContaining(categories: [first.category, second.category])
+            let topClues = Array(clues.prefix(2))
+            if topClues.count == 2 {
+                let first = topClues[0]
+                let second = topClues[1]
+                let overlapDays = traceDaysContaining(categories: [first.category, second.category], items: items)
                 if overlapDays > 0 {
                     return "\(first.category.rawValue)和\(second.category.rawValue)在 \(overlapDays) 天里同时出现。它们可能不是两件散事，而是同一天的外出、工作节奏或集中补给带出来的。"
                 }
@@ -1217,7 +1322,7 @@ struct StatsWebView: View {
         }
 
         if question.contains("重复") || question.contains("习惯") || question.contains("好几次") {
-            if let top = traceCategoryClues.first {
+            if let top = clues.first {
                 return "\(top.category.rawValue)出现 \(top.count) 笔，是这一段最稳定的重复项。它不一定是问题，更像这段时间经常发生的一件事。"
             }
             return "现在重复还不明显。等同类记录连续出现，这里会更容易看出习惯。"
@@ -1228,8 +1333,8 @@ struct StatsWebView: View {
         }
 
         if question.contains("为什么") {
-            if let top = traceCategoryClues.first {
-                return traceWhyCategoryBecameVisible(top)
+            if let top = clues.first {
+                return traceWhyCategoryBecameVisible(top, items: items, clues: clues, rhythmPoints: rhythmPoints)
             }
             return insight.previewLine
         }
@@ -1237,10 +1342,15 @@ struct StatsWebView: View {
         return insight.previewLine
     }
 
-    private func traceWhyCategoryBecameVisible(_ clue: TraceCategoryClue) -> String {
-        let categoryItems = traceClueItems.filter { $0.category == clue.category }
-        let peak = traceRhythmPoints.max(by: { $0.count < $1.count })
-        let second = traceCategoryClues.dropFirst().first
+    private func traceWhyCategoryBecameVisible(
+        _ clue: TraceCategoryClue,
+        items: [HomeItem],
+        clues: [TraceCategoryClue],
+        rhythmPoints: [TraceRhythmPoint]
+    ) -> String {
+        let categoryItems = items.filter { $0.category == clue.category }
+        let peak = rhythmPoints.max(by: { $0.count < $1.count })
+        let second = clues.dropFirst().first
         let categoryName = traceCategoryLifeName(for: clue.category, items: categoryItems)
         let base: String
         switch clue.category {
@@ -1266,7 +1376,7 @@ struct StatsWebView: View {
 
         var tails: [String] = []
         if let peak, peak.count > 0 {
-            tails.append("\(traceRhythmNarrativeLabel(peak))最集中，原因很可能就在那天的安排里。")
+            tails.append("\(traceRhythmNarrativeLabel(peak))最集中，原因很可能就在\(traceRhythmPeriodReference)的安排里。")
         }
         if let second {
             tails.append("它还和「\(second.category.rawValue)」一起靠前，可能是同一段生活带出来的两种记录。")
@@ -1292,10 +1402,10 @@ struct StatsWebView: View {
         keywords.contains { text.contains($0) }
     }
 
-    private func traceDaysContaining(categories: [HomeItem.Category]) -> Int {
+    private func traceDaysContaining(categories: [HomeItem.Category], items: [HomeItem]) -> Int {
         guard !categories.isEmpty else { return 0 }
         let calendar = Calendar.current
-        let grouped = Dictionary(grouping: traceClueItems) { item in
+        let grouped = Dictionary(grouping: items) { item in
             calendar.startOfDay(for: item.createdAt)
         }
         return grouped.values.filter { dayItems in
@@ -1309,6 +1419,35 @@ struct StatsWebView: View {
             return "周\(point.label)"
         }
         return point.label
+    }
+
+    private var traceRhythmPeriodReference: String {
+        selectedPeriod == .week ? "那天" : "那一周"
+    }
+
+    private func tracePeakCalendarDay(from items: [HomeItem]) -> (date: Date, count: Int)? {
+        guard !items.isEmpty else { return nil }
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: items) { item in
+            calendar.startOfDay(for: item.createdAt)
+        }
+        guard let peak = grouped.max(by: { lhs, rhs in
+            if lhs.value.count == rhs.value.count {
+                return lhs.key < rhs.key
+            }
+            return lhs.value.count < rhs.value.count
+        }) else { return nil }
+        return (peak.key, peak.value.count)
+    }
+
+    private func traceCalendarDayNarrativeLabel(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if selectedPeriod == .week {
+            return weekdayText(for: date)
+        }
+        let month = calendar.component(.month, from: date)
+        let day = calendar.component(.day, from: date)
+        return "\(month)月\(day)日（\(weekdayText(for: date))）"
     }
 
     private func traceClueEvidenceChip(_ text: String, isPrimary: Bool = false) -> some View {
@@ -1326,8 +1465,8 @@ struct StatsWebView: View {
             )
     }
 
-    private func traceCategoryClueRow(_ clue: TraceCategoryClue) -> some View {
-        let isTop = traceCategoryClues.first?.category == clue.category
+    private func traceCategoryClueRow(_ clue: TraceCategoryClue, topCategory: HomeItem.Category?) -> some View {
+        let isTop = topCategory == clue.category
         return HStack(spacing: 9) {
             Circle()
                 .fill(traceClueColor(for: clue.category).opacity(0.82))
@@ -1346,8 +1485,7 @@ struct StatsWebView: View {
         }
     }
 
-    private func traceRhythmColumn(_ point: TraceRhythmPoint) -> some View {
-        let maxCount = max(traceRhythmPoints.map(\.count).max() ?? 1, 1)
+    private func traceRhythmColumn(_ point: TraceRhythmPoint, maxCount: Int) -> some View {
         let ratio = CGFloat(point.count) / CGFloat(maxCount)
         let barHeight = max(8, 54 * ratio)
         return VStack(spacing: 7) {

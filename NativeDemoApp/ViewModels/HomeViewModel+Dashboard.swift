@@ -12,14 +12,13 @@ extension HomeViewModel {
     }
 
     var todayExpenseTotal: Double {
-        let todayItems = items.filter { Calendar.current.isDateInToday($0.createdAt) && $0.amount > 0 }
         return todayItems.reduce(0) { $0 + $1.amount }
     }
 
     var todayHeroSubtitle: String {
-        let todayItems = items.filter { Calendar.current.isDateInToday($0.createdAt) && $0.amount > 0 }
-        let total = todayItems.reduce(0) { $0 + $1.amount }
-        let topCategory = todayItems
+        let records = todayItems
+        let total = records.reduce(0) { $0 + $1.amount }
+        let topCategory = records
             .reduce(into: [HomeItem.Category: Double]()) { result, item in
                 result[item.category, default: 0] += item.amount
             }
@@ -38,8 +37,12 @@ extension HomeViewModel {
     var todayStoryNarrative: TodayStoryNarrative {
         let records = todayItems
         let count = records.count
-        let totalText = todayExpenseTotal.formatted(.cny)
-        let weekText = weekExpenseTotal.formatted(.cny)
+        let todayTotal = records.reduce(0) { $0 + $1.amount }
+        let weekTotal = filteredItems(in: .week)
+            .filter { $0.amount > 0 }
+            .reduce(0) { $0 + $1.amount }
+        let totalText = todayTotal.formatted(.cny)
+        let weekText = weekTotal.formatted(.cny)
         let topCategory = topCategoryLabel(from: records)
         let todaySceneLine = lifeSceneMemoryLine(from: records, minimumCount: 2)
 
@@ -118,7 +121,8 @@ extension HomeViewModel {
     }
 
     var quickRecordNudgeText: String {
-        if todayItems.isEmpty {
+        let records = todayItems
+        if records.isEmpty {
             if let suggestion = frequentRecordAmountSuggestions(at: Date()).first {
                 return "常记 \(shortAmountText(suggestion.amount)) · \(suggestion.category.label)"
             }
@@ -128,11 +132,11 @@ extension HomeViewModel {
             }
             return "只输金额也可以"
         }
-        if let scene = LifeSceneSemanticService.dominantScene(in: todayItems),
+        if let scene = LifeSceneSemanticService.dominantScene(in: records),
            scene.count >= 2 {
-            return "今天已有 \(todayItems.count) 笔 · \(LifeSceneSemanticService.displayTheme(for: scene.signal))"
+            return "今天已有 \(records.count) 笔 · \(LifeSceneSemanticService.displayTheme(for: scene.signal))"
         }
-        return "今天已记 \(todayItems.count) 笔"
+        return "今天已记 \(records.count) 笔"
     }
 
     /// 近 7 日内生成的复盘记录（按时间新到旧）。
@@ -183,14 +187,16 @@ extension HomeViewModel {
 
     /// 本地月度小结文案（与 web 预览结构对齐：摘要 / 结构 / 建议）。
     func localMonthlyInsightBlocks() -> (summary: String, structure: String, advice: String) {
-        let total = monthExpenseTotal
-        let top = monthTopCategoryText
+        let monthItems = filteredItems(in: .month)
+        let positiveMonthItems = monthItems.filter { $0.amount > 0 }
+        let total = positiveMonthItems.reduce(0) { $0 + $1.amount }
+        let top = topCategoryCountLabel(from: monthItems)
         let summary: String
         if total <= 0 {
             summary = "本月还没有足够账单，多记几笔再来生成月度复盘吧。"
-        } else if let memoryLine = contextualMemoryLine(from: filteredItems(in: .month).filter { $0.amount > 0 }) {
+        } else if let memoryLine = contextualMemoryLine(from: positiveMonthItems) {
             summary = memoryLine
-        } else if let scene = LifeSceneSemanticService.dominantScene(in: filteredItems(in: .month).filter { $0.amount > 0 }),
+        } else if let scene = LifeSceneSemanticService.dominantScene(in: positiveMonthItems),
                   scene.count >= 2 {
             summary = LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count)
         } else {
@@ -198,7 +204,7 @@ extension HomeViewModel {
         }
         let structure = total <= 0
             ? "等本月多几笔记录，再整理这段时间的变化。"
-            : monthlyStructureText(fallbackTop: top)
+            : monthlyStructureText(fallbackTop: top, monthItems: positiveMonthItems)
         let advice = total <= 0
             ? "先记下一周，复盘会更有内容。"
             : "这个月已经有一些记录，继续记几天，月记会更完整。"
@@ -207,6 +213,10 @@ extension HomeViewModel {
 
     private func topCategoryLabel(in period: Period) -> String {
         let target = filteredItems(in: period)
+        return topCategoryCountLabel(from: target)
+    }
+
+    private func topCategoryCountLabel(from target: [HomeItem]) -> String {
         let grouped = Dictionary(grouping: target, by: \.category)
         guard let top = grouped.max(by: { $0.value.count < $1.value.count })?.key else {
             return "暂无"
@@ -237,6 +247,10 @@ extension HomeViewModel {
 
     private func monthlyStructureText(fallbackTop: String) -> String {
         let monthItems = filteredItems(in: .month).filter { $0.amount > 0 }
+        return monthlyStructureText(fallbackTop: fallbackTop, monthItems: monthItems)
+    }
+
+    private func monthlyStructureText(fallbackTop: String, monthItems: [HomeItem]) -> String {
         if monthItems.contains(where: { $0.memoryContext?.weatherKind != nil || $0.memoryContext?.cityName != nil }) {
             return "这个月不只看分类，也能看到天气、城市和当天场景留下的线索。"
         }

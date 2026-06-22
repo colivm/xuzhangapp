@@ -981,7 +981,17 @@ struct RecordEditSheet: View {
     }
 
     private var previewEmotion: String {
+        if editFieldsUnchanged {
+            return item.displayEmotionTag
+        }
         editPreviewResolution.emotionTag
+    }
+
+    private var editFieldsUnchanged: Bool {
+        abs(parsedAmount - item.amount) < 0.005
+            && cleanTitle == item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            && selectedCategory == item.category
+            && abs(selectedDate.timeIntervalSince(item.createdAt)) < 1
     }
 
     private var editPreviewResolution: RecordDraftResolution {

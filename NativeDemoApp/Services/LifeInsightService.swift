@@ -17,6 +17,7 @@ final class LifeInsightService {
     private enum Keys {
         static let freeMonthKey = "life_insight_free_month_key"
         static let freeMonthUsedCount = "life_insight_free_month_used_count"
+        static let unlockedTraceKeys = "life_insight_unlocked_trace_keys"
     }
 
     private let defaults: UserDefaults
@@ -42,6 +43,20 @@ final class LifeInsightService {
         syncMonthIfNeeded(now: now)
         let used = defaults.integer(forKey: Keys.freeMonthUsedCount)
         defaults.set(min(Self.freeMonthlyLimit, used + 1), forKey: Keys.freeMonthUsedCount)
+    }
+
+    func hasUnlockedTrace(_ key: String, isMember: Bool, now: Date = Date()) -> Bool {
+        guard !isMember else { return true }
+        syncMonthIfNeeded(now: now)
+        return unlockedTraceKeys().contains(key)
+    }
+
+    func markTraceUnlocked(_ key: String, isMember: Bool, now: Date = Date()) {
+        guard !isMember else { return }
+        syncMonthIfNeeded(now: now)
+        var keys = unlockedTraceKeys()
+        keys.insert(key)
+        defaults.set(Array(keys), forKey: Keys.unlockedTraceKeys)
     }
 
     func buildTraceInsight(items: [HomeItem], periodLabel: String, now: Date = Date()) -> LifeInsightResult {
@@ -128,7 +143,12 @@ final class LifeInsightService {
         if defaults.string(forKey: Keys.freeMonthKey) != key {
             defaults.set(key, forKey: Keys.freeMonthKey)
             defaults.set(0, forKey: Keys.freeMonthUsedCount)
+            defaults.set([], forKey: Keys.unlockedTraceKeys)
         }
+    }
+
+    private func unlockedTraceKeys() -> Set<String> {
+        Set(defaults.stringArray(forKey: Keys.unlockedTraceKeys) ?? [])
     }
 
     private func monthKey(now: Date) -> String {
@@ -152,8 +172,14 @@ final class LifeInsightService {
             calendar.startOfDay(for: item.createdAt)
         }
         guard let entry = grouped.max(by: { $0.value.count < $1.value.count }) else { return nil }
-        let label = weekdayLabel(for: entry.key)
+        let label = calendarDayLabel(for: entry.key)
         return (label, entry.value.count)
+    }
+
+    private func calendarDayLabel(for date: Date) -> String {
+        let month = calendar.component(.month, from: date)
+        let day = calendar.component(.day, from: date)
+        return "\(month)月\(day)日（\(weekdayLabel(for: date))）"
     }
 
     private func weekdayLabel(for date: Date) -> String {
