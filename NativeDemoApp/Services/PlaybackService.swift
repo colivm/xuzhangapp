@@ -214,6 +214,14 @@ final class PlaybackService {
         let voiceTitle2 = secondaryVoice?.text ?? voiceTitle1
         let busiestTitle = busiestMaterial?.text ?? voiceTitle1
         let sceneMemoryLine = weeklySceneMemoryLine(rows)
+        let lifeMark = LifeMarkService
+            .aggregates(for: rows, allItems: items, isMember: true, now: now, limit: 1)
+            .first
+        let lifeMarkTitle = lifeMark?.title ?? sceneMemoryTitle(from: sceneMemoryLine, fallback: voiceTitle1)
+        let lifeMarkLine = playbackLifeMarkLine(
+            lifeMark,
+            fallback: sceneMemoryLine ?? "这一周最清楚的一格，是「\(voiceTitle1)」。"
+        )
         let echoSentence = echoAnchor
             .map { EchoAnchorService.shared.formatEchoAnchorSentence($0) }
             .flatMap { $0.isEmpty ? nil : $0 }
@@ -234,7 +242,9 @@ final class PlaybackService {
             "topCategory": top?.category ?? "日常",
             "ratio": "\(ratio)",
             "echoLine": echoSentence ?? "",
-            "sceneMemoryLine": sceneMemoryLine ?? ""
+            "sceneMemoryLine": sceneMemoryLine ?? lifeMarkLine,
+            "lifeMarkTitle": lifeMarkTitle,
+            "lifeMarkLine": lifeMarkLine
         ]
 
         var chapters: [SummaryChapter] = [
@@ -353,7 +363,8 @@ final class PlaybackService {
                 rows: rows,
                 voiceTitle: voiceTitle1,
                 scentWords: scentText,
-                copySeed: weekSeed
+                copySeed: weekSeed,
+                lifeMarkLine: lifeMarkLine
             ),
             count: rows.count,
             total: total,
@@ -871,6 +882,14 @@ final class PlaybackService {
         let voiceTitle1 = selection.voiceText(for: .month)
         let earlyVoiceTitle = earlyVoice?.text ?? PlaybackMomentSelector.honestNoVoiceText(for: .month)
         let lateVoiceTitle = lateVoice?.text ?? PlaybackMomentSelector.honestNoVoiceText(for: .month)
+        let lifeMark = LifeMarkService
+            .aggregates(for: rows, allItems: items, isMember: true, now: now, limit: 1)
+            .first
+        let lifeMarkTitle = lifeMark?.title ?? sceneMemoryTitle(from: nil, fallback: voiceTitle1)
+        let lifeMarkLine = playbackLifeMarkLine(
+            lifeMark,
+            fallback: "这个月先从「\(voiceTitle1)」这一格想起。"
+        )
         let monthValues: [String: String] = [
             "rangeLabel": rangeLabel,
             "count": "\(rows.count)",
@@ -887,7 +906,9 @@ final class PlaybackService {
             "voiceTitle1": voiceTitle1,
             "earlyVoiceTitle": earlyVoiceTitle,
             "lateVoiceTitle": lateVoiceTitle,
-            "scentWords": scentText
+            "scentWords": scentText,
+            "lifeMarkTitle": lifeMarkTitle,
+            "lifeMarkLine": lifeMarkLine
         ]
 
         let chapters: [SummaryChapter] = [
@@ -991,7 +1012,8 @@ final class PlaybackService {
                 scentWords: scentText,
                 changeText: changeText,
                 copySeed: monthSeed,
-                rangeLabel: rangeLabel
+                rangeLabel: rangeLabel,
+                lifeMarkLine: lifeMarkLine
             ),
             count: rows.count,
             total: total,
@@ -1136,16 +1158,26 @@ final class PlaybackService {
         }
     }
 
-    private func weekTeaserLine(busiest: DayActivity?, rows: [HomeItem], voiceTitle: String, scentWords: String, copySeed: String) -> String {
+    private func weekTeaserLine(
+        busiest: DayActivity?,
+        rows: [HomeItem],
+        voiceTitle: String,
+        scentWords: String,
+        copySeed: String,
+        lifeMarkLine: String
+    ) -> String {
         if rows.count < 3 {
-            return "这周已有 \(rows.count) 笔记录，再多一点就能讲得更完整。"
+            return rows.count == 1
+                ? "这周先留下「\(voiceTitle)」这一格。"
+                : "这周先留下这几格，已经能听出一点生活的开头。"
         }
         let values = [
             "busiestDayShort": busiest?.label ?? "本周",
             "count": "\(rows.count)",
             "rangeLabel": "这一周",
             "voiceTitle1": voiceTitle,
-            "scentWords": scentWords
+            "scentWords": scentWords,
+            "lifeMarkLine": lifeMarkLine
         ]
         return PlaybackCopyPool.weekTeaser(seed: copySeed, values: values)
     }
@@ -1185,15 +1217,44 @@ final class PlaybackService {
         scentWords: String,
         changeText: String,
         copySeed: String,
-        rangeLabel: String
+        rangeLabel: String,
+        lifeMarkLine: String
     ) -> String {
         let values = [
             "voiceTitle1": voiceTitle,
             "scentWords": scentWords,
             "changeHint": changeText,
-            "rangeLabel": rangeLabel
+            "rangeLabel": rangeLabel,
+            "lifeMarkLine": lifeMarkLine
         ]
         return PlaybackCopyPool.monthTeaser(seed: copySeed, values: values)
+    }
+
+    private func playbackLifeMarkLine(_ aggregate: LifeMarkAggregate?, fallback: String) -> String {
+        guard let aggregate else { return fallback }
+        let detail = LifeMarkService.primaryLine(for: aggregate)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !detail.isEmpty else { return fallback }
+
+        switch aggregate.kind {
+        case .context:
+            return detail
+        case .milestone:
+            return "\(aggregate.title) 被放进这一段里，\(detail)"
+        case .streak:
+            return detail
+        case .scene:
+            return "\(aggregate.title) 这条线露了出来，\(detail)"
+        }
+    }
+
+    private func sceneMemoryTitle(from line: String?, fallback: String) -> String {
+        let trimmed = line?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmed.contains("雨") { return "天气里的生活线" }
+        if trimmed.contains("第一次") { return "第一次的开始" }
+        if trimmed.contains("连续") { return "连续出现的节奏" }
+        if trimmed.contains("周末") { return "周末留下的片段" }
+        return fallback
     }
 
     private func playbackCopySeed(base: String, suffix: String) -> String {
@@ -1314,30 +1375,27 @@ final class PlaybackService {
             return contextLine
         }
         if let change = meaningfulMonthlyCategoryChange(current: current, previous: previous) {
-            let amountText = Self.money(abs(change.amountDelta))
             if change.previous == nil {
-                return "这个月「\(change.category)」开始变得明显，记录了 \(change.current.count) 笔、\(Self.money(change.current.amount))。"
+                return "这个月「\(change.category)」开始露面，像是新添了一段生活侧面。"
             }
             if change.amountDelta >= 0 {
-                let countText = change.countDelta > 0 ? "，多了 \(change.countDelta) 笔" : ""
-                return "这个月「\(change.category)」比上月更显眼\(countText)，多出约 \(amountText)。"
+                return "这个月「\(change.category)」比上月更常回来，像一条更清楚的生活线。"
             } else {
-                let countText = change.countDelta < 0 ? "，少了 \(abs(change.countDelta)) 笔" : ""
-                return "这个月「\(change.category)」比上月轻了一些\(countText)，少了约 \(amountText)。"
+                return "这个月「\(change.category)」比上月轻了一些，日子的重心也换了位置。"
             }
         }
         let streak = longestRecordStreak(in: current)
         if streak >= 3 {
-            return "这个月最长连续 \(streak) 天有记录，节奏比较清楚。"
+            return "这个月有一段连续 \(streak) 天被留下来，像生活自己形成了节奏。"
         }
         if let leading = segments.max(by: { $0.amount < $1.amount }), leading.amount > 0 {
-            return "\(leading.label)最热闹，记录了 \(leading.count) 笔、\(Self.money(leading.amount))。"
+            return "\(leading.label) 这一段更有画面，像这个月中间被加重的一格。"
         }
         if let first = current.first, let last = current.last {
             let days = max(1, Calendar.current.dateComponents([.day], from: first.createdAt, to: last.createdAt).day ?? 1)
-            return "记录从 \(Self.shortDateFormatter.string(from: first.createdAt)) 延续到 \(Self.shortDateFormatter.string(from: last.createdAt))，跨度 \(days) 天。"
+            return "这段从 \(Self.shortDateFormatter.string(from: first.createdAt)) 留到 \(Self.shortDateFormatter.string(from: last.createdAt))，中间隔着 \(days) 天真实日子。"
         }
-        return "这个月已经有几笔可以回看的记录。"
+        return "这个月已经有几格可以回看的生活。"
     }
 
     private func contextualMemoryLine(in rows: [HomeItem]) -> String? {

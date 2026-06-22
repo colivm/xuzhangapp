@@ -940,7 +940,7 @@ struct HomeView: View {
         guard item.amount > 0 else { return nil }
         guard let mark = LifeMarkService.aggregates(
             for: [item],
-            allItems: homeViewModel.items,
+            allItems: nil,
             isMember: settingsViewModel.settings.hasMemberAccess,
             limit: 1
         ).first else {
@@ -1417,28 +1417,42 @@ struct BillPlaybackSheet: View {
         buildPlaybackMoments()
     }
 
+    private var currentPlaybackMoment: PlaybackMoment? {
+        guard !playbackMoments.isEmpty else { return nil }
+        if activeIndex < 0 { return playbackMoments.first }
+        return playbackMoments[min(activeIndex, playbackMoments.count - 1)]
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            dragHandle
-            if todayItems.isEmpty {
-                emptyPlaybackState
-            } else {
-                playbackContent
-                Spacer()
-                playbackDoneSection
-                playbackControls
+        ZStack(alignment: .topTrailing) {
+            todayPlaybackBackdrop
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                dragHandle
+                if todayItems.isEmpty {
+                    emptyPlaybackState
+                } else {
+                    playbackContent
+                    Spacer(minLength: 10)
+                    playbackDoneSection
+                    playbackControls
+                }
             }
-        }
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .topTrailing) {
+
             Button { dismiss() } label: {
-                Image(systemName: "xmark.circle.fill").font(.title3)
-                    .foregroundStyle(AppColors.subtext.opacity(0.5))
-            }.padding(12)
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.subtext.opacity(0.76))
+                    .frame(width: 34, height: 34)
+                    .background(Color.white.opacity(0.64), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(12)
         }
-        .presentationDetents([.height(360)])
+        .presentationDetents([.height(todayItems.isEmpty ? 320 : 620)])
         .presentationBackground(.clear)
-        .presentationCornerRadius(24)
+        .presentationCornerRadius(30)
         .onAppear {
             activeIndex = -1; playbackDone = false; isPlaying = false; showMemberNudge = false
             if !todayItems.isEmpty { isPlaying = true }
@@ -1465,6 +1479,21 @@ struct BillPlaybackSheet: View {
         }
     }
 
+    private var todayPlaybackBackdrop: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    AppColors.heroGradientPink.opacity(0.34),
+                    AppColors.heroGradientTeal.opacity(0.28),
+                    AppColors.bg
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        .background(.ultraThinMaterial)
+    }
+
     private var dragHandle: some View {
         Capsule()
             .fill(Color.white.opacity(0.3))
@@ -1485,111 +1514,187 @@ struct BillPlaybackSheet: View {
     }
 
     private var playbackContent: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 14) {
             playbackHeader
-            playbackMomentList
+            playbackStage
+            playbackFilmStrip
         }
+        .padding(.horizontal, 18)
+        .padding(.top, 6)
     }
 
     private var playbackHeader: some View {
-        VStack(spacing: 6) {
-            Text("今日生活回放")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(AppColors.text)
-            Text("十秒听一遍今天")
-                .font(.system(size: 12))
-                .foregroundStyle(AppColors.subtext)
+        HStack(alignment: .bottom) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("今日生活回放")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.text)
+                Text(todayPlaybackSubtitle)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Text("\(todayItems.count) 笔")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.accent)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule(style: .continuous).fill(Color.white.opacity(0.58)))
         }
-        .padding(.top, 10)
-        .padding(.bottom, 6)
+        .padding(.top, 8)
     }
 
-    private var playbackMomentList: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: 8) {
-                    ForEach(Array(playbackMoments.enumerated()), id: \.element.id) { index, moment in
-                        playbackMomentRow(moment, index: index)
+    private var todayPlaybackSubtitle: String {
+        if playbackDone { return "今天的几笔已经播完" }
+        if isPlaying { return "正在把今天读成一段胶片" }
+        return "暂停在这一格"
+    }
+
+    private var playbackStage: some View {
+        let moment = currentPlaybackMoment
+        return ZStack(alignment: .topTrailing) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 7) {
+                    ForEach(playbackMoments.indices, id: \.self) { index in
+                        Capsule(style: .continuous)
+                            .fill(index <= max(activeIndex, 0) ? AppColors.accent.opacity(0.82) : Color.white.opacity(0.55))
+                            .frame(height: 4)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 6)
-            }
-            .onChange(of: activeIndex) { _, index in
-                guard index >= 0 else { return }
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                    proxy.scrollTo(index, anchor: .center)
+
+                Spacer(minLength: 0)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Text(moment?.eyebrow ?? "今天")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(AppColors.accentDark.opacity(0.82))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Capsule(style: .continuous).fill(Color.white.opacity(0.54)))
+                        if let amount = moment?.amountText {
+                            Text(amount)
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundStyle(AppColors.text.opacity(0.72))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Capsule(style: .continuous).fill(Color.white.opacity(0.42)))
+                        }
+                    }
+
+                    Text(moment?.title ?? "今天的记录")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppColors.text)
+                        .lineSpacing(5)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.72)
+
+                    Text(moment?.body ?? "先留下几笔，晚上再回来看。")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(AppColors.subtext.opacity(0.94))
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            }
-        }
-    }
 
-    private func playbackMomentRow(_ moment: PlaybackMoment, index: Int) -> some View {
-        let isActive = index == activeIndex
-        let isRevealed = index <= activeIndex || activeIndex == -1
+                Spacer(minLength: 0)
 
-        return VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 8) {
-                Text(moment.eyebrow)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(AppColors.accent.opacity(0.82))
-                Spacer()
-                if let amount = moment.amountText {
-                    Text(amount)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundStyle(AppColors.text.opacity(0.72))
+                HStack(spacing: 8) {
+                    Image(systemName: playbackDone ? "checkmark.circle.fill" : "waveform")
+                        .font(.system(size: 14, weight: .bold))
+                    Text(playbackDone ? "今日胶片已放完" : "轻轻播放中")
+                        .font(.system(size: 13, weight: .semibold))
                 }
+                .foregroundStyle(AppColors.accent.opacity(0.88))
             }
+            .padding(22)
+            .frame(maxWidth: .infinity, minHeight: 286, alignment: .leading)
+            .background(todayPlaybackStageBackground)
+            .overlay(todayPlaybackStageBorder)
+            .shadow(color: AppColors.subtext.opacity(0.14), radius: 22, x: 0, y: 12)
 
-            Text(moment.title)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(AppColors.text)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text(moment.body)
-                .font(.system(size: 12))
-                .foregroundStyle(AppColors.subtext.opacity(0.92))
-                .lineLimit(3)
-                .fixedSize(horizontal: false, vertical: true)
+            Image(systemName: playbackStageSymbol)
+                .font(.system(size: 88, weight: .bold))
+                .foregroundStyle(AppColors.accent.opacity(0.08))
+                .offset(x: 6, y: 4)
         }
-        .padding(13)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(activeMomentBackground(isActive: isActive))
-        .overlay(activeMomentBorder(isActive: isActive))
-        .scaleEffect(isActive && !playbackDone ? 1.01 : 1.0, anchor: .leading)
-        .opacity(isRevealed ? 1 : 0.35)
-        .animation(.spring(response: 0.35, dampingFraction: 0.65), value: activeIndex)
-        .id(index)
+        .animation(.easeInOut(duration: 0.24), value: activeIndex)
     }
 
-    @ViewBuilder
-    private func activeMomentBackground(isActive: Bool) -> some View {
-        if isActive && !playbackDone {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(AppColors.accent.opacity(0.05))
-                )
-        } else {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.32))
-        }
+    private var playbackStageSymbol: String {
+        guard let moment = currentPlaybackMoment else { return "play.rectangle.fill" }
+        if moment.id.contains("first") { return "sunrise.fill" }
+        if moment.id.contains("theme") { return "sparkles" }
+        if moment.id.contains("close") { return "moon.stars.fill" }
+        return "rectangle.stack.fill"
     }
 
-    private func activeMomentBorder(isActive: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .stroke(isActive && !playbackDone ? AppColors.accent.opacity(0.24) : Color.white.opacity(0.32), lineWidth: 1)
+    private var todayPlaybackStageBackground: some View {
+        RoundedRectangle(cornerRadius: 28, style: .continuous)
+            .fill(Color.white.opacity(0.60))
+            .background(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+    }
+
+    private var todayPlaybackStageBorder: some View {
+        RoundedRectangle(cornerRadius: 28, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.74), AppColors.accent.opacity(0.16)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
+    }
+
+    private var playbackFilmStrip: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(playbackMoments.enumerated()), id: \.element.id) { index, moment in
+                Button {
+                    activeIndex = index
+                    playbackDone = false
+                } label: {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(moment.eyebrow)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(index == activeIndex ? AppColors.accent : AppColors.subtext)
+                            .lineLimit(1)
+                        Text(moment.title)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(AppColors.text.opacity(index <= max(activeIndex, 0) ? 0.92 : 0.54))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.78)
+                    }
+                    .padding(9)
+                    .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(index == activeIndex ? Color.white.opacity(0.70) : Color.white.opacity(0.32))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(index == activeIndex ? AppColors.accent.opacity(0.25) : Color.white.opacity(0.28), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     @ViewBuilder
     private var playbackDoneSection: some View {
         if playbackDone {
-            Text("今天的记录已回放完毕")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(AppColors.accent.opacity(0.8))
-                .padding(.bottom, 8)
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 14, weight: .bold))
+                Text("今天的记录已回放完毕")
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .foregroundStyle(AppColors.accent.opacity(0.86))
+            .padding(.bottom, 8)
 
             if showMemberNudge {
                 memberPlaybackNudge
@@ -1680,14 +1785,18 @@ struct BillPlaybackSheet: View {
     private var primaryPlaybackControlLabel: some View {
         let title = playbackDone ? "关闭" : (isPlaying ? "暂停" : "播放")
 
-        return Text(title)
-            .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(AppColors.text.opacity(0.8))
+        return HStack(spacing: 7) {
+            Image(systemName: playbackDone ? "xmark" : (isPlaying ? "pause.fill" : "play.fill"))
+                .font(.system(size: 12, weight: .bold))
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+        }
+            .foregroundStyle(AppColors.text.opacity(0.82))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(RoundedRectangle(cornerRadius: 12).fill(.ultraThinMaterial))
+            .padding(.vertical, 12)
+            .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(Color.white.opacity(0.58)))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
                     .stroke(Color.white.opacity(0.35), lineWidth: 0.6)
             )
     }
@@ -1695,16 +1804,16 @@ struct BillPlaybackSheet: View {
     private var replayPlaybackControlLabel: some View {
         let title = playbackDone ? "再看一遍" : "重播"
 
-        return Text(title)
-            .font(.system(size: 14, weight: .medium))
+        return HStack(spacing: 7) {
+            Image(systemName: "arrow.counterclockwise")
+                .font(.system(size: 12, weight: .bold))
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+        }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(Capsule(style: .continuous).fill(AppColors.accent))
-    }
-
-    private var progressFraction: CGFloat {
-        playbackDone ? 1 : CGFloat(max(0, activeIndex)) / CGFloat(max(1, playbackMoments.count - 1))
+            .padding(.vertical, 12)
+            .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(AppColors.accent))
     }
 
     private func restartPlayback() {
@@ -1729,17 +1838,19 @@ struct BillPlaybackSheet: View {
 
     private func buildPlaybackMoments() -> [PlaybackMoment] {
         guard !todayItems.isEmpty else { return [] }
-        let total = todayItems.reduce(0) { $0 + $1.amount }
         let topCategory = topCategoryText()
         let dominantScene = LifeSceneSemanticService.dominantScene(in: todayItems)
+        let lifeMark = LifeMarkService
+            .aggregates(for: todayItems, allItems: todayItems, isMember: true, limit: 1)
+            .first
         let first = todayItems.first
         let representative = representativeItem()
         var moments: [PlaybackMoment] = [
             PlaybackMoment(
                 id: "opening",
-                eyebrow: "今天",
-                title: "今天记了 \(todayItems.count) 笔",
-                body: openingBody(total: total, dominantScene: dominantScene),
+                eyebrow: "今日回放",
+                title: "今天留下 \(todayItems.count) 格",
+                body: openingBody(dominantScene: dominantScene, lifeMark: lifeMark),
                 amountText: nil
             )
         ]
@@ -1760,7 +1871,7 @@ struct BillPlaybackSheet: View {
             moments.append(
                 PlaybackMoment(
                     id: "theme",
-                    eyebrow: "今天多一点",
+                    eyebrow: "今天的主线",
                     title: themeTitle(topCategory: topCategory, dominantScene: dominantScene),
                     body: themeBody(topCategory: topCategory, dominantScene: dominantScene),
                     amountText: nil
@@ -1798,29 +1909,35 @@ struct BillPlaybackSheet: View {
     }
 
     private func openingBody(
-        total: Double,
-        dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?
+        dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?,
+        lifeMark: LifeMarkAggregate?
     ) -> String {
         let categories = categoryMixText()
+        if let lifeMark {
+            let detail = LifeMarkService.primaryLine(for: lifeMark)
+            if !detail.isEmpty {
+                return "\(detail) 今天先不急着算总账，先把这段生活留住。"
+            }
+        }
         if let dominantScene = dominantScene, dominantScene.count >= 2 {
             switch dominantScene.signal.kind {
             case .commute:
-                return "合计 \(total.formatted(.cny))，路上的几笔也算今天的一部分。"
+                return "今天反复出现的是路上。出门、等待、到达，这些不只属于交通分类。"
             case .cityRoute:
-                return "合计 \(total.formatted(.cny))，今天跑动的地方不少。"
+                return "今天像是在城市里挪了几个位置，回头看会知道自己去过哪些地方。"
             case .breakfast, .quickMeal, .workMeal:
-                return "合计 \(total.formatted(.cny))，吃饭这件小事被好好记下了。"
+                return "今天先从几次吃饭看起。忙也好、赶饭点也好，身体总要被照顾到。"
             case .coffee:
-                return "合计 \(total.formatted(.cny))，忙里提神的几口也留下来了。"
+                return "今天有几杯饮品留下来，它们更像日子中间的小停顿。"
             case .convenienceSupply, .groceries, .homeSupply:
-                return "合计 \(total.formatted(.cny))，补上的都是今天用得上的。"
+                return "今天像是给生活补了一点库存，少几件惦记的事。"
             case .medicalVisit, .medicineCare, .fitness, .bodyCare:
-                return "合计 \(total.formatted(.cny))，身体这边的事也被记住了。"
+                return "今天身体这边被认真记了一下，这类记录本来就不该只剩金额。"
             default:
                 break
             }
         }
-        return "合计 \(total.formatted(.cny))，\(categories)这些小事被收进了今天。"
+        return "\(categories)这些小事被收进了今天。以后再翻回来，看到的会是这一天的几个片段。"
     }
 
     private func categoryMixText() -> String {
@@ -1850,21 +1967,40 @@ struct BillPlaybackSheet: View {
     }
 
     private func firstMomentBody(for item: HomeItem) -> String {
+        if let weatherLine = weatherPlaybackLine(for: item) {
+            return weatherLine
+        }
+        let hour = Calendar.current.component(.hour, from: item.createdAt)
         switch LifeSceneSemanticService.classify(item).kind {
         case .commute:
-            return "这笔从路上开始，今天的节奏也跟着动起来。"
+            if hour < 12 {
+                return "这笔落在上班路上，清晨出门这件事也被留下了一格。"
+            }
+            if hour >= 17 {
+                return "这笔落在下班路上，到家的那一段也算今天的一部分。"
+            }
+            return "这笔落在通勤路上，是今天在城市里移动过的证据。"
         case .cityRoute:
             return "先把这趟路记下，后面回看就知道那会儿去了哪里。"
         case .breakfast:
             return "先从早上的一口吃的开始，今天有了开头。"
         case .quickMeal, .workMeal:
-            return "先把这一餐记下，忙不忙都算吃过了。"
+            return "这一餐不需要被说得很重，它只是把今天中间那一段稳住了。"
         case .coffee:
-            return "先从这杯提神的开始，今天慢慢往前走。"
+            if (11..<14).contains(hour) {
+                return "这杯更像工作日中间的一次停顿，和路上的事没什么关系。"
+            }
+            if hour < 11 {
+                return "早上的这杯先把人叫醒一点，今天从这里慢慢展开。"
+            }
+            if hour >= 17 {
+                return "傍晚这杯像给后半天留一点余量，不只是提神。"
+            }
+            return "这杯饮品被留下来，像今天中间一小段喘气的时间。"
         case .convenienceSupply, .groceries, .homeSupply:
             return "先把需要的东西补上，今天少一件惦记的事。"
         case .medicalVisit, .medicineCare, .fitness, .bodyCare:
-            return "先把身体这边的安排记下，这笔不只是数字。"
+            return "先把身体这边的安排记下，这笔以后看起来会比数字更具体。"
         default:
             return "这笔先开了个头，今天就从这里被记住。"
         }
@@ -1879,13 +2015,13 @@ struct BillPlaybackSheet: View {
         }
         switch dominantScene.signal.kind {
         case .commute:
-            return "今天路上有几笔"
+            return "今天路上有几格"
         case .cityRoute:
-            return "今天跑动不少"
+            return "今天在城市里移动过"
         case .breakfast, .quickMeal, .workMeal:
-            return "今天吃饭这条线比较明显"
+            return "今天吃饭这条线清楚"
         case .coffee:
-            return "今天靠几口提神往前走"
+            return "今天有几次小停顿"
         case .convenienceSupply, .groceries, .homeSupply:
             return "今天补了些需要的"
         case .shopping:
@@ -1910,23 +2046,23 @@ struct BillPlaybackSheet: View {
         }
         switch dominantScene.signal.kind {
         case .commute:
-            return "通勤记了 \(dominantScene.count) 笔，路上花掉的时间也算今天的一部分。"
+            return "通勤出现了 \(dominantScene.count) 次。它不只是上班两个字，也包括出门、等车、到达和回来的那段时间。"
         case .cityRoute:
-            return "出行记了 \(dominantScene.count) 笔，今天确实在城市里来回移动。"
+            return "出行出现了 \(dominantScene.count) 次，今天确实在城市里换过几个位置。"
         case .breakfast, .quickMeal, .workMeal:
-            return "吃饭记了 \(dominantScene.count) 笔，忙的时候能吃上也挺重要。"
+            return "吃饭出现了 \(dominantScene.count) 次。它不是消费主题，是今天被照顾到的几段时间。"
         case .coffee:
-            return "咖啡饮品记了 \(dominantScene.count) 笔，清醒也有成本。"
+            return "咖啡饮品出现了 \(dominantScene.count) 次。它们更像小停顿，不必都被解释成路上匆忙或硬撑。"
         case .convenienceSupply, .groceries, .homeSupply:
-            return "补给记了 \(dominantScene.count) 笔，都是把日子往前推的小东西。"
+            return "补给出现了 \(dominantScene.count) 次，都是让今天少一点缺口的小东西。"
         case .shopping:
-            return "购物记了 \(dominantScene.count) 笔，买到需要的就好。"
+            return "添置出现了 \(dominantScene.count) 次，可能是需要，也可能是兴趣里的一点投入。"
         case .medicalVisit, .medicineCare:
-            return "健康相关记了 \(dominantScene.count) 笔，辛苦归辛苦，先别漏掉自己。"
+            return "健康相关出现了 \(dominantScene.count) 次，辛苦归辛苦，至少没有把自己漏掉。"
         case .fitness, .bodyCare:
-            return "身体相关记了 \(dominantScene.count) 笔，今天有在照看自己。"
+            return "身体相关出现了 \(dominantScene.count) 次，今天有在照看自己，也给恢复留了位置。"
         case .social:
-            return "人情往来记了 \(dominantScene.count) 笔，日子里也有和别人相连的部分。"
+            return "人情往来出现了 \(dominantScene.count) 次，日子里也有和别人相连的部分。"
         default:
             return "这条线出现了 \(dominantScene.count) 次，今天的轮廓就更清楚一点。"
         }
@@ -1938,7 +2074,25 @@ struct BillPlaybackSheet: View {
     }
 
     private func closingBody(for item: HomeItem) -> String {
-        "最后停在「\(playbackTitle(for: item))」。今天不用讲得很满，记到这里就已经够具体了。"
+        if let weather = item.memoryContext?.weatherKind,
+           weather.contains("雨") || weather.lowercased().contains("rain") {
+            return "最后停在「\(playbackTitle(for: item))」。以后翻回来，会知道这一天不只有金额，还有当时的雨。"
+        }
+        return "最后停在「\(playbackTitle(for: item))」。今天不用讲得很满，能留下这些片段就已经够具体了。"
+    }
+
+    private func weatherPlaybackLine(for item: HomeItem) -> String? {
+        let weather = item.memoryContext?.weatherKind?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let rainy = weather.contains("雨") || weather.lowercased().contains("rain")
+        guard rainy else { return nil }
+        switch LifeSceneSemanticService.classify(item).kind {
+        case .commute:
+            return "这笔落在雨天通勤里。以后再看，会知道那天上班路上有雨，路也可能不太好走。"
+        case .cityRoute:
+            return "这趟路带着雨天背景，回头看会知道那会儿不是普通出门。"
+        default:
+            return "这笔旁边有雨天背景。以后再看，会知道今天的空气和天气也在场。"
+        }
     }
 }
 

@@ -216,7 +216,18 @@ struct SummaryPlaybackSheet: View {
 
     private var header: some View {
         HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: playback.range == .week ? "calendar.badge.clock" : "calendar")
+                        .font(.system(size: 12, weight: .bold))
+                    Text(playback.range == .week ? "本周章节" : "本月章节")
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .foregroundStyle(AppColors.accentDark.opacity(0.82))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule(style: .continuous).fill(Color.white.opacity(0.54)))
+
                 Text(playback.title)
                     .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundStyle(AppColors.text)
@@ -244,12 +255,14 @@ struct SummaryPlaybackSheet: View {
     private var chapterStage: some View {
         ZStack(alignment: .topTrailing) {
             if let chapter = currentChapter {
+                chapterFilmRails
                 chapterStageSymbol(chapter)
                 chapterStageContent(chapter)
             }
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, minHeight: 330, alignment: .topLeading)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 22)
+        .frame(maxWidth: .infinity, minHeight: 360, alignment: .topLeading)
         .background(chapterStageBackground)
         .overlay(chapterStageBorder)
         .shadow(color: AppColors.subtext.opacity(0.16), radius: 22, x: 0, y: 12)
@@ -262,6 +275,28 @@ struct SummaryPlaybackSheet: View {
         .animation(.easeInOut(duration: 0.22), value: activeIndex)
     }
 
+    private var chapterFilmRails: some View {
+        VStack {
+            filmRail
+            Spacer()
+            filmRail
+        }
+        .padding(.horizontal, 2)
+        .padding(.vertical, 4)
+        .allowsHitTesting(false)
+    }
+
+    private var filmRail: some View {
+        HStack(spacing: 7) {
+            ForEach(0..<10, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(Color.white.opacity(0.40))
+                    .frame(width: 12, height: 5)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     private func chapterStageSymbol(_ chapter: SummaryChapter) -> some View {
         Image(systemName: chapterSymbol(for: chapter))
             .font(.system(size: 112, weight: .bold))
@@ -272,13 +307,26 @@ struct SummaryPlaybackSheet: View {
 
     private func chapterStageContent(_ chapter: SummaryChapter) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            chapterTitle(chapter)
+            chapterTopLine(chapter)
             chapterRangeLabel(chapter)
             chapterNarration(chapter)
             chapterSupportView(for: chapter)
         }
         .id(chapter.id)
         .transition(.opacity.combined(with: .scale(scale: 0.98)))
+    }
+
+    private func chapterTopLine(_ chapter: SummaryChapter) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            chapterTitle(chapter)
+            Spacer(minLength: 8)
+            Text("\(min(activeIndex + 1, playback.chapters.count))/\(playback.chapters.count)")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(chapterAccent(for: chapter))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule(style: .continuous).fill(Color.white.opacity(0.48)))
+        }
     }
 
     private func chapterTitle(_ chapter: SummaryChapter) -> some View {
@@ -299,9 +347,9 @@ struct SummaryPlaybackSheet: View {
 
     private func chapterNarration(_ chapter: SummaryChapter) -> some View {
         Text(petEnabled ? chapter.narration.warm : chapter.narration.plain)
-            .font(.system(size: 23, weight: .semibold, design: .rounded))
+            .font(.system(size: 24, weight: .bold, design: .rounded))
             .foregroundStyle(AppColors.text)
-            .lineSpacing(7)
+            .lineSpacing(8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
             .contentTransition(.opacity)
@@ -309,16 +357,35 @@ struct SummaryPlaybackSheet: View {
 
     private var chapterStageBackground: some View {
         RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .fill(Color.white.opacity(0.62))
+            .fill(Color.white.opacity(0.66))
             .background(
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
                     .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.36),
+                        chapterAccent(for: currentChapter).opacity(0.08),
+                        Color.clear
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
             )
     }
 
     private var chapterStageBorder: some View {
         RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .stroke(Color.white.opacity(0.62), lineWidth: 1)
+            .stroke(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.78), chapterAccent(for: currentChapter).opacity(0.22)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
     }
 
     @ViewBuilder
@@ -534,14 +601,23 @@ struct SummaryPlaybackSheet: View {
 
     private var controls: some View {
         VStack(spacing: 12) {
-            ProgressView(value: progressFraction)
-                .tint(AppColors.accent)
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.54))
+                    Capsule(style: .continuous)
+                        .fill(AppColors.accent.opacity(0.86))
+                        .frame(width: max(8, proxy.size.width * CGFloat(progressFraction)))
+                }
+            }
+            .frame(height: 6)
 
             HStack(spacing: 12) {
                 ForEach(playback.chapters.indices, id: \.self) { index in
-                    Circle()
+                    RoundedRectangle(cornerRadius: 999, style: .continuous)
                         .fill(index <= activeIndex ? AppColors.accent : Color.white.opacity(0.54))
-                        .frame(width: index == activeIndex ? 9 : 7, height: index == activeIndex ? 9 : 7)
+                        .frame(width: index == activeIndex ? 20 : 8, height: 8)
+                        .animation(.spring(response: 0.24, dampingFraction: 0.86), value: activeIndex)
                 }
                 Spacer()
                 Button {

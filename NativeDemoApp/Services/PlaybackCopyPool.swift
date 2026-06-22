@@ -33,193 +33,193 @@ enum PlaybackCopyPool {
     }
 
     private static let fallbackGroup = PlaybackCopyGroup(
-        warm: ["这段记录先留在这里。"],
-        plain: ["这段记录先留在这里。"]
+        warm: ["这段生活先留在这里。"],
+        plain: ["这段生活先留在这里。"]
     )
 
     private static let groups: [String: PlaybackCopyGroup] = [
         "week-presence": PlaybackCopyGroup(
             warm: [
-                "{rangeLabel}，这一周已经有一段可回看的生活。",
-                "这一周先从这些记录听起。",
-                "{rangeLabel} 留下了记录，故事从这里开始。"
+                "{rangeLabel} 先别急着看成一张表，它更像几格被留下来的生活。",
+                "这一周的开场，不在合计里，而在「{voiceTitle1}」这样的片段里。",
+                "{lifeMarkLine}"
             ],
             plain: [
-                "{rangeLabel}，这一周已经有记录可回看。",
-                "先看这一周留下的记录。",
-                "这一周从这里开始回看。"
+                "{rangeLabel} 先从生活片段看起。",
+                "这一周从「{voiceTitle1}」开始回看。",
+                "{lifeMarkLine}"
             ]
         ),
         "week-weak-presence": PlaybackCopyGroup(
             warm: [
-                "这周记录还不多，但已经有了开头。",
-                "先把这几笔放在这一周里听一遍。",
-                "这周刚留下几笔，先听一个短版本。"
+                "这周还只是几格，但已经能看见一点生活的开头。",
+                "先把这几笔放在同一段里听一遍，不急着下结论。",
+                "这周的胶片还短，先留住「{voiceTitle1}」这一格。"
             ],
             plain: [
-                "这周记录还不多，先听一个短版本。",
-                "这几笔先作为这一周的开头。",
-                "记录还少，先简单回看。"
+                "这周先留住这几格。",
+                "先从「{voiceTitle1}」听起。",
+                "记录还少，但生活已经有了开头。"
             ]
         ),
         "week-rhythm": PlaybackCopyGroup(
             warm: [
-                "{busiestDay} 更热闹，代表的一笔是「{busiestTitle}」。",
-                "这一周的起伏落在 {busiestDay}，那天留下了「{busiestTitle}」。",
-                "{busiestDay} 记录更密一点，其中有「{busiestTitle}」。"
+                "镜头转到 {busiestDay}，那天最容易被记住的是「{busiestTitle}」。",
+                "{busiestDay} 像这一周里被按下暂停的一天，留下了「{busiestTitle}」。",
+                "{sceneMemoryLine}"
             ],
             plain: [
-                "{busiestDay} 记录更多，代表一笔是「{busiestTitle}」。",
-                "这一周更集中在 {busiestDay}，那天有「{busiestTitle}」。",
-                "{busiestDay} 更忙一点，留下了「{busiestTitle}」。"
+                "{busiestDay} 这一格里，有「{busiestTitle}」。",
+                "这一周可以记住 {busiestDay} 的「{busiestTitle}」。",
+                "{sceneMemoryLine}"
             ]
         ),
         "week-voices": PlaybackCopyGroup(
             warm: [
-                "这周最像生活句的，是「{voiceTitle1}」。",
-                "账本里有一句「{voiceTitle1}」，比数字更有画面。",
-                "这一周留下的话里，「{voiceTitle1}」站得出来。"
+                "如果只能留下一句，这周会先留下「{voiceTitle1}」。",
+                "「{voiceTitle1}」不是分类名，它像当时生活自己说出来的一句话。",
+                "这一周最有画面的一格，是「{voiceTitle1}」。"
             ],
             plain: [
-                "这周有一句「{voiceTitle1}」。",
-                "账本里留下了「{voiceTitle1}」。",
-                "这一周可以从「{voiceTitle1}」记起。"
+                "这周先记住「{voiceTitle1}」。",
+                "账本里留下了「{voiceTitle1}」这一句。",
+                "这一周可以从「{voiceTitle1}」想起。"
             ]
         ),
         "week-weak-voices": PlaybackCopyGroup(
             warm: [
-                "目前能读到的一句是「{voiceTitle1}」。",
-                "记录还少，但「{voiceTitle1}」已经能留下来。",
-                "短短几笔里，有「{voiceTitle1}」。"
+                "目前最清楚的一格，是「{voiceTitle1}」。",
+                "记录还少，但「{voiceTitle1}」已经能把这周留住一点。",
+                "短短几笔里，「{voiceTitle1}」先露了出来。"
             ],
             plain: [
-                "目前能读到的一句是「{voiceTitle1}」。",
+                "先记住「{voiceTitle1}」。",
                 "这几笔里有「{voiceTitle1}」。",
-                "记录不多，先记住「{voiceTitle1}」。"
+                "记录不多，但这一句已经够具体。"
             ]
         ),
         "week-scent": PlaybackCopyGroup(
             warm: [
-                "这周常冒头的词是：{scentWords}。",
-                "把标题和标记拆开看，{scentWords} 反复出现。",
-                "这一周的气味不在大数字里，而在 {scentWords}。"
+                "{scentWords} 不是关键词列表，更像这一周反复露面的生活道具。",
+                "把金额先放到一边，{scentWords} 才是这周更有味道的部分。",
+                "{lifeMarkTitle} 这条线也在里面，它让这周不只是几笔账。"
             ],
             plain: [
-                "这周常出现的词是：{scentWords}。",
-                "标题和标记里，{scentWords} 更常见。",
-                "这一周可以用 {scentWords} 来记。"
+                "这一周可以用 {scentWords} 来想起。",
+                "{scentWords} 在这周反复出现。",
+                "{lifeMarkLine}"
             ]
         ),
         "week-outro": PlaybackCopyGroup(
             warm: [
-                "这周先记到这里，下周再听新的版本。",
-                "这些句子先放回账本里，下周再接着听。",
-                "这一周已经留下来了，后面有新记录再回来。"
+                "这一周先收在这里。以后再回来，看的不是合计，是这些片段怎么连成了生活。",
+                "这些句子先放回账本里。下次再听，会接上新的天气、新的路和新的饭点。",
+                "这一周已经留下来了，不必讲满，能被想起就够了。"
             ],
             plain: [
-                "这周先记到这里。",
-                "这些记录先放回账本里。",
-                "下周再听新的版本。"
+                "这周先收在这里。",
+                "这些片段先放回账本里。",
+                "下周再接着听新的生活。"
             ]
         ),
         "week-weak-outro": PlaybackCopyGroup(
             warm: [
-                "再多记几笔，下次会更像完整的一周。",
-                "这周先到这里，后面多一点记录会更清楚。",
-                "先留住这个开头，下次再听更完整。"
+                "这周先留下这个开头。再多几笔，它会慢慢长成一段更完整的生活。",
+                "先到这里，不急着讲大道理；几格也能证明这周真实发生过。",
+                "先留住这一小段，下次回来会有更多能接上的镜头。"
             ],
             plain: [
-                "再多记几笔，下次会更完整。",
+                "先留住这个开头。",
                 "这周先到这里。",
-                "先留住这个开头。"
+                "再多几笔，下次会更完整。"
             ]
         ),
         "month-opening": PlaybackCopyGroup(
             warm: [
-                "{rangeLabel} 有 {activeDays} 天留下了记录，先从一句「{voiceTitle1}」听起。",
-                "这个月不是一张表，先记住「{voiceTitle1}」。",
-                "{rangeLabel} 的开头，落在「{voiceTitle1}」这样的记录里。"
+                "{rangeLabel} 不该只被压成一个总数，先从「{voiceTitle1}」这一格看起。",
+                "这个月的第一句，不是花了多少，而是「{voiceTitle1}」。",
+                "{lifeMarkLine}"
             ],
             plain: [
-                "{rangeLabel} 有 {activeDays} 天留下记录，先看「{voiceTitle1}」。",
+                "{rangeLabel} 先看「{voiceTitle1}」。",
                 "这个月先从「{voiceTitle1}」听起。",
-                "{rangeLabel} 先记住「{voiceTitle1}」。"
+                "{lifeMarkLine}"
             ]
         ),
         "month-early-voice": PlaybackCopyGroup(
             warm: [
-                "上旬留下的一句是「{earlyVoiceTitle}」。",
-                "月初先落下一笔「{earlyVoiceTitle}」。",
-                "前十天里，「{earlyVoiceTitle}」先站出来。"
+                "月初那几天，先被留下来的是「{earlyVoiceTitle}」。",
+                "这个月刚展开时，「{earlyVoiceTitle}」先占了一格。",
+                "前十天不用讲得很满，记住「{earlyVoiceTitle}」就有画面。"
             ],
             plain: [
-                "上旬有「{earlyVoiceTitle}」。",
                 "月初留下了「{earlyVoiceTitle}」。",
-                "前十天里有「{earlyVoiceTitle}」。"
+                "前十天先记住「{earlyVoiceTitle}」。",
+                "上旬这一格是「{earlyVoiceTitle}」。"
             ]
         ),
         "month-late-voice": PlaybackCopyGroup(
             warm: [
-                "中下旬换了一个侧面：「{lateVoiceTitle}」。",
-                "到了后半月，记录里出现了「{lateVoiceTitle}」。",
-                "这个月往后走，留下了「{lateVoiceTitle}」。"
+                "这个月往后走，又换成了「{lateVoiceTitle}」这样的画面。",
+                "到了后半段，账本里多了一句「{lateVoiceTitle}」。",
+                "中下旬没有只是在延续，它留下了「{lateVoiceTitle}」这个侧面。"
             ],
             plain: [
-                "中下旬有「{lateVoiceTitle}」。",
                 "后半月留下了「{lateVoiceTitle}」。",
-                "这个月后面出现了「{lateVoiceTitle}」。"
+                "中下旬这一格是「{lateVoiceTitle}」。",
+                "这个月后面可以记住「{lateVoiceTitle}」。"
             ]
         ),
         "month-change": PlaybackCopyGroup(
             warm: [
                 "{changeHint}",
-                "这个月有一个变化点：{changeHint}",
-                "{petName} 注意到：{changeHint}"
+                "这个月真正值得留意的，不是波动本身，而是：{changeHint}",
+                "{petName} 读到的生活变化是：{changeHint}"
             ],
             plain: [
                 "{changeHint}",
-                "这个月的变化点是：{changeHint}",
-                "可以记住这个变化：{changeHint}"
+                "这个月可以记住这个变化：{changeHint}",
+                "这一段的变化是：{changeHint}"
             ]
         ),
         "month-scent": PlaybackCopyGroup(
             warm: [
-                "这个月常冒头的词是：{scentWords}。",
-                "把这个月拆成词，{scentWords} 更常回来。",
-                "{rangeLabel} 的气味，藏在 {scentWords} 里。"
+                "{scentWords} 像这个月反复出现的生活道具，不是冷冰冰的标签。",
+                "把这个月拆成镜头，{scentWords} 会一次次回来。",
+                "{rangeLabel} 的气味，藏在 {scentWords} 和「{lifeMarkTitle}」里。"
             ],
             plain: [
-                "这个月常出现的词是：{scentWords}。",
-                "这个月可以用 {scentWords} 来记。",
-                "{rangeLabel} 里，{scentWords} 更常见。"
+                "这个月可以用 {scentWords} 来想起。",
+                "{scentWords} 在这个月反复回来。",
+                "{rangeLabel} 里，有「{lifeMarkTitle}」这条线。"
             ]
         ),
         "month-outro": PlaybackCopyGroup(
             warm: [
-                "这个月先收到这里，下个月再听新的生活句。",
-                "{rangeLabel} 先放回账本里，下个月会有新的版本。",
-                "这一个月已经留下来了，下一章等新记录长出来。"
+                "这个月先收到这里。以后再翻回来，先看见的应该是生活，不只是金额。",
+                "{rangeLabel} 先放回账本里。下个月会有新的天气、新的路线和新的小停顿。",
+                "这一个月已经留下来了，下一章不用复制这一章，会自己长出新的生活。"
             ],
             plain: [
                 "这个月先收到这里。",
                 "{rangeLabel} 先放回账本里。",
-                "下个月再听新的版本。"
+                "下个月再听新的生活。"
             ]
         )
     ]
 
     private static let weekTeasers = [
-        "{busiestDayShort} 更热闹，留下过「{voiceTitle1}」。",
+        "{busiestDayShort} 那一格，留下过「{voiceTitle1}」。",
         "这一周，可以从「{voiceTitle1}」听起。",
-        "这周常冒头的是 {scentWords}。",
-        "{rangeLabel} 留下了「{voiceTitle1}」。"
+        "{scentWords} 像这周反复露面的生活道具。",
+        "{lifeMarkLine}"
     ]
 
     private static let monthTeasers = [
         "{rangeLabel}，先记住「{voiceTitle1}」。",
-        "这个月的变化点：{changeHint}",
-        "{rangeLabel} 常冒头的是 {scentWords}。",
-        "这个月可以从「{voiceTitle1}」听起。"
+        "{changeHint}",
+        "{scentWords} 像这个月反复出现的生活道具。",
+        "{lifeMarkLine}"
     ]
 
     private static func render(_ template: String, values: [String: String]) -> String {

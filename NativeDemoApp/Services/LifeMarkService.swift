@@ -409,12 +409,15 @@ enum LifeMarkService {
         var rows: [LifeMarkAggregate] = []
         for id in trackedDefinitionIDs {
             guard let definition = definitions.first(where: { $0.id == id }) else { continue }
+            let periodMatched = periodItems.filter { matches($0, definition: definition) }
+            guard !periodMatched.isEmpty else { continue }
+            let periodMatchedIDs = Set(periodMatched.map(\.id))
             let sorted = historyItems
                 .filter { matches($0, definition: definition) }
                 .sorted { $0.createdAt < $1.createdAt }
             for target in [1, 10, 30, 50] where sorted.count >= target {
                 let item = sorted[target - 1]
-                guard periodIDs.contains(item.id) else { continue }
+                guard periodIDs.contains(item.id), periodMatchedIDs.contains(item.id) else { continue }
                 let title = target == 1 ? "第一次\(definition.label)" : "\(definition.label)第 \(target) 次"
                 let detail = milestoneDetail(label: definition.label, target: target)
                 rows.append(aggregate(

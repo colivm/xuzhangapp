@@ -141,6 +141,25 @@ struct StatsWebView: View {
         let isToday: Bool
     }
 
+    private struct TraceClueSnapshot {
+        let items: [HomeItem]
+        let clues: [TraceCategoryClue]
+        let rhythmPoints: [TraceRhythmPoint]
+        let insight: LifeInsightResult
+        let marks: [LifeMarkAggregate]
+        let lockedMark: LifeMarkAggregate?
+        let isDeepInsightUnlocked: Bool
+        let canUseDeepInsight: Bool
+        let freeInsightRemaining: Int
+    }
+
+    private struct SummaryLaunchPreview {
+        let count: Int
+        let total: Double
+        let chapterCount: Int
+        let topCategory: String?
+    }
+
     var body: some View {
         statsScrollView
             .sheet(isPresented: $showPeriodSheet) {
@@ -264,13 +283,16 @@ struct StatsWebView: View {
     }
 
     private var heroNarrativeText: String {
-        let items = heroScopedItems
+        heroNarrativeText(from: heroScopedItems)
+    }
+
+    private func heroNarrativeText(from items: [HomeItem]) -> String {
         guard !items.isEmpty else {
             return selectedPeriod == .week
                 ? "这一周还没有记录。先留下几笔，之后会整理成一段场记。"
                 : "这个月还没有记录。先留下几笔，之后会整理成一段场记。"
         }
-        if let voice = heroMomentSelection.primary?.text {
+        if let voice = heroMomentSelection(from: items).primary?.text {
             return selectedPeriod == .week
                 ? "这一周先记住「\(voice)」。数字放在旁边，生活句留在前面。"
                 : "这个月先记住「\(voice)」。统计放在旁边，生活句留在前面。"
@@ -284,10 +306,14 @@ struct StatsWebView: View {
     }
 
     private var heroMomentSelection: PlaybackMomentSelection {
+        heroMomentSelection(from: heroScopedItems)
+    }
+
+    private func heroMomentSelection(from items: [HomeItem]) -> PlaybackMomentSelection {
         let periodKey = heroMomentPeriodKey
-        let echoAnchor = heroMomentEchoAnchor(periodKey: periodKey)
+        let echoAnchor = heroMomentEchoAnchor(periodKey: periodKey, items: items)
         return momentSelector.select(
-            from: heroScopedItems,
+            from: items,
             periodKey: periodKey,
             range: heroRange,
             now: .now,
@@ -308,8 +334,12 @@ struct StatsWebView: View {
     }
 
     private func heroMomentEchoAnchor(periodKey: String) -> EchoAnchor? {
+        heroMomentEchoAnchor(periodKey: periodKey, items: heroScopedItems)
+    }
+
+    private func heroMomentEchoAnchor(periodKey: String, items: [HomeItem]) -> EchoAnchor? {
         guard !useCustomRange, selectedPeriod != .year else { return nil }
-        return EchoAnchorService.shared.pickEchoAnchor(items: heroScopedItems, periodKey: periodKey)
+        return EchoAnchorService.shared.pickEchoAnchor(items: items, periodKey: periodKey)
     }
 
     private var heroRange: SummaryPlaybackRange {
@@ -319,46 +349,35 @@ struct StatsWebView: View {
     private var traceChapterCard: some View {
         let _ = quotaRefreshID
         let range = heroRange
-        let preview = buildSummaryPreview(for: range)
-        let hasData = !heroScopedItems.isEmpty
+        let items = heroScopedItems
+        let hasData = !items.isEmpty
+        let narrative = heroNarrativeText(from: items)
+        let preview = buildSummaryLaunchPreview(for: range, items: items)
         let isMonthLocked = range == .month && !hasMemberAccess && quotaStore.monthRemaining(isMember: false) <= 0
         let canPlay = hasData && quotaStore.canPlay(range, isMember: hasMemberAccess)
 
         return VStack(alignment: .leading, spacing: 14) {
             traceRangeKicker
 
-            Text(heroNarrativeText)
+            Text(narrative)
                 .font(.system(size: 16, weight: .medium))
                 .lineSpacing(5)
                 .foregroundStyle(AppColors.text)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(summaryCardSubtitle(preview: preview, range: range, hasData: hasData, isMonthLocked: isMonthLocked))
+            Text(summaryLaunchSubtitle(preview: preview, range: range, hasData: hasData, isMonthLocked: isMonthLocked))
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
                 .fixedSize(horizontal: false, vertical: true)
 
             Button {
-                handleSummaryPlaybackTap(range: range, preview: preview)
+                handleSummaryPlaybackTap(range: range, hasData: hasData)
             } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: isMonthLocked ? "lock.fill" : "play.fill")
-                        .font(.system(size: 10, weight: .bold))
-                        .frame(width: 22, height: 22)
-                        .background(Circle().fill(AppColors.accent.opacity(canPlay ? 0.16 : 0.08)))
-                    Text(isMonthLocked ? "了解会员" : "听听这一段")
-                        .font(.system(size: 15, weight: .semibold))
-                }
-                .foregroundStyle(canPlay || isMonthLocked ? AppColors.accent.opacity(0.9) : AppColors.subtext.opacity(0.82))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(AppColors.tracePlaybackButtonBg)
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .stroke(AppColors.accent.opacity(canPlay || isMonthLocked ? 0.24 : 0.10), lineWidth: 1)
+                tracePlaybackLaunchCard(
+                    title: isMonthLocked ? "了解会员" : "听听这一段",
+                    subtitle: playbackLaunchSubtitle(range: range, preview: preview, hasData: hasData, isMonthLocked: isMonthLocked),
+                    systemImage: isMonthLocked ? "lock.fill" : "play.fill",
+                    isEnabled: canPlay || isMonthLocked
                 )
             }
             .buttonStyle(.plain)
@@ -366,7 +385,7 @@ struct StatsWebView: View {
 
             if hasData {
                 VStack(spacing: 8) {
-                    ForEach(Array(traceRepresentativeItems.enumerated()), id: \.element.id) { _, item in
+                    ForEach(Array(representativeTraceItems(from: items).enumerated()), id: \.element.id) { _, item in
                         Button {
                             openEditor(for: item)
                         } label: {
@@ -390,6 +409,98 @@ struct StatsWebView: View {
             }
         }
         .paperChapterPanel(radius: 24, padding: 20)
+    }
+
+    private func tracePlaybackLaunchCard(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        isEnabled: Bool
+    ) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(AppColors.accent.opacity(isEnabled ? 0.16 : 0.08))
+                    .frame(width: 42, height: 42)
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(isEnabled ? AppColors.accent : AppColors.subtext.opacity(0.64))
+                    .offset(x: systemImage == "play.fill" ? 1 : 0)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(isEnabled ? AppColors.text : AppColors.subtext.opacity(0.72))
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(AppColors.subtext.opacity(0.58))
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(AppColors.tracePlaybackButtonBg.opacity(isEnabled ? 0.92 : 0.46))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppColors.accent.opacity(isEnabled ? 0.18 : 0.08), lineWidth: 1)
+        )
+    }
+
+    private func playbackLaunchSubtitle(
+        range: SummaryPlaybackRange,
+        preview: SummaryLaunchPreview,
+        hasData: Bool,
+        isMonthLocked: Bool
+    ) -> String {
+        if isMonthLocked {
+            return "本月章节需要会员继续回看。"
+        }
+        guard hasData else {
+            return "先记几笔，这里会把它们读成一段。"
+        }
+        let chapterCount = preview.chapterCount
+        let rangeName = range == .week ? "这周" : "这个月"
+        return "\(rangeName) \(preview.count) 笔，整理成 \(chapterCount) 个章节。"
+    }
+
+    private func buildSummaryLaunchPreview(
+        for range: SummaryPlaybackRange,
+        items: [HomeItem]
+    ) -> SummaryLaunchPreview {
+        let rows = items.filter { $0.amount > 0 && $0.draftMeta == nil }
+        let total = rows.reduce(0) { $0 + $1.amount }
+        let topCategory = Dictionary(grouping: rows, by: \.category)
+            .map { (category: $0.key.rawValue, count: $0.value.count, amount: $0.value.reduce(0) { $0 + $1.amount }) }
+            .sorted {
+                if $0.count == $1.count { return $0.amount > $1.amount }
+                return $0.count > $1.count
+            }
+            .first?.category
+        let chapterCount: Int
+        if rows.isEmpty {
+            chapterCount = 0
+        } else if range == .week {
+            chapterCount = rows.count >= 3 ? 4 : 3
+        } else {
+            chapterCount = 6
+        }
+        return SummaryLaunchPreview(
+            count: rows.count,
+            total: total,
+            chapterCount: chapterCount,
+            topCategory: topCategory
+        )
     }
 
     private var traceRangeKicker: some View {
@@ -617,15 +728,19 @@ struct StatsWebView: View {
     }
 
     private var traceClueHeadline: String {
-        traceClueHeadline(items: traceClueItems, clues: traceCategoryClues)
+        traceClueHeadline(items: traceClueItems, clues: traceCategoryClues, marks: traceLifeMarks)
     }
 
-    private func traceClueHeadline(items: [HomeItem], clues: [TraceCategoryClue]) -> String {
+    private func traceClueHeadline(
+        items: [HomeItem],
+        clues: [TraceCategoryClue],
+        marks: [LifeMarkAggregate]
+    ) -> String {
         guard !items.isEmpty else { return "线索还在等第一笔记录" }
         guard let top = clues.first else {
             return "这一段的记录还比较分散"
         }
-        if let mark = traceLifeMarks.first, mark.kind != .scene || mark.count >= 2 {
+        if let mark = marks.first, mark.kind != .scene || mark.count >= 2 {
             return "\(traceNarrativePeriodPrefix)，\(mark.label)变成了一条线索"
         }
         let period = traceNarrativePeriodPrefix
@@ -654,16 +769,22 @@ struct StatsWebView: View {
     }
 
     private var traceClueSubline: String {
-        traceClueSubline(items: traceClueItems, clues: traceCategoryClues, rhythmPoints: traceRhythmPoints)
+        traceClueSubline(
+            items: traceClueItems,
+            clues: traceCategoryClues,
+            rhythmPoints: traceRhythmPoints,
+            marks: traceLifeMarks
+        )
     }
 
     private func traceClueSubline(
         items: [HomeItem],
         clues: [TraceCategoryClue],
-        rhythmPoints: [TraceRhythmPoint]
+        rhythmPoints: [TraceRhythmPoint],
+        marks: [LifeMarkAggregate]
     ) -> String {
         guard !items.isEmpty else { return "先留下几笔，账本会把生活里的走向慢慢标出来。" }
-        if let mark = traceLifeMarks.first {
+        if let mark = marks.first {
             return LifeMarkService.primaryLine(for: mark)
         }
         if let top = clues.first {
@@ -743,13 +864,21 @@ struct StatsWebView: View {
     }
 
     private var traceClueInsightLines: [String] {
-        traceClueInsightLines(items: traceClueItems, clues: traceCategoryClues, rhythmPoints: traceRhythmPoints)
+        traceClueInsightLines(
+            items: traceClueItems,
+            clues: traceCategoryClues,
+            rhythmPoints: traceRhythmPoints,
+            marks: traceLifeMarks,
+            lockedPreview: traceLockedLifeMarkPreview
+        )
     }
 
     private func traceClueInsightLines(
         items: [HomeItem],
         clues: [TraceCategoryClue],
-        rhythmPoints: [TraceRhythmPoint]
+        rhythmPoints: [TraceRhythmPoint],
+        marks: [LifeMarkAggregate],
+        lockedPreview: LifeMarkAggregate?
     ) -> [String] {
         guard !items.isEmpty else {
             return [
@@ -762,14 +891,9 @@ struct StatsWebView: View {
         if let contextLine = traceContextualMemoryLine(from: items) {
             lines.append(contextLine)
         }
-        if let mark = LifeMarkService.aggregates(
-            for: items,
-            allItems: homeViewModel.items,
-            isMember: hasMemberAccess,
-            limit: 1
-        ).first {
+        if let mark = marks.first {
             lines.append(LifeMarkService.primaryLine(for: mark))
-        } else if let locked = LifeMarkService.lockedPreview(for: items, allItems: homeViewModel.items), !hasMemberAccess {
+        } else if let locked = lockedPreview, !hasMemberAccess {
             lines.append("这段里还有「\(locked.label)」这类深层印记。会员会把天气、异地、首次和连续性一起串起来。")
         }
         if let top = clues.first {
@@ -892,6 +1016,38 @@ struct StatsWebView: View {
     }
 
     private var traceClueBoard: some View {
+        let snapshot = buildTraceClueSnapshot()
+        return VStack(spacing: 16) {
+            traceClueHeroCard(
+                items: snapshot.items,
+                clues: snapshot.clues,
+                rhythmPoints: snapshot.rhythmPoints,
+                marks: snapshot.marks
+            )
+            traceClueCompositionCard(items: snapshot.items, clues: snapshot.clues)
+            traceLifeMarkCard(marks: snapshot.marks, lockedPreview: snapshot.lockedMark)
+            traceClueRhythmCard(rhythmPoints: snapshot.rhythmPoints)
+            traceClueInsightCard(
+                items: snapshot.items,
+                clues: snapshot.clues,
+                rhythmPoints: snapshot.rhythmPoints,
+                marks: snapshot.marks,
+                lockedPreview: snapshot.lockedMark
+            )
+            traceDeepInsightCard(
+                insight: snapshot.insight,
+                items: snapshot.items,
+                clues: snapshot.clues,
+                rhythmPoints: snapshot.rhythmPoints,
+                isUnlocked: snapshot.isDeepInsightUnlocked,
+                canUseDeepInsight: snapshot.canUseDeepInsight,
+                freeRemaining: snapshot.freeInsightRemaining
+            )
+            traceAppendixStrip
+        }
+    }
+
+    private func buildTraceClueSnapshot() -> TraceClueSnapshot {
         let items = traceClueItems
         let clues = traceCategoryClues(from: items)
         let rhythmPoints = traceRhythmPoints(from: items)
@@ -903,33 +1059,40 @@ struct StatsWebView: View {
             limit: 6
         )
         let lockedMark = hasMemberAccess ? nil : LifeMarkService.lockedPreview(for: items, allItems: homeViewModel.items)
-        return VStack(spacing: 16) {
-            traceClueHeroCard(items: items, clues: clues, rhythmPoints: rhythmPoints)
-            traceClueCompositionCard(items: items, clues: clues)
-            traceLifeMarkCard(marks: marks, lockedPreview: lockedMark)
-            traceClueRhythmCard(rhythmPoints: rhythmPoints)
-            traceClueInsightCard(items: items, clues: clues, rhythmPoints: rhythmPoints)
-            traceDeepInsightCard(insight: insight, items: items, clues: clues, rhythmPoints: rhythmPoints)
-            traceAppendixStrip
-        }
+        let unlockKey = traceInsightUnlockKey(from: items)
+        let freeRemaining = lifeInsightService.freeRemaining(isMember: hasMemberAccess)
+        let isUnlocked = lifeInsightService.hasUnlockedTrace(unlockKey, isMember: hasMemberAccess)
+        let canUse = !items.isEmpty && (isUnlocked || freeRemaining > 0)
+        return TraceClueSnapshot(
+            items: items,
+            clues: clues,
+            rhythmPoints: rhythmPoints,
+            insight: insight,
+            marks: marks,
+            lockedMark: lockedMark,
+            isDeepInsightUnlocked: isUnlocked,
+            canUseDeepInsight: canUse,
+            freeInsightRemaining: freeRemaining
+        )
     }
 
     private func traceClueHeroCard(
         items: [HomeItem],
         clues: [TraceCategoryClue],
-        rhythmPoints: [TraceRhythmPoint]
+        rhythmPoints: [TraceRhythmPoint],
+        marks: [LifeMarkAggregate]
     ) -> some View {
         return VStack(alignment: .leading, spacing: 16) {
             traceRangeKicker
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(traceClueHeadline(items: items, clues: clues))
+                Text(traceClueHeadline(items: items, clues: clues, marks: marks))
                     .font(.system(size: 25, weight: .bold))
                     .foregroundStyle(TraceColors.primaryText)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(traceClueSubline(items: items, clues: clues, rhythmPoints: rhythmPoints))
+                Text(traceClueSubline(items: items, clues: clues, rhythmPoints: rhythmPoints, marks: marks))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(TraceColors.secondaryText)
                     .lineSpacing(3)
@@ -1050,10 +1213,10 @@ struct StatsWebView: View {
                                     .fill(AppColors.lockGold.opacity(0.12))
                             )
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("会员可看「\(lockedPreview.label)」")
+                            Text("解锁更深的生活记忆")
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(TraceColors.primaryText)
-                            Text("解锁天气、异地、首次和连续记录这些更深的生活线索。")
+                            Text("雨天通勤、第一次、第 10 次、连续记录、异地城市，会在以后回看、复盘和指令台里被重新想起。")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(TraceColors.tertiaryText)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -1187,7 +1350,9 @@ struct StatsWebView: View {
     private func traceClueInsightCard(
         items: [HomeItem],
         clues: [TraceCategoryClue],
-        rhythmPoints: [TraceRhythmPoint]
+        rhythmPoints: [TraceRhythmPoint],
+        marks: [LifeMarkAggregate],
+        lockedPreview: LifeMarkAggregate?
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("变化线索")
@@ -1195,7 +1360,13 @@ struct StatsWebView: View {
                 .foregroundStyle(TraceColors.primaryText)
 
             VStack(spacing: 10) {
-                ForEach(Array(traceClueInsightLines(items: items, clues: clues, rhythmPoints: rhythmPoints).enumerated()), id: \.offset) { index, line in
+                ForEach(Array(traceClueInsightLines(
+                    items: items,
+                    clues: clues,
+                    rhythmPoints: rhythmPoints,
+                    marks: marks,
+                    lockedPreview: lockedPreview
+                ).enumerated()), id: \.offset) { index, line in
                     traceClueInsightRow(line, index: index)
                 }
             }
@@ -1207,9 +1378,12 @@ struct StatsWebView: View {
         insight: LifeInsightResult,
         items: [HomeItem],
         clues: [TraceCategoryClue],
-        rhythmPoints: [TraceRhythmPoint]
+        rhythmPoints: [TraceRhythmPoint],
+        isUnlocked snapshotUnlocked: Bool,
+        canUseDeepInsight snapshotCanUse: Bool,
+        freeRemaining: Int
     ) -> some View {
-        let isUnlocked = hasUnlockedTraceDeepInsight || traceDeepInsightExpanded
+        let isUnlocked = snapshotUnlocked || traceDeepInsightExpanded
         return VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .center, spacing: 10) {
                 ZStack {
@@ -1225,7 +1399,7 @@ struct StatsWebView: View {
                     Text("多看一层")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(TraceColors.primaryText)
-                    Text(hasMemberAccess ? "把这些记录连成一段生活" : "本月还可展开 \(traceLifeInsightFreeRemaining)/\(LifeInsightService.freeMonthlyLimit) 次")
+                    Text(hasMemberAccess ? "把这些记录连成一段生活" : "本月还可展开 \(freeRemaining)/\(LifeInsightService.freeMonthlyLimit) 次")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(TraceColors.tertiaryText)
                 }
@@ -1274,10 +1448,10 @@ struct StatsWebView: View {
             Button {
                 handleTraceDeepInsightTap()
             } label: {
-                let buttonIsOpen = hasMemberAccess || canUseTraceDeepInsight || isUnlocked
+                let buttonIsOpen = hasMemberAccess || snapshotCanUse || isUnlocked
                 if buttonIsOpen {
                     HStack(spacing: 8) {
-                        Text(traceDeepInsightButtonTitle(isUnlocked: isUnlocked))
+                        Text(traceDeepInsightButtonTitle(isUnlocked: isUnlocked, canUse: snapshotCanUse, hasData: !items.isEmpty))
                             .font(.system(size: 14, weight: .semibold))
                         Image(systemName: "arrow.right")
                             .font(.system(size: 11, weight: .semibold))
@@ -1289,7 +1463,7 @@ struct StatsWebView: View {
                     .background(traceDeepCTAButtonBackground(isOpen: true))
                 } else {
                     HStack(spacing: 7) {
-                        Text(traceDeepInsightButtonTitle(isUnlocked: isUnlocked))
+                        Text(traceDeepInsightButtonTitle(isUnlocked: isUnlocked, canUse: snapshotCanUse, hasData: !items.isEmpty))
                             .font(.system(size: 13, weight: .semibold))
                         Image(systemName: "lock.fill")
                             .font(.system(size: 10, weight: .semibold))
@@ -1301,7 +1475,7 @@ struct StatsWebView: View {
                 }
             }
             .buttonStyle(.plain)
-            .disabled(!hasTraceInsightData)
+            .disabled(items.isEmpty)
         }
         .traceGlassPanel(radius: 20, padding: 18)
     }
@@ -1402,11 +1576,11 @@ struct StatsWebView: View {
             )
     }
 
-    private func traceDeepInsightButtonTitle(isUnlocked: Bool) -> String {
-        if !hasTraceInsightData { return "先留下几笔" }
+    private func traceDeepInsightButtonTitle(isUnlocked: Bool, canUse: Bool, hasData: Bool) -> String {
+        if !hasData { return "先留下几笔" }
         if hasMemberAccess { return "展开这段生活" }
         if isUnlocked { return "再看一个角度" }
-        if canUseTraceDeepInsight { return "试一次多看一层" }
+        if canUse { return "试一次多看一层" }
         return "解锁完整解读"
     }
 
@@ -2497,92 +2671,18 @@ struct StatsWebView: View {
 
     // MARK: - Summary Playback Card
 
-    @ViewBuilder
-    private var summarySliceCard: some View {
-        let _ = quotaRefreshID
-        if useCustomRange || selectedPeriod == .year {
-            EmptyView()
-        } else {
-            let range = selectedPeriod == .week ? SummaryPlaybackRange.week : .month
-            let preview = buildSummaryPreview(for: range)
-            let hasData = preview.count > 0
-            let canPlay = hasData && quotaStore.canPlay(range, isMember: hasMemberAccess)
-            let isMonthLocked = range == .month && !hasMemberAccess && quotaStore.monthRemaining(isMember: false) <= 0
-
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 12) {
-                    Text(isMonthLocked ? "🔒" : "🎬")
-                        .font(.system(size: 24))
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(range == .week ? "本周回放" : "本月回放")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(AppColors.text)
-                        Text(summaryCardSubtitle(preview: preview, range: range, hasData: hasData, isMonthLocked: isMonthLocked))
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(AppColors.subtext)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer()
-                }
-
-                let playbackButtonTitle = isMonthLocked ? "了解会员" : "听听这一段"
-                let playbackForeground = canPlay ? Color.white : AppColors.text.opacity(0.72)
-                let playbackFill = canPlay ? AppColors.accent : Color.white.opacity(0.64)
-                let playbackStroke = canPlay ? AppColors.accent.opacity(0.28) : Color.white.opacity(0.58)
-
-                HStack(spacing: 12) {
-                    Button {
-                        handleSummaryPlaybackTap(range: range, preview: preview)
-                    } label: {
-                        Text(playbackButtonTitle)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(playbackForeground)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 13)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .fill(playbackFill)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .stroke(playbackStroke, lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!hasData && !isMonthLocked)
-                }
-
-                Text(summaryQuotaFootnote(range: range, hasData: hasData))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(range == .month && isMonthLocked ? AppColors.lockGold : AppColors.subtext)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .glassPanel(radius: 24, padding: 20)
-        }
-    }
-
-    private func buildSummaryPreview(for range: SummaryPlaybackRange) -> SummaryPlayback {
-        switch range {
-        case .week:
-            return playbackService.buildWeekSummary(from: homeViewModel.items)
-        case .month:
-            return playbackService.buildMonthSummary(from: homeViewModel.items)
-        }
-    }
-
-    private func summaryCardSubtitle(preview: SummaryPlayback, range: SummaryPlaybackRange, hasData: Bool, isMonthLocked: Bool) -> String {
+    private func summaryLaunchSubtitle(
+        preview: SummaryLaunchPreview,
+        range: SummaryPlaybackRange,
+        hasData: Bool,
+        isMonthLocked: Bool
+    ) -> String {
         guard hasData else { return "先留下几笔，这里就能讲出这一段。" }
         if isMonthLocked {
             return "会员专属 · 你的 10 次新用户体验已用完"
         }
-        if !preview.teaserLine.isEmpty {
-            return preview.teaserLine
-        }
         switch range {
         case .week:
-            if homeViewModel.items.count >= 5 && !quotaStore.hasCompletedWeekPlaybackEver() {
-                return "已记 \(homeViewModel.items.count) 笔，可以讲这周的故事了"
-            }
             let category = preview.topCategory.map { "\($0)为主" } ?? "日常为主"
             return "\(preview.count) 笔 · \(preview.total.formatted(.cny)) · \(category)"
         case .month:
@@ -2607,8 +2707,8 @@ struct StatsWebView: View {
         }
     }
 
-    private func handleSummaryPlaybackTap(range: SummaryPlaybackRange, preview: SummaryPlayback) {
-        guard preview.count > 0 else { return }
+    private func handleSummaryPlaybackTap(range: SummaryPlaybackRange, hasData: Bool) {
+        guard hasData else { return }
         guard quotaStore.canPlay(range, isMember: hasMemberAccess) else {
             switch range {
             case .week:
