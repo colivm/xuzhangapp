@@ -43,6 +43,11 @@
 		A10000430000000000000001 /* IAPService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000440000000000000001 /* IAPService.swift */; };
 		A10000450000000000000001 /* RecordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000460000000000000001 /* RecordView.swift */; };
 		A10000470000000000000001 /* StatsWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000480000000000000001 /* StatsWebView.swift */; };
+		F26000010000000000000001 /* StatsTraceInlineRecordEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26000020000000000000001 /* StatsTraceInlineRecordEditor.swift */; };
+		F26000030000000000000001 /* StatsTraceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26000040000000000000001 /* StatsTraceModels.swift */; };
+		F26000050000000000000001 /* StatsTracePanelModifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26000060000000000000001 /* StatsTracePanelModifiers.swift */; };
+		F26000070000000000000001 /* StatsTraceTrendChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26000080000000000000001 /* StatsTraceTrendChart.swift */; };
+		F26000090000000000000001 /* StatsTraceFilters.swift in Sources */ = {isa = PBXBuildFile; fileRef = F260000A0000000000000001 /* StatsTraceFilters.swift */; };
 		A10000490000000000000001 /* PlaybackCopyPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004A0000000000000001 /* PlaybackCopyPool.swift */; };
 		A100004B0000000000000001 /* ScenePackSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004C0000000000000001 /* ScenePackSectionView.swift */; };
 		A100004D0000000000000001 /* InsightWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004E0000000000000001 /* InsightWebView.swift */; };
@@ -110,6 +115,11 @@
 		A10000440000000000000001 /* IAPService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IAPService.swift; sourceTree = "<group>"; };
 		A10000460000000000000001 /* RecordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordView.swift; sourceTree = "<group>"; };
 		A10000480000000000000001 /* StatsWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsWebView.swift; sourceTree = "<group>"; };
+		F26000020000000000000001 /* StatsTraceInlineRecordEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsTraceInlineRecordEditor.swift; sourceTree = "<group>"; };
+		F26000040000000000000001 /* StatsTraceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsTraceModels.swift; sourceTree = "<group>"; };
+		F26000060000000000000001 /* StatsTracePanelModifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsTracePanelModifiers.swift; sourceTree = "<group>"; };
+		F26000080000000000000001 /* StatsTraceTrendChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsTraceTrendChart.swift; sourceTree = "<group>"; };
+		F260000A0000000000000001 /* StatsTraceFilters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsTraceFilters.swift; sourceTree = "<group>"; };
 		A100004A0000000000000001 /* PlaybackCopyPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackCopyPool.swift; sourceTree = "<group>"; };
 		A100004C0000000000000001 /* ScenePackSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackSectionView.swift; sourceTree = "<group>"; };
 		A100004E0000000000000001 /* InsightWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightWebView.swift; sourceTree = "<group>"; };
@@ -248,6 +258,11 @@
 				A10000180000000000000001 /* HomeView.swift */,
 				A10000460000000000000001 /* RecordView.swift */,
 				A10000480000000000000001 /* StatsWebView.swift */,
+				F26000020000000000000001 /* StatsTraceInlineRecordEditor.swift */,
+				F26000040000000000000001 /* StatsTraceModels.swift */,
+				F26000060000000000000001 /* StatsTracePanelModifiers.swift */,
+				F26000080000000000000001 /* StatsTraceTrendChart.swift */,
+				F260000A0000000000000001 /* StatsTraceFilters.swift */,
 				A100004E0000000000000001 /* InsightWebView.swift */,
 				A100004C0000000000000001 /* ScenePackSectionView.swift */,
 				F12000040000000000000001 /* ScenePackAngleSheet.swift */,
@@ -404,6 +419,11 @@
 				A10000430000000000000001 /* IAPService.swift in Sources */,
 				A10000450000000000000001 /* RecordView.swift in Sources */,
 				A10000470000000000000001 /* StatsWebView.swift in Sources */,
+				F26000010000000000000001 /* StatsTraceInlineRecordEditor.swift in Sources */,
+				F26000030000000000000001 /* StatsTraceModels.swift in Sources */,
+				F26000050000000000000001 /* StatsTracePanelModifiers.swift in Sources */,
+				F26000070000000000000001 /* StatsTraceTrendChart.swift in Sources */,
+				F26000090000000000000001 /* StatsTraceFilters.swift in Sources */,
 				A10000490000000000000001 /* PlaybackCopyPool.swift in Sources */,
 				A100004B0000000000000001 /* ScenePackSectionView.swift in Sources */,
 				A100004D0000000000000001 /* InsightWebView.swift in Sources */,
