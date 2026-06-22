@@ -104,10 +104,10 @@ enum LifeSceneSemanticService {
             )
         case .quickMeal:
             return LifeSceneWeeklyCopy(
-                fact: "简餐记了 \(count) 次",
+                fact: "饭点外卖记了 \(count) 次",
                 cares: ["忙归忙，先吃上", "饭点没有落空，也算稳住"],
-                leadingTag: "#简餐\(count)次",
-                semanticTag: "#忙里吃饭",
+                leadingTag: "#饭点\(count)次",
+                semanticTag: "#饭点外卖",
                 supportTag: "#热乎一口"
             )
         case .coffee:
@@ -139,40 +139,40 @@ enum LifeSceneSemanticService {
                 fact: "出行路上记了 \(count) 笔",
                 cares: ["这周跑动不少，到了就先歇口气", "每一段路记下来，回头也清楚"],
                 leadingTag: "#出行\(count)次",
-                semanticTag: "#赶路",
+                semanticTag: "#出门办事",
                 supportTag: "#城市里移动"
             )
         case .convenienceSupply:
             return LifeSceneWeeklyCopy(
-                fact: "便利店补给记了 \(count) 次",
+                fact: "便利店和即时补给记了 \(count) 次",
                 cares: ["这些小补给，像是在补忙碌里的缺口", "路过买点需要的，也很真实"],
                 leadingTag: "#补给\(count)次",
-                semanticTag: "#便利店小补给",
+                semanticTag: "#便利店补给",
                 supportTag: "#路过带上"
             )
         case .groceries:
             return LifeSceneWeeklyCopy(
-                fact: "食材补给记了 \(count) 次",
+                fact: "超市买菜记了 \(count) 次",
                 cares: ["把吃的备好，忙起来也少点乱", "厨房有东西，吃饭就不慌"],
-                leadingTag: "#食材\(count)次",
-                semanticTag: "#饭桌准备",
-                supportTag: "#家里烟火气"
+                leadingTag: "#买菜\(count)次",
+                semanticTag: "#超市买菜",
+                supportTag: "#给家补货"
             )
         case .homeSupply:
             return LifeSceneWeeklyCopy(
                 fact: "家用补给记了 \(count) 次",
                 cares: ["缺的东西补上了，家里会顺一点", "这些小补给，确实会用得上"],
                 leadingTag: "#家用\(count)次",
-                semanticTag: "#家里补齐",
+                semanticTag: "#家用补货",
                 supportTag: "#日常运转"
             )
         case .shopping:
             return LifeSceneWeeklyCopy(
-                fact: "添置东西记了 \(count) 笔",
-                cares: ["买到需要的就好", "用得上的东西，后面会知道"],
-                leadingTag: "#添置\(count)笔",
-                semanticTag: "#买到需要的",
-                supportTag: "#日常更新"
+                fact: "网购添置记了 \(count) 笔",
+                cares: ["买到需要的就好", "兴趣里的小投入，也会留下生活形状"],
+                leadingTag: "#网购\(count)笔",
+                semanticTag: "#快递到了",
+                supportTag: "#兴趣装备"
             )
         case .medicalVisit:
             return LifeSceneWeeklyCopy(
@@ -195,7 +195,7 @@ enum LifeSceneSemanticService {
                 fact: "锻炼安排记了 \(count) 次",
                 cares: ["能动起来已经很好，别忘了休息", "保持住就好，不用每次都拉满"],
                 leadingTag: "#锻炼\(count)次",
-                semanticTag: "#身体动起来",
+                semanticTag: "#健身恢复",
                 supportTag: "#记得休息"
             )
         case .bodyCare:
@@ -270,7 +270,7 @@ enum LifeSceneSemanticService {
         case .quickMeal:
             if (11..<14).contains(hour) { return "午餐简餐记一笔" }
             if (17..<21).contains(hour) { return "晚饭简餐记一笔" }
-            return "简餐吃饭记一笔"
+            return "饭点外卖记一笔"
         case .coffee:
             return "咖啡饮品记一笔"
         case .workMeal:
@@ -278,15 +278,15 @@ enum LifeSceneSemanticService {
         case .commute:
             return hour < 12 ? "早高峰通勤一段" : "通勤路上记一笔"
         case .cityRoute:
-            return amount <= 20 ? "短途出行记一笔" : "赶路出行记一笔"
+            return amount <= 20 ? "短途出行记一笔" : "出门这一趟记一笔"
         case .convenienceSupply:
             return "便利店补给记一笔"
         case .groceries:
-            return "食材补给记一笔"
+            return "超市买菜记一笔"
         case .homeSupply:
             return "家用补给记一笔"
         case .shopping:
-            return "添置购物记一笔"
+            return "网购添置记一笔"
         case .medicalVisit:
             return "就医检查记一笔"
         case .medicineCare:
@@ -333,18 +333,18 @@ enum LifeSceneSemanticService {
         switch brand?.id {
         case "luckin", "starbucks", "manner", "mixue", "heytea", "naixue":
             add(.coffee, 7.0, .dining, "咖啡饮品", "#提神", 10)
-        case "meituan", "eleme", "mcdonalds", "kfc":
-            add(.quickMeal, 6.6, .dining, "简餐", "#吃饭", 20)
+        case "meituan", "eleme", "mcdonalds", "kfc", "qixintian":
+            add(.quickMeal, 6.6, .dining, "饭点外卖", "#饭点外卖", 20)
         case "metro_transit":
             add(.commute, 7.2, .transport, "通勤", "#通勤", 5)
         case "didi", "alipay_ride":
-            add(.cityRoute, 6.8, .transport, "出行", "#赶路", 18)
+            add(.cityRoute, 6.8, .transport, "出行", "#出门办事", 18)
         case "familymart", "lawson", "bianlifeng", "seveneleven", "meiyijia":
             add(.convenienceSupply, 6.8, .daily, "便利店补给", "#便利店", 25)
-        case "freshippo", "dingdong":
-            add(.groceries, 6.8, .daily, "食材补给", "#食材", 30)
+        case "freshippo", "dingdong", "xiaoxiang", "meituan_grocery", "pupu":
+            add(.groceries, 6.8, .daily, "超市买菜", "#超市买菜", 30)
         case "taobao", "jd", "miniso":
-            add(.shopping, 6.4, .shopping, "添置", "#购物", 45)
+            add(.shopping, 6.4, .shopping, "网购添置", "#快递到了", 45)
         default:
             break
         }
@@ -355,8 +355,8 @@ enum LifeSceneSemanticService {
         if containsAny(text, ["食堂", "工位", "工作餐", "加班餐", "公司楼下", "单位食堂"]) {
             add(.workMeal, 7.0, .dining, "工作餐", "#工作餐", 12)
         }
-        if containsAny(text, ["午餐", "午饭", "晚餐", "晚饭", "外卖", "简餐", "热饭", "吃一口", "饭点", "夜宵", "面", "粉", "馄饨", "盖饭"]) {
-            add(.quickMeal, 6.2, .dining, "简餐", "#吃饭", 22)
+        if containsAny(text, ["午餐", "午饭", "晚餐", "晚饭", "外卖", "简餐", "热饭", "吃一口", "饭点", "夜宵", "面", "粉", "馄饨", "盖饭", "七欣天", "火锅", "烤肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "便当"]) {
+            add(.quickMeal, 6.2, .dining, "饭点外卖", "#饭点外卖", 22)
         }
         if containsAny(text, ["咖啡", "拿铁", "美式", "奶茶", "饮品", "茶饮", "提神"]) {
             add(.coffee, 6.8, .dining, "咖啡饮品", "#提神", 15)
@@ -364,23 +364,23 @@ enum LifeSceneSemanticService {
         if containsAny(text, ["上班", "下班", "到岗", "通勤", "早高峰", "晚高峰", "地铁", "公交", "轨道交通"]) {
             add(.commute, 7.0, .transport, "通勤", "#通勤", 6)
         }
-        if containsAny(text, ["打车", "出租", "网约车", "滴滴", "单车", "骑车", "停车", "车票", "高铁", "火车", "机场", "航班", "过路费", "路费"]) {
-            add(.cityRoute, 6.4, .transport, "出行", "#赶路", 19)
+        if containsAny(text, ["打车", "出租", "网约车", "滴滴", "单车", "骑车", "停车", "车票", "高铁", "火车", "机场", "航班", "过路费", "路费", "充电", "充电桩"]) {
+            add(.cityRoute, 6.4, .transport, "出行", "#出门办事", 19)
         }
         if containsAny(text, ["便利蜂", "便利店", "全家", "罗森", "7-11", "711", "美宜佳", "饭团", "小食"]) {
             add(.convenienceSupply, 6.6, .daily, "便利店补给", "#便利店", 26)
         }
-        if containsAny(text, ["买菜", "食材", "盒马", "叮咚", "菜场", "水果", "厨房", "饭桌", "生鲜"]) {
-            add(.groceries, 6.6, .daily, "食材补给", "#食材", 31)
+        if containsAny(text, ["买菜", "食材", "盒马", "叮咚", "小象超市", "京东到家", "京东秒送", "朴朴", "菜场", "水果", "厨房", "饭桌", "生鲜", "蔬菜", "淘宝买菜", "美团买菜"]) {
+            add(.groceries, 6.6, .daily, "超市买菜", "#超市买菜", 31)
         }
-        if containsAny(text, ["纸巾", "洗衣液", "洗洁精", "清洁", "垃圾袋", "洗发水", "沐浴露", "牙刷", "毛巾"]) {
+        if containsAny(text, ["纸巾", "洗衣液", "洗洁精", "清洁", "垃圾袋", "洗发水", "沐浴露", "牙刷", "毛巾", "美团闪购", "即时零售", "给家补货"]) {
             add(.homeSupply, 6.1, .daily, "家用补给", "#家用补给", 36)
         }
         if containsAny(text, ["打印", "复印", "证件照", "配钥匙", "钥匙", "修锁", "手续费", "服务费", "押金"]) {
             add(.errand, 6.0, .other, "临时事务", "#临时处理", 38)
         }
-        if containsAny(text, ["淘宝", "京东", "购物", "下单", "快递", "衣服", "鞋", "护肤", "数据线", "耳机", "手机", "文具"]) {
-            add(.shopping, 6.1, .shopping, "添置", "#购物", 46)
+        if containsAny(text, ["淘宝", "京东", "拼多多", "购物", "下单", "快递", "衣服", "鞋", "护肤", "数据线", "耳机", "手机", "文具", "渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "乐器", "茶具", "咖啡器具"]) {
+            add(.shopping, 6.1, .shopping, "网购添置", "#快递到了", 46)
         }
         if containsAny(text, ["医院", "门诊", "诊所", "挂号", "问诊", "体检", "检查", "拍片", "验血", "口腔", "牙科"]) {
             add(.medicalVisit, 7.4, .health, "就医检查", "#就医", 2)
@@ -418,9 +418,9 @@ enum LifeSceneSemanticService {
         case .transport:
             return LifeSceneSignal(kind: .cityRoute, category: .transport, score: 2.4, label: "出行", tag: "#出行", priority: 80)
         case .shopping:
-            return LifeSceneSignal(kind: .shopping, category: .shopping, score: 2.2, label: "添置", tag: "#购物", priority: 80)
+            return LifeSceneSignal(kind: .shopping, category: .shopping, score: 2.2, label: "网购添置", tag: "#快递到了", priority: 80)
         case .daily:
-            return LifeSceneSignal(kind: .homeSupply, category: .daily, score: 2.2, label: "日常补给", tag: "#日常补给", priority: 80)
+            return LifeSceneSignal(kind: .homeSupply, category: .daily, score: 2.2, label: "家用补给", tag: "#家用补货", priority: 80)
         case .entertainment:
             return LifeSceneSignal(kind: .leisure, category: .entertainment, score: 2.2, label: "放松安排", tag: "#放松", priority: 80)
         case .lodging:

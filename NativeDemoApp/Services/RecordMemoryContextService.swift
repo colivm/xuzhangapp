@@ -145,7 +145,7 @@ enum RecordMemoryContextService {
         case (.snow, .commute):
             return "雪天通勤，慢慢到"
         case (.cold, .commute):
-            return "冷天赶路也记下"
+            return "冷天出门也记下"
         case (.cold, .dining):
             return "冷天吃点热乎的"
         case (.hot, .commute):

@@ -9,13 +9,15 @@ final class FreeScenePackService {
     private let packIdsKey = "free_scene_pack_ids_v1"
     private let firstOpenKey = "free_scene_pack_first_open_at"
     private let lastReplaceKey = "free_scene_pack_last_replace_at"
+    private let replaceWindowStartedKey = "free_scene_pack_replace_window_started_at"
     private let orderKey = "free_scene_pack_order_v1"
     private let lockedHintKey = "free_scene_pack_locked_hint_v1"
 
     private let firstWeekInterval: TimeInterval = 7 * 24 * 60 * 60
     private let replaceCooldownInterval: TimeInterval = 30 * 24 * 60 * 60
+    private let replaceWindowInterval: TimeInterval = 24 * 60 * 60
     private let lockedHintCooldownInterval: TimeInterval = 3 * 24 * 60 * 60
-    private let extensionLockedIds: Set<String> = ["travel", "pet", "baby", "fitness"]
+    private let extensionLockedIds: Set<String> = ["travel", "family"]
 
     init(
         defaults: UserDefaults = .standard,
@@ -26,7 +28,7 @@ final class FreeScenePackService {
     }
 
     func defaultPackIds() -> [String] {
-        ["commute", "food", "home"]
+        ["commute", "food", "supply"]
     }
 
     func recordFirstOpenIfNeeded() {
@@ -68,21 +70,72 @@ final class FreeScenePackService {
 
     func canReplacePackCombination() -> Bool {
         if isInFirstWeek() { return true }
-        let lastReplace = defaults.double(forKey: lastReplaceKey)
-        guard lastReplace > 0 else { return true }
-        return now().timeIntervalSince1970 >= lastReplace + replaceCooldownInterval
+        let current = now().timeIntervalSince1970
+        let windowStart = defaults.double(forKey: replaceWindowStartedKey)
+        if windowStart > 0 {
+            if current < windowStart + replaceWindowInterval {
+                return true
+            }
+            return current >= windowStart + replaceWindowInterval + replaceCooldownInterval
+        }
+
+        let legacyLastReplace = defaults.double(forKey: lastReplaceKey)
+        guard legacyLastReplace > 0 else { return true }
+        return current >= legacyLastReplace + replaceCooldownInterval
     }
 
     func daysUntilNextReplace() -> Int {
         if isInFirstWeek() || canReplacePackCombination() { return 0 }
-        let lastReplace = defaults.double(forKey: lastReplaceKey)
-        let remaining = max(0, lastReplace + replaceCooldownInterval - now().timeIntervalSince1970)
+        let remaining = secondsUntilNextReplace()
         return max(1, Int(ceil(remaining / 86_400)))
+    }
+
+    func secondsUntilNextReplace() -> TimeInterval {
+        if isInFirstWeek() || canReplacePackCombination() { return 0 }
+        let current = now().timeIntervalSince1970
+        return max(0, nextReplaceAvailableAt() - current)
+    }
+
+    func nextReplaceAvailableAt() -> TimeInterval {
+        let windowStart = defaults.double(forKey: replaceWindowStartedKey)
+        if windowStart > 0 {
+            return windowStart + replaceWindowInterval + replaceCooldownInterval
+        }
+        let legacyLastReplace = defaults.double(forKey: lastReplaceKey)
+        guard legacyLastReplace > 0 else { return now().timeIntervalSince1970 }
+        return legacyLastReplace + replaceCooldownInterval
+    }
+
+    func isReplaceWindowActive() -> Bool {
+        guard !isInFirstWeek() else { return false }
+        let windowStart = defaults.double(forKey: replaceWindowStartedKey)
+        guard windowStart > 0 else { return false }
+        let current = now().timeIntervalSince1970
+        return current < windowStart + replaceWindowInterval
+    }
+
+    func replaceWindowRemainingHours() -> Int {
+        guard isReplaceWindowActive() else { return 0 }
+        let windowStart = defaults.double(forKey: replaceWindowStartedKey)
+        let remaining = max(0, windowStart + replaceWindowInterval - now().timeIntervalSince1970)
+        return max(1, Int(ceil(remaining / 3_600)))
+    }
+
+    func replaceWindowRemainingSeconds() -> TimeInterval {
+        guard isReplaceWindowActive() else { return 0 }
+        return max(0, replaceWindowEndsAt() - now().timeIntervalSince1970)
+    }
+
+    func replaceWindowEndsAt() -> TimeInterval {
+        let windowStart = defaults.double(forKey: replaceWindowStartedKey)
+        guard windowStart > 0 else { return 0 }
+        return windowStart + replaceWindowInterval
     }
 
     func replacePack(atSlot slot: Int, oldId: String, newId: String, from definitions: [ScenePackDefinition]) {
         var ids = currentPackIds(from: definitions)
         guard ids.indices.contains(slot), ids[slot] == oldId, !ids.contains(newId) else { return }
+        guard isInFirstWeek() || canReplacePackCombination() else { return }
         guard isInFirstWeek() || !extensionLockedIds.contains(newId) else { return }
         guard definitions.contains(where: { $0.id == newId }) else { return }
 
@@ -90,8 +143,8 @@ final class FreeScenePackService {
         persistPackIds(ids)
         persistOrderedIds(ids)
 
-        if !isInFirstWeek() {
-            defaults.set(now().timeIntervalSince1970, forKey: lastReplaceKey)
+        if !isInFirstWeek(), !isReplaceWindowActive() {
+            defaults.set(now().timeIntervalSince1970, forKey: replaceWindowStartedKey)
         }
     }
 

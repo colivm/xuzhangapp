@@ -45,13 +45,19 @@ enum RecordDraftResolutionService {
 
         let baseTitle = initialTitle.isEmpty ? category.defaultRecordTitle : initialTitle
         let resolvedTitle = NarrativeCopyResolver.resolveTitle(brandId: brandId, fallback: baseTitle)
-        let title = RecordSemanticLexicon.repairedTitle(
-            for: resolvedTitle,
-            category: category,
-            amount: input.amount,
-            date: input.date,
-            userEditedTitle: input.userEditedTitle
-        )
+        let shouldPreserveBrandTitle = brand.map { brand in
+            MerchantBrandCatalog.isExactBrandAlias(resolvedTitle, for: brand.id)
+                || MerchantBrandCatalog.matchBrand(in: resolvedTitle)?.id == brand.id
+        } ?? false
+        let title = shouldPreserveBrandTitle
+            ? resolvedTitle
+            : RecordSemanticLexicon.repairedTitle(
+                for: resolvedTitle,
+                category: category,
+                amount: input.amount,
+                date: input.date,
+                userEditedTitle: input.userEditedTitle
+            )
         if title != resolvedTitle { trace.append("title:semanticRepair") }
 
         let emotionBrandId = MerchantBrandCatalog.definition(for: brandId)?.category == category ? brandId : nil

@@ -24,7 +24,9 @@ struct ScenePackAngleSheet: View {
         let isInFirstWeek: Bool
         let daysUntilExtensionLock: Int
         let canReplacePackCombination: Bool
-        let daysUntilNextReplace: Int
+        let nextReplaceAvailableAt: TimeInterval
+        let isReplaceWindowActive: Bool
+        let replaceWindowEndsAt: TimeInterval
         let scenePackDesc: (ScenePackDefinition) -> String
         let isExtensionLockedPack: (ScenePackDefinition) -> Bool
         let onReorderFreePacks: (_ orderedPackIds: [String]) -> Void
@@ -50,9 +52,9 @@ struct ScenePackAngleSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedPackID: String?
-    @State private var isReplacingPack = false
     @State private var selectedReplaceSlot: Int?
     @State private var pendingReplacement: PendingReplacement?
+    @State private var inlineNotice: String?
 
     init(
         primaryScenePacks: [ScenePackDefinition],
@@ -82,7 +84,9 @@ struct ScenePackAngleSheet: View {
         isInFirstWeek: Bool,
         daysUntilExtensionLock: Int,
         canReplacePackCombination: Bool,
-        daysUntilNextReplace: Int,
+        nextReplaceAvailableAt: TimeInterval,
+        isReplaceWindowActive: Bool,
+        replaceWindowEndsAt: TimeInterval,
         scenePackDesc: @escaping (ScenePackDefinition) -> String,
         isExtensionLockedPack: @escaping (ScenePackDefinition) -> Bool,
         onReorderFreePacks: @escaping (_ orderedPackIds: [String]) -> Void,
@@ -99,7 +103,9 @@ struct ScenePackAngleSheet: View {
                 isInFirstWeek: isInFirstWeek,
                 daysUntilExtensionLock: daysUntilExtensionLock,
                 canReplacePackCombination: canReplacePackCombination,
-                daysUntilNextReplace: daysUntilNextReplace,
+                nextReplaceAvailableAt: nextReplaceAvailableAt,
+                isReplaceWindowActive: isReplaceWindowActive,
+                replaceWindowEndsAt: replaceWindowEndsAt,
                 scenePackDesc: scenePackDesc,
                 isExtensionLockedPack: isExtensionLockedPack,
                 onReorderFreePacks: onReorderFreePacks,
@@ -112,33 +118,39 @@ struct ScenePackAngleSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                switch mode {
-                case .member(let configuration):
+            switch mode {
+            case .member(let configuration):
+                List {
                     memberContent(configuration)
-                case .free(let configuration):
-                    freeContent(configuration)
                 }
-            }
-            .environment(\.editMode, .constant(.active))
-            .navigationTitle("换个角度")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
-                }
+                .environment(\.editMode, .constant(.active))
+                .navigationTitle("换个角度")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { closeToolbar }
+            case .free(let configuration):
+                freeSheet(configuration)
+                    .navigationTitle("调整免费场景包")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { closeToolbar }
             }
         }
         .presentationDetents([.medium, .large])
         .alert(item: $pendingReplacement) { replacement in
             Alert(
-                title: Text("替换角度"),
-                message: Text("确定替换？替换后 30 天内不可再换。"),
+                title: Text("替换场景包"),
+                message: Text("确定换上「\(replacement.newPack.label)」？这会开启 24 小时调整窗口，窗口内还可以继续调整另外两个免费场景包。"),
                 primaryButton: .cancel(Text("再想想")),
-                secondaryButton: .default(Text("确定替换")) {
+                secondaryButton: .default(Text("确定换上")) {
                     confirmReplacement(replacement)
                 }
             )
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var closeToolbar: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button("关闭") { dismiss() }
         }
     }
 
@@ -183,99 +195,423 @@ struct ScenePackAngleSheet: View {
         }
     }
 
-    @ViewBuilder
-    private func freeContent(_ configuration: FreeConfiguration) -> some View {
-        if isReplacingPack {
-            replacementContent(configuration)
-        } else {
-            if let hint = configuration.lockedSceneHint {
-                Section {
-                    lockedSceneHintRow(hint, configuration: configuration)
+    private func freeSheet(_ configuration: FreeConfiguration) -> some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                if let hint = configuration.lockedSceneHint {
+                    lockedSceneHintCard(hint, configuration: configuration)
                 }
-            }
 
-            if configuration.isInFirstWeek {
-                Section {
-                    HStack(spacing: 8) {
-                        Image(systemName: "info.circle.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(AppColors.accent.opacity(0.78))
-                        Text("首周可试用扩展角度，\(extensionLockCountdownText(configuration))；首周结束后，每次替换会冷却 30 天")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AppColors.text.opacity(0.78))
-                        Spacer()
-                    }
-                    .padding(.vertical, 2)
-                }
+                freeStatusCard(configuration)
+                activeFreeModule(configuration)
+                candidateFreeModule(configuration)
+                memberUnlockCard(configuration)
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 28)
+        }
+        .background(
+            LinearGradient(
+                colors: [AppColors.bg, AppColors.paperMist.opacity(0.72)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        )
+    }
 
-            Section {
-                reorderHint
-            }
+    private func freeStatusCard(_ configuration: FreeConfiguration) -> some View {
+        TimelineView(.periodic(from: Date(), by: 1)) { context in
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: statusIcon(configuration))
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(statusTint(configuration))
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(statusTint(configuration).opacity(0.12)))
 
-            Section("我的 3 个角度") {
-                ForEach(configuration.freeScenePacks, id: \.id) { pack in
-                    freeSelectablePackRow(pack, configuration: configuration)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(statusTitle(configuration, now: context.date))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                    Text(statusSubtitle(configuration, now: context.date))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .onMove { source, destination in
-                    reorderFreePacks(from: source, to: destination, configuration: configuration)
-                }
-            }
 
-            if !configuration.moreScenePacks.isEmpty {
-                Section("更多角度") {
-                    ForEach(configuration.moreScenePacks, id: \.id) { pack in
-                        morePackRow(pack, configuration: configuration)
-                    }
-                }
+                Spacer(minLength: 0)
             }
-
-            Section {
-                replaceButton(configuration)
-            } footer: {
-                if configuration.isInFirstWeek {
-                    Text("现在替换不会进入冷却。\(extensionLockCountdownText(configuration))，之后免费版每 30 天可换一次。")
-                } else if configuration.canReplacePackCombination {
-                    Text("替换后 30 天可再换 · 会员可随时用全部角度")
-                } else {
-                    Text("距离下次可替换还有 \(configuration.daysUntilNextReplace) 天")
-                }
-            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(AppColors.panel.opacity(0.92))
+                    .shadow(color: Color.black.opacity(0.05), radius: 18, x: 0, y: 8)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(AppColors.line.opacity(0.6), lineWidth: 1)
+            )
         }
     }
 
-    @ViewBuilder
-    private func replacementContent(_ configuration: FreeConfiguration) -> some View {
-        Section("选择要替换的角度") {
-            ForEach(Array(configuration.freeScenePacks.enumerated()), id: \.element.id) { index, pack in
-                replacementSlotRow(pack, slot: index)
-            }
-        }
-
-        if selectedReplaceSlot != nil {
-            Section("选择新的角度") {
-                if configuration.replaceableScenePacks.isEmpty {
-                    Text("暂无可替换的基础角度")
-                        .font(.system(size: 13))
+    private func activeFreeModule(_ configuration: FreeConfiguration) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("正在使用的 3 个")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                    Text(activeModuleSubtitle(configuration))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.subtext)
-                } else {
-                    ForEach(configuration.replaceableScenePacks, id: \.id) { pack in
-                        replacementCandidateRow(pack, configuration: configuration)
-                    }
                 }
+                Spacer()
+                Text("\(configuration.freeScenePacks.count)/3")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.accent)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(AppColors.accent.opacity(0.12)))
             }
-        }
 
-        Section {
-            Button("取消替换") {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    isReplacingPack = false
-                    selectedReplaceSlot = nil
+            activeAvailabilityPill(configuration)
+
+            VStack(spacing: 10) {
+                ForEach(Array(configuration.freeScenePacks.enumerated()), id: \.element.id) { index, pack in
+                    activePackCard(pack, slot: index, configuration: configuration)
                 }
             }
-            .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(AppColors.subtext)
+
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.accent.opacity(0.82))
+                Text("点右侧按钮先移下一个，再从下面换上来")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer()
+            }
+            .padding(.top, 2)
         }
+        .padding(14)
+        .background(moduleBackground)
+    }
+
+    private func candidateFreeModule(_ configuration: FreeConfiguration) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("下面可替换的 6 个")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                    Text(candidateModuleSubtitle(configuration))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                }
+                Spacer()
+            }
+
+            candidateAvailabilityPill(configuration)
+
+            if let inlineNotice {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 13, weight: .bold))
+                    Text(inlineNotice)
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .foregroundStyle(AppColors.accent)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(AppColors.accent.opacity(0.10))
+                )
+            }
+
+            if let selectedReplaceSlot,
+               configuration.freeScenePacks.indices.contains(selectedReplaceSlot) {
+                movedDownPackStrip(configuration.freeScenePacks[selectedReplaceSlot])
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                ForEach(configuration.moreScenePacks, id: \.id) { pack in
+                    candidatePackCard(pack, configuration: configuration)
+                }
+            }
+        }
+        .padding(14)
+        .background(moduleBackground)
+    }
+
+    private func activeAvailabilityPill(_ configuration: FreeConfiguration) -> some View {
+        TimelineView(.periodic(from: Date(), by: 1)) { context in
+            infoPill(
+                icon: "clock",
+                text: activeAvailabilityText(configuration, now: context.date),
+                tint: statusTint(configuration)
+            )
+        }
+    }
+
+    private func candidateAvailabilityPill(_ configuration: FreeConfiguration) -> some View {
+        TimelineView(.periodic(from: Date(), by: 1)) { context in
+            infoPill(
+                icon: configuration.canReplacePackCombination || configuration.isInFirstWeek ? "checkmark.circle" : "lock.clock",
+                text: candidateAvailabilityText(configuration, now: context.date),
+                tint: statusTint(configuration)
+            )
+        }
+    }
+
+    private func infoPill(icon: String, text: String, tint: Color) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .bold))
+            Text(text)
+                .font(.system(size: 11, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(tint.opacity(0.10))
+        )
+    }
+
+    private func memberUnlockCard(_ configuration: FreeConfiguration) -> some View {
+        Button {
+            dismiss()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                configuration.onShowMemberPricing()
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(AppColors.lockGold)
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(AppColors.lockGold.opacity(0.12)))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("会员不用等冷却")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                    Text("全部场景包可随时启用，旅行、家庭照护和兴趣装备都会跟着记录变化。")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(AppColors.lockGold.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(AppColors.lockGold.opacity(0.18), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var moduleBackground: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(AppColors.panel.opacity(0.94))
+            .shadow(color: Color.black.opacity(0.055), radius: 18, x: 0, y: 8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(AppColors.line.opacity(0.62), lineWidth: 1)
+            )
+    }
+
+    private func activePackCard(
+        _ pack: ScenePackDefinition,
+        slot: Int,
+        configuration: FreeConfiguration
+    ) -> some View {
+        let isOpenSlot = selectedReplaceSlot == slot
+        let canReplace = configuration.isInFirstWeek || configuration.canReplacePackCombination
+        return HStack(spacing: 10) {
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                selectedPackID = pack.id
+                configuration.onSelectFreePack(pack)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                    dismiss()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    scenePackVisual(pack, compact: true)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(pack.label)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+                            .lineLimit(1)
+                        Text(isOpenSlot ? "已移到下面，选一个新场景包补上来" : configuration.scenePackDesc(pack))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(isOpenSlot ? AppColors.accent : AppColors.subtext)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(isOpenSlot)
+
+            if isOpenSlot {
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                        selectedReplaceSlot = nil
+                        inlineNotice = nil
+                    }
+                } label: {
+                    Image(systemName: "arrow.uturn.up")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(AppColors.subtext)
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(AppColors.surfaceMuted.opacity(0.8)))
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button {
+                    guard canReplace else {
+                        showCooldownNotice(configuration)
+                        return
+                    }
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                        selectedReplaceSlot = slot
+                        inlineNotice = "现在从下面选一个换上来"
+                    }
+                } label: {
+                    Image(systemName: canReplace ? "arrow.down.circle.fill" : "clock.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(canReplace ? AppColors.accent : AppColors.subtext.opacity(0.62))
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill((canReplace ? AppColors.accent : AppColors.surfaceMuted).opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(11)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(isOpenSlot ? AppColors.accent.opacity(0.09) : AppColors.paperWarm.opacity(0.46))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(isOpenSlot ? AppColors.accent.opacity(0.28) : AppColors.line.opacity(0.55), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+    }
+
+    private func candidatePackCard(
+        _ pack: ScenePackDefinition,
+        configuration: FreeConfiguration
+    ) -> some View {
+        let isLocked = isLockedMorePack(pack, configuration: configuration)
+        let canReplaceThisPack = configuration.replaceableScenePacks.contains { $0.id == pack.id }
+        return Button {
+            handleCandidateTap(pack, isLocked: isLocked, canReplaceThisPack: canReplaceThisPack, configuration: configuration)
+        } label: {
+            VStack(alignment: .leading, spacing: 9) {
+                scenePackVisual(pack, compact: false)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(pack.label)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(candidateSubtitle(for: pack, isLocked: isLocked, configuration: configuration))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(isLocked ? AppColors.lockGold : AppColors.subtext)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack {
+                    Spacer()
+                    Image(systemName: isLocked ? "lock.fill" : "arrow.up.circle.fill")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(isLocked ? AppColors.lockGold : AppColors.accent)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 172, alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(AppColors.paperWarm.opacity(isLocked ? 0.38 : 0.58))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(isLocked ? AppColors.lockGold.opacity(0.24) : AppColors.line.opacity(0.55), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func scenePackVisual(_ pack: ScenePackDefinition, compact: Bool) -> some View {
+        let style = scenePackStyle(for: pack)
+        return ZStack(alignment: .bottomLeading) {
+            LinearGradient(colors: style.colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+
+            ForEach(Array(style.symbols.enumerated()), id: \.offset) { index, symbol in
+                Image(systemName: symbol)
+                    .font(.system(size: compact ? CGFloat(22 + index * 5) : CGFloat(25 + index * 7), weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(index == 0 ? 0.34 : 0.18))
+                    .rotationEffect(.degrees(index == 0 ? -8 : 12))
+                    .offset(x: compact ? CGFloat(30 + index * 18) : CGFloat(58 + index * 20),
+                            y: compact ? CGFloat(-8 + index * 8) : CGFloat(-12 + index * 12))
+            }
+
+            HStack(spacing: 7) {
+                Text(pack.emoji)
+                    .font(.system(size: compact ? 22 : 24))
+                if !compact {
+                    Text(style.keyword)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.9))
+                        .lineLimit(1)
+                }
+            }
+            .padding(compact ? 8 : 10)
+        }
+        .frame(width: compact ? 70 : nil, height: compact ? 58 : 76)
+        .clipShape(RoundedRectangle(cornerRadius: compact ? 15 : 16, style: .continuous))
+    }
+
+    private func movedDownPackStrip(_ pack: ScenePackDefinition) -> some View {
+        HStack(spacing: 8) {
+            Text(pack.emoji)
+                .font(.system(size: 16))
+            Text("已移下：\(pack.label)")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+            Spacer()
+            Text("待补位")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(AppColors.accent)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(AppColors.accent.opacity(0.08))
+        )
     }
 
     private var reorderHint: some View {
@@ -342,93 +678,7 @@ struct ScenePackAngleSheet: View {
         .buttonStyle(.plain)
     }
 
-    private func freeSelectablePackRow(
-        _ pack: ScenePackDefinition,
-        configuration: FreeConfiguration
-    ) -> some View {
-        Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            withAnimation(.easeInOut(duration: 0.12)) {
-                selectedPackID = pack.id
-            }
-            configuration.onSelectFreePack(pack)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
-                dismiss()
-            }
-        } label: {
-            packRowContent(pack, subtitle: configuration.scenePackDesc(pack), isSelected: selectedPackID == pack.id)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func morePackRow(
-        _ pack: ScenePackDefinition,
-        configuration: FreeConfiguration
-    ) -> some View {
-        let isLocked = isLockedMorePack(pack, configuration: configuration)
-        return Button {
-            if isLocked {
-                dismiss()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    configuration.onShowMemberPricing()
-                }
-            } else {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    isReplacingPack = true
-                }
-            }
-        } label: {
-            HStack(spacing: 12) {
-                Text(pack.emoji)
-                    .font(.system(size: 22))
-                    .frame(width: 30)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(pack.label)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppColors.text)
-                    Text(morePackSubtitle(for: pack, isLocked: isLocked, configuration: configuration))
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppColors.subtext)
-                        .lineLimit(1)
-                }
-
-                Spacer()
-
-                Image(systemName: isLocked ? "lock.fill" : "arrow.triangle.2.circlepath")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(isLocked ? AppColors.subtext.opacity(0.72) : AppColors.accent.opacity(0.72))
-            }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func morePackSubtitle(
-        for pack: ScenePackDefinition,
-        isLocked: Bool,
-        configuration: FreeConfiguration
-    ) -> String {
-        if isLocked {
-            return lockedPackSubtitle(for: pack)
-        }
-        if configuration.isInFirstWeek, configuration.isExtensionLockedPack(pack) {
-            return "\(extensionLockCountdownText(configuration)) · 可替换到我的 3 个角度"
-        }
-        return "可替换到我的 3 个角度"
-    }
-
-    private func isLockedMorePack(
-        _ pack: ScenePackDefinition,
-        configuration: FreeConfiguration
-    ) -> Bool {
-        configuration.isExtensionLockedPack(pack) && !configuration.isInFirstWeek
-    }
-
-    private func lockedSceneHintRow(
+    private func lockedSceneHintCard(
         _ hint: LockedSceneHint,
         configuration: FreeConfiguration
     ) -> some View {
@@ -448,7 +698,7 @@ struct ScenePackAngleSheet: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(AppColors.text)
                     Text(hint.detail)
-                        .font(.system(size: 12))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.subtext)
                         .lineLimit(2)
                 }
@@ -459,102 +709,17 @@ struct ScenePackAngleSheet: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(AppColors.lockGold)
             }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(AppColors.lockGold.opacity(0.08))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(AppColors.lockGold.opacity(0.18), lineWidth: 1)
             )
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-
-    private func extensionLockCountdownText(_ configuration: FreeConfiguration) -> String {
-        let days = max(0, configuration.daysUntilExtensionLock)
-        return days <= 1 ? "扩展角度今天后锁定" : "扩展角度还有 \(days) 天锁定"
-    }
-
-    private func lockedPackSubtitle(for pack: ScenePackDefinition) -> String {
-        switch pack.id {
-        case "travel":
-            return "把路费、住宿、门票放回行程里"
-        case "pet":
-            return "把毛孩子的日常也记得更像生活"
-        case "baby":
-            return "照护、奶粉、衣物不只是一笔支出"
-        case "fitness":
-            return "区分补给、装备、课程和恢复"
-        default:
-            return "会员可解锁更多生活语境"
-        }
-    }
-
-    private func replacementSlotRow(_ pack: ScenePackDefinition, slot: Int) -> some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.16)) {
-                selectedReplaceSlot = slot
-            }
-        } label: {
-            packRowContent(pack, subtitle: "当前角度", isSelected: selectedReplaceSlot == slot)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func replacementCandidateRow(
-        _ pack: ScenePackDefinition,
-        configuration: FreeConfiguration
-    ) -> some View {
-        Button {
-            guard let slot = selectedReplaceSlot,
-                  configuration.freeScenePacks.indices.contains(slot) else { return }
-            let oldPack = configuration.freeScenePacks[slot]
-            let replacement = PendingReplacement(slot: slot, oldId: oldPack.id, newPack: pack)
-            if configuration.isInFirstWeek {
-                confirmReplacement(replacement)
-            } else {
-                pendingReplacement = replacement
-            }
-        } label: {
-            packRowContent(pack, subtitle: configuration.scenePackDesc(pack), isSelected: false)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func replaceButton(_ configuration: FreeConfiguration) -> some View {
-        let canReplace = configuration.isInFirstWeek || configuration.canReplacePackCombination
-        return Button {
-            withAnimation(.easeInOut(duration: 0.18)) {
-                isReplacingPack = true
-                selectedReplaceSlot = nil
-            }
-        } label: {
-            HStack {
-                Text("替换其中一个角度")
-                    .font(.system(size: 14, weight: .semibold))
-                Spacer()
-                if configuration.isInFirstWeek {
-                    Text("首周自由换")
-                        .font(.system(size: 12, weight: .medium))
-                } else if !configuration.canReplacePackCombination {
-                    Text("还有 \(configuration.daysUntilNextReplace) 天")
-                        .font(.system(size: 12, weight: .medium))
-                } else {
-                    Text("换后冷却 30 天")
-                        .font(.system(size: 12, weight: .medium))
-                }
-            }
-            .foregroundStyle(canReplace ? AppColors.accent : AppColors.subtext.opacity(0.58))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!canReplace)
     }
 
     private func packRowContent(
@@ -596,6 +761,44 @@ struct ScenePackAngleSheet: View {
         .contentShape(Rectangle())
     }
 
+    private func handleCandidateTap(
+        _ pack: ScenePackDefinition,
+        isLocked: Bool,
+        canReplaceThisPack: Bool,
+        configuration: FreeConfiguration
+    ) {
+        if isLocked {
+            dismiss()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                configuration.onShowMemberPricing()
+            }
+            return
+        }
+
+        guard configuration.isInFirstWeek || configuration.canReplacePackCombination else {
+            showCooldownNotice(configuration)
+            return
+        }
+
+        guard let slot = selectedReplaceSlot,
+              configuration.freeScenePacks.indices.contains(slot) else {
+            withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
+                inlineNotice = "上面已经有 3 个，先把一个移下来"
+            }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            return
+        }
+
+        guard canReplaceThisPack else { return }
+        let oldPack = configuration.freeScenePacks[slot]
+        let replacement = PendingReplacement(slot: slot, oldId: oldPack.id, newPack: pack)
+        if configuration.isInFirstWeek {
+            confirmReplacement(replacement)
+        } else {
+            pendingReplacement = replacement
+        }
+    }
+
     private func confirmReplacement(_ replacement: PendingReplacement) {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         if case .free(let configuration) = mode {
@@ -603,7 +806,187 @@ struct ScenePackAngleSheet: View {
         }
         withAnimation(.easeInOut(duration: 0.18)) {
             selectedReplaceSlot = nil
-            isReplacingPack = false
+            inlineNotice = "已换上「\(replacement.newPack.label)」"
+        }
+    }
+
+    private func showCooldownNotice(_ configuration: FreeConfiguration) {
+        withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
+            inlineNotice = "还在冷却中，\(cooldownBriefText(configuration, now: Date()))后可开启调整窗口"
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    private func isLockedMorePack(
+        _ pack: ScenePackDefinition,
+        configuration: FreeConfiguration
+    ) -> Bool {
+        configuration.isExtensionLockedPack(pack) && !configuration.isInFirstWeek
+    }
+
+    private func activeModuleSubtitle(_ configuration: FreeConfiguration) -> String {
+        if selectedReplaceSlot != nil {
+            return "已经空出一个位置，从下面选一个补上来"
+        }
+        if configuration.isInFirstWeek {
+            return "首周可以自由试，找到最常用的三个"
+        }
+        if configuration.isReplaceWindowActive {
+            return "24 小时调整窗口内，还能继续换"
+        }
+        if configuration.canReplacePackCombination {
+            return "先把一个移下来，再从下面换上一个"
+        }
+        return "当前 3 个仍可正常使用，替换区在冷却"
+    }
+
+    private func candidateModuleSubtitle(_ configuration: FreeConfiguration) -> String {
+        if configuration.isInFirstWeek {
+            return "首周可任意换上去，扩展包锁定前先试试"
+        }
+        if configuration.isReplaceWindowActive {
+            return "窗口内可以继续换，直到倒计时结束"
+        }
+        if configuration.canReplacePackCombination {
+            return "第一次换上去后，才开始 24 小时调整倒计时"
+        }
+        return "替换区每 30 天开放一次；不足一天时显示时分秒"
+    }
+
+    private func activeAvailabilityText(_ configuration: FreeConfiguration, now: Date) -> String {
+        if configuration.isInFirstWeek {
+            return "首周自由调整，现在换不进冷却"
+        }
+        if configuration.isReplaceWindowActive {
+            return "调整窗口还剩 \(countdownText(until: configuration.replaceWindowEndsAt, now: now))"
+        }
+        if configuration.canReplacePackCombination {
+            return "可换到：现在，第一次换上去后开始 24 小时窗口"
+        }
+        return "可换到：\(countdownText(until: configuration.nextReplaceAvailableAt, now: now))后"
+    }
+
+    private func candidateAvailabilityText(_ configuration: FreeConfiguration, now: Date) -> String {
+        if configuration.isInFirstWeek {
+            return "下面 6 个首周都可以试"
+        }
+        if configuration.isReplaceWindowActive {
+            return "下面 6 个可继续替换，窗口还剩 \(countdownText(until: configuration.replaceWindowEndsAt, now: now))"
+        }
+        if configuration.canReplacePackCombination {
+            return "下面 6 个可替换，换上第一个才开始倒计时"
+        }
+        return "下面替换区 30 天冷却还剩 \(countdownText(until: configuration.nextReplaceAvailableAt, now: now))"
+    }
+
+    private func candidateSubtitle(
+        for pack: ScenePackDefinition,
+        isLocked: Bool,
+        configuration: FreeConfiguration
+    ) -> String {
+        if isLocked {
+            return lockedPackSubtitle(for: pack)
+        }
+        if configuration.isInFirstWeek, configuration.isExtensionLockedPack(pack) {
+            return extensionLockCountdownText(configuration)
+        }
+        return configuration.scenePackDesc(pack)
+    }
+
+    private func statusIcon(_ configuration: FreeConfiguration) -> String {
+        if configuration.isInFirstWeek { return "sparkles" }
+        if configuration.isReplaceWindowActive { return "timer" }
+        if configuration.canReplacePackCombination { return "arrow.triangle.2.circlepath" }
+        return "lock.clock"
+    }
+
+    private func statusTint(_ configuration: FreeConfiguration) -> Color {
+        if configuration.isInFirstWeek { return AppColors.accent }
+        if configuration.isReplaceWindowActive { return AppColors.accent }
+        if configuration.canReplacePackCombination { return AppColors.accent }
+        return AppColors.lockGold
+    }
+
+    private func statusTitle(_ configuration: FreeConfiguration, now: Date) -> String {
+        if configuration.isInFirstWeek {
+            return "首周试用中"
+        }
+        if configuration.isReplaceWindowActive {
+            return "24 小时调整窗口还剩 \(countdownText(until: configuration.replaceWindowEndsAt, now: now))"
+        }
+        if configuration.canReplacePackCombination {
+            return "现在可换，第一次换上去后开始计时"
+        }
+        return "替换区冷却中，还剩 \(countdownText(until: configuration.nextReplaceAvailableAt, now: now))"
+    }
+
+    private func statusSubtitle(_ configuration: FreeConfiguration, now: Date) -> String {
+        if configuration.isInFirstWeek {
+            return "\(extensionLockCountdownText(configuration))。现在调整不进入 30 天冷却。"
+        }
+        if configuration.isReplaceWindowActive {
+            return "这 24 小时是调整窗口，换完后上方不会再显示可换倒计时。"
+        }
+        if configuration.canReplacePackCombination {
+            return "先移下上面一个，再从下面换上一个；从第一次换上去开始算 24 小时窗口。"
+        }
+        return "上面的 3 个还能继续用；下面的替换区到期后，会重新开放一天调整窗口。"
+    }
+
+    private func cooldownBriefText(_ configuration: FreeConfiguration, now: Date) -> String {
+        countdownText(until: configuration.nextReplaceAvailableAt, now: now)
+    }
+
+    private func countdownText(until timestamp: TimeInterval, now: Date) -> String {
+        guard timestamp > 0 else { return "0:00:00" }
+        let seconds = max(0, Int(ceil(timestamp - now.timeIntervalSince1970)))
+        if seconds >= 86_400 {
+            return "\(Int(ceil(Double(seconds) / 86_400.0))) 天"
+        }
+        let hours = seconds / 3_600
+        let minutes = (seconds % 3_600) / 60
+        let restSeconds = seconds % 60
+        return String(format: "%02d:%02d:%02d", hours, minutes, restSeconds)
+    }
+
+    private func extensionLockCountdownText(_ configuration: FreeConfiguration) -> String {
+        let days = max(0, configuration.daysUntilExtensionLock)
+        return days <= 1 ? "出去玩、娃和毛孩等扩展角度今天后锁定" : "出去玩、娃和毛孩等扩展角度还有 \(days) 天锁定"
+    }
+
+    private func lockedPackSubtitle(for pack: ScenePackDefinition) -> String {
+        switch pack.id {
+        case "travel":
+            return "会员可用：把路费、住宿、门票放回行程里"
+        case "family":
+            return "会员可用：奶粉尿不湿、宠物粮猫砂都是照护节奏"
+        default:
+            return "会员可解锁更多生活语境"
+        }
+    }
+
+    private func scenePackStyle(for pack: ScenePackDefinition) -> (colors: [Color], symbols: [String], keyword: String) {
+        switch pack.id {
+        case "commute":
+            return ([Color(red: 0.24, green: 0.50, blue: 0.86), Color(red: 0.42, green: 0.78, blue: 0.74)], ["tram.fill", "car.fill"], "出门")
+        case "food":
+            return ([Color(red: 0.95, green: 0.43, blue: 0.35), Color(red: 0.98, green: 0.72, blue: 0.38)], ["cup.and.saucer.fill", "fork.knife"], "干饭")
+        case "supply":
+            return ([Color(red: 0.30, green: 0.63, blue: 0.48), Color(red: 0.79, green: 0.74, blue: 0.42)], ["basket.fill", "shippingbox.fill"], "补货")
+        case "shopping":
+            return ([Color(red: 0.58, green: 0.45, blue: 0.86), Color(red: 0.94, green: 0.54, blue: 0.68)], ["bag.fill", "camera.fill"], "快递")
+        case "care":
+            return ([Color(red: 0.22, green: 0.64, blue: 0.66), Color(red: 0.60, green: 0.74, blue: 0.88)], ["heart.fill", "figure.strengthtraining.traditional"], "身体")
+        case "home":
+            return ([Color(red: 0.58, green: 0.54, blue: 0.46), Color(red: 0.77, green: 0.64, blue: 0.47)], ["house.fill", "wrench.and.screwdriver.fill"], "住处")
+        case "social":
+            return ([Color(red: 0.88, green: 0.35, blue: 0.48), Color(red: 0.93, green: 0.68, blue: 0.36)], ["gift.fill", "person.2.fill"], "人情")
+        case "travel":
+            return ([Color(red: 0.24, green: 0.47, blue: 0.82), Color(red: 0.62, green: 0.74, blue: 0.50)], ["airplane", "map.fill"], "出走")
+        case "family":
+            return ([Color(red: 0.94, green: 0.52, blue: 0.55), Color(red: 0.62, green: 0.57, blue: 0.86)], ["pawprint.fill", "figure.and.child.holdinghands"], "照护")
+        default:
+            return ([AppColors.accent, AppColors.heroGradientTeal], ["sparkles"], "生活")
         }
     }
 }

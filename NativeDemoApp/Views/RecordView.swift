@@ -30,10 +30,12 @@ struct RecordView: View {
     @State private var lastDraftIntent: RecordDraftIntent = .automatic
     @State private var freeScenePackRefreshToken = 0
     @State private var freeLockedSceneHint: ScenePackAngleSheet.LockedSceneHint?
+    @State private var ocrQuotaUpsellVisibleThisSession = false
     @AppStorage("scene_pack_order_v1") private var scenePackOrderStorage = ""
     @AppStorage("scene_pack_more_expanded_v1") private var scenePackMoreExpanded = false
     @AppStorage("scene_pack_usage_v1") private var scenePackUsageStorage = ""
     @AppStorage("scene_pack_pinned_v1") private var scenePackPinnedStorage = ""
+    @AppStorage("ocr_import_member_upsell_last_shown_at") private var ocrImportMemberUpsellLastShownAt = 0.0
     @FocusState private var focusedField: RecordField?
 
     private enum RecordField {
@@ -51,8 +53,10 @@ struct RecordView: View {
     private let recordAccent = AppColors.accent
     private let recordInk = AppColors.text
     private let freeScenePackService = FreeScenePackService.shared
-    private let extensionScenePackIds: Set<String> = ["travel", "pet", "baby", "fitness"]
+    private let dailyQuotaStore = DailyFeatureQuotaStore()
+    private let extensionScenePackIds: Set<String> = ["travel", "family"]
     private let scenePackSilenceInterval: TimeInterval = 45 * 24 * 60 * 60
+    private let ocrImportUpsellCooldown: TimeInterval = 3 * 24 * 60 * 60
 
     private struct ScenePackUsageStat {
         var count: Int
@@ -60,11 +64,8 @@ struct RecordView: View {
     }
 
     private var visibleScenePacks: [ScenePackDefinition] {
-        let enabledPacks = ScenePackCopyPool.definitions.filter { pack in
-            settingsViewModel.petCompanionEnabled || pack.id != "pet"
-        }
         let orderIds = scenePackOrderIds
-        return enabledPacks.sorted { lhs, rhs in
+        return ScenePackCopyPool.definitions.sorted { lhs, rhs in
             scenePackSortRank(lhs, orderIds: orderIds) < scenePackSortRank(rhs, orderIds: orderIds)
         }
     }
@@ -100,12 +101,22 @@ struct RecordView: View {
         Set(freeScenePacks.map(\.id))
     }
 
+    private var shouldShowOCRQuotaUpsell: Bool {
+        guard isOCRQuotaExhausted else { return false }
+        if ocrQuotaUpsellVisibleThisSession { return true }
+        return Date().timeIntervalSince1970 >= ocrImportMemberUpsellLastShownAt + ocrImportUpsellCooldown
+    }
+
+    private var isOCRQuotaExhausted: Bool {
+        !isMember && dailyQuotaStore.ocrRemaining(isMember: false) == 0
+    }
+
     private var freeScenePackLimitText: String? {
         guard !isMember, freeScenePackService.isInFirstWeek() else { return nil }
         let days = freeScenePackService.daysUntilExtensionLock()
         return days <= 1
-            ? "旅途、宠物、宝宝、健身等扩展角度今天后会锁定"
-            : "旅途、宠物、宝宝、健身等扩展角度还有 \(days) 天锁定"
+            ? "出去玩、娃和毛孩等扩展角度今天后会锁定"
+            : "出去玩、娃和毛孩等扩展角度还有 \(days) 天锁定"
     }
 
     private var scenePackOrderIds: [String] {
@@ -209,7 +220,7 @@ struct RecordView: View {
                 return availableScenePackId("travel")
             }
             if amount <= 45 { return availableScenePackId("food") }
-            if amount <= 120 { return availableScenePackId("home") }
+            if amount <= 120 { return availableScenePackId("supply", fallback: "home") }
             return availableScenePackId("home")
         }
 
@@ -217,14 +228,19 @@ struct RecordView: View {
             if hasTravelContextForCurrentRecord {
                 return availableScenePackId("travel")
             }
-            return amount <= 80 ? availableScenePackId("food") : availableScenePackId("social", fallback: "home")
+            return amount <= 80 ? availableScenePackId("food") : availableScenePackId("social", fallback: "supply")
+        }
+
+        let note = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if containsPetKeyword(note) || containsBabyKeyword(note) {
+            return availableScenePackId("family", fallback: "supply")
         }
 
         let categoryToPackId: [HomeItem.Category: String] = [
             .dining: "food",
             .transport: "commute",
             .shopping: "shopping",
-            .daily: "home",
+            .daily: "supply",
             .lodging: "travel",
             .health: "care",
             .home: "home",
@@ -237,7 +253,7 @@ struct RecordView: View {
 
         if amount <= 15 { return "commute" }
         if amount <= 45 { return "food" }
-        if amount <= 120 { return "home" }
+        if amount <= 120 { return "supply" }
         return "home"
     }
 
@@ -279,12 +295,10 @@ struct RecordView: View {
     private func lockedScenePackForCurrentRecord() -> ScenePackDefinition? {
         let text = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let targetId: String?
-        if containsPetKeyword(text) {
-            targetId = "pet"
-        } else if containsBabyKeyword(text) {
-            targetId = "baby"
+        if containsPetKeyword(text) || containsBabyKeyword(text) {
+            targetId = "family"
         } else if containsFitnessKeyword(text) {
-            targetId = "fitness"
+            targetId = "care"
         } else if homeViewModel.selectedCategory == .lodging || containsTravelKeyword(text) {
             targetId = "travel"
         } else {
@@ -317,13 +331,11 @@ struct RecordView: View {
     private func lockedSceneHintTitle(for pack: ScenePackDefinition) -> String {
         switch pack.id {
         case "travel":
-            return "这笔更像旅行场景"
-        case "pet":
-            return "这笔更像宠物日常"
-        case "baby":
-            return "这笔更像照护场景"
-        case "fitness":
-            return "这笔更像运动健身"
+            return "这笔更像出去玩订酒店买票"
+        case "family":
+            return "这笔更像娃和毛孩的补给站"
+        case "care":
+            return "这笔更像看病买药健身恢复"
         default:
             return "这笔可以换个生活角度"
         }
@@ -332,13 +344,11 @@ struct RecordView: View {
     private func lockedSceneHintDetail(for pack: ScenePackDefinition) -> String {
         switch pack.id {
         case "travel":
-            return "会员可直接换到旅行包，把路费、住宿和门票放回行程里。"
-        case "pet":
-            return "会员可直接换到宠物包，让毛孩子的开销也更像生活记录。"
-        case "baby":
-            return "会员可直接换到宝宝包，照护、奶粉和衣物会写得更贴近场景。"
-        case "fitness":
-            return "会员可直接换到运动包，区分补给、装备、课程和恢复。"
+            return "会员可直接换到出去玩这一包，把路费、住宿和门票放回同一段行程里。"
+        case "family":
+            return "会员可直接换到娃和毛孩这一包，奶粉尿不湿、宠物粮猫砂和洗护就医都能放回照护场景。"
+        case "care":
+            return "会员可直接换到身体相关角度，区分健身房、运动装备、理疗和恢复。"
         default:
             return "会员可打开全部生活角度，不只停在 3 个常用包。"
         }
@@ -579,6 +589,19 @@ struct RecordView: View {
         }
     }
 
+    private func markOCRQuotaUpsellShown() {
+        ocrQuotaUpsellVisibleThisSession = true
+        let now = Date().timeIntervalSince1970
+        if now >= ocrImportMemberUpsellLastShownAt + ocrImportUpsellCooldown {
+            ocrImportMemberUpsellLastShownAt = now
+        }
+    }
+
+    private func dismissOCRQuotaUpsell() {
+        ocrQuotaUpsellVisibleThisSession = false
+        ocrImportMemberUpsellLastShownAt = Date().timeIntervalSince1970
+    }
+
     private var previewMeta: String {
         let displayCategory = previewDraftResolution?.category ?? homeViewModel.selectedCategory
         if let activeScenePack,
@@ -744,7 +767,8 @@ struct RecordView: View {
         case .health: packId = "care"
         case .home: packId = "home"
         case .social: packId = "social"
-        case .daily, .entertainment, .other: packId = nil
+        case .daily: packId = "supply"
+        case .entertainment, .other: packId = nil
         }
         guard let packId else { return nil }
         return visibleScenePacks.first { $0.id == packId }
@@ -1053,7 +1077,9 @@ struct RecordView: View {
                         isInFirstWeek: freeScenePackService.isInFirstWeek(),
                         daysUntilExtensionLock: freeScenePackService.daysUntilExtensionLock(),
                         canReplacePackCombination: freeScenePackService.canReplacePackCombination(),
-                        daysUntilNextReplace: freeScenePackService.daysUntilNextReplace(),
+                        nextReplaceAvailableAt: freeScenePackService.nextReplaceAvailableAt(),
+                        isReplaceWindowActive: freeScenePackService.isReplaceWindowActive(),
+                        replaceWindowEndsAt: freeScenePackService.replaceWindowEndsAt(),
                         scenePackDesc: scenePackDesc,
                         isExtensionLockedPack: { pack in
                             freeScenePackService.isExtensionLockedPack(pack)
@@ -2141,9 +2167,17 @@ struct RecordView: View {
 
             if !homeViewModel.ocrStatus.isEmpty {
                 Text(homeViewModel.ocrStatus)
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext)
+                    .font(.system(size: 12, weight: isOCRQuotaExhausted ? .semibold : .regular))
+                    .foregroundStyle(isOCRQuotaExhausted ? recordAccent : AppColors.subtext)
                     .padding(.top, 4)
+            }
+
+            if shouldShowOCRQuotaUpsell {
+                ocrQuotaUpsellCard
+                    .padding(.top, 2)
+                    .onAppear {
+                        markOCRQuotaUpsellShown()
+                    }
             }
 
             OCRDraftPanel(
@@ -2157,6 +2191,71 @@ struct RecordView: View {
             )
             .padding(.top, 6)
         }
+    }
+
+    private var ocrQuotaUpsellCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(recordAccent)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle()
+                            .fill(recordAccent.opacity(0.12))
+                    )
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("今日免费导入已用完")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                    Text("明天会刷新 3 次。经常导入微信/支付宝截图的话，会员可连续整理，不用被次数打断。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 6)
+
+                Button {
+                    dismissOCRQuotaUpsell()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppColors.subtext)
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button {
+                dismissOCRQuotaUpsell()
+                onShowMemberPricing?()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "crown")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("开通会员，连续导入")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, minHeight: 38)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(recordAccent)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(recordAccent.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(recordAccent.opacity(0.18), lineWidth: 1)
+        )
     }
 
     // MARK: - Amount helpers

@@ -230,9 +230,13 @@ final class LifeInsightService {
         case .transport:
             return containsAny(joined, ["通勤", "上班", "下班", "地铁", "公交"]) ? "通勤交通" : "交通"
         case .health:
-            return containsAny(joined, ["健身", "运动", "跑步", "瑜伽", "私教", "游泳"]) ? "运动健身" : "健康"
+            return containsAny(joined, ["健身", "运动", "跑步", "瑜伽", "私教", "游泳", "理疗", "恢复"]) ? "健身恢复" : "看病买药"
         case .dining:
-            return containsAny(joined, ["咖啡", "奶茶"]) ? "饮品餐饮" : "餐饮"
+            return containsAny(joined, ["咖啡", "奶茶"]) ? "饭点饮品" : "饭点外卖"
+        case .shopping:
+            return containsAny(joined, ["渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "乐器", "茶具", "咖啡器具"]) ? "兴趣装备" : "网购添置"
+        case .daily:
+            return containsAny(joined, ["买菜", "生鲜", "盒马", "叮咚", "小象", "京东到家", "朴朴"]) ? "超市买菜" : "家用补货"
         default:
             return category.rawValue
         }
@@ -251,7 +255,7 @@ final class LifeInsightService {
         case .health:
             return "「\(name)」变多，说明身体这件事被放回了日程。不管是训练、恢复还是照顾自己，都值得被看见。"
         case .shopping, .daily:
-            return "「\(name)」变多，像是在给生活补库存。很多小东西一起出现，通常是一个阶段在重新整理。"
+            return "「\(name)」变多，像是在给生活补库存。买菜、家用、网购和兴趣装备一起出现，通常是一个阶段在重新整理。"
         case .entertainment:
             return "「\(name)」不只是花钱玩，也可能是在给紧绷的日子留一点出口。"
         case .home:

@@ -50,9 +50,13 @@ enum NarrativeCopyResolver {
             return lateNightTag
         }
 
-        if let brand = MerchantBrandCatalog.definition(for: context.brandId),
-           let note = note(from: brand.tiers, amount: context.amount, seed: context.seed) {
-            return note
+        if let brand = MerchantBrandCatalog.definition(for: context.brandId) {
+            if let note = drinkBrandEmotionTag(brand: brand, context: context) {
+                return note
+            }
+            if let note = note(from: brand.tiers, amount: context.amount, seed: context.seed) {
+                return note
+            }
         }
 
         if let note = HomeItem.refinedEmotionTag(title: context.note, category: context.category, amount: context.amount, date: context.date) {
@@ -127,6 +131,35 @@ enum NarrativeCopyResolver {
             )
         }
 
+        if !hasIncompatibleSemanticCue,
+           [.dining, .daily].contains(context.category),
+           emotionRuleIDs.contains("convenience") {
+            if containsAny(lower, ["茶叶蛋", "饭团", "便当", "关东煮", "包子", "三明治", "热食", "小食"]) {
+                return pick(
+                    [
+                        "便利店小食记下",
+                        "路过买点吃的",
+                        "便利店热食在手边",
+                        "小食先垫一下",
+                        "便利店这一口",
+                        "午间小补给",
+                    ],
+                    seed: context.seed + "|convenienceFood"
+                )
+            }
+            return pick(
+                [
+                    "便利店补给",
+                    "这一站很方便",
+                    "小补给刚好带上",
+                    "日常一站完成",
+                    "路过买一点",
+                    "便利店小袋子",
+                ],
+                seed: context.seed + "|convenience"
+            )
+        }
+
         if context.category == .transport,
            emotionRuleIDs.contains("transport") {
             if isWeekend(context.date), !containsWorkCue(lower) {
@@ -197,22 +230,6 @@ enum NarrativeCopyResolver {
             )
         }
 
-        if !hasIncompatibleSemanticCue,
-           context.category == .daily,
-           emotionRuleIDs.contains("convenience") {
-            return pick(
-                [
-                    "便利店补给",
-                    "这一站很方便",
-                    "小补给刚好带上",
-                    "日常一站完成",
-                    "路过买一点",
-                    "便利店小袋子",
-                ],
-                seed: context.seed + "|convenience"
-            )
-        }
-
         return nil
     }
 
@@ -221,6 +238,69 @@ enum NarrativeCopyResolver {
         let tier = tiers.first { amount <= $0.maxAmount } ?? tiers[tiers.count - 1]
         guard !tier.notes.isEmpty else { return nil }
         return tier.notes[stableIndex(seed: seed, count: tier.notes.count)]
+    }
+
+    private static func drinkBrandEmotionTag(
+        brand: MerchantBrandDefinition,
+        context: Context
+    ) -> String? {
+        guard context.category == .dining,
+              ["luckin", "starbucks", "manner", "mixue", "heytea", "naixue"].contains(brand.id) else {
+            return nil
+        }
+
+        let lower = "\(context.seed) \(context.note)".lowercased()
+        let isCoffee = ["luckin", "starbucks", "manner"].contains(brand.id)
+            || containsAny(lower, ["咖啡", "拿铁", "美式", "蓝杯", "coffee"])
+        let hasRushOrTravelCue = containsAny(lower, ["赶路", "赶车", "赶时间", "来不及", "机场", "高铁", "火车", "车站", "登机", "出发去"])
+        let hour = Calendar.current.component(.hour, from: context.date)
+
+        if hasRushOrTravelCue {
+            return pick(
+                isCoffee
+                ? ["路上续一杯清醒", "出发前补点精神", "这杯陪着走一段", "路上买杯提神", "移动前补一口"]
+                : ["路上买杯喝的", "出发前带杯清爽", "这杯陪着走一段", "路上补点清爽", "移动前喝一口"],
+                seed: context.seed + "|drinkRoute"
+            )
+        }
+
+        switch hour {
+        case 5..<10:
+            return pick(
+                isCoffee
+                ? ["早上提个神", "早晨续一杯清醒", "把清晨叫醒一点", "今天也先醒过来", "咖啡香落进早上"]
+                : ["早上喝点清爽", "清晨的一杯", "今天先喝一口", "早上补点甜", "把早晨提亮一点"],
+                seed: context.seed + "|drinkMorning"
+            )
+        case 10..<14:
+            return pick(
+                isCoffee
+                ? ["午间补一杯清醒", "午饭旁边的一杯", "给下午先续一点", "中午这杯提个神", "午间咖啡记下", "忙里补一点清醒"]
+                : ["午间喝点清爽", "饭点旁边的一杯", "中午补点甜", "午间饮品记下", "给下午添点清爽", "忙里喝一口"],
+                seed: context.seed + "|drinkNoon"
+            )
+        case 14..<18:
+            return pick(
+                isCoffee
+                ? ["午后补一点精神", "给下午一点支撑", "忙里补一点清醒", "一杯咖啡缓一缓", "把节奏续上一点", "下午续一杯"]
+                : ["午后喝点清爽", "给下午添点甜", "忙里喝一口", "下午饮品记下", "茶歇时刻记一下", "把下午接上"],
+                seed: context.seed + "|drinkAfternoon"
+            )
+        case 18..<23:
+            return pick(
+                isCoffee
+                ? ["晚点续一杯清醒", "这杯陪着把事做完", "忙完前补点精神", "夜里先提个神", "这杯把节奏稳住"]
+                : ["晚上喝点喜欢的", "晚点补一杯", "夜里喝口清爽", "这杯留在晚上", "给晚上添一点味道"],
+                seed: context.seed + "|drinkEvening"
+            )
+        default:
+            return pick(
+                isCoffee
+                ? ["这杯咖啡记下", "认真续一杯清醒", "一杯咖啡缓一缓", "今天添了一杯咖啡", "忙里有个小停顿"]
+                : ["这杯饮品记下", "喝一口喜欢的", "给今天添一杯", "一口清爽记下来", "今天喝点好的"],
+                seed: context.seed + "|drinkAnytime"
+            )
+        }
     }
 
     private static func pick(_ notes: [String], seed: String) -> String {
@@ -288,10 +368,15 @@ enum NarrativeCopyResolver {
         case .health: packId = "care"
         case .home: packId = "home"
         case .social: packId = "social"
-        case .daily: packId = nil
+        case .daily: packId = containsFamilyCareKeyword(context.note) ? "family" : "supply"
         }
         guard let packId else { return nil }
         return ScenePackCopyPool.definitions.first { $0.id == packId }
+    }
+
+    private static func containsFamilyCareKeyword(_ text: String) -> Bool {
+        let keywords = ["宝宝", "孩子", "婴儿", "奶粉", "尿不湿", "纸尿裤", "辅食", "童装", "儿童座椅", "推车", "宠物", "猫粮", "狗粮", "猫砂", "尿垫", "罐头", "冻干", "宠物医院", "毛孩", "毛孩子"]
+        return keywords.contains { text.contains($0) }
     }
 
     private static func containsTravelKeyword(_ text: String) -> Bool {

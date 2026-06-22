@@ -29,13 +29,13 @@ struct MemberPricingView: View {
         ("AI 深度生活分析", "看见那些你自己都没察觉的规律：哪些支出正在悄悄增加、最近压力最大的时间段、什么事情最值得你投入时间和金钱、生活节奏正在发生哪些变化。"),
         ("持续生成生活故事", "不只是记账，而是记录成长。周记、月记、年度故事自动串联，多年以后依然能翻阅今天。"),
         ("账单连续整理", "把重复整理交给 AI。微信、支付宝截图可以连续导入，一年账单也能快速变成可回看的生活档案。"),
-        ("全部生活场景", "你的生活，不只有消费。日常生活、旅行、健身运动、宝宝成长、宠物记录、人情往来与自定义主题，都能从不同角度重新认识自己。"),
+        ("全部生活场景", "你的生活，不只有消费。地铁公交打车停车、干饭点外卖和咖啡、超市买菜和家用、快递到了网购这件、看病买药健身恢复、娃和毛孩，都能从不同角度重新认识自己。"),
         ("今日无限回放", "睡前重新看看今天。重要的事、见过的人、花过的钱，让每一天都有痕迹。"),
         ("25+ 生活风格", "让记录变得更有温度。纸境、档案馆、夜读、观察者、旅行手账和博物馆，打造属于自己的生活记录本。"),
     ]
 
     private let boundaryRows = [
-        ("生活场景", "轻度记录常用角度", "完整打开旅行、运动、宝宝、宠物、人情等生活面"),
+        ("生活场景", "轻度记录常用角度", "完整打开出去玩、看病买药健身恢复、娃和毛孩、人情局、兴趣装备等生活面"),
         ("生活回放", "基础体验最近片段", "持续保存周/月/年度故事，不让生活断档"),
         ("账单整理", "适合少量截图", "大段账单也能连续整理成可回看的档案"),
     ]
@@ -434,7 +434,8 @@ struct MemberPricingView: View {
     }
 
     private var lifetimeArchiveSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let snapshot = lifetimeArchiveSnapshot
+        return VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
                 Image(systemName: "crown.fill")
                     .font(.system(size: 13, weight: .semibold))
@@ -446,37 +447,41 @@ struct MemberPricingView: View {
             }
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(lifetimeArchiveStats.traceCount > 0 ? "你的生活档案正在形成" : "从第一笔开始，生活档案会慢慢形成")
+                Text(snapshot.title)
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(AppColors.text)
-                Text("因为生活档案会越来越值钱。")
+                Text(snapshot.subtitle)
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.subtext)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
-                lifetimeArchiveMetric("\(lifetimeArchiveStats.continuousDays)天", "连续记录")
-                lifetimeArchiveMetric("\(lifetimeArchiveStats.traceCount)条", "生活痕迹")
-                lifetimeArchiveMetric("\(lifetimeArchiveStats.weekCount)篇", "周记素材")
-                lifetimeArchiveMetric("\(lifetimeArchiveStats.monthCount)个月", "故事跨度")
+                ForEach(snapshot.metrics) { metric in
+                    lifetimeArchiveMetric(metric.value, metric.label)
+                }
             }
 
             HStack(alignment: .center, spacing: 8) {
-                lifetimeStage("17天", "记录")
-                lifetimeStageArrow
-                lifetimeStage("170天", "习惯")
-                lifetimeStageArrow
-                lifetimeStage("1700天", "人生")
+                ForEach(snapshot.stages.indices, id: \.self) { index in
+                    let stage = snapshot.stages[index]
+                    lifetimeStage(stage.value, stage.label)
+                    if index < snapshot.stages.count - 1 {
+                        lifetimeStageArrow
+                    }
+                }
             }
             .padding(.vertical, 4)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("这些数字不会越来越小。它们会陪你一起长大。")
+                Text(snapshot.primaryLine)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.text.opacity(0.82))
-                Text("有些账单会被忘记。但那些日子，不应该。")
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(snapshot.closingLine)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppColors.text)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(16)
@@ -508,6 +513,8 @@ struct MemberPricingView: View {
             Text(label)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 9)
@@ -527,9 +534,13 @@ struct MemberPricingView: View {
             Text(day)
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
             Text(meaning)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
         }
         .frame(maxWidth: .infinity)
     }
@@ -540,23 +551,173 @@ struct MemberPricingView: View {
             .foregroundStyle(AppColors.lockGold.opacity(0.72))
     }
 
-    private var lifetimeArchiveStats: (continuousDays: Int, traceCount: Int, weekCount: Int, monthCount: Int) {
-        let positiveItems = homeViewModel.items.filter { $0.amount > 0 }
+    private var lifetimeArchiveSnapshot: LifetimeArchiveSnapshot {
+        let positiveItems = homeViewModel.items
+            .filter { $0.amount > 0 && $0.draftMeta == nil }
+        let calendar = Calendar.current
         guard !positiveItems.isEmpty else {
-            return (0, 0, 0, 0)
+            return LifetimeArchiveSnapshot(
+                title: "从第一笔开始，生活档案会慢慢形成",
+                subtitle: "永久会员不是一段固定说明，而是把以后每一天都接进同一本生活档案。",
+                metrics: [
+                    LifetimeArchiveMetric(value: "0天", label: "连续记录"),
+                    LifetimeArchiveMetric(value: "0条", label: "生活痕迹"),
+                    LifetimeArchiveMetric(value: "0天", label: "有记录的日子"),
+                    LifetimeArchiveMetric(value: "0个月", label: "故事跨度")
+                ],
+                stages: [
+                    LifetimeArchiveStage(value: "1天", label: "开始"),
+                    LifetimeArchiveStage(value: "7天", label: "连起来"),
+                    LifetimeArchiveStage(value: "30天", label: "月度档案")
+                ],
+                primaryLine: "有了真实记录后，这里会自动换成你的连续天数、生活印记和周月故事素材。",
+                closingLine: "它会跟着你的账本长，不是一张固定权益图。"
+            )
         }
 
-        let calendar = Calendar.current
         let days = Set(positiveItems.map { calendar.startOfDay(for: $0.createdAt) })
         let continuousDays = continuousRecordDays(from: days, calendar: calendar)
         let weekKeys = Set(positiveItems.map { weekKey(for: $0.createdAt, calendar: calendar) })
         let monthKeys = Set(positiveItems.map { monthKey(for: $0.createdAt, calendar: calendar) })
-        return (
-            max(1, continuousDays),
-            positiveItems.count,
-            weekKeys.count,
-            monthKeys.count
+        let activeDays = days.count
+        let traceCount = positiveItems.count
+        let firstDate = positiveItems.map(\.createdAt).min() ?? Date()
+        let latestDate = positiveItems.map(\.createdAt).max() ?? Date()
+        let spanDays = max(1, (calendar.dateComponents([.day], from: calendar.startOfDay(for: firstDate), to: calendar.startOfDay(for: latestDate)).day ?? 0) + 1)
+        let marks = LifeMarkService.aggregates(
+            for: positiveItems,
+            allItems: positiveItems,
+            isMember: true,
+            limit: 6
         )
+        let primaryMark = marks.first
+        let title = lifetimeArchiveTitle(
+            traceCount: traceCount,
+            monthCount: monthKeys.count,
+            primaryMark: primaryMark
+        )
+        let subtitle = lifetimeArchiveSubtitle(
+            traceCount: traceCount,
+            activeDays: activeDays,
+            spanDays: spanDays,
+            primaryMark: primaryMark
+        )
+        let thirdMetric = lifetimeArchiveSceneMetric(
+            primaryMark: primaryMark,
+            activeDays: activeDays
+        )
+        let fourthMetric = monthKeys.count > 1
+            ? LifetimeArchiveMetric(value: "\(monthKeys.count)个月", label: "故事跨度")
+            : LifetimeArchiveMetric(value: "\(weekKeys.count)篇", label: "周记素材")
+        return LifetimeArchiveSnapshot(
+            title: title,
+            subtitle: subtitle,
+            metrics: [
+                LifetimeArchiveMetric(value: "\(max(1, continuousDays))天", label: "连续记录"),
+                LifetimeArchiveMetric(value: "\(traceCount)条", label: "生活痕迹"),
+                thirdMetric,
+                fourthMetric
+            ],
+            stages: lifetimeArchiveStages(activeDays: activeDays),
+            primaryLine: lifetimeArchivePrimaryLine(
+                primaryMark: primaryMark,
+                traceCount: traceCount,
+                spanDays: spanDays
+            ),
+            closingLine: lifetimeArchiveClosingLine(
+                primaryMark: primaryMark,
+                activeDays: activeDays,
+                monthCount: monthKeys.count
+            )
+        )
+    }
+
+    private func lifetimeArchiveTitle(
+        traceCount: Int,
+        monthCount: Int,
+        primaryMark: LifeMarkAggregate?
+    ) -> String {
+        if let primaryMark {
+            switch primaryMark.kind {
+            case .context:
+                return "你的\(primaryMark.label)已经被记住"
+            case .milestone:
+                return primaryMark.title
+            case .streak:
+                return "\(primaryMark.label)正在形成节奏"
+            case .scene:
+                return "\(primaryMark.label)正在变成生活档案"
+            }
+        }
+        if monthCount >= 2 {
+            return "你的生活档案已经跨过 \(monthCount) 个月"
+        }
+        return traceCount >= 10 ? "你的生活档案正在形成" : "这些记录已经有了开头"
+    }
+
+    private func lifetimeArchiveSubtitle(
+        traceCount: Int,
+        activeDays: Int,
+        spanDays: Int,
+        primaryMark: LifeMarkAggregate?
+    ) -> String {
+        if let primaryMark {
+            return primaryMark.detail
+        }
+        if spanDays > activeDays {
+            return "\(traceCount) 条记录分布在 \(activeDays) 个日子里，时间跨度已经有 \(spanDays) 天。"
+        }
+        return "\(traceCount) 条记录来自真实账本，后面会继续整理成周记、月章和回放。"
+    }
+
+    private func lifetimeArchiveSceneMetric(
+        primaryMark: LifeMarkAggregate?,
+        activeDays: Int
+    ) -> LifetimeArchiveMetric {
+        guard let primaryMark, primaryMark.count > 0 else {
+            return LifetimeArchiveMetric(value: "\(activeDays)天", label: "有记录的日子")
+        }
+        return LifetimeArchiveMetric(
+            value: "\(primaryMark.count)次",
+            label: primaryMark.label
+        )
+    }
+
+    private func lifetimeArchiveStages(activeDays: Int) -> [LifetimeArchiveStage] {
+        let currentDays = max(1, activeDays)
+        let nextTarget = [7, 17, 30, 60, 100, 170, 365, 700, 1000, 1700]
+            .first { $0 > currentDays } ?? (currentDays + 365)
+        let longTarget = max(1700, nextTarget * 3)
+        return [
+            LifetimeArchiveStage(value: "\(currentDays)天", label: "已记录"),
+            LifetimeArchiveStage(value: "\(nextTarget)天", label: "下一站"),
+            LifetimeArchiveStage(value: "\(longTarget)天", label: "长期档案")
+        ]
+    }
+
+    private func lifetimeArchivePrimaryLine(
+        primaryMark: LifeMarkAggregate?,
+        traceCount: Int,
+        spanDays: Int
+    ) -> String {
+        if let primaryMark {
+            return "最近最清楚的线索是「\(primaryMark.label)」：\(primaryMark.count) 次、合计 \(primaryMark.total.formatted(.cny))，以后能继续和天气、地点、周月回放连起来。"
+        }
+        return "\(traceCount) 条账单已经覆盖 \(spanDays) 天。记录越多，AI 能看见的生活线索就越完整。"
+    }
+
+    private func lifetimeArchiveClosingLine(
+        primaryMark: LifeMarkAggregate?,
+        activeDays: Int,
+        monthCount: Int
+    ) -> String {
+        if let primaryMark {
+            return "这不是固定文案，是你账本里的「\(primaryMark.label)」正在长出来。"
+        }
+        if monthCount >= 2 {
+            return "它会从单笔账单，慢慢长成跨月份的生活回望。"
+        }
+        return activeDays >= 7 ? "这些日子已经连起来了，后面会越看越有内容。" : "先把今天留下来，后面才有值得回看的故事。"
     }
 
     private func continuousRecordDays(from days: Set<Date>, calendar: Calendar) -> Int {
@@ -836,6 +997,26 @@ private struct MemberPlan: Identifiable {
     let featured: Bool
     let badge: String?
     let dailyHint: String
+}
+
+private struct LifetimeArchiveSnapshot {
+    let title: String
+    let subtitle: String
+    let metrics: [LifetimeArchiveMetric]
+    let stages: [LifetimeArchiveStage]
+    let primaryLine: String
+    let closingLine: String
+}
+
+private struct LifetimeArchiveMetric: Identifiable {
+    let id = UUID()
+    let value: String
+    let label: String
+}
+
+private struct LifetimeArchiveStage {
+    let value: String
+    let label: String
 }
 
 // MARK: - Preview

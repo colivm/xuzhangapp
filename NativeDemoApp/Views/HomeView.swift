@@ -1024,6 +1024,13 @@ struct HomeView: View {
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
             }
+            .overlay {
+                if rainTint {
+                    todayRecordRainMemoryTexture(isEditing: isEditing)
+                        .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                        .allowsHitTesting(false)
+                }
+            }
             .shadow(
                 color: AppColors.subtext.opacity(isEditing ? 0.18 : 0.12),
                 radius: isEditing ? 20 : 16,
@@ -1036,6 +1043,109 @@ struct HomeView: View {
                 x: -2,
                 y: -2
             )
+    }
+
+    private func todayRecordRainMemoryTexture(isEditing: Bool) -> some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let height = proxy.size.height
+            ZStack {
+                Image(systemName: "cloud.rain.fill")
+                    .font(.system(size: 42, weight: .light))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color(red: 0.36, green: 0.56, blue: 0.66).opacity(0.18))
+                    .position(x: width * 0.82, y: height * 0.26)
+
+                ForEach(0..<16, id: \.self) { index in
+                    Capsule(style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.72),
+                                    Color(red: 0.33, green: 0.53, blue: 0.63).opacity(0.36)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(
+                            width: index.isMultiple(of: 4) ? 1.8 : 1.15,
+                            height: todayRainStreakHeight(index)
+                        )
+                        .rotationEffect(.degrees(16))
+                        .position(
+                            x: width * todayRainStreakX(index),
+                            y: height * todayRainStreakY(index)
+                        )
+                        .blur(radius: index.isMultiple(of: 5) ? 0.25 : 0)
+                }
+
+                ForEach(0..<7, id: \.self) { index in
+                    Ellipse()
+                        .fill(Color.white.opacity(index.isMultiple(of: 2) ? 0.46 : 0.32))
+                        .frame(width: 4 + CGFloat(index % 3) * 1.6, height: 2.1)
+                        .position(
+                            x: width * todayRainDropX(index),
+                            y: height * todayRainDropY(index)
+                        )
+                        .blur(radius: 0.25)
+                }
+
+                VStack {
+                    Spacer()
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.0),
+                            Color(red: 0.73, green: 0.86, blue: 0.90).opacity(0.36),
+                            Color.white.opacity(0.30)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 38)
+                    .overlay(alignment: .bottomTrailing) {
+                        Capsule(style: .continuous)
+                            .fill(Color.white.opacity(0.46))
+                            .frame(width: min(width * 0.34, 130), height: 2)
+                            .padding(.trailing, 36)
+                            .padding(.bottom, 10)
+                    }
+                    .overlay(alignment: .bottomLeading) {
+                        Capsule(style: .continuous)
+                            .fill(Color(red: 0.36, green: 0.58, blue: 0.67).opacity(0.22))
+                            .frame(width: min(width * 0.26, 100), height: 2)
+                            .padding(.leading, 28)
+                            .padding(.bottom, 17)
+                    }
+                }
+            }
+        }
+        .opacity(isEditing ? 0.34 : 0.58)
+    }
+
+    private func todayRainStreakX(_ index: Int) -> CGFloat {
+        let values: [CGFloat] = [0.08, 0.16, 0.24, 0.35, 0.45, 0.56, 0.66, 0.78, 0.88, 0.95, 0.13, 0.29, 0.51, 0.72, 0.84, 0.40]
+        return values[index % values.count]
+    }
+
+    private func todayRainStreakY(_ index: Int) -> CGFloat {
+        let values: [CGFloat] = [0.08, 0.24, 0.42, 0.17, 0.58, 0.33, 0.12, 0.50, 0.28, 0.66, 0.73, 0.36, 0.80, 0.18, 0.56, 0.69]
+        return values[index % values.count]
+    }
+
+    private func todayRainStreakHeight(_ index: Int) -> CGFloat {
+        let values: [CGFloat] = [24, 18, 29, 21, 34, 23, 27, 19]
+        return values[index % values.count]
+    }
+
+    private func todayRainDropX(_ index: Int) -> CGFloat {
+        let values: [CGFloat] = [0.18, 0.31, 0.48, 0.63, 0.76, 0.86, 0.55]
+        return values[index % values.count]
+    }
+
+    private func todayRainDropY(_ index: Int) -> CGFloat {
+        let values: [CGFloat] = [0.72, 0.83, 0.70, 0.86, 0.76, 0.88, 0.79]
+        return values[index % values.count]
     }
 
     private func todayRecordRowBorder(item: HomeItem, isEditing: Bool) -> some View {
@@ -1744,7 +1854,7 @@ struct BillPlaybackSheet: View {
         case .commute:
             return "这笔从路上开始，今天的节奏也跟着动起来。"
         case .cityRoute:
-            return "先把这趟路记下，后面回看就知道那会儿在赶路。"
+            return "先把这趟路记下，后面回看就知道那会儿去了哪里。"
         case .breakfast:
             return "先从早上的一口吃的开始，今天有了开头。"
         case .quickMeal, .workMeal:

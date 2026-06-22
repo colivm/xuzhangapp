@@ -137,7 +137,8 @@ struct HomeItem: Identifiable, Codable, Equatable {
     var displayEmotionTag: String {
         let trimmed = emotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
-        if !RecordSemanticLexicon.isTitle(trimmed, compatibleWith: category) {
+        if !RecordSemanticLexicon.isTitle(trimmed, compatibleWith: category),
+           !(category == .dining && Self.containsConvenienceStoreKeyword("\(title) \(trimmed)")) {
             return Self.inferEmotionTag(category: category, amount: amount)
         }
         if Self.containsTravelKeyword(trimmed),
@@ -363,6 +364,12 @@ struct HomeItem: Identifiable, Codable, Equatable {
     private static func containsTravelKeyword(_ text: String) -> Bool {
         let keywords = ["旅行", "旅途", "景区", "景点", "行程", "酒店", "民宿", "住宿", "机票", "高铁", "机场", "返程", "摆渡"]
         return keywords.contains { text.contains($0) }
+    }
+
+    private static func containsConvenienceStoreKeyword(_ text: String) -> Bool {
+        ["便利蜂", "便利店", "全家", "罗森", "711", "7-11", "美宜佳", "茶叶蛋", "饭团", "关东煮"].contains {
+            text.localizedCaseInsensitiveContains($0)
+        }
     }
 
     private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
@@ -635,12 +642,13 @@ enum RecordSemanticLexicon {
         version: 0,
         keywordRules: [
             .init(category: .transport, score: 4.0, keywords: ["地铁", "公交", "打车", "滴滴", "充电", "高铁", "机票", "机场", "路费", "通勤"]),
-            .init(category: .dining, score: 4.8, keywords: ["咖啡", "奶茶", "早餐", "早饭", "午餐", "晚餐", "夜宵", "宵夜", "外卖", "饭", "餐", "一顿", "这顿", "吃", "垫一下", "垫一口", "夜里补", "热食", "热乎", "轻食", "小食", "点心", "补点能量", "吃一口", "饮品", "拿铁", "美式"]),
-            .init(category: .shopping, score: 4.0, keywords: ["淘宝", "京东", "购物", "下单", "快递", "衣服", "鞋", "数码"]),
-            .init(category: .daily, score: 3.0, keywords: ["超市", "日用品", "纸巾", "洗衣", "打印", "理发", "宠物"]),
+            .init(category: .dining, score: 4.8, keywords: ["咖啡", "奶茶", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "宵夜", "外卖", "饭", "餐", "一顿", "这顿", "吃", "垫一下", "垫一口", "夜里补", "热食", "热乎", "轻食", "小食", "点心", "补点能量", "吃一口", "饮品", "拿铁", "美式", "七欣天", "火锅", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "美团外卖", "饿了么"]),
+            .init(category: .shopping, score: 4.0, keywords: ["淘宝", "京东", "拼多多", "购物", "下单", "快递", "衣服", "鞋", "数码", "渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "乐器", "茶具", "咖啡器具"]),
+            .init(category: .daily, score: 3.0, keywords: ["超市", "日用品", "纸巾", "洗衣", "打印", "理发", "宠物", "便利店", "买菜", "生鲜", "盒马", "叮咚买菜", "小象超市", "朴朴超市", "美团闪购", "京东秒送"]),
+            .init(category: .daily, score: 4.6, keywords: ["纸巾", "抽纸", "卷纸", "湿巾", "洗衣液", "洗衣凝珠", "洗洁精", "垃圾袋", "清洁", "日化", "日用品", "家用", "补货", "买菜", "生鲜", "水果", "蔬菜", "肉禽", "水产", "给家补货"]),
             .init(category: .entertainment, score: 3.0, keywords: ["电影", "影院", "游戏", "会员", "演唱会", "门票"]),
             .init(category: .lodging, score: 4.0, keywords: ["酒店", "民宿", "住宿", "宾馆"]),
-            .init(category: .health, score: 4.0, keywords: ["药店", "医院", "挂号", "体检", "健身", "跑步"]),
+            .init(category: .health, score: 4.0, keywords: ["药店", "药房", "医院", "挂号", "门诊", "体检", "健身", "健身房", "跑步", "理疗", "康复", "运动装备"]),
             .init(category: .home, score: 4.0, keywords: ["房租", "水电", "电费", "燃气", "物业", "宽带"]),
             .init(category: .social, score: 4.0, keywords: ["红包", "礼物", "请客", "份子钱", "探望"]),
             .init(category: .other, score: 1.0, keywords: ["手续费", "服务费"]),
@@ -650,10 +658,10 @@ enum RecordSemanticLexicon {
             .init(keywords: ["高铁", "机票", "机场", "车站", "返程", "出发"], scores: [.transport: 3.2, .lodging: 1.2, .entertainment: 1.0])
         ],
         emotionKeywordRules: [
-            .init(id: "fitness", category: .health, keywords: ["运动", "健身", "训练", "跑步", "瑜伽", "补给", "能量", "护具", "恢复", "锻炼"]),
+            .init(id: "fitness", category: .health, keywords: ["运动", "健身", "健身房", "训练", "跑步", "瑜伽", "补给", "能量", "护具", "恢复", "锻炼", "理疗", "康复", "运动装备"]),
             .init(id: "drink", category: .dining, keywords: ["饮料", "喝的", "可乐", "雪碧", "汽水", "果汁", "茶饮", "奶茶", "咖啡", "拿铁", "美式", "冰饮"]),
             .init(id: "transport", category: .transport, keywords: ["地铁", "公交", "打车", "出租", "网约车", "路费", "车程", "通勤", "上班", "下班", "返程", "回家"]),
-            .init(id: "meal", category: .dining, keywords: ["食堂", "午餐", "简餐", "轻食", "小食", "点心", "热饭", "外卖", "饭点", "夜宵", "晚饭", "早餐", "早饭"]),
+            .init(id: "meal", category: .dining, keywords: ["食堂", "午餐", "午饭", "简餐", "轻食", "小食", "点心", "热饭", "外卖", "饭点", "吃一口", "夜宵", "晚饭", "早餐", "早饭", "七欣天", "火锅", "麻辣烫", "便当", "盖饭"]),
             .init(id: "convenience", category: .daily, keywords: ["便利蜂", "便利店", "全家", "罗森", "711", "7-11"]),
         ]
     )

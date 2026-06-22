@@ -79,10 +79,10 @@ enum ShareInsightCopyPool {
             rhythmTag = "#早晚路上"
         case .ride:
             fact = "\(name)用了 \(count) 次"
-            cares = ["这周赶路不少，到了就先歇口气", "能省点路上的力气，也挺好"]
+            cares = ["这周出门移动不少，到了就先歇口气", "能省点路上的力气，也挺好"]
             semanticTag = "#出行"
             leadingTag = "#出行\(count)次"
-            rhythmTag = "#赶路"
+            rhythmTag = "#路上"
         case .convenience:
             fact = "\(name)记了 \(count) 次"
             cares = ["便利店这几次，像是在补忙碌里的小缺口", "路过买点需要的，也很真实"]
@@ -199,10 +199,10 @@ enum ShareInsightCopyPool {
             tag = "#家用补给"
             rhythmTag = "#日常运转"
         case .shopping:
-            fact = "添置东西记了 \(count) 笔"
-            cares = ["买到需要的就好", "用得上的东西，后面会知道"]
-            tag = "#购物"
-            rhythmTag = "#买到需要的"
+            fact = "网购添置记了 \(count) 笔"
+            cares = ["买到需要的就好", "兴趣里的小投入，也会留下生活形状"]
+            tag = "#快递到了"
+            rhythmTag = "#兴趣装备"
         case .lodging:
             fact = "停留和住宿记了 \(count) 笔"
             cares = ["在外面也要睡踏实", "换个地方停下，也算这周的一段"]
@@ -217,7 +217,7 @@ enum ShareInsightCopyPool {
             switch category {
             case .transport:
                 fact = "路上记了 \(count) 笔，这周奔波不少"
-                cares = ["赶路也占精力，到家先缓一缓", "移动多的一周，留点空给自己"]
+                cares = ["移动也占精力，到家先缓一缓", "移动多的一周，留点空给自己"]
                 tag = "#奔波"
                 rhythmTag = "#城市里移动"
             case .health:
@@ -226,10 +226,10 @@ enum ShareInsightCopyPool {
                 tag = "#健康"
                 rhythmTag = "#身体这边"
             case .shopping:
-                fact = "添置东西记了 \(count) 笔"
-                cares = ["买到需要的就好", "用得上的东西，后面会知道"]
-                tag = "#购物"
-                rhythmTag = "#买到需要的"
+                fact = "网购添置记了 \(count) 笔"
+                cares = ["买到需要的就好", "兴趣里的小投入，也会留下生活形状"]
+                tag = "#快递到了"
+                rhythmTag = "#兴趣装备"
             case .dining:
                 fact = "吃饭记了 \(count) 次"
                 cares = ["忙归忙，先吃上", "这几顿先记清楚"]

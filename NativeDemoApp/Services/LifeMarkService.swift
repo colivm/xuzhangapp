@@ -52,10 +52,10 @@ enum LifeMarkService {
     private static let definitions: [LifeMarkDefinition] = [
         LifeMarkDefinition(
             id: "fitness",
-            label: "运动健身",
+            label: "健身恢复",
             category: .health,
             categories: [.health, .shopping, .entertainment, .daily],
-            keywords: ["运动", "健身", "训练", "锻炼", "跑步", "瑜伽", "普拉提", "游泳", "球场", "羽毛球", "网球", "篮球", "私教", "团课", "课程", "健身卡", "月卡", "年卡", "护具", "运动鞋", "运动服", "蛋白", "补剂", "能量胶", "恢复", "按摩"],
+            keywords: ["运动", "健身", "健身房", "训练", "锻炼", "跑步", "瑜伽", "普拉提", "游泳", "球场", "羽毛球", "网球", "篮球", "私教", "团课", "课程", "健身卡", "月卡", "年卡", "护具", "运动鞋", "运动服", "蛋白", "补剂", "能量胶", "恢复", "按摩", "理疗", "康复", "运动装备"],
             access: .free,
             priority: 10,
             minimumCount: 1,
@@ -96,10 +96,10 @@ enum LifeMarkService {
         ),
         LifeMarkDefinition(
             id: "daily_supply",
-            label: "生活补给",
+            label: "超市买菜和家用",
             category: .daily,
             categories: [.daily, .shopping, .home],
-            keywords: ["日用", "日用品", "生活用品", "生活补给", "生活补寄", "超市", "便利店", "纸巾", "抽纸", "卷纸", "湿巾", "洗衣液", "洗洁精", "垃圾袋", "清洁", "洗发水", "沐浴露", "牙刷", "毛巾", "收纳"],
+            keywords: ["日用", "日用品", "生活用品", "生活补给", "生活补寄", "超市", "便利店", "纸巾", "抽纸", "卷纸", "湿巾", "洗衣液", "洗洁精", "垃圾袋", "清洁", "洗发水", "沐浴露", "牙刷", "毛巾", "收纳", "买菜", "生鲜", "水果", "蔬菜", "盒马", "叮咚买菜", "小象超市", "京东到家", "京东秒送", "美团闪购", "朴朴超市", "即时零售"],
             access: .free,
             priority: 28,
             minimumCount: 1,
@@ -107,7 +107,7 @@ enum LifeMarkService {
         ),
         LifeMarkDefinition(
             id: "home_utilities",
-            label: "水电家账",
+            label: "房租水电物业",
             category: .home,
             categories: [.home, .daily, .other],
             keywords: ["水电", "水费", "电费", "燃气", "煤气", "物业", "宽带", "网费", "房租", "租金", "停车费", "话费"],
@@ -129,10 +129,10 @@ enum LifeMarkService {
         ),
         LifeMarkDefinition(
             id: "medical_care",
-            label: "健康护理",
+            label: "看病买药",
             category: .health,
             categories: [.health, .daily],
-            keywords: ["医院", "门诊", "诊所", "挂号", "问诊", "体检", "检查", "拍片", "验血", "牙科", "口腔", "药店", "药房", "买药", "感冒", "退烧", "消炎", "止痛", "维生素", "眼药水", "创可贴", "护理"],
+            keywords: ["医院", "门诊", "诊所", "挂号", "问诊", "体检", "检查", "拍片", "验血", "牙科", "口腔", "药店", "药房", "买药", "感冒", "退烧", "消炎", "止痛", "维生素", "眼药水", "创可贴", "护理", "理疗", "康复"],
             access: .free,
             priority: 16,
             minimumCount: 1,
@@ -162,7 +162,7 @@ enum LifeMarkService {
         ),
         LifeMarkDefinition(
             id: "travel",
-            label: "异地旅行",
+            label: "出去玩订酒店买票",
             category: .transport,
             categories: [.transport, .lodging, .entertainment, .dining, .shopping],
             keywords: ["旅行", "旅游", "异地", "外地", "出差", "酒店", "民宿", "住宿", "机票", "机场", "高铁", "火车", "车站", "景区", "景点", "门票", "返程", "行程", "伴手礼"],
@@ -173,12 +173,23 @@ enum LifeMarkService {
         ),
         LifeMarkDefinition(
             id: "groceries",
-            label: "食材买菜",
+            label: "超市买菜",
             category: .daily,
             categories: [.daily, .dining, .shopping],
-            keywords: ["买菜", "菜场", "生鲜", "水果", "蔬菜", "盒马", "叮咚", "食材", "厨房", "做饭"],
+            keywords: ["买菜", "菜场", "生鲜", "水果", "蔬菜", "盒马", "叮咚", "叮咚买菜", "小象超市", "京东到家", "京东秒送", "朴朴超市", "淘宝买菜", "美团买菜", "食材", "厨房", "做饭"],
             access: .free,
             priority: 34,
+            minimumCount: 1,
+            requiresKeywordMatch: true
+        ),
+        LifeMarkDefinition(
+            id: "interest_gear",
+            label: "兴趣装备",
+            category: .shopping,
+            categories: [.shopping, .daily, .health, .entertainment],
+            keywords: ["渔具", "鱼竿", "鱼线", "鱼饵", "路亚", "钓箱", "钓椅", "露营", "帐篷", "天幕", "睡袋", "骑行", "头盔", "码表", "摄影", "相机", "镜头", "模型", "手办", "乐器", "吉他", "键盘", "茶具", "咖啡器具", "磨豆机", "滤杯"],
+            access: .free,
+            priority: 35,
             minimumCount: 1,
             requiresKeywordMatch: true
         ),
@@ -353,7 +364,7 @@ enum LifeMarkService {
         }
         if !away.isEmpty {
             let city = away.compactMap { $0.memoryContext?.cityName }.first
-            let label = city.map { "\($0)异地记录" } ?? "异地旅行"
+            let label = city.map { "\($0)异地记录" } ?? "出去玩订酒店买票"
             rows.append(aggregate(
                 id: "away_travel",
                 kind: .context,
@@ -363,7 +374,7 @@ enum LifeMarkService {
                 detail: city.map { "这段里有记录留在\($0)，以后再看会知道那几笔发生在外地。" } ?? "这段里有外地/旅行线索，交通、住宿和门票可以被串成同一段行程。",
                 category: .transport,
                 items: away,
-                queryHint: "上一次异地旅行花了多少？"
+                queryHint: "上一次出去玩订酒店买票花了多少？"
             ))
         }
 
@@ -499,16 +510,18 @@ enum LifeMarkService {
 
     private static func sceneDetail(label: String, count: Int) -> String {
         switch label {
-        case "运动健身":
-            return count == 1 ? "运动健身出现了 1 次，是一个好的开始。" : "运动健身出现 \(count) 次，身体这条线正在变清楚。"
+        case "健身恢复":
+            return count == 1 ? "健身恢复出现了 1 次，是一个好的开始。" : "健身恢复出现 \(count) 次，身体这条线正在变清楚。"
         case "宝宝照护":
             return "宝宝相关用品出现 \(count) 次，这类记录会慢慢变成照护节奏。"
-        case "水电家账":
+        case "房租水电物业":
             return "水电、房租或物业这类家账出现 \(count) 次，适合按月回看。"
         case "休闲娱乐":
             return "休闲娱乐出现 \(count) 次，能看出这段时间把松弛留给了哪里。"
-        case "异地旅行":
+        case "出去玩订酒店买票":
             return "旅行和异地线索出现 \(count) 次，可以和城市、天气一起回看。"
+        case "兴趣装备":
+            return "兴趣装备出现 \(count) 次，这类小众爱好不用单独成包，也值得被记住。"
         default:
             return "\(label)出现 \(count) 次，已经可以作为一条生活线索。"
         }
@@ -517,8 +530,8 @@ enum LifeMarkService {
     private static func milestoneDetail(label: String, target: Int) -> String {
         if target == 1 {
             switch label {
-            case "运动健身":
-                return "第一次运动健身被记下来了，真是一个好的开始。"
+            case "健身恢复":
+                return "第一次健身恢复被记下来了，真是一个好的开始。"
             case "宝宝照护":
                 return "第一次宝宝照护用品被记下来了，之后能看见照护节奏怎么变化。"
             default:
@@ -526,8 +539,8 @@ enum LifeMarkService {
             }
         }
         switch label {
-        case "运动健身":
-            return "运动健身来到第 \(target) 次，坚持已经开始有形状了。"
+        case "健身恢复":
+            return "健身恢复来到第 \(target) 次，坚持已经开始有形状了。"
         case "咖啡奶茶":
             return "咖啡奶茶来到第 \(target) 次，这类小补给已经成为生活里的固定节点。"
         default:
@@ -537,12 +550,13 @@ enum LifeMarkService {
 
     private static func queryHint(for definition: LifeMarkDefinition) -> String {
         switch definition.id {
-        case "fitness": return "这个月运动健身几次？"
+        case "fitness": return "这个月健身恢复几次？"
         case "coffee_drink": return "这周咖啡奶茶几次？"
-        case "home_utilities": return "这个月水电家账多少？"
+        case "home_utilities": return "这个月房租水电物业多少？"
         case "baby_supply": return "这个月宝宝奶粉买了几次？"
         case "leisure": return "上周休闲娱乐花了多少钱？"
-        case "travel": return "上一次异地旅行是什么时候？"
+        case "travel": return "上一次出去玩订酒店买票是什么时候？"
+        case "interest_gear": return "这个月兴趣装备买了几次？"
         default: return "这个月\(definition.label)几次？"
         }
     }

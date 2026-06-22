@@ -635,9 +635,9 @@ struct StatsWebView: View {
         case .dining:
             return "\(period)，吃饭留下了最多痕迹"
         case .shopping:
-            return "\(period)，添置东西更常出现"
+            return "\(period)，网购添置更常出现"
         case .daily:
-            return "\(period)，日常补给占了不少"
+            return "\(period)，超市买菜和家用占了不少"
         case .health:
             return "\(period)，你在照顾身体"
         case .lodging:
@@ -793,7 +793,7 @@ struct StatsWebView: View {
         let sorted = items.sorted { $0.createdAt > $1.createdAt }
         if let item = sorted.first(where: { $0.category == .transport && $0.memoryContext?.weatherKind == "rain" }) {
             if let city = item.memoryContext?.cityName, item.memoryContext?.semanticPlace == "外地" {
-                return "\(city)那次雨天出行被记下来了。以后再看，会知道那天是在外地赶路。"
+                return "\(city)那次雨天出行被记下来了。以后再看，会知道那天是在外地路上。"
             }
             return "这段里有一次雨天出行。那笔交通不是孤零零的金额，也带着当天的天气。"
         }
@@ -1544,7 +1544,7 @@ struct StatsWebView: View {
         case .health:
             base = "「\(categoryName)」变明显，更像你把身体放回了日程里：健身、看诊、买药或恢复，都不只是消费。"
         case .shopping, .daily:
-            base = "「\(categoryName)」变明显，像是在给生活补库存：添置、日用、临时需要一起冒出来。"
+            base = "「\(categoryName)」变明显，像是在给生活补库存：买菜、家用、网购和兴趣装备一起冒出来。"
         case .entertainment:
             base = "「\(categoryName)」变明显，说明这段时间你给自己留了松动空间。它不一定是浪费，也可能是在给压力找出口。"
         case .home:
@@ -1573,9 +1573,13 @@ struct StatsWebView: View {
         case .transport:
             return traceContainsAny(text, ["通勤", "上班", "下班", "地铁", "公交"]) ? "通勤交通" : "交通"
         case .health:
-            return traceContainsAny(text, ["健身", "运动", "跑步", "瑜伽", "私教", "游泳"]) ? "运动健身" : "健康"
+            return traceContainsAny(text, ["健身", "运动", "跑步", "瑜伽", "私教", "游泳", "理疗", "恢复"]) ? "健身恢复" : "看病买药"
         case .dining:
-            return traceContainsAny(text, ["咖啡", "奶茶"]) ? "饮品餐饮" : "餐饮"
+            return traceContainsAny(text, ["咖啡", "奶茶"]) ? "饭点饮品" : "饭点外卖"
+        case .shopping:
+            return traceContainsAny(text, ["渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "乐器", "茶具", "咖啡器具"]) ? "兴趣装备" : "网购添置"
+        case .daily:
+            return traceContainsAny(text, ["买菜", "生鲜", "盒马", "叮咚", "小象", "京东到家", "朴朴"]) ? "超市买菜" : "家用补货"
         default:
             return category.rawValue
         }
