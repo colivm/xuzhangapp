@@ -732,7 +732,8 @@ struct RecordView: View {
         let didSave = homeViewModel.addManualRecord(
             userEditedTitle: currentTitleShouldBeUserEdited,
             preserveEmptyTitle: shouldUseNeutralRemarkFallback,
-            categoryLockedForSave: categoryLockedForCurrentIntent
+            categoryLockedForSave: categoryLockedForCurrentIntent,
+            scenePackId: activeScenePack?.category == homeViewModel.selectedCategory ? activeScenePack?.id : nil
         )
         guard didSave else {
             withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {

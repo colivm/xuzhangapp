@@ -183,7 +183,8 @@ final class HomeViewModel: ObservableObject {
     func addManualRecord(
         userEditedTitle: Bool = false,
         preserveEmptyTitle: Bool = false,
-        categoryLockedForSave: Bool? = nil
+        categoryLockedForSave: Bool? = nil,
+        scenePackId: String? = nil
     ) -> Bool {
         guard let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0 else { return false }
         let wasEmpty = items.isEmpty
@@ -237,7 +238,8 @@ final class HomeViewModel: ObservableObject {
             userEditedTitle: userEditedTitle && resolution.title == baseTitle ? true : nil,
             userEditedCategory: shouldLockCategory ? true : nil,
             categoryCorrectionFrom: shouldLockCategory ? pendingCategoryCorrectionFrom : nil,
-            memoryContext: memoryContext
+            memoryContext: memoryContext,
+            scenePackId: scenePackId
         )
         items.insert(newItem, at: 0)
         resetInput()
@@ -737,6 +739,7 @@ final class HomeViewModel: ObservableObject {
         }
         if categoryWasEdited {
             resolved.categoryCorrectionFrom = original.category
+            resolved.scenePackId = nil
         } else if original.categoryCorrectionFrom != nil {
             resolved.categoryCorrectionFrom = original.categoryCorrectionFrom
         }

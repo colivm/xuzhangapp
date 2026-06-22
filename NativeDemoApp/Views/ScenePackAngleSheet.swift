@@ -55,6 +55,7 @@ struct ScenePackAngleSheet: View {
     @State private var selectedReplaceSlot: Int?
     @State private var pendingReplacement: PendingReplacement?
     @State private var inlineNotice: String?
+    @State private var freeCandidatesManuallyExpanded = false
 
     init(
         primaryScenePacks: [ScenePackDefinition],
@@ -120,10 +121,7 @@ struct ScenePackAngleSheet: View {
         NavigationStack {
             switch mode {
             case .member(let configuration):
-                List {
-                    memberContent(configuration)
-                }
-                .environment(\.editMode, .constant(.active))
+                memberSheet(configuration)
                 .navigationTitle("换个角度")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { closeToolbar }
@@ -195,6 +193,170 @@ struct ScenePackAngleSheet: View {
         }
     }
 
+    private func memberSheet(_ configuration: MemberConfiguration) -> some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                memberScenePackModule(configuration)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 28)
+        }
+        .background(
+            LinearGradient(
+                colors: [AppColors.bg, AppColors.paperMist.opacity(0.72)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        )
+    }
+
+    private func memberScenePackModule(_ configuration: MemberConfiguration) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("场景包")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                    Text("常用靠前，少用的会静默收起")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                }
+                Spacer()
+                Text("\(memberDisplayedScenePacks(configuration).count)")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.accent)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(AppColors.accent.opacity(0.12)))
+            }
+
+            reorderHint
+
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                ForEach(memberDisplayedScenePacks(configuration), id: \.id) { pack in
+                    memberPackCard(pack, configuration: configuration)
+                }
+            }
+
+            if !configuration.secondaryScenePacks.isEmpty {
+                memberMoreToggle(configuration)
+            }
+        }
+        .padding(14)
+        .background(moduleBackground)
+    }
+
+    private func memberPackCard(
+        _ pack: ScenePackDefinition,
+        configuration: MemberConfiguration
+    ) -> some View {
+        let packs = memberDisplayedScenePacks(configuration)
+        let index = packs.firstIndex { $0.id == pack.id } ?? 0
+        let canMoveUp = index > 0
+        let canMoveDown = index < packs.count - 1
+        return VStack(alignment: .leading, spacing: 9) {
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.easeInOut(duration: 0.12)) {
+                    selectedPackID = pack.id
+                }
+                configuration.onSelectPack(pack)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                    dismiss()
+                }
+            } label: {
+                VStack(alignment: .leading, spacing: 9) {
+                    scenePackVisual(pack, compact: false)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(pack.label)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(configuration.scenePackDesc(pack))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: 8) {
+                memberMoveButton(systemName: "arrow.up", isEnabled: canMoveUp) {
+                    moveMemberPack(pack, delta: -1, configuration: configuration)
+                }
+                memberMoveButton(systemName: "arrow.down", isEnabled: canMoveDown) {
+                    moveMemberPack(pack, delta: 1, configuration: configuration)
+                }
+                Spacer()
+                Image(systemName: selectedPackID == pack.id ? "checkmark.circle.fill" : "line.3.horizontal")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(selectedPackID == pack.id ? AppColors.accent : AppColors.subtext.opacity(0.62))
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 184, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(AppColors.paperWarm.opacity(selectedPackID == pack.id ? 0.72 : 0.58))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(selectedPackID == pack.id ? AppColors.accent.opacity(0.30) : AppColors.line.opacity(0.55), lineWidth: 1)
+        )
+    }
+
+    private func memberMoveButton(systemName: String, isEnabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(AppColors.subtext)
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(AppColors.surfaceMuted.opacity(0.70)))
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.30)
+    }
+
+    private func memberMoreToggle(_ configuration: MemberConfiguration) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                configuration.isMoreExpanded.wrappedValue.toggle()
+            }
+        } label: {
+            HStack {
+                Text(configuration.isMoreExpanded.wrappedValue ? "收起未常用场景" : "展开未常用场景")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppColors.text)
+                Text("\(configuration.secondaryScenePacks.count) 个未用或静默")
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppColors.subtext)
+                    .lineLimit(1)
+                Spacer()
+                Image(systemName: configuration.isMoreExpanded.wrappedValue ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(AppColors.paperWarm.opacity(0.50))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(AppColors.line.opacity(0.48), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
     private func freeSheet(_ configuration: FreeConfiguration) -> some View {
         ScrollView {
             VStack(spacing: 14) {
@@ -205,7 +367,6 @@ struct ScenePackAngleSheet: View {
                 freeStatusCard(configuration)
                 activeFreeModule(configuration)
                 candidateFreeModule(configuration)
-                memberUnlockCard(configuration)
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
@@ -312,9 +473,13 @@ struct ScenePackAngleSheet: View {
                 Spacer()
             }
 
-            candidateAvailabilityPill(configuration)
+            if shouldExpandFreeCandidates(configuration) {
+                candidateAvailabilityPill(configuration)
+            } else {
+                freeCandidateFoldedToggle(configuration)
+            }
 
-            if let inlineNotice {
+            if shouldExpandFreeCandidates(configuration), let inlineNotice {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 13, weight: .bold))
@@ -331,19 +496,70 @@ struct ScenePackAngleSheet: View {
                 )
             }
 
-            if let selectedReplaceSlot,
+            if shouldExpandFreeCandidates(configuration),
+               let selectedReplaceSlot,
                configuration.freeScenePacks.indices.contains(selectedReplaceSlot) {
                 movedDownPackStrip(configuration.freeScenePacks[selectedReplaceSlot])
             }
 
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                ForEach(configuration.moreScenePacks, id: \.id) { pack in
-                    candidatePackCard(pack, configuration: configuration)
+            if shouldExpandFreeCandidates(configuration) {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                    ForEach(configuration.moreScenePacks, id: \.id) { pack in
+                        candidatePackCard(pack, configuration: configuration)
+                    }
                 }
+                memberUnlockCard(configuration)
             }
         }
         .padding(14)
         .background(moduleBackground)
+    }
+
+    private func shouldExpandFreeCandidates(_ configuration: FreeConfiguration) -> Bool {
+        configuration.isInFirstWeek
+            || configuration.isReplaceWindowActive
+            || selectedReplaceSlot != nil
+            || freeCandidatesManuallyExpanded
+    }
+
+    private func freeCandidateFoldedToggle(_ configuration: FreeConfiguration) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                freeCandidatesManuallyExpanded = true
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: configuration.canReplacePackCombination ? "arrow.triangle.2.circlepath" : "chevron.down.circle")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(AppColors.accent)
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(AppColors.accent.opacity(0.12)))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("展开可替换场景包")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                    Text("6 个未选场景包和会员引导已收起")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                }
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AppColors.paperWarm.opacity(0.50))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(AppColors.line.opacity(0.50), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func activeAvailabilityPill(_ configuration: FreeConfiguration) -> some View {
@@ -387,10 +603,7 @@ struct ScenePackAngleSheet: View {
 
     private func memberUnlockCard(_ configuration: FreeConfiguration) -> some View {
         Button {
-            dismiss()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                configuration.onShowMemberPricing()
-            }
+            openMemberPricingAfterDismiss(configuration)
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "sparkles")
@@ -564,7 +777,7 @@ struct ScenePackAngleSheet: View {
     }
 
     private func scenePackVisual(_ pack: ScenePackDefinition, compact: Bool) -> some View {
-        let style = scenePackStyle(for: pack)
+        let style = ScenePackVisualStyles.style(for: pack)
         return ZStack(alignment: .bottomLeading) {
             LinearGradient(colors: style.colors, startPoint: .topLeading, endPoint: .bottomTrailing)
 
@@ -648,6 +861,20 @@ struct ScenePackAngleSheet: View {
         configuration.onReorderPacks(reorderedPacks.map(\.id), movedPackIds)
     }
 
+    private func moveMemberPack(
+        _ pack: ScenePackDefinition,
+        delta: Int,
+        configuration: MemberConfiguration
+    ) {
+        var packs = memberDisplayedScenePacks(configuration)
+        guard let currentIndex = packs.firstIndex(where: { $0.id == pack.id }) else { return }
+        let nextIndex = currentIndex + delta
+        guard packs.indices.contains(nextIndex) else { return }
+        packs.swapAt(currentIndex, nextIndex)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        configuration.onReorderPacks(packs.map(\.id), [pack.id])
+    }
+
     private func reorderFreePacks(
         from source: IndexSet,
         to destination: Int,
@@ -683,10 +910,7 @@ struct ScenePackAngleSheet: View {
         configuration: FreeConfiguration
     ) -> some View {
         Button {
-            dismiss()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                configuration.onShowMemberPricing()
-            }
+            openMemberPricingAfterDismiss(configuration)
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 Text(hint.pack.emoji)
@@ -768,10 +992,7 @@ struct ScenePackAngleSheet: View {
         configuration: FreeConfiguration
     ) {
         if isLocked {
-            dismiss()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                configuration.onShowMemberPricing()
-            }
+            openMemberPricingAfterDismiss(configuration)
             return
         }
 
@@ -952,6 +1173,13 @@ struct ScenePackAngleSheet: View {
     private func extensionLockCountdownText(_ configuration: FreeConfiguration) -> String {
         let days = max(0, configuration.daysUntilExtensionLock)
         return days <= 1 ? "出去玩、娃和毛孩等扩展角度今天后锁定" : "出去玩、娃和毛孩等扩展角度还有 \(days) 天锁定"
+    }
+
+    private func openMemberPricingAfterDismiss(_ configuration: FreeConfiguration) {
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            configuration.onShowMemberPricing()
+        }
     }
 
     private func lockedPackSubtitle(for pack: ScenePackDefinition) -> String {

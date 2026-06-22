@@ -71,6 +71,7 @@ struct SummaryPlaybackSheet: View {
                 }
             }
             .padding(.horizontal, 22)
+            .padding(.top, 12)
             .padding(.bottom, 24)
 
             if showShareCardPrivacyConfirm {
@@ -78,8 +79,18 @@ struct SummaryPlaybackSheet: View {
                     .transition(.opacity)
                     .zIndex(20)
             }
+
+            if let memorySaveMessage {
+                playbackStatusToast(memorySaveMessage)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 14)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(12)
+            }
         }
         .animation(.easeInOut(duration: 0.28), value: currentChapter?.id)
+        .animation(.easeInOut(duration: 0.20), value: memorySaveMessage)
         .animation(.spring(response: 0.28, dampingFraction: 0.88), value: showShareCardPrivacyConfirm)
         .onAppear {
             startPlayback()
@@ -742,12 +753,6 @@ struct SummaryPlaybackSheet: View {
                 .buttonStyle(.plain)
             }
 
-            if let memorySaveMessage {
-                Text(memorySaveMessage)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.subtext)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
         }
     }
 
@@ -767,6 +772,26 @@ struct SummaryPlaybackSheet: View {
             }
             .buttonStyle(.plain)
         }
+    }
+
+    private func playbackStatusToast(_ message: String) -> some View {
+        Text(message)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(AppColors.text.opacity(0.78))
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(Color.white.opacity(0.52), lineWidth: 0.8)
+            )
+            .shadow(color: AppColors.subtext.opacity(0.12), radius: 12, x: 0, y: 6)
+            .allowsHitTesting(false)
     }
 
     private var playbackMemoryLine: String? {

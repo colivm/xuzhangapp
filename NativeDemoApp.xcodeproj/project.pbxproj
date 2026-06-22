@@ -50,6 +50,7 @@
 		F26000090000000000000001 /* StatsTraceFilters.swift in Sources */ = {isa = PBXBuildFile; fileRef = F260000A0000000000000001 /* StatsTraceFilters.swift */; };
 		A10000490000000000000001 /* PlaybackCopyPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004A0000000000000001 /* PlaybackCopyPool.swift */; };
 		A100004B0000000000000001 /* ScenePackSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004C0000000000000001 /* ScenePackSectionView.swift */; };
+		A100004B1000000000000001 /* ScenePackVisualStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004C1000000000000001 /* ScenePackVisualStyle.swift */; };
 		A100004D0000000000000001 /* InsightWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004E0000000000000001 /* InsightWebView.swift */; };
 		A100004F0000000000000001 /* CategoryRecommendService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100008A0000000000000001 /* CategoryRecommendService.swift */; };
 		B20000010000000000000001 /* WeatherCompanionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000040000000000000001 /* WeatherCompanionService.swift */; };
@@ -122,6 +123,7 @@
 		F260000A0000000000000001 /* StatsTraceFilters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsTraceFilters.swift; sourceTree = "<group>"; };
 		A100004A0000000000000001 /* PlaybackCopyPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackCopyPool.swift; sourceTree = "<group>"; };
 		A100004C0000000000000001 /* ScenePackSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackSectionView.swift; sourceTree = "<group>"; };
+		A100004C1000000000000001 /* ScenePackVisualStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackVisualStyle.swift; sourceTree = "<group>"; };
 		A100004E0000000000000001 /* InsightWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightWebView.swift; sourceTree = "<group>"; };
 		A100008A0000000000000001 /* CategoryRecommendService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryRecommendService.swift; sourceTree = "<group>"; };
 		B20000040000000000000001 /* WeatherCompanionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherCompanionService.swift; sourceTree = "<group>"; };
@@ -265,6 +267,7 @@
 				F260000A0000000000000001 /* StatsTraceFilters.swift */,
 				A100004E0000000000000001 /* InsightWebView.swift */,
 				A100004C0000000000000001 /* ScenePackSectionView.swift */,
+				A100004C1000000000000001 /* ScenePackVisualStyle.swift */,
 				F12000040000000000000001 /* ScenePackAngleSheet.swift */,
 				F10000020000000000000001 /* MinimalOnboardingSheet.swift */,
 				A10000190000000000000001 /* SettingsView.swift */,
@@ -426,6 +429,7 @@
 				F26000090000000000000001 /* StatsTraceFilters.swift in Sources */,
 				A10000490000000000000001 /* PlaybackCopyPool.swift in Sources */,
 				A100004B0000000000000001 /* ScenePackSectionView.swift in Sources */,
+				A100004B1000000000000001 /* ScenePackVisualStyle.swift in Sources */,
 				A100004D0000000000000001 /* InsightWebView.swift in Sources */,
 				A100004F0000000000000001 /* CategoryRecommendService.swift in Sources */,
 				B20000010000000000000001 /* WeatherCompanionService.swift in Sources */,

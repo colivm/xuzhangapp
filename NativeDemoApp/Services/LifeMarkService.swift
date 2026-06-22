@@ -110,7 +110,7 @@ enum LifeMarkService {
             label: "房租水电物业",
             category: .home,
             categories: [.home, .daily, .other],
-            keywords: ["水电", "水费", "电费", "燃气", "煤气", "物业", "宽带", "网费", "房租", "租金", "停车费", "话费"],
+            keywords: ["水电", "水费", "电费", "燃气", "煤气", "物业", "宽带", "网费", "房租", "租房", "租房子", "租屋", "租赁", "租金", "押金", "房东", "停车费", "话费"],
             access: .free,
             priority: 30,
             minimumCount: 1,
@@ -310,7 +310,7 @@ enum LifeMarkService {
     }
 
     static func milestoneTarget(from text: String) -> Int? {
-        if containsAny(text, ["第一次", "首次", "第一回"]) { return 1 }
+        if containsAny(text, ["第一次", "首次", "第一回", "第一笔", "第1笔", "第一条", "第1条", "第一单", "第1单"]) { return 1 }
         if containsAny(text, ["第十次", "第10次", "10次", "十次"]) { return 10 }
         if containsAny(text, ["第三十次", "第30次", "30次", "三十次"]) { return 30 }
         if containsAny(text, ["第五十次", "第50次", "50次", "五十次"]) { return 50 }
@@ -418,8 +418,9 @@ enum LifeMarkService {
             for target in [1, 10, 30, 50] where sorted.count >= target {
                 let item = sorted[target - 1]
                 guard periodIDs.contains(item.id), periodMatchedIDs.contains(item.id) else { continue }
-                let title = target == 1 ? "第一次\(definition.label)" : "\(definition.label)第 \(target) 次"
-                let detail = milestoneDetail(label: definition.label, target: target)
+                let label = milestoneLabel(for: definition, item: item)
+                let title = target == 1 ? "第一次\(label)" : "\(label)第 \(target) 次"
+                let detail = milestoneDetail(label: label, target: target)
                 rows.append(aggregate(
                     id: "\(definition.id)_milestone_\(target)",
                     kind: .milestone,
@@ -429,7 +430,7 @@ enum LifeMarkService {
                     detail: detail,
                     category: definition.category,
                     items: [item],
-                    queryHint: target == 1 ? "第一次\(definition.label)是哪天？" : "\(definition.label)第 \(target) 次是哪天？",
+                    queryHint: target == 1 ? "第一次\(label)是哪天？" : "\(label)第 \(target) 次是哪天？",
                     priorityOverride: target == 1 ? 4 : 6
                 ))
             }
@@ -536,9 +537,11 @@ enum LifeMarkService {
             case "健身恢复":
                 return "第一次健身恢复被记下来了，真是一个好的开始。"
             case "宝宝照护":
-                return "第一次宝宝照护用品被记下来了，之后能看见照护节奏怎么变化。"
+                return "第一次宝宝照护用品被记下来了；之后如果还有同类记录，会一起形成照护节奏。"
+            case "水电燃气", "房租", "物业费", "宽带网费", "停车费", "话费", "租房押金":
+                return "这笔\(label)已经作为本月家账线索记录；有同类记录时，会继续归到这条线里。"
             default:
-                return "第一次\(label)被记下来了，以后回看会知道这条线从哪里开始。"
+                return "第一次\(label)被记下来了；有同类记录时，会继续归到这条线里。"
             }
         }
         switch label {
@@ -549,6 +552,37 @@ enum LifeMarkService {
         default:
             return "\(label)来到第 \(target) 次，这不是孤立的一笔，是反复出现的生活痕迹。"
         }
+    }
+
+    private static func milestoneLabel(for definition: LifeMarkDefinition, item: HomeItem) -> String {
+        guard definition.id == "home_utilities" else { return definition.label }
+        return homeUtilityLabel(for: item)
+    }
+
+    private static func homeUtilityLabel(for item: HomeItem) -> String {
+        let text = semanticText(for: item)
+        if containsAny(text, ["押金"]) {
+            return "租房押金"
+        }
+        if containsAny(text, ["房租", "租金", "租房", "租房子", "租屋", "租赁", "房东"]) {
+            return "房租"
+        }
+        if containsAny(text, ["水电", "水费", "电费", "燃气", "煤气"]) {
+            return "水电燃气"
+        }
+        if containsAny(text, ["物业"]) {
+            return "物业费"
+        }
+        if containsAny(text, ["宽带", "网费"]) {
+            return "宽带网费"
+        }
+        if containsAny(text, ["停车费"]) {
+            return "停车费"
+        }
+        if containsAny(text, ["话费"]) {
+            return "话费"
+        }
+        return "家账"
     }
 
     private static func queryHint(for definition: LifeMarkDefinition) -> String {
