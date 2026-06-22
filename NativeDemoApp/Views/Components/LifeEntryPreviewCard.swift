@@ -5,6 +5,7 @@ struct LifeEntryPreviewCard: View {
     let headline: String
     let hint: String?
     let learningHint: String?
+    var lifeMarkText: String? = nil
     let emotion: String
     let meta: String
     let amountText: String
@@ -67,6 +68,10 @@ struct LifeEntryPreviewCard: View {
                 learningHintPill(learningHint)
             }
 
+            if let lifeMarkText, !lifeMarkText.isEmpty, isConfirm {
+                lifeMarkPill(lifeMarkText)
+            }
+
             emotionPill
 
             metaRow
@@ -79,6 +84,24 @@ struct LifeEntryPreviewCard: View {
             .foregroundStyle(AppColors.subtext.opacity(0.76))
             .lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func lifeMarkPill(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(AppColors.text.opacity(0.70))
+            .lineLimit(1)
+            .minimumScaleFactor(0.84)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(AppColors.paperWarm.opacity(0.52))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(AppColors.line.opacity(0.42), lineWidth: 0.7)
+            )
     }
 
     private var footContent: some View {

@@ -584,6 +584,20 @@ struct StatsWebView: View {
         traceCategoryClues(from: traceClueItems)
     }
 
+    private var traceLifeMarks: [LifeMarkAggregate] {
+        LifeMarkService.aggregates(
+            for: traceClueItems,
+            allItems: homeViewModel.items,
+            isMember: hasMemberAccess,
+            limit: 6
+        )
+    }
+
+    private var traceLockedLifeMarkPreview: LifeMarkAggregate? {
+        guard !hasMemberAccess else { return nil }
+        return LifeMarkService.lockedPreview(for: traceClueItems, allItems: homeViewModel.items)
+    }
+
     private func traceCategoryClues(from items: [HomeItem]) -> [TraceCategoryClue] {
         guard !items.isEmpty else { return [] }
         let totalCount = Double(items.count)
@@ -610,6 +624,9 @@ struct StatsWebView: View {
         guard !items.isEmpty else { return "线索还在等第一笔记录" }
         guard let top = clues.first else {
             return "这一段的记录还比较分散"
+        }
+        if let mark = traceLifeMarks.first, mark.kind != .scene || mark.count >= 2 {
+            return "\(traceNarrativePeriodPrefix)，\(mark.label)变成了一条线索"
         }
         let period = traceNarrativePeriodPrefix
         switch top.category {
@@ -646,6 +663,9 @@ struct StatsWebView: View {
         rhythmPoints: [TraceRhythmPoint]
     ) -> String {
         guard !items.isEmpty else { return "先留下几笔，账本会把生活里的走向慢慢标出来。" }
+        if let mark = traceLifeMarks.first {
+            return LifeMarkService.primaryLine(for: mark)
+        }
         if let top = clues.first {
             let percent = Int((top.ratio * 100).rounded())
             if let peak = rhythmPoints.max(by: { $0.count < $1.count }), peak.count >= 2 {
@@ -741,6 +761,16 @@ struct StatsWebView: View {
         var lines: [String] = []
         if let contextLine = traceContextualMemoryLine(from: items) {
             lines.append(contextLine)
+        }
+        if let mark = LifeMarkService.aggregates(
+            for: items,
+            allItems: homeViewModel.items,
+            isMember: hasMemberAccess,
+            limit: 1
+        ).first {
+            lines.append(LifeMarkService.primaryLine(for: mark))
+        } else if let locked = LifeMarkService.lockedPreview(for: items, allItems: homeViewModel.items), !hasMemberAccess {
+            lines.append("这段里还有「\(locked.label)」这类深层印记。会员会把天气、异地、首次和连续性一起串起来。")
         }
         if let top = clues.first {
             let percent = Int((top.ratio * 100).rounded())
@@ -866,9 +896,17 @@ struct StatsWebView: View {
         let clues = traceCategoryClues(from: items)
         let rhythmPoints = traceRhythmPoints(from: items)
         let insight = traceLifeInsight(from: items)
+        let marks = LifeMarkService.aggregates(
+            for: items,
+            allItems: homeViewModel.items,
+            isMember: hasMemberAccess,
+            limit: 6
+        )
+        let lockedMark = hasMemberAccess ? nil : LifeMarkService.lockedPreview(for: items, allItems: homeViewModel.items)
         VStack(spacing: 16) {
             traceClueHeroCard(items: items, clues: clues, rhythmPoints: rhythmPoints)
             traceClueCompositionCard(items: items, clues: clues)
+            traceLifeMarkCard(marks: marks, lockedPreview: lockedMark)
             traceClueRhythmCard(rhythmPoints: rhythmPoints)
             traceClueInsightCard(items: items, clues: clues, rhythmPoints: rhythmPoints)
             traceDeepInsightCard(insight: insight, items: items, clues: clues, rhythmPoints: rhythmPoints)
@@ -971,6 +1009,151 @@ struct StatsWebView: View {
             Capsule(style: .continuous)
                 .fill(TraceColors.surfaceMuted)
         )
+    }
+
+    private func traceLifeMarkCard(
+        marks: [LifeMarkAggregate],
+        lockedPreview: LifeMarkAggregate?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(alignment: .center) {
+                Text("生活印记")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(TraceColors.primaryText)
+                Spacer()
+                Text(hasMemberAccess ? "场景资产" : "基础可看")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(TraceColors.tertiaryText)
+            }
+
+            if marks.isEmpty {
+                traceQuietCluePlaceholder("多留下几笔，运动、补给、旅行、家账这些印记会自然出现。")
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(Array(marks.prefix(4))) { mark in
+                        traceLifeMarkRow(mark)
+                    }
+                }
+            }
+
+            if let lockedPreview {
+                Button {
+                    onShowMemberPricing?()
+                } label: {
+                    HStack(spacing: 9) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(AppColors.lockGold)
+                            .frame(width: 22, height: 22)
+                            .background(
+                                Circle()
+                                    .fill(AppColors.lockGold.opacity(0.12))
+                            )
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("会员可看「\(lockedPreview.label)」")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(TraceColors.primaryText)
+                            Text("解锁天气、异地、首次和连续记录这些更深的生活线索。")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(TraceColors.tertiaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(AppColors.lockGold.opacity(0.08))
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .traceGlassPanel(radius: 20, padding: 18)
+    }
+
+    private func traceLifeMarkRow(_ mark: LifeMarkAggregate) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(traceLifeMarkIcon(for: mark))
+                .font(.system(size: 15))
+                .frame(width: 24, height: 24)
+                .background(
+                    Circle()
+                        .fill(traceClueColor(for: mark.category).opacity(0.12))
+                )
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(mark.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(TraceColors.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    if mark.access == .member {
+                        Text("会员")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(AppColors.lockGold)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(AppColors.lockGold.opacity(0.10))
+                            )
+                    }
+                }
+                Text(mark.detail)
+                    .font(.system(size: 12, weight: .regular))
+                    .lineSpacing(2)
+                    .foregroundStyle(TraceColors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(mark.count) 次")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(TraceColors.primaryText)
+                Text(mark.total.formatted(.cny))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(TraceColors.tertiaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(TraceColors.surfaceMuted)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(TraceColors.stroke, lineWidth: 1)
+        )
+    }
+
+    private func traceLifeMarkIcon(for mark: LifeMarkAggregate) -> String {
+        switch mark.category {
+        case .transport:
+            return mark.id.contains("rain") ? "🌧️" : "🚇"
+        case .dining:
+            return "🍵"
+        case .daily:
+            return mark.id.contains("baby") ? "🍼" : "🧺"
+        case .health:
+            return "🏃"
+        case .home:
+            return "🏠"
+        case .entertainment:
+            return "🎡"
+        case .lodging:
+            return "🏨"
+        case .social:
+            return "👥"
+        case .shopping:
+            return "🛍️"
+        case .other:
+            return "✦"
+        }
     }
 
     private func traceClueRhythmCard(rhythmPoints: [TraceRhythmPoint]) -> some View {

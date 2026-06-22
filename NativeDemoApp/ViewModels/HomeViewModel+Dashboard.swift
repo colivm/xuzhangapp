@@ -45,6 +45,7 @@ extension HomeViewModel {
         let weekText = weekTotal.formatted(.cny)
         let topCategory = topCategoryLabel(from: records)
         let todaySceneLine = lifeSceneMemoryLine(from: records, minimumCount: 2)
+        let todayLifeMarkLine = lifeMarkMemoryLine(from: records, minimumCount: 1)
 
         let title: String
         let subtitle: String
@@ -56,16 +57,16 @@ extension HomeViewModel {
         case 1:
             title = "今天的第一笔记录"
             let emotion = records.first?.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            subtitle = "\(!emotion.isEmpty ? emotion : "这笔生活被记下来了")，这一天刚翻开第一页。"
+            subtitle = todayLifeMarkLine ?? "\(!emotion.isEmpty ? emotion : "这笔生活被记下来了")，这一天刚翻开第一页。"
         case 2:
             title = "今天已记下 2 笔"
-            subtitle = todaySceneLine ?? "主要在「\(topCategory)」上，记录变得具体。"
+            subtitle = todayLifeMarkLine ?? todaySceneLine ?? "主要在「\(topCategory)」上，记录变得具体。"
         case 3:
             title = "今天记下了 3 笔"
-            subtitle = todaySceneLine ?? "合计 \(totalText)，今天的记录已经成形。"
+            subtitle = todayLifeMarkLine ?? todaySceneLine ?? "合计 \(totalText)，今天的记录已经成形。"
         default:
             title = "今天记下了 \(count) 笔"
-            subtitle = todaySceneLine ?? "「\(topCategory)」居多，今天的记录已经清楚。"
+            subtitle = todayLifeMarkLine ?? todaySceneLine ?? "「\(topCategory)」居多，今天的记录已经清楚。"
         }
 
         return TodayStoryNarrative(
@@ -117,7 +118,9 @@ extension HomeViewModel {
     }
 
     var weekLifeThemeText: String {
-        lifeSceneMemoryLine(from: filteredItems(in: .week), minimumCount: 2) ?? ""
+        lifeMarkMemoryLine(from: filteredItems(in: .week), minimumCount: 2)
+            ?? lifeSceneMemoryLine(from: filteredItems(in: .week), minimumCount: 2)
+            ?? ""
     }
 
     var quickRecordNudgeText: String {
@@ -126,11 +129,29 @@ extension HomeViewModel {
             if let suggestion = frequentRecordAmountSuggestions(at: Date()).first {
                 return "常记 \(shortAmountText(suggestion.amount)) · \(suggestion.category.label)"
             }
+            if let mark = LifeMarkService.aggregates(
+                for: filteredItems(in: .week),
+                allItems: items,
+                isMember: hasMemberAccess,
+                limit: 1
+            ).first,
+               mark.count >= 2 || mark.kind != .scene {
+                return "接着留下「\(mark.label)」"
+            }
             if let scene = LifeSceneSemanticService.dominantScene(in: filteredItems(in: .week).filter({ $0.amount > 0 })),
                scene.count >= 2 {
                 return "接着留下「\(LifeSceneSemanticService.displayTheme(for: scene.signal))」"
             }
             return "只输金额也可以"
+        }
+        if let mark = LifeMarkService.aggregates(
+            for: records,
+            allItems: items,
+            isMember: hasMemberAccess,
+            limit: 1
+        ).first,
+           mark.count >= 2 || mark.kind != .scene {
+            return "今天已有 \(records.count) 笔 · \(mark.label)"
         }
         if let scene = LifeSceneSemanticService.dominantScene(in: records),
            scene.count >= 2 {
@@ -165,6 +186,20 @@ extension HomeViewModel {
                 : "再多记几笔，天气和地点线索会更容易浮出来。"
             return (memoryLine, structure, advice)
         }
+        if let mark = LifeMarkService.aggregates(
+            for: weekItems,
+            allItems: items,
+            isMember: hasMemberAccess,
+            limit: 1
+        ).first,
+           mark.count >= 2 || mark.kind != .scene {
+            let summary = LifeMarkService.primaryLine(for: mark)
+            let structure = "这一周更明显的是「\(mark.label)」这条生活印记。"
+            let advice = mark.access == .member
+                ? "继续按真实时间记，天气、城市、首次和连续性会更容易被串起来。"
+                : "继续按笔记下去，这类印记会慢慢变成可以回看的生活资产。"
+            return (summary, structure, advice)
+        }
         if let scene = LifeSceneSemanticService.dominantScene(in: weekItems),
            scene.count >= 2 {
             let copy = LifeSceneSemanticService.weeklyCopy(for: scene.signal, count: scene.count)
@@ -196,6 +231,8 @@ extension HomeViewModel {
             summary = "本月还没有足够账单，多记几笔再来生成月度复盘吧。"
         } else if let memoryLine = contextualMemoryLine(from: positiveMonthItems) {
             summary = memoryLine
+        } else if let markLine = lifeMarkMemoryLine(from: positiveMonthItems, minimumCount: 2) {
+            summary = markLine
         } else if let scene = LifeSceneSemanticService.dominantScene(in: positiveMonthItems),
                   scene.count >= 2 {
             summary = LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count)
@@ -245,6 +282,22 @@ extension HomeViewModel {
         return LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count)
     }
 
+    func lifeMarkMemoryLine(from target: [HomeItem], minimumCount: Int) -> String? {
+        let positive = target.filter { $0.amount > 0 }
+        guard let mark = LifeMarkService.aggregates(
+            for: positive,
+            allItems: items,
+            isMember: hasMemberAccess,
+            limit: 1
+        ).first else {
+            return nil
+        }
+        guard mark.count >= minimumCount || mark.kind != .scene else {
+            return nil
+        }
+        return LifeMarkService.primaryLine(for: mark)
+    }
+
     private func monthlyStructureText(fallbackTop: String) -> String {
         let monthItems = filteredItems(in: .month).filter { $0.amount > 0 }
         return monthlyStructureText(fallbackTop: fallbackTop, monthItems: monthItems)
@@ -253,6 +306,15 @@ extension HomeViewModel {
     private func monthlyStructureText(fallbackTop: String, monthItems: [HomeItem]) -> String {
         if monthItems.contains(where: { $0.memoryContext?.weatherKind != nil || $0.memoryContext?.cityName != nil }) {
             return "这个月不只看分类，也能看到天气、城市和当天场景留下的线索。"
+        }
+        if let mark = LifeMarkService.aggregates(
+            for: monthItems,
+            allItems: items,
+            isMember: hasMemberAccess,
+            limit: 1
+        ).first,
+           mark.count >= 2 || mark.kind != .scene {
+            return "这个月更明显的是「\(mark.label)」这条生活印记。"
         }
         if let scene = LifeSceneSemanticService.dominantScene(in: monthItems),
            scene.count >= 2 {

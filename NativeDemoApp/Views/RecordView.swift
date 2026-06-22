@@ -550,6 +550,35 @@ struct RecordView: View {
         return previewDraftResolution?.emotionTag ?? ""
     }
 
+    private var previewLifeMarkText: String? {
+        guard previewTier == .confirm, hasValidAmount else { return nil }
+        let category = previewDraftResolution?.category ?? homeViewModel.selectedCategory
+        let rawTitle = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = rawTitle.isEmpty ? previewHeadline : rawTitle
+        let draft = HomeItem(
+            title: title,
+            amount: inputAmountValue,
+            category: category,
+            createdAt: homeViewModel.selectedDate,
+            emotionTag: previewEmotion,
+            merchantBrandId: previewBrand?.id
+        )
+        guard let mark = LifeMarkService.aggregates(
+            for: [draft],
+            allItems: homeViewModel.items + [draft],
+            isMember: isMember,
+            limit: 1
+        ).first else {
+            return nil
+        }
+        switch mark.kind {
+        case .milestone, .context, .streak:
+            return "生活印记 · \(mark.title)"
+        case .scene:
+            return "会进入「\(mark.label)」印记"
+        }
+    }
+
     private var previewMeta: String {
         let displayCategory = previewDraftResolution?.category ?? homeViewModel.selectedCategory
         if let activeScenePack,
@@ -1171,6 +1200,7 @@ struct RecordView: View {
             headline: previewHeadline,
             hint: previewHint,
             learningHint: homeViewModel.recordLearningHint,
+            lifeMarkText: previewLifeMarkText,
             emotion: previewTier == .whisper ? "" : previewEmotion,
             meta: previewCardMeta,
             amountText: inputAmountValue.formatted(.cny),

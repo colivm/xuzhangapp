@@ -1325,6 +1325,13 @@ struct InsightWebView: View {
         if recentItems.contains(where: { $0.category == .entertainment }) {
             suggestions.append("上周休闲娱乐花了多少钱？")
         }
+        let recentMarks = LifeMarkService.aggregates(
+            for: recentItems,
+            allItems: homeViewModel.items,
+            isMember: hasMemberAccess,
+            limit: 3
+        )
+        suggestions.append(contentsOf: recentMarks.map(\.queryHint))
         if recentItems.contains(where: { $0.source == .ocr || $0.draftMeta != nil }) {
             suggestions.append("找找最近有没有重复账单")
         }
@@ -1882,14 +1889,29 @@ struct InsightWebView: View {
         if containsAny(normalized, ["重复", "重复账单", "重复记录"]) {
             return buildDuplicateCheckResult(range: aiCommandTimeRange(from: normalized, defaultRecentDays: 7))
         }
+        let lifeMarkIntent = LifeMarkService.queryIntent(from: normalized)
+        if let lifeMarkIntent,
+           !hasMemberAccess,
+           shouldRequireMemberForLifeMark(intent: lifeMarkIntent, command: normalized) {
+            return buildLifeMarkLockedResult(intent: lifeMarkIntent, command: normalized)
+        }
         if let memoryResult = buildMemoryLookupResult(command: normalized) {
             return memoryResult
+        }
+        if let lifeMarkIntent,
+           containsAny(normalized, ["上一次", "上次", "最近一次", "什么时候", "哪天", "第一次", "首次", "第十次", "第10次", "10次", "十次"]) {
+            return buildLifeMarkLookupResult(intent: lifeMarkIntent, command: normalized)
         }
 
         let range = aiCommandTimeRange(from: normalized)
         let categoryIntent = aiCommandCategoryIntent(from: normalized)
-        if categoryIntent != nil || aiCommandAsksCategoryBreakdown(normalized) || containsAny(normalized, ["查", "看", "多少", "花了", "消费", "账本", "整理", "概览", "最近", "这阵子", "今天", "昨天", "本周", "上周", "本月", "上个月"]) {
-            return buildQueryResult(range: range, categoryIntent: categoryIntent, command: normalized)
+        if lifeMarkIntent != nil || categoryIntent != nil || aiCommandAsksCategoryBreakdown(normalized) || containsAny(normalized, ["查", "看", "多少", "几次", "花了", "消费", "账本", "整理", "概览", "最近", "这阵子", "今天", "昨天", "本周", "上周", "本月", "上个月"]) {
+            return buildQueryResult(
+                range: range,
+                categoryIntent: categoryIntent,
+                lifeMarkIntent: lifeMarkIntent,
+                command: normalized
+            )
         }
         return AICommandResult(
             kind: .unsupported,
@@ -1956,13 +1978,15 @@ struct InsightWebView: View {
     private func buildQueryResult(
         range: AICommandTimeRange,
         categoryIntent: AICommandCategoryIntent?,
+        lifeMarkIntent: LifeMarkQueryIntent? = nil,
         command: String = ""
     ) -> AICommandResult {
-        let items = filteredAICommandItems(range: range, intent: categoryIntent)
+        let items = lifeMarkIntent.map { filteredAICommandLifeMarkItems(range: range, intent: $0) }
+            ?? filteredAICommandItems(range: range, intent: categoryIntent)
         let total = items.reduce(0) { $0 + $1.amount }
-        let categoryText = categoryIntent?.label ?? "全部"
+        let categoryText = lifeMarkIntent?.label ?? categoryIntent?.label ?? "全部"
         let rangeNote = range.isFallback ? "「最近/这阵子」先按最近 7 天整理。" : "\(range.label)已整理。"
-        if categoryIntent == nil, aiCommandAsksCategoryBreakdown(command) {
+        if categoryIntent == nil, lifeMarkIntent == nil, aiCommandAsksCategoryBreakdown(command) {
             let summary: String
             if items.isEmpty {
                 summary = "\(range.label)没有找到记录。"
@@ -2000,6 +2024,98 @@ struct InsightWebView: View {
             detail: detail,
             items: sortedAICommandEvidenceItems(items),
             bars: dailyBars(range: range, items: items),
+            drafts: [],
+            amountSource: nil,
+            needsAmount: false
+        )
+    }
+
+    private func buildLifeMarkLookupResult(
+        intent: LifeMarkQueryIntent,
+        command: String
+    ) -> AICommandResult {
+        let matched = homeViewModel.items
+            .filter { item in
+                item.amount > 0 && LifeMarkService.matches(item, intent: intent)
+            }
+            .sorted { $0.createdAt < $1.createdAt }
+        let target = LifeMarkService.milestoneTarget(from: command)
+        let item: HomeItem?
+        let title: String
+        if let target {
+            item = matched.count >= target ? matched[target - 1] : nil
+            title = target == 1 ? "第一次\(intent.label)" : "\(intent.label)第 \(target) 次"
+        } else {
+            item = matched.last
+            title = "上一次\(intent.label)"
+        }
+
+        guard let item else {
+            let targetText = target.map { $0 == 1 ? "第一次" : "第 \($0) 次" } ?? "上一次"
+            return AICommandResult(
+                kind: .query,
+                title: "还没找到\(targetText)\(intent.label)",
+                summary: "账本里暂时没有足够明确的\(intent.label)记录。",
+                detail: "之后只要备注、分类或天气城市线索匹配，这类生活印记会自动累积。",
+                items: [],
+                bars: [],
+                drafts: [],
+                amountSource: nil,
+                needsAmount: false
+            )
+        }
+
+        let related = filteredAICommandLifeMarkItems(
+            range: aiCommandTimeRange(from: command, defaultRecentDays: 31),
+            intent: intent
+        )
+        let contextLine = aiCommandMemoryContextLine(item.memoryContext)
+        let detailParts = [
+            "时间在 \(item.createdAt.zhBillDateOnly)，金额 \(item.amount.formatted(.cny))。",
+            contextLine.isEmpty ? nil : contextLine
+        ]
+        .compactMap { $0 }
+        return AICommandResult(
+            kind: .query,
+            title: title,
+            summary: "找到了 \(item.createdAt.zhBillDateOnly) 的「\(item.displayTitle)」。",
+            detail: detailParts.joined(separator: " "),
+            items: uniqueAICommandItems([item] + related),
+            bars: dailyBars(range: aiCommandTimeRange(from: command, defaultRecentDays: 31), items: related),
+            drafts: [],
+            amountSource: nil,
+            needsAmount: false
+        )
+    }
+
+    private func shouldRequireMemberForLifeMark(
+        intent: LifeMarkQueryIntent,
+        command: String
+    ) -> Bool {
+        if LifeMarkService.access(for: intent) == .member {
+            return true
+        }
+        if LifeMarkService.milestoneTarget(from: command) != nil {
+            return true
+        }
+        return containsAny(command, ["连续", "连着", "第几次", "第几回"])
+    }
+
+    private func buildLifeMarkLockedResult(
+        intent: LifeMarkQueryIntent,
+        command: String
+    ) -> AICommandResult {
+        let asksMilestone = LifeMarkService.milestoneTarget(from: command) != nil
+        let reason = asksMilestone
+            ? "首次、第十次和连续记录属于会员的深层生活印记。"
+            : "天气、异地和周末相聚这类上下文印记属于会员能力。"
+        return AICommandResult(
+            kind: .unsupported,
+            title: "会员可看「\(intent.label)」",
+            summary: reason,
+            detail: "免费版先保留基础次数和金额统计；会员会把关联记录、天气城市、里程碑和连续性一起整理出来。",
+            items: [],
+            bars: [],
             drafts: [],
             amountSource: nil,
             needsAmount: false
@@ -2177,6 +2293,10 @@ struct InsightWebView: View {
             guard intent.requiresKeywordMatch ? categoryMatched && keywordMatched : categoryMatched || keywordMatched else {
                 return false
             }
+        } else if let lifeMarkIntent = LifeMarkService.queryIntent(from: command) {
+            guard LifeMarkService.matches(item, intent: lifeMarkIntent) else {
+                return false
+            }
         }
 
         if containsAny(command, ["下雨", "雨天", "雨"]) {
@@ -2308,6 +2428,14 @@ struct InsightWebView: View {
             return intent.requiresKeywordMatch
                 ? categoryMatched && keywordMatched
                 : categoryMatched || keywordMatched
+        }
+    }
+
+    private func filteredAICommandLifeMarkItems(range: AICommandTimeRange, intent: LifeMarkQueryIntent) -> [HomeItem] {
+        homeViewModel.items.filter { item in
+            item.amount > 0
+                && range.contains(item.createdAt)
+                && LifeMarkService.matches(item, intent: intent)
         }
     }
 

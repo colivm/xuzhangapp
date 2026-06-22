@@ -39,6 +39,7 @@
 		A100003E0000000000000001 /* ScenePackCopyPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100003F0000000000000001 /* ScenePackCopyPool.swift */; };
 		F23000010000000000000001 /* FreeScenePackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F23000020000000000000001 /* FreeScenePackService.swift */; };
 		F24000010000000000000001 /* LifeInsightService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24000020000000000000001 /* LifeInsightService.swift */; };
+		F25000010000000000000001 /* LifeMarkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F25000020000000000000001 /* LifeMarkService.swift */; };
 		A10000430000000000000001 /* IAPService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000440000000000000001 /* IAPService.swift */; };
 		A10000450000000000000001 /* RecordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000460000000000000001 /* RecordView.swift */; };
 		A10000470000000000000001 /* StatsWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000480000000000000001 /* StatsWebView.swift */; };
@@ -105,6 +106,7 @@
 		A100003F0000000000000001 /* ScenePackCopyPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackCopyPool.swift; sourceTree = "<group>"; };
 		F23000020000000000000001 /* FreeScenePackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FreeScenePackService.swift; sourceTree = "<group>"; };
 		F24000020000000000000001 /* LifeInsightService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeInsightService.swift; sourceTree = "<group>"; };
+		F25000020000000000000001 /* LifeMarkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeMarkService.swift; sourceTree = "<group>"; };
 		A10000440000000000000001 /* IAPService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IAPService.swift; sourceTree = "<group>"; };
 		A10000460000000000000001 /* RecordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordView.swift; sourceTree = "<group>"; };
 		A10000480000000000000001 /* StatsWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsWebView.swift; sourceTree = "<group>"; };
@@ -211,6 +213,7 @@
 				D21400020000000000000001 /* RecordDraftResolutionService.swift */,
 				D21500020000000000000001 /* RecordMemoryContextService.swift */,
 				D21600020000000000000001 /* LifeSceneSemanticService.swift */,
+				F25000020000000000000001 /* LifeMarkService.swift */,
 				E0A000020000000000000001 /* EchoAnchorService.swift */,
 				E0A000040000000000000001 /* UserContentRiskService.swift */,
 				C30000020000000000000001 /* MerchantBrandCatalog.swift */,
@@ -397,6 +400,7 @@
 				A100003E0000000000000001 /* ScenePackCopyPool.swift in Sources */,
 				F23000010000000000000001 /* FreeScenePackService.swift in Sources */,
 				F24000010000000000000001 /* LifeInsightService.swift in Sources */,
+				F25000010000000000000001 /* LifeMarkService.swift in Sources */,
 				A10000430000000000000001 /* IAPService.swift in Sources */,
 				A10000450000000000000001 /* RecordView.swift in Sources */,
 				A10000470000000000000001 /* StatsWebView.swift in Sources */,

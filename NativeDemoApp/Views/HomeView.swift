@@ -656,6 +656,10 @@ struct HomeView: View {
                     .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.18), lineWidth: 0.7))
                     .padding(.bottom, 4)
             }
+            if let lifeMarkText = homeLifeMarkText(for: item) {
+                homeLifeMarkChip(lifeMarkText)
+                    .padding(.bottom, 3)
+            }
             HStack(spacing: 6) {
                 Text(item.category.rawValue)
                     .font(.system(size: 11, weight: .medium))
@@ -896,6 +900,10 @@ struct HomeView: View {
                     .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.28), lineWidth: 0.7))
                     .opacity(isEditing ? 0.52 : 1)
             }
+            if let lifeMarkText = homeLifeMarkText(for: item) {
+                homeLifeMarkChip(lifeMarkText)
+                    .opacity(isEditing ? 0.52 : 1)
+            }
 
             HStack(spacing: 6) {
                 Text(item.category.rawValue)
@@ -926,6 +934,42 @@ struct HomeView: View {
         let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !tag.isEmpty else { return false }
         return tag != HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
+    }
+
+    private func homeLifeMarkText(for item: HomeItem) -> String? {
+        guard item.amount > 0 else { return nil }
+        guard let mark = LifeMarkService.aggregates(
+            for: [item],
+            allItems: homeViewModel.items,
+            isMember: settingsViewModel.settings.hasMemberAccess,
+            limit: 1
+        ).first else {
+            return nil
+        }
+        switch mark.kind {
+        case .scene:
+            return "生活印记 · \(mark.label)"
+        case .context, .milestone, .streak:
+            return "生活印记 · \(mark.title)"
+        }
+    }
+
+    private func homeLifeMarkChip(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(AppColors.text.opacity(0.68))
+            .lineLimit(1)
+            .minimumScaleFactor(0.84)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(AppColors.paperWarm.opacity(0.52))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(AppColors.line.opacity(0.42), lineWidth: 0.7)
+            )
     }
 
     private func todayRecordRowBackground(item: HomeItem, isEditing: Bool) -> some View {
