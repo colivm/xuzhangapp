@@ -1904,7 +1904,7 @@ struct InsightWebView: View {
             return memoryResult
         }
         if let lifeMarkIntent,
-           containsAny(normalized, ["上一次", "上次", "最近一次", "什么时候", "哪天", "第一次", "首次", "第十次", "第10次", "10次", "十次"]) {
+           containsAny(normalized, ["上一次", "上次", "最近一次", "什么时候", "哪天", "第一次", "首次", "第一笔", "第1笔", "第一条", "第1条", "第一单", "第1单", "第十次", "第10次", "10次", "十次"]) {
             return buildLifeMarkLookupResult(intent: lifeMarkIntent, command: normalized)
         }
 
@@ -1986,10 +1986,10 @@ struct InsightWebView: View {
         lifeMarkIntent: LifeMarkQueryIntent? = nil,
         command: String = ""
     ) -> AICommandResult {
-        let items = lifeMarkIntent.map { filteredAICommandLifeMarkItems(range: range, intent: $0) }
+        let items = lifeMarkIntent.map { filteredAICommandLifeMarkItems(range: range, intent: $0, command: command) }
             ?? filteredAICommandItems(range: range, intent: categoryIntent)
         let total = items.reduce(0) { $0 + $1.amount }
-        let categoryText = lifeMarkIntent?.label ?? categoryIntent?.label ?? "全部"
+        let categoryText = aiCommandLifeMarkLabel(lifeMarkIntent, command: command) ?? categoryIntent?.label ?? "全部"
         let rangeNote = range.isFallback ? "「最近/这阵子」先按最近 7 天整理。" : "\(range.label)已整理。"
         if categoryIntent == nil, lifeMarkIntent == nil, aiCommandAsksCategoryBreakdown(command) {
             let summary: String
@@ -2039,28 +2039,32 @@ struct InsightWebView: View {
         intent: LifeMarkQueryIntent,
         command: String
     ) -> AICommandResult {
-        let matched = homeViewModel.items
-            .filter { item in
+        let displayLabel = aiCommandLifeMarkLabel(intent, command: command) ?? intent.label
+        let matched = aiCommandScopedLifeMarkItems(
+            homeViewModel.items.filter { item in
                 item.amount > 0 && LifeMarkService.matches(item, intent: intent)
-            }
-            .sorted { $0.createdAt < $1.createdAt }
+            },
+            intent: intent,
+            command: command
+        )
+        .sorted { $0.createdAt < $1.createdAt }
         let target = LifeMarkService.milestoneTarget(from: command)
         let item: HomeItem?
         let title: String
         if let target {
             item = matched.count >= target ? matched[target - 1] : nil
-            title = target == 1 ? "第一次\(intent.label)" : "\(intent.label)第 \(target) 次"
+            title = target == 1 ? "第一次\(displayLabel)" : "\(displayLabel)第 \(target) 次"
         } else {
             item = matched.last
-            title = "上一次\(intent.label)"
+            title = "上一次\(displayLabel)"
         }
 
         guard let item else {
             let targetText = target.map { $0 == 1 ? "第一次" : "第 \($0) 次" } ?? "上一次"
             return AICommandResult(
                 kind: .query,
-                title: "还没找到\(targetText)\(intent.label)",
-                summary: "账本里暂时没有足够明确的\(intent.label)记录。",
+                title: "还没找到\(targetText)\(displayLabel)",
+                summary: "账本里暂时没有足够明确的\(displayLabel)记录。",
                 detail: "之后只要备注、分类或天气城市线索匹配，这类生活印记会自动累积。",
                 items: [],
                 bars: [],
@@ -2072,7 +2076,8 @@ struct InsightWebView: View {
 
         let related = filteredAICommandLifeMarkItems(
             range: aiCommandTimeRange(from: command, defaultRecentDays: 31),
-            intent: intent
+            intent: intent,
+            command: command
         )
         let contextLine = aiCommandMemoryContextLine(item.memoryContext)
         let detailParts = [
@@ -2111,12 +2116,13 @@ struct InsightWebView: View {
         command: String
     ) -> AICommandResult {
         let asksMilestone = LifeMarkService.milestoneTarget(from: command) != nil
+        let displayLabel = aiCommandLifeMarkLabel(intent, command: command) ?? intent.label
         let reason = asksMilestone
             ? "首次、第十次和连续记录属于会员的深层生活印记。"
             : "天气、异地和周末相聚这类上下文印记属于会员能力。"
         return AICommandResult(
             kind: .unsupported,
-            title: "会员可看「\(intent.label)」",
+            title: "会员可看「\(displayLabel)」",
             summary: reason,
             detail: "免费版先保留基础次数和金额统计；会员会把关联记录、天气城市、里程碑和连续性一起整理出来。",
             items: [],
@@ -2436,12 +2442,63 @@ struct InsightWebView: View {
         }
     }
 
-    private func filteredAICommandLifeMarkItems(range: AICommandTimeRange, intent: LifeMarkQueryIntent) -> [HomeItem] {
-        homeViewModel.items.filter { item in
+    private func filteredAICommandLifeMarkItems(
+        range: AICommandTimeRange,
+        intent: LifeMarkQueryIntent,
+        command: String = ""
+    ) -> [HomeItem] {
+        let items = homeViewModel.items.filter { item in
             item.amount > 0
                 && range.contains(item.createdAt)
                 && LifeMarkService.matches(item, intent: intent)
         }
+        return aiCommandScopedLifeMarkItems(items, intent: intent, command: command)
+    }
+
+    private func aiCommandScopedLifeMarkItems(
+        _ items: [HomeItem],
+        intent: LifeMarkQueryIntent,
+        command: String
+    ) -> [HomeItem] {
+        guard intent.id == "home_utilities",
+              let rentKeywords = aiCommandRentKeywords(from: command) else {
+            return items
+        }
+        return items.filter { aiCommandItemMatchesRentKeywords($0, keywords: rentKeywords) }
+    }
+
+    private func aiCommandLifeMarkLabel(_ intent: LifeMarkQueryIntent?, command: String) -> String? {
+        guard let intent else { return nil }
+        if intent.id == "home_utilities", aiCommandRentKeywords(from: command) != nil {
+            return "房租"
+        }
+        return intent.label
+    }
+
+    private func aiCommandRentKeywords(from command: String) -> [String]? {
+        let keywords = ["房租", "租金", "租房", "租房子", "租屋", "租赁", "押金", "房东"]
+        return containsAny(command, keywords) ? keywords : nil
+    }
+
+    private func aiCommandItemMatchesRentKeywords(_ item: HomeItem, keywords: [String]) -> Bool {
+        let titleText = [
+            item.title,
+            item.displayTitle
+        ]
+            .joined(separator: " ")
+            .lowercased()
+        if containsAny(titleText, keywords) {
+            return true
+        }
+
+        let tagText = [
+            item.emotionTag,
+            item.displayEmotionTag
+        ]
+            .filter { !$0.localizedCaseInsensitiveContains("房租水电物业") }
+            .joined(separator: " ")
+            .lowercased()
+        return containsAny(tagText, keywords)
     }
 
     private func aiCommandItemMatchesKeywords(_ item: HomeItem, keywords: [String]) -> Bool {

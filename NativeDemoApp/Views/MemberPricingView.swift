@@ -12,6 +12,9 @@ struct MemberPricingView: View {
     @State private var morePlansExpanded = false
     @State private var purchaseNotice: String?
     @State private var isPurchasing = false
+    @State private var didRunInitialRefresh = false
+    @State private var didApplyHighlight = false
+    @State private var lifetimeArchiveSnapshot: LifetimeArchiveSnapshot = .empty
     private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
     private let privacyURL = URL(string: "https://xuzhangapp.com/legal/privacy.html")!
 
@@ -86,6 +89,7 @@ struct MemberPricingView: View {
                 .scrollIndicators(.hidden)
                 .background(AppColors.bg.ignoresSafeArea())
                 .onAppear {
+                    refreshLifetimeArchiveSnapshot()
                     applyHighlightIfNeeded(proxy)
                 }
             }
@@ -97,9 +101,10 @@ struct MemberPricingView: View {
                 }
             }
             .task {
-                await settingsViewModel.refreshCloudAccountProfile()
-                await settingsViewModel.refreshMemberFromLocalEntitlements()
-                await loadStoreProducts()
+                await runInitialRefreshIfNeeded()
+            }
+            .onChange(of: homeViewModel.items.count) { _, _ in
+                refreshLifetimeArchiveSnapshot()
             }
             .alert("会员购买", isPresented: Binding(
                 get: { purchaseNotice != nil },
@@ -301,7 +306,7 @@ struct MemberPricingView: View {
                 .padding(.vertical, 12)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.thinMaterial)
+                        .fill(Color.white.opacity(0.58))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -435,7 +440,7 @@ struct MemberPricingView: View {
 
     private var lifetimeArchiveSection: some View {
         let snapshot = lifetimeArchiveSnapshot
-        return VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
                 Image(systemName: "crown.fill")
                     .font(.system(size: 13, weight: .semibold))
@@ -551,28 +556,12 @@ struct MemberPricingView: View {
             .foregroundStyle(AppColors.lockGold.opacity(0.72))
     }
 
-    private var lifetimeArchiveSnapshot: LifetimeArchiveSnapshot {
+    private func makeLifetimeArchiveSnapshot() -> LifetimeArchiveSnapshot {
         let positiveItems = homeViewModel.items
             .filter { $0.amount > 0 && $0.draftMeta == nil }
         let calendar = Calendar.current
         guard !positiveItems.isEmpty else {
-            return LifetimeArchiveSnapshot(
-                title: "从第一笔开始，生活档案会慢慢形成",
-                subtitle: "永久会员不是一段固定说明，而是把以后每一天都接进同一本生活档案。",
-                metrics: [
-                    LifetimeArchiveMetric(value: "0天", label: "连续记录"),
-                    LifetimeArchiveMetric(value: "0条", label: "生活痕迹"),
-                    LifetimeArchiveMetric(value: "0天", label: "有记录的日子"),
-                    LifetimeArchiveMetric(value: "0个月", label: "故事跨度")
-                ],
-                stages: [
-                    LifetimeArchiveStage(value: "1天", label: "开始"),
-                    LifetimeArchiveStage(value: "7天", label: "连起来"),
-                    LifetimeArchiveStage(value: "30天", label: "月度档案")
-                ],
-                primaryLine: "有了真实记录后，这里会自动换成你的连续天数、生活印记和周月故事素材。",
-                closingLine: "它会跟着你的账本长，不是一张固定权益图。"
-            )
+            return .empty
         }
 
         let days = Set(positiveItems.map { calendar.startOfDay(for: $0.createdAt) })
@@ -630,6 +619,10 @@ struct MemberPricingView: View {
                 monthCount: monthKeys.count
             )
         )
+    }
+
+    private func refreshLifetimeArchiveSnapshot() {
+        lifetimeArchiveSnapshot = makeLifetimeArchiveSnapshot()
     }
 
     private func lifetimeArchiveTitle(
@@ -851,7 +844,7 @@ struct MemberPricingView: View {
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.thinMaterial)
+                    .fill(Color.white.opacity(0.58))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -879,13 +872,26 @@ struct MemberPricingView: View {
     }
 
     private func applyHighlightIfNeeded(_ proxy: ScrollViewProxy) {
-        guard highlightPlanId == "lifetime" else { return }
+        guard highlightPlanId == "lifetime", !didApplyHighlight else { return }
+        didApplyHighlight = true
         morePlansExpanded = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            withAnimation(.easeInOut(duration: 0.28)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            if !isPurchasing {
                 proxy.scrollTo("member-plan-lifetime", anchor: .center)
             }
         }
+    }
+
+    private func runInitialRefreshIfNeeded() async {
+        guard !didRunInitialRefresh else { return }
+        didRunInitialRefresh = true
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard !Task.isCancelled else { return }
+        await settingsViewModel.refreshCloudAccountProfile()
+        guard !Task.isCancelled else { return }
+        await settingsViewModel.refreshMemberFromLocalEntitlements()
+        guard !Task.isCancelled else { return }
+        await loadStoreProducts()
     }
 
     private var restorePurchaseButton: some View {
@@ -1006,6 +1012,24 @@ private struct LifetimeArchiveSnapshot {
     let stages: [LifetimeArchiveStage]
     let primaryLine: String
     let closingLine: String
+
+    static let empty = LifetimeArchiveSnapshot(
+        title: "从第一笔开始，生活档案会慢慢形成",
+        subtitle: "永久会员不是一段固定说明，而是把以后每一天都接进同一本生活档案。",
+        metrics: [
+            LifetimeArchiveMetric(value: "0天", label: "连续记录"),
+            LifetimeArchiveMetric(value: "0条", label: "生活痕迹"),
+            LifetimeArchiveMetric(value: "0天", label: "有记录的日子"),
+            LifetimeArchiveMetric(value: "0个月", label: "故事跨度")
+        ],
+        stages: [
+            LifetimeArchiveStage(value: "1天", label: "开始"),
+            LifetimeArchiveStage(value: "7天", label: "连起来"),
+            LifetimeArchiveStage(value: "30天", label: "月度档案")
+        ],
+        primaryLine: "有了真实记录后，这里会自动换成你的连续天数、生活印记和周月故事素材。",
+        closingLine: "它会跟着你的账本长，不是一张固定权益图。"
+    )
 }
 
 private struct LifetimeArchiveMetric: Identifiable {

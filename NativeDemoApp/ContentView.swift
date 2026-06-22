@@ -250,6 +250,9 @@ struct ContentView: View {
             MemberPricingView(highlightPlanId: pricingHighlightPlanId)
                 .environmentObject(settingsViewModel)
                 .environmentObject(homeViewModel)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(AppColors.bg)
                 .onDisappear {
                     pricingHighlightPlanId = nil
                 }

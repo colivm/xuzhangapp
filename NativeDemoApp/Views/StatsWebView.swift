@@ -1011,7 +1011,7 @@ struct StatsWebView: View {
         if let mark = marks.first {
             lines.append(LifeMarkService.primaryLine(for: mark))
         } else if let locked = lockedPreview, !hasMemberAccess {
-            lines.append("这段里还有「\(locked.label)」这类深层印记。会员会把天气、异地、首次和连续性一起串起来。")
+            lines.append("这段里还有「\(locked.label)」这类深层印记。会员会按账本里已有的日期、分类、备注和上下文线索整理，不额外编造。")
         }
         if let top = clues.first {
             let percent = Int((top.ratio * 100).rounded())
@@ -1333,7 +1333,7 @@ struct StatsWebView: View {
                             Text("解锁更深的生活记忆")
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(TraceColors.primaryText)
-                            Text("雨天通勤、第一次、第 10 次、连续记录、异地城市，会在以后回看、复盘和指令台里被重新想起。")
+                            Text("雨天通勤、第一次、第 10 次、连续记录、异地城市，会按账本里已有的日期、分类、备注和上下文线索整理。")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(TraceColors.tertiaryText)
                                 .fixedSize(horizontal: false, vertical: true)

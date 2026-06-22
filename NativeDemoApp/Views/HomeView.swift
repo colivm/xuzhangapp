@@ -1126,6 +1126,11 @@ struct HomeView: View {
                         .allowsHitTesting(false)
                 }
             }
+            .overlay {
+                todayRecordScenePackBackground(item: item, isEditing: isEditing)
+                    .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                    .allowsHitTesting(false)
+            }
             .shadow(
                 color: AppColors.subtext.opacity(isEditing ? 0.18 : 0.12),
                 radius: isEditing ? 20 : 16,
@@ -1323,13 +1328,59 @@ struct HomeView: View {
 
     private func todayRecordWatermark(for item: HomeItem) -> some View {
         let accent = todayRecordCategoryAccent(for: item)
-        return Image(systemName: todayRecordWatermarkSymbol(for: item.category))
+        let symbol = item.scenePackId
+            .flatMap { ScenePackVisualStyles.style(for: $0).symbols.first }
+            ?? todayRecordWatermarkSymbol(for: item.category)
+        return Image(systemName: symbol)
             .font(.system(size: 64, weight: .ultraLight))
             .symbolRenderingMode(.hierarchical)
             .foregroundStyle(accent.opacity(0.22))
             .frame(width: 124, height: 74, alignment: .trailing)
             .offset(x: 8, y: 10)
             .clipped()
+    }
+
+    @ViewBuilder
+    private func todayRecordScenePackBackground(item: HomeItem, isEditing: Bool) -> some View {
+        if let scenePackId = item.scenePackId {
+            let style = ScenePackVisualStyles.style(for: scenePackId)
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        style.colors.first?.opacity(isEditing ? 0.10 : 0.16) ?? Color.clear,
+                        style.colors.last?.opacity(isEditing ? 0.08 : 0.13) ?? Color.clear,
+                        Color.white.opacity(0.34)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                ForEach(Array(style.symbols.enumerated()), id: \.offset) { index, symbol in
+                    GeometryReader { proxy in
+                        Image(systemName: symbol)
+                            .font(.system(size: index == 0 ? 58 : 76, weight: .ultraLight))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(Color.white.opacity(index == 0 ? 0.22 : 0.14))
+                            .rotationEffect(.degrees(index == 0 ? -8 : 12))
+                            .position(
+                                x: proxy.size.width * (index == 0 ? 0.78 : 0.93),
+                                y: proxy.size.height * (index == 0 ? 0.30 : 0.70)
+                            )
+                    }
+                }
+
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.60),
+                        Color.white.opacity(0.40),
+                        Color.white.opacity(0.22)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            }
+            .opacity(isEditing ? 0.46 : 0.72)
+        }
     }
 
     private func todayRecordWatermarkSymbol(for category: HomeItem.Category) -> String {
@@ -1496,10 +1547,10 @@ struct BillPlaybackSheet: View {
     @State private var isPlaying = false
     @State private var playbackDone = false
     @State private var showMemberNudge = false
+    @State private var playbackTask: Task<Void, Never>?
     @Environment(\.dismiss) private var dismiss
     var onNavigateToSettings: (() -> Void)? = nil
     var onShowMemberPricing: (() -> Void)? = nil
-    private let duration: TimeInterval = 10.0
     private let nudgeService = MemberNudgePolicyService()
 
     private var todayItems: [HomeItem] {
@@ -1516,6 +1567,16 @@ struct BillPlaybackSheet: View {
         guard !playbackMoments.isEmpty else { return nil }
         if activeIndex < 0 { return playbackMoments.first }
         return playbackMoments[min(activeIndex, playbackMoments.count - 1)]
+    }
+
+    private var playbackDuration: TimeInterval {
+        max(10, min(34, Double(max(1, playbackMoments.count)) * 2.6))
+    }
+
+    private var playbackProgressFraction: Double {
+        guard !playbackMoments.isEmpty else { return 0 }
+        if playbackDone { return 1 }
+        return Double(max(activeIndex, 0) + 1) / Double(playbackMoments.count)
     }
 
     var body: some View {
@@ -1545,7 +1606,7 @@ struct BillPlaybackSheet: View {
             .buttonStyle(.plain)
             .padding(12)
         }
-        .presentationDetents([.height(todayItems.isEmpty ? 320 : 620)])
+        .presentationDetents([.height(todayPlaybackSheetHeight)])
         .presentationBackground(.clear)
         .presentationCornerRadius(30)
         .onAppear {
@@ -1553,16 +1614,17 @@ struct BillPlaybackSheet: View {
             if !todayItems.isEmpty { isPlaying = true }
         }
         .onChange(of: isPlaying) { _, playing in
+            playbackTask?.cancel()
             guard playing, !todayItems.isEmpty, !playbackDone else { return }
             let count = playbackMoments.count
-            Task {
-                let interval = duration / Double(count)
+            playbackTask = Task {
+                let interval = playbackDuration / Double(max(1, count))
                 for i in 0..<count {
-                    guard self.isPlaying, !self.playbackDone else { break }
+                    guard !Task.isCancelled, self.isPlaying, !self.playbackDone else { break }
                     self.activeIndex = i
                     try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 }
-                if self.isPlaying {
+                if !Task.isCancelled, self.isPlaying {
                     self.playbackDone = true
                     self.isPlaying = false
                     if !settingsViewModel.settings.hasMemberAccess && nudgeService.canShow(scene: "playback_complete") {
@@ -1571,6 +1633,9 @@ struct BillPlaybackSheet: View {
                     }
                 }
             }
+        }
+        .onDisappear {
+            playbackTask?.cancel()
         }
     }
 
@@ -1641,22 +1706,30 @@ struct BillPlaybackSheet: View {
     }
 
     private var todayPlaybackSubtitle: String {
-        if playbackDone { return "今天的几笔已经播完" }
-        if isPlaying { return "正在把今天读成一段胶片" }
-        return "暂停在这一格"
+        if playbackDone { return "今天的记录已经看完" }
+        if isPlaying { return "按时间翻一遍今天" }
+        return "暂停在这一笔"
+    }
+
+    private var todayPlaybackSheetHeight: CGFloat {
+        guard !todayItems.isEmpty else { return 320 }
+        return todayItems.count >= 5 ? 660 : 620
     }
 
     private var playbackStage: some View {
         let moment = currentPlaybackMoment
         return ZStack(alignment: .topTrailing) {
             VStack(alignment: .leading, spacing: 18) {
-                HStack(spacing: 7) {
-                    ForEach(playbackMoments.indices, id: \.self) { index in
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
                         Capsule(style: .continuous)
-                            .fill(index <= max(activeIndex, 0) ? AppColors.accent.opacity(0.82) : Color.white.opacity(0.55))
-                            .frame(height: 4)
+                            .fill(Color.white.opacity(0.54))
+                        Capsule(style: .continuous)
+                            .fill(AppColors.accent.opacity(0.82))
+                            .frame(width: proxy.size.width * playbackProgressFraction)
                     }
                 }
+                .frame(height: 4)
 
                 Spacer(minLength: 0)
 
@@ -1697,7 +1770,7 @@ struct BillPlaybackSheet: View {
                 HStack(spacing: 8) {
                     Image(systemName: playbackDone ? "checkmark.circle.fill" : "waveform")
                         .font(.system(size: 14, weight: .bold))
-                    Text(playbackDone ? "今日胶片已放完" : "轻轻播放中")
+                    Text(playbackDone ? "今天看完了" : "正在翻今天")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .foregroundStyle(AppColors.accent.opacity(0.88))
@@ -1719,9 +1792,9 @@ struct BillPlaybackSheet: View {
     private var playbackStageSymbol: String {
         guard let moment = currentPlaybackMoment else { return "play.rectangle.fill" }
         if moment.id.contains("first") { return "sunrise.fill" }
-        if moment.id.contains("theme") { return "sparkles" }
+        if moment.id.contains("summary") { return "sparkles" }
         if moment.id.contains("close") { return "moon.stars.fill" }
-        return "rectangle.stack.fill"
+        return "note.text"
     }
 
     private var todayPlaybackStageBackground: some View {
@@ -1746,36 +1819,39 @@ struct BillPlaybackSheet: View {
     }
 
     private var playbackFilmStrip: some View {
-        HStack(spacing: 8) {
-            ForEach(Array(playbackMoments.enumerated()), id: \.element.id) { index, moment in
-                Button {
-                    activeIndex = index
-                    playbackDone = false
-                } label: {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(moment.eyebrow)
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(index == activeIndex ? AppColors.accent : AppColors.subtext)
-                            .lineLimit(1)
-                        Text(moment.title)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(AppColors.text.opacity(index <= max(activeIndex, 0) ? 0.92 : 0.54))
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.78)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(playbackMoments.enumerated()), id: \.element.id) { index, moment in
+                    Button {
+                        activeIndex = index
+                        playbackDone = false
+                    } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(moment.eyebrow)
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(index == activeIndex ? AppColors.accent : AppColors.subtext)
+                                .lineLimit(1)
+                            Text(moment.title)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(AppColors.text.opacity(index <= max(activeIndex, 0) ? 0.92 : 0.54))
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.78)
+                        }
+                        .padding(9)
+                        .frame(width: 124, minHeight: 72, alignment: .topLeading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(index == activeIndex ? Color.white.opacity(0.70) : Color.white.opacity(0.32))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(index == activeIndex ? AppColors.accent.opacity(0.25) : Color.white.opacity(0.28), lineWidth: 1)
+                        )
                     }
-                    .padding(9)
-                    .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(index == activeIndex ? Color.white.opacity(0.70) : Color.white.opacity(0.32))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(index == activeIndex ? AppColors.accent.opacity(0.25) : Color.white.opacity(0.28), lineWidth: 1)
-                    )
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
+            .padding(.horizontal, 1)
         }
     }
 
@@ -1785,7 +1861,7 @@ struct BillPlaybackSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.seal.fill")
                     .font(.system(size: 14, weight: .bold))
-                Text("今天的记录已回放完毕")
+                Text("今天的记录已经看完")
                     .font(.system(size: 14, weight: .semibold))
             }
             .foregroundStyle(AppColors.accent.opacity(0.86))
@@ -1799,7 +1875,7 @@ struct BillPlaybackSheet: View {
 
     private var memberPlaybackNudge: some View {
         VStack(spacing: 10) {
-            Text("把这周记录长期留住，之后还能回来听。")
+            Text("晚上想多看几遍，会员可以不等明天。")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppColors.text.opacity(0.88))
                 .multilineTextAlignment(.center)
@@ -1938,35 +2014,43 @@ struct BillPlaybackSheet: View {
         let lifeMark = LifeMarkService
             .aggregates(for: todayItems, allItems: todayItems, isMember: true, limit: 1)
             .first
-        let first = todayItems.first
-        let representative = representativeItem()
-        var moments: [PlaybackMoment] = [
-            PlaybackMoment(
-                id: "opening",
-                eyebrow: "今日回放",
-                title: "今天留下 \(todayItems.count) 格",
-                body: openingBody(dominantScene: dominantScene, lifeMark: lifeMark),
-                amountText: nil
+        if todayItems.count > 8 {
+            return densePlaybackMoments(
+                topCategory: topCategory,
+                dominantScene: dominantScene,
+                lifeMark: lifeMark
             )
-        ]
+        }
 
-        if let first {
+        var moments: [PlaybackMoment] = []
+
+        if todayItems.count >= 3 {
             moments.append(
                 PlaybackMoment(
-                    id: "first-\(first.id)",
-                    eyebrow: formatClockTime(first.createdAt),
-                    title: playbackTitle(for: first),
-                    body: firstMomentBody(for: first),
-                    amountText: first.amount.formatted(.cny)
+                    id: "summary-opening",
+                    eyebrow: "先看一眼",
+                    title: "今天记了 \(todayItems.count) 笔",
+                    body: openingBody(dominantScene: dominantScene, lifeMark: lifeMark),
+                    amountText: todayItems.reduce(0) { $0 + $1.amount }.formatted(.cny)
                 )
             )
         }
 
-        if todayItems.count > 1 {
+        moments += todayItems.prefix(12).map { item in
+            PlaybackMoment(
+                id: "item-\(item.id)",
+                eyebrow: momentEyebrow(for: item),
+                title: playbackTitle(for: item),
+                body: itemMomentBody(for: item),
+                amountText: item.amount.formatted(.cny)
+            )
+        }
+
+        if todayItems.count >= 4 {
             moments.append(
                 PlaybackMoment(
-                    id: "theme",
-                    eyebrow: "今天的主线",
+                    id: "summary-close",
+                    eyebrow: "看完今天",
                     title: themeTitle(topCategory: topCategory, dominantScene: dominantScene),
                     body: themeBody(topCategory: topCategory, dominantScene: dominantScene),
                     amountText: nil
@@ -1974,19 +2058,7 @@ struct BillPlaybackSheet: View {
             )
         }
 
-        if todayItems.count > 1, let representative {
-            moments.append(
-                PlaybackMoment(
-                    id: "close-\(representative.id)",
-                    eyebrow: "收尾",
-                    title: closingTitle(for: representative),
-                    body: closingBody(for: representative),
-                    amountText: representative.amount.formatted(.cny)
-                )
-            )
-        }
-
-        return Array(moments.prefix(4))
+        return moments
     }
 
     private func topCategoryText() -> String {
@@ -1999,8 +2071,44 @@ struct BillPlaybackSheet: View {
             .first?.category.rawValue ?? "日常"
     }
 
-    private func representativeItem() -> HomeItem? {
-        todayItems.last ?? todayItems.first
+    private func densePlaybackMoments(
+        topCategory: String,
+        dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?,
+        lifeMark: LifeMarkAggregate?
+    ) -> [PlaybackMoment] {
+        var moments: [PlaybackMoment] = [
+            PlaybackMoment(
+                id: "summary-opening",
+                eyebrow: "先看一眼",
+                title: "今天记了 \(todayItems.count) 笔",
+                body: openingBody(dominantScene: dominantScene, lifeMark: lifeMark),
+                amountText: todayItems.reduce(0) { $0 + $1.amount }.formatted(.cny)
+            )
+        ]
+
+        moments += todayTimeBlocks().compactMap { block in
+            guard !block.items.isEmpty else { return nil }
+            let total = block.items.reduce(0) { $0 + $1.amount }
+            return PlaybackMoment(
+                id: "time-\(block.id)",
+                eyebrow: block.label,
+                title: "\(block.label)有 \(block.items.count) 笔",
+                body: timeBlockBody(label: block.label, items: block.items),
+                amountText: total.formatted(.cny)
+            )
+        }
+
+        moments.append(
+            PlaybackMoment(
+                id: "summary-close",
+                eyebrow: "看完今天",
+                title: themeTitle(topCategory: topCategory, dominantScene: dominantScene),
+                body: themeBody(topCategory: topCategory, dominantScene: dominantScene),
+                amountText: nil
+            )
+        )
+
+        return moments
     }
 
     private func openingBody(
@@ -2011,15 +2119,15 @@ struct BillPlaybackSheet: View {
         if let lifeMark {
             let detail = LifeMarkService.primaryLine(for: lifeMark)
             if !detail.isEmpty {
-                return "\(detail) 今天先不急着算总账，先把这段生活留住。"
+                return "\(detail) 今天先不急着下结论，按时间看一遍就好。"
             }
         }
         if let dominantScene = dominantScene, dominantScene.count >= 2 {
             switch dominantScene.signal.kind {
             case .commute:
-                return "今天反复出现的是路上。出门、等待、到达，这些不只属于交通分类。"
+                return "今天路上的记录比较多。出门、等待、到达，都算在今天里。"
             case .cityRoute:
-                return "今天像是在城市里挪了几个位置，回头看会知道自己去过哪些地方。"
+                return "今天在城市里换过几个位置，先按时间看一遍。"
             case .breakfast, .quickMeal, .workMeal:
                 return "今天先从几次吃饭看起。忙也好、赶饭点也好，身体总要被照顾到。"
             case .coffee:
@@ -2032,7 +2140,7 @@ struct BillPlaybackSheet: View {
                 break
             }
         }
-        return "\(categories)这些小事被收进了今天。以后再翻回来，看到的会是这一天的几个片段。"
+        return "\(categories)这些小事被收进了今天。先不总结太多，按顺序看一遍。"
     }
 
     private func categoryMixText() -> String {
@@ -2048,6 +2156,37 @@ struct BillPlaybackSheet: View {
         return ranked.joined(separator: "、")
     }
 
+    private func todayTimeBlocks() -> [(id: String, label: String, items: [HomeItem])] {
+        [
+            ("morning", "上午", todayItems.filter { Calendar.current.component(.hour, from: $0.createdAt) < 12 }),
+            ("afternoon", "下午", todayItems.filter {
+                let hour = Calendar.current.component(.hour, from: $0.createdAt)
+                return hour >= 12 && hour < 18
+            }),
+            ("evening", "晚上", todayItems.filter { Calendar.current.component(.hour, from: $0.createdAt) >= 18 })
+        ]
+    }
+
+    private func timeBlockBody(label: String, items: [HomeItem]) -> String {
+        let categories = Dictionary(grouping: items, by: \.category)
+            .map { (category: $0.key, count: $0.value.count, amount: $0.value.reduce(0) { $0 + $1.amount }) }
+            .sorted {
+                if $0.count == $1.count { return $0.amount > $1.amount }
+                return $0.count > $1.count
+            }
+            .prefix(2)
+            .map { $0.category.rawValue }
+            .joined(separator: "、")
+        let first = items.first.map { playbackTitle(for: $0) } ?? "一笔记录"
+        if items.count == 1 {
+            return "\(label)主要是「\(first)」。这笔放在今天的位置很清楚。"
+        }
+        if categories.isEmpty {
+            return "\(label)留下 \(items.count) 笔，按时间看会比硬总结更自然。"
+        }
+        return "\(label)留下 \(items.count) 笔，主要和\(categories)有关。先看发生了什么，不急着概括。"
+    }
+
     private func playbackTitle(for item: HomeItem) -> String {
         let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let hour = Calendar.current.component(.hour, from: item.createdAt)
@@ -2061,7 +2200,11 @@ struct BillPlaybackSheet: View {
         return replacements[title] ?? title
     }
 
-    private func firstMomentBody(for item: HomeItem) -> String {
+    private func momentEyebrow(for item: HomeItem) -> String {
+        "\(formatClockTime(item.createdAt)) · \(item.category.label)"
+    }
+
+    private func itemMomentBody(for item: HomeItem) -> String {
         if let weatherLine = weatherPlaybackLine(for: item) {
             return weatherLine
         }
@@ -2069,14 +2212,14 @@ struct BillPlaybackSheet: View {
         switch LifeSceneSemanticService.classify(item).kind {
         case .commute:
             if hour < 12 {
-                return "这笔落在上班路上，清晨出门这件事也被留下了一格。"
+                return "这笔在上班路上。早上出门这件小事，也算今天的一部分。"
             }
             if hour >= 17 {
                 return "这笔落在下班路上，到家的那一段也算今天的一部分。"
             }
             return "这笔落在通勤路上，是今天在城市里移动过的证据。"
         case .cityRoute:
-            return "先把这趟路记下，后面回看就知道那会儿去了哪里。"
+            return "这趟路先记下。今天不只是待在一个地方。"
         case .breakfast:
             return "先从早上的一口吃的开始，今天有了开头。"
         case .quickMeal, .workMeal:
@@ -2095,9 +2238,9 @@ struct BillPlaybackSheet: View {
         case .convenienceSupply, .groceries, .homeSupply:
             return "先把需要的东西补上，今天少一件惦记的事。"
         case .medicalVisit, .medicineCare, .fitness, .bodyCare:
-            return "先把身体这边的安排记下，这笔以后看起来会比数字更具体。"
+            return "身体这边的安排被记下了。这笔不只是一串数字。"
         default:
-            return "这笔先开了个头，今天就从这里被记住。"
+            return "这笔被放进今天。小事不用放大，但也不用丢掉。"
         }
     }
 
@@ -2106,7 +2249,7 @@ struct BillPlaybackSheet: View {
         dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?
     ) -> String {
         guard let dominantScene = dominantScene, dominantScene.count >= 2 else {
-            return "\(topCategory)多一点"
+            return "\(topCategory)多一些"
         }
         switch dominantScene.signal.kind {
         case .commute:
@@ -2137,7 +2280,7 @@ struct BillPlaybackSheet: View {
         dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?
     ) -> String {
         guard let dominantScene = dominantScene, dominantScene.count >= 2 else {
-            return "不是要总结什么大道理，只是今天「\(topCategory)」出现得更清楚。"
+            return "今天「\(topCategory)」出现得多一些。记到这里就够了。"
         }
         switch dominantScene.signal.kind {
         case .commute:
@@ -2163,30 +2306,17 @@ struct BillPlaybackSheet: View {
         }
     }
 
-    private func closingTitle(for item: HomeItem) -> String {
-        let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
-        return tag.isEmpty ? playbackTitle(for: item) : tag
-    }
-
-    private func closingBody(for item: HomeItem) -> String {
-        if let weather = item.memoryContext?.weatherKind,
-           weather.contains("雨") || weather.lowercased().contains("rain") {
-            return "最后停在「\(playbackTitle(for: item))」。以后翻回来，会知道这一天不只有金额，还有当时的雨。"
-        }
-        return "最后停在「\(playbackTitle(for: item))」。今天不用讲得很满，能留下这些片段就已经够具体了。"
-    }
-
     private func weatherPlaybackLine(for item: HomeItem) -> String? {
         let weather = item.memoryContext?.weatherKind?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let rainy = weather.contains("雨") || weather.lowercased().contains("rain")
         guard rainy else { return nil }
         switch LifeSceneSemanticService.classify(item).kind {
         case .commute:
-            return "这笔落在雨天通勤里。以后再看，会知道那天上班路上有雨，路也可能不太好走。"
+            return "这笔在雨天通勤里。路上可能慢一点，也更费一点心。"
         case .cityRoute:
-            return "这趟路带着雨天背景，回头看会知道那会儿不是普通出门。"
+            return "这趟路带着雨天背景，不是很普通的一次出门。"
         default:
-            return "这笔旁边有雨天背景。以后再看，会知道今天的空气和天气也在场。"
+            return "这笔旁边有雨天背景。今天的天气也在这条记录里。"
         }
     }
 }

@@ -29,6 +29,7 @@ private struct LedgerDTO: Codable {
     let userEditedCategory: Bool?
     let categoryCorrectionFrom: String?
     let memoryContext: LedgerMemoryContextDTO?
+    let scenePackId: String?
 }
 
 private struct LedgerDraftMetaDTO: Codable {
@@ -89,7 +90,8 @@ final class LedgerSyncService {
                     cityName: $0.cityName,
                     semanticPlace: $0.semanticPlace
                 )
-            }
+            },
+            scenePackId: item.scenePackId
         )
         var request = try makeRequest(path: "/v1/ledger", method: "POST")
         request.httpBody = try JSONEncoder().encode(dto)
@@ -143,7 +145,8 @@ final class LedgerSyncService {
                         cityName: $0.cityName,
                         semanticPlace: $0.semanticPlace
                     )
-                }
+                },
+                scenePackId: dto.scenePackId
             )
         }
     }
