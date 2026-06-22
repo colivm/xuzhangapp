@@ -3077,7 +3077,6 @@ struct InsightWebView: View {
         }
         .buttonStyle(.plain)
         .scaleEffect(0.985)
-        .animation(.easeOut(duration: 0.1), value: UUID())
     }
 
     private func lockedReportButton(_ title: String) -> some View {
