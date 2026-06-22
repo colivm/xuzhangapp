@@ -13,6 +13,7 @@ struct LifeEntryPreviewCard: View {
     let showAngleAction: Bool
     var showsFreePrimaryAction: Bool = false
     var showFreeAngleAction: Bool = false
+    var freeScenePackLimitText: String? = nil
     var onTap: () -> Void
     var onChangeCategory: () -> Void
     var onPrimaryAction: () -> Void
@@ -81,16 +82,28 @@ struct LifeEntryPreviewCard: View {
     }
 
     private var footContent: some View {
-        HStack(alignment: .center, spacing: 10) {
-            actionRow
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 10) {
+                actionRow
 
-            Spacer(minLength: 10)
+                Spacer(minLength: 10)
 
-            Text(amountText)
-                .font(.system(size: isWhisper ? 11 : 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppColors.subtext.opacity(isWhisper ? 0.48 : 0.58))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                Text(amountText)
+                    .font(.system(size: isWhisper ? 11 : 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(AppColors.subtext.opacity(isWhisper ? 0.48 : 0.58))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+
+            if let freeScenePackLimitText,
+               !freeScenePackLimitText.isEmpty,
+               showsFreePrimaryAction || showFreeAngleAction {
+                Text(freeScenePackLimitText)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.lockGold.opacity(0.86))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
         }
     }
 

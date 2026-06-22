@@ -57,6 +57,15 @@ final class FreeScenePackService {
         return now().timeIntervalSince1970 < firstOpen + firstWeekInterval
     }
 
+    func daysUntilExtensionLock() -> Int {
+        recordFirstOpenIfNeeded()
+        let firstOpen = defaults.double(forKey: firstOpenKey)
+        guard firstOpen > 0 else { return 7 }
+        let remaining = max(0, firstOpen + firstWeekInterval - now().timeIntervalSince1970)
+        guard remaining > 0 else { return 0 }
+        return max(1, Int(ceil(remaining / 86_400)))
+    }
+
     func canReplacePackCombination() -> Bool {
         if isInFirstWeek() { return true }
         let lastReplace = defaults.double(forKey: lastReplaceKey)

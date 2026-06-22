@@ -667,9 +667,9 @@ struct StatsWebView: View {
         let items = traceClueItems
         guard !items.isEmpty else {
             return [
-                "先留下几笔，线索会先从分类、时间和频次里浮出来。",
-                "这里先列事实证据，不急着解释原因。",
-                "多记几天后，会看到哪类更多、哪天更密。"
+                "先记几笔，不用急着总结。",
+                "等同类事情出现两三次，这里会把它们串起来。",
+                "我会优先看日期、场景和你写过的备注。"
             ]
         }
         var lines: [String] = []
@@ -678,17 +678,17 @@ struct StatsWebView: View {
         }
         if let top = traceCategoryClues.first {
             let percent = Int((top.ratio * 100).rounded())
-            lines.append("\(top.category.rawValue)占 \(percent)%，共 \(top.count) 笔，是占比最高的分类。")
+            lines.append("\(top.category.rawValue)出现 \(top.count) 笔，占这一段 \(percent)%。这是最先浮出来的一面。")
         }
         if let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 {
-            lines.append("\(traceRhythmNarrativeLabel(peak))留下 \(peak.count) 笔，是记录最密的时间点。")
+            lines.append("\(traceRhythmNarrativeLabel(peak))记录最集中，适合回头看那天具体发生了什么。")
         }
         let total = items.reduce(0) { $0 + $1.amount }
         if items.count >= 2 {
             let average = total / Double(items.count)
-            lines.append("共 \(items.count) 笔，平均每笔约 \(average.formatted(.cny))。")
+            lines.append("这一段共 \(items.count) 笔，平均约 \(average.formatted(.cny))。先看原因，不急着评判金额。")
         } else {
-            lines.append("现在只有一笔，先不做趋势判断。")
+            lines.append("现在只有一笔，先把这个瞬间留住就好。")
         }
         return Array(lines.prefix(3))
     }
@@ -697,16 +697,16 @@ struct StatsWebView: View {
         let sorted = items.sorted { $0.createdAt > $1.createdAt }
         if let item = sorted.first(where: { $0.category == .transport && $0.memoryContext?.weatherKind == "rain" }) {
             if let city = item.memoryContext?.cityName, item.memoryContext?.semanticPlace == "外地" {
-                return "雨天出行发生在\(city)，这条线索不只是交通，也是在外地的一天。"
+                return "\(city)那次雨天出行被记下来了。以后再看，会知道那天是在外地赶路。"
             }
-            return "这段里出现过雨天出行，天气已经成为这条生活线索的一部分。"
+            return "这段里有一次雨天出行。那笔交通不是孤零零的金额，也带着当天的天气。"
         }
         if let item = sorted.first(where: { $0.memoryContext?.semanticPlace == "外地" }),
            let city = item.memoryContext?.cityName {
-            return "有记录发生在\(city)，城市变化也被保留下来。"
+            return "有一笔记录留在\(city)。城市变了，这段生活的背景也变了。"
         }
         if let item = sorted.first(where: { $0.memoryContext?.weatherKind == "rain" }) {
-            return "\(item.createdAt.zhBillDateTime)那天有雨，这笔记录带着当天的天气背景。"
+            return "\(item.createdAt.zhBillDateTime)那天有雨。这笔记录把天气也一起留下来了。"
         }
         return nil
     }
@@ -957,7 +957,7 @@ struct StatsWebView: View {
                     Text("多看一层")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(TraceColors.primaryText)
-                    Text(hasMemberAccess ? "会员可继续追问这段账本" : "每月赠送 \(traceLifeInsightFreeRemaining)/\(LifeInsightService.freeMonthlyLimit) 次完整解读")
+                    Text(hasMemberAccess ? "把这些记录连成一段生活" : "本月还可展开 \(traceLifeInsightFreeRemaining)/\(LifeInsightService.freeMonthlyLimit) 次")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(TraceColors.tertiaryText)
                 }
@@ -1124,10 +1124,10 @@ struct StatsWebView: View {
 
     private func traceDeepInsightButtonTitle(isUnlocked: Bool) -> String {
         if !hasTraceInsightData { return "先留下几笔" }
-        if hasMemberAccess { return "继续追问这段账本" }
-        if isUnlocked { return "继续展开这条线索" }
+        if hasMemberAccess { return "展开这段生活" }
+        if isUnlocked { return "再看一个角度" }
         if canUseTraceDeepInsight { return "试一次多看一层" }
-        return "解锁完整线索"
+        return "解锁完整解读"
     }
 
     private func handleTraceDeepInsightTap() {
@@ -1197,30 +1197,30 @@ struct StatsWebView: View {
     private func traceInsightAnswer(for question: String, insight: LifeInsightResult) -> String {
         if question.contains("哪天") || question.contains("不太像") || question.contains("更密") || question.contains("发生了什么") {
             if let peak = traceRhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 {
-                return "\(traceRhythmNarrativeLabel(peak))留下 \(peak.count) 笔，是这一段里最密的一天。可以从那天的备注往回看，它更像一个具体生活节点。"
+                return "\(traceRhythmNarrativeLabel(peak))留下 \(peak.count) 笔，是这一段最集中的一天。先回头看那天去了哪里、见了谁，很多原因会比金额本身更清楚。"
             }
-            return "这一段还没有明显峰值，先让记录再多一点，哪天不太一样会更容易浮出来。"
+            return "这一段还没有特别突出的日子。再多几笔之后，哪天不太一样会更容易看出来。"
         }
 
-        if question.contains("有关吗") || question.contains("一起") {
+        if question.contains("有关吗") || question.contains("一起") || question.contains("同一段事") || question.contains("同天") {
             let clues = Array(traceCategoryClues.prefix(2))
             if clues.count == 2 {
                 let first = clues[0]
                 let second = clues[1]
                 let overlapDays = traceDaysContaining(categories: [first.category, second.category])
                 if overlapDays > 0 {
-                    return "\(first.category.rawValue)和\(second.category.rawValue)在 \(overlapDays) 天里同时出现，说明它们可能被同一种生活安排带出来，比如外出、工作日节奏或某次集中补给。"
+                    return "\(first.category.rawValue)和\(second.category.rawValue)在 \(overlapDays) 天里同时出现。它们可能不是两件散事，而是同一天的外出、工作节奏或集中补给带出来的。"
                 }
-                return "\(first.category.rawValue)和\(second.category.rawValue)都靠前，但没有明显落在同一天，更像两条并行的生活线索。"
+                return "\(first.category.rawValue)和\(second.category.rawValue)都靠前，但不太落在同一天。它们更像这段时间同时存在的两件事。"
             }
             return insight.previewLine
         }
 
-        if question.contains("重复") || question.contains("习惯") {
+        if question.contains("重复") || question.contains("习惯") || question.contains("好几次") {
             if let top = traceCategoryClues.first {
-                return "\(top.category.rawValue)出现 \(top.count) 笔，是当前最稳定的重复线索。它不一定是问题，更像这段时间反复出现的生活面。"
+                return "\(top.category.rawValue)出现 \(top.count) 笔，是这一段最稳定的重复项。它不一定是问题，更像这段时间经常发生的一件事。"
             }
-            return "现在重复还不明显，等同类记录连续出现，账本会更容易看出习惯。"
+            return "现在重复还不明显。等同类记录连续出现，这里会更容易看出习惯。"
         }
 
         if question.contains("名字") {
@@ -1245,31 +1245,31 @@ struct StatsWebView: View {
         let base: String
         switch clue.category {
         case .dining:
-            base = "「\(categoryName)」变明显，通常不是因为某一顿特别贵，而是这一段生活被吃饭、外卖、咖啡这些小节点不断打断或撑住了。它更像日程密度的影子。"
+            base = "「\(categoryName)」变明显，通常不是某一顿特别贵，而是饭点、外卖、咖啡这些小节点把这段日子撑了起来。"
         case .transport:
-            base = "「\(categoryName)」变明显，往往说明你在移动：通勤、办事、见人、往返变多了。它背后看的不是车费，而是这段时间你被拉去哪些地方。"
+            base = "「\(categoryName)」变明显，往往说明你在移动：通勤、办事、见人、往返变多了。看的不是车费，是这段时间你去了哪些地方。"
         case .health:
-            base = "「\(categoryName)」变明显，更像你开始把身体放回日程里：可能是健身、看诊、买药或恢复性的安排，不只是消费变多。"
+            base = "「\(categoryName)」变明显，更像你把身体放回了日程里：健身、看诊、买药或恢复，都不只是消费。"
         case .shopping, .daily:
-            base = "「\(categoryName)」变明显，像是生活在补库存：添置、日用、临时需要一起冒出来。它通常对应某个阶段的整理、消耗或重新准备。"
+            base = "「\(categoryName)」变明显，像是在给生活补库存：添置、日用、临时需要一起冒出来。"
         case .entertainment:
-            base = "「\(categoryName)」变明显，说明这段时间你给自己留了更多松动空间。它不一定是浪费，可能是在给压力找出口。"
+            base = "「\(categoryName)」变明显，说明这段时间你给自己留了松动空间。它不一定是浪费，也可能是在给压力找出口。"
         case .home:
-            base = "「\(categoryName)」变明显，像是注意力回到居住环境：修补、布置、家用安排开始占据生活。"
+            base = "「\(categoryName)」变明显，像是注意力回到住处：修补、布置、家用安排开始占据生活。"
         case .social:
-            base = "「\(categoryName)」变明显，背后通常是关系在发生：见面、送礼、人情往来比金额本身更重要。"
+            base = "「\(categoryName)」变明显，背后通常是关系在发生：见面、送礼、人情往来，比金额本身更重要。"
         case .lodging:
-            base = "「\(categoryName)」变明显，说明这段时间有停留和位置变化，可能是旅行、出差或临时过夜安排。"
+            base = "「\(categoryName)」变明显，说明这段时间有停留和位置变化，可能是旅行、出差，或临时过夜。"
         case .other:
-            base = "这类记录变明显，说明有些事还没被归进固定生活面。可以回头看看备注，里面可能藏着真正的主题。"
+            base = "这类记录变明显，说明有些事还没被归进固定分类。回头看看备注，里面可能藏着真正的主题。"
         }
 
         var tails: [String] = []
         if let peak, peak.count > 0 {
-            tails.append("尤其\(traceRhythmNarrativeLabel(peak))最密，原因可能就在那天的行程里。")
+            tails.append("\(traceRhythmNarrativeLabel(peak))最集中，原因很可能就在那天的安排里。")
         }
         if let second {
-            tails.append("它还和「\(second.category.rawValue)」一起靠前，像是同一段生活场景带出来的两条痕迹。")
+            tails.append("它还和「\(second.category.rawValue)」一起靠前，可能是同一段生活带出来的两种记录。")
         }
         return ([base] + tails).joined(separator: " ")
     }

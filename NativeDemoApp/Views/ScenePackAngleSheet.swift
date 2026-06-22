@@ -22,6 +22,7 @@ struct ScenePackAngleSheet: View {
         let replaceableScenePacks: [ScenePackDefinition]
         let lockedSceneHint: LockedSceneHint?
         let isInFirstWeek: Bool
+        let daysUntilExtensionLock: Int
         let canReplacePackCombination: Bool
         let daysUntilNextReplace: Int
         let scenePackDesc: (ScenePackDefinition) -> String
@@ -79,6 +80,7 @@ struct ScenePackAngleSheet: View {
         replaceableScenePacks: [ScenePackDefinition],
         lockedSceneHint: LockedSceneHint? = nil,
         isInFirstWeek: Bool,
+        daysUntilExtensionLock: Int,
         canReplacePackCombination: Bool,
         daysUntilNextReplace: Int,
         scenePackDesc: @escaping (ScenePackDefinition) -> String,
@@ -95,6 +97,7 @@ struct ScenePackAngleSheet: View {
                 replaceableScenePacks: replaceableScenePacks,
                 lockedSceneHint: lockedSceneHint,
                 isInFirstWeek: isInFirstWeek,
+                daysUntilExtensionLock: daysUntilExtensionLock,
                 canReplacePackCombination: canReplacePackCombination,
                 daysUntilNextReplace: daysUntilNextReplace,
                 scenePackDesc: scenePackDesc,
@@ -197,7 +200,7 @@ struct ScenePackAngleSheet: View {
                         Image(systemName: "info.circle.fill")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(AppColors.accent.opacity(0.78))
-                        Text("首周可随意替换角度；首周结束后，每次替换会冷却 30 天")
+                        Text("首周可试用扩展角度，\(extensionLockCountdownText(configuration))；首周结束后，每次替换会冷却 30 天")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(AppColors.text.opacity(0.78))
                         Spacer()
@@ -231,7 +234,7 @@ struct ScenePackAngleSheet: View {
                 replaceButton(configuration)
             } footer: {
                 if configuration.isInFirstWeek {
-                    Text("现在替换不会进入冷却。首周结束后，免费版每 30 天可换一次。")
+                    Text("现在替换不会进入冷却。\(extensionLockCountdownText(configuration))，之后免费版每 30 天可换一次。")
                 } else if configuration.canReplacePackCombination {
                     Text("替换后 30 天可再换 · 会员可随时用全部角度")
                 } else {
@@ -384,7 +387,7 @@ struct ScenePackAngleSheet: View {
                     Text(pack.label)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(AppColors.text)
-                    Text(isLocked ? lockedPackSubtitle(for: pack) : "可替换到我的 3 个角度")
+                    Text(morePackSubtitle(for: pack, isLocked: isLocked, configuration: configuration))
                         .font(.system(size: 12))
                         .foregroundStyle(AppColors.subtext)
                         .lineLimit(1)
@@ -402,6 +405,20 @@ struct ScenePackAngleSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private func morePackSubtitle(
+        for pack: ScenePackDefinition,
+        isLocked: Bool,
+        configuration: FreeConfiguration
+    ) -> String {
+        if isLocked {
+            return lockedPackSubtitle(for: pack)
+        }
+        if configuration.isInFirstWeek, configuration.isExtensionLockedPack(pack) {
+            return "\(extensionLockCountdownText(configuration)) · 可替换到我的 3 个角度"
+        }
+        return "可替换到我的 3 个角度"
     }
 
     private func isLockedMorePack(
@@ -456,6 +473,11 @@ struct ScenePackAngleSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private func extensionLockCountdownText(_ configuration: FreeConfiguration) -> String {
+        let days = max(0, configuration.daysUntilExtensionLock)
+        return days <= 1 ? "扩展角度今天后锁定" : "扩展角度还有 \(days) 天锁定"
     }
 
     private func lockedPackSubtitle(for pack: ScenePackDefinition) -> String {

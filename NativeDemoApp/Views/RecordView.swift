@@ -100,6 +100,14 @@ struct RecordView: View {
         Set(freeScenePacks.map(\.id))
     }
 
+    private var freeScenePackLimitText: String? {
+        guard !isMember, freeScenePackService.isInFirstWeek() else { return nil }
+        let days = freeScenePackService.daysUntilExtensionLock()
+        return days <= 1
+            ? "旅途、宠物、宝宝、健身等扩展角度今天后会锁定"
+            : "旅途、宠物、宝宝、健身等扩展角度还有 \(days) 天锁定"
+    }
+
     private var scenePackOrderIds: [String] {
         scenePackOrderStorage
             .split(separator: ",")
@@ -1014,6 +1022,7 @@ struct RecordView: View {
                         replaceableScenePacks: freeReplaceableScenePacks,
                         lockedSceneHint: freeLockedSceneHint,
                         isInFirstWeek: freeScenePackService.isInFirstWeek(),
+                        daysUntilExtensionLock: freeScenePackService.daysUntilExtensionLock(),
                         canReplacePackCombination: freeScenePackService.canReplacePackCombination(),
                         daysUntilNextReplace: freeScenePackService.daysUntilNextReplace(),
                         scenePackDesc: scenePackDesc,
@@ -1170,6 +1179,7 @@ struct RecordView: View {
             showAngleAction: isMember && previewLineWasRotated && previewTier == .confirm,
             showsFreePrimaryAction: !isMember && hasValidAmount && previewTier == .confirm,
             showFreeAngleAction: !isMember && hasValidAmount && previewTier == .confirm,
+            freeScenePackLimitText: freeScenePackLimitText,
             onTap: {
                 openNoteEditor()
             },
