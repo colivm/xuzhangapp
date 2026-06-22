@@ -28,12 +28,20 @@ private struct LedgerDTO: Codable {
     let userEditedTitle: Bool?
     let userEditedCategory: Bool?
     let categoryCorrectionFrom: String?
+    let memoryContext: LedgerMemoryContextDTO?
 }
 
 private struct LedgerDraftMetaDTO: Codable {
     let batchId: String
     let importedAt: String
     let status: String
+}
+
+private struct LedgerMemoryContextDTO: Codable {
+    let weatherKind: String?
+    let temperatureCelsius: Double?
+    let cityName: String?
+    let semanticPlace: String?
 }
 
 private struct LedgerListResponse: Codable {
@@ -73,7 +81,15 @@ final class LedgerSyncService {
             },
             userEditedTitle: item.userEditedTitle,
             userEditedCategory: item.userEditedCategory,
-            categoryCorrectionFrom: item.categoryCorrectionFrom?.rawValue
+            categoryCorrectionFrom: item.categoryCorrectionFrom?.rawValue,
+            memoryContext: item.memoryContext.map {
+                LedgerMemoryContextDTO(
+                    weatherKind: $0.weatherKind,
+                    temperatureCelsius: $0.temperatureCelsius,
+                    cityName: $0.cityName,
+                    semanticPlace: $0.semanticPlace
+                )
+            }
         )
         var request = try makeRequest(path: "/v1/ledger", method: "POST")
         request.httpBody = try JSONEncoder().encode(dto)
@@ -119,7 +135,15 @@ final class LedgerSyncService {
                 draftMeta: draftMeta,
                 userEditedTitle: dto.userEditedTitle,
                 userEditedCategory: dto.userEditedCategory,
-                categoryCorrectionFrom: dto.categoryCorrectionFrom.flatMap { HomeItem.Category(rawValue: $0) }
+                categoryCorrectionFrom: dto.categoryCorrectionFrom.flatMap { HomeItem.Category(rawValue: $0) },
+                memoryContext: dto.memoryContext.map {
+                    HomeItem.MemoryContext(
+                        weatherKind: $0.weatherKind,
+                        temperatureCelsius: $0.temperatureCelsius,
+                        cityName: $0.cityName,
+                        semanticPlace: $0.semanticPlace
+                    )
+                }
             )
         }
     }

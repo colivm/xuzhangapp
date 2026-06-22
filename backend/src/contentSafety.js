@@ -72,6 +72,11 @@ export function sanitizeLedgerItem(rawItem) {
   if (emotionTag) item.emotionTag = emotionTag;
   if (merchantBrandId) item.merchantBrandId = merchantBrandId;
   if (raw.userEditedTitle === true) item.userEditedTitle = true;
+  if (raw.userEditedCategory === true) item.userEditedCategory = true;
+  const categoryCorrectionFrom = normalizeUserText(raw.categoryCorrectionFrom, 24);
+  if (categoryCorrectionFrom) item.categoryCorrectionFrom = categoryCorrectionFrom;
+  const memoryContext = sanitizeMemoryContext(raw.memoryContext);
+  if (memoryContext) item.memoryContext = memoryContext;
   const draftMeta = sanitizeDraftMeta(raw.draftMeta);
   if (draftMeta) item.draftMeta = draftMeta;
 
@@ -92,6 +97,24 @@ export function sanitizeLedgerItem(rawItem) {
     return { ok: false, error: "INVALID_LEDGER_AMOUNT", message: "金额无效" };
   }
   return { ok: true, item };
+}
+
+function sanitizeMemoryContext(rawContext) {
+  if (!rawContext || typeof rawContext !== "object") return null;
+  const weatherKind = normalizeUserText(rawContext.weatherKind, 16);
+  const cityName = normalizeUserText(rawContext.cityName, 24);
+  const semanticPlace = normalizeUserText(rawContext.semanticPlace, 16);
+  const temperatureCelsius = Number(rawContext.temperatureCelsius);
+  const context = {};
+  if (["rain", "snow", "hot", "cold", "normal"].includes(weatherKind)) {
+    context.weatherKind = weatherKind;
+  }
+  if (Number.isFinite(temperatureCelsius) && temperatureCelsius > -60 && temperatureCelsius < 70) {
+    context.temperatureCelsius = temperatureCelsius;
+  }
+  if (cityName) context.cityName = cityName;
+  if (semanticPlace) context.semanticPlace = semanticPlace;
+  return Object.keys(context).length > 0 ? context : null;
 }
 
 function sanitizeDraftMeta(rawDraftMeta) {

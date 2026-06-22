@@ -790,6 +790,7 @@ struct RecordView: View {
             }
             return
         }
+        refreshRecommendedCategory()
         previewLineWasRotated = true
         lastDraftIntent = .category
         activeScenePack = nil
@@ -800,6 +801,7 @@ struct RecordView: View {
         dismissKeyboard()
         guard hasValidAmount else { return }
 
+        refreshRecommendedCategory()
         previewLineWasRotated = true
         lastDraftIntent = .category
         activeScenePack = nil
@@ -855,6 +857,7 @@ struct RecordView: View {
     private func refreshRecommendedCategory() {
         guard selectedEntryMode == .manual else { return }
         guard !homeViewModel.categoryLockedByUser else { return }
+        guard !(previewLineWasRotated && lastDraftIntent == .category) else { return }
         homeViewModel.refreshRecordPrefill()
     }
 

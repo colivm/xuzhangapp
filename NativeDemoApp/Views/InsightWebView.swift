@@ -51,6 +51,7 @@ struct InsightWebView: View {
 
     private enum AICommandKind: Equatable {
         case query
+        case memoryLookup
         case duplicateCheck
         case batchCreate
         case needsAmount
@@ -64,6 +65,14 @@ struct InsightWebView: View {
         var count: Int
     }
 
+    private struct AICommandMemoryCard: Identifiable, Equatable {
+        let id = UUID()
+        var title: String
+        var subtitle: String
+        var item: HomeItem
+        var context: HomeItem.MemoryContext?
+    }
+
     private struct AICommandResult: Identifiable, Equatable {
         let id = UUID()
         var kind: AICommandKind
@@ -71,6 +80,7 @@ struct InsightWebView: View {
         var summary: String
         var detail: String
         var items: [HomeItem]
+        var memoryCard: AICommandMemoryCard? = nil
         var bars: [AICommandBar]
         var drafts: [AICommandRecordDraft]
         var amountSource: String?
@@ -584,6 +594,41 @@ struct InsightWebView: View {
                         source: .emotion
                     )
                 )
+            }
+        }
+
+        for item in items where item.id != heroID {
+            if let context = item.memoryContext {
+                if context.weatherKind == "rain" {
+                    let text: String
+                    if item.category == .transport {
+                        text = "雨天出行"
+                    } else if let city = context.cityName, context.semanticPlace == "外地" {
+                        text = "\(city)雨天"
+                    } else {
+                        text = "雨天生活"
+                    }
+                    candidates.append(
+                        KeywordBubbleDraft(
+                            text: text,
+                            score: 3_200 + Int(item.amount.rounded()) + (context.semanticPlace == "外地" ? 420 : 0),
+                            category: item.category,
+                            priority: 2,
+                            source: .context
+                        )
+                    )
+                }
+                if let city = context.cityName, context.semanticPlace == "外地" {
+                    candidates.append(
+                        KeywordBubbleDraft(
+                            text: "\(city)一日",
+                            score: 2_800 + Int(item.amount.rounded()),
+                            category: item.category,
+                            priority: 3,
+                            source: .context
+                        )
+                    )
+                }
             }
         }
 
@@ -1225,6 +1270,7 @@ struct InsightWebView: View {
     private var aiCommandSuggestionRow: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
+                aiCommandPresetChip("上一次下雨通勤是什么时候？")
                 aiCommandPresetChip("过去三天餐饮花了多少？")
                 aiCommandPresetChip("看一下这周交通")
                 aiCommandPresetChip("找找最近有没有重复账单")
@@ -1264,6 +1310,9 @@ struct InsightWebView: View {
         if let result = aiCommandResult {
             VStack(alignment: .leading, spacing: 14) {
                 aiCommandIntentCard(result)
+                if let memoryCard = result.memoryCard {
+                    aiCommandMemoryCard(memoryCard)
+                }
                 if !result.bars.isEmpty {
                     aiCommandBarChart(result.bars)
                 }
@@ -1328,6 +1377,126 @@ struct InsightWebView: View {
             }
         }
         .glassPanel(radius: 22, padding: 18)
+    }
+
+    private func aiCommandMemoryCard(_ card: AICommandMemoryCard) -> some View {
+        let isRain = card.context?.weatherKind == "rain"
+        let contextLine = aiCommandMemoryContextLine(card.context)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill((isRain ? Color(red: 0.42, green: 0.58, blue: 0.66) : AppColors.accent).opacity(0.14))
+                    Image(systemName: isRain ? "cloud.rain.fill" : "sparkles")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(isRain ? Color(red: 0.34, green: 0.50, blue: 0.58) : AppColors.accentDark)
+                }
+                .frame(width: 38, height: 38)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(card.title)
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                    Text(card.subtitle)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                }
+                Spacer(minLength: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(card.item.displayTitle)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppColors.text.opacity(0.92))
+                    .lineLimit(2)
+                Text("\(card.item.category.rawValue) · \(card.item.createdAt.zhBillDateTime) · \(card.item.amount.formatted(.cny))")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                if !contextLine.isEmpty {
+                    Text(contextLine)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.text.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if shouldShowHomeEmotionLike(card.item) {
+                    Text(card.item.displayEmotionTag)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(isRain ? Color(red: 0.30, green: 0.48, blue: 0.56) : AppColors.accentDark)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(isRain ? Color(red: 0.76, green: 0.84, blue: 0.88).opacity(0.54) : Color.white.opacity(0.54))
+                        if isRain {
+                            WeatherMemoryBackdrop(kind: .rain)
+                                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        }
+                    }
+                )
+                .overlay(
+                    ZStack {
+                        LinearGradient(
+                            colors: isRain
+                                ? [
+                                    Color.white.opacity(0.74),
+                                    Color(red: 0.62, green: 0.76, blue: 0.82).opacity(0.26),
+                                    Color(red: 0.36, green: 0.54, blue: 0.62).opacity(0.16)
+                                ]
+                                : [
+                                    Color.white.opacity(0.70),
+                                    Color.white.opacity(0.42),
+                                    AppColors.accent.opacity(0.12)
+                                ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        if isRain {
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.22),
+                                    Color.white.opacity(0.04),
+                                    Color(red: 0.30, green: 0.45, blue: 0.54).opacity(0.12)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                )
+                .overlay(alignment: .topTrailing) {
+                    if isRain {
+                        Image(systemName: "cloud.rain")
+                            .font(.system(size: 78, weight: .ultraLight))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(Color.white.opacity(0.24))
+                            .offset(x: 12, y: -8)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.78),
+                                    Color.white.opacity(isRain ? 0.28 : 0.42),
+                                    (isRain ? Color(red: 0.36, green: 0.54, blue: 0.62) : AppColors.accent).opacity(0.18)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+        )
     }
 
     private func aiCommandBarChart(_ bars: [AICommandBar]) -> some View {
@@ -1632,6 +1801,9 @@ struct InsightWebView: View {
         if containsAny(normalized, ["重复", "重复账单", "重复记录"]) {
             return buildDuplicateCheckResult(range: aiCommandTimeRange(from: normalized, defaultRecentDays: 7))
         }
+        if let memoryResult = buildMemoryLookupResult(command: normalized) {
+            return memoryResult
+        }
 
         let range = aiCommandTimeRange(from: normalized)
         let categoryIntent = aiCommandCategoryIntent(from: normalized)
@@ -1644,6 +1816,53 @@ struct InsightWebView: View {
             summary: "可以先问一段时间、一个分类，或明确说要补记哪类记录。",
             detail: "例子：过去三天餐饮花了多少？或者：补记过去一周工作日通勤，早晚各一次。",
             items: [],
+            bars: [],
+            drafts: [],
+            amountSource: nil,
+            needsAmount: false
+        )
+    }
+
+    private func buildMemoryLookupResult(command: String) -> AICommandResult? {
+        let asksMemory = containsAny(command, ["上一次", "上次", "最近一次", "什么时候", "哪天", "记得", "回忆", "回看"])
+        let hasContextSignal = containsAny(command, ["下雨", "雨天", "雨", "雪", "外地", "城市", "旅游", "旅行", "出差", "温度", "天气"])
+        guard asksMemory && hasContextSignal else { return nil }
+
+        let matches = homeViewModel.items
+            .filter { item in
+                guard item.amount > 0 else { return false }
+                return aiCommandMemoryItemMatches(item, command: command)
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+
+        guard let item = matches.first else {
+            return AICommandResult(
+                kind: .memoryLookup,
+                title: "还没找到这段生活记忆",
+                summary: "账本里暂时没有匹配的天气或城市线索。",
+                detail: "从之后的新记录开始，天气、温度和低敏城市语义会随当天记录一起保存；历史记录如果没有这些字段，只能按备注和分类粗略查找。",
+                items: [],
+                bars: [],
+                drafts: [],
+                amountSource: nil,
+                needsAmount: false
+            )
+        }
+
+        let title = aiCommandMemoryTitle(command: command, item: item)
+        let card = AICommandMemoryCard(
+            title: title,
+            subtitle: item.createdAt.zhBillDateTime,
+            item: item,
+            context: item.memoryContext
+        )
+        return AICommandResult(
+            kind: .memoryLookup,
+            title: title,
+            summary: "找到了 \(item.createdAt.zhBillDateTime) 的那笔记录。",
+            detail: aiCommandMemoryContextLine(item.memoryContext),
+            items: [item],
+            memoryCard: card,
             bars: [],
             drafts: [],
             amountSource: nil,
@@ -1787,6 +2006,102 @@ struct InsightWebView: View {
         if count > 0 {
             aiCommandResult = nil
         }
+    }
+
+    private func aiCommandMemoryItemMatches(_ item: HomeItem, command: String) -> Bool {
+        let text = [
+            item.title,
+            item.emotionTag,
+            item.displayEmotionTag,
+            item.category.rawValue,
+            item.category.label,
+            item.memoryContext?.cityName ?? "",
+            item.memoryContext?.semanticPlace ?? ""
+        ]
+            .joined(separator: " ")
+            .lowercased()
+
+        if containsAny(command, ["通勤", "上班", "下班", "地铁", "公交"]) {
+            guard item.category == .transport,
+                  containsAny(text, ["通勤", "上班", "下班", "地铁", "公交", "早高峰", "晚高峰"]) || item.amount <= 80 else {
+                return false
+            }
+        } else if let intent = aiCommandCategoryIntent(from: command) {
+            let categoryMatched = intent.categories.contains(item.category)
+            let keywordMatched = aiCommandItemMatchesKeywords(item, keywords: intent.keywords)
+            guard intent.requiresKeywordMatch ? categoryMatched && keywordMatched : categoryMatched || keywordMatched else {
+                return false
+            }
+        }
+
+        if containsAny(command, ["下雨", "雨天", "雨"]) {
+            return item.memoryContext?.weatherKind == "rain"
+                || containsAny(text, ["下雨", "雨天", "雨天通勤", "雨天出行"])
+        }
+        if containsAny(command, ["下雪", "雪天", "雪"]) {
+            return item.memoryContext?.weatherKind == "snow"
+                || containsAny(text, ["下雪", "雪天"])
+        }
+        if containsAny(command, ["外地", "旅游", "旅行", "出差"]) {
+            return item.memoryContext?.semanticPlace == "外地"
+                || containsAny(text, ["外地", "旅游", "旅行", "出差"])
+        }
+        if containsAny(command, ["城市"]) {
+            return item.memoryContext?.cityName != nil
+        }
+        return item.memoryContext != nil
+    }
+
+    private func aiCommandMemoryTitle(command: String, item: HomeItem) -> String {
+        if containsAny(command, ["下雨", "雨天", "雨"]),
+           containsAny(command, ["通勤", "上班", "下班", "地铁", "公交"]) {
+            return "上一次雨天通勤"
+        }
+        if containsAny(command, ["下雨", "雨天", "雨"]) {
+            return "上一次雨天记录"
+        }
+        if item.memoryContext?.semanticPlace == "外地", let city = item.memoryContext?.cityName {
+            return "\(city)的那次记录"
+        }
+        return "找到一段生活记忆"
+    }
+
+    private func aiCommandMemoryContextLine(_ context: HomeItem.MemoryContext?) -> String {
+        guard let context else { return "" }
+        var parts: [String] = []
+        if let weatherKind = context.weatherKind {
+            switch weatherKind {
+            case "rain":
+                parts.append("雨天")
+            case "snow":
+                parts.append("雪天")
+            case "hot":
+                parts.append("偏热")
+            case "cold":
+                parts.append("偏冷")
+            default:
+                parts.append("天气普通")
+            }
+        }
+        if let temperature = context.temperatureCelsius {
+            parts.append("\(Int(temperature.rounded()))℃")
+        }
+        if let city = context.cityName {
+            if let semantic = context.semanticPlace {
+                parts.append("\(city) · \(semantic)")
+            } else {
+                parts.append(city)
+            }
+        } else if let semantic = context.semanticPlace {
+            parts.append(semantic)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func shouldShowHomeEmotionLike(_ item: HomeItem) -> Bool {
+        let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tag.isEmpty else { return false }
+        return tag != HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
     }
 
     private func filteredAICommandItems(range: AICommandTimeRange, category: HomeItem.Category?) -> [HomeItem] {
@@ -2187,6 +2502,8 @@ struct InsightWebView: View {
         switch kind {
         case .query:
             return "查账"
+        case .memoryLookup:
+            return "回望"
         case .duplicateCheck:
             return "核对"
         case .batchCreate:
@@ -2819,6 +3136,113 @@ struct InsightWebView: View {
     }
 }
 
+// MARK: - Weather Memory Backdrop
+
+private struct WeatherMemoryBackdrop: View {
+    enum Kind: Equatable {
+        case rain
+    }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let kind: Kind
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 24)) { timeline in
+            let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
+            let phase = time.truncatingRemainder(dividingBy: 12) / 12
+
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.45, green: 0.61, blue: 0.70).opacity(0.34),
+                        Color(red: 0.72, green: 0.82, blue: 0.88).opacity(0.28),
+                        Color(red: 0.28, green: 0.43, blue: 0.52).opacity(0.22)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                movingMist(phase: phase)
+
+                if kind == .rain {
+                    rainCanvas(time: time)
+                        .opacity(reduceMotion ? 0.24 : 0.42)
+                }
+
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.34),
+                        Color.white.opacity(0.02),
+                        Color(red: 0.22, green: 0.36, blue: 0.44).opacity(0.12)
+                    ],
+                    startPoint: UnitPoint(x: reduceMotion ? 0.1 : 0.1 + phase * 0.22, y: 0),
+                    endPoint: .bottomTrailing
+                )
+            }
+            .saturation(0.92)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func movingMist(phase: Double) -> some View {
+        ZStack {
+            RadialGradient(
+                colors: [
+                    Color.white.opacity(0.38),
+                    Color.white.opacity(0.12),
+                    Color.white.opacity(0)
+                ],
+                center: .center,
+                startRadius: 0,
+                endRadius: 120
+            )
+            .frame(width: 220, height: 120)
+            .offset(x: CGFloat(-72 + phase * 54), y: -34)
+            .blur(radius: 8)
+
+            RadialGradient(
+                colors: [
+                    Color(red: 0.78, green: 0.90, blue: 0.96).opacity(0.28),
+                    Color.white.opacity(0.06),
+                    Color.white.opacity(0)
+                ],
+                center: .center,
+                startRadius: 0,
+                endRadius: 150
+            )
+            .frame(width: 260, height: 150)
+            .offset(x: CGFloat(80 - phase * 42), y: 54)
+            .blur(radius: 12)
+        }
+    }
+
+    private func rainCanvas(time: TimeInterval) -> some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            let diagonalDrift = size.height * 0.20
+            for index in 0..<42 {
+                let seed = Double(index)
+                let lane = (seed * 37).truncatingRemainder(dividingBy: 100) / 100
+                let speed = 0.34 + (seed * 13).truncatingRemainder(dividingBy: 19) / 45
+                let progress = (time * speed + seed * 0.071).truncatingRemainder(dividingBy: 1)
+                let length = 10 + (seed * 11).truncatingRemainder(dividingBy: 14)
+                let x = lane * size.width + progress * diagonalDrift - 26
+                let y = progress * (size.height + 54) - 34
+                let opacity = 0.18 + (seed * 7).truncatingRemainder(dividingBy: 11) / 70
+
+                var path = Path()
+                path.move(to: CGPoint(x: x, y: y))
+                path.addLine(to: CGPoint(x: x + length * 0.32, y: y + length))
+                context.stroke(
+                    path,
+                    with: .color(Color.white.opacity(opacity)),
+                    style: StrokeStyle(lineWidth: seed.truncatingRemainder(dividingBy: 3) == 0 ? 1.15 : 0.8, lineCap: .round)
+                )
+            }
+        }
+    }
+}
+
 // MARK: - Keyword Bubble Cloud
 
 private struct KeywordBubbleDraft {
@@ -2827,6 +3251,7 @@ private struct KeywordBubbleDraft {
         case userTitle
         case amountTitle
         case emotion
+        case context
         case category
     }
 

@@ -2,6 +2,13 @@ import Foundation
 import os.log
 
 struct HomeItem: Identifiable, Codable, Equatable {
+    struct MemoryContext: Codable, Equatable {
+        var weatherKind: String?
+        var temperatureCelsius: Double?
+        var cityName: String?
+        var semanticPlace: String?
+    }
+
     struct DraftMeta: Codable, Equatable {
         enum Status: String, Codable {
             case pending
@@ -78,6 +85,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
     var userEditedTitle: Bool?
     var userEditedCategory: Bool?
     var categoryCorrectionFrom: Category?
+    var memoryContext: MemoryContext?
 
     init(
         id: UUID = UUID(),
@@ -92,7 +100,8 @@ struct HomeItem: Identifiable, Codable, Equatable {
         draftMeta: DraftMeta? = nil,
         userEditedTitle: Bool? = nil,
         userEditedCategory: Bool? = nil,
-        categoryCorrectionFrom: Category? = nil
+        categoryCorrectionFrom: Category? = nil,
+        memoryContext: MemoryContext? = nil
     ) {
         self.id = id
         self.title = title
@@ -107,6 +116,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
         self.userEditedTitle = userEditedTitle
         self.userEditedCategory = userEditedCategory
         self.categoryCorrectionFrom = categoryCorrectionFrom
+        self.memoryContext = memoryContext
     }
 
     static func inferEmotionTag(category: Category, amount: Double) -> String {
@@ -407,7 +417,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
 extension HomeItem {
     enum CodingKeys: String, CodingKey {
-        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta, userEditedTitle, userEditedCategory, categoryCorrectionFrom
+        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta, userEditedTitle, userEditedCategory, categoryCorrectionFrom, memoryContext
     }
 
     init(from decoder: Decoder) throws {
@@ -426,6 +436,7 @@ extension HomeItem {
         userEditedTitle = try container.decodeIfPresent(Bool.self, forKey: .userEditedTitle)
         userEditedCategory = try container.decodeIfPresent(Bool.self, forKey: .userEditedCategory)
         categoryCorrectionFrom = try container.decodeIfPresent(Category.self, forKey: .categoryCorrectionFrom)
+        memoryContext = try container.decodeIfPresent(MemoryContext.self, forKey: .memoryContext)
     }
 }
 

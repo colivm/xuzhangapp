@@ -217,6 +217,14 @@ final class HomeViewModel: ObservableObject {
                 source: "manual"
             )
         )
+        let emotionTag = memoryEnhancedEmotionTag(
+            title: resolution.title,
+            category: resolution.category,
+            amount: amount,
+            date: selectedDate,
+            baseEmotionTag: resolution.emotionTag
+        )
+        let memoryContext = memoryContextForRecord(date: selectedDate)
         let newItem = HomeItem(
             title: resolution.title,
             amount: amount,
@@ -224,11 +232,12 @@ final class HomeViewModel: ObservableObject {
             source: .manual,
             createdAt: selectedDate,
             updatedAt: Date(),
-            emotionTag: resolution.emotionTag,
+            emotionTag: emotionTag,
             merchantBrandId: resolution.merchantBrandId,
             userEditedTitle: userEditedTitle && resolution.title == baseTitle ? true : nil,
             userEditedCategory: shouldLockCategory ? true : nil,
-            categoryCorrectionFrom: shouldLockCategory ? pendingCategoryCorrectionFrom : nil
+            categoryCorrectionFrom: shouldLockCategory ? pendingCategoryCorrectionFrom : nil,
+            memoryContext: memoryContext
         )
         items.insert(newItem, at: 0)
         resetInput()
@@ -333,6 +342,7 @@ final class HomeViewModel: ObservableObject {
 
         let now = Date()
         let batchId = UUID().uuidString
+        var memorySeedItems = items
         let importedItems = validDrafts.map { rawDraft in
             let draft = reviewedOCRDraft(rawDraft)
             let resolution = RecordDraftResolutionService.resolve(
@@ -347,14 +357,23 @@ final class HomeViewModel: ObservableObject {
                     source: "ocr"
                 )
             )
-            return HomeItem(
+            let emotionTag = memoryEnhancedEmotionTag(
+                title: resolution.title,
+                category: resolution.category,
+                amount: draft.amount,
+                date: draft.date,
+                baseEmotionTag: resolution.emotionTag,
+                existingItems: memorySeedItems
+            )
+            let memoryContext = memoryContextForRecord(date: draft.date)
+            let item = HomeItem(
                 title: resolution.title,
                 amount: draft.amount,
                 category: resolution.category,
                 source: .ocr,
                 createdAt: draft.date,
                 updatedAt: now,
-                emotionTag: resolution.emotionTag,
+                emotionTag: emotionTag,
                 merchantBrandId: resolution.merchantBrandId,
                 draftMeta: HomeItem.DraftMeta(
                     batchId: batchId,
@@ -362,8 +381,11 @@ final class HomeViewModel: ObservableObject {
                     status: .pending
                 ),
                 userEditedCategory: draft.userEditedCategory == true ? true : nil,
-                categoryCorrectionFrom: draft.categoryCorrectionFrom
+                categoryCorrectionFrom: draft.categoryCorrectionFrom,
+                memoryContext: memoryContext
             )
+            memorySeedItems.insert(item, at: 0)
+            return item
         }
         items.insert(contentsOf: importedItems, at: 0)
         dailyQuotaStore.markOCRImported(isMember: isMember)
@@ -400,6 +422,7 @@ final class HomeViewModel: ObservableObject {
 
         let wasEmpty = items.isEmpty
         let now = Date()
+        var memorySeedItems = items
         let importedItems = validDrafts.map { draft in
             let resolution = RecordDraftResolutionService.resolve(
                 RecordDraftResolutionInput(
@@ -413,18 +436,29 @@ final class HomeViewModel: ObservableObject {
                     source: "ai_command"
                 )
             )
-            return HomeItem(
+            let emotionTag = memoryEnhancedEmotionTag(
+                title: resolution.title,
+                category: resolution.category,
+                amount: draft.amount,
+                date: draft.date,
+                baseEmotionTag: resolution.emotionTag,
+                existingItems: memorySeedItems
+            )
+            let item = HomeItem(
                 title: resolution.title,
                 amount: draft.amount,
                 category: resolution.category,
                 source: .manual,
                 createdAt: draft.date,
                 updatedAt: now,
-                emotionTag: resolution.emotionTag,
+                emotionTag: emotionTag,
                 merchantBrandId: resolution.merchantBrandId,
                 userEditedTitle: true,
-                userEditedCategory: true
+                userEditedCategory: true,
+                memoryContext: memoryContextForRecord(date: draft.date)
             )
+            memorySeedItems.insert(item, at: 0)
+            return item
         }
 
         items.insert(contentsOf: importedItems, at: 0)
@@ -530,9 +564,19 @@ final class HomeViewModel: ObservableObject {
         )
         items[idx].title = resolution.title
         items[idx].category = resolution.category
-        items[idx].emotionTag = resolution.emotionTag
+        items[idx].emotionTag = memoryEnhancedEmotionTag(
+            title: resolution.title,
+            category: resolution.category,
+            amount: items[idx].amount,
+            date: items[idx].createdAt,
+            baseEmotionTag: resolution.emotionTag,
+            excluding: items[idx].id
+        )
         items[idx].merchantBrandId = resolution.merchantBrandId
         items[idx].userEditedCategory = true
+        if items[idx].memoryContext == nil {
+            items[idx].memoryContext = memoryContextForRecord(date: items[idx].createdAt)
+        }
         if originalCategory != resolution.category {
             items[idx].categoryCorrectionFrom = originalCategory
         }
@@ -560,9 +604,19 @@ final class HomeViewModel: ObservableObject {
         )
         items[idx].title = resolution.title
         items[idx].category = resolution.category
-        items[idx].emotionTag = resolution.emotionTag
+        items[idx].emotionTag = memoryEnhancedEmotionTag(
+            title: resolution.title,
+            category: resolution.category,
+            amount: amount,
+            date: items[idx].createdAt,
+            baseEmotionTag: resolution.emotionTag,
+            excluding: items[idx].id
+        )
         items[idx].merchantBrandId = resolution.merchantBrandId
         items[idx].userEditedCategory = items[idx].userEditedCategory == true ? true : nil
+        if items[idx].memoryContext == nil {
+            items[idx].memoryContext = memoryContextForRecord(date: items[idx].createdAt)
+        }
         items[idx].updatedAt = Date()
         persistItems()
         Task { await syncUpsertToCloud(items[idx]) }
@@ -908,8 +962,65 @@ final class HomeViewModel: ObservableObject {
     private func currentRecordContextSignal() -> RecordContextSignal {
         let settings = LocalStore.loadSettings()
         // Coarse local context only: cached weather plus time bands, no location trail or POI.
-        let weather = settings.weatherCompanionEnabled ? WeatherCompanionService.shared.cachedSnapshot : nil
+        let weather = settings.weatherCompanionEnabled && shouldAttachLiveContext(to: selectedDate)
+            ? WeatherCompanionService.shared.cachedSnapshot
+            : nil
         return RecordContextSignal(referenceDate: selectedDate, weather: weather)
+    }
+
+    private func memoryContextForRecord(date: Date) -> HomeItem.MemoryContext? {
+        let settings = LocalStore.loadSettings()
+        guard settings.weatherCompanionEnabled,
+              shouldAttachLiveContext(to: date) else {
+            return nil
+        }
+        let weather = WeatherCompanionService.shared.cachedSnapshot
+        let city = WeatherCompanionService.shared.cachedCitySemanticSnapshot
+        let context = HomeItem.MemoryContext(
+            weatherKind: RecordMemoryContextService.weatherKindCode(from: weather),
+            temperatureCelsius: weather?.temp,
+            cityName: city?.cityName,
+            semanticPlace: city?.semanticPlace
+        )
+        let hasValue = context.weatherKind != nil
+            || context.temperatureCelsius != nil
+            || context.cityName != nil
+            || context.semanticPlace != nil
+        return hasValue ? context : nil
+    }
+
+    private func memoryEnhancedEmotionTag(
+        title: String,
+        category: HomeItem.Category,
+        amount: Double,
+        date: Date,
+        baseEmotionTag: String,
+        existingItems: [HomeItem]? = nil,
+        excluding excludedID: UUID? = nil
+    ) -> String {
+        let settings = LocalStore.loadSettings()
+        let weather = settings.weatherCompanionEnabled && shouldAttachLiveContext(to: date)
+            ? WeatherCompanionService.shared.cachedSnapshot
+            : nil
+        let memoryItems = (existingItems ?? items).filter { item in
+            guard let excludedID else { return true }
+            return item.id != excludedID
+        }
+        return RecordMemoryContextService.enhancedEmotionTag(
+            input: RecordMemoryContextInput(
+                title: title,
+                category: category,
+                amount: amount,
+                date: date,
+                baseEmotionTag: baseEmotionTag,
+                existingItems: memoryItems,
+                weather: weather
+            )
+        )
+    }
+
+    private func shouldAttachLiveContext(to date: Date) -> Bool {
+        Calendar.current.isDate(date, inSameDayAs: Date())
     }
 
     func refreshRecordPrefill() {

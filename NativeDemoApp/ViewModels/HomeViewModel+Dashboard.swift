@@ -154,6 +154,13 @@ extension HomeViewModel {
         guard !weekItems.isEmpty else {
             return ("近 7 天暂无复盘。多记几笔，就能看到更完整的消费节奏啦。", "", "")
         }
+        if let memoryLine = contextualMemoryLine(from: weekItems) {
+            let structure = "这一周的记录里，天气、城市和重复出现的场景已经能连起来看。"
+            let advice = weekItems.count >= 8
+                ? "继续按真实时间记，回望会更像一条生活时间线。"
+                : "再多记几笔，天气和地点线索会更容易浮出来。"
+            return (memoryLine, structure, advice)
+        }
         if let scene = LifeSceneSemanticService.dominantScene(in: weekItems),
            scene.count >= 2 {
             let copy = LifeSceneSemanticService.weeklyCopy(for: scene.signal, count: scene.count)
@@ -181,6 +188,8 @@ extension HomeViewModel {
         let summary: String
         if total <= 0 {
             summary = "本月还没有足够账单，多记几笔再来生成月度复盘吧。"
+        } else if let memoryLine = contextualMemoryLine(from: filteredItems(in: .month).filter { $0.amount > 0 }) {
+            summary = memoryLine
         } else if let scene = LifeSceneSemanticService.dominantScene(in: filteredItems(in: .month).filter { $0.amount > 0 }),
                   scene.count >= 2 {
             summary = LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count)
@@ -228,10 +237,40 @@ extension HomeViewModel {
 
     private func monthlyStructureText(fallbackTop: String) -> String {
         let monthItems = filteredItems(in: .month).filter { $0.amount > 0 }
+        if monthItems.contains(where: { $0.memoryContext?.weatherKind != nil || $0.memoryContext?.cityName != nil }) {
+            return "这个月不只看分类，也能看到天气、城市和当天场景留下的线索。"
+        }
         if let scene = LifeSceneSemanticService.dominantScene(in: monthItems),
            scene.count >= 2 {
             return "这个月更明显的是「\(LifeSceneSemanticService.displayTheme(for: scene.signal))」这条线。"
         }
         return "「\(fallbackTop)」是这个月比较明显的一类。"
+    }
+
+    private func contextualMemoryLine(from target: [HomeItem]) -> String? {
+        let sorted = target.sorted { $0.createdAt > $1.createdAt }
+        if let item = sorted.first(where: { item in
+            item.category == .transport
+                && item.memoryContext?.weatherKind == "rain"
+        }) {
+            if let city = item.memoryContext?.cityName, item.memoryContext?.semanticPlace == "外地" {
+                return "\(city)那次雨天出行被留下来了，像是一段外地路上的小标记。"
+            }
+            return "有一次雨天出行被记下来了，天气和路上的那笔记录连在了一起。"
+        }
+        if let item = sorted.first(where: { $0.memoryContext?.semanticPlace == "外地" }),
+           let city = item.memoryContext?.cityName {
+            return "这段时间有一笔在\(city)留下的记录，位置变化也进入了回望。"
+        }
+        if let item = sorted.first(where: { $0.memoryContext?.weatherKind == "rain" }) {
+            return "\(item.createdAt.zhBillDateTime)那天有雨，账本留下了当天的生活切片。"
+        }
+        return sorted.first { item in
+            let text = item.displayEmotionTag
+            return text.contains("第一次")
+                || text.contains("第10次")
+                || text.contains("连续")
+                || text.contains("周末出门")
+        }?.displayEmotionTag
     }
 }

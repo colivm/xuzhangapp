@@ -7,15 +7,25 @@ struct WeatherSnapshot: Equatable {
     var ts: Date
 }
 
+struct CitySemanticSnapshot: Equatable {
+    var cityName: String?
+    var semanticPlace: String?
+    var ts: Date
+}
+
 @MainActor
 final class WeatherCompanionService: NSObject, @preconcurrency CLLocationManagerDelegate {
     static let shared = WeatherCompanionService()
 
     private let manager = CLLocationManager()
+    private let geocoder = CLGeocoder()
     private let cacheDuration: TimeInterval = 30 * 60
+    private let homeCityKey = "weather_companion_home_city_v1"
     private var cachedCoordinate: CLLocationCoordinate2D?
     private var cachedCoordinateAt: Date?
     private var cachedSnapshotValue: WeatherSnapshot?
+    private var cachedCitySemanticValue: CitySemanticSnapshot?
+    private var isRefreshingCitySemantic = false
     private var refreshTimer: Timer?
 
     private override init() {
@@ -27,6 +37,14 @@ final class WeatherCompanionService: NSObject, @preconcurrency CLLocationManager
     var cachedSnapshot: WeatherSnapshot? {
         guard let snapshot = cachedSnapshotValue,
               Date().timeIntervalSince(snapshot.ts) < cacheDuration else {
+            return nil
+        }
+        return snapshot
+    }
+
+    var cachedCitySemanticSnapshot: CitySemanticSnapshot? {
+        guard let snapshot = cachedCitySemanticValue,
+              Date().timeIntervalSince(snapshot.ts) < cacheDuration * 2 else {
             return nil
         }
         return snapshot
@@ -124,6 +142,7 @@ final class WeatherCompanionService: NSObject, @preconcurrency CLLocationManager
         guard let location = locations.last else { return }
         cachedCoordinate = location.coordinate
         cachedCoordinateAt = Date()
+        refreshCitySemantic(for: location)
         Task { _ = await fetchWeatherSnapshot() }
     }
 
@@ -142,6 +161,49 @@ final class WeatherCompanionService: NSObject, @preconcurrency CLLocationManager
         default:
             break
         }
+    }
+
+    private func refreshCitySemantic(for location: CLLocation) {
+        guard !isRefreshingCitySemantic else { return }
+        isRefreshingCitySemantic = true
+        Task { @MainActor in
+            defer { isRefreshingCitySemantic = false }
+            let placemarks = try? await geocoder.reverseGeocodeLocation(location)
+            guard let placemark = placemarks?.first else { return }
+            let city = [
+                placemark.locality,
+                placemark.subAdministrativeArea,
+                placemark.administrativeArea
+            ]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .first { !$0.isEmpty }
+            let normalizedCity = city.map(Self.normalizedCityName)
+            let storedHomeCity = UserDefaults.standard.string(forKey: homeCityKey).map(Self.normalizedCityName)
+            let semanticPlace: String?
+            if let normalizedCity {
+                if let storedHomeCity, !storedHomeCity.isEmpty {
+                    semanticPlace = storedHomeCity == normalizedCity ? "本城" : "外地"
+                } else {
+                    UserDefaults.standard.set(normalizedCity, forKey: homeCityKey)
+                    semanticPlace = "本城"
+                }
+            } else {
+                semanticPlace = nil
+            }
+            cachedCitySemanticValue = CitySemanticSnapshot(
+                cityName: normalizedCity,
+                semanticPlace: semanticPlace,
+                ts: Date()
+            )
+        }
+    }
+
+    private static func normalizedCityName(_ raw: String) -> String {
+        raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "市", with: "")
+            .replacingOccurrences(of: "地区", with: "")
+            .replacingOccurrences(of: "自治州", with: "")
     }
 }
 

@@ -1170,6 +1170,9 @@ final class PlaybackService {
     }
 
     private func weeklySceneMemoryLine(_ rows: [HomeItem]) -> String? {
+        if let contextLine = contextualMemoryLine(in: rows) {
+            return contextLine
+        }
         guard let scene = LifeSceneSemanticService.dominantScene(in: rows),
               scene.count >= 2 else {
             return nil
@@ -1307,6 +1310,9 @@ final class PlaybackService {
     }
 
     private func monthlyChangeText(current: [HomeItem], previous: [HomeItem], segments: [MonthSegment]) -> String {
+        if let contextLine = contextualMemoryLine(in: current) {
+            return contextLine
+        }
         if let change = meaningfulMonthlyCategoryChange(current: current, previous: previous) {
             let amountText = Self.money(abs(change.amountDelta))
             if change.previous == nil {
@@ -1332,6 +1338,30 @@ final class PlaybackService {
             return "记录从 \(Self.shortDateFormatter.string(from: first.createdAt)) 延续到 \(Self.shortDateFormatter.string(from: last.createdAt))，跨度 \(days) 天。"
         }
         return "这个月已经有几笔可以回看的记录。"
+    }
+
+    private func contextualMemoryLine(in rows: [HomeItem]) -> String? {
+        let candidates = rows.compactMap { item -> (item: HomeItem, tag: String, score: Int)? in
+            let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !tag.isEmpty else { return nil }
+            let text = "\(item.title) \(tag)"
+            var score = 0
+            if text.contains("雨天") || text.contains("下雨") || text.contains("雪天") { score += 50 }
+            if text.contains("第一次") { score += 45 }
+            if text.contains("第10次") || text.contains("第 10 次") { score += 42 }
+            if text.contains("连续") { score += 36 }
+            if text.contains("周末出门") || text.contains("周末路上") { score += 32 }
+            guard score > 0 else { return nil }
+            return (item, tag, score)
+        }
+        .sorted { lhs, rhs in
+            if lhs.score == rhs.score { return lhs.item.createdAt > rhs.item.createdAt }
+            return lhs.score > rhs.score
+        }
+
+        guard let best = candidates.first else { return nil }
+        let day = Self.shortWeekdayFormatter.string(from: best.item.createdAt)
+        return "\(day)这笔写着「\(best.tag)」，以后再看会知道当时发生了什么。"
     }
 
     private func meaningfulMonthlyCategoryChange(current: [HomeItem], previous: [HomeItem]) -> MonthlyCategoryChange? {

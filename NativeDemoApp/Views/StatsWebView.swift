@@ -673,6 +673,9 @@ struct StatsWebView: View {
             ]
         }
         var lines: [String] = []
+        if let contextLine = traceContextualMemoryLine(from: items) {
+            lines.append(contextLine)
+        }
         if let top = traceCategoryClues.first {
             let percent = Int((top.ratio * 100).rounded())
             lines.append("\(top.category.rawValue)占 \(percent)%，共 \(top.count) 笔，是占比最高的分类。")
@@ -688,6 +691,24 @@ struct StatsWebView: View {
             lines.append("现在只有一笔，先不做趋势判断。")
         }
         return Array(lines.prefix(3))
+    }
+
+    private func traceContextualMemoryLine(from items: [HomeItem]) -> String? {
+        let sorted = items.sorted { $0.createdAt > $1.createdAt }
+        if let item = sorted.first(where: { $0.category == .transport && $0.memoryContext?.weatherKind == "rain" }) {
+            if let city = item.memoryContext?.cityName, item.memoryContext?.semanticPlace == "外地" {
+                return "雨天出行发生在\(city)，这条线索不只是交通，也是在外地的一天。"
+            }
+            return "这段里出现过雨天出行，天气已经成为这条生活线索的一部分。"
+        }
+        if let item = sorted.first(where: { $0.memoryContext?.semanticPlace == "外地" }),
+           let city = item.memoryContext?.cityName {
+            return "有记录发生在\(city)，城市变化也被保留下来。"
+        }
+        if let item = sorted.first(where: { $0.memoryContext?.weatherKind == "rain" }) {
+            return "\(item.createdAt.zhBillDateTime)那天有雨，这笔记录带着当天的天气背景。"
+        }
+        return nil
     }
 
     private var traceRhythmPoints: [TraceRhythmPoint] {

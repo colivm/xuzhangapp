@@ -930,11 +930,12 @@ struct HomeView: View {
 
     private func todayRecordRowBackground(item: HomeItem, isEditing: Bool) -> some View {
         let accent = todayRecordCategoryAccent(for: item)
+        let rainTint = shouldUseRainMemoryBackground(for: item)
         return RoundedRectangle(cornerRadius: 19, style: .continuous)
             .fill(.ultraThinMaterial)
             .background(
                 RoundedRectangle(cornerRadius: 19, style: .continuous)
-                    .fill(Color.white.opacity(isEditing ? 0.62 : 0.52))
+                    .fill(rainTint ? Color(red: 0.74, green: 0.82, blue: 0.86).opacity(isEditing ? 0.48 : 0.56) : Color.white.opacity(isEditing ? 0.62 : 0.52))
             )
             .overlay(
                 LinearGradient(
@@ -945,9 +946,9 @@ struct HomeView: View {
                         AppColors.accent.opacity(0.18)
                     ]
                     : [
-                        Color.white.opacity(0.72),
-                        Color.white.opacity(0.42),
-                        accent.opacity(0.14)
+                        rainTint ? Color(red: 0.92, green: 0.96, blue: 0.98).opacity(0.78) : Color.white.opacity(0.72),
+                        rainTint ? Color(red: 0.64, green: 0.76, blue: 0.82).opacity(0.30) : Color.white.opacity(0.42),
+                        rainTint ? Color(red: 0.38, green: 0.55, blue: 0.64).opacity(0.20) : accent.opacity(0.14)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -970,7 +971,7 @@ struct HomeView: View {
             .overlay(alignment: .bottomTrailing) {
                 RadialGradient(
                     colors: [
-                        accent.opacity(isEditing ? 0.14 : 0.18),
+                        rainTint ? Color(red: 0.38, green: 0.56, blue: 0.65).opacity(isEditing ? 0.16 : 0.22) : accent.opacity(isEditing ? 0.14 : 0.18),
                         Color.white.opacity(0.0)
                     ],
                     center: .bottomTrailing,
@@ -1014,6 +1015,12 @@ struct HomeView: View {
                 ),
                 lineWidth: isEditing ? 1.3 : 1.1
             )
+    }
+
+    private func shouldUseRainMemoryBackground(for item: HomeItem) -> Bool {
+        let text = "\(item.title) \(item.emotionTag) \(item.displayEmotionTag)"
+        return item.category == .transport
+            && (item.memoryContext?.weatherKind == "rain" || text.contains("雨天") || text.contains("下雨"))
     }
 
     private var todayRecordPrimaryInk: Color {
