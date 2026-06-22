@@ -1826,33 +1826,40 @@ struct BillPlaybackSheet: View {
                         activeIndex = index
                         playbackDone = false
                     } label: {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(moment.eyebrow)
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(index == activeIndex ? AppColors.accent : AppColors.subtext)
-                                .lineLimit(1)
-                            Text(moment.title)
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(AppColors.text.opacity(index <= max(activeIndex, 0) ? 0.92 : 0.54))
-                                .lineLimit(2)
-                                .minimumScaleFactor(0.78)
-                        }
-                        .padding(9)
-                        .frame(width: 124, minHeight: 72, alignment: .topLeading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(index == activeIndex ? Color.white.opacity(0.70) : Color.white.opacity(0.32))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(index == activeIndex ? AppColors.accent.opacity(0.25) : Color.white.opacity(0.28), lineWidth: 1)
-                        )
+                        playbackFilmStripCard(moment: moment, index: index)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 1)
         }
+    }
+
+    private func playbackFilmStripCard(moment: PlaybackMoment, index: Int) -> some View {
+        let isActive = index == activeIndex
+        let isSeen = index <= max(activeIndex, 0)
+        return VStack(alignment: .leading, spacing: 5) {
+            Text(moment.eyebrow)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(isActive ? AppColors.accent : AppColors.subtext)
+                .lineLimit(1)
+            Text(moment.title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AppColors.text.opacity(isSeen ? 0.92 : 0.54))
+                .lineLimit(2)
+                .minimumScaleFactor(0.78)
+        }
+        .padding(9)
+        .frame(width: 124, alignment: .topLeading)
+        .frame(minHeight: 72, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isActive ? Color.white.opacity(0.70) : Color.white.opacity(0.32))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(isActive ? AppColors.accent.opacity(0.25) : Color.white.opacity(0.28), lineWidth: 1)
+        )
     }
 
     @ViewBuilder

@@ -6,6 +6,7 @@ struct ScenePackVisualStyle {
     let keyword: String
 }
 
+@MainActor
 enum ScenePackVisualStyles {
     static func style(for packId: String) -> ScenePackVisualStyle {
         switch packId {

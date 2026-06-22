@@ -440,7 +440,7 @@ struct MemberPricingView: View {
 
     private var lifetimeArchiveSection: some View {
         let snapshot = lifetimeArchiveSnapshot
-        VStack(alignment: .leading, spacing: 14) {
+        return VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
                 Image(systemName: "crown.fill")
                     .font(.system(size: 13, weight: .semibold))

@@ -3,7 +3,7 @@ import SwiftUI
 @MainActor
 final class ThemeResolver: ObservableObject {
     static let shared = ThemeResolver()
-    static let defaultThemeId = "xuzhang_default"
+    nonisolated static let defaultThemeId = "xuzhang_default"
 
     @Published private(set) var colors: ResolvedThemeTokens = .fallback
 
