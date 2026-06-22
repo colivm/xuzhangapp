@@ -265,7 +265,7 @@ struct InsightWebView: View {
         let monthItems = currentMonthPositiveItems
         let keywords = monthlyKeywordBubbles(from: monthItems)
 
-        VStack(alignment: .leading, spacing: 0) {
+        return VStack(alignment: .leading, spacing: 0) {
             insightJournalCard(weeklyBlocks: weeklyBlocks, weekItems: weekItems)
             insightChapterFootnote
             keywordBubbleSection(keywords: keywords)

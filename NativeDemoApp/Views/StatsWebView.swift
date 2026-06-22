@@ -903,7 +903,7 @@ struct StatsWebView: View {
             limit: 6
         )
         let lockedMark = hasMemberAccess ? nil : LifeMarkService.lockedPreview(for: items, allItems: homeViewModel.items)
-        VStack(spacing: 16) {
+        return VStack(spacing: 16) {
             traceClueHeroCard(items: items, clues: clues, rhythmPoints: rhythmPoints)
             traceClueCompositionCard(items: items, clues: clues)
             traceLifeMarkCard(marks: marks, lockedPreview: lockedMark)
