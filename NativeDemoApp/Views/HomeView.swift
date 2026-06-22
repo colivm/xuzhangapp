@@ -49,6 +49,12 @@ struct HomeView: View {
                     .padding(.trailing, 16)
                     .padding(.bottom, 102)
             }
+
+            if todayPlaybackQuotaMessage != nil {
+                todayPlaybackQuotaOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .zIndex(20)
+            }
         }
         .scrollIndicators(.hidden)
         .background(Color.clear)
@@ -93,20 +99,6 @@ struct HomeView: View {
         }
         .sheet(item: $editingItem) { item in
             editSheet(for: item)
-        }
-        .alert("今天先手动记也可以", isPresented: Binding(
-            get: { todayPlaybackQuotaMessage != nil },
-            set: { if !$0 { todayPlaybackQuotaMessage = nil } }
-        )) {
-            Button("让回放不中断") {
-                todayPlaybackQuotaMessage = nil
-                onShowMemberPricing?()
-            }
-            Button("知道了", role: .cancel) {
-                todayPlaybackQuotaMessage = nil
-            }
-        } message: {
-            Text(todayPlaybackQuotaMessage ?? "")
         }
     }
 
@@ -543,6 +535,109 @@ struct HomeView: View {
         }
         dailyQuotaStore.markTodayPlaybackStarted(isMember: isMember)
         showPlayback = true
+    }
+
+    private var todayPlaybackQuotaOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.18)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    dismissTodayPlaybackQuotaPrompt()
+                }
+
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(AppColors.accent)
+                        .frame(width: 36, height: 36)
+                        .background(
+                            Circle()
+                                .fill(AppColors.accent.opacity(0.12))
+                        )
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("今天先手动记也可以")
+                            .font(.system(size: 19, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+                        Text(todayPlaybackQuotaMessage ?? "")
+                            .font(.system(size: 14, weight: .medium))
+                            .lineSpacing(4)
+                            .foregroundStyle(AppColors.subtext)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    Button {
+                        dismissTodayPlaybackQuotaPrompt()
+                    } label: {
+                        Text("知道了")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(AppColors.text.opacity(0.82))
+                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(AppColors.surfaceMuted.opacity(0.78))
+                            )
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(AppColors.line.opacity(0.52), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        dismissTodayPlaybackQuotaPrompt()
+                        onShowMemberPricing?()
+                    } label: {
+                        Text("让回放不中断")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(AppColors.accent)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(20)
+            .frame(maxWidth: 360)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                AppColors.panelStrong.opacity(0.94),
+                                AppColors.panel.opacity(0.90),
+                                AppColors.surfaceMuted.opacity(0.62)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(AppColors.line.opacity(0.78), lineWidth: 1)
+            )
+            .shadow(color: AppColors.text.opacity(0.10), radius: 24, y: 14)
+            .padding(.horizontal, 26)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.easeInOut(duration: 0.18), value: todayPlaybackQuotaMessage != nil)
+    }
+
+    private func dismissTodayPlaybackQuotaPrompt() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            todayPlaybackQuotaMessage = nil
+        }
     }
 
     private var todayPetStamp: some View {

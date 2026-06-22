@@ -1305,6 +1305,7 @@ struct InsightWebView: View {
 
     private func aiCommandPresetSuggestions() -> [String] {
         var suggestions: [String] = []
+        var lockedPreviewSuggestions: [String] = []
         let recentItems = recentPositiveItems(days: 7)
         let todayWeatherKind = RecordMemoryContextService.weatherKindCode(
             from: WeatherCompanionService.shared.cachedSnapshot
@@ -1314,7 +1315,11 @@ struct InsightWebView: View {
         }
 
         if hasRainToday {
-            suggestions.append("上一次雨天通勤是什么时候？")
+            if hasMemberAccess {
+                suggestions.append("上一次雨天通勤是什么时候？")
+            } else {
+                lockedPreviewSuggestions.append("上一次雨天通勤是什么时候？")
+            }
         }
         if recentItems.contains(where: { $0.category == .dining }) {
             suggestions.append("过去三天餐饮花了多少？")
@@ -1340,7 +1345,7 @@ struct InsightWebView: View {
         }
 
         let fallback = ["过去三天餐饮花了多少？", "看一下这周交通", "找找最近有没有重复账单"]
-        return Array(uniqueAICommandSuggestions(suggestions + fallback).prefix(5))
+        return Array(uniqueAICommandSuggestions(suggestions + fallback + lockedPreviewSuggestions).prefix(5))
     }
 
     private func uniqueAICommandSuggestions(_ suggestions: [String]) -> [String] {

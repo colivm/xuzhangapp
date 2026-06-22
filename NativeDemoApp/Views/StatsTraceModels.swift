@@ -34,6 +34,13 @@ struct TraceDayGroup: Identifiable {
     let items: [HomeItem]
 }
 
+struct TraceMarkEvidenceGroup: Identifiable {
+    let id: String
+    let markLabel: String
+    let items: [HomeItem]
+    let overflowCount: Int
+}
+
 struct TraceCategoryClue: Identifiable {
     let id = UUID()
     let category: HomeItem.Category

@@ -203,6 +203,33 @@ struct StatsWebView: View {
         return selected.sorted { $0.createdAt > $1.createdAt }
     }
 
+    private func representativeTraceItems(
+        from items: [HomeItem],
+        maxItems: Int,
+        maxPerCategory: Int
+    ) -> [HomeItem] {
+        guard maxItems > 0 else { return [] }
+        let ranked = Array(items.enumerated()).sorted { lhs, rhs in
+            let leftScore = traceRepresentativeScore(item: lhs.element, index: lhs.offset)
+            let rightScore = traceRepresentativeScore(item: rhs.element, index: rhs.offset)
+            if leftScore == rightScore {
+                return lhs.element.createdAt > rhs.element.createdAt
+            }
+            return leftScore > rightScore
+        }
+
+        var selected: [HomeItem] = []
+        var categoryCounts: [String: Int] = [:]
+        for candidate in ranked where selected.count < maxItems {
+            let categoryKey = candidate.element.category.rawValue
+            let count = categoryCounts[categoryKey, default: 0]
+            guard count < maxPerCategory else { continue }
+            selected.append(candidate.element)
+            categoryCounts[categoryKey] = count + 1
+        }
+        return selected.sorted { $0.createdAt > $1.createdAt }
+    }
+
     private func traceRepresentativeScore(item: HomeItem, index: Int) -> Int {
         let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let defaultTitle = item.category.defaultRecordTitle
@@ -223,22 +250,27 @@ struct StatsWebView: View {
     }
 
     private func heroNarrativeText(from items: [HomeItem]) -> String {
+        heroNarrativeText(from: items, marks: traceLifeMarks(from: items, limit: 2))
+    }
+
+    private func heroNarrativeText(from items: [HomeItem], marks: [LifeMarkAggregate]) -> String {
         guard !items.isEmpty else {
             return selectedPeriod == .week
                 ? "这一周还没有记录。先留下几笔，之后会整理成一段场记。"
                 : "这个月还没有记录。先留下几笔，之后会整理成一段场记。"
         }
+        if let primaryMark = marks.first {
+            if selectedPeriod == .week {
+                return "\(traceMarkDisplayLabel(primaryMark))，是这周的主线"
+            }
+            return "这个月 · \(traceMarkDisplayLabel(primaryMark))"
+        }
         if let voice = heroMomentSelection(from: items).primary?.text {
             return selectedPeriod == .week
-                ? "这一周先记住「\(voice)」。数字放在旁边，生活句留在前面。"
-                : "这个月先记住「\(voice)」。统计放在旁边，生活句留在前面。"
+                ? "这一周先记住「\(voice)」"
+                : "这个月先记住「\(voice)」"
         }
-        let grouped = Dictionary(grouping: items, by: \.category)
-        let topCategory = grouped
-            .map { (category: $0.key, total: $0.value.reduce(0) { $0 + $1.amount }) }
-            .sorted { $0.total > $1.total }
-            .first?.category.rawValue ?? "日常"
-        return "这一段还没有具体备注，先看到「\(topCategory)」出现得多一点。"
+        return "这一段还散，多记几笔会收成一章。"
     }
 
     private var heroMomentSelection: PlaybackMomentSelection {
@@ -287,7 +319,10 @@ struct StatsWebView: View {
         let range = heroRange
         let items = heroScopedItems
         let hasData = !items.isEmpty
-        let narrative = heroNarrativeText(from: items)
+        let marks = traceLifeMarks(from: items, limit: 2)
+        let narrative = heroNarrativeText(from: items, marks: marks)
+        let chapterSummary = traceChapterSummary(from: items, marks: marks)
+        let evidenceGroups = traceMarkEvidenceGroups(from: items, marks: marks, maxItems: 3)
         let preview = buildSummaryLaunchPreview(for: range, items: items)
         let isMonthLocked = range == .month && !hasMemberAccess && quotaStore.monthRemaining(isMember: false) <= 0
         let canPlay = hasData && quotaStore.canPlay(range, isMember: hasMemberAccess)
@@ -295,23 +330,34 @@ struct StatsWebView: View {
         return VStack(alignment: .leading, spacing: 14) {
             traceRangeKicker
 
+            traceLifeMarkPillRow(marks)
+
             Text(narrative)
                 .font(.system(size: 16, weight: .medium))
                 .lineSpacing(5)
                 .foregroundStyle(AppColors.text)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(summaryLaunchSubtitle(preview: preview, range: range, hasData: hasData, isMonthLocked: isMonthLocked))
-                .font(.system(size: 13))
-                .foregroundStyle(AppColors.subtext)
-                .fixedSize(horizontal: false, vertical: true)
+            if let chapterSummary {
+                Text(chapterSummary)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Button {
                 handleSummaryPlaybackTap(range: range, hasData: hasData)
             } label: {
                 tracePlaybackLaunchCard(
                     title: isMonthLocked ? "了解会员" : "听听这一段",
-                    subtitle: playbackLaunchSubtitle(range: range, preview: preview, hasData: hasData, isMonthLocked: isMonthLocked),
+                    subtitle: playbackLaunchSubtitle(
+                        range: range,
+                        preview: preview,
+                        hasData: hasData,
+                        isMonthLocked: isMonthLocked,
+                        primaryMark: marks.first
+                    ),
                     systemImage: isMonthLocked ? "lock.fill" : "play.fill",
                     isEnabled: canPlay || isMonthLocked
                 )
@@ -320,15 +366,37 @@ struct StatsWebView: View {
             .disabled(!hasData && !isMonthLocked)
 
             if hasData {
-                VStack(spacing: 8) {
-                    ForEach(Array(representativeTraceItems(from: items).enumerated()), id: \.element.id) { _, item in
-                        Button {
-                            openEditor(for: item)
-                        } label: {
-                            traceSlipRow(item)
-                                .contentShape(Rectangle())
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(evidenceGroups) { group in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(group.markLabel)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(AppColors.subtext.opacity(0.86))
+
+                            ForEach(group.items) { item in
+                                Button {
+                                    openEditor(for: item)
+                                } label: {
+                                    traceSlipRow(item)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            if group.overflowCount > 0 {
+                                Button {
+                                    openTraceDetail()
+                                } label: {
+                                    Text("还有 \(group.overflowCount) 笔同类 · 细查")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(AppColors.tertiary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 8)
+                                        .padding(.top, 1)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
                 .padding(8)
@@ -345,6 +413,115 @@ struct StatsWebView: View {
             }
         }
         .paperChapterPanel(radius: 24, padding: 20)
+    }
+
+    private func traceLifeMarks(from items: [HomeItem], limit: Int) -> [LifeMarkAggregate] {
+        LifeMarkService.aggregates(
+            for: items,
+            allItems: homeViewModel.items,
+            isMember: hasMemberAccess,
+            limit: limit
+        )
+    }
+
+    private func traceMarkDisplayLabel(_ mark: LifeMarkAggregate) -> String {
+        switch mark.kind {
+        case .scene:
+            return mark.label
+        case .context, .milestone, .streak:
+            return mark.title
+        }
+    }
+
+    @ViewBuilder
+    private func traceLifeMarkPillRow(_ marks: [LifeMarkAggregate]) -> some View {
+        let visibleMarks = marks.enumerated().compactMap { index, mark in
+            if index == 0, mark.count >= 1 { return mark }
+            if index == 1, mark.count >= 2 { return mark }
+            return nil
+        }
+        if !visibleMarks.isEmpty {
+            ScrollView(.horizontal) {
+                HStack(spacing: 7) {
+                    ForEach(visibleMarks) { mark in
+                        Text("\(traceLifeMarkIcon(for: mark)) \(traceMarkDisplayLabel(mark)) · \(mark.count)")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(AppColors.text.opacity(0.70))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(AppColors.paperWarm.opacity(0.50))
+                            )
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(AppColors.line.opacity(0.42), lineWidth: 0.7)
+                            )
+                    }
+                }
+                .padding(.horizontal, 1)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    private func traceChapterSummary(from items: [HomeItem], marks: [LifeMarkAggregate]) -> String? {
+        guard !items.isEmpty else { return nil }
+        guard let primaryMark = marks.first else { return nil }
+        return LifeMarkService.primaryLine(for: primaryMark)
+    }
+
+    private func traceMarkEvidenceGroups(
+        from items: [HomeItem],
+        marks: [LifeMarkAggregate],
+        maxItems: Int
+    ) -> [TraceMarkEvidenceGroup] {
+        guard maxItems > 0 else { return [] }
+        let sortedItems = items.sorted { $0.createdAt > $1.createdAt }
+        var groups: [TraceMarkEvidenceGroup] = []
+        var usedItemIDs = Set<UUID>()
+        var remainingSlots = maxItems
+
+        for (index, mark) in marks.enumerated() where remainingSlots > 0 {
+            if index == 1, mark.count < 2 { continue }
+            let markItemIDs = Set(mark.itemIDs)
+            let matchingItems = sortedItems.filter { markItemIDs.contains($0.id) }
+            guard !matchingItems.isEmpty else { continue }
+            let groupLimit = index == 0 ? min(2, remainingSlots) : remainingSlots
+            let visibleItems = matchingItems
+                .filter { !usedItemIDs.contains($0.id) }
+                .prefix(groupLimit)
+            guard !visibleItems.isEmpty else { continue }
+
+            let visibleArray = Array(visibleItems)
+            visibleArray.forEach { usedItemIDs.insert($0.id) }
+            remainingSlots -= visibleArray.count
+            groups.append(
+                TraceMarkEvidenceGroup(
+                    id: mark.id,
+                    markLabel: traceMarkDisplayLabel(mark),
+                    items: visibleArray,
+                    overflowCount: max(matchingItems.count - visibleArray.count, 0)
+                )
+            )
+        }
+
+        if !groups.isEmpty {
+            return groups
+        }
+
+        let fallbackItems = representativeTraceItems(from: sortedItems, maxItems: maxItems, maxPerCategory: 2)
+        guard !fallbackItems.isEmpty else { return [] }
+        return [
+            TraceMarkEvidenceGroup(
+                id: "fallback",
+                markLabel: "这一段里的笔笔",
+                items: fallbackItems,
+                overflowCount: max(sortedItems.count - fallbackItems.count, 0)
+            )
+        ]
     }
 
     private func tracePlaybackLaunchCard(
@@ -397,7 +574,8 @@ struct StatsWebView: View {
         range: SummaryPlaybackRange,
         preview: SummaryLaunchPreview,
         hasData: Bool,
-        isMonthLocked: Bool
+        isMonthLocked: Bool,
+        primaryMark: LifeMarkAggregate?
     ) -> String {
         if isMonthLocked {
             return "本月章节需要会员继续回看。"
@@ -407,6 +585,9 @@ struct StatsWebView: View {
         }
         let chapterCount = preview.chapterCount
         let rangeName = range == .week ? "这周" : "这个月"
+        if let primaryMark {
+            return "\(rangeName) \(preview.count) 笔，把「\(traceMarkDisplayLabel(primaryMark))」读成 \(chapterCount) 个章节。"
+        }
         return "\(rangeName) \(preview.count) 笔，整理成 \(chapterCount) 个章节。"
     }
 
@@ -2221,27 +2402,6 @@ struct StatsWebView: View {
             Button("知道了", role: .cancel) {
                 summaryQuotaMessage = nil
             }
-    }
-
-    // MARK: - Summary Playback Card
-
-    private func summaryLaunchSubtitle(
-        preview: SummaryLaunchPreview,
-        range: SummaryPlaybackRange,
-        hasData: Bool,
-        isMonthLocked: Bool
-    ) -> String {
-        guard hasData else { return "先留下几笔，这里就能讲出这一段。" }
-        if isMonthLocked {
-            return "会员专属 · 你的 10 次新用户体验已用完"
-        }
-        switch range {
-        case .week:
-            let category = preview.topCategory.map { "\($0)为主" } ?? "日常为主"
-            return "\(preview.count) 笔 · \(preview.total.formatted(.cny)) · \(category)"
-        case .month:
-            return "\(preview.count) 笔 · \(preview.total.formatted(.cny)) · 分段看完整月节奏"
-        }
     }
 
     private func summaryQuotaFootnote(range: SummaryPlaybackRange, hasData: Bool) -> String {
