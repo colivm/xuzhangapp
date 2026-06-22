@@ -3064,7 +3064,7 @@ struct InsightWebView: View {
     private var currentMonthPositiveItems: [HomeItem] {
         let calendar = Calendar.current
         let now = Date()
-        homeViewModel.items.filter {
+        return homeViewModel.items.filter {
             calendar.isDate($0.createdAt, equalTo: now, toGranularity: .month) && $0.amount > 0
         }
     }

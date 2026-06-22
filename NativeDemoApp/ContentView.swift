@@ -984,7 +984,7 @@ struct RecordEditSheet: View {
         if editFieldsUnchanged {
             return item.displayEmotionTag
         }
-        editPreviewResolution.emotionTag
+        return editPreviewResolution.emotionTag
     }
 
     private var editFieldsUnchanged: Bool {
