@@ -403,6 +403,7 @@ struct RecordView: View {
         trackMemberSceneUsage: Bool = true
     ) {
         dismissKeyboard()
+        let shouldPreserveUserNote = shouldPreserveUserNoteWhenChangingAngle
         lastDraftIntent = .category
         if trackMemberSceneUsage {
             markScenePackUsed(pack)
@@ -430,14 +431,28 @@ struct RecordView: View {
         )
         if !keepSelectedCategory {
             activeScenePack = pack
-            homeViewModel.applyScenePackDraft(title: title, category: pack.category)
+            if shouldPreserveUserNote {
+                homeViewModel.applyScenePackCategory(pack.category)
+            } else {
+                homeViewModel.applyScenePackDraft(title: title, category: pack.category)
+            }
         } else {
-            activeScenePack = nil
-            homeViewModel.inputTitle = title
+            if shouldPreserveUserNote {
+                activeScenePack = pack
+                homeViewModel.applyScenePackCategory(pack.category)
+            } else {
+                activeScenePack = nil
+                homeViewModel.inputTitle = title
+            }
         }
         if !keepSelectedCategory {
             showScenePackAppliedFeedback(pack)
         }
+    }
+
+    private var shouldPreserveUserNoteWhenChangingAngle: Bool {
+        let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !title.isEmpty && lastDraftIntent == .note
     }
 
     private func scenePackVariantKey(

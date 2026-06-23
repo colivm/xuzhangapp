@@ -272,6 +272,12 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["机票", "机场", "航班"]) { return "飞一程记下" }
             if containsAny(text, ["高速", "过路费", "etc"]) { return "路上通行一笔" }
         case .shopping:
+            if containsAny(text, ["渔具", "鱼竿", "鱼线", "鱼饵", "路亚", "钓箱", "钓椅"]) {
+                return "给喜欢的事添点装备"
+            }
+            if containsAny(text, ["露营", "帐篷", "天幕", "睡袋", "骑行", "头盔", "摄影", "相机", "镜头", "乐器", "吉他", "键盘"]) {
+                return "爱好里的小投入"
+            }
             if containsAny(text, ["奶粉"]) { return "宝宝口粮补上" }
             if containsAny(text, ["尿不湿", "纸尿裤", "拉拉裤"]) { return "照护用品补齐" }
             if containsAny(text, ["辅食", "奶瓶", "安抚奶嘴"]) { return "宝宝照护补上" }

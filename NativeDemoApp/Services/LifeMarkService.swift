@@ -193,7 +193,7 @@ enum LifeMarkService {
             categories: [.shopping, .daily, .health, .entertainment],
             keywords: ["渔具", "鱼竿", "鱼线", "鱼饵", "路亚", "钓箱", "钓椅", "露营", "帐篷", "天幕", "睡袋", "骑行", "头盔", "码表", "摄影", "相机", "镜头", "模型", "手办", "乐器", "吉他", "键盘", "茶具", "咖啡器具", "磨豆机", "滤杯"],
             access: .free,
-            priority: 35,
+            priority: 18,
             minimumCount: 1,
             requiresKeywordMatch: true
         ),
@@ -583,6 +583,9 @@ enum LifeMarkService {
         }
         let categoryMatched = definition.categories.contains(item.category)
         let keywordMatched = containsAny(semanticText(for: item), definition.keywords)
+        if definition.id == "daily_supply", item.category != .daily {
+            return categoryMatched && keywordMatched
+        }
         return definition.requiresKeywordMatch
             ? categoryMatched && keywordMatched
             : categoryMatched || keywordMatched
