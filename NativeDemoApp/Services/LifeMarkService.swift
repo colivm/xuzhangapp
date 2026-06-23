@@ -49,6 +49,10 @@ private struct LifeMarkDefinition {
 }
 
 enum LifeMarkService {
+    private static var aggregateCache: [String: [LifeMarkAggregate]] = [:]
+    private static var aggregateCacheOrder: [String] = []
+    private static let aggregateCacheLimit = 48
+
     private static let definitions: [LifeMarkDefinition] = [
         LifeMarkDefinition(
             id: "fitness",
@@ -228,12 +232,22 @@ enum LifeMarkService {
         guard !periodItems.isEmpty else { return [] }
 
         let history = (allItems ?? items).filter { $0.amount > 0 && $0.draftMeta == nil }
-        var rows = sceneAggregates(for: periodItems)
+        let cacheKey = aggregateCacheKey(
+            periodItems: periodItems,
+            historyItems: history,
+            isMember: isMember,
+            limit: limit
+        )
+        if let cached = aggregateCache[cacheKey] {
+            return cached
+        }
+
+        var rows = sceneAggregates(for: periodItems, historyItems: history)
         rows += contextAggregates(for: periodItems)
         rows += milestoneAggregates(periodItems: periodItems, historyItems: history)
         rows += streakAggregates(for: periodItems)
 
-        return rows
+        let result = rows
             .filter { isMember || $0.access == .free }
             .sorted { lhs, rhs in
                 if lhs.priority == rhs.priority {
@@ -244,6 +258,8 @@ enum LifeMarkService {
             }
             .prefix(limit)
             .map { $0 }
+        storeAggregateCache(result, for: cacheKey)
+        return result
     }
 
     static func lockedPreview(
@@ -260,6 +276,53 @@ enum LifeMarkService {
             return aggregate.detail
         case .context, .milestone, .streak:
             return aggregate.detail
+        }
+    }
+
+    private static func aggregateCacheKey(
+        periodItems: [HomeItem],
+        historyItems: [HomeItem],
+        isMember: Bool,
+        limit: Int
+    ) -> String {
+        [
+            isMember ? "member" : "free",
+            "limit:\(limit)",
+            "period:\(itemsSignature(periodItems))",
+            "history:\(itemsSignature(historyItems))"
+        ].joined(separator: "|")
+    }
+
+    private static func itemsSignature(_ items: [HomeItem]) -> String {
+        var hasher = Hasher()
+        hasher.combine(items.count)
+        for item in items {
+            hasher.combine(item.id)
+            hasher.combine(item.createdAt.timeIntervalSince1970)
+            hasher.combine(item.updatedAt.timeIntervalSince1970)
+            hasher.combine(item.amount)
+            hasher.combine(item.category.rawValue)
+            hasher.combine(item.title)
+            hasher.combine(item.emotionTag)
+            hasher.combine(item.source.rawValue)
+            hasher.combine(item.draftMeta?.status.rawValue)
+            hasher.combine(item.memoryContext?.weatherKind)
+            hasher.combine(item.memoryContext?.cityName)
+            hasher.combine(item.memoryContext?.semanticPlace)
+            hasher.combine(item.scenePackId)
+        }
+        return "\(hasher.finalize())"
+    }
+
+    private static func storeAggregateCache(_ result: [LifeMarkAggregate], for key: String) {
+        guard aggregateCache[key] == nil else {
+            return
+        }
+        aggregateCache[key] = result
+        aggregateCacheOrder.append(key)
+        while aggregateCacheOrder.count > aggregateCacheLimit {
+            let staleKey = aggregateCacheOrder.removeFirst()
+            aggregateCache.removeValue(forKey: staleKey)
         }
     }
 
@@ -317,20 +380,25 @@ enum LifeMarkService {
         return nil
     }
 
-    private static func sceneAggregates(for items: [HomeItem]) -> [LifeMarkAggregate] {
+    private static func sceneAggregates(for items: [HomeItem], historyItems: [HomeItem]) -> [LifeMarkAggregate] {
         definitions.compactMap { definition in
             if ["weekend_gathering", "travel"].contains(definition.id) {
                 return nil
             }
             let matched = items.filter { matches($0, definition: definition) }
             guard matched.count >= definition.minimumCount else { return nil }
+            let historyMatched = historyItems.filter { matches($0, definition: definition) }
             return aggregate(
                 id: definition.id,
                 kind: .scene,
                 access: definition.access,
                 label: definition.label,
                 title: definition.label,
-                detail: sceneDetail(label: definition.label, count: matched.count),
+                detail: sceneDetail(
+                    label: definition.label,
+                    periodCount: matched.count,
+                    historyCount: historyMatched.count
+                ),
                 category: definition.category,
                 items: matched,
                 queryHint: queryHint(for: definition)
@@ -405,7 +473,15 @@ enum LifeMarkService {
         historyItems: [HomeItem]
     ) -> [LifeMarkAggregate] {
         let periodIDs = Set(periodItems.map(\.id))
-        let trackedDefinitionIDs = ["fitness", "coffee_drink", "baby_supply", "leisure", "home_utilities"]
+        let trackedDefinitionIDs = [
+            "fitness",
+            "coffee_drink",
+            "baby_supply",
+            "pet_supply",
+            "interest_gear",
+            "leisure",
+            "home_utilities"
+        ]
         var rows: [LifeMarkAggregate] = []
         for id in trackedDefinitionIDs {
             guard let definition = definitions.first(where: { $0.id == id }) else { continue }
@@ -415,24 +491,29 @@ enum LifeMarkService {
             let sorted = historyItems
                 .filter { matches($0, definition: definition) }
                 .sorted { $0.createdAt < $1.createdAt }
-            for target in [1, 10, 30, 50] where sorted.count >= target {
-                let item = sorted[target - 1]
-                guard periodIDs.contains(item.id), periodMatchedIDs.contains(item.id) else { continue }
-                let label = milestoneLabel(for: definition, item: item)
-                let title = target == 1 ? "第一次\(label)" : "\(label)第 \(target) 次"
-                let detail = milestoneDetail(label: label, target: target)
-                rows.append(aggregate(
-                    id: "\(definition.id)_milestone_\(target)",
-                    kind: .milestone,
-                    access: .member,
-                    label: title,
-                    title: title,
-                    detail: detail,
-                    category: definition.category,
-                    items: [item],
-                    queryHint: target == 1 ? "第一次\(label)是哪天？" : "\(label)第 \(target) 次是哪天？",
-                    priorityOverride: target == 1 ? 4 : 6
-                ))
+            let grouped = Dictionary(grouping: sorted) { item in
+                milestoneLabel(for: definition, item: item)
+            }
+            for (label, labelItems) in grouped {
+                let labelSorted = labelItems.sorted { $0.createdAt < $1.createdAt }
+                for target in [1, 10, 30, 50] where labelSorted.count >= target {
+                    let item = labelSorted[target - 1]
+                    guard periodIDs.contains(item.id), periodMatchedIDs.contains(item.id) else { continue }
+                    let title = target == 1 ? "第一次\(label)" : "\(label)第 \(target) 次"
+                    let detail = milestoneDetail(label: label, target: target)
+                    rows.append(aggregate(
+                        id: "\(definition.id)_\(label)_milestone_\(target)",
+                        kind: .milestone,
+                        access: .member,
+                        label: title,
+                        title: title,
+                        detail: detail,
+                        category: definition.category,
+                        items: [item],
+                        queryHint: target == 1 ? "第一次\(label)是哪天？" : "\(label)第 \(target) 次是哪天？",
+                        priorityOverride: target == 1 ? 4 : 6
+                    ))
+                }
             }
         }
         return rows
@@ -512,21 +593,50 @@ enum LifeMarkService {
         return matches(item, definition: definition)
     }
 
-    private static func sceneDetail(label: String, count: Int) -> String {
+    private static func sceneDetail(label: String, periodCount: Int, historyCount: Int) -> String {
+        let recurring = historyCount > periodCount
+        let count = periodCount
+        let historyText = historyCount > count ? "，账本里已经累计 \(historyCount) 次" : ""
         switch label {
         case "健身恢复":
-            return count == 1 ? "健身恢复出现了 1 次，是一个好的开始。" : "健身恢复出现 \(count) 次，身体这条线正在变清楚。"
+            if recurring {
+                return "健身恢复又出现了\(historyText)，身体这条线正在变得有节奏。"
+            }
+            return count == 1 ? "健身恢复被记下来了，这是身体这条线的开头。" : "健身恢复出现 \(count) 次，身体这条线正在变清楚。"
+        case "咖啡奶茶":
+            if recurring {
+                return "咖啡奶茶又落进这段记录\(historyText)，这类小补给已经是生活里的固定节点。"
+            }
+            return count == 1 ? "咖啡奶茶被记下来了，以后再看会知道今天从哪一杯开始。" : "咖啡奶茶出现 \(count) 次，这些小补给正在连成一天里的节奏。"
         case "宝宝照护":
+            if recurring {
+                return "宝宝照护又被记下\(historyText)，这些不是零散采购，是照护节奏的一部分。"
+            }
             return "宝宝相关用品出现 \(count) 次，这类记录会慢慢变成照护节奏。"
         case "房租水电物业":
+            if recurring {
+                return "家账线索又出现了\(historyText)，以后按月回看会更清楚。"
+            }
             return "水电、房租或物业这类家账出现 \(count) 次，适合按月回看。"
         case "休闲娱乐":
+            if recurring {
+                return "休闲娱乐又出现了\(historyText)，能看出你把松弛留给了哪里。"
+            }
             return "休闲娱乐出现 \(count) 次，能看出这段时间把松弛留给了哪里。"
         case "出去玩订酒店买票":
+            if recurring {
+                return "旅行和异地线索又出现了\(historyText)，可以和城市、天气一起回看。"
+            }
             return "旅行和异地线索出现 \(count) 次，可以和城市、天气一起回看。"
         case "兴趣装备":
+            if recurring {
+                return "兴趣装备又出现了\(historyText)，这条爱好线值得被长期记住。"
+            }
             return "兴趣装备出现 \(count) 次，这类小众爱好不用单独成包，也值得被记住。"
         default:
+            if recurring {
+                return "\(label)又出现了\(historyText)，这条生活线索正在延续。"
+            }
             return "\(label)出现 \(count) 次，已经可以作为一条生活线索。"
         }
     }
@@ -535,13 +645,41 @@ enum LifeMarkService {
         if target == 1 {
             switch label {
             case "健身恢复":
-                return "第一次健身恢复被记下来了，真是一个好的开始。"
-            case "宝宝照护":
+                return "第一次健身恢复被记下来了；以后再有同类记录，就能回看上一次、连续几次和身体这条线。"
+            case "咖啡奶茶":
+                return "第一杯咖啡奶茶被记下来了；以后它会继续累计成小补给习惯，而不只是一笔餐饮。"
+            case "给宝宝买奶粉":
+                return "第一次给宝宝买奶粉被记下来了；这不是普通日用品，是照护生活真正开始留下痕迹。"
+            case "给宝宝买尿不湿":
+                return "第一次给宝宝买尿不湿被记下来了；以后这些小小消耗，会连成照顾一个小生命的节奏。"
+            case "给宝宝买辅食":
+                return "第一次给宝宝买辅食被记下来了；从这一笔开始，成长也会在账本里慢慢有线索。"
+            case "给宝宝买照护用品", "宝宝照护":
                 return "第一次宝宝照护用品被记下来了；之后如果还有同类记录，会一起形成照护节奏。"
+            case "给毛孩子买狗粮":
+                return "第一次给毛孩子买狗粮被记下来了；它不是一笔普通购物，是家里多了一个需要照顾的日常。"
+            case "给毛孩子买猫粮":
+                return "第一次给毛孩子买猫粮被记下来了；以后这些补给，会慢慢连成陪伴它生活的节奏。"
+            case "给毛孩子买猫砂":
+                return "第一次给毛孩子买猫砂被记下来了；这些细碎开销，其实都是一起生活的证据。"
+            case "给毛孩子买零食":
+                return "第一次给毛孩子买零食被记下来了；以后再看，会知道那些宠爱是从哪一笔开始的。"
+            case "照顾毛孩子", "毛孩子照护":
+                return "第一次毛孩子照护被记下来了；以后就能回看它在生活里留下的长期陪伴。"
+            case "露营":
+                return "第一次露营被记下来了；以后再看到帐篷、天幕和路上的花费，会知道这条户外生活线从哪里开始。"
+            case "买渔具":
+                return "第一次买渔具被记下来了；这不是普通装备，是一个爱好开始有了自己的痕迹。"
+            case "骑行装备":
+                return "第一次骑行装备被记下来了；以后路线、装备和出发的日子会慢慢连起来。"
+            case "摄影装备":
+                return "第一次摄影装备被记下来了；以后再回看，会知道你是从哪一笔开始认真留住画面。"
+            case "买乐器":
+                return "第一次买乐器被记下来了；一个爱好开始有声音，也开始在账本里留下形状。"
             case "水电燃气", "房租", "物业费", "宽带网费", "停车费", "话费", "租房押金":
                 return "这笔\(label)已经作为本月家账线索记录；有同类记录时，会继续归到这条线里。"
             default:
-                return "第一次\(label)被记下来了；有同类记录时，会继续归到这条线里。"
+                return "第一次\(label)被记下来了；后面再出现时，会继续归到这条线里，方便回看上一次和第几次。"
             }
         }
         switch label {
@@ -549,14 +687,87 @@ enum LifeMarkService {
             return "健身恢复来到第 \(target) 次，坚持已经开始有形状了。"
         case "咖啡奶茶":
             return "咖啡奶茶来到第 \(target) 次，这类小补给已经成为生活里的固定节点。"
+        case "给宝宝买奶粉", "给宝宝买尿不湿", "给宝宝买辅食", "给宝宝买照护用品", "宝宝照护":
+            return "\(label)来到第 \(target) 次，这些重复出现的小事，正在变成照顾宝宝的生活节奏。"
+        case "给毛孩子买狗粮", "给毛孩子买猫粮", "给毛孩子买猫砂", "给毛孩子买零食", "照顾毛孩子", "毛孩子照护":
+            return "\(label)来到第 \(target) 次，陪伴不是一句话，是这些反复出现的日常。"
+        case "露营", "买渔具", "骑行装备", "摄影装备", "买乐器", "兴趣装备":
+            return "\(label)来到第 \(target) 次，这个爱好已经不只是偶然想起，而是在生活里有了位置。"
         default:
             return "\(label)来到第 \(target) 次，这不是孤立的一笔，是反复出现的生活痕迹。"
         }
     }
 
     private static func milestoneLabel(for definition: LifeMarkDefinition, item: HomeItem) -> String {
-        guard definition.id == "home_utilities" else { return definition.label }
-        return homeUtilityLabel(for: item)
+        switch definition.id {
+        case "baby_supply":
+            return babySupplyLabel(for: item)
+        case "pet_supply":
+            return petSupplyLabel(for: item)
+        case "interest_gear":
+            return interestGearLabel(for: item)
+        case "home_utilities":
+            return homeUtilityLabel(for: item)
+        default:
+            return definition.label
+        }
+    }
+
+    private static func babySupplyLabel(for item: HomeItem) -> String {
+        let text = semanticText(for: item)
+        if containsAny(text, ["奶粉"]) {
+            return "给宝宝买奶粉"
+        }
+        if containsAny(text, ["尿不湿", "纸尿裤", "拉拉裤"]) {
+            return "给宝宝买尿不湿"
+        }
+        if containsAny(text, ["辅食", "米粉"]) {
+            return "给宝宝买辅食"
+        }
+        if containsAny(text, ["湿巾", "奶瓶", "安抚奶嘴"]) {
+            return "给宝宝买照护用品"
+        }
+        return "宝宝照护"
+    }
+
+    private static func petSupplyLabel(for item: HomeItem) -> String {
+        let text = semanticText(for: item)
+        if containsAny(text, ["狗粮"]) {
+            return "给毛孩子买狗粮"
+        }
+        if containsAny(text, ["猫粮"]) {
+            return "给毛孩子买猫粮"
+        }
+        if containsAny(text, ["猫砂"]) {
+            return "给毛孩子买猫砂"
+        }
+        if containsAny(text, ["冻干", "罐头"]) {
+            return "给毛孩子买零食"
+        }
+        if containsAny(text, ["宠物医院", "驱虫", "洗护"]) {
+            return "照顾毛孩子"
+        }
+        return "毛孩子照护"
+    }
+
+    private static func interestGearLabel(for item: HomeItem) -> String {
+        let text = semanticText(for: item)
+        if containsAny(text, ["露营", "帐篷", "天幕", "睡袋"]) {
+            return "露营"
+        }
+        if containsAny(text, ["渔具", "鱼竿", "鱼线", "鱼饵", "路亚", "钓箱", "钓椅"]) {
+            return "买渔具"
+        }
+        if containsAny(text, ["骑行", "头盔", "码表"]) {
+            return "骑行装备"
+        }
+        if containsAny(text, ["摄影", "相机", "镜头"]) {
+            return "摄影装备"
+        }
+        if containsAny(text, ["乐器", "吉他", "键盘"]) {
+            return "买乐器"
+        }
+        return "兴趣装备"
     }
 
     private static func homeUtilityLabel(for item: HomeItem) -> String {
@@ -591,9 +802,10 @@ enum LifeMarkService {
         case "coffee_drink": return "这周咖啡奶茶几次？"
         case "home_utilities": return "这个月房租水电物业多少？"
         case "baby_supply": return "这个月宝宝奶粉买了几次？"
+        case "pet_supply": return "上一次给毛孩子买狗粮是哪天？"
         case "leisure": return "上周休闲娱乐花了多少钱？"
         case "travel": return "上一次出去玩订酒店买票是什么时候？"
-        case "interest_gear": return "这个月兴趣装备买了几次？"
+        case "interest_gear": return "第一次露营或买渔具是哪天？"
         default: return "这个月\(definition.label)几次？"
         }
     }

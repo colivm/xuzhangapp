@@ -878,16 +878,25 @@ final class HomeViewModel: ObservableObject {
                 return "这个时间附近常这样记。"
             }
             if let category = result.category {
+                if category == .other {
+                    return "还没看出明确场景，先放到「其他」。"
+                }
                 return "这个时间附近常是「\(category.label)」。"
             }
             return nil
         case "habit":
             if let category = result.category {
+                if category == .other {
+                    return "还没看出明确场景，先放到「其他」。"
+                }
                 return "这个时间附近常是「\(category.label)」。"
             }
             return nil
         case "frequent":
             if let category = result.category {
+                if category == .other {
+                    return "还没看出明确场景，先放到「其他」。"
+                }
                 return "这个时间附近常是「\(category.label)」。"
             }
             return nil

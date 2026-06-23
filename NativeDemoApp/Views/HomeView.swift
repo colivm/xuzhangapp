@@ -1035,7 +1035,7 @@ struct HomeView: View {
         guard item.amount > 0 else { return nil }
         guard let mark = LifeMarkService.aggregates(
             for: [item],
-            allItems: nil,
+            allItems: homeViewModel.items,
             isMember: settingsViewModel.settings.hasMemberAccess,
             limit: 1
         ).first else {
@@ -2019,7 +2019,7 @@ struct BillPlaybackSheet: View {
         let topCategory = topCategoryText()
         let dominantScene = LifeSceneSemanticService.dominantScene(in: todayItems)
         let lifeMark = LifeMarkService
-            .aggregates(for: todayItems, allItems: todayItems, isMember: true, limit: 1)
+            .aggregates(for: todayItems, allItems: homeViewModel.items, isMember: true, limit: 1)
             .first
         if todayItems.count > 8 {
             return densePlaybackMoments(

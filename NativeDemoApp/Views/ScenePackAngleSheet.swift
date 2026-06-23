@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct ScenePackAngleSheet: View {
     private enum Mode {
@@ -21,6 +22,8 @@ struct ScenePackAngleSheet: View {
         let moreScenePacks: [ScenePackDefinition]
         let replaceableScenePacks: [ScenePackDefinition]
         let lockedSceneHint: LockedSceneHint?
+        let pendingLifeMarkReward: LifeMarkSceneReward?
+        let activeLifeMarkReward: LifeMarkSceneReward?
         let isInFirstWeek: Bool
         let daysUntilExtensionLock: Int
         let canReplacePackCombination: Bool
@@ -32,6 +35,7 @@ struct ScenePackAngleSheet: View {
         let onReorderFreePacks: (_ orderedPackIds: [String]) -> Void
         let onSelectFreePack: (ScenePackDefinition) -> Void
         let onReplaceFreePack: (_ slot: Int, _ oldId: String, _ newPack: ScenePackDefinition) -> Void
+        let onClaimLifeMarkReward: (LifeMarkSceneReward) -> Void
         let onShowMemberPricing: () -> Void
     }
 
@@ -56,6 +60,8 @@ struct ScenePackAngleSheet: View {
     @State private var pendingReplacement: PendingReplacement?
     @State private var inlineNotice: String?
     @State private var freeCandidatesManuallyExpanded = false
+    @State private var draggingMemberPackID: String?
+    @State private var claimedLifeMarkRewardID: String?
 
     init(
         primaryScenePacks: [ScenePackDefinition],
@@ -82,6 +88,8 @@ struct ScenePackAngleSheet: View {
         moreScenePacks: [ScenePackDefinition],
         replaceableScenePacks: [ScenePackDefinition],
         lockedSceneHint: LockedSceneHint? = nil,
+        pendingLifeMarkReward: LifeMarkSceneReward? = nil,
+        activeLifeMarkReward: LifeMarkSceneReward? = nil,
         isInFirstWeek: Bool,
         daysUntilExtensionLock: Int,
         canReplacePackCombination: Bool,
@@ -93,6 +101,7 @@ struct ScenePackAngleSheet: View {
         onReorderFreePacks: @escaping (_ orderedPackIds: [String]) -> Void,
         onSelectFreePack: @escaping (ScenePackDefinition) -> Void,
         onReplaceFreePack: @escaping (_ slot: Int, _ oldId: String, _ newPack: ScenePackDefinition) -> Void,
+        onClaimLifeMarkReward: @escaping (LifeMarkSceneReward) -> Void,
         onShowMemberPricing: @escaping () -> Void
     ) {
         mode = .free(
@@ -101,6 +110,8 @@ struct ScenePackAngleSheet: View {
                 moreScenePacks: moreScenePacks,
                 replaceableScenePacks: replaceableScenePacks,
                 lockedSceneHint: lockedSceneHint,
+                pendingLifeMarkReward: pendingLifeMarkReward,
+                activeLifeMarkReward: activeLifeMarkReward,
                 isInFirstWeek: isInFirstWeek,
                 daysUntilExtensionLock: daysUntilExtensionLock,
                 canReplacePackCombination: canReplacePackCombination,
@@ -112,6 +123,7 @@ struct ScenePackAngleSheet: View {
                 onReorderFreePacks: onReorderFreePacks,
                 onSelectFreePack: onSelectFreePack,
                 onReplaceFreePack: onReplaceFreePack,
+                onClaimLifeMarkReward: onClaimLifeMarkReward,
                 onShowMemberPricing: onShowMemberPricing
             )
         )
@@ -297,6 +309,11 @@ struct ScenePackAngleSheet: View {
                 Image(systemName: selectedPackID == pack.id ? "checkmark.circle.fill" : "line.3.horizontal")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(selectedPackID == pack.id ? AppColors.accent : AppColors.subtext.opacity(0.62))
+                    .onDrag {
+                        draggingMemberPackID = pack.id
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        return NSItemProvider(object: pack.id as NSString)
+                    }
             }
         }
         .padding(10)
@@ -308,6 +325,15 @@ struct ScenePackAngleSheet: View {
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(selectedPackID == pack.id ? AppColors.accent.opacity(0.30) : AppColors.line.opacity(0.55), lineWidth: 1)
+        )
+        .onDrop(
+            of: [UTType.plainText],
+            delegate: ScenePackMemberDropDelegate(
+                targetPack: pack,
+                displayedPacks: packs,
+                draggingPackID: $draggingMemberPackID,
+                onReorder: configuration.onReorderPacks
+            )
         )
     }
 
@@ -362,6 +388,13 @@ struct ScenePackAngleSheet: View {
             VStack(spacing: 14) {
                 if let hint = configuration.lockedSceneHint {
                     lockedSceneHintCard(hint, configuration: configuration)
+                }
+
+                if let reward = configuration.pendingLifeMarkReward,
+                   claimedLifeMarkRewardID != reward.id {
+                    pendingLifeMarkRewardCard(reward, configuration: configuration)
+                } else if let reward = configuration.activeLifeMarkReward {
+                    activeLifeMarkRewardCard(reward, configuration: configuration)
                 }
 
                 freeStatusCard(configuration)
@@ -905,6 +938,109 @@ struct ScenePackAngleSheet: View {
         .buttonStyle(.plain)
     }
 
+    private func pendingLifeMarkRewardCard(
+        _ reward: LifeMarkSceneReward,
+        configuration: FreeConfiguration
+    ) -> some View {
+        let pack = scenePack(for: reward.packId, configuration: configuration)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(AppColors.accent)
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(AppColors.accent.opacity(0.12)))
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("有 1 次生活印记奖励待领取")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                    Text("奖励一次免费体验")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppColors.accent)
+                    Text(pack.map { "领取后可体验「\($0.label)」7 天，不占用当前 3 个免费场景包。" } ?? reward.detail)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                configuration.onClaimLifeMarkReward(reward)
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    claimedLifeMarkRewardID = reward.id
+                    inlineNotice = pack.map { "已领取「\($0.label)」7 天体验" } ?? "已领取 7 天体验"
+                }
+            } label: {
+                Text("领取体验")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(AppColors.accent)
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(AppColors.accent.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppColors.accent.opacity(0.18), lineWidth: 1)
+        )
+    }
+
+    private func activeLifeMarkRewardCard(
+        _ reward: LifeMarkSceneReward,
+        configuration: FreeConfiguration
+    ) -> some View {
+        let pack = scenePack(for: reward.packId, configuration: configuration)
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(AppColors.accent)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(AppColors.accent.opacity(0.12)))
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(pack.map { "正在体验「\($0.label)」" } ?? "生活印记奖励体验中")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                Text("这 7 天不占用当前 3 个免费场景包。先用起来，形成习惯后再决定是否保留。")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(AppColors.accent.opacity(0.07))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppColors.accent.opacity(0.16), lineWidth: 1)
+        )
+    }
+
+    private func scenePack(
+        for packId: String,
+        configuration: FreeConfiguration
+    ) -> ScenePackDefinition? {
+        (configuration.freeScenePacks + configuration.moreScenePacks)
+            .first { $0.id == packId }
+            ?? ScenePackCopyPool.definitions.first { $0.id == packId }
+    }
+
     private func lockedSceneHintCard(
         _ hint: LockedSceneHint,
         configuration: FreeConfiguration
@@ -1216,5 +1352,37 @@ struct ScenePackAngleSheet: View {
         default:
             return ([AppColors.accent, AppColors.heroGradientTeal], ["sparkles"], "生活")
         }
+    }
+}
+
+private struct ScenePackMemberDropDelegate: DropDelegate {
+    let targetPack: ScenePackDefinition
+    let displayedPacks: [ScenePackDefinition]
+    @Binding var draggingPackID: String?
+    let onReorder: (_ orderedPackIds: [String], _ movedPackIds: Set<String>) -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let draggingPackID,
+              draggingPackID != targetPack.id,
+              let sourceIndex = displayedPacks.firstIndex(where: { $0.id == draggingPackID }),
+              let targetIndex = displayedPacks.firstIndex(where: { $0.id == targetPack.id }) else {
+            return
+        }
+
+        var nextPacks = displayedPacks
+        nextPacks.move(
+            fromOffsets: IndexSet(integer: sourceIndex),
+            toOffset: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
+        )
+        onReorder(nextPacks.map(\.id), [draggingPackID])
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingPackID = nil
+        return true
     }
 }

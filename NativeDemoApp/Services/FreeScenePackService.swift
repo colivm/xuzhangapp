@@ -1,5 +1,229 @@
 import Foundation
 
+struct LifeMarkSceneReward: Identifiable, Codable, Equatable {
+    let id: String
+    let groupId: String
+    let packId: String
+    let title: String
+    let detail: String
+    let createdAt: TimeInterval
+    let expiresAt: TimeInterval
+}
+
+final class LifeMarkSceneRewardService {
+    static let shared = LifeMarkSceneRewardService()
+
+    private struct RewardCandidate {
+        let groupId: String
+        let packId: String
+        let keywords: [String]
+        let title: String
+        let detail: String
+    }
+
+    private let defaults: UserDefaults
+    private let now: () -> Date
+
+    private let pendingKey = "life_mark_scene_reward_pending_v1"
+    private let activeKey = "life_mark_scene_reward_active_v1"
+    private let claimedGroupsKey = "life_mark_scene_reward_claimed_groups_v1"
+    private let coldStartGuideSeenKey = "life_mark_scene_reward_cold_start_seen_v1"
+    private let lastRewardCreatedDayKey = "life_mark_scene_reward_last_created_day_v1"
+    private let rewardDuration: TimeInterval = 7 * 24 * 60 * 60
+
+    init(
+        defaults: UserDefaults = .standard,
+        now: @escaping () -> Date = Date.init
+    ) {
+        self.defaults = defaults
+        self.now = now
+    }
+
+    func pendingReward(from definitions: [ScenePackDefinition]) -> LifeMarkSceneReward? {
+        guard let reward = decodeReward(forKey: pendingKey),
+              definitions.contains(where: { $0.id == reward.packId }) else { return nil }
+        return reward
+    }
+
+    func activeReward(from definitions: [ScenePackDefinition]) -> LifeMarkSceneReward? {
+        guard let reward = decodeReward(forKey: activeKey),
+              definitions.contains(where: { $0.id == reward.packId }) else { return nil }
+        guard now().timeIntervalSince1970 < reward.expiresAt else {
+            defaults.removeObject(forKey: activeKey)
+            return nil
+        }
+        return reward
+    }
+
+    @discardableResult
+    func registerRewardIfNeeded(
+        for item: HomeItem,
+        allItems: [HomeItem],
+        currentPackIds: Set<String>,
+        definitions: [ScenePackDefinition],
+        isMember: Bool
+    ) -> LifeMarkSceneReward? {
+        guard !isMember else { return nil }
+        guard pendingReward(from: definitions) == nil else { return nil }
+        let active = activeReward(from: definitions)
+        let claimedGroups = claimedGroupIds()
+        let currentDayKey = dayKey(for: now())
+        guard defaults.string(forKey: lastRewardCreatedDayKey) != currentDayKey else { return nil }
+        guard let candidate = rewardCandidate(for: item) else { return nil }
+        guard !currentPackIds.contains(candidate.packId) else { return nil }
+        guard active?.groupId != candidate.groupId else { return nil }
+        guard !claimedGroups.contains(candidate.groupId) else { return nil }
+        guard definitions.contains(where: { $0.id == candidate.packId }) else { return nil }
+        guard isFirstStrongLifeMark(item: item, allItems: allItems, candidate: candidate) else { return nil }
+
+        let current = now().timeIntervalSince1970
+        let reward = LifeMarkSceneReward(
+            id: "\(candidate.groupId)_\(Int(current))",
+            groupId: candidate.groupId,
+            packId: candidate.packId,
+            title: candidate.title,
+            detail: candidate.detail,
+            createdAt: current,
+            expiresAt: current + rewardDuration
+        )
+        encodeReward(reward, forKey: pendingKey)
+        defaults.set(currentDayKey, forKey: lastRewardCreatedDayKey)
+        return reward
+    }
+
+    @discardableResult
+    func claimReward(_ reward: LifeMarkSceneReward, from definitions: [ScenePackDefinition]) -> LifeMarkSceneReward? {
+        guard definitions.contains(where: { $0.id == reward.packId }) else { return nil }
+        var claimedGroups = claimedGroupIds()
+        claimedGroups.insert(reward.groupId)
+        defaults.set(Array(claimedGroups).sorted(), forKey: claimedGroupsKey)
+
+        let current = now().timeIntervalSince1970
+        let active = LifeMarkSceneReward(
+            id: reward.id,
+            groupId: reward.groupId,
+            packId: reward.packId,
+            title: reward.title,
+            detail: reward.detail,
+            createdAt: current,
+            expiresAt: current + rewardDuration
+        )
+        encodeReward(active, forKey: activeKey)
+        defaults.removeObject(forKey: pendingKey)
+        return active
+    }
+
+    func shouldShowColdStartGuide(
+        after item: HomeItem,
+        allItems: [HomeItem],
+        isMember: Bool
+    ) -> Bool {
+        guard !isMember, !defaults.bool(forKey: coldStartGuideSeenKey) else { return false }
+        let currentMarks = LifeMarkService.aggregates(for: [item], allItems: allItems, isMember: true, limit: 1)
+        guard !currentMarks.isEmpty else { return false }
+        let previousItems = allItems.filter { $0.id != item.id }
+        let previousMarks = LifeMarkService.aggregates(for: previousItems, allItems: previousItems, isMember: true, limit: 1)
+        return previousMarks.isEmpty
+    }
+
+    func markColdStartGuideSeen() {
+        defaults.set(true, forKey: coldStartGuideSeenKey)
+    }
+
+    private func rewardCandidate(for item: HomeItem) -> RewardCandidate? {
+        let text = semanticText(for: item)
+        if containsAny(text, ["奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "宝宝", "婴儿", "湿巾", "奶瓶"]) {
+            return RewardCandidate(
+                groupId: "family_baby",
+                packId: "family",
+                keywords: ["奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "宝宝", "婴儿", "湿巾", "奶瓶"],
+                title: "宝宝照护这条线开始了",
+                detail: "奖励体验「娃和毛孩」场景包 7 天，把奶粉、尿不湿和照护用品放到同一条生活线里。"
+            )
+        }
+        if containsAny(text, ["狗粮", "猫粮", "猫砂", "宠物", "毛孩子", "毛孩", "罐头", "冻干", "驱虫", "宠物医院"]) {
+            return RewardCandidate(
+                groupId: "family_pet",
+                packId: "family",
+                keywords: ["狗粮", "猫粮", "猫砂", "宠物", "毛孩子", "毛孩", "罐头", "冻干", "驱虫", "宠物医院"],
+                title: "毛孩子照护这条线开始了",
+                detail: "奖励体验「娃和毛孩」场景包 7 天，把口粮、猫砂、洗护和就医都放回照护日常。"
+            )
+        }
+        if containsAny(text, ["露营", "帐篷", "天幕", "睡袋", "渔具", "鱼竿", "鱼线", "鱼饵", "骑行", "摄影", "相机", "镜头", "乐器", "吉他", "键盘"]) {
+            return RewardCandidate(
+                groupId: "interest_gear",
+                packId: "shopping",
+                keywords: ["露营", "帐篷", "天幕", "睡袋", "渔具", "鱼竿", "鱼线", "鱼饵", "骑行", "摄影", "相机", "镜头", "乐器", "吉他", "键盘"],
+                title: "新的爱好线索被记下来了",
+                detail: "奖励体验「网购与装备」场景包 7 天，让露营、渔具、摄影这类兴趣投入不只停在购物分类。"
+            )
+        }
+        if containsAny(text, ["健身", "运动", "训练", "跑步", "瑜伽", "游泳", "私教", "健身卡", "健身房", "理疗", "康复", "护具"]) {
+            return RewardCandidate(
+                groupId: "care_fitness",
+                packId: "care",
+                keywords: ["健身", "运动", "训练", "跑步", "瑜伽", "游泳", "私教", "健身卡", "健身房", "理疗", "康复", "护具"],
+                title: "身体照护这条线开始了",
+                detail: "奖励体验「看病买药健身恢复」场景包 7 天，记录训练、恢复和身体状态的连续变化。"
+            )
+        }
+        if containsAny(text, ["酒店", "民宿", "住宿", "机票", "高铁", "火车", "机场", "景区", "景点", "门票", "旅行", "旅游", "露营地"]) {
+            return RewardCandidate(
+                groupId: "travel_trip",
+                packId: "travel",
+                keywords: ["酒店", "民宿", "住宿", "机票", "高铁", "火车", "机场", "景区", "景点", "门票", "旅行", "旅游", "露营地"],
+                title: "一段出行线索被记下来了",
+                detail: "奖励体验「出去玩订酒店买票」场景包 7 天，把路费、住宿和门票连成一段行程。"
+            )
+        }
+        return nil
+    }
+
+    private func isFirstStrongLifeMark(
+        item: HomeItem,
+        allItems: [HomeItem],
+        candidate: RewardCandidate
+    ) -> Bool {
+        let previousItems = allItems.filter { $0.id != item.id }
+        return !previousItems.contains { previous in
+            containsAny(semanticText(for: previous), candidate.keywords)
+        }
+    }
+
+    private func semanticText(for item: HomeItem) -> String {
+        [
+            item.title,
+            item.emotionTag,
+            item.memoryContext?.semanticPlace ?? "",
+            item.memoryContext?.cityName ?? ""
+        ].joined(separator: " ")
+    }
+
+    private func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.localizedCaseInsensitiveContains($0) }
+    }
+
+    private func decodeReward(forKey key: String) -> LifeMarkSceneReward? {
+        guard let data = defaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(LifeMarkSceneReward.self, from: data)
+    }
+
+    private func encodeReward(_ reward: LifeMarkSceneReward, forKey key: String) {
+        guard let data = try? JSONEncoder().encode(reward) else { return }
+        defaults.set(data, forKey: key)
+    }
+
+    private func claimedGroupIds() -> Set<String> {
+        Set(defaults.stringArray(forKey: claimedGroupsKey) ?? [])
+    }
+
+    private func dayKey(for date: Date) -> String {
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return "\(components.year ?? 0)-\(components.month ?? 0)-\(components.day ?? 0)"
+    }
+}
+
 final class FreeScenePackService {
     static let shared = FreeScenePackService()
 

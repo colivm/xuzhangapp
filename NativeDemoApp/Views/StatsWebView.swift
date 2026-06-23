@@ -7,7 +7,7 @@ struct StatsWebView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     var openTraceRequestID: UUID? = nil
-    var onShowMemberPricing: (() -> Void)? = nil
+    var onShowMemberPricing: ((MemberPricingEntryContext) -> Void)? = nil
     var onOpenInsight: (() -> Void)? = nil
 
     @State var selectedPeriod: StatsPeriod = .week
@@ -33,6 +33,9 @@ struct StatsWebView: View {
     private let momentSelector = PlaybackMomentSelector()
     private let quotaStore = SummaryPlaybackQuotaStore()
     private let lifeInsightService = LifeInsightService.shared
+    private static var traceClueSnapshotCache: [String: TraceClueSnapshot] = [:]
+    private static var traceClueSnapshotCacheOrder: [String] = []
+    private static let traceClueSnapshotCacheLimit = 24
 
     var filteredItems: [HomeItem] {
         var items: [HomeItem]
@@ -278,7 +281,7 @@ struct StatsWebView: View {
     }
 
     private func heroMomentSelection(from items: [HomeItem]) -> PlaybackMomentSelection {
-        let periodKey = heroMomentPeriodKey
+        let periodKey = heroMomentPeriodKey(itemCount: items.count)
         let echoAnchor = heroMomentEchoAnchor(periodKey: periodKey, items: items)
         return momentSelector.select(
             from: items,
@@ -290,8 +293,12 @@ struct StatsWebView: View {
     }
 
     private var heroMomentPeriodKey: String {
+        heroMomentPeriodKey(itemCount: heroScopedItems.count)
+    }
+
+    private func heroMomentPeriodKey(itemCount: Int) -> String {
         if useCustomRange || selectedPeriod == .year {
-            return "trace-\(selectedPeriod.rawValue)-\(heroScopedItems.count)"
+            return "trace-\(selectedPeriod.rawValue)-\(itemCount)"
         }
         switch heroRange {
         case .week:
@@ -665,9 +672,7 @@ struct StatsWebView: View {
     private func traceViewModeTab(_ mode: TraceViewMode) -> some View {
         let isSelected = traceViewMode == mode
         return Button {
-            withAnimation(traceEditSpring) {
-                traceViewMode = mode
-            }
+            traceViewMode = mode
         } label: {
             Text(mode.rawValue)
                 .font(.system(size: 16, weight: isSelected ? .bold : .semibold))
@@ -1166,6 +1171,11 @@ struct StatsWebView: View {
 
     private func buildTraceClueSnapshot() -> TraceClueSnapshot {
         let items = traceClueItems
+        let cacheKey = traceClueSnapshotCacheKey(items: items)
+        if let cached = Self.traceClueSnapshotCache[cacheKey] {
+            return cached
+        }
+
         let clues = traceCategoryClues(from: items)
         let rhythmPoints = traceRhythmPoints(from: items)
         let insight = traceLifeInsight(from: items)
@@ -1180,7 +1190,7 @@ struct StatsWebView: View {
         let freeRemaining = lifeInsightService.freeRemaining(isMember: hasMemberAccess)
         let isUnlocked = lifeInsightService.hasUnlockedTrace(unlockKey, isMember: hasMemberAccess)
         let canUse = !items.isEmpty && (isUnlocked || freeRemaining > 0)
-        return TraceClueSnapshot(
+        let snapshot = TraceClueSnapshot(
             items: items,
             clues: clues,
             rhythmPoints: rhythmPoints,
@@ -1191,6 +1201,55 @@ struct StatsWebView: View {
             canUseDeepInsight: canUse,
             freeInsightRemaining: freeRemaining
         )
+        storeTraceClueSnapshot(snapshot, for: cacheKey)
+        return snapshot
+    }
+
+    private func traceClueSnapshotCacheKey(items: [HomeItem]) -> String {
+        [
+            selectedPeriod.rawValue,
+            useCustomRange ? "custom" : "preset",
+            "\(Int(customStartDate.timeIntervalSince1970))",
+            "\(Int(customEndDate.timeIntervalSince1970))",
+            selectedCategory?.rawValue ?? "all",
+            hasMemberAccess ? "member" : "free",
+            lifeInsightRefreshID.uuidString,
+            traceItemsSignature(items),
+            traceItemsSignature(homeViewModel.items)
+        ].joined(separator: "|")
+    }
+
+    private func traceItemsSignature(_ items: [HomeItem]) -> String {
+        var hasher = Hasher()
+        hasher.combine(items.count)
+        for item in items {
+            hasher.combine(item.id)
+            hasher.combine(item.createdAt.timeIntervalSince1970)
+            hasher.combine(item.updatedAt.timeIntervalSince1970)
+            hasher.combine(item.amount)
+            hasher.combine(item.category.rawValue)
+            hasher.combine(item.title)
+            hasher.combine(item.emotionTag)
+            hasher.combine(item.source.rawValue)
+            hasher.combine(item.draftMeta?.status.rawValue)
+            hasher.combine(item.memoryContext?.weatherKind)
+            hasher.combine(item.memoryContext?.cityName)
+            hasher.combine(item.memoryContext?.semanticPlace)
+            hasher.combine(item.scenePackId)
+        }
+        return "\(hasher.finalize())"
+    }
+
+    private func storeTraceClueSnapshot(_ snapshot: TraceClueSnapshot, for key: String) {
+        guard Self.traceClueSnapshotCache[key] == nil else {
+            return
+        }
+        Self.traceClueSnapshotCache[key] = snapshot
+        Self.traceClueSnapshotCacheOrder.append(key)
+        while Self.traceClueSnapshotCacheOrder.count > Self.traceClueSnapshotCacheLimit {
+            let staleKey = Self.traceClueSnapshotCacheOrder.removeFirst()
+            Self.traceClueSnapshotCache.removeValue(forKey: staleKey)
+        }
     }
 
     private func traceClueHeroCard(
@@ -1318,7 +1377,7 @@ struct StatsWebView: View {
 
             if let lockedPreview {
                 Button {
-                    onShowMemberPricing?()
+                    onShowMemberPricing?(.traceDeepInsight)
                 } label: {
                     HStack(spacing: 9) {
                         Image(systemName: "lock.fill")
@@ -1720,7 +1779,7 @@ struct StatsWebView: View {
         }
 
         guard canUseTraceDeepInsight else {
-            onShowMemberPricing?()
+            onShowMemberPricing?(.traceDeepInsight)
             return
         }
 
@@ -1743,7 +1802,7 @@ struct StatsWebView: View {
         }
 
         guard canUseTraceDeepInsight else {
-            onShowMemberPricing?()
+            onShowMemberPricing?(.traceDeepInsight)
             return
         }
 
@@ -2327,7 +2386,9 @@ struct StatsWebView: View {
                 }
                 quotaRefreshID = UUID()
             },
-            onShowMemberPricing: onShowMemberPricing,
+            onShowMemberPricing: {
+                onShowMemberPricing?(.playbackQuota)
+            },
             onOpenWeekly: {
                 useCustomRange = false
                 selectedPeriod = .week
@@ -2397,7 +2458,7 @@ struct StatsWebView: View {
             Button("让回放不中断") {
                 let shouldOpenMember = summaryQuotaMessage?.contains("会员") ?? false
                 summaryQuotaMessage = nil
-                if shouldOpenMember { onShowMemberPricing?() }
+                if shouldOpenMember { onShowMemberPricing?(.playbackQuota) }
             }
             Button("知道了", role: .cancel) {
                 summaryQuotaMessage = nil

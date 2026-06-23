@@ -42,18 +42,20 @@ struct TraceMarkEvidenceGroup: Identifiable {
 }
 
 struct TraceCategoryClue: Identifiable {
-    let id = UUID()
     let category: HomeItem.Category
     let count: Int
     let total: Double
     let ratio: Double
+
+    var id: String { category.rawValue }
 }
 
 struct TraceRhythmPoint: Identifiable {
-    let id = UUID()
     let label: String
     let count: Int
     let isToday: Bool
+
+    var id: String { label }
 }
 
 struct TrendPoint: Identifiable {

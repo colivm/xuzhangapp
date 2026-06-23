@@ -191,6 +191,7 @@ struct ContentView: View {
     @State private var selectedTab: AppTab = .today
     @State private var showMemberPricing = false
     @State private var pricingHighlightPlanId: String?
+    @State private var pricingEntryContext: MemberPricingEntryContext = .settings
     @State private var showMinimalOnboarding = false
     @State private var statsTraceOpenRequestID: UUID?
     @State private var settingsAppearanceOpenRequestID: UUID?
@@ -247,7 +248,10 @@ struct ContentView: View {
 
         }
         .sheet(isPresented: $showMemberPricing) {
-            MemberPricingView(highlightPlanId: pricingHighlightPlanId)
+            MemberPricingView(
+                highlightPlanId: pricingHighlightPlanId,
+                entryContext: pricingEntryContext
+            )
                 .environmentObject(settingsViewModel)
                 .environmentObject(homeViewModel)
                 .presentationDetents([.large])
@@ -255,6 +259,7 @@ struct ContentView: View {
                 .presentationBackground(AppColors.bg)
                 .onDisappear {
                     pricingHighlightPlanId = nil
+                    pricingEntryContext = .settings
                 }
         }
         .sheet(isPresented: $showMinimalOnboarding) {
@@ -378,22 +383,30 @@ struct ContentView: View {
                              selectTab(.stats)
                          },
                          onNavigateSettings: { selectTab(.settings) },
-                         onShowMemberPricing: { showMemberPricingSheet() })
+                         onShowMemberPricing: {
+                             showMemberPricingSheet(entryContext: .playbackQuota)
+                         })
             case .record:
                 RecordView(
                     onSaved: { selectTab(.today) },
-                    onShowMemberPricing: { showMemberPricingSheet() }
+                    onShowMemberPricing: { entryContext in
+                        showMemberPricingSheet(entryContext: entryContext)
+                    }
                 )
             case .stats:
                 StatsWebView(
                     openTraceRequestID: statsTraceOpenRequestID,
-                    onShowMemberPricing: { showMemberPricingSheet() },
+                    onShowMemberPricing: { entryContext in
+                        showMemberPricingSheet(entryContext: entryContext)
+                    },
                     onOpenInsight: { selectTab(.insight) }
                 )
             case .insight:
                 InsightWebView(
                     onNavigateSettings: { selectTab(.settings) },
-                    onShowMemberPricing: { showMemberPricingSheet() },
+                    onShowMemberPricing: {
+                        showMemberPricingSheet(entryContext: .aiCommand)
+                    },
                     onOpenAppearanceSettings: {
                         settingsAppearanceOpenRequestID = UUID()
                         selectTab(.settings)
@@ -403,6 +416,7 @@ struct ContentView: View {
                 SettingsView(
                     showMemberPricing: $showMemberPricing,
                     pricingHighlightPlanId: $pricingHighlightPlanId,
+                    pricingEntryContext: $pricingEntryContext,
                     openAppearanceRequestID: settingsAppearanceOpenRequestID,
                     onShowMinimalOnboarding: {
                         showMinimalOnboarding = true
@@ -418,8 +432,12 @@ struct ContentView: View {
         selectedTab = tab
     }
 
-    private func showMemberPricingSheet(highlightPlanId: String? = nil) {
+    private func showMemberPricingSheet(
+        highlightPlanId: String? = nil,
+        entryContext: MemberPricingEntryContext = .settings
+    ) {
         pricingHighlightPlanId = highlightPlanId
+        pricingEntryContext = highlightPlanId == "lifetime" ? .lifetime : entryContext
         showMemberPricing = true
     }
 
