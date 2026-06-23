@@ -100,6 +100,48 @@ enum NarrativeCopyResolver {
         }
 
         if !hasIncompatibleSemanticCue,
+           [.shopping, .daily].contains(context.category),
+           emotionRuleIDs.contains("baby_supply") {
+            if containsAny(lower, ["奶粉"]) {
+                return pick(
+                    ["宝宝口粮补上", "今天的奶粉安排好", "照护宝宝这一笔", "宝宝日常不断档"],
+                    seed: context.seed + "|babySupplyMilk"
+                )
+            }
+            if containsAny(lower, ["尿不湿", "纸尿裤", "拉拉裤"]) {
+                return pick(
+                    ["照护用品补齐", "宝宝换洗用品到位", "日常照护补上", "宝宝日常更安心"],
+                    seed: context.seed + "|babySupplyDiaper"
+                )
+            }
+            return pick(
+                ["宝宝照护用品到位", "照护宝宝这一笔", "宝宝日常补给", "家里的小照护记下"],
+                seed: context.seed + "|babySupply"
+            )
+        }
+
+        if !hasIncompatibleSemanticCue,
+           [.shopping, .daily].contains(context.category),
+           emotionRuleIDs.contains("pet_supply") {
+            if containsAny(lower, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) {
+                return pick(
+                    ["毛孩子口粮补上", "毛孩子饭碗续上", "宠物口粮记下", "照护毛孩子这一笔"],
+                    seed: context.seed + "|petSupplyFood"
+                )
+            }
+            if containsAny(lower, ["猫砂", "尿垫"]) {
+                return pick(
+                    ["毛孩子日常补给", "照护用品补齐", "家里的清爽补上", "毛孩子日常更安心"],
+                    seed: context.seed + "|petSupplyDaily"
+                )
+            }
+            return pick(
+                ["毛孩子日常补给", "照护毛孩子这一笔", "宠物用品补上", "家里的小照护记下"],
+                seed: context.seed + "|petSupply"
+            )
+        }
+
+        if !hasIncompatibleSemanticCue,
            [.health, .daily, .shopping].contains(context.category),
            emotionRuleIDs.contains("fitness") {
             return pick(

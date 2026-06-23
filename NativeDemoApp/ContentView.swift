@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import UIKit
 
@@ -196,6 +197,7 @@ struct ContentView: View {
     @State private var statsTraceOpenRequestID: UUID?
     @State private var settingsAppearanceOpenRequestID: UUID?
     @State private var lastMemberStatusRefreshAt: Date?
+    @State private var homeLifeMarkRewardPrompt: LifeMarkSceneRewardPrompt?
 
     enum AppTab: Int, CaseIterable, Identifiable {
         case today
@@ -246,6 +248,11 @@ struct ContentView: View {
             }
             .ignoresSafeArea(.keyboard, edges: .bottom)
 
+            if let homeLifeMarkRewardPrompt {
+                lifeMarkSceneRewardOverlay(homeLifeMarkRewardPrompt)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(5)
+            }
         }
         .sheet(isPresented: $showMemberPricing) {
             MemberPricingView(
@@ -388,7 +395,12 @@ struct ContentView: View {
                          })
             case .record:
                 RecordView(
-                    onSaved: { selectTab(.today) },
+                    onSaved: { prompt in
+                        selectTab(.today)
+                        if let prompt {
+                            showHomeLifeMarkRewardPrompt(prompt)
+                        }
+                    },
                     onShowMemberPricing: { entryContext in
                         showMemberPricingSheet(entryContext: entryContext)
                     }
@@ -430,6 +442,146 @@ struct ContentView: View {
     private func selectTab(_ tab: AppTab) {
         guard selectedTab != tab else { return }
         selectedTab = tab
+    }
+
+    private func showHomeLifeMarkRewardPrompt(_ prompt: LifeMarkSceneRewardPrompt) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                homeLifeMarkRewardPrompt = prompt
+            }
+        }
+    }
+
+    private func dismissHomeLifeMarkRewardPrompt(_ prompt: LifeMarkSceneRewardPrompt) {
+        if case .coldStart = prompt.kind {
+            LifeMarkSceneRewardService.shared.markColdStartGuideSeen()
+        }
+        withAnimation(.easeInOut(duration: 0.18)) {
+            homeLifeMarkRewardPrompt = nil
+        }
+    }
+
+    private func handleHomeLifeMarkRewardPrimary(_ prompt: LifeMarkSceneRewardPrompt) {
+        switch prompt.kind {
+        case .reward(let reward):
+            _ = LifeMarkSceneRewardService.shared.claimReward(reward, from: ScenePackCopyPool.definitions)
+            withAnimation(.easeInOut(duration: 0.18)) {
+                homeLifeMarkRewardPrompt = nil
+            }
+            selectTab(.record)
+        case .coldStart:
+            LifeMarkSceneRewardService.shared.markColdStartGuideSeen()
+            withAnimation(.easeInOut(duration: 0.18)) {
+                homeLifeMarkRewardPrompt = nil
+            }
+            selectTab(.record)
+        }
+    }
+
+    private func lifeMarkSceneRewardOverlay(_ prompt: LifeMarkSceneRewardPrompt) -> some View {
+        ZStack {
+            Color.black.opacity(0.24)
+                .ignoresSafeArea()
+
+            TimelineView(.animation) { context in
+                lifeMarkRewardAnimatedBackdrop(time: context.date.timeIntervalSinceReferenceDate)
+            }
+            .allowsHitTesting(false)
+
+            VStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(AppColors.accent.opacity(0.13))
+                        .frame(width: 58, height: 58)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(AppColors.accent)
+                }
+
+                VStack(spacing: 7) {
+                    Text(prompt.title)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                    Text(prompt.badge)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(AppColors.accent)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(AppColors.accent.opacity(0.12)))
+                    Text(prompt.detail)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 10) {
+                    Button {
+                        dismissHomeLifeMarkRewardPrompt(prompt)
+                    } label: {
+                        Text(prompt.secondaryTitle)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(AppColors.subtext)
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(AppColors.surfaceMuted.opacity(0.72))
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        handleHomeLifeMarkRewardPrimary(prompt)
+                    } label: {
+                        Text(prompt.primaryTitle)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(AppColors.accent)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 2)
+            }
+            .padding(18)
+            .frame(maxWidth: 340)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(AppColors.panel.opacity(0.96))
+                    .shadow(color: Color.black.opacity(0.18), radius: 28, x: 0, y: 16)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.white.opacity(0.72), lineWidth: 1)
+            )
+            .padding(.horizontal, 24)
+        }
+    }
+
+    private func lifeMarkRewardAnimatedBackdrop(time: TimeInterval) -> some View {
+        let drift = CGFloat(sin(time * 1.15))
+        let lift = CGFloat(cos(time * 0.9))
+        return ZStack {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(AppColors.accent.opacity(0.18), lineWidth: 1)
+                .frame(width: 260, height: 260)
+                .rotationEffect(.degrees(time.truncatingRemainder(dividingBy: 18) * 4))
+                .offset(x: drift * 18, y: lift * 12)
+
+            ForEach(0..<7, id: \.self) { index in
+                Image(systemName: index.isMultiple(of: 2) ? "sparkle" : "plus")
+                    .font(.system(size: index.isMultiple(of: 2) ? 13 : 10, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.58))
+                    .offset(
+                        x: CGFloat(index - 3) * 33 + drift * CGFloat(index + 2),
+                        y: CGFloat((index % 3) - 1) * 54 + lift * CGFloat(5 - index)
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func showMemberPricingSheet(

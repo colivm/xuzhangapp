@@ -395,6 +395,7 @@ struct ScenePackAngleSheet: View {
                     pendingLifeMarkRewardCard(reward, configuration: configuration)
                 } else if let reward = configuration.activeLifeMarkReward {
                     activeLifeMarkRewardCard(reward, configuration: configuration)
+                    activeLifeMarkRewardPackCard(reward, configuration: configuration)
                 }
 
                 freeStatusCard(configuration)
@@ -1030,6 +1031,67 @@ struct ScenePackAngleSheet: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(AppColors.accent.opacity(0.16), lineWidth: 1)
         )
+    }
+
+    @ViewBuilder
+    private func activeLifeMarkRewardPackCard(
+        _ reward: LifeMarkSceneReward,
+        configuration: FreeConfiguration
+    ) -> some View {
+        if let pack = scenePack(for: reward.packId, configuration: configuration) {
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                selectedPackID = pack.id
+                configuration.onSelectFreePack(pack)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                    dismiss()
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    scenePackVisual(pack, compact: true)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 7) {
+                            Text(pack.label)
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(AppColors.text)
+                                .lineLimit(1)
+                            Text("7天体验中")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(AppColors.accent)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(AppColors.accent.opacity(0.12)))
+                        }
+                        Text("不占 3 个免费名额，可以直接用这个角度记下一笔。")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Text("使用这个体验包")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                        .padding(.horizontal, 10)
+                        .frame(height: 32)
+                        .background(Capsule().fill(AppColors.accent))
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(AppColors.accent.opacity(selectedPackID == pack.id ? 0.13 : 0.08))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(AppColors.accent.opacity(0.22), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private func scenePack(
