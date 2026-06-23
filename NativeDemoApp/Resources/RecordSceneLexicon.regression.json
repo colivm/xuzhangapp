@@ -129,6 +129,38 @@
       "amount": 30,
       "rawText": "商户名称 充电桩 服务 付款金额 ¥30.00",
       "expectedCategory": "交通"
+    },
+    {
+      "id": "ocr-bianlifeng-brand-default-dining",
+      "mode": "ocr",
+      "amount": 5.5,
+      "rawText": "支付成功\n便利蜂\n￥5.50",
+      "expectedCategory": "餐饮",
+      "expectedTitle": "便利蜂"
+    },
+    {
+      "id": "ocr-familymart-brand-default-dining",
+      "mode": "ocr",
+      "amount": 12,
+      "rawText": "商户名称 全家 付款金额 ¥12.00",
+      "expectedCategory": "餐饮",
+      "expectedTitle": "全家"
+    },
+    {
+      "id": "manual-convenience-breakfast-dining",
+      "mode": "manual",
+      "amount": 8,
+      "time": "08:12",
+      "inputTitle": "便利蜂买早餐",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
+      "id": "manual-convenience-daily-goods-can-override-brand",
+      "mode": "manual",
+      "amount": 18,
+      "inputTitle": "全家纸巾",
+      "expectedCategory": "日用"
     }
   ]
 }
