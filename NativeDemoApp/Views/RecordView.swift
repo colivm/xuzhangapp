@@ -840,17 +840,19 @@ struct RecordView: View {
     }
 
     private func baseScenePack(for category: HomeItem.Category) -> ScenePackDefinition? {
+        let note = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let packId: String?
         switch category {
         case .dining: packId = "food"
-        case .transport: packId = "commute"
+        case .transport: packId = containsTravelKeyword(note) ? "travel" : "commute"
         case .shopping: packId = "shopping"
         case .lodging: packId = "travel"
         case .health: packId = "care"
         case .home: packId = "home"
         case .social: packId = "social"
-        case .daily: packId = "supply"
-        case .entertainment, .other: packId = nil
+        case .daily: packId = containsPetKeyword(note) || containsBabyKeyword(note) ? "family" : "supply"
+        case .entertainment: packId = containsTravelKeyword(note) ? "travel" : nil
+        case .other: packId = nil
         }
         guard let packId else { return nil }
         return visibleScenePacks.first { $0.id == packId }
