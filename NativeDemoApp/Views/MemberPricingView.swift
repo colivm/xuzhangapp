@@ -289,7 +289,7 @@ struct MemberPricingView: View {
 
     private var heroSection: some View {
         let content = heroContent
-        VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 8) {
             Text(content.title)
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(AppColors.text)
