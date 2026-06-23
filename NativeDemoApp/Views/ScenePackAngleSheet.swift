@@ -449,7 +449,7 @@ struct ScenePackAngleSheet: View {
 
     private func activeFreeModule(_ configuration: FreeConfiguration) -> some View {
         let activeCount = activeFreePackCount(configuration)
-        VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("正在使用的 \(activeCount) 个")
@@ -497,7 +497,7 @@ struct ScenePackAngleSheet: View {
 
     private func candidateFreeModule(_ configuration: FreeConfiguration) -> some View {
         let candidatePacks = candidateScenePacks(configuration)
-        VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("下面可替换的 \(candidatePacks.count) 个")

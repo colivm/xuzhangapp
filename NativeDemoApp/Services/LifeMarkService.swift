@@ -583,12 +583,33 @@ enum LifeMarkService {
         }
         let categoryMatched = definition.categories.contains(item.category)
         let keywordMatched = containsAny(semanticText(for: item), definition.keywords)
+        if item.scenePackId == "family", definition.id == "daily_supply" {
+            return false
+        }
+        if item.scenePackId == "family",
+           ["baby_supply", "pet_supply"].contains(definition.id) {
+            return categoryMatched && keywordMatched
+        }
+        if definition.id == "daily_supply",
+           matchesAnySpecificDailyCareDefinition(item) {
+            return false
+        }
         if definition.id == "daily_supply", item.category != .daily {
             return categoryMatched && keywordMatched
         }
         return definition.requiresKeywordMatch
             ? categoryMatched && keywordMatched
             : categoryMatched || keywordMatched
+    }
+
+    private static func matchesAnySpecificDailyCareDefinition(_ item: HomeItem) -> Bool {
+        let specificIDs = ["baby_supply", "pet_supply"]
+        let text = semanticText(for: item)
+        return definitions.contains { definition in
+            specificIDs.contains(definition.id)
+                && definition.categories.contains(item.category)
+                && containsAny(text, definition.keywords)
+        }
     }
 
     private static func matches(_ item: HomeItem, definitionID: String) -> Bool {

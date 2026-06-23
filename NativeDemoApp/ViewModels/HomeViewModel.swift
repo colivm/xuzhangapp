@@ -215,7 +215,8 @@ final class HomeViewModel: ObservableObject {
                 merchantBrandId: MerchantBrandCatalog.matchBrand(in: baseTitle)?.id,
                 categoryLockedByUser: shouldLockCategory,
                 userEditedTitle: userEditedTitle || titleWasIntentionallyBlank,
-                source: "manual"
+                source: "manual",
+                scenePackId: scenePackId
             )
         )
         let emotionTag = memoryEnhancedEmotionTag(

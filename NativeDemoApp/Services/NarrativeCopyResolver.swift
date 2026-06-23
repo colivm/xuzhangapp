@@ -8,6 +8,7 @@ enum NarrativeCopyResolver {
         let date: Date
         let seed: String
         let note: String
+        let scenePackId: String?
 
         init(
             brandId: String?,
@@ -15,7 +16,8 @@ enum NarrativeCopyResolver {
             amount: Double,
             date: Date,
             seed: String,
-            note: String = ""
+            note: String = "",
+            scenePackId: String? = nil
         ) {
             self.brandId = brandId
             self.category = category
@@ -23,6 +25,7 @@ enum NarrativeCopyResolver {
             self.date = date
             self.seed = seed
             self.note = note
+            self.scenePackId = scenePackId
         }
     }
 
@@ -399,6 +402,10 @@ enum NarrativeCopyResolver {
     }
 
     private static func scenePack(for context: Context) -> ScenePackDefinition? {
+        if let scenePackId = context.scenePackId,
+           let pack = ScenePackCopyPool.definitions.first(where: { $0.id == scenePackId }) {
+            return pack
+        }
         let packId: String?
         switch context.category {
         case .dining: packId = "food"
