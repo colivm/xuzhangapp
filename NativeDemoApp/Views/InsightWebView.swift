@@ -36,6 +36,9 @@ struct InsightWebView: View {
     private static var aiCommandLifeMarkItemsCache: [String: [HomeItem]] = [:]
     private static var aiCommandCacheOrder: [String] = []
     private static let aiCommandCacheLimit = 48
+    private static let mainlandChinaHolidayOverrides: Set<String> = [
+        "2026-06-19" // Dragon Boat Festival holiday.
+    ]
 
     private struct AIStatusPill: Equatable {
         enum Kind {
@@ -1942,7 +1945,7 @@ struct InsightWebView: View {
 
         let range = aiCommandTimeRange(from: normalized)
         let categoryIntent = aiCommandCategoryIntent(from: normalized)
-        if lifeMarkIntent != nil || categoryIntent != nil || aiCommandAsksCategoryBreakdown(normalized) || containsAny(normalized, ["查", "看", "多少", "几次", "花了", "消费", "账本", "记录", "流水", "明细", "整理", "概览", "最近", "近来", "这阵子", "这段时间", "今天", "昨日", "昨天", "本周", "这周", "这一周", "本星期", "这个星期", "这星期", "本礼拜", "这个礼拜", "这礼拜", "上周", "上一周", "上星期", "上个星期", "上礼拜", "上个礼拜", "本月", "这个月", "这月", "上个月", "上月"]) {
+        if lifeMarkIntent != nil || categoryIntent != nil || aiCommandAsksCategoryBreakdown(normalized) || containsAny(normalized, ["查", "看", "多少", "几次", "花了", "消费", "账本", "记录", "流水", "明细", "整理", "概览", "最近", "近来", "这阵子", "这段时间", "今天", "昨日", "昨天", "本周", "这周", "这一周", "本自然周", "这个自然周", "本星期", "这个星期", "这星期", "本礼拜", "这个礼拜", "这礼拜", "上周", "上一周", "上个自然周", "上一个自然周", "上星期", "上个星期", "上礼拜", "上个礼拜", "本月", "这个月", "这月", "上个月", "上月"]) {
             return buildQueryResult(
                 range: range,
                 categoryIntent: categoryIntent,
@@ -2256,7 +2259,7 @@ struct InsightWebView: View {
             )
         }
 
-        let draftWeekdays = Array(weekdays(in: range).suffix(5))
+        let draftWeekdays = Array(commuteWorkdays(in: range).suffix(5))
         let commuteCandidates = filteredAICommandItems(range: range, category: .transport)
         let drafts = draftWeekdays.flatMap { day in
             commuteDrafts(for: day, amount: resolvedAmount, candidates: commuteCandidates)
@@ -2292,8 +2295,8 @@ struct InsightWebView: View {
             title: "补上\(range.label)通勤",
             summary: "可新增 \(saveableDrafts.count) 条出行记录，合计 \(total.formatted(.cny))。",
             detail: drafts.count == saveableDrafts.count
-                ? "按工作日早晚生成，保存前可先核对，不会自动写入账本。"
-                : "已发现部分工作日早晚通勤可能已经存在，先用高亮标出并排除保存。",
+                ? "按周一到周五早晚生成，遇到节假日会跳过；保存前可先核对，不会自动写入账本。"
+                : "已发现部分工作日早晚通勤可能已经存在，先用高亮标出并排除保存；节假日会跳过。",
             items: [],
             bars: dailyBarsForDrafts(drafts, weekdays: draftWeekdays),
             drafts: drafts,
@@ -2683,7 +2686,7 @@ struct InsightWebView: View {
         if containsAny(text, ["今天", "今日", "今儿", "昨天", "昨日", "昨儿", "这阵子", "近来", "这段时间"]) {
             return true
         }
-        if containsAny(text, ["本周", "这周", "这一周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜", "上周", "上一周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜"]) {
+        if containsAny(text, ["本周", "这周", "这一周", "本自然周", "这个自然周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜", "上周", "上一周", "上个自然周", "上一个自然周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜"]) {
             return true
         }
         if containsAny(text, ["本月", "这个月", "这月", "本月份", "这个月份", "这月份", "当月", "上个月", "上月", "上一个月", "上一月", "上月份", "上个自然月"]) {
@@ -2837,7 +2840,7 @@ struct InsightWebView: View {
     }
 
     private func aiCommandTimeRange(from text: String, defaultRecentDays: Int = 3) -> AICommandTimeRange {
-        let calendar = Calendar.current
+        let calendar = aiCommandCalendar
         let now = Date()
         let todayStart = calendar.startOfDay(for: now)
 
@@ -2862,13 +2865,15 @@ struct InsightWebView: View {
         if containsAny(text, ["过去三天", "近三天", "最近三天", "3天", "3 天", "三天"]) {
             return aiCommandRecentRange(days: 3, label: "过去 3 天")
         }
-        if containsAny(text, ["本周", "这周", "这一周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜"]) {
-            let start = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? todayStart
-            let end = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? now
+        if containsAny(text, ["本周", "这周", "这一周", "本自然周", "这个自然周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜"]) {
+            let start = aiCommandNaturalWeekStart(for: now)
+            let tomorrow = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? now
+            let naturalEnd = calendar.date(byAdding: .day, value: 7, to: start) ?? tomorrow
+            let end = min(tomorrow, naturalEnd)
             return AICommandTimeRange(label: "本周", start: start, end: end, barDays: daysBetween(start, end))
         }
-        if containsAny(text, ["上周", "上一周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜"]) {
-            let end = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? todayStart
+        if containsAny(text, ["上周", "上一周", "上个自然周", "上一个自然周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜"]) {
+            let end = aiCommandNaturalWeekStart(for: now)
             let start = calendar.date(byAdding: .day, value: -7, to: end) ?? end
             return AICommandTimeRange(label: "上周", start: start, end: end, barDays: 7)
         }
@@ -2894,7 +2899,7 @@ struct InsightWebView: View {
     }
 
     private func aiCommandRecentRange(days: Int, label: String) -> AICommandTimeRange {
-        let calendar = Calendar.current
+        let calendar = aiCommandCalendar
         let now = Date()
         let todayStart = calendar.startOfDay(for: now)
         let safeDays = max(1, days)
@@ -2904,7 +2909,7 @@ struct InsightWebView: View {
     }
 
     private func aiCommandRecentMonthRange(months: Int, label: String) -> AICommandTimeRange {
-        let calendar = Calendar.current
+        let calendar = aiCommandCalendar
         let now = Date()
         let todayStart = calendar.startOfDay(for: now)
         let safeMonths = max(1, min(months, 12))
@@ -2964,7 +2969,7 @@ struct InsightWebView: View {
     }
 
     private func aiCommandExplicitRecentWeeks(from text: String) -> Int? {
-        if containsAny(text, ["本周", "这周", "这一周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜", "上周", "上一周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜"]) {
+        if containsAny(text, ["本周", "这周", "这一周", "本自然周", "这个自然周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜", "上周", "上一周", "上个自然周", "上一个自然周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜"]) {
             return nil
         }
         let hasRecentContext = containsAny(text, ["最近", "过去", "近", "前"])
@@ -3050,18 +3055,18 @@ struct InsightWebView: View {
 
     private func commuteDraftRange(from text: String) -> AICommandTimeRange {
         let explicitRange = aiCommandTimeRange(from: text, defaultRecentDays: 7)
-        if containsAny(text, ["上周", "上一周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜", "本周", "这周", "这一周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜", "最近", "过去", "近", "前", "7天", "七天", "一周", "一星期", "一个星期", "一礼拜", "一个礼拜", "半个月", "半月", "个月"]) {
+        if containsAny(text, ["上周", "上一周", "上个自然周", "上一个自然周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜", "本周", "这周", "这一周", "本自然周", "这个自然周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜", "最近", "过去", "近", "前", "7天", "七天", "一周", "一星期", "一个星期", "一礼拜", "一个礼拜", "半个月", "半月", "个月"]) {
             return explicitRange
         }
         return aiCommandRecentRange(days: 7, label: "最近一周")
     }
 
-    private func weekdays(in range: AICommandTimeRange) -> [Date] {
-        let calendar = Calendar.current
+    private func commuteWorkdays(in range: AICommandTimeRange) -> [Date] {
+        let calendar = aiCommandCalendar
         var days: [Date] = []
         var cursor = calendar.startOfDay(for: range.start)
         while cursor < range.end {
-            if isWeekday(cursor) {
+            if isCommuteWorkday(cursor) {
                 days.append(cursor)
             }
             cursor = calendar.date(byAdding: .day, value: 1, to: cursor) ?? range.end
@@ -3069,13 +3074,76 @@ struct InsightWebView: View {
         return days
     }
 
+    private var aiCommandCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = Calendar.current.timeZone
+        calendar.locale = Locale(identifier: "zh_CN")
+        calendar.firstWeekday = 2
+        calendar.minimumDaysInFirstWeek = 1
+        return calendar
+    }
+
+    private func aiCommandNaturalWeekStart(for date: Date) -> Date {
+        aiCommandCalendar.dateInterval(of: .weekOfYear, for: date)?.start
+            ?? aiCommandCalendar.startOfDay(for: date)
+    }
+
+    private func isCommuteWorkday(_ date: Date) -> Bool {
+        guard isWeekday(date) else { return false }
+        return !isKnownMainlandChinaHoliday(date)
+    }
+
     private func isWeekday(_ date: Date) -> Bool {
-        let weekday = Calendar.current.component(.weekday, from: date)
+        let weekday = aiCommandCalendar.component(.weekday, from: date)
         return weekday >= 2 && weekday <= 6
     }
 
     private func daysBetween(_ start: Date, _ end: Date) -> Int {
-        max(1, Calendar.current.dateComponents([.day], from: start, to: end).day ?? 0)
+        max(1, aiCommandCalendar.dateComponents([.day], from: start, to: end).day ?? 0)
+    }
+
+    private func isKnownMainlandChinaHoliday(_ date: Date) -> Bool {
+        if Self.mainlandChinaHolidayOverrides.contains(gregorianDateKey(for: date)) {
+            return true
+        }
+        let components = aiCommandCalendar.dateComponents([.month, .day], from: date)
+        if components.month == 1 && components.day == 1 {
+            return true
+        }
+        if components.month == 5 && components.day == 1 {
+            return true
+        }
+        if components.month == 10 && (1...3).contains(components.day ?? 0) {
+            return true
+        }
+        return isTraditionalMainlandChinaPublicFestival(date)
+    }
+
+    private func isTraditionalMainlandChinaPublicFestival(_ date: Date) -> Bool {
+        var lunarCalendar = Calendar(identifier: .chinese)
+        lunarCalendar.timeZone = aiCommandCalendar.timeZone
+        let components = lunarCalendar.dateComponents([.month, .day, .isLeapMonth], from: date)
+        guard components.isLeapMonth != true else { return false }
+        if components.month == 1 && (1...3).contains(components.day ?? 0) {
+            return true
+        }
+        if components.month == 5 && components.day == 5 {
+            return true
+        }
+        if components.month == 8 && components.day == 15 {
+            return true
+        }
+        return false
+    }
+
+    private func gregorianDateKey(for date: Date) -> String {
+        let components = aiCommandCalendar.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
     }
 
     private func aiCommandCategoryIntent(from text: String) -> AICommandCategoryIntent? {

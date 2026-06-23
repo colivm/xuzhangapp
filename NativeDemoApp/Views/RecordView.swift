@@ -24,6 +24,7 @@ struct RecordView: View {
     @State private var datePanelExpanded = false
     @State private var previewLineWasRotated = false
     @State private var showScenePackAngleSheet = false
+    @State private var recommendedCategoryRefreshTask: Task<Void, Never>?
     @State private var activeScenePack: ScenePackDefinition?
     @State private var scenePackFeedback: String?
     @State private var didAutoFocusAmountPad = false
@@ -603,6 +604,7 @@ struct RecordView: View {
 
     private var previewLifeMarkText: String? {
         guard previewTier == .confirm, hasValidAmount else { return nil }
+        guard focusedField != .note else { return nil }
         let category = previewDraftResolution?.category ?? homeViewModel.selectedCategory
         let rawTitle = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = rawTitle.isEmpty ? previewHeadline : rawTitle
@@ -999,7 +1001,21 @@ struct RecordView: View {
         return packs[variant % packs.count]
     }
 
-    private func refreshRecommendedCategory() {
+    private func refreshRecommendedCategory(debounced: Bool = false) {
+        if debounced {
+            recommendedCategoryRefreshTask?.cancel()
+            recommendedCategoryRefreshTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 220_000_000)
+                guard !Task.isCancelled else { return }
+                refreshRecommendedCategoryNow()
+            }
+            return
+        }
+        recommendedCategoryRefreshTask?.cancel()
+        refreshRecommendedCategoryNow()
+    }
+
+    private func refreshRecommendedCategoryNow() {
         guard selectedEntryMode == .manual else { return }
         guard !homeViewModel.categoryLockedByUser else { return }
         guard !(previewLineWasRotated && lastDraftIntent == .category) else { return }
@@ -1095,11 +1111,13 @@ struct RecordView: View {
                     return
                 }
                 if focusedField == .note {
-                    lastDraftIntent = .note
+                    if lastDraftIntent != .note {
+                        lastDraftIntent = .note
+                    }
                     homeViewModel.preferNoteSemanticsForCurrentDraft()
                 }
                 homeViewModel.clearRecordInputMessage()
-                refreshRecommendedCategory()
+                refreshRecommendedCategory(debounced: focusedField == .note)
             }
             .onChange(of: homeViewModel.selectedDate) { _, _ in
                 refreshRecommendedCategory()
@@ -1115,6 +1133,8 @@ struct RecordView: View {
                 if newValue == .note {
                     amountPadActive = false
                     scrollNoteFieldIntoView(scrollProxy)
+                } else {
+                    refreshRecommendedCategory()
                 }
             }
             .onReceive(draftClock) { now in
@@ -1127,6 +1147,10 @@ struct RecordView: View {
                 guard !didAutoFocusAmountPad else { return }
                 didAutoFocusAmountPad = true
                 focusAmountPad()
+            }
+            .onDisappear {
+                recommendedCategoryRefreshTask?.cancel()
+                recommendedCategoryRefreshTask = nil
             }
             .sheet(isPresented: $showOCRConfirmSheet) {
                 OCRConfirmSheet(drafts: ocrConfirmDrafts) { selectedDrafts in

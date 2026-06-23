@@ -944,11 +944,20 @@ final class HomeViewModel: ObservableObject {
         guard let amount = Double(normalizedAmount), amount > 0 else { return nil }
         let noteResult = UserContentRiskService.shared.validateManualNote(inputTitle, allowEmpty: true)
         let trimmedNote = noteResult.isAllowed ? noteResult.value : ""
-        if let brand = MerchantBrandCatalog.matchBrand(in: trimmedNote), !categoryLockedByUser {
-            return CategoryRecommendResult(recommended: brand.category, reasonTag: "brand")
-        }
-        if let semanticCategory = semanticCategory(from: trimmedNote), !categoryLockedByUser {
-            return CategoryRecommendResult(recommended: semanticCategory, reasonTag: "semantic")
+        let brand = MerchantBrandCatalog.matchBrand(in: trimmedNote)
+        let noteSemanticCategory = semanticCategory(from: trimmedNote)
+        if !categoryLockedByUser {
+            if let brand {
+                if MerchantBrandCatalog.isConvenienceStoreBrand(brand),
+                   let noteSemanticCategory,
+                   noteSemanticCategory != brand.category {
+                    return CategoryRecommendResult(recommended: noteSemanticCategory, reasonTag: "semantic")
+                }
+                return CategoryRecommendResult(recommended: brand.category, reasonTag: "brand")
+            }
+            if let noteSemanticCategory {
+                return CategoryRecommendResult(recommended: noteSemanticCategory, reasonTag: "semantic")
+            }
         }
         if !categoryLockedByUser,
            let category = recordPrefillResult?.category,
@@ -1083,6 +1092,11 @@ final class HomeViewModel: ObservableObject {
         let brand = MerchantBrandCatalog.matchBrand(in: trimmedNote)
         let frequentSuggestion = frequentRecordAmountSuggestion(for: amount, at: selectedDate)
         let noteSemanticCategory = semanticCategory(from: trimmedNote)
+        let shouldUseBrandPrefill = brand.map { brand in
+            !MerchantBrandCatalog.isConvenienceStoreBrand(brand)
+                || noteSemanticCategory == nil
+                || noteSemanticCategory == brand.category
+        } ?? false
 
         let start = Calendar.current.date(byAdding: .day, value: -180, to: Date()) ?? .distantPast
         let recentItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
@@ -1093,7 +1107,7 @@ final class HomeViewModel: ObservableObject {
                 items: recentItems,
                 noteDraft: trimmedNote,
                 categoryLocked: categoryLockedByUser,
-                merchantBrandId: categoryLockedByUser ? nil : brand?.id,
+                merchantBrandId: categoryLockedByUser || !shouldUseBrandPrefill ? nil : brand?.id,
                 context: currentRecordContextSignal()
             )
         )
@@ -1207,6 +1221,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func clearRecordInputMessage() {
+        guard recordInputMessage != nil else { return }
         recordInputMessage = nil
     }
 
@@ -1231,6 +1246,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func preferNoteSemanticsForCurrentDraft() {
+        guard categoryLockedByUser || pendingCategoryCorrectionFrom != nil else { return }
         categoryLockedByUser = false
         pendingCategoryCorrectionFrom = nil
     }

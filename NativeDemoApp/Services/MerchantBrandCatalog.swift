@@ -14,6 +14,14 @@ private struct MerchantBrandAliasMatch {
 }
 
 enum MerchantBrandCatalog {
+    private static let convenienceStoreBrandIDs: Set<String> = [
+        "familymart",
+        "lawson",
+        "bianlifeng",
+        "seveneleven",
+        "meiyijia"
+    ]
+
     static let definitions: [MerchantBrandDefinition] = diningDefinitions
         + transportDefinitions
         + dailyDefinitions
@@ -140,31 +148,31 @@ enum MerchantBrandCatalog {
             ["认真补了一轮超市", "把需要的东西备上", "饭桌和家用都顾到", "这单放进日常", "家里更稳一点", "补货到位"],
             ["一轮家用补货", "几天的日常备好了", "超市这一单挺完整", "给家里添点底气", "该补的都补上", "这次补得踏实"],
         ]),
-        brand("familymart", "全家", ["FamilyMart", "familymart", "全家"], .daily, [
+        brand("familymart", "全家", ["FamilyMart", "familymart", "全家"], .dining, [
             ["便利店补给", "路上买个饭团", "小物件刚好带上", "日常一站完成", "路过全家记一笔", "今天补点方便"],
             ["午间简单买一点", "便当落在中午", "饮料和小食在手边", "忙里到便利店一趟", "这一站很方便", "把日常小缺口补上"],
             ["添点需要的", "便利店里补齐一点", "今天补点方便", "一小袋带回去", "这一笔很具体", "小东西补齐一点"],
             ["认真补了一轮日常", "一站式把小事办完", "给这几天添点方便", "便利店补上忙日子", "小补给刚好用上", "把需要的都带上"],
         ]),
-        brand("lawson", "罗森", ["LAWSON", "lawson", "罗森"], .daily, [
+        brand("lawson", "罗森", ["LAWSON", "lawson", "罗森"], .dining, [
             ["路过罗森补一点", "饭团和饮料在手边", "便利小站补点日常", "今天买点", "小袋子带着走", "一口热食很及时"],
             ["午间简单解决", "便当让中午落下", "忙里拿点吃的", "日常小补给到了", "这一站很省心", "把需要的带回去"],
             ["买到一点刚需", "便利店买点方便", "给日常补个小缺口", "小补给记下来", "添一点方便", "日常补齐一点"],
             ["认真添了一袋日常", "一站办完几件小事", "给这几天留点方便", "便利店补点日常", "这次补得刚好", "这一袋放进日常"],
         ]),
-        brand("bianlifeng", "便利蜂", ["便利蜂", "bianlifeng"], .daily, [
+        brand("bianlifeng", "便利蜂", ["便利蜂", "bianlifeng"], .dining, [
             ["便利蜂补点东西", "饮料和小食在手边", "路过买点方便", "今天补点小需要", "便利店一站完成", "小补给记下来"],
             ["午间简单买一点", "忙里拿点吃的", "这一站很方便", "便利小站补点日常", "小袋子带着走", "把日常小缺口补上"],
             ["添点需要的", "便利店里补齐一点", "今天补点方便", "一小袋带回去", "这一笔很具体", "小东西补齐一点"],
             ["认真添了一袋日常", "一站办完几件小事", "给这几天留点方便", "便利店补点日常", "这次补得刚好", "这一袋放进日常"],
         ]),
-        brand("seveneleven", "7-Eleven", ["7-Eleven", "7-eleven", "7ELEVEN", "7eleven", "7-11"], .daily, [
+        brand("seveneleven", "7-Eleven", ["7-Eleven", "7-eleven", "7ELEVEN", "7eleven", "7-11"], .dining, [
             ["便利店补点东西", "饭团和饮料在手边", "小物件刚好带上", "日常一站完成", "今天补点方便", "小补给记下来"],
             ["午间简单买一点", "便当落在中午", "饮料和小食在手边", "忙里到便利店一趟", "这一站很方便", "把日常小缺口补上"],
             ["添点需要的", "便利店里补齐一点", "今天补点方便", "一小袋带回去", "这一笔很具体", "小东西补齐一点"],
             ["认真补了一轮日常", "一站式把小事办完", "给这几天添点方便", "便利店补上忙日子", "小补给刚好用上", "把需要的都带上"],
         ]),
-        brand("meiyijia", "美宜佳", ["美宜佳", "meiyijia"], .daily, [
+        brand("meiyijia", "美宜佳", ["美宜佳", "meiyijia"], .dining, [
             ["便利店补点东西", "小物件刚好带上", "饮料和小食在手边", "路过买点方便", "今天补点日常", "小补给记下来"],
             ["午间简单买一点", "忙里拿点吃的", "这一站很方便", "便利店补点日常", "小袋子带着走", "把日常小缺口补上"],
             ["添点需要的", "便利店里补齐一点", "今天补点方便", "一小袋带回去", "这一笔很具体", "小东西补齐一点"],
@@ -196,6 +204,15 @@ enum MerchantBrandCatalog {
     static func definition(for id: String?) -> MerchantBrandDefinition? {
         guard let id else { return nil }
         return definitions.first { $0.id == id }
+    }
+
+    static func isConvenienceStoreBrand(_ brand: MerchantBrandDefinition) -> Bool {
+        convenienceStoreBrandIDs.contains(brand.id)
+    }
+
+    static func isConvenienceStoreBrand(id: String?) -> Bool {
+        guard let brand = definition(for: id) else { return false }
+        return isConvenienceStoreBrand(brand)
     }
 
     static func matchBrand(in text: String) -> MerchantBrandDefinition? {

@@ -26,16 +26,25 @@ enum RecordDraftResolutionService {
         let initialTitle = input.rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let brand = MerchantBrandCatalog.definition(for: input.merchantBrandId)
             ?? MerchantBrandCatalog.matchBrand(in: initialTitle)
-        let brandId = input.categoryLockedByUser ? nil : brand?.id
+        let semanticCategory = semanticCategory(from: initialTitle, fallback: input.fallbackCategory)
+        let semanticOverridesConvenienceBrand = brand.map { brand in
+            MerchantBrandCatalog.isConvenienceStoreBrand(brand)
+                && semanticCategory != nil
+                && semanticCategory != brand.category
+        } ?? false
+        let brandId = input.categoryLockedByUser || semanticOverridesConvenienceBrand ? nil : brand?.id
 
         let category: HomeItem.Category
         if input.categoryLockedByUser {
             category = input.fallbackCategory
             trace.append("category:userLocked")
+        } else if semanticOverridesConvenienceBrand, let semanticCategory {
+            category = semanticCategory
+            trace.append("category:semantic")
         } else if let brand {
             category = brand.category
             trace.append("category:brand")
-        } else if let semanticCategory = semanticCategory(from: initialTitle, fallback: input.fallbackCategory) {
+        } else if let semanticCategory {
             category = semanticCategory
             trace.append("category:semantic")
         } else {
