@@ -7,7 +7,7 @@ struct RecordView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @Environment(\.colorScheme) private var colorScheme
     var onSaved: (() -> Void)? = nil
-    var onShowMemberPricing: (() -> Void)? = nil
+    var onShowMemberPricing: ((MemberPricingEntryContext) -> Void)? = nil
     @State private var selectedEntryMode: EntryMode = .manual
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isOCRRecognizing = false
@@ -30,8 +30,10 @@ struct RecordView: View {
     @State private var lastDraftIntent: RecordDraftIntent = .automatic
     @State private var freeScenePackRefreshToken = 0
     @State private var freeLockedSceneHint: ScenePackAngleSheet.LockedSceneHint?
+    @State private var lifeMarkSceneRewardCard: LifeMarkSceneRewardCard?
     @State private var ocrQuotaUpsellVisibleThisSession = false
     @AppStorage("scene_pack_order_v1") private var scenePackOrderStorage = ""
+    @AppStorage("scene_pack_manual_order_v1") private var scenePackManualOrderEnabled = false
     @AppStorage("scene_pack_more_expanded_v1") private var scenePackMoreExpanded = false
     @AppStorage("scene_pack_usage_v1") private var scenePackUsageStorage = ""
     @AppStorage("scene_pack_pinned_v1") private var scenePackPinnedStorage = ""
@@ -53,9 +55,10 @@ struct RecordView: View {
     private let recordAccent = AppColors.accent
     private let recordInk = AppColors.text
     private let freeScenePackService = FreeScenePackService.shared
+    private let lifeMarkSceneRewardService = LifeMarkSceneRewardService.shared
     private let dailyQuotaStore = DailyFeatureQuotaStore()
     private let extensionScenePackIds: Set<String> = ["travel", "family"]
-    private let scenePackSilenceInterval: TimeInterval = 45 * 24 * 60 * 60
+    private let scenePackSilenceInterval: TimeInterval = 7 * 24 * 60 * 60
     private let ocrImportUpsellCooldown: TimeInterval = 3 * 24 * 60 * 60
 
     private struct ScenePackUsageStat {
@@ -63,10 +66,28 @@ struct RecordView: View {
         var lastUsedAt: TimeInterval
     }
 
+    private struct LifeMarkSceneRewardCard: Identifiable, Equatable {
+        enum Kind: Equatable {
+            case reward(LifeMarkSceneReward)
+            case coldStart
+        }
+
+        let id: String
+        let title: String
+        let badge: String
+        let detail: String
+        let primaryTitle: String
+        let secondaryTitle: String
+        let kind: Kind
+    }
+
     private var visibleScenePacks: [ScenePackDefinition] {
         let orderIds = scenePackOrderIds
         return ScenePackCopyPool.definitions.sorted { lhs, rhs in
-            scenePackSortRank(lhs, orderIds: orderIds) < scenePackSortRank(rhs, orderIds: orderIds)
+            if scenePackManualOrderEnabled {
+                return scenePackManualSortRank(lhs, orderIds: orderIds) < scenePackManualSortRank(rhs, orderIds: orderIds)
+            }
+            return scenePackUsageSortRank(lhs) < scenePackUsageSortRank(rhs)
         }
     }
 
@@ -87,8 +108,35 @@ struct RecordView: View {
         return freeScenePackService.orderedFreePacks(from: visibleScenePacks)
     }
 
+    private var pendingLifeMarkSceneReward: LifeMarkSceneReward? {
+        _ = freeScenePackRefreshToken
+        return lifeMarkSceneRewardService.pendingReward(from: visibleScenePacks)
+    }
+
+    private var activeLifeMarkSceneReward: LifeMarkSceneReward? {
+        _ = freeScenePackRefreshToken
+        return lifeMarkSceneRewardService.activeReward(from: visibleScenePacks)
+    }
+
+    private var activeLifeMarkRewardPack: ScenePackDefinition? {
+        guard let reward = activeLifeMarkSceneReward else { return nil }
+        return visibleScenePacks.first { $0.id == reward.packId }
+    }
+
+    private var freeScenePacksForUse: [ScenePackDefinition] {
+        var packs = freeScenePacks
+        if let activePack = activeLifeMarkRewardPack,
+           !packs.contains(where: { $0.id == activePack.id }) {
+            packs.insert(activePack, at: 0)
+        }
+        return packs
+    }
+
     private var freeMoreScenePacks: [ScenePackDefinition] {
-        let freeIds = Set(freeScenePacks.map(\.id))
+        var freeIds = Set(freeScenePacks.map(\.id))
+        if let activePack = activeLifeMarkRewardPack {
+            freeIds.insert(activePack.id)
+        }
         return visibleScenePacks.filter { !freeIds.contains($0.id) }
     }
 
@@ -98,7 +146,7 @@ struct RecordView: View {
     }
 
     private var freeScenePackIds: Set<String> {
-        Set(freeScenePacks.map(\.id))
+        Set(freeScenePacksForUse.map(\.id))
     }
 
     private var shouldShowOCRQuotaUpsell: Bool {
@@ -126,7 +174,7 @@ struct RecordView: View {
             .filter { !$0.isEmpty }
     }
 
-    private func scenePackSortRank(_ pack: ScenePackDefinition, orderIds: [String]) -> Int {
+    private func scenePackManualSortRank(_ pack: ScenePackDefinition, orderIds: [String]) -> Int {
         if let index = orderIds.firstIndex(of: pack.id) {
             return index
         }
@@ -134,10 +182,13 @@ struct RecordView: View {
         return 1_000 + defaultIndex
     }
 
-    private func promoteScenePack(_ pack: ScenePackDefinition) {
-        var orderIds = scenePackOrderIds.filter { $0 != pack.id }
-        orderIds.insert(pack.id, at: 0)
-        scenePackOrderStorage = orderIds.prefix(12).joined(separator: ",")
+    private func scenePackUsageSortRank(_ pack: ScenePackDefinition) -> Int {
+        let defaultIndex = ScenePackCopyPool.definitions.firstIndex { $0.id == pack.id } ?? 999
+        guard let stat = scenePackUsageStats[pack.id] else {
+            return 200_000 + defaultIndex
+        }
+        let usageGroup = isScenePackInSilence(stat) ? 1 : 0
+        return usageGroup * 100_000 - min(stat.count, 999) * 100 + defaultIndex
     }
 
     private func reorderScenePacks(orderedPackIds: [String], movedPackIds: Set<String>) {
@@ -148,6 +199,7 @@ struct RecordView: View {
         let reorderedIds = allVisibleIds.map { id in
             orderedSet.contains(id) ? (orderedIterator.next() ?? id) : id
         }
+        scenePackManualOrderEnabled = true
         scenePackOrderStorage = reorderedIds.prefix(12).joined(separator: ",")
 
         let movedExtensionIds = movedPackIds.intersection(extensionScenePackIds)
@@ -159,10 +211,16 @@ struct RecordView: View {
     }
 
     private func shouldFoldScenePack(_ pack: ScenePackDefinition) -> Bool {
-        guard extensionScenePackIds.contains(pack.id) else { return false }
+        guard !scenePackManualOrderEnabled else { return false }
         if scenePackPinnedIds.contains(pack.id) { return false }
-        guard let stat = scenePackUsageStats[pack.id] else { return true }
-        if stat.count >= 3 { return false }
+        guard let stat = scenePackUsageStats[pack.id] else {
+            return extensionScenePackIds.contains(pack.id)
+        }
+        return isScenePackInSilence(stat)
+    }
+
+    private func isScenePackInSilence(_ stat: ScenePackUsageStat) -> Bool {
+        guard stat.lastUsedAt > 0 else { return true }
         let lastUsed = Date(timeIntervalSince1970: stat.lastUsedAt)
         return Date().timeIntervalSince(lastUsed) > scenePackSilenceInterval
     }
@@ -362,7 +420,6 @@ struct RecordView: View {
         dismissKeyboard()
         lastDraftIntent = .category
         if trackMemberSceneUsage {
-            promoteScenePack(pack)
             markScenePackUsed(pack)
         }
         let amount = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
@@ -747,7 +804,49 @@ struct RecordView: View {
         noteEditorExpanded = false
         datePanelExpanded = false
         lastDraftIntent = .automatic
+        if let savedItem = homeViewModel.items.first {
+            prepareLifeMarkSceneRewardCardIfNeeded(for: savedItem)
+        }
+        guard lifeMarkSceneRewardCard == nil else { return }
         onSaved?()
+    }
+
+    private func prepareLifeMarkSceneRewardCardIfNeeded(for item: HomeItem) {
+        guard !isMember else { return }
+        if let reward = lifeMarkSceneRewardService.registerRewardIfNeeded(
+            for: item,
+            allItems: homeViewModel.items,
+            currentPackIds: Set(freeScenePacks.map(\.id)),
+            definitions: visibleScenePacks,
+            isMember: isMember
+        ) {
+            lifeMarkSceneRewardCard = LifeMarkSceneRewardCard(
+                id: reward.id,
+                title: "新的生活线索诞生",
+                badge: "奖励一次免费体验",
+                detail: reward.detail,
+                primaryTitle: "立即体验",
+                secondaryTitle: "稍后再说",
+                kind: .reward(reward)
+            )
+            freeScenePackRefreshToken += 1
+            return
+        }
+
+        guard lifeMarkSceneRewardService.shouldShowColdStartGuide(
+            after: item,
+            allItems: homeViewModel.items,
+            isMember: isMember
+        ) else { return }
+        lifeMarkSceneRewardCard = LifeMarkSceneRewardCard(
+            id: "cold_start_scene_pack_guide",
+            title: "新的生活线索诞生",
+            badge: "先选 3 个常用场景包",
+            detail: "这笔已经长成生活印记了。可以先把最常用的 3 个场景包选好，之后记账会更贴近你的日常。",
+            primaryTitle: "去看看",
+            secondaryTitle: "知道了",
+            kind: .coldStart
+        )
     }
 
     private func previewFallbackTitle(for category: HomeItem.Category) -> String {
@@ -897,7 +996,7 @@ struct RecordView: View {
     }
 
     private func preferredFreeScenePack() -> ScenePackDefinition? {
-        let packs = freeScenePacks
+        let packs = freeScenePacksForUse
         guard !packs.isEmpty else { return nil }
 
         let guessedPackId = guessScenePackId()
@@ -1075,6 +1174,8 @@ struct RecordView: View {
                         moreScenePacks: freeMoreScenePacks,
                         replaceableScenePacks: freeReplaceableScenePacks,
                         lockedSceneHint: freeLockedSceneHint,
+                        pendingLifeMarkReward: pendingLifeMarkSceneReward,
+                        activeLifeMarkReward: activeLifeMarkSceneReward,
                         isInFirstWeek: freeScenePackService.isInFirstWeek(),
                         daysUntilExtensionLock: freeScenePackService.daysUntilExtensionLock(),
                         canReplacePackCombination: freeScenePackService.canReplacePackCombination(),
@@ -1097,8 +1198,11 @@ struct RecordView: View {
                             freeScenePackService.replacePack(atSlot: slot, oldId: oldId, newId: newPack.id, from: visibleScenePacks)
                             freeScenePackRefreshToken += 1
                         },
+                        onClaimLifeMarkReward: { reward in
+                            claimLifeMarkSceneReward(reward, shouldApplyPack: false)
+                        },
                         onShowMemberPricing: {
-                            onShowMemberPricing?()
+                            onShowMemberPricing?(.scenePack(nil))
                         }
                     )
                 }
@@ -1129,8 +1233,8 @@ struct RecordView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(AppColors.accent.opacity(0.78))
 
-            Text("记下这一笔")
-                .font(.system(size: 22, weight: .bold))
+            Text(hasAmountDraft ? "先放进账本" : "先记金额")
+                .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(recordInk)
 
             Text(hasAmountDraft ? "这一笔会先落到账本，再长成回望。" : "先敲金额，分类和备注会跟着浮出来。")
@@ -1194,6 +1298,10 @@ struct RecordView: View {
     private var manualForm: some View {
         VStack(alignment: .leading, spacing: 12) {
             amountField
+            if let lifeMarkSceneRewardCard {
+                lifeMarkSceneRewardPrompt(lifeMarkSceneRewardCard)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
             if hasValidAmount {
                 lifeEntryPreview
             }
@@ -1259,6 +1367,112 @@ struct RecordView: View {
                 openFreeScenePackAngleSheet()
             }
         )
+    }
+
+    private func lifeMarkSceneRewardPrompt(_ card: LifeMarkSceneRewardCard) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(recordAccent)
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(recordAccent.opacity(0.12)))
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(card.title)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(recordInk)
+                    Text(card.badge)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(recordAccent)
+                    Text(card.detail)
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    dismissLifeMarkSceneRewardCard(card)
+                } label: {
+                    Text(card.secondaryTitle)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppColors.subtext)
+                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.white.opacity(0.58))
+                        )
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    handleLifeMarkSceneRewardPrimary(card)
+                } label: {
+                    Text(card.primaryTitle)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(recordAccent)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(recordAccent.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(recordAccent.opacity(0.18), lineWidth: 1)
+        )
+    }
+
+    private func handleLifeMarkSceneRewardPrimary(_ card: LifeMarkSceneRewardCard) {
+        switch card.kind {
+        case .reward(let reward):
+            claimLifeMarkSceneReward(reward, shouldApplyPack: true)
+        case .coldStart:
+            lifeMarkSceneRewardService.markColdStartGuideSeen()
+            withAnimation(.easeInOut(duration: 0.18)) {
+                lifeMarkSceneRewardCard = nil
+            }
+            openFreeScenePackAngleSheet()
+        }
+    }
+
+    private func dismissLifeMarkSceneRewardCard(_ card: LifeMarkSceneRewardCard) {
+        if case .coldStart = card.kind {
+            lifeMarkSceneRewardService.markColdStartGuideSeen()
+        }
+        withAnimation(.easeInOut(duration: 0.18)) {
+            lifeMarkSceneRewardCard = nil
+        }
+        onSaved?()
+    }
+
+    private func claimLifeMarkSceneReward(_ reward: LifeMarkSceneReward, shouldApplyPack: Bool) {
+        guard let activeReward = lifeMarkSceneRewardService.claimReward(reward, from: visibleScenePacks) else { return }
+        freeScenePackRefreshToken += 1
+        withAnimation(.easeInOut(duration: 0.18)) {
+            lifeMarkSceneRewardCard = nil
+        }
+        guard shouldApplyPack,
+              let pack = visibleScenePacks.first(where: { $0.id == activeReward.packId }) else { return }
+        guard hasValidAmount else {
+            openFreeScenePackAngleSheet()
+            return
+        }
+        previewLineWasRotated = true
+        applyScenePack(pack, keepSelectedCategory: true, trackMemberSceneUsage: false)
+        scenePackFeedback = "已领取 7 天体验：\(pack.label)"
     }
 
     private var ocrSideDoor: some View {
@@ -1402,7 +1616,7 @@ struct RecordView: View {
 
     private var amountWarmupChips: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("常记金额")
+            Text("这个时段常记")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(AppColors.subtext.opacity(0.68))
                 .padding(.horizontal, 12)
@@ -2231,7 +2445,7 @@ struct RecordView: View {
 
             Button {
                 dismissOCRQuotaUpsell()
-                onShowMemberPricing?()
+                onShowMemberPricing?(.ocrImport)
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "crown")

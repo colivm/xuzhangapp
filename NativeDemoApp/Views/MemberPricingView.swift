@@ -2,12 +2,37 @@ import SwiftUI
 
 // MARK: - Member Pricing View (matching web #accountMemberView)
 
+enum MemberPricingEntryContext: Equatable {
+    case traceDeepInsight
+    case playbackQuota
+    case ocrImport
+    case scenePack(String?)
+    case lifetime
+    case aiCommand
+    case settings
+}
+
+private struct MemberHeroContent {
+    let title: String
+    let subtitle: String
+    let detail: String
+    let chips: [String]
+}
+
+private struct MemberValuePoint: Identifiable {
+    var id: String { title }
+    let symbol: String
+    let title: String
+    let detail: String
+}
+
 struct MemberPricingView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var iapService = IAPService.shared
     let highlightPlanId: String?
+    let entryContext: MemberPricingEntryContext
     @State private var benefitsExpanded = false
     @State private var morePlansExpanded = false
     @State private var purchaseNotice: String?
@@ -43,8 +68,12 @@ struct MemberPricingView: View {
         ("账单整理", "适合少量截图", "大段账单也能连续整理成可回看的档案"),
     ]
 
-    init(highlightPlanId: String? = nil) {
+    init(
+        highlightPlanId: String? = nil,
+        entryContext: MemberPricingEntryContext = .settings
+    ) {
         self.highlightPlanId = highlightPlanId
+        self.entryContext = entryContext
     }
 
     private let freeQuotaFootnote = "免费版适合轻度记录。会员适合希望长期保存生活轨迹、获得 AI 深度分析与持续回顾的用户。所有账单数据均由你掌控。"
@@ -55,6 +84,142 @@ struct MemberPricingView: View {
 
     private var isLifetimeMember: Bool {
         settingsViewModel.memberTier.lowercased() == "lifetime" && isMember
+    }
+
+    private var heroContent: MemberHeroContent {
+        switch entryContext {
+        case .traceDeepInsight:
+            return MemberHeroContent(
+                title: "把这段记录展开成生活线索",
+                subtitle: "会员会继续整理本周、本月和更长时间的生活印记，不只停在分类和金额。",
+                detail: "雨天通勤、健身恢复、旅行停留、家庭照护这些线索，会按账本里已有的日期、分类、备注和上下文连接起来。",
+                chips: ["深度线索", "周/月连续", "生活印记"]
+            )
+        case .playbackQuota:
+            return MemberHeroContent(
+                title: "想多看几遍，不用等刷新",
+                subtitle: "会员适合经常回看今日、周记和月章的人，记录刚有感觉时可以继续整理。",
+                detail: "回放不会因为免费次数停住，今天、这一周和这个月的生活节奏可以持续接上。",
+                chips: ["不限回看", "周记月章", "持续整理"]
+            )
+        case .ocrImport:
+            return MemberHeroContent(
+                title: "连续整理截图账单",
+                subtitle: "微信、支付宝截图多的时候，会员可以继续导入，不用等明天刷新。",
+                detail: "导入后会继续参与重复账单判断、生活线索和周/月回顾，账单不是只进列表里。",
+                chips: ["连续导入", "重复整理", "进入回顾"]
+            )
+        case .scenePack(_):
+            return MemberHeroContent(
+                title: "把这笔放进更准确的生活场景",
+                subtitle: "会员可打开旅行、身体、娃和毛孩等完整场景包，让记录不只停在基础分类。",
+                detail: "健身卡、酒店门票、宠物补给、看病买药这些记录，会更容易回到对应生活线里。",
+                chips: ["全部场景", "更准文案", "长期线索"]
+            )
+        case .lifetime:
+            return MemberHeroContent(
+                title: "把生活档案长期留住",
+                subtitle: "永久会员适合想长期保存周记、月章、风格和生活档案的人。",
+                detail: "一次开通后，记录会持续长成跨月份、跨年份的回看材料，也包含 3 款典藏风格。",
+                chips: ["永久档案", "典藏风格", "长期陪伴"]
+            )
+        case .aiCommand:
+            return MemberHeroContent(
+                title: "让 AI 继续替你查账本",
+                subtitle: "会员可以更连续地追问本周、本月、上一次和第几次这些生活线索。",
+                detail: "它会基于真实账单里的日期、分类、备注和上下文回答，不额外编造。",
+                chips: ["连续追问", "线索查询", "真实账本"]
+            )
+        case .settings:
+            return MemberHeroContent(
+                title: "把流水变成故事，把记录变成回忆",
+                subtitle: "多年以后，你未必记得今天花了多少钱，但会想知道那时的自己正在过怎样的生活。",
+                detail: "会员让 AI 持续整理你的生活脉络，帮你看见消费背后的习惯、情绪和变化。",
+                chips: ["生活回放", "深度分析", "长期档案"]
+            )
+        }
+    }
+
+    private var memberValuePoints: [MemberValuePoint] {
+        switch entryContext {
+        case .traceDeepInsight:
+            return [
+                MemberValuePoint(symbol: "sparkles", title: "展开深层印记", detail: "雨天通勤、健身恢复、旅行停留这类线索会继续浮出来。"),
+                MemberValuePoint(symbol: "calendar", title: "周月不断档", detail: "本周、本月和更长周期都能持续整理。"),
+                MemberValuePoint(symbol: "text.magnifyingglass", title: "只基于真实账本", detail: "按日期、分类、备注和上下文连接，不额外编造。")
+            ]
+        case .playbackQuota:
+            return [
+                MemberValuePoint(symbol: "play.circle", title: "回放不限次", detail: "今日、周记、月章想多看几遍都能继续。"),
+                MemberValuePoint(symbol: "clock.arrow.circlepath", title: "不用等刷新", detail: "记录刚有感觉时，不会被免费次数打断。"),
+                MemberValuePoint(symbol: "book.closed", title: "留下长期章节", detail: "多次回看会慢慢接成周月生活档案。")
+            ]
+        case .ocrImport:
+            return [
+                MemberValuePoint(symbol: "doc.viewfinder", title: "连续导入截图", detail: "微信、支付宝截图多的时候可以接着整理。"),
+                MemberValuePoint(symbol: "checklist", title: "减少重复整理", detail: "导入后的账单继续参与重复判断和分类线索。"),
+                MemberValuePoint(symbol: "chart.line.uptrend.xyaxis", title: "导入后能回看", detail: "账单会进入痕迹页、回放和 AI 查询。")
+            ]
+        case .scenePack(_):
+            return [
+                MemberValuePoint(symbol: "square.grid.2x2", title: "打开全部生活角度", detail: "旅行、身体、家庭照护等场景都能使用。"),
+                MemberValuePoint(symbol: "wand.and.stars", title: "文案更贴近场景", detail: "同样一笔钱，会放进更具体的生活语境。"),
+                MemberValuePoint(symbol: "link", title: "长期线索更清楚", detail: "同类记录多了，会在痕迹页串成生活印记。")
+            ]
+        case .lifetime:
+            return [
+                MemberValuePoint(symbol: "archivebox", title: "长期生活档案", detail: "适合想把多年记录持续留住的人。"),
+                MemberValuePoint(symbol: "paintpalette", title: "典藏风格", detail: "永久会员包含档案馆、观察者、夜读等典藏风格。"),
+                MemberValuePoint(symbol: "infinity", title: "一次开通", detail: "不用每年再想订阅是否续上。")
+            ]
+        case .aiCommand:
+            return [
+                MemberValuePoint(symbol: "terminal", title: "继续追问账本", detail: "本月健身、上一次通勤、第十次咖啡都能接着查。"),
+                MemberValuePoint(symbol: "brain.head.profile", title: "更懂生活线索", detail: "不仅查分类，也能查场景和上下文。"),
+                MemberValuePoint(symbol: "lock.open", title: "减少次数打断", detail: "想整理时不用频繁停在会员提示前。")
+            ]
+        case .settings:
+            return [
+                MemberValuePoint(symbol: "book.closed", title: "多年以后仍能回看", detail: "不只是记金额，而是留下当时怎样生活。"),
+                MemberValuePoint(symbol: "sparkles", title: "AI 帮你看懂生活", detail: "发现消费习惯、情绪变化和生活节奏。"),
+                MemberValuePoint(symbol: "clock.arrow.circlepath", title: "长期连续记录", detail: "回放、故事和账单整理持续接上。")
+            ]
+        }
+    }
+
+    private var memberProofLine: String {
+        let items = homeViewModel.items.filter { $0.amount > 0 && $0.draftMeta == nil }
+        guard !items.isEmpty else {
+            return "先从第一笔开始，后面会自动长出你的周记、月章和生活线索。"
+        }
+        let calendar = Calendar.current
+        let activeDays = Set(items.map { calendar.startOfDay(for: $0.createdAt) }).count
+        let monthCount = Set(items.map { monthKey(for: $0.createdAt, calendar: calendar) }).count
+        if monthCount >= 2 {
+            return "你的账本已有 \(items.count) 笔记录，跨过 \(monthCount) 个月，适合继续整理成长期档案。"
+        }
+        return "你的账本已有 \(items.count) 笔记录，\(activeDays) 天留下痕迹，可以继续整理成生活线索。"
+    }
+
+    private var lifetimeArchiveItemsSignature: String {
+        var hasher = Hasher()
+        hasher.combine(homeViewModel.items.count)
+        for item in homeViewModel.items {
+            hasher.combine(item.id)
+            hasher.combine(item.createdAt.timeIntervalSince1970)
+            hasher.combine(item.updatedAt.timeIntervalSince1970)
+            hasher.combine(item.amount)
+            hasher.combine(item.category.rawValue)
+            hasher.combine(item.title)
+            hasher.combine(item.emotionTag)
+            hasher.combine(item.source.rawValue)
+            hasher.combine(item.draftMeta?.status.rawValue)
+            hasher.combine(item.memoryContext?.weatherKind)
+            hasher.combine(item.memoryContext?.cityName)
+            hasher.combine(item.memoryContext?.semanticPlace)
+            hasher.combine(item.scenePackId)
+        }
+        return "\(hasher.finalize())"
     }
 
     var body: some View {
@@ -71,6 +236,7 @@ struct MemberPricingView: View {
                         // ── Pricing ──
                         if !isMember {
                             pricingSection
+                            lifetimeTeaserSection
                         } else {
                             currentMemberBadge
                         }
@@ -89,7 +255,7 @@ struct MemberPricingView: View {
                 .scrollIndicators(.hidden)
                 .background(AppColors.bg.ignoresSafeArea())
                 .onAppear {
-                    refreshLifetimeArchiveSnapshot()
+                    scheduleLifetimeArchiveSnapshotRefresh()
                     applyHighlightIfNeeded(proxy)
                 }
             }
@@ -103,8 +269,8 @@ struct MemberPricingView: View {
             .task {
                 await runInitialRefreshIfNeeded()
             }
-            .onChange(of: homeViewModel.items.count) { _, _ in
-                refreshLifetimeArchiveSnapshot()
+            .onChange(of: lifetimeArchiveItemsSignature) { _, _ in
+                scheduleLifetimeArchiveSnapshotRefresh()
             }
             .alert("会员购买", isPresented: Binding(
                 get: { purchaseNotice != nil },
@@ -122,54 +288,47 @@ struct MemberPricingView: View {
     // MARK: - Hero
 
     private var heroSection: some View {
+        let content = heroContent
         VStack(alignment: .leading, spacing: 8) {
-            Text("把流水变成故事，把记录变成回忆")
+            Text(content.title)
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(AppColors.text)
 
-            Text("多年以后，你未必记得今天花了多少钱，但会想知道，那时的自己正在过怎样的生活。")
+            Text(content.subtitle)
                 .font(.system(size: 13))
                 .lineSpacing(3)
                 .foregroundStyle(AppColors.subtext)
 
-            Text("会员让 AI 持续整理你的生活脉络，帮你看见消费背后的习惯、情绪和变化。")
+            Text(content.detail)
                 .font(.system(size: 12))
                 .lineSpacing(3)
                 .foregroundStyle(AppColors.subtext.opacity(0.88))
                 .padding(.top, 2)
 
             if !isMember {
-                legalPurchaseNote
-                    .padding(.top, 2)
+                Text(memberProofLine)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.text.opacity(0.82))
+                    .lineSpacing(3)
+                    .padding(.top, 4)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                Button {
-                    handlePurchase(plans[0]) // yearly default
-                } label: {
-                    Text("开启完整生活档案")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(
-                            LinearGradient(
-                                colors: [
-                                    AppColors.accentDark.opacity(0.96),
-                                    AppColors.accent.opacity(0.94),
-                                    AppColors.lockGold.opacity(0.72)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        )
-                        .shadow(color: AppColors.accent.opacity(0.3), radius: 8, y: 4)
+                HStack(spacing: 7) {
+                    ForEach(content.chips, id: \.self) { chip in
+                        Text(chip)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(AppColors.accentDark.opacity(0.9))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(AppColors.accent.opacity(0.10))
+                            )
+                    }
                 }
-                .buttonStyle(.plain)
                 .padding(.top, 4)
-
-                Text("订阅可随时在 App Store 账户设置中取消。")
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppColors.subtext.opacity(0.8))
             }
         }
         .padding(16)
@@ -192,21 +351,13 @@ struct MemberPricingView: View {
 
     private var memberValueSection: some View {
         VStack(spacing: 10) {
-            memberValueRow(
-                symbol: "book.closed",
-                title: "多年以后，你未必记得今天花了多少钱",
-                detail: "但你会想知道，那时的自己正在过怎样的生活。"
-            )
-            memberValueRow(
-                symbol: "sparkles",
-                title: "AI 帮你看懂生活",
-                detail: "发现消费习惯、情绪变化和生活节奏，而不只是记录每一笔账。"
-            )
-            memberValueRow(
-                symbol: "clock.arrow.circlepath",
-                title: "长期连续记录",
-                detail: "回放、故事和账单整理持续接上，生活脉络不会因为额度断档。"
-            )
+            ForEach(memberValuePoints) { point in
+                memberValueRow(
+                    symbol: point.symbol,
+                    title: point.title,
+                    detail: point.detail
+                )
+            }
         }
     }
 
@@ -380,6 +531,51 @@ struct MemberPricingView: View {
                 .foregroundStyle(AppColors.subtext.opacity(0.8))
                 .padding(.top, 4)
         }
+    }
+
+    private var lifetimeTeaserSection: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                morePlansExpanded.toggle()
+            }
+        } label: {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.lockGold)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle()
+                            .fill(AppColors.lockGold.opacity(0.14))
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("想长期保存生活档案？")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppColors.text.opacity(0.9))
+                    Text("永久会员一次开通，含 3 款典藏风格。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AppColors.subtext)
+                }
+
+                Spacer(minLength: 6)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(AppColors.subtext.opacity(0.7))
+                    .rotationEffect(.degrees(morePlansExpanded ? 180 : 0))
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white.opacity(0.54))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(AppColors.lockGold.opacity(0.18), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Current Member Badge
@@ -623,6 +819,12 @@ struct MemberPricingView: View {
 
     private func refreshLifetimeArchiveSnapshot() {
         lifetimeArchiveSnapshot = makeLifetimeArchiveSnapshot()
+    }
+
+    private func scheduleLifetimeArchiveSnapshotRefresh() {
+        DispatchQueue.main.async {
+            refreshLifetimeArchiveSnapshot()
+        }
     }
 
     private func lifetimeArchiveTitle(

@@ -6,6 +6,7 @@ struct SettingsView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @Binding var showMemberPricing: Bool
     @Binding var pricingHighlightPlanId: String?
+    @Binding var pricingEntryContext: MemberPricingEntryContext
     var openAppearanceRequestID: UUID?
     var onShowMinimalOnboarding: () -> Void = {}
     @State private var showAccountSheet = false
@@ -700,6 +701,7 @@ struct SettingsView: View {
 
     private func openMemberPricing(highlightPlanId: String? = nil) {
         pricingHighlightPlanId = highlightPlanId
+        pricingEntryContext = highlightPlanId == "lifetime" ? .lifetime : .settings
         showMemberPricing = true
     }
 
@@ -3113,7 +3115,12 @@ private extension View {
 
 struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
-        SettingsView(showMemberPricing: .constant(false), pricingHighlightPlanId: .constant(nil), openAppearanceRequestID: nil)
+        SettingsView(
+            showMemberPricing: .constant(false),
+            pricingHighlightPlanId: .constant(nil),
+            pricingEntryContext: .constant(.settings),
+            openAppearanceRequestID: nil
+        )
             .environmentObject(SettingsViewModel())
             .environmentObject(HomeViewModel())
     }

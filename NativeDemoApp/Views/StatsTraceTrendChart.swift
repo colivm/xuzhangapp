@@ -130,11 +130,13 @@ extension StatsWebView {
         let inclusiveEnd = cal.date(byAdding: .second, value: -1, to: interval.end) ?? interval.end
         let endDay = cal.startOfDay(for: inclusiveEnd)
         let dayCount = max(cal.dateComponents([.day], from: startDay, to: endDay).day ?? 0, 0)
+        let totalsByDay = trendItems.reduce(into: [Date: Double]()) { result, item in
+            let day = cal.startOfDay(for: item.createdAt)
+            result[day, default: 0] += item.amount
+        }
         let points = (0...dayCount).compactMap { offset -> TrendPoint? in
             guard let date = cal.date(byAdding: .day, value: offset, to: startDay) else { return nil }
-            let total = trendItems
-                .filter { cal.isDate($0.createdAt, inSameDayAs: date) }
-                .reduce(0) { $0 + $1.amount }
+            let total = totalsByDay[cal.startOfDay(for: date), default: 0]
             return TrendPoint(day: "\(cal.component(.day, from: date))", value: total)
         }
         return points.contains { $0.value > 0 } ? points : []

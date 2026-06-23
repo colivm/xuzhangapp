@@ -319,13 +319,11 @@ extension StatsWebView {
     }
 
     func applyTracePeriod(_ period: StatsPeriod) {
-        withAnimation(traceEditSpring) {
-            useCustomRange = false
-            selectedPeriod = period
-            showTraceCustomDatePanel = false
-            traceInlineEditingItemID = nil
-            traceSwipedItemID = nil
-        }
+        useCustomRange = false
+        selectedPeriod = period
+        showTraceCustomDatePanel = false
+        traceInlineEditingItemID = nil
+        traceSwipedItemID = nil
     }
 
     private func applyTraceCategory(_ category: HomeItem.Category?) {

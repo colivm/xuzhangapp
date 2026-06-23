@@ -31,6 +31,11 @@ struct InsightWebView: View {
     @State private var aiCommandMessage: String?
     @State private var aiCommandSavedCount: Int?
     private let trialTotal = 5
+    private static var aiCommandSuggestionsCache: [String: [String]] = [:]
+    private static var aiCommandItemsCache: [String: [HomeItem]] = [:]
+    private static var aiCommandLifeMarkItemsCache: [String: [HomeItem]] = [:]
+    private static var aiCommandCacheOrder: [String] = []
+    private static let aiCommandCacheLimit = 48
 
     private struct AIStatusPill: Equatable {
         enum Kind {
@@ -1304,6 +1309,11 @@ struct InsightWebView: View {
     }
 
     private func aiCommandPresetSuggestions() -> [String] {
+        let cacheKey = aiCommandSuggestionsCacheKey()
+        if let cached = Self.aiCommandSuggestionsCache[cacheKey] {
+            return cached
+        }
+
         var suggestions: [String] = []
         var lockedPreviewSuggestions: [String] = []
         let recentItems = recentPositiveItems(days: 7)
@@ -1345,7 +1355,9 @@ struct InsightWebView: View {
         }
 
         let fallback = ["过去三天餐饮花了多少？", "看一下这周交通", "找找最近有没有重复账单"]
-        return Array(uniqueAICommandSuggestions(suggestions + fallback + lockedPreviewSuggestions).prefix(5))
+        let result = Array(uniqueAICommandSuggestions(suggestions + fallback + lockedPreviewSuggestions).prefix(5))
+        storeAICommandSuggestions(result, for: cacheKey)
+        return result
     }
 
     private func uniqueAICommandSuggestions(_ suggestions: [String]) -> [String] {
@@ -1355,6 +1367,26 @@ struct InsightWebView: View {
             seen.insert(suggestion)
             return true
         }
+    }
+
+    private func aiCommandSuggestionsCacheKey() -> String {
+        let weatherKind = RecordMemoryContextService.weatherKindCode(
+            from: WeatherCompanionService.shared.cachedSnapshot
+        ) ?? "none"
+        return [
+            "suggestions",
+            hasMemberAccess ? "member" : "free",
+            weatherKind,
+            aiCommandItemsSignature(homeViewModel.items)
+        ].joined(separator: "|")
+    }
+
+    private func storeAICommandSuggestions(_ suggestions: [String], for key: String) {
+        guard Self.aiCommandSuggestionsCache[key] == nil else {
+            return
+        }
+        Self.aiCommandSuggestionsCache[key] = suggestions
+        rememberAICommandCacheKey("suggestions|\(key)")
     }
 
     private func shouldSuggestCommuteDraft(recentItems: [HomeItem]) -> Bool {
@@ -1910,7 +1942,7 @@ struct InsightWebView: View {
 
         let range = aiCommandTimeRange(from: normalized)
         let categoryIntent = aiCommandCategoryIntent(from: normalized)
-        if lifeMarkIntent != nil || categoryIntent != nil || aiCommandAsksCategoryBreakdown(normalized) || containsAny(normalized, ["查", "看", "多少", "几次", "花了", "消费", "账本", "整理", "概览", "最近", "这阵子", "今天", "昨天", "本周", "上周", "本月", "上个月"]) {
+        if lifeMarkIntent != nil || categoryIntent != nil || aiCommandAsksCategoryBreakdown(normalized) || containsAny(normalized, ["查", "看", "多少", "几次", "花了", "消费", "账本", "记录", "流水", "明细", "整理", "概览", "最近", "近来", "这阵子", "这段时间", "今天", "昨日", "昨天", "本周", "这周", "这一周", "本星期", "这个星期", "这星期", "本礼拜", "这个礼拜", "这礼拜", "上周", "上一周", "上星期", "上个星期", "上礼拜", "上个礼拜", "本月", "这个月", "这月", "上个月", "上月"]) {
             return buildQueryResult(
                 range: range,
                 categoryIntent: categoryIntent,
@@ -2040,10 +2072,10 @@ struct InsightWebView: View {
         command: String
     ) -> AICommandResult {
         let displayLabel = aiCommandLifeMarkLabel(intent, command: command) ?? intent.label
-        let matched = aiCommandScopedLifeMarkItems(
-            homeViewModel.items.filter { item in
-                item.amount > 0 && LifeMarkService.matches(item, intent: intent)
-            },
+        let hasExplicitTimeRange = aiCommandHasExplicitTimeRange(command)
+        let lookupRange = hasExplicitTimeRange ? aiCommandTimeRange(from: command, defaultRecentDays: 31) : aiCommandAllTimeRange
+        let matched = filteredAICommandLifeMarkItems(
+            range: lookupRange,
             intent: intent,
             command: command
         )
@@ -2053,18 +2085,20 @@ struct InsightWebView: View {
         let title: String
         if let target {
             item = matched.count >= target ? matched[target - 1] : nil
-            title = target == 1 ? "第一次\(displayLabel)" : "\(displayLabel)第 \(target) 次"
+            let prefix = hasExplicitTimeRange ? lookupRange.label : ""
+            title = target == 1 ? "\(prefix)第一次\(displayLabel)" : "\(prefix)\(displayLabel)第 \(target) 次"
         } else {
             item = matched.last
-            title = "上一次\(displayLabel)"
+            title = hasExplicitTimeRange ? "\(lookupRange.label)上一次\(displayLabel)" : "上一次\(displayLabel)"
         }
 
         guard let item else {
             let targetText = target.map { $0 == 1 ? "第一次" : "第 \($0) 次" } ?? "上一次"
+            let rangeText = hasExplicitTimeRange ? "\(lookupRange.label)内" : "账本里"
             return AICommandResult(
                 kind: .query,
                 title: "还没找到\(targetText)\(displayLabel)",
-                summary: "账本里暂时没有足够明确的\(displayLabel)记录。",
+                summary: "\(rangeText)暂时没有足够明确的\(displayLabel)记录。",
                 detail: "之后只要备注、分类或天气城市线索匹配，这类生活印记会自动累积。",
                 items: [],
                 bars: [],
@@ -2074,8 +2108,9 @@ struct InsightWebView: View {
             )
         }
 
+        let relatedRange = hasExplicitTimeRange ? lookupRange : aiCommandTimeRange(from: command, defaultRecentDays: 31)
         let related = filteredAICommandLifeMarkItems(
-            range: aiCommandTimeRange(from: command, defaultRecentDays: 31),
+            range: relatedRange,
             intent: intent,
             command: command
         )
@@ -2091,7 +2126,7 @@ struct InsightWebView: View {
             summary: "找到了 \(item.createdAt.zhBillDateOnly) 的「\(item.displayTitle)」。",
             detail: detailParts.joined(separator: " "),
             items: uniqueAICommandItems([item] + related),
-            bars: dailyBars(range: aiCommandTimeRange(from: command, defaultRecentDays: 31), items: related),
+            bars: dailyBars(range: relatedRange, items: related),
             drafts: [],
             amountSource: nil,
             needsAmount: false
@@ -2431,7 +2466,12 @@ struct InsightWebView: View {
     }
 
     private func filteredAICommandItems(range: AICommandTimeRange, intent: AICommandCategoryIntent?) -> [HomeItem] {
-        return homeViewModel.items.filter { item in
+        let cacheKey = aiCommandItemsCacheKey(range: range, intent: intent)
+        if let cached = Self.aiCommandItemsCache[cacheKey] {
+            return cached
+        }
+
+        let result = homeViewModel.items.filter { item in
             guard item.amount > 0, range.contains(item.createdAt) else { return false }
             guard let intent else { return true }
             let categoryMatched = intent.categories.contains(item.category)
@@ -2440,6 +2480,8 @@ struct InsightWebView: View {
                 ? categoryMatched && keywordMatched
                 : categoryMatched || keywordMatched
         }
+        storeAICommandItems(result, for: cacheKey)
+        return result
     }
 
     private func filteredAICommandLifeMarkItems(
@@ -2447,12 +2489,134 @@ struct InsightWebView: View {
         intent: LifeMarkQueryIntent,
         command: String = ""
     ) -> [HomeItem] {
+        let cacheKey = aiCommandLifeMarkItemsCacheKey(range: range, intent: intent, command: command)
+        if let cached = Self.aiCommandLifeMarkItemsCache[cacheKey] {
+            return cached
+        }
+
         let items = homeViewModel.items.filter { item in
             item.amount > 0
                 && range.contains(item.createdAt)
                 && LifeMarkService.matches(item, intent: intent)
         }
-        return aiCommandScopedLifeMarkItems(items, intent: intent, command: command)
+        let result = aiCommandScopedLifeMarkItems(items, intent: intent, command: command)
+        storeAICommandLifeMarkItems(result, for: cacheKey)
+        return result
+    }
+
+    private func aiCommandItemsCacheKey(
+        range: AICommandTimeRange,
+        intent: AICommandCategoryIntent?
+    ) -> String {
+        let intentKey: String
+        if let intent {
+            intentKey = [
+                intent.label,
+                intent.categories.map(\.rawValue).joined(separator: ","),
+                intent.keywords.joined(separator: ","),
+                intent.requiresKeywordMatch ? "strict" : "loose"
+            ].joined(separator: "#")
+        } else {
+            intentKey = "all"
+        }
+        return [
+            "items",
+            range.label,
+            aiCommandDateCacheKey(range.start),
+            aiCommandDateCacheKey(range.end),
+            intentKey,
+            aiCommandItemsSignature(homeViewModel.items)
+        ].joined(separator: "|")
+    }
+
+    private func aiCommandLifeMarkItemsCacheKey(
+        range: AICommandTimeRange,
+        intent: LifeMarkQueryIntent,
+        command: String
+    ) -> String {
+        [
+            "lifeMark",
+            range.label,
+            aiCommandDateCacheKey(range.start),
+            aiCommandDateCacheKey(range.end),
+            intent.id,
+            intent.label,
+            intent.categories.map(\.rawValue).joined(separator: ","),
+            intent.keywords.joined(separator: ","),
+            intent.requiresKeywordMatch ? "strict" : "loose",
+            command,
+            aiCommandItemsSignature(homeViewModel.items)
+        ].joined(separator: "|")
+    }
+
+    private func aiCommandDateCacheKey(_ date: Date) -> String {
+        if date == .distantPast {
+            return "distantPast"
+        }
+        if date == .distantFuture {
+            return "distantFuture"
+        }
+        return "\(Int(date.timeIntervalSince1970))"
+    }
+
+    private func storeAICommandItems(_ items: [HomeItem], for key: String) {
+        guard Self.aiCommandItemsCache[key] == nil else {
+            return
+        }
+        Self.aiCommandItemsCache[key] = items
+        rememberAICommandCacheKey("items|\(key)")
+    }
+
+    private func storeAICommandLifeMarkItems(_ items: [HomeItem], for key: String) {
+        guard Self.aiCommandLifeMarkItemsCache[key] == nil else {
+            return
+        }
+        Self.aiCommandLifeMarkItemsCache[key] = items
+        rememberAICommandCacheKey("lifeMark|\(key)")
+    }
+
+    private func aiCommandItemsSignature(_ items: [HomeItem]) -> String {
+        var hasher = Hasher()
+        hasher.combine(items.count)
+        for item in items {
+            hasher.combine(item.id)
+            hasher.combine(item.createdAt.timeIntervalSince1970)
+            hasher.combine(item.updatedAt.timeIntervalSince1970)
+            hasher.combine(item.amount)
+            hasher.combine(item.category.rawValue)
+            hasher.combine(item.title)
+            hasher.combine(item.emotionTag)
+            hasher.combine(item.source.rawValue)
+            hasher.combine(item.draftMeta?.status.rawValue)
+            hasher.combine(item.memoryContext?.weatherKind)
+            hasher.combine(item.memoryContext?.cityName)
+            hasher.combine(item.memoryContext?.semanticPlace)
+            hasher.combine(item.scenePackId)
+        }
+        return "\(hasher.finalize())"
+    }
+
+    private func rememberAICommandCacheKey(_ typedKey: String) {
+        Self.aiCommandCacheOrder.append(typedKey)
+        while Self.aiCommandCacheOrder.count > Self.aiCommandCacheLimit {
+            let staleTypedKey = Self.aiCommandCacheOrder.removeFirst()
+            removeAICommandCacheValue(for: staleTypedKey)
+        }
+    }
+
+    private func removeAICommandCacheValue(for typedKey: String) {
+        let parts = typedKey.split(separator: "|", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return }
+        switch parts[0] {
+        case "suggestions":
+            Self.aiCommandSuggestionsCache.removeValue(forKey: parts[1])
+        case "items":
+            Self.aiCommandItemsCache.removeValue(forKey: parts[1])
+        case "lifeMark":
+            Self.aiCommandLifeMarkItemsCache.removeValue(forKey: parts[1])
+        default:
+            break
+        }
     }
 
     private func aiCommandScopedLifeMarkItems(
@@ -2513,6 +2677,21 @@ struct InsightWebView: View {
             .joined(separator: " ")
             .lowercased()
         return containsAny(text, keywords)
+    }
+
+    private func aiCommandHasExplicitTimeRange(_ text: String) -> Bool {
+        if containsAny(text, ["今天", "今日", "今儿", "昨天", "昨日", "昨儿", "这阵子", "近来", "这段时间"]) {
+            return true
+        }
+        if containsAny(text, ["本周", "这周", "这一周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜", "上周", "上一周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜"]) {
+            return true
+        }
+        if containsAny(text, ["本月", "这个月", "这月", "本月份", "这个月份", "这月份", "当月", "上个月", "上月", "上一个月", "上一月", "上月份", "上个自然月"]) {
+            return true
+        }
+        return aiCommandExplicitRecentDays(from: text) != nil
+            || aiCommandExplicitRecentWeeks(from: text) != nil
+            || aiCommandExplicitRecentMonths(from: text) != nil
     }
 
     private func dailyBars(range: AICommandTimeRange, items: [HomeItem]) -> [AICommandBar] {
@@ -2665,37 +2844,43 @@ struct InsightWebView: View {
         if let explicitDays = aiCommandExplicitRecentDays(from: text) {
             return aiCommandRecentRange(days: explicitDays, label: "最近 \(explicitDays) 天")
         }
+        if let explicitWeeks = aiCommandExplicitRecentWeeks(from: text) {
+            return aiCommandRecentRange(days: explicitWeeks * 7, label: explicitWeeks == 1 ? "最近一周" : "最近 \(explicitWeeks) 周")
+        }
+        if let explicitMonths = aiCommandExplicitRecentMonths(from: text) {
+            return aiCommandRecentMonthRange(months: explicitMonths, label: explicitMonths == 1 ? "最近一个月" : "最近 \(explicitMonths) 个月")
+        }
 
-        if containsAny(text, ["今天", "今日"]) {
+        if containsAny(text, ["今天", "今日", "今儿", "今天这天"]) {
             let end = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? now
             return AICommandTimeRange(label: "今天", start: todayStart, end: end, barDays: 1)
         }
-        if containsAny(text, ["昨天", "昨日"]) {
+        if containsAny(text, ["昨天", "昨日", "昨儿"]) {
             let start = calendar.date(byAdding: .day, value: -1, to: todayStart) ?? todayStart
             return AICommandTimeRange(label: "昨天", start: start, end: todayStart, barDays: 1)
         }
         if containsAny(text, ["过去三天", "近三天", "最近三天", "3天", "3 天", "三天"]) {
             return aiCommandRecentRange(days: 3, label: "过去 3 天")
         }
-        if containsAny(text, ["本周", "这周", "这一周"]) {
+        if containsAny(text, ["本周", "这周", "这一周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜"]) {
             let start = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? todayStart
             let end = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? now
             return AICommandTimeRange(label: "本周", start: start, end: end, barDays: daysBetween(start, end))
         }
-        if containsAny(text, ["上周", "上一周"]) {
+        if containsAny(text, ["上周", "上一周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜"]) {
             let end = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? todayStart
             let start = calendar.date(byAdding: .day, value: -7, to: end) ?? end
             return AICommandTimeRange(label: "上周", start: start, end: end, barDays: 7)
         }
-        if containsAny(text, ["最近7天", "最近 7 天", "最近七天", "过去7天", "过去 7 天", "近7天", "近 7 天", "七天", "一周", "过去一周", "最近一周"]) {
+        if containsAny(text, ["最近7天", "最近 7 天", "最近七天", "过去7天", "过去 7 天", "近7天", "近 7 天", "七天", "一周", "一星期", "一个星期", "一礼拜", "一个礼拜", "过去一周", "过去一星期", "过去一礼拜", "最近一周", "最近一星期", "最近一礼拜"]) {
             return aiCommandRecentRange(days: 7, label: "最近 7 天")
         }
-        if containsAny(text, ["本月", "这个月", "这月"]) {
+        if containsAny(text, ["本月", "这个月", "这月", "本月份", "这个月份", "这月份", "当月"]) {
             let start = calendar.dateInterval(of: .month, for: now)?.start ?? todayStart
             let end = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? now
             return AICommandTimeRange(label: "本月", start: start, end: end, barDays: daysBetween(start, end))
         }
-        if containsAny(text, ["上个月", "上月"]) {
+        if containsAny(text, ["上个月", "上月", "上一个月", "上一月", "上月份", "上个自然月"]) {
             let end = calendar.dateInterval(of: .month, for: now)?.start ?? todayStart
             let start = calendar.date(byAdding: .month, value: -1, to: end) ?? end
             return AICommandTimeRange(label: "上个月", start: start, end: end, barDays: daysBetween(start, end))
@@ -2718,7 +2903,30 @@ struct InsightWebView: View {
         return AICommandTimeRange(label: label, start: start, end: end, barDays: safeDays)
     }
 
+    private func aiCommandRecentMonthRange(months: Int, label: String) -> AICommandTimeRange {
+        let calendar = Calendar.current
+        let now = Date()
+        let todayStart = calendar.startOfDay(for: now)
+        let safeMonths = max(1, min(months, 12))
+        let end = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? now
+        let start = calendar.date(byAdding: .month, value: -safeMonths, to: end) ?? todayStart
+        return AICommandTimeRange(label: label, start: start, end: end, barDays: daysBetween(start, end))
+    }
+
+    private var aiCommandAllTimeRange: AICommandTimeRange {
+        AICommandTimeRange(
+            label: "全部",
+            start: .distantPast,
+            end: .distantFuture,
+            barDays: 7
+        )
+    }
+
     private func aiCommandExplicitRecentDays(from text: String) -> Int? {
+        let hasRecentContext = containsAny(text, ["最近", "过去", "近", "前"])
+        if hasRecentContext, containsAny(text, ["半个月", "半月"]) {
+            return 15
+        }
         guard containsAny(text, ["最近", "过去", "近", "前"]),
               containsAny(text, ["天", "日"]) else { return nil }
         if containsAny(text, ["几天", "几日"]) {
@@ -2755,9 +2963,94 @@ struct InsightWebView: View {
         return candidates.first { text.contains("\($0.0)天") || text.contains("\($0.0)日") }?.1
     }
 
+    private func aiCommandExplicitRecentWeeks(from text: String) -> Int? {
+        if containsAny(text, ["本周", "这周", "这一周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜", "上周", "上一周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜"]) {
+            return nil
+        }
+        let hasRecentContext = containsAny(text, ["最近", "过去", "近", "前"])
+        let hasExplicitWeekSpan = containsAny(text, ["一周", "两周", "二周", "个星期", "个礼拜", "一星期", "两星期", "二星期", "一礼拜", "两礼拜", "二礼拜"])
+        guard (hasRecentContext || hasExplicitWeekSpan),
+              containsAny(text, ["周", "星期", "礼拜"]) else { return nil }
+        if containsAny(text, ["几周", "几个星期", "几个礼拜"]) {
+            return 1
+        }
+        if let number = aiCommandArabicWeekCount(from: text) {
+            return min(max(number, 1), 12)
+        }
+        if let number = aiCommandChineseWeekCount(from: text) {
+            return min(max(number, 1), 12)
+        }
+        return containsAny(text, ["一周", "一个星期", "一星期", "一个礼拜", "一礼拜"]) ? 1 : nil
+    }
+
+    private func aiCommandArabicWeekCount(from text: String) -> Int? {
+        guard let regex = try? NSRegularExpression(pattern: #"(\d{1,2})\s*(周|个?\s*星期|个?\s*礼拜)"#) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let numberRange = Range(match.range(at: 1), in: text) else {
+            return nil
+        }
+        return Int(text[numberRange])
+    }
+
+    private func aiCommandChineseWeekCount(from text: String) -> Int? {
+        let candidates: [(String, Int)] = [
+            ("十二", 12), ("十一", 11), ("十", 10), ("九", 9), ("八", 8),
+            ("七", 7), ("六", 6), ("五", 5), ("四", 4), ("三", 3),
+            ("两", 2), ("二", 2), ("一", 1)
+        ]
+        return candidates.first { candidate in
+            let value = candidate.0
+            return text.contains("\(value)周")
+                || text.contains("\(value)星期")
+                || text.contains("\(value)个星期")
+                || text.contains("\(value)礼拜")
+                || text.contains("\(value)个礼拜")
+        }?.1
+    }
+
+    private func aiCommandExplicitRecentMonths(from text: String) -> Int? {
+        if containsAny(text, ["本月", "这个月", "这月", "本月份", "这个月份", "这月份", "当月", "上个月", "上月", "上一个月", "上一月", "上月份", "上个自然月"]) {
+            return nil
+        }
+        let hasRecentContext = containsAny(text, ["最近", "过去", "近", "前"])
+        let hasExplicitMonthSpan = containsAny(text, ["个月"])
+        guard (hasRecentContext || hasExplicitMonthSpan),
+              containsAny(text, ["个月", "月"]) else { return nil }
+        if containsAny(text, ["几个月"]) {
+            return 1
+        }
+        if let number = aiCommandArabicMonthCount(from: text) {
+            return min(max(number, 1), 12)
+        }
+        if let number = aiCommandChineseMonthCount(from: text) {
+            return min(max(number, 1), 12)
+        }
+        return containsAny(text, ["一个月", "一月"]) ? 1 : nil
+    }
+
+    private func aiCommandArabicMonthCount(from text: String) -> Int? {
+        guard let regex = try? NSRegularExpression(pattern: #"(\d{1,2})\s*个?\s*月"#) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let numberRange = Range(match.range(at: 1), in: text) else {
+            return nil
+        }
+        return Int(text[numberRange])
+    }
+
+    private func aiCommandChineseMonthCount(from text: String) -> Int? {
+        let candidates: [(String, Int)] = [
+            ("十二", 12), ("十一", 11), ("十", 10), ("九", 9), ("八", 8),
+            ("七", 7), ("六", 6), ("五", 5), ("四", 4), ("三", 3),
+            ("两", 2), ("二", 2), ("一", 1)
+        ]
+        return candidates.first { text.contains("\($0.0)个月") || text.contains("\($0.0)月") }?.1
+    }
+
     private func commuteDraftRange(from text: String) -> AICommandTimeRange {
         let explicitRange = aiCommandTimeRange(from: text, defaultRecentDays: 7)
-        if containsAny(text, ["上周", "上一周", "本周", "这周", "最近", "过去", "7天", "七天", "一周"]) {
+        if containsAny(text, ["上周", "上一周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜", "本周", "这周", "这一周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜", "最近", "过去", "近", "前", "7天", "七天", "一周", "一星期", "一个星期", "一礼拜", "一个礼拜", "半个月", "半月", "个月"]) {
             return explicitRange
         }
         return aiCommandRecentRange(days: 7, label: "最近一周")
