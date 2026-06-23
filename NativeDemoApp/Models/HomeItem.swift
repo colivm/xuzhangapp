@@ -161,6 +161,13 @@ struct HomeItem: Identifiable, Codable, Equatable {
            !Self.containsWeekendWorkRouteCue(title) {
             return Self.weekendRouteTag(for: createdAt)
         }
+        if Self.isGenericRainDailyTag(trimmed),
+           !Self.containsWeatherSupplyKeyword(title) {
+            if let refined = Self.refinedEmotionTag(title: title, category: category, amount: amount, date: createdAt) {
+                return refined
+            }
+            return Self.inferEmotionTag(category: category, amount: amount)
+        }
         if let refined = Self.refinedEmotionTag(title: title, category: category, amount: amount, date: createdAt),
            Self.shouldPreferRefinedTag(current: trimmed, refined: refined) {
             return refined
@@ -265,6 +272,11 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["机票", "机场", "航班"]) { return "飞一程记下" }
             if containsAny(text, ["高速", "过路费", "etc"]) { return "路上通行一笔" }
         case .shopping:
+            if containsAny(text, ["奶粉"]) { return "宝宝口粮补上" }
+            if containsAny(text, ["尿不湿", "纸尿裤", "拉拉裤"]) { return "照护用品补齐" }
+            if containsAny(text, ["辅食", "奶瓶", "安抚奶嘴"]) { return "宝宝照护补上" }
+            if containsAny(text, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) { return "毛孩子口粮补上" }
+            if containsAny(text, ["猫砂", "尿垫", "冻干", "宠物罐头", "罐头"]) { return "毛孩子日常补给" }
             if containsAny(text, ["衣服", "上衣", "裤子", "裙", "外套", "内衣"]) { return "给衣柜添一件" }
             if containsAny(text, ["鞋", "袜"]) { return "脚下换新一点" }
             if containsAny(text, ["护肤", "洗面奶", "面霜", "防晒", "口红", "化妆"]) { return "照顾自己一点" }
@@ -273,6 +285,11 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["花", "香薰", "摆件"]) { return "给日子添点好看" }
             if containsAny(text, ["快递", "运费"]) { return "路上的小费用" }
         case .daily:
+            if containsAny(text, ["奶粉"]) { return "宝宝口粮补上" }
+            if containsAny(text, ["尿不湿", "纸尿裤", "拉拉裤"]) { return "照护用品补齐" }
+            if containsAny(text, ["辅食", "奶瓶", "安抚奶嘴"]) { return "宝宝照护补上" }
+            if containsAny(text, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) { return "毛孩子口粮补上" }
+            if containsAny(text, ["猫砂", "尿垫", "冻干", "宠物罐头", "罐头"]) { return "毛孩子日常补给" }
             if containsAny(text, ["纸巾", "卷纸", "抽纸", "湿巾"]) { return "纸品补上了" }
             if containsAny(text, ["洗衣液", "洗洁精", "清洁", "垃圾袋", "消毒"]) { return "清洁用品补齐" }
             if containsAny(text, ["洗发水", "沐浴露", "牙刷", "毛巾"]) { return "洗护日常补上" }
@@ -377,6 +394,14 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
     private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
         keywords.contains { text.contains($0.lowercased()) }
+    }
+
+    private static func isGenericRainDailyTag(_ text: String) -> Bool {
+        text.contains("下雨天补齐日常") || text.contains("雨天补齐日常")
+    }
+
+    private static func containsWeatherSupplyKeyword(_ text: String) -> Bool {
+        containsAny(text.lowercased(), ["雨伞", "伞", "雨衣", "雨鞋", "防水", "烘干", "除湿"])
     }
 
     private static func isWeekend(_ date: Date) -> Bool {
@@ -648,6 +673,7 @@ enum RecordSemanticLexicon {
             .init(category: .transport, score: 4.0, keywords: ["地铁", "公交", "打车", "滴滴", "充电", "高铁", "机票", "机场", "路费", "通勤"]),
             .init(category: .dining, score: 4.8, keywords: ["咖啡", "奶茶", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "宵夜", "外卖", "饭", "餐", "一顿", "这顿", "吃", "垫一下", "垫一口", "夜里补", "热食", "热乎", "轻食", "小食", "点心", "补点能量", "吃一口", "饮品", "拿铁", "美式", "七欣天", "火锅", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "美团外卖", "饿了么"]),
             .init(category: .shopping, score: 4.0, keywords: ["淘宝", "京东", "拼多多", "购物", "下单", "快递", "衣服", "鞋", "数码", "渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "乐器", "茶具", "咖啡器具"]),
+            .init(category: .shopping, score: 6.4, keywords: ["奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "奶瓶", "安抚奶嘴", "宝宝湿巾", "婴儿湿巾", "童装", "儿童座椅", "推车", "狗粮", "猫粮", "猫砂", "宠物粮", "宠物口粮", "尿垫", "冻干", "宠物罐头"]),
             .init(category: .daily, score: 3.0, keywords: ["超市", "日用品", "纸巾", "洗衣", "打印", "理发", "宠物", "便利店", "买菜", "生鲜", "盒马", "叮咚买菜", "小象超市", "朴朴超市", "美团闪购", "京东秒送"]),
             .init(category: .daily, score: 4.6, keywords: ["纸巾", "抽纸", "卷纸", "湿巾", "洗衣液", "洗衣凝珠", "洗洁精", "垃圾袋", "清洁", "日化", "日用品", "家用", "补货", "买菜", "生鲜", "水果", "蔬菜", "肉禽", "水产", "给家补货"]),
             .init(category: .entertainment, score: 3.0, keywords: ["电影", "影院", "游戏", "会员", "演唱会", "门票"]),
@@ -667,6 +693,8 @@ enum RecordSemanticLexicon {
             .init(id: "transport", category: .transport, keywords: ["地铁", "公交", "打车", "出租", "网约车", "路费", "车程", "通勤", "上班", "下班", "返程", "回家"]),
             .init(id: "meal", category: .dining, keywords: ["食堂", "午餐", "午饭", "简餐", "轻食", "小食", "点心", "热饭", "外卖", "饭点", "吃一口", "夜宵", "晚饭", "早餐", "早饭", "七欣天", "火锅", "麻辣烫", "便当", "盖饭"]),
             .init(id: "convenience", category: .daily, keywords: ["便利蜂", "便利店", "全家", "罗森", "711", "7-11"]),
+            .init(id: "baby_supply", category: .shopping, keywords: ["宝宝", "孩子", "婴儿", "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "奶瓶", "安抚奶嘴", "宝宝湿巾", "婴儿湿巾", "童装", "儿童座椅", "推车"]),
+            .init(id: "pet_supply", category: .shopping, keywords: ["宠物", "毛孩子", "毛孩", "狗粮", "猫粮", "猫砂", "宠物粮", "宠物口粮", "尿垫", "冻干", "罐头", "宠物罐头", "驱虫", "宠物医院", "洗护"]),
         ]
     )
 

@@ -6,7 +6,7 @@ struct RecordView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @Environment(\.colorScheme) private var colorScheme
-    var onSaved: (() -> Void)? = nil
+    var onSaved: ((LifeMarkSceneRewardPrompt?) -> Void)? = nil
     var onShowMemberPricing: ((MemberPricingEntryContext) -> Void)? = nil
     @State private var selectedEntryMode: EntryMode = .manual
     @State private var selectedPhoto: PhotosPickerItem?
@@ -30,7 +30,6 @@ struct RecordView: View {
     @State private var lastDraftIntent: RecordDraftIntent = .automatic
     @State private var freeScenePackRefreshToken = 0
     @State private var freeLockedSceneHint: ScenePackAngleSheet.LockedSceneHint?
-    @State private var lifeMarkSceneRewardCard: LifeMarkSceneRewardCard?
     @State private var ocrQuotaUpsellVisibleThisSession = false
     @AppStorage("scene_pack_order_v1") private var scenePackOrderStorage = ""
     @AppStorage("scene_pack_manual_order_v1") private var scenePackManualOrderEnabled = false
@@ -64,21 +63,6 @@ struct RecordView: View {
     private struct ScenePackUsageStat {
         var count: Int
         var lastUsedAt: TimeInterval
-    }
-
-    private struct LifeMarkSceneRewardCard: Identifiable, Equatable {
-        enum Kind: Equatable {
-            case reward(LifeMarkSceneReward)
-            case coldStart
-        }
-
-        let id: String
-        let title: String
-        let badge: String
-        let detail: String
-        let primaryTitle: String
-        let secondaryTitle: String
-        let kind: Kind
     }
 
     private var visibleScenePacks: [ScenePackDefinition] {
@@ -804,15 +788,14 @@ struct RecordView: View {
         noteEditorExpanded = false
         datePanelExpanded = false
         lastDraftIntent = .automatic
-        if let savedItem = homeViewModel.items.first {
-            prepareLifeMarkSceneRewardCardIfNeeded(for: savedItem)
+        let rewardPrompt = homeViewModel.items.first.flatMap { savedItem in
+            prepareLifeMarkSceneRewardPromptIfNeeded(for: savedItem)
         }
-        guard lifeMarkSceneRewardCard == nil else { return }
-        onSaved?()
+        onSaved?(rewardPrompt)
     }
 
-    private func prepareLifeMarkSceneRewardCardIfNeeded(for item: HomeItem) {
-        guard !isMember else { return }
+    private func prepareLifeMarkSceneRewardPromptIfNeeded(for item: HomeItem) -> LifeMarkSceneRewardPrompt? {
+        guard !isMember else { return nil }
         if let reward = lifeMarkSceneRewardService.registerRewardIfNeeded(
             for: item,
             allItems: homeViewModel.items,
@@ -820,7 +803,8 @@ struct RecordView: View {
             definitions: visibleScenePacks,
             isMember: isMember
         ) {
-            lifeMarkSceneRewardCard = LifeMarkSceneRewardCard(
+            freeScenePackRefreshToken += 1
+            return LifeMarkSceneRewardPrompt(
                 id: reward.id,
                 title: "新的生活线索诞生",
                 badge: "奖励一次免费体验",
@@ -829,16 +813,14 @@ struct RecordView: View {
                 secondaryTitle: "稍后再说",
                 kind: .reward(reward)
             )
-            freeScenePackRefreshToken += 1
-            return
         }
 
         guard lifeMarkSceneRewardService.shouldShowColdStartGuide(
             after: item,
             allItems: homeViewModel.items,
             isMember: isMember
-        ) else { return }
-        lifeMarkSceneRewardCard = LifeMarkSceneRewardCard(
+        ) else { return nil }
+        return LifeMarkSceneRewardPrompt(
             id: "cold_start_scene_pack_guide",
             title: "新的生活线索诞生",
             badge: "先选 3 个常用场景包",
@@ -1298,10 +1280,6 @@ struct RecordView: View {
     private var manualForm: some View {
         VStack(alignment: .leading, spacing: 12) {
             amountField
-            if let lifeMarkSceneRewardCard {
-                lifeMarkSceneRewardPrompt(lifeMarkSceneRewardCard)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
             if hasValidAmount {
                 lifeEntryPreview
             }
@@ -1369,101 +1347,9 @@ struct RecordView: View {
         )
     }
 
-    private func lifeMarkSceneRewardPrompt(_ card: LifeMarkSceneRewardCard) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(recordAccent)
-                    .frame(width: 30, height: 30)
-                    .background(Circle().fill(recordAccent.opacity(0.12)))
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(card.title)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(recordInk)
-                    Text(card.badge)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(recordAccent)
-                    Text(card.detail)
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppColors.subtext)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
-            }
-
-            HStack(spacing: 10) {
-                Button {
-                    dismissLifeMarkSceneRewardCard(card)
-                } label: {
-                    Text(card.secondaryTitle)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppColors.subtext)
-                        .frame(maxWidth: .infinity, minHeight: 38)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color.white.opacity(0.58))
-                        )
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    handleLifeMarkSceneRewardPrimary(card)
-                } label: {
-                    Text(card.primaryTitle)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 38)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(recordAccent)
-                        )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(recordAccent.opacity(0.08))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(recordAccent.opacity(0.18), lineWidth: 1)
-        )
-    }
-
-    private func handleLifeMarkSceneRewardPrimary(_ card: LifeMarkSceneRewardCard) {
-        switch card.kind {
-        case .reward(let reward):
-            claimLifeMarkSceneReward(reward, shouldApplyPack: true)
-        case .coldStart:
-            lifeMarkSceneRewardService.markColdStartGuideSeen()
-            withAnimation(.easeInOut(duration: 0.18)) {
-                lifeMarkSceneRewardCard = nil
-            }
-            openFreeScenePackAngleSheet()
-        }
-    }
-
-    private func dismissLifeMarkSceneRewardCard(_ card: LifeMarkSceneRewardCard) {
-        if case .coldStart = card.kind {
-            lifeMarkSceneRewardService.markColdStartGuideSeen()
-        }
-        withAnimation(.easeInOut(duration: 0.18)) {
-            lifeMarkSceneRewardCard = nil
-        }
-        onSaved?()
-    }
-
     private func claimLifeMarkSceneReward(_ reward: LifeMarkSceneReward, shouldApplyPack: Bool) {
         guard let activeReward = lifeMarkSceneRewardService.claimReward(reward, from: visibleScenePacks) else { return }
         freeScenePackRefreshToken += 1
-        withAnimation(.easeInOut(duration: 0.18)) {
-            lifeMarkSceneRewardCard = nil
-        }
         guard shouldApplyPack,
               let pack = visibleScenePacks.first(where: { $0.id == activeReward.packId }) else { return }
         guard hasValidAmount else {

@@ -141,7 +141,9 @@ enum RecordMemoryContextService {
         case (.rain, .dining) where containsAny(text, ["外卖", "热", "饭", "面", "吃"]):
             return "雨天吃口热的"
         case (.rain, .shopping), (.rain, .home):
-            return "下雨天补齐日常"
+            if containsAny(text, ["雨伞", "伞", "雨衣", "雨鞋", "防水", "烘干", "除湿"]) {
+                return "雨天用品补上"
+            }
         case (.snow, .commute):
             return "雪天通勤，慢慢到"
         case (.cold, .commute):

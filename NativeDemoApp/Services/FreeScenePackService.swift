@@ -10,6 +10,21 @@ struct LifeMarkSceneReward: Identifiable, Codable, Equatable {
     let expiresAt: TimeInterval
 }
 
+struct LifeMarkSceneRewardPrompt: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case reward(LifeMarkSceneReward)
+        case coldStart
+    }
+
+    let id: String
+    let title: String
+    let badge: String
+    let detail: String
+    let primaryTitle: String
+    let secondaryTitle: String
+    let kind: Kind
+}
+
 final class LifeMarkSceneRewardService {
     static let shared = LifeMarkSceneRewardService()
 
