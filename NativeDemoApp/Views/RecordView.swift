@@ -29,6 +29,7 @@ struct RecordView: View {
     @State private var scenePackFeedback: String?
     @State private var didAutoFocusAmountPad = false
     @State private var lastDraftIntent: RecordDraftIntent = .automatic
+    @State private var userNoteAnchorTitle: String?
     @State private var freeScenePackRefreshToken = 0
     @State private var freeLockedSceneHint: ScenePackAngleSheet.LockedSceneHint?
     @State private var ocrQuotaUpsellVisibleThisSession = false
@@ -49,6 +50,17 @@ struct RecordView: View {
         case automatic
         case note
         case category
+    }
+
+    private enum ScenePackNoteRelation: Equatable {
+        case aligned
+        case related
+        case conflict
+    }
+
+    private enum NoteRewriteDecision {
+        case categoryCopy(anchorTitle: String?)
+        case scenePackCopy(ScenePackDefinition, anchorTitle: String?)
     }
 
     private let draftClock = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
@@ -307,6 +319,10 @@ struct RecordView: View {
         return fallback
     }
 
+    private func canUseScenePackForCurrentAccess(_ pack: ScenePackDefinition) -> Bool {
+        isMember || freeScenePacksForUse.contains { $0.id == pack.id }
+    }
+
     private var hasTravelContextForCurrentRecord: Bool {
         let note = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         return containsTravelKeyword(note)
@@ -371,16 +387,20 @@ struct RecordView: View {
         return keywords.contains { text.contains($0) }
     }
 
+    private func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.localizedCaseInsensitiveContains($0) }
+    }
+
     private func lockedSceneHintTitle(for pack: ScenePackDefinition) -> String {
         switch pack.id {
         case "travel":
-            return "这笔更像出去玩订酒店买票"
+            return "更像出去玩订酒店买票"
         case "family":
-            return "这笔更像娃和毛孩的补给站"
+            return "更像娃和毛孩的补给站"
         case "care":
-            return "这笔更像看病买药健身恢复"
+            return "更像看病买药健身恢复"
         default:
-            return "这笔可以换个生活角度"
+            return "可以换个生活角度"
         }
     }
 
@@ -404,7 +424,9 @@ struct RecordView: View {
     ) {
         dismissKeyboard()
         let shouldPreserveUserNote = shouldPreserveUserNoteWhenChangingAngle
-        lastDraftIntent = .category
+        if !shouldPreserveUserNote {
+            lastDraftIntent = .category
+        }
         if trackMemberSceneUsage {
             markScenePackUsed(pack)
         }
@@ -432,15 +454,19 @@ struct RecordView: View {
         if !keepSelectedCategory {
             activeScenePack = pack
             if shouldPreserveUserNote {
+                rememberUserNoteAnchor(homeViewModel.inputTitle)
                 homeViewModel.applyScenePackCategory(pack.category)
             } else {
+                userNoteAnchorTitle = nil
                 homeViewModel.applyScenePackDraft(title: title, category: pack.category)
             }
         } else {
             if shouldPreserveUserNote {
+                rememberUserNoteAnchor(homeViewModel.inputTitle)
                 activeScenePack = pack
                 homeViewModel.applyScenePackCategory(pack.category)
             } else {
+                userNoteAnchorTitle = nil
                 activeScenePack = nil
                 homeViewModel.inputTitle = title
             }
@@ -453,6 +479,11 @@ struct RecordView: View {
     private var shouldPreserveUserNoteWhenChangingAngle: Bool {
         let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         return !title.isEmpty && lastDraftIntent == .note
+    }
+
+    private func rememberUserNoteAnchor(_ title: String) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        userNoteAnchorTitle = trimmed.isEmpty ? nil : trimmed
     }
 
     private func scenePackVariantKey(
@@ -577,7 +608,13 @@ struct RecordView: View {
     }
 
     private var categoryLockedForCurrentIntent: Bool {
-        homeViewModel.categoryLockedByUser && lastDraftIntent != .note
+        homeViewModel.categoryLockedByUser
+    }
+
+    private var activeScenePackIdForCurrentRecord: String? {
+        guard let activeScenePack,
+              activeScenePack.category == homeViewModel.selectedCategory else { return nil }
+        return activeScenePack.id
     }
 
     private var previewHeadline: String {
@@ -605,7 +642,8 @@ struct RecordView: View {
                 merchantBrandId: previewBrand?.id,
                 categoryLockedByUser: categoryLockedForCurrentIntent,
                 userEditedTitle: previewTitleIsExplicitUserEdit,
-                source: "preview"
+                source: "preview",
+                scenePackId: activeScenePackIdForCurrentRecord
             )
         )
     }
@@ -629,7 +667,8 @@ struct RecordView: View {
             category: category,
             createdAt: homeViewModel.selectedDate,
             emotionTag: previewEmotion,
-            merchantBrandId: previewBrand?.id
+            merchantBrandId: previewBrand?.id,
+            scenePackId: activeScenePackIdForCurrentRecord
         )
         guard let mark = LifeMarkService.aggregates(
             for: [draft],
@@ -791,7 +830,7 @@ struct RecordView: View {
             userEditedTitle: currentTitleShouldBeUserEdited,
             preserveEmptyTitle: shouldUseNeutralRemarkFallback,
             categoryLockedForSave: categoryLockedForCurrentIntent,
-            scenePackId: activeScenePack?.category == homeViewModel.selectedCategory ? activeScenePack?.id : nil
+            scenePackId: activeScenePackIdForCurrentRecord
         )
         guard didSave else {
             withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
@@ -805,6 +844,8 @@ struct RecordView: View {
         noteEditorExpanded = false
         datePanelExpanded = false
         lastDraftIntent = .automatic
+        userNoteAnchorTitle = nil
+        activeScenePack = nil
         let rewardPrompt = homeViewModel.items.first.flatMap { savedItem in
             prepareLifeMarkSceneRewardPromptIfNeeded(for: savedItem)
         }
@@ -841,7 +882,7 @@ struct RecordView: View {
             id: "cold_start_scene_pack_guide",
             title: "新的生活线索诞生",
             badge: "先选 3 个常用场景包",
-            detail: "这笔已经长成生活印记了。可以先把最常用的 3 个场景包选好，之后记账会更贴近你的日常。",
+            detail: "这条记录已经长成生活印记了。可以先把最常用的 3 个场景包选好，之后记账会更贴近你的日常。",
             primaryTitle: "去看看",
             secondaryTitle: "知道了",
             kind: .coldStart
@@ -875,7 +916,7 @@ struct RecordView: View {
         return visibleScenePacks.first { $0.id == packId }
     }
 
-    private func nextCategoryCopyTitle() -> String {
+    private func nextCategoryCopyTitle(anchorTitle: String? = nil) -> String {
         let amount = inputAmountValue
         let category = homeViewModel.selectedCategory
         let variantKey = categoryCopyVariantKey(
@@ -886,26 +927,21 @@ struct RecordView: View {
         let variant = scenePackVariants[variantKey, default: 0]
         scenePackVariants[variantKey] = variant + 1
 
-        if let pack = baseScenePack(for: category) {
-            return ScenePackCopyPool.note(
-                for: pack,
-                amount: amount,
-                date: homeViewModel.selectedDate,
-                categoryContext: category,
-                petName: settingsViewModel.petNickname,
-                historyItems: homeViewModel.items,
-                allowPetCopy: settingsViewModel.petCompanionEnabled,
-                variant: variant,
-                allowTravelSpecificCopy: containsTravelKeyword(homeViewModel.inputTitle)
-            )
+        if let anchorTitle,
+           let anchored = anchoredCategoryCopy(
+            from: anchorTitle,
+            categoryContext: category,
+            variant: variant
+           ) {
+            return anchored
         }
 
-        return genericCategoryCopy(
+        return polishedRecordNoteCopy(genericCategoryCopy(
             for: category,
             amount: amount,
             date: homeViewModel.selectedDate,
             variant: variant
-        )
+        ))
     }
 
     private func categoryCopyVariantKey(
@@ -930,11 +966,11 @@ struct RecordView: View {
         case .daily:
             notes = amount <= 50
                 ? ["日用小补给", "日常小物补上", "刚好需要的小东西", "小补给记下来", "常用的先补一点", "便利袋里的一点日常"]
-                : ["日常用品补齐", "把常用的补上", "日用品换新一点", "这笔给日常用品", "常用物件买回来了", "日常安排记一笔"]
+                : ["日常用品补齐", "把常用的补上", "日用品换新一点", "常用物件买回来了", "日常安排补上", "家用小物补齐"]
         case .entertainment:
-            notes = ["这次放松安排", "给自己留点轻松", "娱乐小消费记下", "这一段休闲时间", "放松一下也记下", "今天的娱乐安排"]
+            notes = ["这次放松安排", "给自己留点轻松", "娱乐小消费记下", "留点休闲时间", "放松一下也记下", "今天的娱乐安排"]
         case .other:
-            notes = ["这笔先放进账本", "日常小记录", "临时花了一笔", "这一笔先记下", "单独记录一下", "今天补上一笔", "小额支出记下", "这笔记录已放好"]
+            notes = ["先放进账本", "日常小记录", "临时花费补上", "单独记录一下", "今天补上一条", "小额支出记下", "这条记录已放好", "简单留个记录"]
         default:
             notes = [previewFallbackTitle(for: category)]
         }
@@ -952,42 +988,382 @@ struct RecordView: View {
             }
             return
         }
+        let sourceTitle = homeViewModel.inputTitle
+        let sourceWasManualNote = lastDraftIntent == .note
         refreshRecommendedCategory()
         previewLineWasRotated = true
+        applyNoteRewriteDecision(
+            resolveNoteRewriteDecision(
+                sourceTitle: sourceTitle,
+                sourceWasManualNote: sourceWasManualNote
+            ),
+            sourceTitle: sourceTitle
+        )
         lastDraftIntent = .category
-        activeScenePack = nil
-        homeViewModel.inputTitle = nextCategoryCopyTitle()
     }
 
     private func handleFreePreviewQuickAction() {
         dismissKeyboard()
         guard hasValidAmount else { return }
 
+        let sourceTitle = homeViewModel.inputTitle
+        let sourceWasManualNote = lastDraftIntent == .note
         refreshRecommendedCategory()
         previewLineWasRotated = true
+
+        applyNoteRewriteDecision(
+            resolveNoteRewriteDecision(
+                sourceTitle: sourceTitle,
+                sourceWasManualNote: sourceWasManualNote
+            ),
+            sourceTitle: sourceTitle
+        )
         lastDraftIntent = .category
-        activeScenePack = nil
+    }
 
-        if let pack = preferredFreeScenePack() {
-            applyScenePack(pack, keepSelectedCategory: true, trackMemberSceneUsage: false)
-            return
+    private func resolveNoteRewriteDecision(
+        sourceTitle: String,
+        sourceWasManualNote: Bool
+    ) -> NoteRewriteDecision {
+        let anchorTitle = currentUserNoteAnchorTitle(
+            sourceTitle: sourceTitle,
+            sourceWasManualNote: sourceWasManualNote
+        )
+        if let pack = activeScenePack {
+            if let anchorTitle {
+                switch noteRelation(anchorTitle, to: pack, categoryContext: homeViewModel.selectedCategory) {
+                case .aligned, .related:
+                    return .scenePackCopy(pack, anchorTitle: anchorTitle)
+                case .conflict:
+                    if let semanticPack = scenePackForTitle(anchorTitle),
+                       canUseScenePackForCurrentAccess(semanticPack) {
+                        return .scenePackCopy(semanticPack, anchorTitle: anchorTitle)
+                    }
+                    return .categoryCopy(anchorTitle: anchorTitle)
+                }
+            }
+            return .scenePackCopy(pack, anchorTitle: nil)
         }
+        return .categoryCopy(anchorTitle: anchorTitle)
+    }
 
+    private func applyNoteRewriteDecision(
+        _ decision: NoteRewriteDecision,
+        sourceTitle: String
+    ) {
+        switch decision {
+        case let .categoryCopy(anchorTitle):
+            activeScenePack = nil
+            homeViewModel.inputTitle = nextCategoryCopyTitle(anchorTitle: anchorTitle)
+        case let .scenePackCopy(pack, anchorTitle):
+            activeScenePack = pack
+            applyScenePackCopy(pack, sourceTitle: sourceTitle, anchorTitle: anchorTitle)
+        }
+    }
+
+    private func applyScenePackCopy(
+        _ pack: ScenePackDefinition,
+        sourceTitle: String,
+        anchorTitle: String?
+    ) {
         let amount = inputAmountValue
         let category = homeViewModel.selectedCategory
-        let variantKey = categoryCopyVariantKey(
-            category: category,
+        let variantKey = scenePackVariantKey(
+            pack: pack,
             amount: amount,
+            category: category,
             date: homeViewModel.selectedDate
         )
         let variant = scenePackVariants[variantKey, default: 0]
         scenePackVariants[variantKey] = variant + 1
-        homeViewModel.inputTitle = genericCategoryCopy(
-            for: category,
+        homeViewModel.inputTitle = scenePackCopyTitle(
+            for: pack,
+            amount: amount,
+            categoryContext: category,
+            variant: variant,
+            sourceTitle: anchorTitle ?? sourceTitle
+        )
+    }
+
+    private func currentUserNoteAnchorTitle(
+        sourceTitle: String,
+        sourceWasManualNote: Bool
+    ) -> String? {
+        let source = sourceTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if sourceWasManualNote, !source.isEmpty {
+            userNoteAnchorTitle = source
+            return source
+        }
+        let anchor = userNoteAnchorTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return anchor.isEmpty ? nil : anchor
+    }
+
+    private func scenePackCopyTitle(
+        for pack: ScenePackDefinition,
+        amount: Double,
+        categoryContext: HomeItem.Category,
+        variant: Int,
+        sourceTitle: String
+    ) -> String {
+        if let anchored = anchoredScenePackCopy(
+            from: sourceTitle,
+            pack: pack,
+            categoryContext: categoryContext,
+            variant: variant
+        ) {
+            return polishedRecordNoteCopy(anchored)
+        }
+        let note = ScenePackCopyPool.note(
+            for: pack,
             amount: amount,
             date: homeViewModel.selectedDate,
+            categoryContext: categoryContext,
+            petName: settingsViewModel.petNickname,
+            historyItems: homeViewModel.items,
+            allowPetCopy: settingsViewModel.petCompanionEnabled,
+            variant: variant,
+            allowTravelSpecificCopy: containsTravelKeyword(sourceTitle)
+        )
+        return polishedRecordNoteCopy(note)
+    }
+
+    private func polishedRecordNoteCopy(_ note: String) -> String {
+        note
+            .replacingOccurrences(of: "这一笔", with: "这条记录")
+            .replacingOccurrences(of: "这笔记录", with: "这条记录")
+            .replacingOccurrences(of: "这笔先", with: "先")
+            .replacingOccurrences(of: "这笔给", with: "给")
+            .replacingOccurrences(of: "这笔留给", with: "留给")
+            .replacingOccurrences(of: "这笔行程", with: "这次行程")
+            .replacingOccurrences(of: "记一笔", with: "记下")
+            .replacingOccurrences(of: "留一笔", with: "留个记录")
+            .replacingOccurrences(of: "补上一笔", with: "补上")
+            .replacingOccurrences(of: "一笔小", with: "一点小")
+            .replacingOccurrences(of: "一笔日常", with: "日常")
+            .replacingOccurrences(of: "一笔重要", with: "重要")
+            .replacingOccurrences(of: "一笔大", with: "大")
+            .replacingOccurrences(of: "一笔记录", with: "记录")
+            .replacingOccurrences(of: "的一笔", with: "的记录")
+    }
+
+    private func anchoredCategoryCopy(
+        from sourceTitle: String,
+        categoryContext: HomeItem.Category,
+        variant: Int
+    ) -> String? {
+        let title = sourceTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        guard let pack = scenePackForTitle(title) ?? baseScenePack(for: categoryContext) else { return nil }
+        return anchoredScenePackCopy(
+            from: title,
+            pack: pack,
+            categoryContext: categoryContext,
             variant: variant
         )
+    }
+
+    private func anchoredScenePackCopy(
+        from sourceTitle: String,
+        pack: ScenePackDefinition,
+        categoryContext: HomeItem.Category,
+        variant: Int
+    ) -> String? {
+        let title = sourceTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        guard titleIsCompatibleWithScenePack(title, pack: pack, categoryContext: categoryContext) else {
+            return nil
+        }
+        let normalized = title.lowercased()
+        let notes: [String]?
+        switch pack.id {
+        case "shopping":
+            if containsAny(normalized, ["路亚", "渔具", "鱼竿", "鱼线", "鱼饵", "钓箱", "钓椅"]) {
+                notes = ["钓鱼装备补充", "给钓鱼添点装备", "路亚装备补上", "喜欢的装备补上"]
+            } else if containsAny(normalized, ["露营", "帐篷", "天幕", "睡袋"]) {
+                notes = ["露营装备补充", "给露营添点装备", "户外装备补上", "下次出发用得上"]
+            } else if containsAny(normalized, ["骑行", "头盔", "码表"]) {
+                notes = ["骑行装备补充", "给骑行添点装备", "路上用得上的小升级", "骑行小物补上"]
+            } else if containsAny(normalized, ["摄影", "相机", "镜头"]) {
+                notes = ["摄影装备补充", "给拍照添点装备", "镜头和器材补上", "喜欢的器材小升级"]
+            } else if containsAny(normalized, ["乐器", "吉他", "键盘"]) {
+                notes = ["乐器装备补充", "给练习添点装备", "音乐爱好里的小投入", "喜欢的声音留住"]
+            } else {
+                notes = nil
+            }
+        case "family":
+            if containsBabyKeyword(normalized) {
+                notes = ["宝宝用品补充", "照护用品补上", "给宝宝备一点", "成长里的小补给"]
+            } else if containsPetKeyword(normalized) {
+                notes = ["毛孩子用品补充", "宠物口粮补上", "给毛孩子备一点", "照顾小成员的日常"]
+            } else {
+                notes = nil
+            }
+        case "food":
+            if containsAny(normalized, ["咖啡", "拿铁", "美式"]) {
+                notes = ["咖啡续上", "今天这杯咖啡", "给自己补杯咖啡", "咖啡时间记下"]
+            } else if containsAny(normalized, ["奶茶", "饮品", "饮料", "茶饮"]) {
+                notes = ["买杯喝的", "饮品补一点", "今天这杯记下", "给自己添杯饮品"]
+            } else if containsAny(normalized, ["早餐", "早饭", "包子", "豆浆"]) {
+                notes = ["早餐先记下", "早上吃点热乎的", "早餐补点能量", "早饭安排好"]
+            } else if containsAny(normalized, ["午餐", "午饭", "食堂", "简餐", "外卖"]) {
+                notes = ["午餐先记下", "中午简单吃好", "简单吃一顿", "饭点补点能量"]
+            } else if containsAny(normalized, ["晚餐", "晚饭", "夜宵", "宵夜"]) {
+                notes = ["晚饭先安排", "夜里吃点热乎的", "这顿先记下", "晚点补点能量"]
+            } else {
+                notes = nil
+            }
+        case "supply":
+            if containsAny(normalized, ["买菜", "生鲜", "水果", "蔬菜", "肉", "盒马", "叮咚"]) {
+                notes = ["给家里补点吃的", "买菜顺手补齐", "冰箱补一点", "日常食材补上"]
+            } else if containsAny(normalized, ["纸巾", "抽纸", "卷纸", "洗衣", "清洁", "垃圾袋", "日化"]) {
+                notes = ["日用品补上", "家用消耗品补齐", "清洁日用补齐", "常用的先备好"]
+            } else if containsAny(normalized, ["超市", "便利店", "日用品", "家用", "补货"]) {
+                notes = ["日常补货补上", "给家里补一点", "常用小物补上", "顺手补点日常"]
+            } else {
+                notes = nil
+            }
+        case "care":
+            if containsAny(normalized, ["健身", "运动", "训练", "跑步", "瑜伽", "游泳"]) {
+                notes = ["训练安排补上", "运动安排留好", "给身体的一次投入", "健身相关补上"]
+            } else if containsAny(normalized, ["药", "医院", "挂号", "问诊", "理疗", "康复"]) {
+                notes = ["身体照顾补上", "健康相关补上", "身体护理留个记录", "给身体留个记录"]
+            } else {
+                notes = nil
+            }
+        case "travel":
+            if containsTravelKeyword(normalized) {
+                notes = ["行程里的小安排", "出去玩相关记下", "路上安排补上", "这段出行留个底"]
+            } else {
+                notes = nil
+            }
+        case "commute":
+            if containsAny(normalized, ["地铁", "公交", "打车", "停车", "加油", "通勤", "上班", "下班"]) {
+                notes = ["通勤路上", "路上花费补上", "今天出行记下", "这趟走完了"]
+            } else {
+                notes = nil
+            }
+        case "home":
+            if containsAny(normalized, ["房租", "租金", "租房"]) {
+                notes = ["房租安排好", "住处固定支出", "这个月房租放好", "给住处留个记录"]
+            } else if containsAny(normalized, ["水电", "电费", "燃气", "煤气", "物业", "宽带"]) {
+                notes = ["住处日常账单", "家里固定账单补上", "水电物业补上", "住处运转日常"]
+            } else if containsAny(normalized, ["维修", "家电", "家具", "床品", "收纳", "厨房"]) {
+                notes = ["给住处添点东西", "家里需要的补上", "居家安排补上", "住处小调整记下"]
+            } else {
+                notes = nil
+            }
+        case "social":
+            if containsAny(normalized, ["红包", "随礼", "份子钱"]) {
+                notes = ["人情往来记下", "这份心意记下", "重要日子里的心意", "关系里的往来放好"]
+            } else if containsAny(normalized, ["礼物", "送礼", "伴手礼"]) {
+                notes = ["给对方带点心意", "礼物准备好", "这份心意补上", "见面前准备一下"]
+            } else if containsAny(normalized, ["请客", "聚会", "朋友", "同事"]) {
+                notes = ["这次相聚记下", "一起吃顿饭", "见面留个记录", "关系里的热闹记下"]
+            } else if containsAny(normalized, ["探望", "看望", "拜访", "家人", "父母"]) {
+                notes = ["去见重要的人", "探望安排记下", "给牵挂的人留个记录", "这次见面记下"]
+            } else {
+                notes = nil
+            }
+        default:
+            notes = nil
+        }
+        guard let notes, !notes.isEmpty else { return nil }
+        return notes[variant % notes.count]
+    }
+
+    private func titleIsCompatibleWithScenePack(
+        _ title: String,
+        pack: ScenePackDefinition,
+        categoryContext: HomeItem.Category
+    ) -> Bool {
+        noteRelation(title, to: pack, categoryContext: categoryContext) != .conflict
+    }
+
+    private func noteRelation(
+        _ title: String,
+        to pack: ScenePackDefinition,
+        categoryContext: HomeItem.Category
+    ) -> ScenePackNoteRelation {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .related }
+        let matches = RecordSemanticLexicon.matchingCategories(in: title)
+        guard !matches.isEmpty else { return .related }
+        if pack.id == "travel", containsTravelKeyword(title) { return .aligned }
+        if pack.id == "family", containsBabyKeyword(title) || containsPetKeyword(title) { return .aligned }
+        let compatibleCategories = scenePackSemanticCategories(for: pack)
+        if !matches.isDisjoint(with: compatibleCategories) { return .aligned }
+        if compatibleCategories.contains(categoryContext),
+           RecordSemanticLexicon.isTitle(title, compatibleWith: categoryContext) {
+            return .related
+        }
+        return .conflict
+    }
+
+    private func scenePackForTitle(_ title: String) -> ScenePackDefinition? {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let packId: String?
+        if containsPetKeyword(trimmed) || containsBabyKeyword(trimmed) {
+            packId = "family"
+        } else if containsTravelKeyword(trimmed) {
+            packId = "travel"
+        } else if let category = RecordSemanticLexicon.bestMatchingCategory(in: trimmed) {
+            switch category {
+            case .dining:
+                packId = "food"
+            case .transport:
+                packId = "commute"
+            case .shopping:
+                packId = "shopping"
+            case .daily:
+                packId = "supply"
+            case .lodging:
+                packId = "travel"
+            case .health:
+                packId = "care"
+            case .home:
+                packId = "home"
+            case .social:
+                packId = "social"
+            case .entertainment:
+                packId = containsTravelKeyword(trimmed) ? "travel" : nil
+            case .other:
+                packId = nil
+            }
+        } else {
+            packId = nil
+        }
+        guard let packId else { return nil }
+        return visibleScenePacks.first { $0.id == packId }
+    }
+
+    private func scenePackSemanticCategories(for pack: ScenePackDefinition) -> Set<HomeItem.Category> {
+        switch pack.id {
+        case "travel":
+            return [.transport, .lodging, .entertainment, .dining]
+        case "family":
+            return [.daily]
+        case "shopping":
+            return [.shopping, .daily]
+        case "supply":
+            return [.daily, .shopping, .home]
+        case "home":
+            return [.home, .daily]
+        case "social":
+            return [.social]
+        default:
+            return [pack.category]
+        }
+    }
+
+    private func clearActiveScenePackIfManualNoteMovedAway() {
+        guard lastDraftIntent == .note,
+              let pack = activeScenePack else { return }
+        let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        if !titleIsCompatibleWithScenePack(title, pack: pack, categoryContext: homeViewModel.selectedCategory) {
+            activeScenePack = nil
+        }
     }
 
     private func openFreeScenePackAngleSheet() {
@@ -1107,6 +1483,7 @@ struct RecordView: View {
                 if !hasValidAmount {
                     previewLineWasRotated = false
                     lastDraftIntent = .automatic
+                    userNoteAnchorTitle = nil
                     activeScenePack = nil
                     categoryGridExpanded = false
                     noteEditorExpanded = false
@@ -1130,6 +1507,7 @@ struct RecordView: View {
                         lastDraftIntent = .note
                     }
                     homeViewModel.preferNoteSemanticsForCurrentDraft()
+                    rememberUserNoteAnchor(homeViewModel.inputTitle)
                 }
                 homeViewModel.clearRecordInputMessage()
                 refreshRecommendedCategory(debounced: focusedField == .note)
@@ -1252,7 +1630,7 @@ struct RecordView: View {
 
     private var recordPanelHeader: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("把一笔生活放进账本")
+            Text("把生活放进账本")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(AppColors.accent.opacity(0.78))
 
@@ -1260,7 +1638,7 @@ struct RecordView: View {
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(recordInk)
 
-            Text(hasAmountDraft ? "这一笔会先落到账本，再长成回望。" : "先敲金额，分类和备注会跟着浮出来。")
+            Text(hasAmountDraft ? "先落到账本，再慢慢长成回望。" : "先敲金额，分类和备注会跟着浮出来。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext.opacity(0.76))
                 .fixedSize(horizontal: false, vertical: true)
@@ -1533,7 +1911,7 @@ struct RecordView: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
-            Text(hasValidAmount ? "金额只是刻度，这一笔会长成一句生活记录。" : emptyAmountWhisper)
+            Text(hasValidAmount ? "金额只是刻度，记录会慢慢长成生活线索。" : emptyAmountWhisper)
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext.opacity(0.76))
                 .frame(maxWidth: .infinity, alignment: hasAmountDraft ? .leading : .center)
@@ -1749,7 +2127,7 @@ struct RecordView: View {
     private var emptyAmountWhisper: String {
         let lines = [
             "金额填上后，再补分类和备注。",
-            "先从数字开始，这一笔就有了位置。",
+            "先从数字开始，记录就有了位置。",
             "不用想完整，先把金额记下来。",
             "数额在这就行，后面再补一句记录。"
         ]
@@ -1990,7 +2368,12 @@ struct RecordView: View {
         return Button {
             dismissKeyboard()
             withAnimation(.easeInOut(duration: 0.12)) {
-                lastDraftIntent = .category
+                if !shouldPreserveUserNoteWhenChangingAngle {
+                    lastDraftIntent = .category
+                    userNoteAnchorTitle = nil
+                } else {
+                    rememberUserNoteAnchor(homeViewModel.inputTitle)
+                }
                 activeScenePack = nil
                 homeViewModel.selectCategory(category)
                 categoryGridExpanded = false
@@ -2075,7 +2458,9 @@ struct RecordView: View {
                             dismissKeyboard()
                             lastDraftIntent = .note
                             homeViewModel.preferNoteSemanticsForCurrentDraft()
+                            rememberUserNoteAnchor(suggestion)
                             homeViewModel.inputTitle = suggestion
+                            clearActiveScenePackIfManualNoteMovedAway()
                         }
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(recordInk.opacity(0.88))
@@ -2246,7 +2631,7 @@ struct RecordView: View {
                 dismissKeyboard()
                 selectedEntryMode = .manual
             } label: {
-                Text("回到手动记一笔 →")
+                Text("回到手动记录 →")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.subtext.opacity(0.86))
             }

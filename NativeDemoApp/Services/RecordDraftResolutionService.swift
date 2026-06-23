@@ -18,6 +18,7 @@ struct RecordDraftResolutionInput {
     let categoryLockedByUser: Bool
     let userEditedTitle: Bool
     let source: String
+    var scenePackId: String? = nil
 }
 
 enum RecordDraftResolutionService {
@@ -77,7 +78,8 @@ enum RecordDraftResolutionService {
                 amount: input.amount,
                 date: input.date,
                 seed: title,
-                note: title
+                note: title,
+                scenePackId: input.scenePackId
             )
         )
         let emotionTag = RecordSemanticLexicon.isTitle(resolvedEmotionTag, compatibleWith: category)
