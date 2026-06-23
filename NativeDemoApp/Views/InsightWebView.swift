@@ -771,7 +771,7 @@ struct InsightWebView: View {
             return [normalized]
         }
 
-        let candidates = ["咖啡", "奶茶", "早餐", "午餐", "晚餐", "夜宵", "七欣天", "外卖", "食堂", "热饭", "打车", "地铁", "公交", "停车", "充电", "超市", "便利店", "买菜", "小象", "京东到家", "水果", "药", "运动", "健身", "宠物", "电影", "渔具", "露营", "摄影", "手办"]
+        let candidates = ["咖啡", "奶茶", "早餐", "午餐", "晚餐", "夜宵", "七欣天", "外卖", "食堂", "热饭", "打车", "地铁", "公交", "停车", "充电", "超市", "便利店", "买菜", "小象", "京东到家", "水果", "药", "运动", "健身", "奶粉", "尿不湿", "狗粮", "猫粮", "宠物", "酒店", "民宿", "旅行", "电影", "渔具", "露营", "摄影", "手办"]
         return candidates.filter { title.contains($0) }
     }
 
@@ -3090,6 +3090,24 @@ struct InsightWebView: View {
                 categories: [.dining],
                 label: "餐饮",
                 keywords: ["餐饮", "吃饭", "吃的", "饭", "美食", "外卖", "美团外卖", "饿了么", "抖音团购", "七欣天", "海底捞", "肯德基", "麦当劳", "必胜客", "塔斯汀", "华莱士", "食堂", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "简餐", "咖啡", "奶茶", "饮品", "饭店", "餐厅", "火锅", "烤肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "面", "粉", "包子", "盒饭"]
+            ),
+            AICommandCategoryIntent(
+                categories: [.daily, .shopping, .health],
+                label: "娃和毛孩",
+                keywords: ["娃", "宝宝", "孩子", "婴儿", "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "奶瓶", "安抚奶嘴", "宝宝湿巾", "婴儿湿巾", "童装", "儿童座椅", "推车", "宠物", "毛孩子", "毛孩", "狗粮", "猫粮", "猫砂", "宠物粮", "宠物口粮", "尿垫", "冻干", "宠物罐头", "驱虫", "宠物医院", "洗护"],
+                requiresKeywordMatch: true
+            ),
+            AICommandCategoryIntent(
+                categories: [.transport, .lodging, .entertainment, .dining, .shopping],
+                label: "旅行出行",
+                keywords: ["旅行", "旅游", "出去玩", "异地", "外地", "出差", "酒店", "民宿", "住宿", "机票", "机场", "高铁", "火车", "车站", "景区", "景点", "门票", "返程", "行程", "伴手礼", "露营地"],
+                requiresKeywordMatch: true
+            ),
+            AICommandCategoryIntent(
+                categories: [.shopping, .daily, .health, .entertainment],
+                label: "兴趣装备",
+                keywords: ["兴趣装备", "装备", "渔具", "鱼竿", "鱼线", "鱼饵", "路亚", "钓箱", "钓椅", "露营", "帐篷", "天幕", "睡袋", "骑行", "头盔", "码表", "摄影", "相机", "镜头", "模型", "手办", "乐器", "吉他", "键盘", "茶具", "咖啡器具", "磨豆机", "滤杯"],
+                requiresKeywordMatch: true
             ),
             AICommandCategoryIntent(
                 categories: [.transport],
