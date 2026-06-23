@@ -393,9 +393,6 @@ struct ScenePackAngleSheet: View {
                 if let reward = configuration.pendingLifeMarkReward,
                    claimedLifeMarkRewardID != reward.id {
                     pendingLifeMarkRewardCard(reward, configuration: configuration)
-                } else if let reward = configuration.activeLifeMarkReward {
-                    activeLifeMarkRewardCard(reward, configuration: configuration)
-                    activeLifeMarkRewardPackCard(reward, configuration: configuration)
                 }
 
                 freeStatusCard(configuration)
@@ -451,10 +448,11 @@ struct ScenePackAngleSheet: View {
     }
 
     private func activeFreeModule(_ configuration: FreeConfiguration) -> some View {
+        let activeCount = activeFreePackCount(configuration)
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("正在使用的 3 个")
+                    Text("正在使用的 \(activeCount) 个")
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(AppColors.text)
                     Text(activeModuleSubtitle(configuration))
@@ -462,7 +460,7 @@ struct ScenePackAngleSheet: View {
                         .foregroundStyle(AppColors.subtext)
                 }
                 Spacer()
-                Text("\(configuration.freeScenePacks.count)/3")
+                Text("\(activeCount)/\(activeCount)")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(AppColors.accent)
                     .padding(.horizontal, 9)
@@ -475,6 +473,10 @@ struct ScenePackAngleSheet: View {
             VStack(spacing: 10) {
                 ForEach(Array(configuration.freeScenePacks.enumerated()), id: \.element.id) { index, pack in
                     activePackCard(pack, slot: index, configuration: configuration)
+                }
+                if let reward = configuration.activeLifeMarkReward,
+                   let pack = activeRewardPack(for: reward, configuration: configuration) {
+                    activeRewardPackRow(pack, configuration: configuration)
                 }
             }
 
@@ -494,10 +496,11 @@ struct ScenePackAngleSheet: View {
     }
 
     private func candidateFreeModule(_ configuration: FreeConfiguration) -> some View {
+        let candidatePacks = candidateScenePacks(configuration)
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("下面可替换的 6 个")
+                    Text("下面可替换的 \(candidatePacks.count) 个")
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(AppColors.text)
                     Text(candidateModuleSubtitle(configuration))
@@ -538,7 +541,7 @@ struct ScenePackAngleSheet: View {
 
             if shouldExpandFreeCandidates(configuration) {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                    ForEach(configuration.moreScenePacks, id: \.id) { pack in
+                    ForEach(candidatePacks, id: \.id) { pack in
                         candidatePackCard(pack, configuration: configuration)
                     }
                 }
@@ -572,7 +575,7 @@ struct ScenePackAngleSheet: View {
                     Text("展开可替换场景包")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(AppColors.text)
-                    Text("6 个未选场景包和会员引导已收起")
+                    Text("\(candidateScenePacks(configuration).count) 个未选场景包和会员引导已收起")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.subtext)
                         .lineLimit(1)
@@ -998,100 +1001,60 @@ struct ScenePackAngleSheet: View {
         )
     }
 
-    private func activeLifeMarkRewardCard(
-        _ reward: LifeMarkSceneReward,
+    private func activeRewardPackRow(
+        _ pack: ScenePackDefinition,
         configuration: FreeConfiguration
     ) -> some View {
-        let pack = scenePack(for: reward.packId, configuration: configuration)
-        return HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(AppColors.accent)
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(AppColors.accent.opacity(0.12)))
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(pack.map { "正在体验「\($0.label)」" } ?? "生活印记奖励体验中")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(AppColors.text)
-                Text("这 7 天不占用当前 3 个免费场景包。先用起来，形成习惯后再决定是否保留。")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.subtext)
-                    .fixedSize(horizontal: false, vertical: true)
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            selectedPackID = pack.id
+            configuration.onSelectFreePack(pack)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                dismiss()
             }
+        } label: {
+            HStack(spacing: 10) {
+                scenePackVisual(pack, compact: true)
 
-            Spacer(minLength: 0)
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(AppColors.accent.opacity(0.07))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(AppColors.accent.opacity(0.16), lineWidth: 1)
-        )
-    }
-
-    @ViewBuilder
-    private func activeLifeMarkRewardPackCard(
-        _ reward: LifeMarkSceneReward,
-        configuration: FreeConfiguration
-    ) -> some View {
-        if let pack = scenePack(for: reward.packId, configuration: configuration) {
-            Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                selectedPackID = pack.id
-                configuration.onSelectFreePack(pack)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
-                    dismiss()
-                }
-            } label: {
-                HStack(spacing: 12) {
-                    scenePackVisual(pack, compact: true)
-
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack(spacing: 7) {
-                            Text(pack.label)
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundStyle(AppColors.text)
-                                .lineLimit(1)
-                            Text("7天体验中")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(AppColors.accent)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(Capsule().fill(AppColors.accent.opacity(0.12)))
-                        }
-                        Text("不占 3 个免费名额，可以直接用这个角度记下一笔。")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AppColors.subtext)
-                            .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(pack.label)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+                            .lineLimit(1)
+                        Text("7天体验中")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(AppColors.accent)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(AppColors.accent.opacity(0.12)))
                     }
-
-                    Spacer(minLength: 0)
-
-                    Text("使用这个体验包")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-                        .padding(.horizontal, 10)
-                        .frame(height: 32)
-                        .background(Capsule().fill(AppColors.accent))
+                    Text("生活印记奖励，不占基础免费名额")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                        .lineLimit(2)
                 }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(AppColors.accent.opacity(selectedPackID == pack.id ? 0.13 : 0.08))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(AppColors.accent.opacity(0.22), lineWidth: 1)
-                )
+
+                Spacer(minLength: 0)
+
+                Text("使用")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 11)
+                    .frame(height: 30)
+                    .background(Capsule().fill(AppColors.accent))
             }
-            .buttonStyle(.plain)
+            .padding(11)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(AppColors.accent.opacity(selectedPackID == pack.id ? 0.13 : 0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(AppColors.accent.opacity(0.22), lineWidth: 1)
+            )
         }
+        .buttonStyle(.plain)
     }
 
     private func scenePack(
@@ -1101,6 +1064,32 @@ struct ScenePackAngleSheet: View {
         (configuration.freeScenePacks + configuration.moreScenePacks)
             .first { $0.id == packId }
             ?? ScenePackCopyPool.definitions.first { $0.id == packId }
+    }
+
+    private func activeRewardPack(
+        for reward: LifeMarkSceneReward,
+        configuration: FreeConfiguration
+    ) -> ScenePackDefinition? {
+        guard !configuration.freeScenePacks.contains(where: { $0.id == reward.packId }) else {
+            return nil
+        }
+        return scenePack(for: reward.packId, configuration: configuration)
+    }
+
+    private func activeFreePackCount(_ configuration: FreeConfiguration) -> Int {
+        guard let reward = configuration.activeLifeMarkReward,
+              activeRewardPack(for: reward, configuration: configuration) != nil else {
+            return configuration.freeScenePacks.count
+        }
+        return configuration.freeScenePacks.count + 1
+    }
+
+    private func candidateScenePacks(_ configuration: FreeConfiguration) -> [ScenePackDefinition] {
+        guard let reward = configuration.activeLifeMarkReward,
+              activeRewardPack(for: reward, configuration: configuration) != nil else {
+            return configuration.moreScenePacks
+        }
+        return configuration.moreScenePacks.filter { $0.id != reward.packId }
     }
 
     private func lockedSceneHintCard(
@@ -1202,7 +1191,7 @@ struct ScenePackAngleSheet: View {
         guard let slot = selectedReplaceSlot,
               configuration.freeScenePacks.indices.contains(slot) else {
             withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
-                inlineNotice = "上面已经有 3 个，先把一个移下来"
+                inlineNotice = "基础免费名额已满，先把一个移下来"
             }
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             return
@@ -1247,6 +1236,9 @@ struct ScenePackAngleSheet: View {
         if selectedReplaceSlot != nil {
             return "已经空出一个位置，从下面选一个补上来"
         }
+        if activeFreePackCount(configuration) > configuration.freeScenePacks.count {
+            return "3 个基础免费包，加上奖励体验一起可用"
+        }
         if configuration.isInFirstWeek {
             return "首周可以自由试，找到最常用的三个"
         }
@@ -1256,7 +1248,7 @@ struct ScenePackAngleSheet: View {
         if configuration.canReplacePackCombination {
             return "先把一个移下来，再从下面换上一个"
         }
-        return "当前 3 个仍可正常使用，替换区在冷却"
+        return "基础免费包仍可正常使用，替换区在冷却"
     }
 
     private func candidateModuleSubtitle(_ configuration: FreeConfiguration) -> String {
@@ -1286,14 +1278,15 @@ struct ScenePackAngleSheet: View {
     }
 
     private func candidateAvailabilityText(_ configuration: FreeConfiguration, now: Date) -> String {
+        let count = candidateScenePacks(configuration).count
         if configuration.isInFirstWeek {
-            return "下面 6 个首周都可以试"
+            return "下面 \(count) 个首周都可以试"
         }
         if configuration.isReplaceWindowActive {
-            return "下面 6 个可继续替换，窗口还剩 \(countdownText(until: configuration.replaceWindowEndsAt, now: now))"
+            return "下面 \(count) 个可继续替换，窗口还剩 \(countdownText(until: configuration.replaceWindowEndsAt, now: now))"
         }
         if configuration.canReplacePackCombination {
-            return "下面 6 个可替换，换上第一个才开始倒计时"
+            return "下面 \(count) 个可替换，换上第一个才开始倒计时"
         }
         return "下面替换区 30 天冷却还剩 \(countdownText(until: configuration.nextReplaceAvailableAt, now: now))"
     }
@@ -1349,7 +1342,7 @@ struct ScenePackAngleSheet: View {
         if configuration.canReplacePackCombination {
             return "先移下上面一个，再从下面换上一个；从第一次换上去开始算 24 小时窗口。"
         }
-        return "上面的 3 个还能继续用；下面的替换区到期后，会重新开放一天调整窗口。"
+        return "上面的场景包还能继续用；下面的替换区到期后，会重新开放一天调整窗口。"
     }
 
     private func cooldownBriefText(_ configuration: FreeConfiguration, now: Date) -> String {

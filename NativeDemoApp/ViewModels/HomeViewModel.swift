@@ -1261,6 +1261,15 @@ final class HomeViewModel: ObservableObject {
         recordInputMessage = nil
     }
 
+    func applyScenePackCategory(_ category: HomeItem.Category) {
+        rememberCategoryCorrectionIfNeeded(to: category)
+        selectedCategory = category
+        categoryLockedByUser = true
+        recordPrefillResult = nil
+        recordPrefillAmount = nil
+        recordInputMessage = nil
+    }
+
     func applyRecommendedCategory(_ category: HomeItem.Category) {
         guard !categoryLockedByUser else { return }
         selectedCategory = category
