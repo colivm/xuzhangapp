@@ -68,6 +68,7 @@ struct ShareInsightSignal: Equatable {
         case brandTop(name: String, count: Int, brandId: String?)
         case categoryTop(category: HomeItem.Category, count: Int, context: CategoryContext)
         case busiestDay(label: String, count: Int)
+        case lifeMark(kind: LifeMarkKind, title: String, line: String, label: String, count: Int)
         case lifeTitle(text: String)
         case weakData(recordCount: Int)
     }
@@ -400,11 +401,14 @@ final class PlaybackService {
         let categorySlices = weeklyShareCategorySlices(from: rows)
         let period = "\(Self.dotDateFormatter.string(from: interval.start)) ~ \(Self.dotDateFormatter.string(from: calendar.date(byAdding: .day, value: -1, to: interval.end) ?? now))"
         let closing = builtSummary.chapters.last?.narration.plain ?? "这一周已经留下了可以回看的记录。"
-        let lifeMarkSubtitle = weeklyShareLifeMarkLine(from: builtSummary)
+        let weeklyLifeMark = weeklyShareLifeMarkAggregate(rows: rows, allItems: items, now: now)
+        let lifeMarkSubtitle = weeklyShareLifeMarkLine(from: weeklyLifeMark)
+            ?? weeklyShareLifeMarkLine(from: builtSummary)
         let signal = weeklyShareInsightSignal(
             rows: rows,
             activity: activity,
-            now: now
+            now: now,
+            lifeMark: weeklyLifeMark
         )
         let insight = ShareInsightCopyPool.insight(
             for: signal,
@@ -518,6 +522,8 @@ final class PlaybackService {
             return (count, weeklyShareEmoji(for: category, context: context))
         case let .busiestDay(_, count):
             return (count, "📌")
+        case let .lifeMark(_, _, _, _, count):
+            return (count, "✨")
         case .lifeTitle:
             return (signal.recordCount, "📝")
         case let .weakData(recordCount):
@@ -629,10 +635,26 @@ final class PlaybackService {
     private func weeklyShareInsightSignal(
         rows: [HomeItem],
         activity: [DayActivity],
-        now: Date
+        now: Date,
+        lifeMark: LifeMarkAggregate?
     ) -> ShareInsightSignal {
         let activeDays = activeDayCount(rows)
         let base = (recordCount: rows.count, activeDays: activeDays)
+
+        if let lifeMark,
+           let lifeMarkLine = weeklyShareLifeMarkLine(from: lifeMark) {
+            return ShareInsightSignal(
+                kind: .lifeMark(
+                    kind: lifeMark.kind,
+                    title: lifeMark.title,
+                    line: lifeMarkLine,
+                    label: lifeMark.label,
+                    count: lifeMark.count
+                ),
+                recordCount: base.recordCount,
+                activeDays: base.activeDays
+            )
+        }
 
         if rows.count <= 2 {
             return ShareInsightSignal(
@@ -1215,6 +1237,56 @@ final class PlaybackService {
         summary.chapters
             .compactMap { $0.metrics["lifeMarkLine"]?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .first { !$0.isEmpty && !EchoAnchorService.shared.isDirtyTraceTitle($0) }
+    }
+
+    private func weeklyShareLifeMarkAggregate(
+        rows: [HomeItem],
+        allItems: [HomeItem],
+        now: Date
+    ) -> LifeMarkAggregate? {
+        let marks = LifeMarkService.aggregates(
+            for: rows,
+            allItems: allItems,
+            isMember: true,
+            now: now,
+            limit: 4
+        )
+        return marks.sorted { lhs, rhs in
+            let lhsRank = weeklyShareLifeMarkRank(lhs)
+            let rhsRank = weeklyShareLifeMarkRank(rhs)
+            if lhsRank == rhsRank {
+                if lhs.priority == rhs.priority {
+                    if lhs.count == rhs.count { return lhs.latestDate > rhs.latestDate }
+                    return lhs.count > rhs.count
+                }
+                return lhs.priority < rhs.priority
+            }
+            return lhsRank < rhsRank
+        }.first
+    }
+
+    private func weeklyShareLifeMarkRank(_ mark: LifeMarkAggregate) -> Int {
+        switch mark.kind {
+        case .milestone:
+            return 0
+        case .context:
+            return 1
+        case .scene:
+            return 2
+        case .streak:
+            return 3
+        }
+    }
+
+    private func weeklyShareLifeMarkLine(from aggregate: LifeMarkAggregate?) -> String? {
+        guard let aggregate else { return nil }
+        let line = playbackLifeMarkLine(aggregate, fallback: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !line.isEmpty,
+              !EchoAnchorService.shared.isDirtyTraceTitle(line) else {
+            return nil
+        }
+        return line
     }
 
     private func weeklySceneMemoryLine(_ rows: [HomeItem]) -> String? {

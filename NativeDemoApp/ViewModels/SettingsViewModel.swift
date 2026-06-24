@@ -91,7 +91,14 @@ final class SettingsViewModel: ObservableObject {
     var shareCardUsesAppTheme: Bool {
         get { settings.shareCardUsesAppTheme }
         set {
-            settings.shareCardUsesAppTheme = newValue && settings.hasMemberAccess
+            if newValue && !settings.hasMemberAccess {
+                settings.shareCardUsesAppTheme = false
+                themeMessage = "分享图使用当前主题是会员专属。开通后，分享图会跟随当前外观配色。"
+                persist()
+                return
+            }
+            settings.shareCardUsesAppTheme = newValue
+            themeMessage = nil
             persist()
         }
     }

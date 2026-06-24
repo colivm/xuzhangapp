@@ -270,8 +270,7 @@ struct InsightWebView: View {
     private var insightContent: some View {
         let weeklyBlocks = homeViewModel.localWeeklyInsightBlocks()
         let weekItems = recentPositiveItems(days: 7)
-        let monthItems = currentMonthPositiveItems
-        let keywords = monthlyKeywordBubbles(from: monthItems)
+        let keywords = weeklyKeywordBubbles(from: flexibleBubblePositiveItems)
 
         return VStack(alignment: .leading, spacing: 0) {
             insightJournalCard(weeklyBlocks: weeklyBlocks, weekItems: weekItems)
@@ -396,7 +395,7 @@ struct InsightWebView: View {
 
     @ViewBuilder
     private var keywordBubbleSection: some View {
-        keywordBubbleSection(keywords: monthlyKeywordBubbles())
+        keywordBubbleSection(keywords: weeklyKeywordBubbles())
     }
 
     @ViewBuilder
@@ -404,10 +403,10 @@ struct InsightWebView: View {
         if keywords.count >= 3 {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("这个月的碎碎念")
+                    Text("最近的碎碎念")
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(AppColors.text.opacity(0.88))
-                    Text("留给未来自己的话：优先放你亲手写下的备注，也让不同生活面都露一点头。")
+                    Text("以本周为主；有新的生活印记，也会直接冒出来。")
                         .font(.system(size: 12))
                         .foregroundStyle(AppColors.subtext.opacity(0.78))
                 }
@@ -539,11 +538,31 @@ struct InsightWebView: View {
         return homeViewModel.items.filter { $0.createdAt >= start && $0.amount > 0 }
     }
 
-    private func monthlyKeywordBubbles() -> [KeywordBubbleData] {
-        monthlyKeywordBubbles(from: currentMonthPositiveItems)
+    private var currentWeekPositiveItems: [HomeItem] {
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.firstWeekday = 2
+        guard let interval = calendar.dateInterval(of: .weekOfYear, for: Date()) else {
+            return recentPositiveItems(days: 7)
+        }
+        return homeViewModel.items.filter {
+            $0.createdAt >= interval.start && $0.createdAt < interval.end && $0.amount > 0
+        }
     }
 
-    private func monthlyKeywordBubbles(from items: [HomeItem]) -> [KeywordBubbleData] {
+    private var flexibleBubblePositiveItems: [HomeItem] {
+        let recentCutoff = Calendar.current.date(byAdding: .day, value: -3, to: Date()) ?? Date()
+        let weekIDs = Set(currentWeekPositiveItems.map(\.id))
+        let recentlyTouched = homeViewModel.items.filter {
+            $0.amount > 0 && $0.updatedAt >= recentCutoff && !weekIDs.contains($0.id)
+        }
+        return currentWeekPositiveItems + recentlyTouched
+    }
+
+    private func weeklyKeywordBubbles() -> [KeywordBubbleData] {
+        weeklyKeywordBubbles(from: flexibleBubblePositiveItems)
+    }
+
+    private func weeklyKeywordBubbles(from items: [HomeItem]) -> [KeywordBubbleData] {
         guard !items.isEmpty else { return [] }
 
         let targetCount: Int
@@ -555,7 +574,7 @@ struct InsightWebView: View {
             return []
         }
 
-        let candidates = monthlyBubbleCandidates(from: items)
+        let candidates = weeklyBubbleCandidates(from: items)
         let selected = diversifiedBubbleCandidates(candidates, targetCount: targetCount)
 
         return selected
@@ -569,8 +588,8 @@ struct InsightWebView: View {
             }
     }
 
-    private func monthlyBubbleCandidates(from items: [HomeItem]) -> [KeywordBubbleDraft] {
-        var candidates: [KeywordBubbleDraft] = []
+    private func weeklyBubbleCandidates(from items: [HomeItem]) -> [KeywordBubbleDraft] {
+        var candidates = weeklyLifeMarkBubbleCandidates(from: items)
         let userTitleItems = items.compactMap { item -> (item: HomeItem, text: String)? in
             guard item.userEditedTitle == true,
                   let text = preferredBubbleTitle(from: item, allowsFullTitle: true) else {
@@ -683,6 +702,67 @@ struct InsightWebView: View {
         return bestCandidatePerText(candidates)
     }
 
+    private func weeklyLifeMarkBubbleCandidates(from items: [HomeItem]) -> [KeywordBubbleDraft] {
+        LifeMarkService.aggregates(
+            for: items,
+            allItems: homeViewModel.items,
+            isMember: true,
+            now: Date(),
+            limit: 6
+        ).compactMap { mark in
+            guard let text = bubbleText(for: mark) else { return nil }
+            return KeywordBubbleDraft(
+                text: text,
+                score: 9_200 + lifeMarkBubbleScoreBoost(mark) + mark.count * 180,
+                category: mark.category,
+                priority: lifeMarkBubblePriority(mark),
+                source: .lifeMark
+            )
+        }
+    }
+
+    private func bubbleText(for mark: LifeMarkAggregate) -> String? {
+        let raw: String
+        switch mark.kind {
+        case .milestone:
+            raw = mark.title
+        case .context, .scene:
+            raw = mark.label
+        case .streak:
+            raw = mark.label.hasPrefix("连续")
+                ? "一段\(mark.label.replacingOccurrences(of: "连续", with: ""))节奏"
+                : mark.label
+        }
+        let text = normalizedKeyword(raw, maxLength: 12)
+        return text.isEmpty ? nil : text
+    }
+
+    private func lifeMarkBubblePriority(_ mark: LifeMarkAggregate) -> Int {
+        switch mark.kind {
+        case .milestone:
+            return 0
+        case .context:
+            return 1
+        case .scene:
+            return 2
+        case .streak:
+            return 4
+        }
+    }
+
+    private func lifeMarkBubbleScoreBoost(_ mark: LifeMarkAggregate) -> Int {
+        switch mark.kind {
+        case .milestone:
+            return 1_400
+        case .context:
+            return 900
+        case .scene:
+            return 650
+        case .streak:
+            return 260
+        }
+    }
+
     private func bestCandidatePerText(_ candidates: [KeywordBubbleDraft]) -> [KeywordBubbleDraft] {
         var best: [String: KeywordBubbleDraft] = [:]
         for candidate in candidates {
@@ -708,7 +788,8 @@ struct InsightWebView: View {
                 if (categoryCounts[candidate.category] ?? 0) >= 2 { return false }
                 if selected.count < 3,
                    firstThreeCategories.contains(candidate.category),
-                   candidate.source != .userTitle {
+                   candidate.source != .userTitle,
+                   candidate.source != .lifeMark {
                     return false
                 }
             } else if (categoryCounts[candidate.category] ?? 0) >= 3 {
@@ -1231,7 +1312,7 @@ struct InsightWebView: View {
             ZStack {
                 AppColors.bg.ignoresSafeArea()
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
+                    LazyVStack(alignment: .leading, spacing: 16) {
                         aiCommandSheetHeader
                         aiCommandInputPanel
                         aiCommandSuggestionRow
@@ -1431,7 +1512,7 @@ struct InsightWebView: View {
     @ViewBuilder
     private var aiCommandResultPanel: some View {
         if let result = aiCommandResult {
-            VStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: 14) {
                 aiCommandIntentCard(result)
                 if let memoryCard = result.memoryCard {
                     aiCommandMemoryCard(memoryCard)
@@ -1674,7 +1755,7 @@ struct InsightWebView: View {
                     .foregroundStyle(AppColors.subtext)
             }
 
-            ForEach(sortedAICommandEvidenceItems(items).prefix(8)) { item in
+            ForEach(items.prefix(8)) { item in
                 aiCommandItemRow(item)
             }
         }
@@ -2006,7 +2087,7 @@ struct InsightWebView: View {
             title: title,
             summary: "找到了 \(item.createdAt.zhBillDateOnly) 的那次记录。",
             detail: aiCommandMemoryContextLine(item.memoryContext),
-            items: relatedItems,
+            items: sortedAICommandEvidenceItems(relatedItems),
             memoryCard: card,
             bars: [],
             drafts: [],
@@ -2128,7 +2209,7 @@ struct InsightWebView: View {
             title: title,
             summary: "找到了 \(item.createdAt.zhBillDateOnly) 的「\(item.displayTitle)」。",
             detail: detailParts.joined(separator: " "),
-            items: uniqueAICommandItems([item] + related),
+            items: sortedAICommandEvidenceItems(uniqueAICommandItems([item] + related)),
             bars: dailyBars(range: relatedRange, items: related),
             drafts: [],
             amountSource: nil,
@@ -2220,7 +2301,7 @@ struct InsightWebView: View {
             title: "重复记录初筛",
             summary: summary,
             detail: detail,
-            items: suspects,
+            items: sortedAICommandEvidenceItems(suspects),
             bars: suspects.isEmpty ? [] : dailyBars(range: range, items: suspects),
             drafts: [],
             amountSource: nil,
@@ -2481,7 +2562,7 @@ struct InsightWebView: View {
             return cached
         }
 
-        let result = homeViewModel.items.filter { item in
+        let result = sortedAICommandEvidenceItems(homeViewModel.items.filter { item in
             guard item.amount > 0, range.contains(item.createdAt) else { return false }
             guard let intent else { return true }
             let categoryMatched = intent.categories.contains(item.category)
@@ -2489,7 +2570,7 @@ struct InsightWebView: View {
             return intent.requiresKeywordMatch
                 ? categoryMatched && keywordMatched
                 : categoryMatched || keywordMatched
-        }
+        })
         storeAICommandItems(result, for: cacheKey)
         return result
     }
@@ -2509,7 +2590,7 @@ struct InsightWebView: View {
                 && range.contains(item.createdAt)
                 && LifeMarkService.matches(item, intent: intent)
         }
-        let result = aiCommandScopedLifeMarkItems(items, intent: intent, command: command)
+        let result = sortedAICommandEvidenceItems(aiCommandScopedLifeMarkItems(items, intent: intent, command: command))
         storeAICommandLifeMarkItems(result, for: cacheKey)
         return result
     }
@@ -4084,6 +4165,7 @@ private struct KeywordBubbleDraft {
     enum Source {
         case hero
         case userTitle
+        case lifeMark
         case amountTitle
         case emotion
         case context

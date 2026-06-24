@@ -18,10 +18,10 @@ private enum TodayPlaybackPrompt: Equatable {
         }
     }
 
-    var message: String {
+    func message(quotaText: String) -> String {
         switch self {
         case .firstUse:
-            return "它会把今天已经记下的几笔按时间翻一遍。免费用户每天可听 3 次；白天可以先继续记，晚上记录差不多了再回看，会更完整。"
+            return "它会把今天已经记下的几笔按时间翻一遍。免费用户每天可听 \(DailyFeatureQuotaStore.todayPlaybackFreeLimit) 次，当前剩余 \(quotaText) 次；白天可以先继续记，晚上记录差不多了再回看，会更完整。"
         case .quotaExhausted(let message):
             return message
         }
@@ -158,12 +158,18 @@ struct HomeView: View {
             )
             homeActionCard(
                 title: "听今日回放",
-                subtitle: homeViewModel.todayItems.isEmpty ? "有记录后可播放" : "十几秒叙完今天",
+                subtitle: todayPlaybackActionSubtitle,
                 systemImage: "play.circle.fill",
                 isPrimary: false,
                 action: { requestTodayPlayback() }
             )
         }
+    }
+
+    private var todayPlaybackActionSubtitle: String {
+        guard !homeViewModel.todayItems.isEmpty else { return "有记录后可播放" }
+        guard !settingsViewModel.settings.hasMemberAccess else { return "十几秒叙完今天" }
+        return "十几秒叙完今天 · 剩余 \(todayPlaybackQuotaText())"
     }
 
     @ViewBuilder
@@ -559,8 +565,9 @@ struct HomeView: View {
             return
         }
         let isMember = settingsViewModel.settings.hasMemberAccess
-        guard dailyQuotaStore.canPlayTodayPlayback(isMember: isMember) else {
-            todayPlaybackPrompt = .quotaExhausted("今日免费回放剩余 0/\(DailyFeatureQuotaStore.todayPlaybackFreeLimit) 次，明天会自动刷新。今天还可以继续记账，晚一点记录更完整时再回看也很好。")
+        let remaining = todayPlaybackRemaining(isMember: isMember)
+        guard isMember || remaining > 0 else {
+            todayPlaybackPrompt = .quotaExhausted("今日免费回放剩余 \(todayPlaybackQuotaText(remaining: remaining)) 次，明天会自动刷新。今天还可以继续记账，晚一点记录更完整时再回看也很好。")
             return
         }
 
@@ -586,6 +593,17 @@ struct HomeView: View {
         showPlayback = true
     }
 
+    private func todayPlaybackRemaining(isMember: Bool? = nil) -> Int {
+        let member = isMember ?? settingsViewModel.settings.hasMemberAccess
+        return dailyQuotaStore.todayPlaybackRemaining(isMember: member)
+    }
+
+    private func todayPlaybackQuotaText(remaining: Int? = nil) -> String {
+        let limit = DailyFeatureQuotaStore.todayPlaybackFreeLimit
+        let left = min(limit, max(0, remaining ?? todayPlaybackRemaining(isMember: false)))
+        return "\(left)/\(limit)"
+    }
+
     private var todayPlaybackPromptOverlay: some View {
         ZStack {
             Color.black.opacity(0.18)
@@ -609,7 +627,7 @@ struct HomeView: View {
                         Text(todayPlaybackPrompt?.title ?? "")
                             .font(.system(size: 19, weight: .bold))
                             .foregroundStyle(AppColors.text)
-                        Text(todayPlaybackPrompt?.message ?? "")
+                        Text(todayPlaybackPrompt?.message(quotaText: todayPlaybackQuotaText()) ?? "")
                             .font(.system(size: 14, weight: .medium))
                             .lineSpacing(4)
                             .foregroundStyle(AppColors.subtext)
@@ -1634,6 +1652,7 @@ struct BillPlaybackSheet: View {
     var onNavigateToSettings: (() -> Void)? = nil
     var onShowMemberPricing: (() -> Void)? = nil
     private let nudgeService = MemberNudgePolicyService()
+    private let dailyQuotaStore = DailyFeatureQuotaStore()
 
     private var todayItems: [HomeItem] {
         homeViewModel.items.filter {
@@ -1801,7 +1820,14 @@ struct BillPlaybackSheet: View {
 
     private var todayPlaybackUsageHint: String? {
         guard !settingsViewModel.settings.hasMemberAccess else { return nil }
-        return "适合晚上回看；免费每天 \(DailyFeatureQuotaStore.todayPlaybackFreeLimit) 次。"
+        return "适合晚上回看；今日免费回放剩余 \(todayPlaybackQuotaText()) 次。"
+    }
+
+    private func todayPlaybackQuotaText() -> String {
+        let limit = DailyFeatureQuotaStore.todayPlaybackFreeLimit
+        let remaining = dailyQuotaStore.todayPlaybackRemaining(isMember: false)
+        let left = min(limit, max(0, remaining))
+        return "\(left)/\(limit)"
     }
 
     private var todayPlaybackSheetHeight: CGFloat {

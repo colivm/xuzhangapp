@@ -16,6 +16,15 @@ enum ShareInsightCopyPool {
                 footnote: footnote(for: signal),
                 tags: ["#\(shortDayLabel(label))\(count)笔", "#\(signal.activeDays)天有记录", "#节奏更密", "#有记录的日子"]
             )
+        case let .lifeMark(kind, title, line, label, count):
+            let markName = label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? title : label
+            let markTag = kind == .milestone ? "#里程碑" : "#生活印记"
+            return ShareInsight(
+                fact: "这周留下「\(title)」",
+                care: compactLifeMarkLine(line),
+                footnote: footnote(for: signal),
+                tags: [markTag, "#\(sanitizedTag(markName))", "#\(count)次", "#\(signal.activeDays)天有记录"]
+            )
         case let .lifeTitle(text):
             return ShareInsight(
                 fact: text,
@@ -312,6 +321,12 @@ enum ShareInsightCopyPool {
     private static func footnote(for signal: ShareInsightSignal) -> String {
         let dayText = signal.activeDays > 0 ? " · \(signal.activeDays) 天有记录" : ""
         return "\(signal.recordCount) 笔 · 这一周\(dayText)"
+    }
+
+    private static func compactLifeMarkLine(_ line: String) -> String {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > 34 else { return trimmed }
+        return "\(trimmed.prefix(34))..."
     }
 
     private static func pick(_ options: [String], seed: String) -> String {

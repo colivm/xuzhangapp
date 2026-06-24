@@ -376,6 +376,13 @@ struct StatsWebView: View {
             .buttonStyle(.plain)
             .disabled(!hasData && !isMonthLocked)
 
+            Text(summaryQuotaFootnote(range: range, hasData: hasData))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.74))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 4)
+                .padding(.top, -4)
+
             if hasData {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(evidenceGroups) { group in
