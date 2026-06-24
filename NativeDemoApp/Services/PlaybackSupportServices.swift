@@ -957,7 +957,7 @@ enum LifeStorySignalService {
         return "\(cleaned)，后来也留在了这周里。"
     }
 
-    private static func containsAny(_ text: String, keywords: [String]) -> Bool {
+    private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
         keywords.contains { text.localizedCaseInsensitiveContains($0) }
     }
 }
@@ -1189,9 +1189,10 @@ final class DailyFeatureQuotaStore {
     }
 
     static let todayPlaybackFreeLimit = 3
+    static let ocrDailyFreeLimit = 3
 
     private let defaults: UserDefaults
-    private let ocrDailyLimit = 3
+    private let ocrDailyLimit = Self.ocrDailyFreeLimit
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
