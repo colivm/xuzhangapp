@@ -1046,7 +1046,11 @@ struct HomeView: View {
             .frame(height: isDeleting ? 0 : nil)
             .clipped()
             .onTapGesture {
-                if todaySwipedItemID != nil {
+                if todaySwipedItemID == item.id {
+                    withAnimation(todayEditSpring) {
+                        todaySwipedItemID = nil
+                    }
+                } else if todaySwipedItemID != nil {
                     withAnimation(todayEditSpring) {
                         todaySwipedItemID = nil
                     }
@@ -1543,16 +1547,26 @@ struct HomeView: View {
             .updating($todaySwipeDragState) { value, state, _ in
                 let horizontal = value.translation.width
                 let vertical = value.translation.height
-                guard abs(horizontal) > abs(vertical) * 1.1 else { return }
-                state = TodaySwipeDragState(itemID: item.id, translation: horizontal)
+                guard abs(horizontal) > max(16, abs(vertical) * 1.35) else { return }
+                let baseOffset: CGFloat = todaySwipedItemID == item.id ? -76 : 0
+                let translation = min(86, max(-86, baseOffset + horizontal)) - baseOffset
+                state = TodaySwipeDragState(itemID: item.id, translation: translation)
             }
             .onEnded { value in
                 let horizontal = value.translation.width
                 let predictedHorizontal = value.predictedEndTranslation.width
                 let vertical = value.translation.height
-                let isHorizontalSwipe = abs(horizontal) > max(28, abs(vertical) * 1.2)
-                    || abs(predictedHorizontal) > max(56, abs(value.predictedEndTranslation.height) * 1.2)
-                guard isHorizontalSwipe else { return }
+                let predictedVertical = value.predictedEndTranslation.height
+                let isHorizontalSwipe = abs(horizontal) > max(34, abs(vertical) * 1.45)
+                    || abs(predictedHorizontal) > max(62, abs(predictedVertical) * 1.35)
+                if !isHorizontalSwipe {
+                    if abs(vertical) > abs(horizontal), todaySwipedItemID == item.id {
+                        withAnimation(todayEditSpring) {
+                            todaySwipedItemID = nil
+                        }
+                    }
+                    return
+                }
                 withAnimation(todayEditSpring) {
                     if horizontal < -28 || predictedHorizontal < -56 {
                         todaySwipedItemID = item.id
@@ -1943,6 +1957,7 @@ struct BillPlaybackSheet: View {
             HStack(spacing: 8) {
                 ForEach(Array(playbackMoments.enumerated()), id: \.element.id) { index, moment in
                     Button {
+                        isPlaying = false
                         activeIndex = index
                         playbackDone = false
                     } label: {
@@ -1953,6 +1968,14 @@ struct BillPlaybackSheet: View {
             }
             .padding(.horizontal, 1)
         }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 8)
+                .onChanged { _ in
+                    if isPlaying {
+                        isPlaying = false
+                    }
+                }
+        )
     }
 
     private func playbackFilmStripCard(moment: PlaybackMoment, index: Int) -> some View {

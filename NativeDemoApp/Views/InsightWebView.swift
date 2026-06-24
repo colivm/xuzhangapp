@@ -243,7 +243,7 @@ struct InsightWebView: View {
             }
             .scrollIndicators(.hidden)
 
-            if let modal = monthlyTrialModal {
+            if let modal = monthlyTrialModal, !showMonthlyInsightSheet {
                 monthlyTrialOverlay(modal)
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
@@ -2106,7 +2106,6 @@ struct InsightWebView: View {
             ?? filteredAICommandItems(range: range, intent: categoryIntent)
         let total = items.reduce(0) { $0 + $1.amount }
         let categoryText = aiCommandLifeMarkLabel(lifeMarkIntent, command: command) ?? categoryIntent?.label ?? "全部"
-        let rangeNote = range.isFallback ? "「最近/这阵子」先按最近 7 天整理。" : "\(range.label)已整理。"
         if categoryIntent == nil, lifeMarkIntent == nil, aiCommandAsksCategoryBreakdown(command) {
             let summary: String
             if items.isEmpty {
@@ -2120,7 +2119,7 @@ struct InsightWebView: View {
                 kind: .query,
                 title: "\(range.label)的分类分布",
                 summary: summary,
-                detail: aiCommandCategoryBreakdownDetail(items: items, total: total, fallback: rangeNote),
+                detail: aiCommandCategoryBreakdownDetail(items: items, total: total, fallback: ""),
                 items: sortedAICommandEvidenceItems(items),
                 bars: dailyBars(range: range, items: items),
                 drafts: [],
@@ -2134,9 +2133,9 @@ struct InsightWebView: View {
             : "\(range.label)找到 \(items.count) 笔\(categoryText)记录，合计 \(total.formatted(.cny))。"
         let detail: String
         if let top = items.max(by: { $0.amount < $1.amount }) {
-            detail = "\(rangeNote) 金额最高的是「\(top.displayTitle)」，\(top.amount.formatted(.cny))，时间在 \(top.createdAt.zhBillDateTime)。"
+            detail = "金额最高的是「\(top.displayTitle)」，\(top.amount.formatted(.cny))，时间在 \(top.createdAt.zhBillDateTime)。"
         } else {
-            detail = "\(rangeNote) 换个范围或分类再问一次，结果会更明确。"
+            detail = "换个范围或分类再问一次，结果会更明确。"
         }
         return AICommandResult(
             kind: .query,
@@ -2199,6 +2198,12 @@ struct InsightWebView: View {
             command: command
         )
         let contextLine = aiCommandMemoryContextLine(item.memoryContext)
+        let card = AICommandMemoryCard(
+            title: title,
+            subtitle: item.createdAt.zhBillDateOnly,
+            item: item,
+            context: item.memoryContext
+        )
         let detailParts = [
             "时间在 \(item.createdAt.zhBillDateOnly)，金额 \(item.amount.formatted(.cny))。",
             contextLine.isEmpty ? nil : contextLine
@@ -2210,6 +2215,7 @@ struct InsightWebView: View {
             summary: "找到了 \(item.createdAt.zhBillDateOnly) 的「\(item.displayTitle)」。",
             detail: detailParts.joined(separator: " "),
             items: sortedAICommandEvidenceItems(uniqueAICommandItems([item] + related)),
+            memoryCard: card,
             bars: dailyBars(range: relatedRange, items: related),
             drafts: [],
             amountSource: nil,
@@ -3243,15 +3249,15 @@ struct InsightWebView: View {
                 requiresKeywordMatch: true
             ),
             AICommandCategoryIntent(
-                categories: [.dining],
-                label: "餐饮",
-                keywords: ["餐饮", "吃饭", "吃的", "饭", "美食", "外卖", "美团外卖", "饿了么", "抖音团购", "七欣天", "海底捞", "肯德基", "麦当劳", "必胜客", "塔斯汀", "华莱士", "食堂", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "简餐", "咖啡", "奶茶", "饮品", "饭店", "餐厅", "火锅", "烤肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "面", "粉", "包子", "盒饭"]
-            ),
-            AICommandCategoryIntent(
                 categories: [.daily, .shopping, .health],
                 label: "娃和毛孩",
                 keywords: ["娃", "宝宝", "孩子", "婴儿", "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "奶瓶", "安抚奶嘴", "宝宝湿巾", "婴儿湿巾", "童装", "儿童座椅", "推车", "宠物", "毛孩子", "毛孩", "狗粮", "猫粮", "猫砂", "宠物粮", "宠物口粮", "尿垫", "冻干", "宠物罐头", "驱虫", "宠物医院", "洗护"],
                 requiresKeywordMatch: true
+            ),
+            AICommandCategoryIntent(
+                categories: [.dining],
+                label: "餐饮",
+                keywords: ["餐饮", "吃饭", "吃的", "饭", "美食", "外卖", "美团外卖", "饿了么", "抖音团购", "七欣天", "海底捞", "肯德基", "麦当劳", "必胜客", "塔斯汀", "华莱士", "食堂", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "简餐", "咖啡", "奶茶", "饮品", "饭店", "餐厅", "火锅", "烤肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "面条", "米粉", "河粉", "粉丝", "包子", "盒饭"]
             ),
             AICommandCategoryIntent(
                 categories: [.transport, .lodging, .entertainment, .dining, .shopping],
@@ -3899,15 +3905,10 @@ struct InsightWebView: View {
             monthlyTrialUsed += 1
             UserDefaults.standard.set(monthlyTrialUsed, forKey: "monthly_trial_used_v1")
             let left = max(0, trialTotal - monthlyTrialUsed)
-            monthlyTrialModal = firstTime
-                ? MonthlyTrialModal(
-                    title: "月记写好了",
-                    body: "这次先用掉 1 次月度回顾体验，还剩 \(left) 次。"
-                )
-                : MonthlyTrialModal(
-                    title: "月度复盘已生成",
-                    body: "这次用掉 1 次月度回顾体验，还剩 \(left) 次。"
-                )
+            monthlyTrialModal = nil
+            monthlyActionMessage = firstTime
+                ? "这次先用掉 1 次月度回顾体验，还剩 \(left) 次。"
+                : "这次用掉 1 次月度回顾体验，还剩 \(left) 次。"
         }
     }
 
@@ -4797,11 +4798,13 @@ struct WeeklyShareCardView: View {
                 .font(.system(size: 17, weight: .medium, design: .rounded))
                 .foregroundStyle(profileAccent.opacity(0.88))
                 .lineSpacing(4)
-                .lineLimit(3)
+                .lineLimit(2)
                 .minimumScaleFactor(0.74)
             Text(insight.footnote)
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(t.textMuted.opacity(0.82))
+                .lineLimit(1)
+                .minimumScaleFactor(0.86)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)

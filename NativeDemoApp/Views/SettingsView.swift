@@ -8,6 +8,7 @@ struct SettingsView: View {
     @Binding var pricingHighlightPlanId: String?
     @Binding var pricingEntryContext: MemberPricingEntryContext
     var openAppearanceRequestID: UUID?
+    var onAppearanceRequestHandled: (() -> Void)? = nil
     @State private var showAccountSheet = false
     @State private var activeSettingsSheet: SettingsSheet?
     @State private var draftDisplayName = ""
@@ -748,6 +749,9 @@ struct SettingsView: View {
         pricingHighlightPlanId = highlightPlanId
         pricingEntryContext = highlightPlanId == "lifetime" ? .lifetime : .settings
         showMemberPricing = true
+        Task {
+            await settingsViewModel.refreshMemberFromLocalEntitlements(syncToCloud: true)
+        }
     }
 
     private func openMemberPricingFromSettingsSheet(highlightPlanId: String? = nil) {
@@ -761,6 +765,7 @@ struct SettingsView: View {
         guard let requestID, handledAppearanceRequestID != requestID else { return }
         handledAppearanceRequestID = requestID
         activeSettingsSheet = .appearance
+        onAppearanceRequestHandled?()
     }
 
     private func handleLockedThemeTap(_ theme: ThemeDefinition, style: ThemeSwatchStyle) {
@@ -3163,7 +3168,8 @@ struct SettingsView_Previews: PreviewProvider {
             showMemberPricing: .constant(false),
             pricingHighlightPlanId: .constant(nil),
             pricingEntryContext: .constant(.settings),
-            openAppearanceRequestID: nil
+            openAppearanceRequestID: nil,
+            onAppearanceRequestHandled: nil
         )
             .environmentObject(SettingsViewModel())
             .environmentObject(HomeViewModel())
