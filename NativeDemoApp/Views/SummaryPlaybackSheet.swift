@@ -755,7 +755,6 @@ struct SummaryPlaybackSheet: View {
                         endRadius: 200
                     )
                 }
-                )
                 .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
             )
     }
