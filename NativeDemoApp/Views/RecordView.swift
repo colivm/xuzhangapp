@@ -33,6 +33,7 @@ struct RecordView: View {
     @State private var freeScenePackRefreshToken = 0
     @State private var freeLockedSceneHint: ScenePackAngleSheet.LockedSceneHint?
     @State private var ocrQuotaUpsellVisibleThisSession = false
+    @State private var suppressNextNoteSemanticUnlock = false
     @AppStorage("scene_pack_order_v1") private var scenePackOrderStorage = ""
     @AppStorage("scene_pack_manual_order_v1") private var scenePackManualOrderEnabled = false
     @AppStorage("scene_pack_more_expanded_v1") private var scenePackMoreExpanded = false
@@ -144,6 +145,10 @@ struct RecordView: View {
 
     private var freeScenePackIds: Set<String> {
         Set(freeScenePacksForUse.map(\.id))
+    }
+
+    private var implicitScenePacksForCurrentAccess: [ScenePackDefinition] {
+        isMember ? visibleScenePacks : freeScenePacksForUse
     }
 
     private var shouldShowOCRQuotaUpsell: Bool {
@@ -486,6 +491,17 @@ struct RecordView: View {
         userNoteAnchorTitle = trimmed.isEmpty ? nil : trimmed
     }
 
+    private func shouldManualNoteOverrideSelectedCategory(_ title: String) -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        guard homeViewModel.categoryLockedByUser || lastDraftIntent == .category else { return false }
+        guard !RecordSemanticLexicon.isTitle(trimmed, compatibleWith: homeViewModel.selectedCategory) else {
+            return false
+        }
+        return !RecordSemanticLexicon.matchingCategories(in: trimmed).isEmpty
+            || !RecordSemanticLexicon.matchingEmotionRuleIDs(in: trimmed).isEmpty
+    }
+
     private func scenePackVariantKey(
         pack: ScenePackDefinition,
         amount: Double,
@@ -652,7 +668,8 @@ struct RecordView: View {
         if shouldUseNeutralRemarkFallback {
             return ""
         }
-        return previewDraftResolution?.emotionTag ?? ""
+        guard let resolution = previewDraftResolution else { return "" }
+        return previewEmotionTag(for: resolution)
     }
 
     private var previewLifeMarkText: String? {
@@ -660,7 +677,7 @@ struct RecordView: View {
         guard focusedField != .note else { return nil }
         let category = previewDraftResolution?.category ?? homeViewModel.selectedCategory
         let rawTitle = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = rawTitle.isEmpty ? previewHeadline : rawTitle
+        let title = previewSemanticTitle(rawTitle.isEmpty ? previewHeadline : rawTitle)
         let draft = HomeItem(
             title: title,
             amount: inputAmountValue,
@@ -684,6 +701,56 @@ struct RecordView: View {
         case .scene:
             return "会进入「\(mark.label)」印记"
         }
+    }
+
+    private var previewLearningHint: String? {
+        let currentTitle = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let anchor = previewSemanticAnchorTitle,
+           noteHasSpecificSemantics(anchor) {
+            return nil
+        }
+        if noteHasSpecificSemantics(currentTitle) {
+            return nil
+        }
+        return homeViewModel.recordLearningHint
+    }
+
+    private var previewSemanticAnchorTitle: String? {
+        let current = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let anchor = userNoteAnchorTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !anchor.isEmpty, anchor != current else { return nil }
+        guard noteHasSpecificSemantics(anchor) else { return nil }
+        return anchor
+    }
+
+    private func previewSemanticTitle(_ title: String) -> String {
+        guard let anchor = previewSemanticAnchorTitle else { return title }
+        return "\(title) \(anchor)"
+    }
+
+    private func previewEmotionTag(for resolution: RecordDraftResolution) -> String {
+        guard let anchor = previewSemanticAnchorTitle else { return resolution.emotionTag }
+        let resolved = NarrativeCopyResolver.resolveEmotionTag(
+            context: NarrativeCopyResolver.Context(
+                brandId: resolution.merchantBrandId,
+                category: resolution.category,
+                amount: inputAmountValue,
+                date: homeViewModel.selectedDate,
+                seed: "\(resolution.title)|\(anchor)",
+                note: "\(resolution.title) \(anchor)",
+                scenePackId: activeScenePackIdForCurrentRecord
+            )
+        )
+        return RecordSemanticLexicon.isTitle(resolved, compatibleWith: resolution.category)
+            ? resolved
+            : resolution.emotionTag
+    }
+
+    private func noteHasSpecificSemantics(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return !RecordSemanticLexicon.matchingCategories(in: trimmed).isEmpty
+            || !RecordSemanticLexicon.matchingEmotionRuleIDs(in: trimmed).isEmpty
     }
 
     private func markOCRQuotaUpsellShown() {
@@ -846,13 +913,25 @@ struct RecordView: View {
         lastDraftIntent = .automatic
         userNoteAnchorTitle = nil
         activeScenePack = nil
-        let rewardPrompt = homeViewModel.items.first.flatMap { savedItem in
-            prepareLifeMarkSceneRewardPromptIfNeeded(for: savedItem)
+        let savedItem = homeViewModel.items.first
+        onSaved?(nil)
+        if let savedItem {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+                guard let rewardPrompt = prepareLifeMarkSceneRewardPromptIfNeeded(
+                    for: savedItem,
+                    refreshScenePackState: false
+                ) else {
+                    return
+                }
+                onSaved?(rewardPrompt)
+            }
         }
-        onSaved?(rewardPrompt)
     }
 
-    private func prepareLifeMarkSceneRewardPromptIfNeeded(for item: HomeItem) -> LifeMarkSceneRewardPrompt? {
+    private func prepareLifeMarkSceneRewardPromptIfNeeded(
+        for item: HomeItem,
+        refreshScenePackState: Bool = true
+    ) -> LifeMarkSceneRewardPrompt? {
         guard !isMember else { return nil }
         if let reward = lifeMarkSceneRewardService.registerRewardIfNeeded(
             for: item,
@@ -861,7 +940,9 @@ struct RecordView: View {
             definitions: visibleScenePacks,
             isMember: isMember
         ) {
-            freeScenePackRefreshToken += 1
+            if refreshScenePackState {
+                freeScenePackRefreshToken += 1
+            }
             return LifeMarkSceneRewardPrompt(
                 id: reward.id,
                 title: "新的生活线索诞生",
@@ -913,7 +994,7 @@ struct RecordView: View {
         case .other: packId = nil
         }
         guard let packId else { return nil }
-        return visibleScenePacks.first { $0.id == packId }
+        return implicitScenePacksForCurrentAccess.first { $0.id == packId }
     }
 
     private func nextCategoryCopyTitle(anchorTitle: String? = nil) -> String {
@@ -925,8 +1006,31 @@ struct RecordView: View {
             date: homeViewModel.selectedDate
         )
         let variant = scenePackVariants[variantKey, default: 0]
+        let currentTitle = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        for offset in 0..<8 {
+            let candidate = categoryCopyTitle(
+                category: category,
+                amount: amount,
+                date: homeViewModel.selectedDate,
+                variant: variant + offset,
+                anchorTitle: anchorTitle
+            )
+            if candidate != currentTitle || offset == 7 {
+                scenePackVariants[variantKey] = variant + offset + 1
+                return candidate
+            }
+        }
         scenePackVariants[variantKey] = variant + 1
+        return previewFallbackTitle(for: category)
+    }
 
+    private func categoryCopyTitle(
+        category: HomeItem.Category,
+        amount: Double,
+        date: Date,
+        variant: Int,
+        anchorTitle: String?
+    ) -> String {
         if let anchorTitle,
            let anchored = anchoredCategoryCopy(
             from: anchorTitle,
@@ -939,7 +1043,7 @@ struct RecordView: View {
         return polishedRecordNoteCopy(genericCategoryCopy(
             for: category,
             amount: amount,
-            date: homeViewModel.selectedDate,
+            date: date,
             variant: variant
         ))
     }
@@ -963,16 +1067,42 @@ struct RecordView: View {
     ) -> String {
         let notes: [String]
         switch category {
+        case .dining:
+            let hour = Calendar.current.component(.hour, from: date)
+            switch hour {
+            case 5..<10:
+                notes = ["早餐先记下", "早上吃点热乎的", "早餐补点能量", "出门前吃一口"]
+            case 10..<14:
+                notes = ["午餐先记下", "中午简单吃好", "饭点补点能量", "这顿先安排"]
+            case 14..<17:
+                notes = ["下午补点吃的", "便利店小食记下", "忙到一半补一口", "喝点吃点补上"]
+            case 17..<21:
+                notes = ["晚饭先安排", "下班后吃点热乎的", "晚餐记下来", "这顿吃好一点"]
+            default:
+                notes = ["夜里吃点热乎的", "晚归路上补一口", "深夜小食记下", "加班后补点能量"]
+            }
+        case .transport:
+            notes = ["通勤路上", "路上花费补上", "今天出行记下", "这趟走完了", "出门这段记下"]
+        case .shopping:
+            notes = amount <= 80
+                ? ["买到常用的小东西", "下单一个需要的", "快递路上记下", "顺手买点实用的", "小物件补上"]
+                : ["买到需要的东西", "给生活添点装备", "这次下单记下", "常用物件买回来了", "购物安排补上"]
         case .daily:
             notes = amount <= 50
                 ? ["日用小补给", "日常小物补上", "刚好需要的小东西", "小补给记下来", "常用的先补一点", "便利袋里的一点日常"]
                 : ["日常用品补齐", "把常用的补上", "日用品换新一点", "常用物件买回来了", "日常安排补上", "家用小物补齐"]
         case .entertainment:
             notes = ["这次放松安排", "给自己留点轻松", "娱乐小消费记下", "留点休闲时间", "放松一下也记下", "今天的娱乐安排"]
+        case .lodging:
+            notes = ["今晚住在这里", "住宿安排记下", "短住一晚记下", "这次住处放好"]
+        case .health:
+            notes = ["健康相关补上", "身体照顾记下", "给身体留个记录", "护理恢复补上"]
+        case .home:
+            notes = ["家里需要的补上", "住处日常账单", "居家安排补上", "给住处添点东西"]
+        case .social:
+            notes = ["这份心意记下", "人情往来放好", "见面留个记录", "关系里的往来记下"]
         case .other:
             notes = ["先放进账本", "日常小记录", "临时花费补上", "单独记录一下", "今天补上一条", "小额支出记下", "这条记录已放好", "简单留个记录"]
-        default:
-            notes = [previewFallbackTitle(for: category)]
         }
         guard !notes.isEmpty else { return previewFallbackTitle(for: category) }
         return notes[variant % notes.count]
@@ -990,7 +1120,6 @@ struct RecordView: View {
         }
         let sourceTitle = homeViewModel.inputTitle
         let sourceWasManualNote = lastDraftIntent == .note
-        refreshRecommendedCategory()
         previewLineWasRotated = true
         applyNoteRewriteDecision(
             resolveNoteRewriteDecision(
@@ -1008,7 +1137,6 @@ struct RecordView: View {
 
         let sourceTitle = homeViewModel.inputTitle
         let sourceWasManualNote = lastDraftIntent == .note
-        refreshRecommendedCategory()
         previewLineWasRotated = true
 
         applyNoteRewriteDecision(
@@ -1153,6 +1281,12 @@ struct RecordView: View {
     ) -> String? {
         let title = sourceTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return nil }
+        if let semanticCopy = anchoredSemanticCategoryCopy(
+            from: title,
+            variant: variant
+        ) {
+            return semanticCopy
+        }
         guard let pack = scenePackForTitle(title) ?? baseScenePack(for: categoryContext) else { return nil }
         return anchoredScenePackCopy(
             from: title,
@@ -1160,6 +1294,34 @@ struct RecordView: View {
             categoryContext: categoryContext,
             variant: variant
         )
+    }
+
+    private func anchoredSemanticCategoryCopy(
+        from sourceTitle: String,
+        variant: Int
+    ) -> String? {
+        let normalized = sourceTitle.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+        let notes: [String]?
+        if containsAny(normalized, ["猫砂", "尿垫"]) {
+            notes = ["猫砂日常补上", "毛孩子日常补给", "猫砂用品补上", "猫砂清爽补上"]
+        } else if containsAny(normalized, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) {
+            notes = ["毛孩子口粮补上", "毛孩子饭碗续上", "宠物口粮补上", "给毛孩子备点口粮"]
+        } else if containsPetKeyword(normalized) {
+            notes = ["毛孩子用品补充", "宠物用品补上", "给毛孩子备一点", "毛孩子日常补给"]
+        } else if containsBabyKeyword(normalized) {
+            notes = ["宝宝用品补充", "照护用品补上", "给宝宝备一点", "成长里的小补给"]
+        } else if containsAny(normalized, ["游泳", "泳池", "泳馆", "泳票", "泳道"]) {
+            notes = ["今天下水一回", "游泳安排记下", "游泳相关补上", "下水这次记下"]
+        } else if containsFitnessKeyword(normalized) {
+            notes = ["运动安排记下", "运动后补给一下", "训练相关补上", "身体这条线记下"]
+        } else if containsAny(normalized, ["路亚", "渔具", "鱼竿", "鱼线", "鱼饵", "钓箱", "钓椅"]) {
+            notes = ["钓鱼装备补充", "给钓鱼添点装备", "路亚装备补上", "喜欢的装备补上"]
+        } else {
+            notes = nil
+        }
+        guard let notes, !notes.isEmpty else { return nil }
+        return notes[variant % notes.count]
     }
 
     private func anchoredScenePackCopy(
@@ -1194,7 +1356,13 @@ struct RecordView: View {
             if containsBabyKeyword(normalized) {
                 notes = ["宝宝用品补充", "照护用品补上", "给宝宝备一点", "成长里的小补给"]
             } else if containsPetKeyword(normalized) {
-                notes = ["毛孩子用品补充", "宠物口粮补上", "给毛孩子备一点", "照顾小成员的日常"]
+                if containsAny(normalized, ["猫砂", "尿垫"]) {
+                    notes = ["猫砂日常补上", "毛孩子日常补给", "猫砂用品补上", "猫砂清爽补上"]
+                } else if containsAny(normalized, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) {
+                    notes = ["毛孩子口粮补上", "毛孩子饭碗续上", "宠物口粮补上", "给毛孩子备点口粮"]
+                } else {
+                    notes = ["毛孩子用品补充", "宠物用品补上", "给毛孩子备一点", "毛孩子日常补给"]
+                }
             } else {
                 notes = nil
             }
@@ -1334,7 +1502,7 @@ struct RecordView: View {
             packId = nil
         }
         guard let packId else { return nil }
-        return visibleScenePacks.first { $0.id == packId }
+        return implicitScenePacksForCurrentAccess.first { $0.id == packId }
     }
 
     private func scenePackSemanticCategories(for pack: ScenePackDefinition) -> Set<HomeItem.Category> {
@@ -1506,8 +1674,14 @@ struct RecordView: View {
                     if lastDraftIntent != .note {
                         lastDraftIntent = .note
                     }
-                    homeViewModel.preferNoteSemanticsForCurrentDraft()
+                    if suppressNextNoteSemanticUnlock {
+                        suppressNextNoteSemanticUnlock = false
+                    } else if shouldManualNoteOverrideSelectedCategory(homeViewModel.inputTitle) {
+                        homeViewModel.preferNoteSemanticsForCurrentDraft()
+                    }
                     rememberUserNoteAnchor(homeViewModel.inputTitle)
+                } else if suppressNextNoteSemanticUnlock {
+                    suppressNextNoteSemanticUnlock = false
                 }
                 homeViewModel.clearRecordInputMessage()
                 refreshRecommendedCategory(debounced: focusedField == .note)
@@ -1593,7 +1767,7 @@ struct RecordView: View {
                         },
                         onSelectFreePack: { pack in
                             previewLineWasRotated = true
-                            applyScenePack(pack, keepSelectedCategory: true, trackMemberSceneUsage: false)
+                            applyScenePack(pack, trackMemberSceneUsage: false)
                         },
                         onReplaceFreePack: { slot, oldId, newPack in
                             freeScenePackService.replacePack(atSlot: slot, oldId: oldId, newId: newPack.id, from: visibleScenePacks)
@@ -1731,7 +1905,7 @@ struct RecordView: View {
             tier: previewTier,
             headline: previewHeadline,
             hint: previewHint,
-            learningHint: homeViewModel.recordLearningHint,
+            learningHint: previewLearningHint,
             lifeMarkText: previewLifeMarkText,
             emotion: previewTier == .whisper ? "" : previewEmotion,
             meta: previewCardMeta,
@@ -1776,7 +1950,7 @@ struct RecordView: View {
             return
         }
         previewLineWasRotated = true
-        applyScenePack(pack, keepSelectedCategory: true, trackMemberSceneUsage: false)
+        applyScenePack(pack, trackMemberSceneUsage: false)
         scenePackFeedback = "已领取 7 天体验：\(pack.label)"
     }
 
@@ -2456,10 +2630,14 @@ struct RecordView: View {
                     ForEach(homeViewModel.noteSuggestions(for: homeViewModel.selectedCategory, at: homeViewModel.selectedDate), id: \.self) { suggestion in
                         Button(suggestion) {
                             dismissKeyboard()
-                            lastDraftIntent = .note
-                            homeViewModel.preferNoteSemanticsForCurrentDraft()
+                            lastDraftIntent = .category
                             rememberUserNoteAnchor(suggestion)
-                            homeViewModel.inputTitle = suggestion
+                            if homeViewModel.inputTitle != suggestion {
+                                suppressNextNoteSemanticUnlock = true
+                                homeViewModel.inputTitle = suggestion
+                            } else {
+                                suppressNextNoteSemanticUnlock = false
+                            }
                             clearActiveScenePackIfManualNoteMovedAway()
                         }
                         .font(.system(size: 13, weight: .medium))

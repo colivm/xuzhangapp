@@ -2,6 +2,14 @@ import SwiftUI
 
 // MARK: - Stats View (matching web statsPage)
 
+private struct SummaryQuotaPrompt: Identifiable, Equatable {
+    let id = UUID()
+    let title: String
+    let message: String
+    let primaryTitle: String
+    let opensMember: Bool
+}
+
 struct StatsWebView: View {
 
     @EnvironmentObject private var homeViewModel: HomeViewModel
@@ -14,7 +22,7 @@ struct StatsWebView: View {
     @State var selectedCategory: HomeItem.Category? = nil
     @State private var editingItem: HomeItem?
     @State private var summaryPlayback: SummaryPlayback?
-    @State private var summaryQuotaMessage: String?
+    @State private var summaryQuotaPrompt: SummaryQuotaPrompt?
     @State private var quotaRefreshID = UUID()
     @State var isFiltersExpanded = false
     @State private var showTraceDetailSheet = false
@@ -122,11 +130,14 @@ struct StatsWebView: View {
             .onChange(of: openTraceRequestID) { _, _ in
                 handleOpenTraceRequestIfNeeded()
             }
-            .alert("播放次数已用完", isPresented: summaryQuotaAlertBinding) {
-                summaryQuotaAlertActions
-            } message: {
-                Text(summaryQuotaMessage ?? "")
+            .overlay {
+                if let summaryQuotaPrompt {
+                    summaryQuotaOverlay(summaryQuotaPrompt)
+                        .transition(.opacity)
+                        .zIndex(30)
+                }
             }
+            .animation(.easeInOut(duration: 0.18), value: summaryQuotaPrompt)
     }
 
     private var statsScrollView: some View {
@@ -1471,6 +1482,25 @@ struct StatsWebView: View {
     }
 
     private func traceLifeMarkIcon(for mark: LifeMarkAggregate) -> String {
+        let semanticText = "\(mark.id) \(mark.label) \(mark.title) \(mark.detail)"
+        if mark.id == "medical_care" {
+            if traceContainsAny(semanticText, ["医院", "门诊", "挂号", "问诊", "体检", "检查", "拍片", "验血"]) {
+                return "🏥"
+            }
+            if traceContainsAny(semanticText, ["护理", "理疗", "康复", "创可贴", "牙科", "口腔"]) {
+                return "🩹"
+            }
+            return "💊"
+        }
+        if mark.id == "fitness" {
+            return "🏋️"
+        }
+        if traceContainsAny(semanticText, ["看病", "买药", "医院", "门诊", "挂号", "问诊", "体检", "检查", "药"]) {
+            return traceContainsAny(semanticText, ["医院", "门诊", "挂号", "问诊", "体检", "检查"]) ? "🏥" : "💊"
+        }
+        if traceContainsAny(semanticText, ["健身", "运动", "跑步", "瑜伽", "普拉提", "游泳", "训练"]) {
+            return "🏋️"
+        }
         switch mark.category {
         case .transport:
             return mark.id.contains("rain") ? "🌧️" : "🚇"
@@ -2409,34 +2439,34 @@ struct StatsWebView: View {
             if !quotaStore.hasCompletedWeekPlaybackEver() {
                 return SummaryPlaybackMemberPitch(
                     headline: "这是你的第一段周记。",
-                    detail: "下周还想继续这样回看，就可以把每周生活回放长期留住。",
+                    detail: "之后每周都可以把情绪标签、生活印记和反复出现的场景继续接上，不只看金额。",
                     cta: "保留每周生活回放"
                 )
             }
             if quotaStore.weekRemaining(isMember: false) <= 1 {
                 return SummaryPlaybackMemberPitch(
                     headline: "这周的免费回放快用完了。",
-                    detail: "会员会让周记和月章持续留下来，不用等下个自然周刷新。",
+                    detail: "会员会让周记和月章持续留下来，情绪标签和生活印记也会一起进入回放。",
                     cta: "让回放继续留下"
                 )
             }
             return SummaryPlaybackMemberPitch(
-                headline: "像不像你的这周？",
-                detail: "这类回看会随着记录变多更贴近你。",
-                cta: "让账本更懂我"
+                headline: "像不像你的这一周？",
+                detail: "会员会把情绪标签、生活印记和反复出现的场景接着整理进周/月回放，不只停在分类和金额。",
+                cta: "让账本继续读懂我"
             )
         case .month:
             if quotaStore.monthRemaining(isMember: false) <= 1 {
                 return SummaryPlaybackMemberPitch(
-                    headline: "10 次月章已经听到最后一次。",
-                    detail: "后面的月份也可以继续被整理出来，形成一段更长的生活脉络。",
-                    cta: "继续留下月章"
+                    headline: "月章体验快用完了。",
+                    detail: "月章是新用户体验额度，不是每月刷新。会员可以继续整理更多月份，形成更长的生活脉络。",
+                    cta: "继续留住月章"
                 )
             }
             return SummaryPlaybackMemberPitch(
                 headline: "像不像你的这个月？",
-                detail: "会员可以把更多月份继续整理成生活章。",
-                cta: "让账本更懂我"
+                detail: "会员会把更多月份里的天气、路线、情绪标签和生活印记串起来，整理成连续生活章。",
+                cta: "让账本继续读懂我"
             )
         }
     }
@@ -2446,23 +2476,79 @@ struct StatsWebView: View {
         return playbackService.buildWeeklyShareCardPayload(from: homeViewModel.items, summary: playback)
     }
 
-    private var summaryQuotaAlertBinding: Binding<Bool> {
-        Binding(
-            get: { summaryQuotaMessage != nil },
-            set: { if !$0 { summaryQuotaMessage = nil } }
-        )
+    private func summaryQuotaOverlay(_ prompt: SummaryQuotaPrompt) -> some View {
+        ZStack {
+            Color.black.opacity(0.24)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    dismissSummaryQuotaPrompt()
+                }
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "play.slash")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppColors.accent.opacity(0.92))
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(AppColors.accent.opacity(0.12)))
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(prompt.title)
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+                        Text(prompt.message)
+                            .font(.system(size: 15))
+                            .foregroundStyle(AppColors.text.opacity(0.76))
+                            .lineSpacing(4)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    Button {
+                        dismissSummaryQuotaPrompt()
+                    } label: {
+                        Text("知道了")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(AppColors.text.opacity(0.82))
+                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .background(Color.white.opacity(0.72), in: Capsule(style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        let shouldOpenMember = prompt.opensMember
+                        dismissSummaryQuotaPrompt()
+                        if shouldOpenMember {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                                onShowMemberPricing?(.playbackQuota)
+                            }
+                        }
+                    } label: {
+                        Text(prompt.primaryTitle)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .background(AppColors.accent.opacity(0.88), in: Capsule(style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: 340)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(Color.white.opacity(0.58), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.16), radius: 28, y: 14)
+            .padding(.horizontal, 24)
+        }
     }
 
-    @ViewBuilder
-    private var summaryQuotaAlertActions: some View {
-            Button("让回放不中断") {
-                let shouldOpenMember = summaryQuotaMessage?.contains("会员") ?? false
-                summaryQuotaMessage = nil
-                if shouldOpenMember { onShowMemberPricing?(.playbackQuota) }
-            }
-            Button("知道了", role: .cancel) {
-                summaryQuotaMessage = nil
-            }
+    private func dismissSummaryQuotaPrompt() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            summaryQuotaPrompt = nil
+        }
     }
 
     private func summaryQuotaFootnote(range: SummaryPlaybackRange, hasData: Bool) -> String {
@@ -2487,9 +2573,19 @@ struct StatsWebView: View {
         guard quotaStore.canPlay(range, isMember: hasMemberAccess) else {
             switch range {
             case .week:
-                summaryQuotaMessage = "本周回放剩余 0/3 次。下个自然周会刷新；会员适合想连续回看周/月生活节奏的人。"
+                summaryQuotaPrompt = SummaryQuotaPrompt(
+                    title: "本周回放用完了",
+                    message: "本周免费回放剩余 0/\(SummaryPlaybackQuotaStore.weeklyFreeLimit) 次。下个自然周会刷新。会员可以连续回看周/月生活节奏。",
+                    primaryTitle: "了解连续回放",
+                    opensMember: true
+                )
             case .month:
-                summaryQuotaMessage = "新用户月章剩余 0/10 次。会员可以继续整理更多月份，也让 OCR 和 AI 回顾不被次数打断。本周回放仍会在每个自然周刷新 3 次。"
+                summaryQuotaPrompt = SummaryQuotaPrompt(
+                    title: "本月章体验用完了",
+                    message: "新用户月章剩余 0/\(SummaryPlaybackQuotaStore.lifetimeMonthFreeLimit) 次。月章额度不是每月刷新。会员可以继续整理更多月份。",
+                    primaryTitle: "继续留住月章",
+                    opensMember: true
+                )
             }
             return
         }

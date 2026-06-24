@@ -41,6 +41,9 @@ final class PlaybackMomentSelector {
             let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
             let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
             var score = PlaybackMaterialScoring.stableScore(item: item, periodKey: periodKey, now: now)
+            if HomeItem.isLateWorkCommute(item) {
+                score += 30
+            }
 
             if EchoAnchorService.shared.isEligibleLifeTraceTitle(title, item: item) {
                 score += 70
@@ -233,9 +236,10 @@ final class DailyFeatureQuotaStore {
         static let todayPlaybackUsedCount = "todayPlaybackUsedCount"
     }
 
+    static let todayPlaybackFreeLimit = 3
+
     private let defaults: UserDefaults
     private let ocrDailyLimit = 3
-    private let todayPlaybackDailyLimit = 1
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -250,7 +254,7 @@ final class DailyFeatureQuotaStore {
     func todayPlaybackRemaining(isMember: Bool, now: Date = Date()) -> Int {
         guard !isMember else { return Int.max }
         syncDayIfNeeded(dayKey: Keys.todayPlaybackDayKey, usedKey: Keys.todayPlaybackUsedCount, now: now)
-        return max(0, todayPlaybackDailyLimit - defaults.integer(forKey: Keys.todayPlaybackUsedCount))
+        return max(0, Self.todayPlaybackFreeLimit - defaults.integer(forKey: Keys.todayPlaybackUsedCount))
     }
 
     func canUseOCR(isMember: Bool, now: Date = Date()) -> Bool {
@@ -272,7 +276,7 @@ final class DailyFeatureQuotaStore {
         guard !isMember else { return }
         syncDayIfNeeded(dayKey: Keys.todayPlaybackDayKey, usedKey: Keys.todayPlaybackUsedCount, now: now)
         let used = defaults.integer(forKey: Keys.todayPlaybackUsedCount)
-        defaults.set(min(todayPlaybackDailyLimit, used + 1), forKey: Keys.todayPlaybackUsedCount)
+        defaults.set(min(Self.todayPlaybackFreeLimit, used + 1), forKey: Keys.todayPlaybackUsedCount)
     }
 
     private func syncDayIfNeeded(dayKey: String, usedKey: String, now: Date) {

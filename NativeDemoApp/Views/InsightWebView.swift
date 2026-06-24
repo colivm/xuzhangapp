@@ -1674,7 +1674,7 @@ struct InsightWebView: View {
                     .foregroundStyle(AppColors.subtext)
             }
 
-            ForEach(items.prefix(8)) { item in
+            ForEach(sortedAICommandEvidenceItems(items).prefix(8)) { item in
                 aiCommandItemRow(item)
             }
         }
@@ -2307,7 +2307,7 @@ struct InsightWebView: View {
 
     private func saveAICommandDrafts(_ drafts: [AICommandRecordDraft]) {
         guard hasMemberAccess else {
-            onShowMemberPricing?()
+            openMemberPricingAfterAICommandDismiss()
             return
         }
         let count = homeViewModel.importAICommandDrafts(drafts)
@@ -2315,6 +2315,13 @@ struct InsightWebView: View {
         aiCommandMessage = count > 0 ? "已确认保存，账本会按时间排序。" : "没有可保存的记录。"
         if count > 0 {
             aiCommandResult = nil
+        }
+    }
+
+    private func openMemberPricingAfterAICommandDismiss() {
+        showAICommandSheet = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            onShowMemberPricing?()
         }
     }
 
@@ -3213,10 +3220,10 @@ struct InsightWebView: View {
 
     private func sortedAICommandEvidenceItems(_ items: [HomeItem]) -> [HomeItem] {
         items.sorted { lhs, rhs in
-            if lhs.amount == rhs.amount {
-                return lhs.createdAt > rhs.createdAt
+            if lhs.createdAt == rhs.createdAt {
+                return lhs.amount > rhs.amount
             }
-            return lhs.amount > rhs.amount
+            return lhs.createdAt > rhs.createdAt
         }
     }
 

@@ -245,23 +245,30 @@ final class HomeViewModel: ObservableObject {
         items.insert(newItem, at: 0)
         resetInput()
         persistItems()
-        analyticsService.track(
-            "record_saved",
-            props: [
-                "category": newItem.category.rawValue,
-                "amount": String(format: "%.2f", newItem.amount),
-                "source": newItem.source.rawValue,
-            ]
-        )
-        refreshTodayPlayback()
-        if wasEmpty {
-            emitRouteGuidance(.firstRecordTodayPlayback)
-        } else {
-            refreshRouteGuidanceIfNeeded()
-        }
-        enqueuePetMessage(for: newItem)
-        Task { await syncUpsertToCloud(newItem) }
+        schedulePostManualRecordWork(for: newItem, wasEmpty: wasEmpty)
         return true
+    }
+
+    private func schedulePostManualRecordWork(for newItem: HomeItem, wasEmpty: Bool) {
+        Task { @MainActor in
+            await Task.yield()
+            analyticsService.track(
+                "record_saved",
+                props: [
+                    "category": newItem.category.rawValue,
+                    "amount": String(format: "%.2f", newItem.amount),
+                    "source": newItem.source.rawValue,
+                ]
+            )
+            refreshTodayPlayback()
+            if wasEmpty {
+                emitRouteGuidance(.firstRecordTodayPlayback)
+            } else {
+                refreshRouteGuidanceIfNeeded()
+            }
+            enqueuePetMessage(for: newItem)
+            Task { await syncUpsertToCloud(newItem) }
+        }
     }
 
     private func compatiblePrefillTitleForSave(category: HomeItem.Category) -> String? {
@@ -729,7 +736,8 @@ final class HomeViewModel: ObservableObject {
             baseEmotionTag: resolution.emotionTag,
             existingItems: items,
             excluding: resolved.id,
-            weatherOverride: storedWeatherSnapshot(from: resolved.memoryContext)
+            weatherOverride: storedWeatherSnapshot(from: resolved.memoryContext),
+            allowLiveWeather: false
         )
         resolved.merchantBrandId = resolution.merchantBrandId
         if resolved.userEditedTitle == true || titleWasEdited {
@@ -1032,10 +1040,11 @@ final class HomeViewModel: ObservableObject {
         baseEmotionTag: String,
         existingItems: [HomeItem]? = nil,
         excluding excludedID: UUID? = nil,
-        weatherOverride: WeatherSnapshot? = nil
+        weatherOverride: WeatherSnapshot? = nil,
+        allowLiveWeather: Bool = true
     ) -> String {
         let settings = LocalStore.loadSettings()
-        let weather = weatherOverride ?? (settings.weatherCompanionEnabled && shouldAttachLiveContext(to: date)
+        let weather = weatherOverride ?? (allowLiveWeather && settings.weatherCompanionEnabled && shouldAttachLiveContext(to: date)
             ? WeatherCompanionService.shared.cachedSnapshot
             : nil)
         let memoryItems = (existingItems ?? items).filter { item in

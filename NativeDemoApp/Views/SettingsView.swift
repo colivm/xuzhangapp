@@ -195,20 +195,68 @@ struct SettingsView: View {
             ZStack {
                 settingsConfirmationOverlay(host: .main)
                 lifetimeThemePreviewOverlay
+                if let lifetimeTrialOfferTheme {
+                    lifetimeTrialOfferOverlay(lifetimeTrialOfferTheme)
+                        .transition(.opacity)
+                        .zIndex(30)
+                }
             }
         }
-        .alert(item: $lifetimeTrialOfferTheme) { theme in
-            Alert(
-                title: Text("试一天典藏皮"),
-                message: Text("这次不会改变会员状态，只临时试用 24 小时。试用结束后会回到默认主题。"),
-                primaryButton: .default(Text("开始试用")) {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    _ = settingsViewModel.startLifetimeThemeTrial(themeId: theme.id)
-                },
-                secondaryButton: .cancel(Text("以后再说")) {
-                    openMemberPricingFromSettingsSheet(highlightPlanId: "lifetime")
+
+    }
+
+
+    private func lifetimeTrialOfferOverlay(_ theme: ThemeDefinition) -> some View {
+        ZStack {
+            Color.black.opacity(0.22)
+                .ignoresSafeArea()
+                .onTapGesture { lifetimeTrialOfferTheme = nil }
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppColors.accent.opacity(0.92))
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(AppColors.accent.opacity(0.12)))
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("è¯ä¸å¤©å¸èç®")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+                        Text("è¿æ¬¡ä¸ä¼æ¹åä¼åç¶æï¼åªä¸´æ¶è¯ç¨ 24 å°æ¶ãè¯ç¨ç»æåä¼åå°é»è®¤ä¸»é¢ã")
+                            .font(.system(size: 15))
+                            .foregroundStyle(AppColors.text.opacity(0.76))
+                            .lineSpacing(4)
+                    }
                 }
-            )
+                HStack(spacing: 10) {
+                    Button("ä»¥ååè¯´") {
+                        lifetimeTrialOfferTheme = nil
+                        openMemberPricingFromSettingsSheet(highlightPlanId: "lifetime")
+                    }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppColors.text.opacity(0.82))
+                    .frame(maxWidth: .infinity, minHeight: 46)
+                    .background(Color.white.opacity(0.72), in: Capsule(style: .continuous))
+
+                    Button("å¼å§è¯ç¨") {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        _ = settingsViewModel.startLifetimeThemeTrial(themeId: theme.id)
+                        lifetimeTrialOfferTheme = nil
+                    }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 46)
+                    .background(AppColors.accent.opacity(0.88), in: Capsule(style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(24)
+            .frame(maxWidth: 340)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Color.white.opacity(0.58), lineWidth: 1))
+            .shadow(color: Color.black.opacity(0.16), radius: 28, y: 14)
+            .padding(.horizontal, 24)
         }
     }
 

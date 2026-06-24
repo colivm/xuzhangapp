@@ -125,10 +125,10 @@ struct MemberPricingView: View {
             )
         case .aiCommand:
             return MemberHeroContent(
-                title: "让 AI 继续替你查账本",
-                subtitle: "会员可以更连续地追问本周、本月、上一次和第几次这些生活线索。",
-                detail: "它会基于真实账单里的日期、分类、备注和上下文回答，不额外编造。",
-                chips: ["连续追问", "线索查询", "真实账本"]
+                title: "让指令台继续替你整理账本",
+                subtitle: "会员可以批量补记、连续追问，也能把本周、本月和上一次这些线索接着查下去。",
+                detail: "批量补记会先生成预览，确认后才写入账本；查询和整理都只基于真实记录，不额外编造。",
+                chips: ["批量补记", "连续追问", "真实账本"]
             )
         case .settings:
             return MemberHeroContent(
@@ -174,9 +174,9 @@ struct MemberPricingView: View {
             ]
         case .aiCommand:
             return [
+                MemberValuePoint(symbol: "list.bullet.rectangle", title: "批量补记先预览", detail: "通勤这类重复记录会先列出来，确认后才写入账本。"),
                 MemberValuePoint(symbol: "terminal", title: "继续追问账本", detail: "本月健身、上一次通勤、第十次咖啡都能接着查。"),
-                MemberValuePoint(symbol: "brain.head.profile", title: "更懂生活线索", detail: "不仅查分类，也能查场景和上下文。"),
-                MemberValuePoint(symbol: "lock.open", title: "减少次数打断", detail: "想整理时不用频繁停在会员提示前。")
+                MemberValuePoint(symbol: "text.magnifyingglass", title: "只基于真实记录", detail: "按日期、分类、备注和上下文整理，不额外编造。")
             ]
         case .settings:
             return [
@@ -272,16 +272,55 @@ struct MemberPricingView: View {
             .onChange(of: lifetimeArchiveItemsSignature) { _, _ in
                 scheduleLifetimeArchiveSnapshotRefresh()
             }
-            .alert("会员购买", isPresented: Binding(
-                get: { purchaseNotice != nil },
-                set: { if !$0 { purchaseNotice = nil } }
-            )) {
-                Button("知道了", role: .cancel) {
-                    purchaseNotice = nil
+            .overlay {
+                if let purchaseNotice {
+                    purchaseNoticeOverlay(purchaseNotice)
+                        .transition(.opacity)
+                        .zIndex(20)
                 }
-            } message: {
-                Text(purchaseNotice ?? "")
             }
+            .animation(.easeInOut(duration: 0.18), value: purchaseNotice)
+
+        }
+    }
+
+
+    private func purchaseNoticeOverlay(_ message: String) -> some View {
+        ZStack {
+            Color.black.opacity(0.20)
+                .ignoresSafeArea()
+                .onTapGesture { purchaseNotice = nil }
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "checkmark.seal")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppColors.accent.opacity(0.92))
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(AppColors.accent.opacity(0.12)))
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("ä¼åè´­ä¹°")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+                        Text(message)
+                            .font(.system(size: 15))
+                            .foregroundStyle(AppColors.text.opacity(0.76))
+                            .lineSpacing(4)
+                    }
+                }
+                Button("ç¥éäº") { purchaseNotice = nil }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 46)
+                    .background(AppColors.accent.opacity(0.88), in: Capsule(style: .continuous))
+                    .buttonStyle(.plain)
+            }
+            .padding(24)
+            .frame(maxWidth: 340)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Color.white.opacity(0.58), lineWidth: 1))
+            .shadow(color: Color.black.opacity(0.16), radius: 28, y: 14)
+            .padding(.horizontal, 24)
         }
     }
 

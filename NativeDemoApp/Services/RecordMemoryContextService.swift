@@ -36,6 +36,15 @@ enum RecordMemoryContextService {
         }
         let sceneCount = existingSceneItems.count + 1
 
+        if let lateCommuteLine = lateWorkCommuteLine(
+            date: input.date,
+            weather: input.weather,
+            scene: scene,
+            text: text
+        ) {
+            return lateCommuteLine
+        }
+
         if let weatherLine = weatherLine(
             weather: input.weather,
             scene: scene,
@@ -99,7 +108,7 @@ enum RecordMemoryContextService {
         if category == .health, containsAny(text, ["健身", "锻炼", "运动", "训练", "跑步", "瑜伽", "游泳", "球场"]) {
             return .fitness
         }
-        if category == .dining, containsAny(text, ["咖啡", "拿铁", "美式", "奶茶", "饮品", "茶饮"]) {
+        if category == .dining, containsAny(text, ["咖啡", "拿铁", "美式", "奶茶", "饮品", "饮料", "喝的", "茶饮", "果汁", "柠檬茶", "水溶", "c100", "维C", "维他", "瑞幸", "星巴克", "manner", "蜜雪", "喜茶", "奈雪"]) {
             return .coffee
         }
         if category == .dining {
@@ -162,6 +171,32 @@ enum RecordMemoryContextService {
         return "雨天出行，路上留痕"
     }
 
+    private static func lateWorkCommuteLine(
+        date: Date,
+        weather: WeatherSnapshot?,
+        scene: MemoryScene,
+        text: String
+    ) -> String? {
+        guard scene == .commute else { return nil }
+        let hour = Calendar.current.component(.hour, from: date)
+        guard (21...23).contains(hour) || (0..<5).contains(hour) else { return nil }
+        guard containsAny(text, ["下班", "通勤", "晚高峰", "加班", "工作", "公司", "单位", "工位", "地铁", "公交", "轨道交通", "打车", "滴滴", "网约车", "回家", "到家"]) else {
+            return nil
+        }
+        let isWorkRoute = containsAny(text, ["下班", "加班", "工作", "公司", "单位", "工位"])
+        let rainy = weather.map { weatherKind(from: $0) == .rain } ?? false
+        if rainy, isWorkRoute {
+            return "晚下班遇上雨，慢点到家"
+        }
+        if isWorkRoute {
+            return "晚下班路上辛苦了"
+        }
+        if rainy {
+            return "晚上通勤遇上雨"
+        }
+        return "晚上这段通勤"
+    }
+
     private enum MemoryWeather {
         case rain
         case snow
@@ -198,7 +233,7 @@ enum RecordMemoryContextService {
             if count == 1 { return "第一次充电，车也续上了" }
             if count == 10 { return "第10次充电，补能成习惯" }
         case .coffee:
-            if count == 10 { return "第10杯提神，辛苦了" }
+            if count == 10 { return "第10次饮品补给，辛苦了" }
         case .medicine:
             if count == 1 { return "第一次身体记录，先照顾好" }
         default:
@@ -242,7 +277,7 @@ enum RecordMemoryContextService {
         case .dining:
             return "连续\(days)天好好吃饭"
         case .coffee:
-            return "连续\(days)天靠它提神"
+            return "连续\(days)天饮品补给"
         case .groceries:
             return "连续\(days)天把饭桌备好"
         case .medicine:

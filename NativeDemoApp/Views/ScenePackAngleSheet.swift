@@ -145,15 +145,65 @@ struct ScenePackAngleSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
-        .alert(item: $pendingReplacement) { replacement in
-            Alert(
-                title: Text("替换场景包"),
-                message: Text("确定换上「\(replacement.newPack.label)」？这会开启 24 小时调整窗口，窗口内还可以继续调整另外两个免费场景包。"),
-                primaryButton: .cancel(Text("再想想")),
-                secondaryButton: .default(Text("确定换上")) {
-                    confirmReplacement(replacement)
+        .overlay {
+            if let pendingReplacement {
+                replacementConfirmOverlay(pendingReplacement)
+                    .transition(.opacity)
+                    .zIndex(20)
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: pendingReplacement?.id)
+
+    }
+
+
+    private func replacementConfirmOverlay(_ replacement: PendingReplacement) -> some View {
+        ZStack {
+            Color.black.opacity(0.22)
+                .ignoresSafeArea()
+                .onTapGesture { pendingReplacement = nil }
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppColors.accent.opacity(0.92))
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(AppColors.accent.opacity(0.12)))
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("æ¿æ¢åºæ¯å")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+                        Text("ç¡®å®æ¢ä¸ã\(replacement.newPack.label)ãï¼è¿ä¼å¼å¯ 24 å°æ¶è°æ´çªå£ï¼çªå£åè¿å¯ä»¥ç»§ç»­è°æ´å¦å¤ä¸¤ä¸ªåè´¹åºæ¯åã")
+                            .font(.system(size: 15))
+                            .foregroundStyle(AppColors.text.opacity(0.76))
+                            .lineSpacing(4)
+                    }
                 }
-            )
+                HStack(spacing: 10) {
+                    Button("åæ³æ³") { pendingReplacement = nil }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(AppColors.text.opacity(0.82))
+                        .frame(maxWidth: .infinity, minHeight: 46)
+                        .background(Color.white.opacity(0.72), in: Capsule(style: .continuous))
+                    Button("ç¡®å®æ¢ä¸") {
+                        let replacement = replacement
+                        pendingReplacement = nil
+                        confirmReplacement(replacement)
+                    }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 46)
+                    .background(AppColors.accent.opacity(0.88), in: Capsule(style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(24)
+            .frame(maxWidth: 340)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Color.white.opacity(0.58), lineWidth: 1))
+            .shadow(color: Color.black.opacity(0.16), radius: 28, y: 14)
+            .padding(.horizontal, 24)
         }
     }
 

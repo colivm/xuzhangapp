@@ -140,6 +140,15 @@ struct HomeItem: Identifiable, Codable, Equatable {
     var displayEmotionTag: String {
         let trimmed = emotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
+        if let lateCommute = Self.lateWorkCommuteEmotionTag(for: self),
+           Self.shouldPreferLateWorkCommuteTag(current: trimmed) {
+            return lateCommute
+        }
+        if category == .dining,
+           Self.containsDrinkKeyword(title),
+           Self.isMealDiningTag(trimmed) {
+            return Self.drinkDiningDisplayTag(from: trimmed)
+        }
         if !RecordSemanticLexicon.isTitle(trimmed, compatibleWith: category),
            !(category == .dining && Self.containsConvenienceStoreKeyword("\(title) \(trimmed)")) {
             return Self.inferEmotionTag(category: category, amount: amount)
@@ -255,7 +264,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
             }
             if containsAny(text, ["午餐", "午饭", "中午"]) { return "中午一顿饭" }
             if containsAny(text, ["晚餐", "晚饭"]) { return "晚饭时间坐一会儿" }
-            if containsAny(text, ["咖啡", "拿铁", "美式", "奶茶", "饮品", "茶"]) { return "买杯喝的" }
+            if containsDrinkKeyword(text) { return "买杯喝的" }
             if containsAny(text, ["烤生蚝", "烤鱿鱼", "烤冷面", "烧烤", "串串", "烤串", "大排档"]) { return "路边摊吃点热闹" }
             if containsAny(text, ["火锅", "烤肉"]) { return "认真吃一顿" }
             if containsAny(text, ["面", "粉", "馄饨", "饺子", "盖饭", "米线", "麻辣烫"]) { return "热乎一碗记下" }
@@ -263,6 +272,9 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["水果", "酸奶", "轻食", "沙拉"]) { return "轻轻补一点" }
             if containsAny(text, ["买菜", "菜场", "生鲜", "超市菜"]) { return "回家做饭的料" }
         case .transport:
+            if let lateCommute = lateWorkCommuteEmotionTag(title: title, category: category, date: date) {
+                return lateCommute
+            }
             if containsAny(text, ["停车", "停车费", "车位"]) { return "车停稳了" }
             if containsAny(text, ["加油", "油费", "充电", "充电桩"]) { return "给车补点能量" }
             if containsAny(text, ["打车", "出租", "网约车", "滴滴"]) { return "打车这一程" }
@@ -369,6 +381,54 @@ struct HomeItem: Identifiable, Codable, Equatable {
         return nil
     }
 
+    static func isLateWorkCommute(_ item: HomeItem) -> Bool {
+        lateWorkCommuteEmotionTag(for: item) != nil
+    }
+
+    static func lateWorkCommuteEmotionTag(for item: HomeItem) -> String? {
+        lateWorkCommuteEmotionTag(
+            title: "\(item.title) \(item.emotionTag)",
+            category: item.category,
+            date: item.createdAt,
+            weatherKind: item.memoryContext?.weatherKind
+        )
+    }
+
+    static func lateWorkCommutePlaybackTitle(for item: HomeItem) -> String? {
+        guard isLateWorkCommute(item) else { return nil }
+        let text = "\(item.title) \(item.emotionTag)".lowercased()
+        return containsWorkCommuteCue(text) ? "晚下班路上" : "晚上通勤路上"
+    }
+
+    static func lateWorkCommutePlaybackLine(for item: HomeItem) -> String? {
+        guard isLateWorkCommute(item) else { return nil }
+        let text = "\(item.title) \(item.emotionTag)".lowercased()
+        let timeText = lateCommuteTimeText(for: item.createdAt)
+        let rainy = isRainyWeather(item.memoryContext?.weatherKind) || text.contains("雨")
+        if containsWorkCommuteCue(text) {
+            return rainy
+                ? "\(timeText)还在下班路上，又赶上雨，今天辛苦了。到家先缓一缓。"
+                : "\(timeText)还在下班路上，今天收得有点晚。到家先缓一缓。"
+        }
+        return rainy
+            ? "\(timeText)的通勤带着雨，路上更费心一点。到家先缓一缓。"
+            : "\(timeText)的通勤被留下来了，路上的这段也算今天的一部分。"
+    }
+
+    static func lateWorkCommuteTraceLine(for item: HomeItem) -> String? {
+        guard isLateWorkCommute(item) else { return nil }
+        let text = "\(item.title) \(item.emotionTag)".lowercased()
+        let timeText = lateCommuteTimeText(for: item.createdAt)
+        let rainy = isRainyWeather(item.memoryContext?.weatherKind) || text.contains("雨")
+        if rainy, containsWorkCommuteCue(text) {
+            return "\(timeText)的下班路还遇上雨，账本把这段晚归也留下来了。"
+        }
+        if containsWorkCommuteCue(text) {
+            return "\(timeText)的下班路被留下来了，今天工作收得有点晚。"
+        }
+        return "\(timeText)的通勤被留下来了，今天回到家的路也有了位置。"
+    }
+
     private static func shouldPreferRefinedTag(current: String, refined: String) -> Bool {
         guard current != refined else { return false }
         let genericExact = [
@@ -387,6 +447,68 @@ struct HomeItem: Identifiable, Codable, Equatable {
         return genericFragments.contains { current.contains($0) }
     }
 
+    private static func lateWorkCommuteEmotionTag(
+        title: String,
+        category: Category,
+        date: Date?,
+        weatherKind: String? = nil
+    ) -> String? {
+        guard category == .transport, let date else { return nil }
+        let hour = Calendar.current.component(.hour, from: date)
+        guard (21...23).contains(hour) || (0..<5).contains(hour) else { return nil }
+        let text = title.lowercased()
+        guard containsLateCommuteCue(text) else { return nil }
+        let rainy = isRainyWeather(weatherKind) || text.contains("雨")
+        if rainy, containsWorkCommuteCue(text) {
+            return "晚下班遇上雨，慢点到家"
+        }
+        if containsWorkCommuteCue(text) {
+            return "晚下班路上辛苦了"
+        }
+        if rainy {
+            return "晚上通勤遇上雨"
+        }
+        return "晚上这段通勤"
+    }
+
+    private static func shouldPreferLateWorkCommuteTag(current: String) -> Bool {
+        let text = current.lowercased()
+        let generic = [
+            "日常出行", "出行记录", "傍晚一段路", "公共交通一段", "公交地铁这一趟",
+            "通勤路上", "连续", "雨天通勤", "雪天通勤", "冷天出门", "热天路上",
+            "下班路上这一程", "下班这趟路到家了", "打车这一程"
+        ]
+        return containsAny(text, generic)
+    }
+
+    private static func containsLateCommuteCue(_ text: String) -> Bool {
+        containsAny(text.lowercased(), ["下班", "通勤", "晚高峰", "加班", "工作", "公司", "单位", "工位", "地铁", "公交", "轨道交通", "打车", "滴滴", "网约车", "回家", "到家"])
+    }
+
+    private static func containsWorkCommuteCue(_ text: String) -> Bool {
+        containsAny(text.lowercased(), ["下班", "加班", "工作", "公司", "单位", "工位"])
+    }
+
+    private static func isRainyWeather(_ weatherKind: String?) -> Bool {
+        let text = weatherKind?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        return text.contains("雨") || text.contains("rain")
+    }
+
+    private static func lateCommuteTimeText(for date: Date) -> String {
+        let hour = Calendar.current.component(.hour, from: date)
+        switch hour {
+        case 21: return "晚上九点多"
+        case 22: return "晚上十点多"
+        case 23: return "晚上十一点多"
+        case 0: return "凌晨零点多"
+        case 1: return "凌晨一点多"
+        case 2: return "凌晨两点多"
+        case 3: return "凌晨三点多"
+        case 4: return "凌晨四点多"
+        default: return "晚上"
+        }
+    }
+
     private static func containsTravelKeyword(_ text: String) -> Bool {
         let keywords = ["旅行", "旅途", "景区", "景点", "行程", "酒店", "民宿", "住宿", "机票", "高铁", "机场", "返程", "摆渡"]
         return keywords.contains { text.contains($0) }
@@ -396,6 +518,34 @@ struct HomeItem: Identifiable, Codable, Equatable {
         ["便利蜂", "便利店", "全家", "罗森", "711", "7-11", "美宜佳", "茶叶蛋", "饭团", "关东煮"].contains {
             text.localizedCaseInsensitiveContains($0)
         }
+    }
+
+    private static func containsDrinkKeyword(_ text: String) -> Bool {
+        containsAny(text.lowercased(), ["咖啡", "拿铁", "美式", "奶茶", "饮品", "饮料", "喝的", "茶饮", "果汁", "柠檬茶", "水溶", "c100", "维c", "维他", "瑞幸", "星巴克", "manner", "蜜雪", "喜茶", "奈雪"])
+    }
+
+    private static func isMealDiningTag(_ text: String) -> Bool {
+        containsAny(text.lowercased(), ["好好吃饭", "吃上饭", "饭点", "一顿饭", "这一顿", "简单吃一顿", "认真吃一顿", "晚饭", "热饭"])
+    }
+
+    private static func drinkDiningDisplayTag(from current: String) -> String {
+        if let days = consecutiveDays(in: current) {
+            return "连续\(days)天饮品补给"
+        }
+        if current.contains("第10") {
+            return "第10次饮品补给"
+        }
+        return "买杯喝的"
+    }
+
+    private static func consecutiveDays(in text: String) -> Int? {
+        guard let start = text.range(of: "连续"),
+              let end = text.range(of: "天", range: start.upperBound..<text.endIndex) else {
+            return nil
+        }
+        let rawDays = text[start.upperBound..<end.lowerBound]
+        let digits = rawDays.unicodeScalars.filter { CharacterSet.decimalDigits.contains($0) }.map(String.init).joined()
+        return Int(digits)
     }
 
     private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {

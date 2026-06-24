@@ -67,10 +67,10 @@ enum LifeMarkService {
         ),
         LifeMarkDefinition(
             id: "coffee_drink",
-            label: "咖啡奶茶",
+            label: "咖啡饮品",
             category: .dining,
             categories: [.dining],
-            keywords: ["咖啡", "拿铁", "美式", "奶茶", "茶饮", "饮品", "瑞幸", "星巴克", "manner", "蜜雪", "喜茶", "奈雪"],
+            keywords: ["咖啡", "拿铁", "美式", "奶茶", "茶饮", "饮品", "饮料", "喝的", "果汁", "柠檬茶", "水溶", "c100", "维C", "维他", "瑞幸", "星巴克", "manner", "蜜雪", "喜茶", "奈雪"],
             access: .free,
             priority: 18,
             minimumCount: 1,
@@ -627,11 +627,11 @@ enum LifeMarkService {
                 return "健身恢复又出现了\(historyText)，身体这条线正在变得有节奏。"
             }
             return count == 1 ? "健身恢复被记下来了，这是身体这条线的开头。" : "健身恢复出现 \(count) 次，身体这条线正在变清楚。"
-        case "咖啡奶茶":
+        case "咖啡饮品":
             if recurring {
-                return "咖啡奶茶又落进这段记录\(historyText)，这类小补给已经是生活里的固定节点。"
+                return "咖啡饮品又落进这段记录\(historyText)，这类小补给已经是生活里的固定节点。"
             }
-            return count == 1 ? "咖啡奶茶被记下来了，以后再看会知道今天从哪一杯开始。" : "咖啡奶茶出现 \(count) 次，这些小补给正在连成一天里的节奏。"
+            return count == 1 ? "咖啡饮品被记下来了，以后再看会知道今天从哪一杯开始。" : "咖啡饮品出现 \(count) 次，这些小补给正在连成一天里的节奏。"
         case "宝宝照护":
             if recurring {
                 return "宝宝照护又被记下\(historyText)，这些不是零散采购，是照护节奏的一部分。"
@@ -670,14 +670,14 @@ enum LifeMarkService {
             switch label {
             case "健身恢复":
                 return "第一次健身恢复被记下来了；以后再有同类记录，就能回看上一次、连续几次和身体这条线。"
-            case "咖啡奶茶":
-                return "第一杯咖啡奶茶被记下来了；以后它会继续累计成小补给习惯，而不只是一笔餐饮。"
+            case "咖啡饮品":
+                return "第一杯咖啡饮品被记下来了；以后它会继续累计成小补给习惯，而不只是普通餐饮。"
             case "给宝宝买奶粉":
                 return "第一次给宝宝买奶粉被记下来了；这不是普通日用品，是照护生活真正开始留下痕迹。"
             case "给宝宝买尿不湿":
                 return "第一次给宝宝买尿不湿被记下来了；以后这些小小消耗，会连成照顾一个小生命的节奏。"
             case "给宝宝买辅食":
-                return "第一次给宝宝买辅食被记下来了；从这一笔开始，成长也会在账本里慢慢有线索。"
+                return "第一次给宝宝买辅食被记下来了；从这次开始，成长也会在账本里慢慢有线索。"
             case "给宝宝买照护用品", "宝宝照护":
                 return "第一次宝宝照护用品被记下来了；之后如果还有同类记录，会一起形成照护节奏。"
             case "给毛孩子买狗粮":
@@ -709,8 +709,8 @@ enum LifeMarkService {
         switch label {
         case "健身恢复":
             return "健身恢复来到第 \(target) 次，坚持已经开始有形状了。"
-        case "咖啡奶茶":
-            return "咖啡奶茶来到第 \(target) 次，这类小补给已经成为生活里的固定节点。"
+        case "咖啡饮品":
+            return "咖啡饮品来到第 \(target) 次，这类小补给已经成为生活里的固定节点。"
         case "给宝宝买奶粉", "给宝宝买尿不湿", "给宝宝买辅食", "给宝宝买照护用品", "宝宝照护":
             return "\(label)来到第 \(target) 次，这些重复出现的小事，正在变成照顾宝宝的生活节奏。"
         case "给毛孩子买狗粮", "给毛孩子买猫粮", "给毛孩子买猫砂", "给毛孩子买零食", "照顾毛孩子", "毛孩子照护":
@@ -823,7 +823,7 @@ enum LifeMarkService {
     private static func queryHint(for definition: LifeMarkDefinition) -> String {
         switch definition.id {
         case "fitness": return "这个月健身恢复几次？"
-        case "coffee_drink": return "这周咖啡奶茶几次？"
+        case "coffee_drink": return "这周咖啡饮品几次？"
         case "home_utilities": return "这个月房租水电物业多少？"
         case "baby_supply": return "这个月宝宝奶粉买了几次？"
         case "pet_supply": return "上一次给毛孩子买狗粮是哪天？"

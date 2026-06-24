@@ -433,6 +433,10 @@ struct SummaryPlaybackSheet: View {
     }
 
     private func presenceChapterSupport(_ chapter: SummaryChapter) -> some View {
+        if let lifeMarkLine = chapter.metrics["lifeMarkLine"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !lifeMarkLine.isEmpty {
+            return supportHint("生活印记：\(lifeMarkLine)")
+        }
         let count = chapter.metrics["count"] ?? "\(playback.count)"
         let total = chapter.metrics["total"] ?? playback.total.formatted(.cny)
         return supportHint("\(playback.rangeLabel) · \(count) 笔 · \(total)")
@@ -761,7 +765,7 @@ struct SummaryPlaybackSheet: View {
         if let line = playbackMemoryLine, onSaveMemoryLine != nil {
             Button {
                 onSaveMemoryLine?(line, playback.range)
-                memorySaveMessage = "已放到首页「最近的生活」。"
+                showMemorySaveMessage("已放到首页「最近的生活」。")
             } label: {
                 Text("留下这一句到首页")
                     .font(.system(size: 15, weight: .semibold))
@@ -771,6 +775,19 @@ struct SummaryPlaybackSheet: View {
                     .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(.plain)
+        }
+    }
+
+
+    private func showMemorySaveMessage(_ message: String) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            memorySaveMessage = message
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            guard memorySaveMessage == message else { return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                memorySaveMessage = nil
+            }
         }
     }
 

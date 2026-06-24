@@ -251,7 +251,12 @@ final class PlaybackService {
             SummaryChapter(
                 id: "week-presence",
                 title: "这一周",
-                metrics: ["count": "\(rows.count)", "total": Self.money(total), "range": rangeLabel],
+                metrics: [
+                    "count": "\(rows.count)",
+                    "total": Self.money(total),
+                    "range": rangeLabel,
+                    "lifeMarkLine": lifeMarkLine
+                ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: rows.count < 3 ? "week-weak-presence" : "week-presence",
                     seed: weekSeed,
@@ -395,6 +400,7 @@ final class PlaybackService {
         let categorySlices = weeklyShareCategorySlices(from: rows)
         let period = "\(Self.dotDateFormatter.string(from: interval.start)) ~ \(Self.dotDateFormatter.string(from: calendar.date(byAdding: .day, value: -1, to: interval.end) ?? now))"
         let closing = builtSummary.chapters.last?.narration.plain ?? "这一周已经留下了可以回看的记录。"
+        let lifeMarkSubtitle = weeklyShareLifeMarkLine(from: builtSummary)
         let signal = weeklyShareInsightSignal(
             rows: rows,
             activity: activity,
@@ -417,7 +423,7 @@ final class PlaybackService {
             categorySlices: categorySlices,
             topCategoryRatio: ratio,
             headline: builtSummary.teaserLine,
-            subtitle: closing,
+            subtitle: lifeMarkSubtitle ?? closing,
             anchorLine: weeklyShareAnchorLine(from: builtSummary),
             periodText: period,
             insight: insight
@@ -921,7 +927,8 @@ final class PlaybackService {
                     "activeDays": "\(activeDays)",
                     "momPercent": momPercent ?? "",
                     "range": rangeLabel,
-                    "voiceTitle1": voiceTitle1
+                    "voiceTitle1": voiceTitle1,
+                    "lifeMarkLine": lifeMarkLine
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-opening",
@@ -1183,6 +1190,9 @@ final class PlaybackService {
     }
 
     private func weeklyShareAnchorLine(from summary: SummaryPlayback) -> String? {
+        if let lifeMarkLine = weeklyShareLifeMarkLine(from: summary) {
+            return lifeMarkLine
+        }
         if let sceneLine = summary.chapters
             .compactMap({ $0.metrics["sceneMemoryLine"]?.trimmingCharacters(in: .whitespacesAndNewlines) })
             .first(where: { !$0.isEmpty }) {
@@ -1199,6 +1209,12 @@ final class PlaybackService {
             }
         }
         return nil
+    }
+
+    private func weeklyShareLifeMarkLine(from summary: SummaryPlayback) -> String? {
+        summary.chapters
+            .compactMap { $0.metrics["lifeMarkLine"]?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty && !EchoAnchorService.shared.isDirtyTraceTitle($0) }
     }
 
     private func weeklySceneMemoryLine(_ rows: [HomeItem]) -> String? {
@@ -1399,6 +1415,10 @@ final class PlaybackService {
     }
 
     private func contextualMemoryLine(in rows: [HomeItem]) -> String? {
+        if let item = rows.sorted(by: { $0.createdAt > $1.createdAt }).first(where: { HomeItem.isLateWorkCommute($0) }),
+           let line = HomeItem.lateWorkCommuteTraceLine(for: item) {
+            return line
+        }
         let candidates = rows.compactMap { item -> (item: HomeItem, tag: String, score: Int)? in
             let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !tag.isEmpty else { return nil }

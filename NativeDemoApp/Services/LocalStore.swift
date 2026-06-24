@@ -83,13 +83,13 @@ enum LocalStore {
     }
 
     static func saveHomeItems(_ items: [HomeItem]) {
-        saveHomeItemsBackup(items)
+        guard let data = try? JSONEncoder().encode(items) else { return }
+        UserDefaults.standard.set(data, forKey: homeItemsBackupKey)
         guard let fileURL = fileURL(for: homeItemsFile) else {
             return
         }
 
         do {
-            let data = try JSONEncoder().encode(items)
             try data.write(to: fileURL, options: .atomic)
         } catch {
             print("Failed to save home items: \(error)")
@@ -101,11 +101,6 @@ enum LocalStore {
             return []
         }
         return (try? JSONDecoder().decode([HomeItem].self, from: data)) ?? []
-    }
-
-    private static func saveHomeItemsBackup(_ items: [HomeItem]) {
-        guard let data = try? JSONEncoder().encode(items) else { return }
-        UserDefaults.standard.set(data, forKey: homeItemsBackupKey)
     }
 
     private static func cloudSyncPreferences() -> [String: Bool] {

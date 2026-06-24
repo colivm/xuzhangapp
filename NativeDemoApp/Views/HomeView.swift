@@ -1,5 +1,10 @@
 import SwiftUI
 
+private struct TodaySwipeDragState: Equatable {
+    let itemID: UUID
+    let translation: CGFloat
+}
+
 struct HomeView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
@@ -21,6 +26,7 @@ struct HomeView: View {
     @State private var todayBillsFocusPulse = false
     @State private var todayBillsFocusTick = 0
     @State private var highlightedSavedItemID: UUID?
+    @GestureState private var todaySwipeDragState: TodaySwipeDragState?
     private let dailyQuotaStore = DailyFeatureQuotaStore()
 
     var body: some View {
@@ -530,7 +536,7 @@ struct HomeView: View {
         }
         let isMember = settingsViewModel.settings.hasMemberAccess
         guard dailyQuotaStore.canPlayTodayPlayback(isMember: isMember) else {
-            todayPlaybackQuotaMessage = "今日免费回放剩余 0/1 次。明天可继续播放；会员适合晚上反复整理当天记录，不用等刷新。"
+            todayPlaybackQuotaMessage = "今日免费回放剩余 0/\(DailyFeatureQuotaStore.todayPlaybackFreeLimit) 次，明天会自动刷新。建议晚上记录差不多后再听，今天还可以继续记账。"
             return
         }
         dailyQuotaStore.markTodayPlaybackStarted(isMember: isMember)
@@ -557,7 +563,7 @@ struct HomeView: View {
                         )
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("今天先手动记也可以")
+                        Text("今天的免费回放已用完")
                             .font(.system(size: 19, weight: .bold))
                             .foregroundStyle(AppColors.text)
                         Text(todayPlaybackQuotaMessage ?? "")
@@ -591,7 +597,7 @@ struct HomeView: View {
                         dismissTodayPlaybackQuotaPrompt()
                         onShowMemberPricing?()
                     } label: {
-                        Text("让回放不中断")
+                        Text("了解不限回放")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity, minHeight: 46)
@@ -845,8 +851,26 @@ struct HomeView: View {
                         .padding(.horizontal, 18)
                         .padding(.top, 18)
                         .padding(.bottom, 92)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if todaySwipedItemID != nil {
+                                withAnimation(todayEditSpring) {
+                                    todaySwipedItemID = nil
+                                }
+                            }
+                        }
                     }
                     .scrollIndicators(.hidden)
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 18).onEnded { value in
+                            guard todaySwipedItemID != nil else { return }
+                            if abs(value.translation.height) > abs(value.translation.width) {
+                                withAnimation(todayEditSpring) {
+                                    todaySwipedItemID = nil
+                                }
+                            }
+                        }
+                    )
                     .onChange(of: todayInlineEditingItemID) { _, itemID in
                         guard let itemID else { return }
                         scrollTodayEditorIntoView(itemID, proxy: proxy, delay: 0.34)
@@ -898,6 +922,9 @@ struct HomeView: View {
         let isEditing = todayInlineEditingItemID == item.id
         let isSwiped = todaySwipedItemID == item.id && !isEditing
         let isDeleting = todayDeletingItemID == item.id
+        let dragTranslation = todaySwipeDragState?.itemID == item.id ? todaySwipeDragState?.translation ?? 0 : 0
+        let restingOffset: CGFloat = isSwiped ? -76 : 0
+        let rowOffset = min(0, max(-86, restingOffset + dragTranslation))
         return ZStack(alignment: .trailing) {
             if !isEditing {
                 todaySwipeActions(for: item, isVisible: isSwiped)
@@ -943,23 +970,23 @@ struct HomeView: View {
                 }
             }
             .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
-            .offset(x: isSwiped ? -76 : 0)
+            .offset(x: rowOffset)
             .scaleEffect(isDeleting ? 0.96 : 1, anchor: .trailing)
             .opacity(isDeleting ? 0 : 1)
             .frame(height: isDeleting ? 0 : nil)
             .clipped()
             .onTapGesture {
-                if !isEditing && !isSwiped {
+                if todaySwipedItemID != nil {
+                    withAnimation(todayEditSpring) {
+                        todaySwipedItemID = nil
+                    }
+                } else if !isEditing {
                     withAnimation(todayEditSpring) {
                         todayInlineEditingItemID = item.id
                     }
                 }
             }
-
-            if !isEditing && !isSwiped {
-                todaySwipeHandle(for: item, isSwiped: isSwiped)
-                    .zIndex(3)
-            }
+            .simultaneousGesture(todayRowSwipeGesture(for: item))
         }
         .id(item.id)
         .animation(todayEditSpring, value: isEditing)
@@ -1441,23 +1468,27 @@ struct HomeView: View {
         .animation(todayEditSpring, value: isVisible)
     }
 
-    private func todaySwipeHandle(for item: HomeItem, isSwiped: Bool) -> some View {
-        Color.clear
-            .frame(maxWidth: isSwiped ? .infinity : nil)
-            .frame(width: isSwiped ? nil : 42)
-            .contentShape(Rectangle())
-            .gesture(todayRowSwipeGesture(for: item))
-    }
-
     private func todayRowSwipeGesture(for item: HomeItem) -> some Gesture {
-        DragGesture(minimumDistance: 22, coordinateSpace: .local)
-            .onEnded { value in
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .updating($todaySwipeDragState) { value, state, _ in
                 let horizontal = value.translation.width
                 let vertical = value.translation.height
-                let isHorizontalSwipe = abs(horizontal) > max(44, abs(vertical) * 1.35)
+                guard abs(horizontal) > abs(vertical) * 1.1 else { return }
+                state = TodaySwipeDragState(itemID: item.id, translation: horizontal)
+            }
+            .onEnded { value in
+                let horizontal = value.translation.width
+                let predictedHorizontal = value.predictedEndTranslation.width
+                let vertical = value.translation.height
+                let isHorizontalSwipe = abs(horizontal) > max(28, abs(vertical) * 1.2)
+                    || abs(predictedHorizontal) > max(56, abs(value.predictedEndTranslation.height) * 1.2)
                 guard isHorizontalSwipe else { return }
                 withAnimation(todayEditSpring) {
-                    todaySwipedItemID = horizontal < 0 ? item.id : nil
+                    if horizontal < -28 || predictedHorizontal < -56 {
+                        todaySwipedItemID = item.id
+                    } else if horizontal > 24 || predictedHorizontal > 48 {
+                        todaySwipedItemID = nil
+                    }
                 }
             }
     }
@@ -1708,7 +1739,7 @@ struct BillPlaybackSheet: View {
     private var todayPlaybackSubtitle: String {
         if playbackDone { return "今天的记录已经看完" }
         if isPlaying { return "按时间翻一遍今天" }
-        return "暂停在这一笔"
+        return "暂停在这里"
     }
 
     private var todayPlaybackSheetHeight: CGFloat {
@@ -2196,6 +2227,10 @@ struct BillPlaybackSheet: View {
 
     private func playbackTitle(for item: HomeItem) -> String {
         let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let lateTitle = HomeItem.lateWorkCommutePlaybackTitle(for: item),
+           ["下班", "通勤", "通勤路上", "日常出行", "公共交通一段", "下班路上这一程"].contains(title) {
+            return lateTitle
+        }
         let hour = Calendar.current.component(.hour, from: item.createdAt)
         let replacements: [String: String] = [
             "上班路上的一段车程": hour < 12 ? "早上路上这一程" : "路上这一程",
@@ -2212,6 +2247,9 @@ struct BillPlaybackSheet: View {
     }
 
     private func itemMomentBody(for item: HomeItem) -> String {
+        if let lateCommuteLine = HomeItem.lateWorkCommutePlaybackLine(for: item) {
+            return lateCommuteLine
+        }
         if let weatherLine = weatherPlaybackLine(for: item) {
             return weatherLine
         }

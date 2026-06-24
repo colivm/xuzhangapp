@@ -46,6 +46,10 @@ extension HomeViewModel {
         let topCategory = topCategoryLabel(from: records)
         let todaySceneLine = lifeSceneMemoryLine(from: records, minimumCount: 2)
         let todayLifeMarkLine = lifeMarkMemoryLine(from: records, minimumCount: 1)
+        let todayLateCommuteLine = records
+            .sorted { $0.createdAt > $1.createdAt }
+            .first(where: { HomeItem.isLateWorkCommute($0) })
+            .flatMap { HomeItem.lateWorkCommuteTraceLine(for: $0) }
 
         let title: String
         let subtitle: String
@@ -57,16 +61,16 @@ extension HomeViewModel {
         case 1:
             title = "今天的第一笔记录"
             let emotion = records.first?.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            subtitle = todayLifeMarkLine ?? "\(!emotion.isEmpty ? emotion : "这笔生活被记下来了")，这一天刚翻开第一页。"
+            subtitle = todayLateCommuteLine ?? todayLifeMarkLine ?? "\(!emotion.isEmpty ? emotion : "这段生活被记下来了")，这一天刚翻开第一页。"
         case 2:
             title = "今天已记下 2 笔"
-            subtitle = todayLifeMarkLine ?? todaySceneLine ?? "主要在「\(topCategory)」上，记录变得具体。"
+            subtitle = todayLateCommuteLine ?? todayLifeMarkLine ?? todaySceneLine ?? "主要在「\(topCategory)」上，记录变得具体。"
         case 3:
             title = "今天记下了 3 笔"
-            subtitle = todayLifeMarkLine ?? todaySceneLine ?? "合计 \(totalText)，今天的记录已经成形。"
+            subtitle = todayLateCommuteLine ?? todayLifeMarkLine ?? todaySceneLine ?? "合计 \(totalText)，今天的记录已经成形。"
         default:
             title = "今天记下了 \(count) 笔"
-            subtitle = todayLifeMarkLine ?? todaySceneLine ?? "「\(topCategory)」居多，今天的记录已经清楚。"
+            subtitle = todayLateCommuteLine ?? todayLifeMarkLine ?? todaySceneLine ?? "「\(topCategory)」居多，今天的记录已经清楚。"
         }
 
         return TodayStoryNarrative(
@@ -80,7 +84,7 @@ extension HomeViewModel {
     private func emptyTodayStoryCopy(now: Date = Date()) -> (title: String, subtitle: String) {
         if let suggestion = frequentRecordAmountSuggestions(at: now).first {
             return (
-                "今天可能从这一笔开始",
+                "今天可以从这里开始",
                 "这个时间你常记 \(shortAmountText(suggestion.amount)) · \(suggestion.category.label)，不确定也可以只输金额。"
             )
         }
@@ -325,6 +329,10 @@ extension HomeViewModel {
 
     private func contextualMemoryLine(from target: [HomeItem]) -> String? {
         let sorted = target.sorted { $0.createdAt > $1.createdAt }
+        if let item = sorted.first(where: { HomeItem.isLateWorkCommute($0) }),
+           let line = HomeItem.lateWorkCommuteTraceLine(for: item) {
+            return line
+        }
         if let item = sorted.first(where: { item in
             item.category == .transport
                 && item.memoryContext?.weatherKind == "rain"
