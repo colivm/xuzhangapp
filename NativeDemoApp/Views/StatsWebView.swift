@@ -32,6 +32,7 @@ struct StatsWebView: View {
     @State var traceSwipedItemID: UUID?
     @State private var traceDeletingItemID: UUID?
     @State private var traceAutoCommitRequestID: UUID?
+    @GestureState private var traceSwipeDragState: TraceSwipeDragState?
     @State var showTraceCustomDatePanel = false
     @State private var traceViewMode: TraceViewMode = .life
     @State private var traceDeepInsightExpanded = false
@@ -434,12 +435,28 @@ struct StatsWebView: View {
     }
 
     private func traceLifeMarks(from items: [HomeItem], limit: Int) -> [LifeMarkAggregate] {
-        LifeMarkService.aggregates(
+        let rawMarks = LifeMarkService.aggregates(
             for: items,
             allItems: homeViewModel.items,
             isMember: hasMemberAccess,
-            limit: limit
+            limit: max(limit, 8)
         )
+        return prioritizedTraceLifeMarks(rawMarks, items: items)
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    private func prioritizedTraceLifeMarks(
+        _ marks: [LifeMarkAggregate],
+        items: [HomeItem]
+    ) -> [LifeMarkAggregate] {
+        guard !useCustomRange, selectedPeriod == .month, items.count >= 8 else {
+            return marks
+        }
+        let recurringMarks = marks.filter { $0.count >= 2 && $0.kind != .milestone }
+        let oneOffMarks = marks.filter { $0.count < 2 || $0.kind == .milestone }
+        let ordered = recurringMarks + oneOffMarks
+        return ordered.isEmpty ? marks : ordered
     }
 
     private func traceMarkDisplayLabel(_ mark: LifeMarkAggregate) -> String {
@@ -829,12 +846,7 @@ struct StatsWebView: View {
     }
 
     private var traceLifeMarks: [LifeMarkAggregate] {
-        LifeMarkService.aggregates(
-            for: traceClueItems,
-            allItems: homeViewModel.items,
-            isMember: hasMemberAccess,
-            limit: 6
-        )
+        traceLifeMarks(from: traceClueItems, limit: 6)
     }
 
     private var traceLockedLifeMarkPreview: LifeMarkAggregate? {
@@ -1190,12 +1202,7 @@ struct StatsWebView: View {
         let clues = traceCategoryClues(from: items)
         let rhythmPoints = traceRhythmPoints(from: items)
         let insight = traceLifeInsight(from: items)
-        let marks = LifeMarkService.aggregates(
-            for: items,
-            allItems: homeViewModel.items,
-            isMember: hasMemberAccess,
-            limit: 6
-        )
+        let marks = traceLifeMarks(from: items, limit: 6)
         let lockedMark = hasMemberAccess ? nil : LifeMarkService.lockedPreview(for: items, allItems: homeViewModel.items)
         let unlockKey = traceInsightUnlockKey(from: items)
         let freeRemaining = lifeInsightService.freeRemaining(isMember: hasMemberAccess)
@@ -2667,6 +2674,9 @@ struct StatsWebView: View {
         let isEditing = traceInlineEditingItemID == item.id
         let isSwiped = traceSwipedItemID == item.id && !isEditing
         let isDeleting = traceDeletingItemID == item.id
+        let dragTranslation = traceSwipeDragState?.itemID == item.id ? traceSwipeDragState?.translation ?? 0 : 0
+        let restingOffset: CGFloat = isSwiped ? -76 : 0
+        let rowOffset = min(0, max(-86, restingOffset + dragTranslation))
         return ZStack(alignment: .trailing) {
             if !isEditing {
                 traceSwipeActions(for: item, isVisible: isSwiped)
@@ -2705,7 +2715,7 @@ struct StatsWebView: View {
             .background(traceDetailRecordBackground(isEditing: isEditing))
             .overlay(traceDetailRecordBorder(isEditing: isEditing))
             .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
-            .offset(x: isSwiped ? -76 : 0)
+            .offset(x: rowOffset)
             .scaleEffect(isDeleting ? 0.96 : 1, anchor: .trailing)
             .opacity(isDeleting ? 0 : 1)
             .frame(height: isDeleting ? 0 : nil)
@@ -2719,12 +2729,7 @@ struct StatsWebView: View {
                     openEditor(for: item, fromTraceDetail: true)
                 }
             }
-            .overlay(alignment: .trailing) {
-                if !isEditing && !isSwiped {
-                    traceSwipeHandle(for: item, isSwiped: isSwiped)
-                        .zIndex(3)
-                }
-            }
+            .simultaneousGesture(traceRowSwipeGesture(for: item))
         }
         .id(item.id)
         .animation(traceEditSpring, value: isEditing)
@@ -2849,14 +2854,6 @@ struct StatsWebView: View {
         .animation(traceEditSpring, value: isVisible)
     }
 
-    private func traceSwipeHandle(for item: HomeItem, isSwiped: Bool) -> some View {
-        Color.clear
-            .frame(maxWidth: isSwiped ? .infinity : nil)
-            .frame(width: isSwiped ? nil : 42)
-            .contentShape(Rectangle())
-            .gesture(traceRowSwipeGesture(for: item))
-    }
-
     private func traceSwipeActionLabel(_ title: String, systemImage: String, tint: Color) -> some View {
         ZStack {
             Image(systemName: systemImage)
@@ -2872,16 +2869,34 @@ struct StatsWebView: View {
     }
 
     private func traceRowSwipeGesture(for item: HomeItem) -> some Gesture {
-        DragGesture(minimumDistance: 22, coordinateSpace: .local)
-            .onEnded { value in
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .updating($traceSwipeDragState) { value, state, _ in
                 let horizontal = value.translation.width
                 let vertical = value.translation.height
-                let isHorizontalSwipe = abs(horizontal) > max(44, abs(vertical) * 1.35)
-                guard isHorizontalSwipe else { return }
+                guard abs(horizontal) > max(16, abs(vertical) * 1.35) else { return }
+                let baseOffset: CGFloat = traceSwipedItemID == item.id ? -76 : 0
+                let translation = min(86, max(-86, baseOffset + horizontal)) - baseOffset
+                state = TraceSwipeDragState(itemID: item.id, translation: translation)
+            }
+            .onEnded { value in
+                let horizontal = value.translation.width
+                let predictedHorizontal = value.predictedEndTranslation.width
+                let vertical = value.translation.height
+                let predictedVertical = value.predictedEndTranslation.height
+                let isHorizontalSwipe = abs(horizontal) > max(34, abs(vertical) * 1.45)
+                    || abs(predictedHorizontal) > max(62, abs(predictedVertical) * 1.35)
+                if !isHorizontalSwipe {
+                    if abs(vertical) > abs(horizontal), traceSwipedItemID == item.id {
+                        withAnimation(traceEditSpring) {
+                            traceSwipedItemID = nil
+                        }
+                    }
+                    return
+                }
                 withAnimation(traceEditSpring) {
-                    if horizontal < 0 {
+                    if horizontal < -28 || predictedHorizontal < -56 {
                         traceSwipedItemID = item.id
-                    } else {
+                    } else if horizontal > 24 || predictedHorizontal > 48 {
                         traceSwipedItemID = nil
                     }
                 }

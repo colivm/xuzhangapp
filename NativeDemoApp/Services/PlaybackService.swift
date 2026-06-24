@@ -212,7 +212,7 @@ final class PlaybackService {
             previous: previousWeekItems(from: items, now: now),
             rangeName: "上周"
         )
-        let scentText = copyWithRecurringLine(selection.scentText, recurringLine)
+        let scentText = selection.scentText
         let scentWords = selection.scentWords
         let voiceTitle1 = selection.voiceText(for: .week)
         let voiceTitle2 = secondaryVoice?.text ?? voiceTitle1
@@ -226,6 +226,17 @@ final class PlaybackService {
         let lifeMarkLine = playbackLifeMarkLine(
             lifeMark,
             fallback: sceneMemoryLine ?? "这一周最清楚的一格，是「\(voiceTitle1)」。"
+        )
+        let presenceSupportLine = lifeMark == nil ? (sceneMemoryLine ?? "") : ""
+        let rhythmSupportLine = busiestMaterial?.item.id == primaryVoiceID
+            ? (sceneMemoryLineForRows(busiestRows, excluding: primaryVoiceID) ?? "")
+            : (sceneMemoryLineForItem(busiestMaterial?.item)
+                ?? sceneMemoryLineForRows(busiestRows, excluding: primaryVoiceID)
+                ?? "")
+        let voiceSupportLine = sceneMemoryLineForItem(primaryVoice?.item) ?? ""
+        let scentSupportLine = weeklyScentSupportLine(
+            sceneLine: sceneMemoryLine,
+            recurringLine: recurringLine
         )
         let echoSentence = echoAnchor
             .map { EchoAnchorService.shared.formatEchoAnchorSentence($0) }
@@ -263,7 +274,7 @@ final class PlaybackService {
                     "total": Self.money(total),
                     "range": rangeLabel,
                     "lifeMarkLine": lifeMarkLine,
-                    "sceneMemoryLine": sceneMemoryLine ?? "",
+                    "sceneMemoryLine": presenceSupportLine,
                     "emotionTag": emotionSignal
                 ],
                 narration: PlaybackCopyPool.narration(
@@ -284,7 +295,7 @@ final class PlaybackService {
                         "busiestDay": busiest?.label ?? "本周",
                         "busiestTitle": busiestTitle,
                         "count": "\(busiest?.count ?? 0)",
-                        "sceneMemoryLine": sceneMemoryLine ?? "",
+                        "sceneMemoryLine": rhythmSupportLine,
                         "emotionTag": emotionSignal
                     ],
                     narration: PlaybackCopyPool.narration(
@@ -304,7 +315,7 @@ final class PlaybackService {
                         "voiceTitle2": voiceTitle2,
                         "amount": primaryVoice.map { Self.money($0.item.amount) } ?? "",
                         "day": primaryVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? "",
-                        "sceneMemoryLine": sceneMemoryLine ?? "",
+                        "sceneMemoryLine": voiceSupportLine,
                         "emotionTag": emotionSignal
                     ],
                     narration: echoSentence.map { SummaryNarration(warm: $0, plain: $0) }
@@ -324,6 +335,8 @@ final class PlaybackService {
                         "scentWords": scentText,
                         "topCategory": top?.category ?? "日常",
                         "ratio": "\(ratio)",
+                        "lifeMarkLine": lifeMarkLine,
+                        "sceneMemoryLine": scentSupportLine,
                         "emotionTag": emotionSignal
                     ],
                     narration: PlaybackCopyPool.narration(
@@ -343,7 +356,7 @@ final class PlaybackService {
                         "voiceTitle1": voiceTitle1,
                         "amount": primaryVoice.map { Self.money($0.item.amount) } ?? "",
                         "day": primaryVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? "",
-                        "sceneMemoryLine": sceneMemoryLine ?? "",
+                        "sceneMemoryLine": voiceSupportLine,
                         "emotionTag": emotionSignal
                     ],
                     narration: PlaybackCopyPool.narration(
@@ -1341,6 +1354,57 @@ final class PlaybackService {
             return nil
         }
         return LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count)
+    }
+
+    private func sceneMemoryLineForItem(_ item: HomeItem?) -> String? {
+        guard let item else { return nil }
+        if HomeItem.isLateWorkCommute(item),
+           let line = HomeItem.lateWorkCommuteTraceLine(for: item) {
+            return line
+        }
+        let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tag.isEmpty,
+              !EchoAnchorService.shared.isDirtyTraceTitle(tag) else {
+            return nil
+        }
+        let text = "\(item.title) \(tag)"
+        guard text.contains("雨天")
+            || text.contains("下雨")
+            || text.contains("雪天")
+            || text.contains("第一次")
+            || text.contains("第10次")
+            || text.contains("第 10 次")
+            || text.contains("连续")
+            || text.contains("周末出门")
+            || text.contains("周末路上") else {
+            return nil
+        }
+        let day = Self.shortWeekdayFormatter.string(from: item.createdAt)
+        return "\(day)这笔写着「\(tag)」，以后再看会知道当时发生了什么。"
+    }
+
+    private func sceneMemoryLineForRows(_ rows: [HomeItem], excluding excludedID: UUID?) -> String? {
+        let scoped = rows.filter { item in
+            if let excludedID, item.id == excludedID { return false }
+            return true
+        }
+        return contextualMemoryLine(in: scoped)
+    }
+
+    private func weeklyScentSupportLine(
+        sceneLine: String?,
+        recurringLine: String?
+    ) -> String {
+        if let recurring = recurringLine?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !recurring.isEmpty {
+            return recurring
+        }
+        let scene = sceneLine?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !scene.isEmpty,
+           !scene.contains("雨天通勤") {
+            return scene
+        }
+        return ""
     }
 
     private func weeklyEmotionSignalLine(_ rows: [HomeItem]) -> String? {

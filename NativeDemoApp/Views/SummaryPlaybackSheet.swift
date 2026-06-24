@@ -362,30 +362,29 @@ struct SummaryPlaybackSheet: View {
                 .ignoresSafeArea()
                 .transition(.opacity)
 
-            VStack(spacing: 18) {
-                Capsule()
-                    .fill(Color.white.opacity(0.58))
-                    .frame(width: 42, height: 5)
-                    .padding(.top, 10)
+            ScrollView {
+                VStack(spacing: 16) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.58))
+                        .frame(width: 42, height: 5)
+                        .padding(.top, 10)
 
-                header
+                    header
 
-                Spacer(minLength: 8)
+                    chapterStage
 
-                chapterStage
+                    controls
 
-                Spacer(minLength: 8)
-
-                controls
-
-                if playbackDone {
-                    doneActions
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    if playbackDone {
+                        doneActions
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                 }
+                .padding(.horizontal, 22)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal, 22)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
+            .scrollIndicators(.hidden)
 
             if showShareCardPrivacyConfirm {
                 shareCardPrivacyOverlay
@@ -848,6 +847,11 @@ struct SummaryPlaybackSheet: View {
     private func supportLineText(for chapter: SummaryChapter) -> String? {
         if hasNoSupportLine(chapter) {
             return nil
+        }
+        if isScentChapter(chapter),
+           let lifeMarkLine = chapter.metrics["lifeMarkLine"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !lifeMarkLine.isEmpty {
+            return "照护印记：\(lifeMarkLine)"
         }
         if let scene = chapter.metrics["sceneMemoryLine"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !scene.isEmpty {
@@ -1375,6 +1379,8 @@ struct SummaryPlaybackSheet: View {
                 Text(detail)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.subtext)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.86)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1411,6 +1417,8 @@ struct SummaryPlaybackSheet: View {
                     Text(shareSaveMessage)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.subtext)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.86)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
@@ -1778,7 +1786,7 @@ private struct WeeklyStoryShareCardView: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("本周故事图")
+                        Text("生活档案，这一周的手札")
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(deepGreen.opacity(0.86))
                         Text(payload.periodText)
@@ -1949,20 +1957,20 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var storyFactSlip: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("本周最强信号")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(storyAccent.opacity(0.76))
 
             Text(storyHeadlineText)
-                .font(.system(size: 27, weight: .bold, design: .rounded))
+                .font(.system(size: 25, weight: .bold, design: .rounded))
                 .foregroundStyle(ink)
-                .lineSpacing(6)
-                .lineLimit(4)
+                .lineSpacing(5)
+                .lineLimit(3)
                 .minimumScaleFactor(0.64)
-                .frame(maxWidth: .infinity, minHeight: 126, alignment: .topLeading)
+                .frame(maxWidth: .infinity, minHeight: 94, alignment: .topLeading)
         }
-        .padding(20)
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -1978,24 +1986,26 @@ private struct WeeklyStoryShareCardView: View {
     private var storyHeroPanel: some View {
         ZStack(alignment: .bottomTrailing) {
             storyFactSlip
-                .padding(.trailing, 26)
+                .padding(.trailing, 10)
 
-            storyCareSlip
-                .frame(width: 240, alignment: .leading)
-                .offset(x: 6, y: 18)
+            if shouldShowStoryCareSlip {
+                storyCareSlip
+                    .frame(width: 232, alignment: .leading)
+                    .offset(x: 4, y: 14)
+            }
         }
-        .padding(.bottom, 20)
+        .padding(.bottom, shouldShowStoryCareSlip ? 18 : 0)
     }
 
     private var storyCareSlip: some View {
         Text(storySceneLine)
-            .font(.system(size: 18, weight: .semibold, design: .rounded))
+            .font(.system(size: 16, weight: .semibold, design: .rounded))
             .foregroundStyle(deepGreen.opacity(0.92))
-            .lineSpacing(5)
-            .lineLimit(3)
+            .lineSpacing(4)
+            .lineLimit(2)
             .minimumScaleFactor(0.72)
             .padding(.horizontal, 18)
-            .padding(.vertical, 16)
+            .padding(.vertical, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -2013,7 +2023,8 @@ private struct WeeklyStoryShareCardView: View {
             Text("留下来的线索")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(muted.opacity(0.82))
-            if let anchor = storyPictureLine,
+            if !shouldShowStoryCareSlip,
+               let anchor = storyPictureLine,
                !anchor.isEmpty {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("这周最有画面的一格")
@@ -2034,7 +2045,7 @@ private struct WeeklyStoryShareCardView: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -2056,6 +2067,11 @@ private struct WeeklyStoryShareCardView: View {
 
     private var storySceneLine: String {
         storyPictureLine ?? payload.insight.care
+    }
+
+    private var shouldShowStoryCareSlip: Bool {
+        guard let picture = storyPictureLine else { return false }
+        return !storyHeadlineText.contains(picture) && picture.count <= 36
     }
 
     private var storySignals: [LifeStorySignal] {
@@ -2161,11 +2177,14 @@ private struct WeeklyStoryShareCardView: View {
 
         var seen = Set<String>()
         return rows.filter { row in
+            if let picture = storyPictureLine, row.contains(picture) {
+                return false
+            }
             guard !seen.contains(row) else { return false }
             seen.insert(row)
             return true
         }
-        .prefix(4)
+        .prefix(3)
         .map { $0 }
     }
 

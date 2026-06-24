@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 enum StatsPeriod: String, CaseIterable, Identifiable {
     case week = "本周"
@@ -32,6 +33,11 @@ struct TraceDayGroup: Identifiable {
     let id: String
     let date: Date
     let items: [HomeItem]
+}
+
+struct TraceSwipeDragState: Equatable {
+    let itemID: UUID
+    let translation: CGFloat
 }
 
 struct TraceMarkEvidenceGroup: Identifiable {

@@ -1126,8 +1126,6 @@ struct MemberPricingView: View {
     private func runInitialRefreshIfNeeded() async {
         guard !didRunInitialRefresh else { return }
         didRunInitialRefresh = true
-        try? await Task.sleep(nanoseconds: 350_000_000)
-        guard !Task.isCancelled else { return }
         await settingsViewModel.refreshCloudAccountProfile()
         guard !Task.isCancelled else { return }
         await settingsViewModel.refreshMemberFromLocalEntitlements()

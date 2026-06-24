@@ -408,7 +408,10 @@ struct ContentView: View {
                     showMemberPricing: $showMemberPricing,
                     pricingHighlightPlanId: $pricingHighlightPlanId,
                     pricingEntryContext: $pricingEntryContext,
-                    openAppearanceRequestID: settingsAppearanceOpenRequestID
+                    openAppearanceRequestID: settingsAppearanceOpenRequestID,
+                    onAppearanceRequestHandled: {
+                        settingsAppearanceOpenRequestID = nil
+                    }
                 )
             }
         }
@@ -567,6 +570,9 @@ struct ContentView: View {
         pricingHighlightPlanId = highlightPlanId
         pricingEntryContext = highlightPlanId == "lifetime" ? .lifetime : entryContext
         showMemberPricing = true
+        Task {
+            await settingsViewModel.refreshMemberFromLocalEntitlements(syncToCloud: true)
+        }
     }
 
     // MARK: - Tab Bar
