@@ -1192,7 +1192,6 @@ final class DailyFeatureQuotaStore {
     static let ocrDailyFreeLimit = 3
 
     private let defaults: UserDefaults
-    private let ocrDailyLimit = Self.ocrDailyFreeLimit
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -1201,7 +1200,7 @@ final class DailyFeatureQuotaStore {
     func ocrRemaining(isMember: Bool, now: Date = Date()) -> Int {
         guard !isMember else { return Int.max }
         syncDayIfNeeded(dayKey: Keys.ocrImportDayKey, usedKey: Keys.ocrImportUsedCount, now: now)
-        return max(0, ocrDailyLimit - defaults.integer(forKey: Keys.ocrImportUsedCount))
+        return max(0, DailyFeatureQuotaStore.ocrDailyFreeLimit - defaults.integer(forKey: Keys.ocrImportUsedCount))
     }
 
     func todayPlaybackRemaining(isMember: Bool, now: Date = Date()) -> Int {
@@ -1222,7 +1221,7 @@ final class DailyFeatureQuotaStore {
         guard !isMember else { return }
         syncDayIfNeeded(dayKey: Keys.ocrImportDayKey, usedKey: Keys.ocrImportUsedCount, now: now)
         let used = defaults.integer(forKey: Keys.ocrImportUsedCount)
-        defaults.set(min(ocrDailyLimit, used + 1), forKey: Keys.ocrImportUsedCount)
+        defaults.set(min(DailyFeatureQuotaStore.ocrDailyFreeLimit, used + 1), forKey: Keys.ocrImportUsedCount)
     }
 
     func markTodayPlaybackStarted(isMember: Bool, now: Date = Date()) {
