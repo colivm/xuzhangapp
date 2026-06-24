@@ -18,10 +18,10 @@ private enum TodayPlaybackPrompt: Equatable {
         }
     }
 
-    func message(quotaText: String) -> String {
+    func message(remaining: Int) -> String {
         switch self {
         case .firstUse:
-            return "它会把今天已经记下的几笔按时间翻一遍。免费用户每天可听 \(DailyFeatureQuotaStore.todayPlaybackFreeLimit) 次，当前剩余 \(quotaText) 次；白天可以先继续记，晚上记录差不多了再回看，会更完整。"
+            return ExperienceRuleCopy.todayPlaybackFirstUseMessage(remaining: remaining)
         case .quotaExhausted(let message):
             return message
         }
@@ -169,7 +169,7 @@ struct HomeView: View {
     private var todayPlaybackActionSubtitle: String {
         guard !homeViewModel.todayItems.isEmpty else { return "有记录后可播放" }
         guard !settingsViewModel.settings.hasMemberAccess else { return "十几秒叙完今天" }
-        return "十几秒叙完今天 · 剩余 \(todayPlaybackQuotaText())"
+        return ExperienceRuleCopy.todayPlaybackActionSubtitle(remaining: todayPlaybackRemaining(isMember: false))
     }
 
     @ViewBuilder
@@ -567,7 +567,7 @@ struct HomeView: View {
         let isMember = settingsViewModel.settings.hasMemberAccess
         let remaining = todayPlaybackRemaining(isMember: isMember)
         guard isMember || remaining > 0 else {
-            todayPlaybackPrompt = .quotaExhausted("今日免费回放剩余 \(todayPlaybackQuotaText(remaining: remaining)) 次，明天会自动刷新。今天还可以继续记账，晚一点记录更完整时再回看也很好。")
+            todayPlaybackPrompt = .quotaExhausted(ExperienceRuleCopy.todayPlaybackExhaustedMessage(remaining: remaining))
             return
         }
 
@@ -599,9 +599,10 @@ struct HomeView: View {
     }
 
     private func todayPlaybackQuotaText(remaining: Int? = nil) -> String {
-        let limit = DailyFeatureQuotaStore.todayPlaybackFreeLimit
-        let left = min(limit, max(0, remaining ?? todayPlaybackRemaining(isMember: false)))
-        return "\(left)/\(limit)"
+        ExperienceRuleCopy.quotaText(
+            remaining: remaining ?? todayPlaybackRemaining(isMember: false),
+            limit: DailyFeatureQuotaStore.todayPlaybackFreeLimit
+        )
     }
 
     private var todayPlaybackPromptOverlay: some View {
@@ -627,7 +628,7 @@ struct HomeView: View {
                         Text(todayPlaybackPrompt?.title ?? "")
                             .font(.system(size: 19, weight: .bold))
                             .foregroundStyle(AppColors.text)
-                        Text(todayPlaybackPrompt?.message(quotaText: todayPlaybackQuotaText()) ?? "")
+                        Text(todayPlaybackPrompt?.message(remaining: todayPlaybackRemaining(isMember: false)) ?? "")
                             .font(.system(size: 14, weight: .medium))
                             .lineSpacing(4)
                             .foregroundStyle(AppColors.subtext)
@@ -1820,14 +1821,14 @@ struct BillPlaybackSheet: View {
 
     private var todayPlaybackUsageHint: String? {
         guard !settingsViewModel.settings.hasMemberAccess else { return nil }
-        return "适合晚上回看；今日免费回放剩余 \(todayPlaybackQuotaText()) 次。"
+        return ExperienceRuleCopy.todayPlaybackUsageHint(remaining: dailyQuotaStore.todayPlaybackRemaining(isMember: false))
     }
 
     private func todayPlaybackQuotaText() -> String {
-        let limit = DailyFeatureQuotaStore.todayPlaybackFreeLimit
-        let remaining = dailyQuotaStore.todayPlaybackRemaining(isMember: false)
-        let left = min(limit, max(0, remaining))
-        return "\(left)/\(limit)"
+        ExperienceRuleCopy.quotaText(
+            remaining: dailyQuotaStore.todayPlaybackRemaining(isMember: false),
+            limit: DailyFeatureQuotaStore.todayPlaybackFreeLimit
+        )
     }
 
     private var todayPlaybackSheetHeight: CGFloat {

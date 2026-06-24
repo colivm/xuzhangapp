@@ -1,0 +1,137 @@
+[
+  {
+    "id": "rain_commute",
+    "category": "signal",
+    "input_hint": "rain commute after work",
+    "expected_profile": "rain",
+    "expected_signal_focus": "scene_or_weather",
+    "expected_title_role": "scene",
+    "expected_picture_role": "scene"
+  },
+  {
+    "id": "first_fitness",
+    "category": "signal",
+    "input_hint": "first time getting back to fitness",
+    "expected_profile": "fitness",
+    "expected_signal_focus": "milestone_or_recovery",
+    "expected_title_role": "life_mark",
+    "expected_picture_role": "memory"
+  },
+  {
+    "id": "drink_streak",
+    "category": "signal",
+    "input_hint": "repeated drink purchases",
+    "expected_profile": "warmDaily",
+    "expected_signal_focus": "daily_rhythm_without_mechanical_streak_copy",
+    "expected_title_role": "soft_fallback",
+    "expected_picture_role": "soft_fallback"
+  },
+  {
+    "id": "away_city",
+    "category": "signal",
+    "input_hint": "out-of-town records",
+    "expected_profile": "travel",
+    "expected_signal_focus": "city_or_trip_context",
+    "expected_title_role": "scene",
+    "expected_picture_role": "scene"
+  },
+  {
+    "id": "weekend_social",
+    "category": "signal",
+    "input_hint": "weekend dinner with friends",
+    "expected_profile": "social",
+    "expected_signal_focus": "gathering_or_social_warmth",
+    "expected_title_role": "scene",
+    "expected_picture_role": "scene"
+  },
+  {
+    "id": "milestone_wins_over_generic_scene",
+    "category": "signal",
+    "input_hint": "got back to fitness, also had a normal commute scene",
+    "expected_profile": "fitness",
+    "expected_signal_focus": "milestone_beats_generic_scene",
+    "expected_title_role": "life_mark",
+    "expected_picture_role": "scene_with_memory"
+  },
+  {
+    "id": "scene_wins_over_generic_emotion",
+    "category": "signal",
+    "input_hint": "rainy walk home, emotion tag only says okay",
+    "expected_profile": "rain",
+    "expected_signal_focus": "concrete_scene_beats_generic_emotion",
+    "expected_title_role": "scene",
+    "expected_picture_role": "scene"
+  },
+  {
+    "id": "generic_emotion_cannot_lead",
+    "category": "signal",
+    "input_hint": "generic daily emotion plus a concrete noon recharge moment",
+    "expected_profile": "warmDaily",
+    "expected_signal_focus": "generic_emotion_cannot_be_primary",
+    "expected_title_role": "soft_fallback",
+    "expected_picture_role": "memory"
+  },
+  {
+    "id": "short_quote_can_lead",
+    "category": "signal",
+    "input_hint": "short note like keep going plus ordinary week context",
+    "expected_profile": "defaultSoft",
+    "expected_signal_focus": "short_quote_can_be_emotional_asset",
+    "expected_title_role": "voice",
+    "expected_picture_role": "voice"
+  },
+  {
+    "id": "night_route_with_soft_emotion",
+    "category": "signal",
+    "input_hint": "late walk home with a subtle sigh of relief",
+    "expected_profile": "lateCity",
+    "expected_signal_focus": "night_scene_carries_the_memory",
+    "expected_title_role": "scene",
+    "expected_picture_role": "scene_with_emotion"
+  },
+  {
+    "id": "life_mark_without_scene_stays_memory_like",
+    "category": "signal",
+    "input_hint": "midday recharge as a concrete life mark without a strong scene",
+    "expected_profile": "warmDaily",
+    "expected_signal_focus": "life_mark_keeps_memory_tone",
+    "expected_title_role": "life_mark",
+    "expected_picture_role": "memory"
+  },
+  {
+    "id": "emotion_without_scene_stays_feeling_like",
+    "category": "signal",
+    "input_hint": "soft relief emotion without a concrete scene",
+    "expected_profile": "defaultSoft",
+    "expected_signal_focus": "emotion_stays_feeling_not_scene",
+    "expected_title_role": "emotion",
+    "expected_picture_role": "emotion"
+  },
+  {
+    "id": "voice_without_scene_stays_quote_like",
+    "category": "signal",
+    "input_hint": "short note saying keep going without a concrete scene",
+    "expected_profile": "defaultSoft",
+    "expected_signal_focus": "voice_stays_quote_like",
+    "expected_title_role": "voice",
+    "expected_picture_role": "voice"
+  },
+  {
+    "id": "today_playback_quota",
+    "category": "quota",
+    "states": ["3/3", "2/3", "0/3"],
+    "expected_copy": "unified_x_over_y_format"
+  },
+  {
+    "id": "weekly_summary_quota",
+    "category": "quota",
+    "states": ["3/3", "0/3"],
+    "expected_copy": "unified_x_over_y_format"
+  },
+  {
+    "id": "month_summary_quota",
+    "category": "quota",
+    "states": ["10/10", "0/10"],
+    "expected_copy": "not_monthly_refresh"
+  }
+]

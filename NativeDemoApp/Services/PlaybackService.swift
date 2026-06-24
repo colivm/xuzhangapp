@@ -104,6 +104,9 @@ struct WeeklyShareCardPayload {
     let headline: String
     let subtitle: String
     let anchorLine: String?
+    let lifeMarkLine: String?
+    let contextLine: String?
+    let emotionLine: String?
     let periodText: String
     let insight: ShareInsight
 }
@@ -215,6 +218,7 @@ final class PlaybackService {
         let voiceTitle2 = secondaryVoice?.text ?? voiceTitle1
         let busiestTitle = busiestMaterial?.text ?? voiceTitle1
         let sceneMemoryLine = weeklySceneMemoryLine(rows)
+        let emotionSignal = primaryVoice?.item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let lifeMark = LifeMarkService
             .aggregates(for: rows, allItems: items, isMember: true, now: now, limit: 1)
             .first
@@ -236,6 +240,7 @@ final class PlaybackService {
             "busiestTitle": busiestTitle,
             "voiceTitle1": voiceTitle1,
             "voiceTitle2": voiceTitle2,
+            "emotionTag": emotionSignal,
             "scentWord1": scentWords.indices.contains(0) ? scentWords[0] : PlaybackMomentSelector.honestNoScentText,
             "scentWord2": scentWords.indices.contains(1) ? scentWords[1] : "",
             "scentWord3": scentWords.indices.contains(2) ? scentWords[2] : "",
@@ -244,6 +249,7 @@ final class PlaybackService {
             "ratio": "\(ratio)",
             "echoLine": echoSentence ?? "",
             "sceneMemoryLine": sceneMemoryLine ?? lifeMarkLine,
+            "contextLine": sceneMemoryLine ?? "",
             "lifeMarkTitle": lifeMarkTitle,
             "lifeMarkLine": lifeMarkLine
         ]
@@ -256,7 +262,9 @@ final class PlaybackService {
                     "count": "\(rows.count)",
                     "total": Self.money(total),
                     "range": rangeLabel,
-                    "lifeMarkLine": lifeMarkLine
+                    "lifeMarkLine": lifeMarkLine,
+                    "sceneMemoryLine": sceneMemoryLine ?? "",
+                    "emotionTag": emotionSignal
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: rows.count < 3 ? "week-weak-presence" : "week-presence",
@@ -276,7 +284,8 @@ final class PlaybackService {
                         "busiestDay": busiest?.label ?? "本周",
                         "busiestTitle": busiestTitle,
                         "count": "\(busiest?.count ?? 0)",
-                        "sceneMemoryLine": sceneMemoryLine ?? ""
+                        "sceneMemoryLine": sceneMemoryLine ?? "",
+                        "emotionTag": emotionSignal
                     ],
                     narration: PlaybackCopyPool.narration(
                         chapterId: "week-rhythm",
@@ -295,7 +304,8 @@ final class PlaybackService {
                         "voiceTitle2": voiceTitle2,
                         "amount": primaryVoice.map { Self.money($0.item.amount) } ?? "",
                         "day": primaryVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? "",
-                        "sceneMemoryLine": sceneMemoryLine ?? ""
+                        "sceneMemoryLine": sceneMemoryLine ?? "",
+                        "emotionTag": emotionSignal
                     ],
                     narration: echoSentence.map { SummaryNarration(warm: $0, plain: $0) }
                         ?? PlaybackCopyPool.narration(
@@ -313,7 +323,8 @@ final class PlaybackService {
                     metrics: [
                         "scentWords": scentText,
                         "topCategory": top?.category ?? "日常",
-                        "ratio": "\(ratio)"
+                        "ratio": "\(ratio)",
+                        "emotionTag": emotionSignal
                     ],
                     narration: PlaybackCopyPool.narration(
                         chapterId: "week-scent",
@@ -332,7 +343,8 @@ final class PlaybackService {
                         "voiceTitle1": voiceTitle1,
                         "amount": primaryVoice.map { Self.money($0.item.amount) } ?? "",
                         "day": primaryVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? "",
-                        "sceneMemoryLine": sceneMemoryLine ?? ""
+                        "sceneMemoryLine": sceneMemoryLine ?? "",
+                        "emotionTag": emotionSignal
                     ],
                     narration: PlaybackCopyPool.narration(
                         chapterId: "week-weak-voices",
@@ -349,7 +361,14 @@ final class PlaybackService {
             SummaryChapter(
                 id: "week-outro",
                 title: weak ? "再多一点" : "先记到这里",
-                metrics: ["count": "\(rows.count)", "total": Self.money(total), "topCategory": top?.category ?? "日常"],
+                metrics: [
+                    "count": "\(rows.count)",
+                    "total": Self.money(total),
+                    "topCategory": top?.category ?? "日常",
+                    "lifeMarkLine": lifeMarkLine,
+                    "sceneMemoryLine": sceneMemoryLine ?? "",
+                    "emotionTag": emotionSignal
+                ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: weak ? "week-weak-outro" : "week-outro",
                     seed: weekSeed,
@@ -404,6 +423,8 @@ final class PlaybackService {
         let weeklyLifeMark = weeklyShareLifeMarkAggregate(rows: rows, allItems: items, now: now)
         let lifeMarkSubtitle = weeklyShareLifeMarkLine(from: weeklyLifeMark)
             ?? weeklyShareLifeMarkLine(from: builtSummary)
+        let contextLine = weeklySceneMemoryLine(rows)
+        let emotionLine = weeklyEmotionSignalLine(rows)
         let signal = weeklyShareInsightSignal(
             rows: rows,
             activity: activity,
@@ -428,7 +449,10 @@ final class PlaybackService {
             topCategoryRatio: ratio,
             headline: builtSummary.teaserLine,
             subtitle: lifeMarkSubtitle ?? closing,
-            anchorLine: weeklyShareAnchorLine(from: builtSummary),
+            anchorLine: contextLine ?? weeklyShareAnchorLine(from: builtSummary),
+            lifeMarkLine: lifeMarkSubtitle,
+            contextLine: contextLine,
+            emotionLine: emotionLine,
             periodText: period,
             insight: insight
         )
@@ -910,6 +934,8 @@ final class PlaybackService {
         let voiceTitle1 = selection.voiceText(for: .month)
         let earlyVoiceTitle = earlyVoice?.text ?? PlaybackMomentSelector.honestNoVoiceText(for: .month)
         let lateVoiceTitle = lateVoice?.text ?? PlaybackMomentSelector.honestNoVoiceText(for: .month)
+        let monthContextLine = contextualMemoryLine(in: rows) ?? weeklySceneMemoryLine(rows)
+        let emotionSignal = primaryVoice?.item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let lifeMark = LifeMarkService
             .aggregates(for: rows, allItems: items, isMember: true, now: now, limit: 1)
             .first
@@ -934,6 +960,8 @@ final class PlaybackService {
             "voiceTitle1": voiceTitle1,
             "earlyVoiceTitle": earlyVoiceTitle,
             "lateVoiceTitle": lateVoiceTitle,
+            "emotionTag": emotionSignal,
+            "contextLine": monthContextLine ?? "",
             "scentWords": scentText,
             "lifeMarkTitle": lifeMarkTitle,
             "lifeMarkLine": lifeMarkLine
@@ -950,7 +978,9 @@ final class PlaybackService {
                     "momPercent": momPercent ?? "",
                     "range": rangeLabel,
                     "voiceTitle1": voiceTitle1,
-                    "lifeMarkLine": lifeMarkLine
+                    "lifeMarkLine": lifeMarkLine,
+                    "sceneMemoryLine": monthContextLine ?? "",
+                    "emotionTag": emotionSignal
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-opening",
@@ -967,7 +997,8 @@ final class PlaybackService {
                     "label": segments[0].label,
                     "amount": Self.money(segments[0].amount),
                     "count": "\(segments[0].count)",
-                    "day": earlyVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? ""
+                    "day": earlyVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? "",
+                    "emotionTag": emotionSignal
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-early-voice",
@@ -983,7 +1014,8 @@ final class PlaybackService {
                     "lateVoiceTitle": lateVoiceTitle,
                     "middle": Self.money(segments[1].amount),
                     "late": Self.money(segments[2].amount),
-                    "day": lateVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? ""
+                    "day": lateVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? "",
+                    "emotionTag": emotionSignal
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-late-voice",
@@ -995,7 +1027,11 @@ final class PlaybackService {
             SummaryChapter(
                 id: "month-change",
                 title: "变化点",
-                metrics: ["change": changeText],
+                metrics: [
+                    "change": changeText,
+                    "sceneMemoryLine": monthContextLine ?? "",
+                    "emotionTag": emotionSignal
+                ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-change",
                     seed: monthSeed,
@@ -1009,7 +1045,8 @@ final class PlaybackService {
                 metrics: [
                     "scentWords": scentText,
                     "topCategory": top?.category ?? "日常",
-                    "ratio": "\(ratio)"
+                    "ratio": "\(ratio)",
+                    "emotionTag": emotionSignal
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-scent",
@@ -1021,7 +1058,13 @@ final class PlaybackService {
             SummaryChapter(
                 id: "month-outro",
                 title: "下月再叙",
-                metrics: ["count": "\(rows.count)", "total": Self.money(total)],
+                metrics: [
+                    "count": "\(rows.count)",
+                    "total": Self.money(total),
+                    "lifeMarkLine": lifeMarkLine,
+                    "sceneMemoryLine": monthContextLine ?? "",
+                    "emotionTag": emotionSignal
+                ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-outro",
                     seed: monthSeed,
@@ -1298,6 +1341,32 @@ final class PlaybackService {
             return nil
         }
         return LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count)
+    }
+
+    private func weeklyEmotionSignalLine(_ rows: [HomeItem]) -> String? {
+        let ranked = rows.compactMap { item -> (text: String, score: Int, date: Date)? in
+            let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !emotion.isEmpty,
+                  emotion != HomeItem.inferEmotionTag(category: item.category, amount: item.amount),
+                  !EchoAnchorService.shared.isDirtyTraceTitle(emotion) else {
+                return nil
+            }
+
+            var score = 1
+            if emotion.contains("第一次") { score += 5 }
+            if emotion.contains("连续") { score += 4 }
+            if emotion.contains("雨天") || emotion.contains("出行") { score += 3 }
+            if emotion.contains("健身") || emotion.contains("恢复") { score += 3 }
+            if emotion.contains("聚餐") || emotion.contains("朋友") { score += 3 }
+            return (emotion, score, item.createdAt)
+        }
+        .sorted { lhs, rhs in
+            if lhs.score == rhs.score { return lhs.date > rhs.date }
+            return lhs.score > rhs.score
+        }
+
+        guard let best = ranked.first else { return nil }
+        return "这周也写下了「\(best.text)」"
     }
 
     private func monthTeaserLine(

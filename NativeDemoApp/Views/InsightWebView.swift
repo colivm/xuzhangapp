@@ -389,7 +389,7 @@ struct InsightWebView: View {
     private func openWeeklyAICommand() {
         showAICommandSheet = true
         if aiCommandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            aiCommandText = "帮我继续解读最近这段生活，看看生活节奏、压力变化和最值得保留的瞬间。"
+            aiCommandText = "帮我继续解读最近这段生活，看看生活节奏、压力变化和可以回看的细节。"
         }
     }
 
@@ -4532,6 +4532,9 @@ struct WeeklyShareCardView: View {
     let headline: String
     let subtitle: String
     let anchorLine: String?
+    let lifeMarkLine: String?
+    let contextLine: String?
+    let emotionLine: String?
     let periodText: String
     let insight: ShareInsight
     var isPetMode: Bool = true
@@ -4586,6 +4589,9 @@ struct WeeklyShareCardView: View {
         headline: String = "这一周留下几笔记录",
         subtitle: String = "之后有新记录，再回来对照。",
         anchorLine: String? = nil,
+        lifeMarkLine: String? = nil,
+        contextLine: String? = nil,
+        emotionLine: String? = nil,
         periodText: String? = nil,
         insight: ShareInsight? = nil,
         isPetMode: Bool = true,
@@ -4604,6 +4610,9 @@ struct WeeklyShareCardView: View {
         self.headline = headline
         self.subtitle = subtitle
         self.anchorLine = anchorLine
+        self.lifeMarkLine = lifeMarkLine
+        self.contextLine = contextLine
+        self.emotionLine = emotionLine
         self.periodText = periodText ?? Self.defaultPeriodText()
         self.insight = insight ?? ShareInsight(
             fact: headline,
@@ -4630,6 +4639,9 @@ struct WeeklyShareCardView: View {
             headline: payload.headline,
             subtitle: payload.subtitle,
             anchorLine: payload.anchorLine,
+            lifeMarkLine: payload.lifeMarkLine,
+            contextLine: payload.contextLine,
+            emotionLine: payload.emotionLine,
             periodText: payload.periodText,
             insight: payload.insight,
             isPetMode: isPetMode,
@@ -4653,6 +4665,8 @@ struct WeeklyShareCardView: View {
                 endPoint: .bottomTrailing
             )
 
+            profileAtmosphere
+
             paperStack
                 .padding(.horizontal, 22)
                 .padding(.vertical, 18)
@@ -4665,30 +4679,13 @@ struct WeeklyShareCardView: View {
             VStack(alignment: .leading, spacing: 0) {
                 weeklyCardHeader
 
-                Text(shareHeadline)
-                    .font(.system(size: 29, weight: .bold, design: .rounded))
-                    .foregroundStyle(t.textMain)
-                    .lineSpacing(5)
-                    .lineLimit(3)
-                    .minimumScaleFactor(0.66)
-                    .padding(.top, 34)
-                    .frame(minHeight: 92, alignment: .topLeading)
+                headlineSection
 
                 weeklyChartPanel
                     .padding(.top, 8)
 
-                Text(insight.care)
-                    .font(.system(size: 17, weight: .medium, design: .rounded))
-                    .foregroundStyle(t.textMain.opacity(0.82))
-                    .lineSpacing(4)
-                    .lineLimit(3)
-                    .minimumScaleFactor(0.74)
+                shareCarePanel
                     .padding(.top, 16)
-
-                Text(insight.footnote)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(t.textMuted.opacity(0.86))
-                    .padding(.top, 5)
 
                 weeklyMetricRow
                     .padding(.top, 12)
@@ -4697,7 +4694,7 @@ struct WeeklyShareCardView: View {
                     .padding(.top, 10)
                     .padding(.bottom, 8)
                 
-                shareTags
+                shareTagPanel
                     .padding(.bottom, 10)
 
                 Spacer(minLength: 12)
@@ -4738,11 +4735,209 @@ struct WeeklyShareCardView: View {
         }
     }
 
+    private var headlineSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("本周最强信号")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(profileAccent.opacity(0.76))
+            Text(shareHeadline)
+                .font(.system(size: 29, weight: .bold, design: .rounded))
+                .foregroundStyle(t.textMain)
+                .lineSpacing(5)
+                .lineLimit(3)
+                .minimumScaleFactor(0.66)
+                .frame(minHeight: 92, alignment: .topLeading)
+        }
+        .padding(.top, 30)
+    }
+
     private var shareHeadline: String {
-        let fact = insight.fact.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fact = LifeStorySignalService.shareHeadline(from: shareCardPayload)
         guard !fact.isEmpty else { return "这一周，留下了 \(recordCount) 笔记录" }
         if fact.contains("周") { return fact }
         return "这一周，\(fact)"
+    }
+
+    private var shareCareLine: String {
+        LifeStorySignalService.sharePictureLine(from: shareCardPayload) ?? insight.care
+    }
+
+    private var shareSelection: SignalSelectionPolicyResult {
+        LifeStorySignalService.selectionPolicy(for: shareCardPayload)
+    }
+
+    private var shareCardPayload: WeeklyShareCardPayload {
+        WeeklyShareCardPayload(
+            weekTotal: weekTotal,
+            topCategory: topCategory,
+            recordCount: recordCount,
+            primaryMetricCount: primaryMetricCount,
+            primaryMetricEmoji: primaryMetricEmoji,
+            dailyTrend: dailyTrend,
+            dailyCountTrend: dailyCountTrend,
+            categorySlices: categorySlices,
+            topCategoryRatio: topCategoryRatio,
+            headline: headline,
+            subtitle: subtitle,
+            anchorLine: anchorLine,
+            lifeMarkLine: lifeMarkLine,
+            contextLine: contextLine ?? anchorLine,
+            emotionLine: emotionLine,
+            periodText: periodText,
+            insight: insight
+        )
+    }
+
+    private var shareCarePanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("这周最有画面的一格")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(t.textMuted.opacity(0.82))
+            Text(shareCareLine)
+                .font(.system(size: 17, weight: .medium, design: .rounded))
+                .foregroundStyle(profileAccent.opacity(0.88))
+                .lineSpacing(4)
+                .lineLimit(3)
+                .minimumScaleFactor(0.74)
+            Text(insight.footnote)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(t.textMuted.opacity(0.82))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(profilePanelFill.opacity(0.96))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(profileAccent.opacity(0.14), lineWidth: 1)
+        )
+    }
+
+    private var shareProfile: LifeStoryVisualProfile {
+        LifeStorySignalService.shareVisualProfile(from: shareCardPayload)
+    }
+
+    private var profileAccent: Color {
+        switch shareProfile {
+        case .rain:
+            return Color(hex: "5f7f95")
+        case .travel:
+            return Color(hex: "738f52")
+        case .lateCity:
+            return Color(hex: "6c6f96")
+        case .warmDaily:
+            return Color(hex: "9b7454")
+        case .fitness:
+            return Color(hex: "4f8a62")
+        case .social:
+            return Color(hex: "9a6958")
+        case .defaultSoft:
+            return t.accentDeep
+        }
+    }
+
+    private var profilePanelFill: Color {
+        switch shareProfile {
+        case .rain:
+            return Color(hex: "eef4f7").opacity(0.60)
+        case .travel:
+            return Color(hex: "f2f4df").opacity(0.62)
+        case .lateCity:
+            return Color(hex: "eef0f8").opacity(0.58)
+        case .warmDaily:
+            return Color(hex: "fff1e4").opacity(0.58)
+        case .fitness:
+            return Color(hex: "ecf6ed").opacity(0.60)
+        case .social:
+            return Color(hex: "f8eee7").opacity(0.60)
+        case .defaultSoft:
+            return Color.white.opacity(0.48)
+        }
+    }
+
+    private var profileAtmosphere: some View {
+        ZStack {
+            switch shareProfile {
+            case .rain:
+                Circle()
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: 200, height: 200)
+                    .blur(radius: 34)
+                    .offset(x: 110, y: -130)
+                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                    .fill(Color(hex: "cad9e1").opacity(0.28))
+                    .frame(width: 250, height: 100)
+                    .rotationEffect(.degrees(-18))
+                    .offset(x: -100, y: 180)
+            case .travel:
+                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                    .fill(Color.white.opacity(0.16))
+                    .frame(width: 230, height: 92)
+                    .blur(radius: 18)
+                    .rotationEffect(.degrees(-14))
+                    .offset(x: 92, y: -88)
+                Circle()
+                    .fill(Color(hex: "f5e8b8").opacity(0.20))
+                    .frame(width: 150, height: 150)
+                    .blur(radius: 24)
+                    .offset(x: -110, y: 160)
+            case .lateCity:
+                Circle()
+                    .fill(Color.white.opacity(0.14))
+                    .frame(width: 180, height: 180)
+                    .blur(radius: 40)
+                    .offset(x: 108, y: -132)
+                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                    .fill(Color(hex: "d7dbef").opacity(0.20))
+                    .frame(width: 240, height: 24)
+                    .blur(radius: 10)
+                    .offset(x: -50, y: 170)
+            case .warmDaily:
+                Circle()
+                    .fill(Color(hex: "ffe8d1").opacity(0.22))
+                    .frame(width: 190, height: 190)
+                    .blur(radius: 34)
+                    .offset(x: -108, y: -96)
+                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                    .fill(Color.white.opacity(0.16))
+                    .frame(width: 210, height: 80)
+                    .blur(radius: 16)
+                    .rotationEffect(.degrees(10))
+                    .offset(x: 90, y: 176)
+            case .fitness:
+                Circle()
+                    .stroke(Color.white.opacity(0.24), lineWidth: 14)
+                    .frame(width: 150, height: 150)
+                    .blur(radius: 1)
+                    .offset(x: 96, y: -88)
+                Circle()
+                    .fill(Color(hex: "d8efd9").opacity(0.22))
+                    .frame(width: 180, height: 180)
+                    .blur(radius: 28)
+                    .offset(x: -110, y: 170)
+            case .social:
+                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                    .fill(Color.white.opacity(0.16))
+                    .frame(width: 230, height: 104)
+                    .blur(radius: 20)
+                    .rotationEffect(.degrees(10))
+                    .offset(x: -80, y: -92)
+                Circle()
+                    .fill(Color(hex: "f5d4bf").opacity(0.24))
+                    .frame(width: 160, height: 160)
+                    .blur(radius: 24)
+                    .offset(x: 100, y: 164)
+            case .defaultSoft:
+                Circle()
+                    .fill(Color.white.opacity(0.12))
+                    .frame(width: 180, height: 180)
+                    .blur(radius: 36)
+                    .offset(x: 88, y: -104)
+            }
+        }
+        .allowsHitTesting(false)
     }
 
     private var displayCategorySlices: [WeeklyShareCategorySlice] {
@@ -4792,11 +4987,11 @@ struct WeeklyShareCardView: View {
         .frame(height: 88)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.48))
+                .fill(profilePanelFill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(t.panelBorder.opacity(0.74), lineWidth: 1)
+                .stroke(profileAccent.opacity(0.18), lineWidth: 1)
         )
     }
 
@@ -4998,21 +5193,40 @@ struct WeeklyShareCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var shareTagPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("留下来的线索")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(t.textMuted.opacity(0.82))
+            shareTags
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.32))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(profileAccent.opacity(0.12), lineWidth: 1)
+        )
+    }
+
     private func shareTagPill(_ tag: String, row: Int, column: Int) -> some View {
         Text(tag)
             .font(.system(size: 12, weight: .semibold, design: .rounded))
-            .foregroundStyle(t.accentDeep.opacity(0.72))
+            .foregroundStyle(profileAccent.opacity(0.82))
             .lineLimit(1)
             .minimumScaleFactor(0.78)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
                 Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.38))
+                    .fill(profilePanelFill.opacity(0.92))
             )
             .overlay(
                 Capsule(style: .continuous)
-                    .stroke(t.accent.opacity(0.24), lineWidth: 0.8)
+                    .stroke(profileAccent.opacity(0.18), lineWidth: 0.8)
             )
             .rotationEffect(.degrees(tagAngle(row: row, column: column)))
             .offset(y: (row + column).isMultiple(of: 2) ? 0 : 1)
@@ -5028,9 +5242,32 @@ struct WeeklyShareCardView: View {
     }
 
     private var tagRows: [[String]] {
-        let tags = Array(insight.tags.prefix(4))
+        let tags = shareTagTexts
         guard tags.count > 2 else { return [tags] }
         return [Array(tags.prefix(2)), Array(tags.dropFirst(2))]
+    }
+
+    private var shareTagTexts: [String] {
+        var texts = orderedShareSignals.map(\.label)
+        if texts.isEmpty {
+            texts = insight.tags
+        }
+        return Array(texts.prefix(4))
+    }
+
+    private var orderedShareSignals: [LifeStorySignal] {
+        var signals: [LifeStorySignal] = []
+        if let primary = shareSelection.primary?.signal {
+            signals.append(primary)
+        }
+        signals.append(contentsOf: shareSelection.supports.map(\.signal))
+        if signals.isEmpty {
+            signals = LifeStorySignalService.weeklyShareSignals(from: shareCardPayload, limit: 4)
+        }
+        if !shareCareLine.isEmpty {
+            signals = signals.filter { $0.kind != .scene }
+        }
+        return Array(signals.prefix(4))
     }
 
     private var lowerPaperTexture: some View {

@@ -2911,10 +2911,10 @@ struct RecordView: View {
                     )
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("今日免费导入已用完")
+                    Text(ExperienceRuleCopy.ocrUpsellHeadline)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(AppColors.text)
-                    Text("明天会刷新 3 次。经常导入微信/支付宝截图的话，会员可连续整理，不用被次数打断。")
+                    Text(ExperienceRuleCopy.ocrUpsellDetail)
                         .font(.system(size: 12))
                         .foregroundStyle(AppColors.subtext)
                         .fixedSize(horizontal: false, vertical: true)
@@ -2940,7 +2940,7 @@ struct RecordView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "crown")
                         .font(.system(size: 13, weight: .semibold))
-                    Text("开通会员，连续导入")
+                    Text(ExperienceRuleCopy.ocrUpsellCTA)
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .foregroundStyle(.white)

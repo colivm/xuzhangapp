@@ -1463,7 +1463,7 @@ struct SettingsView: View {
                     get: { settingsViewModel.shareCardUsesAppTheme },
                     set: { settingsViewModel.shareCardUsesAppTheme = $0 }
                 ))
-                Text("会员专属：开启后，分享图会跟随当前主题配色。")
+                Text(ExperienceRuleCopy.shareThemeMemberHint)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AppColors.subtext.opacity(0.72))
                     .padding(.top, -12)

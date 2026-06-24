@@ -2438,34 +2438,34 @@ struct StatsWebView: View {
         case .week:
             if !quotaStore.hasCompletedWeekPlaybackEver() {
                 return SummaryPlaybackMemberPitch(
-                    headline: "这是你的第一段周记。",
-                    detail: "之后每周都可以把情绪标签、生活印记和反复出现的场景继续接上，不只看金额。",
+                    headline: "这是你第一次听本周回放。",
+                    detail: "这次免费已经能看到本周的基本节奏。之后会员会把情绪标签、生活印记和反复出现的场景继续接上，不只停在金额。",
                     cta: "保留每周生活回放"
                 )
             }
             if quotaStore.weekRemaining(isMember: false) <= 1 {
                 return SummaryPlaybackMemberPitch(
-                    headline: "这周的免费回放快用完了。",
-                    detail: "会员会让周记和月章持续留下来，情绪标签和生活印记也会一起进入回放。",
-                    cta: "让回放继续留下"
+                    headline: "本周免费回放快用完了。",
+                    detail: "这次免费已经给你留下本周的一段回看。会员会继续把周记、月章和生活印记接着整理，不打断当前记录。",
+                    cta: "让回放继续留下来"
                 )
             }
             return SummaryPlaybackMemberPitch(
                 headline: "像不像你的这一周？",
-                detail: "会员会把情绪标签、生活印记和反复出现的场景接着整理进周/月回放，不只停在分类和金额。",
+                detail: "这次免费会先保留基础回看。会员会把情绪标签、生活印记和反复出现的场景继续整理进周/月回放。",
                 cta: "让账本继续读懂我"
             )
         case .month:
             if quotaStore.monthRemaining(isMember: false) <= 1 {
                 return SummaryPlaybackMemberPitch(
                     headline: "月章体验快用完了。",
-                    detail: "月章是新用户体验额度，不是每月刷新。会员可以继续整理更多月份，形成更长的生活脉络。",
+                    detail: "这次免费已经给你看过月章开头。月章是新用户体验额度，不是每月刷新；会员可以继续整理更多月份，形成更长的生活脉络。",
                     cta: "继续留住月章"
                 )
             }
             return SummaryPlaybackMemberPitch(
                 headline: "像不像你的这个月？",
-                detail: "会员会把更多月份里的天气、路线、情绪标签和生活印记串起来，整理成连续生活章。",
+                detail: "这次免费会先保留这一段月章。会员会把更多月份里的天气、路线、情绪标签和生活印记继续串起来。",
                 cta: "让账本继续读懂我"
             )
         }
@@ -2552,20 +2552,14 @@ struct StatsWebView: View {
     }
 
     private func summaryQuotaFootnote(range: SummaryPlaybackRange, hasData: Bool) -> String {
-        guard hasData else { return "回放使用本地模板生成，不依赖 AI 服务。" }
-        guard !hasMemberAccess else { return "会员可无限回看周/月回放。" }
-        switch range {
-        case .week:
-            let remaining = quotaStore.weekRemaining(isMember: false)
-            return remaining > 0
-                ? "本周回放剩余 \(remaining)/\(SummaryPlaybackQuotaStore.weeklyFreeLimit) 次 · 会员可连续回看周/月节奏"
-                : "本周回放剩余 0/\(SummaryPlaybackQuotaStore.weeklyFreeLimit) 次 · 下个自然周刷新"
-        case .month:
-            let remaining = quotaStore.monthRemaining(isMember: false)
-            return remaining > 0
-                ? "新用户月章剩余 \(remaining)/\(SummaryPlaybackQuotaStore.lifetimeMonthFreeLimit) 次 · 会员可继续整理更多月份"
-                : "新用户月章剩余 0/\(SummaryPlaybackQuotaStore.lifetimeMonthFreeLimit) 次 · 会员可继续整理更多月份"
-        }
+        ExperienceRuleCopy.summaryQuotaFootnote(
+            range: range,
+            remaining: range == .week
+                ? quotaStore.weekRemaining(isMember: false)
+                : quotaStore.monthRemaining(isMember: false),
+            hasData: hasData,
+            isMember: hasMemberAccess
+        )
     }
 
     private func handleSummaryPlaybackTap(range: SummaryPlaybackRange, hasData: Bool) {
@@ -2575,14 +2569,14 @@ struct StatsWebView: View {
             case .week:
                 summaryQuotaPrompt = SummaryQuotaPrompt(
                     title: "本周回放用完了",
-                    message: "本周免费回放剩余 0/\(SummaryPlaybackQuotaStore.weeklyFreeLimit) 次。下个自然周会刷新。会员可以连续回看周/月生活节奏。",
+                    message: ExperienceRuleCopy.summaryQuotaExhaustedMessage(range: .week),
                     primaryTitle: "了解连续回放",
                     opensMember: true
                 )
             case .month:
                 summaryQuotaPrompt = SummaryQuotaPrompt(
                     title: "本月章体验用完了",
-                    message: "新用户月章剩余 0/\(SummaryPlaybackQuotaStore.lifetimeMonthFreeLimit) 次。月章额度不是每月刷新。会员可以继续整理更多月份。",
+                    message: ExperienceRuleCopy.summaryQuotaExhaustedMessage(range: .month),
                     primaryTitle: "继续留住月章",
                     opensMember: true
                 )
