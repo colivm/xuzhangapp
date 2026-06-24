@@ -144,6 +144,9 @@ struct HomeItem: Identifiable, Codable, Equatable {
            Self.shouldPreferLateWorkCommuteTag(current: trimmed) {
             return lateCommute
         }
+        if Self.isAggregateStyleEmotionTag(trimmed) {
+            return Self.singleRecordEmotionTag(for: self)
+        }
         if category == .dining,
            Self.containsDrinkKeyword(title),
            Self.isMealDiningTag(trimmed) {
@@ -529,23 +532,46 @@ struct HomeItem: Identifiable, Codable, Equatable {
     }
 
     private static func drinkDiningDisplayTag(from current: String) -> String {
-        if let days = consecutiveDays(in: current) {
-            return "连续\(days)天饮品补给"
-        }
-        if current.contains("第10") {
-            return "第10次饮品补给"
-        }
         return "买杯喝的"
     }
 
-    private static func consecutiveDays(in text: String) -> Int? {
-        guard let start = text.range(of: "连续"),
-              let end = text.range(of: "天", range: start.upperBound..<text.endIndex) else {
-            return nil
+    private static func isAggregateStyleEmotionTag(_ text: String) -> Bool {
+        if text.contains("连续"), text.contains("天") {
+            return true
         }
-        let rawDays = text[start.upperBound..<end.lowerBound]
-        let digits = rawDays.unicodeScalars.filter { CharacterSet.decimalDigits.contains($0) }.map(String.init).joined()
-        return Int(digits)
+        if text.contains("第一次") || text.contains("首次") {
+            return true
+        }
+        if text.contains("第"), text.contains("次") {
+            return true
+        }
+        return false
+    }
+
+    private static func singleRecordEmotionTag(for item: HomeItem) -> String {
+        let resolved = NarrativeCopyResolver.resolveEmotionTag(
+            context: NarrativeCopyResolver.Context(
+                brandId: item.merchantBrandId,
+                category: item.category,
+                amount: item.amount,
+                date: item.createdAt,
+                seed: item.title,
+                note: item.title,
+                scenePackId: item.scenePackId
+            )
+        )
+        if RecordSemanticLexicon.isTitle(resolved, compatibleWith: item.category) {
+            return resolved
+        }
+        if let refined = Self.refinedEmotionTag(
+            title: item.title,
+            category: item.category,
+            amount: item.amount,
+            date: item.createdAt
+        ) {
+            return refined
+        }
+        return Self.inferEmotionTag(category: item.category, amount: item.amount)
     }
 
     private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {

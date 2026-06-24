@@ -31,6 +31,14 @@ struct AICommandRecordDraft: Identifiable, Equatable {
     }
 }
 
+private struct ItemDerivedCache {
+    var todayPositiveItems: [HomeItem] = []
+    var recentThreeTodayItems: [HomeItem] = []
+    var currentWeekItems: [HomeItem] = []
+    var currentMonthItems: [HomeItem] = []
+    var currentYearItems: [HomeItem] = []
+}
+
 @MainActor
 final class HomeViewModel: ObservableObject {
     enum Period: String, CaseIterable, Identifiable {
@@ -64,7 +72,11 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var isGeneratingMonthlyInsight: Bool = false
     @Published private(set) var insightErrorMessage: String?
     @Published private(set) var insights: [DailyInsight] = []
-    @Published private(set) var items: [HomeItem] = []
+    @Published private(set) var items: [HomeItem] = [] {
+        didSet {
+            itemDerivedCacheNeedsRebuild = true
+        }
+    }
     @Published private(set) var syncStatusMessage: String?
     @Published private(set) var isSyncingCloudLedger: Bool = false
     @Published private(set) var memberNudgeCopy: MemberCtaCopy?
@@ -156,9 +168,13 @@ final class HomeViewModel: ObservableObject {
     private var recordPrefillAmount: Double?
     private var lastAutoRecommendedCategory: HomeItem.Category?
     private var pendingCategoryCorrectionFrom: HomeItem.Category?
+    private var itemDerivedCache = ItemDerivedCache()
+    private var itemDerivedCacheDayKey: String?
+    private var itemDerivedCacheNeedsRebuild = true
 
     init() {
         items = LocalStore.loadHomeItems().sorted { $0.createdAt > $1.createdAt }
+        rebuildItemDerivedCache()
         insights = LocalStore.loadDailyInsights().sorted { $0.createdAt > $1.createdAt }
         if let data = UserDefaults.standard.data(forKey: "latest_action_card_v1"),
            let card = try? JSONDecoder().decode(ActionCardData.self, from: data) {
@@ -1545,12 +1561,18 @@ final class HomeViewModel: ObservableObject {
     }
 
     var todayItems: [HomeItem] {
-        items.filter { Calendar.current.isDateInToday($0.createdAt) && $0.amount > 0 }
-            .sorted { $0.createdAt > $1.createdAt }
+        ensureItemDerivedCacheFresh()
+        return itemDerivedCache.todayPositiveItems
     }
 
     var recentThreeItems: [HomeItem] {
-        Array(todayItems.prefix(3))
+        ensureItemDerivedCacheFresh()
+        return itemDerivedCache.recentThreeTodayItems
+    }
+
+    var currentYearItems: [HomeItem] {
+        ensureItemDerivedCacheFresh()
+        return itemDerivedCache.currentYearItems
     }
 
     var periodItems: [HomeItem] {
@@ -1838,16 +1860,52 @@ final class HomeViewModel: ObservableObject {
     }
 
     func filteredItems(in period: Period) -> [HomeItem] {
-        let calendar = Calendar.current
-        return items.filter { item in
-            switch period {
-            case .week:
-                guard let interval = PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: .now) else { return false }
-                return item.createdAt >= interval.start && item.createdAt < interval.end
-            case .month:
-                return calendar.isDate(item.createdAt, equalTo: .now, toGranularity: .month)
-            }
+        ensureItemDerivedCacheFresh()
+        switch period {
+        case .week:
+            return itemDerivedCache.currentWeekItems
+        case .month:
+            return itemDerivedCache.currentMonthItems
         }
+    }
+
+    func items(in dateInterval: DateInterval) -> [HomeItem] {
+        items
+            .filter { $0.createdAt >= dateInterval.start && $0.createdAt < dateInterval.end }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    private func rebuildItemDerivedCache(now: Date = Date()) {
+        let calendar = Calendar.current
+        let sortedItems = items.sorted { $0.createdAt > $1.createdAt }
+        let currentWeekInterval = PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: now)
+        let todayPositiveItems = sortedItems.filter {
+            calendar.isDate($0.createdAt, inSameDayAs: now) && $0.amount > 0
+        }
+        let currentWeekItems = sortedItems.filter { item in
+            guard let currentWeekInterval else { return false }
+            return item.createdAt >= currentWeekInterval.start && item.createdAt < currentWeekInterval.end
+        }
+        let currentMonthItems = sortedItems.filter {
+            calendar.isDate($0.createdAt, equalTo: now, toGranularity: .month)
+        }
+        let currentYearItems = sortedItems.filter {
+            calendar.isDate($0.createdAt, equalTo: now, toGranularity: .year)
+        }
+        itemDerivedCache = ItemDerivedCache(
+            todayPositiveItems: todayPositiveItems,
+            recentThreeTodayItems: Array(todayPositiveItems.prefix(3)),
+            currentWeekItems: currentWeekItems,
+            currentMonthItems: currentMonthItems,
+            currentYearItems: currentYearItems
+        )
+        itemDerivedCacheDayKey = Self.dayKey(for: now)
+        itemDerivedCacheNeedsRebuild = false
+    }
+
+    private func ensureItemDerivedCacheFresh(now: Date = Date()) {
+        guard itemDerivedCacheNeedsRebuild || itemDerivedCacheDayKey != Self.dayKey(for: now) else { return }
+        rebuildItemDerivedCache(now: now)
     }
 
     private func weeklyAverageExpense() -> Double {

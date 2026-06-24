@@ -5,6 +5,29 @@ private struct TodaySwipeDragState: Equatable {
     let translation: CGFloat
 }
 
+private enum TodayPlaybackPrompt: Equatable {
+    case firstUse
+    case quotaExhausted(String)
+
+    var title: String {
+        switch self {
+        case .firstUse:
+            return "今日回放，适合晚一点听"
+        case .quotaExhausted:
+            return "今天的免费回放已用完"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .firstUse:
+            return "它会把今天已经记下的几笔按时间翻一遍。免费用户每天可听 3 次；白天可以先继续记，晚上记录差不多了再回看，会更完整。"
+        case .quotaExhausted(let message):
+            return message
+        }
+    }
+}
+
 struct HomeView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
@@ -20,7 +43,7 @@ struct HomeView: View {
     @State private var todayInlineEditingItemID: UUID?
     @State private var todaySwipedItemID: UUID?
     @State private var todayDeletingItemID: UUID?
-    @State private var todayPlaybackQuotaMessage: String?
+    @State private var todayPlaybackPrompt: TodayPlaybackPrompt?
     @State private var petHint: String = "有一笔就记一笔，晚点也能补。"
     @State private var petBubbleVisible = false
     @State private var todayBillsFocusPulse = false
@@ -28,6 +51,7 @@ struct HomeView: View {
     @State private var highlightedSavedItemID: UUID?
     @GestureState private var todaySwipeDragState: TodaySwipeDragState?
     private let dailyQuotaStore = DailyFeatureQuotaStore()
+    private static let todayPlaybackFirstUsePromptSeenKey = "today_playback_first_use_prompt_seen_v1"
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -56,8 +80,8 @@ struct HomeView: View {
                     .padding(.bottom, 102)
             }
 
-            if todayPlaybackQuotaMessage != nil {
-                todayPlaybackQuotaOverlay
+            if todayPlaybackPrompt != nil {
+                todayPlaybackPromptOverlay
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
                     .zIndex(20)
             }
@@ -523,37 +547,56 @@ struct HomeView: View {
         guard guidance == .firstRecordTodayPlayback else { return }
         showFirstRecordToast = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            requestTodayPlayback()
+            requestTodayPlayback(allowsFirstUsePrompt: false)
             showFirstRecordToast = false
             homeViewModel.consumeRouteGuidance(.firstRecordTodayPlayback)
         }
     }
 
-    private func requestTodayPlayback() {
+    private func requestTodayPlayback(allowsFirstUsePrompt: Bool = true) {
         guard !homeViewModel.todayItems.isEmpty else {
             showPlayback = true
             return
         }
         let isMember = settingsViewModel.settings.hasMemberAccess
         guard dailyQuotaStore.canPlayTodayPlayback(isMember: isMember) else {
-            todayPlaybackQuotaMessage = "今日免费回放剩余 0/\(DailyFeatureQuotaStore.todayPlaybackFreeLimit) 次，明天会自动刷新。建议晚上记录差不多后再听，今天还可以继续记账。"
+            todayPlaybackPrompt = .quotaExhausted("今日免费回放剩余 0/\(DailyFeatureQuotaStore.todayPlaybackFreeLimit) 次，明天会自动刷新。今天还可以继续记账，晚一点记录更完整时再回看也很好。")
             return
         }
+
+        if allowsFirstUsePrompt && shouldShowTodayPlaybackFirstUsePrompt(isMember: isMember) {
+            markTodayPlaybackFirstUsePromptSeen()
+            todayPlaybackPrompt = .firstUse
+            return
+        }
+
+        startTodayPlayback(isMember: isMember)
+    }
+
+    private func shouldShowTodayPlaybackFirstUsePrompt(isMember: Bool) -> Bool {
+        !isMember && !UserDefaults.standard.bool(forKey: Self.todayPlaybackFirstUsePromptSeenKey)
+    }
+
+    private func markTodayPlaybackFirstUsePromptSeen() {
+        UserDefaults.standard.set(true, forKey: Self.todayPlaybackFirstUsePromptSeenKey)
+    }
+
+    private func startTodayPlayback(isMember: Bool) {
         dailyQuotaStore.markTodayPlaybackStarted(isMember: isMember)
         showPlayback = true
     }
 
-    private var todayPlaybackQuotaOverlay: some View {
+    private var todayPlaybackPromptOverlay: some View {
         ZStack {
             Color.black.opacity(0.18)
                 .ignoresSafeArea()
                 .onTapGesture {
-                    dismissTodayPlaybackQuotaPrompt()
+                    dismissTodayPlaybackPrompt()
                 }
 
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "play.circle.fill")
+                    Image(systemName: todayPlaybackPrompt == .firstUse ? "clock.fill" : "play.circle.fill")
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(AppColors.accent)
                         .frame(width: 36, height: 36)
@@ -563,10 +606,10 @@ struct HomeView: View {
                         )
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("今天的免费回放已用完")
+                        Text(todayPlaybackPrompt?.title ?? "")
                             .font(.system(size: 19, weight: .bold))
                             .foregroundStyle(AppColors.text)
-                        Text(todayPlaybackQuotaMessage ?? "")
+                        Text(todayPlaybackPrompt?.message ?? "")
                             .font(.system(size: 14, weight: .medium))
                             .lineSpacing(4)
                             .foregroundStyle(AppColors.subtext)
@@ -576,9 +619,9 @@ struct HomeView: View {
 
                 HStack(spacing: 10) {
                     Button {
-                        dismissTodayPlaybackQuotaPrompt()
+                        dismissTodayPlaybackPrompt()
                     } label: {
-                        Text("知道了")
+                        Text(todayPlaybackPrompt == .firstUse ? "晚点再说" : "知道了")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(AppColors.text.opacity(0.82))
                             .frame(maxWidth: .infinity, minHeight: 46)
@@ -594,10 +637,18 @@ struct HomeView: View {
                     .buttonStyle(.plain)
 
                     Button {
-                        dismissTodayPlaybackQuotaPrompt()
-                        onShowMemberPricing?()
+                        switch todayPlaybackPrompt {
+                        case .firstUse:
+                            dismissTodayPlaybackPrompt()
+                            startTodayPlayback(isMember: settingsViewModel.settings.hasMemberAccess)
+                        case .quotaExhausted:
+                            dismissTodayPlaybackPrompt()
+                            onShowMemberPricing?()
+                        case .none:
+                            dismissTodayPlaybackPrompt()
+                        }
                     } label: {
-                        Text("了解不限回放")
+                        Text(todayPlaybackPrompt == .firstUse ? "现在听一遍" : "了解不限回放")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity, minHeight: 46)
@@ -637,12 +688,12 @@ struct HomeView: View {
             .padding(.horizontal, 26)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(.easeInOut(duration: 0.18), value: todayPlaybackQuotaMessage != nil)
+        .animation(.easeInOut(duration: 0.18), value: todayPlaybackPrompt != nil)
     }
 
-    private func dismissTodayPlaybackQuotaPrompt() {
+    private func dismissTodayPlaybackPrompt() {
         withAnimation(.easeInOut(duration: 0.18)) {
-            todayPlaybackQuotaMessage = nil
+            todayPlaybackPrompt = nil
         }
     }
 
@@ -1724,6 +1775,12 @@ struct BillPlaybackSheet: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(AppColors.subtext)
                     .lineLimit(1)
+                if let hint = todayPlaybackUsageHint {
+                    Text(hint)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppColors.subtext.opacity(0.76))
+                        .lineLimit(1)
+                }
             }
             Spacer()
             Text("\(todayItems.count) 笔")
@@ -1740,6 +1797,11 @@ struct BillPlaybackSheet: View {
         if playbackDone { return "今天的记录已经看完" }
         if isPlaying { return "按时间翻一遍今天" }
         return "暂停在这里"
+    }
+
+    private var todayPlaybackUsageHint: String? {
+        guard !settingsViewModel.settings.hasMemberAccess else { return nil }
+        return "适合晚上回看；免费每天 \(DailyFeatureQuotaStore.todayPlaybackFreeLimit) 次。"
     }
 
     private var todayPlaybackSheetHeight: CGFloat {

@@ -51,23 +51,21 @@ struct StatsWebView: View {
             let cal = Calendar.current
             let start = cal.startOfDay(for: customStartDate)
             let end = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: customEndDate)) ?? customEndDate
-            items = homeViewModel.items.filter { $0.createdAt >= start && $0.createdAt < end }
+            items = start < end ? homeViewModel.items(in: DateInterval(start: start, end: end)) : []
         } else {
             switch selectedPeriod {
             case .week:
-                if let interval = PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: .now) {
-                    items = homeViewModel.items.filter { $0.createdAt >= interval.start && $0.createdAt < interval.end }
-                } else {
-                    items = []
-                }
-            case .month: items = homeViewModel.items.filter { Calendar.current.isDate($0.createdAt, equalTo: .now, toGranularity: .month) }
-            case .year: items = homeViewModel.items.filter { Calendar.current.isDate($0.createdAt, equalTo: .now, toGranularity: .year) }
+                items = homeViewModel.filteredItems(in: .week)
+            case .month:
+                items = homeViewModel.filteredItems(in: .month)
+            case .year:
+                items = homeViewModel.currentYearItems
             }
         }
         if let cat = selectedCategory {
             items = items.filter { $0.category == cat }
         }
-        return items.sorted { $0.createdAt > $1.createdAt }
+        return items
     }
 
     private var totalExpense: Double {
@@ -168,17 +166,12 @@ struct StatsWebView: View {
         if useCustomRange || selectedPeriod == .year {
             return filteredItems
         }
-        let calendar = Calendar.current
         let items: [HomeItem]
         switch selectedPeriod {
         case .week:
-            if let interval = PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: .now) {
-                items = homeViewModel.items.filter { $0.createdAt >= interval.start && $0.createdAt < interval.end }
-            } else {
-                items = []
-            }
+            items = homeViewModel.filteredItems(in: .week)
         case .month:
-            items = homeViewModel.items.filter { calendar.isDate($0.createdAt, equalTo: .now, toGranularity: .month) }
+            items = homeViewModel.filteredItems(in: .month)
         case .year:
             items = []
         }

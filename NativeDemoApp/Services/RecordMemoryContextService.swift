@@ -31,11 +31,6 @@ enum RecordMemoryContextService {
         let title = input.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let text = "\(title) \(input.baseEmotionTag) \(input.category.rawValue)".lowercased()
         let scene = sceneKind(for: input.category, text: text)
-        let existingSceneItems = input.existingItems.filter { item in
-            sceneKind(for: item.category, text: "\(item.title) \(item.emotionTag) \(item.category.rawValue)") == scene
-        }
-        let sceneCount = existingSceneItems.count + 1
-
         if let lateCommuteLine = lateWorkCommuteLine(
             date: input.date,
             weather: input.weather,
@@ -55,19 +50,6 @@ enum RecordMemoryContextService {
             return weatherLine
         }
 
-        if let milestoneLine = milestoneLine(scene: scene, count: sceneCount) {
-            return milestoneLine
-        }
-
-        let streak = consecutiveSceneDays(
-            scene: scene,
-            date: input.date,
-            existingItems: input.existingItems
-        )
-        if let streakLine = streakLine(scene: scene, days: streak) {
-            return streakLine
-        }
-
         if let weekendLine = weekendOutingLine(
             itemCategory: input.category,
             title: title,
@@ -75,10 +57,6 @@ enum RecordMemoryContextService {
             existingItems: input.existingItems
         ) {
             return weekendLine
-        }
-
-        if let repeatLine = repeatLine(scene: scene, count: sceneCount) {
-            return repeatLine
         }
 
         return input.baseEmotionTag
@@ -221,78 +199,6 @@ enum RecordMemoryContextService {
         return .normal
     }
 
-    private static func milestoneLine(scene: MemoryScene, count: Int) -> String? {
-        switch scene {
-        case .fitness:
-            if count == 1 { return "第一次健身，好的开始" }
-            if count == 10 { return "第10次健身，坚持有形状" }
-            if count > 10, count % 10 == 0 { return "第\(count)次健身，继续保持" }
-        case .commute:
-            if count == 10 { return "第10次通勤，路也熟了" }
-        case .charging:
-            if count == 1 { return "第一次充电，车也续上了" }
-            if count == 10 { return "第10次充电，补能成习惯" }
-        case .coffee:
-            if count == 10 { return "第10次饮品补给，辛苦了" }
-        case .medicine:
-            if count == 1 { return "第一次身体记录，先照顾好" }
-        default:
-            break
-        }
-        return nil
-    }
-
-    private static func consecutiveSceneDays(
-        scene: MemoryScene,
-        date: Date,
-        existingItems: [HomeItem]
-    ) -> Int {
-        let calendar = Calendar.current
-        let currentDay = calendar.startOfDay(for: date)
-        let sceneDays = Set(existingItems.compactMap { item -> Date? in
-            let itemText = "\(item.title) \(item.emotionTag) \(item.category.rawValue)"
-            guard sceneKind(for: item.category, text: itemText) == scene else { return nil }
-            return calendar.startOfDay(for: item.createdAt)
-        })
-
-        var streak = 1
-        var cursor = currentDay
-        while let previous = calendar.date(byAdding: .day, value: -1, to: cursor),
-              sceneDays.contains(previous) {
-            streak += 1
-            cursor = previous
-        }
-        return streak
-    }
-
-    private static func streakLine(scene: MemoryScene, days: Int) -> String? {
-        guard days >= 3 else { return nil }
-        switch scene {
-        case .fitness:
-            return "连续\(days)天动起来了"
-        case .commute:
-            return "连续\(days)天通勤在线"
-        case .charging:
-            return "连续\(days)天补能出行"
-        case .dining:
-            return "连续\(days)天好好吃饭"
-        case .coffee:
-            return "连续\(days)天饮品补给"
-        case .groceries:
-            return "连续\(days)天把饭桌备好"
-        case .medicine:
-            return "连续\(days)天照顾身体"
-        case .social:
-            return "连续\(days)天有人情往来"
-        case .shopping:
-            return "连续\(days)天添置生活"
-        case .home:
-            return "连续\(days)天照看家里"
-        case .other(_):
-            return "连续\(days)天都有记录"
-        }
-    }
-
     private static func weekendOutingLine(
         itemCategory: HomeItem.Category,
         title: String,
@@ -317,24 +223,6 @@ enum RecordMemoryContextService {
             return "周末出门的路线"
         }
         return nil
-    }
-
-    private static func repeatLine(scene: MemoryScene, count: Int) -> String? {
-        guard count >= 5, count % 5 == 0 else { return nil }
-        switch scene {
-        case .dining:
-            return "第\(count)次吃饭记录"
-        case .commute:
-            return "第\(count)次通勤记录"
-        case .charging:
-            return "第\(count)次充电记录"
-        case .groceries:
-            return "第\(count)次备好饭桌"
-        case .social:
-            return "第\(count)次心意往来"
-        default:
-            return nil
-        }
     }
 
     private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
