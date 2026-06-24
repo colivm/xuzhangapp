@@ -161,7 +161,7 @@ struct HomeView: View {
                 subtitle: homeViewModel.todayItems.isEmpty ? "有记录后可播放" : "十几秒叙完今天",
                 systemImage: "play.circle.fill",
                 isPrimary: false,
-                action: requestTodayPlayback
+                action: { requestTodayPlayback() }
             )
         }
     }
