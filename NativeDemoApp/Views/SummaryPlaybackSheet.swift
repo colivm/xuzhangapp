@@ -1,6 +1,187 @@
 import SwiftUI
 import UIKit
 
+private enum StoryBackdropProfile {
+    case rain
+    case travel
+    case lateCity
+    case warmDaily
+    case defaultSoft
+
+    static func detect(from texts: [String]) -> StoryBackdropProfile {
+        let merged = texts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !merged.isEmpty else { return .defaultSoft }
+
+        if containsAny(merged, ["雨", "雨天", "下雨", "雨里"]) {
+            return .rain
+        }
+        if containsAny(merged, ["外地", "异地", "出行", "旅行", "高铁", "机票", "酒店", "通勤出行"]) {
+            return .travel
+        }
+        if containsAny(merged, ["深夜", "夜里", "晚上", "晚归", "加班", "回家路上", "夜路", "晚间"]) {
+            return .lateCity
+        }
+        if containsAny(merged, ["早餐", "咖啡", "奶茶", "午饭", "晚饭", "家里", "聚餐", "周末", "热乎", "吃饭"]) {
+            return .warmDaily
+        }
+        return .defaultSoft
+    }
+
+    var gradientColors: [Color] {
+        switch self {
+        case .rain:
+            return [Color(red: 0.78, green: 0.86, blue: 0.92), Color(red: 0.90, green: 0.95, blue: 0.98), AppColors.bg]
+        case .travel:
+            return [Color(red: 0.86, green: 0.93, blue: 0.89), Color(red: 0.97, green: 0.95, blue: 0.84), AppColors.bg]
+        case .lateCity:
+            return [Color(red: 0.79, green: 0.84, blue: 0.93), Color(red: 0.92, green: 0.93, blue: 0.98), AppColors.bg]
+        case .warmDaily:
+            return [Color(red: 1.00, green: 0.93, blue: 0.86), Color(red: 0.93, green: 0.97, blue: 0.90), AppColors.bg]
+        case .defaultSoft:
+            return [AppColors.heroGradientPink.opacity(0.34), AppColors.heroGradientTeal.opacity(0.38), AppColors.bg]
+        }
+    }
+
+    private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.localizedCaseInsensitiveContains($0) }
+    }
+}
+
+private struct StoryDynamicBackdrop: View {
+    let profile: StoryBackdropProfile
+    var opacity: Double = 1
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: profile.gradientColors.map { $0.opacity(0.32 * opacity) },
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { timeline in
+                Canvas { context, size in
+                    let time = timeline.date.timeIntervalSinceReferenceDate
+                    switch profile {
+                    case .rain:
+                        drawRain(in: &context, size: size, time: time)
+                    case .travel:
+                        drawTravel(in: &context, size: size, time: time)
+                    case .lateCity:
+                        drawLateCity(in: &context, size: size, time: time)
+                    case .warmDaily:
+                        drawWarmDaily(in: &context, size: size, time: time)
+                    case .defaultSoft:
+                        drawPaperFlow(in: &context, size: size, time: time)
+                    }
+                }
+            }
+            .opacity(opacity)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func drawRain(in context: inout GraphicsContext, size: CGSize, time: TimeInterval) {
+        for index in 0..<68 {
+            let seed = Double(index + 1)
+            let lane = (seed * 0.073).truncatingRemainder(dividingBy: 1)
+            let drift = 36 + seed.truncatingRemainder(dividingBy: 22)
+            let speed = 0.42 + seed.truncatingRemainder(dividingBy: 9) / 30
+            let progress = (time * speed + seed * 0.041).truncatingRemainder(dividingBy: 1)
+            let x = lane * size.width - 22 + progress * drift
+            let y = progress * (size.height + 64) - 40
+            let length = 14 + seed.truncatingRemainder(dividingBy: 12)
+            var path = Path()
+            path.move(to: CGPoint(x: x, y: y))
+            path.addLine(to: CGPoint(x: x + length * 0.30, y: y + length))
+            context.stroke(
+                path,
+                with: .color(Color.white.opacity(0.16)),
+                style: StrokeStyle(lineWidth: seed.truncatingRemainder(dividingBy: 4) == 0 ? 1.2 : 0.8, lineCap: .round)
+            )
+        }
+    }
+
+    private func drawTravel(in context: inout GraphicsContext, size: CGSize, time: TimeInterval) {
+        for index in 0..<4 {
+            let offset = CGFloat(index) * size.height * 0.16 + size.height * 0.18
+            var path = Path()
+            path.move(to: CGPoint(x: -20, y: offset))
+            path.addCurve(
+                to: CGPoint(x: size.width + 24, y: offset + 8),
+                control1: CGPoint(x: size.width * 0.28, y: offset - 34),
+                control2: CGPoint(x: size.width * 0.72, y: offset + 42)
+            )
+            context.stroke(
+                path,
+                with: .color(Color.white.opacity(0.14)),
+                style: StrokeStyle(lineWidth: 1.2, lineCap: .round, dash: [4, 10])
+            )
+
+            let progress = (time * (0.08 + Double(index) * 0.02)).truncatingRemainder(dividingBy: 1)
+            let x = CGFloat(progress) * (size.width + 44) - 22
+            let y = offset + CGFloat(sin(time + Double(index))) * 8
+            context.fill(
+                Path(ellipseIn: CGRect(x: x, y: y, width: 6, height: 6)),
+                with: .color(Color.white.opacity(0.22))
+            )
+        }
+    }
+
+    private func drawLateCity(in context: inout GraphicsContext, size: CGSize, time: TimeInterval) {
+        for index in 0..<18 {
+            let seed = Double(index + 1)
+            let x = CGFloat((seed * 0.131).truncatingRemainder(dividingBy: 1)) * size.width
+            let height = size.height * (0.16 + CGFloat(seed.truncatingRemainder(dividingBy: 5)) * 0.06)
+            let progress = (time * (0.10 + seed / 220)).truncatingRemainder(dividingBy: 1)
+            let y = CGFloat(progress) * (size.height + height) - height
+            let rect = CGRect(x: x, y: y, width: 2.2, height: height)
+            context.fill(
+                Path(roundedRect: rect, cornerRadius: 2),
+                with: .color(Color.white.opacity(0.10))
+            )
+        }
+    }
+
+    private func drawWarmDaily(in context: inout GraphicsContext, size: CGSize, time: TimeInterval) {
+        for index in 0..<5 {
+            let baseX = size.width * (0.18 + CGFloat(index) * 0.16)
+            let sway = CGFloat(sin(time * 0.8 + Double(index) * 0.7)) * 8
+            var path = Path()
+            path.move(to: CGPoint(x: baseX, y: size.height * 0.80))
+            path.addCurve(
+                to: CGPoint(x: baseX + sway, y: size.height * 0.18),
+                control1: CGPoint(x: baseX - 18, y: size.height * 0.58),
+                control2: CGPoint(x: baseX + 26, y: size.height * 0.36)
+            )
+            context.stroke(
+                path,
+                with: .color(Color.white.opacity(0.10)),
+                style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
+            )
+        }
+    }
+
+    private func drawPaperFlow(in context: inout GraphicsContext, size: CGSize, time: TimeInterval) {
+        for index in 0..<8 {
+            let y = size.height * (0.12 + CGFloat(index) * 0.10)
+            let drift = CGFloat(cos(time * 0.3 + Double(index))) * 6
+            var path = Path()
+            path.move(to: CGPoint(x: 0, y: y))
+            path.addCurve(
+                to: CGPoint(x: size.width, y: y + drift),
+                control1: CGPoint(x: size.width * 0.28, y: y - 10),
+                control2: CGPoint(x: size.width * 0.72, y: y + 10)
+            )
+            context.stroke(
+                path,
+                with: .color(Color.white.opacity(0.08)),
+                style: StrokeStyle(lineWidth: 1)
+            )
+        }
+    }
+}
+
 struct SummaryPlaybackMemberPitch: Equatable {
     let headline: String
     let detail: String
@@ -48,6 +229,10 @@ struct SummaryPlaybackSheet: View {
                 .id(currentChapter?.id ?? "empty")
                 .transition(.opacity)
                 .ignoresSafeArea()
+
+            StoryDynamicBackdrop(profile: backdropProfile, opacity: 0.9)
+                .ignoresSafeArea()
+                .transition(.opacity)
 
             VStack(spacing: 18) {
                 Capsule()
@@ -105,8 +290,25 @@ struct SummaryPlaybackSheet: View {
     }
 
     private var backgroundGradient: LinearGradient {
-        let palette = chapterPalette(for: currentChapter)
+        let palette = chapterPalette(for: currentChapter, profile: backdropProfile)
         return LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    private var backdropProfile: StoryBackdropProfile {
+        let chapterTexts = currentChapter.map { chapter in
+            [
+                chapter.title,
+                chapter.narration.plain,
+                chapter.narration.warm
+            ] + Array(chapter.metrics.values)
+        } ?? []
+        return StoryBackdropProfile.detect(
+            from: chapterTexts + [
+                playback.title,
+                playback.teaserLine,
+                playbackMemoryLine ?? ""
+            ]
+        )
     }
 
     private var shareCardPrivacyOverlay: some View {
@@ -322,6 +524,7 @@ struct SummaryPlaybackSheet: View {
             chapterRangeLabel(chapter)
             chapterNarration(chapter)
             chapterSupportView(for: chapter)
+            chapterElementStrip(for: chapter)
         }
         .id(chapter.id)
         .transition(.opacity.combined(with: .scale(scale: 0.98)))
@@ -510,6 +713,85 @@ struct SummaryPlaybackSheet: View {
             )
     }
 
+    @ViewBuilder
+    private func chapterElementStrip(for chapter: SummaryChapter) -> some View {
+        let chips = chapterElementChips(for: chapter)
+        if !chips.isEmpty {
+            HStack(spacing: 7) {
+                ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
+                    HStack(spacing: 5) {
+                        Image(systemName: chip.symbol)
+                            .font(.system(size: 10, weight: .bold))
+                        Text(chip.text)
+                            .font(.system(size: 11, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                    }
+                    .foregroundStyle(chapterAccent(for: chapter).opacity(0.86))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 7)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.white.opacity(0.44))
+                    )
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(chapterAccent(for: chapter).opacity(0.10), lineWidth: 0.8)
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func chapterElementChips(for chapter: SummaryChapter) -> [(symbol: String, text: String)] {
+        var chips: [(String, String)] = []
+
+        if let lifeMark = cleanMetric(chapter.metrics["lifeMarkLine"]) {
+            chips.append(("sparkles", compactChipText(lifeMark, prefix: "印记")))
+        }
+        if let scene = cleanMetric(chapter.metrics["sceneMemoryLine"]) {
+            chips.append(("map", compactChipText(scene, prefix: "场景")))
+        }
+        if let scent = cleanMetric(chapter.metrics["scentWords"]) {
+            let first = scent
+                .split(separator: "、")
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .first { !$0.isEmpty } ?? scent
+            chips.append(("text.quote", compactChipText(first, prefix: "词")))
+        }
+        if let voice = voiceTitle(for: chapter) {
+            chips.append(("quote.bubble", compactChipText(voice, prefix: "备注")))
+        }
+        if let busiest = cleanMetric(chapter.metrics["busiestDay"]) {
+            chips.append(("calendar", "\(busiest)更密"))
+        }
+        if let category = cleanMetric(chapter.metrics["category"] ?? chapter.metrics["topCategory"]) {
+            chips.append(("chart.pie", category))
+        }
+
+        var seen = Set<String>()
+        return chips.filter { chip in
+            guard !seen.contains(chip.1) else { return false }
+            seen.insert(chip.1)
+            return true
+        }.prefix(3).map { $0 }
+    }
+
+    private func cleanMetric(_ value: String?) -> String? {
+        let text = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return text.isEmpty ? nil : text
+    }
+
+    private func compactChipText(_ text: String, prefix: String) -> String {
+        let cleaned = text
+            .replacingOccurrences(of: "这段里", with: "")
+            .replacingOccurrences(of: "这一周", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let short = cleaned.count > 8 ? "\(cleaned.prefix(8))..." : cleaned
+        return "\(prefix)·\(short)"
+    }
+
     private func softHintText(for chapter: SummaryChapter) -> String? {
         if isIntroChapter(chapter) {
             return chapter.metrics["range"] ?? playback.rangeLabel
@@ -592,10 +874,22 @@ struct SummaryPlaybackSheet: View {
         return "calendar"
     }
 
-    private func chapterPalette(for chapter: SummaryChapter?) -> [Color] {
+    private func chapterPalette(for chapter: SummaryChapter?, profile: StoryBackdropProfile) -> [Color] {
         let warmBase: [Color]
         let coolBase: [Color]
-        if let chapter, isRhythmChapter(chapter) {
+        if profile == .rain {
+            warmBase = [Color(red: 0.82, green: 0.89, blue: 0.94), Color(red: 0.92, green: 0.96, blue: 0.98), AppColors.bg]
+            coolBase = [Color(red: 0.77, green: 0.84, blue: 0.91), Color(red: 0.90, green: 0.95, blue: 0.98), AppColors.bg]
+        } else if profile == .travel {
+            warmBase = [Color(red: 0.92, green: 0.96, blue: 0.88), Color(red: 1.00, green: 0.94, blue: 0.84), AppColors.bg]
+            coolBase = [Color(red: 0.86, green: 0.92, blue: 0.88), Color(red: 0.95, green: 0.97, blue: 0.92), AppColors.bg]
+        } else if profile == .lateCity {
+            warmBase = [Color(red: 0.89, green: 0.91, blue: 0.98), Color(red: 0.93, green: 0.95, blue: 1.00), AppColors.bg]
+            coolBase = [Color(red: 0.82, green: 0.86, blue: 0.95), Color(red: 0.92, green: 0.94, blue: 0.99), AppColors.bg]
+        } else if profile == .warmDaily {
+            warmBase = [Color(red: 1.00, green: 0.93, blue: 0.86), Color(red: 0.94, green: 0.97, blue: 0.90), AppColors.bg]
+            coolBase = [Color(red: 0.94, green: 0.92, blue: 0.88), Color(red: 0.97, green: 0.96, blue: 0.92), AppColors.bg]
+        } else if let chapter, isRhythmChapter(chapter) {
             warmBase = [Color(red: 0.88, green: 0.97, blue: 0.96), Color(red: 1.00, green: 0.93, blue: 0.86), AppColors.bg]
             coolBase = [Color(red: 0.86, green: 0.93, blue: 0.96), Color(red: 0.94, green: 0.97, blue: 0.98), AppColors.bg]
         } else if let chapter, isScentChapter(chapter) || isCategoryChapter(chapter) {
@@ -1045,14 +1339,13 @@ private struct WeeklyStoryShareCardView: View {
     private let green = Color(hex: "7fb39f")
     private let deepGreen = Color(hex: "486f5d")
     private let softGreen = Color(hex: "e8f2e9")
+    private let rainGreen = Color(hex: "6a8a96")
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color(hex: "dcebe0"), Color(hex: "f6f8ed"), Color(hex: "fff2df")],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            storyGradient
+
+            StoryDynamicBackdrop(profile: backdropProfile, opacity: 0.82)
 
             storyPaperStack
                 .padding(.horizontal, 30)
@@ -1082,6 +1375,9 @@ private struct WeeklyStoryShareCardView: View {
                     .padding(.top, -10)
                     .padding(.leading, 28)
 
+                storySignalPanel
+                    .padding(.top, 16)
+
                 Spacer(minLength: 24)
 
                 storyDataRows
@@ -1107,6 +1403,36 @@ private struct WeeklyStoryShareCardView: View {
         }
         .frame(width: 390, height: 580)
         .clipped()
+    }
+
+    private var backdropProfile: StoryBackdropProfile {
+        StoryBackdropProfile.detect(
+            from: [
+                payload.headline,
+                payload.subtitle,
+                payload.anchorLine ?? "",
+                payload.topCategory,
+                payload.insight.fact,
+                payload.insight.care
+            ] + payload.insight.tags
+        )
+    }
+
+    private var storyGradient: LinearGradient {
+        let colors: [Color]
+        switch backdropProfile {
+        case .rain:
+            colors = [Color(hex: "d4e1e7"), Color(hex: "eef5f8"), Color(hex: "f8efe2")]
+        case .travel:
+            colors = [Color(hex: "dfead8"), Color(hex: "f7f2da"), Color(hex: "f8efe2")]
+        case .lateCity:
+            colors = [Color(hex: "d9dff1"), Color(hex: "eef1fb"), Color(hex: "f4eadf")]
+        case .warmDaily:
+            colors = [Color(hex: "f7e7d5"), Color(hex: "eef5e5"), Color(hex: "fff2df")]
+        case .defaultSoft:
+            colors = [Color(hex: "dcebe0"), Color(hex: "f6f8ed"), Color(hex: "fff2df")]
+        }
+        return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
     private var storyPaperStack: some View {
@@ -1197,6 +1523,88 @@ private struct WeeklyStoryShareCardView: View {
                     .stroke(green.opacity(0.18), lineWidth: 1)
             )
             .rotationEffect(.degrees(1.4))
+    }
+
+    private var storySignalPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let anchor = payload.anchorLine?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !anchor.isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("这周最有画面的一格")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(muted.opacity(0.82))
+                    Text(anchor)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(ink.opacity(0.82))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
+                }
+            }
+
+            HStack(spacing: 8) {
+                ForEach(Array(storySignals.enumerated()), id: \.offset) { _, signal in
+                    storySignalPill(signal)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.white.opacity(0.44))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.62), lineWidth: 1)
+        )
+    }
+
+    private var storySignals: [(symbol: String, text: String)] {
+        var signals: [(String, String)] = []
+        if let first = payload.categorySlices.first {
+            let ratio = Int((first.ratio * 100).rounded())
+            signals.append(("chart.pie", "\(first.label) \(ratio)%"))
+        }
+        signals.append(("\(payload.primaryMetricEmoji)", "\(activeDays)天有记录"))
+        if let firstTag = payload.insight.tags.first {
+            signals.append(("sparkles", compactStoryText(firstTag)))
+        }
+        return Array(signals.prefix(3))
+    }
+
+    private var activeDays: Int {
+        max(1, payload.dailyCountTrend.filter { $0.1 > 0 }.count)
+    }
+
+    private func storySignalPill(_ signal: (symbol: String, text: String)) -> some View {
+        HStack(spacing: 5) {
+            if signal.symbol.count == 1 || signal.symbol.count == 2 {
+                Text(signal.symbol)
+                    .font(.system(size: 11))
+            } else {
+                Image(systemName: signal.symbol)
+                    .font(.system(size: 10, weight: .bold))
+            }
+            Text(signal.text)
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.76)
+        }
+        .foregroundStyle(backdropProfile == .rain ? rainGreen.opacity(0.96) : deepGreen.opacity(0.92))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.56))
+        )
+    }
+
+    private func compactStoryText(_ text: String) -> String {
+        let cleaned = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "#", with: "")
+        return cleaned.count > 10 ? "\(cleaned.prefix(10))..." : cleaned
     }
 
     private var storyDataRows: some View {

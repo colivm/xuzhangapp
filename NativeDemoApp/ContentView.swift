@@ -193,7 +193,6 @@ struct ContentView: View {
     @State private var showMemberPricing = false
     @State private var pricingHighlightPlanId: String?
     @State private var pricingEntryContext: MemberPricingEntryContext = .settings
-    @State private var showMinimalOnboarding = false
     @State private var statsTraceOpenRequestID: UUID?
     @State private var settingsAppearanceOpenRequestID: UUID?
     @State private var lastMemberStatusRefreshAt: Date?
@@ -268,26 +267,6 @@ struct ContentView: View {
                     pricingHighlightPlanId = nil
                     pricingEntryContext = .settings
                 }
-        }
-        .sheet(isPresented: $showMinimalOnboarding) {
-            MinimalOnboardingSheet(
-                onStartFirstRecord: {
-                    showMinimalOnboarding = false
-                    selectTab(.record)
-                },
-                onSkip: {
-                    showMinimalOnboarding = false
-                }
-            )
-            .presentationDetents([.height(360), .medium])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(.clear)
-            .presentationCornerRadius(28)
-        }
-        .onAppear {
-            if !MinimalOnboardingStore.hasCompleted {
-                showMinimalOnboarding = true
-            }
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -429,10 +408,7 @@ struct ContentView: View {
                     showMemberPricing: $showMemberPricing,
                     pricingHighlightPlanId: $pricingHighlightPlanId,
                     pricingEntryContext: $pricingEntryContext,
-                    openAppearanceRequestID: settingsAppearanceOpenRequestID,
-                    onShowMinimalOnboarding: {
-                        showMinimalOnboarding = true
-                    }
+                    openAppearanceRequestID: settingsAppearanceOpenRequestID
                 )
             }
         }

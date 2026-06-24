@@ -8,7 +8,6 @@ struct SettingsView: View {
     @Binding var pricingHighlightPlanId: String?
     @Binding var pricingEntryContext: MemberPricingEntryContext
     var openAppearanceRequestID: UUID?
-    var onShowMinimalOnboarding: () -> Void = {}
     @State private var showAccountSheet = false
     @State private var activeSettingsSheet: SettingsSheet?
     @State private var draftDisplayName = ""
@@ -551,8 +550,6 @@ struct SettingsView: View {
 
     private var settingsFooterLinks: some View {
         HStack(spacing: 7) {
-            Button("新手引导") { onShowMinimalOnboarding() }
-            Text("·")
             Button("数据隐私") { activeSettingsSheet = .privacy }
             Text("·")
             Link("用户协议", destination: termsURL)
@@ -1308,7 +1305,7 @@ struct SettingsView: View {
             }
             settingHelper(clearAllRecordsHelperText)
             legalLinksRow
-            Text("ICP备案号：待备案")
+            Text("ICP备案号：苏ICP备2026035096号-1")
                 .font(.system(size: 11))
                 .foregroundStyle(AppColors.subtext.opacity(0.68))
         }
@@ -1417,11 +1414,6 @@ struct SettingsView: View {
                 set: { settingsViewModel.weatherCompanionEnabled = $0 }
             ))
             settingHelper("开启这个，我就能知道今天是晴是雨，陪你说更懂你的悄悄话啦！")
-
-            // Reset guide
-            webButton("重新查看新手引导") {
-                onShowMinimalOnboarding()
-            }
         }
         .webCardPadding()
         .webCardBackground()
@@ -1471,6 +1463,10 @@ struct SettingsView: View {
                     get: { settingsViewModel.shareCardUsesAppTheme },
                     set: { settingsViewModel.shareCardUsesAppTheme = $0 }
                 ))
+                Text("会员专属：开启后，分享图会跟随当前主题配色。")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.72))
+                    .padding(.top, -12)
 
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -2907,7 +2903,7 @@ struct SettingsView: View {
                 .foregroundStyle(AppColors.subtext)
             legalLinksRow
                 .padding(.top, 4)
-            Text("ICP备案号：待备案")
+            Text("ICP备案号：苏ICP备2026035096号-1")
                 .font(.system(size: 11))
                 .foregroundStyle(AppColors.subtext.opacity(0.68))
                 .padding(.top, 2)
