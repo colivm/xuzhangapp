@@ -27,6 +27,7 @@ private enum StoryBackdropProfile {
         return .defaultSoft
     }
 
+    @MainActor
     var gradientColors: [Color] {
         switch self {
         case .rain:
