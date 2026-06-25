@@ -692,6 +692,22 @@ extension Date {
         return Date.zhBillDateOnlyFormatter.string(from: self)
     }
 
+    /// 「M月d日 周X HH:mm」——用于通勤补记等需要快速判断工作日/周末的场景。
+    var zhBillDateTimeWithWeekday: String {
+        if !Calendar.current.isDate(self, equalTo: Date(), toGranularity: .year) {
+            return Date.zhBillDateTimeWithYearAndWeekdayFormatter.string(from: self)
+        }
+        return Date.zhBillDateTimeWithWeekdayFormatter.string(from: self)
+    }
+
+    /// 「M月d日 周X」——用于洞察/记忆卡片等只显示日期且需要星期的场景。
+    var zhBillDateOnlyWithWeekday: String {
+        if !Calendar.current.isDate(self, equalTo: Date(), toGranularity: .year) {
+            return Date.zhBillDateOnlyWithYearAndWeekdayFormatter.string(from: self)
+        }
+        return Date.zhBillDateOnlyWithWeekdayFormatter.string(from: self)
+    }
+
     private static let zhBillDateTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
@@ -705,6 +721,22 @@ extension Date {
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.dateFormat = "yyyy\u{5E74}M\u{6708}d\u{65E5} HH:mm"
+        return formatter
+    }()
+
+    private static let zhBillDateTimeWithWeekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "M月d日 EEE HH:mm"
+        return formatter
+    }()
+
+    private static let zhBillDateTimeWithYearAndWeekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy年M月d日 EEE HH:mm"
         return formatter
     }()
 
@@ -729,6 +761,22 @@ extension Date {
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.dateFormat = "yyyy年M月d日"
+        return formatter
+    }()
+
+    private static let zhBillDateOnlyWithWeekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "M月d日 EEE"
+        return formatter
+    }()
+
+    private static let zhBillDateOnlyWithYearAndWeekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy年M月d日 EEE"
         return formatter
     }()
 }

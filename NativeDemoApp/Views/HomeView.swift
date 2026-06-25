@@ -2382,35 +2382,35 @@ struct BillPlaybackSheet: View {
         switch LifeSceneSemanticService.classify(item).kind {
         case .commute:
             if hour < 12 {
-                return "这笔在上班路上。早上出门这件小事，也算今天的一部分。"
+                return "早上上班路上的一笔。"
             }
             if hour >= 17 {
-                return "这笔落在下班路上，到家的那一段也算今天的一部分。"
+                return "下班回家路上的一笔。"
             }
-            return "这笔落在通勤路上，是今天在城市里移动过的证据。"
+            return "今天在路上的一段。"
         case .cityRoute:
-            return "这趟路先记下。今天不只是待在一个地方。"
+            return "今天出门办了点事。"
         case .breakfast:
-            return "先从早上的一口吃的开始，今天有了开头。"
+            return "早上先吃了口东西。"
         case .quickMeal, .workMeal:
-            return "这一餐不需要被说得很重，它只是把今天中间那一段稳住了。"
+            return "中午这顿饭先吃上了。"
         case .coffee:
             if (11..<14).contains(hour) {
-                return "这杯更像工作日中间的一次停顿，和路上的事没什么关系。"
+                return "中午买了杯喝的。"
             }
             if hour < 11 {
-                return "早上的这杯先把人叫醒一点，今天从这里慢慢展开。"
+                return "早上买了杯喝的。"
             }
             if hour >= 17 {
-                return "傍晚这杯像给后半天留一点余量，不只是提神。"
+                return "傍晚买了杯喝的。"
             }
-            return "这杯饮品被留下来，像今天中间一小段喘气的时间。"
+            return "顺手买了杯喝的。"
         case .convenienceSupply, .groceries, .homeSupply:
-            return "先把需要的东西补上，今天少一件惦记的事。"
+            return "买了点需要的东西。"
         case .medicalVisit, .medicineCare, .fitness, .bodyCare:
-            return "身体这边的安排被记下了。这笔不只是一串数字。"
+            return "今天身体这边有笔安排。"
         default:
-            return "这笔被放进今天。小事不用放大，但也不用丢掉。"
+            return "今天的一笔，记下来了。"
         }
     }
 

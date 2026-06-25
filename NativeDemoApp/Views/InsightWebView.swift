@@ -1865,7 +1865,7 @@ struct InsightWebView: View {
                 Text(draft.title)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(AppColors.text)
-                Text(draft.date.zhBillDateTime)
+                Text(draft.date.zhBillDateTimeWithWeekday)
                     .font(.system(size: 11))
                     .foregroundStyle(AppColors.subtext)
                 if case let .conflict(message) = draft.status {

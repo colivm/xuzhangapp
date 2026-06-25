@@ -154,6 +154,17 @@ enum LifeMarkService {
             requiresKeywordMatch: true
         ),
         LifeMarkDefinition(
+            id: "movie_ticket",
+            label: "看电影",
+            category: .entertainment,
+            categories: [.entertainment],
+            keywords: ["电影票", "买电影票", "看电影", "观影", "票根", "电影", "影院", "电影院", "影城", "万达影城", "CGV", "IMAX", "卢米埃", "幸福蓝海", "横店影视", "金逸影城", "奥斯卡", "中影", "SFC", "上影", "博纳"],
+            access: .free,
+            priority: 8,
+            minimumCount: 1,
+            requiresKeywordMatch: true
+        ),
+        LifeMarkDefinition(
             id: "leisure",
             label: "休闲娱乐",
             category: .entertainment,
