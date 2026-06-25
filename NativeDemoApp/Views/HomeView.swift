@@ -59,6 +59,7 @@ struct HomeView: View {
                 ScrollView {
                     homeContent
                 }
+                .scrollDisabled(todaySwipeDragState != nil)
                 .onChange(of: todayBillsFocusTick) { _, _ in
                     withAnimation(.easeInOut(duration: 0.38)) {
                         proxy.scrollTo("todayBillsPanel", anchor: .center)
@@ -202,17 +203,15 @@ struct HomeView: View {
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(homeViewModel.recentThreeItems.enumerated()), id: \.element.id) { index, item in
-                    Button {
+                    billListItem(
+                        item: item,
+                        isFirst: index == 0,
+                        isHighlighted: highlightedSavedItemID == item.id
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
                         editingItem = item
-                    } label: {
-                        billListItem(
-                            item: item,
-                            isFirst: index == 0,
-                            isHighlighted: highlightedSavedItemID == item.id
-                        )
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
                 }
                 if homeViewModel.todayItems.count > homeViewModel.recentThreeItems.count {
                     Button {
@@ -931,6 +930,7 @@ struct HomeView: View {
                         }
                     }
                     .scrollIndicators(.hidden)
+                    .scrollDisabled(todaySwipeDragState != nil)
                     .simultaneousGesture(
                         DragGesture(minimumDistance: 18).onEnded { value in
                             guard todaySwipedItemID != nil else { return }
@@ -1060,7 +1060,12 @@ struct HomeView: View {
                     }
                 }
             }
-            .simultaneousGesture(todayRowSwipeGesture(for: item))
+            .overlay(alignment: .trailing) {
+                if !isEditing {
+                    todaySwipeHandle(for: item, isSwiped: isSwiped)
+                        .zIndex(3)
+                }
+            }
         }
         .id(item.id)
         .animation(todayEditSpring, value: isEditing)
@@ -1540,6 +1545,14 @@ struct HomeView: View {
         .offset(x: isVisible ? 0 : 18)
         .allowsHitTesting(isVisible)
         .animation(todayEditSpring, value: isVisible)
+    }
+
+    private func todaySwipeHandle(for item: HomeItem, isSwiped: Bool) -> some View {
+        Color.clear
+            .frame(maxWidth: isSwiped ? .infinity : nil)
+            .frame(width: isSwiped ? nil : 42)
+            .contentShape(Rectangle())
+            .gesture(todayRowSwipeGesture(for: item))
     }
 
     private func todayRowSwipeGesture(for item: HomeItem) -> some Gesture {
