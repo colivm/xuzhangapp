@@ -1153,15 +1153,31 @@ struct RecordEditSheet: View {
         let title = cleanTitle.isEmpty ? selectedCategory.defaultRecordTitle : cleanTitle
         let matchedBrand = MerchantBrandCatalog.matchBrand(in: title)
         let categoryOverridesBrand = matchedBrand.map { selectedCategory != $0.category } ?? false
+        // 用户改了标题时，判断旧品牌是否仍匹配新标题；不匹配就清掉，避免沿用旧品牌文案/分类。
+        let userEdited = title != item.title
+        let oldBrandId = userEdited ? item.merchantBrandId : nil
+        let oldBrandStillMatches: Bool = {
+            guard let oldBrandId, let oldBrand = MerchantBrandCatalog.definition(for: oldBrandId) else { return false }
+            if MerchantBrandCatalog.matchBrand(in: title)?.id == oldBrand.id { return true }
+            return oldBrand.aliases.contains { alias in
+                title.localizedCaseInsensitiveContains(alias)
+            }
+        }()
+        let effectiveBrandId: String?
+        if userEdited, !oldBrandStillMatches {
+            effectiveBrandId = nil
+        } else {
+            effectiveBrandId = matchedBrand?.id ?? item.merchantBrandId
+        }
         return RecordDraftResolutionService.resolve(
             RecordDraftResolutionInput(
                 rawTitle: title,
                 fallbackCategory: selectedCategory,
                 amount: parsedAmount,
                 date: selectedDate,
-                merchantBrandId: matchedBrand?.id ?? item.merchantBrandId,
+                merchantBrandId: effectiveBrandId,
                 categoryLockedByUser: selectedCategory != item.category || categoryOverridesBrand,
-                userEditedTitle: title != item.title,
+                userEditedTitle: userEdited,
                 source: "edit_preview"
             )
         )
@@ -1469,6 +1485,9 @@ struct RecordEditSheet: View {
             updated.category = selectedCategory
             updated.createdAt = selectedDate
             updated.updatedAt = Date()
+            // 用编辑预览解析出的品牌/情绪标签覆盖，确保改了标题后旧品牌绑定被清掉。
+            updated.merchantBrandId = editPreviewResolution.merchantBrandId
+            updated.emotionTag = editPreviewResolution.emotionTag
             if onSave(updated) {
                 dismiss()
             } else {
