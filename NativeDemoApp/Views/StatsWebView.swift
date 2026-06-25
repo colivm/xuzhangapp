@@ -144,6 +144,7 @@ struct StatsWebView: View {
             statsContent
         }
         .scrollIndicators(.hidden)
+        .scrollDisabled(traceSwipeDragState != nil)
     }
 
     private var statsContent: some View {
@@ -2191,6 +2192,7 @@ struct StatsWebView: View {
                         .padding(.bottom, 28)
                     }
                     .scrollIndicators(.hidden)
+                    .scrollDisabled(traceSwipeDragState != nil)
                     .onChange(of: traceInlineEditingItemID) { _, itemID in
                         guard let itemID else { return }
                         scrollTraceEditorIntoView(itemID, proxy: traceProxy, delay: 0.34)
@@ -2729,7 +2731,12 @@ struct StatsWebView: View {
                     openEditor(for: item, fromTraceDetail: true)
                 }
             }
-            .simultaneousGesture(traceRowSwipeGesture(for: item))
+            .overlay(alignment: .trailing) {
+                if !isEditing {
+                    traceSwipeHandle(for: item, isSwiped: isSwiped)
+                        .zIndex(3)
+                }
+            }
         }
         .id(item.id)
         .animation(traceEditSpring, value: isEditing)
@@ -2866,6 +2873,14 @@ struct StatsWebView: View {
                 .fill(tint)
         )
         .shadow(color: tint.opacity(0.22), radius: 12, y: 6)
+    }
+
+    private func traceSwipeHandle(for item: HomeItem, isSwiped: Bool) -> some View {
+        Color.clear
+            .frame(maxWidth: isSwiped ? .infinity : nil)
+            .frame(width: isSwiped ? nil : 42)
+            .contentShape(Rectangle())
+            .gesture(traceRowSwipeGesture(for: item))
     }
 
     private func traceRowSwipeGesture(for item: HomeItem) -> some Gesture {
