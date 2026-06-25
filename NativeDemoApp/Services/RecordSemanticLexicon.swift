@@ -111,7 +111,7 @@ enum RecordSemanticLexicon {
             .init(id: "drink", category: .dining, keywords: ["饮料", "喝的", "可乐", "雪碧", "汽水", "果汁", "茶饮", "奶茶", "咖啡", "拿铁", "美式", "冰饮"]),
             .init(id: "transport", category: .transport, keywords: ["地铁", "公交", "打车", "出租", "网约车", "路费", "车程", "通勤", "上班", "下班", "到站", "早高峰", "晚高峰", "顺利到达", "准时出门", "返程", "回家"]),
             .init(id: "meal", category: .dining, keywords: ["食堂", "午餐", "午饭", "简餐", "轻食", "小食", "点心", "热饭", "外卖", "饭点", "吃一口", "夜宵", "晚饭", "早餐", "早饭", "七欣天", "火锅", "麻辣烫", "便当", "盖饭"]),
-            .init(id: "convenience", category: .dining, keywords: ["便利蜂", "便利店", "全家", "罗森", "711", "7-11", "美宜佳"]),
+            .init(id: "convenience", category: .dining, keywords: ["便利蜂", "便利店", "全家", "罗森", "711", "7-11", "美宜佳", "茶叶蛋", "饭团", "关东煮", "便当", "三明治"]),
             .init(id: "baby_supply", category: .daily, keywords: ["宝宝", "孩子", "婴儿", "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "奶瓶", "安抚奶嘴", "宝宝湿巾", "婴儿湿巾", "童装", "儿童座椅", "推车"]),
             .init(id: "pet_supply", category: .daily, keywords: ["宠物", "毛孩子", "毛孩", "狗粮", "猫粮", "猫砂", "宠物粮", "宠物口粮", "尿垫", "冻干", "罐头", "宠物罐头", "驱虫", "宠物医院", "洗护"]),
         ]

@@ -483,7 +483,8 @@ struct RecordView: View {
 
     private var shouldPreserveUserNoteWhenChangingAngle: Bool {
         let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !title.isEmpty && lastDraftIntent == .note
+        guard !title.isEmpty else { return false }
+        return lastDraftIntent == .note || noteHasSpecificSemantics(title)
     }
 
     private func rememberUserNoteAnchor(_ title: String) {
@@ -1163,11 +1164,8 @@ struct RecordView: View {
                 case .aligned, .related:
                     return .scenePackCopy(pack, anchorTitle: anchorTitle)
                 case .conflict:
-                    if let semanticPack = scenePackForTitle(anchorTitle),
-                       canUseScenePackForCurrentAccess(semanticPack) {
-                        return .scenePackCopy(semanticPack, anchorTitle: anchorTitle)
-                    }
-                    return .categoryCopy(anchorTitle: anchorTitle)
+                    // 用户已通过「换个角度」选定场景包，换句时不再跳到别的 pack。
+                    return .scenePackCopy(pack, anchorTitle: anchorTitle)
                 }
             }
             return .scenePackCopy(pack, anchorTitle: nil)
@@ -1371,6 +1369,10 @@ struct RecordView: View {
                 notes = ["咖啡续上", "今天这杯咖啡", "给自己补杯咖啡", "咖啡时间记下"]
             } else if containsAny(normalized, ["奶茶", "饮品", "饮料", "茶饮"]) {
                 notes = ["买杯喝的", "饮品补一点", "今天这杯记下", "给自己添杯饮品"]
+            } else if containsAny(normalized, ["茶叶蛋", "饭团", "关东煮", "便当", "三明治", "热食", "小食"]) {
+            notes = ["便利店小食记下", "路过买点吃的", "便利店热食在手边", "小食先垫一下"]
+            } else if containsAny(normalized, ["茶叶蛋", "饭团", "关东煮", "便当", "三明治", "热食", "小食"]) {
+                notes = ["便利店小食记下", "路过买点吃的", "便利店热食在手边", "小食先垫一下"]
             } else if containsAny(normalized, ["早餐", "早饭", "包子", "豆浆"]) {
                 notes = ["早餐先记下", "早上吃点热乎的", "早餐补点能量", "早饭安排好"]
             } else if containsAny(normalized, ["午餐", "午饭", "食堂", "简餐", "外卖"]) {
