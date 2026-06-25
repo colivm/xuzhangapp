@@ -1311,8 +1311,20 @@ struct RecordView: View {
             notes = ["宝宝用品补充", "照护用品补上", "给宝宝备一点", "成长里的小补给"]
         } else if containsAny(normalized, ["游泳", "泳池", "泳馆", "泳票", "泳道"]) {
             notes = ["今天下水一回", "游泳安排记下", "游泳相关补上", "下水这次记下"]
+        } else if containsAny(normalized, ["洗牙", "配镜", "验光"]) {
+            notes = ["身体检查补上", "护理这次记下", "健康相关补上", "身体这条线记下"]
         } else if containsFitnessKeyword(normalized) {
             notes = ["运动安排记下", "运动后补给一下", "训练相关补上", "身体这条线记下"]
+        } else if containsAny(normalized, ["茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴"]) {
+            notes = ["这口吃的记下", "热乎一份记下", "饭点补上一口", "这一份先垫一下"]
+        } else if containsAny(normalized, ["鸡蛋", "牛奶", "鲜奶", "纯牛奶", "酸奶", "山姆", "永辉", "大润发", "钱大妈"]) {
+            notes = ["家里吃的补上", "日常食材补上", "给家里补点吃的", "冰箱补一点"]
+        } else if containsAny(normalized, ["保洁", "家政", "钟点工", "开荒保洁"]) {
+            notes = ["家里清洁一回", "住处收拾一下", "居家安排补上", "家里这件事办完"]
+        } else if containsAny(normalized, ["洗车", "汽车保养", "车辆保养", "保养车", "etc"]) {
+            notes = ["车主日常记下", "车这边安排好", "路上相关补上", "用车这笔记下"]
+        } else if containsAny(normalized, ["b站会员", "哔哩哔哩会员", "爱奇艺会员", "网易云会员", "网易云音乐会员"]) {
+            notes = ["数字会员续上", "这次续费记下", "常用会员安排好", "娱乐订阅补上"]
         } else if containsAny(normalized, ["路亚", "渔具", "鱼竿", "鱼线", "鱼饵", "钓箱", "钓椅"]) {
             notes = ["钓鱼装备补充", "给钓鱼添点装备", "路亚装备补上", "喜欢的装备补上"]
         } else {
@@ -1369,9 +1381,7 @@ struct RecordView: View {
                 notes = ["咖啡续上", "今天这杯咖啡", "给自己补杯咖啡", "咖啡时间记下"]
             } else if containsAny(normalized, ["奶茶", "饮品", "饮料", "茶饮"]) {
                 notes = ["买杯喝的", "饮品补一点", "今天这杯记下", "给自己添杯饮品"]
-            } else if containsAny(normalized, ["茶叶蛋", "饭团", "关东煮", "便当", "三明治", "热食", "小食"]) {
-            notes = ["便利店小食记下", "路过买点吃的", "便利店热食在手边", "小食先垫一下"]
-            } else if containsAny(normalized, ["茶叶蛋", "饭团", "关东煮", "便当", "三明治", "热食", "小食"]) {
+            } else if containsAny(normalized, ["茶叶蛋", "饭团", "关东煮", "便当", "三明治", "热食", "小食", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴"]) {
                 notes = ["便利店小食记下", "路过买点吃的", "便利店热食在手边", "小食先垫一下"]
             } else if containsAny(normalized, ["早餐", "早饭", "包子", "豆浆"]) {
                 notes = ["早餐先记下", "早上吃点热乎的", "早餐补点能量", "早饭安排好"]
@@ -1383,7 +1393,7 @@ struct RecordView: View {
                 notes = nil
             }
         case "supply":
-            if containsAny(normalized, ["买菜", "生鲜", "水果", "蔬菜", "肉", "盒马", "叮咚"]) {
+            if containsAny(normalized, ["买菜", "生鲜", "水果", "蔬菜", "肉", "鸡蛋", "牛奶", "鲜奶", "纯牛奶", "酸奶", "盒马", "叮咚", "山姆", "永辉", "大润发", "钱大妈"]) {
                 notes = ["给家里补点吃的", "买菜顺手补齐", "冰箱补一点", "日常食材补上"]
             } else if containsAny(normalized, ["纸巾", "抽纸", "卷纸", "洗衣", "清洁", "垃圾袋", "日化"]) {
                 notes = ["日用品补上", "家用消耗品补齐", "清洁日用补齐", "常用的先备好"]
@@ -1395,7 +1405,7 @@ struct RecordView: View {
         case "care":
             if containsAny(normalized, ["健身", "运动", "训练", "跑步", "瑜伽", "游泳"]) {
                 notes = ["训练安排补上", "运动安排留好", "给身体的一次投入", "健身相关补上"]
-            } else if containsAny(normalized, ["药", "医院", "挂号", "问诊", "理疗", "康复"]) {
+            } else if containsAny(normalized, ["药", "医院", "挂号", "问诊", "理疗", "康复", "洗牙", "配镜", "验光"]) {
                 notes = ["身体照顾补上", "健康相关补上", "身体护理留个记录", "给身体留个记录"]
             } else {
                 notes = nil
@@ -1407,7 +1417,7 @@ struct RecordView: View {
                 notes = nil
             }
         case "commute":
-            if containsAny(normalized, ["地铁", "公交", "打车", "停车", "加油", "通勤", "上班", "下班"]) {
+            if containsAny(normalized, ["地铁", "公交", "打车", "花小猪", "停车", "加油", "洗车", "汽车保养", "车辆保养", "保养车", "etc", "通勤", "上班", "下班"]) {
                 notes = ["通勤路上", "路上花费补上", "今天出行记下", "这趟走完了"]
             } else {
                 notes = nil
@@ -1415,8 +1425,10 @@ struct RecordView: View {
         case "home":
             if containsAny(normalized, ["房租", "租金", "租房"]) {
                 notes = ["房租安排好", "住处固定支出", "这个月房租放好", "给住处留个记录"]
-            } else if containsAny(normalized, ["水电", "电费", "燃气", "煤气", "物业", "宽带"]) {
+            } else if containsAny(normalized, ["水电", "电费", "燃气", "煤气", "物业", "宽带", "暖气费", "取暖费", "网上国网", "国网"]) {
                 notes = ["住处日常账单", "家里固定账单补上", "水电物业补上", "住处运转日常"]
+            } else if containsAny(normalized, ["保洁", "家政", "钟点工", "开荒保洁"]) {
+                notes = ["家里清洁一回", "住处收拾一下", "居家安排补上", "家里这件事办完"]
             } else if containsAny(normalized, ["维修", "家电", "家具", "床品", "收纳", "厨房"]) {
                 notes = ["给住处添点东西", "家里需要的补上", "居家安排补上", "住处小调整记下"]
             } else {

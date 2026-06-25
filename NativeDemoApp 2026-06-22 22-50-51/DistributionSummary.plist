@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NativeDemoApp.ipa</key>
+	<array>
+		<dict>
+			<key>architectures</key>
+			<array>
+				<string>arm64</string>
+			</array>
+			<key>buildNumber</key>
+			<string>162</string>
+			<key>certificate</key>
+			<dict>
+				<key>SHA1</key>
+				<string>5D837CF252C2E7520C4F9C1B3E5AF4E33F444A11</string>
+				<key>dateExpires</key>
+				<string>2027/6/5</string>
+				<key>type</key>
+				<string>Cloud Managed Apple Distribution</string>
+			</dict>
+			<key>entitlements</key>
+			<dict>
+				<key>application-identifier</key>
+				<string>4SYY8L84JV.com.xuzhang.app</string>
+				<key>beta-reports-active</key>
+				<true/>
+				<key>com.apple.developer.team-identifier</key>
+				<string>4SYY8L84JV</string>
+				<key>get-task-allow</key>
+				<false/>
+			</dict>
+			<key>name</key>
+			<string>NativeDemoApp.app</string>
+			<key>profile</key>
+			<dict>
+				<key>UUID</key>
+				<string>423fa720-6a3b-437a-a1d3-ee2f490dc2a6</string>
+				<key>dateExpires</key>
+				<string>2027/6/5</string>
+				<key>name</key>
+				<string>iOS Team Store Provisioning Profile: com.xuzhang.app</string>
+			</dict>
+			<key>symbols</key>
+			<true/>
+			<key>team</key>
+			<dict>
+				<key>id</key>
+				<string>4SYY8L84JV</string>
+				<key>name</key>
+				<string>yilei wang</string>
+			</dict>
+			<key>versionNumber</key>
+			<string>1.0</string>
+		</dict>
+	</array>
+</dict>
+</plist>

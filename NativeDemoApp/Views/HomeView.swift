@@ -2378,6 +2378,33 @@ struct BillPlaybackSheet: View {
         if let weatherLine = weatherPlaybackLine(for: item) {
             return weatherLine
         }
+        if let brand = MerchantBrandCatalog.definition(for: item.merchantBrandId)
+            ?? MerchantBrandCatalog.matchBrand(in: item.title) {
+            switch brand.id {
+            case "haidilao":
+                return "今天认真吃了顿火锅。"
+            case "laoxiangji":
+                return "今天吃了口家常热饭。"
+            case "tastien":
+                return "今天吃了顿汉堡快餐。"
+            case "cotti":
+                return "今天买了杯咖啡。"
+            case "juewei":
+                return "今天带了点卤味小食。"
+            case "yuanjiyunjiao":
+                return "今天吃了份热乎水饺。"
+            case "saizeriya":
+                return "今天坐下来吃了顿简餐。"
+            case "samsclub", "yonghui", "rtmart", "qiandama":
+                return "今天给家里补了点吃用。"
+            case "huaxiaozhu":
+                return "今天打车走完一程。"
+            case "sgcc_online":
+                return "今天把家里账单处理了。"
+            default:
+                break
+            }
+        }
         let hour = Calendar.current.component(.hour, from: item.createdAt)
         switch LifeSceneSemanticService.classify(item).kind {
         case .commute:
