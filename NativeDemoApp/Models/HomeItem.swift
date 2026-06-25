@@ -265,6 +265,22 @@ struct HomeItem: Identifiable, Codable, Equatable {
                     return "热乎一口记下"
                 }
             }
+            if containsAny(text, ["茶叶蛋", "饭团", "关东煮", "便当", "三明治"]) {
+                guard let date else { return "便利店小食记下" }
+                let hour = Calendar.current.component(.hour, from: date)
+                switch hour {
+                case 5..<10:
+                    return "早餐先记下"
+                case 11..<14:
+                    return "中午垫一口"
+                case 17..<21:
+                    return "晚饭先垫一下"
+                case 21...23, 0..<5:
+                    return "夜里一口热的"
+                default:
+                    return "便利店小食记下"
+                }
+            }
             if containsAny(text, ["午餐", "午饭", "中午"]) { return "中午一顿饭" }
             if containsAny(text, ["晚餐", "晚饭"]) { return "晚饭时间坐一会儿" }
             if containsDrinkKeyword(text) { return "买杯喝的" }

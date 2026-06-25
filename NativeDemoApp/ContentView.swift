@@ -1158,10 +1158,7 @@ struct RecordEditSheet: View {
         let oldBrandId = userEdited ? item.merchantBrandId : nil
         let oldBrandStillMatches: Bool = {
             guard let oldBrandId, let oldBrand = MerchantBrandCatalog.definition(for: oldBrandId) else { return false }
-            if MerchantBrandCatalog.matchBrand(in: title)?.id == oldBrand.id { return true }
-            return oldBrand.aliases.contains { alias in
-                title.localizedCaseInsensitiveContains(alias)
-            }
+            return MerchantBrandCatalog.matchBrand(in: title)?.id == oldBrand.id
         }()
         let effectiveBrandId: String?
         if userEdited, !oldBrandStillMatches {
