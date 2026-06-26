@@ -62,6 +62,7 @@ struct ScenePackAngleSheet: View {
     @State private var freeCandidatesManuallyExpanded = false
     @State private var draggingMemberPackID: String?
     @State private var claimedLifeMarkRewardID: String?
+    @State private var freeCountdownNow = Date()
 
     init(
         primaryScenePacks: [ScenePackDefinition],
@@ -167,7 +168,7 @@ struct ScenePackAngleSheet: View {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(AppColors.accent.opacity(0.92))
+                        .foregroundStyle(AppColors.readableAccent)
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(AppColors.accent.opacity(0.12)))
                     VStack(alignment: .leading, spacing: 7) {
@@ -192,9 +193,9 @@ struct ScenePackAngleSheet: View {
                         confirmReplacement(replacement)
                     }
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.onAccent)
                     .frame(maxWidth: .infinity, minHeight: 46)
-                    .background(AppColors.accent.opacity(0.88), in: Capsule(style: .continuous))
+                    .background(AppColors.accent, in: Capsule(style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -240,12 +241,12 @@ struct ScenePackAngleSheet: View {
                             .foregroundStyle(AppColors.text)
                         Text("\(configuration.secondaryScenePacks.count) 个未用或静默")
                             .font(.system(size: 12))
-                            .foregroundStyle(AppColors.subtext)
+                            .foregroundStyle(AppColors.readableSubtext)
                             .lineLimit(1)
                         Spacer()
                         Image(systemName: configuration.isMoreExpanded.wrappedValue ? "chevron.up" : "chevron.down")
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(AppColors.subtext)
+                            .foregroundStyle(AppColors.readableSubtext)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
@@ -275,6 +276,7 @@ struct ScenePackAngleSheet: View {
     }
 
     private func memberScenePackModule(_ configuration: MemberConfiguration) -> some View {
+        let displayedPacks = memberDisplayedScenePacks(configuration)
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
@@ -283,12 +285,12 @@ struct ScenePackAngleSheet: View {
                         .foregroundStyle(AppColors.text)
                     Text("常用靠前，少用的会静默收起")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
+                        .foregroundStyle(AppColors.readableSubtext)
                 }
                 Spacer()
-                Text("\(memberDisplayedScenePacks(configuration).count)")
+                Text("\(displayedPacks.count)")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppColors.accent)
+                    .foregroundStyle(AppColors.readableAccent)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 5)
                     .background(Capsule().fill(AppColors.accent.opacity(0.12)))
@@ -297,8 +299,8 @@ struct ScenePackAngleSheet: View {
             reorderHint
 
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                ForEach(memberDisplayedScenePacks(configuration), id: \.id) { pack in
-                    memberPackCard(pack, configuration: configuration)
+                ForEach(displayedPacks, id: \.id) { pack in
+                    memberPackCard(pack, displayedPacks: displayedPacks, configuration: configuration)
                 }
             }
 
@@ -312,12 +314,12 @@ struct ScenePackAngleSheet: View {
 
     private func memberPackCard(
         _ pack: ScenePackDefinition,
+        displayedPacks: [ScenePackDefinition],
         configuration: MemberConfiguration
     ) -> some View {
-        let packs = memberDisplayedScenePacks(configuration)
-        let index = packs.firstIndex { $0.id == pack.id } ?? 0
+        let index = displayedPacks.firstIndex { $0.id == pack.id } ?? 0
         let canMoveUp = index > 0
-        let canMoveDown = index < packs.count - 1
+        let canMoveDown = index < displayedPacks.count - 1
         let style = ScenePackVisualStyles.style(for: pack)
         return VStack(alignment: .leading, spacing: 9) {
             Button {
@@ -340,7 +342,7 @@ struct ScenePackAngleSheet: View {
                             .fixedSize(horizontal: false, vertical: true)
                         Text(configuration.scenePackDesc(pack))
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(AppColors.subtext)
+                            .foregroundStyle(AppColors.readableSubtext)
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -359,7 +361,7 @@ struct ScenePackAngleSheet: View {
                 Spacer()
                 Image(systemName: selectedPackID == pack.id ? "checkmark.circle.fill" : "line.3.horizontal")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(selectedPackID == pack.id ? AppColors.accent : AppColors.subtext.opacity(0.62))
+                    .foregroundStyle(selectedPackID == pack.id ? AppColors.readableAccent : AppColors.readableTertiary)
                     .onDrag {
                         draggingMemberPackID = pack.id
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -375,7 +377,7 @@ struct ScenePackAngleSheet: View {
             of: [UTType.plainText],
             delegate: ScenePackMemberDropDelegate(
                 targetPack: pack,
-                displayedPacks: packs,
+                displayedPacks: displayedPacks,
                 draggingPackID: $draggingMemberPackID,
                 onReorder: configuration.onReorderPacks
             )
@@ -386,7 +388,7 @@ struct ScenePackAngleSheet: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(isEnabled ? AppColors.text.opacity(0.78) : AppColors.subtext.opacity(0.46))
+                .foregroundStyle(isEnabled ? AppColors.text : AppColors.readableTertiary.opacity(0.72))
                 .frame(width: 28, height: 28)
                 .background(
                     Circle()
@@ -396,6 +398,7 @@ struct ScenePackAngleSheet: View {
                     Circle()
                         .stroke(Color.white.opacity(isEnabled ? 0.62 : 0.24), lineWidth: 1)
                 )
+                .frame(width: 44, height: 44)
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
@@ -414,12 +417,12 @@ struct ScenePackAngleSheet: View {
                     .foregroundStyle(AppColors.text)
                 Text("\(configuration.secondaryScenePacks.count) 个未用或静默")
                     .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(AppColors.readableSubtext)
                     .lineLimit(1)
                 Spacer()
                 Image(systemName: configuration.isMoreExpanded.wrappedValue ? "chevron.up" : "chevron.down")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(AppColors.readableSubtext)
             }
             .padding(.horizontal, 11)
             .padding(.vertical, 10)
@@ -433,6 +436,7 @@ struct ScenePackAngleSheet: View {
             )
         }
         .buttonStyle(.plain)
+        .minimumTapTarget()
     }
 
     private func freeSheet(_ configuration: FreeConfiguration) -> some View {
@@ -447,7 +451,7 @@ struct ScenePackAngleSheet: View {
                     pendingLifeMarkRewardCard(reward, configuration: configuration)
                 }
 
-                freeStatusCard(configuration)
+                freeStatusCard(configuration, now: freeCountdownNow)
                 activeFreeModule(configuration)
                 candidateFreeModule(configuration)
             }
@@ -463,40 +467,41 @@ struct ScenePackAngleSheet: View {
             )
             .ignoresSafeArea()
         )
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { now in
+            freeCountdownNow = now
+        }
     }
 
-    private func freeStatusCard(_ configuration: FreeConfiguration) -> some View {
-        TimelineView(.periodic(from: Date(), by: 1)) { context in
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: statusIcon(configuration))
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(statusTint(configuration))
-                    .frame(width: 30, height: 30)
-                    .background(Circle().fill(statusTint(configuration).opacity(0.12)))
+    private func freeStatusCard(_ configuration: FreeConfiguration, now: Date) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: statusIcon(configuration))
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(statusTint(configuration))
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(statusTint(configuration).opacity(0.12)))
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(statusTitle(configuration, now: context.date))
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(AppColors.text)
-                    Text(statusSubtitle(configuration, now: context.date))
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(statusTitle(configuration, now: now))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                Text(statusSubtitle(configuration, now: now))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.readableSubtext)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(AppColors.panel.opacity(0.92))
-                    .shadow(color: Color.black.opacity(0.05), radius: 18, x: 0, y: 8)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(AppColors.line.opacity(0.6), lineWidth: 1)
-            )
+
+            Spacer(minLength: 0)
         }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(AppColors.panel.opacity(0.92))
+                .shadow(color: Color.black.opacity(0.05), radius: 18, x: 0, y: 8)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppColors.line.opacity(0.6), lineWidth: 1)
+        )
     }
 
     private func activeFreeModule(_ configuration: FreeConfiguration) -> some View {
@@ -509,18 +514,18 @@ struct ScenePackAngleSheet: View {
                         .foregroundStyle(AppColors.text)
                     Text(activeModuleSubtitle(configuration))
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
+                        .foregroundStyle(AppColors.readableSubtext)
                 }
                 Spacer()
                 Text("\(activeCount)/\(activeCount)")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppColors.accent)
+                    .foregroundStyle(AppColors.readableAccent)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 5)
                     .background(Capsule().fill(AppColors.accent.opacity(0.12)))
             }
 
-            activeAvailabilityPill(configuration)
+            activeAvailabilityPill(configuration, now: freeCountdownNow)
 
             VStack(spacing: 10) {
                 ForEach(Array(configuration.freeScenePacks.enumerated()), id: \.element.id) { index, pack in
@@ -535,10 +540,10 @@ struct ScenePackAngleSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.down.circle")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppColors.accent.opacity(0.82))
+                    .foregroundStyle(AppColors.readableAccent)
                 Text("点右侧按钮先移下一个，再从下面换上来")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(AppColors.readableSubtext)
                 Spacer()
             }
             .padding(.top, 2)
@@ -557,13 +562,13 @@ struct ScenePackAngleSheet: View {
                         .foregroundStyle(AppColors.text)
                     Text(candidateModuleSubtitle(configuration))
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
+                        .foregroundStyle(AppColors.readableSubtext)
                 }
                 Spacer()
             }
 
             if shouldExpandFreeCandidates(configuration) {
-                candidateAvailabilityPill(configuration)
+                candidateAvailabilityPill(configuration, now: freeCountdownNow)
             } else {
                 freeCandidateFoldedToggle(configuration)
             }
@@ -575,7 +580,7 @@ struct ScenePackAngleSheet: View {
                     Text(inlineNotice)
                         .font(.system(size: 12, weight: .semibold))
                 }
-                .foregroundStyle(AppColors.accent)
+                .foregroundStyle(AppColors.readableAccent)
                 .padding(.horizontal, 11)
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -620,7 +625,7 @@ struct ScenePackAngleSheet: View {
             HStack(spacing: 10) {
                 Image(systemName: configuration.canReplacePackCombination ? "arrow.triangle.2.circlepath" : "chevron.down.circle")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(AppColors.accent)
+                    .foregroundStyle(AppColors.readableAccent)
                     .frame(width: 30, height: 30)
                     .background(Circle().fill(AppColors.accent.opacity(0.12)))
                 VStack(alignment: .leading, spacing: 3) {
@@ -629,14 +634,14 @@ struct ScenePackAngleSheet: View {
                         .foregroundStyle(AppColors.text)
                     Text("\(candidateScenePacks(configuration).count) 个未选场景包和会员引导已收起")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
+                        .foregroundStyle(AppColors.readableSubtext)
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
                 }
                 Spacer()
                 Image(systemName: "chevron.down")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(AppColors.readableSubtext)
             }
             .padding(12)
             .background(
@@ -649,26 +654,23 @@ struct ScenePackAngleSheet: View {
             )
         }
         .buttonStyle(.plain)
+        .minimumTapTarget()
     }
 
-    private func activeAvailabilityPill(_ configuration: FreeConfiguration) -> some View {
-        TimelineView(.periodic(from: Date(), by: 1)) { context in
-            infoPill(
-                icon: "clock",
-                text: activeAvailabilityText(configuration, now: context.date),
-                tint: statusTint(configuration)
-            )
-        }
+    private func activeAvailabilityPill(_ configuration: FreeConfiguration, now: Date) -> some View {
+        infoPill(
+            icon: "clock",
+            text: activeAvailabilityText(configuration, now: now),
+            tint: statusTint(configuration)
+        )
     }
 
-    private func candidateAvailabilityPill(_ configuration: FreeConfiguration) -> some View {
-        TimelineView(.periodic(from: Date(), by: 1)) { context in
-            infoPill(
-                icon: configuration.canReplacePackCombination || configuration.isInFirstWeek ? "checkmark.circle" : "lock.clock",
-                text: candidateAvailabilityText(configuration, now: context.date),
-                tint: statusTint(configuration)
-            )
-        }
+    private func candidateAvailabilityPill(_ configuration: FreeConfiguration, now: Date) -> some View {
+        infoPill(
+            icon: configuration.canReplacePackCombination || configuration.isInFirstWeek ? "checkmark.circle" : "lock.clock",
+            text: candidateAvailabilityText(configuration, now: now),
+            tint: statusTint(configuration)
+        )
     }
 
     private func infoPill(icon: String, text: String, tint: Color) -> some View {
@@ -707,13 +709,13 @@ struct ScenePackAngleSheet: View {
                         .foregroundStyle(AppColors.text)
                     Text("全部场景包可随时启用，旅行、家庭照护和兴趣装备都会跟着记录变化。")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
+                        .foregroundStyle(AppColors.readableSubtext)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(AppColors.readableSubtext)
             }
             .padding(14)
             .background(
@@ -738,9 +740,9 @@ struct ScenePackAngleSheet: View {
             .overlay(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isLocked ? 0.18 : 0.34),
-                        AppColors.paperWarm.opacity(isLocked ? 0.18 : 0.28),
-                        tint.opacity(isSelected ? 0.16 : 0.08)
+                        Color.white.opacity(isLocked ? 0.16 : 0.26),
+                        AppColors.paperWarm.opacity(isLocked ? 0.16 : 0.22),
+                        tint.opacity(isSelected ? 0.10 : 0.05)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -750,7 +752,7 @@ struct ScenePackAngleSheet: View {
             .overlay(alignment: .bottomTrailing) {
                 RadialGradient(
                     colors: [
-                        (isLocked ? AppColors.lockGold : tint).opacity(isSelected ? 0.16 : 0.10),
+                        (isLocked ? AppColors.lockGold : tint).opacity(isSelected ? 0.10 : 0.06),
                         Color.clear
                     ],
                     center: .bottomTrailing,
@@ -770,8 +772,8 @@ struct ScenePackAngleSheet: View {
             .stroke(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isLocked ? 0.24 : 0.62),
-                        (isLocked ? AppColors.lockGold : tint).opacity(isSelected || isLocked ? 0.34 : 0.18),
+                        Color.white.opacity(isLocked ? 0.20 : 0.48),
+                        (isLocked ? AppColors.lockGold : tint).opacity(isSelected || isLocked ? 0.24 : 0.12),
                         AppColors.line.opacity(0.52)
                     ],
                     startPoint: .topLeading,
@@ -818,7 +820,7 @@ struct ScenePackAngleSheet: View {
                             .lineLimit(1)
                         Text(isOpenSlot ? "已移到下面，选一个新场景包补上来" : configuration.scenePackDesc(pack))
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(isOpenSlot ? AppColors.accent : AppColors.subtext)
+                            .foregroundStyle(isOpenSlot ? AppColors.readableAccent : AppColors.readableSubtext)
                             .lineLimit(2)
                     }
                     Spacer(minLength: 0)
@@ -836,11 +838,13 @@ struct ScenePackAngleSheet: View {
                 } label: {
                     Image(systemName: "arrow.uturn.up")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(AppColors.subtext)
+                        .foregroundStyle(AppColors.readableSubtext)
                         .frame(width: 32, height: 32)
                         .background(Circle().fill(AppColors.surfaceMuted.opacity(0.8)))
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
+                .minimumTapTarget()
             } else {
                 Button {
                     guard canReplace else {
@@ -854,11 +858,13 @@ struct ScenePackAngleSheet: View {
                 } label: {
                     Image(systemName: canReplace ? "arrow.down.circle.fill" : "clock.fill")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(canReplace ? AppColors.accent : AppColors.subtext.opacity(0.62))
+                        .foregroundStyle(canReplace ? AppColors.readableAccent : AppColors.readableTertiary.opacity(0.72))
                         .frame(width: 34, height: 34)
                         .background(Circle().fill((canReplace ? AppColors.accent : AppColors.surfaceMuted).opacity(0.12)))
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
+                .minimumTapTarget()
             }
         }
         .padding(11)
@@ -919,7 +925,7 @@ struct ScenePackAngleSheet: View {
                 if !compact {
                     Text(style.keyword)
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Color.white.opacity(0.9))
+                        .foregroundStyle(Color.white.opacity(0.82))
                         .lineLimit(1)
                 }
             }
@@ -940,7 +946,7 @@ struct ScenePackAngleSheet: View {
             Spacer()
             Text("待补位")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(AppColors.accent)
+                .foregroundStyle(AppColors.readableAccent)
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 9)
@@ -954,10 +960,10 @@ struct ScenePackAngleSheet: View {
         HStack(spacing: 8) {
             Image(systemName: "line.3.horizontal")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(AppColors.accent.opacity(0.82))
+                .foregroundStyle(AppColors.readableAccent)
             Text("长按右侧拖动可调换顺序")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppColors.subtext)
+                .foregroundStyle(AppColors.readableSubtext)
             Spacer()
         }
         .padding(.vertical, 2)
@@ -1037,7 +1043,7 @@ struct ScenePackAngleSheet: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(AppColors.accent)
+                    .foregroundStyle(AppColors.readableAccent)
                     .frame(width: 32, height: 32)
                     .background(Circle().fill(AppColors.accent.opacity(0.12)))
 
@@ -1047,10 +1053,10 @@ struct ScenePackAngleSheet: View {
                         .foregroundStyle(AppColors.text)
                     Text("奖励一次免费体验")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(AppColors.accent)
+                        .foregroundStyle(AppColors.readableAccent)
                     Text(pack.map { "领取后可体验「\($0.label)」7 天，不占用当前 3 个免费场景包。" } ?? reward.detail)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
+                        .foregroundStyle(AppColors.readableSubtext)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -1067,8 +1073,8 @@ struct ScenePackAngleSheet: View {
             } label: {
                 Text("领取体验")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .foregroundStyle(AppColors.onAccent)
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .background(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(AppColors.accent)
@@ -1111,14 +1117,14 @@ struct ScenePackAngleSheet: View {
                             .lineLimit(1)
                         Text("7天体验中")
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(AppColors.accent)
+                            .foregroundStyle(AppColors.readableAccent)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(Capsule().fill(AppColors.accent.opacity(0.12)))
                     }
                     Text("生活印记奖励，不占基础免费名额")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
+                        .foregroundStyle(AppColors.readableSubtext)
                         .lineLimit(2)
                 }
 
@@ -1126,7 +1132,7 @@ struct ScenePackAngleSheet: View {
 
                 Text("使用")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.onAccent)
                     .padding(.horizontal, 11)
                     .frame(height: 30)
                     .background(Capsule().fill(AppColors.accent))
@@ -1191,7 +1197,7 @@ struct ScenePackAngleSheet: View {
                         .foregroundStyle(AppColors.text)
                     Text(hint.detail)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
+                        .foregroundStyle(AppColors.readableSubtext)
                         .lineLimit(2)
                 }
 
@@ -1230,7 +1236,7 @@ struct ScenePackAngleSheet: View {
                     .foregroundStyle(AppColors.text)
                 Text(subtitle)
                     .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(AppColors.readableSubtext)
                     .lineLimit(1)
             }
 
@@ -1239,7 +1245,7 @@ struct ScenePackAngleSheet: View {
             if isSelected {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(AppColors.accent)
+                    .foregroundStyle(AppColors.readableAccent)
                     .transition(.scale.combined(with: .opacity))
             }
         }

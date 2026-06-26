@@ -33,7 +33,7 @@ struct OCRConfirmSheet: View {
         NavigationStack {
             VStack(spacing: 0) {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
+                    LazyVStack(alignment: .leading, spacing: 16) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("先帮你把截图里的支出整理出来，请核对金额、备注和分类。")
                                 .font(.system(size: 15, weight: .semibold))
@@ -55,7 +55,7 @@ struct OCRConfirmSheet: View {
 
                         receiptFoldDivider
 
-                        VStack(spacing: 10) {
+                        LazyVStack(spacing: 10) {
                             ForEach(rows.indices, id: \.self) { index in
                                 confirmRow(index)
                             }
@@ -93,7 +93,7 @@ struct OCRConfirmSheet: View {
                     )
                 }
                 .padding(16)
-                .background(.ultraThinMaterial)
+                .background(AppColors.panelStrong)
             }
             .navigationTitle("待确认账单")
             .navigationBarTitleDisplayMode(.inline)
