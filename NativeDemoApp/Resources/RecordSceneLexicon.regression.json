@@ -131,6 +131,202 @@
       "expectedCategory": "交通"
     },
     {
+      "id": "manual-phone-charger-shopping",
+      "mode": "manual",
+      "amount": 39,
+      "inputTitle": "手机充电器",
+      "expectedCategory": "购物"
+    },
+    {
+      "id": "manual-heating-home",
+      "mode": "manual",
+      "amount": 1200,
+      "inputTitle": "热力公司供暖费",
+      "expectedCategory": "居家"
+    },
+    {
+      "id": "manual-housekeeping-home",
+      "mode": "manual",
+      "amount": 180,
+      "inputTitle": "上门保洁擦玻璃",
+      "expectedCategory": "居家"
+    },
+    {
+      "id": "manual-goods-shopping",
+      "mode": "manual",
+      "amount": 88,
+      "inputTitle": "泡泡玛特盲盒谷子",
+      "expectedCategory": "购物"
+    },
+    {
+      "id": "manual-video-subscription-entertainment",
+      "mode": "manual",
+      "amount": 25,
+      "inputTitle": "腾讯视频会员",
+      "expectedCategory": "娱乐"
+    },
+    {
+      "id": "manual-music-subscription-entertainment",
+      "mode": "manual",
+      "amount": 18,
+      "inputTitle": "网易云音乐会员",
+      "expectedCategory": "娱乐"
+    },
+    {
+      "id": "manual-samsclub-member-daily",
+      "mode": "manual",
+      "amount": 260,
+      "inputTitle": "山姆会员",
+      "expectedCategory": "日用"
+    },
+    {
+      "id": "manual-fitness-member-health",
+      "mode": "manual",
+      "amount": 399,
+      "inputTitle": "健身会员",
+      "expectedCategory": "健康"
+    },
+    {
+      "id": "manual-netbar-member-entertainment",
+      "mode": "manual",
+      "amount": 50,
+      "inputTitle": "网吧会员充值",
+      "expectedCategory": "娱乐"
+    },
+    {
+      "id": "manual-office365-subscription-shopping",
+      "mode": "manual",
+      "amount": 68,
+      "inputTitle": "Microsoft 365订阅",
+      "expectedCategory": "购物"
+    },
+    {
+      "id": "manual-adobe-subscription-shopping",
+      "mode": "manual",
+      "amount": 88,
+      "inputTitle": "Adobe订阅",
+      "expectedCategory": "购物"
+    },
+    {
+      "id": "manual-popmart-doujin-shopping",
+      "mode": "manual",
+      "amount": 59,
+      "inputTitle": "POP MART同人本",
+      "expectedCategory": "购物"
+    },
+    {
+      "id": "manual-moving-home",
+      "mode": "manual",
+      "amount": 460,
+      "inputTitle": "搬家公司搬家",
+      "expectedCategory": "居家"
+    },
+    {
+      "id": "manual-plain-member-neutral",
+      "mode": "manual",
+      "amount": 20,
+      "inputTitle": "普通会员费",
+      "expectedCategory": null
+    },
+    {
+      "id": "manual-plain-member-renewal-neutral",
+      "mode": "manual",
+      "amount": 20,
+      "inputTitle": "会员续费",
+      "expectedCategory": null
+    },
+    {
+      "id": "manual-office-stationery-neutral",
+      "mode": "manual",
+      "amount": 18,
+      "inputTitle": "Office文具",
+      "expectedCategory": null
+    },
+    {
+      "id": "manual-plain-merch-neutral",
+      "mode": "manual",
+      "amount": 29,
+      "inputTitle": "周边小物",
+      "expectedCategory": null
+    },
+    {
+      "id": "manual-driving-school-other",
+      "mode": "manual",
+      "amount": 3800,
+      "inputTitle": "驾校报名费",
+      "expectedCategory": "其他"
+    },
+    {
+      "id": "manual-daycare-daily",
+      "mode": "manual",
+      "amount": 1800,
+      "inputTitle": "托育费",
+      "expectedCategory": "日用"
+    },
+    {
+      "id": "manual-funeral-social",
+      "mode": "manual",
+      "amount": 500,
+      "inputTitle": "白事随礼",
+      "expectedCategory": "人情"
+    },
+    {
+      "id": "manual-live-tip-entertainment",
+      "mode": "manual",
+      "amount": 30,
+      "inputTitle": "直播打赏",
+      "expectedCategory": "娱乐"
+    },
+    {
+      "id": "manual-medical-beauty-health",
+      "mode": "manual",
+      "amount": 699,
+      "inputTitle": "光子嫩肤",
+      "expectedCategory": "健康"
+    },
+    {
+      "id": "manual-lottery-other",
+      "mode": "manual",
+      "amount": 20,
+      "inputTitle": "刮刮乐",
+      "expectedCategory": "其他"
+    },
+    {
+      "id": "manual-netbar-entertainment",
+      "mode": "manual",
+      "amount": 28,
+      "inputTitle": "网吧上网费",
+      "expectedCategory": "娱乐"
+    },
+    {
+      "id": "manual-esports-hotel-lodging",
+      "mode": "manual",
+      "amount": 288,
+      "inputTitle": "电竞酒店",
+      "expectedCategory": "住宿"
+    },
+    {
+      "id": "manual-plain-tuition-neutral",
+      "mode": "manual",
+      "amount": 300,
+      "inputTitle": "学费",
+      "expectedCategory": null
+    },
+    {
+      "id": "manual-plain-tip-neutral",
+      "mode": "manual",
+      "amount": 12,
+      "inputTitle": "打赏",
+      "expectedCategory": null
+    },
+    {
+      "id": "manual-hair-removal-cream-neutral",
+      "mode": "manual",
+      "amount": 39,
+      "inputTitle": "脱毛膏",
+      "expectedCategory": null
+    },
+    {
       "id": "ocr-bianlifeng-brand-default-dining",
       "mode": "ocr",
       "amount": 5.5,

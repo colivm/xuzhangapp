@@ -28,6 +28,233 @@ private enum TodayPlaybackPrompt: Equatable {
     }
 }
 
+private struct HighConfidenceCommuteFloatingCard: View {
+    let suggestion: HomeViewModel.HighConfidenceQuickRecordSuggestion
+    let weatherKind: String?
+    let isPulsing: Bool
+    let onClose: () -> Void
+    let onSave: () -> Void
+
+    var body: some View {
+        ZStack {
+            Image(suggestion.backgroundImageName)
+                .resizable()
+                .scaledToFill()
+
+            commuteImageScrim
+
+            if let weatherKind {
+                CommuteQuickCardWeatherLayer(kind: weatherKind)
+            }
+
+            HStack(spacing: 12) {
+                commuteGlyph
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(suggestion.headline)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .shadow(color: .black.opacity(0.34), radius: 5, y: 2)
+
+                    Text("\(suggestion.title) · \(suggestion.amount.formatted(.cny))")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.94))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+
+                    Text(suggestion.detail)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.78))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 2)
+
+                VStack(spacing: 8) {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color.white.opacity(0.86))
+                            .frame(width: 30, height: 30)
+                            .background(Circle().fill(Color.black.opacity(0.22)))
+                            .overlay(Circle().stroke(Color.white.opacity(0.24), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("关闭")
+
+                    Button(action: onSave) {
+                        Text(suggestion.buttonTitle)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                            .frame(width: 108, height: 52)
+                            .background(
+                                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                    .fill(Color.white.opacity(0.92))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                    .stroke(Color.white.opacity(0.62), lineWidth: 1)
+                            )
+                            .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 6)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.leading, 14)
+            .padding(.trailing, 12)
+            .padding(.vertical, 14)
+        }
+        .frame(height: 134)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(quickCardBorder)
+        .overlay(quickCardGlint)
+        .shadow(color: .black.opacity(0.16), radius: 22, x: 0, y: 12)
+        .shadow(color: AppColors.accent.opacity(isPulsing ? 0.16 : 0.04), radius: isPulsing ? 18 : 8, x: 0, y: 0)
+        .offset(y: isPulsing ? -2 : 1)
+        .scaleEffect(isPulsing ? 1.006 : 0.996)
+        .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: isPulsing)
+    }
+
+    private var commuteGlyph: some View {
+        Image(systemName: weatherKind == "rain" ? "cloud.rain.fill" : weatherKind == "snow" ? "snowflake" : "tram.fill")
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.94))
+            .frame(width: 44, height: 44)
+            .background(Circle().fill(Color.black.opacity(0.28)))
+            .overlay(Circle().stroke(Color.white.opacity(0.28), lineWidth: 1))
+    }
+
+    private var commuteImageScrim: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.58),
+                    Color.black.opacity(0.34),
+                    Color.black.opacity(0.62)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.54),
+                    Color.black.opacity(0.32),
+                    Color.black.opacity(0.08)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            LinearGradient(
+                colors: [
+                    AppColors.accent.opacity(0.18),
+                    Color.clear,
+                    Color.black.opacity(0.28)
+                ],
+                startPoint: .topTrailing,
+                endPoint: .bottomLeading
+            )
+        }
+    }
+
+    private var quickCardBorder: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.54),
+                        AppColors.accent.opacity(isPulsing ? 0.42 : 0.22),
+                        Color.white.opacity(0.22)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
+    }
+
+    private var quickCardGlint: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .stroke(Color.white.opacity(isPulsing ? 0.34 : 0.08), lineWidth: 1.5)
+            .blur(radius: isPulsing ? 0.25 : 1.2)
+            .allowsHitTesting(false)
+    }
+}
+
+private struct CommuteQuickCardWeatherLayer: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let kind: String
+
+    var body: some View {
+        if reduceMotion {
+            weatherBody(time: 0)
+                .allowsHitTesting(false)
+        } else {
+            TimelineView(.periodic(from: Date(), by: 1 / 12)) { timeline in
+                weatherBody(time: timeline.date.timeIntervalSinceReferenceDate)
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    @ViewBuilder
+    private func weatherBody(time: TimeInterval) -> some View {
+        if kind == "rain" {
+            rainLayer(time: time)
+                .opacity(reduceMotion ? 0.22 : 0.42)
+        } else if kind == "snow" {
+            snowLayer(time: time)
+                .opacity(reduceMotion ? 0.22 : 0.38)
+        }
+    }
+
+    private func rainLayer(time: TimeInterval) -> some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            for index in 0..<34 {
+                let seed = Double(index)
+                let lane = (seed * 41).truncatingRemainder(dividingBy: 100) / 100
+                let speed = 0.36 + (seed * 11).truncatingRemainder(dividingBy: 17) / 42
+                let progress = (time * speed + seed * 0.067).truncatingRemainder(dividingBy: 1)
+                let length = 11 + (seed * 7).truncatingRemainder(dividingBy: 12)
+                let x = lane * size.width + progress * size.height * 0.18 - 22
+                let y = progress * (size.height + 48) - 30
+                var path = Path()
+                path.move(to: CGPoint(x: x, y: y))
+                path.addLine(to: CGPoint(x: x + length * 0.30, y: y + length))
+                context.stroke(
+                    path,
+                    with: .color(Color.white.opacity(0.20)),
+                    style: StrokeStyle(lineWidth: index.isMultiple(of: 4) ? 1.1 : 0.75, lineCap: .round)
+                )
+            }
+        }
+    }
+
+    private func snowLayer(time: TimeInterval) -> some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            for index in 0..<24 {
+                let seed = Double(index)
+                let lane = (seed * 29).truncatingRemainder(dividingBy: 100) / 100
+                let speed = 0.12 + (seed * 5).truncatingRemainder(dividingBy: 11) / 70
+                let progress = (time * speed + seed * 0.053).truncatingRemainder(dividingBy: 1)
+                let drift = sin(time * 0.55 + seed) * 8
+                let radius = 1.3 + (seed.truncatingRemainder(dividingBy: 4)) * 0.35
+                let rect = CGRect(
+                    x: lane * size.width + drift,
+                    y: progress * (size.height + 36) - 18,
+                    width: radius * 2,
+                    height: radius * 2
+                )
+                context.fill(Path(ellipseIn: rect), with: .color(Color.white.opacity(0.30)))
+            }
+        }
+    }
+}
+
 struct HomeView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
@@ -49,6 +276,10 @@ struct HomeView: View {
     @State private var todayBillsFocusPulse = false
     @State private var todayBillsFocusTick = 0
     @State private var highlightedSavedItemID: UUID?
+    @State private var quickRecordCardDismissedID: String?
+    @State private var quickRecordCardAutoCloseID: String?
+    @State private var quickRecordCardPulse = false
+    @State private var quickRecordWeatherRefreshTick = 0
     @GestureState private var todaySwipeDragState: TodaySwipeDragState?
     private let dailyQuotaStore = DailyFeatureQuotaStore()
     private static let todayPlaybackFirstUsePromptSeenKey = "today_playback_first_use_prompt_seen_v1"
@@ -72,6 +303,16 @@ struct HomeView: View {
                     .padding(.horizontal, 18)
                     .padding(.top, 10)
                     .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(18)
+            }
+
+            highConfidenceQuickRecordOverlay
+                .zIndex(12)
+
+            if todayPlaybackPrompt != nil {
+                todayPlaybackPromptOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .zIndex(20)
             }
 
             if settingsViewModel.petCompanionEnabled {
@@ -81,11 +322,6 @@ struct HomeView: View {
                     .padding(.bottom, 102)
             }
 
-            if todayPlaybackPrompt != nil {
-                todayPlaybackPromptOverlay
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                    .zIndex(20)
-            }
         }
         .scrollIndicators(.hidden)
         .background(Color.clear)
@@ -164,6 +400,83 @@ struct HomeView: View {
                 isPrimary: false,
                 action: { requestTodayPlayback() }
             )
+        }
+    }
+
+    @ViewBuilder
+    private var highConfidenceQuickRecordOverlay: some View {
+        if let suggestion = homeViewModel.highConfidenceQuickRecordSuggestion,
+           quickRecordCardDismissedID != suggestion.id {
+            HighConfidenceCommuteFloatingCard(
+                suggestion: suggestion,
+                weatherKind: quickRecordWeatherKind,
+                isPulsing: quickRecordCardPulse,
+                onClose: { dismissQuickRecordCard(suggestion.id) },
+                onSave: {
+                    if homeViewModel.addHighConfidenceQuickRecord(suggestion) {
+                        dismissQuickRecordCard(suggestion.id)
+                    }
+                }
+            )
+                .frame(maxWidth: 430)
+                .padding(.horizontal, 12)
+                .padding(.top, 148)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .id(suggestion.id)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .onAppear {
+                    armQuickRecordCard(suggestion)
+                }
+        }
+    }
+
+    private var quickRecordWeatherKind: String? {
+        _ = quickRecordWeatherRefreshTick
+        guard settingsViewModel.settings.weatherCompanionEnabled,
+              WeatherCompanionService.shared.hasLocationPermissionReady else {
+            return nil
+        }
+        return RecordMemoryContextService.weatherKindCode(
+            from: WeatherCompanionService.shared.cachedSnapshot
+        )
+    }
+
+    private func armQuickRecordCard(_ suggestion: HomeViewModel.HighConfidenceQuickRecordSuggestion) {
+        quickRecordCardAutoCloseID = suggestion.id
+        quickRecordCardPulse = false
+        if settingsViewModel.settings.weatherCompanionEnabled,
+           WeatherCompanionService.shared.hasLocationPermissionReady {
+            WeatherCompanionService.shared.refreshWeatherInBackground(refreshGeo: false)
+            scheduleQuickRecordWeatherRefresh(for: suggestion.id, delay: 1.2)
+            scheduleQuickRecordWeatherRefresh(for: suggestion.id, delay: 3.0)
+        }
+        withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+            quickRecordCardPulse = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6.5) {
+            guard quickRecordCardAutoCloseID == suggestion.id,
+                  quickRecordCardDismissedID != suggestion.id else {
+                return
+            }
+            dismissQuickRecordCard(suggestion.id)
+        }
+    }
+
+    private func dismissQuickRecordCard(_ id: String) {
+        withAnimation(.easeInOut(duration: 0.24)) {
+            quickRecordCardDismissedID = id
+            quickRecordCardAutoCloseID = nil
+            quickRecordCardPulse = false
+        }
+    }
+
+    private func scheduleQuickRecordWeatherRefresh(for id: String, delay: TimeInterval) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard quickRecordCardAutoCloseID == id,
+                  quickRecordCardDismissedID != id else {
+                return
+            }
+            quickRecordWeatherRefreshTick += 1
         }
     }
 
