@@ -343,6 +343,14 @@
       "expectedTitle": "全家"
     },
     {
+      "id": "ocr-telecom-bill-taobao-coupon-stays-daily",
+      "mode": "ocr",
+      "amount": 20,
+      "rawText": "支付成功\n¥20.00\n中国移动通信集团江苏有限公司\n支付有福利\n6元 自动缴费券\n生活缴费\n3元 话费券\n0.3元 生活缴费券\n淘宝缴费",
+      "expectedCategory": "日用",
+      "expectedTitle": "not:淘宝"
+    },
+    {
       "id": "manual-convenience-breakfast-dining",
       "mode": "manual",
       "amount": 8,
