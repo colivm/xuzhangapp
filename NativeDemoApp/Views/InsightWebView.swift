@@ -4436,15 +4436,37 @@ private struct KeywordBubbleView: View {
     @ViewBuilder
     var body: some View {
         if reduceMotion {
-            bubble(phase: 0, isAnimated: false)
+            staticBubble
         } else {
-            TimelineView(.periodic(from: Date(), by: 1 / 8)) { timeline in
-                bubble(phase: phaseValue(at: timeline.date), isAnimated: true)
-            }
+            animatedBubble
+        }
+    }
+
+    private var staticBubble: some View {
+        bubble(phase: 0, isAnimated: false)
+    }
+
+    private var animatedBubble: some View {
+        TimelineView(.periodic(from: Date(), by: 1 / 8)) { timeline in
+            bubble(phase: phaseValue(at: timeline.date), isAnimated: true)
         }
     }
 
     private func bubble(phase: Double, isAnimated: Bool) -> some View {
+        let scale = isAnimated ? 1 + sin(phase) * 0.018 : 1
+        let opacity = isAnimated ? 0.95 + cos(phase) * 0.035 : 1
+        let xOffset = isAnimated ? cos(phase * 0.72) * 1.8 : 0
+        let yOffset = isAnimated ? sin(phase) * 5.5 : 0
+        let shadowRadius: CGFloat = weight > 0.6 ? 22 : 16
+        return bubbleContent(phase: phase)
+            .scaleEffect(scale)
+            .opacity(opacity)
+            .offset(x: xOffset, y: yOffset)
+            .shadow(color: palette.glow.opacity(0.70), radius: shadowRadius, x: 0, y: 12)
+            .accessibilityLabel("\(text)，出现 \(count) 次")
+    }
+
+    private func bubbleContent(phase: Double) -> some View {
         Text(text)
             .font(.system(size: fontSize, weight: weight > 0.72 ? .bold : .semibold, design: .rounded))
             .foregroundStyle(palette.text)
@@ -4454,14 +4476,6 @@ private struct KeywordBubbleView: View {
             .padding(.horizontal, 8)
             .frame(width: diameter, height: diameter)
             .background(bubbleBackground(phase: phase))
-            .scaleEffect(isAnimated ? 1 + sin(phase) * 0.018 : 1)
-            .opacity(isAnimated ? 0.95 + cos(phase) * 0.035 : 1)
-            .offset(
-                x: isAnimated ? cos(phase * 0.72) * 1.8 : 0,
-                y: isAnimated ? sin(phase) * 5.5 : 0
-            )
-            .shadow(color: palette.glow.opacity(0.70), radius: weight > 0.6 ? 22 : 16, x: 0, y: 12)
-            .accessibilityLabel("\(text)，出现 \(count) 次")
     }
 
     private func phaseValue(at date: Date) -> Double {
