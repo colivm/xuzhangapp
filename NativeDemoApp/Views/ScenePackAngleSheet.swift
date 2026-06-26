@@ -277,7 +277,7 @@ struct ScenePackAngleSheet: View {
 
     private func memberScenePackModule(_ configuration: MemberConfiguration) -> some View {
         let displayedPacks = memberDisplayedScenePacks(configuration)
-        VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("场景包")
