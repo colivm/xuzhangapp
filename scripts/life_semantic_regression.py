@@ -119,14 +119,14 @@ EXPECTED_SWIFT_SNIPPETS = {
         "山姆", "永辉", "大润发", "钱大妈", "花小猪", "洗车", "汽车保养",
         "配镜", "验光", "洗牙", "网上国网", "暖气费", "取暖费", "B站会员",
         "供暖费", "热力费", "腾讯视频会员", "充电器", "Office 365", "谷子", "潮玩", "泡泡玛特", "POP MART", "搬家",
-        "托育费", "直播打赏", "网吧", "电竞酒店", "医美", "白事随礼", "驾校", "彩票",
+        "托育费", "直播打赏", "网吧", "电竞酒店", "医美", "白事随礼", "驾校", "彩票", "telecomBill", "手机话费",
     ],
     "life_mark": [
         "茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴",
-        "山姆", "永辉", "大润发", "钱大妈", "花小猪", "洗车", "汽车保养",
+        "山姆", "永辉", "大润发", "钱大妈", "洗车", "汽车保养",
         "配镜", "验光", "洗牙", "网上国网", "暖气费", "取暖费", "B站会员",
         "供暖费", "热力费", "腾讯视频会员", "Office 365", "谷子", "潮玩", "泡泡玛特", "POP MART", "搬家",
-        "托育费", "直播打赏", "网吧", "医美", "白事随礼", "驾校",
+        "托育费", "直播打赏", "网吧", "医美", "白事随礼", "驾校", "telecom_bill", "手机话费",
     ],
     "record_view": [
         "茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴",
@@ -146,10 +146,39 @@ EXPECTED_SWIFT_SNIPPETS = {
 }
 
 INTENTS_REQUIRING_KEYWORD_MATCH = [
+    "commute",
+    "daily_supply",
     "everyday_meal",
+    "telecom_bill",
     "household_service",
     "car_care",
     "digital_subscription",
+    "leisure",
+]
+
+DAILY_SUPPLY_EXCLUSION_IDS = [
+    "fitness",
+    "home_utilities",
+    "telecom_bill",
+    "household_service",
+    "digital_subscription",
+    "baby_supply",
+    "medical_care",
+    "social_care",
+    "groceries",
+    "interest_gear",
+    "learning_growth",
+    "pet_supply",
+]
+
+LEISURE_EXCLUSION_IDS = [
+    "fitness",
+    "digital_subscription",
+    "social_care",
+    "movie_ticket",
+    "travel",
+    "interest_gear",
+    "learning_growth",
 ]
 
 SCENE_PACK_BLOCKED_TERMS = [
@@ -239,6 +268,18 @@ def extract_life_mark_block(text: str, intent_id: str) -> str:
     return text[start:next_start]
 
 
+def extract_swift_string_set(text: str, name: str) -> set[str]:
+    marker = f"let {name}: Set<String>"
+    marker_index = text.find(marker)
+    if marker_index < 0:
+        return set()
+    start = text.find("[", marker_index)
+    end = text.find("]", start)
+    if start < 0 or end < 0:
+        return set()
+    return set(re.findall(r'"([^"]+)"', text[start:end]))
+
+
 def scan_json(failures: list[str]) -> None:
     payload = json.loads(LEXICON_PATH.read_text(encoding="utf-8"))
     for label, expected in EXPECTED_JSON_KEYWORDS.items():
@@ -293,6 +334,32 @@ def scan_scene_pack_notes(failures: list[str], text: str) -> None:
         for term in SCENE_PACK_BLOCKED_TERMS:
             if term in line:
                 failures.append(f"ScenePackCopyPool.swift:{line_number}: tier note contains LifeMark term {term}")
+
+
+def scan_life_mark_boundaries(failures: list[str], text: str) -> None:
+    home_utilities = extract_life_mark_block(text, "home_utilities")
+    if '"话费"' in home_utilities or '"手机话费"' in home_utilities:
+        failures.append("LifeMarkService: home_utilities must not absorb telecom bill keywords")
+
+    commute = extract_life_mark_block(text, "commute")
+    if '"花小猪"' in commute:
+        failures.append("LifeMarkService: commute must not treat ride-hailing brand alone as high-confidence commute")
+
+    daily_exclusions = extract_swift_string_set(text, "broadDailySupplySpecificDefinitionIDs")
+    missing_daily = [intent_id for intent_id in DAILY_SUPPLY_EXCLUSION_IDS if intent_id not in daily_exclusions]
+    if missing_daily:
+        failures.append(
+            "LifeMarkService: daily_supply broad match missing exclusions "
+            + ", ".join(missing_daily)
+        )
+
+    leisure_exclusions = extract_swift_string_set(text, "broadLeisureSpecificDefinitionIDs")
+    missing_leisure = [intent_id for intent_id in LEISURE_EXCLUSION_IDS if intent_id not in leisure_exclusions]
+    if missing_leisure:
+        failures.append(
+            "LifeMarkService: leisure broad match missing exclusions "
+            + ", ".join(missing_leisure)
+        )
 
 
 def scan_broad_keywords(failures: list[str], texts: dict[str, str]) -> None:
@@ -365,6 +432,7 @@ def main() -> int:
     scan_regression_cases(failures, payload)
     texts = scan_swift_presence(failures)
     scan_scene_pack_notes(failures, texts["scene_pack"])
+    scan_life_mark_boundaries(failures, texts["life_mark"])
     scan_broad_keywords(failures, texts)
 
     if failures:

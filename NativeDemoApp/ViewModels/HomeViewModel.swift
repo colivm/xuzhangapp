@@ -1004,6 +1004,7 @@ final class HomeViewModel: ObservableObject {
            abs(recordPrefillAmount - amount) < 0.005 {
             return CategoryRecommendResult(recommended: category, reasonTag: recordPrefillResult?.source)
         }
+        guard !trimmedNote.isEmpty else { return nil }
         let start = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? .distantPast
         let recentItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
         return categoryRecommendService.recommend(

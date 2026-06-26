@@ -52,6 +52,30 @@ enum LifeMarkService {
     private static var aggregateCache: [String: [LifeMarkAggregate]] = [:]
     private static var aggregateCacheOrder: [String] = []
     private static let aggregateCacheLimit = 48
+    private static let telecomBillKeywords = ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国移动通信集团", "中国联通", "中国电信", "移动通信", "运营商缴费"]
+    private static let broadDailySupplySpecificDefinitionIDs: Set<String> = [
+        "fitness",
+        "home_utilities",
+        "telecom_bill",
+        "household_service",
+        "digital_subscription",
+        "baby_supply",
+        "medical_care",
+        "social_care",
+        "groceries",
+        "interest_gear",
+        "learning_growth",
+        "pet_supply"
+    ]
+    private static let broadLeisureSpecificDefinitionIDs: Set<String> = [
+        "fitness",
+        "digital_subscription",
+        "social_care",
+        "movie_ticket",
+        "travel",
+        "interest_gear",
+        "learning_growth"
+    ]
 
     private static let definitions: [LifeMarkDefinition] = [
         LifeMarkDefinition(
@@ -81,11 +105,11 @@ enum LifeMarkService {
             label: "通勤出行",
             category: .transport,
             categories: [.transport],
-            keywords: ["通勤", "上班", "下班", "地铁", "公交", "花小猪", "早高峰", "晚高峰", "轨道交通"],
+            keywords: ["通勤", "上班", "下班", "地铁", "公交", "早高峰", "晚高峰", "轨道交通"],
             access: .free,
             priority: 20,
             minimumCount: 1,
-            requiresKeywordMatch: false
+            requiresKeywordMatch: true
         ),
         LifeMarkDefinition(
             id: "weekend_gathering",
@@ -107,7 +131,7 @@ enum LifeMarkService {
             access: .free,
             priority: 28,
             minimumCount: 1,
-            requiresKeywordMatch: false
+            requiresKeywordMatch: true
         ),
         LifeMarkDefinition(
             id: "everyday_meal",
@@ -125,9 +149,20 @@ enum LifeMarkService {
             label: "房租水电物业",
             category: .home,
             categories: [.home, .daily, .other],
-            keywords: ["水电", "水费", "电费", "燃气", "煤气", "物业", "宽带", "网费", "暖气费", "取暖费", "供暖费", "采暖费", "热力费", "供热费", "暖气缴费", "热力公司", "网上国网", "国网", "房租", "租房", "租房子", "租屋", "租赁", "租金", "押金", "房东", "停车费", "话费"],
+            keywords: ["水电", "水费", "电费", "燃气", "煤气", "物业", "宽带", "网费", "暖气费", "取暖费", "供暖费", "采暖费", "热力费", "供热费", "暖气缴费", "热力公司", "网上国网", "国网", "房租", "租房", "租房子", "租屋", "租赁", "租金", "押金", "房东", "停车费"],
             access: .free,
             priority: 30,
+            minimumCount: 1,
+            requiresKeywordMatch: true
+        ),
+        LifeMarkDefinition(
+            id: "telecom_bill",
+            label: "手机话费",
+            category: .daily,
+            categories: [.daily],
+            keywords: telecomBillKeywords,
+            access: .free,
+            priority: 31,
             minimumCount: 1,
             requiresKeywordMatch: true
         ),
@@ -217,7 +252,7 @@ enum LifeMarkService {
             access: .free,
             priority: 24,
             minimumCount: 1,
-            requiresKeywordMatch: false
+            requiresKeywordMatch: true
         ),
         LifeMarkDefinition(
             id: "travel",
@@ -646,7 +681,15 @@ enum LifeMarkService {
             return categoryMatched && keywordMatched
         }
         if definition.id == "daily_supply",
-           matchesAnySpecificDailyCareDefinition(item) {
+           isTelecomBill(item) {
+            return false
+        }
+        if definition.id == "daily_supply",
+           matchesAnySpecificDefinition(item, ids: broadDailySupplySpecificDefinitionIDs) {
+            return false
+        }
+        if definition.id == "leisure",
+           matchesAnySpecificDefinition(item, ids: broadLeisureSpecificDefinitionIDs) {
             return false
         }
         if definition.id == "daily_supply", item.category != .daily {
@@ -657,14 +700,17 @@ enum LifeMarkService {
             : categoryMatched || keywordMatched
     }
 
-    private static func matchesAnySpecificDailyCareDefinition(_ item: HomeItem) -> Bool {
-        let specificIDs = ["baby_supply", "pet_supply"]
+    private static func matchesAnySpecificDefinition(_ item: HomeItem, ids specificIDs: Set<String>) -> Bool {
         let text = semanticText(for: item)
         return definitions.contains { definition in
             specificIDs.contains(definition.id)
                 && definition.categories.contains(item.category)
                 && containsAny(text, definition.keywords)
         }
+    }
+
+    private static func isTelecomBill(_ item: HomeItem) -> Bool {
+        containsAny(semanticText(for: item), telecomBillKeywords)
     }
 
     private static func matches(_ item: HomeItem, definitionID: String) -> Bool {
@@ -787,6 +833,8 @@ enum LifeMarkService {
             return interestGearLabel(for: item)
         case "home_utilities":
             return homeUtilityLabel(for: item)
+        case "telecom_bill":
+            return "话费"
         case "household_service":
             return householdServiceLabel(for: item)
         default:
@@ -879,9 +927,6 @@ enum LifeMarkService {
         }
         if containsAny(text, ["停车费"]) {
             return "停车费"
-        }
-        if containsAny(text, ["话费"]) {
-            return "话费"
         }
         return "家账"
     }
