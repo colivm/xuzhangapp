@@ -363,7 +363,7 @@ struct SummaryPlaybackSheet: View {
                 .transition(.opacity)
 
             ScrollView {
-                VStack(spacing: 16) {
+                LazyVStack(spacing: 16) {
                     Capsule()
                         .fill(Color.white.opacity(0.58))
                         .frame(width: 42, height: 5)

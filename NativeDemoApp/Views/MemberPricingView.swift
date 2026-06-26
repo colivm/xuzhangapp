@@ -226,7 +226,7 @@ struct MemberPricingView: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
+                    LazyVStack(alignment: .leading, spacing: 16) {
                         // ── Hero ──
                         if !isMember {
                             heroSection

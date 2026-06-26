@@ -24,6 +24,10 @@ struct AppColors {
     static var text: Color { theme.textPrimary }
     static var subtext: Color { theme.textSecondary }
     static var tertiary: Color { theme.textTertiary }
+    static var readableSubtext: Color { theme.textSecondary }
+    static var readableTertiary: Color { theme.textSecondary }
+    static var readableAccent: Color { theme.readableAccent }
+    static var onAccent: Color { theme.onAccent }
     static var heroGradientPink: Color { theme.heroGradientPink }
     static var heroGradientTeal: Color { theme.heroGradientTeal }
     static var tabActiveBg: Color { theme.tabActiveBg }
@@ -71,6 +75,13 @@ struct AppColors {
     }
 }
 
+extension View {
+    func minimumTapTarget(_ size: CGFloat = 44) -> some View {
+        frame(minWidth: size, minHeight: size)
+            .contentShape(Rectangle())
+    }
+}
+
 // MARK: - Glass Panel Modifier
 
 struct GlassPanel: ViewModifier {
@@ -84,10 +95,6 @@ struct GlassPanel: ViewModifier {
             .background(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .fill(AppColors.panel)
-                    .background(
-                        RoundedRectangle(cornerRadius: radius, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -105,7 +112,7 @@ struct GlassPanel: ViewModifier {
                     .stroke(AppColors.line, lineWidth: 1)
                     .allowsHitTesting(false)
             )
-            .shadow(color: Color(red: 117/255, green: 131/255, blue: 156/255).opacity(0.11), radius: 22, x: 0, y: 8)
+            .shadow(color: Color(red: 117/255, green: 131/255, blue: 156/255).opacity(0.08), radius: 14, x: 0, y: 6)
     }
 }
 
@@ -132,10 +139,6 @@ struct PaperChapterPanel: ViewModifier {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .background(
-                        RoundedRectangle(cornerRadius: radius, style: .continuous)
-                            .fill(.thinMaterial)
-                    )
             )
             .overlay(alignment: .leading) {
                 if showsAccentLine {
@@ -152,7 +155,7 @@ struct PaperChapterPanel: ViewModifier {
                     .stroke(AppColors.paperBorder.opacity(0.28), lineWidth: 1)
                     .allowsHitTesting(false)
             )
-            .shadow(color: Color(red: 128/255, green: 106/255, blue: 82/255).opacity(0.10), radius: 22, x: 0, y: 8)
+            .shadow(color: Color(red: 128/255, green: 106/255, blue: 82/255).opacity(0.07), radius: 14, x: 0, y: 6)
     }
 }
 
@@ -189,6 +192,7 @@ struct ContentView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedTab: AppTab = .today
     @State private var showMemberPricing = false
     @State private var pricingHighlightPlanId: String?
@@ -339,7 +343,6 @@ struct ContentView: View {
             Text(selectedTab.pageTitle)
                 .font(.system(size: 32, weight: .semibold, design: .default))
                 .foregroundStyle(AppColors.text)
-                .animation(.easeInOut(duration: 0.28), value: selectedTab)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
@@ -347,7 +350,7 @@ struct ContentView: View {
         .padding(.bottom, 10)
         .background(
             Rectangle()
-                .fill(.thinMaterial)
+                .fill(AppColors.panelStrong)
                 .overlay(alignment: .bottom) {
                     Rectangle()
                         .fill(Color.white.opacity(0.43))
@@ -416,11 +419,18 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .transaction { transaction in
+            transaction.animation = nil
+        }
     }
 
     private func selectTab(_ tab: AppTab) {
         guard selectedTab != tab else { return }
-        selectedTab = tab
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            selectedTab = tab
+        }
     }
 
     private func showHomeLifeMarkRewardPrompt(_ prompt: LifeMarkSceneRewardPrompt) {
@@ -462,8 +472,14 @@ struct ContentView: View {
             Color.black.opacity(0.24)
                 .ignoresSafeArea()
 
-            TimelineView(.animation) { context in
-                lifeMarkRewardAnimatedBackdrop(time: context.date.timeIntervalSinceReferenceDate)
+            Group {
+                if reduceMotion {
+                    lifeMarkRewardAnimatedBackdrop(time: 0)
+                } else {
+                    TimelineView(.periodic(from: Date(), by: 1.0 / 12.0)) { context in
+                        lifeMarkRewardAnimatedBackdrop(time: context.date.timeIntervalSinceReferenceDate)
+                    }
+                }
             }
             .allowsHitTesting(false)
 
@@ -611,13 +627,13 @@ struct ContentView: View {
         .padding(.bottom, 8)
         .background(
             Rectangle()
-                .fill(.thinMaterial)
+                .fill(AppColors.panelStrong)
                 .overlay(alignment: .top) {
                     Rectangle()
                         .fill(Color.white.opacity(0.43))
                         .frame(height: 1)
                 }
-                .shadow(color: AppColors.bg.opacity(0.4), radius: 14, x: 0, y: -8)
+                .shadow(color: AppColors.bg.opacity(0.28), radius: 10, x: 0, y: -6)
         )
     }
 

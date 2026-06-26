@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 enum ThemeTier: String, Codable, CaseIterable, Identifiable {
@@ -200,6 +201,8 @@ struct ResolvedThemeTokens {
     let textTertiary: Color
     let accent: Color
     let accentDark: Color
+    let readableAccent: Color
+    let onAccent: Color
     let lockGold: Color
     let heroGradientPink: Color
     let heroGradientTeal: Color
@@ -243,6 +246,13 @@ struct ResolvedThemeTokens {
         textTertiary = tokens.textTertiary.color
         accent = tokens.accent.color
         accentDark = tokens.accentDark.color
+        readableAccent = Self.readableAccentColor(
+            accent: tokens.accent,
+            accentDark: tokens.accentDark,
+            textPrimary: tokens.textPrimary,
+            backgrounds: [tokens.background, tokens.surface]
+        )
+        onAccent = Self.foregroundColor(on: tokens.accent, preferred: tokens.textPrimary)
         lockGold = tokens.lockGold.color
         heroGradientPink = tokens.heroGradientPink.color
         heroGradientTeal = tokens.heroGradientTeal.color
@@ -290,11 +300,14 @@ struct ResolvedThemeTokens {
         surfaceWarm = Color(red: 1.0, green: 0.969, blue: 0.925)
         surfaceMuted = Color(red: 0.941, green: 0.949, blue: 0.961)
         stroke = Color(red: 0.910, green: 0.929, blue: 0.949)
-        textPrimary = Color(red: 0.145, green: 0.188, blue: 0.255)
+        let fallbackTextPrimary = Color(red: 0.145, green: 0.188, blue: 0.255)
+        textPrimary = fallbackTextPrimary
         textSecondary = Color(red: 0.365, green: 0.412, blue: 0.494)
         textTertiary = Color(red: 0.541, green: 0.584, blue: 0.659)
         accent = Color(red: 0.498, green: 0.702, blue: 0.635)
         accentDark = Color(red: 0.471, green: 0.682, blue: 0.620)
+        readableAccent = fallbackTextPrimary
+        onAccent = fallbackTextPrimary
         lockGold = Color(red: 0.788, green: 0.651, blue: 0.290)
         heroGradientPink = Color(red: 1.0, green: 0.773, blue: 0.871)
         heroGradientTeal = Color(red: 0.690, green: 0.878, blue: 0.859)
@@ -330,11 +343,72 @@ struct ResolvedThemeTokens {
         settingsEnvelopeSage = Color(hexString: "#8FB1A3")
         settingsEnvelopeDeepSage = Color(hexString: "#4D776A")
     }
+
+    private static func readableAccentColor(
+        accent: TokenColor,
+        accentDark: TokenColor,
+        textPrimary: TokenColor,
+        backgrounds: [TokenColor]
+    ) -> Color {
+        let candidates = [accentDark, accent, textPrimary]
+        if let accessible = candidates.first(where: { candidate in
+            backgrounds.allSatisfy { candidate.contrastRatio(to: $0) >= 4.5 }
+        }) {
+            return accessible.color
+        }
+        return candidates.max { lhs, rhs in
+            lhs.minimumContrast(against: backgrounds) < rhs.minimumContrast(against: backgrounds)
+        }?.color ?? textPrimary.color
+    }
+
+    private static func foregroundColor(on background: TokenColor, preferred: TokenColor) -> Color {
+        if preferred.contrastRatio(to: background) >= 4.5 {
+            return preferred.color
+        }
+        let candidates = [preferred, TokenColor("#000000"), TokenColor("#FFFFFF")]
+        return candidates.max {
+            $0.contrastRatio(to: background) < $1.contrastRatio(to: background)
+        }?.color ?? preferred.color
+    }
 }
 
 extension TokenColor {
     var color: Color {
         Color(hexString: hex)
+    }
+
+    fileprivate func contrastRatio(to other: TokenColor) -> Double {
+        let lighter = max(relativeLuminance, other.relativeLuminance)
+        let darker = min(relativeLuminance, other.relativeLuminance)
+        return (lighter + 0.05) / (darker + 0.05)
+    }
+
+    fileprivate func minimumContrast(against backgrounds: [TokenColor]) -> Double {
+        backgrounds.map { contrastRatio(to: $0) }.min() ?? 0
+    }
+
+    private var relativeLuminance: Double {
+        let components = rgbComponents
+        return 0.2126 * Self.linearized(components.red)
+            + 0.7152 * Self.linearized(components.green)
+            + 0.0722 * Self.linearized(components.blue)
+    }
+
+    private var rgbComponents: (red: Double, green: Double, blue: Double) {
+        let cleaned = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var value: UInt64 = 0
+        Scanner(string: cleaned).scanHexInt64(&value)
+        return (
+            red: Double((value >> 16) & 0xFF) / 255.0,
+            green: Double((value >> 8) & 0xFF) / 255.0,
+            blue: Double(value & 0xFF) / 255.0
+        )
+    }
+
+    private static func linearized(_ value: Double) -> Double {
+        value <= 0.03928
+            ? value / 12.92
+            : pow((value + 0.055) / 1.055, 2.4)
     }
 }
 

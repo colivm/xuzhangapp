@@ -29,6 +29,7 @@ private enum TodayPlaybackPrompt: Equatable {
 }
 
 private struct HighConfidenceCommuteFloatingCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let suggestion: HomeViewModel.HighConfidenceQuickRecordSuggestion
     let weatherKind: String?
     let isPulsing: Bool
@@ -64,17 +65,19 @@ private struct HighConfidenceCommuteFloatingCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .shadow(color: .black.opacity(0.34), radius: 5, y: 2)
 
-                    Text("\(suggestion.title) · \(suggestion.amount.formatted(.cny))")
+                    Text(suggestion.amountSummaryText)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.94))
-                        .lineLimit(1)
+                        .lineLimit(suggestion.secondaryTitle == nil ? 1 : 2)
                         .minimumScaleFactor(0.82)
+                        .shadow(color: .black.opacity(0.30), radius: 4, y: 1)
 
                     Text(suggestion.detail)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.78))
+                        .foregroundStyle(Color.white.opacity(0.90))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
+                        .shadow(color: .black.opacity(0.34), radius: 4, y: 1)
                 }
 
                 Spacer(minLength: 2)
@@ -87,6 +90,7 @@ private struct HighConfidenceCommuteFloatingCard: View {
                             .frame(width: 30, height: 30)
                             .background(Circle().fill(Color.black.opacity(0.22)))
                             .overlay(Circle().stroke(Color.white.opacity(0.24), lineWidth: 1))
+                            .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("关闭")
@@ -120,10 +124,14 @@ private struct HighConfidenceCommuteFloatingCard: View {
         .overlay(quickCardBorder)
         .overlay(quickCardGlint)
         .shadow(color: .black.opacity(0.18), radius: 24, x: 0, y: 14)
-        .shadow(color: AppColors.accent.opacity(isPulsing ? 0.22 : 0.05), radius: isPulsing ? 22 : 8, x: 0, y: 0)
-        .offset(y: isPulsing ? -4 : 2)
-        .scaleEffect(isPulsing ? 1.012 : 0.992)
-        .animation(.easeInOut(duration: 1.9).repeatForever(autoreverses: true), value: isPulsing)
+        .shadow(color: AppColors.accent.opacity(isMotionPulsing ? 0.22 : 0.05), radius: isMotionPulsing ? 22 : 8, x: 0, y: 0)
+        .offset(y: isMotionPulsing ? -4 : 2)
+        .scaleEffect(isMotionPulsing ? 1.012 : 0.992)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 1.9).repeatForever(autoreverses: true), value: isMotionPulsing)
+    }
+
+    private var isMotionPulsing: Bool {
+        isPulsing && !reduceMotion
     }
 
     private var commuteGlyph: some View {
@@ -222,7 +230,7 @@ private struct HighConfidenceCommuteFloatingCard: View {
         LinearGradient(
             colors: [
                 Color.clear,
-                Color.white.opacity(isPulsing ? 0.16 : 0.04),
+                Color.white.opacity(isMotionPulsing ? 0.16 : 0.04),
                 Color.clear
             ],
             startPoint: .top,
@@ -230,7 +238,7 @@ private struct HighConfidenceCommuteFloatingCard: View {
         )
         .frame(width: 84)
         .rotationEffect(.degrees(18))
-        .offset(x: isPulsing ? 210 : -190)
+        .offset(x: isMotionPulsing ? 210 : -190)
         .blur(radius: 1.4)
         .allowsHitTesting(false)
     }
@@ -241,7 +249,7 @@ private struct HighConfidenceCommuteFloatingCard: View {
                 LinearGradient(
                     colors: [
                         Color.white.opacity(0.54),
-                        AppColors.accent.opacity(isPulsing ? 0.42 : 0.22),
+                        AppColors.accent.opacity(isMotionPulsing ? 0.42 : 0.22),
                         Color.white.opacity(0.22)
                     ],
                     startPoint: .topLeading,
@@ -253,8 +261,8 @@ private struct HighConfidenceCommuteFloatingCard: View {
 
     private var quickCardGlint: some View {
         RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .stroke(Color.white.opacity(isPulsing ? 0.34 : 0.08), lineWidth: 1.5)
-            .blur(radius: isPulsing ? 0.25 : 1.2)
+            .stroke(Color.white.opacity(isMotionPulsing ? 0.34 : 0.08), lineWidth: 1.5)
+            .blur(radius: isMotionPulsing ? 0.25 : 1.2)
             .allowsHitTesting(false)
     }
 }
@@ -330,6 +338,7 @@ private struct CommuteQuickCardWeatherLayer: View {
 }
 
 struct HomeView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     var onQuickRecord: () -> Void = {}
@@ -353,6 +362,7 @@ struct HomeView: View {
     @State private var quickRecordCardDismissedID: String?
     @State private var quickRecordCardAutoCloseID: String?
     @State private var quickRecordCardPulse = false
+    @State private var quickRecordRefreshTick = 0
     @State private var quickRecordWeatherRefreshTick = 0
     @GestureState private var todaySwipeDragState: TodaySwipeDragState?
     private let dailyQuotaStore = DailyFeatureQuotaStore()
@@ -408,6 +418,9 @@ struct HomeView: View {
         }
         .onChange(of: homeViewModel.recentThreeItems.first?.id) { _, _ in
             scheduleRecentSaveHighlight()
+        }
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in
+            quickRecordRefreshTick += 1
         }
         .onChange(of: settingsViewModel.petCompanionEnabled) { _, enabled in
             if !enabled {
@@ -479,6 +492,7 @@ struct HomeView: View {
 
     @ViewBuilder
     private var highConfidenceQuickRecordOverlay: some View {
+        let _ = quickRecordRefreshTick
         if let suggestion = homeViewModel.highConfidenceQuickRecordSuggestion,
            quickRecordCardDismissedID != suggestion.id {
             HighConfidenceCommuteFloatingCard(
@@ -524,8 +538,10 @@ struct HomeView: View {
             scheduleQuickRecordWeatherRefresh(for: suggestion.id, delay: 1.2)
             scheduleQuickRecordWeatherRefresh(for: suggestion.id, delay: 3.0)
         }
-        withAnimation(.easeInOut(duration: 1.9).repeatForever(autoreverses: true)) {
-            quickRecordCardPulse = true
+        if !reduceMotion {
+            withAnimation(.easeInOut(duration: 1.9).repeatForever(autoreverses: true)) {
+                quickRecordCardPulse = true
+            }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
             guard quickRecordCardAutoCloseID == suggestion.id,
@@ -610,10 +626,11 @@ struct HomeView: View {
                                 .font(.system(size: 11, weight: .semibold))
                         }
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppColors.subtext.opacity(0.9))
+                        .foregroundStyle(AppColors.readableSubtext)
                         .padding(.top, 8)
                     }
                     .buttonStyle(.plain)
+                    .minimumTapTarget()
                 }
             }
         }
@@ -637,11 +654,11 @@ struct HomeView: View {
                 .foregroundStyle(AppColors.text.opacity(0.88))
             Text(card.updatedAt, style: .relative)
                 .font(.system(size: 11))
-                .foregroundStyle(AppColors.subtext)
+                .foregroundStyle(AppColors.readableSubtext)
         } else if homeViewModel.recentThreeItems.isEmpty {
             Text("先记几笔，这里会慢慢长出最近的生活线索。")
                 .font(.system(size: 14))
-                .foregroundStyle(AppColors.subtext)
+                .foregroundStyle(AppColors.readableSubtext)
         } else {
             lifeRhythmFallback
         }
@@ -653,11 +670,11 @@ struct HomeView: View {
             if daysWithRecords > 0 {
                 Text("已记录 \(daysWithRecords) 天")
                     .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext.opacity(0.9))
+                    .foregroundStyle(AppColors.readableSubtext)
             }
             Text(lifeRhythmFallbackText)
                 .font(.system(size: 13))
-                .foregroundStyle(AppColors.subtext)
+                .foregroundStyle(AppColors.readableSubtext)
         }
     }
 
@@ -675,7 +692,7 @@ struct HomeView: View {
         return VStack(alignment: .leading, spacing: 10) {
             Text("今日小记")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(AppColors.subtext.opacity(0.88))
+                .foregroundStyle(AppColors.readableSubtext)
 
             Text(narrative.title)
                 .font(.system(size: 26, weight: .bold))
@@ -696,6 +713,7 @@ struct HomeView: View {
                     narrativePill(narrative.todayTotalText)
                 }
                 .buttonStyle(.plain)
+                .minimumTapTarget()
 
                 Button {
                     onNavigateWeeklyTrace?()
@@ -703,6 +721,7 @@ struct HomeView: View {
                     narrativePill(narrative.weekTotalText)
                 }
                 .buttonStyle(.plain)
+                .minimumTapTarget()
             }
             .padding(.top, 2)
         }
@@ -713,7 +732,7 @@ struct HomeView: View {
     private func narrativePill(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(AppColors.subtext.opacity(0.88))
+            .foregroundStyle(AppColors.readableSubtext)
             .lineLimit(1)
             .minimumScaleFactor(0.78)
             .padding(.horizontal, 10)
@@ -752,7 +771,7 @@ struct HomeView: View {
 
                     Text(subtitle)
                         .font(.system(size: 11))
-                        .foregroundStyle(AppColors.subtext.opacity(0.88))
+                        .foregroundStyle(AppColors.readableSubtext)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -795,7 +814,7 @@ struct HomeView: View {
     private func homeActionIconBadge(systemImage: String) -> some View {
         Image(systemName: systemImage == "plus.circle.fill" ? "plus" : "play.fill")
             .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(AppColors.accent.opacity(0.92))
+            .foregroundStyle(AppColors.readableAccent)
             .frame(width: 34, height: 34)
             .background(
                 Circle()
@@ -873,14 +892,14 @@ struct HomeView: View {
         HStack(spacing: 10) {
             Image(systemName: "play.circle.fill")
                 .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(AppColors.accent)
+                .foregroundStyle(AppColors.readableAccent)
             VStack(alignment: .leading, spacing: 2) {
                 Text("用十几秒叙一下今天")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(AppColors.text)
                 Text("第一笔已经记好，听一遍今日回放。")
                     .font(.system(size: 11))
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(AppColors.readableSubtext)
             }
             Spacer()
         }
@@ -905,7 +924,7 @@ struct HomeView: View {
             HStack(spacing: 10) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(AppColors.accent)
+                    .foregroundStyle(AppColors.readableAccent)
                     .frame(width: 30, height: 30)
                     .background(AppColors.accent.opacity(0.12), in: Circle())
                 VStack(alignment: .leading, spacing: 3) {
@@ -914,12 +933,12 @@ struct HomeView: View {
                         .foregroundStyle(AppColors.text)
                     Text(guidance.message)
                         .font(.system(size: 12))
-                        .foregroundStyle(AppColors.subtext)
+                        .foregroundStyle(AppColors.readableSubtext)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(AppColors.subtext.opacity(0.72))
+                    .foregroundStyle(AppColors.readableSubtext)
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -933,6 +952,7 @@ struct HomeView: View {
             )
         }
         .buttonStyle(.plain)
+        .minimumTapTarget()
     }
 
     private func handleRouteGuidance(_ guidance: HomeViewModel.PlaybackRouteGuidance?) {
@@ -1003,7 +1023,7 @@ struct HomeView: View {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: todayPlaybackPrompt == .firstUse ? "clock.fill" : "play.circle.fill")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(AppColors.accent)
+                        .foregroundStyle(AppColors.readableAccent)
                         .frame(width: 36, height: 36)
                         .background(
                             Circle()
@@ -1017,7 +1037,7 @@ struct HomeView: View {
                         Text(todayPlaybackPrompt?.message(remaining: todayPlaybackRemaining(isMember: false)) ?? "")
                             .font(.system(size: 14, weight: .medium))
                             .lineSpacing(4)
-                            .foregroundStyle(AppColors.subtext)
+                            .foregroundStyle(AppColors.readableSubtext)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -1028,7 +1048,7 @@ struct HomeView: View {
                     } label: {
                         Text(todayPlaybackPrompt == .firstUse ? "晚点再说" : "知道了")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(AppColors.text.opacity(0.82))
+                            .foregroundStyle(AppColors.text)
                             .frame(maxWidth: .infinity, minHeight: 46)
                             .background(
                                 Capsule(style: .continuous)
@@ -1055,7 +1075,7 @@ struct HomeView: View {
                     } label: {
                         Text(todayPlaybackPrompt == .firstUse ? "现在听一遍" : "了解不限回放")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(AppColors.onAccent)
                             .frame(maxWidth: .infinity, minHeight: 46)
                             .background(
                                 Capsule(style: .continuous)
@@ -1207,7 +1227,7 @@ struct HomeView: View {
                 let emotionTag = item.displayEmotionTag
                 Text(emotionTag)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppColors.accent.opacity(0.74))
+                    .foregroundStyle(AppColors.readableAccent)
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.08)))
                     .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.18), lineWidth: 0.7))
@@ -1220,13 +1240,13 @@ struct HomeView: View {
             HStack(spacing: 6) {
                 Text(item.category.rawValue)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppColors.subtext.opacity(0.9))
+                    .foregroundStyle(AppColors.readableSubtext)
 
-                Text("·").foregroundStyle(AppColors.subtext)
+                Text("·").foregroundStyle(AppColors.readableSubtext)
 
                 Text(item.createdAt.zhBillDateTime)
                     .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext.opacity(0.92))
+                    .foregroundStyle(AppColors.readableSubtext)
             }
         }
         .padding(.vertical, 10)
@@ -1507,10 +1527,10 @@ struct HomeView: View {
                         Capsule(style: .continuous)
                             .stroke(todayRecordCategoryAccent(for: item).opacity(0.16), lineWidth: 0.7)
                     )
-                Text("·").foregroundStyle(AppColors.subtext)
+                Text("·").foregroundStyle(AppColors.readableSubtext)
                 Text(item.createdAt.zhBillDateTime)
                     .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext.opacity(0.96))
+                    .foregroundStyle(AppColors.readableSubtext)
                 Spacer()
             }
             .opacity(isEditing ? 0 : 1)
@@ -2081,9 +2101,10 @@ struct BillPlaybackSheet: View {
             Button { dismiss() } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppColors.subtext.opacity(0.76))
+                    .foregroundStyle(AppColors.readableSubtext)
                     .frame(width: 34, height: 34)
                     .background(Color.white.opacity(0.64), in: Circle())
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .padding(12)
@@ -2150,7 +2171,7 @@ struct BillPlaybackSheet: View {
                 .font(.system(size: 40))
             Text("今天还没有记录，先记一笔吧。")
                 .font(.system(size: 14))
-                .foregroundStyle(AppColors.subtext)
+                .foregroundStyle(AppColors.readableSubtext)
         }
         .frame(maxHeight: .infinity)
     }
@@ -2173,19 +2194,19 @@ struct BillPlaybackSheet: View {
                     .foregroundStyle(AppColors.text)
                 Text(todayPlaybackSubtitle)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(AppColors.readableSubtext)
                     .lineLimit(1)
                 if let hint = todayPlaybackUsageHint {
                     Text(hint)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(AppColors.subtext.opacity(0.76))
+                        .foregroundStyle(AppColors.readableSubtext)
                         .lineLimit(1)
                 }
             }
             Spacer()
             Text("\(todayItems.count) 笔")
                 .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(AppColors.accent)
+                .foregroundStyle(AppColors.readableAccent)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(Capsule(style: .continuous).fill(Color.white.opacity(0.58)))
@@ -2260,7 +2281,7 @@ struct BillPlaybackSheet: View {
 
                     Text(moment?.body ?? "先留下几笔，晚上再回来看。")
                         .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(AppColors.subtext.opacity(0.94))
+                        .foregroundStyle(AppColors.readableSubtext)
                         .lineSpacing(4)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -2273,7 +2294,7 @@ struct BillPlaybackSheet: View {
                     Text(playbackDone ? "今天看完了" : "正在翻今天")
                         .font(.system(size: 13, weight: .semibold))
                 }
-                .foregroundStyle(AppColors.accent.opacity(0.88))
+                .foregroundStyle(AppColors.readableAccent)
             }
             .padding(22)
             .frame(maxWidth: .infinity, minHeight: 286, alignment: .leading)
@@ -2380,7 +2401,7 @@ struct BillPlaybackSheet: View {
                 Text("今天的记录已经看完")
                     .font(.system(size: 14, weight: .semibold))
             }
-            .foregroundStyle(AppColors.accent.opacity(0.86))
+            .foregroundStyle(AppColors.readableAccent)
             .padding(.bottom, 8)
 
             if showMemberNudge {
@@ -2414,7 +2435,8 @@ struct BillPlaybackSheet: View {
             } label: {
                 Text("稍后再说")
                     .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext.opacity(0.7))
+                    .foregroundStyle(AppColors.readableSubtext)
+                    .minimumTapTarget()
             }
             Button {
                 dismiss()
@@ -2431,9 +2453,10 @@ struct BillPlaybackSheet: View {
     private var memberPlaybackNudgePrimaryLabel: some View {
         Text("✨ 了解会员")
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.onAccent)
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
+            .frame(minHeight: 44)
             .background(Capsule(style: .continuous).fill(AppColors.accent))
     }
 
@@ -2478,8 +2501,8 @@ struct BillPlaybackSheet: View {
             Text(title)
                 .font(.system(size: 14, weight: .semibold))
         }
-            .foregroundStyle(AppColors.text.opacity(0.82))
-            .frame(maxWidth: .infinity)
+            .foregroundStyle(AppColors.text)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .padding(.vertical, 12)
             .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(Color.white.opacity(0.58)))
             .overlay(
@@ -2497,8 +2520,8 @@ struct BillPlaybackSheet: View {
             Text(title)
                 .font(.system(size: 14, weight: .semibold))
         }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
+            .foregroundStyle(AppColors.onAccent)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .padding(.vertical, 12)
             .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(AppColors.accent))
     }

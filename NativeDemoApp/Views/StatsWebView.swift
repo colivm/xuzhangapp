@@ -2226,10 +2226,6 @@ struct StatsWebView: View {
                     endPoint: .bottomTrailing
                 )
             )
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(.thinMaterial)
-            )
     }
 
     private var traceDetailListBorder: some View {
@@ -2289,21 +2285,25 @@ struct StatsWebView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
         } else {
-            ForEach(traceDayGroups) { group in
-                traceDayHeader(group)
-                    .padding(.top, group.id == traceDayGroups.first?.id ? 0 : 6)
+            let groups = traceDayGroups
+            let firstGroupID = groups.first?.id
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(groups) { group in
+                    traceDayHeader(group)
+                        .padding(.top, group.id == firstGroupID ? 0 : 6)
 
-                ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
-                    if fromTraceDetail {
-                        traceDetailBillRecordRow(item, isFirst: index == 0)
-                    } else {
-                        Button {
-                            openEditor(for: item)
-                        } label: {
-                            billRecordRow(item, isFirst: index == 0)
-                                .contentShape(Rectangle())
+                    ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
+                        if fromTraceDetail {
+                            traceDetailBillRecordRow(item, isFirst: index == 0)
+                        } else {
+                            Button {
+                                openEditor(for: item)
+                            } label: {
+                                billRecordRow(item, isFirst: index == 0)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
