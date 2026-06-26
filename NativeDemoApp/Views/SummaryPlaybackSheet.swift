@@ -40,7 +40,7 @@ private struct StoryDynamicBackdrop: View {
             if reduceMotion {
                 canvasLayer(time: 0)
             } else {
-                TimelineView(.periodic(from: Date(), by: 1.0 / 15.0)) { timeline in
+                TimelineView(.periodic(from: Date(), by: 1.0 / 8.0)) { timeline in
                     canvasLayer(time: timeline.date.timeIntervalSinceReferenceDate)
                 }
             }
