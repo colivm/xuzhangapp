@@ -10,6 +10,7 @@ enum LifeSceneKind: String, CaseIterable, Hashable {
     case convenienceSupply
     case groceries
     case homeSupply
+    case telecomBill
     case shopping
     case medicalVisit
     case medicineCare
@@ -166,6 +167,14 @@ enum LifeSceneSemanticService {
                 semanticTag: "#家用补货",
                 supportTag: "#日常运转"
             )
+        case .telecomBill:
+            return LifeSceneWeeklyCopy(
+                fact: "手机话费记了 \(count) 次",
+                cares: ["这类通信账单单独留着，别混进房租水电里", "固定话费归固定话费，回看会更清楚"],
+                leadingTag: "#话费\(count)次",
+                semanticTag: "#手机话费",
+                supportTag: "#通信账单"
+            )
         case .shopping:
             return LifeSceneWeeklyCopy(
                 fact: "网购添置记了 \(count) 笔",
@@ -285,6 +294,8 @@ enum LifeSceneSemanticService {
             return "超市买菜记一笔"
         case .homeSupply:
             return "家用补给记一笔"
+        case .telecomBill:
+            return "手机话费记一笔"
         case .shopping:
             return "网购添置记一笔"
         case .medicalVisit:
@@ -345,8 +356,12 @@ enum LifeSceneSemanticService {
             add(.groceries, 6.8, .daily, "超市买菜", "#超市买菜", 30)
         case "sgcc_online":
             add(.homeSupply, 6.7, .home, "居家账单", "#居家账单", 34)
+        case "telecom_bill":
+            add(.telecomBill, 7.4, .daily, "手机话费", "#手机话费", 32)
         case "taobao", "jd", "miniso":
-            add(.shopping, 6.4, .shopping, "网购添置", "#快递到了", 45)
+            if !containsTelecomBillCue(text) {
+                add(.shopping, 6.4, .shopping, "网购添置", "#快递到了", 45)
+            }
         default:
             break
         }
@@ -378,6 +393,9 @@ enum LifeSceneSemanticService {
         if containsAny(text, ["纸巾", "洗衣液", "洗洁精", "清洁", "垃圾袋", "洗发水", "沐浴露", "牙刷", "毛巾", "美团闪购", "即时零售", "给家补货"]) {
             add(.homeSupply, 6.1, .daily, "家用补给", "#家用补给", 36)
         }
+        if containsTelecomBillCue(text) {
+            add(.telecomBill, 7.2, .daily, "手机话费", "#手机话费", 32)
+        }
         if containsAny(text, ["保洁", "家政", "钟点工", "开荒保洁", "上门保洁", "深度保洁", "擦玻璃", "清洗油烟机", "空调清洗", "搬家", "搬家公司", "货拉拉搬家", "网上国网", "国网", "暖气费", "取暖费", "供暖费", "采暖费", "热力费", "供热费", "暖气缴费", "热力公司", "水费", "电费", "燃气", "物业", "宽带"]) {
             add(.homeSupply, 6.5, .home, "居家账单", "#居家安排", 35)
         }
@@ -390,7 +408,8 @@ enum LifeSceneSemanticService {
         if containsAny(text, ["Office 365", "Microsoft 365", "Adobe订阅", "Creative Cloud", "Notion订阅", "Notion会员"]) {
             add(.shopping, 6.3, .shopping, "数字服务", "#数字订阅", 45)
         }
-        if containsAny(text, ["淘宝", "京东", "拼多多", "购物", "下单", "快递", "衣服", "鞋", "护肤", "充电器", "数据线", "充电宝", "耳机", "手机", "文具", "渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "谷子", "潮玩", "吧唧", "徽章", "亚克力", "立牌", "盲盒", "泡泡玛特", "POP MART", "POPMART", "LABUBU", "棉花娃娃", "痛包", "同人本", "乙游周边", "漫展周边", "乐器", "茶具", "咖啡器具"]) {
+        if !containsTelecomBillCue(text),
+           containsAny(text, ["淘宝", "京东", "拼多多", "购物", "下单", "快递", "衣服", "鞋", "护肤", "充电器", "数据线", "充电宝", "耳机", "手机", "文具", "渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "谷子", "潮玩", "吧唧", "徽章", "亚克力", "立牌", "盲盒", "泡泡玛特", "POP MART", "POPMART", "LABUBU", "棉花娃娃", "痛包", "同人本", "乙游周边", "漫展周边", "乐器", "茶具", "咖啡器具"]) {
             add(.shopping, 6.1, .shopping, "网购添置", "#快递到了", 46)
         }
         if containsAny(text, ["医院", "门诊", "诊所", "挂号", "问诊", "体检", "检查", "拍片", "验血", "口腔", "牙科", "洗牙", "配镜", "验光", "医美", "医美脱毛", "光子嫩肤", "水光针"]) {
@@ -452,5 +471,9 @@ enum LifeSceneSemanticService {
 
     private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
         keywords.contains { text.localizedCaseInsensitiveContains($0) }
+    }
+
+    private static func containsTelecomBillCue(_ text: String) -> Bool {
+        containsAny(text, ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国移动通信集团", "中国联通", "中国电信", "移动通信", "运营商缴费"])
     }
 }

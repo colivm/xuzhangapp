@@ -318,6 +318,7 @@ struct ScenePackAngleSheet: View {
         let index = packs.firstIndex { $0.id == pack.id } ?? 0
         let canMoveUp = index > 0
         let canMoveDown = index < packs.count - 1
+        let style = ScenePackVisualStyles.style(for: pack)
         return VStack(alignment: .leading, spacing: 9) {
             Button {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -368,14 +369,8 @@ struct ScenePackAngleSheet: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, minHeight: 184, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(AppColors.paperWarm.opacity(selectedPackID == pack.id ? 0.72 : 0.58))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(selectedPackID == pack.id ? AppColors.accent.opacity(0.30) : AppColors.line.opacity(0.55), lineWidth: 1)
-        )
+        .background(scenePackCardBackground(tint: style.colors.first ?? AppColors.accent, isSelected: selectedPackID == pack.id))
+        .overlay(scenePackCardBorder(tint: style.colors.first ?? AppColors.accent, isSelected: selectedPackID == pack.id))
         .onDrop(
             of: [UTType.plainText],
             delegate: ScenePackMemberDropDelegate(
@@ -391,13 +386,20 @@ struct ScenePackAngleSheet: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(AppColors.subtext)
-                .frame(width: 26, height: 26)
-                .background(Circle().fill(AppColors.surfaceMuted.opacity(0.70)))
+                .foregroundStyle(isEnabled ? AppColors.text.opacity(0.78) : AppColors.subtext.opacity(0.46))
+                .frame(width: 28, height: 28)
+                .background(
+                    Circle()
+                        .fill(isEnabled ? AppColors.panelStrong.opacity(0.84) : AppColors.surfaceMuted.opacity(0.48))
+                )
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(isEnabled ? 0.62 : 0.24), lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.30)
+        .opacity(isEnabled ? 1 : 0.48)
     }
 
     private func memberMoreToggle(_ configuration: MemberConfiguration) -> some View {
@@ -726,6 +728,59 @@ struct ScenePackAngleSheet: View {
         .buttonStyle(.plain)
     }
 
+    private func scenePackCardBackground(
+        tint: Color,
+        isSelected: Bool = false,
+        isLocked: Bool = false
+    ) -> some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(AppColors.panelStrong.opacity(isLocked ? 0.46 : (isSelected ? 0.88 : 0.72)))
+            .overlay(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(isLocked ? 0.18 : 0.34),
+                        AppColors.paperWarm.opacity(isLocked ? 0.18 : 0.28),
+                        tint.opacity(isSelected ? 0.16 : 0.08)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            )
+            .overlay(alignment: .bottomTrailing) {
+                RadialGradient(
+                    colors: [
+                        (isLocked ? AppColors.lockGold : tint).opacity(isSelected ? 0.16 : 0.10),
+                        Color.clear
+                    ],
+                    center: .bottomTrailing,
+                    startRadius: 0,
+                    endRadius: 120
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+    }
+
+    private func scenePackCardBorder(
+        tint: Color,
+        isSelected: Bool = false,
+        isLocked: Bool = false
+    ) -> some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(isLocked ? 0.24 : 0.62),
+                        (isLocked ? AppColors.lockGold : tint).opacity(isSelected || isLocked ? 0.34 : 0.18),
+                        AppColors.line.opacity(0.52)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: isSelected ? 1.2 : 1
+            )
+    }
+
     private var moduleBackground: some View {
         RoundedRectangle(cornerRadius: 22, style: .continuous)
             .fill(AppColors.panel.opacity(0.94))
@@ -743,6 +798,7 @@ struct ScenePackAngleSheet: View {
     ) -> some View {
         let isOpenSlot = selectedReplaceSlot == slot
         let canReplace = configuration.isInFirstWeek || configuration.canReplacePackCombination
+        let style = ScenePackVisualStyles.style(for: pack)
         return HStack(spacing: 10) {
             Button {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -806,14 +862,8 @@ struct ScenePackAngleSheet: View {
             }
         }
         .padding(11)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(isOpenSlot ? AppColors.accent.opacity(0.09) : AppColors.paperWarm.opacity(0.46))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(isOpenSlot ? AppColors.accent.opacity(0.28) : AppColors.line.opacity(0.55), lineWidth: 1)
-        )
+        .background(scenePackCardBackground(tint: style.colors.first ?? AppColors.accent, isSelected: isOpenSlot))
+        .overlay(scenePackCardBorder(tint: style.colors.first ?? AppColors.accent, isSelected: isOpenSlot))
         .contentShape(Rectangle())
     }
 
@@ -823,6 +873,7 @@ struct ScenePackAngleSheet: View {
     ) -> some View {
         let isLocked = isLockedMorePack(pack, configuration: configuration)
         let canReplaceThisPack = configuration.replaceableScenePacks.contains { $0.id == pack.id }
+        let style = ScenePackVisualStyles.style(for: pack)
         return Button {
             handleCandidateTap(pack, isLocked: isLocked, canReplaceThisPack: canReplaceThisPack, configuration: configuration)
         } label: {
@@ -851,14 +902,8 @@ struct ScenePackAngleSheet: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, minHeight: 172, alignment: .topLeading)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(AppColors.paperWarm.opacity(isLocked ? 0.38 : 0.58))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(isLocked ? AppColors.lockGold.opacity(0.24) : AppColors.line.opacity(0.55), lineWidth: 1)
-            )
+            .background(scenePackCardBackground(tint: style.colors.first ?? AppColors.accent, isLocked: isLocked))
+            .overlay(scenePackCardBorder(tint: style.colors.first ?? AppColors.accent, isLocked: isLocked))
         }
         .buttonStyle(.plain)
     }
@@ -866,16 +911,7 @@ struct ScenePackAngleSheet: View {
     private func scenePackVisual(_ pack: ScenePackDefinition, compact: Bool) -> some View {
         let style = ScenePackVisualStyles.style(for: pack)
         return ZStack(alignment: .bottomLeading) {
-            LinearGradient(colors: style.colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-
-            ForEach(Array(style.symbols.enumerated()), id: \.offset) { index, symbol in
-                Image(systemName: symbol)
-                    .font(.system(size: compact ? CGFloat(22 + index * 5) : CGFloat(25 + index * 7), weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(index == 0 ? 0.34 : 0.18))
-                    .rotationEffect(.degrees(index == 0 ? -8 : 12))
-                    .offset(x: compact ? CGFloat(30 + index * 18) : CGFloat(58 + index * 20),
-                            y: compact ? CGFloat(-8 + index * 8) : CGFloat(-12 + index * 12))
-            }
+            ScenePackVisualBackdrop(style: style, compact: compact)
 
             HStack(spacing: 7) {
                 Text(pack.emoji)
@@ -1055,6 +1091,7 @@ struct ScenePackAngleSheet: View {
         _ pack: ScenePackDefinition,
         configuration: FreeConfiguration
     ) -> some View {
+        let style = ScenePackVisualStyles.style(for: pack)
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             selectedPackID = pack.id
@@ -1095,14 +1132,8 @@ struct ScenePackAngleSheet: View {
                     .background(Capsule().fill(AppColors.accent))
             }
             .padding(11)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(AppColors.accent.opacity(selectedPackID == pack.id ? 0.13 : 0.08))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(AppColors.accent.opacity(0.22), lineWidth: 1)
-            )
+            .background(scenePackCardBackground(tint: style.colors.first ?? AppColors.accent, isSelected: selectedPackID == pack.id))
+            .overlay(scenePackCardBorder(tint: AppColors.accent, isSelected: true))
         }
         .buttonStyle(.plain)
     }

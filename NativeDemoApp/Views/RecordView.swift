@@ -492,15 +492,15 @@ struct RecordView: View {
         userNoteAnchorTitle = trimmed.isEmpty ? nil : trimmed
     }
 
-    private func shouldManualNoteOverrideSelectedCategory(_ title: String) -> Bool {
+    private func manualNoteOverrideCategory(_ title: String) -> HomeItem.Category? {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        guard homeViewModel.categoryLockedByUser || lastDraftIntent == .category else { return false }
-        guard !RecordSemanticLexicon.isTitle(trimmed, compatibleWith: homeViewModel.selectedCategory) else {
-            return false
+        guard !trimmed.isEmpty else { return nil }
+        guard !homeViewModel.categoryLockedByUser else { return nil }
+        guard let category = RecordSemanticLexicon.strongManualNoteCategory(of: trimmed),
+              category != homeViewModel.selectedCategory else {
+            return nil
         }
-        return !RecordSemanticLexicon.matchingCategories(in: trimmed).isEmpty
-            || !RecordSemanticLexicon.matchingEmotionRuleIDs(in: trimmed).isEmpty
+        return category
     }
 
     private func scenePackVariantKey(
@@ -1714,8 +1714,8 @@ struct RecordView: View {
                     }
                     if suppressNextNoteSemanticUnlock {
                         suppressNextNoteSemanticUnlock = false
-                    } else if shouldManualNoteOverrideSelectedCategory(homeViewModel.inputTitle) {
-                        homeViewModel.preferNoteSemanticsForCurrentDraft()
+                    } else if let category = manualNoteOverrideCategory(homeViewModel.inputTitle) {
+                        homeViewModel.applyRecommendedCategory(category)
                     }
                     rememberUserNoteAnchor(homeViewModel.inputTitle)
                 } else if suppressNextNoteSemanticUnlock {

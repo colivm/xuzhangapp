@@ -1307,6 +1307,9 @@ final class OCRService {
         windowText: String
     ) -> HomeItem.Category {
         // 支付宝列表自带分类，优先信平台分类；微信通常没有分类，用商户名/标题做本地推断。
+        if containsTelecomBillCue("\(title)\n\(windowText)") {
+            return .daily
+        }
         if mode == .alipay,
            let alipayCategory = alipayListCategory(from: windowLines) {
             if let localCategory = inferCategoryIfConfident(from: alipayLocalCategoryText(title: title, windowLines: windowLines)),
@@ -1365,6 +1368,12 @@ final class OCRService {
         if text.contains("投资理财") { return .other }
         if text == "其他" { return .other }
         return nil
+    }
+
+    private func containsTelecomBillCue(_ text: String) -> Bool {
+        ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国移动通信集团", "中国联通", "中国电信", "移动通信", "运营商缴费"].contains {
+            text.localizedCaseInsensitiveContains($0)
+        }
     }
 
     private func amountNear(labels: [String], in lines: [String]) -> Double? {

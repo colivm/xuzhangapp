@@ -351,6 +351,14 @@
       "expectedTitle": "not:淘宝"
     },
     {
+      "id": "ocr-phone-recharge-other-stays-daily",
+      "mode": "ocr",
+      "amount": 20,
+      "rawText": "话费充值\n¥20.00\n其他\n淘宝缴费",
+      "expectedCategory": "日用",
+      "expectedTitle": "not:淘宝"
+    },
+    {
       "id": "manual-convenience-breakfast-dining",
       "mode": "manual",
       "amount": 8,
@@ -358,6 +366,21 @@
       "inputTitle": "便利蜂买早餐",
       "expectedCategory": "餐饮",
       "expectedEmotionRule": "meal"
+    },
+    {
+      "id": "manual-tea-egg-small-amount-dining",
+      "mode": "manual",
+      "amount": 4,
+      "inputTitle": "茶叶蛋",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "convenience"
+    },
+    {
+      "id": "manual-phone-charger-stays-shopping",
+      "mode": "manual",
+      "amount": 39,
+      "inputTitle": "手机充电器",
+      "expectedCategory": "购物"
     },
     {
       "id": "manual-convenience-daily-goods-can-override-brand",

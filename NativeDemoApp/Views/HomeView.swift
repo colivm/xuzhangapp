@@ -40,12 +40,18 @@ private struct HighConfidenceCommuteFloatingCard: View {
             Image(suggestion.backgroundImageName)
                 .resizable()
                 .scaledToFill()
+                .saturation(0.62)
+                .brightness(-0.08)
+                .contrast(0.92)
 
             commuteImageScrim
+            commuteRouteOverlay
 
             if let weatherKind {
                 CommuteQuickCardWeatherLayer(kind: weatherKind)
             }
+
+            quickCardLightSweep
 
             HStack(spacing: 12) {
                 commuteGlyph
@@ -113,11 +119,11 @@ private struct HighConfidenceCommuteFloatingCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(quickCardBorder)
         .overlay(quickCardGlint)
-        .shadow(color: .black.opacity(0.16), radius: 22, x: 0, y: 12)
-        .shadow(color: AppColors.accent.opacity(isPulsing ? 0.16 : 0.04), radius: isPulsing ? 18 : 8, x: 0, y: 0)
-        .offset(y: isPulsing ? -2 : 1)
-        .scaleEffect(isPulsing ? 1.006 : 0.996)
-        .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: isPulsing)
+        .shadow(color: .black.opacity(0.18), radius: 24, x: 0, y: 14)
+        .shadow(color: AppColors.accent.opacity(isPulsing ? 0.22 : 0.05), radius: isPulsing ? 22 : 8, x: 0, y: 0)
+        .offset(y: isPulsing ? -4 : 2)
+        .scaleEffect(isPulsing ? 1.012 : 0.992)
+        .animation(.easeInOut(duration: 1.9).repeatForever(autoreverses: true), value: isPulsing)
     }
 
     private var commuteGlyph: some View {
@@ -133,32 +139,100 @@ private struct HighConfidenceCommuteFloatingCard: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color.black.opacity(0.58),
-                    Color.black.opacity(0.34),
-                    Color.black.opacity(0.62)
+                    Color.black.opacity(0.66),
+                    Color.black.opacity(0.42),
+                    Color.black.opacity(0.68)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             LinearGradient(
                 colors: [
-                    Color.black.opacity(0.54),
-                    Color.black.opacity(0.32),
-                    Color.black.opacity(0.08)
+                    Color.black.opacity(0.62),
+                    Color.black.opacity(0.40),
+                    Color.black.opacity(0.16)
                 ],
                 startPoint: .leading,
                 endPoint: .trailing
             )
             LinearGradient(
                 colors: [
-                    AppColors.accent.opacity(0.18),
+                    AppColors.accent.opacity(0.24),
                     Color.clear,
-                    Color.black.opacity(0.28)
+                    Color.black.opacity(0.32)
                 ],
                 startPoint: .topTrailing,
                 endPoint: .bottomLeading
             )
         }
+    }
+
+    private var commuteRouteOverlay: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            var mainRoute = Path()
+            mainRoute.move(to: CGPoint(x: size.width * 0.08, y: size.height * 0.70))
+            mainRoute.addCurve(
+                to: CGPoint(x: size.width * 0.88, y: size.height * 0.28),
+                control1: CGPoint(x: size.width * 0.28, y: size.height * 0.44),
+                control2: CGPoint(x: size.width * 0.56, y: size.height * 0.86)
+            )
+            context.stroke(
+                mainRoute,
+                with: .linearGradient(
+                    Gradient(colors: [
+                        Color.white.opacity(0.08),
+                        AppColors.accent.opacity(0.42),
+                        Color.white.opacity(0.18)
+                    ]),
+                    startPoint: CGPoint(x: 0, y: size.height),
+                    endPoint: CGPoint(x: size.width, y: 0)
+                ),
+                style: StrokeStyle(lineWidth: 2.6, lineCap: .round, lineJoin: .round)
+            )
+
+            var secondaryRoute = Path()
+            secondaryRoute.move(to: CGPoint(x: size.width * 0.18, y: size.height * 0.18))
+            secondaryRoute.addCurve(
+                to: CGPoint(x: size.width * 0.96, y: size.height * 0.62),
+                control1: CGPoint(x: size.width * 0.38, y: size.height * 0.10),
+                control2: CGPoint(x: size.width * 0.62, y: size.height * 0.52)
+            )
+            context.stroke(
+                secondaryRoute,
+                with: .color(Color.white.opacity(0.11)),
+                style: StrokeStyle(lineWidth: 1.2, lineCap: .round, dash: [5, 8])
+            )
+
+            for point in [
+                CGPoint(x: size.width * 0.18, y: size.height * 0.58),
+                CGPoint(x: size.width * 0.48, y: size.height * 0.62),
+                CGPoint(x: size.width * 0.76, y: size.height * 0.38)
+            ] {
+                let outer = CGRect(x: point.x - 5, y: point.y - 5, width: 10, height: 10)
+                let inner = CGRect(x: point.x - 2.5, y: point.y - 2.5, width: 5, height: 5)
+                context.fill(Path(ellipseIn: outer), with: .color(AppColors.accent.opacity(0.18)))
+                context.fill(Path(ellipseIn: inner), with: .color(Color.white.opacity(0.56)))
+            }
+        }
+        .blendMode(.screen)
+        .allowsHitTesting(false)
+    }
+
+    private var quickCardLightSweep: some View {
+        LinearGradient(
+            colors: [
+                Color.clear,
+                Color.white.opacity(isPulsing ? 0.16 : 0.04),
+                Color.clear
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(width: 84)
+        .rotationEffect(.degrees(18))
+        .offset(x: isPulsing ? 210 : -190)
+        .blur(radius: 1.4)
+        .allowsHitTesting(false)
     }
 
     private var quickCardBorder: some View {
@@ -205,10 +279,10 @@ private struct CommuteQuickCardWeatherLayer: View {
     private func weatherBody(time: TimeInterval) -> some View {
         if kind == "rain" {
             rainLayer(time: time)
-                .opacity(reduceMotion ? 0.22 : 0.42)
+                .opacity(reduceMotion ? 0.30 : 0.58)
         } else if kind == "snow" {
             snowLayer(time: time)
-                .opacity(reduceMotion ? 0.22 : 0.38)
+                .opacity(reduceMotion ? 0.30 : 0.52)
         }
     }
 
@@ -219,7 +293,7 @@ private struct CommuteQuickCardWeatherLayer: View {
                 let lane = (seed * 41).truncatingRemainder(dividingBy: 100) / 100
                 let speed = 0.36 + (seed * 11).truncatingRemainder(dividingBy: 17) / 42
                 let progress = (time * speed + seed * 0.067).truncatingRemainder(dividingBy: 1)
-                let length = 11 + (seed * 7).truncatingRemainder(dividingBy: 12)
+                let length = 15 + (seed * 7).truncatingRemainder(dividingBy: 14)
                 let x = lane * size.width + progress * size.height * 0.18 - 22
                 let y = progress * (size.height + 48) - 30
                 var path = Path()
@@ -227,8 +301,8 @@ private struct CommuteQuickCardWeatherLayer: View {
                 path.addLine(to: CGPoint(x: x + length * 0.30, y: y + length))
                 context.stroke(
                     path,
-                    with: .color(Color.white.opacity(0.20)),
-                    style: StrokeStyle(lineWidth: index.isMultiple(of: 4) ? 1.1 : 0.75, lineCap: .round)
+                    with: .color(Color.white.opacity(0.30)),
+                    style: StrokeStyle(lineWidth: index.isMultiple(of: 4) ? 1.25 : 0.85, lineCap: .round)
                 )
             }
         }
@@ -249,7 +323,7 @@ private struct CommuteQuickCardWeatherLayer: View {
                     width: radius * 2,
                     height: radius * 2
                 )
-                context.fill(Path(ellipseIn: rect), with: .color(Color.white.opacity(0.30)))
+                context.fill(Path(ellipseIn: rect), with: .color(Color.white.opacity(0.42)))
             }
         }
     }
@@ -420,7 +494,7 @@ struct HomeView: View {
             )
                 .frame(maxWidth: 430)
                 .padding(.horizontal, 12)
-                .padding(.top, 148)
+                .padding(.top, 172)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .id(suggestion.id)
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -450,10 +524,10 @@ struct HomeView: View {
             scheduleQuickRecordWeatherRefresh(for: suggestion.id, delay: 1.2)
             scheduleQuickRecordWeatherRefresh(for: suggestion.id, delay: 3.0)
         }
-        withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+        withAnimation(.easeInOut(duration: 1.9).repeatForever(autoreverses: true)) {
             quickRecordCardPulse = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 6.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
             guard quickRecordCardAutoCloseID == suggestion.id,
                   quickRecordCardDismissedID != suggestion.id else {
                 return
@@ -1763,42 +1837,8 @@ struct HomeView: View {
     private func todayRecordScenePackBackground(item: HomeItem, isEditing: Bool) -> some View {
         if let scenePackId = item.scenePackId {
             let style = ScenePackVisualStyles.style(for: scenePackId)
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        style.colors.first?.opacity(isEditing ? 0.10 : 0.16) ?? Color.clear,
-                        style.colors.last?.opacity(isEditing ? 0.08 : 0.13) ?? Color.clear,
-                        Color.white.opacity(0.34)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-
-                ForEach(Array(style.symbols.enumerated()), id: \.offset) { index, symbol in
-                    GeometryReader { proxy in
-                        Image(systemName: symbol)
-                            .font(.system(size: index == 0 ? 58 : 76, weight: .ultraLight))
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(Color.white.opacity(index == 0 ? 0.22 : 0.14))
-                            .rotationEffect(.degrees(index == 0 ? -8 : 12))
-                            .position(
-                                x: proxy.size.width * (index == 0 ? 0.78 : 0.93),
-                                y: proxy.size.height * (index == 0 ? 0.30 : 0.70)
-                            )
-                    }
-                }
-
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.60),
-                        Color.white.opacity(0.40),
-                        Color.white.opacity(0.22)
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            }
-            .opacity(isEditing ? 0.46 : 0.72)
+            ScenePackVisualBackdrop(style: style, compact: false, isSubtle: true)
+                .opacity(isEditing ? 0.40 : 0.64)
         }
     }
 

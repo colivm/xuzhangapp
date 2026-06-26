@@ -145,6 +145,9 @@ struct RecordPrefillService {
         input: RecordPrefillInput,
         historyItems: [HomeItem]
     ) -> RecordPrefillResult? {
+        guard !input.noteDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
         let result = genericCategoryService.recommend(
             input: CategoryRecommendInput(
                 amount: input.amount,
@@ -314,6 +317,7 @@ struct RecordPrefillService {
         let historyCents = Int((historyAmount * 100).rounded())
         let inputCents = Int((inputAmount * 100).rounded())
         if historyCents == inputCents { return true }
+        if max(historyAmount, inputAmount) <= 20 { return false }
 
         let lower = inputAmount * 0.8
         let upper = inputAmount * 1.2
