@@ -1092,7 +1092,7 @@ struct ScenePackAngleSheet: View {
         configuration: FreeConfiguration
     ) -> some View {
         let style = ScenePackVisualStyles.style(for: pack)
-        Button {
+        return Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             selectedPackID = pack.id
             configuration.onSelectFreePack(pack)

@@ -910,6 +910,19 @@ enum RecordSemanticLexicon {
     static let comboRules: [RecordSemanticComboRule] = payload.comboRules
     static let emotionKeywordRules: [RecordSemanticEmotionRule] = payload.emotionKeywordRules
 
+    private static let strongManualNoteOverrideRules: [(category: HomeItem.Category, keywords: [String])] = [
+        (.dining, ["茶叶蛋", "饭团", "关东煮", "便当", "三明治", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "咖啡", "奶茶", "拿铁", "美式"]),
+        (.transport, ["地铁", "公交", "打车", "滴滴", "花小猪", "网约车", "通勤", "早高峰", "晚高峰", "高铁", "机票", "机场", "充电桩", "电车充电", "汽车充电"]),
+        (.daily, ["纸巾", "抽纸", "卷纸", "湿巾", "洗衣液", "洗衣凝珠", "垃圾袋", "话费", "手机话费", "手机充值", "中国移动", "中国联通", "中国电信", "山姆会员"]),
+        (.home, ["房租", "电费", "燃气", "物业", "宽带", "暖气费", "取暖费", "供暖费", "热力费", "家政", "保洁", "搬家"]),
+        (.shopping, ["手机充电器", "数据线", "充电宝", "泡泡玛特", "POP MART", "谷子", "潮玩", "盲盒"]),
+        (.entertainment, ["网吧", "网咖", "上网费", "腾讯视频会员", "爱奇艺会员", "网易云音乐会员", "QQ音乐会员", "直播打赏"]),
+        (.health, ["药店", "医院", "挂号", "门诊", "体检", "洗牙", "配镜", "健身房", "私教"]),
+        (.lodging, ["酒店", "民宿", "住宿", "电竞酒店"]),
+        (.social, ["红包", "随礼", "份子钱", "白事随礼", "奠仪", "帛金"]),
+        (.other, ["驾校", "驾校报名费", "彩票", "刮刮乐"])
+    ]
+
     private static let payload: RecordSceneLexiconPayload = {
         guard let url = Bundle.main.url(forResource: "RecordSceneLexicon", withExtension: "json") else {
             return fallbackPayload(reason: "missing_bundle_resource")
@@ -1000,6 +1013,16 @@ enum RecordSemanticLexicon {
                 return lhs.score > rhs.score
             }
             .first?.category
+    }
+
+    static func strongManualNoteCategory(of text: String) -> HomeItem.Category? {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+        let matches = Set(strongManualNoteOverrideRules.compactMap { rule in
+            rule.keywords.contains { normalized.contains($0.lowercased()) } ? rule.category : nil
+        })
+        guard matches.count == 1 else { return nil }
+        return matches.first
     }
 
     static func isTitle(_ title: String, compatibleWith category: HomeItem.Category) -> Bool {

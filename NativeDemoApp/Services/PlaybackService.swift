@@ -524,7 +524,7 @@ final class PlaybackService {
             return "小补给"
         case .groceries:
             return "食材"
-        case .homeSupply:
+        case .homeSupply, .telecomBill:
             return "家用"
         case .shopping:
             return "购物"
@@ -578,7 +578,7 @@ final class PlaybackService {
             return "☕"
         case .commute, .cityRoute:
             return "🚌"
-        case .convenienceSupply, .groceries, .homeSupply:
+        case .convenienceSupply, .groceries, .homeSupply, .telecomBill:
             return "🛒"
         case .shopping:
             return "🛍️"
@@ -822,7 +822,7 @@ final class PlaybackService {
                 return .care
             case .groceries:
                 return .groceries
-            case .convenienceSupply, .homeSupply:
+            case .convenienceSupply, .homeSupply, .telecomBill:
                 return .homeSupply
             case .shopping:
                 return .shopping
