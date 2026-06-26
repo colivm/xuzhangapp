@@ -41,9 +41,10 @@ private struct HighConfidenceCommuteFloatingCard: View {
             Image(suggestion.backgroundImageName)
                 .resizable()
                 .scaledToFill()
-                .saturation(0.62)
-                .brightness(-0.08)
-                .contrast(0.92)
+                .saturation(0.42)
+                .brightness(0.04)
+                .contrast(0.82)
+                .opacity(0.52)
 
             commuteImageScrim
             commuteRouteOverlay
@@ -60,24 +61,21 @@ private struct HighConfidenceCommuteFloatingCard: View {
                 VStack(alignment: .leading, spacing: 7) {
                     Text(suggestion.headline)
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.text)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
-                        .shadow(color: .black.opacity(0.34), radius: 5, y: 2)
 
                     Text(suggestion.amountSummaryText)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.94))
+                        .foregroundStyle(AppColors.readableAccent)
                         .lineLimit(suggestion.secondaryTitle == nil ? 1 : 2)
                         .minimumScaleFactor(0.82)
-                        .shadow(color: .black.opacity(0.30), radius: 4, y: 1)
 
                     Text(suggestion.detail)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.90))
+                        .foregroundStyle(AppColors.readableSubtext)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
-                        .shadow(color: .black.opacity(0.34), radius: 4, y: 1)
                 }
 
                 Spacer(minLength: 2)
@@ -86,10 +84,10 @@ private struct HighConfidenceCommuteFloatingCard: View {
                     Button(action: onClose) {
                         Image(systemName: "xmark")
                             .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(Color.white.opacity(0.86))
+                            .foregroundStyle(AppColors.readableSubtext)
                             .frame(width: 30, height: 30)
-                            .background(Circle().fill(Color.black.opacity(0.22)))
-                            .overlay(Circle().stroke(Color.white.opacity(0.24), lineWidth: 1))
+                            .background(Circle().fill(AppColors.panelStrong.opacity(0.84)))
+                            .overlay(Circle().stroke(AppColors.line.opacity(0.52), lineWidth: 1))
                             .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
@@ -98,19 +96,19 @@ private struct HighConfidenceCommuteFloatingCard: View {
                     Button(action: onSave) {
                         Text(suggestion.buttonTitle)
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(AppColors.text)
+                            .foregroundStyle(AppColors.onAccent)
                             .lineLimit(1)
                             .minimumScaleFactor(0.82)
                             .frame(width: 108, height: 52)
                             .background(
                                 RoundedRectangle(cornerRadius: 17, style: .continuous)
-                                    .fill(Color.white.opacity(0.92))
+                                    .fill(AppColors.accent)
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 17, style: .continuous)
-                                    .stroke(Color.white.opacity(0.62), lineWidth: 1)
+                                    .stroke(Color.white.opacity(0.28), lineWidth: 1)
                             )
-                            .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 6)
+                            .shadow(color: AppColors.accent.opacity(0.16), radius: 10, x: 0, y: 5)
                     }
                     .buttonStyle(.plain)
                 }
@@ -119,14 +117,15 @@ private struct HighConfidenceCommuteFloatingCard: View {
             .padding(.trailing, 12)
             .padding(.vertical, 14)
         }
-        .frame(height: 134)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .frame(height: 128)
+        .background(AppColors.panelStrong)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(quickCardBorder)
         .overlay(quickCardGlint)
-        .shadow(color: .black.opacity(0.18), radius: 24, x: 0, y: 14)
-        .shadow(color: AppColors.accent.opacity(isMotionPulsing ? 0.22 : 0.05), radius: isMotionPulsing ? 22 : 8, x: 0, y: 0)
-        .offset(y: isMotionPulsing ? -4 : 2)
-        .scaleEffect(isMotionPulsing ? 1.012 : 0.992)
+        .shadow(color: AppColors.subtext.opacity(0.12), radius: 18, x: 0, y: 10)
+        .shadow(color: AppColors.accent.opacity(isMotionPulsing ? 0.12 : 0.03), radius: isMotionPulsing ? 14 : 6, x: 0, y: 0)
+        .offset(y: isMotionPulsing ? -2 : 1)
+        .scaleEffect(isMotionPulsing ? 1.006 : 0.998)
         .animation(reduceMotion ? nil : .easeInOut(duration: 1.9).repeatForever(autoreverses: true), value: isMotionPulsing)
     }
 
@@ -137,37 +136,37 @@ private struct HighConfidenceCommuteFloatingCard: View {
     private var commuteGlyph: some View {
         Image(systemName: weatherKind == "rain" ? "cloud.rain.fill" : weatherKind == "snow" ? "snowflake" : "tram.fill")
             .font(.system(size: 18, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.94))
+            .foregroundStyle(AppColors.readableAccent)
             .frame(width: 44, height: 44)
-            .background(Circle().fill(Color.black.opacity(0.28)))
-            .overlay(Circle().stroke(Color.white.opacity(0.28), lineWidth: 1))
+            .background(Circle().fill(AppColors.panelStrong.opacity(0.82)))
+            .overlay(Circle().stroke(AppColors.accent.opacity(0.18), lineWidth: 1))
     }
 
     private var commuteImageScrim: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color.black.opacity(0.66),
-                    Color.black.opacity(0.42),
-                    Color.black.opacity(0.68)
+                    AppColors.panelStrong.opacity(0.88),
+                    AppColors.panel.opacity(0.72),
+                    AppColors.paperWarm.opacity(0.62)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             LinearGradient(
                 colors: [
-                    Color.black.opacity(0.62),
-                    Color.black.opacity(0.40),
-                    Color.black.opacity(0.16)
+                    Color.white.opacity(0.34),
+                    AppColors.panelStrong.opacity(0.40),
+                    Color.clear
                 ],
                 startPoint: .leading,
                 endPoint: .trailing
             )
             LinearGradient(
                 colors: [
-                    AppColors.accent.opacity(0.24),
+                    AppColors.accent.opacity(0.10),
                     Color.clear,
-                    Color.black.opacity(0.32)
+                    AppColors.bg.opacity(0.14)
                 ],
                 startPoint: .topTrailing,
                 endPoint: .bottomLeading
@@ -188,9 +187,9 @@ private struct HighConfidenceCommuteFloatingCard: View {
                 mainRoute,
                 with: .linearGradient(
                     Gradient(colors: [
-                        Color.white.opacity(0.08),
-                        AppColors.accent.opacity(0.42),
-                        Color.white.opacity(0.18)
+                        AppColors.accent.opacity(0.05),
+                        AppColors.accent.opacity(0.20),
+                        Color.white.opacity(0.08)
                     ]),
                     startPoint: CGPoint(x: 0, y: size.height),
                     endPoint: CGPoint(x: size.width, y: 0)
@@ -207,7 +206,7 @@ private struct HighConfidenceCommuteFloatingCard: View {
             )
             context.stroke(
                 secondaryRoute,
-                with: .color(Color.white.opacity(0.11)),
+                with: .color(AppColors.readableSubtext.opacity(0.10)),
                 style: StrokeStyle(lineWidth: 1.2, lineCap: .round, dash: [5, 8])
             )
 
@@ -218,8 +217,8 @@ private struct HighConfidenceCommuteFloatingCard: View {
             ] {
                 let outer = CGRect(x: point.x - 5, y: point.y - 5, width: 10, height: 10)
                 let inner = CGRect(x: point.x - 2.5, y: point.y - 2.5, width: 5, height: 5)
-                context.fill(Path(ellipseIn: outer), with: .color(AppColors.accent.opacity(0.18)))
-                context.fill(Path(ellipseIn: inner), with: .color(Color.white.opacity(0.56)))
+                context.fill(Path(ellipseIn: outer), with: .color(AppColors.accent.opacity(0.10)))
+                context.fill(Path(ellipseIn: inner), with: .color(AppColors.accent.opacity(0.30)))
             }
         }
         .blendMode(.screen)
@@ -230,7 +229,7 @@ private struct HighConfidenceCommuteFloatingCard: View {
         LinearGradient(
             colors: [
                 Color.clear,
-                Color.white.opacity(isMotionPulsing ? 0.16 : 0.04),
+                Color.white.opacity(isMotionPulsing ? 0.10 : 0.03),
                 Color.clear
             ],
             startPoint: .top,
@@ -244,13 +243,13 @@ private struct HighConfidenceCommuteFloatingCard: View {
     }
 
     private var quickCardBorder: some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
             .stroke(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.54),
-                        AppColors.accent.opacity(isMotionPulsing ? 0.42 : 0.22),
-                        Color.white.opacity(0.22)
+                        Color.white.opacity(0.58),
+                        AppColors.accent.opacity(isMotionPulsing ? 0.24 : 0.14),
+                        AppColors.line.opacity(0.46)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -260,9 +259,9 @@ private struct HighConfidenceCommuteFloatingCard: View {
     }
 
     private var quickCardGlint: some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .stroke(Color.white.opacity(isMotionPulsing ? 0.34 : 0.08), lineWidth: 1.5)
-            .blur(radius: isMotionPulsing ? 0.25 : 1.2)
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .stroke(Color.white.opacity(isMotionPulsing ? 0.20 : 0.06), lineWidth: 1.2)
+            .blur(radius: isMotionPulsing ? 0.2 : 1)
             .allowsHitTesting(false)
     }
 }
@@ -347,6 +346,7 @@ struct HomeView: View {
     var onNavigateSettings: (() -> Void)? = nil
     var onShowMemberPricing: (() -> Void)? = nil
     @State private var showPlayback = false
+    @State private var playbackSheetID = UUID()
     @State private var showFirstRecordToast = false
     @State private var showTodayRecordsSheet = false
     @State private var editingItem: HomeItem?
@@ -445,7 +445,7 @@ struct HomeView: View {
                 onNavigateToSettings: { onNavigateSettings?() },
                 onShowMemberPricing: { onShowMemberPricing?() }
             )
-                .id(UUID())
+                .id(playbackSheetID)
                 .environmentObject(homeViewModel)
         }
         .sheet(isPresented: $showTodayRecordsSheet) {
@@ -508,7 +508,7 @@ struct HomeView: View {
             )
                 .frame(maxWidth: 430)
                 .padding(.horizontal, 12)
-                .padding(.top, 172)
+                .padding(.top, 206)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .id(suggestion.id)
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -524,7 +524,7 @@ struct HomeView: View {
               WeatherCompanionService.shared.hasLocationPermissionReady else {
             return nil
         }
-        return RecordMemoryContextService.weatherKindCode(
+        return RecordMemoryContextService.commuteCardWeatherKindCode(
             from: WeatherCompanionService.shared.cachedSnapshot
         )
     }
@@ -534,7 +534,7 @@ struct HomeView: View {
         quickRecordCardPulse = false
         if settingsViewModel.settings.weatherCompanionEnabled,
            WeatherCompanionService.shared.hasLocationPermissionReady {
-            WeatherCompanionService.shared.refreshWeatherInBackground(refreshGeo: false)
+            WeatherCompanionService.shared.refreshWeatherInBackground(refreshGeo: false, forceWeather: true)
             scheduleQuickRecordWeatherRefresh(for: suggestion.id, delay: 1.2)
             scheduleQuickRecordWeatherRefresh(for: suggestion.id, delay: 3.0)
         }
@@ -967,7 +967,7 @@ struct HomeView: View {
 
     private func requestTodayPlayback(allowsFirstUsePrompt: Bool = true) {
         guard !homeViewModel.todayItems.isEmpty else {
-            showPlayback = true
+            presentTodayPlaybackSheet()
             return
         }
         let isMember = settingsViewModel.settings.hasMemberAccess
@@ -996,6 +996,11 @@ struct HomeView: View {
 
     private func startTodayPlayback(isMember: Bool) {
         dailyQuotaStore.markTodayPlaybackStarted(isMember: isMember)
+        presentTodayPlaybackSheet()
+    }
+
+    private func presentTodayPlaybackSheet() {
+        playbackSheetID = UUID()
         showPlayback = true
     }
 

@@ -4061,7 +4061,7 @@ private struct WeatherMemoryBackdrop: View {
             backdrop(time: 0, phase: 0, isAnimated: false)
                 .allowsHitTesting(false)
         } else {
-            TimelineView(.periodic(from: Date(), by: 1 / 12)) { timeline in
+            TimelineView(.periodic(from: Date(), by: 1 / 8)) { timeline in
                 let time = timeline.date.timeIntervalSinceReferenceDate
                 let phase = time.truncatingRemainder(dividingBy: 12) / 12
                 backdrop(time: time, phase: phase, isAnimated: true)
@@ -4433,27 +4433,35 @@ private struct KeywordBubbleView: View {
 
     private var diameter: CGFloat { radius * 2 }
 
+    @ViewBuilder
     var body: some View {
-        TimelineView(.periodic(from: Date(), by: 1 / 15)) { timeline in
-            let phase = reduceMotion ? 0 : phaseValue(at: timeline.date)
-            Text(text)
-                .font(.system(size: fontSize, weight: weight > 0.72 ? .bold : .semibold, design: .rounded))
-                .foregroundStyle(palette.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.66)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 8)
-                .frame(width: diameter, height: diameter)
-                .background(bubbleBackground(phase: phase))
-                .scaleEffect(reduceMotion ? 1 : 1 + sin(phase) * 0.018)
-                .opacity(reduceMotion ? 1 : 0.95 + cos(phase) * 0.035)
-                .offset(
-                    x: reduceMotion ? 0 : cos(phase * 0.72) * 1.8,
-                    y: reduceMotion ? 0 : sin(phase) * 5.5
-                )
-                .shadow(color: palette.glow.opacity(0.70), radius: weight > 0.6 ? 22 : 16, x: 0, y: 12)
-                .accessibilityLabel("\(text)，出现 \(count) 次")
+        if reduceMotion {
+            bubble(phase: 0, isAnimated: false)
+        } else {
+            TimelineView(.periodic(from: Date(), by: 1 / 8)) { timeline in
+                bubble(phase: phaseValue(at: timeline.date), isAnimated: true)
+            }
         }
+    }
+
+    private func bubble(phase: Double, isAnimated: Bool) -> some View {
+        Text(text)
+            .font(.system(size: fontSize, weight: weight > 0.72 ? .bold : .semibold, design: .rounded))
+            .foregroundStyle(palette.text)
+            .lineLimit(1)
+            .minimumScaleFactor(0.66)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 8)
+            .frame(width: diameter, height: diameter)
+            .background(bubbleBackground(phase: phase))
+            .scaleEffect(isAnimated ? 1 + sin(phase) * 0.018 : 1)
+            .opacity(isAnimated ? 0.95 + cos(phase) * 0.035 : 1)
+            .offset(
+                x: isAnimated ? cos(phase * 0.72) * 1.8 : 0,
+                y: isAnimated ? sin(phase) * 5.5 : 0
+            )
+            .shadow(color: palette.glow.opacity(0.70), radius: weight > 0.6 ? 22 : 16, x: 0, y: 12)
+            .accessibilityLabel("\(text)，出现 \(count) 次")
     }
 
     private func phaseValue(at date: Date) -> Double {

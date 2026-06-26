@@ -90,13 +90,13 @@ final class WeatherCompanionService: NSObject, @preconcurrency CLLocationManager
         refreshTimer = nil
     }
 
-    func refreshWeatherInBackground(refreshGeo: Bool = false) {
+    func refreshWeatherInBackground(refreshGeo: Bool = false, forceWeather: Bool = false) {
         requestLocationIfNeeded(force: refreshGeo)
-        Task { _ = await fetchWeatherSnapshot() }
+        Task { _ = await fetchWeatherSnapshot(forceRefresh: forceWeather) }
     }
 
-    func fetchWeatherSnapshot() async -> WeatherSnapshot? {
-        if let cachedSnapshot {
+    func fetchWeatherSnapshot(forceRefresh: Bool = false) async -> WeatherSnapshot? {
+        if !forceRefresh, let cachedSnapshot {
             return cachedSnapshot
         }
         guard let coordinate = cachedCoordinate else {

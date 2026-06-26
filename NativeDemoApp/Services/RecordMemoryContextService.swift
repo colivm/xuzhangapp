@@ -27,6 +27,21 @@ enum RecordMemoryContextService {
         }
     }
 
+    static func commuteCardWeatherKindCode(from snapshot: WeatherSnapshot?) -> String? {
+        guard let snapshot,
+              Date().timeIntervalSince(snapshot.ts) < 10 * 60,
+              let code = snapshot.weatherCode else {
+            return nil
+        }
+        if (61...67).contains(code) || (80...82).contains(code) {
+            return "rain"
+        }
+        if (71...77).contains(code) || (85...86).contains(code) {
+            return "snow"
+        }
+        return nil
+    }
+
     static func enhancedEmotionTag(input: RecordMemoryContextInput) -> String {
         let title = input.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let text = "\(title) \(input.baseEmotionTag) \(input.category.rawValue)".lowercased()
@@ -185,7 +200,7 @@ enum RecordMemoryContextService {
 
     private static func weatherKind(from snapshot: WeatherSnapshot) -> MemoryWeather {
         if let code = snapshot.weatherCode {
-            if (51...67).contains(code) || (80...82).contains(code) || code == 95 {
+            if (61...67).contains(code) || (80...82).contains(code) {
                 return .rain
             }
             if (71...77).contains(code) || (85...86).contains(code) {
