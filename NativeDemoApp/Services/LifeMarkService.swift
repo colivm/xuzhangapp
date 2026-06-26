@@ -125,7 +125,7 @@ enum LifeMarkService {
             label: "房租水电物业",
             category: .home,
             categories: [.home, .daily, .other],
-            keywords: ["水电", "水费", "电费", "燃气", "煤气", "物业", "宽带", "网费", "暖气费", "取暖费", "网上国网", "国网", "房租", "租房", "租房子", "租屋", "租赁", "租金", "押金", "房东", "停车费", "话费"],
+            keywords: ["水电", "水费", "电费", "燃气", "煤气", "物业", "宽带", "网费", "暖气费", "取暖费", "供暖费", "采暖费", "热力费", "供热费", "暖气缴费", "热力公司", "网上国网", "国网", "房租", "租房", "租房子", "租屋", "租赁", "租金", "押金", "房东", "停车费", "话费"],
             access: .free,
             priority: 30,
             minimumCount: 1,
@@ -133,10 +133,10 @@ enum LifeMarkService {
         ),
         LifeMarkDefinition(
             id: "household_service",
-            label: "家里清洁维护",
+            label: "居家服务维护",
             category: .home,
             categories: [.home, .daily],
-            keywords: ["保洁", "家政", "钟点工", "开荒保洁"],
+            keywords: ["保洁", "家政", "钟点工", "开荒保洁", "上门保洁", "深度保洁", "擦玻璃", "清洗油烟机", "空调清洗", "搬家", "搬家公司", "货拉拉搬家"],
             access: .free,
             priority: 32,
             minimumCount: 1,
@@ -155,10 +155,10 @@ enum LifeMarkService {
         ),
         LifeMarkDefinition(
             id: "digital_subscription",
-            label: "数字会员",
+            label: "数字订阅",
             category: .entertainment,
-            categories: [.entertainment],
-            keywords: ["B站会员", "哔哩哔哩会员", "爱奇艺会员", "网易云会员", "网易云音乐会员"],
+            categories: [.entertainment, .shopping],
+            keywords: ["B站会员", "哔哩哔哩会员", "爱奇艺会员", "腾讯视频会员", "优酷会员", "芒果TV会员", "网易云会员", "网易云音乐会员", "QQ音乐会员", "喜马拉雅会员", "百度网盘会员", "WPS会员", "iCloud订阅", "Apple Music", "Office 365", "Microsoft 365", "Adobe订阅", "Creative Cloud", "Notion订阅", "Notion会员"],
             access: .free,
             priority: 32,
             minimumCount: 1,
@@ -169,7 +169,7 @@ enum LifeMarkService {
             label: "宝宝照护",
             category: .daily,
             categories: [.daily, .shopping, .health],
-            keywords: ["宝宝", "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "母婴", "婴儿", "辅食", "湿巾", "奶瓶", "安抚奶嘴", "早教", "童装", "儿童座椅", "推车"],
+            keywords: ["宝宝", "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "母婴", "婴儿", "辅食", "湿巾", "奶瓶", "安抚奶嘴", "早教", "早教课", "托育费", "托班费", "幼儿园学费", "童装", "儿童座椅", "推车"],
             access: .free,
             priority: 12,
             minimumCount: 1,
@@ -180,7 +180,7 @@ enum LifeMarkService {
             label: "看病买药",
             category: .health,
             categories: [.health, .daily],
-            keywords: ["医院", "门诊", "诊所", "挂号", "问诊", "体检", "检查", "拍片", "验血", "牙科", "口腔", "洗牙", "配镜", "验光", "药店", "药房", "买药", "感冒", "退烧", "消炎", "止痛", "维生素", "眼药水", "创可贴", "护理", "理疗", "康复"],
+            keywords: ["医院", "门诊", "诊所", "挂号", "问诊", "体检", "检查", "拍片", "验血", "牙科", "口腔", "洗牙", "配镜", "验光", "药店", "药房", "买药", "感冒", "退烧", "消炎", "止痛", "维生素", "眼药水", "创可贴", "护理", "理疗", "康复", "医美", "医美脱毛", "光子嫩肤", "水光针"],
             access: .free,
             priority: 16,
             minimumCount: 1,
@@ -191,7 +191,7 @@ enum LifeMarkService {
             label: "人情往来",
             category: .social,
             categories: [.social, .dining, .shopping],
-            keywords: ["红包", "礼物", "送礼", "份子", "随礼", "生日", "探望", "拜访", "请客", "聚餐", "朋友", "伴手礼", "乔迁", "婚礼", "满月"],
+            keywords: ["红包", "礼物", "送礼", "份子", "随礼", "生日", "探望", "拜访", "请客", "聚餐", "朋友", "伴手礼", "乔迁", "婚礼", "满月", "白事", "白事随礼", "奠仪", "帛金", "花圈"],
             access: .free,
             priority: 26,
             minimumCount: 1,
@@ -213,7 +213,7 @@ enum LifeMarkService {
             label: "休闲娱乐",
             category: .entertainment,
             categories: [.entertainment],
-            keywords: ["娱乐", "休闲", "电影", "影院", "动物园", "游乐场", "乐园", "主题乐园", "迪士尼", "环球影城", "海洋馆", "水族馆", "公园", "景区", "景点", "展览", "看展", "展馆", "博物馆", "美术馆", "演唱会", "音乐节", "剧场", "话剧", "脱口秀", "密室", "剧本杀", "桌游", "台球", "ktv", "唱歌", "游戏", "门票"],
+            keywords: ["娱乐", "休闲", "电影", "影院", "网吧", "网咖", "上网费", "直播打赏", "主播打赏", "抖音打赏", "直播礼物", "动物园", "游乐场", "乐园", "主题乐园", "迪士尼", "环球影城", "海洋馆", "水族馆", "公园", "景区", "景点", "展览", "看展", "展馆", "博物馆", "美术馆", "演唱会", "音乐节", "剧场", "话剧", "脱口秀", "密室", "剧本杀", "桌游", "台球", "ktv", "唱歌", "游戏", "门票"],
             access: .free,
             priority: 24,
             minimumCount: 1,
@@ -246,7 +246,7 @@ enum LifeMarkService {
             label: "兴趣装备",
             category: .shopping,
             categories: [.shopping, .daily, .health, .entertainment],
-            keywords: ["渔具", "鱼竿", "鱼线", "鱼饵", "路亚", "钓箱", "钓椅", "露营", "帐篷", "天幕", "睡袋", "骑行", "头盔", "码表", "摄影", "相机", "镜头", "模型", "手办", "乐器", "吉他", "键盘", "茶具", "咖啡器具", "磨豆机", "滤杯"],
+            keywords: ["渔具", "鱼竿", "鱼线", "鱼饵", "路亚", "钓箱", "钓椅", "露营", "帐篷", "天幕", "睡袋", "骑行", "头盔", "码表", "摄影", "相机", "镜头", "模型", "手办", "谷子", "潮玩", "吧唧", "徽章", "亚克力", "立牌", "盲盒", "泡泡玛特", "POP MART", "POPMART", "LABUBU", "棉花娃娃", "痛包", "同人本", "乙游周边", "漫展周边", "乐器", "吉他", "键盘", "茶具", "咖啡器具", "磨豆机", "滤杯"],
             access: .free,
             priority: 18,
             minimumCount: 1,
@@ -256,8 +256,8 @@ enum LifeMarkService {
             id: "learning_growth",
             label: "学习成长",
             category: .shopping,
-            categories: [.shopping, .entertainment, .daily],
-            keywords: ["书", "书店", "教材", "文具", "本子", "笔", "课程", "培训", "考试", "报名费", "资料", "学习", "读书"],
+            categories: [.shopping, .entertainment, .daily, .other],
+            keywords: ["书", "书店", "教材", "文具", "本子", "笔", "课程", "培训", "考试", "报名费", "资料", "学习", "读书", "驾校", "驾校报名费", "驾考", "学车"],
             access: .free,
             priority: 36,
             minimumCount: 1,
@@ -787,6 +787,8 @@ enum LifeMarkService {
             return interestGearLabel(for: item)
         case "home_utilities":
             return homeUtilityLabel(for: item)
+        case "household_service":
+            return householdServiceLabel(for: item)
         default:
             return definition.label
         }
@@ -802,6 +804,9 @@ enum LifeMarkService {
         }
         if containsAny(text, ["辅食", "米粉"]) {
             return "给宝宝买辅食"
+        }
+        if containsAny(text, ["托育费", "托班费", "幼儿园学费", "早教课"]) {
+            return "托育早教"
         }
         if containsAny(text, ["湿巾", "奶瓶", "安抚奶嘴"]) {
             return "给宝宝买照护用品"
@@ -843,6 +848,9 @@ enum LifeMarkService {
         if containsAny(text, ["摄影", "相机", "镜头"]) {
             return "摄影装备"
         }
+        if containsAny(text, ["模型", "手办", "谷子", "潮玩", "吧唧", "徽章", "亚克力", "立牌", "盲盒", "泡泡玛特", "POP MART", "POPMART", "LABUBU", "棉花娃娃", "痛包", "同人本", "乙游周边", "漫展周边"]) {
+            return "潮玩谷子"
+        }
         if containsAny(text, ["乐器", "吉他", "键盘"]) {
             return "买乐器"
         }
@@ -860,6 +868,9 @@ enum LifeMarkService {
         if containsAny(text, ["水电", "水费", "电费", "燃气", "煤气"]) {
             return "水电燃气"
         }
+        if containsAny(text, ["暖气费", "取暖费", "供暖费", "采暖费", "热力费", "供热费", "暖气缴费", "热力公司"]) {
+            return "供暖账单"
+        }
         if containsAny(text, ["物业"]) {
             return "物业费"
         }
@@ -873,6 +884,14 @@ enum LifeMarkService {
             return "话费"
         }
         return "家账"
+    }
+
+    private static func householdServiceLabel(for item: HomeItem) -> String {
+        let text = semanticText(for: item)
+        if containsAny(text, ["搬家", "搬家公司", "货拉拉搬家"]) {
+            return "搬家安排"
+        }
+        return "家政保洁"
     }
 
     private static func queryHint(for definition: LifeMarkDefinition) -> String {

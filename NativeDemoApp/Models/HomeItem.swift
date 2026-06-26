@@ -235,6 +235,9 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["配镜", "验光", "眼镜"]) {
                 return "视力护理一回"
             }
+            if containsAny(text, ["医美", "医美脱毛", "光子嫩肤", "水光针"]) {
+                return "身体护理安排"
+            }
             if containsAny(text, ["药", "药店", "感冒", "退烧", "消炎", "止痛", "维生素", "眼药水", "创可贴"]) {
                 return "药品护理记下"
             }
@@ -298,7 +301,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
                 return lateCommute
             }
             if containsAny(text, ["停车", "停车费", "车位"]) { return "车停稳了" }
-            if containsAny(text, ["加油", "油费", "充电", "充电桩"]) { return "给车补点能量" }
+            if containsAny(text, ["加油", "油费", "充车", "充电桩", "电车充电", "汽车充电", "车辆充电", "新能源充电", "补能"]) { return "给车补点能量" }
             if containsAny(text, ["洗车"]) { return "车洗干净了" }
             if containsAny(text, ["汽车保养", "车辆保养", "保养车"]) { return "车保养一回" }
             if containsAny(text, ["打车", "出租", "网约车", "滴滴", "花小猪"]) { return "打车这一程" }
@@ -308,21 +311,24 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["机票", "机场", "航班"]) { return "飞一程记下" }
             if containsAny(text, ["高速", "过路费", "etc"]) { return "路上通行一笔" }
         case .shopping:
+            if containsAny(text, ["Office 365", "Microsoft 365", "Adobe订阅", "Creative Cloud", "Notion订阅", "Notion会员"]) {
+                return "数字服务续上"
+            }
             if containsAny(text, ["渔具", "鱼竿", "鱼线", "鱼饵", "路亚", "钓箱", "钓椅"]) {
                 return "给喜欢的事添点装备"
             }
-            if containsAny(text, ["露营", "帐篷", "天幕", "睡袋", "骑行", "头盔", "摄影", "相机", "镜头", "乐器", "吉他", "键盘"]) {
+            if containsAny(text, ["露营", "帐篷", "天幕", "睡袋", "骑行", "头盔", "摄影", "相机", "镜头", "模型", "手办", "谷子", "潮玩", "吧唧", "徽章", "亚克力", "立牌", "盲盒", "泡泡玛特", "POP MART", "POPMART", "LABUBU", "棉花娃娃", "痛包", "同人本", "乙游周边", "漫展周边", "乐器", "吉他", "键盘"]) {
                 return "爱好里的小投入"
             }
             if containsAny(text, ["奶粉"]) { return "宝宝口粮补上" }
             if containsAny(text, ["尿不湿", "纸尿裤", "拉拉裤"]) { return "照护用品补齐" }
-            if containsAny(text, ["辅食", "奶瓶", "安抚奶嘴"]) { return "宝宝照护补上" }
+            if containsAny(text, ["辅食", "奶瓶", "安抚奶嘴", "托育费", "托班费", "幼儿园学费", "早教课"]) { return "宝宝照护补上" }
             if containsAny(text, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) { return "毛孩子口粮补上" }
             if containsAny(text, ["猫砂", "尿垫", "冻干", "宠物罐头", "罐头"]) { return "毛孩子日常补给" }
             if containsAny(text, ["衣服", "上衣", "裤子", "裙", "外套", "内衣"]) { return "给衣柜添一件" }
             if containsAny(text, ["鞋", "袜"]) { return "脚下换新一点" }
             if containsAny(text, ["护肤", "洗面奶", "面霜", "防晒", "口红", "化妆"]) { return "照顾自己一点" }
-            if containsAny(text, ["手机", "耳机", "充电器", "数据线", "电脑", "键盘"]) { return "数码小物到位" }
+            if containsAny(text, ["手机", "耳机", "充电器", "数据线", "充电宝", "电脑", "键盘"]) { return "数码小物到位" }
             if containsAny(text, ["书", "文具", "本子", "笔"]) { return "书桌添点东西" }
             if containsAny(text, ["花", "香薰", "摆件"]) { return "给日子添点好看" }
             if containsAny(text, ["快递", "运费"]) { return "路上的小费用" }
@@ -342,8 +348,10 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["雨伞", "伞"]) { return "给天气留个准备" }
         case .entertainment:
             if containsAny(text, ["电影", "影院"]) { return "看场电影" }
-            if containsAny(text, ["B站会员", "哔哩哔哩会员", "爱奇艺会员", "网易云会员", "网易云音乐会员"]) { return "数字会员续上" }
-            if containsAny(text, ["游戏", "点券", "皮肤", "会员"]) { return "娱乐里充一笔" }
+            if containsAny(text, ["B站会员", "哔哩哔哩会员", "爱奇艺会员", "腾讯视频会员", "优酷会员", "芒果TV会员", "网易云会员", "网易云音乐会员", "QQ音乐会员", "喜马拉雅会员", "百度网盘会员", "WPS会员", "iCloud订阅", "Apple Music"]) { return "数字订阅续上" }
+            if containsAny(text, ["网吧", "网咖", "上网费"]) { return "上网娱乐一回" }
+            if containsAny(text, ["直播打赏", "主播打赏", "抖音打赏", "直播礼物"]) { return "直播互动记下" }
+            if containsAny(text, ["游戏", "点券", "皮肤"]) { return "娱乐里充一笔" }
             if containsAny(text, ["演唱会", "音乐节", "live", "话剧", "剧场"]) { return "看一场现场" }
             if containsAny(text, ["展", "博物馆", "美术馆"]) { return "出去看点东西" }
             if containsAny(text, ["ktv", "唱歌"]) { return "唱一会儿" }
@@ -351,17 +359,20 @@ struct HomeItem: Identifiable, Codable, Equatable {
         case .lodging:
             if containsAny(text, ["酒店", "宾馆"]) { return "住一晚记下" }
             if containsAny(text, ["民宿", "客栈"]) { return "今晚落脚这里" }
+            if containsAny(text, ["电竞酒店"]) { return "电竞酒店一晚" }
             if containsAny(text, ["房费", "续住", "押金"]) { return "住宿安排一笔" }
         case .home:
             if containsAny(text, ["房租", "租金"]) { return "住处安稳下来" }
-            if containsAny(text, ["水费", "电费", "燃气", "煤气", "暖气费", "取暖费", "网上国网", "国网"]) { return "家里运转一笔" }
+            if containsAny(text, ["水费", "电费", "燃气", "煤气", "暖气费", "取暖费", "供暖费", "采暖费", "热力费", "供热费", "暖气缴费", "热力公司", "网上国网", "国网"]) { return "家里运转一笔" }
             if containsAny(text, ["物业", "宽带", "网费"]) { return "居家固定支出" }
-            if containsAny(text, ["保洁", "家政", "钟点工", "开荒保洁"]) { return "家里清洁一回" }
+            if containsAny(text, ["搬家", "搬家公司", "货拉拉搬家"]) { return "搬家安排记下" }
+            if containsAny(text, ["保洁", "家政", "钟点工", "开荒保洁", "上门保洁", "深度保洁", "擦玻璃", "清洗油烟机", "空调清洗"]) { return "家里清洁一回" }
             if containsAny(text, ["维修", "修理", "师傅", "换锁", "疏通"]) { return "家里修一处" }
             if containsAny(text, ["锅", "碗", "厨房", "床品", "收纳", "灯"]) { return "给家添点方便" }
             if containsAny(text, ["冰箱", "洗衣机", "空调", "家电"]) { return "家电安排一笔" }
         case .social:
             if containsAny(text, ["礼物", "送礼", "伴手礼"]) { return "带点心意" }
+            if containsAny(text, ["白事", "白事随礼", "奠仪", "帛金", "花圈"]) { return "重要人情记下" }
             if containsAny(text, ["红包", "份子", "随礼"]) { return "人情往来一笔" }
             if containsAny(text, ["生日", "蛋糕"]) { return "生日里的心意" }
             if containsAny(text, ["婚礼", "满月", "乔迁"]) { return "重要日子记下" }
@@ -369,6 +380,8 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["请客", "聚餐", "朋友"]) { return "见面吃一顿" }
         case .other:
             if containsAny(text, ["打印", "复印", "证件照"]) { return "临时办点事" }
+            if containsAny(text, ["驾校", "驾校报名费", "驾考", "学车"]) { return "学车安排记下" }
+            if containsAny(text, ["彩票", "福彩", "体彩", "刮刮乐"]) { return "这笔单独记下" }
             if containsAny(text, ["押金", "保证金"]) { return "先垫一笔" }
             if containsAny(text, ["手续费", "服务费"]) { return "小费用记下" }
             if containsAny(text, ["罚款", "违章"]) { return "不太想记也记下" }
@@ -924,25 +937,26 @@ enum RecordSemanticLexicon {
     private static let minimalFallbackPayload = RecordSceneLexiconPayload(
         version: 0,
         keywordRules: [
-            .init(category: .transport, score: 4.0, keywords: ["地铁", "公交", "打车", "滴滴", "花小猪", "洗车", "汽车保养", "车辆保养", "保养车", "ETC", "etc", "充电", "充电桩", "高铁", "机票", "机场", "路费", "通勤"]),
+            .init(category: .transport, score: 4.0, keywords: ["地铁", "公交", "打车", "滴滴", "花小猪", "洗车", "汽车保养", "车辆保养", "保养车", "ETC", "etc", "充车", "充电桩", "电车充电", "汽车充电", "车辆充电", "新能源充电", "补能", "高铁", "机票", "机场", "路费", "通勤"]),
             .init(category: .dining, score: 4.8, keywords: ["咖啡", "奶茶", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "宵夜", "外卖", "饭", "餐", "一顿", "这顿", "吃", "垫一下", "垫一口", "夜里补", "热食", "热乎", "轻食", "小食", "点心", "补点能量", "吃一口", "饮品", "拿铁", "美式", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "七欣天", "海底捞", "老乡鸡", "塔斯汀", "库迪", "绝味", "袁记云饺", "萨莉亚", "火锅", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "美团外卖", "饿了么"]),
             .init(category: .dining, score: 2.8, keywords: ["便利蜂", "便利店", "全家", "罗森", "711", "7-11", "美宜佳", "茶叶蛋", "饭团", "关东煮"]),
-            .init(category: .shopping, score: 4.0, keywords: ["淘宝", "京东", "拼多多", "购物", "下单", "快递", "衣服", "鞋", "数码", "渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "乐器", "茶具", "咖啡器具"]),
-            .init(category: .daily, score: 6.4, keywords: ["奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "奶瓶", "安抚奶嘴", "宝宝湿巾", "婴儿湿巾", "童装", "儿童座椅", "推车", "狗粮", "猫粮", "猫砂", "宠物粮", "宠物口粮", "尿垫", "冻干", "宠物罐头"]),
+            .init(category: .shopping, score: 4.0, keywords: ["淘宝", "京东", "拼多多", "购物", "下单", "快递", "衣服", "鞋", "数码", "耳机", "手机", "电脑", "Office 365", "Microsoft 365", "Adobe订阅", "Creative Cloud", "Notion订阅", "Notion会员", "充电器", "数据线", "充电宝", "渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "谷子", "潮玩", "吧唧", "徽章", "亚克力", "立牌", "盲盒", "泡泡玛特", "POP MART", "POPMART", "LABUBU", "棉花娃娃", "痛包", "同人本", "乙游周边", "漫展周边", "乐器", "茶具", "咖啡器具"]),
+            .init(category: .daily, score: 6.4, keywords: ["奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "奶瓶", "安抚奶嘴", "宝宝湿巾", "婴儿湿巾", "童装", "儿童座椅", "推车", "托育费", "托班费", "幼儿园学费", "早教课", "狗粮", "猫粮", "猫砂", "宠物粮", "宠物口粮", "尿垫", "冻干", "宠物罐头"]),
             .init(category: .daily, score: 3.0, keywords: ["超市", "日用品", "纸巾", "洗衣", "打印", "理发", "宠物", "买菜", "生鲜", "盒马", "叮咚买菜", "小象超市", "朴朴超市", "美团闪购", "京东秒送", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈"]),
             .init(category: .daily, score: 4.6, keywords: ["纸巾", "抽纸", "卷纸", "湿巾", "洗衣液", "洗衣凝珠", "洗洁精", "垃圾袋", "清洁", "日化", "日用品", "家用", "补货", "买菜", "生鲜", "水果", "蔬菜", "肉禽", "水产", "鸡蛋", "给家补货"]),
-            .init(category: .entertainment, score: 3.0, keywords: ["电影", "影院", "游戏", "会员", "B站会员", "哔哩哔哩会员", "爱奇艺会员", "网易云会员", "网易云音乐会员", "演唱会", "门票"]),
-            .init(category: .lodging, score: 4.0, keywords: ["酒店", "民宿", "住宿", "宾馆"]),
-            .init(category: .health, score: 4.0, keywords: ["药店", "药房", "医院", "挂号", "门诊", "体检", "洗牙", "配镜", "验光", "健身", "健身房", "健身卡", "月卡", "年卡", "私教", "团课", "课程", "跑步", "理疗", "康复", "按摩", "补剂", "蛋白", "运动装备", "运动鞋", "运动服"]),
-            .init(category: .home, score: 4.0, keywords: ["房租", "水电", "电费", "燃气", "物业", "宽带", "暖气费", "取暖费", "网上国网", "国网", "保洁", "家政", "钟点工", "开荒保洁"]),
-            .init(category: .social, score: 4.0, keywords: ["红包", "礼物", "请客", "份子钱", "探望"]),
-            .init(category: .other, score: 1.0, keywords: ["手续费", "服务费"]),
+            .init(category: .entertainment, score: 3.0, keywords: ["电影", "影院", "游戏", "网吧", "网咖", "上网费", "直播打赏", "主播打赏", "抖音打赏", "直播礼物", "B站会员", "哔哩哔哩会员", "爱奇艺会员", "腾讯视频会员", "优酷会员", "芒果TV会员", "网易云会员", "网易云音乐会员", "QQ音乐会员", "喜马拉雅会员", "百度网盘会员", "WPS会员", "iCloud订阅", "Apple Music", "演唱会", "门票"]),
+            .init(category: .lodging, score: 4.0, keywords: ["酒店", "民宿", "住宿", "宾馆", "电竞酒店"]),
+            .init(category: .health, score: 4.0, keywords: ["药店", "药房", "医院", "挂号", "门诊", "体检", "洗牙", "配镜", "验光", "医美", "医美脱毛", "光子嫩肤", "水光针", "健身", "健身房", "健身卡", "月卡", "年卡", "私教", "团课", "课程", "跑步", "理疗", "康复", "按摩", "补剂", "蛋白", "运动装备", "运动鞋", "运动服"]),
+            .init(category: .home, score: 4.0, keywords: ["房租", "水电", "电费", "燃气", "物业", "宽带", "暖气费", "取暖费", "供暖费", "采暖费", "热力费", "供热费", "暖气缴费", "热力公司", "网上国网", "国网", "保洁", "家政", "钟点工", "开荒保洁", "上门保洁", "深度保洁", "擦玻璃", "清洗油烟机", "空调清洗", "搬家", "搬家公司", "货拉拉搬家"]),
+            .init(category: .social, score: 4.0, keywords: ["红包", "礼物", "请客", "份子钱", "随礼", "探望", "白事", "白事随礼", "奠仪", "帛金", "花圈"]),
+            .init(category: .other, score: 3.0, keywords: ["驾校", "驾校报名费", "驾考", "学车", "彩票", "福彩", "体彩", "刮刮乐"]),
         ],
         ocrKeywordRules: [
             .init(category: .dining, score: 4.5, keywords: ["海底捞", "老乡鸡", "塔斯汀", "库迪", "库迪咖啡", "绝味", "袁记云饺", "萨莉亚"]),
             .init(category: .daily, score: 3.0, keywords: ["山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈"]),
-            .init(category: .transport, score: 4.0, keywords: ["花小猪", "洗车", "汽车保养", "车辆保养", "保养车", "ETC", "etc"]),
-            .init(category: .home, score: 4.0, keywords: ["网上国网", "国网", "暖气费", "取暖费"])
+            .init(category: .shopping, score: 3.8, keywords: ["Office 365", "Microsoft 365", "Adobe订阅", "Creative Cloud", "Notion订阅", "Notion会员", "充电器", "数据线", "充电宝", "谷子", "潮玩", "吧唧", "亚克力", "盲盒", "泡泡玛特", "POP MART", "POPMART", "痛包", "同人本", "乙游周边", "漫展周边"]),
+            .init(category: .transport, score: 4.0, keywords: ["花小猪", "洗车", "汽车保养", "车辆保养", "保养车", "ETC", "etc", "充车", "充电桩", "电车充电"]),
+            .init(category: .home, score: 4.0, keywords: ["网上国网", "国网", "暖气费", "取暖费", "供暖费", "采暖费", "热力费", "供热费", "家政", "保洁", "上门保洁", "搬家", "搬家公司", "货拉拉搬家"])
         ],
         comboRules: [
             .init(keywords: ["高铁", "机票", "机场", "车站", "返程", "出发"], scores: [.transport: 3.2, .lodging: 1.2, .entertainment: 1.0])

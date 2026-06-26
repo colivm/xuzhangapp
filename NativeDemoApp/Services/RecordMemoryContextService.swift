@@ -77,7 +77,7 @@ enum RecordMemoryContextService {
     }
 
     private static func sceneKind(for category: HomeItem.Category, text: String) -> MemoryScene {
-        if category == .transport, containsAny(text, ["充电", "充电桩", "补能", "电车"]) {
+        if category == .transport, containsAny(text, ["充车", "充电桩", "电车充电", "汽车充电", "车辆充电", "新能源充电", "补能"]) {
             return .charging
         }
         if category == .transport, containsAny(text, ["通勤", "上班", "下班", "地铁", "公交", "早高峰", "晚高峰", "到岗", "到站"]) {
