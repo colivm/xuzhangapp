@@ -2,8 +2,345 @@
 
 @MainActor
 extension HomeViewModel {
+    struct HighConfidenceQuickRecordSuggestion: Equatable, Identifiable {
+        enum Kind: String, Equatable {
+            case commute
+        }
+
+        let id: String
+        let kind: Kind
+        let title: String
+        let amount: Double
+        let category: HomeItem.Category
+        let recordDate: Date
+        let headline: String
+        let detail: String
+        let buttonTitle: String
+        let backgroundImageName: String
+        let supportCount: Int
+        let confidence: Double
+        let isBackfill: Bool
+    }
+
     var hasMemberAccess: Bool {
         LocalStore.loadSettings().hasMemberAccess
+    }
+
+    var highConfidenceQuickRecordSuggestion: HighConfidenceQuickRecordSuggestion? {
+        highConfidenceCommuteSuggestion(at: Date())
+    }
+
+    @discardableResult
+    func addHighConfidenceQuickRecord(_ suggestion: HighConfidenceQuickRecordSuggestion) -> Bool {
+        guard suggestion.kind == .commute else { return false }
+        inputTitle = suggestion.title
+        inputAmount = String(format: "%.2f", suggestion.amount)
+        selectedCategory = suggestion.category
+        selectedDate = suggestion.recordDate
+        return addManualRecord(
+            userEditedTitle: false,
+            preserveEmptyTitle: false,
+            categoryLockedForSave: true,
+            scenePackId: "commute"
+        )
+    }
+
+    private enum CommuteHabitDirection: String {
+        case morning
+        case evening
+
+        var fallbackTitle: String {
+            switch self {
+            case .morning: return "上班通勤"
+            case .evening: return "下班通勤"
+            }
+        }
+
+        var headline: String {
+            switch self {
+            case .morning: return "这趟上班路，要不要顺手记下"
+            case .evening: return "这趟回家路，可以一键记下"
+            }
+        }
+
+        var backfillHeadline: String {
+            switch self {
+            case .morning: return "早上的通勤，可能还没补"
+            case .evening: return "回家这趟，可能还没补"
+            }
+        }
+    }
+
+    private struct CommuteHabitCandidate {
+        let direction: CommuteHabitDirection
+        let amount: Double
+        let title: String
+        let recordDate: Date
+        let supportCount: Int
+        let distinctDays: Int
+        let confidence: Double
+        let medianMinute: Int
+        let isBackfill: Bool
+    }
+
+    private func highConfidenceCommuteSuggestion(at now: Date) -> HighConfidenceQuickRecordSuggestion? {
+        let calendar = Calendar.current
+        guard isWorkday(now, calendar: calendar) else { return nil }
+        guard items.filter({ $0.amount > 0 }).count >= 16 else { return nil }
+
+        let direction: CommuteHabitDirection
+        let isBackfill: Bool
+        if isMorningCommutePromptTime(now, calendar: calendar) {
+            direction = .morning
+            isBackfill = false
+        } else if isNoonCommuteBackfillTime(now, calendar: calendar) {
+            direction = .morning
+            isBackfill = true
+        } else if isEveningCommutePromptTime(now, calendar: calendar) {
+            direction = .evening
+            isBackfill = false
+        } else {
+            return nil
+        }
+
+        guard !hasTodayCommuteRecord(direction: direction, now: now, calendar: calendar),
+              let candidate = commuteHabitCandidate(
+                direction: direction,
+                now: now,
+                isBackfill: isBackfill,
+                calendar: calendar
+              ) else {
+            return nil
+        }
+
+        let headline = candidate.isBackfill
+            ? candidate.direction.backfillHeadline
+            : candidate.direction.headline
+        let timeText = commuteTimeText(minutesFromMidnight: candidate.medianMinute)
+        let detail = candidate.isBackfill
+            ? "按最近 \(candidate.distinctDays) 个工作日的记录，常在 \(timeText) 左右。"
+            : "最近 \(candidate.distinctDays) 个工作日都像这笔，\(candidate.amount.formatted(.cny))。"
+        let id = [
+            "quick",
+            candidate.direction.rawValue,
+            quickRecordDayKey(for: now),
+            String(Int((candidate.amount * 100).rounded())),
+            String(candidate.medianMinute)
+        ].joined(separator: ":")
+
+        return HighConfidenceQuickRecordSuggestion(
+            id: id,
+            kind: .commute,
+            title: candidate.title,
+            amount: candidate.amount,
+            category: .transport,
+            recordDate: candidate.recordDate,
+            headline: headline,
+            detail: detail,
+            buttonTitle: candidate.isBackfill ? "补记通勤" : "一键记通勤",
+            backgroundImageName: candidate.direction == .morning
+                ? "CommuteMorningQuickCardBackground"
+                : "CommuteEveningQuickCardBackground",
+            supportCount: candidate.supportCount,
+            confidence: candidate.confidence,
+            isBackfill: candidate.isBackfill
+        )
+    }
+
+    private func commuteHabitCandidate(
+        direction: CommuteHabitDirection,
+        now: Date,
+        isBackfill: Bool,
+        calendar: Calendar
+    ) -> CommuteHabitCandidate? {
+        let recentStart = calendar.date(byAdding: .day, value: -120, to: now) ?? .distantPast
+        let weekdayGroup = commuteWeekdayGroup(for: now, direction: direction, calendar: calendar)
+        let candidates = items.filter { item in
+            item.amount > 0
+                && item.createdAt >= recentStart
+                && item.createdAt < now
+                && isWorkday(item.createdAt, calendar: calendar)
+                && commuteWeekdayGroup(for: item.createdAt, direction: direction, calendar: calendar) == weekdayGroup
+                && commuteDirection(for: item.createdAt, calendar: calendar) == direction
+                && isCommuteRecord(item)
+        }
+        guard candidates.count >= 5 else { return nil }
+
+        let distinctDays = Set(candidates.map { quickRecordDayKey(for: $0.createdAt) }).count
+        guard distinctDays >= 4 else { return nil }
+
+        let minuteSamples = candidates.map { minutesFromMidnight($0.createdAt, calendar: calendar) }.sorted()
+        guard let medianMinute = medianMinute(in: minuteSamples) else { return nil }
+        let currentMinute = minutesFromMidnight(now, calendar: calendar)
+        if !isBackfill {
+            let allowedDrift = direction == .evening && weekdayGroup == "fri" ? 120 : 90
+            guard abs(currentMinute - medianMinute) <= allowedDrift else { return nil }
+        }
+
+        guard let amountCluster = stableAmountCluster(in: candidates) else { return nil }
+        let amount = Double(amountCluster.cents) / 100
+        let supportRatio = Double(amountCluster.count) / Double(max(candidates.count, 1))
+        guard amountCluster.count >= 5, supportRatio >= 0.72 else { return nil }
+
+        let title = stableCommuteTitle(in: candidates, direction: direction)
+        let confidence = min(0.98, 0.72 + min(supportRatio, 0.22) + min(Double(distinctDays) * 0.01, 0.04))
+        guard confidence >= 0.90 else { return nil }
+
+        let recordDate = isBackfill
+            ? date(onSameDayAs: now, minutesFromMidnight: medianMinute, calendar: calendar)
+            : now
+        return CommuteHabitCandidate(
+            direction: direction,
+            amount: amount,
+            title: title,
+            recordDate: recordDate,
+            supportCount: amountCluster.count,
+            distinctDays: distinctDays,
+            confidence: confidence,
+            medianMinute: medianMinute,
+            isBackfill: isBackfill
+        )
+    }
+
+    private func stableAmountCluster(in items: [HomeItem]) -> (cents: Int, count: Int)? {
+        let grouped = Dictionary(grouping: items) { item in
+            Int((item.amount * 100).rounded())
+        }
+        return grouped
+            .map { (cents: $0.key, count: $0.value.count) }
+            .sorted { lhs, rhs in
+                if lhs.count == rhs.count { return lhs.cents < rhs.cents }
+                return lhs.count > rhs.count
+            }
+            .first
+    }
+
+    private func stableCommuteTitle(
+        in items: [HomeItem],
+        direction: CommuteHabitDirection
+    ) -> String {
+        let counts = items.reduce(into: [String: Int]()) { result, item in
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard RecordPrefillService.isHabitTitle(title, category: .transport),
+                  RecordSemanticLexicon.canReuseHabitTitle(
+                    title,
+                    category: .transport,
+                    userEditedTitle: item.userEditedTitle == true
+                  ) else {
+                return
+            }
+            result[title, default: 0] += item.userEditedTitle == true ? 2 : 1
+        }
+        if let best = counts.sorted(by: { lhs, rhs in
+            if lhs.value == rhs.value { return lhs.key < rhs.key }
+            return lhs.value > rhs.value
+        }).first,
+           best.value >= 3 {
+            return best.key
+        }
+        return direction.fallbackTitle
+    }
+
+    private func hasTodayCommuteRecord(
+        direction: CommuteHabitDirection,
+        now: Date,
+        calendar: Calendar
+    ) -> Bool {
+        items.contains { item in
+            calendar.isDate(item.createdAt, inSameDayAs: now)
+                && item.amount > 0
+                && commuteDirection(for: item.createdAt, calendar: calendar) == direction
+                && isCommuteRecord(item)
+        }
+    }
+
+    private func isCommuteRecord(_ item: HomeItem) -> Bool {
+        guard item.category == .transport else { return false }
+        let text = "\(item.title) \(item.emotionTag) \(item.memoryContext?.semanticPlace ?? "")".lowercased()
+        return containsAny(
+            text,
+            [
+                "通勤", "上班", "下班", "早高峰", "晚高峰", "到岗", "到站",
+                "地铁", "公交", "轨道交通", "打车", "滴滴", "花小猪",
+                "网约车", "回家", "到家", "路费"
+            ]
+        )
+    }
+
+    private func isMorningCommutePromptTime(_ date: Date, calendar: Calendar) -> Bool {
+        (390...585).contains(minutesFromMidnight(date, calendar: calendar))
+    }
+
+    private func isNoonCommuteBackfillTime(_ date: Date, calendar: Calendar) -> Bool {
+        (600...810).contains(minutesFromMidnight(date, calendar: calendar))
+    }
+
+    private func isEveningCommutePromptTime(_ date: Date, calendar: Calendar) -> Bool {
+        let minute = minutesFromMidnight(date, calendar: calendar)
+        let weekday = calendar.component(.weekday, from: date)
+        if weekday == 6 {
+            return (960...1230).contains(minute)
+        }
+        return (1050...1350).contains(minute)
+    }
+
+    private func isWorkday(_ date: Date, calendar: Calendar) -> Bool {
+        let weekday = calendar.component(.weekday, from: date)
+        return (2...6).contains(weekday)
+    }
+
+    private func commuteDirection(
+        for date: Date,
+        calendar: Calendar
+    ) -> CommuteHabitDirection? {
+        let minute = minutesFromMidnight(date, calendar: calendar)
+        if (330...660).contains(minute) { return .morning }
+        if (900...1440).contains(minute) { return .evening }
+        return nil
+    }
+
+    private func commuteWeekdayGroup(
+        for date: Date,
+        direction: CommuteHabitDirection,
+        calendar: Calendar
+    ) -> String {
+        guard direction == .evening else { return "weekday_morning" }
+        return calendar.component(.weekday, from: date) == 6 ? "fri" : "mon_thu"
+    }
+
+    private func minutesFromMidnight(_ date: Date, calendar: Calendar) -> Int {
+        let components = calendar.dateComponents([.hour, .minute], from: date)
+        return (components.hour ?? 0) * 60 + (components.minute ?? 0)
+    }
+
+    private func medianMinute(in minutes: [Int]) -> Int? {
+        guard !minutes.isEmpty else { return nil }
+        return minutes[minutes.count / 2]
+    }
+
+    private func date(
+        onSameDayAs date: Date,
+        minutesFromMidnight minute: Int,
+        calendar: Calendar
+    ) -> Date {
+        let start = calendar.startOfDay(for: date)
+        return calendar.date(byAdding: .minute, value: minute, to: start) ?? date
+    }
+
+    private func commuteTimeText(minutesFromMidnight minute: Int) -> String {
+        String(format: "%02d:%02d", minute / 60, minute % 60)
+    }
+
+    private func quickRecordDayKey(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    private func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.contains($0.lowercased()) }
     }
 
     var monthExpenseTotal: Double {
