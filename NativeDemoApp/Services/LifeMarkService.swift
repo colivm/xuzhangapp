@@ -134,11 +134,22 @@ enum LifeMarkService {
             requiresKeywordMatch: true
         ),
         LifeMarkDefinition(
+            id: "luwei_snack",
+            label: "卤味小食",
+            category: .dining,
+            categories: [.dining],
+            keywords: ["绝味", "绝味鸭脖", "鸭脖", "鸭货", "卤味", "周黑鸭", "煌上煌", "久久鸭", "紫燕百味鸡"],
+            access: .free,
+            priority: 27,
+            minimumCount: 1,
+            requiresKeywordMatch: true
+        ),
+        LifeMarkDefinition(
             id: "everyday_meal",
             label: "日常吃饭",
             category: .dining,
             categories: [.dining],
-            keywords: ["茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "老乡鸡", "塔斯汀", "海底捞", "库迪", "绝味", "袁记云饺", "萨莉亚"],
+            keywords: ["茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "老乡鸡", "塔斯汀", "海底捞", "库迪", "袁记云饺", "萨莉亚"],
             access: .free,
             priority: 32,
             minimumCount: 1,

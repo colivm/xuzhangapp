@@ -28,6 +28,7 @@ struct InsightWebView: View {
     @State private var aiCommandText = ""
     @State private var aiCommandAmountText = ""
     @State private var aiCommandResult: AICommandResult?
+    @State private var aiCommandShowsAllRelatedItems = false
     @State private var aiCommandMessage: String?
     @State private var aiCommandSavedCount: Int?
     private let trialTotal = 5
@@ -1521,7 +1522,7 @@ struct InsightWebView: View {
                     aiCommandBarChart(result.bars)
                 }
                 if !result.items.isEmpty {
-                    aiCommandItemsPreview(result.items)
+                    aiCommandItemsPreview(result.items, resultID: result.id)
                 }
                 if result.needsAmount {
                     aiCommandAmountInput(result)
@@ -1743,7 +1744,9 @@ struct InsightWebView: View {
         .glassPanel(radius: 20, padding: 16)
     }
 
-    private func aiCommandItemsPreview(_ items: [HomeItem]) -> some View {
+    private func aiCommandItemsPreview(_ items: [HomeItem], resultID: UUID) -> some View {
+        let previewLimit = 12
+        let visibleItems = aiCommandShowsAllRelatedItems ? items : Array(items.prefix(previewLimit))
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("相关记录")
@@ -1755,8 +1758,32 @@ struct InsightWebView: View {
                     .foregroundStyle(AppColors.subtext)
             }
 
-            ForEach(items.prefix(8)) { item in
+            ForEach(visibleItems) { item in
                 aiCommandItemRow(item)
+            }
+
+            if items.count > previewLimit {
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                        aiCommandShowsAllRelatedItems.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: aiCommandShowsAllRelatedItems ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 11, weight: .bold))
+                        Text(aiCommandShowsAllRelatedItems ? "收起" : "展开剩余 \(items.count - previewLimit) 笔")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(AppColors.accentDark)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(AppColors.accent.opacity(0.08))
+                    )
+                }
+                .buttonStyle(.plain)
+                .id(resultID)
             }
         }
         .glassPanel(radius: 20, padding: 16)
@@ -1987,6 +2014,7 @@ struct InsightWebView: View {
         }
         aiCommandSavedCount = nil
         aiCommandMessage = nil
+        aiCommandShowsAllRelatedItems = false
         aiCommandResult = buildAICommandResult(for: command)
         if let successMessage {
             withAnimation(.easeInOut(duration: 0.18)) {
@@ -1997,6 +2025,7 @@ struct InsightWebView: View {
 
     private func clearAICommandInput() {
         aiCommandAmountText = ""
+        aiCommandShowsAllRelatedItems = false
         aiCommandResult = nil
         aiCommandMessage = nil
         aiCommandSavedCount = nil

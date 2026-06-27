@@ -13,10 +13,9 @@ REGRESSION_CASES_PATH = ROOT / "NativeDemoApp/Resources/RecordSceneLexicon.regre
 
 SWIFT_FILES = {
     "brands": "NativeDemoApp/Services/MerchantBrandCatalog.swift",
-    "semantic_fallback": "NativeDemoApp/Services/RecordSemanticLexicon.swift",
+    "semantic_fallback": "NativeDemoApp/Models/HomeItem.swift",
     "life_scene": "NativeDemoApp/Services/LifeSceneSemanticService.swift",
     "life_mark": "NativeDemoApp/Services/LifeMarkService.swift",
-    "home_item": "NativeDemoApp/Models/HomeItem.swift",
     "record_view": "NativeDemoApp/Views/RecordView.swift",
     "scene_pack": "NativeDemoApp/Services/ScenePackCopyPool.swift",
     "home_view": "NativeDemoApp/Views/HomeView.swift",
@@ -101,13 +100,6 @@ EXPECTED_BRANDS = [
 
 EXPECTED_SWIFT_SNIPPETS = {
     "semantic_fallback": [
-        "茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴",
-        "山姆", "永辉", "大润发", "钱大妈", "花小猪", "洗车", "汽车保养",
-        "配镜", "验光", "洗牙", "网上国网", "暖气费", "取暖费", "B站会员",
-        "供暖费", "热力费", "腾讯视频会员", "充电器", "Office 365", "谷子", "潮玩", "泡泡玛特", "POP MART", "搬家",
-        "托育费", "直播打赏", "网吧", "电竞酒店", "医美", "白事随礼", "驾校", "彩票",
-    ],
-    "home_item": [
         "茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴",
         "山姆", "永辉", "大润发", "钱大妈", "花小猪", "洗车", "汽车保养",
         "配镜", "验光", "洗牙", "网上国网", "暖气费", "取暖费", "B站会员",
@@ -237,6 +229,15 @@ def read_text(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
+def assert_no_dead_semantic_source(failures: list[str]) -> None:
+    dead_path = ROOT / "NativeDemoApp/Services/RecordSemanticLexicon.swift"
+    if dead_path.exists():
+        failures.append(
+            "RecordSemanticLexicon has a duplicate source at "
+            "NativeDemoApp/Services/RecordSemanticLexicon.swift; use NativeDemoApp/Models/HomeItem.swift"
+        )
+
+
 def collect_keywords(payload: dict, section: str, key: str, value: str) -> set[str]:
     keywords: set[str] = set()
     for rule in payload.get(section, []):
@@ -306,7 +307,7 @@ def scan_swift_presence(failures: list[str]) -> dict[str, str]:
         if missing:
             failures.append(f"{SWIFT_FILES[name]}: missing snippets {', '.join(missing)}")
 
-    for name in ["semantic_fallback", "home_item"]:
+    for name in ["semantic_fallback"]:
         if "ocrKeywordRules:" not in texts[name]:
             failures.append(f"{SWIFT_FILES[name]}: fallback missing ocrKeywordRules")
 
@@ -428,6 +429,7 @@ def scan_regression_cases(failures: list[str], payload: dict) -> None:
 def main() -> int:
     failures: list[str] = []
     payload = json.loads(LEXICON_PATH.read_text(encoding="utf-8"))
+    assert_no_dead_semantic_source(failures)
     scan_json(failures)
     scan_regression_cases(failures, payload)
     texts = scan_swift_presence(failures)
