@@ -349,7 +349,7 @@ struct ScenePackAngleSheet: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ThemedPressButtonStyle())
 
             HStack(spacing: 8) {
                 memberMoveButton(systemName: "arrow.up", isEnabled: canMoveUp) {
@@ -373,6 +373,7 @@ struct ScenePackAngleSheet: View {
         .frame(maxWidth: .infinity, minHeight: 184, alignment: .topLeading)
         .background(scenePackCardBackground(tint: style.colors.first ?? AppColors.accent, isSelected: selectedPackID == pack.id))
         .overlay(scenePackCardBorder(tint: style.colors.first ?? AppColors.accent, isSelected: selectedPackID == pack.id))
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .onDrop(
             of: [UTType.plainText],
             delegate: ScenePackMemberDropDelegate(
@@ -735,24 +736,38 @@ struct ScenePackAngleSheet: View {
         isSelected: Bool = false,
         isLocked: Bool = false
     ) -> some View {
+        let stateTint = isLocked ? AppColors.lockGold : tint
         RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(AppColors.panelStrong.opacity(isLocked ? 0.46 : (isSelected ? 0.90 : 0.72)))
+            .fill(AppColors.panelStrong.opacity(isLocked ? 0.48 : (isSelected ? 0.90 : 0.74)))
             .overlay(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isLocked ? 0.14 : 0.30),
+                        Color.white.opacity(isLocked ? 0.16 : 0.32),
                         AppColors.paperWarm.opacity(isLocked ? 0.14 : 0.18),
-                        tint.opacity(isLocked ? 0.04 : (isSelected ? 0.14 : 0.06))
+                        stateTint.opacity(isLocked ? 0.07 : (isSelected ? 0.15 : 0.06))
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             )
+            .overlay(alignment: .topLeading) {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(isLocked ? 0.18 : 0.34),
+                        Color.white.opacity(0.08),
+                        Color.clear
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .frame(height: 48)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
             .overlay(alignment: .bottomTrailing) {
                 RadialGradient(
                     colors: [
-                        (isLocked ? AppColors.lockGold : tint).opacity(isSelected ? 0.16 : 0.07),
+                        stateTint.opacity(isSelected ? 0.17 : (isLocked ? 0.10 : 0.07)),
                         Color.clear
                     ],
                     center: .bottomTrailing,
@@ -761,7 +776,8 @@ struct ScenePackAngleSheet: View {
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
-            .shadow(color: (isLocked ? AppColors.lockGold : tint).opacity(isSelected ? 0.13 : 0), radius: 16, x: 0, y: 0)
+            .shadow(color: AppColors.subtext.opacity(isSelected ? 0.07 : 0.045), radius: isSelected ? 12 : 8, x: 0, y: isSelected ? 6 : 4)
+            .shadow(color: stateTint.opacity(isSelected ? 0.13 : (isLocked ? 0.05 : 0)), radius: isSelected ? 16 : 10, x: 0, y: 0)
     }
 
     private func scenePackCardBorder(
@@ -782,6 +798,14 @@ struct ScenePackAngleSheet: View {
                 ),
                 lineWidth: isSelected ? 1.2 : 1
             )
+            .overlay {
+                if isSelected && !isLocked {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(tint.opacity(0.13), lineWidth: 3)
+                        .padding(1.5)
+                }
+            }
+            .allowsHitTesting(false)
     }
 
     private var moduleBackground: some View {
@@ -871,7 +895,7 @@ struct ScenePackAngleSheet: View {
         .padding(11)
         .background(scenePackCardBackground(tint: style.colors.first ?? AppColors.accent, isSelected: isOpenSlot))
         .overlay(scenePackCardBorder(tint: style.colors.first ?? AppColors.accent, isSelected: isOpenSlot))
-        .contentShape(Rectangle())
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private func candidatePackCard(
@@ -909,10 +933,11 @@ struct ScenePackAngleSheet: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, minHeight: 172, alignment: .topLeading)
-            .background(scenePackCardBackground(tint: style.colors.first ?? AppColors.accent, isLocked: isLocked))
-            .overlay(scenePackCardBorder(tint: style.colors.first ?? AppColors.accent, isLocked: isLocked))
+            .background(scenePackCardBackground(tint: style.colors.first ?? AppColors.accent, isSelected: canReplaceThisPack && !isLocked, isLocked: isLocked))
+            .overlay(scenePackCardBorder(tint: style.colors.first ?? AppColors.accent, isSelected: canReplaceThisPack && !isLocked, isLocked: isLocked))
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ThemedPressButtonStyle())
     }
 
     private func scenePackVisual(_ pack: ScenePackDefinition, compact: Bool) -> some View {
@@ -1032,7 +1057,7 @@ struct ScenePackAngleSheet: View {
         } label: {
             packRowContent(pack, subtitle: configuration.scenePackDesc(pack), isSelected: selectedPackID == pack.id)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ThemedPressButtonStyle())
     }
 
     private func pendingLifeMarkRewardCard(
@@ -1140,9 +1165,10 @@ struct ScenePackAngleSheet: View {
             }
             .padding(11)
             .background(scenePackCardBackground(tint: style.colors.first ?? AppColors.accent, isSelected: selectedPackID == pack.id))
-            .overlay(scenePackCardBorder(tint: AppColors.accent, isSelected: true))
+            .overlay(scenePackCardBorder(tint: style.colors.first ?? AppColors.accent, isSelected: selectedPackID == pack.id))
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ThemedPressButtonStyle())
     }
 
     private func scenePack(

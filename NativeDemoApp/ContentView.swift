@@ -89,24 +89,38 @@ struct ThemedInteractionSurface: ViewModifier {
     var tint: Color = AppColors.accent
     var isSelected = false
     var isDisabled = false
+    var glowIntensity: Double = 1
+
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
         content
             .background(surfaceFill)
             .overlay(surfaceRim)
-            .shadow(color: AppColors.subtext.opacity(isDisabled ? 0.04 : 0.08), radius: isSelected ? 16 : 10, x: 0, y: isSelected ? 8 : 5)
-            .shadow(color: tint.opacity(isSelected && !isDisabled ? 0.14 : 0.0), radius: 18, x: 0, y: 0)
+            .overlay(selectedRim)
+            .shadow(
+                color: AppColors.subtext.opacity(isDisabled ? 0.03 : (isSelected ? 0.10 : 0.07)),
+                radius: isSelected ? 14 : 9,
+                x: 0,
+                y: isSelected ? 7 : 4
+            )
+            .shadow(
+                color: tint.opacity(isSelected && !isDisabled ? 0.15 * boundedGlow : 0.0),
+                radius: 16,
+                x: 0,
+                y: 0
+            )
     }
 
     private var surfaceFill: some View {
         RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .fill(AppColors.panelStrong.opacity(isDisabled ? 0.42 : (isSelected ? 0.88 : 0.72)))
+            .fill(AppColors.panelStrong.opacity(baseOpacity))
             .overlay(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isDisabled ? 0.10 : 0.24),
-                        AppColors.paperWarm.opacity(isDisabled ? 0.08 : 0.16),
-                        tint.opacity(isDisabled ? 0.03 : (isSelected ? 0.13 : 0.06))
+                        Color.white.opacity(reduceTransparency ? 0.06 : (isDisabled ? 0.10 : 0.25)),
+                        AppColors.paperWarm.opacity(isDisabled ? 0.07 : 0.15),
+                        tint.opacity(isDisabled ? 0.03 : (isSelected ? 0.14 * boundedGlow : 0.055))
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -114,16 +128,18 @@ struct ThemedInteractionSurface: ViewModifier {
                 .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             )
             .overlay(alignment: .bottomTrailing) {
-                RadialGradient(
-                    colors: [
-                        tint.opacity(isDisabled ? 0.02 : (isSelected ? 0.16 : 0.07)),
-                        Color.clear
-                    ],
-                    center: .bottomTrailing,
-                    startRadius: 0,
-                    endRadius: isSelected ? 150 : 110
-                )
-                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+                if !reduceTransparency {
+                    RadialGradient(
+                        colors: [
+                            tint.opacity(isDisabled ? 0.02 : (isSelected ? 0.17 * boundedGlow : 0.065)),
+                            Color.clear
+                        ],
+                        center: .bottomTrailing,
+                        startRadius: 0,
+                        endRadius: isSelected ? 150 : 112
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+                }
             }
     }
 
@@ -132,9 +148,9 @@ struct ThemedInteractionSurface: ViewModifier {
             .stroke(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isDisabled ? 0.16 : 0.52),
-                        tint.opacity(isDisabled ? 0.08 : (isSelected ? 0.32 : 0.15)),
-                        AppColors.line.opacity(isSelected ? 0.72 : 0.52)
+                        Color.white.opacity(isDisabled ? 0.16 : 0.54),
+                        tint.opacity(isDisabled ? 0.08 : (isSelected ? 0.34 * boundedGlow : 0.14)),
+                        AppColors.line.opacity(isSelected ? 0.70 : 0.50)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -143,13 +159,40 @@ struct ThemedInteractionSurface: ViewModifier {
             )
             .allowsHitTesting(false)
     }
+
+    @ViewBuilder
+    private var selectedRim: some View {
+        if isSelected && !isDisabled {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .stroke(tint.opacity(0.13 * boundedGlow), lineWidth: 3)
+                .padding(1.5)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private var baseOpacity: Double {
+        if isDisabled {
+            return reduceTransparency ? 0.56 : 0.44
+        }
+        if isSelected {
+            return reduceTransparency ? 0.96 : 0.88
+        }
+        return reduceTransparency ? 0.86 : 0.72
+    }
+
+    private var boundedGlow: Double {
+        min(max(glowIntensity, 0), 1.4)
+    }
 }
 
 struct ThemedPressButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .animation(.spring(response: 0.22, dampingFraction: 0.86), value: configuration.isPressed)
+            .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? 0.985 : 1))
+            .brightness(configuration.isPressed ? -0.012 : 0)
+            .animation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.86), value: configuration.isPressed)
     }
 }
 
@@ -158,9 +201,16 @@ extension View {
         radius: CGFloat = 20,
         tint: Color = AppColors.accent,
         isSelected: Bool = false,
-        isDisabled: Bool = false
+        isDisabled: Bool = false,
+        glowIntensity: Double = 1
     ) -> some View {
-        modifier(ThemedInteractionSurface(radius: radius, tint: tint, isSelected: isSelected, isDisabled: isDisabled))
+        modifier(ThemedInteractionSurface(
+            radius: radius,
+            tint: tint,
+            isSelected: isSelected,
+            isDisabled: isDisabled,
+            glowIntensity: glowIntensity
+        ))
     }
 }
 

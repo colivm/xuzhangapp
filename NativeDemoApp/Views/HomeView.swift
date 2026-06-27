@@ -1190,15 +1190,21 @@ struct HomeView: View {
     // MARK: - Bill List Item
 
     private func billListItem(item: HomeItem, isFirst: Bool, isHighlighted: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let accent = AppColors.categoryColor(item.category)
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(item.displayTitle)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(AppColors.text)
-                Spacer()
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.88)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 10)
                 Text(item.amount.formatted(.cny))
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
             }
 
             if shouldShowHomeEmotion(for: item) {
@@ -1231,24 +1237,13 @@ struct HomeView: View {
         .padding(.horizontal, 10)
         .background {
             if isHighlighted {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(AppColors.accent.opacity(0.08))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.42),
-                                        AppColors.accent.opacity(0.28),
-                                        AppColors.line.opacity(0.36)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
+                Color.clear
+                    .themedInteractionSurface(
+                        radius: 16,
+                        tint: accent,
+                        isSelected: true,
+                        glowIntensity: 0.72
                     )
-                    .shadow(color: AppColors.accent.opacity(0.12), radius: 12, x: 0, y: 0)
             }
         }
         .overlay(alignment: .top) {
@@ -1479,6 +1474,8 @@ struct HomeView: View {
                     .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(todayRecordPrimaryInk)
                     .lineLimit(2)
+                    .minimumScaleFactor(0.84)
+                    .fixedSize(horizontal: false, vertical: true)
                     .opacity(isEditing ? 0.50 : 1)
 
                 Spacer(minLength: 8)
@@ -1486,6 +1483,8 @@ struct HomeView: View {
                 Text(item.amount.formatted(.cny))
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundStyle(todayRecordAmountInk)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
                     .opacity(isEditing ? 0.46 : 1)
             }
 
@@ -1523,6 +1522,8 @@ struct HomeView: View {
                 Text(item.createdAt.zhBillDateTime)
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.readableSubtext)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
                 Spacer()
             }
             .opacity(isEditing ? 0 : 1)
@@ -1641,6 +1642,12 @@ struct HomeView: View {
                 radius: isEditing ? 20 : 16,
                 x: 0,
                 y: isEditing ? 12 : 8
+            )
+            .shadow(
+                color: accent.opacity(isEditing ? 0.12 : 0.05),
+                radius: isEditing ? 14 : 8,
+                x: 0,
+                y: 0
             )
             .shadow(
                 color: Color.white.opacity(isEditing ? 0.20 : 0.28),
