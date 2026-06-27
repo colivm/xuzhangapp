@@ -736,13 +736,13 @@ struct ScenePackAngleSheet: View {
         isLocked: Bool = false
     ) -> some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(AppColors.panelStrong.opacity(isLocked ? 0.46 : (isSelected ? 0.88 : 0.72)))
+            .fill(AppColors.panelStrong.opacity(isLocked ? 0.46 : (isSelected ? 0.90 : 0.72)))
             .overlay(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isLocked ? 0.16 : 0.26),
-                        AppColors.paperWarm.opacity(isLocked ? 0.16 : 0.22),
-                        tint.opacity(isSelected ? 0.10 : 0.05)
+                        Color.white.opacity(isLocked ? 0.14 : 0.30),
+                        AppColors.paperWarm.opacity(isLocked ? 0.14 : 0.18),
+                        tint.opacity(isLocked ? 0.04 : (isSelected ? 0.14 : 0.06))
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -752,15 +752,16 @@ struct ScenePackAngleSheet: View {
             .overlay(alignment: .bottomTrailing) {
                 RadialGradient(
                     colors: [
-                        (isLocked ? AppColors.lockGold : tint).opacity(isSelected ? 0.10 : 0.06),
+                        (isLocked ? AppColors.lockGold : tint).opacity(isSelected ? 0.16 : 0.07),
                         Color.clear
                     ],
                     center: .bottomTrailing,
                     startRadius: 0,
-                    endRadius: 120
+                    endRadius: isSelected ? 150 : 112
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
+            .shadow(color: (isLocked ? AppColors.lockGold : tint).opacity(isSelected ? 0.13 : 0), radius: 16, x: 0, y: 0)
     }
 
     private func scenePackCardBorder(
@@ -772,9 +773,9 @@ struct ScenePackAngleSheet: View {
             .stroke(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isLocked ? 0.20 : 0.48),
-                        (isLocked ? AppColors.lockGold : tint).opacity(isSelected || isLocked ? 0.24 : 0.12),
-                        AppColors.line.opacity(0.52)
+                        Color.white.opacity(isLocked ? 0.18 : 0.52),
+                        (isLocked ? AppColors.lockGold : tint).opacity(isSelected || isLocked ? 0.34 : 0.14),
+                        AppColors.line.opacity(isSelected ? 0.68 : 0.52)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing

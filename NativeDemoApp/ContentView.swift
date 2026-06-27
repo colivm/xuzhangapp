@@ -82,6 +82,88 @@ extension View {
     }
 }
 
+// MARK: - Theme-Aware Interaction Surfaces
+
+struct ThemedInteractionSurface: ViewModifier {
+    var radius: CGFloat = 20
+    var tint: Color = AppColors.accent
+    var isSelected = false
+    var isDisabled = false
+
+    func body(content: Content) -> some View {
+        content
+            .background(surfaceFill)
+            .overlay(surfaceRim)
+            .shadow(color: AppColors.subtext.opacity(isDisabled ? 0.04 : 0.08), radius: isSelected ? 16 : 10, x: 0, y: isSelected ? 8 : 5)
+            .shadow(color: tint.opacity(isSelected && !isDisabled ? 0.14 : 0.0), radius: 18, x: 0, y: 0)
+    }
+
+    private var surfaceFill: some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(AppColors.panelStrong.opacity(isDisabled ? 0.42 : (isSelected ? 0.88 : 0.72)))
+            .overlay(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(isDisabled ? 0.10 : 0.24),
+                        AppColors.paperWarm.opacity(isDisabled ? 0.08 : 0.16),
+                        tint.opacity(isDisabled ? 0.03 : (isSelected ? 0.13 : 0.06))
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            )
+            .overlay(alignment: .bottomTrailing) {
+                RadialGradient(
+                    colors: [
+                        tint.opacity(isDisabled ? 0.02 : (isSelected ? 0.16 : 0.07)),
+                        Color.clear
+                    ],
+                    center: .bottomTrailing,
+                    startRadius: 0,
+                    endRadius: isSelected ? 150 : 110
+                )
+                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            }
+    }
+
+    private var surfaceRim: some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(isDisabled ? 0.16 : 0.52),
+                        tint.opacity(isDisabled ? 0.08 : (isSelected ? 0.32 : 0.15)),
+                        AppColors.line.opacity(isSelected ? 0.72 : 0.52)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: isSelected ? 1.15 : 1
+            )
+            .allowsHitTesting(false)
+    }
+}
+
+struct ThemedPressButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.spring(response: 0.22, dampingFraction: 0.86), value: configuration.isPressed)
+    }
+}
+
+extension View {
+    func themedInteractionSurface(
+        radius: CGFloat = 20,
+        tint: Color = AppColors.accent,
+        isSelected: Bool = false,
+        isDisabled: Bool = false
+    ) -> some View {
+        modifier(ThemedInteractionSurface(radius: radius, tint: tint, isSelected: isSelected, isDisabled: isDisabled))
+    }
+}
+
 // MARK: - Glass Panel Modifier
 
 struct GlassPanel: ViewModifier {

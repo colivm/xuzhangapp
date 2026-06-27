@@ -779,36 +779,9 @@ struct HomeView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 13)
             .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: isPrimary
-                                ? [
-                                    AppColors.accent.opacity(0.14),
-                                    Color.white.opacity(0.70)
-                                  ]
-                                : [
-                                    Color.white.opacity(0.74),
-                                    Color.white.opacity(0.62)
-                                  ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(
-                        isPrimary
-                            ? AppColors.accent.opacity(0.26)
-                            : Color.white.opacity(0.54),
-                        lineWidth: 1
-                    )
-            )
-            .shadow(color: AppColors.subtext.opacity(0.08), radius: 12, x: 0, y: 5)
+            .themedInteractionSurface(radius: 20, tint: AppColors.accent, isSelected: isPrimary)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ThemedPressButtonStyle())
     }
 
     private func homeActionIconBadge(systemImage: String) -> some View {
@@ -1256,14 +1229,28 @@ struct HomeView: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(isHighlighted ? AppColors.accent.opacity(0.10) : Color.clear)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(isHighlighted ? AppColors.accent.opacity(0.22) : Color.clear, lineWidth: 1)
-        )
+        .background {
+            if isHighlighted {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AppColors.accent.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.42),
+                                        AppColors.accent.opacity(0.28),
+                                        AppColors.line.opacity(0.36)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+                    .shadow(color: AppColors.accent.opacity(0.12), radius: 12, x: 0, y: 0)
+            }
+        }
         .overlay(alignment: .top) {
             if !isFirst {
                 PaperCreaseDivider()
