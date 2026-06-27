@@ -737,7 +737,7 @@ struct ScenePackAngleSheet: View {
         isLocked: Bool = false
     ) -> some View {
         let stateTint = isLocked ? AppColors.lockGold : tint
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
+        return RoundedRectangle(cornerRadius: 18, style: .continuous)
             .fill(AppColors.panelStrong.opacity(isLocked ? 0.48 : (isSelected ? 0.90 : 0.74)))
             .overlay(
                 LinearGradient(

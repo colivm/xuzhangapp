@@ -1002,6 +1002,7 @@ final class PlaybackMomentSelector {
                 if item.userEditedTitle == true { score += 24 }
                 if item.source == .manual { score += 8 }
                 if emotion != defaultEmotion { score += 8 }
+                score += lifeTraceWeightAdjustment(for: item, text: title)
                 return PlaybackMoment(item: item, text: title, source: .title, score: score)
             }
 
@@ -1012,6 +1013,7 @@ final class PlaybackMomentSelector {
             }
             score += 48
             if item.userEditedTitle == true { score += 8 }
+            score += lifeTraceWeightAdjustment(for: item, text: emotion)
             return PlaybackMoment(item: item, text: emotion, source: .emotionTag, score: score)
         }
         .sorted {
@@ -1046,12 +1048,23 @@ final class PlaybackMomentSelector {
             counts[text, default: 0] += 1
         }
 
-        materials.forEach { add($0.text) }
+        materials.forEach { material in
+            if !isLowSignalDrink(material.item, text: material.text) {
+                add(material.text)
+            }
+        }
         for item in items {
             let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
             let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !emotion.isEmpty, emotion != defaultEmotion { add(emotion) }
-            if EchoAnchorService.shared.isEligibleLifeTraceTitle(item.title, item: item) { add(item.title) }
+            if !emotion.isEmpty,
+               emotion != defaultEmotion,
+               !isLowSignalDrink(item, text: emotion) {
+                add(emotion)
+            }
+            if EchoAnchorService.shared.isEligibleLifeTraceTitle(item.title, item: item),
+               !isLowSignalDrink(item, text: item.title) {
+                add(item.title)
+            }
             add(LifeSceneSemanticService.displayTheme(for: LifeSceneSemanticService.classify(item)))
         }
 
@@ -1064,6 +1077,34 @@ final class PlaybackMomentSelector {
             }
             .prefix(5)
             .map(\.key)
+    }
+
+    private func lifeTraceWeightAdjustment(for item: HomeItem, text: String) -> Int {
+        let normalized = "\(item.title) \(item.displayEmotionTag) \(text)"
+        var adjustment = 0
+        if containsAny(normalized, ["第一次", "第10次", "第 10 次", "连续", "恢复", "雨天", "下雨", "晚归", "宝宝", "奶粉", "尿不湿"]) {
+            adjustment += 26
+        }
+        if isLowSignalDrink(item, text: normalized) {
+            adjustment -= 46
+        }
+        if item.category == .dining, item.amount <= 20, !containsAny(normalized, ["第一次", "聚餐", "朋友", "宝宝"]) {
+            adjustment -= 18
+        }
+        return adjustment
+    }
+
+    private func isLowSignalDrink(_ item: HomeItem, text: String) -> Bool {
+        let normalized = "\(item.title) \(item.displayEmotionTag) \(text)"
+        guard item.amount <= 25 else { return false }
+        guard containsAny(normalized, ["咖啡", "拿铁", "美式", "奶茶", "茶饮", "饮品", "饮料", "喝的", "果汁", "柠檬茶", "水溶", "c100", "维c", "维C", "维他"]) else {
+            return false
+        }
+        return !containsAny(normalized, ["第一次", "恢复", "加班", "晚归", "雨天", "下雨", "聚餐", "朋友", "宝宝"])
+    }
+
+    private func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.localizedCaseInsensitiveContains($0) }
     }
 
 }

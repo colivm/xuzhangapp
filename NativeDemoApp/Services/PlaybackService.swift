@@ -129,9 +129,12 @@ struct PlaybackMomentSelection: Equatable {
     let scentWords: [String]
 
     func first(excluding itemID: UUID?) -> PlaybackMoment? {
+        first(excluding: Set([itemID].compactMap { $0 }))
+    }
+
+    func first(excluding itemIDs: Set<UUID>) -> PlaybackMoment? {
         materials.first { material in
-            guard let itemID else { return true }
-            return material.item.id != itemID
+            !itemIDs.contains(material.item.id)
         }
     }
 
@@ -203,10 +206,11 @@ final class PlaybackService {
         let selection = momentSelector.select(from: rows, periodKey: weekKey, range: .week, now: now, echoAnchor: echoAnchor)
         let primaryVoice = selection.primary
         let primaryVoiceID = primaryVoice?.item.id
-        let secondaryVoice = selection.first(excluding: primaryVoiceID)
+        let primaryVoiceIDs = Set([primaryVoiceID].compactMap { $0 })
+        let secondaryVoice = selection.first(excluding: primaryVoiceIDs)
         let busiestRows = busiest.map { day in rows.filter { calendar.isDate($0.createdAt, inSameDayAs: day.date) } } ?? []
         let busiestSelection = momentSelector.select(from: busiestRows, periodKey: weekKey, range: .week, now: now)
-        let busiestMaterial = busiestSelection.primary ?? primaryVoice
+        let busiestMaterial = busiestSelection.first(excluding: primaryVoiceIDs)
         let recurringLine = recurringTraceLine(
             current: rows,
             previous: previousWeekItems(from: items, now: now),
@@ -216,7 +220,9 @@ final class PlaybackService {
         let scentWords = selection.scentWords
         let voiceTitle1 = selection.voiceText(for: .week)
         let voiceTitle2 = secondaryVoice?.text ?? voiceTitle1
-        let busiestTitle = busiestMaterial?.text ?? voiceTitle1
+        let busiestTitle = busiestMaterial?.text
+            ?? busiestFallbackTitle(from: busiestRows, excluding: primaryVoiceID)
+            ?? "这天的几笔记录"
         let sceneMemoryLine = weeklySceneMemoryLine(rows)
         let emotionSignal = primaryVoice?.item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let lifeMark = LifeMarkService
@@ -228,11 +234,10 @@ final class PlaybackService {
             fallback: sceneMemoryLine ?? "这一周最清楚的一格，是「\(voiceTitle1)」。"
         )
         let presenceSupportLine = lifeMark == nil ? (sceneMemoryLine ?? "") : ""
-        let rhythmSupportLine = busiestMaterial?.item.id == primaryVoiceID
-            ? (sceneMemoryLineForRows(busiestRows, excluding: primaryVoiceID) ?? "")
-            : (sceneMemoryLineForItem(busiestMaterial?.item)
-                ?? sceneMemoryLineForRows(busiestRows, excluding: primaryVoiceID)
-                ?? "")
+        let rhythmSupportLine = sceneMemoryLineForItem(busiestMaterial?.item)
+            ?? sceneMemoryLineForRows(busiestRows, excluding: primaryVoiceID)
+            ?? busiestFallbackSupportLine(from: busiestRows, excluding: primaryVoiceID)
+            ?? ""
         let voiceSupportLine = sceneMemoryLineForItem(primaryVoice?.item) ?? ""
         let scentSupportLine = weeklyScentSupportLine(
             sceneLine: sceneMemoryLine,
@@ -1389,6 +1394,35 @@ final class PlaybackService {
             return true
         }
         return contextualMemoryLine(in: scoped)
+    }
+
+    private func busiestFallbackTitle(from rows: [HomeItem], excluding excludedID: UUID?) -> String? {
+        rows
+            .filter { item in
+                if let excludedID, item.id == excludedID { return false }
+                return true
+            }
+            .sorted { lhs, rhs in
+                if abs(lhs.amount - rhs.amount) < 0.001 {
+                    return lhs.createdAt < rhs.createdAt
+                }
+                return lhs.amount > rhs.amount
+            }
+            .first
+            .map { item in
+                let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                return title.isEmpty ? item.category.rawValue : title
+            }
+    }
+
+    private func busiestFallbackSupportLine(from rows: [HomeItem], excluding excludedID: UUID?) -> String? {
+        let scoped = rows.filter { item in
+            if let excludedID, item.id == excludedID { return false }
+            return true
+        }
+        guard scoped.count >= 2 else { return nil }
+        let day = scoped.first.map { Self.shortWeekdayFormatter.string(from: $0.createdAt) } ?? "这天"
+        return "\(day)不只留下一笔，几件小事叠在一起，才让这一天更明显。"
     }
 
     private func weeklyScentSupportLine(

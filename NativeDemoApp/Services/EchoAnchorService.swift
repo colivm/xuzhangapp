@@ -93,6 +93,8 @@ final class EchoAnchorService {
             if (6...14).contains(item.title.trimmingCharacters(in: .whitespacesAndNewlines).count) { score += 10 }
             if item.merchantBrandId != nil, item.userEditedTitle == true { score += 5 }
             if item.userEditedTitle == true { score += 5 }
+            if isLowSignalDrink(item, text: item.title) { score -= 45 }
+            if isStrongLifeTrace(item, text: item.title) { score += 22 }
             return (item, score)
         }
 
@@ -176,6 +178,24 @@ final class EchoAnchorService {
         let clamped = min(max(fraction, 0), 1)
         let index = Int((Double(values.count - 1) * clamped).rounded())
         return values[min(max(index, 0), values.count - 1)]
+    }
+
+    private func isLowSignalDrink(_ item: HomeItem, text: String) -> Bool {
+        let normalized = "\(item.title) \(item.displayEmotionTag) \(text)"
+        guard item.amount <= 25 else { return false }
+        guard containsAny(normalized, ["咖啡", "拿铁", "美式", "奶茶", "茶饮", "饮品", "饮料", "喝的", "果汁", "柠檬茶", "水溶", "c100", "维c", "维C", "维他"]) else {
+            return false
+        }
+        return !isStrongLifeTrace(item, text: normalized)
+    }
+
+    private func isStrongLifeTrace(_ item: HomeItem, text: String) -> Bool {
+        let normalized = "\(item.title) \(item.displayEmotionTag) \(text)"
+        return containsAny(normalized, ["第一次", "第10次", "第 10 次", "连续", "恢复", "加班", "晚归", "雨天", "下雨", "聚餐", "朋友", "宝宝", "奶粉", "尿不湿"])
+    }
+
+    private func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.localizedCaseInsensitiveContains($0) }
     }
 
     private func stableHash(_ value: String) -> Int {
