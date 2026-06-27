@@ -73,6 +73,14 @@ extension HomeViewModel {
         category: HomeItem.Category,
         date: Date
     ) -> Bool {
+        if hasMatchingHighConfidenceCommuteRecord(
+            title: title,
+            amount: amount,
+            category: category,
+            date: date
+        ) {
+            return true
+        }
         inputTitle = title
         inputAmount = String(format: "%.2f", amount)
         selectedCategory = category
@@ -83,6 +91,27 @@ extension HomeViewModel {
             categoryLockedForSave: true,
             scenePackId: "commute"
         )
+    }
+
+    private func hasMatchingHighConfidenceCommuteRecord(
+        title: String,
+        amount: Double,
+        category: HomeItem.Category,
+        date: Date
+    ) -> Bool {
+        let amountCents = Int((amount * 100).rounded())
+        let normalizedTitle = normalizedQuickRecordTitle(title)
+        return items.contains { item in
+            item.category == category
+                && item.scenePackId == "commute"
+                && Int((item.amount * 100).rounded()) == amountCents
+                && abs(item.createdAt.timeIntervalSince(date)) < 90
+                && normalizedQuickRecordTitle(item.title) == normalizedTitle
+        }
+    }
+
+    private func normalizedQuickRecordTitle(_ title: String) -> String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private enum CommuteHabitDirection: String {
