@@ -22,6 +22,31 @@
       "expectedFrequentOverride": false
     },
     {
+      "id": "ocr-grilled-oyster-wechat-phone-tail",
+      "mode": "ocr",
+      "amount": 15,
+      "rawText": "微信支付 账单详情 扫码二维码付款-给烤生蚝13023190931 金额 -¥15.00 转账时间 2026年6月27日 22:07:11 财付通订单号 4200000000000000",
+      "expectedCategory": "餐饮"
+    },
+    {
+      "id": "manual-teppan-squid-night-market",
+      "mode": "manual",
+      "amount": 35,
+      "time": "22:12",
+      "inputTitle": "铁板鱿鱼",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
+      "id": "manual-juewei-duck-neck-snack",
+      "mode": "manual",
+      "amount": 41.67,
+      "time": "11:38",
+      "inputTitle": "绝味鸭脖",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
       "id": "manual-subway-transport",
       "mode": "manual",
       "amount": 4.75,

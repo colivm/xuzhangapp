@@ -344,7 +344,9 @@ enum LifeSceneSemanticService {
         switch brand?.id {
         case "luckin", "starbucks", "manner", "mixue", "heytea", "naixue", "cotti":
             add(.coffee, 7.0, .dining, "咖啡饮品", "#提神", 10)
-        case "meituan", "eleme", "mcdonalds", "kfc", "qixintian", "haidilao", "laoxiangji", "tastien", "juewei", "yuanjiyunjiao", "saizeriya":
+        case "juewei":
+            add(.quickMeal, 6.8, .dining, "卤味小食", "#卤味小食", 16)
+        case "meituan", "eleme", "mcdonalds", "kfc", "qixintian", "haidilao", "laoxiangji", "tastien", "yuanjiyunjiao", "saizeriya":
             add(.quickMeal, 6.6, .dining, "饭点外卖", "#饭点外卖", 20)
         case "metro_transit":
             add(.commute, 7.2, .transport, "通勤", "#通勤", 5)
@@ -372,7 +374,13 @@ enum LifeSceneSemanticService {
         if containsAny(text, ["食堂", "工位", "工作餐", "加班餐", "公司楼下", "单位食堂"]) {
             add(.workMeal, 7.0, .dining, "工作餐", "#工作餐", 12)
         }
-        if containsAny(text, ["午餐", "午饭", "晚餐", "晚饭", "外卖", "简餐", "热饭", "吃一口", "饭点", "夜宵", "面", "粉", "馄饨", "盖饭", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "七欣天", "海底捞", "老乡鸡", "塔斯汀", "绝味", "袁记云饺", "萨莉亚", "火锅", "烤肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "便当"]) {
+        if containsAny(text, ["绝味", "鸭脖", "鸭货", "卤味", "周黑鸭", "煌上煌"]) {
+            add(.quickMeal, 6.9, .dining, "卤味小食", "#卤味小食", 16)
+        }
+        if containsAny(text, ["夜市", "夜摊", "大排档", "生蚝", "烤生蚝", "鱿鱼", "铁板鱿鱼", "烧烤", "烤串", "串串"]) {
+            add(.quickMeal, 6.9, .dining, "夜市小吃", "#夜市小吃", 17)
+        }
+        if containsAny(text, ["午餐", "午饭", "晚餐", "晚饭", "外卖", "简餐", "热饭", "吃一口", "饭点", "夜宵", "面", "粉", "馄饨", "盖饭", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "七欣天", "海底捞", "老乡鸡", "塔斯汀", "袁记云饺", "萨莉亚", "火锅", "烤肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "便当"]) {
             add(.quickMeal, 6.2, .dining, "饭点外卖", "#饭点外卖", 22)
         }
         if containsAny(text, ["咖啡", "拿铁", "美式", "奶茶", "饮品", "茶饮", "提神", "库迪"]) {

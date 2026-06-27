@@ -292,8 +292,8 @@ final class OCRService {
         let text = lines.joined(separator: "\n")
         let detailHints = [
             "账单详情", "交易详情", "订单详情", "商品说明", "商品名称", "商家名称", "商户名称", "商户全称",
-            "交易对象", "收款方", "收款账户", "创建时间", "付款时间", "支付时间", "交易时间", "当前状态",
-            "订单号", "商户单号", "交易单号", "支付方式",
+            "交易对象", "收款方", "收款账户", "创建时间", "付款时间", "支付时间", "交易时间", "转账时间", "当前状态",
+            "订单号", "商户单号", "交易单号", "财付通订单号", "转账金额", "支付方式",
         ]
         return detailHints.contains { text.contains($0) }
             || text.contains("支付成功")
@@ -916,6 +916,9 @@ final class OCRService {
         let hasCurrency = normalized.contains("¥")
         let hasExpenseWord = normalized.contains("支出") || normalized.contains("付款") || normalized.contains("支付")
         let paidWithoutMinus = !hasMinus && ["等待确认收货", "交易成功", "支付成功"].contains { statusScope.contains($0) }
+        if !hasMinus && !hasCurrency && !paidWithoutMinus && containsLongDigitRun(normalized) {
+            return nil
+        }
         let positiveListExpense = allowPositiveExpense && (hasCurrency || hasExpenseWord || (isPureAmountLine(normalized) && numericAmount < 1_000))
         guard hasMinus || paidWithoutMinus || positiveListExpense else { return nil }
 
@@ -981,6 +984,9 @@ final class OCRService {
         let paidWithoutMinus = !hasMinus && ["等待确认收货", "交易成功", "支付成功"].contains { statusContext.contains($0) }
         let amount = Double(nsText.substring(with: match.range(at: 2))) ?? 0
         guard amount > 0 else { return nil }
+        if !hasMinus && !hasCurrency && !paidWithoutMinus && containsLongDigitRun(normalized) {
+            return nil
+        }
         let positiveListExpense = allowPositiveExpense && (hasCurrency || hasExpenseWord || (isPureAmountLine(normalized) && amount < 1_000))
         guard hasMinus || paidWithoutMinus || positiveListExpense else { return nil }
 
@@ -1436,7 +1442,12 @@ final class OCRService {
     private func normalizedOCRTitleCandidate(_ value: String) -> String {
         value
             .replacingOccurrences(of: "！", with: "!")
+            .replacingOccurrences(of: #"(?<=[\p{Han}A-Za-z])\d{7,}$"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func containsLongDigitRun(_ value: String) -> Bool {
+        value.range(of: #"\d{7,}"#, options: .regularExpression) != nil
     }
 
     private func isStatusBarSystemText(_ value: String) -> Bool {
@@ -1698,20 +1709,22 @@ final class OCRService {
     }
 
     private func currencyCandidates(in text: String) -> [Double] {
-        let pattern = #"[-+]?\s*[¥￥]\s*([0-9]+(?:\.[0-9]{1,2})?)"#
+        let pattern = #"[-+]?\s*[¥￥]\s*([0-9]{1,6}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]{1,6}(?:\.[0-9]{1,2})?)(?![0-9,])"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let nsText = text as NSString
         return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).compactMap { match in
             guard match.numberOfRanges > 1 else { return nil }
             let full = nsText.substring(with: match.range(at: 0))
-            let value = nsText.substring(with: match.range(at: 1))
+            let value = nsText.substring(with: match.range(at: 1)).replacingOccurrences(of: ",", with: "")
             let sign = full.contains("-") ? -1.0 : 1.0
-            return (Double(value) ?? 0) * sign
+            let amount = (Double(value) ?? 0) * sign
+            guard abs(amount) < 1_000_000 else { return nil }
+            return amount
         }
     }
 
     private func plainAmountCandidates(in text: String) -> [Double] {
-        let pattern = #"(?<!\d)([0-9]{1,6}(?:\.[0-9]{1,2})?)\s*元"#
+        let pattern = #"(?<!\d)([0-9]{1,6}(?:\.[0-9]{1,2})?)(?!\d)\s*元"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let nsText = text as NSString
         return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).compactMap { match in
@@ -1721,7 +1734,7 @@ final class OCRService {
     }
 
     private func labeledAmountCandidates(in text: String) -> [Double] {
-        let pattern = #"(?:金额|付款金额|支付金额|实付金额|订单金额|交易金额|转账金额)[^\d\-+]{0,8}([-+]?\s*[0-9]{1,6}(?:\.[0-9]{1,2})?)"#
+        let pattern = #"(?:金额|付款金额|支付金额|实付金额|订单金额|交易金额|转账金额)[^\d\-+]{0,8}([-+]?\s*[0-9]{1,6}(?:\.[0-9]{1,2})?)(?!\d)"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let nsText = text as NSString
         return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).compactMap { match in
