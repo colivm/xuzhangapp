@@ -1747,7 +1747,7 @@ struct InsightWebView: View {
     private func aiCommandItemsPreview(_ items: [HomeItem], resultID: UUID) -> some View {
         let previewLimit = 12
         let visibleItems = aiCommandShowsAllRelatedItems ? items : Array(items.prefix(previewLimit))
-        VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("相关记录")
                     .font(.system(size: 13, weight: .bold))
