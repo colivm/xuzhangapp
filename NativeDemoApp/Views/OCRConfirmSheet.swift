@@ -64,9 +64,9 @@ struct OCRConfirmSheet: View {
                     }
                     .padding(18)
                 }
-                .scaleEffect(isCollectingImport ? 0.96 : 1)
-                .offset(y: isCollectingImport ? 14 : 0)
-                .opacity(isCollectingImport ? 0.64 : 1)
+                .scaleEffect(isCollectingImport ? 0.82 : 1, anchor: .bottomTrailing)
+                .offset(x: isCollectingImport ? 28 : 0, y: isCollectingImport ? 32 : 0)
+                .opacity(isCollectingImport ? 0.34 : 1)
 
                 Divider()
                 HStack(spacing: 12) {
@@ -82,7 +82,7 @@ struct OCRConfirmSheet: View {
                     Button {
                         let selectedDrafts = selectedRows.map(\.draft)
                         guard !selectedDrafts.isEmpty, !isCollectingImport else { return }
-                        withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
+                        withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
                             isCollectingImport = true
                         }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
@@ -480,9 +480,10 @@ struct OCRDraftPanel: View {
             .overlay(panelBorder)
             .shadow(color: Color.black.opacity(items.isEmpty ? 0.04 : 0.09), radius: items.isEmpty ? 8 : 22, x: 0, y: items.isEmpty ? 4 : 14)
             .shadow(color: AppColors.accent.opacity(items.isEmpty ? 0.02 : 0.13), radius: 24, x: 0, y: 0)
-            .scaleEffect(isCollectingPending || isClearingResolved ? 0.94 : 1)
-            .offset(y: isCollectingPending ? 18 : (isClearingResolved ? 10 : 0))
-            .opacity(isCollectingPending ? 0.62 : 1)
+            .scaleEffect(isCollectingPending ? 0.72 : (isClearingResolved ? 0.86 : 1), anchor: .bottomTrailing)
+            .offset(x: isCollectingPending ? 42 : 0, y: isCollectingPending ? 44 : (isClearingResolved ? 18 : 0))
+            .opacity(isCollectingPending ? 0.28 : (isClearingResolved ? 0.46 : 1))
+            .blur(radius: isCollectingPending || isClearingResolved ? 0.6 : 0)
         }
         .padding(.vertical, items.isEmpty ? 0 : 4)
         .animation(.spring(response: 0.38, dampingFraction: 0.84), value: pendingItems.count)
@@ -716,7 +717,7 @@ struct OCRDraftPanel: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             onResolveAllPending()
-            withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
                 isCollectingPending = false
             }
         }
@@ -729,7 +730,9 @@ struct OCRDraftPanel: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
             onClearResolved()
-            isClearingResolved = false
+            withAnimation(.spring(response: 0.30, dampingFraction: 0.88)) {
+                isClearingResolved = false
+            }
         }
     }
 }
