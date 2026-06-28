@@ -2840,8 +2840,97 @@ struct RecordView: View {
 
     // MARK: - OCR Form
 
+    private var hasOCRDraftItems: Bool {
+        !homeViewModel.ocrDraftItems.isEmpty
+    }
+
     @ViewBuilder
     private var ocrForm: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if hasOCRDraftItems {
+                ocrDraftStageLayer
+                    .zIndex(2)
+
+                ocrImportControlsLayer
+                    .zIndex(0)
+                    .transition(.opacity.combined(with: .offset(y: -8)))
+            } else {
+                ocrImportControlsLayer
+                    .zIndex(1)
+
+                ocrDraftStageLayer
+                    .zIndex(0)
+            }
+        }
+        .animation(.spring(response: 0.34, dampingFraction: 0.84), value: hasOCRDraftItems)
+    }
+
+    private var ocrDraftStageLayer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if hasOCRDraftItems {
+                HStack(spacing: 8) {
+                    Image(systemName: "tray.full.fill")
+                        .font(.system(size: 12, weight: .bold))
+                    Text("待整理区")
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .foregroundStyle(recordAccent.opacity(0.92))
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(AppColors.panelStrong.opacity(0.82))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(Color.white.opacity(0.42), lineWidth: 1)
+                        )
+                )
+                .shadow(color: recordAccent.opacity(0.16), radius: 12, y: 5)
+                .transition(.opacity.combined(with: .offset(y: 6)))
+            }
+
+            OCRDraftPanel(
+                items: homeViewModel.ocrDraftItems,
+                onToggleResolved: { id, isResolved in homeViewModel.updateOCRDraftStatus(id: id, isResolved: isResolved) },
+                onCategoryChange: { id, category in homeViewModel.updateOCRDraftCategory(id: id, category: category) },
+                onAmountChange: { id, amount in homeViewModel.updateOCRDraftAmount(id: id, amount: amount) },
+                onDelete: { id in homeViewModel.deleteOCRDraftItem(id: id) },
+                onClearResolved: homeViewModel.clearResolvedOCRDrafts,
+                onResolveAllPending: homeViewModel.resolveAllPendingOCRDrafts
+            )
+        }
+        .padding(hasOCRDraftItems ? 8 : 0)
+        .background(ocrDraftStageAura)
+        .padding(.top, hasOCRDraftItems ? 0 : 6)
+        .scaleEffect(hasOCRDraftItems ? 1.012 : 1, anchor: .top)
+        .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
+    }
+
+    private var ocrDraftStageAura: some View {
+        RoundedRectangle(cornerRadius: 28, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        recordAccent.opacity(0.18),
+                        AppColors.panelStrong.opacity(0.30),
+                        recordAccent.opacity(0.08)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(hasOCRDraftItems ? Color.white.opacity(0.24) : Color.clear, lineWidth: 1)
+            )
+            .opacity(hasOCRDraftItems ? 1 : 0)
+            .shadow(color: recordAccent.opacity(hasOCRDraftItems ? 0.18 : 0), radius: 26, x: 0, y: 15)
+            .padding(.horizontal, -2)
+            .padding(.vertical, -2)
+            .allowsHitTesting(false)
+    }
+
+    private var ocrImportControlsLayer: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button {
                 dismissKeyboard()
@@ -2922,18 +3011,23 @@ struct RecordView: View {
                         markOCRQuotaUpsellShown()
                     }
             }
-
-            OCRDraftPanel(
-                items: homeViewModel.ocrDraftItems,
-                onToggleResolved: { id, isResolved in homeViewModel.updateOCRDraftStatus(id: id, isResolved: isResolved) },
-                onCategoryChange: { id, category in homeViewModel.updateOCRDraftCategory(id: id, category: category) },
-                onAmountChange: { id, amount in homeViewModel.updateOCRDraftAmount(id: id, amount: amount) },
-                onDelete: { id in homeViewModel.deleteOCRDraftItem(id: id) },
-                onClearResolved: homeViewModel.clearResolvedOCRDrafts,
-                onResolveAllPending: homeViewModel.resolveAllPendingOCRDrafts
-            )
-            .padding(.top, 6)
         }
+        .padding(hasOCRDraftItems ? 12 : 0)
+        .background(ocrSecondaryLayerBackground)
+        .scaleEffect(hasOCRDraftItems ? 0.94 : 1, anchor: .top)
+        .offset(y: hasOCRDraftItems ? -4 : 0)
+        .opacity(hasOCRDraftItems ? 0.34 : 1)
+        .saturation(hasOCRDraftItems ? 0.72 : 1)
+        .allowsHitTesting(!hasOCRDraftItems)
+    }
+
+    private var ocrSecondaryLayerBackground: some View {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(hasOCRDraftItems ? AppColors.panelStrong.opacity(0.34) : Color.clear)
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(hasOCRDraftItems ? AppColors.line.opacity(0.30) : Color.clear, lineWidth: 1)
+            )
     }
 
     private var ocrQuotaUpsellCard: some View {
