@@ -9,6 +9,7 @@ struct OCRConfirmSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var rows: [ConfirmRow]
+    @State private var isCollectingImport = false
 
     let onConfirm: ([OCRReceiptDraft]) -> Int
 
@@ -63,6 +64,9 @@ struct OCRConfirmSheet: View {
                     }
                     .padding(18)
                 }
+                .scaleEffect(isCollectingImport ? 0.96 : 1)
+                .offset(y: isCollectingImport ? 14 : 0)
+                .opacity(isCollectingImport ? 0.64 : 1)
 
                 Divider()
                 HStack(spacing: 12) {
@@ -77,15 +81,26 @@ struct OCRConfirmSheet: View {
 
                     Button {
                         let selectedDrafts = selectedRows.map(\.draft)
-                        if onConfirm(selectedDrafts) > 0 {
-                            dismiss()
+                        guard !selectedDrafts.isEmpty, !isCollectingImport else { return }
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
+                            isCollectingImport = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                            if onConfirm(selectedDrafts) > 0 {
+                                dismiss()
+                            } else {
+                                isCollectingImport = false
+                            }
                         }
                     } label: {
-                        Text("导入 \(selectedRows.count) 条到账单")
+                        Label(
+                            isCollectingImport ? "收进待整理区" : "导入 \(selectedRows.count) 条到账单",
+                            systemImage: isCollectingImport ? "tray.and.arrow.down.fill" : "tray.full.fill"
+                        )
                             .font(.system(size: 15, weight: .semibold))
                             .frame(maxWidth: .infinity, minHeight: 48)
                     }
-                    .disabled(selectedRows.isEmpty)
+                    .disabled(selectedRows.isEmpty || isCollectingImport)
                     .foregroundStyle(.white)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -99,6 +114,7 @@ struct OCRConfirmSheet: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.large])
+        .animation(.spring(response: 0.30, dampingFraction: 0.84), value: isCollectingImport)
     }
 
     private var reviewSummary: some View {
@@ -413,6 +429,9 @@ struct OCRDraftPanel: View {
     let onClearResolved: () -> Void
     let onResolveAllPending: () -> Void
 
+    @State private var isCollectingPending = false
+    @State private var isClearingResolved = false
+
     private var visibleGroups: [DraftGroup] {
         let grouped = Dictionary(grouping: items) { item in
             item.draftMeta?.batchId ?? item.id.uuidString
@@ -439,18 +458,37 @@ struct OCRDraftPanel: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            panelHeader
-
-            if items.isEmpty {
-                emptyState
-            } else {
-                draftGroupList
+        ZStack(alignment: .topTrailing) {
+            if !items.isEmpty {
+                floatingBackplate(offset: 18, opacity: 0.16)
+                floatingBackplate(offset: 9, opacity: 0.24)
             }
+
+            VStack(alignment: .leading, spacing: 14) {
+                panelHeader
+
+                if items.isEmpty {
+                    emptyState
+                } else {
+                    floatingDigestCard
+                    draftGroupList
+                }
+            }
+            .padding(18)
+            .background(panelBackground)
+            .overlay(panelHighlight)
+            .overlay(panelBorder)
+            .shadow(color: Color.black.opacity(items.isEmpty ? 0.04 : 0.09), radius: items.isEmpty ? 8 : 22, x: 0, y: items.isEmpty ? 4 : 14)
+            .shadow(color: AppColors.accent.opacity(items.isEmpty ? 0.02 : 0.13), radius: 24, x: 0, y: 0)
+            .scaleEffect(isCollectingPending || isClearingResolved ? 0.94 : 1)
+            .offset(y: isCollectingPending ? 18 : (isClearingResolved ? 10 : 0))
+            .opacity(isCollectingPending ? 0.62 : 1)
         }
-        .padding(18)
-        .background(panelBackground)
-        .overlay(panelBorder)
+        .padding(.vertical, items.isEmpty ? 0 : 4)
+        .animation(.spring(response: 0.38, dampingFraction: 0.84), value: pendingItems.count)
+        .animation(.spring(response: 0.36, dampingFraction: 0.82), value: resolvedCount)
+        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: isCollectingPending)
+        .animation(.easeInOut(duration: 0.18), value: isClearingResolved)
     }
 
     private var panelHeader: some View {
@@ -465,16 +503,106 @@ struct OCRDraftPanel: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 8) {
-                Button("\u{4E00}\u{952E}\u{6807}\u{8BB0}\u{5DF2}\u{6574}\u{7406}") { onResolveAllPending() }
+                Button {
+                    collectPendingDrafts()
+                } label: {
+                    Label("\u{4E00}\u{952E}\u{6807}\u{8BB0}\u{5DF2}\u{6574}\u{7406}", systemImage: "tray.and.arrow.down.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                }
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(resolveAllForeground)
                     .disabled(pendingItems.isEmpty)
-                Button("\u{5B8C}\u{6210}\u{6574}\u{7406}\u{FF08}\(resolvedCount) \u{7B14}\u{FF09}") { onClearResolved() }
+                Button {
+                    clearResolvedDrafts()
+                } label: {
+                    Label("\u{5B8C}\u{6210}\u{6574}\u{7406}\u{FF08}\(resolvedCount) \u{7B14}\u{FF09}", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                }
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(clearResolvedForeground)
                     .disabled(resolvedCount == 0)
             }
         }
+    }
+
+    private var floatingDigestCard: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AppColors.accent.opacity(0.14))
+                Image(systemName: pendingItems.isEmpty ? "checkmark.seal.fill" : "doc.viewfinder")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(AppColors.accent)
+            }
+            .frame(width: 46, height: 46)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.42), lineWidth: 1)
+            )
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(pendingItems.isEmpty ? "这批账单已经收好" : "导入账单待整理")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                Text(floatingDigestText)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 8)
+
+            Text(pendingItems.isEmpty ? "\(resolvedCount) 笔" : "\(pendingItems.count) 笔")
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.accentDark)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.12)))
+        }
+        .padding(14)
+        .background(floatingDigestBackground)
+        .overlay(floatingDigestBorder)
+        .transition(.opacity.combined(with: .scale(scale: 0.96)).combined(with: .offset(y: 8)))
+    }
+
+    private var floatingDigestText: String {
+        if pendingItems.isEmpty {
+            return "确认后会进入正式账本，回放和统计会按真实记录继续计算。"
+        }
+        let total = pendingTotal.formatted(.cny.precision(.fractionLength(2)))
+        return "合计 \(total)，先悬在这里，确认后会收进账本。"
+    }
+
+    private var floatingDigestBackground: some View {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(AppColors.panelStrong.opacity(0.82))
+            .overlay(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.34),
+                        AppColors.paperWarm.opacity(0.14),
+                        AppColors.accent.opacity(0.10)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+    }
+
+    private var floatingDigestBorder: some View {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.60),
+                        AppColors.accent.opacity(0.24),
+                        AppColors.line.opacity(0.50)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
     }
 
     private var panelSubtitle: String {
@@ -532,13 +660,77 @@ struct OCRDraftPanel: View {
     }
 
     private var panelBackground: some View {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(AppColors.accent.opacity(0.06))
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(AppColors.panelStrong.opacity(items.isEmpty ? 0.72 : 0.84))
+            .overlay(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(items.isEmpty ? 0.12 : 0.30),
+                        AppColors.accent.opacity(items.isEmpty ? 0.06 : 0.12),
+                        AppColors.paperWarm.opacity(items.isEmpty ? 0.08 : 0.16)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+    }
+
+    private var panelHighlight: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(items.isEmpty ? 0.34 : 0.62),
+                        AppColors.accent.opacity(items.isEmpty ? 0.12 : 0.30),
+                        Color.white.opacity(0.10)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
+            .padding(0.5)
+            .allowsHitTesting(false)
     }
 
     private var panelBorder: some View {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .stroke(AppColors.accent.opacity(0.16), lineWidth: 1)
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .stroke(AppColors.accent.opacity(items.isEmpty ? 0.12 : 0.20), lineWidth: 1)
+    }
+
+    private func floatingBackplate(offset: CGFloat, opacity: Double) -> some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(AppColors.accent.opacity(opacity))
+            .frame(maxWidth: .infinity)
+            .frame(height: 86)
+            .padding(.horizontal, offset)
+            .offset(y: offset)
+            .blur(radius: 0.3)
+            .allowsHitTesting(false)
+    }
+
+    private func collectPendingDrafts() {
+        guard !pendingItems.isEmpty, !isCollectingPending else { return }
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+            isCollectingPending = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            onResolveAllPending()
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                isCollectingPending = false
+            }
+        }
+    }
+
+    private func clearResolvedDrafts() {
+        guard resolvedCount > 0, !isClearingResolved else { return }
+        withAnimation(.easeInOut(duration: 0.16)) {
+            isClearingResolved = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
+            onClearResolved()
+            isClearingResolved = false
+        }
     }
 }
 
