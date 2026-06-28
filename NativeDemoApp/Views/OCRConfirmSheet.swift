@@ -478,8 +478,8 @@ struct OCRDraftPanel: View {
             .background(panelBackground)
             .overlay(panelHighlight)
             .overlay(panelBorder)
-            .shadow(color: Color.black.opacity(items.isEmpty ? 0.04 : 0.09), radius: items.isEmpty ? 8 : 22, x: 0, y: items.isEmpty ? 4 : 14)
-            .shadow(color: AppColors.accent.opacity(items.isEmpty ? 0.02 : 0.13), radius: 24, x: 0, y: 0)
+            .shadow(color: Color.black.opacity(items.isEmpty ? 0.04 : 0.13), radius: items.isEmpty ? 8 : 26, x: 0, y: items.isEmpty ? 4 : 18)
+            .shadow(color: AppColors.accent.opacity(items.isEmpty ? 0.02 : 0.20), radius: 30, x: 0, y: 0)
             .scaleEffect(isCollectingPending ? 0.72 : (isClearingResolved ? 0.86 : 1), anchor: .bottomTrailing)
             .offset(x: isCollectingPending ? 42 : 0, y: isCollectingPending ? 44 : (isClearingResolved ? 18 : 0))
             .opacity(isCollectingPending ? 0.28 : (isClearingResolved ? 0.46 : 1))
@@ -662,13 +662,13 @@ struct OCRDraftPanel: View {
 
     private var panelBackground: some View {
         RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(AppColors.panelStrong.opacity(items.isEmpty ? 0.72 : 0.84))
+            .fill(AppColors.panelStrong.opacity(items.isEmpty ? 0.72 : 0.90))
             .overlay(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(items.isEmpty ? 0.12 : 0.30),
-                        AppColors.accent.opacity(items.isEmpty ? 0.06 : 0.12),
-                        AppColors.paperWarm.opacity(items.isEmpty ? 0.08 : 0.16)
+                        Color.white.opacity(items.isEmpty ? 0.12 : 0.42),
+                        AppColors.accent.opacity(items.isEmpty ? 0.06 : 0.16),
+                        AppColors.paperWarm.opacity(items.isEmpty ? 0.08 : 0.18)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing

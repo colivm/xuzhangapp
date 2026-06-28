@@ -2853,6 +2853,8 @@ struct RecordView: View {
 
                 ocrImportControlsLayer
                     .zIndex(0)
+                    .frame(maxHeight: 132, alignment: .top)
+                    .clipped()
                     .transition(.opacity.combined(with: .offset(y: -8)))
             } else {
                 ocrImportControlsLayer
@@ -2911,9 +2913,9 @@ struct RecordView: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        recordAccent.opacity(0.18),
-                        AppColors.panelStrong.opacity(0.30),
-                        recordAccent.opacity(0.08)
+                        recordAccent.opacity(0.24),
+                        AppColors.panelStrong.opacity(0.40),
+                        recordAccent.opacity(0.10)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -2924,7 +2926,8 @@ struct RecordView: View {
                     .stroke(hasOCRDraftItems ? Color.white.opacity(0.24) : Color.clear, lineWidth: 1)
             )
             .opacity(hasOCRDraftItems ? 1 : 0)
-            .shadow(color: recordAccent.opacity(hasOCRDraftItems ? 0.18 : 0), radius: 26, x: 0, y: 15)
+            .shadow(color: recordAccent.opacity(hasOCRDraftItems ? 0.24 : 0), radius: 30, x: 0, y: 17)
+            .shadow(color: Color.black.opacity(hasOCRDraftItems ? 0.08 : 0), radius: 18, x: 0, y: 12)
             .padding(.horizontal, -2)
             .padding(.vertical, -2)
             .allowsHitTesting(false)
@@ -3014,10 +3017,10 @@ struct RecordView: View {
         }
         .padding(hasOCRDraftItems ? 12 : 0)
         .background(ocrSecondaryLayerBackground)
-        .scaleEffect(hasOCRDraftItems ? 0.94 : 1, anchor: .top)
-        .offset(y: hasOCRDraftItems ? -4 : 0)
-        .opacity(hasOCRDraftItems ? 0.34 : 1)
-        .saturation(hasOCRDraftItems ? 0.72 : 1)
+        .scaleEffect(hasOCRDraftItems ? 0.92 : 1, anchor: .top)
+        .offset(y: hasOCRDraftItems ? -6 : 0)
+        .opacity(hasOCRDraftItems ? 0.28 : 1)
+        .saturation(hasOCRDraftItems ? 0.62 : 1)
         .allowsHitTesting(!hasOCRDraftItems)
     }
 

@@ -3303,7 +3303,7 @@ struct InsightWebView: View {
             AICommandCategoryIntent(
                 categories: [.transport],
                 label: "交通",
-                keywords: ["交通", "出行", "通勤", "地铁", "公交", "打车", "出租", "网约车", "滴滴", "停车", "加油", "路费", "高铁", "火车", "机票", "机场"]
+                keywords: ["交通", "出行", "通勤", "地铁", "公交", "打车", "出租", "网约车", "滴滴", "花小猪", "单车", "骑车", "上班", "下班", "早高峰", "晚高峰", "回家", "停车", "加油", "路费", "高铁", "火车", "机票", "机场"]
             ),
             AICommandCategoryIntent(
                 categories: [.daily, .home],

@@ -163,6 +163,19 @@ enum NarrativeCopyResolver {
         if !hasIncompatibleSemanticCue,
            [.dining, .daily].contains(context.category),
            emotionRuleIDs.contains("drink") {
+            if containsAny(lower, ["可乐", "雪碧", "汽水", "水溶", "c100", "维c", "维他", "果汁", "饮料"]) {
+                return pick(
+                    [
+                        "买瓶喝的",
+                        "饮料记一笔",
+                        "这瓶喝的记下",
+                        "路上买点喝的",
+                        "今天买了瓶饮料",
+                        "小饮料记下来",
+                    ],
+                    seed: context.seed + "|bottledDrink"
+                )
+            }
             return pick(
                 [
                     "买杯喝的",
@@ -195,11 +208,11 @@ enum NarrativeCopyResolver {
             return pick(
                 [
                     "便利店补给",
-                    "这一站很方便",
+                    "路过买点需要的",
                     "小补给刚好带上",
-                    "日常一站完成",
+                    "便利店这一笔",
                     "路过买一点",
-                    "便利店小袋子",
+                    "小东西顺路带上",
                 ],
                 seed: context.seed + "|convenience"
             )
