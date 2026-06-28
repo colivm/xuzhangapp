@@ -14,6 +14,7 @@ struct StatsWebView: View {
 
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
+    @Environment(\.appTheme) private var appTheme
     var openTraceRequestID: UUID? = nil
     var onShowMemberPricing: ((MemberPricingEntryContext) -> Void)? = nil
     var onOpenInsight: (() -> Void)? = nil
@@ -2418,6 +2419,9 @@ struct StatsWebView: View {
             memberPitch: summaryMemberPitch(for: playback),
             weeklySharePayload: weeklySharePayload(for: playback),
             shareNickname: settingsViewModel.displayName,
+            shareCardTheme: settingsViewModel.shareCardUsesAppTheme && settingsViewModel.settings.hasMemberAccess
+                ? .appTheme(appTheme)
+                : .journal,
             onCompleted: { progress in
                 quotaStore.markCompleted(playback.range, isMember: hasMemberAccess, progress: progress)
                 if progress >= 0.8 {

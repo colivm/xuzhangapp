@@ -312,6 +312,47 @@ struct SummaryPlaybackMemberPitch: Equatable {
     let cta: String
 }
 
+struct WeeklyStoryShareCardTheme {
+    let backgroundStart, backgroundMid, backgroundEnd: Color
+    let paper, paperEdge, ink, muted: Color
+    let accent, accentDeep, softAccent: Color
+    let rainAccent, travelAccent, cityAccent: Color
+
+    static let journal = WeeklyStoryShareCardTheme(
+        backgroundStart: Color(hex: "dcebe0"),
+        backgroundMid: Color(hex: "f6f8ed"),
+        backgroundEnd: Color(hex: "fff2df"),
+        paper: Color(hex: "fffdf7"),
+        paperEdge: Color(hex: "e8f2e9"),
+        ink: Color(hex: "1f2528"),
+        muted: Color(hex: "78847c"),
+        accent: Color(hex: "7fb39f"),
+        accentDeep: Color(hex: "486f5d"),
+        softAccent: Color(hex: "e8f2e9"),
+        rainAccent: Color(hex: "6a8a96"),
+        travelAccent: Color(hex: "80985e"),
+        cityAccent: Color(hex: "59638d")
+    )
+
+    static func appTheme(_ theme: ResolvedThemeTokens) -> WeeklyStoryShareCardTheme {
+        WeeklyStoryShareCardTheme(
+            backgroundStart: theme.background,
+            backgroundMid: theme.surfaceWarm,
+            backgroundEnd: theme.backgroundGradientEnd,
+            paper: theme.panelStrong,
+            paperEdge: theme.surfaceMuted,
+            ink: theme.textPrimary,
+            muted: theme.textSecondary,
+            accent: theme.accent,
+            accentDeep: theme.accentDark,
+            softAccent: theme.surfaceMuted,
+            rainAccent: theme.accentDark,
+            travelAccent: theme.accent,
+            cityAccent: theme.readableAccent
+        )
+    }
+}
+
 struct SummaryPlaybackSheet: View {
     let playback: SummaryPlayback
     let petEnabled: Bool
@@ -319,6 +360,7 @@ struct SummaryPlaybackSheet: View {
     var memberPitch: SummaryPlaybackMemberPitch?
     var weeklySharePayload: WeeklyShareCardPayload?
     var shareNickname: String = "叙账用户"
+    var shareCardTheme: WeeklyStoryShareCardTheme = .journal
     var onCompleted: (Double) -> Void
     var onShowMemberPricing: (() -> Void)? = nil
     var onOpenWeekly: (() -> Void)? = nil
@@ -1659,7 +1701,8 @@ struct SummaryPlaybackSheet: View {
         let card = WeeklyStoryShareCardView(
             payload: payload,
             isPetMode: petEnabled,
-            nickname: shareNickname.isEmpty ? "叙账用户" : shareNickname
+            nickname: shareNickname.isEmpty ? "叙账用户" : shareNickname,
+            theme: shareCardTheme
         )
         guard let image = card.snapshot() else { return }
         isSavingShareCard = true
@@ -1760,16 +1803,17 @@ private struct WeeklyStoryShareCardView: View {
     let payload: WeeklyShareCardPayload
     var isPetMode: Bool = true
     var nickname: String = "叙账用户"
+    var theme: WeeklyStoryShareCardTheme = .journal
 
-    private let paper = Color(hex: "fffdf7")
-    private let ink = Color(hex: "1f2528")
-    private let muted = Color(hex: "78847c")
-    private let green = Color(hex: "7fb39f")
-    private let deepGreen = Color(hex: "486f5d")
-    private let softGreen = Color(hex: "e8f2e9")
-    private let rainGreen = Color(hex: "6a8a96")
-    private let travelGold = Color(hex: "80985e")
-    private let cityIndigo = Color(hex: "59638d")
+    private var paper: Color { theme.paper }
+    private var ink: Color { theme.ink }
+    private var muted: Color { theme.muted }
+    private var green: Color { theme.accent }
+    private var deepGreen: Color { theme.accentDeep }
+    private var softGreen: Color { theme.softAccent }
+    private var rainGreen: Color { theme.rainAccent }
+    private var travelGold: Color { theme.travelAccent }
+    private var cityIndigo: Color { theme.cityAccent }
 
     var body: some View {
         ZStack {
@@ -1845,19 +1889,19 @@ private struct WeeklyStoryShareCardView: View {
         let colors: [Color]
         switch backdropProfile {
         case .rain:
-            colors = [Color(hex: "d4e1e7"), Color(hex: "eef5f8"), Color(hex: "f8efe2")]
+            colors = [theme.rainAccent.opacity(0.22), theme.backgroundMid, theme.backgroundEnd]
         case .travel:
-            colors = [Color(hex: "dfead8"), Color(hex: "f7f2da"), Color(hex: "f8efe2")]
+            colors = [theme.travelAccent.opacity(0.22), theme.backgroundMid, theme.backgroundEnd]
         case .lateCity:
-            colors = [Color(hex: "d9dff1"), Color(hex: "eef1fb"), Color(hex: "f4eadf")]
+            colors = [theme.cityAccent.opacity(0.20), theme.backgroundMid, theme.backgroundEnd]
         case .warmDaily:
-            colors = [Color(hex: "f7e7d5"), Color(hex: "eef5e5"), Color(hex: "fff2df")]
+            colors = [theme.accent.opacity(0.18), theme.backgroundMid, theme.backgroundEnd]
         case .fitness:
-            colors = [Color(hex: "d9eddd"), Color(hex: "edf8ee"), Color(hex: "fff2df")]
+            colors = [theme.accent.opacity(0.20), theme.backgroundMid, theme.backgroundEnd]
         case .social:
-            colors = [Color(hex: "f5decf"), Color(hex: "f6eee0"), Color(hex: "fff2df")]
+            colors = [theme.accentDeep.opacity(0.17), theme.backgroundMid, theme.backgroundEnd]
         case .defaultSoft:
-            colors = [Color(hex: "dcebe0"), Color(hex: "f6f8ed"), Color(hex: "fff2df")]
+            colors = [theme.backgroundStart, theme.backgroundMid, theme.backgroundEnd]
         }
         return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
     }
