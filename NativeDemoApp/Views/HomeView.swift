@@ -2048,6 +2048,8 @@ struct BillPlaybackSheet: View {
     @State private var playbackDone = false
     @State private var showMemberNudge = false
     @State private var playbackTask: Task<Void, Never>?
+    @GestureState private var stageDragOffset: CGFloat = 0
+    @Namespace private var playbackStageNamespace
     @Environment(\.dismiss) private var dismiss
     var onNavigateToSettings: (() -> Void)? = nil
     var onShowMemberPricing: (() -> Void)? = nil
@@ -2070,6 +2072,16 @@ struct BillPlaybackSheet: View {
         return playbackMoments[min(activeIndex, playbackMoments.count - 1)]
     }
 
+    private var activePlaybackIndex: Int {
+        guard !playbackMoments.isEmpty else { return 0 }
+        return min(max(activeIndex, 0), playbackMoments.count - 1)
+    }
+
+    private var activePlaybackTint: Color {
+        guard playbackMoments.indices.contains(activePlaybackIndex) else { return AppColors.accent }
+        return playbackTint(for: playbackMoments[activePlaybackIndex])
+    }
+
     private var playbackDuration: TimeInterval {
         max(10, min(34, Double(max(1, playbackMoments.count)) * 2.6))
     }
@@ -2077,7 +2089,7 @@ struct BillPlaybackSheet: View {
     private var playbackProgressFraction: Double {
         guard !playbackMoments.isEmpty else { return 0 }
         if playbackDone { return 1 }
-        return Double(max(activeIndex, 0) + 1) / Double(playbackMoments.count)
+        return Double(activePlaybackIndex + 1) / Double(playbackMoments.count)
     }
 
     var body: some View {
@@ -2176,7 +2188,7 @@ struct BillPlaybackSheet: View {
     }
 
     private var playbackContent: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 12) {
             playbackHeader
             playbackStage
             playbackFilmStrip
@@ -2237,158 +2249,265 @@ struct BillPlaybackSheet: View {
     }
 
     private var playbackStage: some View {
-        let moment = currentPlaybackMoment
-        let isFocused = isPlaying || playbackDone || activeIndex >= 0
-        return ZStack(alignment: .topTrailing) {
-            VStack(alignment: .leading, spacing: 18) {
-                GeometryReader { proxy in
-                    ZStack(alignment: .leading) {
-                        Capsule(style: .continuous)
-                            .fill(AppColors.line.opacity(0.50))
-                        Capsule(style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        AppColors.accent.opacity(0.92),
-                                        AppColors.accentDark.opacity(0.90)
-                                    ],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: proxy.size.width * playbackProgressFraction)
-                            .shadow(color: AppColors.accent.opacity(0.22), radius: 7, x: 0, y: 0)
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            ZStack {
+                playbackStageAtmosphere
+
+                ForEach(playbackStageVisibleOffsets, id: \.self) { relativeOffset in
+                    let index = activePlaybackIndex + relativeOffset
+                    if playbackMoments.indices.contains(index) {
+                        playbackStageCard(
+                            moment: playbackMoments[index],
+                            relativeOffset: relativeOffset,
+                            containerWidth: width
+                        )
                     }
                 }
-                .frame(height: 6)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(playbackStageDragGesture(width: width))
+        }
+        .frame(height: 286)
+        .animation(.spring(response: 0.42, dampingFraction: 0.84), value: activePlaybackIndex)
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: isPlaying)
+    }
+
+    private var playbackStepText: String {
+        guard !playbackMoments.isEmpty else { return "0 / 0" }
+        let current = activePlaybackIndex + 1
+        return "\(current) / \(playbackMoments.count)"
+    }
+
+    private var playbackStageVisibleOffsets: [Int] {
+        [-1, 1, 0]
+    }
+
+    private var playbackStageAtmosphere: some View {
+        RoundedRectangle(cornerRadius: 30, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        activePlaybackTint.opacity(0.20),
+                        AppColors.heroGradientTeal.opacity(0.13),
+                        AppColors.panelStrong.opacity(0.64)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    .stroke(Color.white.opacity(0.30), lineWidth: 0.8)
+            )
+            .shadow(color: activePlaybackTint.opacity(0.15), radius: 28, x: 0, y: 14)
+    }
+
+    private func playbackStageDragGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 10)
+            .updating($stageDragOffset) { value, state, _ in
+                state = value.translation.width
+            }
+            .onEnded { value in
+                let threshold = max(48, width * 0.16)
+                if value.translation.width < -threshold {
+                    advancePlaybackStage(by: 1)
+                } else if value.translation.width > threshold {
+                    advancePlaybackStage(by: -1)
+                }
+            }
+    }
+
+    private func advancePlaybackStage(by delta: Int) {
+        guard !playbackMoments.isEmpty else { return }
+        isPlaying = false
+        playbackDone = false
+        activeIndex = min(max(activePlaybackIndex + delta, 0), playbackMoments.count - 1)
+    }
+
+    private func playbackStageCard(
+        moment: PlaybackMoment,
+        relativeOffset: Int,
+        containerWidth: CGFloat
+    ) -> some View {
+        let isActive = relativeOffset == 0
+        let dragProgress = stageDragOffset / max(containerWidth, 1)
+        let baseOffset = CGFloat(relativeOffset) * containerWidth * 0.48
+        let dragInfluence = stageDragOffset * (isActive ? 0.48 : 0.20)
+        let scale = isActive ? 1.0 - min(abs(dragProgress) * 0.035, 0.035) : 0.86
+        let opacity = isActive ? 1.0 : 0.40
+        let yOffset: CGFloat = isActive ? 0 : 20
+        let rotation = Double(relativeOffset) * -4.5 + Double(dragProgress) * 2.0
+
+        return playbackStageCardContent(moment: moment, isActive: isActive)
+            .frame(width: containerWidth * (isActive ? 0.98 : 0.78), height: isActive ? 266 : 226)
+            .scaleEffect(scale)
+            .opacity(opacity)
+            .blur(radius: isActive ? 0 : 0.45)
+            .rotation3DEffect(.degrees(rotation), axis: (x: 0, y: 1, z: 0), perspective: 0.52)
+            .offset(x: baseOffset + dragInfluence, y: yOffset)
+            .zIndex(isActive ? 3 : 1)
+            .matchedGeometryEffect(id: "playback-stage-\(moment.id)", in: playbackStageNamespace)
+    }
+
+    private func playbackStageCardContent(moment: PlaybackMoment, isActive: Bool) -> some View {
+        let tint = playbackTint(for: moment)
+        return ZStack(alignment: .topTrailing) {
+            VStack(alignment: .leading, spacing: 16) {
+                playbackStageProgressBar(isActive: isActive)
 
                 Spacer(minLength: 0)
 
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 8) {
-                        Text(moment?.eyebrow ?? "今天")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(AppColors.accentDark.opacity(0.82))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.13)))
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .stroke(AppColors.accent.opacity(0.18), lineWidth: 0.8)
-                            )
-                        if let amount = moment?.amountText {
-                            Text(amount)
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
-                                .foregroundStyle(AppColors.text.opacity(0.72))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Capsule(style: .continuous).fill(Color.white.opacity(0.48)))
-                        }
-                    }
+                    playbackStageBadges(moment: moment)
 
-                    Text(moment?.title ?? "今天的记录")
-                        .font(.system(size: 29, weight: .bold, design: .rounded))
+                    Text(moment.title)
+                        .font(.system(size: isActive ? 30 : 24, weight: .bold, design: .rounded))
                         .foregroundStyle(AppColors.text)
                         .lineSpacing(5)
                         .lineLimit(3)
                         .minimumScaleFactor(0.72)
 
-                    Text(moment?.body ?? "先留下几笔，晚上再回来看。")
-                        .font(.system(size: 15, weight: .medium))
+                    Text(moment.body)
+                        .font(.system(size: isActive ? 15 : 13, weight: .medium))
                         .foregroundStyle(AppColors.readableSubtext)
                         .lineSpacing(4)
+                        .lineLimit(isActive ? 3 : 2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 0)
 
-                HStack(spacing: 8) {
-                    Image(systemName: playbackDone ? "checkmark.circle.fill" : "waveform")
-                        .font(.system(size: 14, weight: .bold))
-                    Text(playbackDone ? "今天看完了" : "正在翻今天")
-                        .font(.system(size: 13, weight: .semibold))
-                    Spacer(minLength: 12)
-                    Text(playbackStepText)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundStyle(AppColors.accentDark.opacity(0.72))
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.12)))
-                }
-                .foregroundStyle(AppColors.readableAccent)
+                playbackStageFooter(isActive: isActive)
             }
-            .padding(22)
-            .frame(maxWidth: .infinity, minHeight: 286, alignment: .leading)
-            .themedInteractionSurface(
-                radius: 28,
-                tint: AppColors.accent,
-                isSelected: isFocused,
-                glowIntensity: playbackDone ? 1.02 : 0.88
-            )
-            .overlay(alignment: .top) {
-                playbackStageTopRail
-            }
-            .overlay(alignment: .leading) {
-                playbackStageSideRail
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(AppColors.accent.opacity(isFocused ? 0.24 : 0.12), lineWidth: isFocused ? 1.2 : 0.8)
-                    .allowsHitTesting(false)
-            )
+            .padding(isActive ? 22 : 18)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .background(playbackStageCardBackground(isActive: isActive))
+            .overlay(playbackStageInnerHighlight(isActive: isActive, tint: tint))
+            .overlay(playbackStageCardBorder(isActive: isActive, tint: tint))
+            .shadow(color: Color.black.opacity(isActive ? 0.08 : 0.04), radius: isActive ? 16 : 9, x: 0, y: isActive ? 10 : 5)
+            .shadow(color: tint.opacity(isActive ? 0.20 : 0.06), radius: isActive ? 26 : 10, x: 0, y: 0)
 
-            Image(systemName: playbackStageSymbol)
-                .font(.system(size: 88, weight: .bold))
-                .foregroundStyle(AppColors.accent.opacity(0.105))
-                .offset(x: 4, y: 2)
+            Image(systemName: playbackStageSymbol(for: moment))
+                .font(.system(size: isActive ? 88 : 64, weight: .bold))
+                .foregroundStyle(tint.opacity(isActive ? 0.10 : 0.055))
+                .offset(x: isActive ? 4 : 2, y: isActive ? 2 : 8)
         }
-        .animation(.easeInOut(duration: 0.24), value: activeIndex)
     }
 
-    private var playbackStepText: String {
-        guard !playbackMoments.isEmpty else { return "0 / 0" }
-        let current = min(max(activeIndex, 0) + 1, playbackMoments.count)
-        return "\(current) / \(playbackMoments.count)"
+    private func playbackStageProgressBar(isActive: Bool) -> some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule(style: .continuous)
+                    .fill(AppColors.line.opacity(isActive ? 0.46 : 0.30))
+                Capsule(style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                AppColors.accent.opacity(0.96),
+                                AppColors.accentDark.opacity(0.90)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: proxy.size.width * playbackProgressFraction)
+                    .shadow(color: AppColors.accent.opacity(isActive ? 0.24 : 0.08), radius: isActive ? 8 : 3, x: 0, y: 0)
+            }
+        }
+        .frame(height: isActive ? 6 : 4)
     }
 
-    private var playbackStageTopRail: some View {
-        Capsule(style: .continuous)
-            .fill(
+    private func playbackStageBadges(moment: PlaybackMoment) -> some View {
+        HStack(spacing: 8) {
+            Text(moment.eyebrow)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(AppColors.accentDark.opacity(0.84))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.13)))
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(AppColors.accent.opacity(0.18), lineWidth: 0.8)
+                )
+            if let amount = moment.amountText {
+                Text(amount)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.text.opacity(0.72))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Capsule(style: .continuous).fill(Color.white.opacity(0.48)))
+            }
+        }
+    }
+
+    private func playbackStageFooter(isActive: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: playbackDone ? "checkmark.circle.fill" : "waveform")
+                .font(.system(size: 14, weight: .bold))
+            Text(playbackDone ? "今天看完了" : "正在翻今天")
+                .font(.system(size: 13, weight: .semibold))
+            Spacer(minLength: 12)
+            Text(playbackStepText)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.accentDark.opacity(0.72))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(isActive ? 0.13 : 0.07)))
+        }
+        .foregroundStyle(AppColors.readableAccent)
+    }
+
+    private func playbackStageCardBackground(isActive: Bool) -> some View {
+        RoundedRectangle(cornerRadius: isActive ? 28 : 24, style: .continuous)
+            .fill(AppColors.panelStrong.opacity(isActive ? 0.88 : 0.58))
+            .overlay(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.56),
-                        AppColors.accent.opacity(0.50),
-                        AppColors.accentDark.opacity(0.34)
+                        Color.white.opacity(isActive ? 0.36 : 0.16),
+                        AppColors.paperWarm.opacity(isActive ? 0.18 : 0.08),
+                        AppColors.accent.opacity(isActive ? 0.13 : 0.05)
                     ],
-                    startPoint: .leading,
-                    endPoint: .trailing
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
                 )
             )
-            .frame(height: 3)
-            .padding(.horizontal, 26)
-            .padding(.top, 1.5)
+    }
+
+    private func playbackStageInnerHighlight(isActive: Bool, tint: Color) -> some View {
+        RoundedRectangle(cornerRadius: isActive ? 28 : 24, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(isActive ? 0.66 : 0.24),
+                        tint.opacity(isActive ? 0.32 : 0.10),
+                        AppColors.line.opacity(isActive ? 0.58 : 0.30)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: isActive ? 1.15 : 0.8
+            )
+            .padding(0.5)
             .allowsHitTesting(false)
     }
 
-    private var playbackStageSideRail: some View {
-        RoundedRectangle(cornerRadius: 2, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [
-                        AppColors.accent.opacity(0.86),
-                        AppColors.accentDark.opacity(0.50)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .frame(width: 4, height: 92)
-            .padding(.leading, 1.5)
+    private func playbackStageCardBorder(isActive: Bool, tint: Color) -> some View {
+        RoundedRectangle(cornerRadius: isActive ? 28 : 24, style: .continuous)
+            .stroke(tint.opacity(isActive ? 0.20 : 0.08), lineWidth: isActive ? 2.4 : 1)
+            .padding(isActive ? 2 : 1)
             .allowsHitTesting(false)
     }
 
-    private var playbackStageSymbol: String {
-        guard let moment = currentPlaybackMoment else { return "play.rectangle.fill" }
+    private func playbackTint(for moment: PlaybackMoment) -> Color {
+        if let category = moment.category {
+            return AppColors.categoryColor(category)
+        }
+        return AppColors.accent
+    }
+
+    private func playbackStageSymbol(for moment: PlaybackMoment) -> String {
         if moment.id.contains("first") { return "sunrise.fill" }
         if moment.id.contains("summary") { return "sparkles" }
         if moment.id.contains("close") { return "moon.stars.fill" }
@@ -2396,55 +2515,68 @@ struct BillPlaybackSheet: View {
     }
 
     private var playbackFilmStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(Array(playbackMoments.enumerated()), id: \.element.id) { index, moment in
-                    Button {
-                        isPlaying = false
-                        activeIndex = index
-                        playbackDone = false
-                    } label: {
-                        playbackFilmStripCard(moment: moment, index: index)
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 7) {
+                    ForEach(Array(playbackMoments.enumerated()), id: \.element.id) { index, moment in
+                        Button {
+                            isPlaying = false
+                            activeIndex = index
+                            playbackDone = false
+                        } label: {
+                            playbackFilmStripCard(moment: moment, index: index)
+                        }
+                        .buttonStyle(.plain)
+                        .id(index)
                     }
-                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 2)
+            }
+            .frame(height: 62)
+            .onAppear {
+                proxy.scrollTo(activePlaybackIndex, anchor: .center)
+            }
+            .onChange(of: activePlaybackIndex) { _, index in
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                    proxy.scrollTo(index, anchor: .center)
                 }
             }
-            .padding(.horizontal, 1)
-        }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 8)
-                .onChanged { _ in
-                    if isPlaying {
-                        isPlaying = false
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8)
+                    .onChanged { _ in
+                        if isPlaying {
+                            isPlaying = false
+                        }
                     }
-                }
-        )
+            )
+        }
     }
 
     private func playbackFilmStripCard(moment: PlaybackMoment, index: Int) -> some View {
-        let isActive = index == activeIndex
-        let isSeen = index <= max(activeIndex, 0)
+        let isFocused = index == activePlaybackIndex
+        let isSeen = index <= activePlaybackIndex
         return ZStack(alignment: .bottomLeading) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(isActive ? AppColors.accent : AppColors.line)
-                        .frame(width: 5, height: 5)
+                        .fill(isFocused ? AppColors.accent : AppColors.line)
+                        .frame(width: 4.5, height: 4.5)
                     Text(moment.eyebrow)
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(isActive ? AppColors.accentDark : AppColors.subtext)
+                        .foregroundStyle(isFocused ? AppColors.accentDark : AppColors.subtext)
                         .lineLimit(1)
                 }
                 Text(moment.title)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(AppColors.text.opacity(isSeen ? 0.94 : 0.54))
-                    .lineLimit(2)
+                    .lineLimit(1)
                     .minimumScaleFactor(0.78)
                 Spacer(minLength: 0)
             }
-            .padding(10)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 8)
 
-            if isActive {
+            if isFocused {
                 Capsule(style: .continuous)
                     .fill(
                         LinearGradient(
@@ -2454,18 +2586,18 @@ struct BillPlaybackSheet: View {
                         )
                     )
                     .frame(height: 3)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 7)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 6)
             }
         }
-        .frame(width: 124, alignment: .topLeading)
-        .frame(minHeight: 72, alignment: .topLeading)
+        .frame(width: 112, alignment: .topLeading)
+        .frame(height: 56, alignment: .topLeading)
         .themedInteractionSurface(
-            radius: 14,
+            radius: 13,
             tint: AppColors.accent,
-            isSelected: isActive,
+            isSelected: isFocused,
             isDisabled: !isSeen,
-            glowIntensity: 0.64
+            glowIntensity: 0.56
         )
     }
 
@@ -2621,6 +2753,7 @@ struct BillPlaybackSheet: View {
         let title: String
         let body: String
         let amountText: String?
+        let category: HomeItem.Category?
     }
 
     private func buildPlaybackMoments() -> [PlaybackMoment] {
@@ -2647,7 +2780,8 @@ struct BillPlaybackSheet: View {
                     eyebrow: "先看一眼",
                     title: "今天记了 \(todayItems.count) 笔",
                     body: openingBody(dominantScene: dominantScene, lifeMark: lifeMark),
-                    amountText: todayItems.reduce(0) { $0 + $1.amount }.formatted(.cny)
+                    amountText: todayItems.reduce(0) { $0 + $1.amount }.formatted(.cny),
+                    category: nil
                 )
             )
         }
@@ -2658,7 +2792,8 @@ struct BillPlaybackSheet: View {
                 eyebrow: momentEyebrow(for: item),
                 title: playbackTitle(for: item),
                 body: itemMomentBody(for: item),
-                amountText: item.amount.formatted(.cny)
+                amountText: item.amount.formatted(.cny),
+                category: item.category
             )
         }
 
@@ -2669,7 +2804,8 @@ struct BillPlaybackSheet: View {
                     eyebrow: "看完今天",
                     title: themeTitle(topCategory: topCategory, dominantScene: dominantScene),
                     body: themeBody(topCategory: topCategory, dominantScene: dominantScene),
-                    amountText: nil
+                    amountText: nil,
+                    category: nil
                 )
             )
         }
@@ -2698,7 +2834,8 @@ struct BillPlaybackSheet: View {
                 eyebrow: "先看一眼",
                 title: "今天记了 \(todayItems.count) 笔",
                 body: openingBody(dominantScene: dominantScene, lifeMark: lifeMark),
-                amountText: todayItems.reduce(0) { $0 + $1.amount }.formatted(.cny)
+                amountText: todayItems.reduce(0) { $0 + $1.amount }.formatted(.cny),
+                category: nil
             )
         ]
 
@@ -2710,7 +2847,8 @@ struct BillPlaybackSheet: View {
                 eyebrow: block.label,
                 title: "\(block.label)有 \(block.items.count) 笔",
                 body: timeBlockBody(label: block.label, items: block.items),
-                amountText: total.formatted(.cny)
+                amountText: total.formatted(.cny),
+                category: nil
             )
         }
 
@@ -2720,7 +2858,8 @@ struct BillPlaybackSheet: View {
                 eyebrow: "看完今天",
                 title: themeTitle(topCategory: topCategory, dominantScene: dominantScene),
                 body: themeBody(topCategory: topCategory, dominantScene: dominantScene),
-                amountText: nil
+                amountText: nil,
+                category: nil
             )
         )
 
