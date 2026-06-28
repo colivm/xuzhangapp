@@ -53,6 +53,8 @@ enum LifeMarkService {
     private static var aggregateCacheOrder: [String] = []
     private static let aggregateCacheLimit = 48
     private static let telecomBillKeywords = ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国移动通信集团", "中国联通", "中国电信", "移动通信", "运营商缴费"]
+    private static let casualDrinkKeywords = ["可乐", "雪碧", "汽水", "水溶", "c100", "维c", "维他", "果汁", "饮料"]
+    private static let intentionalDrinkKeywords = ["咖啡", "拿铁", "美式", "奶茶", "茶饮", "柠檬茶", "瑞幸", "星巴克", "manner", "蜜雪", "喜茶", "奈雪"]
     private static let broadDailySupplySpecificDefinitionIDs: Set<String> = [
         "fitness",
         "home_utilities",
@@ -488,6 +490,12 @@ enum LifeMarkService {
             }
             let matched = items.filter { matches($0, definition: definition) }
             guard matched.count >= definition.minimumCount else { return nil }
+            if definition.id == "coffee_drink",
+               matched.count < 2,
+               let only = matched.first,
+               isCasualDrinkOnly(only) {
+                return nil
+            }
             let historyMatched = historyItems.filter { matches($0, definition: definition) }
             return aggregate(
                 id: definition.id,
@@ -962,6 +970,12 @@ enum LifeMarkService {
         case "interest_gear": return "第一次露营或买渔具是哪天？"
         default: return "这个月\(definition.label)几次？"
         }
+    }
+
+    private static func isCasualDrinkOnly(_ item: HomeItem) -> Bool {
+        let text = semanticText(for: item)
+        return containsAny(text, casualDrinkKeywords)
+            && !containsAny(text, intentionalDrinkKeywords)
     }
 
     private static func semanticText(for item: HomeItem) -> String {

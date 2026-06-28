@@ -101,7 +101,7 @@ enum RecordMemoryContextService {
         if category == .health, containsAny(text, ["健身", "锻炼", "运动", "训练", "跑步", "瑜伽", "游泳", "球场"]) {
             return .fitness
         }
-        if category == .dining, containsAny(text, ["咖啡", "拿铁", "美式", "奶茶", "饮品", "饮料", "喝的", "茶饮", "果汁", "柠檬茶", "水溶", "c100", "维C", "维他", "瑞幸", "星巴克", "manner", "蜜雪", "喜茶", "奈雪"]) {
+        if category == .dining, containsAny(text, ["咖啡", "拿铁", "美式", "奶茶", "饮品", "饮料", "喝的", "茶饮", "可乐", "雪碧", "汽水", "果汁", "柠檬茶", "水溶", "c100", "维C", "维他", "瑞幸", "星巴克", "manner", "蜜雪", "喜茶", "奈雪"]) {
             return .coffee
         }
         if category == .dining {

@@ -2396,29 +2396,47 @@ struct BillPlaybackSheet: View {
     }
 
     private var playbackFilmStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(Array(playbackMoments.enumerated()), id: \.element.id) { index, moment in
-                    Button {
-                        isPlaying = false
-                        activeIndex = index
-                        playbackDone = false
-                    } label: {
-                        playbackFilmStripCard(moment: moment, index: index)
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(playbackMoments.enumerated()), id: \.element.id) { index, moment in
+                        Button {
+                            isPlaying = false
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                                activeIndex = index
+                                playbackDone = false
+                            }
+                        } label: {
+                            playbackFilmStripCard(moment: moment, index: index)
+                        }
+                        .buttonStyle(.plain)
+                        .id(index)
                     }
-                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 1)
+            }
+            .frame(height: 70)
+            .onChange(of: activeIndex) { newValue in
+                guard newValue >= 0 else { return }
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+                    proxy.scrollTo(newValue, anchor: .center)
                 }
             }
-            .padding(.horizontal, 1)
-        }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 8)
-                .onChanged { _ in
-                    if isPlaying {
-                        isPlaying = false
-                    }
+            .onAppear {
+                let initial = max(activeIndex, 0)
+                DispatchQueue.main.async {
+                    proxy.scrollTo(initial, anchor: .center)
                 }
-        )
+            }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8)
+                    .onChanged { _ in
+                        if isPlaying {
+                            isPlaying = false
+                        }
+                    }
+            )
+        }
     }
 
     private func playbackFilmStripCard(moment: PlaybackMoment, index: Int) -> some View {
@@ -2458,15 +2476,17 @@ struct BillPlaybackSheet: View {
                     .padding(.bottom, 7)
             }
         }
-        .frame(width: 124, alignment: .topLeading)
-        .frame(minHeight: 72, alignment: .topLeading)
+        .frame(width: 112, height: 62, alignment: .topLeading)
         .themedInteractionSurface(
-            radius: 14,
+            radius: 13,
             tint: AppColors.accent,
             isSelected: isActive,
             isDisabled: !isSeen,
-            glowIntensity: 0.64
+            glowIntensity: isActive ? 0.74 : 0.40
         )
+        .scaleEffect(isActive ? 1.02 : 0.96)
+        .opacity(isActive ? 1 : (isSeen ? 0.72 : 0.48))
+        .animation(.spring(response: 0.26, dampingFraction: 0.88), value: activeIndex)
     }
 
     @ViewBuilder
@@ -2860,6 +2880,15 @@ struct BillPlaybackSheet: View {
         }
         let hour = Calendar.current.component(.hour, from: item.createdAt)
         let itemText = "\(item.title) \(item.displayTitle) \(item.displayEmotionTag)"
+        if playbackContainsNightMarketCue(itemText) {
+            if hour >= 21 || hour < 5 {
+                return "夜里买了点夜市小吃。"
+            }
+            return "买了点夜市小吃。"
+        }
+        if playbackContainsLuweiCue(itemText) {
+            return "今天带了点卤味小食。"
+        }
         if playbackContainsDrinkCue(itemText) {
             if (11..<14).contains(hour) {
                 return "中午买了瓶喝的。"
@@ -2921,6 +2950,18 @@ struct BillPlaybackSheet: View {
 
     private func playbackContainsDrinkCue(_ text: String) -> Bool {
         ["咖啡", "拿铁", "美式", "奶茶", "饮品", "饮料", "喝的", "茶饮", "可乐", "雪碧", "汽水", "果汁", "柠檬茶", "水溶", "c100", "维c", "维C", "维他"].contains {
+            text.localizedCaseInsensitiveContains($0)
+        }
+    }
+
+    private func playbackContainsLuweiCue(_ text: String) -> Bool {
+        ["绝味", "鸭脖", "鸭货", "卤味", "周黑鸭", "煌上煌"].contains {
+            text.localizedCaseInsensitiveContains($0)
+        }
+    }
+
+    private func playbackContainsNightMarketCue(_ text: String) -> Bool {
+        ["夜市", "夜摊", "大排档", "生蚝", "烤生蚝", "鱿鱼", "铁板鱿鱼", "烧烤", "烤串", "串串"].contains {
             text.localizedCaseInsensitiveContains($0)
         }
     }

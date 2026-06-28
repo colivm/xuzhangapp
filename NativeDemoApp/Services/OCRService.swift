@@ -529,7 +529,7 @@ final class OCRService {
         let amount = amountNear(labels: ["金额", "付款金额", "实付款", "实付金额", "订单金额", "支付金额", "交易金额"], in: lines) ?? currencyCandidates(in: rawText).first
         let brand = MerchantBrandCatalog.matchOCRBrand(in: rawText)
         let title = valueFor(labels: ["商品说明", "商品名称", "商家名称", "商户名称", "交易对象", "收款方", "收款账户", "付款给", "对方账户"], in: lines) ?? brand?.displayName ?? fallbackTitle(from: lines)
-        let date = dateNear(labels: ["付款时间", "创建时间", "交易时间", "支付时间"], in: lines) ?? firstDate(in: rawText) ?? .now
+        let date = dateNear(labels: ["付款时间", "创建时间", "交易时间", "支付时间", "转账时间"], in: lines) ?? firstDate(in: rawText) ?? .now
         guard let amount, let title else { return nil }
 
         return brandedDraft(OCRReceiptDraft(
