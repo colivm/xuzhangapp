@@ -537,18 +537,19 @@ struct SummaryPlaybackSheet: View {
                             .foregroundStyle(AppColors.text.opacity(0.82))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 13)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(Color.white.opacity(0.66))
+                            .themedInteractionSurface(
+                                radius: 14,
+                                tint: AppColors.accent,
+                                glowIntensity: 0.42
                             )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ThemedPressButtonStyle())
 
                     Button {
                         showShareCardPrivacyConfirm = false
                         saveWeeklyStoryCard()
                     } label: {
-                        Text("保存到相册")
+                        Label("保存到相册", systemImage: "photo.badge.checkmark")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -562,7 +563,7 @@ struct SummaryPlaybackSheet: View {
                                 in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                             )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ThemedPressButtonStyle())
                     .disabled(isSavingShareCard)
                     .opacity(isSavingShareCard ? 0.62 : 1)
                 }
@@ -664,9 +665,12 @@ struct SummaryPlaybackSheet: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 22)
         .frame(maxWidth: .infinity, minHeight: 360, alignment: .topLeading)
-        .background(chapterStageBackground)
-        .overlay(chapterStageBorder)
-        .shadow(color: AppColors.subtext.opacity(0.16), radius: 22, x: 0, y: 12)
+        .themedInteractionSurface(
+            radius: 28,
+            tint: chapterAccent(for: currentChapter),
+            isSelected: isPlaying || playbackDone,
+            glowIntensity: 0.78
+        )
         .gesture(
             DragGesture(minimumDistance: 24)
                 .onEnded { value in
@@ -755,61 +759,6 @@ struct SummaryPlaybackSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
             .contentTransition(.opacity)
-    }
-
-    private var chapterStageBackground: some View {
-        RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .fill(Color.white.opacity(0.66))
-            .background(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                ZStack {
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.40),
-                            chapterAccent(for: currentChapter).opacity(0.08),
-                            Color.clear
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-
-                    RadialGradient(
-                        colors: [
-                            backdropHighlightColor.opacity(0.18),
-                            Color.clear
-                        ],
-                        center: .topTrailing,
-                        startRadius: 16,
-                        endRadius: 220
-                    )
-
-                    RadialGradient(
-                        colors: [
-                            Color.white.opacity(0.30),
-                            Color.clear
-                        ],
-                        center: .bottomLeading,
-                        startRadius: 12,
-                        endRadius: 200
-                    )
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            )
-    }
-
-    private var chapterStageBorder: some View {
-        RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .stroke(
-                LinearGradient(
-                    colors: [Color.white.opacity(0.78), chapterAccent(for: currentChapter).opacity(0.22)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: 1
-            )
     }
 
     @ViewBuilder
@@ -1241,21 +1190,27 @@ struct SummaryPlaybackSheet: View {
                         .padding(.vertical, 14)
                         .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ThemedPressButtonStyle())
 
                 memoryLineButton
 
                 Button {
                     showShareCardPrivacyConfirm = true
                 } label: {
-                    Text("保存本周故事图")
+                    Label("保存本周故事图", systemImage: "square.and.arrow.down")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppColors.text)
+                        .foregroundStyle(weeklySharePayload == nil || isSavingShareCard ? AppColors.subtext.opacity(0.64) : AppColors.text)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .themedInteractionSurface(
+                            radius: 16,
+                            tint: AppColors.accent,
+                            isSelected: weeklySharePayload != nil && !isSavingShareCard,
+                            isDisabled: weeklySharePayload == nil || isSavingShareCard,
+                            glowIntensity: 0.58
+                        )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ThemedPressButtonStyle())
                 .disabled(weeklySharePayload == nil || isSavingShareCard)
 
                 if let shareSaveMessage {
@@ -1278,7 +1233,7 @@ struct SummaryPlaybackSheet: View {
                         .padding(.vertical, 12)
                         .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ThemedPressButtonStyle())
             } else {
                 Button {
                     handlePrimaryDoneAction()
@@ -1290,7 +1245,7 @@ struct SummaryPlaybackSheet: View {
                         .padding(.vertical, 14)
                         .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ThemedPressButtonStyle())
 
                 memoryLineButton
             }
@@ -1305,9 +1260,9 @@ struct SummaryPlaybackSheet: View {
                         .foregroundStyle(AppColors.text)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .themedInteractionSurface(radius: 16, tint: AppColors.accent, glowIntensity: 0.48)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ThemedPressButtonStyle())
             }
 
         }
@@ -1325,9 +1280,9 @@ struct SummaryPlaybackSheet: View {
                     .foregroundStyle(AppColors.text)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
-                    .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .themedInteractionSurface(radius: 16, tint: AppColors.accent, glowIntensity: 0.48)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ThemedPressButtonStyle())
         }
     }
 
@@ -1438,21 +1393,27 @@ struct SummaryPlaybackSheet: View {
                         .padding(.vertical, 14)
                         .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ThemedPressButtonStyle())
 
                 memoryLineButton
 
                 Button {
                     showShareCardPrivacyConfirm = true
                 } label: {
-                    Text("保存本周故事图")
+                    Label("保存本周故事图", systemImage: "square.and.arrow.down")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppColors.text)
+                        .foregroundStyle(weeklySharePayload == nil || isSavingShareCard ? AppColors.subtext.opacity(0.64) : AppColors.text)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .themedInteractionSurface(
+                            radius: 16,
+                            tint: AppColors.accent,
+                            isSelected: weeklySharePayload != nil && !isSavingShareCard,
+                            isDisabled: weeklySharePayload == nil || isSavingShareCard,
+                            glowIntensity: 0.58
+                        )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ThemedPressButtonStyle())
                 .disabled(weeklySharePayload == nil || isSavingShareCard)
 
                 if let shareSaveMessage {
@@ -1477,7 +1438,7 @@ struct SummaryPlaybackSheet: View {
                         .padding(.vertical, 12)
                         .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ThemedPressButtonStyle())
             } else {
                 Button {
                     handlePrimaryDoneAction()
@@ -1489,7 +1450,7 @@ struct SummaryPlaybackSheet: View {
                         .padding(.vertical, 14)
                         .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ThemedPressButtonStyle())
 
                 memoryLineButton
             }

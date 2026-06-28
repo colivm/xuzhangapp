@@ -183,7 +183,7 @@ final class EchoAnchorService {
     private func isLowSignalDrink(_ item: HomeItem, text: String) -> Bool {
         let normalized = "\(item.title) \(item.displayEmotionTag) \(text)"
         guard item.amount <= 25 else { return false }
-        guard containsAny(normalized, ["咖啡", "拿铁", "美式", "奶茶", "茶饮", "饮品", "饮料", "喝的", "果汁", "柠檬茶", "水溶", "c100", "维c", "维C", "维他"]) else {
+        guard containsAny(normalized, ["咖啡", "拿铁", "美式", "奶茶", "茶饮", "饮品", "饮料", "喝的", "可乐", "雪碧", "汽水", "果汁", "柠檬茶", "水溶", "c100", "维c", "维C", "维他"]) else {
             return false
         }
         return !isStrongLifeTrace(item, text: normalized)

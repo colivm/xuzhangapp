@@ -845,7 +845,7 @@ final class PlaybackService {
         switch category {
         case .dining:
             if containsAny(text, ["早餐", "早饭", "豆浆", "包子", "饭团", "早班", "上班前"]) { return .breakfast }
-            if containsAny(text, ["咖啡", "瑞幸", "星巴克", "Manner", "奶茶", "饮品", "提神"]) { return .coffee }
+            if containsAny(text, ["咖啡", "瑞幸", "星巴克", "Manner", "奶茶", "饮品", "饮料", "喝的", "可乐", "雪碧", "汽水", "果汁", "柠檬茶", "水溶", "c100", "维C", "维c", "维他", "提神"]) { return .coffee }
             return .dining
         case .transport:
             if containsAny(text, ["上班", "下班", "到岗", "通勤", "早高峰", "晚高峰", "地铁", "公交", "轨道交通"]) { return .commute }
