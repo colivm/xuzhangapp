@@ -86,7 +86,7 @@ extension View {
 
 struct ThemedInteractionSurface: ViewModifier {
     var radius: CGFloat = 20
-    var tint: Color = AppColors.accent
+    var tint: Color = .accentColor
     var isSelected = false
     var isDisabled = false
     var glowIntensity: Double = 1
@@ -199,7 +199,7 @@ struct ThemedPressButtonStyle: ButtonStyle {
 extension View {
     func themedInteractionSurface(
         radius: CGFloat = 20,
-        tint: Color = AppColors.accent,
+        tint: Color = .accentColor,
         isSelected: Bool = false,
         isDisabled: Bool = false,
         glowIntensity: Double = 1
