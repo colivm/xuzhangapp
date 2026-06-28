@@ -47,6 +47,33 @@
       "expectedEmotionRule": "meal"
     },
     {
+      "id": "manual-roast-duck-dining",
+      "mode": "manual",
+      "amount": 25,
+      "time": "13:24",
+      "inputTitle": "烤鸭",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
+      "id": "manual-coca-cola-drink",
+      "mode": "manual",
+      "amount": 3.5,
+      "time": "13:25",
+      "inputTitle": "可口可乐",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "drink"
+    },
+    {
+      "id": "manual-c100-drink",
+      "mode": "manual",
+      "amount": 5,
+      "time": "13:12",
+      "inputTitle": "水溶C100",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "drink"
+    },
+    {
       "id": "manual-subway-transport",
       "mode": "manual",
       "amount": 4.75,

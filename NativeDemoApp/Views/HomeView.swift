@@ -2297,9 +2297,12 @@ struct BillPlaybackSheet: View {
             }
             .padding(22)
             .frame(maxWidth: .infinity, minHeight: 286, alignment: .leading)
-            .background(todayPlaybackStageBackground)
-            .overlay(todayPlaybackStageBorder)
-            .shadow(color: AppColors.subtext.opacity(0.14), radius: 22, x: 0, y: 12)
+            .themedInteractionSurface(
+                radius: 28,
+                tint: AppColors.accent,
+                isSelected: isPlaying || playbackDone,
+                glowIntensity: playbackDone ? 0.88 : 0.72
+            )
 
             Image(systemName: playbackStageSymbol)
                 .font(.system(size: 88, weight: .bold))
@@ -2315,27 +2318,6 @@ struct BillPlaybackSheet: View {
         if moment.id.contains("summary") { return "sparkles" }
         if moment.id.contains("close") { return "moon.stars.fill" }
         return "note.text"
-    }
-
-    private var todayPlaybackStageBackground: some View {
-        RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .fill(Color.white.opacity(0.60))
-            .background(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-    }
-
-    private var todayPlaybackStageBorder: some View {
-        RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .stroke(
-                LinearGradient(
-                    colors: [Color.white.opacity(0.74), AppColors.accent.opacity(0.16)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: 1
-            )
     }
 
     private var playbackFilmStrip: some View {
@@ -2381,13 +2363,12 @@ struct BillPlaybackSheet: View {
         .padding(9)
         .frame(width: 124, alignment: .topLeading)
         .frame(minHeight: 72, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(isActive ? Color.white.opacity(0.70) : Color.white.opacity(0.32))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(isActive ? AppColors.accent.opacity(0.25) : Color.white.opacity(0.28), lineWidth: 1)
+        .themedInteractionSurface(
+            radius: 14,
+            tint: AppColors.accent,
+            isSelected: isActive,
+            isDisabled: !isSeen,
+            glowIntensity: 0.64
         )
     }
 
@@ -2781,6 +2762,22 @@ struct BillPlaybackSheet: View {
             }
         }
         let hour = Calendar.current.component(.hour, from: item.createdAt)
+        let itemText = "\(item.title) \(item.displayTitle) \(item.displayEmotionTag)"
+        if playbackContainsDrinkCue(itemText) {
+            if (11..<14).contains(hour) {
+                return "中午买了瓶喝的。"
+            }
+            if hour < 11 {
+                return "早上买了瓶喝的。"
+            }
+            if hour >= 17 {
+                return "傍晚买了瓶喝的。"
+            }
+            return "今天买了瓶喝的。"
+        }
+        if playbackContainsRoastDuckCue(itemText) {
+            return "今天吃了点烤鸭。"
+        }
         switch LifeSceneSemanticService.classify(item).kind {
         case .commute:
             if hour < 12 {
@@ -2795,7 +2792,16 @@ struct BillPlaybackSheet: View {
         case .breakfast:
             return "早上先吃了口东西。"
         case .quickMeal, .workMeal:
-            return "中午这顿饭先吃上了。"
+            if (11..<14).contains(hour) {
+                return "中午这顿先记下。"
+            }
+            if (17..<21).contains(hour) {
+                return "晚饭这顿先记下。"
+            }
+            if hour >= 21 || hour < 5 {
+                return "夜里补了点吃的。"
+            }
+            return "这份吃的记下来了。"
         case .coffee:
             if (11..<14).contains(hour) {
                 return "中午买了杯喝的。"
@@ -2812,7 +2818,19 @@ struct BillPlaybackSheet: View {
         case .medicalVisit, .medicineCare, .fitness, .bodyCare:
             return "今天身体这边有笔安排。"
         default:
-            return "今天的一笔，记下来了。"
+            return "这笔记录先放进今天。"
+        }
+    }
+
+    private func playbackContainsDrinkCue(_ text: String) -> Bool {
+        ["咖啡", "拿铁", "美式", "奶茶", "饮品", "饮料", "喝的", "茶饮", "可乐", "雪碧", "汽水", "果汁", "柠檬茶", "水溶", "c100", "维c", "维C", "维他"].contains {
+            text.localizedCaseInsensitiveContains($0)
+        }
+    }
+
+    private func playbackContainsRoastDuckCue(_ text: String) -> Bool {
+        ["烤鸭", "烧鸭", "卤鸭", "鸭肉"].contains {
+            text.localizedCaseInsensitiveContains($0)
         }
     }
 

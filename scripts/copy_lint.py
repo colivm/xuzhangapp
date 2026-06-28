@@ -26,6 +26,9 @@ DEFAULT_TARGETS = [
 ]
 
 BLOCKED_TERMS = [
+    "这一袋" + "很方便",
+    "中午这顿饭" + "先吃上了。",
+    "今天的一笔" + "，记下来了。",
     "小确幸",
     "治愈",
     "你值得",
@@ -131,6 +134,15 @@ def sanitizer_ranges(lines: list[str]) -> set[int]:
             ignored.add(index)
             brace_depth += lines[index].count("{") - lines[index].count("}")
             if brace_depth <= 0:
+                break
+    for start_index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped not in {"BLOCKED_TERMS = [", "SOFT_TERMS = ["}:
+            continue
+        ignored.add(start_index)
+        for index in range(start_index + 1, len(lines)):
+            ignored.add(index)
+            if lines[index].strip() == "]":
                 break
     return ignored
 

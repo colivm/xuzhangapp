@@ -376,7 +376,7 @@ struct StatsWebView: View {
                     isEnabled: canPlay || isMonthLocked
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ThemedPressButtonStyle())
             .disabled(!hasData && !isMonthLocked)
 
             Text(summaryQuotaFootnote(range: range, hasData: hasData))
@@ -597,13 +597,12 @@ struct StatsWebView: View {
         }
         .padding(13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(AppColors.tracePlaybackButtonBg.opacity(isEnabled ? 0.92 : 0.46))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(AppColors.accent.opacity(isEnabled ? 0.18 : 0.08), lineWidth: 1)
+        .themedInteractionSurface(
+            radius: 18,
+            tint: AppColors.accent,
+            isSelected: isEnabled,
+            isDisabled: !isEnabled,
+            glowIntensity: 0.62
         )
     }
 

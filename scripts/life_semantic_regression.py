@@ -27,6 +27,7 @@ EXPECTED_JSON_KEYWORDS = {
     "keywordRules:餐饮": [
         "茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴",
         "海底捞", "老乡鸡", "塔斯汀", "库迪", "库迪咖啡", "绝味", "袁记云饺", "萨莉亚",
+        "烤鸭", "烧鸭", "卤鸭", "鸭肉", "可乐", "水溶", "c100",
     ],
     "keywordRules:日用": [
         "鸡蛋", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈",
@@ -63,6 +64,7 @@ EXPECTED_JSON_KEYWORDS = {
     ],
     "ocrKeywordRules:餐饮": [
         "海底捞", "老乡鸡", "塔斯汀", "库迪", "库迪咖啡", "绝味", "袁记云饺", "萨莉亚",
+        "烤鸭",
     ],
     "ocrKeywordRules:日用": [
         "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈",
@@ -90,6 +92,12 @@ EXPECTED_JSON_KEYWORDS = {
     "emotionKeywordRules:convenience": [
         "茶叶蛋", "饭团", "关东煮", "便当", "三明治",
     ],
+    "emotionKeywordRules:drink": [
+        "可乐", "雪碧", "汽水", "水溶", "c100", "维C",
+    ],
+    "emotionKeywordRules:meal": [
+        "烤鸭", "烧鸭", "卤鸭", "鸭肉",
+    ],
 }
 
 EXPECTED_BRANDS = [
@@ -101,6 +109,7 @@ EXPECTED_BRANDS = [
 EXPECTED_SWIFT_SNIPPETS = {
     "semantic_fallback": [
         "茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴",
+        "烤鸭", "烧鸭", "卤鸭", "鸭肉", "可乐", "水溶", "c100",
         "山姆", "永辉", "大润发", "钱大妈", "花小猪", "洗车", "汽车保养",
         "配镜", "验光", "洗牙", "网上国网", "暖气费", "取暖费", "B站会员",
         "供暖费", "热力费", "腾讯视频会员", "充电器", "Office 365", "谷子", "潮玩", "泡泡玛特", "POP MART", "搬家",
@@ -108,6 +117,7 @@ EXPECTED_SWIFT_SNIPPETS = {
     ],
     "life_scene": [
         "茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴",
+        "烤鸭", "烧鸭", "卤鸭", "鸭肉", "可乐", "水溶", "c100",
         "山姆", "永辉", "大润发", "钱大妈", "花小猪", "洗车", "汽车保养",
         "配镜", "验光", "洗牙", "网上国网", "暖气费", "取暖费", "B站会员",
         "供暖费", "热力费", "腾讯视频会员", "充电器", "Office 365", "谷子", "潮玩", "泡泡玛特", "POP MART", "搬家",
@@ -133,7 +143,7 @@ EXPECTED_SWIFT_SNIPPETS = {
     "home_view": [
         "haidilao", "laoxiangji", "tastien", "cotti", "juewei", "yuanjiyunjiao",
         "saizeriya", "samsclub", "yonghui", "rtmart", "qiandama", "huaxiaozhu",
-        "sgcc_online",
+        "sgcc_online", "playbackContainsDrinkCue", "playbackContainsRoastDuckCue",
     ],
 }
 
@@ -175,6 +185,12 @@ LEISURE_EXCLUSION_IDS = [
 
 SCENE_PACK_BLOCKED_TERMS = [
     "房租", "押金", "租房", "水电", "燃气", "物业", "宽带", "电影", "健身",
+]
+
+BLOCKED_COPY_SNIPPETS = [
+    "这一袋" + "很方便",
+    "中午这顿饭" + "先吃上了。",
+    "今天的一笔" + "，记下来了。",
 ]
 
 BROAD_QUOTED_KEYWORD_LIMITS = {
@@ -328,6 +344,18 @@ def scan_swift_presence(failures: list[str]) -> dict[str, str]:
     return texts
 
 
+def scan_blocked_copy(failures: list[str], texts: dict[str, str]) -> None:
+    checked = {
+        "RecordSceneLexicon.json": LEXICON_PATH.read_text(encoding="utf-8"),
+        "RecordSceneLexicon.regression.json": REGRESSION_CASES_PATH.read_text(encoding="utf-8"),
+        **{SWIFT_FILES[name]: text for name, text in texts.items()},
+    }
+    for path, text in checked.items():
+        for snippet in BLOCKED_COPY_SNIPPETS:
+            if snippet in text:
+                failures.append(f"{path}: blocked copy snippet `{snippet}`")
+
+
 def scan_scene_pack_notes(failures: list[str], text: str) -> None:
     for line_number, line in enumerate(text.splitlines(), start=1):
         if "ScenePackTier(" not in line:
@@ -433,6 +461,7 @@ def main() -> int:
     scan_json(failures)
     scan_regression_cases(failures, payload)
     texts = scan_swift_presence(failures)
+    scan_blocked_copy(failures, texts)
     scan_scene_pack_notes(failures, texts["scene_pack"])
     scan_life_mark_boundaries(failures, texts["life_mark"])
     scan_broad_keywords(failures, texts)
