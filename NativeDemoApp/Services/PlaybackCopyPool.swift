@@ -197,7 +197,7 @@ enum PlaybackCopyPool {
         "month-outro": PlaybackCopyGroup(
             warm: [
                 "这个月先收到这里。以后再翻回来，先看见的应该是生活，不只是金额。",
-                "{rangeLabel} 先放回账本里。下个月会有新的天气、新的路线和新的小停顿。",
+                "{rangeLabel} 先放回账本里。下个月会有新的天气、新的路线和新的记录。",
                 "这一个月已经留下来了，下一章不用复制这一章，会自己长出新的生活。"
             ],
             plain: [

@@ -2238,18 +2238,29 @@ struct BillPlaybackSheet: View {
 
     private var playbackStage: some View {
         let moment = currentPlaybackMoment
+        let isFocused = isPlaying || playbackDone || activeIndex >= 0
         return ZStack(alignment: .topTrailing) {
             VStack(alignment: .leading, spacing: 18) {
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
                         Capsule(style: .continuous)
-                            .fill(Color.white.opacity(0.54))
+                            .fill(AppColors.line.opacity(0.50))
                         Capsule(style: .continuous)
-                            .fill(AppColors.accent.opacity(0.82))
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        AppColors.accent.opacity(0.92),
+                                        AppColors.accentDark.opacity(0.90)
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
                             .frame(width: proxy.size.width * playbackProgressFraction)
+                            .shadow(color: AppColors.accent.opacity(0.22), radius: 7, x: 0, y: 0)
                     }
                 }
-                .frame(height: 4)
+                .frame(height: 6)
 
                 Spacer(minLength: 0)
 
@@ -2260,19 +2271,23 @@ struct BillPlaybackSheet: View {
                             .foregroundStyle(AppColors.accentDark.opacity(0.82))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(Capsule(style: .continuous).fill(Color.white.opacity(0.54)))
+                            .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.13)))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(AppColors.accent.opacity(0.18), lineWidth: 0.8)
+                            )
                         if let amount = moment?.amountText {
                             Text(amount)
                                 .font(.system(size: 12, weight: .bold, design: .rounded))
                                 .foregroundStyle(AppColors.text.opacity(0.72))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
-                                .background(Capsule(style: .continuous).fill(Color.white.opacity(0.42)))
+                                .background(Capsule(style: .continuous).fill(Color.white.opacity(0.48)))
                         }
                     }
 
                     Text(moment?.title ?? "今天的记录")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(.system(size: 29, weight: .bold, design: .rounded))
                         .foregroundStyle(AppColors.text)
                         .lineSpacing(5)
                         .lineLimit(3)
@@ -2292,6 +2307,13 @@ struct BillPlaybackSheet: View {
                         .font(.system(size: 14, weight: .bold))
                     Text(playbackDone ? "今天看完了" : "正在翻今天")
                         .font(.system(size: 13, weight: .semibold))
+                    Spacer(minLength: 12)
+                    Text(playbackStepText)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppColors.accentDark.opacity(0.72))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.12)))
                 }
                 .foregroundStyle(AppColors.readableAccent)
             }
@@ -2300,16 +2322,69 @@ struct BillPlaybackSheet: View {
             .themedInteractionSurface(
                 radius: 28,
                 tint: AppColors.accent,
-                isSelected: isPlaying || playbackDone,
-                glowIntensity: playbackDone ? 0.88 : 0.72
+                isSelected: isFocused,
+                glowIntensity: playbackDone ? 1.02 : 0.88
+            )
+            .overlay(alignment: .top) {
+                playbackStageTopRail
+            }
+            .overlay(alignment: .leading) {
+                playbackStageSideRail
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(AppColors.accent.opacity(isFocused ? 0.24 : 0.12), lineWidth: isFocused ? 1.2 : 0.8)
+                    .allowsHitTesting(false)
             )
 
             Image(systemName: playbackStageSymbol)
                 .font(.system(size: 88, weight: .bold))
-                .foregroundStyle(AppColors.accent.opacity(0.08))
-                .offset(x: 6, y: 4)
+                .foregroundStyle(AppColors.accent.opacity(0.105))
+                .offset(x: 4, y: 2)
         }
         .animation(.easeInOut(duration: 0.24), value: activeIndex)
+    }
+
+    private var playbackStepText: String {
+        guard !playbackMoments.isEmpty else { return "0 / 0" }
+        let current = min(max(activeIndex, 0) + 1, playbackMoments.count)
+        return "\(current) / \(playbackMoments.count)"
+    }
+
+    private var playbackStageTopRail: some View {
+        Capsule(style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.56),
+                        AppColors.accent.opacity(0.50),
+                        AppColors.accentDark.opacity(0.34)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(height: 3)
+            .padding(.horizontal, 26)
+            .padding(.top, 1.5)
+            .allowsHitTesting(false)
+    }
+
+    private var playbackStageSideRail: some View {
+        RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        AppColors.accent.opacity(0.86),
+                        AppColors.accentDark.opacity(0.50)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: 4, height: 92)
+            .padding(.leading, 1.5)
+            .allowsHitTesting(false)
     }
 
     private var playbackStageSymbol: String {
@@ -2349,18 +2424,40 @@ struct BillPlaybackSheet: View {
     private func playbackFilmStripCard(moment: PlaybackMoment, index: Int) -> some View {
         let isActive = index == activeIndex
         let isSeen = index <= max(activeIndex, 0)
-        return VStack(alignment: .leading, spacing: 5) {
-            Text(moment.eyebrow)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(isActive ? AppColors.accent : AppColors.subtext)
-                .lineLimit(1)
-            Text(moment.title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(AppColors.text.opacity(isSeen ? 0.92 : 0.54))
-                .lineLimit(2)
-                .minimumScaleFactor(0.78)
+        return ZStack(alignment: .bottomLeading) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(isActive ? AppColors.accent : AppColors.line)
+                        .frame(width: 5, height: 5)
+                    Text(moment.eyebrow)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(isActive ? AppColors.accentDark : AppColors.subtext)
+                        .lineLimit(1)
+                }
+                Text(moment.title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppColors.text.opacity(isSeen ? 0.94 : 0.54))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+
+            if isActive {
+                Capsule(style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [AppColors.accent, AppColors.accentDark.opacity(0.86)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(height: 3)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 7)
+            }
         }
-        .padding(9)
         .frame(width: 124, alignment: .topLeading)
         .frame(minHeight: 72, alignment: .topLeading)
         .themedInteractionSurface(
@@ -2650,7 +2747,7 @@ struct BillPlaybackSheet: View {
             case .breakfast, .quickMeal, .workMeal:
                 return "今天先从几次吃饭看起。忙也好、赶饭点也好，身体总要被照顾到。"
             case .coffee:
-                return "今天有几杯饮品留下来，它们更像日子中间的小停顿。"
+                return "今天有几杯喝的被记下来，先按时间放回今天。"
             case .convenienceSupply, .groceries, .homeSupply:
                 return "今天像是给生活补了一点库存，少几件惦记的事。"
             case .medicalVisit, .medicineCare, .fitness, .bodyCare:
@@ -2849,7 +2946,7 @@ struct BillPlaybackSheet: View {
         case .breakfast, .quickMeal, .workMeal:
             return "今天吃饭这条线清楚"
         case .coffee:
-            return "今天有几次小停顿"
+            return "今天买了几次喝的"
         case .convenienceSupply, .groceries, .homeSupply:
             return "今天补了些需要的"
         case .shopping:
@@ -2880,7 +2977,7 @@ struct BillPlaybackSheet: View {
         case .breakfast, .quickMeal, .workMeal:
             return "吃饭出现了 \(dominantScene.count) 次。它不是消费主题，是今天被照顾到的几段时间。"
         case .coffee:
-            return "咖啡饮品出现了 \(dominantScene.count) 次。它们更像小停顿，不必都被解释成路上匆忙或硬撑。"
+            return "咖啡饮品出现了 \(dominantScene.count) 次。先当作今天买过的几杯喝的，不额外替它们加情绪。"
         case .convenienceSupply, .groceries, .homeSupply:
             return "补给出现了 \(dominantScene.count) 次，都是让今天少一点缺口的小东西。"
         case .shopping:
