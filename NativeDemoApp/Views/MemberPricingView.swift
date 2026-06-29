@@ -53,19 +53,19 @@ struct MemberPricingView: View {
     ]
 
     private let benefits = [
-        ("无限生活回放", "过去的每一天都值得被记住。通勤、聚餐、旅行、看病、送礼、养宠……生活轨迹持续保留，随时回看。"),
-        ("AI 深度生活分析", "看见那些你自己都没察觉的规律：哪些支出正在悄悄增加、最近压力最大的时间段、什么事情最值得你投入时间和金钱、生活节奏正在发生哪些变化。"),
-        ("持续生成生活故事", "不只是记账，而是记录成长。周记、月记、年度故事自动串联，多年以后依然能翻阅今天。"),
-        ("账单连续整理", "把重复整理交给 AI。微信、支付宝截图可以连续导入，一年账单也能快速变成可回看的生活档案。"),
-        ("全部生活场景", "你的生活，不只有消费。地铁公交打车停车、干饭点外卖和咖啡、超市买菜和家用、快递到了网购这件、看病买药健身恢复、娃和毛孩，都能从不同角度重新认识自己。"),
-        ("今日无限回放", "睡前重新看看今天。重要的事、见过的人、花过的钱，让每一天都有痕迹。"),
-        ("25+ 生活风格", "让记录变得更有温度。纸境、档案馆、夜读、观察者、旅行手账和博物馆，打造属于自己的生活记录本。"),
+        ("无限生活回放", "通勤、聚餐、旅行、看病、送礼、养宠等记录持续保留，随时回看。"),
+        ("AI 深度生活分析", "按日期、分类、金额和备注整理规律，查看哪些支出增加、哪些场景出现更频繁。"),
+        ("持续生成周月回放", "周记、月记、年度内容按真实记录自动整理，多年以后依然能翻阅今天。"),
+        ("账单连续整理", "把重复整理交给 AI。微信、支付宝截图可以连续导入，一年账单也能整理成可回看的记录。"),
+        ("全部生活场景", "地铁公交打车停车、外卖咖啡、超市买菜、网购、看病买药、健身恢复、娃和毛孩等场景都能分类整理。"),
+        ("今日无限回放", "睡前重新看看今天。按时间、地点、分类和备注回看当天记录。"),
+        ("25+ 生活风格", "纸境、档案馆、夜读、观察者、旅行手账和博物馆等风格可切换。"),
     ]
 
     private let boundaryRows = [
         ("生活场景", "轻度记录常用角度", "完整打开出去玩、看病买药健身恢复、娃和毛孩、人情局、兴趣装备等生活面"),
-        ("生活回放", "基础体验最近片段", "持续保存周/月/年度故事，不让生活断档"),
-        ("账单整理", "适合少量截图", "大段账单也能连续整理成可回看的档案"),
+        ("生活回放", "基础体验最近片段", "持续保存周/月/年度回放，不让记录断档"),
+        ("账单整理", "适合少量截图", "大段账单也能连续整理成可回看的记录"),
     ]
 
     init(
@@ -90,23 +90,23 @@ struct MemberPricingView: View {
         switch entryContext {
         case .traceDeepInsight:
             return MemberHeroContent(
-                title: "把这段记录展开成生活线索",
-                subtitle: "会员会继续整理本周、本月和更长时间的生活印记，不只停在分类和金额。",
+                title: "把这段记录继续往后查",
+                subtitle: "会员会继续整理本周、本月和更长时间的记录，不只停在分类和金额。",
                 detail: "雨天通勤、健身恢复、旅行停留、家庭照护这些线索，会按账本里已有的日期、分类、备注和上下文连接起来。",
-                chips: ["深度线索", "周/月连续", "生活印记"]
+                chips: ["按日期回看", "周/月连续", "真实记录"]
             )
         case .playbackQuota:
             return MemberHeroContent(
                 title: "想多看几遍，不用等刷新",
                 subtitle: "会员适合经常回看今日、周记和月章的人，记录刚有感觉时可以继续整理。",
-                detail: "回放不会因为免费次数停住，今天、这一周和这个月的生活节奏可以持续接上。",
+                detail: "回放不会因为免费次数停住，今天、这一周和这个月都能继续整理。",
                 chips: ["不限回看", "周记月章", "持续整理"]
             )
         case .ocrImport:
             return MemberHeroContent(
                 title: "连续整理截图账单",
                 subtitle: "微信、支付宝截图多的时候，会员可以继续导入，不用等明天刷新。",
-                detail: "导入后会继续参与重复账单判断、生活线索和周/月回顾，账单不是只进列表里。",
+                detail: "导入后会继续参与重复账单判断、分类整理和周/月回顾，账单不是只进列表里。",
                 chips: ["连续导入", "重复整理", "进入回顾"]
             )
         case .scenePack(_):
@@ -118,10 +118,10 @@ struct MemberPricingView: View {
             )
         case .lifetime:
             return MemberHeroContent(
-                title: "把生活档案长期留住",
-                subtitle: "永久会员适合想长期保存周记、月章、风格和生活档案的人。",
-                detail: "一次开通后，记录会持续长成跨月份、跨年份的回看材料，也包含 3 款典藏风格。",
-                chips: ["永久档案", "典藏风格", "长期陪伴"]
+                title: "把多年记录长期留住",
+                subtitle: "永久会员适合想长期保存周记、月章、风格和历史记录的人。",
+                detail: "一次开通后，跨月份、跨年份的回看材料会持续保留，也包含 3 款典藏风格。",
+                chips: ["长期保存", "典藏风格", "持续回看"]
             )
         case .aiCommand:
             return MemberHeroContent(
@@ -132,10 +132,10 @@ struct MemberPricingView: View {
             )
         case .settings:
             return MemberHeroContent(
-                title: "把流水变成故事，把记录变成回忆",
+                title: "让账本以后还能看懂",
                 subtitle: "多年以后，你未必记得今天花了多少钱，但会想知道那时的自己正在过怎样的生活。",
-                detail: "会员让 AI 持续整理你的生活脉络，帮你看见消费背后的习惯、情绪和变化。",
-                chips: ["生活回放", "深度分析", "长期档案"]
+                detail: "会员让 AI 按日期、分类、备注和上下文整理，帮你看见习惯、场景和变化。",
+                chips: ["生活回放", "深度分析", "长期记录"]
             )
         }
     }
@@ -144,7 +144,7 @@ struct MemberPricingView: View {
         switch entryContext {
         case .traceDeepInsight:
             return [
-                MemberValuePoint(symbol: "sparkles", title: "展开深层印记", detail: "雨天通勤、健身恢复、旅行停留这类线索会继续浮出来。"),
+                MemberValuePoint(symbol: "sparkles", title: "看到更多上下文", detail: "雨天通勤、健身恢复、旅行停留会按已有记录继续整理。"),
                 MemberValuePoint(symbol: "calendar", title: "周月不断档", detail: "本周、本月和更长周期都能持续整理。"),
                 MemberValuePoint(symbol: "text.magnifyingglass", title: "只基于真实账本", detail: "按日期、分类、备注和上下文连接，不额外编造。")
             ]
@@ -152,7 +152,7 @@ struct MemberPricingView: View {
             return [
                 MemberValuePoint(symbol: "play.circle", title: "回放不限次", detail: "今日、周记、月章想多看几遍都能继续。"),
                 MemberValuePoint(symbol: "clock.arrow.circlepath", title: "不用等刷新", detail: "记录刚有感觉时，不会被免费次数打断。"),
-                MemberValuePoint(symbol: "book.closed", title: "留下长期章节", detail: "多次回看会慢慢接成周月生活档案。")
+                MemberValuePoint(symbol: "book.closed", title: "保留长期回放", detail: "多次回看会接成周记和月章。")
             ]
         case .ocrImport:
             return [
@@ -164,11 +164,11 @@ struct MemberPricingView: View {
             return [
                 MemberValuePoint(symbol: "square.grid.2x2", title: "打开全部生活角度", detail: "旅行、身体、家庭照护等场景都能使用。"),
                 MemberValuePoint(symbol: "wand.and.stars", title: "文案更贴近场景", detail: "同样一笔钱，会放进更具体的生活语境。"),
-                MemberValuePoint(symbol: "link", title: "长期线索更清楚", detail: "同类记录多了，会在痕迹页串成生活印记。")
+                MemberValuePoint(symbol: "link", title: "同类记录更清楚", detail: "同类记录多了，会在痕迹页按时间放在一起。")
             ]
         case .lifetime:
             return [
-                MemberValuePoint(symbol: "archivebox", title: "长期生活档案", detail: "适合想把多年记录持续留住的人。"),
+                MemberValuePoint(symbol: "archivebox", title: "长期保存记录", detail: "适合想把多年记录持续留住的人。"),
                 MemberValuePoint(symbol: "paintpalette", title: "典藏风格", detail: "永久会员包含档案馆、观察者、夜读等典藏风格。"),
                 MemberValuePoint(symbol: "infinity", title: "一次开通", detail: "不用每年再想订阅是否续上。")
             ]
@@ -180,9 +180,9 @@ struct MemberPricingView: View {
             ]
         case .settings:
             return [
-                MemberValuePoint(symbol: "book.closed", title: "多年以后仍能回看", detail: "不只是记金额，而是留下当时怎样生活。"),
-                MemberValuePoint(symbol: "sparkles", title: "AI 帮你看懂生活", detail: "发现消费习惯、情绪变化和生活节奏。"),
-                MemberValuePoint(symbol: "clock.arrow.circlepath", title: "长期连续记录", detail: "回放、故事和账单整理持续接上。")
+                MemberValuePoint(symbol: "book.closed", title: "多年以后仍能回看", detail: "金额、备注、天气和地点都能一起看。"),
+                MemberValuePoint(symbol: "sparkles", title: "AI 帮你整理账本", detail: "发现消费习惯、场景变化和重复记录。"),
+                MemberValuePoint(symbol: "clock.arrow.circlepath", title: "长期连续记录", detail: "回放、月章和账单整理持续接上。")
             ]
         }
     }
@@ -190,15 +190,15 @@ struct MemberPricingView: View {
     private var memberProofLine: String {
         let items = homeViewModel.items.filter { $0.amount > 0 && $0.draftMeta == nil }
         guard !items.isEmpty else {
-            return "先从第一笔开始，后面会自动长出你的周记、月章和生活线索。"
+            return "先从第一笔开始，后面会自动整理出周记和月章。"
         }
         let calendar = Calendar.current
         let activeDays = Set(items.map { calendar.startOfDay(for: $0.createdAt) }).count
         let monthCount = Set(items.map { monthKey(for: $0.createdAt, calendar: calendar) }).count
         if monthCount >= 2 {
-            return "你的账本已有 \(items.count) 笔记录，跨过 \(monthCount) 个月，适合继续整理成长期档案。"
+            return "你的账本已有 \(items.count) 笔记录，跨过 \(monthCount) 个月，适合继续长期保存和回看。"
         }
-        return "你的账本已有 \(items.count) 笔记录，\(activeDays) 天留下痕迹，可以继续整理成生活线索。"
+        return "你的账本已有 \(items.count) 笔记录，分布在 \(activeDays) 天里，可以继续整理成周记和月章。"
     }
 
     private var lifetimeArchiveItemsSignature: String {
@@ -435,7 +435,7 @@ struct MemberPricingView: View {
 
     private var memberBoundarySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("完整生活档案包含")
+            Text("完整长期记录包含")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(AppColors.text.opacity(0.9))
 
@@ -589,7 +589,7 @@ struct MemberPricingView: View {
                     )
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("想长期保存生活档案？")
+                    Text("想长期保存记录？")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(AppColors.text.opacity(0.9))
                     Text("永久会员一次开通，含 3 款典藏风格。")
@@ -624,10 +624,10 @@ struct MemberPricingView: View {
             Image(systemName: isLifetimeMember ? "crown.fill" : "checkmark.seal.fill")
                 .font(.system(size: 34))
                 .foregroundStyle(isLifetimeMember ? AppColors.lockGold : AppColors.accent)
-            Text(isLifetimeMember ? "你的永久生活档案已开启" : "感谢成为 xLife 会员")
+            Text(isLifetimeMember ? "你的永久记录已开启" : "感谢成为 xLife 会员")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(AppColors.text)
-            Text(isLifetimeMember ? "这些日子会随账号长期保留，AI 会继续替你整理和连接。" : "你的生活故事正在持续整理中")
+            Text(isLifetimeMember ? "这些日子会随账号长期保留，AI 会继续替你整理和连接。" : "你的周月回放正在持续整理中")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
                 .multilineTextAlignment(.center)
@@ -831,14 +831,14 @@ struct MemberPricingView: View {
             activeDays: activeDays
         )
         let fourthMetric = monthKeys.count > 1
-            ? LifetimeArchiveMetric(value: "\(monthKeys.count)个月", label: "故事跨度")
+            ? LifetimeArchiveMetric(value: "\(monthKeys.count)个月", label: "月份跨度")
             : LifetimeArchiveMetric(value: "\(weekKeys.count)篇", label: "周记素材")
         return LifetimeArchiveSnapshot(
             title: title,
             subtitle: subtitle,
             metrics: [
                 LifetimeArchiveMetric(value: "\(max(1, continuousDays))天", label: "连续记录"),
-                LifetimeArchiveMetric(value: "\(traceCount)条", label: "生活痕迹"),
+                LifetimeArchiveMetric(value: "\(traceCount)条", label: "记录条数"),
                 thirdMetric,
                 fourthMetric
             ],
@@ -880,13 +880,13 @@ struct MemberPricingView: View {
             case .streak:
                 return "\(primaryMark.label)正在形成节奏"
             case .scene:
-                return "\(primaryMark.label)正在变成生活档案"
+                return "\(primaryMark.label)已经有连续记录"
             }
         }
         if monthCount >= 2 {
-            return "你的生活档案已经跨过 \(monthCount) 个月"
+            return "你的记录已经跨过 \(monthCount) 个月"
         }
-        return traceCount >= 10 ? "你的生活档案正在形成" : "这些记录已经有了开头"
+        return traceCount >= 10 ? "你的长期记录正在形成" : "这些记录已经有了开头"
     }
 
     private func lifetimeArchiveSubtitle(
@@ -925,7 +925,7 @@ struct MemberPricingView: View {
         return [
             LifetimeArchiveStage(value: "\(currentDays)天", label: "已记录"),
             LifetimeArchiveStage(value: "\(nextTarget)天", label: "下一站"),
-            LifetimeArchiveStage(value: "\(longTarget)天", label: "长期档案")
+            LifetimeArchiveStage(value: "\(longTarget)天", label: "长期记录")
         ]
     }
 
@@ -935,9 +935,9 @@ struct MemberPricingView: View {
         spanDays: Int
     ) -> String {
         if let primaryMark {
-            return "最近最清楚的线索是「\(primaryMark.label)」：\(primaryMark.count) 次、合计 \(primaryMark.total.formatted(.cny))，以后能继续和天气、地点、周月回放连起来。"
+            return "最近最清楚的是「\(primaryMark.label)」：\(primaryMark.count) 次、合计 \(primaryMark.total.formatted(.cny))，以后能继续和天气、地点、周月回放连起来。"
         }
-        return "\(traceCount) 条账单已经覆盖 \(spanDays) 天。记录越多，AI 能看见的生活线索就越完整。"
+        return "\(traceCount) 条账单已经覆盖 \(spanDays) 天。记录越多，AI 能整理出的日期、分类和场景就越完整。"
     }
 
     private func lifetimeArchiveClosingLine(
@@ -946,12 +946,12 @@ struct MemberPricingView: View {
         monthCount: Int
     ) -> String {
         if let primaryMark {
-            return "这不是固定文案，是你账本里的「\(primaryMark.label)」正在长出来。"
+            return "这不是固定文案，会按你账本里的「\(primaryMark.label)」更新。"
         }
         if monthCount >= 2 {
-            return "它会从单笔账单，慢慢长成跨月份的生活回望。"
+            return "它会从单笔账单，接成跨月份的生活回望。"
         }
-        return activeDays >= 7 ? "这些日子已经连起来了，后面会越看越有内容。" : "先把今天留下来，后面才有值得回看的故事。"
+        return activeDays >= 7 ? "这些日子已经连起来了，后面会有更多可回看的记录。" : "先把今天记下来，后面会有可回看的记录。"
     }
 
     private func continuousRecordDays(from days: Set<Date>, calendar: Calendar) -> Int {
@@ -1253,20 +1253,20 @@ private struct LifetimeArchiveSnapshot {
     let closingLine: String
 
     static let empty = LifetimeArchiveSnapshot(
-        title: "从第一笔开始，生活档案会慢慢形成",
-        subtitle: "永久会员不是一段固定说明，而是把以后每一天都接进同一本生活档案。",
+        title: "从第一笔开始，长期记录会逐步形成",
+        subtitle: "永久会员不是一段固定说明，而是把以后每一天的记录都长期保存。",
         metrics: [
             LifetimeArchiveMetric(value: "0天", label: "连续记录"),
-            LifetimeArchiveMetric(value: "0条", label: "生活痕迹"),
+            LifetimeArchiveMetric(value: "0条", label: "记录条数"),
             LifetimeArchiveMetric(value: "0天", label: "有记录的日子"),
-            LifetimeArchiveMetric(value: "0个月", label: "故事跨度")
+            LifetimeArchiveMetric(value: "0个月", label: "月份跨度")
         ],
         stages: [
             LifetimeArchiveStage(value: "1天", label: "开始"),
             LifetimeArchiveStage(value: "7天", label: "连起来"),
-            LifetimeArchiveStage(value: "30天", label: "月度档案")
+            LifetimeArchiveStage(value: "30天", label: "月度回放")
         ],
-        primaryLine: "有了真实记录后，这里会自动换成你的连续天数、生活印记和周月故事素材。",
+        primaryLine: "有了真实记录后，这里会自动换成你的连续天数、同类记录和周月回放素材。",
         closingLine: "它会跟着你的账本长，不是一张固定权益图。"
     )
 }

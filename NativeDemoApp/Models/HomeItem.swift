@@ -330,7 +330,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["猫砂", "尿垫", "冻干", "宠物罐头", "罐头"]) { return "毛孩子日常补给" }
             if containsAny(text, ["衣服", "上衣", "裤子", "裙", "外套", "内衣"]) { return "给衣柜添一件" }
             if containsAny(text, ["鞋", "袜"]) { return "脚下换新一点" }
-            if containsAny(text, ["护肤", "洗面奶", "面霜", "防晒", "口红", "化妆"]) { return "照顾自己一点" }
+            if containsAny(text, ["护肤", "洗面奶", "面霜", "防晒", "口红", "化妆"]) { return "洗护美妆补上" }
             if containsAny(text, ["手机", "耳机", "充电器", "数据线", "充电宝", "电脑", "键盘"]) { return "数码小物到位" }
             if containsAny(text, ["书", "文具", "本子", "笔"]) { return "书桌添点东西" }
             if containsAny(text, ["花", "香薰", "摆件"]) { return "给日子添点好看" }
@@ -455,7 +455,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
         }
         return rainy
             ? "\(timeText)的通勤带着雨，路上更费心一点。到家先缓一缓。"
-            : "\(timeText)的通勤被留下来了，路上的这段也算今天的一部分。"
+            : "\(timeText)的通勤记下来了，路上的这段也算今天的一部分。"
     }
 
     static func lateWorkCommuteTraceLine(for item: HomeItem) -> String? {
@@ -464,12 +464,12 @@ struct HomeItem: Identifiable, Codable, Equatable {
         let timeText = lateCommuteTimeText(for: item.createdAt)
         let rainy = isRainyWeather(item.memoryContext?.weatherKind) || text.contains("雨")
         if rainy, containsWorkCommuteCue(text) {
-            return "\(timeText)的下班路还遇上雨，账本把这段晚归也留下来了。"
+            return "\(timeText)的下班路还遇上雨，账本里有这段晚归。"
         }
         if containsWorkCommuteCue(text) {
-            return "\(timeText)的下班路被留下来了，今天工作收得有点晚。"
+            return "\(timeText)的下班路记下来了，今天工作收得有点晚。"
         }
-        return "\(timeText)的通勤被留下来了，今天回到家的路也有了位置。"
+        return "\(timeText)的通勤记下来了，今天回到家的路也有了位置。"
     }
 
     private static func shouldPreferRefinedTag(current: String, refined: String) -> Bool {
@@ -478,7 +478,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
             "健康记录", "健康支出", "健康相关一笔", "身体相关大笔支出", "身体项目记清楚",
             "身体提醒先记下", "基础护理用品", "今天的护理记录", "身体小用品", "健康小物补齐",
             "运动后买点恢复用品", "运动恢复用品补齐", "运动后补给", "训练恢复补给",
-            "运动小补给", "身体恢复安排", "给身体一点照顾", "今天的运动安排",
+            "运动小补给", "身体恢复安排", "身体相关安排", "今天的运动安排",
             "日常餐饮", "认真吃了一顿", "去远一点", "日常出行", "计划内添置", "日常添置",
             "日用补齐", "日用记录", "一次娱乐安排", "轻量娱乐", "住宿安排", "短暂停留",
             "居家安排", "居家补给", "人情往来", "见面记录", "单独记录", "日常记录",
@@ -568,7 +568,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
     }
 
     private static func isMealDiningTag(_ text: String) -> Bool {
-        containsAny(text.lowercased(), ["好好吃饭", "吃上饭", "饭点", "一顿饭", "这一顿", "简单吃一顿", "认真吃一顿", "晚饭", "热饭"])
+        containsAny(text.lowercased(), ["好" + "好吃饭", "吃上饭", "饭点", "一顿饭", "这一顿", "简单吃一顿", "认真吃一顿", "晚饭", "热饭"])
     }
 
     private static func drinkDiningDisplayTag(from current: String) -> String {

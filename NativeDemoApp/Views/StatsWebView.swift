@@ -900,7 +900,7 @@ struct StatsWebView: View {
         case .daily:
             return "\(period)，超市买菜和家用占了不少"
         case .health:
-            return "\(period)，你在照顾身体"
+            return "\(period)，健康相关记录更明显"
         case .lodging:
             return "\(period)，停留和住宿更明显"
         case .entertainment:
@@ -929,7 +929,7 @@ struct StatsWebView: View {
         rhythmPoints: [TraceRhythmPoint],
         marks: [LifeMarkAggregate]
     ) -> String {
-        guard !items.isEmpty else { return "先留下几笔，账本会把生活里的走向慢慢标出来。" }
+        guard !items.isEmpty else { return "先记几笔，这里会按日期和分类整理。" }
         if let mark = marks.first {
             return LifeMarkService.primaryLine(for: mark)
         }
@@ -1063,9 +1063,9 @@ struct StatsWebView: View {
         let sorted = items.sorted { $0.createdAt > $1.createdAt }
         if let item = sorted.first(where: { $0.category == .transport && $0.memoryContext?.weatherKind == "rain" }) {
             if let city = item.memoryContext?.cityName, item.memoryContext?.semanticPlace == "外地" {
-                return "\(city)那次雨天出行被记下来了。以后再看，会知道那天是在外地路上。"
+                return "\(city)那次雨天出行有天气和地点信息。"
             }
-            return "这段里有一次雨天出行。那笔交通不是孤零零的金额，也带着当天的天气。"
+            return "这段里有一次雨天出行，那笔交通记录带着当天的天气。"
         }
         if let item = sorted.first(where: { $0.memoryContext?.semanticPlace == "外地" }),
            let city = item.memoryContext?.cityName {
@@ -1315,7 +1315,7 @@ struct StatsWebView: View {
             }
 
             if items.isEmpty {
-                Text("先留下几笔，线索会慢慢浮出来。")
+                Text("先记几笔，这里会按日期和分类整理。")
                     .font(.system(size: 13))
                     .foregroundStyle(TraceColors.secondaryText)
                     .padding(.top, 2)
@@ -1887,14 +1887,14 @@ struct StatsWebView: View {
                 if overlapDays > 0 {
                     return "\(first.category.rawValue)和\(second.category.rawValue)在 \(overlapDays) 天里同时出现。它们可能不是两件散事，而是同一天的外出、工作节奏或集中补给带出来的。"
                 }
-                return "\(first.category.rawValue)和\(second.category.rawValue)都靠前，但不太落在同一天。它们更像这段时间同时存在的两件事。"
+                return "\(first.category.rawValue)和\(second.category.rawValue)都靠前，但不太落在同一天。可以分开看这两类记录。"
             }
             return insight.previewLine
         }
 
         if question.contains("重复") || question.contains("习惯") || question.contains("好几次") {
             if let top = clues.first {
-                return "\(top.category.rawValue)出现 \(top.count) 笔，是这一段最稳定的重复项。它不一定是问题，更像这段时间经常发生的一件事。"
+                return "\(top.category.rawValue)出现 \(top.count) 笔，是这一段最稳定的重复项。"
             }
             return "现在重复还不明显。等同类记录连续出现，这里会更容易看出习惯。"
         }
@@ -1930,19 +1930,19 @@ struct StatsWebView: View {
         case .transport:
             base = "「\(categoryName)」变明显，往往说明你在移动：通勤、办事、见人、往返变多了。看的不是车费，是这段时间你去了哪些地方。"
         case .health:
-            base = "「\(categoryName)」变明显，更像你把身体放回了日程里：健身、看诊、买药或恢复，都不只是消费。"
+            base = "「\(categoryName)」变明显，主要来自健身、看诊、买药或恢复相关记录。"
         case .shopping, .daily:
-            base = "「\(categoryName)」变明显，像是在给生活补库存：买菜、家用、网购和兴趣装备一起冒出来。"
+            base = "「\(categoryName)」变明显，主要来自买菜、家用、网购或兴趣装备。"
         case .entertainment:
-            base = "「\(categoryName)」变明显，说明这段时间你给自己留了松动空间。它不一定是浪费，也可能是在给压力找出口。"
+            base = "「\(categoryName)」变明显，娱乐相关记录在这段时间更多。"
         case .home:
-            base = "「\(categoryName)」变明显，像是注意力回到住处：修补、布置、家用安排开始占据生活。"
+            base = "「\(categoryName)」变明显，主要来自修补、布置或家用安排。"
         case .social:
-            base = "「\(categoryName)」变明显，背后通常是关系在发生：见面、送礼、人情往来，比金额本身更重要。"
+            base = "「\(categoryName)」变明显，主要来自见面、送礼或人情往来。"
         case .lodging:
             base = "「\(categoryName)」变明显，说明这段时间有停留和位置变化，可能是旅行、出差，或临时过夜。"
         case .other:
-            base = "这类记录变明显，说明有些事还没被归进固定分类。回头看看备注，里面可能藏着真正的主题。"
+            base = "这类记录变明显，说明有些记录还没归进固定分类。可以回头看备注。"
         }
 
         var tails: [String] = []
@@ -2450,35 +2450,35 @@ struct StatsWebView: View {
         case .week:
             if !quotaStore.hasCompletedWeekPlaybackEver() {
                 return SummaryPlaybackMemberPitch(
-                    headline: "这是你第一次听本周回放。",
-                    detail: "这次免费已经能看到本周的基本节奏。之后会员会把情绪标签、生活印记和反复出现的场景继续接上，不只停在金额。",
+                    headline: "这是本周回放的首听。",
+                    detail: "这次免费已经能看到本周的基本记录。之后会员会继续整理情绪标签、生活印记和反复出现的场景。",
                     cta: "保留每周生活回放"
                 )
             }
             if quotaStore.weekRemaining(isMember: false) <= 1 {
                 return SummaryPlaybackMemberPitch(
                     headline: "本周免费回放快用完了。",
-                    detail: "这次免费已经给你留下本周的一段回看。会员会继续把周记、月章和生活印记接着整理，不打断当前记录。",
+                    detail: "这次免费已经生成本周回看。会员可以继续整理周记、月章和生活印记。",
                     cta: "让回放继续留下来"
                 )
             }
             return SummaryPlaybackMemberPitch(
-                headline: "像不像你的这一周？",
-                detail: "这次免费会先保留基础回看。会员会把情绪标签、生活印记和反复出现的场景继续整理进周/月回放。",
-                cta: "让账本继续读懂我"
+                headline: "本周回放已完成",
+                detail: "这次免费会先保留基础回看。会员可以继续整理情绪标签、生活印记和反复出现的场景。",
+                cta: "继续整理周/月回放"
             )
         case .month:
             if quotaStore.monthRemaining(isMember: false) <= 1 {
                 return SummaryPlaybackMemberPitch(
                     headline: "月章体验快用完了。",
-                    detail: "这次免费已经给你看过月章开头。月章是新用户体验额度，不是每月刷新；会员可以继续整理更多月份，形成更长的生活脉络。",
+                    detail: "这次免费已经生成月章开头。月章是新用户体验额度，不是每月刷新；会员可以继续整理更多月份。",
                     cta: "继续留住月章"
                 )
             }
             return SummaryPlaybackMemberPitch(
-                headline: "像不像你的这个月？",
-                detail: "这次免费会先保留这一段月章。会员会把更多月份里的天气、路线、情绪标签和生活印记继续串起来。",
-                cta: "让账本继续读懂我"
+                headline: "本月回放已完成",
+                detail: "这次免费会先保留这一段月章。会员可以继续整理更多月份里的天气、路线、情绪标签和生活印记。",
+                cta: "继续整理月度回放"
             )
         }
     }

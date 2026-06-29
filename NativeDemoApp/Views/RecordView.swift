@@ -1086,8 +1086,8 @@ struct RecordView: View {
             notes = ["通勤路上", "路上花费补上", "今天出行记下", "这趟走完了", "出门这段记下"]
         case .shopping:
             notes = amount <= 80
-                ? ["买到常用的小东西", "下单一个需要的", "快递路上记下", "顺手买点实用的", "小物件补上"]
-                : ["买到需要的东西", "给生活添点装备", "这次下单记下", "常用物件买回来了", "购物安排补上"]
+                ? ["买到常用的小东西", "下单一个需要的", "快递路上记下", "买点实用的", "小物件补上"]
+                : ["买到需要的东西", "添点常用装备", "这次下单记下", "常用物件买回来了", "购物安排补上"]
         case .daily:
             notes = amount <= 50
                 ? ["日用小补给", "日常小物补上", "刚好需要的小东西", "小补给记下来", "常用的先补一点", "便利袋里的一点日常"]
@@ -1097,7 +1097,7 @@ struct RecordView: View {
         case .lodging:
             notes = ["今晚住在这里", "住宿安排记下", "短住一晚记下", "这次住处放好"]
         case .health:
-            notes = ["健康相关补上", "身体照顾记下", "给身体留个记录", "护理恢复补上"]
+            notes = ["健康相关补上", "身体相关记下", "健康事项留个记录", "护理恢复补上"]
         case .home:
             notes = ["家里需要的补上", "住处日常账单", "居家安排补上", "给住处添点东西"]
         case .social:
@@ -1414,11 +1414,11 @@ struct RecordView: View {
             }
         case "supply":
             if containsAny(normalized, ["买菜", "生鲜", "水果", "蔬菜", "肉", "鸡蛋", "牛奶", "鲜奶", "纯牛奶", "酸奶", "盒马", "叮咚", "山姆", "永辉", "大润发", "钱大妈"]) {
-                notes = ["给家里补点吃的", "买菜顺手补齐", "冰箱补一点", "日常食材补上"]
+                notes = ["给家里补点吃的", "买菜补齐", "冰箱补一点", "日常食材补上"]
             } else if containsAny(normalized, ["纸巾", "抽纸", "卷纸", "洗衣", "清洁", "垃圾袋", "日化"]) {
                 notes = ["日用品补上", "家用消耗品补齐", "清洁日用补齐", "常用的先备好"]
             } else if containsAny(normalized, ["超市", "便利店", "日用品", "家用", "补货"]) {
-                notes = ["日常补货补上", "给家里补一点", "常用小物补上", "顺手补点日常"]
+                notes = ["日常补货补上", "给家里补一点", "常用小物补上", "补点日常"]
             } else {
                 notes = nil
             }
@@ -1426,7 +1426,7 @@ struct RecordView: View {
             if containsAny(normalized, ["健身", "运动", "训练", "跑步", "瑜伽", "游泳"]) {
                 notes = ["训练安排补上", "运动安排留好", "给身体的一次投入", "健身相关补上"]
             } else if containsAny(normalized, ["药", "医院", "挂号", "问诊", "理疗", "康复", "洗牙", "配镜", "验光", "医美", "医美脱毛", "光子嫩肤", "水光针"]) {
-                notes = ["身体照顾补上", "健康相关补上", "身体护理留个记录", "给身体留个记录"]
+                notes = ["身体相关补上", "健康相关补上", "身体护理留个记录", "健康事项留个记录"]
             } else {
                 notes = nil
             }
@@ -1850,7 +1850,7 @@ struct RecordView: View {
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(recordInk)
 
-            Text(hasAmountDraft ? "先落到账本，再慢慢长成回望。" : "先敲金额，分类和备注会跟着浮出来。")
+            Text(hasAmountDraft ? "先落到账本，之后可以回看。" : "先敲金额，分类和备注会跟着浮出来。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext.opacity(0.76))
                 .fixedSize(horizontal: false, vertical: true)
@@ -2123,7 +2123,7 @@ struct RecordView: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
-            Text(hasValidAmount ? "金额只是刻度，记录会慢慢长成生活线索。" : emptyAmountWhisper)
+            Text(hasValidAmount ? "金额先记下，之后可以按日期和分类回看。" : emptyAmountWhisper)
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext.opacity(0.76))
                 .frame(maxWidth: .infinity, alignment: hasAmountDraft ? .leading : .center)

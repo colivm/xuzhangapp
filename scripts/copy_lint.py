@@ -9,20 +9,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-DEFAULT_TARGETS = [
-    "NativeDemoApp/Services/EchoAnchorService.swift",
-    "NativeDemoApp/Services/MerchantBrandCatalog.swift",
-    "NativeDemoApp/Services/NarrativeCopyResolver.swift",
-    "NativeDemoApp/Services/PetCompanionCopy.swift",
-    "NativeDemoApp/Services/PlaybackCopyPool.swift",
-    "NativeDemoApp/Services/ScenePackCopyPool.swift",
-    "NativeDemoApp/ContentView.swift",
-    "NativeDemoApp/Info.plist",
-    "NativeDemoApp/ViewModels/HomeViewModel.swift",
-    "NativeDemoApp/Views/InsightWebView.swift",
-    "NativeDemoApp/Views/MinimalOnboardingSheet.swift",
-    "NativeDemoApp/Views/RecordView.swift",
-    "NativeDemoApp/Views/SettingsView.swift",
+DEFAULT_SWIFT_ROOTS = [
+    "NativeDemoApp",
+]
+
+DEFAULT_LEXICONS = [
+    "NativeDemoApp/Resources/RecordSceneLexicon.json",
 ]
 
 BLOCKED_TERMS = [
@@ -50,6 +42,39 @@ BLOCKED_TERMS = [
     "高光",
     "小奖励",
     "小快乐",
+    "被按下暂停",
+    "生活自己说出来",
+    "生活道具",
+    "冷冰冰",
+    "那几刻",
+    "一下子有了热度",
+    "生活资产",
+    "生活切片",
+    "小标记",
+    "硬总结",
+    "被照顾到",
+    "轮廓就更清楚",
+    "像不像你的",
+    "读懂我",
+    "生活意义",
+    "把身体放回",
+    "给生活补库存",
+    "压力找出口",
+    "关系在发生",
+    "真正的主题",
+    "孤零零的金额",
+    "不只是消费",
+    "不该只剩金额",
+    "更像这段时间",
+    "值得被看见",
+    "紧绷的日子",
+    "生活在往",
+    "金额只是痕迹",
+    "被留下来",
+    "被留下来了",
+    "生活自己",
+    "撑住这一周",
+    "最有画面",
 ]
 
 SOFT_TERMS = [
@@ -63,6 +88,36 @@ SOFT_TERMS = [
     "安顿",
     "收下",
     "轮廓",
+]
+
+CONTEXTUAL_TERMS = [
+    {
+        "name": "recovery_or_effort_tone",
+        "terms": ["辛苦", "缓一缓", "费心"],
+        "evidence": [
+            "通勤", "下班", "晚归", "到家", "路上", "雨", "雪", "热天", "冷天",
+            "就医", "检查", "问诊", "医院", "身体", "护理", "恢复", "用药", "药",
+        ],
+    },
+    {
+        "name": "picture_tone",
+        "terms": ["有画面"],
+        "evidence": [
+            "朋友", "聚餐", "见面", "相聚", "旅行", "异地", "外地", "雨", "晚归",
+            "爱好", "兴趣", "装备", "具体物件", "备注", "voice", "Voice", "scene", "Scene",
+        ],
+    },
+    {
+        "name": "first_time_memory_tone",
+        "terms": ["第一次"],
+        "evidence": [
+            "target == 1", ".milestone", "milestone", "里程碑", "首次", "第一笔",
+            "第一条", "第一单", "第1", "买", "露营", "渔具", "骑行", "摄影",
+            "乐器", "健身", "恢复", "宝宝", "毛孩子", "奶粉", "尿不湿",
+            "text.contains", "trimmed.contains", "emotion.contains", "target.map", "target =", "displayLabel",
+            "雨天通勤", "第 10 次", "连续记录", "异地城市",
+        ],
+    },
 ]
 
 LEGAL_CATEGORIES = {
@@ -109,7 +164,12 @@ def parse_args() -> argparse.Namespace:
 
 def expand_paths(raw_paths: list[str]) -> list[Path]:
     if not raw_paths:
-        return [ROOT / path for path in DEFAULT_TARGETS]
+        files: list[Path] = []
+        for root in DEFAULT_SWIFT_ROOTS:
+            base = ROOT / root
+            if base.is_dir():
+                files.extend(sorted(p for p in base.rglob("*.swift") if p.is_file()))
+        return files
 
     files: list[Path] = []
     for raw in raw_paths:
@@ -195,6 +255,12 @@ def scan_file(path: Path, strict_soft: bool) -> tuple[list[str], list[str]]:
                     failures.append(message)
                 else:
                     warnings.append(message)
+        for rule in CONTEXTUAL_TERMS:
+            for term in rule["terms"]:
+                if term in line and not any(marker in line for marker in rule["evidence"]):
+                    failures.append(
+                        f"{location}: contextual term `{term}` lacks evidence for {rule['name']}"
+                    )
 
     return failures, warnings
 
@@ -309,7 +375,8 @@ def main() -> int:
         all_failures.extend(failures)
         all_warnings.extend(warnings)
 
-    for raw_lexicon in args.lexicon:
+    lexicons = args.lexicon or ([] if args.paths else DEFAULT_LEXICONS)
+    for raw_lexicon in lexicons:
         lexicon_path = Path(raw_lexicon)
         if not lexicon_path.is_absolute():
             lexicon_path = ROOT / lexicon_path

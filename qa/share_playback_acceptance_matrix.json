@@ -40,6 +40,22 @@
     "forbidden_copy": ["你被大家记得", "被热闹治愈", "终于不孤单"]
   },
   {
+    "id": "first_hobby_gear",
+    "signal_basis": ["lifeMarkLine", "first_time_marker", "hobby_or_gear_words"],
+    "share_title_rule": "first hobby purchase can carry a warm memory tone only when first-time and gear evidence exist",
+    "share_picture_rule": "picture line may mention concrete gear, but must not call it a life turning point",
+    "playback_background_rule": "warmDaily or defaultSoft unless travel/fitness evidence is present",
+    "forbidden_copy": ["人生转折", "最值得", "终于找到自己"]
+  },
+  {
+    "id": "ordinary_drink_no_effort_tone",
+    "signal_basis": ["drink_category", "no commute_or_health_or_late_context"],
+    "share_title_rule": "ordinary drink records should stay factual or mildly sensory",
+    "share_picture_rule": "do not use commute/health effort language for ordinary drinks",
+    "playback_background_rule": "warmDaily or defaultSoft, never effort-driven",
+    "forbidden_copy": ["撑住这一周", "情绪能量", "缓一缓"]
+  },
+  {
     "id": "weak_data_daily",
     "signal_basis": ["recordCount", "topCategory"],
     "share_title_rule": "fallback must stay factual when there is no strong life mark or scene",

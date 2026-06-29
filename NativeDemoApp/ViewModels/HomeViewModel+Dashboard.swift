@@ -127,7 +127,7 @@ extension HomeViewModel {
 
         var headline: String {
             switch self {
-            case .morning: return "这趟上班路，要不要顺手记下"
+            case .morning: return "这趟上班路，可以记下"
             case .evening: return "这趟回家路，可以一键记下"
             }
         }
@@ -577,7 +577,7 @@ extension HomeViewModel {
         case 1:
             title = "今天的第一笔记录"
             let emotion = records.first?.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            subtitle = todayLateCommuteLine ?? todayLifeMarkLine ?? "\(!emotion.isEmpty ? emotion : "这段生活被记下来了")，这一天刚翻开第一页。"
+            subtitle = todayLateCommuteLine ?? todayLifeMarkLine ?? "\(!emotion.isEmpty ? emotion : "今天已经有一笔记录")，这一天刚翻开第一页。"
         case 2:
             title = "今天已记下 2 笔"
             subtitle = todayLateCommuteLine ?? todayLifeMarkLine ?? todaySceneLine ?? "主要在「\(topCategory)」上，记录变得具体。"
@@ -702,7 +702,7 @@ extension HomeViewModel {
         if let memoryLine = contextualMemoryLine(from: weekItems) {
             let structure = "这一周的记录里，天气、城市和重复出现的场景已经能连起来看。"
             let advice = weekItems.count >= 8
-                ? "继续按真实时间记，回望会更像一条生活时间线。"
+                ? "继续按真实时间记，之后可以按时间线回看。"
                 : "再多记几笔，天气和地点线索会更容易浮出来。"
             return (memoryLine, structure, advice)
         }
@@ -714,10 +714,10 @@ extension HomeViewModel {
         ).first,
            mark.count >= 2 || mark.kind != .scene {
             let summary = LifeMarkService.primaryLine(for: mark)
-            let structure = "这一周更明显的是「\(mark.label)」这条生活印记。"
+            let structure = "这一周「\(mark.label)」出现得更集中。"
             let advice = mark.access == .member
                 ? "继续按真实时间记，天气、城市、首次和连续性会更容易被串起来。"
-                : "继续按笔记下去，这类印记会慢慢变成可以回看的生活资产。"
+                : "继续按笔记下去，后面会更容易按时间回看。"
             return (summary, structure, advice)
         }
         if let scene = LifeSceneSemanticService.dominantScene(in: weekItems),
@@ -834,7 +834,7 @@ extension HomeViewModel {
             limit: 1
         ).first,
            mark.count >= 2 || mark.kind != .scene {
-            return "这个月更明显的是「\(mark.label)」这条生活印记。"
+            return "这个月「\(mark.label)」出现得更集中。"
         }
         if let scene = LifeSceneSemanticService.dominantScene(in: monthItems),
            scene.count >= 2 {
@@ -854,16 +854,16 @@ extension HomeViewModel {
                 && item.memoryContext?.weatherKind == "rain"
         }) {
             if let city = item.memoryContext?.cityName, item.memoryContext?.semanticPlace == "外地" {
-                return "\(city)那次雨天出行被留下来了，像是一段外地路上的小标记。"
+                return "\(city)那次雨天出行和这笔记录有关。"
             }
-            return "有一次雨天出行被记下来了，天气和路上的那笔记录连在了一起。"
+            return "有一次雨天出行，天气和那笔交通记录有关。"
         }
         if let item = sorted.first(where: { $0.memoryContext?.semanticPlace == "外地" }),
            let city = item.memoryContext?.cityName {
             return "这段时间有一笔在\(city)留下的记录，位置变化也进入了回望。"
         }
         if let item = sorted.first(where: { $0.memoryContext?.weatherKind == "rain" }) {
-            return "\(item.createdAt.zhBillDateTime)那天有雨，账本留下了当天的生活切片。"
+            return "\(item.createdAt.zhBillDateTime)那天有雨，这笔记录带着当天的天气信息。"
         }
         return sorted.first { item in
             let text = item.displayEmotionTag

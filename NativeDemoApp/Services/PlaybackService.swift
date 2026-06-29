@@ -1641,10 +1641,10 @@ final class PlaybackService {
         }
         let streak = longestRecordStreak(in: current)
         if streak >= 3 {
-            return "这个月有一段连续 \(streak) 天被留下来，像生活自己形成了节奏。"
+            return "这个月有一段连续 \(streak) 天都有记录，回看时能看到那几天怎么接上。"
         }
         if let leading = segments.max(by: { $0.amount < $1.amount }), leading.amount > 0 {
-            return "\(leading.label) 这一段更有画面，像这个月中间被加重的一格。"
+            return "\(leading.label) 这一段更具体，是这个月中间更明显的一格。"
         }
         if let first = current.first, let last = current.last {
             let days = max(1, Calendar.current.dateComponents([.day], from: first.createdAt, to: last.createdAt).day ?? 1)

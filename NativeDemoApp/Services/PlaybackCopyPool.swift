@@ -40,7 +40,7 @@ enum PlaybackCopyPool {
     private static let groups: [String: PlaybackCopyGroup] = [
         "week-presence": PlaybackCopyGroup(
             warm: [
-                "{rangeLabel} 先别急着看成一张表，它更像几格被留下来的生活。",
+                "{rangeLabel} 先不急着看成一张表，可以按几段记录来回看。",
                 "这一周的开场，不在合计里，而在「{voiceTitle1}」这样的片段里。",
                 "{lifeMarkLine}"
             ],
@@ -64,8 +64,8 @@ enum PlaybackCopyPool {
         ),
         "week-rhythm": PlaybackCopyGroup(
             warm: [
-                "镜头转到 {busiestDay}，那天最容易被记住的是「{busiestTitle}」。",
-                "{busiestDay} 像这一周里被按下暂停的一天，留下了「{busiestTitle}」。",
+                "{busiestDay} 记录更多，其中包括「{busiestTitle}」。",
+                "{busiestDay} 记录最多，其中一笔是「{busiestTitle}」。",
                 "{sceneMemoryLine}"
             ],
             plain: [
@@ -77,8 +77,8 @@ enum PlaybackCopyPool {
         "week-voices": PlaybackCopyGroup(
             warm: [
                 "如果只能留下一句，这周会先留下「{voiceTitle1}」。",
-                "「{voiceTitle1}」不是分类名，它像当时生活自己说出来的一句话。",
-                "这一周最有画面的一格，是「{voiceTitle1}」。"
+                "这一周可以先看「{voiceTitle1}」这笔记录。",
+                "这一周最具体的一格，是「{voiceTitle1}」。"
             ],
             plain: [
                 "这周先记住「{voiceTitle1}」。",
@@ -100,9 +100,9 @@ enum PlaybackCopyPool {
         ),
         "week-scent": PlaybackCopyGroup(
             warm: [
-                "{scentWords} 不是关键词列表，更像这一周反复露面的生活道具。",
+                "这一周反复出现的是：{scentWords}。",
                 "把金额先放到一边，{scentWords} 才是这周更有味道的部分。",
-                "{lifeMarkTitle} 这条线也在里面，它让这周不只是几笔账。"
+                "{lifeMarkTitle} 也在这一周的记录里。"
             ],
             plain: [
                 "这一周可以用 {scentWords} 来想起。",
@@ -124,7 +124,7 @@ enum PlaybackCopyPool {
         ),
         "week-weak-outro": PlaybackCopyGroup(
             warm: [
-                "这周先留下这个开头。再多几笔，它会慢慢长成一段更完整的生活。",
+                "这周先记录到这里。再多几笔，回看时会更完整。",
                 "先到这里，不急着讲大道理；几格也能证明这周真实发生过。",
                 "先留住这一小段，下次回来会有更多能接上的镜头。"
             ],
@@ -148,7 +148,7 @@ enum PlaybackCopyPool {
         ),
         "month-early-voice": PlaybackCopyGroup(
             warm: [
-                "月初那几天，先被留下来的是「{earlyVoiceTitle}」。",
+                "月初那几天，先记下来的是「{earlyVoiceTitle}」。",
                 "这个月刚展开时，「{earlyVoiceTitle}」先占了一格。",
                 "前十天不用讲得很满，记住「{earlyVoiceTitle}」就有画面。"
             ],
@@ -173,8 +173,8 @@ enum PlaybackCopyPool {
         "month-change": PlaybackCopyGroup(
             warm: [
                 "{changeHint}",
-                "这个月真正值得留意的，不是波动本身，而是：{changeHint}",
-                "{petName} 读到的生活变化是：{changeHint}"
+                "这个月的变化主要是：{changeHint}",
+                "{petName} 看到的记录变化是：{changeHint}"
             ],
             plain: [
                 "{changeHint}",
@@ -184,7 +184,7 @@ enum PlaybackCopyPool {
         ),
         "month-scent": PlaybackCopyGroup(
             warm: [
-                "{scentWords} 像这个月反复出现的生活道具，不是冷冰冰的标签。",
+                "这个月反复出现的是：{scentWords}。",
                 "把这个月拆成镜头，{scentWords} 会一次次回来。",
                 "{rangeLabel} 的气味，藏在 {scentWords} 和「{lifeMarkTitle}」里。"
             ],
@@ -196,9 +196,9 @@ enum PlaybackCopyPool {
         ),
         "month-outro": PlaybackCopyGroup(
             warm: [
-                "这个月先收到这里。以后再翻回来，先看见的应该是生活，不只是金额。",
+                "这个月先收到这里。以后再翻回来，可以先看记录，再看金额。",
                 "{rangeLabel} 先放回账本里。下个月会有新的天气、新的路线和新的记录。",
-                "这一个月已经留下来了，下一章不用复制这一章，会自己长出新的生活。"
+                "这一个月已经记录下来，下个月会有新的记录。"
             ],
             plain: [
                 "这个月先收到这里。",
@@ -211,14 +211,14 @@ enum PlaybackCopyPool {
     private static let weekTeasers = [
         "{busiestDayShort} 那一格，留下过「{voiceTitle1}」。",
         "这一周，可以从「{voiceTitle1}」听起。",
-        "{scentWords} 像这周反复露面的生活道具。",
+        "这周反复出现：{scentWords}。",
         "{lifeMarkLine}"
     ]
 
     private static let monthTeasers = [
         "{rangeLabel}，先记住「{voiceTitle1}」。",
         "{changeHint}",
-        "{scentWords} 像这个月反复出现的生活道具。",
+        "这个月反复出现：{scentWords}。",
         "{lifeMarkLine}"
     ]
 

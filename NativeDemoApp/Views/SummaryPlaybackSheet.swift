@@ -846,13 +846,13 @@ struct SummaryPlaybackSheet: View {
         }
         if let scene = chapter.metrics["sceneMemoryLine"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !scene.isEmpty {
-            return "这一格最有画面：\(scene)"
+            return "这一格最具体：\(scene)"
         }
         if isVoiceChapter(chapter), let title = voiceTitle(for: chapter) {
             if let day = chapter.metrics["day"], !day.isEmpty {
-                return "\(day) 留下了「\(title)」"
+                return "\(day) 记录了「\(title)」"
             }
-            return "这一句留了下来：\(title)"
+            return "这一句记录下来：\(title)"
         }
         if isScentChapter(chapter), let words = chapter.metrics["scentWords"] {
             let cleaned = words
@@ -860,7 +860,7 @@ struct SummaryPlaybackSheet: View {
                 .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
                 .joined(separator: "、")
-            return cleaned.isEmpty ? nil : "这一段闻起来像 \(cleaned)"
+            return cleaned.isEmpty ? nil : "这一段反复出现：\(cleaned)"
         }
         if isPresenceChapter(chapter) {
             if let lifeMarkLine = chapter.metrics["lifeMarkLine"]?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -908,13 +908,13 @@ struct SummaryPlaybackSheet: View {
         }
         if let scene = chapter.metrics["sceneMemoryLine"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !scene.isEmpty {
-            return "这一格最有画面：\(scene)"
+            return "这一格最具体：\(scene)"
         }
         if isVoiceChapter(chapter), let title = voiceTitle(for: chapter) {
             if let day = chapter.metrics["day"], !day.isEmpty {
-                return "\(day) 留下了「\(title)」"
+                return "\(day) 记录了「\(title)」"
             }
-            return "这一句留了下来：\(title)"
+            return "这一句记录下来：\(title)"
         }
         if isScentChapter(chapter), let words = chapter.metrics["scentWords"] {
             let cleaned = words
@@ -922,7 +922,7 @@ struct SummaryPlaybackSheet: View {
                 .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
                 .joined(separator: "、")
-            return cleaned.isEmpty ? nil : "这一段闻起来像：\(cleaned)"
+            return cleaned.isEmpty ? nil : "这一段反复出现：\(cleaned)"
         }
         if isPresenceChapter(chapter) {
             if let lifeMarkLine = chapter.metrics["lifeMarkLine"]?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1629,9 +1629,9 @@ struct SummaryPlaybackSheet: View {
 
     private var doneHeadline: String {
         if isMember {
-            return playback.range == .week ? "像不像你的这周？" : "像不像你的这个月？"
+            return playback.range == .week ? "本周回放已完成" : "本月回放已完成"
         }
-        return memberPitch?.headline ?? (playback.range == .week ? "像不像你的这周？" : "像不像你的这个月？")
+        return memberPitch?.headline ?? (playback.range == .week ? "本周回放已完成" : "本月回放已完成")
     }
 
     private var doneDetail: String? {
@@ -2032,7 +2032,7 @@ private struct WeeklyStoryShareCardView: View {
                let anchor = storyPictureLine,
                !anchor.isEmpty {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("这周最有画面的一格")
+                    Text("这周最具体的一格")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(muted.opacity(0.82))
                     Text(anchor)

@@ -656,7 +656,7 @@ struct HomeView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(AppColors.readableSubtext)
         } else if homeViewModel.recentThreeItems.isEmpty {
-            Text("先记几笔，这里会慢慢长出最近的生活线索。")
+            Text("先记几笔，这里会按时间显示最近记录。")
                 .font(.system(size: 14))
                 .foregroundStyle(AppColors.readableSubtext)
         } else {
@@ -683,7 +683,7 @@ struct HomeView: View {
             return homeViewModel.weekLifeThemeText
         }
         return homeViewModel.weekTopCategoryText != "暂无"
-            ? "最近「\(homeViewModel.weekTopCategoryText)」这类记录多一点，像这段日子的一个小主题。"
+            ? "最近「\(homeViewModel.weekTopCategoryText)」这类记录多一点。"
             : "先记几笔，这里会长出最近的生活线索。"
     }
 
@@ -2755,7 +2755,7 @@ struct BillPlaybackSheet: View {
         if let lifeMark {
             let detail = LifeMarkService.primaryLine(for: lifeMark)
             if !detail.isEmpty {
-                return "\(detail) 今天先不急着下结论，按时间看一遍就好。"
+                return "\(detail) 今天照着发生的顺序听一遍，会更贴近当天。"
             }
         }
         if let dominantScene = dominantScene, dominantScene.count >= 2 {
@@ -2763,20 +2763,20 @@ struct BillPlaybackSheet: View {
             case .commute:
                 return "今天路上的记录比较多。出门、等待、到达，都算在今天里。"
             case .cityRoute:
-                return "今天在城市里换过几个位置，先按时间看一遍。"
+                return "今天在城市里换过几个位置，路上的时间也算今天的一部分。"
             case .breakfast, .quickMeal, .workMeal:
-                return "今天先从几次吃饭看起。忙也好、赶饭点也好，身体总要被照顾到。"
+                return "今天几次吃饭都在记录里，饭点串起来，今天就清楚了。"
             case .coffee:
-                return "今天有几杯喝的被记下来，先按时间放回今天。"
+                return "今天有几杯喝的，可能是提神，也可能只是解渴。"
             case .convenienceSupply, .groceries, .homeSupply:
-                return "今天像是给生活补了一点库存，少几件惦记的事。"
+                return "今天补了一些日用或家里会用到的东西，都是会派上用场的。"
             case .medicalVisit, .medicineCare, .fitness, .bodyCare:
-                return "今天身体这边被认真记了一下，这类记录本来就不该只剩金额。"
+                return "今天有几笔健康或身体相关记录，先把安排记清楚。"
             default:
                 break
             }
         }
-        return "\(categories)这些小事被收进了今天。先不总结太多，按顺序看一遍。"
+        return "\(categories)这些记录都在今天。先照着发生的顺序听一遍。"
     }
 
     private func categoryMixText() -> String {
@@ -2818,9 +2818,9 @@ struct BillPlaybackSheet: View {
             return "\(label)主要是「\(first)」。这笔放在今天的位置很清楚。"
         }
         if categories.isEmpty {
-            return "\(label)留下 \(items.count) 笔，按时间看会比硬总结更自然。"
+            return "\(label)有 \(items.count) 笔，先照着发生的顺序看。"
         }
-        return "\(label)留下 \(items.count) 笔，主要和\(categories)有关。先看发生了什么，不急着概括。"
+        return "\(label)留下 \(items.count) 笔，主要和\(categories)有关。先看发生了什么。"
     }
 
     private func playbackTitle(for item: HomeItem) -> String {
@@ -2938,7 +2938,7 @@ struct BillPlaybackSheet: View {
             if hour >= 17 {
                 return "傍晚买了杯喝的。"
             }
-            return "顺手买了杯喝的。"
+            return "今天买了杯喝的。"
         case .convenienceSupply, .groceries, .homeSupply:
             return "买了点需要的东西。"
         case .medicalVisit, .medicineCare, .fitness, .bodyCare:
@@ -2995,7 +2995,7 @@ struct BillPlaybackSheet: View {
         case .medicalVisit, .medicineCare:
             return "今天身体这边没落下"
         case .fitness, .bodyCare:
-            return "今天也照顾了一下自己"
+            return "今天有身体相关记录"
         case .social:
             return "今天有一点人情往来"
         default:
@@ -3016,21 +3016,21 @@ struct BillPlaybackSheet: View {
         case .cityRoute:
             return "出行出现了 \(dominantScene.count) 次，今天确实在城市里换过几个位置。"
         case .breakfast, .quickMeal, .workMeal:
-            return "吃饭出现了 \(dominantScene.count) 次。它不是消费主题，是今天被照顾到的几段时间。"
+            return "吃饭出现了 \(dominantScene.count) 次，按时间能看到今天的饭点。"
         case .coffee:
-            return "咖啡饮品出现了 \(dominantScene.count) 次。先当作今天买过的几杯喝的，不额外替它们加情绪。"
+            return "咖啡饮品出现了 \(dominantScene.count) 次。有的是提神，有的是解渴，先照着发生的顺序放好。"
         case .convenienceSupply, .groceries, .homeSupply:
             return "补给出现了 \(dominantScene.count) 次，都是让今天少一点缺口的小东西。"
         case .shopping:
             return "添置出现了 \(dominantScene.count) 次，可能是需要，也可能是兴趣里的一点投入。"
         case .medicalVisit, .medicineCare:
-            return "健康相关出现了 \(dominantScene.count) 次，辛苦归辛苦，至少没有把自己漏掉。"
+            return "健康相关出现了 \(dominantScene.count) 次，看诊、用药或检查都先记清楚。"
         case .fitness, .bodyCare:
-            return "身体相关出现了 \(dominantScene.count) 次，今天有在照看自己，也给恢复留了位置。"
+            return "身体相关出现了 \(dominantScene.count) 次，训练、护理或恢复都在今天的位置上。"
         case .social:
             return "人情往来出现了 \(dominantScene.count) 次，日子里也有和别人相连的部分。"
         default:
-            return "这条线出现了 \(dominantScene.count) 次，今天的轮廓就更清楚一点。"
+            return "这类记录出现了 \(dominantScene.count) 次，今天的主要内容更清楚。"
         }
     }
 

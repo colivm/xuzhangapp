@@ -1373,7 +1373,7 @@ struct ScenePackAngleSheet: View {
             return "窗口内可以继续换，直到倒计时结束"
         }
         if configuration.canReplacePackCombination {
-            return "第一次换上去后，才开始 24 小时调整倒计时"
+            return "首次换上去后，才开始 24 小时调整倒计时"
         }
         return "替换区每 30 天开放一次；不足一天时显示时分秒"
     }
@@ -1386,7 +1386,7 @@ struct ScenePackAngleSheet: View {
             return "调整窗口还剩 \(countdownText(until: configuration.replaceWindowEndsAt, now: now))"
         }
         if configuration.canReplacePackCombination {
-            return "可换到：现在，第一次换上去后开始 24 小时窗口"
+            return "可换到：现在，首次换上去后开始 24 小时窗口"
         }
         return "可换到：\(countdownText(until: configuration.nextReplaceAvailableAt, now: now))后"
     }
@@ -1441,7 +1441,7 @@ struct ScenePackAngleSheet: View {
             return "24 小时调整窗口还剩 \(countdownText(until: configuration.replaceWindowEndsAt, now: now))"
         }
         if configuration.canReplacePackCombination {
-            return "现在可换，第一次换上去后开始计时"
+            return "现在可换，首次换上去后开始计时"
         }
         return "替换区冷却中，还剩 \(countdownText(until: configuration.nextReplaceAvailableAt, now: now))"
     }
@@ -1454,7 +1454,7 @@ struct ScenePackAngleSheet: View {
             return "这 24 小时是调整窗口，换完后上方不会再显示可换倒计时。"
         }
         if configuration.canReplacePackCombination {
-            return "先移下上面一个，再从下面换上一个；从第一次换上去开始算 24 小时窗口。"
+            return "先移下上面一个，再从下面换上一个；从首次换上去开始算 24 小时窗口。"
         }
         return "上面的场景包还能继续用；下面的替换区到期后，会重新开放一天调整窗口。"
     }

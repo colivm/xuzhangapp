@@ -28,7 +28,7 @@ enum ShareInsightCopyPool {
         case let .lifeTitle(text):
             return ShareInsight(
                 fact: text,
-                care: pick(["这句比分类更像这一周", "这句先放进这周的回看里"], seed: seed + "|life"),
+                care: pick(["这周可以先看这句备注", "这句备注会出现在本周回看里"], seed: seed + "|life"),
                 footnote: footnote(for: signal),
                 tags: ["#\(signal.recordCount)笔记录", "#\(signal.activeDays)天有记录", "#手写备注", "#这一周有句子"]
             )
@@ -94,7 +94,7 @@ enum ShareInsightCopyPool {
             rhythmTag = "#路上"
         case .convenience:
             fact = "\(name)记了 \(count) 次"
-            cares = ["便利店这几次，像是在补忙碌里的小缺口", "路过买点需要的，也很真实"]
+            cares = ["便利店这几次，主要是临时补给", "路过买点需要的，也可以直接记下"]
             semanticTag = "#便利店"
             leadingTag = "#补给\(count)次"
             rhythmTag = "#路过带上"
@@ -219,7 +219,7 @@ enum ShareInsightCopyPool {
             rhythmTag = "#在外面"
         case .social:
             fact = "人情往来记了 \(count) 笔"
-            cares = ["见面和心意，都先记一笔", "这些来往，回头看会有用"]
+            cares = ["如果是和朋友吃饭，那顿饭本身就有画面", "见面和心意，都先记一笔"]
             tag = "#人情"
             rhythmTag = "#有来有往"
         case .general:
@@ -266,7 +266,7 @@ enum ShareInsightCopyPool {
                 rhythmTag = "#在外面"
             case .social:
                 fact = "人情往来记了 \(count) 笔"
-                cares = ["见面和心意，都先记一笔", "这些来往，回头看会有用"]
+                cares = ["如果是和朋友吃饭，那顿饭本身就有画面", "见面和心意，都先记一笔"]
                 tag = "#人情"
                 rhythmTag = "#有来有往"
             case .other:

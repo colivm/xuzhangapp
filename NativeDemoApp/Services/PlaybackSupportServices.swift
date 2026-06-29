@@ -17,7 +17,7 @@ enum ExperienceRuleCopy {
     }
 
     static func todayPlaybackFirstUseMessage(remaining: Int) -> String {
-        "它会把今天已经记下的几笔按时间翻一遍。免费用户每天可听 \(DailyFeatureQuotaStore.todayPlaybackFreeLimit) 次，当前剩余 \(quotaText(remaining: remaining, limit: DailyFeatureQuotaStore.todayPlaybackFreeLimit)) 次；白天可以先继续记，晚上记录差不多了再回看，会更完整。"
+        "它会把今天已经记下的几笔照着发生顺序翻一遍。免费用户每天可听 \(DailyFeatureQuotaStore.todayPlaybackFreeLimit) 次，当前剩余 \(quotaText(remaining: remaining, limit: DailyFeatureQuotaStore.todayPlaybackFreeLimit)) 次；白天可以先继续记，晚上记录差不多了再回看，会更完整。"
     }
 
     static func todayPlaybackExhaustedMessage(remaining: Int = 0) -> String {
@@ -744,12 +744,12 @@ enum LifeStorySignalService {
             return weeklyLead(sceneLead(text))
         case .emotion:
             if let scene = supports.first(where: { $0.kind == .scene })?.rawText {
-                return weeklyLead("\(sceneLead(scene))，也带着一点「\(softEmotion(text))」")
+                return weeklyLead("\(sceneLead(scene))，也记录了「\(softEmotion(text))」")
             }
-            return weeklyLead("也把「\(softEmotion(text))」那几刻留了下来")
+            return weeklyLead("也记录了「\(softEmotion(text))」")
         case .voice:
             if isShortShareableQuote(text) {
-                return weeklyLead("把「\(text)」留了下来")
+                return weeklyLead("记录了「\(text)」")
             }
             return "这周，记下了一句话"
         case .activity:
@@ -788,7 +788,7 @@ enum LifeStorySignalService {
                 return scenePictureTemplate(scene, emotion: emotion, memory: isShortShareableQuote(text) ? text : nil)
             }
             if isShortShareableQuote(text) {
-                return "后来连「\(text)」这句话，也留在了这周里。"
+                return "这周也记录了「\(text)」这句话。"
             }
             return clean(fallback)
         case .activity, .rhythm, .category, .scent:
@@ -800,29 +800,29 @@ enum LifeStorySignalService {
         let cleanedScene = sceneLead(scene)
         if containsAny(cleanedScene, ["雨"]) {
             if let emotion {
-                return "那天路上有雨，也写下了「\(softEmotion(emotion))」。"
+                return "那天路上有雨，也记录了「\(softEmotion(emotion))」。"
             }
             if let memory, isMilestonePhrase(memory) {
-                return "那天路上有雨，也把\(memory)留在了这周里。"
+                return "那天路上有雨，也记录了\(memory)。"
             }
-            return "那天路上有雨，这一格也记了下来。"
+            return "那天路上有雨，这一程也在这周的记录里。"
         }
         if containsAny(cleanedScene, ["回家", "下班", "夜", "晚归"]) {
             if let emotion {
-                return "\(cleanedScene)，也带着一点「\(softEmotion(emotion))」。"
+                return "\(cleanedScene)，也记录了「\(softEmotion(emotion))」。"
             }
-            return "\(cleanedScene)，也记在了这周里。"
+            return "\(cleanedScene)，也在这周的记录里。"
         }
         if containsAny(cleanedScene, ["聚餐", "朋友", "见面"]) {
-            return "\(cleanedScene)，让这周一下子有了热度。"
+            return "\(cleanedScene)，这周确实有过这样一顿或一次相聚。"
         }
         if let emotion {
-            return "\(cleanedScene)，也写下了「\(softEmotion(emotion))」。"
+            return "\(cleanedScene)，也记录了「\(softEmotion(emotion))」。"
         }
         if let memory, isMilestonePhrase(memory) {
-            return "\(cleanedScene)，也把\(memory)留在了这周里。"
+            return "\(cleanedScene)，也记录了\(memory)。"
         }
-        return "\(cleanedScene)，也记在了这周里。"
+        return "\(cleanedScene)，也在这周的记录里。"
     }
 
     private static func normalizedLeadText(_ raw: String) -> String {
@@ -838,7 +838,7 @@ enum LifeStorySignalService {
             .replacingOccurrences(of: "这一周", with: "这周")
             .replacingOccurrences(of: "记进账本", with: "记下来")
             .replacingOccurrences(of: "记进了账本", with: "记了下来")
-            .replacingOccurrences(of: "放进账本", with: "留了下来")
+            .replacingOccurrences(of: "放进账本", with: "记下来")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -911,12 +911,12 @@ enum LifeStorySignalService {
     private static func humanizedMoment(_ text: String) -> String {
         let cleaned = compactSentence(text)
         if containsAny(cleaned, ["提神", "放松", "松口气", "恢复"]) {
-            return "也把「\(softEmotion(cleaned))」那几刻留了下来"
+            return "也记录了「\(softEmotion(cleaned))」"
         }
         if containsAny(cleaned, ["早餐", "咖啡", "奶茶", "晚饭"]) {
-            return "\(cleaned)，也记在了这周里"
+            return "\(cleaned)，这周也有这一笔"
         }
-        return "\(cleaned)也记在了这周里"
+        return "\(cleaned)，这周也有这一笔"
     }
 
     private static func sceneLead(_ scene: String) -> String {
@@ -933,12 +933,12 @@ enum LifeStorySignalService {
         let cleaned = compactSentence(text)
         guard !cleaned.isEmpty else { return nil }
         if isMilestonePhrase(cleaned) {
-            return "后来回头看，这周也把\(cleaned)记了下来。"
+            return "这周也记录了\(cleaned)。"
         }
         if containsAny(cleaned, ["提神", "放松", "松口气", "恢复"]) {
-            return "那点「\(softEmotion(cleaned))」的时刻，这周也没有错过。"
+            return "那点「\(softEmotion(cleaned))」，这周也记下了。"
         }
-        return "\(cleaned)，后来也成了这周里的一格。"
+        return "\(cleaned)，这周也有这一笔。"
     }
 
     private static func softFallbackHeadline(_ fallback: String) -> String {
@@ -952,9 +952,9 @@ enum LifeStorySignalService {
     private static func softFallbackPictureLine(_ fallback: String) -> String? {
         let cleaned = compactSentence(fallback)
         if cleaned.isEmpty || isMechanicalContinuity(cleaned) {
-            return "这周的几笔日常，也都记了下来。"
+            return "这周的几笔日常，也都在这里。"
         }
-        return "\(cleaned)，后来也留在了这周里。"
+        return "这周也记录了\(cleaned)。"
     }
 
     private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {

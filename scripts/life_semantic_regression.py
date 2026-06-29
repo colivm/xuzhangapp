@@ -13,14 +13,22 @@ REGRESSION_CASES_PATH = ROOT / "NativeDemoApp/Resources/RecordSceneLexicon.regre
 
 SWIFT_FILES = {
     "brands": "NativeDemoApp/Services/MerchantBrandCatalog.swift",
+    "life_insight": "NativeDemoApp/Services/LifeInsightService.swift",
     "semantic_fallback": "NativeDemoApp/Models/HomeItem.swift",
     "life_scene": "NativeDemoApp/Services/LifeSceneSemanticService.swift",
     "life_mark": "NativeDemoApp/Services/LifeMarkService.swift",
     "record_view": "NativeDemoApp/Views/RecordView.swift",
     "scene_pack": "NativeDemoApp/Services/ScenePackCopyPool.swift",
+    "playback_copy": "NativeDemoApp/Services/PlaybackCopyPool.swift",
+    "playback_support": "NativeDemoApp/Services/PlaybackSupportServices.swift",
+    "share_insight": "NativeDemoApp/Services/ShareInsightCopyPool.swift",
+    "dashboard": "NativeDemoApp/ViewModels/HomeViewModel+Dashboard.swift",
     "home_view": "NativeDemoApp/Views/HomeView.swift",
     "insight_web_view": "NativeDemoApp/Views/InsightWebView.swift",
+    "stats_web_view": "NativeDemoApp/Views/StatsWebView.swift",
+    "summary_playback_sheet": "NativeDemoApp/Views/SummaryPlaybackSheet.swift",
     "memory_context": "NativeDemoApp/Services/RecordMemoryContextService.swift",
+    "ocr_service": "NativeDemoApp/Services/OCRService.swift",
 }
 
 EXPECTED_JSON_KEYWORDS = {
@@ -145,6 +153,13 @@ EXPECTED_SWIFT_SNIPPETS = {
         "haidilao", "laoxiangji", "tastien", "cotti", "juewei", "yuanjiyunjiao",
         "saizeriya", "samsclub", "yonghui", "rtmart", "qiandama", "huaxiaozhu",
         "sgcc_online", "playbackContainsDrinkCue", "playbackContainsRoastDuckCue",
+        "playbackContainsLuweiCue", "playbackContainsNightMarketCue",
+    ],
+    "ocr_service": [
+        "转账时间",
+    ],
+    "insight_web_view": [
+        "花小猪", "单车", "上班", "下班", "早高峰", "晚高峰",
     ],
 }
 
@@ -196,6 +211,34 @@ BLOCKED_COPY_SNIPPETS = [
     "硬" + "撑",
     "被解释" + "成",
     "路上" + "匆忙",
+    "被按下暂停",
+    "生活自己说出来",
+    "生活道具",
+    "冷冰冰",
+    "那几刻",
+    "一下子有了热度",
+    "生活资产",
+    "生活切片",
+    "小标记",
+    "硬总结",
+    "被照顾到",
+    "轮廓就更清楚",
+    "像不像你的",
+    "读懂我",
+    "生活意义",
+    "把身体放回",
+    "给生活补库存",
+    "压力找出口",
+    "关系在发生",
+    "真正的主题",
+    "孤零零的金额",
+    "不只是消费",
+    "不该只剩金额",
+    "更像这段时间",
+    "值得被看见",
+    "紧绷的日子",
+    "生活在往",
+    "金额只是痕迹",
 ]
 
 BROAD_QUOTED_KEYWORD_LIMITS = {
@@ -218,6 +261,14 @@ BROAD_QUOTED_KEYWORD_LIMITS = {
     "打赏": 0,
     "脱毛": 0,
 }
+
+BROAD_KEYWORD_SCAN_FILE_KEYS = [
+    "semantic_fallback",
+    "life_scene",
+    "life_mark",
+    "record_view",
+    "memory_context",
+]
 
 SEMANTIC_TIE_PRIORITY = {
     "交通": 0,
@@ -243,6 +294,16 @@ OCR_TIE_PRIORITY = {
     "居家": 7,
     "人情": 8,
     "其他": 9,
+}
+
+EMOTION_TIE_PRIORITY = {
+    "transport": 0,
+    "meal": 1,
+    "drink": 2,
+    "convenience": 3,
+    "fitness": 4,
+    "baby_supply": 5,
+    "pet_supply": 6,
 }
 
 
@@ -399,7 +460,7 @@ def scan_life_mark_boundaries(failures: list[str], text: str) -> None:
 def scan_broad_keywords(failures: list[str], texts: dict[str, str]) -> None:
     checked = {
         "RecordSceneLexicon.json": LEXICON_PATH.read_text(encoding="utf-8"),
-        **{SWIFT_FILES[name]: text for name, text in texts.items()},
+        **{SWIFT_FILES[name]: texts[name] for name in BROAD_KEYWORD_SCAN_FILE_KEYS},
     }
     totals = {keyword: 0 for keyword in BROAD_QUOTED_KEYWORD_LIMITS}
     for text in checked.values():
@@ -443,20 +504,67 @@ def should_score_regression_case(case: dict) -> bool:
     return bool(case.get("inputTitle") or case.get("rawText"))
 
 
+def should_score_emotion_case(case: dict) -> bool:
+    if not isinstance(case, dict):
+        return False
+    if "expectedEmotionRule" not in case:
+        return False
+    if case.get("selectedCategory") or case.get("categoryLockedByUser"):
+        return False
+    return bool(case.get("inputTitle") or case.get("rawText"))
+
+
+def score_emotion_rule(payload: dict, text: str) -> str | None:
+    normalized = text.strip().lower()
+    if not normalized:
+        return None
+    scores: dict[str, int] = {}
+    for rule in payload.get("emotionKeywordRules", []):
+        rule_id = rule.get("id")
+        keywords = rule.get("keywords", [])
+        if not isinstance(rule_id, str) or not isinstance(keywords, list):
+            continue
+        score = sum(
+            1
+            for keyword in keywords
+            if isinstance(keyword, str) and keyword.lower() in normalized
+        )
+        if score > 0:
+            scores[rule_id] = max(scores.get(rule_id, 0), score)
+    if not scores:
+        return None
+    return sorted(
+        scores.items(),
+        key=lambda entry: (-entry[1], EMOTION_TIE_PRIORITY.get(entry[0], 99)),
+    )[0][0]
+
+
 def scan_regression_cases(failures: list[str], payload: dict) -> None:
     cases_payload = json.loads(REGRESSION_CASES_PATH.read_text(encoding="utf-8"))
     for case in cases_payload.get("cases", []):
-        if not should_score_regression_case(case):
-            continue
         case_id = case.get("id", "<missing-id>")
         mode = case.get("mode")
         text = case.get("rawText") if mode == "ocr" else case.get("inputTitle")
-        sections = ["keywordRules", "ocrKeywordRules"] if mode == "ocr" else ["keywordRules"]
-        tie_priority = OCR_TIE_PRIORITY if mode == "ocr" else SEMANTIC_TIE_PRIORITY
-        actual = score_text(payload, str(text or ""), sections, tie_priority)
-        expected = case.get("expectedCategory")
-        if actual != expected:
-            failures.append(f"RecordSceneLexicon.regression.json:{case_id}: expected {expected}, got {actual}")
+        if should_score_regression_case(case):
+            sections = ["keywordRules", "ocrKeywordRules"] if mode == "ocr" else ["keywordRules"]
+            tie_priority = OCR_TIE_PRIORITY if mode == "ocr" else SEMANTIC_TIE_PRIORITY
+            actual = score_text(payload, str(text or ""), sections, tie_priority)
+            expected = case.get("expectedCategory")
+            if actual != expected:
+                failures.append(f"RecordSceneLexicon.regression.json:{case_id}: expected {expected}, got {actual}")
+        if should_score_emotion_case(case):
+            actual_rule = score_emotion_rule(payload, str(text or ""))
+            expected_rule = str(case.get("expectedEmotionRule"))
+            if expected_rule.startswith("not:"):
+                blocked_rule = expected_rule.removeprefix("not:")
+                if actual_rule == blocked_rule:
+                    failures.append(
+                        f"RecordSceneLexicon.regression.json:{case_id}: expected emotion not {blocked_rule}, got {actual_rule}"
+                    )
+            elif actual_rule != expected_rule:
+                failures.append(
+                    f"RecordSceneLexicon.regression.json:{case_id}: expected emotion {expected_rule}, got {actual_rule}"
+                )
 
 
 def main() -> int:

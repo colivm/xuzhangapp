@@ -122,7 +122,7 @@ enum LifeSceneSemanticService {
         case .workMeal:
             return LifeSceneWeeklyCopy(
                 fact: "工作餐记了 \(count) 次",
-                cares: ["忙的时候先吃上，就不算亏待自己", "工位旁边的几顿饭，也在撑住这一周"],
+                cares: ["忙的时候先吃上，就不算亏待自己", "工位旁边的几顿饭，也在这一周里"],
                 leadingTag: "#工作餐\(count)次",
                 semanticTag: "#饭点在忙",
                 supportTag: "#先吃上"
@@ -146,7 +146,7 @@ enum LifeSceneSemanticService {
         case .convenienceSupply:
             return LifeSceneWeeklyCopy(
                 fact: "便利店和即时补给记了 \(count) 次",
-                cares: ["这些小补给，像是在补忙碌里的缺口", "路过买点需要的，也很真实"],
+                cares: ["这些小补给主要是临时需要", "路过买点需要的，也可以直接记下"],
                 leadingTag: "#补给\(count)次",
                 semanticTag: "#便利店补给",
                 supportTag: "#路过带上"
@@ -178,7 +178,7 @@ enum LifeSceneSemanticService {
         case .shopping:
             return LifeSceneWeeklyCopy(
                 fact: "网购添置记了 \(count) 笔",
-                cares: ["买到需要的就好", "兴趣里的小投入，也会留下生活形状"],
+                cares: ["买到需要的就好", "如果是爱好装备，这一笔会更有画面"],
                 leadingTag: "#网购\(count)笔",
                 semanticTag: "#快递到了",
                 supportTag: "#兴趣装备"
@@ -226,7 +226,7 @@ enum LifeSceneSemanticService {
         case .social:
             return LifeSceneWeeklyCopy(
                 fact: "人情往来记了 \(count) 笔",
-                cares: ["见面和心意，都先记一笔", "这些来往，回头看会有用"],
+                cares: ["如果是和朋友吃饭，那顿饭本身就有画面", "见面和心意，都先记一笔"],
                 leadingTag: "#人情\(count)笔",
                 semanticTag: "#见面和心意",
                 supportTag: "#有来有往"

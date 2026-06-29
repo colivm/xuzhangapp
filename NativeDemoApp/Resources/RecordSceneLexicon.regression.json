@@ -74,6 +74,42 @@
       "expectedEmotionRule": "drink"
     },
     {
+      "id": "manual-sprite-bottled-drink",
+      "mode": "manual",
+      "amount": 4,
+      "time": "12:25",
+      "inputTitle": "雪碧",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "drink"
+    },
+    {
+      "id": "manual-orange-juice-bottled-drink",
+      "mode": "manual",
+      "amount": 6,
+      "time": "18:40",
+      "inputTitle": "果汁饮料",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "drink"
+    },
+    {
+      "id": "manual-night-market-oyster-meal",
+      "mode": "manual",
+      "amount": 28,
+      "time": "22:35",
+      "inputTitle": "夜市烤生蚝",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
+      "id": "manual-huaxiaozhu-transport",
+      "mode": "manual",
+      "amount": 18,
+      "time": "09:05",
+      "inputTitle": "花小猪打车",
+      "expectedCategory": "交通",
+      "expectedEmotionRule": "transport"
+    },
+    {
       "id": "manual-subway-transport",
       "mode": "manual",
       "amount": 4.75,

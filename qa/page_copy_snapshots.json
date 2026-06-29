@@ -1,0 +1,114 @@
+[
+  {
+    "id": "today_playback_food_plain",
+    "surface": "today_playback",
+    "source_paths": ["NativeDemoApp/Views/HomeView.swift"],
+    "evidence_required": ["dining scene count", "record time order"],
+    "expected_copy": ["今天几次吃饭都在记录里，饭点串起来，今天就清楚了。"],
+    "forbidden_copy": ["身体总要被照顾到", "不是消费主题", "被照顾到"]
+  },
+  {
+    "id": "today_playback_daily_plain",
+    "surface": "today_playback",
+    "source_paths": ["NativeDemoApp/Views/HomeView.swift"],
+    "evidence_required": ["daily or grocery scene"],
+    "expected_copy": ["今天补了一些日用或家里会用到的东西，都是会派上用场的。"],
+    "forbidden_copy": ["给生活补库存", "少几件惦记的事", "生活意义"]
+  },
+  {
+    "id": "home_week_slice_mark_plain",
+    "surface": "home_week_slice",
+    "source_paths": ["NativeDemoApp/ViewModels/HomeViewModel+Dashboard.swift"],
+    "evidence_required": ["life mark count >= 2", "week records"],
+    "expected_copy": ["这一周「\\(mark.label)」出现得更集中。"],
+    "forbidden_copy": ["生活印记", "生活资产", "慢慢变成"]
+  },
+  {
+    "id": "month_slice_weather_plain",
+    "surface": "home_month_slice",
+    "source_paths": ["NativeDemoApp/ViewModels/HomeViewModel+Dashboard.swift"],
+    "evidence_required": ["weatherKind", "record date"],
+    "expected_copy": ["那天有雨，这笔记录带着当天的天气信息。"],
+    "forbidden_copy": ["生活切片", "小标记", "被留下来了"]
+  },
+  {
+    "id": "week_playback_scent_plain",
+    "surface": "summary_playback",
+    "source_paths": ["NativeDemoApp/Services/PlaybackCopyPool.swift"],
+    "evidence_required": ["scentWords"],
+    "expected_copy": ["这一周反复出现的是：{scentWords}。"],
+    "forbidden_copy": ["生活道具", "冷冰冰", "不是关键词列表"]
+  },
+  {
+    "id": "month_playback_outro_plain",
+    "surface": "summary_playback",
+    "source_paths": ["NativeDemoApp/Services/PlaybackCopyPool.swift"],
+    "evidence_required": ["month range"],
+    "expected_copy": ["这一个月已经记录下来，下个月会有新的记录。"],
+    "forbidden_copy": ["会自己长出新的生活", "不只是金额", "生活自己"]
+  },
+  {
+    "id": "share_picture_scene_plain",
+    "surface": "share_image",
+    "source_paths": ["NativeDemoApp/Services/PlaybackSupportServices.swift"],
+    "evidence_required": ["scene signal", "optional emotion signal"],
+    "expected_copy": ["也记录了「\\(softEmotion(emotion))」"],
+    "forbidden_copy": ["也带着一点", "那几刻", "一下子有了热度"]
+  },
+  {
+    "id": "share_voice_plain",
+    "surface": "share_image",
+    "source_paths": ["NativeDemoApp/Services/PlaybackSupportServices.swift"],
+    "evidence_required": ["short voice note"],
+    "expected_copy": ["这周也记录了「\\(text)」这句话。"],
+    "forbidden_copy": ["后来连", "留在了这周里", "生活意义"]
+  },
+  {
+    "id": "share_rain_commute_warm",
+    "surface": "share_image",
+    "source_paths": ["NativeDemoApp/Services/PlaybackSupportServices.swift"],
+    "evidence_required": ["rain scene", "route or commute evidence"],
+    "expected_copy": ["那天路上有雨，这一程也在这周的记录里。"],
+    "forbidden_copy": ["被雨治愈", "撑住这一周", "最想留下"]
+  },
+  {
+    "id": "share_friend_meal_warm",
+    "surface": "share_image",
+    "source_paths": ["NativeDemoApp/Services/PlaybackSupportServices.swift", "NativeDemoApp/Services/LifeSceneSemanticService.swift"],
+    "evidence_required": ["friend or gathering words"],
+    "expected_copy": ["这周确实有过这样一顿或一次相聚。", "如果是和朋友吃饭，那顿饭本身就有画面"],
+    "forbidden_copy": ["你被大家记得", "被热闹治愈", "终于不孤单"]
+  },
+  {
+    "id": "first_hobby_gear_warm",
+    "surface": "trace_clue",
+    "source_paths": ["NativeDemoApp/Services/LifeMarkService.swift"],
+    "evidence_required": ["first time marker", "hobby gear keyword"],
+    "expected_copy": ["这个爱好从一件具体装备开始有了记录。", "这个爱好第一次有了一件具体物件。"],
+    "forbidden_copy": ["人生转折", "重要时刻", "最值得"]
+  },
+  {
+    "id": "ordinary_drink_no_effort_tone",
+    "surface": "record_suggestion",
+    "source_paths": ["NativeDemoApp/Services/NarrativeCopyResolver.swift", "NativeDemoApp/Services/ScenePackCopyPool.swift"],
+    "evidence_required": ["ordinary drink or coffee", "no commute/health/late evidence"],
+    "expected_copy": ["午后一杯咖啡", "咖啡时间记一下"],
+    "forbidden_copy": ["一杯咖啡缓一缓", "咖啡时间缓一缓", "情绪能量"]
+  },
+  {
+    "id": "trace_category_health_plain",
+    "surface": "trace_clue",
+    "source_paths": ["NativeDemoApp/Views/StatsWebView.swift", "NativeDemoApp/Services/LifeInsightService.swift"],
+    "evidence_required": ["health category trend"],
+    "expected_copy": ["健康相关记录更明显", "主要来自训练、恢复、看诊或身体相关记录。"],
+    "forbidden_copy": ["把身体放回", "值得被看见", "不只是消费"]
+  },
+  {
+    "id": "trace_category_daily_plain",
+    "surface": "trace_clue",
+    "source_paths": ["NativeDemoApp/Views/StatsWebView.swift", "NativeDemoApp/Services/LifeInsightService.swift"],
+    "evidence_required": ["shopping or daily category trend"],
+    "expected_copy": ["主要来自买菜、家用、网购或兴趣装备。"],
+    "forbidden_copy": ["给生活补库存", "重新整理", "生活意义"]
+  }
+]

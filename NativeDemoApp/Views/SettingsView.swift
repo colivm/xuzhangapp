@@ -112,7 +112,7 @@ struct SettingsView: View {
     private let vaultHelperLines = [
         "多数永久会员从「档案馆」开始建立自己的生活档案。",
         "爱看构成和节奏，试试「观察者」。",
-        "晚上复盘，「夜读」更适合慢慢翻。"
+        "晚上复盘，「夜读」适合逐页看。"
     ]
 
     var body: some View {

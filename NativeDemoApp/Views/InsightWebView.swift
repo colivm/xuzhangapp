@@ -4842,7 +4842,7 @@ struct WeeklyShareCardView: View {
 
     private var shareCarePanel: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("这周最有画面的一格")
+            Text("这周最具体的一格")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(t.textMuted.opacity(0.82))
             Text(shareCareLine)

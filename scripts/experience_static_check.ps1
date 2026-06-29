@@ -72,6 +72,51 @@ function Assert-AcceptanceMatrix($Path, $Ids, $Label) {
     Write-Output "OK  $Label"
 }
 
+function Assert-PageCopySnapshots($Path, $Label) {
+    $raw = Get-Content -Raw -Path $Path -Encoding UTF8
+    $items = $raw | ConvertFrom-Json
+    foreach ($item in $items) {
+        if (-not $item.id) {
+            throw "Page copy snapshot missing id"
+        }
+        if (-not $item.surface) {
+            throw "Missing surface for page copy snapshot: $($item.id)"
+        }
+        if (-not $item.source_paths -or $item.source_paths.Count -eq 0) {
+            throw "Missing source_paths for page copy snapshot: $($item.id)"
+        }
+        if (-not $item.evidence_required -or $item.evidence_required.Count -eq 0) {
+            throw "Missing evidence_required for page copy snapshot: $($item.id)"
+        }
+        if (-not $item.expected_copy -or $item.expected_copy.Count -eq 0) {
+            throw "Missing expected_copy for page copy snapshot: $($item.id)"
+        }
+        if (-not $item.forbidden_copy -or $item.forbidden_copy.Count -eq 0) {
+            throw "Missing forbidden_copy for page copy snapshot: $($item.id)"
+        }
+
+        $combined = ""
+        foreach ($sourcePath in $item.source_paths) {
+            if (-not (Test-Path $sourcePath)) {
+                throw "Missing source path for page copy snapshot $($item.id): $sourcePath"
+            }
+            $combined += "`n" + (Get-Content -Raw -Path $sourcePath -Encoding UTF8)
+        }
+
+        foreach ($expected in $item.expected_copy) {
+            if (-not $combined.Contains($expected)) {
+                throw "Missing expected page copy for $($item.id): $expected"
+            }
+        }
+        foreach ($forbidden in $item.forbidden_copy) {
+            if ($combined.Contains($forbidden)) {
+                throw "Forbidden page copy for $($item.id): $forbidden"
+            }
+        }
+    }
+    Write-Output "OK  $Label"
+}
+
 Assert-Pattern 'NativeDemoApp/Services/PlaybackSupportServices.swift' 'enum ExperienceRuleCopy' 'shared copy layer'
 Assert-Pattern 'NativeDemoApp/Services/PlaybackSupportServices.swift' 'ocrQuotaExhaustedMessage|todayPlaybackFirstUseMessage|summaryQuotaFootnote' 'quota copy coverage'
 Assert-Pattern 'NativeDemoApp/Services/PlaybackSupportServices.swift' 'LifeStorySignalService' 'shared signal layer'
@@ -99,6 +144,8 @@ Assert-JsonFixtureIds 'qa/life_story_regression_fixtures.json' @(
     'drink_streak',
     'away_city',
     'weekend_social',
+    'first_hobby_gear',
+    'ordinary_drink_no_effort_tone',
     'milestone_wins_over_generic_scene',
     'scene_wins_over_generic_emotion',
     'generic_emotion_cannot_lead',
@@ -115,7 +162,10 @@ Assert-AcceptanceMatrix 'qa/share_playback_acceptance_matrix.json' @(
     'drink_streak',
     'away_city',
     'weekend_social',
+    'first_hobby_gear',
+    'ordinary_drink_no_effort_tone',
     'weak_data_daily'
 ) 'share playback acceptance matrix'
+Assert-PageCopySnapshots 'qa/page_copy_snapshots.json' 'page copy snapshots'
 
 Write-Output 'Static experience checks passed.'
