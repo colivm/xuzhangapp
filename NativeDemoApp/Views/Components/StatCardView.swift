@@ -10,21 +10,22 @@ struct StatCardView: View {
             Image(systemName: iconName)
                 .font(.title3)
                 .frame(width: 36, height: 36)
-                .background(AppColors.accent.opacity(0.18))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(AppColors.accent.opacity(0.12))
+                .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppColors.subtext)
                 Text(value)
-                    .font(.headline)
+                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.text)
             }
 
             Spacer()
         }
         .padding(16)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .metricSurface(radius: 16, padding: 0, tint: AppColors.accent)
     }
 }
 

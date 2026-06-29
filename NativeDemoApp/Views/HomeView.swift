@@ -591,7 +591,7 @@ struct HomeView: View {
                 .foregroundStyle(AppColors.text)
             todayBillsContent
         }
-        .glassPanel(radius: 24, padding: 22)
+        .recordSurface(radius: 20, padding: 20, tint: AppColors.accent)
         .overlay(todayBillsFocusOverlay)
         .id("todayBillsPanel")
     }
@@ -643,7 +643,7 @@ struct HomeView: View {
                 .foregroundStyle(AppColors.text)
             lifeRhythmContent
         }
-        .glassPanel(radius: 24, padding: 22)
+        .traceSurface(radius: 18, padding: 18, tint: AppColors.accent)
     }
 
     @ViewBuilder
@@ -726,7 +726,7 @@ struct HomeView: View {
             .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassPanelWithTint(radius: 24, padding: 22)
+        .playbackSurface(radius: 22, padding: 22, tint: AppColors.accent)
     }
 
     private func narrativePill(_ text: String) -> some View {
@@ -779,9 +779,9 @@ struct HomeView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 13)
             .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
-            .themedInteractionSurface(radius: 20, tint: AppColors.accent, isSelected: isPrimary)
+            .appSurface(.action, radius: 18, tint: AppColors.accent, isSelected: isPrimary)
         }
-        .buttonStyle(ThemedPressButtonStyle())
+        .buttonStyle(PurposefulCardButtonStyle(radius: 18, depth: isPrimary ? 1.15 : 0.9))
     }
 
     private func homeActionIconBadge(systemImage: String) -> some View {
@@ -800,7 +800,7 @@ struct HomeView: View {
     }
 
     private var todayBillsFocusOverlay: some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
             .stroke(
                 LinearGradient(
                     colors: [
@@ -2005,37 +2005,6 @@ struct HomeView: View {
         }
     }
 
-}
-
-// MARK: - Glass Panel with Hero Tint
-
-private extension View {
-    func glassPanelWithTint(radius: CGFloat = 24, padding: CGFloat = 24) -> some View {
-        self
-            .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(.thinMaterial)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [AppColors.accent.opacity(0.08), Color.white.opacity(0.06)],
-                            startPoint: UnitPoint(x: 0.3, y: 0),
-                            endPoint: UnitPoint(x: 0.7, y: 1)
-                        )
-                    )
-                    .allowsHitTesting(false)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(AppColors.line, lineWidth: 1)
-                    .allowsHitTesting(false)
-            )
-            .shadow(color: Color(red: 117/255, green: 131/255, blue: 156/255).opacity(0.11), radius: 22, x: 0, y: 8)
-    }
 }
 
 // MARK: - Bill Playback Sheet

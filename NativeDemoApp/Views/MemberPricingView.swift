@@ -614,7 +614,7 @@ struct MemberPricingView: View {
                     .stroke(AppColors.lockGold.opacity(0.18), lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PurposefulCardButtonStyle(radius: 12, depth: 0.65))
     }
 
     // MARK: - Current Member Badge
@@ -1059,7 +1059,7 @@ struct MemberPricingView: View {
             )
             .shadow(color: AppColors.lockGold.opacity(0.18), radius: 10, y: 5)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PurposefulCardButtonStyle(radius: 14, depth: 1.05))
         .disabled(isPurchasing)
     }
 
@@ -1096,7 +1096,7 @@ struct MemberPricingView: View {
             )
             .shadow(color: isHighlighted ? AppColors.lockGold.opacity(0.16) : .clear, radius: 12, y: 6)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PurposefulCardButtonStyle(radius: 12, depth: isHighlighted ? 0.95 : 0.75))
         .disabled(isPurchasing)
         .id("member-plan-\(plan.id)")
     }

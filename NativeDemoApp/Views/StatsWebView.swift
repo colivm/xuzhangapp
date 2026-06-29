@@ -376,7 +376,7 @@ struct StatsWebView: View {
                     isEnabled: canPlay || isMonthLocked
                 )
             }
-            .buttonStyle(ThemedPressButtonStyle())
+            .buttonStyle(PurposefulCardButtonStyle(radius: 18, depth: 1.05))
             .disabled(!hasData && !isMonthLocked)
 
             Text(summaryQuotaFootnote(range: range, hasData: hasData))
@@ -401,7 +401,7 @@ struct StatsWebView: View {
                                     traceSlipRow(item)
                                         .contentShape(Rectangle())
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(PurposefulCardButtonStyle(radius: 12, depth: 0.55))
                             }
 
                             if group.overflowCount > 0 {
@@ -420,15 +420,7 @@ struct StatsWebView: View {
                         }
                     }
                 }
-                .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(Color.white.opacity(0.26))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(AppColors.accent.opacity(0.10), lineWidth: 1)
-                )
+                .traceSurface(radius: 16, padding: 8)
             } else {
                 traceEmptyState
             }
@@ -597,13 +589,7 @@ struct StatsWebView: View {
         }
         .padding(13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .themedInteractionSurface(
-            radius: 18,
-            tint: AppColors.accent,
-            isSelected: isEnabled,
-            isDisabled: !isEnabled,
-            glowIntensity: 0.62
-        )
+        .appSurface(.action, radius: 18, tint: AppColors.accent, isSelected: isEnabled, isDisabled: !isEnabled)
     }
 
     private func playbackLaunchSubtitle(
@@ -767,10 +753,7 @@ struct StatsWebView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 12)
         .frame(minHeight: 58)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.40))
-        )
+        .traceSurface(radius: 12, padding: 0, tint: traceAccentColor(for: item.category))
     }
 
     private func shouldShowTraceSlipEmotion(for item: HomeItem) -> Bool {

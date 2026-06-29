@@ -185,14 +185,70 @@ struct ThemedInteractionSurface: ViewModifier {
     }
 }
 
-struct ThemedPressButtonStyle: ButtonStyle {
+struct PurposefulCardButtonStyle: ButtonStyle {
+    var radius: CGFloat = 18
+    var depth: CGFloat = 1
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed && isEnabled
         configuration.label
-            .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? 0.985 : 1))
-            .brightness(configuration.isPressed ? -0.012 : 0)
-            .animation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.86), value: configuration.isPressed)
+            .scaleEffect(reduceMotion ? 1 : (pressed ? 0.988 : 1), anchor: .center)
+            .offset(y: reduceMotion ? 0 : (pressed ? 0.9 * depth : 0))
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(Color.white.opacity(pressed ? 0.16 : 0.0), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            .overlay(alignment: .topLeading) {
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(pressed ? 0.12 : 0.0),
+                        Color.white.opacity(0.0)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .frame(height: 42)
+                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+                .allowsHitTesting(false)
+            }
+            .shadow(
+                color: Color.black.opacity(pressed ? 0.010 : 0.024 * Double(depth)),
+                radius: pressed ? 2 : 6,
+                x: 0,
+                y: pressed ? 1 : 3
+            )
+            .animation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.82), value: pressed)
+    }
+}
+
+struct PressableCardFeedback: ViewModifier {
+    var radius: CGFloat = 18
+    var depth: CGFloat = 1
+
+    @GestureState private var isPressing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(reduceMotion ? 1 : (isPressing ? 0.987 : 1), anchor: .center)
+            .offset(y: reduceMotion ? 0 : (isPressing ? 1.2 * depth : 0))
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(Color.white.opacity(isPressing ? 0.20 : 0), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            .animation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.84), value: isPressing)
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0, maximumDistance: 8)
+                    .updating($isPressing) { value, state, _ in
+                        guard value else { return }
+                        state = true
+                    }
+            )
     }
 }
 
@@ -212,6 +268,291 @@ extension View {
             glowIntensity: glowIntensity
         ))
     }
+
+    func pressableCardFeedback(radius: CGFloat = 18, depth: CGFloat = 1) -> some View {
+        modifier(PressableCardFeedback(radius: radius, depth: depth))
+    }
+}
+
+// MARK: - Semantic Surface Modifiers
+
+enum AppSurfaceRole: Equatable {
+    case record
+    case playback
+    case trace
+    case metric
+    case action
+    case share
+    case quiet
+}
+
+struct AppSemanticSurface: ViewModifier {
+    var role: AppSurfaceRole
+    var radius: CGFloat = 20
+    var padding: CGFloat = 0
+    var tint: Color = .accentColor
+    var isSelected = false
+    var isDisabled = false
+
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(surfaceBackground)
+            .overlay(roleAccent)
+            .overlay(surfaceRim)
+            .shadow(color: primaryShadowColor, radius: primaryShadowRadius, x: 0, y: primaryShadowY)
+            .shadow(color: secondaryShadowColor, radius: secondaryShadowRadius, x: 0, y: 0)
+    }
+
+    private var surfaceBackground: some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(baseFill)
+            .overlay(surfaceWash.clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous)))
+            .overlay(sceneHighlight.clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous)))
+    }
+
+    private var baseFill: Color {
+        switch role {
+        case .record:
+            return AppColors.panelStrong.opacity(reduceTransparency ? 0.96 : 0.78)
+        case .playback:
+            return AppColors.paperWarm.opacity(reduceTransparency ? 0.96 : 0.82)
+        case .trace:
+            return AppColors.panel.opacity(reduceTransparency ? 0.94 : 0.72)
+        case .metric:
+            return AppColors.surfaceMuted.opacity(reduceTransparency ? 0.96 : 0.80)
+        case .action:
+            return AppColors.panelStrong.opacity(isSelected ? 0.92 : 0.76)
+        case .share:
+            return AppColors.paperMist.opacity(reduceTransparency ? 0.96 : 0.84)
+        case .quiet:
+            return AppColors.panel.opacity(reduceTransparency ? 0.92 : 0.68)
+        }
+    }
+
+    private var surfaceWash: LinearGradient {
+        LinearGradient(
+            colors: washColors,
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var washColors: [Color] {
+        switch role {
+        case .record:
+            return [
+                Color.white.opacity(0.48),
+                AppColors.panelStrong.opacity(0.18),
+                tint.opacity(0.055)
+            ]
+        case .playback:
+            return [
+                Color.white.opacity(0.42),
+                AppColors.paperWarm.opacity(0.26),
+                AppColors.paperMist.opacity(0.30)
+            ]
+        case .trace:
+            return [
+                Color.white.opacity(0.30),
+                AppColors.surfaceMuted.opacity(0.34),
+                tint.opacity(0.035)
+            ]
+        case .metric:
+            return [
+                Color.white.opacity(0.34),
+                AppColors.surfaceMuted.opacity(0.42),
+                Color.white.opacity(0.16)
+            ]
+        case .action:
+            return [
+                Color.white.opacity(isSelected ? 0.42 : 0.30),
+                tint.opacity(isSelected ? 0.16 : 0.065),
+                AppColors.panelStrong.opacity(0.22)
+            ]
+        case .share:
+            return [
+                Color.white.opacity(0.42),
+                AppColors.paperWarm.opacity(0.24),
+                tint.opacity(0.075)
+            ]
+        case .quiet:
+            return [
+                Color.white.opacity(0.22),
+                AppColors.surfaceMuted.opacity(0.24),
+                Color.white.opacity(0.08)
+            ]
+        }
+    }
+
+    @ViewBuilder
+    private var sceneHighlight: some View {
+        if role == .record || role == .playback || role == .share {
+            RadialGradient(
+                colors: [
+                    tint.opacity(role == .record ? 0.075 : 0.055),
+                    Color.clear
+                ],
+                center: .bottomTrailing,
+                startRadius: 0,
+                endRadius: role == .record ? 154 : 188
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var roleAccent: some View {
+        switch role {
+        case .playback:
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(AppColors.paperCrease.opacity(0.24))
+                .frame(width: 2)
+                .padding(.vertical, 18)
+                .padding(.leading, 14)
+                .allowsHitTesting(false)
+        case .trace:
+            Rectangle()
+                .fill(AppColors.line.opacity(0.34))
+                .frame(height: 1)
+                .padding(.horizontal, 16)
+                .padding(.top, 1)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .allowsHitTesting(false)
+        case .metric:
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(tint.opacity(0.34))
+                .frame(width: 34, height: 3)
+                .padding(.top, 13)
+                .padding(.leading, 14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .allowsHitTesting(false)
+        case .record, .action, .share, .quiet:
+            EmptyView()
+        }
+    }
+
+    private var surfaceRim: some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: rimColors,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: isSelected ? 1.15 : 1
+            )
+            .allowsHitTesting(false)
+    }
+
+    private var rimColors: [Color] {
+        switch role {
+        case .record:
+            return [Color.white.opacity(0.66), AppColors.line.opacity(0.46), tint.opacity(0.13)]
+        case .playback:
+            return [Color.white.opacity(0.58), AppColors.paperBorder.opacity(0.24), AppColors.paperCrease.opacity(0.13)]
+        case .trace:
+            return [Color.white.opacity(0.46), AppColors.stroke.opacity(0.46), tint.opacity(0.08)]
+        case .metric:
+            return [Color.white.opacity(0.48), AppColors.stroke.opacity(0.48), tint.opacity(0.10)]
+        case .action:
+            return [Color.white.opacity(0.56), tint.opacity(isSelected ? 0.30 : 0.14), AppColors.line.opacity(0.48)]
+        case .share:
+            return [Color.white.opacity(0.62), tint.opacity(0.14), AppColors.paperBorder.opacity(0.20)]
+        case .quiet:
+            return [Color.white.opacity(0.40), AppColors.line.opacity(0.50), AppColors.stroke.opacity(0.26)]
+        }
+    }
+
+    private var primaryShadowColor: Color {
+        switch role {
+        case .record:
+            return AppColors.subtext.opacity(isDisabled ? 0.03 : 0.075)
+        case .playback, .share:
+            return Color(red: 128/255, green: 106/255, blue: 82/255).opacity(0.060)
+        case .trace:
+            return AppColors.subtext.opacity(0.050)
+        case .metric:
+            return AppColors.subtext.opacity(0.045)
+        case .action:
+            return AppColors.subtext.opacity(isSelected ? 0.080 : 0.050)
+        case .quiet:
+            return AppColors.subtext.opacity(0.040)
+        }
+    }
+
+    private var primaryShadowRadius: CGFloat {
+        switch role {
+        case .playback, .share:
+            return 16
+        case .record:
+            return 12
+        case .action:
+            return isSelected ? 13 : 9
+        case .trace, .metric, .quiet:
+            return 10
+        }
+    }
+
+    private var primaryShadowY: CGFloat {
+        switch role {
+        case .playback, .share:
+            return 7
+        case .record:
+            return 5
+        case .action:
+            return isSelected ? 6 : 4
+        case .trace, .metric, .quiet:
+            return 4
+        }
+    }
+
+    private var secondaryShadowColor: Color {
+        guard isSelected && !isDisabled else { return .clear }
+        return tint.opacity(role == .action ? 0.12 : 0.06)
+    }
+
+    private var secondaryShadowRadius: CGFloat {
+        isSelected ? 14 : 0
+    }
+}
+
+extension View {
+    func appSurface(
+        _ role: AppSurfaceRole,
+        radius: CGFloat = 20,
+        padding: CGFloat = 0,
+        tint: Color = .accentColor,
+        isSelected: Bool = false,
+        isDisabled: Bool = false
+    ) -> some View {
+        modifier(AppSemanticSurface(
+            role: role,
+            radius: radius,
+            padding: padding,
+            tint: tint,
+            isSelected: isSelected,
+            isDisabled: isDisabled
+        ))
+    }
+
+    func recordSurface(radius: CGFloat = 18, padding: CGFloat = 0, tint: Color = .accentColor) -> some View {
+        appSurface(.record, radius: radius, padding: padding, tint: tint)
+    }
+
+    func playbackSurface(radius: CGFloat = 22, padding: CGFloat = 0, tint: Color = .accentColor) -> some View {
+        appSurface(.playback, radius: radius, padding: padding, tint: tint)
+    }
+
+    func traceSurface(radius: CGFloat = 18, padding: CGFloat = 0, tint: Color = .accentColor) -> some View {
+        appSurface(.trace, radius: radius, padding: padding, tint: tint)
+    }
+
+    func metricSurface(radius: CGFloat = 16, padding: CGFloat = 0, tint: Color = .accentColor) -> some View {
+        appSurface(.metric, radius: radius, padding: padding, tint: tint)
+    }
 }
 
 // MARK: - Glass Panel Modifier
@@ -222,29 +563,7 @@ struct GlassPanel: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(AppColors.panel)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.16), Color.white.opacity(0.03)],
-                            startPoint: UnitPoint(x: 0.3, y: 0),
-                            endPoint: UnitPoint(x: 0.7, y: 1)
-                        )
-                    )
-                    .allowsHitTesting(false)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(AppColors.line, lineWidth: 1)
-                    .allowsHitTesting(false)
-            )
-            .shadow(color: Color(red: 117/255, green: 131/255, blue: 156/255).opacity(0.08), radius: 14, x: 0, y: 6)
+            .appSurface(.quiet, radius: radius, padding: padding, tint: AppColors.accent)
     }
 }
 
@@ -255,39 +574,8 @@ struct PaperChapterPanel: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .padding(padding)
             .padding(.leading, showsAccentLine ? 6 : 0)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                AppColors.paperWarm.opacity(0.84),
-                                Color.white.opacity(0.70),
-                                AppColors.paperMist.opacity(0.62)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            )
-            .overlay(alignment: .leading) {
-                if showsAccentLine {
-                    RoundedRectangle(cornerRadius: 999, style: .continuous)
-                        .fill(AppColors.paperCrease.opacity(0.28))
-                        .frame(width: 2)
-                        .padding(.vertical, 20)
-                        .padding(.leading, 14)
-                        .allowsHitTesting(false)
-                }
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(AppColors.paperBorder.opacity(0.28), lineWidth: 1)
-                    .allowsHitTesting(false)
-            )
-            .shadow(color: Color(red: 128/255, green: 106/255, blue: 82/255).opacity(0.07), radius: 14, x: 0, y: 6)
+            .appSurface(showsAccentLine ? .playback : .share, radius: radius, padding: padding, tint: AppColors.accent)
     }
 }
 

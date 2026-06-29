@@ -3127,31 +3127,7 @@ struct SettingsView: View {
 private extension View {
     func webCardBackground() -> some View {
         self
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(AppColors.panel)
-                    .background(
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                    )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.16), Color.white.opacity(0.03)],
-                            startPoint: UnitPoint(x: 0.3, y: 0),
-                            endPoint: UnitPoint(x: 0.7, y: 1)
-                        )
-                    )
-                    .allowsHitTesting(false)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(AppColors.line.opacity(0.88), lineWidth: 1)
-                    .allowsHitTesting(false)
-            )
-            .shadow(color: Color(hex: "75839C").opacity(0.11), radius: 22, x: 0, y: 8)
+            .appSurface(.quiet, radius: 22, tint: AppColors.accent)
     }
 
     func webCardPadding() -> some View {
