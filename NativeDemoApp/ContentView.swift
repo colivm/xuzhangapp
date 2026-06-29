@@ -407,12 +407,7 @@ struct AppSemanticSurface: ViewModifier {
     private var roleAccent: some View {
         switch role {
         case .playback:
-            RoundedRectangle(cornerRadius: 999, style: .continuous)
-                .fill(AppColors.paperCrease.opacity(0.24))
-                .frame(width: 2)
-                .padding(.vertical, 18)
-                .padding(.leading, 14)
-                .allowsHitTesting(false)
+            EmptyView()
         case .trace:
             Rectangle()
                 .fill(AppColors.line.opacity(0.34))
