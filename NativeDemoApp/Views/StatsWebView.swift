@@ -2774,7 +2774,8 @@ struct StatsWebView: View {
                 .fill(isLast ? Color.clear : AppColors.line.opacity(0.42))
                 .frame(width: 1, height: isActive ? 92 : 62)
         }
-        .frame(width: 42, minHeight: 76)
+        .frame(width: 42)
+        .frame(minHeight: 76)
     }
 
     private func traceTimelineClockText(_ date: Date) -> String {
