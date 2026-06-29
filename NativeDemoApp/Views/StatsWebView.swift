@@ -2276,13 +2276,14 @@ struct StatsWebView: View {
                         .padding(.top, group.id == firstGroupID ? 0 : 6)
 
                     ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
+                        let isLast = index == group.items.count - 1
                         if fromTraceDetail {
-                            traceDetailBillRecordRow(item, isFirst: index == 0)
+                            traceDetailBillRecordRow(item, isFirst: index == 0, isLast: isLast)
                         } else {
                             Button {
                                 openEditor(for: item)
                             } label: {
-                                billRecordRow(item, isFirst: index == 0)
+                                timelineBillRecordRow(item, isFirst: index == 0, isLast: isLast)
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -2658,76 +2659,129 @@ struct StatsWebView: View {
         }
     }
 
-    private func traceDetailBillRecordRow(_ item: HomeItem, isFirst: Bool) -> some View {
+    private func timelineBillRecordRow(_ item: HomeItem, isFirst: Bool, isLast: Bool) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            traceTimelineRail(for: item, isFirst: isFirst, isLast: isLast, isActive: false)
+            billRecordRow(item, isFirst: false)
+                .padding(.bottom, isLast ? 0 : 2)
+        }
+        .padding(.top, isFirst ? 2 : 0)
+    }
+
+    private func traceDetailBillRecordRow(_ item: HomeItem, isFirst: Bool, isLast: Bool) -> some View {
         let isEditing = traceInlineEditingItemID == item.id
         let isSwiped = traceSwipedItemID == item.id && !isEditing
         let isDeleting = traceDeletingItemID == item.id
         let dragTranslation = traceSwipeDragState?.itemID == item.id ? traceSwipeDragState?.translation ?? 0 : 0
         let restingOffset: CGFloat = isSwiped ? -76 : 0
         let rowOffset = min(0, max(-86, restingOffset + dragTranslation))
-        return ZStack(alignment: .trailing) {
-            if !isEditing {
-                traceSwipeActions(for: item, isVisible: isSwiped)
-                    .padding(.trailing, 10)
-                    .zIndex(2)
-            }
+        return HStack(alignment: .top, spacing: 10) {
+            traceTimelineRail(for: item, isFirst: isFirst, isLast: isLast, isActive: isEditing || isSwiped)
 
-            VStack(alignment: .leading, spacing: isEditing ? 10 : 8) {
-                traceDetailRecordSummary(item, isEditing: isEditing)
-                if traceInlineEditingItemID == item.id {
-                    TraceInlineRecordEditor(
-                        item: item,
-                        autoCommitRequestID: traceAutoCommitRequestID,
-                        onSave: { updated in
-                            let didSave = homeViewModel.updateItem(updated)
-                            if didSave {
+            ZStack(alignment: .trailing) {
+                if !isEditing {
+                    traceSwipeActions(for: item, isVisible: isSwiped)
+                        .padding(.trailing, 10)
+                        .zIndex(2)
+                }
+
+                VStack(alignment: .leading, spacing: isEditing ? 10 : 8) {
+                    traceDetailRecordSummary(item, isEditing: isEditing)
+                    if traceInlineEditingItemID == item.id {
+                        TraceInlineRecordEditor(
+                            item: item,
+                            autoCommitRequestID: traceAutoCommitRequestID,
+                            onSave: { updated in
+                                let didSave = homeViewModel.updateItem(updated)
+                                if didSave {
+                                    withAnimation(traceEditSpring) {
+                                        traceInlineEditingItemID = nil
+                                        traceSwipedItemID = nil
+                                    }
+                                }
+                                return didSave
+                            },
+                            onCancel: {
                                 withAnimation(traceEditSpring) {
                                     traceInlineEditingItemID = nil
                                     traceSwipedItemID = nil
                                 }
                             }
-                            return didSave
-                        },
-                        onCancel: {
-                            withAnimation(traceEditSpring) {
-                                traceInlineEditingItemID = nil
-                                traceSwipedItemID = nil
-                            }
-                        }
-                    )
-                    .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, isEditing ? 14 : 12)
-            .background(traceDetailRecordBackground(isEditing: isEditing))
-            .overlay(traceDetailRecordBorder(isEditing: isEditing))
-            .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
-            .offset(x: rowOffset)
-            .scaleEffect(isDeleting ? 0.96 : 1, anchor: .trailing)
-            .opacity(isDeleting ? 0 : 1)
-            .frame(height: isDeleting ? 0 : nil)
-            .clipped()
-            .onTapGesture {
-                if traceSwipedItemID == item.id {
-                    withAnimation(traceEditSpring) {
-                        traceSwipedItemID = nil
+                        )
+                        .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
                     }
-                } else if !isEditing {
-                    openEditor(for: item, fromTraceDetail: true)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, isEditing ? 14 : 12)
+                .background(traceDetailRecordBackground(isEditing: isEditing))
+                .overlay(traceDetailRecordBorder(isEditing: isEditing))
+                .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                .offset(x: rowOffset)
+                .scaleEffect(isDeleting ? 0.96 : 1, anchor: .trailing)
+                .opacity(isDeleting ? 0 : 1)
+                .frame(height: isDeleting ? 0 : nil)
+                .clipped()
+                .onTapGesture {
+                    if traceSwipedItemID == item.id {
+                        withAnimation(traceEditSpring) {
+                            traceSwipedItemID = nil
+                        }
+                    } else if !isEditing {
+                        openEditor(for: item, fromTraceDetail: true)
+                    }
+                }
+                .overlay(alignment: .trailing) {
+                    if !isEditing {
+                        traceSwipeHandle(for: item, isSwiped: isSwiped)
+                            .zIndex(3)
+                    }
                 }
             }
-            .overlay(alignment: .trailing) {
-                if !isEditing {
-                    traceSwipeHandle(for: item, isSwiped: isSwiped)
-                        .zIndex(3)
-                }
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .id(item.id)
         .animation(traceEditSpring, value: isEditing)
         .animation(traceEditSpring, value: isSwiped)
         .animation(.easeInOut(duration: 0.45), value: isDeleting)
+    }
+
+    private func traceTimelineRail(for item: HomeItem, isFirst: Bool, isLast: Bool, isActive: Bool) -> some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(isFirst ? Color.clear : AppColors.line.opacity(0.42))
+                .frame(width: 1, height: 12)
+
+            ZStack {
+                Circle()
+                    .fill(isActive ? AppColors.accent.opacity(0.18) : AppColors.paperWarm.opacity(0.72))
+                    .frame(width: 28, height: 28)
+                Circle()
+                    .stroke(isActive ? AppColors.accent.opacity(0.72) : AppColors.line.opacity(0.68), lineWidth: isActive ? 1.4 : 1)
+                    .frame(width: 18, height: 18)
+                Circle()
+                    .fill(isActive ? AppColors.accent : AppColors.accent.opacity(0.52))
+                    .frame(width: 7, height: 7)
+            }
+            .overlay(alignment: .bottom) {
+                Text(traceTimelineClockText(item.createdAt))
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.subtext.opacity(0.82))
+                    .monospacedDigit()
+                    .offset(y: 15)
+            }
+
+            Rectangle()
+                .fill(isLast ? Color.clear : AppColors.line.opacity(0.42))
+                .frame(width: 1, height: isActive ? 92 : 62)
+        }
+        .frame(width: 42, minHeight: 76)
+    }
+
+    private func traceTimelineClockText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 
     var traceEditSpring: Animation {
