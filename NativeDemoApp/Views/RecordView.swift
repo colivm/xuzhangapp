@@ -3148,52 +3148,7 @@ private struct RecordEntryPanel: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                AppColors.tracePlaybackButtonBg.opacity(0.48),
-                                AppColors.paperWarm.opacity(0.50),
-                                Color.white.opacity(0.72)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .background(
-                        RoundedRectangle(cornerRadius: radius, style: .continuous)
-                            .fill(.thinMaterial)
-                    )
-            )
-            .overlay(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 999, style: .continuous)
-                    .fill(AppColors.accent.opacity(0.24))
-                    .frame(width: 34, height: 3)
-                    .padding(.top, 16)
-                    .padding(.leading, 22)
-                    .allowsHitTesting(false)
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.58),
-                                AppColors.accent.opacity(0.16),
-                                AppColors.paperBorder.opacity(0.16)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-                    .allowsHitTesting(false)
-            )
-            .shadow(color: AppColors.accent.opacity(0.08), radius: 24, x: 0, y: 10)
-            .shadow(color: Color(red: 128/255, green: 106/255, blue: 82/255).opacity(0.06), radius: 10, x: 0, y: 4)
+            .appSurface(.record, radius: radius, padding: padding, tint: AppColors.accent)
     }
 }
 

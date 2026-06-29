@@ -41,10 +41,9 @@ struct LifeEntryPreviewCard: View {
         .padding(.top, isWhisper ? 15 : 17)
         .padding(.bottom, 13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
-        .overlay(cardBorder)
-        .shadow(color: isWhisper ? .clear : AppColors.subtext.opacity(0.08), radius: 14, x: 0, y: 6)
-        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .recordSurface(radius: isWhisper ? 16 : 18, padding: 0, tint: AppColors.accent)
+        .pressableCardFeedback(radius: isWhisper ? 16 : 18, depth: isWhisper ? 0.55 : 0.8)
+        .contentShape(RoundedRectangle(cornerRadius: isWhisper ? 16 : 18, style: .continuous))
         .onTapGesture(perform: onTap)
     }
 
@@ -135,7 +134,7 @@ struct LifeEntryPreviewCard: View {
         if isConfirm && !emotion.isEmpty {
             Text(emotion)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(AppColors.accent.opacity(0.62))
+                .foregroundStyle(AppColors.subtext.opacity(0.76))
                 .lineLimit(1)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
@@ -211,34 +210,4 @@ struct LifeEntryPreviewCard: View {
             .padding(.horizontal, 8)
     }
 
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .fill(.thinMaterial)
-            .overlay(
-                LinearGradient(
-                    colors: isWhisper
-                        ? [Color.white.opacity(0.34), Color.white.opacity(0.12)]
-                        : [Color.white.opacity(0.42), AppColors.accent.opacity(0.06)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay(alignment: .leading) {
-                if isWhisper {
-                    Capsule(style: .continuous)
-                        .fill(AppColors.accent.opacity(0.32))
-                        .frame(width: 2)
-                        .padding(.vertical, 16)
-                }
-            }
-    }
-
-    private var cardBorder: some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .stroke(
-                isWhisper ? AppColors.line.opacity(0.55) : AppColors.accent.opacity(0.18),
-                lineWidth: 1
-            )
-            .allowsHitTesting(false)
-    }
 }

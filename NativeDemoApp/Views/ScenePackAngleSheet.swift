@@ -349,7 +349,7 @@ struct ScenePackAngleSheet: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(ThemedPressButtonStyle())
+            .buttonStyle(PurposefulCardButtonStyle())
 
             HStack(spacing: 8) {
                 memberMoveButton(systemName: "arrow.up", isEnabled: canMoveUp) {
@@ -937,7 +937,7 @@ struct ScenePackAngleSheet: View {
             .overlay(scenePackCardBorder(tint: style.colors.first ?? AppColors.accent, isSelected: canReplaceThisPack && !isLocked, isLocked: isLocked))
             .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
-        .buttonStyle(ThemedPressButtonStyle())
+        .buttonStyle(PurposefulCardButtonStyle())
     }
 
     private func scenePackVisual(_ pack: ScenePackDefinition, compact: Bool) -> some View {
@@ -1057,7 +1057,7 @@ struct ScenePackAngleSheet: View {
         } label: {
             packRowContent(pack, subtitle: configuration.scenePackDesc(pack), isSelected: selectedPackID == pack.id)
         }
-        .buttonStyle(ThemedPressButtonStyle())
+        .buttonStyle(PurposefulCardButtonStyle())
     }
 
     private func pendingLifeMarkRewardCard(
@@ -1168,7 +1168,7 @@ struct ScenePackAngleSheet: View {
             .overlay(scenePackCardBorder(tint: style.colors.first ?? AppColors.accent, isSelected: selectedPackID == pack.id))
             .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
-        .buttonStyle(ThemedPressButtonStyle())
+        .buttonStyle(PurposefulCardButtonStyle())
     }
 
     private func scenePack(

@@ -543,7 +543,7 @@ struct SummaryPlaybackSheet: View {
                                 glowIntensity: 0.42
                             )
                     }
-                    .buttonStyle(ThemedPressButtonStyle())
+                    .buttonStyle(PurposefulCardButtonStyle())
 
                     Button {
                         showShareCardPrivacyConfirm = false
@@ -563,7 +563,7 @@ struct SummaryPlaybackSheet: View {
                                 in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                             )
                     }
-                    .buttonStyle(ThemedPressButtonStyle())
+                    .buttonStyle(PurposefulCardButtonStyle())
                     .disabled(isSavingShareCard)
                     .opacity(isSavingShareCard ? 0.62 : 1)
                 }
@@ -1190,7 +1190,7 @@ struct SummaryPlaybackSheet: View {
                         .padding(.vertical, 14)
                         .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(ThemedPressButtonStyle())
+                .buttonStyle(PurposefulCardButtonStyle())
 
                 memoryLineButton
 
@@ -1210,7 +1210,7 @@ struct SummaryPlaybackSheet: View {
                             glowIntensity: 0.58
                         )
                 }
-                .buttonStyle(ThemedPressButtonStyle())
+                .buttonStyle(PurposefulCardButtonStyle())
                 .disabled(weeklySharePayload == nil || isSavingShareCard)
 
                 if let shareSaveMessage {
@@ -1233,7 +1233,7 @@ struct SummaryPlaybackSheet: View {
                         .padding(.vertical, 12)
                         .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(ThemedPressButtonStyle())
+                .buttonStyle(PurposefulCardButtonStyle())
             } else {
                 Button {
                     handlePrimaryDoneAction()
@@ -1245,7 +1245,7 @@ struct SummaryPlaybackSheet: View {
                         .padding(.vertical, 14)
                         .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(ThemedPressButtonStyle())
+                .buttonStyle(PurposefulCardButtonStyle())
 
                 memoryLineButton
             }
@@ -1262,7 +1262,7 @@ struct SummaryPlaybackSheet: View {
                         .padding(.vertical, 12)
                         .themedInteractionSurface(radius: 16, tint: AppColors.accent, glowIntensity: 0.48)
                 }
-                .buttonStyle(ThemedPressButtonStyle())
+                .buttonStyle(PurposefulCardButtonStyle())
             }
 
         }
@@ -1282,7 +1282,7 @@ struct SummaryPlaybackSheet: View {
                     .padding(.vertical, 12)
                     .themedInteractionSurface(radius: 16, tint: AppColors.accent, glowIntensity: 0.48)
             }
-            .buttonStyle(ThemedPressButtonStyle())
+            .buttonStyle(PurposefulCardButtonStyle())
         }
     }
 
@@ -1393,7 +1393,7 @@ struct SummaryPlaybackSheet: View {
                         .padding(.vertical, 14)
                         .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(ThemedPressButtonStyle())
+                .buttonStyle(PurposefulCardButtonStyle())
 
                 memoryLineButton
 
@@ -1413,7 +1413,7 @@ struct SummaryPlaybackSheet: View {
                             glowIntensity: 0.58
                         )
                 }
-                .buttonStyle(ThemedPressButtonStyle())
+                .buttonStyle(PurposefulCardButtonStyle())
                 .disabled(weeklySharePayload == nil || isSavingShareCard)
 
                 if let shareSaveMessage {
@@ -1438,7 +1438,7 @@ struct SummaryPlaybackSheet: View {
                         .padding(.vertical, 12)
                         .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(ThemedPressButtonStyle())
+                .buttonStyle(PurposefulCardButtonStyle())
             } else {
                 Button {
                     handlePrimaryDoneAction()
@@ -1450,7 +1450,7 @@ struct SummaryPlaybackSheet: View {
                         .padding(.vertical, 14)
                         .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(ThemedPressButtonStyle())
+                .buttonStyle(PurposefulCardButtonStyle())
 
                 memoryLineButton
             }
@@ -1977,14 +1977,7 @@ private struct WeeklyStoryShareCardView: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(storyFactCardFill)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(storyAccent.opacity(0.16), lineWidth: 1)
-        )
+        .appSurface(.share, radius: 22, tint: storyAccent)
         .rotationEffect(.degrees(-1.2))
     }
 
@@ -2012,14 +2005,7 @@ private struct WeeklyStoryShareCardView: View {
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(storyCareCardFill)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(storyAccent.opacity(0.18), lineWidth: 1)
-            )
+            .appSurface(.trace, radius: 20, tint: storyAccent)
             .rotationEffect(.degrees(1.4))
     }
 
@@ -2209,36 +2195,6 @@ private struct WeeklyStoryShareCardView: View {
             return Color(hex: "af7b61")
         case .defaultSoft:
             return deepGreen
-        }
-    }
-
-    private var storyFactCardFill: Color {
-        switch backdropProfile {
-        case .lateCity:
-            return Color.white.opacity(0.56)
-        case .rain:
-            return Color.white.opacity(0.58)
-        default:
-            return Color.white.opacity(0.62)
-        }
-    }
-
-    private var storyCareCardFill: Color {
-        switch backdropProfile {
-        case .rain:
-            return Color(hex: "edf4f5").opacity(0.82)
-        case .travel:
-            return Color(hex: "eef3df").opacity(0.82)
-        case .lateCity:
-            return Color(hex: "eef0fa").opacity(0.78)
-        case .warmDaily:
-            return softGreen.opacity(0.78)
-        case .fitness:
-            return Color(hex: "ebf5ee").opacity(0.82)
-        case .social:
-            return Color(hex: "f7ede4").opacity(0.82)
-        case .defaultSoft:
-            return softGreen.opacity(0.78)
         }
     }
 
