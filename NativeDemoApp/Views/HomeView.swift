@@ -2209,6 +2209,8 @@ struct BillPlaybackSheet: View {
         let moment = currentPlaybackMoment
         let isFocused = isPlaying || playbackDone || activeIndex >= 0
         return ZStack(alignment: .topTrailing) {
+            playbackDepthStack
+
             VStack(alignment: .leading, spacing: 18) {
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
@@ -2305,6 +2307,14 @@ struct BillPlaybackSheet: View {
                     .stroke(AppColors.accent.opacity(isFocused ? 0.24 : 0.12), lineWidth: isFocused ? 1.2 : 0.8)
                     .allowsHitTesting(false)
             )
+            .rotation3DEffect(
+                .degrees(isFocused ? -4.5 : -2.0),
+                axis: (x: 0.0, y: 1.0, z: 0.0),
+                anchor: .center,
+                perspective: 0.58
+            )
+            .offset(x: isFocused ? 4 : 0, y: isFocused ? -2 : 0)
+            .shadow(color: AppColors.text.opacity(isFocused ? 0.12 : 0.06), radius: isFocused ? 24 : 14, x: 0, y: 14)
 
             Image(systemName: playbackStageSymbol)
                 .font(.system(size: 88, weight: .bold))
@@ -2312,6 +2322,44 @@ struct BillPlaybackSheet: View {
                 .offset(x: 4, y: 2)
         }
         .animation(.easeInOut(duration: 0.24), value: activeIndex)
+    }
+
+    private var playbackDepthStack: some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { index in
+                playbackDepthCard(index: index)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 286)
+        .allowsHitTesting(false)
+    }
+
+    private func playbackDepthCard(index: Int) -> some View {
+        let progress = max(activeIndex, 0)
+        let offsetY = CGFloat(index + 1) * 16
+        let offsetX = CGFloat(index + 1) * 12
+        return RoundedRectangle(cornerRadius: 28, style: .continuous)
+            .fill(.ultraThinMaterial)
+            .background(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(AppColors.panel.opacity(0.22 - Double(index) * 0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(Color.white.opacity(0.26 - Double(index) * 0.05), lineWidth: 0.8)
+            )
+            .frame(maxWidth: .infinity, minHeight: 246 - CGFloat(index) * 14)
+            .scaleEffect(0.94 - CGFloat(index) * 0.045, anchor: .center)
+            .rotation3DEffect(
+                .degrees(-9.0 - Double(index) * 4.0),
+                axis: (x: 0.0, y: 1.0, z: 0.0),
+                anchor: .center,
+                perspective: 0.72
+            )
+            .offset(x: offsetX, y: offsetY)
+            .opacity(max(0.12, 0.34 - Double(index) * 0.08))
+            .blur(radius: CGFloat(index) * 0.35)
+            .animation(.spring(response: 0.34, dampingFraction: 0.88), value: progress)
     }
 
     private var playbackStepText: String {

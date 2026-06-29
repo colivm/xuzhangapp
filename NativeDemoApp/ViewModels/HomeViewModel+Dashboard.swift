@@ -179,7 +179,8 @@ extension HomeViewModel {
                 return nil
             }
             return quickRecordSuggestion(from: candidate, now: now)
-        } else if isEveningCommutePromptTime(now, calendar: calendar) {
+        } else if isEveningCommutePromptTime(now, calendar: calendar) ||
+                    isEveningCommuteBackfillTime(now, calendar: calendar) {
             let morningBackfill: CommuteHabitCandidate?
             if hasTodayCommuteRecord(direction: .morning, now: now, calendar: calendar) {
                 morningBackfill = nil
@@ -192,17 +193,30 @@ extension HomeViewModel {
                 )
             }
 
-            let eveningCandidate: CommuteHabitCandidate?
+            let eveningPromptCandidate: CommuteHabitCandidate?
             if hasTodayCommuteRecord(direction: .evening, now: now, calendar: calendar) {
-                eveningCandidate = nil
+                eveningPromptCandidate = nil
             } else {
-                eveningCandidate = commuteHabitCandidate(
+                eveningPromptCandidate = commuteHabitCandidate(
                     direction: .evening,
                     now: now,
                     isBackfill: false,
                     calendar: calendar
                 )
             }
+            let eveningBackfillCandidate: CommuteHabitCandidate?
+            if hasTodayCommuteRecord(direction: .evening, now: now, calendar: calendar) ||
+                eveningPromptCandidate != nil {
+                eveningBackfillCandidate = nil
+            } else {
+                eveningBackfillCandidate = commuteHabitCandidate(
+                    direction: .evening,
+                    now: now,
+                    isBackfill: true,
+                    calendar: calendar
+                )
+            }
+            let eveningCandidate = eveningPromptCandidate ?? eveningBackfillCandidate
 
             if let morningBackfill, let eveningCandidate {
                 return combinedCommuteSuggestion(
@@ -255,7 +269,7 @@ extension HomeViewModel {
             secondaryRecordDate: nil,
             headline: headline,
             detail: detail,
-            buttonTitle: candidate.isBackfill ? "补记上班" : "一键记通勤",
+            buttonTitle: candidate.isBackfill ? commuteBackfillButtonTitle(for: candidate.direction) : "一键记通勤",
             backgroundImageName: candidate.direction == .morning
                 ? "CommuteMorningQuickCardBackground"
                 : "CommuteEveningQuickCardBackground",
@@ -263,6 +277,13 @@ extension HomeViewModel {
             confidence: candidate.confidence,
             isBackfill: candidate.isBackfill
         )
+    }
+
+    private func commuteBackfillButtonTitle(for direction: CommuteHabitDirection) -> String {
+        switch direction {
+        case .morning: return "补记上班"
+        case .evening: return "补记下班"
+        }
     }
 
     private func combinedCommuteSuggestion(
@@ -328,12 +349,21 @@ extension HomeViewModel {
         let minuteSamples = candidates.map { minutesFromMidnight($0.createdAt, calendar: calendar) }.sorted()
         guard let medianMinute = medianMinute(in: minuteSamples) else { return nil }
         let currentMinute = minutesFromMidnight(now, calendar: calendar)
-        guard isBackfill || isNearPersonalCommutePromptTime(
-            currentMinute: currentMinute,
-            medianMinute: medianMinute,
-            direction: direction,
-            weekdayGroup: weekdayGroup
-        ) else { return nil }
+        if isBackfill {
+            guard isPastPersonalCommuteBackfillTime(
+                currentMinute: currentMinute,
+                medianMinute: medianMinute,
+                direction: direction,
+                weekdayGroup: weekdayGroup
+            ) else { return nil }
+        } else {
+            guard isNearPersonalCommutePromptTime(
+                currentMinute: currentMinute,
+                medianMinute: medianMinute,
+                direction: direction,
+                weekdayGroup: weekdayGroup
+            ) else { return nil }
+        }
 
         guard let amountCluster = stableAmountCluster(in: candidates) else { return nil }
         let amount = Double(amountCluster.cents) / 100
@@ -420,6 +450,22 @@ extension HomeViewModel {
         return ((medianMinute - window.before)...(medianMinute + window.after)).contains(currentMinute)
     }
 
+    private func isPastPersonalCommuteBackfillTime(
+        currentMinute: Int,
+        medianMinute: Int,
+        direction: CommuteHabitDirection,
+        weekdayGroup: String
+    ) -> Bool {
+        let graceMinutes: Int
+        switch direction {
+        case .morning:
+            graceMinutes = 60
+        case .evening:
+            graceMinutes = weekdayGroup == "fri" ? 75 : 65
+        }
+        return currentMinute >= medianMinute + graceMinutes
+    }
+
     private func hasTodayCommuteRecord(
         direction: CommuteHabitDirection,
         now: Date,
@@ -461,6 +507,11 @@ extension HomeViewModel {
             return (960...1230).contains(minute)
         }
         return (1050...1350).contains(minute)
+    }
+
+    private func isEveningCommuteBackfillTime(_ date: Date, calendar: Calendar) -> Bool {
+        let minute = minutesFromMidnight(date, calendar: calendar)
+        return (1140...1439).contains(minute)
     }
 
     private func isWorkday(_ date: Date, calendar: Calendar) -> Bool {
