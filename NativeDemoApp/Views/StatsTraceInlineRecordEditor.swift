@@ -46,16 +46,18 @@ struct TraceInlineRecordEditor: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
                 amountField
+                    .layoutPriority(1)
                 categorySelector
+                    .frame(width: 112)
             }
 
             TextField("这一笔想怎么被记住？", text: $titleText)
                 .font(.system(size: 15))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 8)
                 .background(inlineFieldChrome)
                 .focused($focusedField, equals: .title)
                 .onChange(of: titleText) { _, value in
@@ -125,7 +127,7 @@ struct TraceInlineRecordEditor: View {
                 .foregroundStyle(AppColors.text)
                 .focused($focusedField, equals: .amount)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 11)
         .padding(.vertical, 8)
         .background(inlineFieldChrome)
     }
@@ -138,7 +140,7 @@ struct TraceInlineRecordEditor: View {
                 isCategoryPanelExpanded.toggle()
             }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 Text(selectedCategory.displayName)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
@@ -147,7 +149,7 @@ struct TraceInlineRecordEditor: View {
                     .font(.system(size: 10, weight: .semibold))
             }
             .foregroundStyle(AppColors.text.opacity(0.92))
-            .padding(.horizontal, 11)
+            .padding(.horizontal, 10)
             .padding(.vertical, 10)
             .background(inlineFieldChrome)
         }
@@ -176,8 +178,8 @@ struct TraceInlineRecordEditor: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(Color(red: 85/255, green: 99/255, blue: 110/255))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 8)
             .background(inlineFieldChrome)
         }
         .buttonStyle(.plain)

@@ -2269,25 +2269,26 @@ struct StatsWebView: View {
                 .foregroundStyle(AppColors.subtext)
         } else {
             let groups = traceDayGroups
-            let firstGroupID = groups.first?.id
-            LazyVStack(alignment: .leading, spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                 ForEach(groups) { group in
-                    traceDayHeader(group)
-                        .padding(.top, group.id == firstGroupID ? 0 : 6)
-
-                    ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
-                        let isLast = index == group.items.count - 1
-                        if fromTraceDetail {
-                            traceDetailBillRecordRow(item, isFirst: index == 0, isLast: isLast)
-                        } else {
-                            Button {
-                                openEditor(for: item)
-                            } label: {
-                                timelineBillRecordRow(item, isFirst: index == 0, isLast: isLast)
-                                    .contentShape(Rectangle())
+                    Section {
+                        ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
+                            let isFirst = index == 0
+                            let isLast = index == group.items.count - 1
+                            if fromTraceDetail {
+                                traceDetailBillRecordRow(item, isFirst: isFirst, isLast: isLast)
+                            } else {
+                                Button {
+                                    openEditor(for: item)
+                                } label: {
+                                    timelineBillRecordRow(item, isFirst: isFirst, isLast: isLast)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
+                    } header: {
+                        traceDayHeader(group)
                     }
                 }
             }
@@ -2311,27 +2312,56 @@ struct StatsWebView: View {
     }
 
     private func traceDayHeader(_ group: TraceDayGroup) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(traceDayTitle(group.date))
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(AppColors.text.opacity(0.82))
+        HStack(alignment: .center, spacing: 8) {
+            VStack(spacing: 1) {
+                Text(traceDayRailTitle(group.date))
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.accent.opacity(0.92))
+                    .lineLimit(1)
+
+                if let subtitle = traceDayRailSubtitle(group.date) {
+                    Text(subtitle)
+                        .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AppColors.subtext.opacity(0.74))
+                        .lineLimit(1)
+                }
+            }
+            .frame(width: 30)
+
             Text(traceDaySubtitle(group))
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(AppColors.subtext.opacity(0.82))
             Spacer(minLength: 0)
         }
-        .padding(.top, 4)
-        .padding(.bottom, 2)
-        .padding(.horizontal, 2)
+        .padding(.top, 6)
+        .padding(.bottom, 6)
+        .background(traceDayHeaderBackground)
+        .zIndex(1)
     }
 
-    private func traceDayTitle(_ date: Date) -> String {
+    private var traceDayHeaderBackground: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color.white.opacity(0.52))
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .padding(.horizontal, -4)
+    }
+
+    private func traceDayRailTitle(_ date: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) { return "今天" }
         if calendar.isDateInYesterday(date) { return "昨天" }
-        let month = calendar.component(.month, from: date)
-        let day = calendar.component(.day, from: date)
-        return "\(month)月\(day)日 · \(weekdayText(for: date))"
+        return "\(calendar.component(.month, from: date))/\(calendar.component(.day, from: date))"
+    }
+
+    private func traceDayRailSubtitle(_ date: Date) -> String? {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) || calendar.isDateInYesterday(date) {
+            return nil
+        }
+        return weekdayText(for: date)
     }
 
     private func traceDaySubtitle(_ group: TraceDayGroup) -> String {
@@ -2660,8 +2690,8 @@ struct StatsWebView: View {
     }
 
     private func timelineBillRecordRow(_ item: HomeItem, isFirst: Bool, isLast: Bool) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            traceTimelineRail(for: item, isFirst: isFirst, isLast: isLast, isActive: false)
+        HStack(alignment: .top, spacing: 8) {
+            traceTimelineRail(isFirst: isFirst, isLast: isLast, isActive: false)
             billRecordRow(item, isFirst: false)
                 .padding(.bottom, isLast ? 0 : 2)
         }
@@ -2675,8 +2705,10 @@ struct StatsWebView: View {
         let dragTranslation = traceSwipeDragState?.itemID == item.id ? traceSwipeDragState?.translation ?? 0 : 0
         let restingOffset: CGFloat = isSwiped ? -76 : 0
         let rowOffset = min(0, max(-86, restingOffset + dragTranslation))
-        return HStack(alignment: .top, spacing: 10) {
-            traceTimelineRail(for: item, isFirst: isFirst, isLast: isLast, isActive: isEditing || isSwiped)
+        return HStack(alignment: .top, spacing: isEditing ? 0 : 8) {
+            if !isEditing {
+                traceTimelineRail(isFirst: isFirst, isLast: isLast, isActive: isSwiped)
+            }
 
             ZStack(alignment: .trailing) {
                 if !isEditing {
@@ -2685,9 +2717,10 @@ struct StatsWebView: View {
                         .zIndex(2)
                 }
 
-                VStack(alignment: .leading, spacing: isEditing ? 10 : 8) {
-                    traceDetailRecordSummary(item, isEditing: isEditing)
-                    if traceInlineEditingItemID == item.id {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !isEditing {
+                        traceDetailRecordSummary(item, isEditing: false)
+                    } else {
                         TraceInlineRecordEditor(
                             item: item,
                             autoCommitRequestID: traceAutoCommitRequestID,
@@ -2708,11 +2741,12 @@ struct StatsWebView: View {
                                 }
                             }
                         )
+                        .padding(.top, 2)
                         .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, isEditing ? 14 : 12)
+                .padding(.horizontal, isEditing ? 12 : 14)
+                .padding(.vertical, isEditing ? 16 : 12)
                 .background(traceDetailRecordBackground(isEditing: isEditing))
                 .overlay(traceDetailRecordBorder(isEditing: isEditing))
                 .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
@@ -2745,44 +2779,31 @@ struct StatsWebView: View {
         .animation(.easeInOut(duration: 0.45), value: isDeleting)
     }
 
-    private func traceTimelineRail(for item: HomeItem, isFirst: Bool, isLast: Bool, isActive: Bool) -> some View {
+    private func traceTimelineRail(isFirst: Bool, isLast: Bool, isActive: Bool) -> some View {
+        let isEmphasized = isActive || isFirst
         VStack(spacing: 0) {
             Rectangle()
                 .fill(isFirst ? Color.clear : AppColors.line.opacity(0.42))
-                .frame(width: 1, height: 12)
+                .frame(width: 1, height: 10)
 
             ZStack {
                 Circle()
-                    .fill(isActive ? AppColors.accent.opacity(0.18) : AppColors.paperWarm.opacity(0.72))
-                    .frame(width: 28, height: 28)
+                    .fill(isEmphasized ? AppColors.accent.opacity(isActive ? 0.20 : 0.12) : AppColors.paperWarm.opacity(0.72))
+                    .frame(width: 22, height: 22)
                 Circle()
-                    .stroke(isActive ? AppColors.accent.opacity(0.72) : AppColors.line.opacity(0.68), lineWidth: isActive ? 1.4 : 1)
-                    .frame(width: 18, height: 18)
+                    .stroke(isEmphasized ? AppColors.accent.opacity(isActive ? 0.72 : 0.46) : AppColors.line.opacity(0.68), lineWidth: isEmphasized ? 1.25 : 1)
+                    .frame(width: 14, height: 14)
                 Circle()
-                    .fill(isActive ? AppColors.accent : AppColors.accent.opacity(0.52))
-                    .frame(width: 7, height: 7)
-            }
-            .overlay(alignment: .bottom) {
-                Text(traceTimelineClockText(item.createdAt))
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.subtext.opacity(0.82))
-                    .monospacedDigit()
-                    .offset(y: 15)
+                    .fill(isActive ? AppColors.accent : AppColors.accent.opacity(isFirst ? 0.72 : 0.52))
+                    .frame(width: isEmphasized ? 6.5 : 6, height: isEmphasized ? 6.5 : 6)
             }
 
             Rectangle()
                 .fill(isLast ? Color.clear : AppColors.line.opacity(0.42))
-                .frame(width: 1, height: isActive ? 92 : 62)
+                .frame(width: 1, height: isActive ? 84 : 58)
         }
-        .frame(width: 42)
-        .frame(minHeight: 76)
-    }
-
-    private func traceTimelineClockText(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "HH:mm"
-        return formatter.string(from: date)
+        .frame(width: 30)
+        .frame(minHeight: 70)
     }
 
     var traceEditSpring: Animation {
