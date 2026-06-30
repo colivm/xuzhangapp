@@ -779,6 +779,22 @@ final class HomeViewModel: ObservableObject {
         return true
     }
 
+    @discardableResult
+    func attachMemoryImage(_ imageData: Data, to itemID: UUID) -> Bool {
+        guard let idx = items.firstIndex(where: { $0.id == itemID }) else { return false }
+        items[idx].memoryImageData = imageData
+        items[idx].updatedAt = Date()
+        let updated = items[idx]
+        persistItems()
+        analyticsService.track("record_memory_image_attached", props: [
+            "category": updated.category.rawValue,
+            "amount": String(format: "%.2f", updated.amount)
+        ])
+        refreshTodayPlayback()
+        Task { await syncUpsertToCloud(updated) }
+        return true
+    }
+
     func syncCloudLedgerNow() async {
         let context = cloudContext()
         guard let context else {

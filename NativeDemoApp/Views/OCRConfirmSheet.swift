@@ -10,12 +10,6 @@ struct OCRConfirmSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var rows: [ConfirmRow]
     @State private var isCollectingImport = false
-    @State private var activeReviewIndex = 0
-    @GestureState private var reviewDeckDragOffset: CGFloat = 0
-
-    private let reviewDeckHeight: CGFloat = 326
-    private let reviewDeckRowStep: CGFloat = 92
-    private let reviewDeckSwitchThreshold: CGFloat = 46
 
     let onConfirm: ([OCRReceiptDraft]) -> Int
 
@@ -62,13 +56,10 @@ struct OCRConfirmSheet: View {
 
                         receiptFoldDivider
 
-                        ocrReviewDeck
+                        ocrOverviewList
                     }
                     .padding(18)
                 }
-                .scaleEffect(isCollectingImport ? 0.82 : 1, anchor: .bottomTrailing)
-                .offset(x: isCollectingImport ? 28 : 0, y: isCollectingImport ? 32 : 0)
-                .opacity(isCollectingImport ? 0.34 : 1)
 
                 Divider()
                 HStack(spacing: 12) {
@@ -84,20 +75,16 @@ struct OCRConfirmSheet: View {
                     Button {
                         let selectedDrafts = selectedRows.map(\.draft)
                         guard !selectedDrafts.isEmpty, !isCollectingImport else { return }
-                        withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
-                            isCollectingImport = true
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                            if onConfirm(selectedDrafts) > 0 {
-                                dismiss()
-                            } else {
-                                isCollectingImport = false
-                            }
+                        isCollectingImport = true
+                        if onConfirm(selectedDrafts) > 0 {
+                            dismiss()
+                        } else {
+                            isCollectingImport = false
                         }
                     } label: {
                         Label(
-                            isCollectingImport ? "收进待整理区" : "导入 \(selectedRows.count) 条到账单",
-                            systemImage: isCollectingImport ? "tray.and.arrow.down.fill" : "tray.full.fill"
+                            isCollectingImport ? "正在进入整理" : "进入整理 \(selectedRows.count) 条",
+                            systemImage: isCollectingImport ? "tray.and.arrow.down.fill" : "checklist.checked"
                         )
                             .font(.system(size: 15, weight: .semibold))
                             .frame(maxWidth: .infinity, minHeight: 48)
@@ -116,247 +103,91 @@ struct OCRConfirmSheet: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.large])
-        .animation(.spring(response: 0.30, dampingFraction: 0.84), value: isCollectingImport)
     }
 
 
-    @ViewBuilder
-    private var ocrReviewDeck: some View {
-        if rows.isEmpty {
-            EmptyView()
-        } else {
-            VStack(spacing: 12) {
-                reviewDeckHeader
+    private var ocrOverviewList: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("识别结果总览")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                Spacer()
+                Text("将导入 \(selectedRows.count) / \(rows.count) 条")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColors.subtext)
+            }
 
-                ZStack {
-                    ForEach(visibleReviewDeckIndices, id: \.self) { index in
-                        let isActive = index == clampedActiveReviewIndex
-                        ocrDeckRow(index, isActive: isActive)
-                            .frame(height: isActive ? 174 : 110)
-                            .scaleEffect(reviewDeckScale(for: index))
-                            .opacity(reviewDeckOpacity(for: index))
-                            .offset(y: reviewDeckOffset(for: index))
-                            .zIndex(reviewDeckZIndex(for: index))
-                            .allowsHitTesting(abs(index - clampedActiveReviewIndex) <= 1)
-                    }
+            LazyVStack(spacing: 10) {
+                ForEach(rows.indices, id: \.self) { index in
+                    overviewRow(index)
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: reviewDeckHeight)
-                .clipped()
-                .contentShape(Rectangle())
-                .gesture(reviewDeckGesture)
-            }
-            .padding(12)
-            .background(reviewDeckBackground)
-            .onChange(of: rows.count) { _, count in
-                guard count > 0, activeReviewIndex >= count else { return }
-                activeReviewIndex = count - 1
             }
         }
     }
 
-    private var reviewDeckHeader: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(AppColors.accent)
-                .frame(width: 7, height: 7)
-                .shadow(color: AppColors.accent.opacity(0.26), radius: 7, y: 2)
-
-            Text("OCR")
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(AppColors.accentDark.opacity(0.88))
-
-            Text("\(clampedActiveReviewIndex + 1) / \(rows.count)")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppColors.subtext.opacity(0.82))
-
-            Spacer(minLength: 8)
-
-            reviewDeckNavButton(systemName: "chevron.up", isEnabled: clampedActiveReviewIndex > 0) {
-                moveReviewDeck(by: -1)
-            }
-
-            reviewDeckNavButton(systemName: "chevron.down", isEnabled: clampedActiveReviewIndex < rows.count - 1) {
-                moveReviewDeck(by: 1)
-            }
-        }
-        .padding(.horizontal, 2)
-    }
-
-    private func reviewDeckNavButton(systemName: String, isEnabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 12, weight: .bold))
-                .frame(width: 30, height: 28)
-                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .foregroundStyle(isEnabled ? AppColors.text.opacity(0.82) : AppColors.subtext.opacity(0.34))
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(isEnabled ? 0.58 : 0.28))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(AppColors.line.opacity(isEnabled ? 0.36 : 0.18), lineWidth: 1)
-        )
-    }
-
-    private var reviewDeckBackground: some View {
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(AppColors.panelStrong.opacity(0.82))
-            .overlay(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.42),
-                        AppColors.accent.opacity(0.10),
-                        AppColors.paperWarm.opacity(0.12)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(AppColors.accent.opacity(0.16), lineWidth: 1)
-            )
-            .shadow(color: AppColors.accent.opacity(0.10), radius: 20, y: 10)
-    }
-
-    private var visibleReviewDeckIndices: [Int] {
-        guard !rows.isEmpty else { return [] }
-        let active = clampedActiveReviewIndex
-        let lower = max(0, active - 1)
-        let upper = min(rows.count - 1, active + 2)
-        return Array(lower...upper)
-    }
-
-    private var clampedActiveReviewIndex: Int {
-        guard !rows.isEmpty else { return 0 }
-        return min(max(activeReviewIndex, 0), rows.count - 1)
-    }
-
-    private var boundedReviewDeckDragOffset: CGFloat {
-        rubberBandedReviewDeckOffset(reviewDeckDragOffset)
-    }
-
-    private var reviewDeckGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .local)
-            .updating($reviewDeckDragOffset) { value, state, _ in
-                guard abs(value.translation.height) > abs(value.translation.width) else { return }
-                state = rubberBandedReviewDeckOffset(value.translation.height)
-            }
-            .onEnded { value in
-                let vertical = value.translation.height
-                guard abs(vertical) > abs(value.translation.width),
-                      abs(vertical) > reviewDeckSwitchThreshold else { return }
-                moveReviewDeck(by: vertical < 0 ? 1 : -1)
-            }
-    }
-
-    private func rubberBandedReviewDeckOffset(_ offset: CGFloat) -> CGFloat {
-        let canMoveUp = clampedActiveReviewIndex < rows.count - 1
-        let canMoveDown = clampedActiveReviewIndex > 0
-        let limited = min(max(offset, -reviewDeckRowStep), reviewDeckRowStep)
-
-        if limited < 0, !canMoveUp { return limited * 0.22 }
-        if limited > 0, !canMoveDown { return limited * 0.22 }
-        return limited
-    }
-
-    private func moveReviewDeck(by delta: Int) {
-        guard !rows.isEmpty else { return }
-        let nextIndex = min(max(clampedActiveReviewIndex + delta, 0), rows.count - 1)
-        guard nextIndex != activeReviewIndex else { return }
-        withAnimation(reviewDeckAnimation) {
-            activeReviewIndex = nextIndex
-        }
-    }
-
-    private func activateReviewIndex(_ index: Int) {
-        guard rows.indices.contains(index) else { return }
-        withAnimation(reviewDeckAnimation) {
-            activeReviewIndex = index
-        }
-    }
-
-    private var reviewDeckAnimation: Animation {
-        .spring(response: 0.30, dampingFraction: 0.88, blendDuration: 0.04)
-    }
-
-    private func reviewDeckPosition(for index: Int) -> CGFloat {
-        CGFloat(index - clampedActiveReviewIndex) + (boundedReviewDeckDragOffset / reviewDeckRowStep)
-    }
-
-    private func reviewDeckOffset(for index: Int) -> CGFloat {
-        reviewDeckPosition(for: index) * reviewDeckRowStep
-    }
-
-    private func reviewDeckOpacity(for index: Int) -> Double {
-        let distance = abs(reviewDeckPosition(for: index))
-        return Double(max(0.24, 1 - distance * 0.44))
-    }
-
-    private func reviewDeckScale(for index: Int) -> CGFloat {
-        let distance = abs(reviewDeckPosition(for: index))
-        return max(0.94, 1 - distance * 0.045)
-    }
-
-    private func reviewDeckZIndex(for index: Int) -> Double {
-        100 - Double(abs(reviewDeckPosition(for: index)) * 10)
-    }
-
-    private func ocrDeckRow(_ index: Int, isActive: Bool) -> some View {
+    private func overviewRow(_ index: Int) -> some View {
         let row = rows[index]
-        return VStack(alignment: .leading, spacing: isActive ? 12 : 8) {
-            confirmRowHeader(row: row, index: index, isActive: isActive)
-
-            if isActive, let note = row.draft.reviewNote {
-                reviewNoteRow(note, status: row.draft.reviewStatus)
+        return HStack(alignment: .top, spacing: 11) {
+            Button {
+                rows[index].selected.toggle()
+            } label: {
+                Image(systemName: row.selected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(row.selected ? AppColors.accent : AppColors.subtext.opacity(0.5))
+                    .frame(width: 28, height: 30)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(row.selected ? "跳过此条" : "导入此条")
 
-            if isActive {
-                confirmRowCategory(row: row, index: index)
-            } else {
-                compactReviewDeckFooter(row)
-            }
-        }
-        .padding(.horizontal, isActive ? 16 : 14)
-        .padding(.vertical, isActive ? 15 : 12)
-        .background(confirmRowBackground(isSelected: row.selected, isActive: isActive))
-        .overlay(confirmRowBorder(isSelected: row.selected, isActive: isActive))
-        .overlay(alignment: .leading) {
-            if row.selected {
-                Capsule(style: .continuous)
-                    .fill(AppColors.accent.opacity(isActive ? 0.28 : 0.16))
-                    .frame(width: isActive ? 3 : 2)
-                    .padding(.vertical, isActive ? 14 : 12)
-            }
-        }
-        .shadow(color: isActive ? AppColors.accent.opacity(0.16) : Color.black.opacity(0.04), radius: isActive ? 18 : 8, y: isActive ? 10 : 4)
-        .contentShape(RoundedRectangle(cornerRadius: isActive ? 18 : 16, style: .continuous))
-        .onTapGesture {
-            activateReviewIndex(index)
-        }
-    }
+            VStack(alignment: .leading, spacing: 7) {
+                Text(row.draft.title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppColors.text.opacity(row.selected ? 1 : 0.56))
+                    .lineLimit(2)
 
-    private func compactReviewDeckFooter(_ row: ConfirmRow) -> some View {
-        HStack(spacing: 8) {
-            Text(row.draft.category.displayName)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(AppColors.text.opacity(0.70))
-                .lineLimit(1)
+                HStack(spacing: 7) {
+                    Text(row.draft.date.zhBillDateTime)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext.opacity(row.selected ? 0.82 : 0.50))
+                        .lineLimit(1)
+                    Text(row.draft.category.displayName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppColors.text.opacity(row.selected ? 0.74 : 0.46))
+                        .lineLimit(1)
+                }
+
+                if let note = row.draft.reviewNote {
+                    overviewNote(note, status: row.draft.reviewStatus)
+                }
+            }
 
             Spacer(minLength: 8)
 
-            if row.draft.reviewNote != nil {
-                Image(systemName: reviewStatusIcon(row.draft.reviewStatus))
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(reviewStatusColor(row.draft.reviewStatus).opacity(0.72))
-            }
+            VStack(alignment: .trailing, spacing: 8) {
+                Text(row.draft.amount.formatted(.cny.precision(.fractionLength(2))))
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.text.opacity(row.selected ? 1 : 0.50))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
 
-            statusPill(row.selected ? "\u{5C06}\u{5BFC}\u{5165}" : "\u{5DF2}\u{8DF3}\u{8FC7}", isSelected: row.selected)
+                statusPill(row.selected ? "将导入" : "已跳过", isSelected: row.selected)
+            }
+        }
+        .padding(14)
+        .background(confirmRowBackground(isSelected: row.selected, isActive: true))
+        .overlay(confirmRowBorder(isSelected: row.selected, isActive: true))
+    }
+
+    private func overviewNote(_ note: String, status: OCRDraftReviewStatus) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: reviewStatusIcon(status))
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(reviewStatusColor(status))
+            Text(note)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.86))
+                .lineLimit(1)
         }
     }
 
@@ -392,182 +223,6 @@ struct OCRConfirmSheet: View {
         )
     }
 
-    private func confirmRow(_ index: Int) -> some View {
-        let row = rows[index]
-        return VStack(alignment: .leading, spacing: 12) {
-            confirmRowHeader(row: row, index: index, isActive: true)
-            if let note = row.draft.reviewNote {
-                reviewNoteRow(note, status: row.draft.reviewStatus)
-            }
-            confirmRowCategory(row: row, index: index)
-        }
-        .padding(16)
-        .background(confirmRowBackground(isSelected: row.selected, isActive: true))
-        .overlay(confirmRowBorder(isSelected: row.selected, isActive: true))
-        .overlay(alignment: .leading) {
-            if row.selected {
-                Capsule(style: .continuous)
-                    .fill(AppColors.accent.opacity(0.22))
-                    .frame(width: 3)
-                    .padding(.vertical, 14)
-            }
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .onTapGesture {
-            activateReviewIndex(index)
-        }
-    }
-
-    private func confirmRowHeader(row: ConfirmRow, index: Int, isActive: Bool) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Button {
-                rows[index].selected.toggle()
-            } label: {
-                Image(systemName: row.selected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: isActive ? 24 : 20, weight: .semibold))
-                .foregroundStyle(row.selected ? AppColors.accent : AppColors.subtext.opacity(0.5))
-            }
-            .buttonStyle(.plain)
-            .disabled(!isActive)
-            .accessibilityLabel("导入此条")
-
-            VStack(alignment: .leading, spacing: isActive ? 8 : 5) {
-                Text("备注")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(AppColors.subtext.opacity(0.74))
-
-                Text(row.draft.title)
-                    .font(.system(size: isActive ? 17 : 15, weight: .semibold))
-                    .foregroundStyle(AppColors.text.opacity(isActive ? 1 : 0.78))
-                    .lineLimit(isActive ? 3 : 1)
-
-                if isActive {
-                    HStack(spacing: 6) {
-                        if let brand = brand(for: row.draft) {
-                            brandChip(brand)
-                        }
-
-                        if let scene = sceneSignal(for: row.draft), scene.confidenceTier >= .medium {
-                            sceneChip(scene)
-                        }
-                    }
-                }
-
-                Text(row.draft.date.zhBillDateTime)
-                    .font(.system(size: isActive ? 12 : 11, weight: .medium))
-                    .foregroundStyle(AppColors.subtext.opacity(isActive ? 0.72 : 0.54))
-            }
-
-            Spacer(minLength: 8)
-
-            amountReviewBlock(row.draft, isCompact: !isActive)
-        }
-    }
-
-    private func amountReviewBlock(_ draft: OCRReceiptDraft, isCompact: Bool = false) -> some View {
-        VStack(alignment: .trailing, spacing: isCompact ? 2 : 4) {
-            Text("金额")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(AppColors.subtext.opacity(0.72))
-            Text(draft.amount.formatted(.cny.precision(.fractionLength(2))))
-                .font(.system(size: isCompact ? 17 : 22, weight: .bold, design: .rounded))
-                .foregroundStyle(AppColors.text.opacity(isCompact ? 0.78 : 1))
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-        }
-        .padding(.horizontal, isCompact ? 8 : 10)
-        .padding(.vertical, isCompact ? 7 : 8)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(isCompact ? 0.36 : 0.54))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(AppColors.accent.opacity(isCompact ? 0.08 : 0.14), lineWidth: 1)
-        )
-    }
-
-    private func brand(for draft: OCRReceiptDraft) -> MerchantBrandDefinition? {
-        MerchantBrandCatalog.definition(for: draft.merchantBrandId)
-            ?? MerchantBrandCatalog.matchOCRBrand(in: "\(draft.title)\n\(draft.rawText)")
-    }
-
-    private func brandChip(_ brand: MerchantBrandDefinition) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: "tag.fill")
-                .font(.system(size: 10, weight: .bold))
-            Text(brand.displayName)
-                .font(.system(size: 11, weight: .semibold))
-                .lineLimit(1)
-        }
-        .foregroundStyle(AppColors.accent.opacity(0.88))
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .background(
-            Capsule(style: .continuous)
-                .fill(AppColors.accent.opacity(0.10))
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(AppColors.accent.opacity(0.18), lineWidth: 1)
-        )
-    }
-
-    private func sceneSignal(for draft: OCRReceiptDraft) -> LifeSceneSignal? {
-        let item = HomeItem(
-            title: "\(draft.title)\n\(draft.rawText)",
-            amount: draft.amount,
-            category: draft.category,
-            source: .ocr,
-            createdAt: draft.date,
-            merchantBrandId: draft.merchantBrandId
-        )
-        let signal = LifeSceneSemanticService.classify(item)
-        return signal.confidenceTier >= .medium ? signal : nil
-    }
-
-    private func sceneChip(_ signal: LifeSceneSignal) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 10, weight: .bold))
-            Text(LifeSceneSemanticService.displayTheme(for: signal))
-                .font(.system(size: 11, weight: .semibold))
-                .lineLimit(1)
-        }
-        .foregroundStyle(AppColors.text.opacity(0.74))
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .background(
-            Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.64))
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(AppColors.line.opacity(0.35), lineWidth: 1)
-        )
-    }
-
-    private func reviewNoteRow(_ note: String, status: OCRDraftReviewStatus) -> some View {
-        HStack(alignment: .top, spacing: 7) {
-            Image(systemName: reviewStatusIcon(status))
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(reviewStatusColor(status))
-                .padding(.top, 2)
-
-            Text(note)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppColors.subtext.opacity(0.88))
-                .lineLimit(2)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(reviewStatusColor(status).opacity(0.08))
-        )
-    }
-
     private func reviewStatusIcon(_ status: OCRDraftReviewStatus) -> String {
         switch status {
         case .ready:
@@ -587,26 +242,6 @@ struct OCRConfirmSheet: View {
             return Color.orange.opacity(0.86)
         case .possibleDuplicate:
             return AppColors.accent.opacity(0.82)
-        }
-    }
-
-    private func confirmRowCategory(row: ConfirmRow, index: Int) -> some View {
-        HStack(spacing: 10) {
-            Text("分类")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(AppColors.subtext.opacity(0.78))
-
-            OCRCategoryChips(selectedCategory: row.draft.category) { category in
-                if rows[index].draft.category != category {
-                    rows[index].draft.categoryCorrectionFrom = rows[index].draft.category
-                }
-                rows[index].draft.category = category
-                rows[index].draft.userEditedCategory = true
-            }
-
-            Spacer()
-
-            statusPill(row.selected ? "将导入" : "已跳过", isSelected: row.selected)
         }
     }
 
@@ -669,42 +304,49 @@ struct OCRConfirmSheet: View {
 }
 
 struct OCRDraftPanel: View {
-    private typealias DraftGroup = (key: String, importedAt: Date, items: [HomeItem])
-
     let items: [HomeItem]
     let onToggleResolved: (UUID, Bool) -> Void
     let onCategoryChange: (UUID, HomeItem.Category) -> Void
     let onAmountChange: (UUID, Double) -> Void
+    let onUpdateItem: (HomeItem) -> Void
     let onDelete: (UUID) -> Void
     let onClearResolved: () -> Void
-    let onResolveAllPending: () -> Void
 
-    @State private var isCollectingPending = false
+    @State private var activeDraftID: UUID?
     @State private var isClearingResolved = false
 
-    private var visibleGroups: [DraftGroup] {
-        let grouped = Dictionary(grouping: items) { item in
-            item.draftMeta?.batchId ?? item.id.uuidString
-        }
-        var groups: [DraftGroup] = grouped.map { key, batchItems in
-            let importedAt = batchItems.first?.draftMeta?.importedAt ?? batchItems.first?.createdAt ?? .now
-            let sortedItems = batchItems.sorted { $0.createdAt > $1.createdAt }
-            return (key: key, importedAt: importedAt, items: sortedItems)
-        }
-        groups.sort { $0.importedAt > $1.importedAt }
-        return Array(groups.prefix(3))
+    private var pendingItems: [HomeItem] {
+        items
+            .filter { $0.draftMeta?.status == .pending }
+            .sorted { $0.createdAt > $1.createdAt }
     }
 
-    private var pendingItems: [HomeItem] {
-        items.filter { $0.draftMeta?.status == .pending }
+    private var resolvedItems: [HomeItem] {
+        items
+            .filter { $0.draftMeta?.status == .resolved }
+            .sorted { $0.updatedAt > $1.updatedAt }
     }
 
     private var resolvedCount: Int {
-        items.filter { $0.draftMeta?.status == .resolved }.count
+        resolvedItems.count
     }
 
     private var pendingTotal: Double {
         pendingItems.reduce(0) { $0 + $1.amount }
+    }
+
+    private var activeIndex: Int? {
+        guard !pendingItems.isEmpty else { return nil }
+        if let activeDraftID,
+           let index = pendingItems.firstIndex(where: { $0.id == activeDraftID }) {
+            return index
+        }
+        return 0
+    }
+
+    private var activeItem: HomeItem? {
+        guard let activeIndex else { return nil }
+        return pendingItems[activeIndex]
     }
 
     var body: some View {
@@ -721,7 +363,8 @@ struct OCRDraftPanel: View {
                     emptyState
                 } else {
                     floatingDigestCard
-                    draftGroupList
+                    reviewStack
+                    resolvedList
                 }
             }
             .padding(18)
@@ -730,16 +373,19 @@ struct OCRDraftPanel: View {
             .overlay(panelBorder)
             .shadow(color: Color.black.opacity(items.isEmpty ? 0.04 : 0.13), radius: items.isEmpty ? 8 : 26, x: 0, y: items.isEmpty ? 4 : 18)
             .shadow(color: AppColors.accent.opacity(items.isEmpty ? 0.02 : 0.20), radius: 30, x: 0, y: 0)
-            .scaleEffect(isCollectingPending ? 0.72 : (isClearingResolved ? 0.86 : 1), anchor: .bottomTrailing)
-            .offset(x: isCollectingPending ? 42 : 0, y: isCollectingPending ? 44 : (isClearingResolved ? 18 : 0))
-            .opacity(isCollectingPending ? 0.28 : (isClearingResolved ? 0.46 : 1))
-            .blur(radius: isCollectingPending || isClearingResolved ? 0.6 : 0)
+            .scaleEffect(isClearingResolved ? 0.86 : 1, anchor: .bottomTrailing)
+            .offset(y: isClearingResolved ? 18 : 0)
+            .opacity(isClearingResolved ? 0.46 : 1)
+            .blur(radius: isClearingResolved ? 0.6 : 0)
         }
         .padding(.vertical, items.isEmpty ? 0 : 4)
         .animation(.spring(response: 0.38, dampingFraction: 0.84), value: pendingItems.count)
         .animation(.spring(response: 0.36, dampingFraction: 0.82), value: resolvedCount)
-        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: isCollectingPending)
         .animation(.easeInOut(duration: 0.18), value: isClearingResolved)
+        .onAppear(perform: normalizeActiveDraft)
+        .onChange(of: pendingItems.map(\.id)) { _, _ in
+            normalizeActiveDraft()
+        }
     }
 
     private var panelHeader: some View {
@@ -754,15 +400,6 @@ struct OCRDraftPanel: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 8) {
-                Button {
-                    collectPendingDrafts()
-                } label: {
-                    Label("\u{4E00}\u{952E}\u{6807}\u{8BB0}\u{5DF2}\u{6574}\u{7406}", systemImage: "tray.and.arrow.down.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(resolveAllForeground)
-                    .disabled(pendingItems.isEmpty)
                 Button {
                     clearResolvedDrafts()
                 } label: {
@@ -864,10 +501,6 @@ struct OCRDraftPanel: View {
         return "\(pendingItems.count) 笔待整理 · 合计 \(total)"
     }
 
-    private var resolveAllForeground: Color {
-        pendingItems.isEmpty ? AppColors.subtext.opacity(0.45) : AppColors.accent
-    }
-
     private var clearResolvedForeground: Color {
         resolvedCount > 0 ? AppColors.accent : AppColors.subtext.opacity(0.45)
     }
@@ -885,27 +518,199 @@ struct OCRDraftPanel: View {
             .fill(Color.white.opacity(0.58))
     }
 
-    private var draftGroupList: some View {
-        LazyVStack(spacing: 14) {
-            ForEach(visibleGroups, id: \.key) { group in
-                draftGroupSection(group)
+    @ViewBuilder
+    private var reviewStack: some View {
+        if let activeIndex, let activeItem {
+            VStack(spacing: 10) {
+                reviewStackHeader(activeIndex: activeIndex)
+
+                ZStack {
+                    if pendingItems.indices.contains(activeIndex + 1) {
+                        backgroundReviewCard(pendingItems[activeIndex + 1], label: "下一条")
+                            .offset(y: 38)
+                            .scaleEffect(0.94)
+                            .opacity(0.42)
+                    }
+
+                    if pendingItems.indices.contains(activeIndex - 1) {
+                        backgroundReviewCard(pendingItems[activeIndex - 1], label: "上一条")
+                            .offset(y: -38)
+                            .scaleEffect(0.94)
+                            .opacity(0.32)
+                    }
+
+                    OCRDraftRow(
+                        item: activeItem,
+                        isFocused: true,
+                        onToggleResolved: onToggleResolved,
+                        onCategoryChange: onCategoryChange,
+                        onAmountChange: onAmountChange,
+                        onUpdateItem: onUpdateItem,
+                        onDelete: onDelete
+                    )
+                    .zIndex(2)
+                }
+                .frame(minHeight: 368)
+                .contentShape(Rectangle())
+
+                reviewStackControls(activeIndex: activeIndex, activeItem: activeItem)
+            }
+            .padding(12)
+            .background(reviewStackBackground)
+        }
+    }
+
+    private func reviewStackHeader(activeIndex: Int) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(AppColors.accent)
+                .frame(width: 7, height: 7)
+            Text("待整理")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.accentDark.opacity(0.88))
+            Text("\(activeIndex + 1) / \(pendingItems.count)")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppColors.subtext.opacity(0.82))
+            Spacer()
+            reviewStackNavButton(systemName: "chevron.up", isEnabled: activeIndex > 0) {
+                moveActiveDraft(by: -1)
+            }
+            reviewStackNavButton(systemName: "chevron.down", isEnabled: activeIndex < pendingItems.count - 1) {
+                moveActiveDraft(by: 1)
             }
         }
     }
 
-    private func draftGroupSection(_ group: DraftGroup) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("导入于 \(group.importedAt.zhBillDateTime)")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppColors.subtext)
-            ForEach(group.items) { item in
-                OCRDraftRow(
-                    item: item,
-                    onToggleResolved: onToggleResolved,
-                    onCategoryChange: onCategoryChange,
-                    onAmountChange: onAmountChange,
-                    onDelete: onDelete
-                )
+    private func reviewStackNavButton(systemName: String, isEnabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .bold))
+                .frame(width: 30, height: 28)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .foregroundStyle(isEnabled ? AppColors.text.opacity(0.82) : AppColors.subtext.opacity(0.34))
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(isEnabled ? 0.58 : 0.28))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(AppColors.line.opacity(isEnabled ? 0.36 : 0.18), lineWidth: 1)
+        )
+    }
+
+    private func backgroundReviewCard(_ item: HomeItem, label: String) -> some View {
+        HStack(spacing: 10) {
+            Text(label)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(AppColors.accent.opacity(0.72))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(Capsule(style: .continuous).fill(Color.white.opacity(0.54)))
+            VStack(alignment: .leading, spacing: 5) {
+                Text(item.title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppColors.text.opacity(0.72))
+                    .lineLimit(1)
+                Text(item.createdAt.zhBillDateTime)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.64))
+            }
+            Spacer()
+            Text(item.amount.formatted(.cny.precision(.fractionLength(2))))
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text.opacity(0.66))
+                .lineLimit(1)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.56))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
+        )
+        .allowsHitTesting(false)
+    }
+
+    private func reviewStackControls(activeIndex: Int, activeItem: HomeItem) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                moveActiveDraft(by: -1)
+            } label: {
+                Label("上一条", systemImage: "chevron.up")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(maxWidth: .infinity, minHeight: 38)
+            }
+            .buttonStyle(.plain)
+            .disabled(activeIndex == 0)
+            .foregroundStyle(activeIndex == 0 ? AppColors.subtext.opacity(0.44) : AppColors.text.opacity(0.80))
+            .background(controlButtonBackground)
+
+            Button {
+                confirmActiveDraft(activeItem)
+            } label: {
+                Label("确认这一条", systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .frame(maxWidth: .infinity, minHeight: 38)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(AppColors.accent)
+            )
+
+            Button {
+                moveActiveDraft(by: 1)
+            } label: {
+                Label("下一条", systemImage: "chevron.down")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(maxWidth: .infinity, minHeight: 38)
+            }
+            .buttonStyle(.plain)
+            .disabled(activeIndex >= pendingItems.count - 1)
+            .foregroundStyle(activeIndex >= pendingItems.count - 1 ? AppColors.subtext.opacity(0.44) : AppColors.text.opacity(0.80))
+            .background(controlButtonBackground)
+        }
+    }
+
+    private var controlButtonBackground: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color.white.opacity(0.62))
+    }
+
+    private var reviewStackBackground: some View {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(AppColors.panelStrong.opacity(0.70))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
+            )
+    }
+
+    @ViewBuilder
+    private var resolvedList: some View {
+        if !resolvedItems.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("已整理列表")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(AppColors.text.opacity(0.82))
+
+                ForEach(resolvedItems) { item in
+                    OCRDraftRow(
+                        item: item,
+                        isFocused: false,
+                        onToggleResolved: onToggleResolved,
+                        onCategoryChange: onCategoryChange,
+                        onAmountChange: onAmountChange,
+                        onUpdateItem: onUpdateItem,
+                        onDelete: onDelete
+                    )
+                }
             }
         }
     }
@@ -960,17 +765,37 @@ struct OCRDraftPanel: View {
             .allowsHitTesting(false)
     }
 
-    private func collectPendingDrafts() {
-        guard !pendingItems.isEmpty, !isCollectingPending else { return }
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
-            isCollectingPending = true
+    private func normalizeActiveDraft() {
+        guard !pendingItems.isEmpty else {
+            activeDraftID = nil
+            return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-            onResolveAllPending()
-            withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
-                isCollectingPending = false
-            }
+        if let activeDraftID, pendingItems.contains(where: { $0.id == activeDraftID }) {
+            return
         }
+        activeDraftID = pendingItems.first?.id
+    }
+
+    private func moveActiveDraft(by delta: Int) {
+        guard let activeIndex else { return }
+        let nextIndex = min(max(activeIndex + delta, 0), pendingItems.count - 1)
+        guard nextIndex != activeIndex else { return }
+        withAnimation(.spring(response: 0.30, dampingFraction: 0.88)) {
+            activeDraftID = pendingItems[nextIndex].id
+        }
+    }
+
+    private func confirmActiveDraft(_ item: HomeItem) {
+        let currentIndex = activeIndex ?? 0
+        let nextCandidate: UUID? = pendingItems.indices.contains(currentIndex + 1)
+            ? pendingItems[currentIndex + 1].id
+            : pendingItems.indices.contains(currentIndex - 1)
+                ? pendingItems[currentIndex - 1].id
+                : nil
+        withAnimation(.spring(response: 0.30, dampingFraction: 0.88)) {
+            activeDraftID = nextCandidate
+        }
+        onToggleResolved(item.id, true)
     }
 
     private func clearResolvedDrafts() {
@@ -989,27 +814,37 @@ struct OCRDraftPanel: View {
 
 private struct OCRDraftRow: View {
     let item: HomeItem
+    let isFocused: Bool
     let onToggleResolved: (UUID, Bool) -> Void
     let onCategoryChange: (UUID, HomeItem.Category) -> Void
     let onAmountChange: (UUID, Double) -> Void
+    let onUpdateItem: (HomeItem) -> Void
     let onDelete: (UUID) -> Void
 
     @State private var amountText: String
+    @State private var titleText: String
+    @State private var selectedDate: Date
     @State private var isEditingAmount = false
 
     init(
         item: HomeItem,
+        isFocused: Bool = false,
         onToggleResolved: @escaping (UUID, Bool) -> Void,
         onCategoryChange: @escaping (UUID, HomeItem.Category) -> Void,
         onAmountChange: @escaping (UUID, Double) -> Void,
+        onUpdateItem: @escaping (HomeItem) -> Void,
         onDelete: @escaping (UUID) -> Void
     ) {
         self.item = item
+        self.isFocused = isFocused
         self.onToggleResolved = onToggleResolved
         self.onCategoryChange = onCategoryChange
         self.onAmountChange = onAmountChange
+        self.onUpdateItem = onUpdateItem
         self.onDelete = onDelete
         _amountText = State(initialValue: String(format: "%.2f", item.amount))
+        _titleText = State(initialValue: item.title)
+        _selectedDate = State(initialValue: item.createdAt)
     }
 
     private var isResolved: Bool {
@@ -1023,6 +858,9 @@ private struct OCRDraftRow: View {
     private var rowContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             headerRow
+            if isFocused {
+                editableFields
+            }
             categoryRow
             if isEditingAmount {
                 amountPad
@@ -1033,20 +871,35 @@ private struct OCRDraftRow: View {
         .background(rowBackground)
         .overlay(rowBorder)
         .animation(.easeInOut(duration: 0.16), value: isEditingAmount)
+        .shadow(color: isFocused ? AppColors.accent.opacity(0.16) : Color.black.opacity(0.04), radius: isFocused ? 18 : 8, y: isFocused ? 10 : 4)
         .onChange(of: item.amount) { _, newValue in
             guard !isEditingAmount else { return }
             amountText = amountInputText(newValue)
         }
+        .onChange(of: item.id) { _, _ in
+            titleText = item.title
+            selectedDate = item.createdAt
+            amountText = amountInputText(item.amount)
+            isEditingAmount = false
+        }
+        .onChange(of: item.title) { _, newValue in
+            guard titleText != newValue else { return }
+            titleText = newValue
+        }
+        .onChange(of: item.createdAt) { _, newValue in
+            guard selectedDate != newValue else { return }
+            selectedDate = newValue
+        }
     }
 
     private var rowBackground: some View {
-        let fill = isResolved ? Color.white.opacity(0.46) : Color.white.opacity(0.68)
+        let fill = isFocused ? Color.white.opacity(0.78) : (isResolved ? Color.white.opacity(0.46) : Color.white.opacity(0.68))
         return RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(fill)
     }
 
     private var rowBorder: some View {
-        let stroke = isResolved ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.52)
+        let stroke = isFocused ? AppColors.accent.opacity(0.30) : (isResolved ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.52))
         return RoundedRectangle(cornerRadius: 16, style: .continuous)
             .stroke(stroke, lineWidth: 1)
     }
@@ -1073,10 +926,10 @@ private struct OCRDraftRow: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(item.title)
-                .font(.system(size: 16, weight: .semibold))
+            Text(isFocused ? "当前账单" : item.title)
+                .font(.system(size: isFocused ? 12 : 16, weight: isFocused ? .bold : .semibold))
                 .foregroundStyle(AppColors.text)
-                .lineLimit(3)
+                .lineLimit(isFocused ? 1 : 3)
             Text(item.createdAt.zhBillDateTime)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
@@ -1114,6 +967,48 @@ private struct OCRDraftRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("修改金额")
+    }
+
+    private var editableFields: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("备注")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppColors.subtext.opacity(0.76))
+                TextField("备注", text: $titleText)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                    .textFieldStyle(.plain)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 9)
+                    .background(inputBackground)
+                    .onSubmit(commitTitle)
+                    .onChange(of: titleText) { _, _ in
+                        commitTitle()
+                    }
+            }
+
+            DatePicker(
+                "时间",
+                selection: $selectedDate,
+                displayedComponents: [.date, .hourAndMinute]
+            )
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(AppColors.subtext.opacity(0.78))
+            .datePickerStyle(.compact)
+            .onChange(of: selectedDate) { _, _ in
+                commitDate()
+            }
+        }
+    }
+
+    private var inputBackground: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color.white.opacity(0.62))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(AppColors.line.opacity(0.26), lineWidth: 1)
+            )
     }
 
     private var categoryRow: some View {
@@ -1247,6 +1142,23 @@ private struct OCRDraftRow: View {
     private func commitAmount() {
         guard let value = Double(amountText.replacingOccurrences(of: ",", with: "")), value > 0 else { return }
         onAmountChange(item.id, value)
+    }
+
+    private func commitTitle() {
+        let cleanTitle = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty,
+              cleanTitle != item.title else { return }
+        var updated = item
+        updated.title = cleanTitle
+        updated.userEditedTitle = true
+        onUpdateItem(updated)
+    }
+
+    private func commitDate() {
+        guard abs(selectedDate.timeIntervalSince(item.createdAt)) >= 1 else { return }
+        var updated = item
+        updated.createdAt = selectedDate
+        onUpdateItem(updated)
     }
 
     private func appendAmountKey(_ key: String) {

@@ -87,6 +87,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
     var categoryCorrectionFrom: Category?
     var memoryContext: MemoryContext?
     var scenePackId: String?
+    var memoryImageData: Data?
 
     init(
         id: UUID = UUID(),
@@ -103,7 +104,8 @@ struct HomeItem: Identifiable, Codable, Equatable {
         userEditedCategory: Bool? = nil,
         categoryCorrectionFrom: Category? = nil,
         memoryContext: MemoryContext? = nil,
-        scenePackId: String? = nil
+        scenePackId: String? = nil,
+        memoryImageData: Data? = nil
     ) {
         self.id = id
         self.title = title
@@ -120,6 +122,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
         self.categoryCorrectionFrom = categoryCorrectionFrom
         self.memoryContext = memoryContext
         self.scenePackId = scenePackId
+        self.memoryImageData = memoryImageData
     }
 
     static func inferEmotionTag(category: Category, amount: Double) -> String {
@@ -674,7 +677,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
 extension HomeItem {
     enum CodingKeys: String, CodingKey {
-        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta, userEditedTitle, userEditedCategory, categoryCorrectionFrom, memoryContext, scenePackId
+        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta, userEditedTitle, userEditedCategory, categoryCorrectionFrom, memoryContext, scenePackId, memoryImageData
     }
 
     init(from decoder: Decoder) throws {
@@ -695,6 +698,7 @@ extension HomeItem {
         categoryCorrectionFrom = try container.decodeIfPresent(Category.self, forKey: .categoryCorrectionFrom)
         memoryContext = try container.decodeIfPresent(MemoryContext.self, forKey: .memoryContext)
         scenePackId = try container.decodeIfPresent(String.self, forKey: .scenePackId)
+        memoryImageData = try container.decodeIfPresent(Data.self, forKey: .memoryImageData)
     }
 }
 

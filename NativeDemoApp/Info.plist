@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>叙账</string>
+	<string>xLife</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -34,9 +34,11 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>用于根据本地天气生成本地提醒，可随时在设置关闭；不上传账单</string>
+	<string>xLife uses local weather to make records feel more contextual. You can turn this off in Settings.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>用于将本周故事图保存到相册，便于你回看或分享。</string>
+	<string>xLife saves story images to your photo library only when you ask it to.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>xLife accesses your photo library only when you choose a photo to attach to a record.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

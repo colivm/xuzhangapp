@@ -2896,9 +2896,9 @@ struct RecordView: View {
                 onToggleResolved: { id, isResolved in homeViewModel.updateOCRDraftStatus(id: id, isResolved: isResolved) },
                 onCategoryChange: { id, category in homeViewModel.updateOCRDraftCategory(id: id, category: category) },
                 onAmountChange: { id, amount in homeViewModel.updateOCRDraftAmount(id: id, amount: amount) },
+                onUpdateItem: { item in _ = homeViewModel.updateItem(item) },
                 onDelete: { id in homeViewModel.deleteOCRDraftItem(id: id) },
-                onClearResolved: homeViewModel.clearResolvedOCRDrafts,
-                onResolveAllPending: homeViewModel.resolveAllPendingOCRDrafts
+                onClearResolved: homeViewModel.clearResolvedOCRDrafts
             )
         }
         .padding(hasOCRDraftItems ? 8 : 0)

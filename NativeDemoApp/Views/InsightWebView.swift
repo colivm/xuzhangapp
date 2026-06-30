@@ -256,7 +256,7 @@ struct InsightWebView: View {
                     .zIndex(30)
             }
 
-            if let aiCommandPreviewItem {
+            if let aiCommandPreviewItem, !showAICommandSheet {
                 FocusedRecordPreviewCard(item: aiCommandPreviewItem) {
                     withAnimation(.spring(response: 0.32, dampingFraction: 0.90)) {
                         self.aiCommandPreviewItem = nil
@@ -278,7 +278,9 @@ struct InsightWebView: View {
         .sheet(isPresented: $showTodayInsightSheet) {
             todayInsightSheet
         }
-        .sheet(isPresented: $showAICommandSheet) {
+        .sheet(isPresented: $showAICommandSheet, onDismiss: {
+            aiCommandPreviewItem = nil
+        }) {
             aiCommandSheet
         }
     }
@@ -1345,6 +1347,9 @@ struct InsightWebView: View {
                 }
                 .scrollIndicators(.hidden)
                 .scrollDismissesKeyboard(.interactively)
+                .scrollDisabled(aiCommandPreviewItem != nil)
+
+                aiCommandPreviewOverlay(topPadding: 46)
             }
             .navigationTitle("AI 指令台")
             .navigationBarTitleDisplayMode(.inline)
@@ -1361,6 +1366,23 @@ struct InsightWebView: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private func aiCommandPreviewOverlay(topPadding: CGFloat) -> some View {
+        if let aiCommandPreviewItem {
+            FocusedRecordPreviewCard(item: aiCommandPreviewItem) {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.90)) {
+                    self.aiCommandPreviewItem = nil
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, topPadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(Color.black.opacity(0.04).ignoresSafeArea())
+            .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
+            .zIndex(40)
+        }
     }
 
     private var aiCommandSheetHeader: some View {

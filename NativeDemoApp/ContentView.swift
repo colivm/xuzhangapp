@@ -1,4 +1,5 @@
 import Foundation
+import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -616,6 +617,11 @@ struct ContentView: View {
     @State private var settingsAppearanceOpenRequestID: UUID?
     @State private var lastMemberStatusRefreshAt: Date?
     @State private var homeLifeMarkRewardPrompt: LifeMarkSceneRewardPrompt?
+    @State private var memoryPromptItem: HomeItem?
+    @State private var memorySourceItem: HomeItem?
+    @State private var memoryPreviewItem: HomeItem?
+    @State private var selectedMemoryPhoto: PhotosPickerItem?
+    @State private var pendingMemoryImageData: Data?
 
     enum AppTab: Int, CaseIterable, Identifiable {
         case today
@@ -671,6 +677,43 @@ struct ContentView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     .zIndex(5)
             }
+
+            if let memoryPromptItem {
+                memorySuccessOverlay(memoryPromptItem)
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                    .zIndex(6)
+            }
+        }
+        .sheet(item: $memorySourceItem) { item in
+            MemorySourceSheet(
+                selectedPhoto: $selectedMemoryPhoto,
+                onClose: { memorySourceItem = nil }
+            )
+            .presentationDetents([.height(330)])
+            .presentationDragIndicator(.hidden)
+            .onDisappear {
+                if selectedMemoryPhoto == nil && memoryPreviewItem == nil {
+                    memorySourceItem = nil
+                }
+                _ = item
+            }
+        }
+        .sheet(item: $memoryPreviewItem) { item in
+            if let pendingMemoryImageData {
+                MemoryPreviewSheet(
+                    item: item,
+                    imageData: pendingMemoryImageData,
+                    onConfirm: {
+                        if homeViewModel.attachMemoryImage(pendingMemoryImageData, to: item.id) {
+                            closeMemoryFlow()
+                        }
+                    },
+                    onReselect: {
+                        memoryPreviewItem = nil
+                        memorySourceItem = item
+                    }
+                )
+            }
         }
         .sheet(isPresented: $showMemberPricing) {
             MemberPricingView(
@@ -692,6 +735,22 @@ struct ContentView: View {
             settingsViewModel.refreshThemeAccess(showsMessage: true)
             Task {
                 await refreshAccountAndMemberStatusIfNeeded(force: true)
+            }
+        }
+        .onChange(of: selectedMemoryPhoto) { _, newValue in
+            guard let newValue, let item = memorySourceItem else { return }
+            Task {
+                guard let data = try? await newValue.loadTransferable(type: Data.self),
+                      let compressedData = MemoryImageCompressor.compressedJPEGData(from: data) else {
+                    await MainActor.run { selectedMemoryPhoto = nil }
+                    return
+                }
+                await MainActor.run {
+                    pendingMemoryImageData = compressedData
+                    selectedMemoryPhoto = nil
+                    memorySourceItem = nil
+                    memoryPreviewItem = item
+                }
             }
         }
         .task {
@@ -793,7 +852,11 @@ struct ContentView: View {
             case .record:
                 RecordView(
                     onSaved: { prompt in
+                        let savedItem = homeViewModel.items.first
                         selectTab(.today)
+                        if let savedItem, savedItem.memoryImageData == nil {
+                            showMemoryPrompt(for: savedItem)
+                        }
                         if let prompt {
                             showHomeLifeMarkRewardPrompt(prompt)
                         }
@@ -853,6 +916,47 @@ struct ContentView: View {
             withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
                 homeLifeMarkRewardPrompt = prompt
             }
+        }
+    }
+
+    private func showMemoryPrompt(for item: HomeItem) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+            guard memoryPromptItem == nil else { return }
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
+                memoryPromptItem = item
+            }
+        }
+    }
+
+    private func closeMemoryFlow() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            memoryPromptItem = nil
+        }
+        memorySourceItem = nil
+        memoryPreviewItem = nil
+        pendingMemoryImageData = nil
+        selectedMemoryPhoto = nil
+    }
+
+    private func memorySuccessOverlay(_ item: HomeItem) -> some View {
+        ZStack {
+            Color.black.opacity(0.22)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    closeMemoryFlow()
+                }
+
+            MemorySuccessCard(
+                item: item,
+                onAddImage: {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        memoryPromptItem = nil
+                    }
+                    memorySourceItem = item
+                },
+                onSkip: closeMemoryFlow
+            )
+            .padding(.horizontal, 22)
         }
     }
 

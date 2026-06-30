@@ -1233,9 +1233,14 @@ struct HomeView: View {
 
                 Text("·").foregroundStyle(AppColors.readableSubtext)
 
-                Text(item.createdAt.zhBillDateTime)
+                Text(item.createdAt.zhBillTime)
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.readableSubtext)
+            }
+
+            if let imageData = item.memoryImageData {
+                MemoryAttachmentThumbnail(imageData: imageData, height: 112, cornerRadius: 12)
+                    .padding(.top, 6)
             }
         }
         .padding(.vertical, 10)
@@ -1538,7 +1543,7 @@ struct HomeView: View {
                             .stroke(todayRecordCategoryAccent(for: item).opacity(0.16), lineWidth: 0.7)
                     )
                 Text("·").foregroundStyle(AppColors.readableSubtext)
-                Text(item.createdAt.zhBillDateTime)
+                Text(item.createdAt.zhBillTime)
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.readableSubtext)
                     .lineLimit(1)
@@ -1547,6 +1552,13 @@ struct HomeView: View {
             }
             .opacity(isEditing ? 0 : 1)
             .frame(height: isEditing ? 0 : nil)
+
+            if let imageData = item.memoryImageData {
+                MemoryAttachmentThumbnail(imageData: imageData, height: 120, cornerRadius: 12)
+                    .padding(.top, 4)
+                    .opacity(isEditing ? 0 : 1)
+                    .frame(height: isEditing ? 0 : nil)
+            }
         }
     }
 

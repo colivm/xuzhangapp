@@ -2424,48 +2424,57 @@ struct StatsWebView: View {
     }
 
     private func traceDayHeader(_ group: TraceDayGroup) -> some View {
-        HStack(alignment: .center, spacing: 8) {
-            VStack(spacing: 1) {
-                Text(traceDayRailTitle(group.date))
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.accent.opacity(0.92))
-                    .lineLimit(1)
-
-                if let subtitle = traceDayRailSubtitle(group.date) {
-                    Text(subtitle)
-                        .font(.system(size: 8.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(AppColors.subtext.opacity(0.74))
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .lastTextBaseline, spacing: 10) {
+                    Text(traceDayRailTitle(group.date))
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(AppColors.text)
                         .lineLimit(1)
-                }
-            }
-            .frame(width: 30)
 
-            Text(traceDaySubtitle(group))
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(AppColors.subtext.opacity(0.82))
+                    if let subtitle = traceDayRailSubtitle(group.date) {
+                        Text(subtitle)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(AppColors.subtext.opacity(0.82))
+                            .lineLimit(1)
+                    }
+                }
+
+                Text(traceDaySubtitle(group))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .lineLimit(1)
+            }
+
             Spacer(minLength: 0)
+
+            Image(systemName: "calendar")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(AppColors.accent.opacity(0.84))
+                .frame(width: 34, height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(AppColors.accent.opacity(0.08))
+                )
         }
-        .padding(.top, 6)
-        .padding(.bottom, 6)
+        .padding(.top, 18)
+        .padding(.bottom, 12)
         .background(traceDayHeaderBackground)
         .zIndex(1)
     }
 
     private var traceDayHeaderBackground: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color.white.opacity(0.52))
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .padding(.horizontal, -4)
+        Rectangle()
+            .fill(AppColors.bg.opacity(0.92))
+            .background(.ultraThinMaterial)
+            .padding(.horizontal, -18)
     }
 
     private func traceDayRailTitle(_ date: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) { return "今天" }
         if calendar.isDateInYesterday(date) { return "昨天" }
-        return "\(calendar.component(.month, from: date))/\(calendar.component(.day, from: date))"
+        return "\(calendar.component(.month, from: date))月\(calendar.component(.day, from: date))日"
     }
 
     private func traceDayRailSubtitle(_ date: Date) -> String? {
@@ -2478,7 +2487,7 @@ struct StatsWebView: View {
 
     private func traceDaySubtitle(_ group: TraceDayGroup) -> String {
         let total = group.items.reduce(0) { $0 + $1.amount }
-        return "\(group.items.count) 笔 · \(total.formatted(.cny))"
+        return "\(group.items.count) 笔 · 共消费 \(total.formatted(.cny))"
     }
 
     func weekdayText(for date: Date) -> String {
@@ -2759,6 +2768,237 @@ struct StatsWebView: View {
     // MARK: - Simplified Category Filter Chips (no longer used, replaced by Menu)
 
     private func billRecordRow(_ item: HomeItem, isFirst: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                traceRecordLeadingMark(item)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(item.displayTitle)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1)
+
+                    traceRecordTagLine(item)
+
+                    if let note = traceRecordNote(item) {
+                        Text(note)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                Text(item.amount.formatted(.cny))
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .padding(.top, 1)
+            }
+
+            if let imageData = item.memoryImageData {
+                MemoryAttachmentThumbnail(imageData: imageData, height: 120, cornerRadius: 12)
+                    .padding(.leading, 56)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
+        .background(traceListRecordBackground)
+        .overlay(traceListRecordBorder)
+    }
+
+    private func traceRecordTagLine(_ item: HomeItem) -> some View {
+        HStack(spacing: 5) {
+            Text(item.category.rawValue)
+            if !item.displayEmotionTag.isEmpty {
+                Text("·")
+                Text(item.displayEmotionTag)
+            }
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(AppColors.accent)
+        .lineLimit(1)
+    }
+
+    private func traceRecordLeadingMark(_ item: HomeItem) -> some View {
+        VStack(spacing: 7) {
+            Image(systemName: categorySystemImage(item.category))
+                .font(.system(size: 18, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(traceAccentColor(for: item.category))
+                .frame(width: 36, height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(traceAccentColor(for: item.category).opacity(0.14))
+                )
+
+            Text(traceRecordTimeText(item.createdAt))
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(AppColors.subtext)
+                .lineLimit(1)
+        }
+        .frame(width: 44)
+        .padding(.top, 1)
+    }
+
+    private func traceRecordNote(_ item: HomeItem) -> String? {
+        let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty,
+              raw != title,
+              raw != item.category.defaultRecordTitle else {
+            return nil
+        }
+        return raw
+    }
+
+    private func traceRecordTimeText(_ date: Date) -> String {
+        date.zhBillTime
+    }
+
+    private var traceListRecordBackground: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color.white.opacity(0.74))
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .shadow(color: Color.black.opacity(0.035), radius: 9, y: 3)
+    }
+
+    private var traceListRecordBorder: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(Color.white.opacity(0.58), lineWidth: 1)
+    }
+
+    private func timelineBillRecordRow(_ item: HomeItem, isFirst: Bool, isLast: Bool) -> some View {
+        billRecordRow(item, isFirst: isFirst)
+            .padding(.bottom, isLast ? 0 : 12)
+    }
+
+    private func traceDetailBillRecordRow(_ item: HomeItem, isFirst: Bool, isLast: Bool) -> some View {
+        let isEditing = traceInlineEditingItemID == item.id
+        let canSwipe = traceInlineEditingItemID == nil
+        let isSwiped = traceSwipedItemID == item.id && canSwipe
+        let isDeleting = traceDeletingItemID == item.id
+        let dragTranslation = traceSwipeDragState?.itemID == item.id ? traceSwipeDragState?.translation ?? 0 : 0
+        let restingOffset: CGFloat = isSwiped ? -76 : 0
+        let rowOffset = min(0, max(-86, restingOffset + dragTranslation))
+        return ZStack(alignment: .trailing) {
+            if canSwipe {
+                traceSwipeActions(for: item, isVisible: isSwiped)
+                    .padding(.trailing, 10)
+                    .zIndex(2)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                traceDetailRecordSummary(item, isEditing: false)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
+            .background(traceDetailRecordBackground(isEditing: false))
+            .overlay(traceDetailRecordBorder(isEditing: false))
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .offset(x: rowOffset)
+            .scaleEffect(isDeleting ? 0.96 : 1, anchor: .trailing)
+            .opacity(isDeleting ? 0 : 1)
+            .frame(height: isDeleting ? 0 : nil)
+            .clipped()
+            .onTapGesture {
+                if traceSwipedItemID == item.id {
+                    withAnimation(traceEditSpring) {
+                        traceSwipedItemID = nil
+                    }
+                } else if !isEditing {
+                    openEditor(for: item, fromTraceDetail: true)
+                }
+            }
+            .overlay(alignment: .trailing) {
+                if canSwipe {
+                    traceSwipeHandle(for: item, isSwiped: isSwiped)
+                        .zIndex(3)
+                }
+            }
+        }
+        .id(item.id)
+        .padding(.bottom, isLast || isDeleting ? 0 : 12)
+        .animation(traceEditSpring, value: isSwiped)
+        .animation(.easeInOut(duration: 0.45), value: isDeleting)
+    }
+
+    private func traceTimelineRail(isFirst: Bool, isLast: Bool, isActive: Bool) -> some View {
+        EmptyView()
+            .frame(width: 0)
+    }
+
+    var traceEditSpring: Animation {
+        .spring(response: 0.38, dampingFraction: 0.90, blendDuration: 0.08)
+    }
+
+    private func traceDetailRecordSummary(_ item: HomeItem, isEditing: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                traceRecordLeadingMark(item)
+                    .opacity(isEditing ? 0.28 : 1)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(item.displayTitle)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1)
+                        .opacity(isEditing ? 0.28 : 1)
+
+                    traceRecordTagLine(item)
+                        .opacity(isEditing ? 0.35 : 1)
+
+                    if let note = traceRecordNote(item) {
+                        Text(note)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
+                            .lineLimit(1)
+                            .opacity(isEditing ? 0 : 1)
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                Text(item.amount.formatted(.cny))
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .padding(.top, 1)
+                    .opacity(isEditing ? 0.24 : 1)
+            }
+
+            if let imageData = item.memoryImageData {
+                MemoryAttachmentThumbnail(imageData: imageData, height: 120, cornerRadius: 12)
+                    .padding(.leading, 56)
+                    .opacity(isEditing ? 0 : 1)
+                    .frame(height: isEditing ? 0 : nil)
+            }
+        }
+    }
+
+    private func traceDetailRecordBackground(isEditing: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color.white.opacity(isEditing ? 0.56 : 0.78))
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .shadow(color: Color.black.opacity(isEditing ? 0.0 : 0.035), radius: 9, y: 3)
+    }
+
+    private func traceDetailRecordBorder(isEditing: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(AppColors.accent.opacity(isEditing ? 0.24 : 0.08), lineWidth: 1)
+            .allowsHitTesting(false)
+    }
+
+    /*
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(item.displayTitle)
@@ -2801,17 +3041,18 @@ struct StatsWebView: View {
             }
         }
     }
+    */
 
-    private func timelineBillRecordRow(_ item: HomeItem, isFirst: Bool, isLast: Bool) -> some View {
+    private func legacyTimelineBillRecordRowWithRail(_ item: HomeItem, isFirst: Bool, isLast: Bool) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            traceTimelineRail(isFirst: isFirst, isLast: isLast, isActive: false)
+            legacyTraceTimelineRail(isFirst: isFirst, isLast: isLast, isActive: false)
             billRecordRow(item, isFirst: false)
                 .padding(.bottom, isLast ? 0 : 2)
         }
         .padding(.top, isFirst ? 2 : 0)
     }
 
-    private func traceDetailBillRecordRow(_ item: HomeItem, isFirst: Bool, isLast: Bool) -> some View {
+    private func legacyTraceDetailBillRecordRow(_ item: HomeItem, isFirst: Bool, isLast: Bool) -> some View {
         let isEditing = traceInlineEditingItemID == item.id
         let canSwipe = traceInlineEditingItemID == nil
         let isSwiped = traceSwipedItemID == item.id && canSwipe
@@ -2820,7 +3061,7 @@ struct StatsWebView: View {
         let restingOffset: CGFloat = isSwiped ? -76 : 0
         let rowOffset = min(0, max(-86, restingOffset + dragTranslation))
         return HStack(alignment: .top, spacing: 8) {
-            traceTimelineRail(isFirst: isFirst, isLast: isLast, isActive: isSwiped || isEditing)
+            legacyTraceTimelineRail(isFirst: isFirst, isLast: isLast, isActive: isSwiped || isEditing)
 
             ZStack(alignment: .trailing) {
                 if canSwipe {
@@ -2830,12 +3071,12 @@ struct StatsWebView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    traceDetailRecordSummary(item, isEditing: false)
+                    legacyTraceDetailRecordSummary(item, isEditing: false)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
-                .background(traceDetailRecordBackground(isEditing: false))
-                .overlay(traceDetailRecordBorder(isEditing: false))
+                .background(legacyTraceDetailRecordBackground(isEditing: false))
+                .overlay(legacyTraceDetailRecordBorder(isEditing: false))
                 .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
                 .offset(x: rowOffset)
                 .scaleEffect(isDeleting ? 0.96 : 1, anchor: .trailing)
@@ -2866,7 +3107,7 @@ struct StatsWebView: View {
         .animation(.easeInOut(duration: 0.45), value: isDeleting)
     }
 
-    private func traceTimelineRail(isFirst: Bool, isLast: Bool, isActive: Bool) -> some View {
+    private func legacyTraceTimelineRail(isFirst: Bool, isLast: Bool, isActive: Bool) -> some View {
         let isEmphasized = isActive || isFirst
         return VStack(spacing: 0) {
             Rectangle()
@@ -2893,11 +3134,11 @@ struct StatsWebView: View {
         .frame(minHeight: 70)
     }
 
-    var traceEditSpring: Animation {
+    var legacyTraceEditSpring: Animation {
         .spring(response: 0.38, dampingFraction: 0.90, blendDuration: 0.08)
     }
 
-    private func traceDetailRecordSummary(_ item: HomeItem, isEditing: Bool) -> some View {
+    private func legacyTraceDetailRecordSummary(_ item: HomeItem, isEditing: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(item.displayTitle)
@@ -2943,7 +3184,7 @@ struct StatsWebView: View {
         }
     }
 
-    private func traceDetailRecordBackground(isEditing: Bool) -> some View {
+    private func legacyTraceDetailRecordBackground(isEditing: Bool) -> some View {
         RoundedRectangle(cornerRadius: 19, style: .continuous)
             .fill(.ultraThinMaterial)
             .background(
@@ -2972,7 +3213,7 @@ struct StatsWebView: View {
             .shadow(color: AppColors.subtext.opacity(isEditing ? 0.14 : 0.09), radius: isEditing ? 16 : 12, x: 0, y: isEditing ? 9 : 6)
     }
 
-    private func traceDetailRecordBorder(isEditing: Bool) -> some View {
+    private func legacyTraceDetailRecordBorder(isEditing: Bool) -> some View {
         RoundedRectangle(cornerRadius: 19, style: .continuous)
             .stroke(
                 LinearGradient(
