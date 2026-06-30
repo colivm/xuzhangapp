@@ -31,6 +31,7 @@ struct InsightWebView: View {
     @State private var aiCommandShowsAllRelatedItems = false
     @State private var aiCommandMessage: String?
     @State private var aiCommandSavedCount: Int?
+    @State private var aiCommandPreviewItem: HomeItem?
     private let trialTotal = 5
     private static var aiCommandSuggestionsCache: [String: [String]] = [:]
     private static var aiCommandItemsCache: [String: [HomeItem]] = [:]
@@ -254,9 +255,23 @@ struct InsightWebView: View {
                     .transition(.opacity)
                     .zIndex(30)
             }
+
+            if let aiCommandPreviewItem {
+                FocusedRecordPreviewCard(item: aiCommandPreviewItem) {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.90)) {
+                        self.aiCommandPreviewItem = nil
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 92)
+                .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
+                .zIndex(34)
+            }
         }
+        .scrollDisabled(aiCommandPreviewItem != nil)
         .animation(.easeInOut(duration: 0.2), value: monthlyTrialModal?.id)
         .animation(.easeInOut(duration: 0.2), value: showWeeklySharePrivacyConfirm)
+        .animation(.spring(response: 0.32, dampingFraction: 0.90), value: aiCommandPreviewItem?.id)
         .sheet(isPresented: $showMonthlyInsightSheet) {
             monthlyInsightSheet
         }
@@ -1790,6 +1805,11 @@ struct InsightWebView: View {
     }
 
     private func aiCommandItemRow(_ item: HomeItem) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.90)) {
+                aiCommandPreviewItem = item
+            }
+        } label: {
         HStack(spacing: 10) {
             Text(item.category.emoji)
                 .font(.system(size: 15))
@@ -1819,6 +1839,9 @@ struct InsightWebView: View {
                 .foregroundStyle(AppColors.text.opacity(0.86))
         }
         .padding(.vertical, 7)
+        .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func aiCommandAmountInput(_ result: AICommandResult) -> some View {
@@ -5403,6 +5426,144 @@ struct WeeklyShareCardView: View {
         }
         win.isHidden = true
         return img
+    }
+}
+
+private struct FocusedRecordPreviewCard: View {
+    let item: HomeItem
+    var onClose: () -> Void
+
+    private var accent: Color {
+        AppColors.categoryColor(item.category)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(AppColors.panelStrong.opacity(0.78)))
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Capsule(style: .continuous)
+                    .fill(AppColors.line.opacity(0.50))
+                    .frame(width: 38, height: 4)
+
+                Spacer()
+
+                Color.clear.frame(width: 36, height: 36)
+            }
+
+            ZStack {
+                Circle()
+                    .fill(accent.opacity(0.14))
+                    .frame(width: 70, height: 70)
+                Text(item.category.emoji)
+                    .font(.system(size: 30))
+            }
+            .padding(.top, 6)
+
+            Text(item.displayTitle)
+                .font(.system(size: 19, weight: .bold))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .padding(.top, 10)
+
+            Text(item.amount.formatted(.cny))
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text)
+                .padding(.top, 8)
+
+            if !item.displayEmotionTag.isEmpty {
+                Text(item.displayEmotionTag)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColors.accent)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.12)))
+                    .padding(.top, 4)
+            }
+
+            VStack(spacing: 8) {
+                previewRow(icon: "tag.fill", title: "分类", value: item.category.rawValue, tint: accent)
+                previewRow(icon: "clock", title: "时间", value: item.createdAt.zhBillDateTime, tint: AppColors.subtext)
+                previewRow(icon: "tray.full.fill", title: "来源", value: item.source.displayName, tint: AppColors.subtext)
+            }
+            .padding(.top, 24)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 18)
+        .frame(maxWidth: .infinity)
+        .background(previewBackground)
+        .overlay(previewBorder)
+        .shadow(color: AppColors.subtext.opacity(0.17), radius: 24, x: 0, y: 16)
+    }
+
+    private func previewRow(icon: String, title: String, value: String, tint: Color) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 20)
+
+            Text(title)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+
+            Spacer(minLength: 12)
+
+            Text(value)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 48)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(AppColors.panelStrong.opacity(0.58))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(AppColors.stroke.opacity(0.34), lineWidth: 0.8)
+                )
+        )
+    }
+
+    private var previewBackground: some View {
+        RoundedRectangle(cornerRadius: 26, style: .continuous)
+            .fill(.ultraThinMaterial)
+            .background(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(AppColors.panelStrong.opacity(0.88))
+            )
+            .overlay(
+                LinearGradient(
+                    colors: [
+                        AppColors.monthlyInsightBg.opacity(0.52),
+                        AppColors.panelStrong.opacity(0.42),
+                        AppColors.accent.opacity(0.08)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+    }
+
+    private var previewBorder: some View {
+        RoundedRectangle(cornerRadius: 26, style: .continuous)
+            .stroke(AppColors.stroke.opacity(0.38), lineWidth: 1)
+            .allowsHitTesting(false)
     }
 }
 
