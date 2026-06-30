@@ -2223,7 +2223,7 @@ struct StatsWebView: View {
                         .padding(.bottom, 28)
                 }
                 .scrollIndicators(.hidden)
-                .scrollDisabled(traceSwipeDragState != nil)
+                .scrollDisabled(traceSwipeDragState != nil || traceInlineEditingItemID != nil)
                 .onChange(of: traceFilteredItemIDs) { _, itemIDs in
                     guard let editingID = traceInlineEditingItemID,
                           !itemIDs.contains(editingID)
@@ -2233,6 +2233,8 @@ struct StatsWebView: View {
                         traceSwipedItemID = nil
                     }
                 }
+
+                traceDetailEditorOverlay
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -2244,34 +2246,40 @@ struct StatsWebView: View {
         .presentationDragIndicator(.visible)
     }
 
-    private var traceDetailFocusedList: some View {
-        let isFocusing = traceInlineEditingItem != nil
-        return ZStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 12) {
-                recordListContent(fromTraceDetail: true)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(traceDetailListBackground)
-            .overlay(traceDetailListBorder)
-            .opacity(isFocusing ? 0.34 : 1)
-            .scaleEffect(isFocusing ? 0.985 : 1, anchor: .top)
-            .allowsHitTesting(!isFocusing)
-
+    private var traceDetailEditorOverlay: some View {
+        VStack(spacing: 0) {
             if let item = traceInlineEditingItem {
                 traceFocusedRecordEditorCard(item)
-                    .padding(.horizontal, 8)
-                    .padding(.top, 8)
-                    .zIndex(10)
+                    .padding(.horizontal, 26)
+                    .padding(.top, 96)
                     .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
+                    .zIndex(30)
             }
+
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .allowsHitTesting(traceInlineEditingItem != nil)
+        .animation(traceEditSpring, value: traceInlineEditingItemID)
+    }
+
+    private var traceDetailFocusedList: some View {
+        let isFocusing = traceInlineEditingItem != nil
+        return VStack(alignment: .leading, spacing: 12) {
+            recordListContent(fromTraceDetail: true)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(traceDetailListBackground)
+        .overlay(traceDetailListBorder)
+        .opacity(isFocusing ? 0.34 : 1)
+        .scaleEffect(isFocusing ? 0.985 : 1, anchor: .top)
+        .allowsHitTesting(!isFocusing)
         .animation(traceEditSpring, value: traceInlineEditingItemID)
     }
 
     private func traceFocusedRecordEditorCard(_ item: HomeItem) -> some View {
-        TraceFocusedRecordEditor(
+        FocusedRecordEditor(
             item: item,
             autoCommitRequestID: traceAutoCommitRequestID,
             onSave: { updated in
@@ -2853,6 +2861,7 @@ struct StatsWebView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .id(item.id)
+        .padding(.bottom, isLast || isDeleting ? 0 : 5)
         .animation(traceEditSpring, value: isSwiped)
         .animation(.easeInOut(duration: 0.45), value: isDeleting)
     }
@@ -3108,7 +3117,7 @@ struct StatsWebView: View {
 
 }
 
-private struct TraceFocusedRecordEditor: View {
+struct FocusedRecordEditor: View {
     let item: HomeItem
     var autoCommitRequestID: UUID?
     var onSave: (HomeItem) -> Bool

@@ -10,6 +10,12 @@ struct OCRConfirmSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var rows: [ConfirmRow]
     @State private var isCollectingImport = false
+    @State private var activeReviewIndex = 0
+    @GestureState private var reviewDeckDragOffset: CGFloat = 0
+
+    private let reviewDeckHeight: CGFloat = 326
+    private let reviewDeckRowStep: CGFloat = 92
+    private let reviewDeckSwitchThreshold: CGFloat = 46
 
     let onConfirm: ([OCRReceiptDraft]) -> Int
 
@@ -56,11 +62,7 @@ struct OCRConfirmSheet: View {
 
                         receiptFoldDivider
 
-                        LazyVStack(spacing: 10) {
-                            ForEach(rows.indices, id: \.self) { index in
-                                confirmRow(index)
-                            }
-                        }
+                        ocrReviewDeck
                     }
                     .padding(18)
                 }
@@ -117,6 +119,247 @@ struct OCRConfirmSheet: View {
         .animation(.spring(response: 0.30, dampingFraction: 0.84), value: isCollectingImport)
     }
 
+
+    @ViewBuilder
+    private var ocrReviewDeck: some View {
+        if rows.isEmpty {
+            EmptyView()
+        } else {
+            VStack(spacing: 12) {
+                reviewDeckHeader
+
+                ZStack {
+                    ForEach(visibleReviewDeckIndices, id: \.self) { index in
+                        let isActive = index == clampedActiveReviewIndex
+                        ocrDeckRow(index, isActive: isActive)
+                            .frame(height: isActive ? 174 : 110)
+                            .scaleEffect(reviewDeckScale(for: index))
+                            .opacity(reviewDeckOpacity(for: index))
+                            .offset(y: reviewDeckOffset(for: index))
+                            .zIndex(reviewDeckZIndex(for: index))
+                            .allowsHitTesting(abs(index - clampedActiveReviewIndex) <= 1)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: reviewDeckHeight)
+                .clipped()
+                .contentShape(Rectangle())
+                .gesture(reviewDeckGesture)
+            }
+            .padding(12)
+            .background(reviewDeckBackground)
+            .onChange(of: rows.count) { _, count in
+                guard count > 0, activeReviewIndex >= count else { return }
+                activeReviewIndex = count - 1
+            }
+        }
+    }
+
+    private var reviewDeckHeader: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(AppColors.accent)
+                .frame(width: 7, height: 7)
+                .shadow(color: AppColors.accent.opacity(0.26), radius: 7, y: 2)
+
+            Text("OCR")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.accentDark.opacity(0.88))
+
+            Text("\(clampedActiveReviewIndex + 1) / \(rows.count)")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(AppColors.subtext.opacity(0.82))
+
+            Spacer(minLength: 8)
+
+            reviewDeckNavButton(systemName: "chevron.up", isEnabled: clampedActiveReviewIndex > 0) {
+                moveReviewDeck(by: -1)
+            }
+
+            reviewDeckNavButton(systemName: "chevron.down", isEnabled: clampedActiveReviewIndex < rows.count - 1) {
+                moveReviewDeck(by: 1)
+            }
+        }
+        .padding(.horizontal, 2)
+    }
+
+    private func reviewDeckNavButton(systemName: String, isEnabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .bold))
+                .frame(width: 30, height: 28)
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .foregroundStyle(isEnabled ? AppColors.text.opacity(0.82) : AppColors.subtext.opacity(0.34))
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(isEnabled ? 0.58 : 0.28))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(AppColors.line.opacity(isEnabled ? 0.36 : 0.18), lineWidth: 1)
+        )
+    }
+
+    private var reviewDeckBackground: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(AppColors.panelStrong.opacity(0.82))
+            .overlay(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.42),
+                        AppColors.accent.opacity(0.10),
+                        AppColors.paperWarm.opacity(0.12)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(AppColors.accent.opacity(0.16), lineWidth: 1)
+            )
+            .shadow(color: AppColors.accent.opacity(0.10), radius: 20, y: 10)
+    }
+
+    private var visibleReviewDeckIndices: [Int] {
+        guard !rows.isEmpty else { return [] }
+        let active = clampedActiveReviewIndex
+        let lower = max(0, active - 1)
+        let upper = min(rows.count - 1, active + 2)
+        return Array(lower...upper)
+    }
+
+    private var clampedActiveReviewIndex: Int {
+        guard !rows.isEmpty else { return 0 }
+        return min(max(activeReviewIndex, 0), rows.count - 1)
+    }
+
+    private var boundedReviewDeckDragOffset: CGFloat {
+        rubberBandedReviewDeckOffset(reviewDeckDragOffset)
+    }
+
+    private var reviewDeckGesture: some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .updating($reviewDeckDragOffset) { value, state, _ in
+                guard abs(value.translation.height) > abs(value.translation.width) else { return }
+                state = rubberBandedReviewDeckOffset(value.translation.height)
+            }
+            .onEnded { value in
+                let vertical = value.translation.height
+                guard abs(vertical) > abs(value.translation.width),
+                      abs(vertical) > reviewDeckSwitchThreshold else { return }
+                moveReviewDeck(by: vertical < 0 ? 1 : -1)
+            }
+    }
+
+    private func rubberBandedReviewDeckOffset(_ offset: CGFloat) -> CGFloat {
+        let canMoveUp = clampedActiveReviewIndex < rows.count - 1
+        let canMoveDown = clampedActiveReviewIndex > 0
+        let limited = min(max(offset, -reviewDeckRowStep), reviewDeckRowStep)
+
+        if limited < 0, !canMoveUp { return limited * 0.22 }
+        if limited > 0, !canMoveDown { return limited * 0.22 }
+        return limited
+    }
+
+    private func moveReviewDeck(by delta: Int) {
+        guard !rows.isEmpty else { return }
+        let nextIndex = min(max(clampedActiveReviewIndex + delta, 0), rows.count - 1)
+        guard nextIndex != activeReviewIndex else { return }
+        withAnimation(reviewDeckAnimation) {
+            activeReviewIndex = nextIndex
+        }
+    }
+
+    private func activateReviewIndex(_ index: Int) {
+        guard rows.indices.contains(index) else { return }
+        withAnimation(reviewDeckAnimation) {
+            activeReviewIndex = index
+        }
+    }
+
+    private var reviewDeckAnimation: Animation {
+        .spring(response: 0.30, dampingFraction: 0.88, blendDuration: 0.04)
+    }
+
+    private func reviewDeckPosition(for index: Int) -> CGFloat {
+        CGFloat(index - clampedActiveReviewIndex) + (boundedReviewDeckDragOffset / reviewDeckRowStep)
+    }
+
+    private func reviewDeckOffset(for index: Int) -> CGFloat {
+        reviewDeckPosition(for: index) * reviewDeckRowStep
+    }
+
+    private func reviewDeckOpacity(for index: Int) -> Double {
+        let distance = abs(reviewDeckPosition(for: index))
+        return Double(max(0.24, 1 - distance * 0.44))
+    }
+
+    private func reviewDeckScale(for index: Int) -> CGFloat {
+        let distance = abs(reviewDeckPosition(for: index))
+        return max(0.94, 1 - distance * 0.045)
+    }
+
+    private func reviewDeckZIndex(for index: Int) -> Double {
+        100 - Double(abs(reviewDeckPosition(for: index)) * 10)
+    }
+
+    private func ocrDeckRow(_ index: Int, isActive: Bool) -> some View {
+        let row = rows[index]
+        return VStack(alignment: .leading, spacing: isActive ? 12 : 8) {
+            confirmRowHeader(row: row, index: index, isActive: isActive)
+
+            if isActive, let note = row.draft.reviewNote {
+                reviewNoteRow(note, status: row.draft.reviewStatus)
+            }
+
+            if isActive {
+                confirmRowCategory(row: row, index: index)
+            } else {
+                compactReviewDeckFooter(row)
+            }
+        }
+        .padding(.horizontal, isActive ? 16 : 14)
+        .padding(.vertical, isActive ? 15 : 12)
+        .background(confirmRowBackground(isSelected: row.selected, isActive: isActive))
+        .overlay(confirmRowBorder(isSelected: row.selected, isActive: isActive))
+        .overlay(alignment: .leading) {
+            if row.selected {
+                Capsule(style: .continuous)
+                    .fill(AppColors.accent.opacity(isActive ? 0.28 : 0.16))
+                    .frame(width: isActive ? 3 : 2)
+                    .padding(.vertical, isActive ? 14 : 12)
+            }
+        }
+        .shadow(color: isActive ? AppColors.accent.opacity(0.16) : Color.black.opacity(0.04), radius: isActive ? 18 : 8, y: isActive ? 10 : 4)
+        .contentShape(RoundedRectangle(cornerRadius: isActive ? 18 : 16, style: .continuous))
+        .onTapGesture {
+            activateReviewIndex(index)
+        }
+    }
+
+    private func compactReviewDeckFooter(_ row: ConfirmRow) -> some View {
+        HStack(spacing: 8) {
+            Text(row.draft.category.displayName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppColors.text.opacity(0.70))
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            if row.draft.reviewNote != nil {
+                Image(systemName: reviewStatusIcon(row.draft.reviewStatus))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(reviewStatusColor(row.draft.reviewStatus).opacity(0.72))
+            }
+
+            statusPill(row.selected ? "\u{5C06}\u{5BFC}\u{5165}" : "\u{5DF2}\u{8DF3}\u{8FC7}", isSelected: row.selected)
+        }
+    }
+
     private var reviewSummary: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "checklist.checked")
@@ -152,15 +395,15 @@ struct OCRConfirmSheet: View {
     private func confirmRow(_ index: Int) -> some View {
         let row = rows[index]
         return VStack(alignment: .leading, spacing: 12) {
-            confirmRowHeader(row: row, index: index)
+            confirmRowHeader(row: row, index: index, isActive: true)
             if let note = row.draft.reviewNote {
                 reviewNoteRow(note, status: row.draft.reviewStatus)
             }
             confirmRowCategory(row: row, index: index)
         }
         .padding(16)
-        .background(confirmRowBackground(isSelected: row.selected))
-        .overlay(confirmRowBorder(isSelected: row.selected))
+        .background(confirmRowBackground(isSelected: row.selected, isActive: true))
+        .overlay(confirmRowBorder(isSelected: row.selected, isActive: true))
         .overlay(alignment: .leading) {
             if row.selected {
                 Capsule(style: .continuous)
@@ -169,71 +412,78 @@ struct OCRConfirmSheet: View {
                     .padding(.vertical, 14)
             }
         }
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .onTapGesture {
+            activateReviewIndex(index)
+        }
     }
 
-    private func confirmRowHeader(row: ConfirmRow, index: Int) -> some View {
+    private func confirmRowHeader(row: ConfirmRow, index: Int, isActive: Bool) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Button {
                 rows[index].selected.toggle()
             } label: {
                 Image(systemName: row.selected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 24, weight: .semibold))
+                    .font(.system(size: isActive ? 24 : 20, weight: .semibold))
                 .foregroundStyle(row.selected ? AppColors.accent : AppColors.subtext.opacity(0.5))
             }
             .buttonStyle(.plain)
+            .disabled(!isActive)
             .accessibilityLabel("导入此条")
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: isActive ? 8 : 5) {
                 Text("备注")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(AppColors.subtext.opacity(0.74))
 
                 Text(row.draft.title)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(3)
+                    .font(.system(size: isActive ? 17 : 15, weight: .semibold))
+                    .foregroundStyle(AppColors.text.opacity(isActive ? 1 : 0.78))
+                    .lineLimit(isActive ? 3 : 1)
 
-                HStack(spacing: 6) {
-                    if let brand = brand(for: row.draft) {
-                        brandChip(brand)
-                    }
+                if isActive {
+                    HStack(spacing: 6) {
+                        if let brand = brand(for: row.draft) {
+                            brandChip(brand)
+                        }
 
-                    if let scene = sceneSignal(for: row.draft), scene.confidenceTier >= .medium {
-                        sceneChip(scene)
+                        if let scene = sceneSignal(for: row.draft), scene.confidenceTier >= .medium {
+                            sceneChip(scene)
+                        }
                     }
                 }
 
                 Text(row.draft.date.zhBillDateTime)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.subtext.opacity(0.72))
+                    .font(.system(size: isActive ? 12 : 11, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(isActive ? 0.72 : 0.54))
             }
 
             Spacer(minLength: 8)
 
-            amountReviewBlock(row.draft)
+            amountReviewBlock(row.draft, isCompact: !isActive)
         }
     }
 
-    private func amountReviewBlock(_ draft: OCRReceiptDraft) -> some View {
-        VStack(alignment: .trailing, spacing: 4) {
+    private func amountReviewBlock(_ draft: OCRReceiptDraft, isCompact: Bool = false) -> some View {
+        VStack(alignment: .trailing, spacing: isCompact ? 2 : 4) {
             Text("金额")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(AppColors.subtext.opacity(0.72))
             Text(draft.amount.formatted(.cny.precision(.fractionLength(2))))
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(AppColors.text)
+                .font(.system(size: isCompact ? 17 : 22, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text.opacity(isCompact ? 0.78 : 1))
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, isCompact ? 8 : 10)
+        .padding(.vertical, isCompact ? 7 : 8)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.54))
+                .fill(Color.white.opacity(isCompact ? 0.36 : 0.54))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
+                .stroke(AppColors.accent.opacity(isCompact ? 0.08 : 0.14), lineWidth: 1)
         )
     }
 
@@ -372,16 +622,16 @@ struct OCRConfirmSheet: View {
             )
     }
 
-    private func confirmRowBackground(isSelected: Bool) -> some View {
-        let fill = isSelected ? AppColors.accent.opacity(0.08) : Color.white.opacity(0.58)
+    private func confirmRowBackground(isSelected: Bool, isActive: Bool = true) -> some View {
+        let fill = isSelected ? AppColors.accent.opacity(isActive ? 0.10 : 0.06) : Color.white.opacity(isActive ? 0.64 : 0.48)
         return RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(fill)
     }
 
-    private func confirmRowBorder(isSelected: Bool) -> some View {
-        let stroke = isSelected ? AppColors.accent.opacity(0.24) : Color.white.opacity(0.45)
+    private func confirmRowBorder(isSelected: Bool, isActive: Bool = true) -> some View {
+        let stroke = isSelected ? AppColors.accent.opacity(isActive ? 0.30 : 0.16) : Color.white.opacity(isActive ? 0.56 : 0.34)
         return RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .stroke(stroke, lineWidth: 1)
+            .stroke(stroke, lineWidth: isActive ? 1.1 : 1)
     }
 
     private var receiptFoldDivider: some View {

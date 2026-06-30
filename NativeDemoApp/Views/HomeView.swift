@@ -368,6 +368,11 @@ struct HomeView: View {
     private let dailyQuotaStore = DailyFeatureQuotaStore()
     private static let todayPlaybackFirstUsePromptSeenKey = "today_playback_first_use_prompt_seen_v1"
 
+    private var todayInlineEditingItem: HomeItem? {
+        guard let todayInlineEditingItemID else { return nil }
+        return homeViewModel.todayItems.first { $0.id == todayInlineEditingItemID }
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             ScrollViewReader { proxy in
@@ -1267,8 +1272,7 @@ struct HomeView: View {
                 todayRecordsGradientBackground
                     .ignoresSafeArea()
 
-                ScrollViewReader { proxy in
-                    ScrollView {
+                ScrollView {
                         VStack(alignment: .leading, spacing: 18) {
                             HStack {
                                 Button {
@@ -1309,6 +1313,9 @@ struct HomeView: View {
                                     todayRecordInlineRow(item: item, isFirst: index == 0)
                                 }
                             }
+                            .opacity(todayInlineEditingItemID == nil ? 1 : 0.34)
+                            .scaleEffect(todayInlineEditingItemID == nil ? 1 : 0.985, anchor: .top)
+                            .allowsHitTesting(todayInlineEditingItemID == nil)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .padding(.horizontal, 18)
@@ -1322,9 +1329,9 @@ struct HomeView: View {
                                 }
                             }
                         }
-                    }
-                    .scrollIndicators(.hidden)
-                    .scrollDisabled(todaySwipeDragState != nil)
+                }
+                .scrollIndicators(.hidden)
+                .scrollDisabled(todaySwipeDragState != nil || todayInlineEditingItemID != nil)
                     .simultaneousGesture(
                         DragGesture(minimumDistance: 18).onEnded { value in
                             guard todaySwipedItemID != nil else { return }
@@ -1335,11 +1342,8 @@ struct HomeView: View {
                             }
                         }
                     )
-                    .onChange(of: todayInlineEditingItemID) { _, itemID in
-                        guard let itemID else { return }
-                        scrollTodayEditorIntoView(itemID, proxy: proxy, delay: 0.34)
-                    }
-                }
+
+                todayFocusedRecordOverlay
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 todayRecordsFooterSummary
@@ -1356,6 +1360,45 @@ struct HomeView: View {
     private var todayRecordsMetaText: String {
         let total = homeViewModel.todayItems.reduce(0) { $0 + $1.amount }
         return "\(homeViewModel.todayItems.count) 笔 · 合计 \(total.formatted(.cny)) · 点任一条可调整"
+    }
+
+    private var todayFocusedRecordOverlay: some View {
+        VStack(spacing: 0) {
+            if let item = todayInlineEditingItem {
+                FocusedRecordEditor(
+                    item: item,
+                    onSave: { updated in
+                        let didSave = homeViewModel.updateItem(updated)
+                        if didSave {
+                            highlightSavedItem(updated.id)
+                            withAnimation(todayEditSpring) {
+                                todayInlineEditingItemID = nil
+                                todaySwipedItemID = nil
+                            }
+                        }
+                        return didSave
+                    },
+                    onCancel: {
+                        withAnimation(todayEditSpring) {
+                            todayInlineEditingItemID = nil
+                            todaySwipedItemID = nil
+                        }
+                    },
+                    onDelete: {
+                        deleteTodayRecord(item)
+                    }
+                )
+                .padding(.horizontal, 26)
+                .padding(.top, 86)
+                .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
+                .zIndex(24)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .allowsHitTesting(todayInlineEditingItem != nil)
+        .animation(todayEditSpring, value: todayInlineEditingItemID)
     }
 
     private var todayRecordsGradientBackground: some View {
@@ -1396,34 +1439,11 @@ struct HomeView: View {
                     .zIndex(2)
             }
 
-            VStack(alignment: .leading, spacing: isEditing ? 10 : 8) {
+            VStack(alignment: .leading, spacing: 8) {
                 todayRecordSummary(item, isEditing: isEditing, isFirst: isFirst)
-                if isEditing {
-                    TraceInlineRecordEditor(
-                        item: item,
-                        onSave: { updated in
-                            let didSave = homeViewModel.updateItem(updated)
-                            if didSave {
-                                highlightSavedItem(updated.id)
-                                withAnimation(todayEditSpring) {
-                                    todayInlineEditingItemID = nil
-                                    todaySwipedItemID = nil
-                                }
-                            }
-                            return didSave
-                        },
-                        onCancel: {
-                            withAnimation(todayEditSpring) {
-                                todayInlineEditingItemID = nil
-                                todaySwipedItemID = nil
-                            }
-                        }
-                    )
-                    .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
-                }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, isEditing ? 14 : 16)
+            .padding(.vertical, 16)
             .background(todayRecordRowBackground(item: item, isEditing: isEditing))
             .overlay(todayRecordRowBorder(item: item, isEditing: isEditing))
             .overlay(alignment: .trailing) {
@@ -1462,7 +1482,6 @@ struct HomeView: View {
             }
         }
         .id(item.id)
-        .animation(todayEditSpring, value: isEditing)
         .animation(todayEditSpring, value: isSwiped)
         .animation(.easeInOut(duration: 0.45), value: isDeleting)
     }
@@ -1960,15 +1979,6 @@ struct HomeView: View {
                     }
                 }
             }
-    }
-
-    private func scrollTodayEditorIntoView(_ itemID: UUID, proxy: ScrollViewProxy, delay: Double) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            guard todayInlineEditingItemID == itemID else { return }
-            withAnimation(todayEditSpring) {
-                proxy.scrollTo(itemID, anchor: .center)
-            }
-        }
     }
 
     private func deleteTodayRecord(_ item: HomeItem) {
