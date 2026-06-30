@@ -2781,7 +2781,7 @@ struct StatsWebView: View {
 
     private func traceTimelineRail(isFirst: Bool, isLast: Bool, isActive: Bool) -> some View {
         let isEmphasized = isActive || isFirst
-        VStack(spacing: 0) {
+        return VStack(spacing: 0) {
             Rectangle()
                 .fill(isFirst ? Color.clear : AppColors.line.opacity(0.42))
                 .frame(width: 1, height: 10)
