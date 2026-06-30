@@ -2824,7 +2824,7 @@ struct StatsWebView: View {
 
     private func traceRecordLeadingMark(_ item: HomeItem) -> some View {
         VStack(spacing: 7) {
-            Image(systemName: categorySystemImage(item.category))
+            Image(systemName: MemoryAttachmentVisuals.categorySystemImage(item.category))
                 .font(.system(size: 18, weight: .semibold))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(traceAccentColor(for: item.category))
@@ -3481,7 +3481,7 @@ struct FocusedRecordEditor: View {
 
             VStack(spacing: 8) {
                 editorActionRow(
-                    icon: categorySystemImage(selectedCategory),
+                    icon: MemoryAttachmentVisuals.categorySystemImage(selectedCategory),
                     title: "分类",
                     value: selectedCategory.rawValue,
                     isAccent: true
@@ -3632,7 +3632,7 @@ struct FocusedRecordEditor: View {
                 .fill(AppColors.panelStrong.opacity(0.84))
                 .frame(width: 54, height: 54)
                 .shadow(color: categoryAccent.opacity(0.14), radius: 12, x: 0, y: 6)
-            Image(systemName: categorySystemImage(selectedCategory))
+            Image(systemName: MemoryAttachmentVisuals.categorySystemImage(selectedCategory))
                 .font(.system(size: 24, weight: .semibold))
                 .foregroundStyle(categoryAccent)
         }
@@ -3738,7 +3738,7 @@ struct FocusedRecordEditor: View {
             }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: categorySystemImage(category))
+                Image(systemName: MemoryAttachmentVisuals.categorySystemImage(category))
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(rowAccent)
                     .frame(width: 28)
@@ -3873,18 +3873,4 @@ struct FocusedRecordEditor: View {
         return output
     }
 
-    private func categorySystemImage(_ category: HomeItem.Category) -> String {
-        switch category {
-        case .dining: return "fork.knife"
-        case .transport: return "bus.fill"
-        case .shopping: return "bag.fill"
-        case .daily: return "mug.fill"
-        case .entertainment: return "film.fill"
-        case .lodging: return "bed.double.fill"
-        case .health: return "cross.case.fill"
-        case .home: return "house.fill"
-        case .social: return "gift.fill"
-        case .other: return "sparkles"
-        }
-    }
 }
