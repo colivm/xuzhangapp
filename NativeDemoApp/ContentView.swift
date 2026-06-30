@@ -319,7 +319,7 @@ struct AppSemanticSurface: ViewModifier {
         case .record:
             return AppColors.panelStrong.opacity(reduceTransparency ? 0.96 : 0.78)
         case .playback:
-            return AppColors.paperWarm.opacity(reduceTransparency ? 0.96 : 0.82)
+            return reduceTransparency ? AppColors.panelStrong : AppColors.monthlyInsightBg
         case .trace:
             return AppColors.panel.opacity(reduceTransparency ? 0.94 : 0.72)
         case .metric:
@@ -327,7 +327,7 @@ struct AppSemanticSurface: ViewModifier {
         case .action:
             return AppColors.panelStrong.opacity(isSelected ? 0.92 : 0.76)
         case .share:
-            return AppColors.paperMist.opacity(reduceTransparency ? 0.96 : 0.84)
+            return reduceTransparency ? AppColors.panelStrong : AppColors.paperMist
         case .quiet:
             return AppColors.panel.opacity(reduceTransparency ? 0.92 : 0.68)
         }
@@ -352,8 +352,8 @@ struct AppSemanticSurface: ViewModifier {
         case .playback:
             return [
                 Color.white.opacity(0.42),
-                AppColors.paperWarm.opacity(0.26),
-                AppColors.paperMist.opacity(0.30)
+                AppColors.tracePlaybackButtonBg.opacity(0.34),
+                tint.opacity(0.08)
             ]
         case .trace:
             return [
@@ -376,7 +376,7 @@ struct AppSemanticSurface: ViewModifier {
         case .share:
             return [
                 Color.white.opacity(0.42),
-                AppColors.paperWarm.opacity(0.24),
+                AppColors.tracePlaybackButtonBg.opacity(0.24),
                 tint.opacity(0.075)
             ]
         case .quiet:
@@ -447,7 +447,7 @@ struct AppSemanticSurface: ViewModifier {
         case .record:
             return [Color.white.opacity(0.66), AppColors.line.opacity(0.46), tint.opacity(0.13)]
         case .playback:
-            return [Color.white.opacity(0.58), AppColors.paperBorder.opacity(0.24), AppColors.paperCrease.opacity(0.13)]
+            return [Color.white.opacity(0.58), tint.opacity(0.16), AppColors.stroke.opacity(0.20)]
         case .trace:
             return [Color.white.opacity(0.46), AppColors.stroke.opacity(0.46), tint.opacity(0.08)]
         case .metric:
@@ -455,7 +455,7 @@ struct AppSemanticSurface: ViewModifier {
         case .action:
             return [Color.white.opacity(0.56), tint.opacity(isSelected ? 0.30 : 0.14), AppColors.line.opacity(0.48)]
         case .share:
-            return [Color.white.opacity(0.62), tint.opacity(0.14), AppColors.paperBorder.opacity(0.20)]
+            return [Color.white.opacity(0.62), tint.opacity(0.14), AppColors.stroke.opacity(0.20)]
         case .quiet:
             return [Color.white.opacity(0.40), AppColors.line.opacity(0.50), AppColors.stroke.opacity(0.26)]
         }
@@ -466,7 +466,7 @@ struct AppSemanticSurface: ViewModifier {
         case .record:
             return AppColors.subtext.opacity(isDisabled ? 0.03 : 0.075)
         case .playback, .share:
-            return Color(red: 128/255, green: 106/255, blue: 82/255).opacity(0.060)
+            return AppColors.subtext.opacity(0.055)
         case .trace:
             return AppColors.subtext.opacity(0.050)
         case .metric:

@@ -319,11 +319,18 @@ extension StatsWebView {
     }
 
     func applyTracePeriod(_ period: StatsPeriod) {
-        useCustomRange = false
-        selectedPeriod = period
-        showTraceCustomDatePanel = false
-        traceInlineEditingItemID = nil
-        traceSwipedItemID = nil
+        guard useCustomRange || selectedPeriod != period || showTraceCustomDatePanel else {
+            return
+        }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            useCustomRange = false
+            selectedPeriod = period
+            showTraceCustomDatePanel = false
+            traceInlineEditingItemID = nil
+            traceSwipedItemID = nil
+        }
     }
 
     private func applyTraceCategory(_ category: HomeItem.Category?) {

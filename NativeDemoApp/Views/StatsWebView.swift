@@ -43,6 +43,9 @@ struct StatsWebView: View {
     private let momentSelector = PlaybackMomentSelector()
     private let quotaStore = SummaryPlaybackQuotaStore()
     private let lifeInsightService = LifeInsightService.shared
+    private static var traceChapterSnapshotCache: [String: TraceChapterSnapshot] = [:]
+    private static var traceChapterSnapshotCacheOrder: [String] = []
+    private static let traceChapterSnapshotCacheLimit = 8
     private static var traceClueSnapshotCache: [String: TraceClueSnapshot] = [:]
     private static var traceClueSnapshotCacheOrder: [String] = []
     private static let traceClueSnapshotCacheLimit = 24
@@ -68,6 +71,15 @@ struct StatsWebView: View {
             items = items.filter { $0.category == cat }
         }
         return items
+    }
+
+    private var traceInlineEditingItem: HomeItem? {
+        guard let traceInlineEditingItemID else { return nil }
+        return filteredItems.first { $0.id == traceInlineEditingItemID }
+    }
+
+    private var traceFilteredItemIDs: [UUID] {
+        filteredItems.map(\.id)
     }
 
     private var totalExpense: Double {
@@ -330,29 +342,24 @@ struct StatsWebView: View {
 
     private var traceChapterCard: some View {
         let _ = quotaRefreshID
-        let range = heroRange
-        let items = heroScopedItems
-        let hasData = !items.isEmpty
-        let marks = traceLifeMarks(from: items, limit: 2)
-        let narrative = heroNarrativeText(from: items, marks: marks)
-        let chapterSummary = traceChapterSummary(from: items, marks: marks)
-        let evidenceGroups = traceMarkEvidenceGroups(from: items, marks: marks, maxItems: 3)
-        let preview = buildSummaryLaunchPreview(for: range, items: items)
+        let snapshot = buildTraceChapterSnapshot()
+        let range = snapshot.range
+        let hasData = !snapshot.items.isEmpty
         let isMonthLocked = range == .month && !hasMemberAccess && quotaStore.monthRemaining(isMember: false) <= 0
         let canPlay = hasData && quotaStore.canPlay(range, isMember: hasMemberAccess)
 
         return VStack(alignment: .leading, spacing: 14) {
             traceRangeKicker
 
-            traceLifeMarkPillRow(marks)
+            traceLifeMarkPillRow(snapshot.marks)
 
-            Text(narrative)
+            Text(snapshot.narrative)
                 .font(.system(size: 16, weight: .medium))
                 .lineSpacing(5)
                 .foregroundStyle(AppColors.text)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if let chapterSummary {
+            if let chapterSummary = snapshot.chapterSummary {
                 Text(chapterSummary)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(AppColors.subtext)
@@ -367,10 +374,10 @@ struct StatsWebView: View {
                     title: isMonthLocked ? "了解会员" : "听听这一段",
                     subtitle: playbackLaunchSubtitle(
                         range: range,
-                        preview: preview,
+                        preview: snapshot.preview,
                         hasData: hasData,
                         isMonthLocked: isMonthLocked,
-                        primaryMark: marks.first
+                        primaryMark: snapshot.marks.first
                     ),
                     systemImage: isMonthLocked ? "lock.fill" : "play.fill",
                     isEnabled: canPlay || isMonthLocked
@@ -388,7 +395,7 @@ struct StatsWebView: View {
 
             if hasData {
                 VStack(alignment: .leading, spacing: 10) {
-                    ForEach(evidenceGroups) { group in
+                    ForEach(snapshot.evidenceGroups) { group in
                         VStack(alignment: .leading, spacing: 8) {
                             Text(group.markLabel)
                                 .font(.system(size: 12, weight: .semibold))
@@ -426,6 +433,54 @@ struct StatsWebView: View {
             }
         }
         .paperChapterPanel(radius: 24, padding: 20)
+    }
+
+    private func buildTraceChapterSnapshot() -> TraceChapterSnapshot {
+        let range = heroRange
+        let items = heroScopedItems
+        let cacheKey = traceChapterSnapshotCacheKey(items: items, range: range)
+        if let cached = Self.traceChapterSnapshotCache[cacheKey] {
+            return cached
+        }
+
+        let marks = traceLifeMarks(from: items, limit: 2)
+        let snapshot = TraceChapterSnapshot(
+            range: range,
+            items: items,
+            marks: marks,
+            narrative: heroNarrativeText(from: items, marks: marks),
+            chapterSummary: traceChapterSummary(from: items, marks: marks),
+            evidenceGroups: traceMarkEvidenceGroups(from: items, marks: marks, maxItems: 3),
+            preview: buildSummaryLaunchPreview(for: range, items: items)
+        )
+        storeTraceChapterSnapshot(snapshot, for: cacheKey)
+        return snapshot
+    }
+
+    private func traceChapterSnapshotCacheKey(items: [HomeItem], range: SummaryPlaybackRange) -> String {
+        [
+            range.rawValue,
+            selectedPeriod.rawValue,
+            useCustomRange ? "custom" : "preset",
+            "\(Int(customStartDate.timeIntervalSince1970))",
+            "\(Int(customEndDate.timeIntervalSince1970))",
+            selectedCategory?.rawValue ?? "all",
+            hasMemberAccess ? "member" : "free",
+            traceItemsSignature(items),
+            traceItemsSignature(homeViewModel.items)
+        ].joined(separator: "|")
+    }
+
+    private func storeTraceChapterSnapshot(_ snapshot: TraceChapterSnapshot, for key: String) {
+        guard Self.traceChapterSnapshotCache[key] == nil else {
+            return
+        }
+        Self.traceChapterSnapshotCache[key] = snapshot
+        Self.traceChapterSnapshotCacheOrder.append(key)
+        while Self.traceChapterSnapshotCacheOrder.count > Self.traceChapterSnapshotCacheLimit {
+            let staleKey = Self.traceChapterSnapshotCacheOrder.removeFirst()
+            Self.traceChapterSnapshotCache.removeValue(forKey: staleKey)
+        }
     }
 
     private func traceLifeMarks(from items: [HomeItem], limit: Int) -> [LifeMarkAggregate] {
@@ -2139,9 +2194,8 @@ struct StatsWebView: View {
         NavigationStack {
             ZStack {
                 AppColors.bg.ignoresSafeArea()
-                ScrollViewReader { traceProxy in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
                         Text("细查这一段")
                             .font(.system(size: 22, weight: .bold))
                             .foregroundStyle(AppColors.text)
@@ -2163,22 +2217,20 @@ struct StatsWebView: View {
                             }
                         }
 
-                        VStack(alignment: .leading, spacing: 12) {
-                            recordListContent(fromTraceDetail: true)
-                        }
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(traceDetailListBackground)
-                        .overlay(traceDetailListBorder)
+                        traceDetailFocusedList
                         }
                         .padding(18)
                         .padding(.bottom, 28)
-                    }
-                    .scrollIndicators(.hidden)
-                    .scrollDisabled(traceSwipeDragState != nil)
-                    .onChange(of: traceInlineEditingItemID) { _, itemID in
-                        guard let itemID else { return }
-                        scrollTraceEditorIntoView(itemID, proxy: traceProxy, delay: 0.34)
+                }
+                .scrollIndicators(.hidden)
+                .scrollDisabled(traceSwipeDragState != nil)
+                .onChange(of: traceFilteredItemIDs) { _, itemIDs in
+                    guard let editingID = traceInlineEditingItemID,
+                          !itemIDs.contains(editingID)
+                    else { return }
+                    withAnimation(traceEditSpring) {
+                        traceInlineEditingItemID = nil
+                        traceSwipedItemID = nil
                     }
                 }
             }
@@ -2190,6 +2242,161 @@ struct StatsWebView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+
+    private var traceDetailFocusedList: some View {
+        let isFocusing = traceInlineEditingItem != nil
+        return ZStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 12) {
+                recordListContent(fromTraceDetail: true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(traceDetailListBackground)
+            .overlay(traceDetailListBorder)
+            .opacity(isFocusing ? 0.34 : 1)
+            .scaleEffect(isFocusing ? 0.985 : 1, anchor: .top)
+            .allowsHitTesting(!isFocusing)
+
+            if let item = traceInlineEditingItem {
+                focusedTraceEditorCard(item)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
+                    .zIndex(10)
+                    .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
+        .animation(traceEditSpring, value: traceInlineEditingItemID)
+    }
+
+    private func focusedTraceEditorCard(_ item: HomeItem) -> some View {
+        let accent = traceAccentColor(for: item.category)
+        return VStack(alignment: .leading, spacing: 12) {
+            focusedTraceEditorHeader(item, accent: accent)
+
+            TraceInlineRecordEditor(
+                item: item,
+                autoCommitRequestID: traceAutoCommitRequestID,
+                onSave: { updated in
+                    let didSave = homeViewModel.updateItem(updated)
+                    if didSave {
+                        withAnimation(traceEditSpring) {
+                            traceInlineEditingItemID = nil
+                            traceSwipedItemID = nil
+                        }
+                    }
+                    return didSave
+                },
+                onCancel: {
+                    withAnimation(traceEditSpring) {
+                        traceInlineEditingItemID = nil
+                        traceSwipedItemID = nil
+                    }
+                }
+            )
+        }
+        .padding(.horizontal, 15)
+        .padding(.top, 15)
+        .padding(.bottom, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(focusedTraceEditorBackground(for: item))
+        .overlay(focusedTraceEditorBorder(for: item))
+        .shadow(color: AppColors.subtext.opacity(0.16), radius: 24, x: 0, y: 16)
+        .shadow(color: accent.opacity(0.12), radius: 18, x: 0, y: 8)
+        .scaleEffect(1.015, anchor: .top)
+    }
+
+    private func focusedTraceEditorHeader(_ item: HomeItem, accent: Color) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(accent)
+                        .frame(width: 7, height: 7)
+                    Text(item.category.rawValue)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppColors.text.opacity(0.72))
+                        .lineLimit(1)
+                    Text(item.createdAt.zhBillDateTime)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(AppColors.subtext)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                }
+
+                Text(item.displayTitle)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Text(item.amount.formatted(.cny))
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.76)
+        }
+        .padding(.bottom, 1)
+    }
+
+    private func focusedTraceEditorBackground(for item: HomeItem) -> some View {
+        let accent = traceAccentColor(for: item.category)
+        return RoundedRectangle(cornerRadius: 23, style: .continuous)
+            .fill(.ultraThinMaterial)
+            .background(
+                RoundedRectangle(cornerRadius: 23, style: .continuous)
+                    .fill(AppColors.panelStrong.opacity(0.72))
+            )
+            .overlay(
+                LinearGradient(
+                    colors: [
+                        accent.opacity(0.20),
+                        AppColors.monthlyInsightBg.opacity(0.42),
+                        AppColors.tracePlaybackButtonBg.opacity(0.28),
+                        Color.white.opacity(0.42)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
+            )
+            .overlay(alignment: .bottomTrailing) {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [accent.opacity(0.24), Color.clear],
+                            center: .center,
+                            startRadius: 4,
+                            endRadius: 96
+                        )
+                    )
+                    .frame(width: 190, height: 190)
+                    .offset(x: 58, y: 64)
+                    .allowsHitTesting(false)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
+    }
+
+    private func focusedTraceEditorBorder(for item: HomeItem) -> some View {
+        let accent = traceAccentColor(for: item.category)
+        return RoundedRectangle(cornerRadius: 23, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.86),
+                        accent.opacity(0.32),
+                        AppColors.stroke.opacity(0.34)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1.15
+            )
+            .allowsHitTesting(false)
     }
 
     private var traceDetailMetaText: String {
@@ -2384,6 +2591,7 @@ struct StatsWebView: View {
     private func openEditor(for item: HomeItem, fromTraceDetail: Bool = false) {
         if fromTraceDetail {
             withAnimation(traceEditSpring) {
+                traceSwipedItemID = nil
                 traceInlineEditingItemID = item.id
             }
         } else {
@@ -2700,55 +2908,29 @@ struct StatsWebView: View {
 
     private func traceDetailBillRecordRow(_ item: HomeItem, isFirst: Bool, isLast: Bool) -> some View {
         let isEditing = traceInlineEditingItemID == item.id
-        let isSwiped = traceSwipedItemID == item.id && !isEditing
+        let canSwipe = traceInlineEditingItemID == nil
+        let isSwiped = traceSwipedItemID == item.id && canSwipe
         let isDeleting = traceDeletingItemID == item.id
         let dragTranslation = traceSwipeDragState?.itemID == item.id ? traceSwipeDragState?.translation ?? 0 : 0
         let restingOffset: CGFloat = isSwiped ? -76 : 0
         let rowOffset = min(0, max(-86, restingOffset + dragTranslation))
-        return HStack(alignment: .top, spacing: isEditing ? 0 : 8) {
-            if !isEditing {
-                traceTimelineRail(isFirst: isFirst, isLast: isLast, isActive: isSwiped)
-            }
+        return HStack(alignment: .top, spacing: 8) {
+            traceTimelineRail(isFirst: isFirst, isLast: isLast, isActive: isSwiped || isEditing)
 
             ZStack(alignment: .trailing) {
-                if !isEditing {
+                if canSwipe {
                     traceSwipeActions(for: item, isVisible: isSwiped)
                         .padding(.trailing, 10)
                         .zIndex(2)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    if !isEditing {
-                        traceDetailRecordSummary(item, isEditing: false)
-                    } else {
-                        TraceInlineRecordEditor(
-                            item: item,
-                            autoCommitRequestID: traceAutoCommitRequestID,
-                            onSave: { updated in
-                                let didSave = homeViewModel.updateItem(updated)
-                                if didSave {
-                                    withAnimation(traceEditSpring) {
-                                        traceInlineEditingItemID = nil
-                                        traceSwipedItemID = nil
-                                    }
-                                }
-                                return didSave
-                            },
-                            onCancel: {
-                                withAnimation(traceEditSpring) {
-                                    traceInlineEditingItemID = nil
-                                    traceSwipedItemID = nil
-                                }
-                            }
-                        )
-                        .padding(.top, 2)
-                        .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
-                    }
+                    traceDetailRecordSummary(item, isEditing: false)
                 }
-                .padding(.horizontal, isEditing ? 12 : 14)
-                .padding(.vertical, isEditing ? 16 : 12)
-                .background(traceDetailRecordBackground(isEditing: isEditing))
-                .overlay(traceDetailRecordBorder(isEditing: isEditing))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(traceDetailRecordBackground(isEditing: false))
+                .overlay(traceDetailRecordBorder(isEditing: false))
                 .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
                 .offset(x: rowOffset)
                 .scaleEffect(isDeleting ? 0.96 : 1, anchor: .trailing)
@@ -2765,7 +2947,7 @@ struct StatsWebView: View {
                     }
                 }
                 .overlay(alignment: .trailing) {
-                    if !isEditing {
+                    if canSwipe {
                         traceSwipeHandle(for: item, isSwiped: isSwiped)
                             .zIndex(3)
                     }
@@ -2774,7 +2956,6 @@ struct StatsWebView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .id(item.id)
-        .animation(traceEditSpring, value: isEditing)
         .animation(traceEditSpring, value: isSwiped)
         .animation(.easeInOut(duration: 0.45), value: isDeleting)
     }
@@ -2800,7 +2981,7 @@ struct StatsWebView: View {
 
             Rectangle()
                 .fill(isLast ? Color.clear : AppColors.line.opacity(0.42))
-                .frame(width: 1, height: isActive ? 84 : 58)
+                .frame(width: 1, height: 58)
         }
         .frame(width: 30)
         .frame(minHeight: 70)
@@ -2897,15 +3078,6 @@ struct StatsWebView: View {
                 ),
                 lineWidth: isEditing ? 1.2 : 1
             )
-    }
-
-    private func scrollTraceEditorIntoView(_ itemID: UUID, proxy: ScrollViewProxy, delay: Double) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            guard traceInlineEditingItemID == itemID else { return }
-            withAnimation(traceEditSpring) {
-                proxy.scrollTo(itemID, anchor: .center)
-            }
-        }
     }
 
     private func traceSwipeActions(for item: HomeItem, isVisible: Bool) -> some View {

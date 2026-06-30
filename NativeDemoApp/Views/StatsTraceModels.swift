@@ -47,6 +47,16 @@ struct TraceMarkEvidenceGroup: Identifiable {
     let overflowCount: Int
 }
 
+struct TraceChapterSnapshot {
+    let range: SummaryPlaybackRange
+    let items: [HomeItem]
+    let marks: [LifeMarkAggregate]
+    let narrative: String
+    let chapterSummary: String?
+    let evidenceGroups: [TraceMarkEvidenceGroup]
+    let preview: SummaryLaunchPreview
+}
+
 struct TraceCategoryClue: Identifiable {
     let category: HomeItem.Category
     let count: Int
