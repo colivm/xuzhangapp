@@ -254,6 +254,7 @@ struct MemoryRecordDetailSheet: View {
     let onDelete: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var selectedImageIndex = 0
+    @State private var imageExpanded = false
     @State private var amountText: String
     @State private var titleText: String
     @State private var selectedCategory: HomeItem.Category
@@ -348,8 +349,7 @@ struct MemoryRecordDetailSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    memoryImageLayer
-                    memoryDetailSummary
+                    memoryHeroSection
 
                     VStack(alignment: .leading, spacing: 10) {
                         Text("管理图片")
@@ -400,20 +400,37 @@ struct MemoryRecordDetailSheet: View {
     }
 
     @ViewBuilder
-    private var memoryImageLayer: some View {
+    private var memoryHeroSection: some View {
+        VStack(spacing: 0) {
+            memoryImageLayer(height: imageExpanded ? 356 : 276, fitMode: imageExpanded)
+
+            memoryDetailSummary
+                .offset(y: imageExpanded ? 0 : -54)
+                .padding(.bottom, imageExpanded ? 18 : -36)
+        }
+        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: imageExpanded)
+    }
+
+    @ViewBuilder
+    private func memoryImageLayer(height: CGFloat, fitMode: Bool) -> some View {
         if !memoryImages.isEmpty {
             ZStack(alignment: .topTrailing) {
                 TabView(selection: $selectedImageIndex) {
                     ForEach(Array(memoryImages.enumerated()), id: \.offset) { pair in
-                        MemoryAttachmentThumbnail(imageData: pair.element, height: 276, cornerRadius: 24)
+                        memoryHeroImage(imageData: pair.element, height: height, fitMode: fitMode)
                             .padding(.horizontal, 1)
                             .tag(pair.offset)
                     }
                 }
-                .frame(height: 276)
+                .frame(height: height)
                 .tabViewStyle(.page(indexDisplayMode: memoryImages.count > 1 ? .automatic : .never))
                 .shadow(color: AppColors.subtext.opacity(0.18), radius: 24, x: 0, y: 14)
                 .shadow(color: Color.white.opacity(0.30), radius: 8, x: -2, y: -2)
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                        imageExpanded.toggle()
+                    }
+                }
 
                 Text("\(selectedImageDisplayIndex)/\(memoryImages.count)")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
@@ -422,9 +439,30 @@ struct MemoryRecordDetailSheet: View {
                     .padding(.vertical, 4)
                     .background(Capsule(style: .continuous).fill(Color.black.opacity(0.26)))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, imageExpanded ? 14 : 66)
             }
-            .padding(.bottom, -18)
+        }
+    }
+
+    @ViewBuilder
+    private func memoryHeroImage(imageData: Data, height: CGFloat, fitMode: Bool) -> some View {
+        if let uiImage = UIImage(data: imageData) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .aspectRatio(contentMode: fitMode ? .fit : .fill)
+                .frame(maxWidth: .infinity)
+                .frame(height: height)
+                .background(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(Color.white.opacity(0.54))
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(0.62), lineWidth: 1)
+                )
+        } else {
+            MemoryAttachmentThumbnail(imageData: imageData, height: height, cornerRadius: 24)
         }
     }
 
