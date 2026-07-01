@@ -761,7 +761,7 @@ struct StatsWebView: View {
     private func traceRangeTab(_ title: String, period: StatsPeriod) -> some View {
         let isSelected = !useCustomRange && selectedPeriod == period
         return Button {
-            applyTracePeriod(period)
+            applyTraceRangePeriod(period)
         } label: {
             Text(title)
                 .font(.system(size: 15, weight: isSelected ? .bold : .medium))
@@ -775,6 +775,21 @@ struct StatsWebView: View {
                 )
         }
         .buttonStyle(.plain)
+    }
+
+    private func applyTraceRangePeriod(_ period: StatsPeriod) {
+        guard useCustomRange || selectedPeriod != period || showTraceCustomDatePanel else {
+            return
+        }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            useCustomRange = false
+            selectedPeriod = period
+            showTraceCustomDatePanel = false
+            traceInlineEditingItemID = nil
+            traceSwipedItemID = nil
+        }
     }
 
     private func traceSlipRow(_ item: HomeItem) -> some View {
