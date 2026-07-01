@@ -152,7 +152,6 @@ struct MemorySourceSheet: View {
     private var cappedSelectionCount: Int {
         max(0, min(9, remainingSelectionCount))
     }
-    }
 
     var body: some View {
         VStack(spacing: 12) {

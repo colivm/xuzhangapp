@@ -687,7 +687,7 @@ struct ContentView: View {
         .sheet(item: $memorySourceItem) { item in
             MemorySourceSheet(
                 selectedPhotos: $selectedMemoryPhotos,
-                remainingSelectionCount: max(1, 9 - item.memoryImages.count),
+                remainingSelectionCount: 9 - item.memoryImages.count,
                 onClose: { memorySourceItem = nil }
             )
             .presentationDetents([.height(330)])
