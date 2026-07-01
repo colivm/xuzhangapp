@@ -848,6 +848,13 @@ struct ContentView: View {
                          onNavigateSettings: { selectTab(.settings) },
                          onShowMemberPricing: {
                              showMemberPricingSheet(entryContext: .playbackQuota)
+                         },
+                         onAttachMemoryImage: { item in
+                             memoryPromptItem = nil
+                             memoryPreviewItem = nil
+                             pendingMemoryImageData = nil
+                             selectedMemoryPhoto = nil
+                             memorySourceItem = item
                          })
             case .record:
                 RecordView(
@@ -1636,6 +1643,7 @@ struct RecordEditSheet: View {
     let item: HomeItem
     var onSave: (HomeItem) -> Bool
     var onDelete: () -> Void
+    var onAttachMemoryImage: (() -> Void)?
 
     @State private var amountText: String
     @State private var titleText: String
@@ -1648,10 +1656,16 @@ struct RecordEditSheet: View {
     @FocusState private var isNoteFieldFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
-    init(item: HomeItem, onSave: @escaping (HomeItem) -> Bool, onDelete: @escaping () -> Void) {
+    init(
+        item: HomeItem,
+        onSave: @escaping (HomeItem) -> Bool,
+        onDelete: @escaping () -> Void,
+        onAttachMemoryImage: (() -> Void)? = nil
+    ) {
         self.item = item
         self.onSave = onSave
         self.onDelete = onDelete
+        self.onAttachMemoryImage = onAttachMemoryImage
         _amountText = State(initialValue: String(format: "%.2f", item.amount))
         _titleText = State(initialValue: item.title)
         _selectedCategory = State(initialValue: item.category)
@@ -1758,8 +1772,45 @@ struct RecordEditSheet: View {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("取消") { dismiss() }
                     }
+                    if hasRecordEditMoreActions {
+                        ToolbarItem(placement: .primaryAction) {
+                            Menu {
+                                recordEditMoreActions
+                            } label: {
+                                Image(systemName: "ellipsis.circle")
+                                    .font(.system(size: 17, weight: .semibold))
+                            }
+                            .accessibilityLabel("更多")
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    private var hasRecordEditMoreActions: Bool {
+        canAttachMemoryImageFromEdit
+    }
+
+    private var canAttachMemoryImageFromEdit: Bool {
+        item.memoryImageData == nil && onAttachMemoryImage != nil
+    }
+
+    @ViewBuilder
+    private var recordEditMoreActions: some View {
+        if canAttachMemoryImageFromEdit {
+            Button {
+                attachMemoryImageFromEditMenu()
+            } label: {
+                Label("补充图片", systemImage: "photo.badge.plus")
+            }
+        }
+    }
+
+    private func attachMemoryImageFromEditMenu() {
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            onAttachMemoryImage?()
         }
     }
 

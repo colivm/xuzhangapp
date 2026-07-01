@@ -795,6 +795,23 @@ final class HomeViewModel: ObservableObject {
         return true
     }
 
+    @discardableResult
+    func removeMemoryImage(from itemID: UUID) -> Bool {
+        guard let idx = items.firstIndex(where: { $0.id == itemID }) else { return false }
+        guard items[idx].memoryImageData != nil else { return false }
+        items[idx].memoryImageData = nil
+        items[idx].updatedAt = Date()
+        let updated = items[idx]
+        persistItems()
+        analyticsService.track("record_memory_image_removed", props: [
+            "category": updated.category.rawValue,
+            "amount": String(format: "%.2f", updated.amount)
+        ])
+        refreshTodayPlayback()
+        Task { await syncUpsertToCloud(updated) }
+        return true
+    }
+
     func syncCloudLedgerNow() async {
         let context = cloudContext()
         guard let context else {

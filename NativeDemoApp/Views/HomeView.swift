@@ -345,11 +345,13 @@ struct HomeView: View {
     var onNavigateWeeklyTrace: (() -> Void)? = nil
     var onNavigateSettings: (() -> Void)? = nil
     var onShowMemberPricing: (() -> Void)? = nil
+    var onAttachMemoryImage: ((HomeItem) -> Void)? = nil
     @State private var showPlayback = false
     @State private var playbackSheetID = UUID()
     @State private var showFirstRecordToast = false
     @State private var showTodayRecordsSheet = false
     @State private var editingItem: HomeItem?
+    @State private var memoryDetailItem: HomeItem?
     @State private var todayInlineEditingItemID: UUID?
     @State private var todaySwipedItemID: UUID?
     @State private var todayDeletingItemID: UUID?
@@ -458,6 +460,9 @@ struct HomeView: View {
         }
         .sheet(item: $editingItem) { item in
             editSheet(for: item)
+        }
+        .sheet(item: $memoryDetailItem) { item in
+            memoryRecordDetailSheet(for: item)
         }
     }
 
@@ -618,7 +623,7 @@ struct HomeView: View {
                     )
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        editingItem = item
+                        openRecord(item)
                     }
                 }
                 if homeViewModel.todayItems.count > homeViewModel.recentThreeItems.count {
@@ -1196,55 +1201,135 @@ struct HomeView: View {
 
     private func billListItem(item: HomeItem, isFirst: Bool, isHighlighted: Bool = false) -> some View {
         let accent = AppColors.categoryColor(item.category)
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(item.displayTitle)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.88)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 10)
-                Text(item.amount.formatted(.cny))
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-            }
-
-            if shouldShowHomeEmotion(for: item) {
-                let emotionTag = item.displayEmotionTag
-                Text(emotionTag)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppColors.readableAccent)
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.08)))
-                    .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.18), lineWidth: 0.7))
-                    .padding(.bottom, 4)
-            }
-            if let lifeMarkText = homeLifeMarkText(for: item) {
-                homeLifeMarkChip(lifeMarkText)
-                    .padding(.bottom, 3)
-            }
-            HStack(spacing: 6) {
-                Text(item.category.rawValue)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppColors.readableSubtext)
-
-                Text("·").foregroundStyle(AppColors.readableSubtext)
-
-                Text(item.createdAt.zhBillTime)
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.readableSubtext)
-            }
-
+        return Group {
             if let imageData = item.memoryImageData {
-                MemoryAttachmentThumbnail(imageData: imageData, height: 112, cornerRadius: 12)
-                    .padding(.top, 6)
+                homeMemoryBillCard(item: item, imageData: imageData, isHighlighted: isHighlighted)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(item.displayTitle)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(AppColors.text)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.88)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 10)
+                        Text(item.amount.formatted(.cny))
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppColors.text)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                    }
+
+                    if shouldShowHomeEmotion(for: item) {
+                        let emotionTag = item.displayEmotionTag
+                        Text(emotionTag)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(AppColors.readableAccent)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.08)))
+                            .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.18), lineWidth: 0.7))
+                            .padding(.bottom, 4)
+                    }
+                    if let lifeMarkText = homeLifeMarkText(for: item) {
+                        homeLifeMarkChip(lifeMarkText)
+                            .padding(.bottom, 3)
+                    }
+                    HStack(spacing: 6) {
+                        Text(item.category.rawValue)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(AppColors.readableSubtext)
+
+                        Text("·").foregroundStyle(AppColors.readableSubtext)
+
+                        Text(item.createdAt.zhBillTime)
+                            .font(.system(size: 12))
+                            .foregroundStyle(AppColors.readableSubtext)
+                    }
+                }
+                .padding(.vertical, 10)
+                .padding(.horizontal, 10)
+                .background {
+                    if isHighlighted {
+                        Color.clear
+                            .themedInteractionSurface(
+                                radius: 16,
+                                tint: accent,
+                                isSelected: true,
+                                glowIntensity: 0.72
+                            )
+                    }
+                }
             }
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 10)
+        .overlay(alignment: .top) {
+            if !isFirst {
+                PaperCreaseDivider()
+                    .padding(.top, -10)
+            }
+        }
+        .animation(.easeInOut(duration: 0.24), value: isHighlighted)
+    }
+
+    private func homeMemoryBillCard(item: HomeItem, imageData: Data, isHighlighted: Bool) -> some View {
+        let accent = AppColors.categoryColor(item.category)
+        return ZStack(alignment: .bottom) {
+            MemoryAttachmentThumbnail(imageData: imageData, height: 112, cornerRadius: 15)
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.0),
+                            Color.black.opacity(0.10),
+                            Color.black.opacity(0.24)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                )
+
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: MemoryAttachmentVisuals.categorySystemImage(item.category))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(accent)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(Color.white.opacity(0.84)))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.displayTitle)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                    Text("\(item.category.rawValue) · \(item.createdAt.zhBillTime)")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(item.amount.formatted(.cny))
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(Color.white.opacity(0.88))
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(Color.white.opacity(0.72), lineWidth: 1)
+            )
+            .padding(8)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 2)
         .background {
             if isHighlighted {
                 Color.clear
@@ -1256,13 +1341,6 @@ struct HomeView: View {
                     )
             }
         }
-        .overlay(alignment: .top) {
-            if !isFirst {
-                PaperCreaseDivider()
-                    .padding(.top, -10)
-            }
-        }
-        .animation(.easeInOut(duration: 0.24), value: isHighlighted)
     }
 
     private func countDaysWithRecords() -> Int {
@@ -1474,8 +1552,12 @@ struct HomeView: View {
                         todaySwipedItemID = nil
                     }
                 } else if !isEditing {
-                    withAnimation(todayEditSpring) {
-                        todayInlineEditingItemID = item.id
+                    if item.memoryImageData != nil {
+                        openRecord(item)
+                    } else {
+                        withAnimation(todayEditSpring) {
+                            todayInlineEditingItemID = item.id
+                        }
                     }
                 }
             }
@@ -1554,7 +1636,7 @@ struct HomeView: View {
             .frame(height: isEditing ? 0 : nil)
 
             if let imageData = item.memoryImageData {
-                MemoryAttachmentThumbnail(imageData: imageData, height: 120, cornerRadius: 12)
+                MemoryAttachmentThumbnail(imageData: imageData, height: 82, cornerRadius: 12)
                     .padding(.top, 4)
                     .opacity(isEditing ? 0 : 1)
                     .frame(height: isEditing ? 0 : nil)
@@ -2011,6 +2093,72 @@ struct HomeView: View {
         }
     }
 
+    private func openRecord(_ item: HomeItem) {
+        if item.memoryImageData != nil {
+            todayInlineEditingItemID = nil
+            todaySwipedItemID = nil
+            if showTodayRecordsSheet {
+                showTodayRecordsSheet = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
+                    memoryDetailItem = latestItem(matching: item)
+                }
+            } else {
+                memoryDetailItem = latestItem(matching: item)
+            }
+        } else {
+            editingItem = latestItem(matching: item)
+        }
+    }
+
+    private func requestAttachMemoryImage(_ item: HomeItem) {
+        todayInlineEditingItemID = nil
+        todaySwipedItemID = nil
+        let target = latestItem(matching: item)
+        if showTodayRecordsSheet {
+            showTodayRecordsSheet = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
+                onAttachMemoryImage?(target)
+            }
+        } else {
+            onAttachMemoryImage?(target)
+        }
+    }
+
+    private func latestItem(matching item: HomeItem) -> HomeItem {
+        homeViewModel.items.first { $0.id == item.id } ?? item
+    }
+
+    private func memoryRecordDetailSheet(for item: HomeItem) -> some View {
+        let current = latestItem(matching: item)
+        return MemoryRecordDetailSheet(
+            item: current,
+            onEditInfo: {
+                memoryDetailItem = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                    editingItem = latestItem(matching: current)
+                }
+            },
+            onReplaceImage: {
+                memoryDetailItem = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                    requestAttachMemoryImage(current)
+                }
+            },
+            onRemoveImage: {
+                if homeViewModel.removeMemoryImage(from: current.id) {
+                    memoryDetailItem = nil
+                    highlightSavedItem(current.id)
+                }
+            },
+            onDelete: {
+                if let idx = homeViewModel.items.firstIndex(where: { $0.id == current.id }) {
+                    homeViewModel.delete(at: IndexSet(integer: idx))
+                }
+                memoryDetailItem = nil
+            }
+        )
+    }
+
     private func editSheet(for item: HomeItem) -> some View {
         RecordEditSheet(item: item) { updated in
             let didSave = homeViewModel.updateItem(updated)
@@ -2024,6 +2172,12 @@ struct HomeView: View {
                 homeViewModel.delete(at: IndexSet(integer: idx))
             }
             editingItem = nil
+        } onAttachMemoryImage: {
+            let target = latestItem(matching: item)
+            editingItem = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                requestAttachMemoryImage(target)
+            }
         }
     }
 

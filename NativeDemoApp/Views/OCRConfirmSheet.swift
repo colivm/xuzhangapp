@@ -527,16 +527,16 @@ struct OCRDraftPanel: View {
                 ZStack {
                     if pendingItems.indices.contains(activeIndex + 1) {
                         backgroundReviewCard(pendingItems[activeIndex + 1], label: "下一条")
-                            .offset(y: 38)
-                            .scaleEffect(0.94)
-                            .opacity(0.42)
+                            .offset(y: 96)
+                            .scaleEffect(0.91)
+                            .opacity(0.48)
                     }
 
                     if pendingItems.indices.contains(activeIndex - 1) {
                         backgroundReviewCard(pendingItems[activeIndex - 1], label: "上一条")
-                            .offset(y: -38)
-                            .scaleEffect(0.94)
-                            .opacity(0.32)
+                            .offset(y: -54)
+                            .scaleEffect(0.92)
+                            .opacity(0.34)
                     }
 
                     OCRDraftRow(
@@ -550,7 +550,8 @@ struct OCRDraftPanel: View {
                     )
                     .zIndex(2)
                 }
-                .frame(minHeight: 368)
+                .padding(.vertical, 28)
+                .frame(minHeight: 424)
                 .contentShape(Rectangle())
 
                 reviewStackControls(activeIndex: activeIndex, activeItem: activeItem)
@@ -825,6 +826,7 @@ private struct OCRDraftRow: View {
     @State private var titleText: String
     @State private var selectedDate: Date
     @State private var isEditingAmount = false
+    @State private var datePanelExpanded = false
 
     init(
         item: HomeItem,
@@ -867,11 +869,14 @@ private struct OCRDraftRow: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(isFocused ? 18 : 14)
         .background(rowBackground)
         .overlay(rowBorder)
         .animation(.easeInOut(duration: 0.16), value: isEditingAmount)
-        .shadow(color: isFocused ? AppColors.accent.opacity(0.16) : Color.black.opacity(0.04), radius: isFocused ? 18 : 8, y: isFocused ? 10 : 4)
+        .animation(.spring(response: 0.30, dampingFraction: 0.88), value: datePanelExpanded)
+        .shadow(color: isFocused ? Color.black.opacity(0.10) : Color.black.opacity(0.04), radius: isFocused ? 28 : 8, y: isFocused ? 18 : 4)
+        .shadow(color: isFocused ? AppColors.accent.opacity(0.20) : Color.clear, radius: isFocused ? 22 : 0, y: isFocused ? 10 : 0)
         .onChange(of: item.amount) { _, newValue in
             guard !isEditingAmount else { return }
             amountText = amountInputText(newValue)
@@ -881,6 +886,7 @@ private struct OCRDraftRow: View {
             selectedDate = item.createdAt
             amountText = amountInputText(item.amount)
             isEditingAmount = false
+            datePanelExpanded = false
         }
         .onChange(of: item.title) { _, newValue in
             guard titleText != newValue else { return }
@@ -893,14 +899,23 @@ private struct OCRDraftRow: View {
     }
 
     private var rowBackground: some View {
-        let fill = isFocused ? Color.white.opacity(0.78) : (isResolved ? Color.white.opacity(0.46) : Color.white.opacity(0.68))
-        return RoundedRectangle(cornerRadius: 16, style: .continuous)
+        let fill = isFocused ? Color.white.opacity(0.90) : (isResolved ? Color.white.opacity(0.46) : Color.white.opacity(0.68))
+        return RoundedRectangle(cornerRadius: isFocused ? 20 : 16, style: .continuous)
             .fill(fill)
+            .overlay(
+                LinearGradient(
+                    colors: isFocused
+                        ? [Color.white.opacity(0.42), AppColors.accent.opacity(0.08), Color.white.opacity(0.18)]
+                        : [Color.clear, Color.clear],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
     }
 
     private var rowBorder: some View {
-        let stroke = isFocused ? AppColors.accent.opacity(0.30) : (isResolved ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.52))
-        return RoundedRectangle(cornerRadius: 16, style: .continuous)
+        let stroke = isFocused ? AppColors.accent.opacity(0.24) : (isResolved ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.52))
+        return RoundedRectangle(cornerRadius: isFocused ? 20 : 16, style: .continuous)
             .stroke(stroke, lineWidth: 1)
     }
 
@@ -917,21 +932,21 @@ private struct OCRDraftRow: View {
         Button {
             onToggleResolved(item.id, !isResolved)
         } label: {
-            Image(systemName: isResolved ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 23, weight: .semibold))
-                .foregroundStyle(isResolved ? AppColors.accent : AppColors.subtext.opacity(0.48))
+            Image(systemName: isResolved || isFocused ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: isFocused ? 24 : 23, weight: .semibold))
+                .foregroundStyle(isResolved || isFocused ? AppColors.accent : AppColors.subtext.opacity(0.48))
         }
         .buttonStyle(.plain)
     }
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(isFocused ? "当前账单" : item.title)
-                .font(.system(size: isFocused ? 12 : 16, weight: isFocused ? .bold : .semibold))
+            Text(item.title)
+                .font(.system(size: isFocused ? 18 : 16, weight: .bold))
                 .foregroundStyle(AppColors.text)
-                .lineLimit(isFocused ? 1 : 3)
+                .lineLimit(isFocused ? 2 : 3)
             Text(item.createdAt.zhBillDateTime)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: isFocused ? 13 : 12, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
         }
     }
@@ -988,18 +1003,90 @@ private struct OCRDraftRow: View {
                     }
             }
 
-            DatePicker(
-                "时间",
-                selection: $selectedDate,
-                displayedComponents: [.date, .hourAndMinute]
-            )
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(AppColors.subtext.opacity(0.78))
-            .datePickerStyle(.compact)
-            .onChange(of: selectedDate) { _, _ in
-                commitDate()
+            ocrDateEditor
+        }
+    }
+
+    private var ocrDateEditor: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Text("时间")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+
+                Button {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.88)) {
+                        datePanelExpanded.toggle()
+                    }
+                } label: {
+                    Text(ocrDateText)
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .padding(.horizontal, 14)
+                        .frame(height: 36)
+                        .background(dateChipBackground)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.88)) {
+                        datePanelExpanded.toggle()
+                    }
+                } label: {
+                    Text(ocrTimeText)
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .padding(.horizontal, 14)
+                        .frame(height: 36)
+                        .background(dateChipBackground)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if datePanelExpanded {
+                WarmRecordDatePanel(selection: ocrDateBinding) {
+                    commitDate()
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+    }
+
+    private var dateChipBackground: some View {
+        Capsule(style: .continuous)
+            .fill(Color.white.opacity(0.70))
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(AppColors.line.opacity(0.26), lineWidth: 1)
+            )
+    }
+
+    private var ocrDateBinding: Binding<Date> {
+        Binding(
+            get: { selectedDate },
+            set: { newValue in
+                selectedDate = newValue
+                commitDate()
+            }
+        )
+    }
+
+    private var ocrDateText: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter.string(from: selectedDate)
+    }
+
+    private var ocrTimeText: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: selectedDate)
     }
 
     private var inputBackground: some View {

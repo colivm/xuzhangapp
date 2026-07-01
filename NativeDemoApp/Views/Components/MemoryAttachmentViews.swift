@@ -328,6 +328,220 @@ struct MemoryPreviewSheet: View {
     }
 }
 
+struct MemoryRecordDetailSheet: View {
+    let item: HomeItem
+    let onEditInfo: () -> Void
+    let onReplaceImage: () -> Void
+    let onRemoveImage: () -> Void
+    let onDelete: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let imageData = item.memoryImageData {
+                        MemoryAttachmentThumbnail(imageData: imageData, height: 292, cornerRadius: 22)
+                            .overlay(alignment: .topTrailing) {
+                                Button {
+                                    onReplaceImage()
+                                } label: {
+                                    Image(systemName: "photo.badge.arrow.down")
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundStyle(AppColors.text)
+                                        .frame(width: 34, height: 34)
+                                        .background(Circle().fill(Color.white.opacity(0.82)))
+                                        .overlay(Circle().stroke(Color.white.opacity(0.70), lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+                                .padding(12)
+                            }
+                    }
+
+                    memoryDetailSummary
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("生活印记")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+
+                        Button {
+                            onReplaceImage()
+                        } label: {
+                            HStack(spacing: 12) {
+                                if let imageData = item.memoryImageData {
+                                    MemoryAttachmentThumbnail(imageData: imageData, height: 48, cornerRadius: 12)
+                                        .frame(width: 48)
+                                }
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(item.memoryImageData == nil ? "添加照片" : "1 张照片")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(AppColors.text)
+                                    Text(item.memoryImageData == nil ? "给这笔消费补一个回忆封面" : "查看、替换或移除这张回忆照片")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(AppColors.subtext)
+                                        .lineLimit(1)
+                                }
+
+                                Spacer(minLength: 8)
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(AppColors.tertiary)
+                            }
+                            .padding(12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(Color.white.opacity(0.66))
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    memoryDetailActions
+                }
+                .padding(18)
+                .padding(.bottom, 26)
+            }
+            .background(AppColors.bg.ignoresSafeArea())
+            .navigationTitle("消费详情")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 14, weight: .bold))
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: onEditInfo) {
+                        Text("编辑")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var memoryDetailSummary: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(item.displayTitle)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 10)
+
+                Text(item.amount.formatted(.cny))
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
+            }
+
+            if item.title != item.displayTitle {
+                Text(item.title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .lineLimit(2)
+            }
+
+            VStack(spacing: 10) {
+                memoryDetailInfoRow("分类", value: item.category.rawValue, systemImage: MemoryAttachmentVisuals.categorySystemImage(item.category))
+                memoryDetailInfoRow("时间", value: item.createdAt.zhBillDateTime, systemImage: "clock")
+                memoryDetailInfoRow("记忆", value: item.displayEmotionTag, systemImage: "sparkles")
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.white.opacity(0.72))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.64), lineWidth: 1)
+        )
+        .shadow(color: AppColors.subtext.opacity(0.08), radius: 16, x: 0, y: 8)
+    }
+
+    private func memoryDetailInfoRow(_ title: String, value: String, systemImage: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(AppColors.accent)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(AppColors.accent.opacity(0.10)))
+
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+
+            Spacer(minLength: 12)
+
+            Text(value)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppColors.text.opacity(0.88))
+                .lineLimit(1)
+                .minimumScaleFactor(0.76)
+        }
+    }
+
+    private var memoryDetailActions: some View {
+        VStack(spacing: 10) {
+            Button(action: onEditInfo) {
+                Text("编辑信息")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(AppColors.accent.opacity(0.92))
+                    )
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: 12) {
+                Button(action: onReplaceImage) {
+                    memoryDetailQuietAction("更换图片", systemImage: "photo.on.rectangle")
+                }
+                .buttonStyle(.plain)
+
+                Button(role: .destructive, action: onRemoveImage) {
+                    memoryDetailQuietAction("移除图片", systemImage: "trash")
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button(role: .destructive, action: onDelete) {
+                Text("删除这一笔")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.red.opacity(0.72))
+                    .padding(.vertical, 8)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func memoryDetailQuietAction(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(AppColors.text.opacity(0.78))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .fill(Color.white.opacity(0.64))
+            )
+    }
+}
+
 enum MemoryAttachmentVisuals {
     static func categorySystemImage(_ category: HomeItem.Category) -> String {
         switch category {
