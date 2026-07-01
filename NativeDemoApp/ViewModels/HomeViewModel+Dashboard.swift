@@ -751,11 +751,18 @@ extension HomeViewModel {
             return ("近 7 天暂无复盘。多记几笔，就能看到更完整的消费节奏啦。", "", "")
         }
         if let memoryLine = contextualMemoryLine(from: weekItems) {
-            let structure = "这一周的记录里，天气、城市和重复出现的场景已经能连起来看。"
+            let structure = weekItems.contains(where: { $0.hasMemoryImages })
+                ? photoStructureLine(from: weekItems, fallback: "这一周的记录里，天气、城市和照片都能成为回看线索。")
+                : "这一周的记录里，天气、城市和重复出现的场景已经能连起来看。"
             let advice = weekItems.count >= 8
                 ? "继续按真实时间记，之后可以按时间线回看。"
                 : "再多记几笔，天气和地点线索会更容易浮出来。"
             return (memoryLine, structure, advice)
+        }
+        if let photoLine = photoMemoryLine(from: weekItems, periodName: "近 7 天") {
+            let structure = photoStructureLine(from: weekItems, fallback: "这一周有照片的记录会优先成为回看线索。")
+            let advice = "照片只是补充，不用每笔都拍；遇到想记住的瞬间再留下就好。"
+            return (photoLine, structure, advice)
         }
         if let mark = LifeMarkService.aggregates(
             for: weekItems,
@@ -802,6 +809,8 @@ extension HomeViewModel {
             summary = "本月还没有足够账单，多记几笔再来生成月度复盘吧。"
         } else if let memoryLine = contextualMemoryLine(from: positiveMonthItems) {
             summary = memoryLine
+        } else if let photoLine = photoMemoryLine(from: positiveMonthItems, periodName: "这个月") {
+            summary = photoLine
         } else if let markLine = lifeMarkMemoryLine(from: positiveMonthItems, minimumCount: 2) {
             summary = markLine
         } else if let scene = LifeSceneSemanticService.dominantScene(in: positiveMonthItems),
@@ -875,6 +884,9 @@ extension HomeViewModel {
     }
 
     private func monthlyStructureText(fallbackTop: String, monthItems: [HomeItem]) -> String {
+        if monthItems.contains(where: { $0.hasMemoryImages }) {
+            return photoStructureLine(from: monthItems, fallback: "这个月有几笔记录带着照片，回看时会更像生活片段。")
+        }
         if monthItems.contains(where: { $0.memoryContext?.weatherKind != nil || $0.memoryContext?.cityName != nil }) {
             return "这个月不只看分类，也能看到天气、城市和当天场景留下的线索。"
         }
@@ -922,6 +934,36 @@ extension HomeViewModel {
                 || text.contains("第10次")
                 || text.contains("连续")
                 || text.contains("周末出门")
-        }?.displayEmotionTag
+        }?.displayEmotionTag ?? photoMemoryLine(from: sorted, periodName: "这段时间")
+    }
+
+    private func photoMemoryLine(from target: [HomeItem], periodName: String) -> String? {
+        let photoItems = target
+            .filter { $0.amount > 0 && $0.hasMemoryImages }
+            .sorted { lhs, rhs in
+                if lhs.memoryImages.count == rhs.memoryImages.count {
+                    return lhs.createdAt > rhs.createdAt
+                }
+                return lhs.memoryImages.count > rhs.memoryImages.count
+            }
+        guard let first = photoItems.first else { return nil }
+        if photoItems.count >= 2 {
+            return "\(periodName)留下了 \(photoItems.count) 个有照片的消费时刻，照片让这些记录更像生活。"
+        }
+        let title = first.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTitle = title.isEmpty || EchoAnchorService.shared.isDirtyTraceTitle(title)
+            ? first.category.rawValue
+            : title
+        return "\(first.createdAt.zhBillDateTime)的「\(cleanTitle)」留了照片，这一笔以后会更容易想起来。"
+    }
+
+    private func photoStructureLine(from target: [HomeItem], fallback: String) -> String {
+        let photoCount = target.filter { $0.amount > 0 && $0.hasMemoryImages }.count
+        guard photoCount > 0 else { return fallback }
+        let total = target.filter { $0.amount > 0 }.count
+        if photoCount == 1 {
+            return "这一段有 1 笔记录带着照片，它会成为回看时更具体的锚点。"
+        }
+        return "这一段 \(total) 笔记录里，有 \(photoCount) 个照片锚点，适合以后写成日记或周记。"
     }
 }

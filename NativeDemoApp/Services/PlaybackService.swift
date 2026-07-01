@@ -223,7 +223,8 @@ final class PlaybackService {
         let busiestTitle = busiestMaterial?.text
             ?? busiestFallbackTitle(from: busiestRows, excluding: primaryVoiceID)
             ?? "这天的几笔记录"
-        let sceneMemoryLine = weeklySceneMemoryLine(rows)
+        let photoMemoryLine = photoMemoryLine(in: rows, range: .week)
+        let sceneMemoryLine = weeklySceneMemoryLine(rows) ?? photoMemoryLine
         let emotionSignal = primaryVoice?.item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let lifeMark = LifeMarkService
             .aggregates(for: rows, allItems: items, isMember: true, now: now, limit: 1)
@@ -233,12 +234,15 @@ final class PlaybackService {
             lifeMark,
             fallback: sceneMemoryLine ?? "这一周最清楚的一格，是「\(voiceTitle1)」。"
         )
-        let presenceSupportLine = lifeMark == nil ? (sceneMemoryLine ?? "") : ""
+        let presenceSupportLine = lifeMark == nil ? (sceneMemoryLine ?? "") : (photoMemoryLine ?? "")
         let rhythmSupportLine = sceneMemoryLineForItem(busiestMaterial?.item)
             ?? sceneMemoryLineForRows(busiestRows, excluding: primaryVoiceID)
+            ?? photoMemoryLine(in: busiestRows, excluding: primaryVoiceID, range: .week)
             ?? busiestFallbackSupportLine(from: busiestRows, excluding: primaryVoiceID)
             ?? ""
-        let voiceSupportLine = sceneMemoryLineForItem(primaryVoice?.item) ?? ""
+        let voiceSupportLine = sceneMemoryLineForItem(primaryVoice?.item)
+            ?? photoMemoryLine(for: primaryVoice?.item)
+            ?? ""
         let scentSupportLine = weeklyScentSupportLine(
             sceneLine: sceneMemoryLine,
             recurringLine: recurringLine
@@ -952,7 +956,8 @@ final class PlaybackService {
         let voiceTitle1 = selection.voiceText(for: .month)
         let earlyVoiceTitle = earlyVoice?.text ?? PlaybackMomentSelector.honestNoVoiceText(for: .month)
         let lateVoiceTitle = lateVoice?.text ?? PlaybackMomentSelector.honestNoVoiceText(for: .month)
-        let monthContextLine = contextualMemoryLine(in: rows) ?? weeklySceneMemoryLine(rows)
+        let photoMemoryLine = photoMemoryLine(in: rows, range: .month)
+        let monthContextLine = contextualMemoryLine(in: rows, range: .month) ?? weeklySceneMemoryLine(rows) ?? photoMemoryLine
         let emotionSignal = primaryVoice?.item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let lifeMark = LifeMarkService
             .aggregates(for: rows, allItems: items, isMember: true, now: now, limit: 1)
@@ -1361,8 +1366,41 @@ final class PlaybackService {
         return LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count)
     }
 
+    private func photoMemoryLine(in rows: [HomeItem], excluding excludedID: UUID? = nil, range: SummaryPlaybackRange) -> String? {
+        let photoRows = rows
+            .filter { item in
+                if let excludedID, item.id == excludedID { return false }
+                return item.hasMemoryImages
+            }
+            .sorted { lhs, rhs in
+                if lhs.memoryImages.count == rhs.memoryImages.count {
+                    return lhs.createdAt > rhs.createdAt
+                }
+                return lhs.memoryImages.count > rhs.memoryImages.count
+            }
+        guard let first = photoRows.first else { return nil }
+        if photoRows.count >= 2 {
+            let unit = range == .week ? "这周" : "这个月"
+            return "\(unit)有 \(photoRows.count) 个带照片的时刻，照片让这些消费不只是数字。"
+        }
+        return photoMemoryLine(for: first)
+    }
+
+    private func photoMemoryLine(for item: HomeItem?) -> String? {
+        guard let item, item.hasMemoryImages else { return nil }
+        let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTitle = title.isEmpty || EchoAnchorService.shared.isDirtyTraceTitle(title)
+            ? item.category.rawValue
+            : title
+        let day = Self.shortWeekdayFormatter.string(from: item.createdAt)
+        return "\(day)的「\(cleanTitle)」留了照片，以后回看会更像一段生活。"
+    }
+
     private func sceneMemoryLineForItem(_ item: HomeItem?) -> String? {
         guard let item else { return nil }
+        if let photoLine = photoMemoryLine(for: item) {
+            return photoLine
+        }
         if HomeItem.isLateWorkCommute(item),
            let line = HomeItem.lateWorkCommuteTraceLine(for: item) {
             return line
@@ -1394,6 +1432,7 @@ final class PlaybackService {
             return true
         }
         return contextualMemoryLine(in: scoped)
+            ?? photoMemoryLine(in: scoped, range: .week)
     }
 
     private func busiestFallbackTitle(from rows: [HomeItem], excluding excludedID: UUID?) -> String? {
@@ -1626,8 +1665,11 @@ final class PlaybackService {
     }
 
     private func monthlyChangeText(current: [HomeItem], previous: [HomeItem], segments: [MonthSegment]) -> String {
-        if let contextLine = contextualMemoryLine(in: current) {
+        if let contextLine = contextualMemoryLine(in: current, range: .month) {
             return contextLine
+        }
+        if let photoLine = photoMemoryLine(in: current, range: .month) {
+            return photoLine
         }
         if let change = meaningfulMonthlyCategoryChange(current: current, previous: previous) {
             if change.previous == nil {
@@ -1653,7 +1695,7 @@ final class PlaybackService {
         return "这个月已经有几格可以回看的生活。"
     }
 
-    private func contextualMemoryLine(in rows: [HomeItem]) -> String? {
+    private func contextualMemoryLine(in rows: [HomeItem], range: SummaryPlaybackRange = .week) -> String? {
         if let item = rows.sorted(by: { $0.createdAt > $1.createdAt }).first(where: { HomeItem.isLateWorkCommute($0) }),
            let line = HomeItem.lateWorkCommuteTraceLine(for: item) {
             return line
@@ -1676,9 +1718,12 @@ final class PlaybackService {
             return lhs.score > rhs.score
         }
 
-        guard let best = candidates.first else { return nil }
-        let day = Self.shortWeekdayFormatter.string(from: best.item.createdAt)
-        return "\(day)这笔写着「\(best.tag)」，以后再看会知道当时发生了什么。"
+        if let best = candidates.first {
+            let day = Self.shortWeekdayFormatter.string(from: best.item.createdAt)
+            return "\(day)这笔写着「\(best.tag)」，以后再看会知道当时发生了什么。"
+        }
+
+        return photoMemoryLine(in: rows, range: range)
     }
 
     private func meaningfulMonthlyCategoryChange(current: [HomeItem], previous: [HomeItem]) -> MonthlyCategoryChange? {
