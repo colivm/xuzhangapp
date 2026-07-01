@@ -18,10 +18,12 @@ struct StatsWebView: View {
     var openTraceRequestID: UUID? = nil
     var onShowMemberPricing: ((MemberPricingEntryContext) -> Void)? = nil
     var onOpenInsight: (() -> Void)? = nil
+    var onAttachMemoryImage: ((HomeItem) -> Void)? = nil
 
     @State var selectedPeriod: StatsPeriod = .week
     @State var selectedCategory: HomeItem.Category? = nil
     @State private var editingItem: HomeItem?
+    @State private var memoryDetailItem: HomeItem?
     @State private var summaryPlayback: SummaryPlayback?
     @State private var summaryQuotaPrompt: SummaryQuotaPrompt?
     @State private var quotaRefreshID = UUID()
@@ -132,6 +134,9 @@ struct StatsWebView: View {
             }
             .sheet(item: $editingItem) { item in
                 editSheet(for: item)
+            }
+            .sheet(item: $memoryDetailItem) { item in
+                memoryRecordDetailSheet(for: item)
             }
             .sheet(item: $summaryPlayback) { playback in
                 summaryPlaybackSheet(playback)
@@ -2503,14 +2508,76 @@ struct StatsWebView: View {
     }
 
     private func openEditor(for item: HomeItem, fromTraceDetail: Bool = false) {
+        if item.hasMemoryImages {
+            traceSwipedItemID = nil
+            traceInlineEditingItemID = nil
+            if showTraceDetailSheet || fromTraceDetail {
+                showTraceDetailSheet = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+                    memoryDetailItem = latestItem(matching: item)
+                }
+            } else {
+                memoryDetailItem = latestItem(matching: item)
+            }
+            return
+        }
+
         if fromTraceDetail {
             withAnimation(traceEditSpring) {
                 traceSwipedItemID = nil
                 traceInlineEditingItemID = item.id
             }
         } else {
-            editingItem = item
+            editingItem = latestItem(matching: item)
         }
+    }
+
+    private func requestAttachMemoryImage(_ item: HomeItem) {
+        traceInlineEditingItemID = nil
+        traceSwipedItemID = nil
+        let target = latestItem(matching: item)
+        if showTraceDetailSheet {
+            showTraceDetailSheet = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+                onAttachMemoryImage?(target)
+            }
+        } else {
+            onAttachMemoryImage?(target)
+        }
+    }
+
+    private func latestItem(matching item: HomeItem) -> HomeItem {
+        homeViewModel.items.first { $0.id == item.id } ?? item
+    }
+
+    private func memoryRecordDetailSheet(for item: HomeItem) -> some View {
+        let current = latestItem(matching: item)
+        return MemoryRecordDetailSheet(
+            item: current,
+            onEditInfo: {
+                memoryDetailItem = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
+                    editingItem = latestItem(matching: current)
+                }
+            },
+            onAddImages: {
+                memoryDetailItem = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                    requestAttachMemoryImage(current)
+                }
+            },
+            onRemoveImage: { imageIndex in
+                if homeViewModel.removeMemoryImage(at: imageIndex, from: current.id) {
+                    memoryDetailItem = nil
+                }
+            },
+            onDelete: {
+                if let idx = homeViewModel.items.firstIndex(where: { $0.id == current.id }) {
+                    homeViewModel.delete(at: IndexSet(integer: idx))
+                }
+                memoryDetailItem = nil
+            }
+        )
     }
 
     private func editSheet(for item: HomeItem) -> some View {
@@ -2525,6 +2592,12 @@ struct StatsWebView: View {
                 homeViewModel.delete(at: IndexSet(integer: idx))
             }
             editingItem = nil
+        } onAttachMemoryImage: {
+            let target = latestItem(matching: item)
+            editingItem = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
+                requestAttachMemoryImage(target)
+            }
         }
     }
 
@@ -2767,46 +2840,117 @@ struct StatsWebView: View {
 
     // MARK: - Simplified Category Filter Chips (no longer used, replaced by Menu)
 
+    @ViewBuilder
     private func billRecordRow(_ item: HomeItem, isFirst: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                traceRecordLeadingMark(item)
+        if let imageData = item.coverMemoryImageData {
+            traceMemoryBillCard(item: item, imageData: imageData)
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    traceRecordLeadingMark(item)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(item.displayTitle)
-                        .font(.system(size: 16, weight: .bold))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(item.displayTitle)
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+                            .lineLimit(1)
+
+                        traceRecordTagLine(item)
+
+                        if let note = traceRecordNote(item) {
+                            Text(note)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(AppColors.subtext)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Text(item.amount.formatted(.cny))
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
                         .foregroundStyle(AppColors.text)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                        .padding(.top, 1)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
+            .background(traceListRecordBackground)
+            .overlay(traceListRecordBorder)
+        }
+    }
 
-                    traceRecordTagLine(item)
+    private func traceMemoryBillCard(item: HomeItem, imageData: Data) -> some View {
+        let accent = traceAccentColor(for: item.category)
+        return ZStack(alignment: .bottom) {
+            MemoryAttachmentThumbnail(imageData: imageData, height: 92, cornerRadius: 14)
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.0),
+                            Color.black.opacity(0.08),
+                            Color.black.opacity(0.22)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                )
 
-                    if let note = traceRecordNote(item) {
-                        Text(note)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AppColors.subtext)
-                            .lineLimit(1)
-                    }
+            if item.memoryImages.count > 1 {
+                Text("\(item.memoryImages.count) 张")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule(style: .continuous).fill(Color.black.opacity(0.30)))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(8)
+            }
+
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: MemoryAttachmentVisuals.categorySystemImage(item.category))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(accent)
+                    .frame(width: 23, height: 23)
+                    .background(Circle().fill(Color.white.opacity(0.86)))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.displayTitle)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1)
+                    Text("\(item.category.rawValue) · \(item.createdAt.zhBillTime)")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                        .lineLimit(1)
                 }
 
                 Spacer(minLength: 8)
 
                 Text(item.amount.formatted(.cny))
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundStyle(AppColors.text)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-                    .padding(.top, 1)
+                    .minimumScaleFactor(0.76)
             }
-
-            if let imageData = item.memoryImageData {
-                MemoryAttachmentThumbnail(imageData: imageData, height: 120, cornerRadius: 12)
-                    .padding(.leading, 56)
-            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(Color.white.opacity(0.88))
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(Color.white.opacity(0.72), lineWidth: 1)
+            )
+            .padding(7)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 13)
-        .background(traceListRecordBackground)
-        .overlay(traceListRecordBorder)
+        .padding(.horizontal, 2)
+        .padding(.vertical, 5)
     }
 
     private func traceRecordTagLine(_ item: HomeItem) -> some View {
@@ -2973,13 +3117,31 @@ struct StatsWebView: View {
                     .opacity(isEditing ? 0.24 : 1)
             }
 
-            if let imageData = item.memoryImageData {
-                MemoryAttachmentThumbnail(imageData: imageData, height: 120, cornerRadius: 12)
-                    .padding(.leading, 56)
+            if let imageData = item.coverMemoryImageData {
+                traceDetailMemoryStrip(item: item, imageData: imageData)
                     .opacity(isEditing ? 0 : 1)
                     .frame(height: isEditing ? 0 : nil)
             }
         }
+    }
+
+    private func traceDetailMemoryStrip(item: HomeItem, imageData: Data) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            MemoryAttachmentThumbnail(imageData: imageData, height: 78, cornerRadius: 12)
+            Text("\(item.memoryImages.count) 张照片")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(AppColors.text.opacity(0.78))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.84))
+                        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+                )
+                .padding(7)
+        }
+        .padding(.leading, 56)
+        .padding(.top, 2)
     }
 
     private func traceDetailRecordBackground(isEditing: Bool) -> some View {

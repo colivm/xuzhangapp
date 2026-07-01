@@ -88,6 +88,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
     var memoryContext: MemoryContext?
     var scenePackId: String?
     var memoryImageData: Data?
+    var memoryImageDatas: [Data]
 
     init(
         id: UUID = UUID(),
@@ -105,7 +106,8 @@ struct HomeItem: Identifiable, Codable, Equatable {
         categoryCorrectionFrom: Category? = nil,
         memoryContext: MemoryContext? = nil,
         scenePackId: String? = nil,
-        memoryImageData: Data? = nil
+        memoryImageData: Data? = nil,
+        memoryImageDatas: [Data] = []
     ) {
         self.id = id
         self.title = title
@@ -122,7 +124,9 @@ struct HomeItem: Identifiable, Codable, Equatable {
         self.categoryCorrectionFrom = categoryCorrectionFrom
         self.memoryContext = memoryContext
         self.scenePackId = scenePackId
-        self.memoryImageData = memoryImageData
+        let normalizedImages = memoryImageDatas.isEmpty ? memoryImageData.map { [$0] } ?? [] : memoryImageDatas
+        self.memoryImageDatas = normalizedImages
+        self.memoryImageData = normalizedImages.first
     }
 
     static func inferEmotionTag(category: Category, amount: Double) -> String {
@@ -677,7 +681,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
 extension HomeItem {
     enum CodingKeys: String, CodingKey {
-        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta, userEditedTitle, userEditedCategory, categoryCorrectionFrom, memoryContext, scenePackId, memoryImageData
+        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta, userEditedTitle, userEditedCategory, categoryCorrectionFrom, memoryContext, scenePackId, memoryImageData, memoryImageDatas
     }
 
     init(from decoder: Decoder) throws {
@@ -698,7 +702,29 @@ extension HomeItem {
         categoryCorrectionFrom = try container.decodeIfPresent(Category.self, forKey: .categoryCorrectionFrom)
         memoryContext = try container.decodeIfPresent(MemoryContext.self, forKey: .memoryContext)
         scenePackId = try container.decodeIfPresent(String.self, forKey: .scenePackId)
-        memoryImageData = try container.decodeIfPresent(Data.self, forKey: .memoryImageData)
+        let legacyImageData = try container.decodeIfPresent(Data.self, forKey: .memoryImageData)
+        let decodedImages = try container.decodeIfPresent([Data].self, forKey: .memoryImageDatas) ?? []
+        memoryImageDatas = decodedImages.isEmpty ? legacyImageData.map { [$0] } ?? [] : decodedImages
+        memoryImageData = memoryImageDatas.first
+    }
+
+    var memoryImages: [Data] {
+        get {
+            if !memoryImageDatas.isEmpty { return memoryImageDatas }
+            return memoryImageData.map { [$0] } ?? []
+        }
+        set {
+            memoryImageDatas = newValue
+            memoryImageData = newValue.first
+        }
+    }
+
+    var coverMemoryImageData: Data? {
+        memoryImages.first
+    }
+
+    var hasMemoryImages: Bool {
+        !memoryImages.isEmpty
     }
 }
 

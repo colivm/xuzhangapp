@@ -781,14 +781,25 @@ final class HomeViewModel: ObservableObject {
 
     @discardableResult
     func attachMemoryImage(_ imageData: Data, to itemID: UUID) -> Bool {
+        attachMemoryImages([imageData], to: itemID)
+    }
+
+    @discardableResult
+    func attachMemoryImages(_ imageDatas: [Data], to itemID: UUID) -> Bool {
         guard let idx = items.firstIndex(where: { $0.id == itemID }) else { return false }
-        items[idx].memoryImageData = imageData
+        var images = items[idx].memoryImages
+        let availableSlots = max(0, 9 - images.count)
+        let cleanImages = Array(imageDatas.filter { !$0.isEmpty }.prefix(availableSlots))
+        guard !cleanImages.isEmpty else { return false }
+        images.append(contentsOf: cleanImages)
+        items[idx].memoryImages = images
         items[idx].updatedAt = Date()
         let updated = items[idx]
         persistItems()
         analyticsService.track("record_memory_image_attached", props: [
             "category": updated.category.rawValue,
-            "amount": String(format: "%.2f", updated.amount)
+            "amount": String(format: "%.2f", updated.amount),
+            "image_count": String(cleanImages.count)
         ])
         refreshTodayPlayback()
         Task { await syncUpsertToCloud(updated) }
@@ -797,15 +808,23 @@ final class HomeViewModel: ObservableObject {
 
     @discardableResult
     func removeMemoryImage(from itemID: UUID) -> Bool {
+        removeMemoryImage(at: 0, from: itemID)
+    }
+
+    @discardableResult
+    func removeMemoryImage(at imageIndex: Int, from itemID: UUID) -> Bool {
         guard let idx = items.firstIndex(where: { $0.id == itemID }) else { return false }
-        guard items[idx].memoryImageData != nil else { return false }
-        items[idx].memoryImageData = nil
+        var images = items[idx].memoryImages
+        guard images.indices.contains(imageIndex) else { return false }
+        images.remove(at: imageIndex)
+        items[idx].memoryImages = images
         items[idx].updatedAt = Date()
         let updated = items[idx]
         persistItems()
         analyticsService.track("record_memory_image_removed", props: [
             "category": updated.category.rawValue,
-            "amount": String(format: "%.2f", updated.amount)
+            "amount": String(format: "%.2f", updated.amount),
+            "remaining_image_count": String(updated.memoryImages.count)
         ])
         refreshTodayPlayback()
         Task { await syncUpsertToCloud(updated) }

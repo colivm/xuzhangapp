@@ -620,8 +620,8 @@ struct ContentView: View {
     @State private var memoryPromptItem: HomeItem?
     @State private var memorySourceItem: HomeItem?
     @State private var memoryPreviewItem: HomeItem?
-    @State private var selectedMemoryPhoto: PhotosPickerItem?
-    @State private var pendingMemoryImageData: Data?
+    @State private var selectedMemoryPhotos: [PhotosPickerItem] = []
+    @State private var pendingMemoryImageDatas: [Data] = []
 
     enum AppTab: Int, CaseIterable, Identifiable {
         case today
@@ -686,25 +686,26 @@ struct ContentView: View {
         }
         .sheet(item: $memorySourceItem) { item in
             MemorySourceSheet(
-                selectedPhoto: $selectedMemoryPhoto,
+                selectedPhotos: $selectedMemoryPhotos,
+                remainingSelectionCount: max(1, 9 - item.memoryImages.count),
                 onClose: { memorySourceItem = nil }
             )
             .presentationDetents([.height(330)])
             .presentationDragIndicator(.hidden)
             .onDisappear {
-                if selectedMemoryPhoto == nil && memoryPreviewItem == nil {
+                if selectedMemoryPhotos.isEmpty && memoryPreviewItem == nil {
                     memorySourceItem = nil
                 }
                 _ = item
             }
         }
         .sheet(item: $memoryPreviewItem) { item in
-            if let pendingMemoryImageData {
+            if !pendingMemoryImageDatas.isEmpty {
                 MemoryPreviewSheet(
                     item: item,
-                    imageData: pendingMemoryImageData,
+                    imageDatas: pendingMemoryImageDatas,
                     onConfirm: {
-                        if homeViewModel.attachMemoryImage(pendingMemoryImageData, to: item.id) {
+                        if homeViewModel.attachMemoryImages(pendingMemoryImageDatas, to: item.id) {
                             closeMemoryFlow()
                         }
                     },
@@ -737,17 +738,23 @@ struct ContentView: View {
                 await refreshAccountAndMemberStatusIfNeeded(force: true)
             }
         }
-        .onChange(of: selectedMemoryPhoto) { _, newValue in
-            guard let newValue, let item = memorySourceItem else { return }
+        .onChange(of: selectedMemoryPhotos) { _, newValue in
+            guard !newValue.isEmpty, let item = memorySourceItem else { return }
             Task {
-                guard let data = try? await newValue.loadTransferable(type: Data.self),
-                      let compressedData = MemoryImageCompressor.compressedJPEGData(from: data) else {
-                    await MainActor.run { selectedMemoryPhoto = nil }
-                    return
+                var compressedImages: [Data] = []
+                for photo in newValue.prefix(9) {
+                    if let data = try? await photo.loadTransferable(type: Data.self),
+                       let compressedData = MemoryImageCompressor.compressedJPEGData(from: data) {
+                        compressedImages.append(compressedData)
+                    }
                 }
                 await MainActor.run {
-                    pendingMemoryImageData = compressedData
-                    selectedMemoryPhoto = nil
+                    guard !compressedImages.isEmpty else {
+                        selectedMemoryPhotos = []
+                        return
+                    }
+                    pendingMemoryImageDatas = compressedImages
+                    selectedMemoryPhotos = []
                     memorySourceItem = nil
                     memoryPreviewItem = item
                 }
@@ -852,8 +859,8 @@ struct ContentView: View {
                          onAttachMemoryImage: { item in
                              memoryPromptItem = nil
                              memoryPreviewItem = nil
-                             pendingMemoryImageData = nil
-                             selectedMemoryPhoto = nil
+                             pendingMemoryImageDatas = []
+                             selectedMemoryPhotos = []
                              memorySourceItem = item
                          })
             case .record:
@@ -861,7 +868,7 @@ struct ContentView: View {
                     onSaved: { prompt in
                         let savedItem = homeViewModel.items.first
                         selectTab(.today)
-                        if let savedItem, savedItem.memoryImageData == nil {
+                        if let savedItem, !savedItem.hasMemoryImages {
                             showMemoryPrompt(for: savedItem)
                         }
                         if let prompt {
@@ -878,7 +885,14 @@ struct ContentView: View {
                     onShowMemberPricing: { entryContext in
                         showMemberPricingSheet(entryContext: entryContext)
                     },
-                    onOpenInsight: { selectTab(.insight) }
+                    onOpenInsight: { selectTab(.insight) },
+                    onAttachMemoryImage: { item in
+                        memoryPromptItem = nil
+                        memoryPreviewItem = nil
+                        pendingMemoryImageDatas = []
+                        selectedMemoryPhotos = []
+                        memorySourceItem = item
+                    }
                 )
             case .insight:
                 InsightWebView(
@@ -941,8 +955,8 @@ struct ContentView: View {
         }
         memorySourceItem = nil
         memoryPreviewItem = nil
-        pendingMemoryImageData = nil
-        selectedMemoryPhoto = nil
+        pendingMemoryImageDatas = []
+        selectedMemoryPhotos = []
     }
 
     private func memorySuccessOverlay(_ item: HomeItem) -> some View {
@@ -1793,7 +1807,7 @@ struct RecordEditSheet: View {
     }
 
     private var canAttachMemoryImageFromEdit: Bool {
-        item.memoryImageData == nil && onAttachMemoryImage != nil
+        !item.hasMemoryImages && onAttachMemoryImage != nil
     }
 
     @ViewBuilder
@@ -1809,7 +1823,7 @@ struct RecordEditSheet: View {
 
     private func attachMemoryImageFromEditMenu() {
         dismiss()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
             onAttachMemoryImage?()
         }
     }

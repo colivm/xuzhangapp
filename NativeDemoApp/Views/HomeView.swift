@@ -1202,7 +1202,7 @@ struct HomeView: View {
     private func billListItem(item: HomeItem, isFirst: Bool, isHighlighted: Bool = false) -> some View {
         let accent = AppColors.categoryColor(item.category)
         return Group {
-            if let imageData = item.memoryImageData {
+            if let imageData = item.coverMemoryImageData {
                 homeMemoryBillCard(item: item, imageData: imageData, isHighlighted: isHighlighted)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
@@ -1274,7 +1274,7 @@ struct HomeView: View {
     private func homeMemoryBillCard(item: HomeItem, imageData: Data, isHighlighted: Bool) -> some View {
         let accent = AppColors.categoryColor(item.category)
         return ZStack(alignment: .bottom) {
-            MemoryAttachmentThumbnail(imageData: imageData, height: 112, cornerRadius: 15)
+            MemoryAttachmentThumbnail(imageData: imageData, height: 86, cornerRadius: 14)
                 .overlay(
                     LinearGradient(
                         colors: [
@@ -1288,11 +1288,22 @@ struct HomeView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
                 )
 
+            if item.memoryImages.count > 1 {
+                Text("\(item.memoryImages.count) 张")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule(style: .continuous).fill(Color.black.opacity(0.30)))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(8)
+            }
+
             HStack(alignment: .center, spacing: 8) {
                 Image(systemName: MemoryAttachmentVisuals.categorySystemImage(item.category))
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(accent)
-                    .frame(width: 24, height: 24)
+                    .frame(width: 22, height: 22)
                     .background(Circle().fill(Color.white.opacity(0.84)))
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -1315,8 +1326,8 @@ struct HomeView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.76)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
                     .fill(Color.white.opacity(0.88))
@@ -1326,9 +1337,9 @@ struct HomeView: View {
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
                     .stroke(Color.white.opacity(0.72), lineWidth: 1)
             )
-            .padding(8)
+            .padding(7)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 5)
         .padding(.horizontal, 2)
         .background {
             if isHighlighted {
@@ -1552,7 +1563,7 @@ struct HomeView: View {
                         todaySwipedItemID = nil
                     }
                 } else if !isEditing {
-                    if item.memoryImageData != nil {
+                    if item.hasMemoryImages {
                         openRecord(item)
                     } else {
                         withAnimation(todayEditSpring) {
@@ -1635,7 +1646,7 @@ struct HomeView: View {
             .opacity(isEditing ? 0 : 1)
             .frame(height: isEditing ? 0 : nil)
 
-            if let imageData = item.memoryImageData {
+            if let imageData = item.coverMemoryImageData {
                 MemoryAttachmentThumbnail(imageData: imageData, height: 82, cornerRadius: 12)
                     .padding(.top, 4)
                     .opacity(isEditing ? 0 : 1)
@@ -2094,7 +2105,7 @@ struct HomeView: View {
     }
 
     private func openRecord(_ item: HomeItem) {
-        if item.memoryImageData != nil {
+        if item.hasMemoryImages {
             todayInlineEditingItemID = nil
             todaySwipedItemID = nil
             if showTodayRecordsSheet {
@@ -2134,18 +2145,18 @@ struct HomeView: View {
             item: current,
             onEditInfo: {
                 memoryDetailItem = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
                     editingItem = latestItem(matching: current)
                 }
             },
-            onReplaceImage: {
+            onAddImages: {
                 memoryDetailItem = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
                     requestAttachMemoryImage(current)
                 }
             },
-            onRemoveImage: {
-                if homeViewModel.removeMemoryImage(from: current.id) {
+            onRemoveImage: { imageIndex in
+                if homeViewModel.removeMemoryImage(at: imageIndex, from: current.id) {
                     memoryDetailItem = nil
                     highlightSavedItem(current.id)
                 }
@@ -2175,7 +2186,7 @@ struct HomeView: View {
         } onAttachMemoryImage: {
             let target = latestItem(matching: item)
             editingItem = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
                 requestAttachMemoryImage(target)
             }
         }
