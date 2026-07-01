@@ -1,4 +1,3 @@
-import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -140,100 +139,6 @@ struct MemorySuccessCard: View {
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color.white.opacity(0.56))
-        )
-    }
-}
-
-struct MemorySourceSheet: View {
-    @Binding var selectedPhotos: [PhotosPickerItem]
-    let remainingSelectionCount: Int
-    let onClose: () -> Void
-
-    private var cappedSelectionCount: Int {
-        max(0, min(9, remainingSelectionCount))
-    }
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Capsule(style: .continuous)
-                .fill(AppColors.line.opacity(0.72))
-                .frame(width: 38, height: 4)
-                .padding(.top, 8)
-
-            VStack(spacing: 4) {
-                Text("添加图片")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(AppColors.text)
-                Text("图片只是回忆的附件，不会影响这笔记录。")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppColors.subtext)
-            }
-            .padding(.bottom, 6)
-
-            Button {
-                onClose()
-            } label: {
-                MemorySourceRow(title: "拍照", subtitle: "下一版接入相机权限", systemImage: "camera")
-                    .opacity(0.54)
-            }
-            .buttonStyle(.plain)
-            .disabled(true)
-
-            PhotosPicker(selection: $selectedPhotos, maxSelectionCount: max(1, cappedSelectionCount), matching: .images, photoLibrary: .shared()) {
-                MemorySourceRow(title: "从相册选择", subtitle: cappedSelectionCount > 1 ? "最多还能选择 \(cappedSelectionCount) 张图片" : cappedSelectionCount == 1 ? "还能选择 1 张图片" : "这笔记录最多保存 9 张图片", systemImage: "photo.on.rectangle")
-            }
-            .buttonStyle(.plain)
-            .disabled(cappedSelectionCount == 0)
-
-            Button(action: onClose) {
-                Text("取消")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(AppColors.subtext)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 18)
-        .padding(.bottom, 18)
-        .background(AppColors.bg)
-    }
-}
-
-private struct MemorySourceRow: View {
-    let title: String
-    let subtitle: String
-    let systemImage: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(AppColors.accent)
-                .frame(width: 42, height: 42)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(AppColors.accent.opacity(0.10))
-                )
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.subtext)
-            }
-
-            Spacer(minLength: 8)
-            Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(AppColors.tertiary)
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.62))
         )
     }
 }

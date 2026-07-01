@@ -622,6 +622,12 @@ struct ContentView: View {
     @State private var memoryPreviewItem: HomeItem?
     @State private var selectedMemoryPhotos: [PhotosPickerItem] = []
     @State private var pendingMemoryImageDatas: [Data] = []
+    @State private var showMemoryPhotoPicker = false
+
+    private var memoryPhotoPickerSelectionLimit: Int {
+        guard let item = memorySourceItem else { return 1 }
+        return max(1, 9 - item.memoryImages.count)
+    }
 
     enum AppTab: Int, CaseIterable, Identifiable {
         case today
@@ -684,21 +690,13 @@ struct ContentView: View {
                     .zIndex(6)
             }
         }
-        .sheet(item: $memorySourceItem) { item in
-            MemorySourceSheet(
-                selectedPhotos: $selectedMemoryPhotos,
-                remainingSelectionCount: 9 - item.memoryImages.count,
-                onClose: { memorySourceItem = nil }
-            )
-            .presentationDetents([.height(330)])
-            .presentationDragIndicator(.hidden)
-            .onDisappear {
-                if selectedMemoryPhotos.isEmpty && memoryPreviewItem == nil {
-                    memorySourceItem = nil
-                }
-                _ = item
-            }
-        }
+        .photosPicker(
+            isPresented: $showMemoryPhotoPicker,
+            selection: $selectedMemoryPhotos,
+            maxSelectionCount: memoryPhotoPickerSelectionLimit,
+            matching: .images,
+            photoLibrary: .shared()
+        )
         .sheet(item: $memoryPreviewItem) { item in
             if !pendingMemoryImageDatas.isEmpty {
                 MemoryPreviewSheet(
@@ -711,7 +709,9 @@ struct ContentView: View {
                     },
                     onReselect: {
                         memoryPreviewItem = nil
-                        memorySourceItem = item
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            openMemoryPhotoPicker(for: item)
+                        }
                     }
                 )
             }
@@ -861,7 +861,7 @@ struct ContentView: View {
                              memoryPreviewItem = nil
                              pendingMemoryImageDatas = []
                              selectedMemoryPhotos = []
-                             memorySourceItem = item
+                             openMemoryPhotoPicker(for: item)
                          })
             case .record:
                 RecordView(
@@ -891,7 +891,7 @@ struct ContentView: View {
                         memoryPreviewItem = nil
                         pendingMemoryImageDatas = []
                         selectedMemoryPhotos = []
-                        memorySourceItem = item
+                        openMemoryPhotoPicker(for: item)
                     }
                 )
             case .insight:
@@ -955,8 +955,15 @@ struct ContentView: View {
         }
         memorySourceItem = nil
         memoryPreviewItem = nil
+        showMemoryPhotoPicker = false
         pendingMemoryImageDatas = []
         selectedMemoryPhotos = []
+    }
+
+    private func openMemoryPhotoPicker(for item: HomeItem) {
+        guard item.memoryImages.count < 9 else { return }
+        memorySourceItem = item
+        showMemoryPhotoPicker = true
     }
 
     private func memorySuccessOverlay(_ item: HomeItem) -> some View {
@@ -973,7 +980,7 @@ struct ContentView: View {
                     withAnimation(.easeInOut(duration: 0.16)) {
                         memoryPromptItem = nil
                     }
-                    memorySourceItem = item
+                    openMemoryPhotoPicker(for: item)
                 },
                 onSkip: closeMemoryFlow
             )
