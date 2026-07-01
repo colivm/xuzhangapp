@@ -223,8 +223,8 @@ final class PlaybackService {
         let busiestTitle = busiestMaterial?.text
             ?? busiestFallbackTitle(from: busiestRows, excluding: primaryVoiceID)
             ?? "这天的几笔记录"
-        let photoMemoryLine = photoMemoryLine(in: rows, range: .week)
-        let sceneMemoryLine = weeklySceneMemoryLine(rows) ?? photoMemoryLine
+        let photoMemorySupportLine = photoMemoryLine(in: rows, range: .week)
+        let sceneMemoryLine = weeklySceneMemoryLine(rows) ?? photoMemorySupportLine
         let emotionSignal = primaryVoice?.item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let lifeMark = LifeMarkService
             .aggregates(for: rows, allItems: items, isMember: true, now: now, limit: 1)
@@ -234,7 +234,7 @@ final class PlaybackService {
             lifeMark,
             fallback: sceneMemoryLine ?? "这一周最清楚的一格，是「\(voiceTitle1)」。"
         )
-        let presenceSupportLine = lifeMark == nil ? (sceneMemoryLine ?? "") : (photoMemoryLine ?? "")
+        let presenceSupportLine = lifeMark == nil ? (sceneMemoryLine ?? "") : (photoMemorySupportLine ?? "")
         let rhythmSupportLine = sceneMemoryLineForItem(busiestMaterial?.item)
             ?? sceneMemoryLineForRows(busiestRows, excluding: primaryVoiceID)
             ?? photoMemoryLine(in: busiestRows, excluding: primaryVoiceID, range: .week)
@@ -956,8 +956,8 @@ final class PlaybackService {
         let voiceTitle1 = selection.voiceText(for: .month)
         let earlyVoiceTitle = earlyVoice?.text ?? PlaybackMomentSelector.honestNoVoiceText(for: .month)
         let lateVoiceTitle = lateVoice?.text ?? PlaybackMomentSelector.honestNoVoiceText(for: .month)
-        let photoMemoryLine = photoMemoryLine(in: rows, range: .month)
-        let monthContextLine = contextualMemoryLine(in: rows, range: .month) ?? weeklySceneMemoryLine(rows) ?? photoMemoryLine
+        let photoMemorySupportLine = photoMemoryLine(in: rows, range: .month)
+        let monthContextLine = contextualMemoryLine(in: rows, range: .month) ?? weeklySceneMemoryLine(rows) ?? photoMemorySupportLine
         let emotionSignal = primaryVoice?.item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let lifeMark = LifeMarkService
             .aggregates(for: rows, allItems: items, isMember: true, now: now, limit: 1)
