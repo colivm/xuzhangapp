@@ -358,7 +358,7 @@ struct MemoryRecordDetailSheet: View {
 
                         memoryImageManager
                     }
-                    .padding(.top, 2)
+                    .padding(.top, imageExpanded ? 12 : 2)
 
                     deleteRecordAction
                         .padding(.top, 14)
@@ -406,7 +406,7 @@ struct MemoryRecordDetailSheet: View {
 
             memoryDetailSummary
                 .offset(y: imageExpanded ? 0 : -54)
-                .padding(.bottom, imageExpanded ? 18 : -36)
+                .padding(.bottom, imageExpanded ? 30 : -36)
         }
         .animation(.spring(response: 0.34, dampingFraction: 0.86), value: imageExpanded)
     }
@@ -432,14 +432,19 @@ struct MemoryRecordDetailSheet: View {
                     }
                 }
 
-                Text("\(selectedImageDisplayIndex)/\(memoryImages.count)")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background(Capsule(style: .continuous).fill(Color.black.opacity(0.26)))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, imageExpanded ? 14 : 66)
+                HStack(spacing: 5) {
+                    Text("\(selectedImageDisplayIndex)/\(memoryImages.count)")
+                    Image(systemName: imageExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(Capsule(style: .continuous).fill(Color.black.opacity(0.26)))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, imageExpanded ? 14 : 66)
+                .accessibilityLabel(imageExpanded ? "收起图片" : "展开图片")
             }
         }
     }
