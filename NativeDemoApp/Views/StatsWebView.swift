@@ -2569,11 +2569,8 @@ struct StatsWebView: View {
         let current = latestItem(matching: item)
         return MemoryRecordDetailSheet(
             item: current,
-            onEditInfo: {
-                memoryDetailItem = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
-                    editingItem = latestItem(matching: current)
-                }
+            onSave: { updated in
+                homeViewModel.updateItem(updated)
             },
             onAddImages: {
                 memoryDetailItem = nil

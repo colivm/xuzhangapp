@@ -2143,11 +2143,12 @@ struct HomeView: View {
         let current = latestItem(matching: item)
         return MemoryRecordDetailSheet(
             item: current,
-            onEditInfo: {
-                memoryDetailItem = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
-                    editingItem = latestItem(matching: current)
+            onSave: { updated in
+                let didSave = homeViewModel.updateItem(updated)
+                if didSave {
+                    highlightSavedItem(updated.id)
                 }
+                return didSave
             },
             onAddImages: {
                 memoryDetailItem = nil
