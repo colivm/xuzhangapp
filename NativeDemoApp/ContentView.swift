@@ -1762,7 +1762,6 @@ struct RecordEditSheet: View {
                         amountStage
                         editPreviewCard
                         saveButton
-                        editQuietActions
                     }
                     .padding(20)
                     .padding(.bottom, editContentBottomPadding)
@@ -1791,10 +1790,15 @@ struct RecordEditSheet: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("取消") { dismiss() }
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 14, weight: .bold))
+                        }
                     }
-                    if hasRecordEditMoreActions {
-                        ToolbarItem(placement: .primaryAction) {
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        if hasRecordEditMoreActions {
                             Menu {
                                 recordEditMoreActions
                             } label: {
@@ -1803,10 +1807,20 @@ struct RecordEditSheet: View {
                             }
                             .accessibilityLabel("更多")
                         }
+
+                        Button(role: .destructive) {
+                            onDelete()
+                            dismiss()
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Color.red.opacity(0.82))
+                        }
                     }
                 }
             }
         }
+        .presentationDetents([.large])
     }
 
     private var hasRecordEditMoreActions: Bool {
@@ -1825,6 +1839,7 @@ struct RecordEditSheet: View {
             } label: {
                 Label("补充图片", systemImage: "photo.badge.plus")
             }
+
         }
     }
 
@@ -2116,23 +2131,6 @@ struct RecordEditSheet: View {
         .buttonStyle(.plain)
         .disabled(parsedAmount <= 0)
         .opacity(parsedAmount <= 0 ? 0.56 : 1)
-    }
-
-    private var editQuietActions: some View {
-        HStack(spacing: 8) {
-            Spacer()
-            Button(role: .destructive) {
-                onDelete()
-                dismiss()
-            } label: {
-                Text("删除这一笔")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Color.red.opacity(0.72))
-            }
-            .buttonStyle(.plain)
-            Spacer()
-        }
-        .padding(.top, 2)
     }
 
     private func quietLink(_ title: String, action: @escaping () -> Void) -> some View {

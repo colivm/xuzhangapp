@@ -360,8 +360,6 @@ struct MemoryRecordDetailSheet: View {
                     }
                     .padding(.top, imageExpanded ? 12 : 2)
 
-                    deleteRecordAction
-                        .padding(.top, 14)
                 }
                 .padding(18)
                 .padding(.bottom, 26)
@@ -370,7 +368,7 @@ struct MemoryRecordDetailSheet: View {
             .navigationTitle("消费详情")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button {
                         closeDetail()
                     } label: {
@@ -378,10 +376,17 @@ struct MemoryRecordDetailSheet: View {
                             .font(.system(size: 14, weight: .bold))
                     }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Button(role: .destructive, action: onDelete) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Color.red.opacity(0.82))
+                    }
+                }
             }
         }
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
+        .presentationDetents([.fraction(0.96), .large])
+        .presentationDragIndicator(.hidden)
         .onChange(of: isNoteFocused) { oldValue, newValue in
             if oldValue && !newValue {
                 saveDraftChanges()
@@ -402,11 +407,11 @@ struct MemoryRecordDetailSheet: View {
     @ViewBuilder
     private var memoryHeroSection: some View {
         VStack(spacing: 0) {
-            memoryImageLayer(height: imageExpanded ? 356 : 276, fitMode: imageExpanded)
+            memoryImageLayer(height: imageExpanded ? 430 : 330, fitMode: imageExpanded)
 
             memoryDetailSummary
-                .offset(y: imageExpanded ? 0 : -54)
-                .padding(.bottom, imageExpanded ? 30 : -36)
+                .offset(y: imageExpanded ? -8 : -62)
+                .padding(.bottom, imageExpanded ? 18 : -44)
         }
         .animation(.spring(response: 0.34, dampingFraction: 0.86), value: imageExpanded)
     }
@@ -443,7 +448,7 @@ struct MemoryRecordDetailSheet: View {
                 .padding(.vertical, 4)
                 .background(Capsule(style: .continuous).fill(Color.black.opacity(0.26)))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .padding(.bottom, imageExpanded ? 14 : 66)
+                .padding(.bottom, imageExpanded ? 18 : 78)
                 .accessibilityLabel(imageExpanded ? "收起图片" : "展开图片")
             }
         }
@@ -599,7 +604,14 @@ struct MemoryRecordDetailSheet: View {
                     }
                     validationMessage = nil
                 }
-                .padding(.horizontal, 2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.54))
+                )
+                .contentShape(Rectangle())
 
             VStack(spacing: 10) {
                 Button {
@@ -714,17 +726,6 @@ struct MemoryRecordDetailSheet: View {
                     .foregroundStyle(AppColors.tertiary)
             }
         }
-    }
-
-    private var deleteRecordAction: some View {
-        Button(role: .destructive, action: onDelete) {
-            Text("删除这一笔")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color.red.opacity(0.72))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-        }
-        .buttonStyle(.plain)
     }
 
     @discardableResult
