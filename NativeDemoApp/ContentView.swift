@@ -623,6 +623,12 @@ struct ContentView: View {
     @State private var selectedMemoryPhotos: [PhotosPickerItem] = []
     @State private var pendingMemoryImageDatas: [Data] = []
     @State private var showMemoryPhotoPicker = false
+    @State private var memoryAttachMode: MemoryAttachMode = .preview
+
+    private enum MemoryAttachMode {
+        case preview
+        case direct
+    }
 
     private var memoryPhotoPickerSelectionLimit: Int {
         guard let item = memorySourceItem else { return 1 }
@@ -755,8 +761,16 @@ struct ContentView: View {
                     }
                     pendingMemoryImageDatas = compressedImages
                     selectedMemoryPhotos = []
-                    memorySourceItem = nil
-                    memoryPreviewItem = item
+                    if memoryAttachMode == .direct {
+                        _ = homeViewModel.attachMemoryImages(compressedImages, to: item.id)
+                        memorySourceItem = nil
+                        pendingMemoryImageDatas = []
+                        showMemoryPhotoPicker = false
+                        memoryAttachMode = .preview
+                    } else {
+                        memorySourceItem = nil
+                        memoryPreviewItem = item
+                    }
                 }
             }
         }
@@ -861,7 +875,7 @@ struct ContentView: View {
                              memoryPreviewItem = nil
                              pendingMemoryImageDatas = []
                              selectedMemoryPhotos = []
-                             openMemoryPhotoPicker(for: item)
+                             openMemoryPhotoPicker(for: item, mode: .direct)
                          })
             case .record:
                 RecordView(
@@ -891,7 +905,7 @@ struct ContentView: View {
                         memoryPreviewItem = nil
                         pendingMemoryImageDatas = []
                         selectedMemoryPhotos = []
-                        openMemoryPhotoPicker(for: item)
+                        openMemoryPhotoPicker(for: item, mode: .direct)
                     }
                 )
             case .insight:
@@ -958,10 +972,12 @@ struct ContentView: View {
         showMemoryPhotoPicker = false
         pendingMemoryImageDatas = []
         selectedMemoryPhotos = []
+        memoryAttachMode = .preview
     }
 
-    private func openMemoryPhotoPicker(for item: HomeItem) {
+    private func openMemoryPhotoPicker(for item: HomeItem, mode: MemoryAttachMode = .preview) {
         guard item.memoryImages.count < 9 else { return }
+        memoryAttachMode = mode
         memorySourceItem = item
         showMemoryPhotoPicker = true
     }
@@ -1665,6 +1681,7 @@ struct RecordEditSheet: View {
     var onSave: (HomeItem) -> Bool
     var onDelete: () -> Void
     var onAttachMemoryImage: (() -> Void)?
+    var onAttachMemoryImages: (([Data]) -> Bool)?
 
     @State private var amountText: String
     @State private var titleText: String
@@ -1674,6 +1691,9 @@ struct RecordEditSheet: View {
     @State private var categoryPanelExpanded = false
     @State private var datePanelExpanded = false
     @State private var safetyMessage: String?
+    @State private var showEditPhotoPicker = false
+    @State private var selectedEditPhotos: [PhotosPickerItem] = []
+    @State private var didAttachMemoryImage = false
     @FocusState private var isNoteFieldFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -1681,12 +1701,14 @@ struct RecordEditSheet: View {
         item: HomeItem,
         onSave: @escaping (HomeItem) -> Bool,
         onDelete: @escaping () -> Void,
-        onAttachMemoryImage: (() -> Void)? = nil
+        onAttachMemoryImage: (() -> Void)? = nil,
+        onAttachMemoryImages: (([Data]) -> Bool)? = nil
     ) {
         self.item = item
         self.onSave = onSave
         self.onDelete = onDelete
         self.onAttachMemoryImage = onAttachMemoryImage
+        self.onAttachMemoryImages = onAttachMemoryImages
         _amountText = State(initialValue: String(format: "%.2f", item.amount))
         _titleText = State(initialValue: item.title)
         _selectedCategory = State(initialValue: item.category)
@@ -1821,6 +1843,38 @@ struct RecordEditSheet: View {
             }
         }
         .presentationDetents([.large])
+        .photosPicker(
+            isPresented: $showEditPhotoPicker,
+            selection: $selectedEditPhotos,
+            maxSelectionCount: editPhotoPickerSelectionLimit,
+            matching: .images,
+            photoLibrary: .shared()
+        )
+        .onChange(of: selectedEditPhotos) { _, newValue in
+            guard !newValue.isEmpty else { return }
+            Task {
+                var compressedImages: [Data] = []
+                for photo in newValue.prefix(editPhotoPickerSelectionLimit) {
+                    if let data = try? await photo.loadTransferable(type: Data.self),
+                       let compressedData = MemoryImageCompressor.compressedJPEGData(from: data) {
+                        compressedImages.append(compressedData)
+                    }
+                }
+                await MainActor.run {
+                    selectedEditPhotos = []
+                    guard !compressedImages.isEmpty else { return }
+                    if onAttachMemoryImages?(compressedImages) == true {
+                        didAttachMemoryImage = true
+                    } else {
+                        onAttachMemoryImage?()
+                    }
+                }
+            }
+        }
+    }
+
+    private var editPhotoPickerSelectionLimit: Int {
+        max(1, 9 - item.memoryImages.count)
     }
 
     private var hasRecordEditMoreActions: Bool {
@@ -1828,7 +1882,7 @@ struct RecordEditSheet: View {
     }
 
     private var canAttachMemoryImageFromEdit: Bool {
-        !item.hasMemoryImages && onAttachMemoryImage != nil
+        !item.hasMemoryImages && !didAttachMemoryImage && (onAttachMemoryImages != nil || onAttachMemoryImage != nil)
     }
 
     @ViewBuilder
@@ -1844,8 +1898,9 @@ struct RecordEditSheet: View {
     }
 
     private func attachMemoryImageFromEditMenu() {
-        dismiss()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
+        if onAttachMemoryImages != nil {
+            showEditPhotoPicker = true
+        } else {
             onAttachMemoryImage?()
         }
     }

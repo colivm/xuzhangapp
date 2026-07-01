@@ -1203,7 +1203,7 @@ struct HomeView: View {
         let accent = AppColors.categoryColor(item.category)
         return Group {
             if let imageData = item.coverMemoryImageData {
-                homeMemoryBillCard(item: item, imageData: imageData, isHighlighted: isHighlighted)
+                homeMemoryBillCardV2(item: item, imageData: imageData, isHighlighted: isHighlighted)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .firstTextBaseline) {
@@ -1269,6 +1269,99 @@ struct HomeView: View {
             }
         }
         .animation(.easeInOut(duration: 0.24), value: isHighlighted)
+    }
+
+    private func homeMemoryBillCardV2(item: HomeItem, imageData: Data, isHighlighted: Bool) -> some View {
+        let accent = AppColors.categoryColor(item.category)
+        return VStack(spacing: 0) {
+            ZStack(alignment: .topTrailing) {
+                MemoryAttachmentThumbnail(imageData: imageData, height: 118, cornerRadius: 0)
+                    .overlay(
+                        LinearGradient(
+                            colors: [
+                                Color.black.opacity(0.0),
+                                Color.black.opacity(0.05),
+                                Color.black.opacity(0.12)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .clipShape(
+                        UnevenRoundedRectangle(
+                            cornerRadii: RectangleCornerRadii(
+                                topLeading: 18,
+                                bottomLeading: 0,
+                                bottomTrailing: 0,
+                                topTrailing: 18
+                            ),
+                            style: .continuous
+                        )
+                    )
+
+                if item.memoryImages.count > 1 {
+                    Label("\(item.memoryImages.count)", systemImage: "photo.on.rectangle")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Capsule(style: .continuous).fill(Color.black.opacity(0.34)))
+                        .padding(10)
+                }
+            }
+
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: MemoryAttachmentVisuals.categorySystemImage(item.category))
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(accent)
+                    .frame(width: 42, height: 42)
+                    .background(Circle().fill(accent.opacity(0.12)))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.displayTitle)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.88)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("\(item.category.rawValue) · \(item.createdAt.zhBillTime)")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.readableSubtext)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 10)
+
+                Text(item.amount.formatted(.cny))
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
+            .background(Color.white.opacity(0.86))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.62), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.035), radius: 12, y: 5)
+        .padding(.vertical, 7)
+        .padding(.horizontal, 1)
+        .background {
+            if isHighlighted {
+                Color.clear
+                    .themedInteractionSurface(
+                        radius: 18,
+                        tint: accent,
+                        isSelected: true,
+                        glowIntensity: 0.72
+                    )
+            }
+        }
     }
 
     private func homeMemoryBillCard(item: HomeItem, imageData: Data, isHighlighted: Bool) -> some View {
@@ -1480,6 +1573,12 @@ struct HomeView: View {
                     },
                     onDelete: {
                         deleteTodayRecord(item)
+                    },
+                    onAttachMemoryImage: {
+                        requestAttachMemoryImage(item, preservesInlineEditor: true)
+                    },
+                    onAttachMemoryImages: { imageDatas in
+                        homeViewModel.attachMemoryImages(imageDatas, to: item.id)
                     }
                 )
                 .padding(.horizontal, 26)
@@ -2121,18 +2220,13 @@ struct HomeView: View {
         }
     }
 
-    private func requestAttachMemoryImage(_ item: HomeItem) {
-        todayInlineEditingItemID = nil
+    private func requestAttachMemoryImage(_ item: HomeItem, preservesInlineEditor: Bool = false) {
+        if !preservesInlineEditor {
+            todayInlineEditingItemID = nil
+        }
         todaySwipedItemID = nil
         let target = latestItem(matching: item)
-        if showTodayRecordsSheet {
-            showTodayRecordsSheet = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
-                onAttachMemoryImage?(target)
-            }
-        } else {
-            onAttachMemoryImage?(target)
-        }
+        onAttachMemoryImage?(target)
     }
 
     private func latestItem(matching item: HomeItem) -> HomeItem {
@@ -2186,10 +2280,9 @@ struct HomeView: View {
             editingItem = nil
         } onAttachMemoryImage: {
             let target = latestItem(matching: item)
-            editingItem = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
-                requestAttachMemoryImage(target)
-            }
+            requestAttachMemoryImage(target)
+        } onAttachMemoryImages: { imageDatas in
+            homeViewModel.attachMemoryImages(imageDatas, to: item.id)
         }
     }
 

@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 
 // MARK: - Stats View (matching web statsPage)
@@ -2320,6 +2321,12 @@ struct StatsWebView: View {
             },
             onDelete: {
                 deleteRecord(item)
+            },
+            onAttachMemoryImage: {
+                requestAttachMemoryImage(item, preservesInlineEditor: true)
+            },
+            onAttachMemoryImages: { imageDatas in
+                homeViewModel.attachMemoryImages(imageDatas, to: item.id)
             }
         )
     }
@@ -2547,18 +2554,13 @@ struct StatsWebView: View {
         }
     }
 
-    private func requestAttachMemoryImage(_ item: HomeItem) {
-        traceInlineEditingItemID = nil
+    private func requestAttachMemoryImage(_ item: HomeItem, preservesInlineEditor: Bool = false) {
+        if !preservesInlineEditor {
+            traceInlineEditingItemID = nil
+        }
         traceSwipedItemID = nil
         let target = latestItem(matching: item)
-        if showTraceDetailSheet {
-            showTraceDetailSheet = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
-                onAttachMemoryImage?(target)
-            }
-        } else {
-            onAttachMemoryImage?(target)
-        }
+        onAttachMemoryImage?(target)
     }
 
     private func latestItem(matching item: HomeItem) -> HomeItem {
@@ -2606,10 +2608,9 @@ struct StatsWebView: View {
             editingItem = nil
         } onAttachMemoryImage: {
             let target = latestItem(matching: item)
-            editingItem = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
-                requestAttachMemoryImage(target)
-            }
+            requestAttachMemoryImage(target)
+        } onAttachMemoryImages: { imageDatas in
+            homeViewModel.attachMemoryImages(imageDatas, to: item.id)
         }
     }
 
@@ -3538,6 +3539,8 @@ struct FocusedRecordEditor: View {
     var onSave: (HomeItem) -> Bool
     var onCancel: () -> Void
     var onDelete: () -> Void
+    var onAttachMemoryImage: (() -> Void)?
+    var onAttachMemoryImages: (([Data]) -> Bool)?
 
     @State private var amountText: String
     @State private var noteText: String
@@ -3546,6 +3549,9 @@ struct FocusedRecordEditor: View {
     @State private var mode: EditorMode = .editing
     @State private var isDatePanelVisible = false
     @State private var validationMessage: String?
+    @State private var showPhotoPicker = false
+    @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var didAttachMemoryImage = false
     @FocusState private var focusedField: FocusedField?
 
     private enum EditorMode {
@@ -3563,13 +3569,17 @@ struct FocusedRecordEditor: View {
         autoCommitRequestID: UUID? = nil,
         onSave: @escaping (HomeItem) -> Bool,
         onCancel: @escaping () -> Void,
-        onDelete: @escaping () -> Void
+        onDelete: @escaping () -> Void,
+        onAttachMemoryImage: (() -> Void)? = nil,
+        onAttachMemoryImages: (([Data]) -> Bool)? = nil
     ) {
         self.item = item
         self.autoCommitRequestID = autoCommitRequestID
         self.onSave = onSave
         self.onCancel = onCancel
         self.onDelete = onDelete
+        self.onAttachMemoryImage = onAttachMemoryImage
+        self.onAttachMemoryImages = onAttachMemoryImages
         _amountText = State(initialValue: String(format: "%.2f", item.amount))
         _noteText = State(initialValue: item.hasMeaningfulTitle ? item.title : "")
         _selectedCategory = State(initialValue: item.category)
@@ -3617,6 +3627,34 @@ struct FocusedRecordEditor: View {
         .onChange(of: autoCommitRequestID) { _, requestID in
             guard requestID != nil else { return }
             save()
+        }
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $selectedPhotos,
+            maxSelectionCount: photoPickerSelectionLimit,
+            matching: .images,
+            photoLibrary: .shared()
+        )
+        .onChange(of: selectedPhotos) { _, newValue in
+            guard !newValue.isEmpty else { return }
+            Task {
+                var compressedImages: [Data] = []
+                for photo in newValue.prefix(photoPickerSelectionLimit) {
+                    if let data = try? await photo.loadTransferable(type: Data.self),
+                       let compressedData = MemoryImageCompressor.compressedJPEGData(from: data) {
+                        compressedImages.append(compressedData)
+                    }
+                }
+                await MainActor.run {
+                    selectedPhotos = []
+                    guard !compressedImages.isEmpty else { return }
+                    if onAttachMemoryImages?(compressedImages) == true {
+                        didAttachMemoryImage = true
+                    } else {
+                        onAttachMemoryImage?()
+                    }
+                }
+            }
         }
     }
 
@@ -3786,14 +3824,50 @@ struct FocusedRecordEditor: View {
 
             Spacer()
 
-            Button(role: .destructive, action: onDelete) {
-                Image(systemName: "trash")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(accent)
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(AppColors.panelStrong.opacity(0.76)))
+            HStack(spacing: 8) {
+                if canAttachMemoryImage {
+                    Menu {
+                        Button {
+                            attachMemoryImage()
+                        } label: {
+                            Label("琛ュ厖鍥剧墖", systemImage: "photo.badge.plus")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(accent)
+                            .frame(width: 36, height: 36)
+                            .background(Circle().fill(AppColors.panelStrong.opacity(0.76)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("鏇村")
+                }
+
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(accent)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(AppColors.panelStrong.opacity(0.76)))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+        }
+    }
+
+    private var canAttachMemoryImage: Bool {
+        !item.hasMemoryImages && !didAttachMemoryImage && (onAttachMemoryImages != nil || onAttachMemoryImage != nil)
+    }
+
+    private var photoPickerSelectionLimit: Int {
+        max(1, 9 - item.memoryImages.count)
+    }
+
+    private func attachMemoryImage() {
+        if onAttachMemoryImages != nil {
+            showPhotoPicker = true
+        } else {
+            onAttachMemoryImage?()
         }
     }
 
