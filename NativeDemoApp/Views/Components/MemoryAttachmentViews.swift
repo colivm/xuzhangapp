@@ -252,7 +252,7 @@ struct MemoryPreviewSheet: View {
                             .fill(Color.white.opacity(0.66))
                     )
 
-                    Text("确认后，主图会成为这笔账的记忆锚点，其他图片先收在这笔里。")
+                    Text("确认后，回看这笔和做复盘时，会优先看到你选的这张。")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(AppColors.subtext)
                         .padding(.horizontal, 2)
@@ -509,7 +509,7 @@ struct MemoryRecordDetailSheet: View {
                 }
 
                 HStack(spacing: 5) {
-                    Text(selectedImageIsCover ? "主图 \(selectedImageDisplayIndex)/\(memoryImages.count)" : "\(selectedImageDisplayIndex)/\(memoryImages.count)")
+                    Text(selectedImageIsCover ? "代表这笔 \(selectedImageDisplayIndex)/\(memoryImages.count)" : "\(selectedImageDisplayIndex)/\(memoryImages.count)")
                     Image(systemName: imageExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                         .font(.system(size: 9, weight: .bold))
                 }
@@ -622,7 +622,7 @@ struct MemoryRecordDetailSheet: View {
                 Button {
                     onSetCoverImage(selectedImageIndex)
                 } label: {
-                    Label(selectedImageIsCover ? "已是主图" : "设为主图", systemImage: selectedImageIsCover ? "checkmark.circle.fill" : "sparkle")
+                    Label(selectedImageIsCover ? "正在代表这笔" : "用这张代表这笔", systemImage: selectedImageIsCover ? "checkmark.circle.fill" : "sparkle")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(selectedImageIsCover ? AppColors.accent.opacity(0.82) : AppColors.text)
                         .frame(maxWidth: .infinity)
@@ -651,6 +651,12 @@ struct MemoryRecordDetailSheet: View {
                 .buttonStyle(.plain)
                 .disabled(memoryImages.isEmpty)
             }
+
+            Text(selectedImageIsCover ? "以后回看这笔、做周月复盘时，会优先看到这张。" : "想让这张以后更容易被看到，就用它代表这笔。")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+                .lineLimit(2)
+                .padding(.horizontal, 2)
         }
         .padding(12)
         .background(
