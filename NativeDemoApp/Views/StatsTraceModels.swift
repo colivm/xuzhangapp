@@ -51,6 +51,7 @@ struct TraceChapterSnapshot {
     let range: SummaryPlaybackRange
     let items: [HomeItem]
     let marks: [LifeMarkAggregate]
+    let memoryAnchors: [SummaryMemoryAnchor]
     let narrative: String
     let chapterSummary: String?
     let evidenceGroups: [TraceMarkEvidenceGroup]

@@ -1879,9 +1879,25 @@ private struct WeeklyStoryShareCardView: View {
                             .foregroundStyle(muted.opacity(0.84))
                     }
                     Spacer()
-                    Text("叙账")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(deepGreen.opacity(0.74))
+                    HStack(spacing: 6) {
+                        Image("LaunchLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 30, height: 18)
+                        Text("回看片段")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(deepGreen.opacity(0.76))
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.white.opacity(0.42))
+                    )
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(Color.white.opacity(0.42), lineWidth: 0.8)
+                    )
                 }
 
                 Spacer(minLength: 26)
