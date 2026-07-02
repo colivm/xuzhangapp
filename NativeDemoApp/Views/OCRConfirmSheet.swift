@@ -453,18 +453,16 @@ struct OCRDraftPanel: View {
                     resolvedList
                 }
             }
-            .padding(18)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 10)
             .background(panelBackground)
-            .overlay(panelHighlight)
-            .overlay(panelBorder)
-            .shadow(color: Color.black.opacity(items.isEmpty ? 0.03 : 0.08), radius: items.isEmpty ? 8 : 18, x: 0, y: items.isEmpty ? 4 : 10)
-            .shadow(color: AppColors.accent.opacity(items.isEmpty ? 0.01 : 0.08), radius: 18, x: 0, y: 0)
+            .shadow(color: Color.black.opacity(items.isEmpty ? 0.02 : 0.04), radius: items.isEmpty ? 6 : 12, x: 0, y: items.isEmpty ? 3 : 7)
             .scaleEffect(isClearingResolved ? 0.86 : 1, anchor: .bottomTrailing)
             .offset(y: isClearingResolved ? 18 : 0)
             .opacity(isClearingResolved ? 0.46 : 1)
             .blur(radius: isClearingResolved ? 0.6 : 0)
         }
-        .padding(.vertical, items.isEmpty ? 0 : 4)
+        .padding(.vertical, items.isEmpty ? 0 : 2)
         .animation(.spring(response: 0.38, dampingFraction: 0.84), value: pendingItems.count)
         .animation(.spring(response: 0.36, dampingFraction: 0.82), value: resolvedCount)
         .animation(.easeInOut(duration: 0.18), value: isClearingResolved)
@@ -623,17 +621,17 @@ struct OCRDraftPanel: View {
                 ZStack {
                     if pendingItems.indices.contains(activeIndex - 1) {
                         backgroundReviewCard(pendingItems[activeIndex - 1], label: "上一条", systemName: "chevron.up")
-                            .offset(y: -154)
-                            .scaleEffect(0.94)
-                            .opacity(0.34)
+                            .offset(y: -118)
+                            .scaleEffect(0.965)
+                            .opacity(0.26)
                             .zIndex(0)
                     }
 
                     if pendingItems.indices.contains(activeIndex + 1) {
                         backgroundReviewCard(pendingItems[activeIndex + 1], label: "下一条", systemName: "chevron.down")
-                            .offset(y: 158)
-                            .scaleEffect(0.94)
-                            .opacity(0.38)
+                            .offset(y: 122)
+                            .scaleEffect(0.965)
+                            .opacity(0.30)
                             .zIndex(0)
                     }
 
@@ -652,16 +650,16 @@ struct OCRDraftPanel: View {
                     .scaleEffect(1 - min(abs(reviewDragOffset) / 2600, 0.035))
                     .transition(reviewCardTransition)
                 }
-                .padding(.horizontal, 4)
-                .padding(.vertical, 46)
-                .frame(minHeight: 468)
+                .padding(.horizontal, 0)
+                .padding(.vertical, 28)
+                .frame(minHeight: 500)
                 .contentShape(Rectangle())
                 .gesture(reviewStackDragGesture(activeIndex: activeIndex))
                 .animation(.interactiveSpring(response: 0.34, dampingFraction: 0.86, blendDuration: 0.08), value: activeDraftID)
 
                 reviewStackControls(activeIndex: activeIndex, activeItem: activeItem)
             }
-            .padding(12)
+            .padding(.vertical, 4)
             .background(reviewStackBackground)
         }
     }
@@ -755,18 +753,18 @@ struct OCRDraftPanel: View {
                 .lineLimit(1)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.72))
+                .fill(Color.white.opacity(0.58))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.62), lineWidth: 1)
+                .stroke(Color.white.opacity(0.38), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.05), radius: 18, y: 8)
-        .padding(.horizontal, 10)
+        .shadow(color: Color.black.opacity(0.03), radius: 12, y: 5)
+        .padding(.horizontal, 6)
         .allowsHitTesting(false)
     }
 
@@ -831,12 +829,7 @@ struct OCRDraftPanel: View {
     }
 
     private var reviewStackBackground: some View {
-        RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(Color.white.opacity(0.30))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(AppColors.accent.opacity(0.10), lineWidth: 1)
-            )
+        Color.clear
     }
 
     @ViewBuilder
@@ -863,53 +856,19 @@ struct OCRDraftPanel: View {
     }
 
     private var panelBackground: some View {
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(AppColors.panelStrong.opacity(items.isEmpty ? 0.72 : 0.90))
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(items.isEmpty ? AppColors.panelStrong.opacity(0.52) : Color.white.opacity(0.08))
             .overlay(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(items.isEmpty ? 0.12 : 0.42),
-                        AppColors.accent.opacity(items.isEmpty ? 0.06 : 0.16),
-                        AppColors.paperWarm.opacity(items.isEmpty ? 0.08 : 0.18)
+                        Color.white.opacity(items.isEmpty ? 0.10 : 0.16),
+                        AppColors.accent.opacity(items.isEmpty ? 0.05 : 0.04),
+                        Color.white.opacity(0.02)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
             )
-    }
-
-    private var panelHighlight: some View {
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .stroke(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(items.isEmpty ? 0.34 : 0.62),
-                        AppColors.accent.opacity(items.isEmpty ? 0.12 : 0.30),
-                        Color.white.opacity(0.10)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: 1
-            )
-            .padding(0.5)
-            .allowsHitTesting(false)
-    }
-
-    private var panelBorder: some View {
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .stroke(AppColors.accent.opacity(items.isEmpty ? 0.12 : 0.20), lineWidth: 1)
-    }
-
-    private func floatingBackplate(offset: CGFloat, opacity: Double) -> some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .fill(AppColors.accent.opacity(opacity))
-            .frame(maxWidth: .infinity)
-            .frame(height: 86)
-            .padding(.horizontal, offset)
-            .offset(y: offset)
-            .blur(radius: 0.3)
-            .allowsHitTesting(false)
     }
 
     private func normalizeActiveDraft() {
@@ -1019,7 +978,8 @@ private struct OCRDraftRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(isFocused ? 18 : 14)
+        .frame(minHeight: isFocused ? 348 : nil, alignment: .topLeading)
+        .padding(isFocused ? 22 : 14)
         .background(rowBackground)
         .overlay(rowBorder)
         .animation(.easeInOut(duration: 0.16), value: isEditingAmount)

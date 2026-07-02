@@ -2919,36 +2919,8 @@ struct RecordView: View {
                 onClose: { ocrDraftStageDismissed = true }
             )
         }
-        .padding(isOCRDraftStageVisible ? 4 : 0)
-        .background(ocrDraftStageAura)
         .padding(.top, isOCRDraftStageVisible ? 0 : 6)
-        .scaleEffect(isOCRDraftStageVisible ? 1.004 : 1, anchor: .top)
         .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
-    }
-
-    private var ocrDraftStageAura: some View {
-        RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [
-                        recordAccent.opacity(0.24),
-                        AppColors.panelStrong.opacity(0.40),
-                        recordAccent.opacity(0.10)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(hasOCRDraftItems ? Color.white.opacity(0.24) : Color.clear, lineWidth: 1)
-            )
-            .opacity(isOCRDraftStageVisible ? 1 : 0)
-            .shadow(color: recordAccent.opacity(isOCRDraftStageVisible ? 0.12 : 0), radius: 18, x: 0, y: 10)
-            .shadow(color: Color.black.opacity(isOCRDraftStageVisible ? 0.04 : 0), radius: 12, x: 0, y: 8)
-            .padding(.horizontal, -2)
-            .padding(.vertical, -2)
-            .allowsHitTesting(false)
     }
 
     private var resumeOCRDraftStageButton: some View {
