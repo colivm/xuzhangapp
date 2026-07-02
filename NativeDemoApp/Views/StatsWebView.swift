@@ -441,7 +441,8 @@ struct StatsWebView: View {
                 .foregroundStyle(AppColors.subtext.opacity(0.88))
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(2)
+                .minimumScaleFactor(0.86)
         }
         .frame(maxWidth: .infinity)
     }
@@ -479,10 +480,7 @@ struct StatsWebView: View {
     private func traceLifeSlicePrimaryPhoto(snapshot: TraceChapterSnapshot) -> some View {
         let anchor = snapshot.memoryAnchors.first
         return ZStack(alignment: .bottomLeading) {
-            traceLifeSliceImage(anchor: anchor)
-                .frame(maxWidth: .infinity)
-                .aspectRatio(1.42, contentMode: .fill)
-                .clipped()
+            traceLifeSliceFramedImage(anchor: anchor, height: 242)
 
             HStack(alignment: .center, spacing: 8) {
                 Text(traceLifeSlicePrimaryCaption(snapshot: snapshot))
@@ -538,10 +536,7 @@ struct StatsWebView: View {
         index: Int
     ) -> some View {
         ZStack(alignment: .bottomLeading) {
-            traceLifeSliceImage(anchor: anchor)
-                .frame(maxWidth: .infinity)
-                .aspectRatio(1.36, contentMode: .fill)
-                .clipped()
+            traceLifeSliceFramedImage(anchor: anchor, height: 116)
 
             HStack(alignment: .center, spacing: 7) {
                 Text(traceLifeSliceSmallCaption(anchor: anchor, item: item, index: index))
@@ -568,6 +563,36 @@ struct StatsWebView: View {
                 .stroke(Color.white.opacity(0.78), lineWidth: 1)
         )
         .shadow(color: AppColors.subtext.opacity(0.06), radius: 10, x: 0, y: 6)
+    }
+
+    @ViewBuilder
+    private func traceLifeSliceFramedImage(anchor: SummaryMemoryAnchor?, height: CGFloat) -> some View {
+        if let anchor, let uiImage = UIImage(data: anchor.imageData) {
+            ZStack {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: height)
+                    .clipped()
+                    .blur(radius: 18)
+                    .overlay(Color.white.opacity(0.16))
+
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: height)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .clipped()
+        } else {
+            traceLifeSliceEmptyBackdrop
+                .frame(maxWidth: .infinity)
+                .frame(height: height)
+                .clipped()
+        }
     }
 
     @ViewBuilder
