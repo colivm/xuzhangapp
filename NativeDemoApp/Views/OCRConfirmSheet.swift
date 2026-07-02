@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct OCRConfirmSheet: View {
@@ -10,10 +11,16 @@ struct OCRConfirmSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var rows: [ConfirmRow]
     @State private var isCollectingImport = false
+    @State private var importAction: ImportAction?
 
-    let onConfirm: ([OCRReceiptDraft]) -> Int
+    private enum ImportAction: Equatable {
+        case review
+        case direct
+    }
 
-    init(drafts: [OCRReceiptDraft], onConfirm: @escaping ([OCRReceiptDraft]) -> Int) {
+    let onConfirm: ([OCRReceiptDraft], Bool) -> Int
+
+    init(drafts: [OCRReceiptDraft], onConfirm: @escaping ([OCRReceiptDraft], Bool) -> Int) {
         _rows = State(initialValue: drafts.map { ConfirmRow(id: $0.id, draft: $0, selected: $0.defaultSelected) })
         self.onConfirm = onConfirm
     }
@@ -62,7 +69,30 @@ struct OCRConfirmSheet: View {
                 }
 
                 Divider()
-                HStack(spacing: 12) {
+                VStack(spacing: 10) {
+                    Button {
+                        importSelected(asReviewDrafts: false)
+                    } label: {
+                        Label(
+                            importAction == .direct ? "正在直接导入" : "直接导入 \(selectedRows.count) 条",
+                            systemImage: "tray.and.arrow.down.fill"
+                        )
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(AppColors.accent)
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                            .background(
+                                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                    .fill(Color.white.opacity(0.78))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                    .stroke(AppColors.accent.opacity(0.20), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(selectedRows.isEmpty || isCollectingImport)
+
+                    HStack(spacing: 12) {
                     Button("取消") { dismiss() }
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(AppColors.subtext)
@@ -73,17 +103,10 @@ struct OCRConfirmSheet: View {
                         )
 
                     Button {
-                        let selectedDrafts = selectedRows.map(\.draft)
-                        guard !selectedDrafts.isEmpty, !isCollectingImport else { return }
-                        isCollectingImport = true
-                        if onConfirm(selectedDrafts) > 0 {
-                            dismiss()
-                        } else {
-                            isCollectingImport = false
-                        }
+                        importSelected(asReviewDrafts: true)
                     } label: {
                         Label(
-                            isCollectingImport ? "正在进入整理" : "进入整理 \(selectedRows.count) 条",
+                            importAction == .review ? "正在进入整理" : "进入整理 \(selectedRows.count) 条",
                             systemImage: isCollectingImport ? "tray.and.arrow.down.fill" : "checklist.checked"
                         )
                             .font(.system(size: 15, weight: .semibold))
@@ -95,6 +118,7 @@ struct OCRConfirmSheet: View {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .fill(selectedRows.isEmpty ? AppColors.subtext.opacity(0.35) : AppColors.accent)
                     )
+                    }
                 }
                 .padding(16)
                 .background(AppColors.panelStrong)
@@ -103,6 +127,19 @@ struct OCRConfirmSheet: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.large])
+    }
+
+    private func importSelected(asReviewDrafts: Bool) {
+        let selectedDrafts = selectedRows.map(\.draft)
+        guard !selectedDrafts.isEmpty, !isCollectingImport else { return }
+        isCollectingImport = true
+        importAction = asReviewDrafts ? .review : .direct
+        if onConfirm(selectedDrafts, asReviewDrafts) > 0 {
+            dismiss()
+        } else {
+            isCollectingImport = false
+            importAction = nil
+        }
     }
 
 
@@ -118,12 +155,43 @@ struct OCRConfirmSheet: View {
                     .foregroundStyle(AppColors.subtext)
             }
 
+            if hasRelativeDateRows {
+                relativeDateWarning
+            }
+
             LazyVStack(spacing: 10) {
                 ForEach(rows.indices, id: \.self) { index in
                     overviewRow(index)
                 }
             }
         }
+    }
+
+    private var hasRelativeDateRows: Bool {
+        rows.contains { relativeDateText(in: $0.draft.rawText) != nil }
+    }
+
+    private var relativeDateWarning: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "calendar.badge.exclamationmark")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppColors.accent)
+                .padding(.top, 1)
+            Text("截图里有今天/昨天这类相对日期。若截图不是当天，建议进入整理先核对日期。")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(AppColors.accent.opacity(0.07))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
+        )
     }
 
     private func overviewRow(_ index: Int) -> some View {
@@ -146,11 +214,11 @@ struct OCRConfirmSheet: View {
                     .foregroundStyle(AppColors.text.opacity(row.selected ? 1 : 0.56))
                     .lineLimit(2)
 
-                HStack(spacing: 7) {
-                    Text(row.draft.date.zhBillDateTime)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(ocrDraftDateText(row.draft))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.subtext.opacity(row.selected ? 0.82 : 0.50))
-                        .lineLimit(1)
+                        .lineLimit(2)
                     Text(row.draft.category.displayName)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(AppColors.text.opacity(row.selected ? 0.74 : 0.46))
@@ -189,6 +257,24 @@ struct OCRConfirmSheet: View {
                 .foregroundStyle(AppColors.subtext.opacity(0.86))
                 .lineLimit(1)
         }
+    }
+
+    private func ocrDraftDateText(_ draft: OCRReceiptDraft) -> String {
+        if let relativeDateText = relativeDateText(in: draft.rawText) {
+            return "\(relativeDateText) · 已按 \(draft.date.zhBillDateTime) 暂放"
+        }
+        return draft.date.zhBillDateTime
+    }
+
+    private func relativeDateText(in text: String) -> String? {
+        let pattern = #"(今天|昨日|昨天|前天)\s*(\d{1,2}:\d{2})"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let nsText = text as NSString
+        guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: nsText.length)),
+              match.numberOfRanges > 2 else {
+            return nil
+        }
+        return "截图显示\(nsText.substring(with: match.range(at: 1))) \(nsText.substring(with: match.range(at: 2)))"
     }
 
     private var reviewSummary: some View {
@@ -311,9 +397,11 @@ struct OCRDraftPanel: View {
     let onUpdateItem: (HomeItem) -> Void
     let onDelete: (UUID) -> Void
     let onClearResolved: () -> Void
+    let onClose: () -> Void
 
     @State private var activeDraftID: UUID?
     @State private var isClearingResolved = false
+    @GestureState private var reviewDragOffset: CGFloat = 0
 
     private var pendingItems: [HomeItem] {
         items
@@ -351,11 +439,6 @@ struct OCRDraftPanel: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            if !items.isEmpty {
-                floatingBackplate(offset: 18, opacity: 0.16)
-                floatingBackplate(offset: 9, opacity: 0.24)
-            }
-
             VStack(alignment: .leading, spacing: 14) {
                 panelHeader
 
@@ -371,8 +454,8 @@ struct OCRDraftPanel: View {
             .background(panelBackground)
             .overlay(panelHighlight)
             .overlay(panelBorder)
-            .shadow(color: Color.black.opacity(items.isEmpty ? 0.04 : 0.13), radius: items.isEmpty ? 8 : 26, x: 0, y: items.isEmpty ? 4 : 18)
-            .shadow(color: AppColors.accent.opacity(items.isEmpty ? 0.02 : 0.20), radius: 30, x: 0, y: 0)
+            .shadow(color: Color.black.opacity(items.isEmpty ? 0.03 : 0.08), radius: items.isEmpty ? 8 : 18, x: 0, y: items.isEmpty ? 4 : 10)
+            .shadow(color: AppColors.accent.opacity(items.isEmpty ? 0.01 : 0.08), radius: 18, x: 0, y: 0)
             .scaleEffect(isClearingResolved ? 0.86 : 1, anchor: .bottomTrailing)
             .offset(y: isClearingResolved ? 18 : 0)
             .opacity(isClearingResolved ? 0.46 : 1)
@@ -399,16 +482,28 @@ struct OCRDraftPanel: View {
                     .foregroundStyle(AppColors.subtext)
             }
             Spacer()
-            VStack(alignment: .trailing, spacing: 8) {
+            HStack(spacing: 8) {
                 Button {
                     clearResolvedDrafts()
                 } label: {
-                    Label("\u{5B8C}\u{6210}\u{6574}\u{7406}\u{FF08}\(resolvedCount) \u{7B14}\u{FF09}", systemImage: "checkmark.circle.fill")
-                        .font(.system(size: 12, weight: .semibold))
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 32, height: 32)
                 }
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(clearResolvedForeground)
-                    .disabled(resolvedCount == 0)
+                .buttonStyle(.plain)
+                .foregroundStyle(clearResolvedForeground)
+                .disabled(resolvedCount == 0)
+                .accessibilityLabel("完成整理 \(resolvedCount) 笔")
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(AppColors.subtext.opacity(0.82))
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+                .background(Circle().fill(Color.white.opacity(0.58)))
+                .accessibilityLabel("关闭整理区")
             }
         }
     }
@@ -549,10 +644,12 @@ struct OCRDraftPanel: View {
                         onDelete: onDelete
                     )
                     .zIndex(2)
+                    .offset(y: reviewDragOffset * 0.18)
                 }
-                .padding(.vertical, 28)
-                .frame(minHeight: 424)
+                .padding(.vertical, 18)
+                .frame(minHeight: 386)
                 .contentShape(Rectangle())
+                .gesture(reviewStackDragGesture(activeIndex: activeIndex))
 
                 reviewStackControls(activeIndex: activeIndex, activeItem: activeItem)
             }
@@ -599,6 +696,28 @@ struct OCRDraftPanel: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(AppColors.line.opacity(isEnabled ? 0.36 : 0.18), lineWidth: 1)
         )
+    }
+
+    private func reviewStackDragGesture(activeIndex: Int) -> some Gesture {
+        DragGesture(minimumDistance: 18, coordinateSpace: .local)
+            .updating($reviewDragOffset) { value, state, _ in
+                let vertical = value.translation.height
+                guard abs(vertical) > max(24, abs(value.translation.width) * 1.4) else { return }
+                state = min(92, max(-92, vertical))
+            }
+            .onEnded { value in
+                let vertical = value.translation.height
+                let predictedVertical = value.predictedEndTranslation.height
+                let horizontal = value.translation.width
+                let isVerticalSwipe = abs(vertical) > max(46, abs(horizontal) * 1.35)
+                    || abs(predictedVertical) > max(80, abs(value.predictedEndTranslation.width) * 1.25)
+                guard isVerticalSwipe else { return }
+                if vertical < -42 || predictedVertical < -76 {
+                    moveActiveDraft(by: 1)
+                } else if vertical > 42 || predictedVertical > 76 {
+                    moveActiveDraft(by: -1)
+                }
+            }
     }
 
     private func backgroundReviewCard(_ item: HomeItem, label: String) -> some View {
@@ -686,10 +805,10 @@ struct OCRDraftPanel: View {
 
     private var reviewStackBackground: some View {
         RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(AppColors.panelStrong.opacity(0.70))
+            .fill(Color.white.opacity(0.30))
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
+                    .stroke(AppColors.accent.opacity(0.10), lineWidth: 1)
             )
     }
 
@@ -1077,8 +1196,9 @@ private struct OCRDraftRow: View {
 
     private var ocrDateText: String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "MMM d, yyyy"
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy年M月d日"
         return formatter.string(from: selectedDate)
     }
 

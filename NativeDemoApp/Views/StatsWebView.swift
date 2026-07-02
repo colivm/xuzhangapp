@@ -2326,7 +2326,11 @@ struct StatsWebView: View {
                 requestAttachMemoryImage(item, preservesInlineEditor: true)
             },
             onAttachMemoryImages: { imageDatas in
-                homeViewModel.attachMemoryImages(imageDatas, to: item.id)
+                let didAttach = homeViewModel.attachMemoryImages(imageDatas, to: item.id)
+                if didAttach {
+                    openMemoryDetailAfterImageAttach(for: item, fromInlineEditor: true)
+                }
+                return didAttach
             }
         )
     }
@@ -2563,6 +2567,26 @@ struct StatsWebView: View {
         onAttachMemoryImage?(target)
     }
 
+    private func openMemoryDetailAfterImageAttach(for item: HomeItem, fromInlineEditor: Bool = false) {
+        if fromInlineEditor {
+            withAnimation(traceEditSpring) {
+                traceInlineEditingItemID = nil
+                traceSwipedItemID = nil
+            }
+        }
+        editingItem = nil
+        let delay: TimeInterval
+        if showTraceDetailSheet {
+            showTraceDetailSheet = false
+            delay = 0.42
+        } else {
+            delay = 0.35
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            memoryDetailItem = latestItem(matching: item)
+        }
+    }
+
     private func latestItem(matching item: HomeItem) -> HomeItem {
         homeViewModel.items.first { $0.id == item.id } ?? item
     }
@@ -2610,7 +2634,11 @@ struct StatsWebView: View {
             let target = latestItem(matching: item)
             requestAttachMemoryImage(target)
         } onAttachMemoryImages: { imageDatas in
-            homeViewModel.attachMemoryImages(imageDatas, to: item.id)
+            let didAttach = homeViewModel.attachMemoryImages(imageDatas, to: item.id)
+            if didAttach {
+                openMemoryDetailAfterImageAttach(for: item)
+            }
+            return didAttach
         }
     }
 
@@ -3830,7 +3858,7 @@ struct FocusedRecordEditor: View {
                         Button {
                             attachMemoryImage()
                         } label: {
-                            Label("琛ュ厖鍥剧墖", systemImage: "photo.badge.plus")
+                            Label("补充图片", systemImage: "photo.badge.plus")
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -3840,7 +3868,7 @@ struct FocusedRecordEditor: View {
                             .background(Circle().fill(AppColors.panelStrong.opacity(0.76)))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("鏇村")
+                    .accessibilityLabel("更多")
                 }
 
                 Button(role: .destructive, action: onDelete) {

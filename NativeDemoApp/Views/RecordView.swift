@@ -15,6 +15,7 @@ struct RecordView: View {
     @State private var ocrConfirmDrafts: [OCRReceiptDraft] = []
     @State private var showOCRConfirmSheet = false
     @State private var didImportOCRConfirmSheet = false
+    @State private var ocrDraftStageDismissed = false
     @State private var scenePackExpanded = false
     @State private var scenePackVariants: [String: Int] = [:]
     @State private var amountPadActive = false
@@ -1758,10 +1759,17 @@ struct RecordView: View {
                 recommendedCategoryRefreshTask = nil
             }
             .sheet(isPresented: $showOCRConfirmSheet) {
-                OCRConfirmSheet(drafts: ocrConfirmDrafts) { selectedDrafts in
-                    let importedCount = homeViewModel.importOCRDrafts(selectedDrafts, isMember: isMember)
+                OCRConfirmSheet(drafts: ocrConfirmDrafts) { selectedDrafts, sendToDrafts in
+                    let importedCount = homeViewModel.importOCRDrafts(
+                        selectedDrafts,
+                        isMember: isMember,
+                        sendToDrafts: sendToDrafts
+                    )
                     if importedCount > 0 {
                         didImportOCRConfirmSheet = true
+                        if sendToDrafts {
+                            ocrDraftStageDismissed = false
+                        }
                     }
                     return importedCount
                 }
@@ -2844,10 +2852,14 @@ struct RecordView: View {
         !homeViewModel.ocrDraftItems.isEmpty
     }
 
+    private var isOCRDraftStageVisible: Bool {
+        hasOCRDraftItems && !ocrDraftStageDismissed
+    }
+
     @ViewBuilder
     private var ocrForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if hasOCRDraftItems {
+            if isOCRDraftStageVisible {
                 ocrDraftStageLayer
                     .zIndex(2)
 
@@ -2860,11 +2872,16 @@ struct RecordView: View {
                 ocrImportControlsLayer
                     .zIndex(1)
 
-                ocrDraftStageLayer
-                    .zIndex(0)
+                if hasOCRDraftItems {
+                    resumeOCRDraftStageButton
+                        .zIndex(1)
+                } else {
+                    ocrDraftStageLayer
+                        .zIndex(0)
+                }
             }
         }
-        .animation(.spring(response: 0.34, dampingFraction: 0.84), value: hasOCRDraftItems)
+        .animation(.spring(response: 0.34, dampingFraction: 0.84), value: isOCRDraftStageVisible)
     }
 
     private var ocrDraftStageLayer: some View {
@@ -2898,13 +2915,14 @@ struct RecordView: View {
                 onAmountChange: { id, amount in homeViewModel.updateOCRDraftAmount(id: id, amount: amount) },
                 onUpdateItem: { item in _ = homeViewModel.updateItem(item) },
                 onDelete: { id in homeViewModel.deleteOCRDraftItem(id: id) },
-                onClearResolved: homeViewModel.clearResolvedOCRDrafts
+                onClearResolved: homeViewModel.clearResolvedOCRDrafts,
+                onClose: { ocrDraftStageDismissed = true }
             )
         }
-        .padding(hasOCRDraftItems ? 8 : 0)
+        .padding(isOCRDraftStageVisible ? 4 : 0)
         .background(ocrDraftStageAura)
-        .padding(.top, hasOCRDraftItems ? 0 : 6)
-        .scaleEffect(hasOCRDraftItems ? 1.012 : 1, anchor: .top)
+        .padding(.top, isOCRDraftStageVisible ? 0 : 6)
+        .scaleEffect(isOCRDraftStageVisible ? 1.004 : 1, anchor: .top)
         .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .top)))
     }
 
@@ -2925,12 +2943,48 @@ struct RecordView: View {
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
                     .stroke(hasOCRDraftItems ? Color.white.opacity(0.24) : Color.clear, lineWidth: 1)
             )
-            .opacity(hasOCRDraftItems ? 1 : 0)
-            .shadow(color: recordAccent.opacity(hasOCRDraftItems ? 0.24 : 0), radius: 30, x: 0, y: 17)
-            .shadow(color: Color.black.opacity(hasOCRDraftItems ? 0.08 : 0), radius: 18, x: 0, y: 12)
+            .opacity(isOCRDraftStageVisible ? 1 : 0)
+            .shadow(color: recordAccent.opacity(isOCRDraftStageVisible ? 0.12 : 0), radius: 18, x: 0, y: 10)
+            .shadow(color: Color.black.opacity(isOCRDraftStageVisible ? 0.04 : 0), radius: 12, x: 0, y: 8)
             .padding(.horizontal, -2)
             .padding(.vertical, -2)
             .allowsHitTesting(false)
+    }
+
+    private var resumeOCRDraftStageButton: some View {
+        Button {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                ocrDraftStageDismissed = false
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "tray.full.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(recordAccent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("继续整理 \(homeViewModel.ocrDraftItems.count) 笔")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppColors.text)
+                    Text("关闭只是收起，待整理账单还在。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AppColors.subtext)
+                }
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(0.70))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(AppColors.accent.opacity(0.18), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private var ocrImportControlsLayer: some View {
@@ -3015,21 +3069,21 @@ struct RecordView: View {
                     }
             }
         }
-        .padding(hasOCRDraftItems ? 12 : 0)
+        .padding(isOCRDraftStageVisible ? 12 : 0)
         .background(ocrSecondaryLayerBackground)
-        .scaleEffect(hasOCRDraftItems ? 0.92 : 1, anchor: .top)
-        .offset(y: hasOCRDraftItems ? -6 : 0)
-        .opacity(hasOCRDraftItems ? 0.28 : 1)
-        .saturation(hasOCRDraftItems ? 0.62 : 1)
-        .allowsHitTesting(!hasOCRDraftItems)
+        .scaleEffect(isOCRDraftStageVisible ? 0.92 : 1, anchor: .top)
+        .offset(y: isOCRDraftStageVisible ? -6 : 0)
+        .opacity(isOCRDraftStageVisible ? 0.28 : 1)
+        .saturation(isOCRDraftStageVisible ? 0.62 : 1)
+        .allowsHitTesting(!isOCRDraftStageVisible)
     }
 
     private var ocrSecondaryLayerBackground: some View {
         RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(hasOCRDraftItems ? AppColors.panelStrong.opacity(0.34) : Color.clear)
+            .fill(isOCRDraftStageVisible ? AppColors.panelStrong.opacity(0.34) : Color.clear)
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(hasOCRDraftItems ? AppColors.line.opacity(0.30) : Color.clear, lineWidth: 1)
+                    .stroke(isOCRDraftStageVisible ? AppColors.line.opacity(0.30) : Color.clear, lineWidth: 1)
             )
     }
 

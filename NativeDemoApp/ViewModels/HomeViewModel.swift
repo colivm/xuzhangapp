@@ -355,7 +355,7 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    func importOCRDrafts(_ drafts: [OCRReceiptDraft], isMember: Bool) -> Int {
+    func importOCRDrafts(_ drafts: [OCRReceiptDraft], isMember: Bool, sendToDrafts: Bool = true) -> Int {
         let validDrafts = drafts.filter { $0.amount > 0 }
         guard !validDrafts.isEmpty else {
             ocrStatus = "未选择可导入的账单。"
@@ -401,11 +401,13 @@ final class HomeViewModel: ObservableObject {
                 updatedAt: now,
                 emotionTag: emotionTag,
                 merchantBrandId: resolution.merchantBrandId,
-                draftMeta: HomeItem.DraftMeta(
-                    batchId: batchId,
-                    importedAt: now,
-                    status: .pending
-                ),
+                draftMeta: sendToDrafts
+                    ? HomeItem.DraftMeta(
+                        batchId: batchId,
+                        importedAt: now,
+                        status: .pending
+                    )
+                    : nil,
                 userEditedCategory: draft.userEditedCategory == true ? true : nil,
                 categoryCorrectionFrom: draft.categoryCorrectionFrom,
                 memoryContext: memoryContext
@@ -425,7 +427,10 @@ final class HomeViewModel: ObservableObject {
         )
         refreshTodayPlayback()
         refreshRouteGuidanceIfNeeded()
-        updateOCRSuccessStatus(prefix: "已导入 \(importedItems.count) 条，进入待整理", isMember: isMember)
+        updateOCRSuccessStatus(
+            prefix: sendToDrafts ? "已导入 \(importedItems.count) 条，进入待整理" : "已直接导入 \(importedItems.count) 条",
+            isMember: isMember
+        )
         if let firstItem = importedItems.first {
             enqueuePetMessage(for: firstItem)
         }

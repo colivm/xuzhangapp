@@ -1263,9 +1263,9 @@ struct HomeView: View {
             }
         }
         .overlay(alignment: .top) {
-            if !isFirst {
+            if !isFirst && item.coverMemoryImageData == nil {
                 PaperCreaseDivider()
-                    .padding(.top, -10)
+                    .padding(.top, -6)
             }
         }
         .animation(.easeInOut(duration: 0.24), value: isHighlighted)
@@ -1275,7 +1275,7 @@ struct HomeView: View {
         let accent = AppColors.categoryColor(item.category)
         return VStack(spacing: 0) {
             ZStack(alignment: .topTrailing) {
-                MemoryAttachmentThumbnail(imageData: imageData, height: 118, cornerRadius: 0)
+                MemoryAttachmentThumbnail(imageData: imageData, height: 96, cornerRadius: 0)
                     .overlay(
                         LinearGradient(
                             colors: [
@@ -1317,7 +1317,7 @@ struct HomeView: View {
                     .frame(width: 42, height: 42)
                     .background(Circle().fill(accent.opacity(0.12)))
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 5) {
                     Text(item.displayTitle)
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(AppColors.text)
@@ -1325,10 +1325,25 @@ struct HomeView: View {
                         .minimumScaleFactor(0.88)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text("\(item.category.rawValue) · \(item.createdAt.zhBillTime)")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.readableSubtext)
-                        .lineLimit(1)
+                    if shouldShowHomeEmotion(for: item) {
+                        Text(item.displayEmotionTag)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(AppColors.readableAccent)
+                            .lineLimit(1)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.08)))
+                            .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.18), lineWidth: 0.7))
+                    }
+
+                    HStack(spacing: 6) {
+                        Text(item.category.rawValue)
+                        Text("·")
+                        Text(item.createdAt.zhBillTime)
+                    }
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.readableSubtext)
+                    .lineLimit(1)
                 }
 
                 Spacer(minLength: 10)
@@ -1340,7 +1355,7 @@ struct HomeView: View {
                     .minimumScaleFactor(0.78)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 13)
+            .padding(.vertical, 11)
             .background(Color.white.opacity(0.86))
         }
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -1349,7 +1364,7 @@ struct HomeView: View {
                 .stroke(Color.white.opacity(0.62), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.035), radius: 12, y: 5)
-        .padding(.vertical, 7)
+        .padding(.vertical, 6)
         .padding(.horizontal, 1)
         .background {
             if isHighlighted {
@@ -1578,7 +1593,11 @@ struct HomeView: View {
                         requestAttachMemoryImage(item, preservesInlineEditor: true)
                     },
                     onAttachMemoryImages: { imageDatas in
-                        homeViewModel.attachMemoryImages(imageDatas, to: item.id)
+                        let didAttach = homeViewModel.attachMemoryImages(imageDatas, to: item.id)
+                        if didAttach {
+                            openMemoryDetailAfterImageAttach(for: item, fromInlineEditor: true)
+                        }
+                        return didAttach
                     }
                 )
                 .padding(.horizontal, 26)
@@ -2229,6 +2248,27 @@ struct HomeView: View {
         onAttachMemoryImage?(target)
     }
 
+    private func openMemoryDetailAfterImageAttach(for item: HomeItem, fromInlineEditor: Bool = false) {
+        if fromInlineEditor {
+            withAnimation(todayEditSpring) {
+                todayInlineEditingItemID = nil
+                todaySwipedItemID = nil
+            }
+        }
+        editingItem = nil
+        highlightSavedItem(item.id)
+        let delay: TimeInterval
+        if showTodayRecordsSheet {
+            showTodayRecordsSheet = false
+            delay = 0.42
+        } else {
+            delay = 0.35
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            memoryDetailItem = latestItem(matching: item)
+        }
+    }
+
     private func latestItem(matching item: HomeItem) -> HomeItem {
         homeViewModel.items.first { $0.id == item.id } ?? item
     }
@@ -2282,7 +2322,11 @@ struct HomeView: View {
             let target = latestItem(matching: item)
             requestAttachMemoryImage(target)
         } onAttachMemoryImages: { imageDatas in
-            homeViewModel.attachMemoryImages(imageDatas, to: item.id)
+            let didAttach = homeViewModel.attachMemoryImages(imageDatas, to: item.id)
+            if didAttach {
+                openMemoryDetailAfterImageAttach(for: item)
+            }
+            return didAttach
         }
     }
 
