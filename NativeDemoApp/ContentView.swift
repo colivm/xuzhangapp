@@ -709,8 +709,14 @@ struct ContentView: View {
                 MemoryPreviewSheet(
                     item: item,
                     imageDatas: pendingMemoryImageDatas,
-                    onConfirm: {
-                        if homeViewModel.attachMemoryImages(pendingMemoryImageDatas, to: item.id) {
+                    onConfirm: { coverIndex in
+                        let reason = PhotoMemoryPromptPolicy.anchorReason(for: item)
+                        if homeViewModel.attachMemoryImages(
+                            pendingMemoryImageDatas,
+                            to: item.id,
+                            coverImageIndex: coverIndex,
+                            anchorReason: reason
+                        ) {
                             closeMemoryFlow()
                         }
                     },
@@ -763,7 +769,12 @@ struct ContentView: View {
                     pendingMemoryImageDatas = compressedImages
                     selectedMemoryPhotos = []
                     if memoryAttachMode == .direct {
-                        _ = homeViewModel.attachMemoryImages(compressedImages, to: item.id)
+                        _ = homeViewModel.attachMemoryImages(
+                            compressedImages,
+                            to: item.id,
+                            coverImageIndex: 0,
+                            anchorReason: PhotoMemoryPromptPolicy.anchorReason(for: item)
+                        )
                         memorySourceItem = nil
                         pendingMemoryImageDatas = []
                         showMemoryPhotoPicker = false

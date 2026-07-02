@@ -790,14 +790,29 @@ final class HomeViewModel: ObservableObject {
     }
 
     @discardableResult
-    func attachMemoryImages(_ imageDatas: [Data], to itemID: UUID) -> Bool {
+    func attachMemoryImages(
+        _ imageDatas: [Data],
+        to itemID: UUID,
+        coverImageIndex: Int? = nil,
+        anchorReason: PhotoMemoryPromptReason? = nil
+    ) -> Bool {
         guard let idx = items.firstIndex(where: { $0.id == itemID }) else { return false }
         var images = items[idx].memoryImages
+        let originalCount = images.count
         let availableSlots = max(0, 9 - images.count)
         let cleanImages = Array(imageDatas.filter { !$0.isEmpty }.prefix(availableSlots))
         guard !cleanImages.isEmpty else { return false }
         images.append(contentsOf: cleanImages)
         items[idx].memoryImages = images
+        let selectedNewIndex = min(max(coverImageIndex ?? 0, 0), cleanImages.count - 1)
+        if originalCount == 0 || items[idx].coverMemoryImageIndex == nil {
+            items[idx].coverMemoryImageIndex = originalCount + selectedNewIndex
+        }
+        let reason = anchorReason ?? PhotoMemoryPromptPolicy.anchorReason(for: items[idx])
+        items[idx].memoryAnchorRole = reason.assetRole
+        items[idx].memoryAnchorSceneHint = reason.sceneHint
+        items[idx].memoryAnchorCaption = reason.memoryAnchorCaption
+        items[idx].memoryAnchorCreatedAt = items[idx].memoryAnchorCreatedAt ?? Date()
         items[idx].updatedAt = Date()
         let updated = items[idx]
         persistItems()
@@ -823,6 +838,20 @@ final class HomeViewModel: ObservableObject {
         guard images.indices.contains(imageIndex) else { return false }
         images.remove(at: imageIndex)
         items[idx].memoryImages = images
+        if images.isEmpty {
+            items[idx].coverMemoryImageIndex = nil
+            items[idx].memoryAnchorRole = nil
+            items[idx].memoryAnchorSceneHint = nil
+            items[idx].memoryAnchorCaption = nil
+            items[idx].memoryAnchorCreatedAt = nil
+        } else {
+            let currentCover = items[idx].coverMemoryImageIndex ?? 0
+            if imageIndex < currentCover {
+                items[idx].coverMemoryImageIndex = currentCover - 1
+            } else if imageIndex == currentCover {
+                items[idx].coverMemoryImageIndex = min(currentCover, images.count - 1)
+            }
+        }
         items[idx].updatedAt = Date()
         let updated = items[idx]
         persistItems()
@@ -830,6 +859,30 @@ final class HomeViewModel: ObservableObject {
             "category": updated.category.rawValue,
             "amount": String(format: "%.2f", updated.amount),
             "remaining_image_count": String(updated.memoryImages.count)
+        ])
+        refreshTodayPlayback()
+        Task { await syncUpsertToCloud(updated) }
+        return true
+    }
+
+    @discardableResult
+    func setCoverMemoryImageIndex(_ imageIndex: Int, for itemID: UUID) -> Bool {
+        guard let idx = items.firstIndex(where: { $0.id == itemID }),
+              items[idx].memoryImages.indices.contains(imageIndex) else { return false }
+        items[idx].coverMemoryImageIndex = imageIndex
+        if items[idx].memoryAnchorRole == nil || items[idx].memoryAnchorSceneHint == nil {
+            let reason = PhotoMemoryPromptPolicy.anchorReason(for: items[idx])
+            items[idx].memoryAnchorRole = reason.assetRole
+            items[idx].memoryAnchorSceneHint = reason.sceneHint
+            items[idx].memoryAnchorCaption = items[idx].memoryAnchorCaption ?? reason.memoryAnchorCaption
+            items[idx].memoryAnchorCreatedAt = items[idx].memoryAnchorCreatedAt ?? Date()
+        }
+        items[idx].updatedAt = Date()
+        let updated = items[idx]
+        persistItems()
+        analyticsService.track("record_memory_cover_selected", props: [
+            "category": updated.category.rawValue,
+            "image_index": String(imageIndex)
         ])
         refreshTodayPlayback()
         Task { await syncUpsertToCloud(updated) }
