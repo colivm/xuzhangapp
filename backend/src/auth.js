@@ -21,7 +21,7 @@ export function requireAuth(req, res, next) {
     const payload = jwt.verify(token, config.jwtSecret);
     req.user = {
       userId: payload.sub,
-      displayName: payload.displayName || "序帐用户",
+      displayName: payload.displayName || "轻账用户",
       phone: payload.phone || "",
     };
     return next();

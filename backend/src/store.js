@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
+import { createClient } from "redis";
 import { config } from "./config.js";
 
 const memory = {
@@ -7,43 +8,77 @@ const memory = {
   sessionsByUserId: new Map(),
   ledgersByUserId: new Map(),
   smsCodeByPhone: new Map(),
+  iapTransactionsByOriginalId: new Map(),
 };
 
 let pool = null;
 let usePostgres = false;
+let redis = null;
 
 export async function initStore() {
-  if (!config.databaseUrl) return { mode: "memory" };
-  pool = new Pool({ connectionString: config.databaseUrl });
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS users (
-      user_id TEXT PRIMARY KEY,
-      phone TEXT UNIQUE NOT NULL,
-      display_name TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS sessions (
-      user_id TEXT PRIMARY KEY,
-      member_tier TEXT NOT NULL DEFAULT 'free',
-      member_expires_at TEXT NULL
-    );
-    CREATE TABLE IF NOT EXISTS ledgers (
-      user_id TEXT NOT NULL,
-      item_id TEXT NOT NULL,
-      payload JSONB NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (user_id, item_id)
-    );
-    CREATE TABLE IF NOT EXISTS sms_codes (
-      phone TEXT PRIMARY KEY,
-      code TEXT NOT NULL,
-      expire_at BIGINT NOT NULL
-    );
-  `);
-  usePostgres = true;
-  return { mode: "postgres" };
+  if (config.redisUrl) {
+    redis = createClient({ url: config.redisUrl });
+    redis.on("error", (error) => {
+      console.error("[store] redis error", error);
+    });
+    await redis.connect();
+  }
+
+  if (config.databaseUrl) {
+    pool = new Pool({ connectionString: config.databaseUrl });
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        user_id TEXT PRIMARY KEY,
+        phone TEXT UNIQUE NOT NULL,
+        display_name TEXT NOT NULL,
+        cloud_sync_enabled BOOLEAN NOT NULL DEFAULT FALSE
+      );
+      CREATE TABLE IF NOT EXISTS sessions (
+        user_id TEXT PRIMARY KEY,
+        member_tier TEXT NOT NULL DEFAULT 'free',
+        member_expires_at TEXT NULL
+      );
+      CREATE TABLE IF NOT EXISTS ledgers (
+        user_id TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        payload JSONB NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, item_id)
+      );
+      CREATE TABLE IF NOT EXISTS sms_codes (
+        phone TEXT PRIMARY KEY,
+        code TEXT NOT NULL,
+        expire_at BIGINT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS iap_transactions (
+        original_transaction_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        transaction_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        member_tier TEXT NOT NULL,
+        member_expires_at TEXT NULL,
+        environment TEXT NULL,
+        verified_at TEXT NOT NULL
+      );
+    `);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS cloud_sync_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
+    usePostgres = true;
+  }
+
+  return {
+    mode: [
+      usePostgres ? "postgres" : "memory",
+      redis ? "redis-sms" : "memory-sms",
+    ].join("+"),
+  };
 }
 
 export async function setSmsCode(phone, code, expireAt) {
+  if (redis) {
+    const ttlMs = Math.max(1, expireAt - Date.now());
+    await redis.set(smsCodeKey(phone), JSON.stringify({ code, expireAt }), { PX: ttlMs });
+    return;
+  }
   if (!usePostgres) {
     memory.smsCodeByPhone.set(phone, { code, expireAt });
     return;
@@ -57,6 +92,20 @@ export async function setSmsCode(phone, code, expireAt) {
 }
 
 export async function getSmsCode(phone) {
+  if (redis) {
+    const value = await redis.get(smsCodeKey(phone));
+    if (!value) return null;
+    try {
+      const parsed = JSON.parse(value);
+      return {
+        code: String(parsed.code || ""),
+        expireAt: Number(parsed.expireAt || 0),
+      };
+    } catch {
+      await redis.del(smsCodeKey(phone));
+      return null;
+    }
+  }
   if (!usePostgres) return memory.smsCodeByPhone.get(phone) || null;
   const result = await pool.query(`SELECT code, expire_at FROM sms_codes WHERE phone = $1`, [phone]);
   if (!result.rowCount) return null;
@@ -67,6 +116,10 @@ export async function getSmsCode(phone) {
 }
 
 export async function deleteSmsCode(phone) {
+  if (redis) {
+    await redis.del(smsCodeKey(phone));
+    return;
+  }
   if (!usePostgres) {
     memory.smsCodeByPhone.delete(phone);
     return;
@@ -78,19 +131,20 @@ export async function getOrCreateUserByPhone(phone) {
   if (!usePostgres) {
     const existing = memory.usersByPhone.get(phone);
     if (existing) return existing;
-    const user = { userId: randomUUID(), displayName: `用户${phone.slice(-4)}`, phone };
+    const user = { userId: randomUUID(), displayName: `用户${phone.slice(-4)}`, phone, cloudSyncEnabled: false };
     memory.usersByPhone.set(phone, user);
     memory.sessionsByUserId.set(user.userId, { memberTier: "free", memberExpiresAt: null });
     memory.ledgersByUserId.set(user.userId, []);
     return user;
   }
 
-  const existing = await pool.query(`SELECT user_id, display_name, phone FROM users WHERE phone = $1`, [phone]);
+  const existing = await pool.query(`SELECT user_id, display_name, phone, cloud_sync_enabled FROM users WHERE phone = $1`, [phone]);
   if (existing.rowCount) {
     return {
       userId: existing.rows[0].user_id,
       displayName: existing.rows[0].display_name,
       phone: existing.rows[0].phone,
+      cloudSyncEnabled: Boolean(existing.rows[0].cloud_sync_enabled),
     };
   }
   const userId = randomUUID();
@@ -101,7 +155,73 @@ export async function getOrCreateUserByPhone(phone) {
      ON CONFLICT (user_id) DO NOTHING`,
     [userId]
   );
-  return { userId, displayName, phone };
+  return { userId, displayName, phone, cloudSyncEnabled: false };
+}
+
+export async function getUserById(userId) {
+  if (!usePostgres) {
+    for (const user of memory.usersByPhone.values()) {
+      if (user.userId === userId) return user;
+    }
+    return null;
+  }
+  const result = await pool.query(`SELECT user_id, display_name, phone, cloud_sync_enabled FROM users WHERE user_id = $1`, [userId]);
+  if (!result.rowCount) return null;
+  return {
+    userId: result.rows[0].user_id,
+    displayName: result.rows[0].display_name,
+    phone: result.rows[0].phone,
+    cloudSyncEnabled: Boolean(result.rows[0].cloud_sync_enabled),
+  };
+}
+
+export async function updateUserDisplayName(userId, displayName) {
+  if (!usePostgres) {
+    for (const [phone, user] of memory.usersByPhone.entries()) {
+      if (user.userId === userId) {
+        const next = { ...user, displayName };
+        memory.usersByPhone.set(phone, next);
+        return next;
+      }
+    }
+    return null;
+  }
+  const result = await pool.query(
+    `UPDATE users SET display_name = $2 WHERE user_id = $1 RETURNING user_id, display_name, phone, cloud_sync_enabled`,
+    [userId, displayName]
+  );
+  if (!result.rowCount) return null;
+  return {
+    userId: result.rows[0].user_id,
+    displayName: result.rows[0].display_name,
+    phone: result.rows[0].phone,
+    cloudSyncEnabled: Boolean(result.rows[0].cloud_sync_enabled),
+  };
+}
+
+export async function updateUserCloudSyncEnabled(userId, cloudSyncEnabled) {
+  const enabled = Boolean(cloudSyncEnabled);
+  if (!usePostgres) {
+    for (const [phone, user] of memory.usersByPhone.entries()) {
+      if (user.userId === userId) {
+        const next = { ...user, cloudSyncEnabled: enabled };
+        memory.usersByPhone.set(phone, next);
+        return next;
+      }
+    }
+    return null;
+  }
+  const result = await pool.query(
+    `UPDATE users SET cloud_sync_enabled = $2 WHERE user_id = $1 RETURNING user_id, display_name, phone, cloud_sync_enabled`,
+    [userId, enabled]
+  );
+  if (!result.rowCount) return null;
+  return {
+    userId: result.rows[0].user_id,
+    displayName: result.rows[0].display_name,
+    phone: result.rows[0].phone,
+    cloudSyncEnabled: Boolean(result.rows[0].cloud_sync_enabled),
+  };
 }
 
 export async function getSessionByUserId(userId) {
@@ -124,6 +244,57 @@ export async function setSessionByUserId(userId, nextSession) {
      VALUES ($1, $2, $3)
      ON CONFLICT (user_id) DO UPDATE SET member_tier = EXCLUDED.member_tier, member_expires_at = EXCLUDED.member_expires_at`,
     [userId, nextSession.memberTier, nextSession.memberExpiresAt]
+  );
+}
+
+export async function getIAPTransactionByOriginalId(originalTransactionId) {
+  if (!usePostgres) {
+    return memory.iapTransactionsByOriginalId.get(originalTransactionId) || null;
+  }
+  const result = await pool.query(
+    `SELECT original_transaction_id, user_id, transaction_id, product_id, member_tier, member_expires_at, environment, verified_at
+     FROM iap_transactions WHERE original_transaction_id = $1`,
+    [originalTransactionId]
+  );
+  if (!result.rowCount) return null;
+  const row = result.rows[0];
+  return {
+    originalTransactionId: row.original_transaction_id,
+    userId: row.user_id,
+    transactionId: row.transaction_id,
+    productId: row.product_id,
+    memberTier: row.member_tier,
+    memberExpiresAt: row.member_expires_at,
+    environment: row.environment,
+    verifiedAt: row.verified_at,
+  };
+}
+
+export async function upsertIAPTransaction(record) {
+  if (!usePostgres) {
+    memory.iapTransactionsByOriginalId.set(record.originalTransactionId, record);
+    return;
+  }
+  await pool.query(
+    `INSERT INTO iap_transactions(original_transaction_id, user_id, transaction_id, product_id, member_tier, member_expires_at, environment, verified_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (original_transaction_id) DO UPDATE
+     SET transaction_id = EXCLUDED.transaction_id,
+         product_id = EXCLUDED.product_id,
+         member_tier = EXCLUDED.member_tier,
+         member_expires_at = EXCLUDED.member_expires_at,
+         environment = EXCLUDED.environment,
+         verified_at = EXCLUDED.verified_at`,
+    [
+      record.originalTransactionId,
+      record.userId,
+      record.transactionId,
+      record.productId,
+      record.memberTier,
+      record.memberExpiresAt,
+      record.environment || null,
+      record.verifiedAt,
+    ]
   );
 }
 
@@ -166,4 +337,57 @@ export async function deleteLedger(userId, itemId) {
     return;
   }
   await pool.query(`DELETE FROM ledgers WHERE user_id = $1 AND item_id = $2`, [userId, itemId]);
+}
+
+export async function deleteLedgersByUserId(userId) {
+  if (!usePostgres) {
+    memory.ledgersByUserId.set(userId, []);
+    return;
+  }
+  await pool.query(`DELETE FROM ledgers WHERE user_id = $1`, [userId]);
+}
+
+export async function deleteAccountByUserId(userId) {
+  if (!usePostgres) {
+    let phoneToDelete = "";
+    for (const [phone, user] of memory.usersByPhone.entries()) {
+      if (user.userId === userId) {
+        phoneToDelete = phone;
+        break;
+      }
+    }
+    if (phoneToDelete) {
+      memory.usersByPhone.delete(phoneToDelete);
+      memory.smsCodeByPhone.delete(phoneToDelete);
+      if (redis) await redis.del(smsCodeKey(phoneToDelete));
+    }
+    memory.sessionsByUserId.delete(userId);
+    memory.ledgersByUserId.delete(userId);
+    for (const [key, tx] of memory.iapTransactionsByOriginalId.entries()) {
+      if (tx.userId === userId) memory.iapTransactionsByOriginalId.delete(key);
+    }
+    return;
+  }
+
+  await pool.query("BEGIN");
+  try {
+    const userResult = await pool.query(`SELECT phone FROM users WHERE user_id = $1`, [userId]);
+    const phone = userResult.rows[0]?.phone || "";
+    await pool.query(`DELETE FROM ledgers WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM sessions WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM iap_transactions WHERE user_id = $1`, [userId]);
+    if (phone) {
+      await pool.query(`DELETE FROM sms_codes WHERE phone = $1`, [phone]);
+      if (redis) await redis.del(smsCodeKey(phone));
+    }
+    await pool.query(`DELETE FROM users WHERE user_id = $1`, [userId]);
+    await pool.query("COMMIT");
+  } catch (error) {
+    await pool.query("ROLLBACK");
+    throw error;
+  }
+}
+
+function smsCodeKey(phone) {
+  return `${config.redisKeyPrefix}:sms_code:${phone}`;
 }

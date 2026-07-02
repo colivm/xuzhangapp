@@ -1,0 +1,205 @@
+你在 xuzhangapp 实现 Task UI-P3.1-iOS — 痕迹 Tab 布局对齐 Web 定稿（仅 UI · 不动逻辑）。
+
+================================================================================
+边界（最重要）
+================================================================================
+
+只改痕迹页 **视图结构与样式**；行为、数据、播放、次数、筛选状态机保持原样。
+
+可改：
+  NativeDemoApp/Views/StatsWebView.swift（布局重组、私有子 View、@State 仅 UI）
+  可选：同文件内新增 private struct TraceDetailSheet（纯 UI 容器）
+
+禁止改：
+  PlaybackService / SummaryPlaybackQuotaStore / HomeViewModel / HomeItem
+  handleSummaryPlaybackTap / buildSummaryPreview / buildSummaryPlayback
+  nextSummaryCopySeed / summaryQuotaFootnote / summaryCardSubtitle 的生成规则
+  computeTrendData / trendInsightText 的算法与返回文案
+  SummaryPlaybackSheet / RecordEditSheet / periodPickerSheet 内部逻辑
+  ContentView 除已存在的 pageTitle「这一段痕迹」外其他 Tab
+  web-preview / backend
+  git commit（除非用户明确要求）
+
+允许新增的 @State（仅 UI）：
+  showTraceDetailSheet: Bool
+  isTrendChartExpanded: Bool
+
+禁止新增/修改：
+  业务持久化键、会员判断、筛选数据结构、播放 quota 计算
+
+================================================================================
+视觉标杆（Web 定稿 · 已实现）
+================================================================================
+
+对照文件：
+  web-preview/index.html  #statsPage、#traceDetailModal
+  web-preview/styles.css  .trace-hero-panel、.trace-detail-*
+  web-preview/app.js      renderStats / renderTraceHeroRecords（只看 DOM 结构，不改 Web）
+
+主屏结构：
+  1 张 hero glassPanel
+    → 本周/本月 chip
+    → 叙事段 + 切片 preview 一句
+    → 全宽「听听这一段」
+    → divider
+    → 最多 3 条 slip
+    → 空态插画
+  卡外 quiet「细查这一段 →」
+
+细查 Sheet：
+  标题「细查这一段」
+  → 时间/分类筛选（原有控件迁入）
+  → 一行 meta「周期 · 分类 · N 笔 · 合计 ¥XX」（无第二大号金额）
+  → 趋势：默认一句 insight +「展开走势」；展开后显示原 trendChart +「收起走势」
+  → 全量列表（原 recordListContent）
+
+================================================================================
+现状 iOS（需重构的 View 层）
+================================================================================
+
+StatsWebView.statsContent 当前 4 块并列：
+  summarySliceCard / overviewPanel / filtersPanel / recordListPanel
+
+目标：合并为 traceHeroPanel + 细查 Sheet，删除首屏多卡堆叠。
+
+================================================================================
+任务 1 · 主屏 traceHeroPanel（单卡）
+================================================================================
+
+1.1 statsContent 改为：
+  VStack(spacing: 12) {
+    traceHeroPanel          // 唯一 glassPanel
+    traceDetailEntryLink    // 卡外 Button，样式 quiet link
+  }
+
+1.2 traceHeroPanel 内部顺序（自上而下）：
+
+  A. traceRangeChips
+      两个 Button：「本周」「本月」
+      点击：仅设置已有 selectedPeriod = .week / .month，useCustomRange = false
+      然后依赖现有 render 路径刷新（不要新写筛选算法）
+      active 样式对齐 Web：浅底 pill 容器 + 选中浅绿底
+      注意：selectedPeriod == .year 或 useCustomRange 时，chip 可都不 active 或保持上次 week/month 显示（不新增状态字段；用现有 selectedPeriod 即可）
+
+  B. traceHeroNarrative（16pt，行距 ~1.6）
+      文案来源：复用现有 overviewNarrativeText
+      但 hero 区应展示「当前 week/month 范围、不含分类筛选」的叙事
+      → 允许新增 private var heroScopedItems: [HomeItem]（仅 View 内日期过滤，复制 filteredItems 的 week/month 分支，不应用 selectedCategory）
+      → overviewNarrativeText 若强依赖 filteredItems，可拆为 heroNarrativeText 调用同一 trendInsightText / format 逻辑，数字仍来自 heroScopedItems
+
+  C. traceHeroPreview（13pt subtext）
+      文案：复用 summaryCardSubtitle(
+        preview: buildSummaryPreview(for: week|month),
+        range: …, hasData: …, isMonthLocked: …
+      )
+      或当笔数 < 3 用现有「先记几笔…」类 fallback（调用现有函数，不改函数体）
+
+  D. tracePlayButton — 全宽「听听这一段」
+      点击：仍走 handleSummaryPlaybackTap(range:preview:)（与 summarySliceCard 相同入参）
+      会员锁时按钮文案仍「了解会员」（现有逻辑）
+      无数据：.disabled(true) + muted 样式（对齐 Web .trace-play-btn:disabled）
+      去掉 🎬、22pt「本周生活切片」独立标题行
+
+  E. 可选保留：summaryQuotaFootnote 一行小字在按钮下方（原有函数，不改正文规则）
+
+  F. traceSlipDivider（1px 线，margin 约 18–20pt）
+
+  G. traceHeroSlipList — 最多 3 条
+      数据源：heroScopedItems.prefix(3)
+      行 UI：复用现有 billRecordRow(item:isFirst:)（已与 HomeView 接近）
+      点击：editingItem = item（现有 sheet）
+      空态：复用 emptyRecordListText 语义 + 简单插画（可参考 HomeView emptyStateArt 或 Web SVG 气质）
+
+1.3 从首屏删除（整段移除或改为 Sheet 内复用）：
+  summarySliceCard 独立 glassPanel
+  overviewPanel（含 totalExpenseCard、trendChart）
+  filtersPanel 折叠卡
+  recordListPanel 独立 glassPanel
+
+================================================================================
+任务 2 · 细查 Sheet traceDetailSheet
+================================================================================
+
+2.1 新增 @State showTraceDetailSheet；「细查这一段 →」点击 = true
+
+2.2 Sheet 内容（.presentationDetents([.medium, .large])，顶部 drag indicator）：
+
+  导航标题：「细查这一段」
+
+  筛选区：迁入现有 periodFilter + categoryFilter（及 showPeriodSheet → periodPickerSheet）
+  样式：比主屏控件略小，仍在 Sheet 内
+
+  Meta 行（12pt muted）：
+    文本模板与 Web 一致：「\(周期) · \(分类) · \(filteredItems.count) 笔 · 合计 \(totalExpense)」
+    使用现有 currentFilterSummary / filteredItems / totalExpense
+    禁止再显示 overviewPanel 式「合计大卡」
+
+  趋势区（迁入 overviewPanel 的 trend 部分，UI 改造）：
+    @State isTrendChartExpanded 默认 false
+    折叠态：HStack { Text(trendInsightText(computeTrendData())) ; Button「展开走势」 }
+    展开态：显示现有 trendChart + Button「收起走势」
+    不显示「一点走势」22pt 标题；趋势块无独立厚底 glass（透明/极淡底）
+    禁止修改 trendInsightText / computeTrendData / trendChart 内部绘制逻辑
+
+  列表区：迁入现有 recordListContent（全量 filteredItems）
+  空态：emptyRecordListText
+
+2.3 Sheet 关闭：toolbar 或 overlay 关闭钮；不改变筛选 state（与 Web 一致，关闭后 state 保留）
+
+================================================================================
+任务 3 · 样式要点（SwiftUI）
+================================================================================
+
+3.1 traceHeroPanel：glassPanel(radius: 24, padding: 20~22)，与 Web .trace-hero-panel 一致
+
+3.2 tracePlayButton：
+  全宽、圆角 18、accent 填充、白字、轻阴影
+  disabled：浅灰底、无阴影
+
+3.3 traceDetailEntryLink：
+  13pt、subtext、左对齐、「细查这一段 →」、无 border
+
+3.4 页内禁止 22pt bold 区块标题（顶栏 ContentView pageTitle 已有「这一段痕迹」）
+
+3.5 主屏 scroll 底部 padding 仍 120，maxWidth 430 居中
+
+================================================================================
+任务 4 · 逻辑冻结清单（改完必须仍一致）
+================================================================================
+
+[ ] 听听这一段 → 仍打开 SummaryPlaybackSheet，quota 弹窗文案不变
+[ ] 周/月 chip 切换后 hero 叙事与 slip 数量随 selectedPeriod 变
+[ ] 细查 Sheet 内改分类/时间后 filteredItems 行为与改前一致
+[ ] 点列表行仍开 RecordEditSheet
+[ ] year / 自定义日期仍通过 periodPickerSheet 可选，只在 Sheet 内操作
+[ ] 本月会员锁、week 次数用尽等逻辑零改动
+
+================================================================================
+验收清单（真机 / 模拟器）
+================================================================================
+
+主屏：
+  [ ] 仅 1 张 hero 卡 + 1 条细查 link
+  [ ] 无首屏筛选、趋势图、合计大卡、多块 h2
+  [ ] chip / 叙事 / 按钮 / 3 slip 顺序与 Web 截图一致
+  [ ] 无数据时主按钮 disabled
+
+细查 Sheet：
+  [ ] 筛选 + meta 一行 + 可折叠趋势 + 全列表
+  [ ] 合计金额只出现 1 次（meta 行）
+  [ ] 展开/收起走势正常
+
+回归：
+  [ ] 生活切片播放完整
+  [ ] 编辑/删除账单正常
+  [ ] 其他 Tab 无影响
+
+================================================================================
+@ 文件
+================================================================================
+
+@web-preview/index.html
+@web-preview/styles.css
+@NativeDemoApp/Views/StatsWebView.swift
+@NativeDemoApp/Views/HomeView.swift（billListItem / emptyStateArt 对照）
+@NativeDemoApp/ContentView.swift（pageTitle 已 OK，勿动 Tab 逻辑）

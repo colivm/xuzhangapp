@@ -2,7 +2,8 @@ const https = require("https");
 const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
-require("dotenv").config();
+require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
+const { redactForLog, validateAIOutputText, validateAIRequestBody } = require("./contentSafety");
 
 const app = express();
 app.use(cors());
@@ -24,6 +25,9 @@ const RISK_LOG_ENABLED = String(process.env.RISK_LOG_ENABLED || "1") === "1";
 const AI_UPSTREAM_TIMEOUT_MS = Number(process.env.AI_UPSTREAM_TIMEOUT_MS || 30000);
 const AI_UPSTREAM_TIMEOUT_MS_MONTHLY = Number(process.env.AI_UPSTREAM_TIMEOUT_MS_MONTHLY || 45000);
 const PREMIUM_FEATURES = new Set(["quarterly", "yearly"]);
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+validateProductionConfig();
 
 const rateBuckets = new Map();
 let usage = {
@@ -80,6 +84,15 @@ app.post("/v1/insight/daily", async (req, res) => {
     }
     const user = auth.user;
     const feature = String(req.body?.feature || "daily").toLowerCase();
+    const safety = validateAIRequestBody(req.body || {});
+    if (!safety.ok) {
+      auditRisk("ai_input_rejected", req, user, {
+        feature,
+        reason: safety.reason,
+        sample: redactForLog(JSON.stringify(req.body || {})),
+      });
+      return res.status(400).json({ code: safety.error, message: safety.message, reason: safety.reason });
+    }
 
     if (PREMIUM_FEATURES.has(feature) && !user.isMember) {
       auditRisk("premium_bypass", req, user, { feature });
@@ -126,6 +139,15 @@ app.post("/v1/insight/daily", async (req, res) => {
 
     const parsed = safeJSONParse(upstream.body);
     const content = parsed?.choices?.[0]?.message?.content;
+    const outputSafety = validateAIOutputText(content || upstream.body);
+    if (!outputSafety.ok) {
+      auditRisk("ai_output_rejected", req, user, {
+        feature,
+        reason: outputSafety.reason,
+        sample: redactForLog(content || upstream.body),
+      });
+      return res.status(502).json({ code: outputSafety.error, message: "AI 输出未通过内容安全检查", reason: outputSafety.reason });
+    }
     const payload = normalizeInsightPayload(content);
     if (!payload) {
       auditRisk("parse_error", req, user, { feature });
@@ -145,6 +167,14 @@ app.post("/v1/insight/daily", async (req, res) => {
 
 app.post("/v1/category/recommend", (req, res) => {
   try {
+    const safety = validateAIRequestBody(req.body || {});
+    if (!safety.ok) {
+      auditRisk("category_input_rejected", req, guestUser(), {
+        reason: safety.reason,
+        sample: redactForLog(JSON.stringify(req.body || {})),
+      });
+      return res.status(400).json({ code: safety.error, message: safety.message, reason: safety.reason });
+    }
     const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
     const lastMessage = [...messages].reverse().find((x) => x && x.role === "user");
     const text = String(lastMessage?.content || req.body?.prompt || "");
@@ -164,6 +194,13 @@ app.listen(PORT, () => {
 });
 
 function authenticateRequest(req) {
+  if (APP_PROXY_TOKEN) {
+    const incomingToken = (req.headers["x-proxy-token"] || "").toString();
+    if (incomingToken && incomingToken === APP_PROXY_TOKEN) {
+      return { ok: true, user: { id: "proxy-token-client", isMember: true } };
+    }
+  }
+
   if (!JWT_SECRET) {
     if (REQUIRE_JWT) {
       return { ok: false, status: 401, code: "UNAUTHORIZED", message: "jwt disabled" };
@@ -219,6 +256,26 @@ function auditRisk(event, req, user, extra = {}) {
     ...extra,
   };
   console.warn("[risk]", JSON.stringify(payload));
+}
+
+function validateProductionConfig() {
+  if (!IS_PRODUCTION) return;
+  const issues = [];
+  if (!AI_UPSTREAM_API_KEY) {
+    issues.push("AI_UPSTREAM_API_KEY must be configured in production.");
+  }
+  if (!APP_PROXY_TOKEN || APP_PROXY_TOKEN.length < 16) {
+    issues.push("APP_PROXY_TOKEN must be configured in production.");
+  }
+  if (!JWT_SECRET || JWT_SECRET.length < 32) {
+    issues.push("JWT_SECRET must be set to a strong production value.");
+  }
+  if (!REQUIRE_JWT) {
+    issues.push("REQUIRE_JWT must be 1 in production.");
+  }
+  if (issues.length) {
+    throw new Error(`Unsafe production ai-proxy config:\n- ${issues.join("\n- ")}`);
+  }
 }
 
 function postJSON(urlString, body, headers, timeoutMs = AI_UPSTREAM_TIMEOUT_MS) {

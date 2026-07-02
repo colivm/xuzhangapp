@@ -1,0 +1,66 @@
+[
+  {
+    "id": "rain_commute",
+    "signal_basis": ["sceneMemoryLine", "weather_or_route_words"],
+    "share_title_rule": "lead with the rainy commute only when rain or commute evidence exists",
+    "share_picture_rule": "picture line may mention rain and route, but must not invent mood",
+    "playback_background_rule": "rain profile only when rain evidence exists",
+    "forbidden_copy": ["撑住这一周", "被雨治愈", "最想留下"]
+  },
+  {
+    "id": "first_fitness",
+    "signal_basis": ["lifeMarkLine", "fitness_or_recovery_words"],
+    "share_title_rule": "life mark can lead when first/restart/recovery evidence exists",
+    "share_picture_rule": "scene can support the memory, but cannot overstate it as a major life event",
+    "playback_background_rule": "fitness profile only when fitness/recovery evidence exists",
+    "forbidden_copy": ["人生转折", "重要时刻", "最值得"]
+  },
+  {
+    "id": "drink_streak",
+    "signal_basis": ["category", "count", "dailyTrend"],
+    "share_title_rule": "do not lead with mechanical continuity; use a soft factual fallback",
+    "share_picture_rule": "describe records as daily traces, not emotional fuel",
+    "playback_background_rule": "warmDaily or defaultSoft, never dramatic profile",
+    "forbidden_copy": ["连续三天饮品补给", "撑住这一周", "情绪能量"]
+  },
+  {
+    "id": "away_city",
+    "signal_basis": ["sceneMemoryLine", "city_or_travel_words"],
+    "share_title_rule": "lead with out-of-town context only when city/travel evidence exists",
+    "share_picture_rule": "use single-event wording unless duration evidence exists",
+    "playback_background_rule": "travel profile only when trip/city evidence exists",
+    "forbidden_copy": ["那段在外地的日子", "远方把你接住", "久违自由"]
+  },
+  {
+    "id": "weekend_social",
+    "signal_basis": ["sceneMemoryLine", "friend_or_meal_words"],
+    "share_title_rule": "social scene can lead when friend/meal/meet evidence exists",
+    "share_picture_rule": "warmth can be described from meeting evidence, without inventing intimacy",
+    "playback_background_rule": "social profile only when gathering evidence exists",
+    "forbidden_copy": ["你被大家记得", "被热闹治愈", "终于不孤单"]
+  },
+  {
+    "id": "first_hobby_gear",
+    "signal_basis": ["lifeMarkLine", "first_time_marker", "hobby_or_gear_words"],
+    "share_title_rule": "first hobby purchase can carry a warm memory tone only when first-time and gear evidence exist",
+    "share_picture_rule": "picture line may mention concrete gear, but must not call it a life turning point",
+    "playback_background_rule": "warmDaily or defaultSoft unless travel/fitness evidence is present",
+    "forbidden_copy": ["人生转折", "最值得", "终于找到自己"]
+  },
+  {
+    "id": "ordinary_drink_no_effort_tone",
+    "signal_basis": ["drink_category", "no commute_or_health_or_late_context"],
+    "share_title_rule": "ordinary drink records should stay factual or mildly sensory",
+    "share_picture_rule": "do not use commute/health effort language for ordinary drinks",
+    "playback_background_rule": "warmDaily or defaultSoft, never effort-driven",
+    "forbidden_copy": ["撑住这一周", "情绪能量", "缓一缓"]
+  },
+  {
+    "id": "weak_data_daily",
+    "signal_basis": ["recordCount", "topCategory"],
+    "share_title_rule": "fallback must stay factual when there is no strong life mark or scene",
+    "share_picture_rule": "plain daily wording is acceptable; do not manufacture drama",
+    "playback_background_rule": "defaultSoft profile when evidence is weak",
+    "forbidden_copy": ["最想留下", "重要时刻", "懂你的生活"]
+  }
+]

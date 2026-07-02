@@ -1,0 +1,72 @@
+const PRIVACY_PATTERNS = [
+  { re: /https?:\/\/[^\s"'<>]+|www\.[^\s"'<>]+|[\w.-]+@[\w.-]+\.\w+/i, label: "LINK_OR_EMAIL" },
+  { re: /(?<!\d)1[3-9]\d{9}(?!\d)/, label: "PHONE" },
+  { re: /(?<!\d)\d{6}(18|19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}[0-9Xx](?!\d)/, label: "ID_CARD" },
+  { re: /(?<!\d)(?:\d[ -]?){12,19}(?!\d)/, label: "BANK_CARD" },
+];
+
+const SENSITIVE_WORDS = ["傻逼", "操你", "约炮", "裸聊", "色情", "赌博", "毒品", "自杀", "杀人", "恐怖袭击"];
+const PUBLIC_SAFETY_PHRASES = ["推翻政府", "颠覆国家政权", "分裂国家", "煽动暴乱", "恐怖组织", "制作炸弹", "爆炸物教程"];
+
+function riskReasonForText(value, { includePublicSafety = false } = {}) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const privacyHit = PRIVACY_PATTERNS.find((item) => item.re.test(text));
+  if (privacyHit) return { code: privacyHit.label, message: "包含手机号、证件号、卡号、链接或邮箱" };
+  const compact = text.replace(/\s/g, "").toLowerCase();
+  if (SENSITIVE_WORDS.some((word) => compact.includes(word.toLowerCase()))) {
+    return { code: "UNSAFE_WORD", message: "包含不适合展示的词" };
+  }
+  if (includePublicSafety && PUBLIC_SAFETY_PHRASES.some((word) => compact.includes(word.toLowerCase()))) {
+    return { code: "PUBLIC_SAFETY", message: "包含不适合公开展示或生成的内容" };
+  }
+  if (/\d/.test(text) && /(验证码|密码|口令|token|密钥|银行卡|身份证|手机号|api\s*key)/i.test(text)) {
+    return { code: "SECRET_LIKE", message: "包含隐私或密钥信息" };
+  }
+  return null;
+}
+
+function validateAIRequestBody(body) {
+  const text = collectText(body).slice(0, 8000);
+  const risk = riskReasonForText(text, { includePublicSafety: true });
+  if (risk) return { ok: false, error: "AI_INPUT_REJECTED", message: risk.message, reason: risk.code };
+  return { ok: true };
+}
+
+function validateAIOutputText(text) {
+  const risk = riskReasonForText(String(text || "").slice(0, 4000), { includePublicSafety: true });
+  if (risk) return { ok: false, error: "AI_OUTPUT_REJECTED", message: risk.message, reason: risk.code };
+  return { ok: true };
+}
+
+function redactForLog(value) {
+  let text = String(value || "");
+  for (const item of PRIVACY_PATTERNS) {
+    text = text.replace(toGlobalRegExp(item.re), `[REDACTED_${item.label}]`);
+  }
+  return text.slice(0, 500);
+}
+
+function toGlobalRegExp(re) {
+  return new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`);
+}
+
+function collectText(value) {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(collectText).join("\n");
+  if (typeof value === "object") {
+    return Object.entries(value)
+      .filter(([key]) => !/token|key|authorization|signed|secret/i.test(key))
+      .map(([, nested]) => collectText(nested))
+      .join("\n");
+  }
+  return "";
+}
+
+module.exports = {
+  redactForLog,
+  validateAIOutputText,
+  validateAIRequestBody,
+};

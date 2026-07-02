@@ -1,0 +1,155 @@
+你在 xuzhangapp 实现 Task UI-P3.1-WEB — 痕迹 Tab 布局润色（仅 web-preview/；对照设计截图）。
+
+================================================================================
+边界（最重要）
+================================================================================
+
+只改 Web 预览痕迹页 + 细查弹层；不动 NativeDemoApp、backend、git commit。
+
+可改：
+  web-preview/index.html（#statsPage、#traceDetailModal）
+  web-preview/styles.css（.trace-*、.trace-detail-*、#statsPage）
+  web-preview/app.js（renderStats、renderTraceHeroRecords、renderBillTrendChart、openTraceDetailModal 等痕迹相关）
+
+禁止改：
+  homePage / recordPage / insightPage / settingsPage 结构
+  记账 life-slip、OCR、会员、AI 生成逻辑
+  iOS 工程任何文件
+
+================================================================================
+设计目标（对照用户截图）
+================================================================================
+
+痕迹 Tab = **一个主叙事 + 少量入口**，不是功能块列表。
+
+主屏（#statsPage）：
+  · 单张 trace-hero-panel
+  · 顶部 本周/本月 chip
+  · 叙事段 + 切片 preview 一句
+  · 全宽「听听这一段」
+  · 最多 3 条 slip（对齐首页 home-record-item 气质）
+  · 底部 quiet「细查这一段 →」
+
+细查（#traceDetailModal）：
+  · 筛选 + 摘要 + 列表收进弹层
+  · 工具感可高于主屏，但仍 **先叙后议**，不要报表教练语气
+
+================================================================================
+现状（代码已有骨架，本 PR 是 polish）
+================================================================================
+
+index.html 已有 trace-hero-panel、traceDetailModal。
+app.js 已有 renderStats / renderTraceHeroRecords / setTraceHeroRange。
+需按评审意见修视觉层次与文案气质，并对齐截图间距。
+
+================================================================================
+任务 A · 主屏 #statsPage
+================================================================================
+
+A1. 保持 **仅 1 张**主 panel + 1 个 trace-detail-link；删除或不要新增第二块 panel/h2。
+
+A2. 周/月 chip（#traceRangeWeekBtn / #traceRangeMonthBtn）
+  · 样式对齐截图：浅底 pill 容器 + active 浅绿底
+  · 点击继续走 setTraceHeroRange，同步 state.period 与 renderStats
+
+A3. 叙事区
+  · #traceHeroNarrative：16px、行距 ~1.6、主色略深（已有 class，微调 CSS 即可）
+  · #traceHeroPreview：13px muted，与叙事间距 8px
+  · 按钮 #traceHeroPlayBtn 上下 margin 加大（叙事→按钮→列表呼吸感 16～20px）
+
+A4. slip 列表
+  · 复用 .home-record-item / .trace-slip-item；分隔线 .trace-slip-divider
+  · 首屏固定 slice(0, 3)；时间格式与首页一致（formatRecordTime，M/d HH:mm）
+  · 无数据走 #traceHeroEmpty（插画 + 一句），不要留空按钮区
+
+A5. **禁止主屏出现「今天还没有账单可回放」类绿条/Toast 常驻**
+  · 该文案仅属于今日回放 emptyMessage
+  · 痕迹页播放空态用「本周/本月还没有账单可回放」toast 即可，不要在 hero 顶部插 banner
+
+A6. #traceHeroPlayBtn 无数据时
+  · disabled 或点击 toast 提示，视觉 muted（避免空数据仍像强 CTA）
+
+A7. 顶栏
+  · stats tab 时 pageTitle 保持「这一段痕迹」（PAGE_TITLES.stats 已有）
+  · 不要在 #statsPage 内再加日期大标题（日期只在 slip 行展示）
+
+================================================================================
+任务 B · 细查弹层 #traceDetailModal
+================================================================================
+
+B1. 去掉 **金额重复展示**
+  · #traceDetailMeta 已含「合计 ¥XX」→ **删除或隐藏** #billExpenseTotal（.trace-detail-total）
+  · 只保留一行 meta 摘要
+
+B2. 走势区降级（去卡中卡）
+  · .trace-detail-trend / .bill-trend-block：去掉独立厚底大卡感
+  · 默认 **折叠**：仅显示 #billTrendInsight 一句 + 小字 link「展开走势」
+  · 展开后才显示 #billTrendChart SVG
+  · 或：图表高度减半（max-height ~56px），弱化 Y 轴标签
+
+B3. 趋势洞察文案改「先叙后议」（app.js renderBillTrendChart 末尾）
+  删除管控式：
+    ✗「建议关注高频消费分类」
+    ✗「保持记录就很棒」类教练句
+  改为陈述已发生，例如：
+    · 上升：「最近几天花得密了一点，多集中在少数几笔。」
+    · 回落：「最近几天节奏慢下来了。」
+    · 平稳：「这一段整体比较匀，没有特别突出的起伏。」
+
+B4. 筛选控件轻量化（仍在弹层内）
+  · 时间按钮 #billDateFilterBtn、分类 #billCategoryFilter 缩小高度与边框对比
+  · 可选：时间改为 chip 行（本周/本月/本年）+「自定义」链到 #billDateRangeModal
+  · 分类 select 保留，但视觉弱于 meta 摘要行
+
+B5. 全量列表 #billRecordsList
+  · 行样式与主屏 slip 一致；时间可带年（toLocaleString zh-CN）
+  · 空态 #billRecordsEmpty 保留
+
+B6. 弹层关闭
+  · 保持 overlay 点击关闭 + × 按钮；滚动只在 .trace-detail-modal 内
+
+================================================================================
+任务 C · CSS 统一
+================================================================================
+
+C1. #statsPage 内禁止恢复旧版多 panel 堆叠样式（检查 #statsPage .panel 规则不撑出第二块）
+
+C2. .trace-play-btn 对齐首页主按钮色（accent 渐变、圆角 18px、全宽）
+
+C3. .trace-detail-link 左对齐、13px、无 border，hover 略深
+
+C4. 弹层 .trace-detail-modal 与截图一致：圆角、max-height 78vh、内部 padding 舒适
+
+C5. 改完 bump index.html 里 app.js 缓存 query（如 ?v=20260609-trace-preview4）
+
+================================================================================
+验收清单
+================================================================================
+
+主屏：
+  [ ] 只有 1 张 hero 卡 + 1 条「细查这一段 →」
+  [ ] 首屏无筛选、无趋势图、无大号合计卡
+  [ ] 周/月 chip 切换叙事与 slip 同步
+  [ ] 无「今天还没有账单可回放」常驻条
+
+细查弹层：
+  [ ] 合计金额只出现 1 次（meta 行）
+  [ ] 趋势默认一句旁白；图表不抢首屏（折叠或极小）
+  [ ] 洞察文案无「建议关注」「控预算」语气
+  [ ] 筛选可用，全列表可点编辑
+
+回归：
+  [ ] 其他 Tab 零视觉/逻辑回归
+  [ ] 听听这一段 → billPlaybackModal 仍正常
+
+================================================================================
+参考
+================================================================================
+
+设计截图：痕迹主屏 + 细查弹层（用户提供的 web 预览图）
+气质对照：homePage「今天留下的痕迹」、PRODUCT_NORTH_STAR §0 先叙后议
+
+@web-preview/index.html
+@web-preview/styles.css
+@web-preview/app.js
+@PRODUCT_NORTH_STAR.md

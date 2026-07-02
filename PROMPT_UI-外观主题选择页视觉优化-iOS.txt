@@ -1,0 +1,275 @@
+你在 xuzhangapp 实现 Task UI-T8.1 — 外观 Sheet「主题选择页」视觉优化（仅 UI · 不动业务逻辑）。
+
+================================================================================
+状态：✅ 已执行（P0 + P1，SettingsView 已落地）
+================================================================================
+
+本 prompt 仅供 **验收对照 / 像素规格参考**。Agent **勿重复实现**。
+后续永久主题「吸引力」增量 → @PROMPT_产品-永久典藏主题吸引力-iOS.md（从 ATTRACT-3 起）。
+
+================================================================================
+用法（历史 · 已完成）
+================================================================================
+
+短指令示例（勿再使用）：
+  按 @PROMPT_UI-外观主题选择页视觉优化-iOS.txt 实现 P0+P1，仅 iOS，不要 commit
+
+前置依赖：
+  · T2 colorThemeId 持久化 + setTheme 已接好
+  · T3～T7 App 换肤已生效（选主题后全 App 变色）
+  · ThemeCatalog.json + ThemeResolver 已有 31 款
+
+与主 prompt 关系：
+  · 本文件 = T8 的 **视觉增补**，不替代 @PROMPT_功能-外观色彩主题与会员方案-iOS.md §2
+  · 色彩 token / unlock 矩阵 / 会员五条 → 仍以主 prompt 为准
+
+================================================================================
+边界（最重要）
+================================================================================
+
+只改 **外观 Sheet 内「色彩主题」区块** 的视图结构与样式。
+
+可改：
+  NativeDemoApp/Views/SettingsView.swift
+    · appearance Sheet 内 §2 色彩主题 UI
+    · 新增 private View：ThemeFamilyAccordionRow、ThemeSwatchCell、LifetimeThemeVault 等
+    · @State 仅 UI：accordion 展开 id、动画状态
+
+禁止改：
+  ThemeResolver / ThemeCatalog.json 色值（除非 swatch 读 theme 预览色，只读）
+  SettingsViewModel.setTheme / unlock 判定规则 / memberTier 逻辑
+  MemberPricingView 五条主文案、PlaybackService、其他 Tab
+  web-preview / backend
+  git commit（除非用户明确要求）
+
+允许：
+  · 从 ThemeResolver.catalog 读 displayName、tier、family 渲染 UI
+  · 非会员点锁 → 仍走现有 showMemberPricing / toast
+
+================================================================================
+问题（走查截图 · 必修）
+================================================================================
+
+[ ] 会员主题 7 族 Accordion 行 = 纯文字「族名 (N) ›」，过于单调
+[ ] 「永久限定 (3)」与标准 Accordion **同款灰条**，无 lifetime 稀缺感
+[ ] 永久限定 buried 在第 7 个折叠里，首屏看不到典藏价值
+[ ] 标准 swatch 与永久 swatch 视觉同级，仅靠小锁区分
+[ ] 免费区缺「当前：xxx」叙事
+
+================================================================================
+设计目标
+================================================================================
+
+标准会员 7 族 = **书架目录行**（左色条 + 副标题 + N 款）
+永久限定 3 款 = **底部典藏橱窗 Vault**（渐变底 + 金边大 swatch + 永远展开）
+气质：叙账 Morandi + lifetime 古铜/沉金/琥珀（§6.1-L），**禁止**赛博霓虹装饰
+
+================================================================================
+任务 A · 信息架构重排（P0）
+================================================================================
+
+A1. §2 色彩主题自上而下顺序固定为：
+
+  helper：「只改界面颜色，不影响账本数据。」
+  当前主题一行：「当前：{displayName}」11pt accent-muted
+
+  §2a 日常
+    区标题「日常」+ 右侧 tertiary「免费」
+    3 列 swatch（叙账默认 / 纸境留白 / 气象晴云）
+
+  §2b 会员主题
+    区标题「会员主题」+ helper「标准主题库；永久会员另有典藏款」
+    7 族 Accordion（仅 tier=standard 按 family 分组，**不含** lifetime 3 款）
+
+  §2c 永久限定 Vault（**独立区块，不是第 8 个 Accordion**）
+    见任务 C
+
+  §3 footer（保持）
+    Toggle 分享图使用当前主题
+    quiet link「恢复默认主题」
+
+A2. Accordion **同时只展开 1 族**；默认全收起。
+
+A3. 7 族顺序与 family id（与 ThemeCatalog 一致）：
+
+  cyber          赛博朋克
+  mood_weather   情绪气象
+  paperverse     纸境东方
+  bio            自然演算
+  orbital        太空通勤
+  brutal         工业柔光
+  （lifetime family 不在此列表）
+
+================================================================================
+任务 B · Accordion 行视觉（P0 + P1）
+================================================================================
+
+B1. 单行结构（高 56pt，圆角 12，底 #FAFAFA 或 surfaceMuted）：
+
+  [左：族色条 3×3×20pt] [中：主标题 15 Semibold + 副标题 11 tertiary] [右：N 款 + 箭头]
+
+B2. 族色条（装饰用，非 theme token）：
+
+  cyber:         #B84888 · #5A9858 · #48A8B8
+  mood_weather:  #C87848 · #88A8B8 · #58A888
+  paperverse:    #B84848 · #486878 · #9090A8
+  bio:           #6A9870 · #C88878 · #78B068
+  orbital:       #D88858 · #586878 · #688898
+  brutal:        #606060 · #D85018 · #6888B0
+
+B3. 副标题（11pt tertiary，1 行 truncate），示例：
+
+  赛博朋克    → 「霓虹深渊、全息黄昏…」
+  情绪气象    → 「晚霞账、薄雾晨、潮汐…」
+  纸境东方    → 「留白、朱砂印、湿墨…」
+  自然演算    → 「苔藓、珊瑚、光合…」
+  太空通勤    → 「舱窗晨、休眠模式…」
+  工业柔光    → 「混凝土、安全橙、网格纸…」
+
+  实现：取该族 themes.prefix(3).map(\.displayName).joined(separator: "、") 即可，勿硬编码维护。
+
+B4. 右侧：「{count} 款」12pt tertiary；收起 › / 展开 ⌄（accent 色）
+
+B5. 展开区：
+  · 顶部分隔线 1px #E8EDF2
+  · 内容左缩进 12pt
+  · 2 列 ThemeSwatchCell 网格，spacing 12
+  · 数据源：ThemeResolver.themes.filter { $0.family == family && $0.tier == standard }
+
+B6. 行间距 6pt；区「会员主题」与 Vault 间距 20pt
+
+================================================================================
+任务 C · 永久限定 Vault（P0 · 核心）
+================================================================================
+
+C1. 容器 LifetimeThemeVault（永远展开，不可折叠）：
+
+  · 圆角 16（大于 Accordion 12）
+  · 背景：线性渐变 #F5F0E8 → #EEECF2（全区块，opacity 100%）
+  · 描边：1px #C9A64A @ 25% opacity
+  · 内边距：16
+  · 上下与相邻区间距：24
+
+C2. 头部 HStack：
+
+  左：「永久限定」15 Semibold textPrimary
+  右：pill「✦ 永久会员」— 背景 #C9A64A @ 12%，字 #8B6F38 11pt Semibold
+      已 lifetime：pill 改「已解锁 ✓」古铜色
+
+  下方 helper 12pt secondary：
+  「三款典藏皮肤，随永久会员账号保留。」
+
+C3. 3 swatch 横排（或 3 列 grid），数据源：
+
+  lifetime_gilded_circuit / lifetime_archive_gold / lifetime_neon_cathedral
+  displayName 来自 catalog（永享·金线电路 等）
+
+C4. 永久 Swatch 规格（与标准区分）：
+
+  | 属性 | 标准 swatch | 永久 swatch |
+  |------|-------------|-------------|
+  | 色块 | 56×56 r14 | **64×64 r16** |
+  | 未选边框 | 无或 1px stroke | **1.5px 渐变金边** #C9A961→#A68445 |
+  | 选中 | 2px accent + ✓ | **2px 古铜 #A68445 + ✓** |
+  | 锁 | 居中 lock 或 opacity 0.55 | **右上 18pt 圆** #C9A64A @ 20% + lock 10pt |
+  | 名称 | 11 Medium 全黑 | 11 **Semibold**；「永享·」段用 theme accent 色 |
+  | 副句 | 无 | 9pt tertiary 一行：结构感 / 最耐用 / 夜间复盘 |
+
+  三款 accent 预览（swatch 内色点）：
+  · 金线电路：#B8985C + slate 底 #EEF1F4
+  · 档案金章：#A68445 + 纸底 #F2EBE0
+  · 琥珀礼拜堂：dark 预览 #100E1A + 琥珀点 #D4A574
+
+C5. 非 lifetime 会员：
+  · swatch **opacity 0.92**（不要 0.55 糊片）
+  · 保留金边 + 锁角标
+  · 点击 → 现有 toast + MemberPricing **锚 lifetime 卡**
+  · Vault 底 quiet link：「了解永久会员 →」
+
+C6. lifetime 会员：
+  · 无锁角标，保留金箔边
+  · 可选：选中款时 Vault 底边 2px #A68445（静态即可，动画 P2）
+
+================================================================================
+任务 D · 日常免费区 polish（P1）
+================================================================================
+
+D1. 区标题：「日常」+ Spacer + 「免费」11pt tertiary
+
+D2. 选中 swatch：保留 2px accent 描边 + ✓；**加**色块底 2pt accent 条
+
+D3. ThemeSwatchCell 统一组件：
+  · 免费 / 标准 / 永久 共用，通过 enum Style { daily, standard, lifetime } 分支
+  · 色块内容：accent 圆点 + background 角 + surface 横条（读 ResolvedThemeTokens 或 catalog modes.light）
+
+D4. 标准会员 swatch 锁定：
+  · opacity 0.92 + 右上 lock（**不要**整卡 0.55）
+  · 点击 → toast + 会员页
+
+================================================================================
+任务 E · 字体与间距（P1）
+================================================================================
+
+| 层级 | 字号 | 字重 | 色 |
+|------|------|------|-----|
+| Sheet 标题 | 18 | Semibold | textPrimary |
+| 区标题 | 13 | Semibold | textPrimary |
+| Accordion 主标题 | 15 | Semibold | textPrimary |
+| Accordion 副标题 | 11 | Regular | textTertiary |
+| Swatch 名 | 11 | Medium / lifetime Semibold | text / accent |
+| helper | 12 | Regular | textSecondary |
+
+Sheet horizontal padding：18
+区与区 spacing：20（Vault 上下 24）
+
+================================================================================
+任务 F · 动效（P2 · 可选）
+================================================================================
+
+F1. Accordion 展开：arrow rotation + content opacity 0.25s ease
+F2. 选 swatch：UIImpactFeedbackGenerator(.light) + 选中圈 scale 1.02→1.0
+F3. 非会员点永久 swatch：金边一次 shimmer（0.6s，仅 Vault 内）
+
+================================================================================
+验收清单（真机 · 外观 Sheet）
+================================================================================
+
+架构：
+  [ ] 永久限定 **不在** 7 族 Accordion 列表内
+  [ ] Vault 首屏可见 3 款 swatch（无需滚到第 7 个折叠）
+  [ ] 同时只展开 1 个标准族
+
+视觉：
+  [ ] 7 族 Accordion 有左色条 + 副标题，不单行黑字
+  [ ] Vault 有渐变底 + 金描边 + pill，一眼区别于 Accordion
+  [ ] 永久 swatch 64pt + 金边；标准 56pt
+  [ ] 非会员永久区：看清预览 + 锁角标，不过度糊
+
+交互：
+  [ ] 选免费/标准/永久 theme → 全 App 变色（T3～T7 已接）
+  [ ] 非会员点标准 → 不写入 id + 会员页
+  [ ] 非 lifetime 点永久 → 锚 lifetime 卡
+  [ ] 恢复默认 → xuzhang_default
+
+回归：
+  [ ] §1 明暗三档仍正常
+  [ ] 分享图 toggle 仍正常
+  [ ] 记账 / 播放 / OCR 零回归
+
+================================================================================
+实施顺序
+================================================================================
+
+P0：A（架构）+ B（Accordion）+ C（Vault）
+P1：D（免费区）+ E（间距字体）
+P2：F（动效）
+
+================================================================================
+@ 文件
+================================================================================
+
+@PROMPT_功能-外观色彩主题与会员方案-iOS.md（§2 §3 §6.1-L）
+@NativeDemoApp/Views/SettingsView.swift
+@NativeDemoApp/Theme/ThemeResolver.swift
+@NativeDemoApp/Theme/ThemeCatalog.json（只读 family/tier/displayName）
+@PRODUCT_PLAYBACK_MEMBERSHIP_v0.1.md（§10.1 五条勿动）

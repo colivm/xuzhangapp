@@ -1,0 +1,213 @@
+import SwiftUI
+
+struct LifeEntryPreviewCard: View {
+    let tier: RecordPreviewTier
+    let headline: String
+    let hint: String?
+    let learningHint: String?
+    var lifeMarkText: String? = nil
+    let emotion: String
+    let meta: String
+    let amountText: String
+    let primaryActionTitle: String
+    let showsPrimaryAction: Bool
+    let showAngleAction: Bool
+    var showsFreePrimaryAction: Bool = false
+    var showFreeAngleAction: Bool = false
+    var freeScenePackLimitText: String? = nil
+    var onTap: () -> Void
+    var onChangeCategory: () -> Void
+    var onPrimaryAction: () -> Void
+    var onWriteOwn: () -> Void
+    var onAngleAction: () -> Void
+    var onFreePrimaryAction: (() -> Void)? = nil
+    var onFreeAngleAction: (() -> Void)? = nil
+
+    private var isWhisper: Bool { tier == .whisper }
+    private var isConfirm: Bool { tier == .confirm }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            bodyContent
+
+            Divider()
+                .background(AppColors.line.opacity(0.38))
+                .padding(.top, 12)
+
+            footContent
+                .padding(.top, 10)
+        }
+        .padding(.horizontal, 17)
+        .padding(.top, isWhisper ? 15 : 17)
+        .padding(.bottom, 13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .recordSurface(radius: isWhisper ? 16 : 18, padding: 0, tint: AppColors.accent)
+        .pressableCardFeedback(radius: isWhisper ? 16 : 18, depth: isWhisper ? 0.55 : 0.8)
+        .contentShape(RoundedRectangle(cornerRadius: isWhisper ? 16 : 18, style: .continuous))
+        .onTapGesture(perform: onTap)
+    }
+
+    private var bodyContent: some View {
+        VStack(alignment: .leading, spacing: isWhisper ? 7 : 8) {
+            Text(headline)
+                .font(.system(size: isWhisper ? 15.5 : 21, weight: isWhisper ? .regular : .semibold))
+                .foregroundStyle(isWhisper ? AppColors.text.opacity(0.76) : AppColors.text)
+                .lineSpacing(isWhisper ? 2 : 1)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let hint, !hint.isEmpty, isConfirm {
+                Text(hint)
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppColors.subtext.opacity(0.78))
+            }
+
+            if let learningHint, !learningHint.isEmpty {
+                learningHintPill(learningHint)
+            }
+
+            if let lifeMarkText, !lifeMarkText.isEmpty, isConfirm {
+                lifeMarkPill(lifeMarkText)
+            }
+
+            emotionPill
+
+            metaRow
+        }
+    }
+
+    private func learningHintPill(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(AppColors.subtext.opacity(0.76))
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func lifeMarkPill(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(AppColors.text.opacity(0.70))
+            .lineLimit(1)
+            .minimumScaleFactor(0.84)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(AppColors.paperWarm.opacity(0.52))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(AppColors.line.opacity(0.42), lineWidth: 0.7)
+            )
+    }
+
+    private var footContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 10) {
+                actionRow
+
+                Spacer(minLength: 10)
+
+                Text(amountText)
+                    .font(.system(size: isWhisper ? 11 : 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(AppColors.subtext.opacity(isWhisper ? 0.48 : 0.58))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+
+            if let freeScenePackLimitText,
+               !freeScenePackLimitText.isEmpty,
+               showsFreePrimaryAction || showFreeAngleAction {
+                Text(freeScenePackLimitText)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.lockGold.opacity(0.86))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var emotionPill: some View {
+        if isConfirm && !emotion.isEmpty {
+            Text(emotion)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.76))
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(emotionPillBackground)
+                .overlay(emotionPillBorder)
+        }
+    }
+
+    private var emotionPillBackground: some View {
+        Capsule(style: .continuous)
+            .fill(Color.white.opacity(0.34))
+    }
+
+    private var emotionPillBorder: some View {
+        Capsule(style: .continuous)
+            .stroke(AppColors.accent.opacity(0.16), lineWidth: 0.7)
+    }
+
+    private var metaRow: some View {
+        HStack(spacing: 7) {
+            Text(meta)
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.subtext.opacity(0.82))
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            if isConfirm {
+                Button("改分类", action: onChangeCategory)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.accent.opacity(0.72))
+                    .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var actionRow: some View {
+        HStack(spacing: 0) {
+            if showsPrimaryAction {
+                quietAction(primaryActionTitle, action: onPrimaryAction)
+                if showAngleAction && isConfirm {
+                    separator
+                    quietAction("换个角度", action: onAngleAction)
+                }
+                separator
+            } else if showsFreePrimaryAction {
+                quietAction(primaryActionTitle) {
+                    onFreePrimaryAction?()
+                }
+                if showFreeAngleAction && isConfirm {
+                    separator
+                    quietAction("换个角度") {
+                        onFreeAngleAction?()
+                    }
+                }
+                separator
+            }
+            quietAction("自己写一句", action: onWriteOwn)
+        }
+    }
+
+    private func quietAction(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(AppColors.accent.opacity(0.68))
+            .buttonStyle(.plain)
+    }
+
+    private var separator: some View {
+        Text("|")
+            .font(.system(size: 12))
+            .foregroundStyle(AppColors.subtext.opacity(0.42))
+            .padding(.horizontal, 8)
+    }
+
+}

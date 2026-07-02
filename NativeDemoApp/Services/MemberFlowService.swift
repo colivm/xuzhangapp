@@ -18,27 +18,27 @@ final class MemberFlowService {
         switch scene {
         case .playbackComplete:
             return MemberCtaCopy(
-                intro: "把这周的生活轨迹长期留住，回看会更温柔。",
-                quickAction: "保留这周生活轨迹",
-                nudge: "想把这些生活切片长期留住？开通会员可自动云端留存。"
+                intro: "这段生活已经被整理出来了，连续回看会更有时间感。",
+                quickAction: "让回望继续留下",
+                nudge: "会员可以持续整理周记和月章，不用刚听出节奏就停下来。"
             )
         case .shareSuccess:
             return MemberCtaCopy(
-                intro: "这张分享卡很温柔，继续留存每周生活卡会更有连续感。",
-                quickAction: "持续留存每周生活卡",
-                nudge: "分享完成啦，开通会员可持续留存每周生活卡。"
+                intro: "这张摘页已经把一周留住了，连续生成会更像一本生活册。",
+                quickAction: "继续留下生活摘页",
+                nudge: "会员可持续生成周记、月章和故事图，让记录不只停在这一张。"
             )
         case .aiMonthly:
             return MemberCtaCopy(
-                intro: "这次复盘只是开始，会员可解锁无限次生活复盘。",
-                quickAction: "解锁无限次生活复盘",
-                nudge: "想继续回看更多生活节奏？会员可解锁无限次复盘。"
+                intro: "这个月已经能看出一点生活结构了，继续整理会更完整。",
+                quickAction: "继续整理月章",
+                nudge: "会员会把更多月份接着整理出来，帮你看见长期生活节奏。"
             )
         case .default:
             return MemberCtaCopy(
-                intro: "让记账更轻松、更省心。",
-                quickAction: "立即开通年度会员（推荐）",
-                nudge: "开通会员可持续留存生活记录，随时温柔回看。"
+                intro: "适合已经开始连续记录的人。",
+                quickAction: "让账本更懂我的生活",
+                nudge: "会员让记录更连续、更懂场景，也不会在想整理时被次数打断。"
             )
         }
     }

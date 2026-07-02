@@ -7,9 +7,9 @@ enum LedgerSyncError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidBaseURL:
-            return "后端地址无效，无法同步。"
+            return "同步设置暂时不可用，请稍后再试。"
         case .badStatus(let code, let body):
-            return "同步失败 (\(code))：\(body)"
+            return "同步没有完成，请稍后再试。你的本机记录已保留。"
         }
     }
 }
@@ -22,6 +22,27 @@ private struct LedgerDTO: Codable {
     let source: String
     let createdAt: String
     let updatedAt: String
+    let emotionTag: String?
+    let merchantBrandId: String?
+    let draftMeta: LedgerDraftMetaDTO?
+    let userEditedTitle: Bool?
+    let userEditedCategory: Bool?
+    let categoryCorrectionFrom: String?
+    let memoryContext: LedgerMemoryContextDTO?
+    let scenePackId: String?
+}
+
+private struct LedgerDraftMetaDTO: Codable {
+    let batchId: String
+    let importedAt: String
+    let status: String
+}
+
+private struct LedgerMemoryContextDTO: Codable {
+    let weatherKind: String?
+    let temperatureCelsius: Double?
+    let cityName: String?
+    let semanticPlace: String?
 }
 
 private struct LedgerListResponse: Codable {
@@ -49,7 +70,28 @@ final class LedgerSyncService {
             category: item.category.rawValue,
             source: item.source.rawValue,
             createdAt: iso8601.string(from: item.createdAt),
-            updatedAt: iso8601.string(from: item.updatedAt)
+            updatedAt: iso8601.string(from: item.updatedAt),
+            emotionTag: item.emotionTag,
+            merchantBrandId: item.merchantBrandId,
+            draftMeta: item.draftMeta.map {
+                LedgerDraftMetaDTO(
+                    batchId: $0.batchId,
+                    importedAt: iso8601.string(from: $0.importedAt),
+                    status: $0.status.rawValue
+                )
+            },
+            userEditedTitle: item.userEditedTitle,
+            userEditedCategory: item.userEditedCategory,
+            categoryCorrectionFrom: item.categoryCorrectionFrom?.rawValue,
+            memoryContext: item.memoryContext.map {
+                LedgerMemoryContextDTO(
+                    weatherKind: $0.weatherKind,
+                    temperatureCelsius: $0.temperatureCelsius,
+                    cityName: $0.cityName,
+                    semanticPlace: $0.semanticPlace
+                )
+            },
+            scenePackId: item.scenePackId
         )
         var request = try makeRequest(path: "/v1/ledger", method: "POST")
         request.httpBody = try JSONEncoder().encode(dto)
@@ -71,6 +113,17 @@ final class LedgerSyncService {
             let updatedAt = iso8601.date(from: dto.updatedAt) ?? createdAt
             let category = HomeItem.Category(rawValue: dto.category) ?? .other
             let source = HomeItem.Source(rawValue: dto.source) ?? .manual
+            let draftMeta = dto.draftMeta.flatMap { meta -> HomeItem.DraftMeta? in
+                guard let importedAt = iso8601.date(from: meta.importedAt),
+                      let status = HomeItem.DraftMeta.Status(rawValue: meta.status) else {
+                    return nil
+                }
+                return HomeItem.DraftMeta(
+                    batchId: meta.batchId,
+                    importedAt: importedAt,
+                    status: status
+                )
+            }
             return HomeItem(
                 id: id,
                 title: dto.title,
@@ -78,7 +131,22 @@ final class LedgerSyncService {
                 category: category,
                 source: source,
                 createdAt: createdAt,
-                updatedAt: updatedAt
+                updatedAt: updatedAt,
+                emotionTag: dto.emotionTag,
+                merchantBrandId: dto.merchantBrandId,
+                draftMeta: draftMeta,
+                userEditedTitle: dto.userEditedTitle,
+                userEditedCategory: dto.userEditedCategory,
+                categoryCorrectionFrom: dto.categoryCorrectionFrom.flatMap { HomeItem.Category(rawValue: $0) },
+                memoryContext: dto.memoryContext.map {
+                    HomeItem.MemoryContext(
+                        weatherKind: $0.weatherKind,
+                        temperatureCelsius: $0.temperatureCelsius,
+                        cityName: $0.cityName,
+                        semanticPlace: $0.semanticPlace
+                    )
+                },
+                scenePackId: dto.scenePackId
             )
         }
     }

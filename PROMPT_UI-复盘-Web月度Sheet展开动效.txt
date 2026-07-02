@@ -1,0 +1,217 @@
+﻿你在 xuzhangapp 实现 Task UI-P4-WEB-INSIGHT — 复盘「这一月的回顾」Sheet 信纸展开动效（仅 web-preview/；主屏 .insight-journal 与 P3.2b 月记结构已定稿勿动）。
+
+================================================================================
+边界
+================================================================================
+
+只改 #monthlyInsightModal 入场/正文揭示动效 + 相关 CSS + open/render 钩子。
+
+可改：
+  web-preview/index.html（#monthlyInsightModal 内可选包裹层，如 .monthly-sheet-paper）
+  web-preview/styles.css（.insight-monthly-modal 动效、.monthly-journal-reveal*）
+  web-preview/app.js（openMonthlyInsightModal、renderInsight 月度段、generateMonthlyInsight 完成回调处加 class）
+
+禁止改：
+  formatMonthlyJournalText / formatMonthlyJournalClosing / formatMonthlySheetKicker 文案逻辑
+  generateMonthlyInsight / monthlyInsightPayload / 试用次数 / 会员锁
+  主屏 #insightPage .insight-journal 结构与样式
+  #traceSliceModal、痕迹页、iOS、git commit
+
+允许：
+  · 正文区加 reveal class 触发 CSS 动画
+  · generating 态用柔和 pulse，不用新 spinner 组件
+  · prefers-reduced-motion 降级
+
+================================================================================
+背景（产品意图）
+================================================================================
+
+主屏复盘 = 暖色周记（.insight-journal）；点「这一月的回顾 →」打开 #monthlyInsightModal（P3.2b 已收束为月记体）。
+用户期望：像 **再展开一页信纸** 读出月记，不是黑板拉下、不是 KPI 报表砸脸。
+
+复盘动效语法 = **纵向展开 + 书写淡入**（与痕迹横向翻页区分）。
+禁止：黑板色、表格飞入、数字滚动、满屏 accent 动画。
+
+================================================================================
+任务 1 · HTML 可选包裹（index.html）
+================================================================================
+
+1.1 在 .insight-sheet-body 外包一层（便于 clip 展开）：
+
+```html
+<div class="monthly-sheet-paper">
+  <section class="insight-sheet-body">
+    <article id="monthlyJournalBody" class="insight-journal-body monthly-journal-body">…</article>
+    <p id="monthlyJournalClosing" class="insight-journal-closing muted"></p>
+    …其余节点保持 P3.2b 顺序…
+  </section>
+</div>
+```
+
+1.2 若不加包裹层，也可直接对 .insight-monthly-modal 做展开；**二选一**，勿双层动画打架。
+
+================================================================================
+任务 2 · 打开 Sheet（app.js）
+================================================================================
+
+2.1 改 openMonthlyInsightModal()：
+
+```js
+function openMonthlyInsightModal() {
+  setUIModal("monthlyInsight");
+  const modal = refs.monthlyInsightModal;
+  modal?.classList.remove("hidden");
+  // 重置动效态
+  modal?.classList.remove("monthly-sheet-opened");
+  refs.monthlyJournalBody?.classList.remove("monthly-journal-revealed");
+  refs.monthlyJournalClosing?.classList.remove("monthly-journal-revealed");
+  requestAnimationFrame(() => {
+    modal?.classList.add("monthly-sheet-opened");
+    queueMonthlyJournalReveal();
+  });
+}
+```
+
+2.2 新增 queueMonthlyJournalReveal()：
+
+  · 若 state.isGeneratingMonthlyInsight：只给 body 加 .monthly-journal-generating（CSS 柔和 pulse），不 reveal
+  · 否则：延迟 180–220ms（等 Sheet 升起过半）后给 body + closing 加 .monthly-journal-revealed
+  · placeholder 与已生成月记 **同一套 reveal**（都是「读信」）
+
+2.3 closeMonthlyInsightModal：移除 monthly-sheet-opened、monthly-journal-revealed、monthly-journal-generating。
+
+================================================================================
+任务 3 · 生成完成 / renderInsight 钩子
+================================================================================
+
+3.1 renderInsight() 月度段写入 monthlyJournalBody / monthlyJournalClosing 后：
+
+  · 若不在 generating 且 Sheet 当前可见（!monthlyInsightModal.classList.contains("hidden")）：
+      先移除 monthly-journal-revealed
+      requestAnimationFrame → 重新 queueMonthlyJournalReveal()（月记「长出来」）
+  · generating 时：toggle .monthly-journal-generating on body，移除 revealed
+
+3.2 generateMonthlyInsight 成功写入后 renderInsight 已会触发；**勿改** generate 函数体，只在 renderInsight 统一处理。
+
+3.3 可选轻量「逐段书写」：
+
+```js
+function wrapMonthlyJournalRevealLines(el) {
+  // 仅当 el 无子元素时：按换行或 。拆成 <span class="monthly-journal-line" style="--line-i:n">
+  // 已有 revealed 时 innerHTML 替换；注意与 textContent 赋值顺序：先 text 再 wrap 再 add revealed
+}
+```
+
+  · 若实现成本高，可只做整块 opacity+translateY（见 CSS 3.4）
+
+================================================================================
+任务 4 · CSS 动效（styles.css）
+================================================================================
+
+4.1 **Sheet 入场**（在现有 .ocr-overlay 基础上叠加，不覆盖全局）：
+
+```css
+.insight-monthly-modal {
+  transform-origin: top center;
+}
+#monthlyInsightModal:not(.hidden) .insight-monthly-modal {
+  /* 覆盖默认 ocr-modal 仅 scale 入场，叠加信纸感 */
+  animation: monthlySheetUnfold 0.52s var(--ease-out-soft) forwards;
+}
+@keyframes monthlySheetUnfold {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+    clip-path: inset(0 0 100% 0 round 30px);
+  }
+  55% {
+    opacity: 1;
+    clip-path: inset(0 0 8% 0 round 30px);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    clip-path: inset(0 0 0 0 round 30px);
+  }
+}
+```
+
+  · 背景保持 P3.2b 暖白渐变；**禁止**深绿/黑板色 #1a1a1a 背景
+  · 左竖线装饰（若主屏有 .insight-journal 左边框）可在 .monthly-journal-body 复用 2px accent mix，随 clip 展开
+
+4.2 **正文揭示** .monthly-journal-revealed：
+
+```css
+.monthly-journal-body:not(.monthly-journal-revealed) {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.monthly-journal-body.monthly-journal-revealed {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.48s var(--ease-out-soft), transform 0.48s var(--ease-out-soft);
+}
+.insight-journal-closing.monthly-journal-revealed {
+  transition-delay: 0.12s;
+  /* 同上 opacity/transform */
+}
+```
+
+4.3 逐行版（若实现 wrapMonthlyJournalRevealLines）：
+
+```css
+.monthly-journal-line {
+  display: block;
+  opacity: 0;
+  transform: translateY(8px);
+  animation: monthlyJournalLineIn 0.4s var(--ease-out-soft) forwards;
+  animation-delay: calc(var(--line-i) * 90ms + 100ms);
+}
+```
+
+4.4 **生成中** .monthly-journal-generating：
+  · 不用 skeleton-line 闪烁（可保留 skeleton class 但覆盖 animation 为柔和 opacity 0.55↔1，周期 1.6s）
+  · 文案「正在梳理这一月…」保持静态，不要打字机
+
+4.5 .monthly-generate-link / quiet actions：**无** hover 弹跳；最多 color 0.2s。
+
+4.6 **prefers-reduced-motion: reduce**：
+  · 禁用 clip-path animation；Sheet 仅用 opacity
+  · 正文同时显示，无 line stagger
+
+================================================================================
+任务 5 · 气质约束（必过）
+================================================================================
+
+  [ ] 无黑板背景、无 dashboard 下拉、无 KPI 数字滚入
+  [ ] 主屏 #insightPage 零视觉/逻辑回归
+  [ ] P3.2b 月记 DOM 顺序与 quiet 按钮保留
+  [ ] 打开 Sheet → 感到「续页信纸」，不是新弹报表
+  [ ] 生成完成 → 月记淡入/写入，非三块文本砸入
+  [ ] 关闭再开、切换月份后动效可重复
+  [ ] 与痕迹切片翻页动效明显不同（复盘=纵向）
+
+================================================================================
+任务 6 · 验收步骤（Web 预览）
+================================================================================
+
+1. 复盘 Tab → 点「这一月的回顾 →」
+2. Sheet 自下而上 + 自上而下「展开一页」感（clip 或等价）
+3. 刊头 kicker 先可见，正文稍后淡入
+4. 点「生成这一月的回顾」→ 柔和 waiting，完成后正文重新 reveal
+5. 已有月记时打开 → 直接 reveal，无报表块
+6. 减少动态效果 → 仅淡入
+
+bump query：?v=20260609-insight-motion1
+
+================================================================================
+参考
+================================================================================
+
+Sheet 结构定稿：PROMPT_UI-复盘-Web月度Sheet月记体.txt
+主屏定稿：PROMPT_UI-复盘-Web与痕迹差异化.txt
+痕迹翻页（勿混）：PROMPT_UI-痕迹-Web切片翻页动效.txt
+现有：openMonthlyInsightModal、renderInsight 月度段（app.js）
+
+@web-preview/index.html
+@web-preview/styles.css
+@web-preview/app.js

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>叙账 xLife - 用账单，叙述生活</title>
+  <meta name="description" content="叙账 xLife：生活回望式记账 App。用账单，叙述生活；账单只是注脚，生活才是主角。本地优先，TestFlight 内测中。">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="logo" href="/">
+        <span class="logo-mark" aria-hidden="true">
+          <img src="favicon-32.png" alt="">
+        </span>
+        <span>叙账 · xLife</span>
+      </a>
+      <nav class="nav-links" aria-label="主导航">
+        <a href="#screenshots">界面预览</a>
+        <a href="#features">功能</a>
+        <a href="https://testflight.apple.com/join/c4QRUQkf" target="_blank" rel="noopener">TestFlight</a>
+        <a href="/legal/privacy.html">隐私政策</a>
+        <a href="/legal/terms.html">用户协议</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap hero-layout">
+        <div class="hero-copy">
+          <span class="hero-badge">xLife · 叙述生活</span>
+          <h1>用账单，<br>叙述生活</h1>
+          <p class="hero-lead">
+            账单只是注脚，生活才是主角。
+            xLife 取自 Xu（叙）和 Life（生活）：把每天记下的一笔，放回这一段日子里看。
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="https://testflight.apple.com/join/c4QRUQkf" target="_blank" rel="noopener">通过 TestFlight 试用</a>
+            <a class="btn btn-ghost" href="#features">看看能做什么</a>
+          </div>
+          <p class="hero-note">账单默认保存在你的手机里，不登录也能记。越常记录，分类和备注越像你的生活习惯。当前开放 TestFlight 内测，正式上架后这里会更新 App Store 下载方式。</p>
+          <div class="trust-row" aria-label="产品原则">
+            <span>本地优先</span>
+            <span>习惯本地学习</span>
+            <span>OCR 原图不上传</span>
+            <span>AI 可选</span>
+          </div>
+        </div>
+
+        <figure class="hero-visual" aria-label="xLife 品牌视觉">
+          <img src="hero-brand.png" alt="xLife 用账单，叙述生活" width="1280" height="640" onerror="this.hidden=true">
+        </figure>
+      </div>
+    </section>
+
+    <section class="section section-screenshots" id="screenshots">
+      <div class="wrap">
+        <h2 class="section-title">看看叙账长什么样</h2>
+        <p class="section-desc">生活切片是主入口：先看见这一周、这一月，再决定要不要请小 AI 多聊一句。</p>
+
+        <div class="carousel" data-carousel tabindex="0" aria-label="App 界面预览轮播">
+          <button type="button" class="carousel-btn carousel-btn-prev" data-carousel-prev aria-label="上一张">‹</button>
+          <button type="button" class="carousel-btn carousel-btn-next" data-carousel-next aria-label="下一张">›</button>
+
+          <div class="carousel-viewport">
+            <div class="carousel-track" data-carousel-track>
+              <article class="carousel-slide" data-carousel-slide aria-hidden="false">
+                <div class="phone">
+                  <div class="phone-screen">
+                    <div class="phone-mock mock-stats" aria-hidden="true">
+                      <div class="mock-status"></div>
+                      <div class="mock-nav">看看花</div>
+                      <div class="mock-tabs"><span class="is-on">本周</span><span>本月</span></div>
+                      <div class="mock-slice-card">
+                        <p class="mock-slice-label">本周生活切片</p>
+                        <p class="mock-slice-title">这一周，是这样过的</p>
+                        <p class="mock-slice-meta">12 笔 · ¥1,286</p>
+                        <span class="mock-play">播放</span>
+                      </div>
+                    </div>
+                    <img class="phone-shot" src="screenshots/01-stats-slice.png" alt="看看花 · 本周生活切片" width="390" height="844" loading="lazy" onerror="this.remove()">
+                  </div>
+                </div>
+                <p class="slide-caption"><strong>看看花</strong> · 本周生活切片</p>
+              </article>
+
+              <article class="carousel-slide" data-carousel-slide aria-hidden="true">
+                <div class="phone">
+                  <div class="phone-screen">
+                    <div class="phone-mock mock-playback" aria-hidden="true">
+                      <div class="mock-status"></div>
+                      <p class="mock-scene">第 2 幕 · 主角分类</p>
+                      <p class="mock-big">餐饮</p>
+                      <p class="mock-narrative">这周外出吃饭多了一些，也有两顿在家简单解决。</p>
+                      <div class="mock-bar-row"><span></span><span></span><span class="tall"></span><span></span></div>
+                    </div>
+                    <img class="phone-shot" src="screenshots/02-week-playback.png" alt="周切片播放" width="390" height="844" loading="lazy" onerror="this.remove()">
+                  </div>
+                </div>
+                <p class="slide-caption"><strong>生活切片</strong> · 约半分钟讲完一周</p>
+              </article>
+
+              <article class="carousel-slide" data-carousel-slide aria-hidden="true">
+                <div class="phone">
+                  <div class="phone-screen">
+                    <div class="phone-mock mock-mix" aria-hidden="true">
+                      <div class="mock-status"></div>
+                      <p class="mock-scene">生活配方</p>
+                      <div class="mock-ring"></div>
+                      <ul class="mock-legend">
+                        <li><span style="--c:#7fb3a2"></span>餐饮 38%</li>
+                        <li><span style="--c:#9ec5e8"></span>交通 22%</li>
+                        <li><span style="--c:#e8b4c8"></span>日用 18%</li>
+                      </ul>
+                    </div>
+                    <img class="phone-shot" src="screenshots/03-life-mix.png" alt="生活配方" width="390" height="844" loading="lazy" onerror="this.remove()">
+                  </div>
+                </div>
+                <p class="slide-caption"><strong>生活配方</strong> · 看懂这段时间的构成</p>
+              </article>
+
+              <article class="carousel-slide" data-carousel-slide aria-hidden="true">
+                <div class="phone">
+                  <div class="phone-screen">
+                    <div class="phone-mock mock-today" aria-hidden="true">
+                      <div class="mock-status"></div>
+                      <div class="mock-nav">今日</div>
+                      <div class="mock-today-card">
+                        <p class="mock-slice-label">今日生活回放</p>
+                        <p class="mock-narrative">今天节奏平稳，通勤和午餐是主角。</p>
+                        <span class="mock-play">播放</span>
+                      </div>
+                    </div>
+                    <img class="phone-shot" src="screenshots/04-today-playback.png" alt="今日生活回放" width="390" height="844" loading="lazy" onerror="this.remove()">
+                  </div>
+                </div>
+                <p class="slide-caption"><strong>今日回放</strong> · 十几秒叙完今天</p>
+              </article>
+            </div>
+          </div>
+
+          <div class="carousel-dots" role="tablist" aria-label="选择预览图">
+            <button type="button" class="carousel-dot is-active" data-carousel-dot role="tab" aria-selected="true" aria-label="看看花"></button>
+            <button type="button" class="carousel-dot" data-carousel-dot role="tab" aria-selected="false" aria-label="生活切片"></button>
+            <button type="button" class="carousel-dot" data-carousel-dot role="tab" aria-selected="false" aria-label="生活配方"></button>
+            <button type="button" class="carousel-dot" data-carousel-dot role="tab" aria-selected="false" aria-label="今日回放"></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="features">
+      <div class="wrap">
+        <h2 class="section-title">你可以这样用叙账</h2>
+        <p class="section-desc">账是素材，叙是目的。叙账不催你省，也不替你审判，只帮你把生活的痕迹讲清楚。</p>
+
+        <div class="features">
+          <article class="feature">
+            <div class="feature-icon" aria-hidden="true">📝</div>
+            <h3>只输金额，也能省力</h3>
+            <p>明确品牌时用专属生活句；没有品牌时，从本机账本习惯预填分类和备注。免费也能完整记账。</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon" aria-hidden="true">🎬</div>
+            <h3>生活切片</h3>
+            <p>今日回放、周度五幕、月度六章，把一段时间的花费，讲成可以回看的生活章。</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon" aria-hidden="true">💬</div>
+            <h3>小 AI · 可选</h3>
+            <p>先叙后议。切片播完若还想多聊一句，AI 只补一段具体回看，不给下月金额目标。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-grid">
+      <div>
+        <strong style="color: var(--text);">叙账 · xLife</strong>
+        <p style="margin: 8px 0 0;">xuzhangapp.com · 用账单，叙述生活</p>
+      </div>
+      <div class="footer-links">
+        <a href="/legal/privacy.html">隐私政策</a>
+        <a href="/legal/terms.html">用户协议</a>
+        <a href="mailto:hello@xuzhang.app">hello@xuzhang.app</a>
+        <a href="mailto:support@xuzhang.app">support@xuzhang.app</a>
+      </div>
+    </div>
+    <div class="wrap" style="margin-top: 20px; font-size: 12px;">
+      © 2026 叙账 xLife · 保留所有权利 · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">苏ICP备2026035096号-1</a>
+    </div>
+  </footer>
+  <script src="site.js" defer></script>
+</body>
+</html>

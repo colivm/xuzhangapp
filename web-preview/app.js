@@ -15,7 +15,7 @@ const guideCards = [
   },
   {
     title: "AI 帮你看懂钱花去哪",
-    desc: "每天一条温和建议，不说教，只给你可执行的小提醒。",
+    desc: "每天一段具体小结，不说教，只把账单里的变化讲清楚。",
   },
   {
     title: "数据只在你手机里",
@@ -35,12 +35,12 @@ const memberScenePacks = [
     emoji: "🚇",
     label: "打工人通勤包",
     category: "交通",
-    desc: "比如：输入 ¥2，自动备注“日常地铁通勤出行”",
+    desc: "把通勤记成日常一口",
     rules: [
-      { max: 5, notes: ["日常地铁通勤出行", "公交短途出行打卡", "选择绿色出行，简单省心"] },
-      { max: 15, notes: ["公交短途出行打卡", "日常地铁通勤出行", "选择绿色出行，简单省心"] },
-      { max: 30, notes: ["选择绿色出行，简单省心", "日常地铁通勤出行", "公交短途出行打卡"] },
-      { max: 9999, notes: ["日常地铁通勤出行", "选择绿色出行，简单省心", "公交短途出行打卡"] },
+      { max: 5, notes: ["日常地铁通勤", "公交短途出行", "一段公共交通", "早班地铁到岗", "换乘通勤完成", "今天的路费", "刷卡进站，到站", "短途公交到家"] },
+      { max: 15, notes: ["公交+地铁组合通勤", "下班高峰一段路", "打车到地铁站接驳", "通勤路上买瓶水", "今天出行少折腾", "固定路线，熟悉的路", "早晚通勤各记一笔", "公交地铁一段路"] },
+      { max: 30, notes: ["雨天打车通勤", "加班后打车回家", "共享单车月卡里的一天", "停车/充电小费用", "今天路程稍长一点", "通勤多花了一点时间", "早晚两次出行", "这一程准时到达"] },
+      { max: 9999, notes: ["跨区通勤长途费", "出差市内交通", "高速/长途客车费", "一次较长的通勤路", "今天跑了不少路", "行程较满的一天路", "远距离往返", "为工作跑了不少路"] },
     ],
   },
   {
@@ -48,25 +48,77 @@ const memberScenePacks = [
     emoji: "🍵",
     label: "吃货专属包",
     category: "餐饮",
-    desc: "比如：输入 ¥12，自动备注“晨间咖啡唤醒日常”",
+    desc: "吃喝里的一句记录",
     rules: [
-      { max: 15, notes: ["晨间咖啡唤醒日常", "简单饮品放松心情", "随手添置早餐小食"] },
-      { max: 25, notes: ["简单饮品放松心情", "随手添置早餐小食", "晨间咖啡唤醒日常"] },
-      { max: 40, notes: ["随手添置早餐小食", "简单饮品放松心情", "晨间咖啡唤醒日常"] },
-      { max: 9999, notes: ["简单饮品放松心情", "随手添置早餐小食", "晨间咖啡唤醒日常"] },
+      { max: 15, notes: ["晨间咖啡", "简单饮品", "早餐小食", "豆浆包子早餐组合", "午前一杯奶茶", "便利店轻食补给", "早茶点心小份", "上班前快速吃一口"] },
+      { max: 25, notes: ["工作日午餐简餐", "外卖点到工位", "食堂一份热乎饭", "下午茶小点心", "中午简单吃一顿", "饱腹又不折腾的一顿", "忙里喝点什么", "中午一顿饭"] },
+      { max: 40, notes: ["晚餐小聚一份主菜", "周末早午餐", "尝试一家新店", "买菜顺路带点卤味", "做了一顿家常饭", "一顿想吃的饭", "热腾腾的面或饭", "今天这顿记下"] },
+      { max: 9999, notes: ["朋友小聚聚餐", "生日月吃一顿", "想吃了很久的一顿", "节日加菜", "家庭聚餐贡献一道", "认真吃一顿", "约会餐厅体验", "试了一家新店"] },
     ],
   },
   {
     id: "travel",
     emoji: "✈️",
-    label: "旅行预算包",
-    category: "其他",
-    desc: "比如：输入 ¥20，自动备注“短途出行小消费”",
+    label: "旅行路上包",
+    category: "交通",
+    desc: "路上的花费，也留一句",
     rules: [
-      { max: 20, notes: ["短途出行小消费", "沿途小吃简单打卡", "出行便携物资采购"] },
-      { max: 80, notes: ["沿途小吃简单打卡", "短途出行小消费", "出行便携物资采购"] },
-      { max: 200, notes: ["出行便携物资采购", "短途出行小消费", "沿途小吃简单打卡"] },
-      { max: 9999, notes: ["短途出行小消费", "出行便携物资采购", "沿途小吃简单打卡"] },
+      { max: 20, notes: ["短途出行小消费", "沿途小吃记一笔", "出行便携物资采购", "景点门口一瓶水", "小城漫步小花费", "街边明信片或小挂件", "公交日票/景区摆渡", "旅途中的轻量补给"] },
+      { max: 80, notes: ["展馆/景点门票", "民宿小用品补买", "旅途一顿特色简餐", "城市漫步咖啡歇脚", "伴手礼试吃装", "租车/骑行小时费", "行程里的一笔小开销", "路边摊吃了一口"] },
+      { max: 200, notes: ["经济型住宿这一晚", "城际大巴/高铁一段", "特色餐厅体验", "博物馆联票", "旅行装备小升级", "行程中较充实的一天", "小镇住宿加早午餐", "为风景多走一段路"] },
+      { max: 9999, notes: ["机票/高铁主段", "途中连住两晚", "行程里的重头戏", "目的地一日游团", "行李箱/装备购置", "长假出行大项", "带家人出门的一程", "这次行程记下"] },
+    ],
+  },
+  {
+    id: "care",
+    emoji: "💊",
+    label: "身体记录包",
+    category: "日用",
+    desc: "把身体小事记下来",
+    rules: [
+      { max: 20, notes: ["药店补一盒常备药", "日常护理小物", "一支眼药水", "维生素或小药片", "创可贴和棉签备一点", "小不舒服先记下", "身体小用品", "健康小物补齐"] },
+      { max: 60, notes: ["药店买药", "挂号问诊的一次记录", "换季护理用品补上", "牙膏牙线和口腔护理", "运动后买点恢复用品", "身体提醒先记下", "基础护理用品", "小病小痛记下"] },
+      { max: 200, notes: ["一次检查", "牙科护理的一段记录", "理疗/康复一次", "体检项目先记下来", "身体项目记清楚", "健康相关一笔", "问诊和用药都记清楚", "今天的护理记录"] },
+      { max: 9999, notes: ["体检套餐", "牙科治疗的一笔重要开销", "医院检查与治疗相关", "长期护理用品一次补齐", "恢复相关安排", "健康大项记下", "身体相关大笔支出", "长期护理安排"] },
+    ],
+  },
+  {
+    id: "home",
+    emoji: "🏠",
+    label: "居家日常包",
+    category: "日用",
+    desc: "家里的日常，也记清楚",
+    rules: [
+      { max: 20, notes: ["家里补个小物件", "厨房小用品补上", "一卷纸巾", "清洁小物", "给家添一点方便", "小修小补", "家里缺的补一点", "家里的小消耗"] },
+      { max: 80, notes: ["日化清洁用品补货", "水电燃气的一笔日常", "家里实用小物", "宽带/话费这类日常", "厨房和卫生间补给", "家里运转的小日常", "家里的小维护", "居家小补给"] },
+      { max: 300, notes: ["家电小维修记一笔", "物业/宽带相关日常", "给房间添一件东西", "床品收纳换新一点", "家里需要的东西补齐", "居住相关安排", "家里收拾一处", "这笔留给住处"] },
+      { max: 9999, notes: ["房租与押金", "大件家电或家具添置", "搬家相关安排", "家里维修的一笔大项", "长期居住安排", "家的基础支出", "住处安稳下来", "为家安排的一笔"] },
+    ],
+  },
+  {
+    id: "social",
+    emoji: "🎁",
+    label: "心意往来包",
+    category: "其他",
+    desc: "关系里的一小句记录",
+    rules: [
+      { max: 30, notes: ["顺路带了点心意", "咖啡时间叙旧", "给这次见面留一句", "带了点心意记下", "路过时想起了对方", "一起坐坐这一回", "带点东西去见面", "日常往来一笔"] },
+      { max: 100, notes: ["聚会里的一段热闹", "请一顿饭叙旧", "节日里带份小礼", "同事小聚记一笔", "和朋友见面一回", "这次相聚记下来", "一顿饭里的熟悉感", "关系里的一点往来"] },
+      { max: 300, notes: ["探望时带了份心意", "家庭聚餐的一点贡献", "一次相聚记下", "重要日子里见一面", "给记挂的人添点东西", "团圆时刻的一笔记录", "赴约的一段记录", "这次见面记下"] },
+      { max: 9999, notes: ["为一次重要相聚安排", "长途探望的一段记录", "重要仪式里的陪伴", "把这份记挂郑重记下", "为团圆多安排一点", "这一程是为了见面", "关系里的重要时刻", "给牵挂的人留一笔"] },
+    ],
+  },
+  {
+    id: "shopping",
+    emoji: "🛍️",
+    label: "日常添置包",
+    category: "购物",
+    desc: "把常用物品记清楚",
+    rules: [
+      { max: 30, notes: ["买个小物件", "给日常添一点方便", "看到合适的小东西", "小补给记一下", "刚好需要，就带回来了", "一点新鲜感", "给自己添个小物", "今天的小添置"] },
+      { max: 100, notes: ["补一件常用小物", "买到一件刚好需要的东西", "日常用品补齐", "日常质感小物", "这件小东西挺实用", "逛到合适的就带回家", "最近需要的一件", "把需要的东西安排上"] },
+      { max: 300, notes: ["挑了一件喜欢的", "给自己添一件好用的东西", "换新一件常用物", "这笔让日常方便一点", "计划里的小升级", "把想买的那件拿下", "今天买到一件合适的", "买到一件合适的"] },
+      { max: 9999, notes: ["入手一件大件", "长期使用的一次升级", "选过的一笔添置", "这件会用一阵子", "把心里惦记的东西带回来", "一次比较正式的换新", "给接下来添点方便", "一个重要物件"] },
     ],
   },
   {
@@ -74,13 +126,83 @@ const memberScenePacks = [
     emoji: "🐱",
     label: "铲屎官宠物包",
     category: "日用",
-    desc: "比如：输入 ¥20，自动备注“给{petName}买了小零食”",
+    desc: "{petName} 相关的小日常",
     rules: [
-      { max: 20, notes: ["给{petName}买了小零食", "给{petName}安排美味小点心", "补货宠物消耗小用品"] },
-      { max: 60, notes: ["为{petName}购置口粮用品", "给{petName}囤上爱吃的罐头", "入手小玩具，陪伴{petName}玩耍"] },
-      { max: 150, notes: ["购入{petName}专用主食与冻干", "安排{petName}日常驱虫护理", "带{petName}洗护美容，清爽干净"] },
-      { max: 9999, notes: ["带{petName}体检接种疫苗", "添置居家小窝与攀爬家具", "{petName}就医护理相关开销", "为{petName}选购高端营养口粮"] },
+      { max: 20, notes: ["给{petName}买了小零食", "给{petName}买点小点心", "补货宠物消耗小用品", "囤一包冻干", "给{petName}挑个小玩具", "猫砂/尿垫补货", "给{petName}加一罐罐头", "毛孩的小零食时间"] },
+      { max: 60, notes: ["为{petName}购置口粮用品", "给{petName}囤上罐头", "入手小玩具", "宠物洗护用品补货", "给{petName}买新碗新窝配件", "驱虫药常备补货", "毛孩营养膏一支", "给{petName}添件用品"] },
+      { max: 150, notes: ["购入{petName}专用主食与冻干", "安排{petName}日常驱虫护理", "带{petName}洗护美容，清爽干净", "宠物医院常规检查", "换季毛发护理记一笔", "给{petName}升级主食粮", "宠物保险/会员续费", "大件猫爬架小分期"] },
+      { max: 9999, notes: ["带{petName}体检接种疫苗", "添置居家小窝与攀爬家具", "{petName}就医护理认真记下", "为{petName}选购高端营养口粮", "宠物手术/治疗相关", "长途托运或寄养费用", "给{petName}安排年度体检套餐", "毛孩的大件生活升级"] },
     ],
+  },
+];
+const emptyStageLines = [
+  "记下一笔今天的生活",
+  "先从一个数字开始，留下一点今天。",
+  "不用想清楚，先把这一刻记下来。",
+  "数额在这就行，晚点可以补成一句生活记录。",
+];
+const coldStartWhispers = [
+  "金额在这就行，分类和备注可以先空着。",
+  "只填数额，也算把今天记下来。",
+  "不用解释为什么花，先记上就好。",
+  "分类我会先帮你猜，错了晚点再改。",
+  "这笔先放进账本，晚点再补一句也行。",
+  "记完去首页，今天会多一段痕迹。",
+  "今晚回放时，这一笔会算进今天。",
+  "花出去的是今天真实发生的一件事。",
+  "记一笔，今天又多了一条可回看的记录。",
+  "细节晚点再补也行，数额先按住这一刻。",
+  "早上记下的，会并进今天前半段的故事。",
+  "夜里记下的，留给今天的收束来讲。",
+  "周末记下的，算进这段日子的一个脚注。",
+  "想不起具体买了什么，也没关系。",
+  "不用挑分类，先把这一刻记下来。",
+];
+const brandsLite = [
+  {
+    id: "luckin",
+    displayName: "瑞幸咖啡",
+    aliases: ["瑞幸", "luckin"],
+    category: "餐饮",
+    emotion: "早班路上续一口",
+    mood: "咖啡提神",
+    lines: ["早班路上续一口", "蓝杯提个神", "赶路前醒一醒"],
+  },
+  {
+    id: "starbucks",
+    displayName: "星巴克",
+    aliases: ["星巴克", "starbucks"],
+    category: "餐饮",
+    emotion: "在店里坐一会儿",
+    mood: "片刻停靠",
+    lines: ["在店里坐一会儿", "坐下来喝完这一杯", "给早上留个停顿"],
+  },
+  {
+    id: "mcd",
+    displayName: "麦当劳",
+    aliases: ["麦当劳", "mcdonald", "mcd"],
+    category: "餐饮",
+    emotion: "熟悉味道吃一顿",
+    mood: "熟悉一餐",
+    lines: ["熟悉味道吃一顿", "忙里吃稳一顿", "这一餐简单又省心"],
+  },
+  {
+    id: "meituan",
+    displayName: "美团外卖",
+    aliases: ["美团外卖", "美团"],
+    category: "餐饮",
+    emotion: "外卖送来这一餐",
+    mood: "饭到手边",
+    lines: ["外卖送来这一餐", "忙里也吃上了", "饭菜送到手边"],
+  },
+  {
+    id: "didi",
+    displayName: "滴滴出行",
+    aliases: ["滴滴出行", "滴滴", "didi"],
+    category: "交通",
+    emotion: "今天坐车过去",
+    mood: "顺利到达",
+    lines: ["今天坐车过去", "赶路少走一段", "这一程到了"],
   },
 ];
 const CATEGORY_AI_ENDPOINT = "http://localhost:8787/v1/category/recommend";
@@ -96,9 +218,9 @@ const PERIOD_TIMEOUT_MS = {
   weekly: 22000,
   monthly: 35000,
 };
-const DEBUG_UI_ENABLED = false;
+const DEBUG_UI_ENABLED = new URLSearchParams(window.location.search).get("debug") === "1";
 const UI_TABS = new Set(["home", "record", "stats", "insight", "settings"]);
-const UI_MODALS = new Set(["none", "guide", "account", "ocrConfirm", "ocrCategory", "monthlyTrial", "billDateRange", "deleteConfirm", "billPlayback"]);
+const UI_MODALS = new Set(["none", "guide", "account", "ocrConfirm", "ocrCategory", "monthlyTrial", "monthlyInsight", "todayInsight", "traceDetail", "traceSlice", "settingsSheet", "billDateRange", "deleteConfirm", "billPlayback"]);
 const UI_INPUT_FOCUS = new Set(["none", "amount", "title"]);
 const ERROR_LOG_KEY = "qingzhang_runtime_errors_v1";
 const ANALYTICS_KEY = "qingzhang_product_analytics_v1";
@@ -112,7 +234,7 @@ const DEFAULT_MEMBER_NUDGE_POLICY = {
   prodSceneCooldownDays: 7,
 };
 const AI_GLOBAL_STYLE_PROMPT =
-  "你是治愈系记账陪伴助手，全程温柔平和，绝不评判、不指责、不劝省钱、不说教、不制造消费焦虑。只客观总结支出结构、消费偏好、生活节奏；多用正向、治愈、生活化语句。禁止词汇：超支、浪费、克制、理性消费、减少、控制、不必要、节约。按要求严格控制字数，段落清爽，语气柔软治愈。";
+  "你是叙账的生活记录助手。语气具体、短、像真实备注；可以有理解和鼓励，但必须落在真实账单上。不要鸡汤、不要心理分析、不要预算说教。优先说具体场景、类目、笔数、金额和用户写过的词。禁止词汇：超支、浪费、克制、理性消费、减少、控制、不必要、节约、小确幸、治愈、接住、高光、温柔。按要求严格控制字数，段落清爽。";
 const AI_COPY_LIMITS = {
   daily: { min: 35, max: 45 },
   weekly: { min: 70, max: 90 },
@@ -137,15 +259,103 @@ const AI_SOFT_REPLACEMENTS = {
   浪费: "支出选择",
   克制: "放松看待",
   理性消费: "按自己节奏安排",
-  减少: "慢慢留意",
-  压缩: "温和调整",
+  减少: "留意",
+  压缩: "调整",
   控制: "从容安排",
-  节制: "轻松平衡",
+  节制: "留一点余地",
   不必要: "可选开销",
-  节约: "更从容",
+  节约: "更清楚",
   纠正: "回看",
   管控: "整理",
 };
+
+const RISK_PRIVACY_PATTERNS = [
+  { re: /https?:\/\/|www\.|[\w.-]+@[\w.-]+\.\w+/i, label: "链接或邮箱" },
+  { re: /\b1[3-9]\d{9}\b/, label: "手机号" },
+  { re: /\b\d{17}[\dXx]\b/, label: "身份证号" },
+  { re: /\b(?:\d[ -]?){12,19}\b/, label: "银行卡号" },
+  { re: /(验证码|密码|口令|token|密钥|银行卡|身份证|手机号).{0,8}\d{4,}/i, label: "敏感信息" },
+];
+const RISK_CONTENT_WORDS = [
+  "傻逼",
+  "操你",
+  "约炮",
+  "裸聊",
+  "色情",
+  "赌博",
+  "毒品",
+  "自杀",
+  "杀人",
+  "恐怖袭击",
+];
+
+function normalizeUserText(value, maxLength) {
+  const compact = String(value || "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return compact.slice(0, maxLength);
+}
+
+function riskReasonForText(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const privacyHit = RISK_PRIVACY_PATTERNS.find((item) => item.re.test(text));
+  if (privacyHit) return `包含${privacyHit.label}`;
+  const compact = text.replace(/\s/g, "").toLowerCase();
+  const wordHit = RISK_CONTENT_WORDS.find((word) => compact.includes(word.toLowerCase()));
+  if (wordHit) return "包含不适合展示的词";
+  return "";
+}
+
+function validateDisplayName(value, { fallback = "叙帐用户", label = "昵称", min = 1, max = 12 } = {}) {
+  const normalized = normalizeUserText(value, max);
+  if (!normalized) return { ok: true, value: fallback };
+  if (!new RegExp(`^[\\u4e00-\\u9fa5A-Za-z0-9_·-]{${min},${max}}$`).test(normalized)) {
+    return { ok: false, value: fallback, message: `${label}只能使用 ${min}-${max} 个中文、字母或数字` };
+  }
+  const reason = riskReasonForText(normalized);
+  if (reason) return { ok: false, value: fallback, message: `${label}${reason}，请换一个` };
+  return { ok: true, value: normalized };
+}
+
+function validateManualNote(value, { allowEmpty = true } = {}) {
+  const normalized = normalizeUserText(value, 32);
+  if (!normalized) {
+    return allowEmpty
+      ? { ok: true, value: "" }
+      : { ok: false, value: "", message: "备注不能为空" };
+  }
+  const reason = riskReasonForText(normalized);
+  if (reason) return { ok: false, value: "", message: `备注${reason}，请换一句更日常的说法` };
+  return { ok: true, value: normalized };
+}
+
+const MEMBER_BENEFITS = [
+  {
+    title: "🎬 周/月生活切片无限回看",
+    desc: "统计页「本周生活切片」「本月生活章」不限次数播放；用章节卡片回看这段时间花了什么、节奏如何。",
+  },
+  {
+    title: "📝 场景备注包 + 宠物专属昵称",
+    desc: "通勤、吃饭、居家、添置、身体、往来、旅行、宠物等备注包；自定义昵称（2～6 字）会用于宠物相关记录。",
+  },
+  {
+    title: "📷 OCR 识票不限次",
+    desc: "拍照导入账单；免费用户每日 3 次，会员不限（可设软上限防滥用，商店仍写「不限」）。",
+  },
+  {
+    title: "☁️ 云端备份 + 纯净无广告",
+    desc: "登录后账单可同步云端、换机不丢；全程无营销弹窗。天气/季节提示会随会员模板更完整。",
+  },
+  {
+    title: "💬 小 AI 说 · 播后可选续聊（不限次）",
+    desc: "生活切片讲完后，若想多读一句再用；含季/年回看（需 ai-proxy 会员 JWT）。",
+  },
+];
+
+const MEMBER_FREE_QUOTA_FOOTNOTE =
+  "免费体验：本周生活切片每自然周 1 次 · 本月生活章终生 3 次 · OCR 每日 3 次 · 今日流水回放每日 1 次。开通会员后上述回访与识票不限。";
 const HOT_WEATHER_THRESHOLD_C = 30;
 const MONTH_END_START_DAY = 26;
 const MONTH_EXPENSE_SOFT_THRESHOLD = 3500;
@@ -173,84 +383,84 @@ const WEATHER_HINT_COOLDOWN_KEY = "qingzhang_weather_hint_cooldown_v1";
 const WEATHER_AI_PET_COOLDOWN_KEY = "qingzhang_weather_ai_pet_cooldown_v1";
 const petCopy = {
   companion: [
-    "我在这儿陪你，一起把钱花明白。",
-    "每一笔记录，都是在帮未来的你减压，{petName}一直在。",
-    "慢慢来，记账不是为了苛责自己，而是更了解自己。",
+    "我在这儿，陪你把今天记清楚。",
+    "有一笔就记一笔，{petName}在旁边看着。",
+    "不急，先留下这一笔。",
     "不想被打扰的话，长按我就能把我藏起来啦。",
   ],
   recordSaved: [
-    "记下来的每一笔，都是你的掌控感呀！{petName}为你点赞～",
-    "今天也按时记账啦，你超棒的！",
-    "这笔记录得很好，继续保持这个节奏～",
-    "今天的小快乐，也被好好记下来了。",
+    "已记下，回头能在账本里找到。",
+    "这一笔已经留在今天。",
+    "记录好了，可以继续下一件事。",
+    "这笔先收进账本。",
   ],
-  lightScene: ["今天的奶茶 / 咖啡，也记得记录一下哦～", "偶尔的小快乐，也要好好记下来呀。"],
+  lightScene: ["奶茶 / 咖啡也可以留一句。", "小花费也能先记下。"],
   weatherHint: [
-    "如果开启定位，我可以根据天气陪你说悄悄话，治愈感满满哦～",
-    "允许获取天气后，我会更懂你的小日常✨",
-    "天冷、降温、下雨天，我都可以温柔提醒你，要不要浅浅授权一下？（前往设置开启）",
+    "开启天气后，雨天、降温这些情况会多一句提示。",
+    "允许获取天气后，提示会更贴近当天。",
+    "天冷、降温、下雨天，可以补一句记录。（前往设置开启）",
   ],
   weatherContext: {
-    coldDrink: "今天外面有点冷，你这杯热饮刚好暖到了自己。小小花费，是给自己的温柔，不用焦虑。",
-    weekendRelax: "难得的周末放松一下，这笔快乐消费很值得，你值得好好奖励自己。",
-    lateNightSnack: "忙了一天，深夜的小奖励很正常。偶尔的小放松，不需要苛责自己。",
+    coldDrink: "今天外面有点冷，这杯热饮可以留一句。",
+    weekendRelax: "周末这笔休闲花费，先记下来。",
+    lateNightSnack: "深夜这笔小食，记清时间就好。",
     hotNoCool: [
-      "今天好热呀～要不要奖励自己一杯小饮料呢？",
-      "外面热乎乎的，{petName}想提醒你：来点清凉小快乐也不错呀。",
-      "天气这么热，给自己安排一份清爽小补给吧，我举爪支持你～",
+      "今天很热，饮料这类小花费也可以记下。",
+      "外面热，清凉饮品也可以留一句。",
+      "热天的小补给，记一笔就行。",
     ],
     rainyHome: [
-      "外面在下雨，今天在家慢慢待着也很治愈，给自己一点松弛感吧。",
-      "雨天最适合把节奏放慢，{petName}陪你把今天过得软乎乎的。",
-      "下雨天就别赶路啦，窝在舒服的小角落里，也是一种温柔生活。",
+      "外面在下雨，家里的花费可以按日常记。",
+      "雨天记录先放轻，记清这一笔就好。",
+      "下雨天的居家小开销，留在今天。",
     ],
     monthEndSoft: [
-      "快到月末啦，这个月你已经很认真记录了，接下来慢慢花、慢慢过就很好。",
-      "月末节奏稍快也没关系，{petName}陪你把日子过稳稳的，不着急。",
-      "这个月辛苦啦，月末给自己一点从容感，按你的节奏继续就很棒。",
+      "快到月末了，这几笔会进入月记。",
+      "月末记录先保持清楚，之后再回看。",
+      "这个月快收尾了，今天这笔也留上。",
     ],
     weekendHealing: [
-      "周末到啦，今天就轻松一点，去做一件让自己开心的小事吧。",
-      "周末是补充能量的好时候，花点小钱换一点松弛感，也很值得。",
-      "难得周末，记账继续，快乐也继续，{petName}陪你慢慢享受生活。",
+      "周末这笔，留个简单备注也可以。",
+      "周末小花费，记下场景就够。",
+      "周末这笔先放进账本。",
     ],
     noExpenseCalm: [
-      "今天还没花钱也没关系，按自己的节奏生活就很好，{petName}在这儿陪你。",
-      "今天像一口慢慢呼吸的空气，没消费也很正常，舒服就好。",
+      "今天还没花钱，账本先空着也可以。",
+      "今天还没有记录，等有一笔再写。",
     ],
     commuteSteady: [
-      "今天通勤开销很稳定，你的生活节奏真的很有秩序感。",
-      "这几笔出行花费都很日常，稳稳当当地过日子就很安心。",
+      "今天通勤开销比较固定。",
+      "这几笔出行都在日常路线上。",
     ],
     groceryWarm: [
-      "今天把生活小补给安排得很好，柴米油盐也是被认真照顾的温柔。",
-      "这些日用和餐饮花费很踏实，日子被你收拾得暖暖的。",
+      "今天有一些日常补给。",
+      "这些日用和餐饮花费都先记清楚。",
     ],
     highSpendComfort: [
-      "今天花得稍微多一点也没关系，重要的是你有在认真记录和感受生活。",
-      "偶尔高一点的开销很正常，{petName}陪你慢慢把节奏找回来就好。",
+      "今天金额高一点，先把明细留清楚。",
+      "这笔金额比较高，备注可以写具体一点。",
     ],
   },
   weatherAiFallback: [
-    "今天的天气和你的消费节奏都很温和，{petName}觉得你把日子安排得刚刚好。",
-    "我看了看今天的花费和天气，整体都很稳，按这个节奏生活就很舒服。",
-    "不管晴天还是阴天，你今天的每一笔都很踏实，慢慢记录就会更安心。",
-    "今天的消费主要在日常刚需，天气也很配合，{petName}继续陪你轻松记账。",
+    "今天的天气和花费先记到这里。",
+    "今天的记录不多，先按现有几笔看。",
+    "晴天或阴天，都先把账本留清楚。",
+    "今天主要是日常花费，{petName}陪你记着。",
   ],
   aiReview: [
-    "复盘完啦，你这个月的消费节奏很稳！",
-    "分析完啦，你比上个月更了解自己的钱了呢～",
-    "别担心，复盘不是为了批评你，而是为了让你花得更轻松。",
-    "数据不会骗你，但也别苛责自己，保持这个节奏就很好。",
+    "复盘整理好了。",
+    "这一段账单已经写成小记。",
+    "回看不是批评，是把记录看清楚。",
+    "数据放在这儿，之后再回头看也行。",
   ],
-  streak: ["已经坚持 {days} 天啦，你离目标越来越近了！", "连续记录 {days} 天，习惯正在长出来！"],
+  streak: ["已经连续记了 {days} 天。", "连续记录 {days} 天，账本更完整了。"],
 };
 const pageTitles = {
   home: "今日",
-  record: "记一笔",
-  stats: "看看花",
-  insight: "小 AI 说",
-  settings: "我的小窝",
+  record: "记下这一笔",
+  stats: "这一段痕迹",
+  insight: "生活复盘",
+  settings: "我的叙账",
 };
 
 const PET_SCENE_RULES = [
@@ -298,7 +508,7 @@ const PET_SCENE_RULES = [
 
 const defaultState = {
   settings: {
-    displayName: "序帐用户",
+    displayName: "叙帐用户",
     appearance: "system",
     syncEnabled: false,
     remoteAIEnabled: false,
@@ -339,11 +549,14 @@ const refs = {
   tabs: [...document.querySelectorAll(".tab")],
   jumpButtons: [...document.querySelectorAll("[data-jump]")],
   quickManualBtn: document.getElementById("quickManualBtn"),
+  homeStoryTitle: document.getElementById("homeStoryTitle"),
+  homeStorySubtitle: document.getElementById("homeStorySubtitle"),
+  homePlaybackEntryBtn: document.getElementById("homePlaybackEntryBtn"),
+  homePlaybackEntryHint: document.getElementById("homePlaybackEntryHint"),
   todayTotal: document.getElementById("todayTotal"),
   weekTotal: document.getElementById("weekTotal"),
   homeTodayList: document.getElementById("homeTodayList"),
   homeTodayEmptyArt: document.getElementById("homeTodayEmptyArt"),
-  playbackTodayBtn: document.getElementById("playbackTodayBtn"),
   homeInsightSummary: document.getElementById("homeInsightSummary"),
   homeInsightHint: document.getElementById("homeInsightHint"),
   homeActionCard: document.getElementById("homeActionCard"),
@@ -364,10 +577,31 @@ const refs = {
   memberNudgeBtn: document.getElementById("memberNudgeBtn"),
   memberNudgeDismissBtn: document.getElementById("memberNudgeDismissBtn"),
   recordModeSegment: document.getElementById("recordModeSegment"),
+  recordImportLink: document.getElementById("recordImportLink"),
+  recordManualLink: document.getElementById("recordManualLink"),
   modeButtons: [...document.querySelectorAll(".mode-btn")],
   manualForm: document.getElementById("manualForm"),
   ocrForm: document.getElementById("ocrForm"),
   recordFormTitle: document.getElementById("recordFormTitle"),
+  amountStage: document.getElementById("amountStage"),
+  lifeEntryPreview: document.getElementById("lifeEntryPreview"),
+  lifeEntryHeadline: document.getElementById("lifeEntryHeadline"),
+  lifeEntryHeadlineHint: document.getElementById("lifeEntryHeadlineHint"),
+  lifeEntryAmount: document.getElementById("lifeEntryAmount"),
+  lifeEntryEmotion: document.getElementById("lifeEntryEmotion"),
+  lifeEntryMeta: document.getElementById("lifeEntryMeta"),
+  lifeEntryChangeCategory: document.getElementById("lifeEntryChangeCategory"),
+  lifeEntryQuietActions: document.getElementById("lifeEntryQuietActions"),
+  lifeEntryNoteEditor: document.getElementById("lifeEntryNoteEditor"),
+  lifeEntryCategoryPanel: document.getElementById("lifeEntryCategoryPanel"),
+  recordPrimaryActions: document.getElementById("recordPrimaryActions"),
+  recordEditSecondaryRow: document.getElementById("recordEditSecondaryRow"),
+  recordDetailsFold: document.getElementById("recordDetailsFold"),
+  recordDetailsToggle: document.getElementById("recordDetailsToggle"),
+  recordDetailsToggleHint: document.getElementById("recordDetailsToggleHint"),
+  recordDetailsBody: document.getElementById("recordDetailsBody"),
+  prefillDemoBar: document.getElementById("prefillDemoBar"),
+  prefillDemoButtons: [...document.querySelectorAll("[data-prefill-mode]")],
   amountInput: document.getElementById("amountInput"),
   amountDisplay: document.getElementById("amountDisplay"),
   amountQuickKeyboard: document.getElementById("amountQuickKeyboard"),
@@ -388,8 +622,12 @@ const refs = {
   editDateBtn: document.getElementById("editDateBtn"),
   saveRecordBtn: document.getElementById("saveRecordBtn"),
   deleteRecordBtn: document.getElementById("deleteRecordBtn"),
+  scenePackMoreSheet: document.getElementById("scenePackMoreSheet"),
+  scenePackMoreCloseBtn: document.getElementById("scenePackMoreCloseBtn"),
+  scenePackMoreList: document.getElementById("scenePackMoreList"),
   ocrImageInput: document.getElementById("ocrImageInput"),
   ocrPickImageBtn: document.getElementById("ocrPickImageBtn"),
+  ocrDemoResultBtn: document.getElementById("ocrDemoResultBtn"),
   ocrLoadingBox: document.getElementById("ocrLoadingBox"),
   ocrProgressBar: document.getElementById("ocrProgressBar"),
   ocrConfirmOverlay: document.getElementById("ocrConfirmOverlay"),
@@ -404,9 +642,38 @@ const refs = {
   ocrConfirmMeta: document.getElementById("ocrConfirmMeta"),
   ocrDraftSummary: document.getElementById("ocrDraftSummary"),
   ocrDraftGroups: document.getElementById("ocrDraftGroups"),
+  ocrResolveAllBtn: document.getElementById("ocrResolveAllBtn"),
   ocrClearResolvedBtn: document.getElementById("ocrClearResolvedBtn"),
   ocrCategoryOverlay: document.getElementById("ocrCategoryOverlay"),
   ocrCategoryOptions: document.getElementById("ocrCategoryOptions"),
+  traceRangeWeekBtn: document.getElementById("traceRangeWeekBtn"),
+  traceRangeMonthBtn: document.getElementById("traceRangeMonthBtn"),
+  traceChapterKicker: document.getElementById("traceChapterKicker"),
+  traceHeroNarrative: document.getElementById("traceHeroNarrative"),
+  traceHeroPreview: document.getElementById("traceHeroPreview"),
+  traceHeroPlayBtn: document.getElementById("traceHeroPlayBtn"),
+  traceHeroRecordsList: document.getElementById("traceHeroRecordsList"),
+  traceHeroEmpty: document.getElementById("traceHeroEmpty"),
+  traceDetailOpenBtn: document.getElementById("traceDetailOpenBtn"),
+  traceDetailModal: document.getElementById("traceDetailModal"),
+  traceDetailCloseBtn: document.getElementById("traceDetailCloseBtn"),
+  traceDetailMeta: document.getElementById("traceDetailMeta"),
+  traceTrendToggleBtn: document.getElementById("traceTrendToggleBtn"),
+  traceSliceModal: document.getElementById("traceSliceModal"),
+  traceSliceCloseBtn: document.getElementById("traceSliceCloseBtn"),
+  traceSliceKicker: document.getElementById("traceSliceKicker"),
+  traceSliceTitle: document.getElementById("traceSliceTitle"),
+  traceSliceTeaser: document.getElementById("traceSliceTeaser"),
+  traceSliceStage: document.getElementById("traceSliceStage"),
+  traceSlicePage: document.getElementById("traceSlicePage"),
+  traceSliceSymbol: document.getElementById("traceSliceSymbol"),
+  traceSliceChapterTitle: document.getElementById("traceSliceChapterTitle"),
+  traceSliceNarration: document.getElementById("traceSliceNarration"),
+  traceSliceSupport: document.getElementById("traceSliceSupport"),
+  traceSliceDots: document.getElementById("traceSliceDots"),
+  traceSlicePrevBtn: document.getElementById("traceSlicePrevBtn"),
+  traceSlicePlayBtn: document.getElementById("traceSlicePlayBtn"),
+  traceSliceNextBtn: document.getElementById("traceSliceNextBtn"),
   billDateFilterBtn: document.getElementById("billDateFilterBtn"),
   billCategoryFilter: document.getElementById("billCategoryFilter"),
   billExpenseTotal: document.getElementById("billExpenseTotal"),
@@ -419,14 +686,13 @@ const refs = {
   billTrendPeakDot: document.getElementById("billTrendPeakDot"),
   billTrendPeakLabel: document.getElementById("billTrendPeakLabel"),
   billTrendInsight: document.getElementById("billTrendInsight"),
-  monthlyTrialText: document.getElementById("monthlyTrialText"),
+  monthlyTrialInline: document.getElementById("monthlyTrialInline"),
+  monthlyFootnoteDot: document.getElementById("monthlyFootnoteDot"),
   generateMonthlyInsightBtn: document.getElementById("generateMonthlyInsightBtn"),
   monthlyAIStatus: document.getElementById("monthlyAIStatus"),
-  monthlyInsightContent: document.getElementById("monthlyInsightContent"),
-  monthlyInsightSummary: document.getElementById("monthlyInsightSummary"),
-  monthlyInsightStructure: document.getElementById("monthlyInsightStructure"),
-  monthlyInsightAdvice: document.getElementById("monthlyInsightAdvice"),
-  monthlySoftPlanBtn: document.getElementById("monthlySoftPlanBtn"),
+  monthlySheetKicker: document.getElementById("monthlySheetKicker"),
+  monthlyJournalBody: document.getElementById("monthlyJournalBody"),
+  monthlyJournalClosing: document.getElementById("monthlyJournalClosing"),
   monthlySaveSummaryBtn: document.getElementById("monthlySaveSummaryBtn"),
   monthlyToneSwitchBtn: document.getElementById("monthlyToneSwitchBtn"),
   advancedInsightToggleBtn: document.getElementById("advancedInsightToggleBtn"),
@@ -436,6 +702,12 @@ const refs = {
   monthlyTrialModalBody: document.getElementById("monthlyTrialModalBody"),
   monthlyTrialModalOkBtn: document.getElementById("monthlyTrialModalOkBtn"),
   monthlyTrialUpgradeBtn: document.getElementById("monthlyTrialUpgradeBtn"),
+  monthlyInsightModal: document.getElementById("monthlyInsightModal"),
+  monthlyInsightCloseBtn: document.getElementById("monthlyInsightCloseBtn"),
+  todayInsightModal: document.getElementById("todayInsightModal"),
+  todayInsightCloseBtn: document.getElementById("todayInsightCloseBtn"),
+  insightMonthlyOpenBtn: document.getElementById("insightMonthlyOpenBtn"),
+  insightTodayOpenBtn: document.getElementById("insightTodayOpenBtn"),
   deleteConfirmModal: document.getElementById("deleteConfirmModal"),
   deleteConfirmCancelBtn: document.getElementById("deleteConfirmCancelBtn"),
   deleteConfirmOkBtn: document.getElementById("deleteConfirmOkBtn"),
@@ -449,6 +721,8 @@ const refs = {
   billDateRangeConfirmBtn: document.getElementById("billDateRangeConfirmBtn"),
   billPlaybackModal: document.getElementById("billPlaybackModal"),
   billPlaybackCloseBtn: document.getElementById("billPlaybackCloseBtn"),
+  billPlaybackTitle: document.getElementById("billPlaybackTitle"),
+  billPlaybackSubtitle: document.getElementById("billPlaybackSubtitle"),
   billPlaybackTimeline: document.getElementById("billPlaybackTimeline"),
   billPlaybackProgressBar: document.getElementById("billPlaybackProgressBar"),
   billPlaybackDoneText: document.getElementById("billPlaybackDoneText"),
@@ -459,16 +733,28 @@ const refs = {
   insightSummary: document.getElementById("insightSummary"),
   insightAction: document.getElementById("insightAction"),
   insightEncourage: document.getElementById("insightEncourage"),
+  insightWeekKicker: document.getElementById("insightWeekKicker"),
+  insightJournalBody: document.getElementById("insightJournalBody"),
+  insightJournalClosing: document.getElementById("insightJournalClosing"),
   weeklyRhythmBtn: document.getElementById("weeklyRhythmBtn"),
   weeklyShareBtn: document.getElementById("weeklyShareBtn"),
   weeklyTagBtn: document.getElementById("weeklyTagBtn"),
-  insightHistory: document.getElementById("insightHistory"),
-  insightHistoryEmpty: document.getElementById("insightHistoryEmpty"),
   generateInsightBtn: document.getElementById("generateInsightBtn"),
   dailyAIStatus: document.getElementById("dailyAIStatus"),
   accountEntryBtn: document.getElementById("accountEntryBtn"),
   accountAvatar: document.getElementById("accountAvatar"),
   accountEntryText: document.getElementById("accountEntryText"),
+  settingsIdentityName: document.getElementById("settingsIdentityName"),
+  settingsIdentityMeta: document.getElementById("settingsIdentityMeta"),
+  settingsAccountRowBtn: document.getElementById("settingsAccountRowBtn"),
+  settingsAccountRowMeta: document.getElementById("settingsAccountRowMeta"),
+  settingsAppearanceMeta: document.getElementById("settingsAppearanceMeta"),
+  settingsSheetButtons: [...document.querySelectorAll("[data-settings-sheet]")],
+  settingsSheetModal: document.getElementById("settingsSheetModal"),
+  settingsSheetCloseBtn: document.getElementById("settingsSheetCloseBtn"),
+  settingsSheetSections: [...document.querySelectorAll(".settings-sheet-section")],
+  privacyPolicyBtn: document.getElementById("privacyPolicyBtn"),
+  termsLinkBtn: document.getElementById("termsLinkBtn"),
   accountOverlay: document.getElementById("accountOverlay"),
   accountCloseBtn: document.getElementById("accountCloseBtn"),
   accountLoginView: document.getElementById("accountLoginView"),
@@ -537,6 +823,12 @@ let petLongPressTriggered = false;
 let pendingPetBubbleText = "";
 let petActionTimer = null;
 let scenePackExpanded = false;
+let prefillDemoMode = "generic";
+let recordDetailsExpanded = false;
+let noteEditorExpanded = false;
+let categoryPanelExpanded = false;
+let previewLineVariant = 0;
+let previewLineWasRotated = false;
 let weatherGeo = null;
 let weatherSnapshot = null;
 let isRequestingWeatherPermission = false;
@@ -556,6 +848,16 @@ let playbackElapsedBeforePause = 0;
 let playbackActiveIndex = -1;
 let playbackRecords = [];
 let playbackRunning = false;
+let traceSliceChapters = [];
+let traceSliceActiveIndex = 0;
+let traceSliceTimer = null;
+let traceSlicePlaying = false;
+let traceSliceTransitionDir = 1;
+let traceSliceAnimating = false;
+let traceSliceHasRendered = false;
+let traceSliceMotionToken = 0;
+let traceTrendExpanded = false;
+let monthlyJournalRevealTimer = null;
 const uiRuntimeState = {
   tab: "home",
   modal: "none",
@@ -572,10 +874,11 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return structuredClone(defaultState);
     const parsed = JSON.parse(raw);
-    return {
+    const next = {
       ...structuredClone(defaultState),
       ...parsed,
       settings: { ...defaultState.settings, ...parsed.settings },
+      recordMode: "manual",
       items: Array.isArray(parsed.items) ? parsed.items : [],
       insights: Array.isArray(parsed.insights) ? parsed.insights : [],
       latestActionCard:
@@ -587,6 +890,11 @@ function loadState() {
             }
           : null,
     };
+    const displayName = validateDisplayName(next.settings.displayName, { fallback: "叙帐用户", label: "昵称", min: 1, max: 12 });
+    next.settings.displayName = displayName.ok ? displayName.value : "叙帐用户";
+    const petName = validateDisplayName(next.settings.userPetNickname, { fallback: "", label: "宠物昵称", min: 2, max: 6 });
+    next.settings.userPetNickname = petName.ok ? petName.value : "";
+    return next;
   } catch {
     return structuredClone(defaultState);
   }
@@ -638,9 +946,15 @@ function syncOverlayScrollLock() {
     refs.ocrConfirmOverlay,
     refs.ocrCategoryOverlay,
     refs.monthlyTrialModal,
+    refs.monthlyInsightModal,
+    refs.todayInsightModal,
+    refs.traceDetailModal,
+    refs.traceSliceModal,
+    refs.settingsSheetModal,
     refs.billDateRangeModal,
     refs.deleteConfirmModal,
     refs.billPlaybackModal,
+    refs.scenePackMoreSheet,
   ];
   const hasVisibleOverlay = overlays.some((el) => el && !el.classList.contains("hidden"));
   document.body.classList.toggle("modal-open", hasVisibleOverlay);
@@ -654,9 +968,15 @@ function watchOverlayChanges() {
     refs.ocrConfirmOverlay,
     refs.ocrCategoryOverlay,
     refs.monthlyTrialModal,
+    refs.monthlyInsightModal,
+    refs.todayInsightModal,
+    refs.traceDetailModal,
+    refs.traceSliceModal,
+    refs.settingsSheetModal,
     refs.billDateRangeModal,
     refs.deleteConfirmModal,
     refs.billPlaybackModal,
+    refs.scenePackMoreSheet,
   ].filter(Boolean);
   overlays.forEach((el) => {
     const observer = new MutationObserver(() => syncOverlayScrollLock());
@@ -1076,16 +1396,16 @@ function isPetModeActive() {
 function getExperienceCopy() {
   if (isPetModeActive()) {
     return {
-      homeInsightEmpty: "记几笔账，明天来这里看 AI 给你的专属小结。",
-      dailyNudge: "花 10 秒，轻松记一笔",
-      dailyInsightEmpty: "还没有今日复盘。",
-      dailyHistoryTag: "每日建议",
-      weeklyHistoryTag: "近7天复盘",
-      insightBtnIdle: "换个轻读版本",
-      insightBtnLoading: "正在准备轻读…",
-      monthlyBtnIdle: "生成月度复盘",
-      monthlyBtnLoading: "正在生成月度复盘...",
-      monthlyBtnLocked: '<span class="lock-icon">🔒︎</span>生成月度复盘',
+      homeInsightEmpty: "记几笔账，明天来这里看今日小记。",
+      dailyNudge: "用 10 秒，记一笔",
+      dailyInsightEmpty: "还没有今日小记。",
+      dailyHistoryTag: "今日小记",
+      weeklyHistoryTag: "近7天周记",
+      insightBtnIdle: "换个说法再读",
+      insightBtnLoading: "正在整理今天的小记…",
+      monthlyBtnIdle: "生成月记",
+      monthlyBtnLoading: "正在生成月记...",
+      monthlyBtnLocked: '<span class="lock-icon">🔒︎</span>生成月记',
     };
   }
   return {
@@ -1093,26 +1413,26 @@ function getExperienceCopy() {
     dailyNudge: "花 10 秒，完成一条记录",
     dailyInsightEmpty: "还没有今日小结。",
     dailyHistoryTag: "今日小结",
-    weeklyHistoryTag: "近7天分析",
-    insightBtnIdle: "换个轻读版本",
-    insightBtnLoading: "正在准备轻读…",
-    monthlyBtnIdle: "生成月度分析",
-    monthlyBtnLoading: "正在生成月度分析...",
-    monthlyBtnLocked: '<span class="lock-icon">🔒︎</span>生成月度分析',
+    weeklyHistoryTag: "近7天周记",
+    insightBtnIdle: "换个说法再读",
+    insightBtnLoading: "正在整理今天的小记…",
+    monthlyBtnIdle: "生成月记",
+    monthlyBtnLoading: "正在生成月记...",
+    monthlyBtnLocked: '<span class="lock-icon">🔒︎</span>生成月记',
   };
 }
 
 function getAIStatusText(statusKind) {
   const petMode = isPetModeActive();
   const petCopyText = {
-    live: "AI 在线，实时分析中",
+    live: "AI 在线，正在整理",
     error: "本地计算，AI 服务忙，稍后再试",
     fallback: "本地兜底，稳定可用",
   };
   const neutralCopyText = {
-    live: "AI 在线，已完成实时分析",
+    live: "AI 在线，已完成整理",
     error: "本地计算，服务繁忙，已切换离线结果",
-    fallback: "本地结果可用，分析已完成",
+    fallback: "本地结果可用，小记已完成",
   };
   const textMap = petMode ? petCopyText : neutralCopyText;
   return textMap[statusKind] || "";
@@ -1124,7 +1444,7 @@ function getToastCopy() {
       insightGenerated: (label) => `${label}已生成`,
       weatherOff: "已关闭天气/季节场景提醒",
       weatherOn: "天气/季节场景提醒已开启",
-      weatherDenied: "未获取定位权限，仍使用通用温柔文案",
+      weatherDenied: "未获取定位权限，仍使用通用文案",
       loginSuccess: "登录成功，已解锁账号同步入口",
       upgradeSuccess: (planName) => `${planName}开通成功，已解锁会员权益`,
       logoutSuccess: "已退出登录",
@@ -1132,10 +1452,10 @@ function getToastCopy() {
     };
   }
   return {
-    insightGenerated: (label) => `${label}分析已生成`,
-    weatherOff: "已关闭天气/季节场景智能提醒",
-    weatherOn: "天气/季节场景智能提醒已开启",
-    weatherDenied: "未获取定位权限，将继续使用通用建议",
+    insightGenerated: (label) => `${label}已生成`,
+    weatherOff: "已关闭天气/季节场景提示",
+    weatherOn: "天气/季节场景提示已开启",
+    weatherDenied: "未获取定位权限，将继续使用通用文案",
     loginSuccess: "登录成功，账号同步入口已启用",
     upgradeSuccess: (planName) => `${planName}已开通，会员功能已生效`,
     logoutSuccess: "已退出账号",
@@ -1146,28 +1466,33 @@ function getToastCopy() {
 function getDialogCopy() {
   if (isPetModeActive()) {
     return {
-      upgradeConfirm: "升级后，小宠物就能陪你解锁更多玩法啦，确定要升级吗？",
+      upgradeConfirm: "升级后，可以解锁更多回看能力。确定要升级吗？",
       logoutConfirm: "确定要退出吗？本地数据不会丢失",
     };
   }
   return {
-    upgradeConfirm: "确认开通会员吗？开通后将解锁完整高级功能。",
+    upgradeConfirm: "确认开通会员吗？开通后将解锁完整回看能力。",
     logoutConfirm: "确认退出账号吗？本地数据不会丢失。",
   };
 }
 
 function buildLocalDailyInsightFallback(total, topCategory) {
+  const dayKey = new Date().toISOString().slice(0, 10);
+  const todayItems = state.items.filter((x) => x.createdAt.slice(0, 10) === dayKey);
+  const count = todayItems.length;
   if (isPetModeActive()) {
     return {
-      summary: `${state.settings.displayName}，今天总支出 ${formatCNY(total)}，主要花在${topCategory}。`,
-      action: total > 100 ? "明天把一笔冲动小额消费换成计划内消费，会更轻松。" : "今天节奏很稳，继续保持每笔记录就很好。",
-      encourage: total > 0 ? "你今天记录得很认真，继续保持就很棒。" : "今天还没消费也没关系，保持记录习惯就很好。",
+      summary: count > 0
+        ? `今天记下 ${count} 笔，合计 ${formatCNY(total)}，主要在「${topCategory}」。`
+        : "今天还没有账单，先空着也可以。",
+      action: count > 0 ? "分类不对的话，回到列表里改一下就行。" : "有消费时再记一笔。",
+      encourage: count > 0 ? "这些记录已经能看出今天的大概样子。" : "没有消费的一天，也能留在这里。",
     };
   }
   return {
-    summary: `今日总支出 ${formatCNY(total)}，主要集中在${topCategory}。`,
-    action: total > 100 ? "可关注一笔非计划支出，明天更容易保持稳定节奏。" : "当前消费节奏平稳，继续保持记录即可。",
-    encourage: total > 0 ? "记录已经形成闭环，继续保持这个节奏就很好。" : "暂无消费也没关系，按日记录会让趋势更清晰。",
+    summary: count > 0 ? `今日记录 ${count} 笔，合计 ${formatCNY(total)}，主要集中在「${topCategory}」。` : "今日暂无账单。",
+    action: count > 0 ? "可回到列表检查分类和标题。" : "有消费时再补一笔即可。",
+    encourage: count > 0 ? "今天的记录已经留住了。" : "暂无消费也没关系。",
   };
 }
 
@@ -1408,7 +1733,7 @@ async function buildContextualPetMessage(recordLike) {
   }
   if (!hasWeatherPermissionReady()) {
     if (shouldNudgeWeather()) {
-      return "还没拿到定位权限呢，先用通用温柔提醒陪你记录～";
+    return "还没拿到定位权限，先用通用提醒陪你记录。";
     }
     return pickRandom(petCopy.recordSaved);
   }
@@ -1433,7 +1758,7 @@ async function buildContextualPetMessage(recordLike) {
 
 function buildAiReviewPetMessage() {
   if (!state.settings.weatherCompanionEnabled && Math.random() < 0.25 && shouldNudgeWeather()) {
-    return "若开启天气权限，后续 AI 复盘会结合季节给你更贴合的温柔建议～（前往设置开启）";
+    return "若开启天气权限，后续复盘会结合季节给你更贴合的提醒。（前往设置开启）";
   }
   return pickRandom(petCopy.aiReview);
 }
@@ -1511,6 +1836,315 @@ function getBillRangeForMode(mode) {
   return getCurrentBillRangeOrDefault();
 }
 
+function setTraceHeroRange(period) {
+  if (!["week", "month"].includes(period)) return;
+  state.period = period;
+  persist();
+  renderStats();
+}
+
+function openTraceDetailModal() {
+  traceTrendExpanded = false;
+  renderTraceTrendVisibility();
+  setUIModal("traceDetail");
+  refs.traceDetailModal?.classList.remove("hidden");
+}
+
+function closeTraceDetailModal() {
+  setUIModal("none");
+  refs.traceDetailModal?.classList.add("hidden");
+}
+
+function renderTraceTrendVisibility() {
+  const trendBlock = document.querySelector(".trace-detail-trend");
+  trendBlock?.classList.toggle("collapsed", !traceTrendExpanded);
+  if (refs.traceTrendToggleBtn) {
+    refs.traceTrendToggleBtn.textContent = traceTrendExpanded ? "收起走势" : "展开走势";
+  }
+}
+
+function stopTraceSliceTimer() {
+  if (traceSliceTimer) {
+    clearInterval(traceSliceTimer);
+    traceSliceTimer = null;
+  }
+  traceSlicePlaying = false;
+}
+
+function startTraceSliceTimer() {
+  stopTraceSliceTimer();
+  if (traceSliceChapters.length <= 1) {
+    updateTraceSliceControls();
+    return;
+  }
+  traceSlicePlaying = true;
+  updateTraceSliceControls();
+  traceSliceTimer = setInterval(() => {
+    if (traceSliceAnimating) return;
+    if (traceSliceActiveIndex >= traceSliceChapters.length - 1) {
+      stopTraceSliceTimer();
+      updateTraceSliceControls();
+      return;
+    }
+    traceSliceTransitionDir = 1;
+    traceSliceActiveIndex += 1;
+    renderTraceSliceChapter();
+  }, 3200);
+}
+
+function traceSliceDayLabel(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "这一段";
+  return date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+}
+
+function traceSliceTopCategory(items) {
+  const map = new Map();
+  items.forEach((item) => {
+    const key = item.category || "日常";
+    map.set(key, (map.get(key) || 0) + Number(item.amount || 0));
+  });
+  return [...map.entries()]
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount)[0] || null;
+}
+
+function traceSliceBusiestDay(items) {
+  const map = new Map();
+  items.forEach((item) => {
+    const key = String(item.createdAt || "").slice(0, 10);
+    if (!key) return;
+    const current = map.get(key) || { count: 0, total: 0, sample: item.createdAt };
+    current.count += 1;
+    current.total += Number(item.amount || 0);
+    map.set(key, current);
+  });
+  const busiest = [...map.values()].sort((a, b) => b.total - a.total || b.count - a.count)[0];
+  return busiest ? { ...busiest, label: traceSliceDayLabel(busiest.sample) } : null;
+}
+
+function buildTraceSliceChapters(period, items) {
+  const label = billPeriodLabel(period);
+  const total = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const top = traceSliceTopCategory(items);
+  const busiest = traceSliceBusiestDay(items);
+  const highlight = [...items].sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))[0];
+  const chapters = [
+    {
+      type: "intro",
+      title: period === "week" ? "这一周" : "这个月",
+      narration: `${label}留下 ${items.length} 笔，合计 ${formatCNY(total)}。这段时间的账，先这样放在一起。`,
+      support: period === "week" ? "本周生活切片" : "本月生活章",
+      symbol: "✦",
+    },
+  ];
+
+  if (busiest) {
+    chapters.push({
+      type: "rhythm",
+      title: "节奏起伏",
+      narration: `${busiest.label}热闹一点，留下 ${busiest.count} 笔，合计 ${formatCNY(busiest.total)}。`,
+      support: "不是判断，只是把哪天多一点标出来。",
+      symbol: "〰",
+    });
+  }
+
+  if (top) {
+    chapters.push({
+      type: "category",
+      title: "生活主料",
+      narration: `「${top.category}」出现得多一点，是这段时间更常记下的部分。`,
+      support: `${top.category} · ${formatCNY(top.amount)}`,
+      symbol: "◌",
+    });
+  }
+
+  if (highlight) {
+    chapters.push({
+      type: "highlight",
+      title: "印象一笔",
+      narration: `有一笔「${highlight.title}」被留在这里，金额是 ${formatCNY(highlight.amount)}。`,
+      support: `${highlight.category} · ${traceSliceDayLabel(highlight.createdAt)}`,
+      symbol: "“”",
+    });
+  }
+
+  chapters.push({
+    type: "outro",
+    title: period === "week" ? "下周再叙" : "月末小结",
+    narration: period === "week"
+      ? "这一周先记到这里。下次回看时，这些记录还在。"
+      : "这个月不是一串数字，也是一段留下来的日常。",
+    support: "切片由本地记录生成。",
+    symbol: "✧",
+  });
+
+  return chapters;
+}
+
+function openTraceSliceModal() {
+  const period = state.period === "week" ? "week" : "month";
+  const items = getTraceHeroPlaybackRecords();
+  if (!items.length) {
+    showToast(`${billPeriodLabel(period)}还没有账单可播放。`);
+    return;
+  }
+  traceSliceChapters = buildTraceSliceChapters(period, items);
+  traceSliceActiveIndex = 0;
+  traceSliceTransitionDir = 1;
+  traceSliceAnimating = false;
+  traceSliceHasRendered = false;
+  traceSliceMotionToken += 1;
+  clearTraceSlicePageMotion();
+  refs.traceSliceKicker.textContent = period === "week" ? "本周生活切片" : "本月生活章";
+  refs.traceSliceTitle.textContent = period === "week" ? "听听这一周" : "听听这个月";
+  refs.traceSliceTeaser.textContent = `${items.length} 笔 · ${formatCNY(items.reduce((sum, item) => sum + Number(item.amount || 0), 0))}`;
+  setUIModal("traceSlice");
+  refs.traceSliceModal?.classList.remove("hidden");
+  renderTraceSliceChapter({ enterOnly: true });
+  startTraceSliceTimer();
+}
+
+function closeTraceSliceModal() {
+  stopTraceSliceTimer();
+  traceSliceAnimating = false;
+  traceSliceHasRendered = false;
+  traceSliceMotionToken += 1;
+  clearTraceSlicePageMotion();
+  setUIModal("none");
+  refs.traceSliceModal?.classList.add("hidden");
+}
+
+function moveTraceSliceChapter(delta) {
+  if (!traceSliceChapters.length || traceSliceAnimating) return;
+  const nextIndex = Math.max(0, Math.min(traceSliceChapters.length - 1, traceSliceActiveIndex + delta));
+  if (nextIndex === traceSliceActiveIndex) {
+    updateTraceSliceControls();
+    return;
+  }
+  traceSliceTransitionDir = delta >= 0 ? 1 : -1;
+  traceSliceActiveIndex = nextIndex;
+  renderTraceSliceChapter();
+}
+
+function clearTraceSlicePageMotion() {
+  refs.traceSlicePage?.classList.remove(
+    "trace-slice-enter",
+    "trace-slice-enter-next",
+    "trace-slice-enter-prev",
+    "trace-slice-enter-initial",
+    "trace-slice-enter-active",
+    "trace-slice-exit",
+    "trace-slice-exit-next",
+    "trace-slice-exit-prev",
+    "trace-slice-exit-active"
+  );
+}
+
+function escapeTraceSliceHTML(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function applyTraceSliceNarrationStagger(el, text) {
+  if (!el) return;
+  const lines = String(text || "").match(/[^。！？；]+[。！？；]?/g) || [String(text || "")];
+  const displayLines = lines.length > 3 ? [lines[0], lines[1], lines.slice(2).join("")] : lines;
+  el.innerHTML = displayLines
+    .slice(0, 3)
+    .map((line, index) => `<span class="trace-slice-line" style="--line-i:${index}">${escapeTraceSliceHTML(line.trim())}</span>`)
+    .join("");
+}
+
+function updateTraceSliceContent(chapter) {
+  refs.traceSliceStage.className = `trace-slice-stage ${chapter.type}`;
+  refs.traceSliceSymbol.textContent = chapter.symbol;
+  refs.traceSliceChapterTitle.textContent = chapter.title;
+  applyTraceSliceNarrationStagger(refs.traceSliceNarration, chapter.narration);
+  refs.traceSliceSupport.textContent = chapter.support;
+  updateTraceSliceControls();
+}
+
+function updateTraceSliceControls() {
+  refs.traceSlicePlayBtn.textContent = traceSlicePlaying ? "暂停" : "继续";
+  refs.traceSlicePrevBtn.disabled = traceSliceAnimating || traceSliceActiveIndex === 0;
+  refs.traceSliceNextBtn.disabled = traceSliceAnimating || traceSliceActiveIndex >= traceSliceChapters.length - 1;
+  refs.traceSliceDots.innerHTML = traceSliceChapters
+    .map((_, index) => `<span class="${index === traceSliceActiveIndex ? "active" : ""}"></span>`)
+    .join("");
+}
+
+function waitForTraceSliceTransition(el, token, callback) {
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    el.removeEventListener("transitionend", onEnd);
+    if (token !== traceSliceMotionToken) return;
+    callback();
+  };
+  const onEnd = (event) => {
+    if (event.target === el && ["transform", "opacity"].includes(event.propertyName)) {
+      finish();
+    }
+  };
+  el.addEventListener("transitionend", onEnd);
+  setTimeout(finish, 560);
+}
+
+function runTraceSliceEnter(page, directionClass, token) {
+  clearTraceSlicePageMotion();
+  page.classList.add("trace-slice-enter", directionClass);
+  requestAnimationFrame(() => {
+    if (token !== traceSliceMotionToken) return;
+    page.classList.add("trace-slice-enter-active");
+  });
+  waitForTraceSliceTransition(page, token, () => {
+    clearTraceSlicePageMotion();
+    traceSliceAnimating = false;
+    traceSliceHasRendered = true;
+    updateTraceSliceControls();
+  });
+}
+
+function renderTraceSliceChapter(options = {}) {
+  const chapter = traceSliceChapters[traceSliceActiveIndex];
+  if (!chapter) return;
+  const page = refs.traceSlicePage;
+  if (!page) {
+    updateTraceSliceContent(chapter);
+    traceSliceHasRendered = true;
+    return;
+  }
+  if (traceSliceAnimating) return;
+
+  traceSliceAnimating = true;
+  const motionToken = ++traceSliceMotionToken;
+  updateTraceSliceControls();
+  const dirClass = traceSliceTransitionDir >= 0 ? "next" : "prev";
+  const enterClass = options.enterOnly || !traceSliceHasRendered ? "trace-slice-enter-initial" : `trace-slice-enter-${dirClass}`;
+  if (options.enterOnly || !traceSliceHasRendered) {
+    updateTraceSliceContent(chapter);
+    runTraceSliceEnter(page, enterClass, motionToken);
+    return;
+  }
+
+  clearTraceSlicePageMotion();
+  page.classList.add("trace-slice-exit", `trace-slice-exit-${dirClass}`);
+  requestAnimationFrame(() => {
+    if (motionToken !== traceSliceMotionToken) return;
+    page.classList.add("trace-slice-exit-active");
+  });
+  waitForTraceSliceTransition(page, motionToken, () => {
+    updateTraceSliceContent(chapter);
+    runTraceSliceEnter(page, enterClass, motionToken);
+  });
+}
+
 function openBillDateRangeModal() {
   setUIModal("billDateRange");
   billRangeDraftMode = state.period || "month";
@@ -1577,7 +2211,7 @@ function normalizeAICopy(text, period) {
   if (!next) return "";
   AI_FORBIDDEN_WORDS.forEach((word) => {
     const re = new RegExp(word, "g");
-    next = next.replace(re, AI_SOFT_REPLACEMENTS[word] || "温柔参考");
+    next = next.replace(re, AI_SOFT_REPLACEMENTS[word] || "具体记录");
   });
   if (!/[。！？]$/.test(next)) next += "。";
   return shortenText(next, limit.max);
@@ -1592,22 +2226,48 @@ function buildSoftBudgetDraft() {
     if (new Date(item.createdAt) >= start && item.amount > 0) last7.push(item);
   });
   if (!last7.length) {
-    return "先随手记几笔，我们再一起整理下周生活开销参考。";
+    return "先记几笔，再整理下周生活开销参考。";
   }
   const total = last7.reduce((sum, x) => sum + x.amount, 0);
   const weeklyRef = Math.max(1, Math.round((total / 7) * 7));
-  return `已按近7天节奏生成一份柔和参考：下周生活开销约 ${formatCNY(weeklyRef)}，可随心微调。`;
+  return `已按近7天记录生成一份参考：下周生活开销约 ${formatCNY(weeklyRef)}，先当作粗略参照。`;
 }
 
 function inferEmotionTag(item) {
   const category = item?.category || "其他";
   const amount = Number(item?.amount || 0);
-  if (category === "餐饮") return amount >= 40 ? "小确幸时刻" : "日常补给";
-  if (category === "购物") return amount >= 100 ? "给自己加点好心情" : "生活补给";
-  if (category === "娱乐") return "生活小确幸";
-  if (category === "交通") return "为生活奔波的一天";
-  if (category === "日用") return "把日子照顾好";
-  return "认真生活记录中";
+  if (category === "餐饮") return amount >= 40 ? "认真吃了一顿" : "日常餐饮";
+  if (category === "购物") return amount >= 100 ? "计划内添置" : "日常添置";
+  if (category === "娱乐") return amount >= 150 ? "一次娱乐安排" : "轻量娱乐";
+  if (category === "交通") return amount >= 20 ? "去远一点" : "日常出行";
+  if (category === "日用") return amount >= 50 ? "日用补齐" : "日用记录";
+  return amount >= 80 ? "单独记录" : "日常记录";
+}
+
+function noteAwareEmotionTag(note, category, amount, seed = "") {
+  const text = String(note || "").trim().toLowerCase();
+  if (!text) return "";
+  const pick = (list, key) => list[stableIndex(`${seed}|${key}|${text}`, list.length)];
+  if (["食堂", "午餐", "简餐", "热饭", "热乎饭", "外卖", "饭点", "吃顿饭", "一顿饭", "面或饭", "夜宵", "夜里饿了"].some((word) => text.includes(word))) {
+    return pick(["中午一顿饭", "饭点记一笔", "食堂吃一顿", "热饭到了手边", "忙里吃上饭", "这一顿先记下"], "meal");
+  }
+  if (["饮料", "喝的", "可乐", "雪碧", "汽水", "果汁", "茶饮", "奶茶", "咖啡", "拿铁", "美式", "冰饮"].some((word) => text.includes(word))) {
+    return pick(["买杯喝的", "小饮料记一笔", "路上添点清爽", "一口喝的记下来", "便利店饮料在手边", "今天补点小清爽"], "drink");
+  }
+  if (["便利蜂", "便利店", "全家", "罗森", "711", "7-11"].some((word) => text.includes(word))) {
+    return pick(["便利店补给", "这一站很方便", "小补给刚好带上", "日常一站完成", "路过买一点", "便利店小袋子"], "convenience");
+  }
+  return "";
+}
+
+function resolveEmotionTagForRecord({ title = "", category = "其他", amount = 0, allowBrand = true, seed = "" } = {}) {
+  const brand = allowBrand ? matchBrandInNote(title) : null;
+  if (brand && brand.category === category) {
+    return brand.mood || brand.emotion || inferEmotionTag({ category, amount });
+  }
+  const noteAware = noteAwareEmotionTag(title, category, amount, seed || title || category);
+  if (noteAware) return noteAware;
+  return inferEmotionTag({ category, amount });
 }
 
 function topSpendCategoryWithin(days = 7) {
@@ -1624,7 +2284,7 @@ function topSpendCategoryWithin(days = 7) {
 
 function buildWeeklyRhythmText() {
   const topCategory = topSpendCategoryWithin(7);
-  return `本周开销以「${topCategory}」为主，先按当前节奏温柔安排，下周再慢慢微调。`;
+  return `本周开销以「${topCategory}」为主，先把这些记录留清楚，下周回看会更有数。`;
 }
 
 function buildWeeklyShareCardText() {
@@ -1632,7 +2292,7 @@ function buildWeeklyShareCardText() {
   start.setDate(start.getDate() - 6);
   start.setHours(0, 0, 0, 0);
   const weekItems = state.items.filter((item) => new Date(item.createdAt) >= start && item.amount > 0);
-  if (!weekItems.length) return "周度分享卡：这周还在轻松起步，继续记录就会慢慢看到你的生活节奏。";
+  if (!weekItems.length) return "周度分享卡：这周还没有足够记录，先继续记几笔。";
   const weekTotal = weekItems.reduce((sum, item) => sum + item.amount, 0);
   const topCategory = topSpendCategoryWithin(7);
   return `周度分享卡：本周记录 ${weekItems.length} 笔，生活开销约 ${formatCNY(weekTotal)}，主要在「${topCategory}」。`;
@@ -1748,7 +2408,7 @@ async function downloadWeeklyShareCardImage() {
         footer: "#6b7688",
         footerSub: "#8f99ab",
       };
-  const nickname = (state.settings.displayName || "序帐用户").trim();
+  const nickname = (state.settings.displayName || "叙帐用户").trim();
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
   canvas.height = 1350;
@@ -1780,7 +2440,7 @@ async function downloadWeeklyShareCardImage() {
 
   ctx.fillStyle = theme.accent;
   ctx.font = "700 56px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-  ctx.fillText("序帐 · 周度分享卡", 140, 230);
+  ctx.fillText("叙帐 · 周度分享卡", 140, 230);
   ctx.font = "400 30px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   ctx.fillStyle = theme.titleSub;
   ctx.fillText(meta.period, 140, 290);
@@ -1912,10 +2572,10 @@ async function downloadWeeklyShareCardImage() {
 
   ctx.fillStyle = theme.footer;
   ctx.font = "400 32px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-  ctx.fillText("温柔回看，不必苛责，按自己的节奏慢慢生活。", 140, 1110);
+  ctx.fillText("账单只是注脚，生活才是主角。", 140, 1110);
   ctx.fillStyle = theme.footerSub;
   ctx.font = "400 27px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-  ctx.fillText("来自 序帐 · 小 AI 说", 140, 1172);
+  ctx.fillText("来自 叙帐 · 小 AI 说", 140, 1172);
 
   let blob = null;
   if (canvas.toBlob) {
@@ -1945,10 +2605,10 @@ async function downloadWeeklyShareCardImage() {
 function buildMonthlySoftPlanText() {
   const monthKey = thisMonthKey();
   const monthItems = state.items.filter((x) => x.createdAt.startsWith(monthKey) && x.amount > 0);
-  if (!monthItems.length) return "先继续轻松记录几笔，下月参考会更贴近你的生活节奏。";
+  if (!monthItems.length) return "先继续记录几笔，下月参考会更贴近真实开销。";
   const total = monthItems.reduce((sum, x) => sum + x.amount, 0);
   const nextRef = Math.max(1, Math.round(total * 0.95));
-  return `下月生活开销温柔参考：约 ${formatCNY(nextRef)}，按你自己的节奏随心调整。`;
+  return `下月生活开销参考：约 ${formatCNY(nextRef)}，先当作一条粗略参照。`;
 }
 
 function getConfiguredAIModel() {
@@ -1999,7 +2659,7 @@ async function buildWeatherSpendPetMessage(trigger = "click") {
     tempC: Number.isFinite(weather?.temp) ? weather.temp : null,
     weatherCode: Number.isFinite(weather?.weatherCode) ? weather.weatherCode : null,
   };
-  const userPrompt = `请你用小宠物第一人称口吻，结合今日消费和天气给一句温柔建议。只输出JSON：{"summary":"...","action":"...","encourage":"..."}。summary控制在28-48字，语气要像宠物陪伴，不评判、不说教。数据：触发方式=${trigger}，今日总支出=${formatCNY(total)}，记录笔数=${todayItems.length}，主要分类=${topCategory}，天气信息=${JSON.stringify(weatherFacts)}。`;
+  const userPrompt = `请你用小宠物第一人称口吻，结合今日消费和天气给一句具体提醒。只输出JSON：{"summary":"...","action":"...","encourage":"..."}。summary控制在28-48字，像真实生活备注，不评判、不说教、不鸡汤。数据：触发方式=${trigger}，今日总支出=${formatCNY(total)}，记录笔数=${todayItems.length}，主要分类=${topCategory}，天气信息=${JSON.stringify(weatherFacts)}。`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), getConfiguredAITimeoutMs("daily"));
   try {
@@ -2010,7 +2670,7 @@ async function buildWeatherSpendPetMessage(trigger = "click") {
         model: getConfiguredAIModel(),
         feature: "daily",
         messages: [
-          { role: "system", content: "你是会陪伴用户记账的小宠物，说话温柔、治愈、生活化。输出JSON字段summary/action/encourage。" },
+          { role: "system", content: "你是会陪伴用户记账的小宠物，说话具体、短、生活化。输出JSON字段summary/action/encourage。" },
           { role: "user", content: userPrompt },
         ],
         temperature: 0.75,
@@ -2059,12 +2719,12 @@ function buildInsightFacts(items, label) {
 
 function buildPeriodPrompt(period, facts) {
   if (period === "monthly") {
-    return `结合全月账单，写一段120-150字月度温柔月报。只输出JSON：{"summary":"...","action":"...","encourage":"..."}。其中summary必须120-150字，内容需包含月度消费趋势与生活节奏；action给出客观结构观察（如饮食占比、通勤稳定、零散消费），encourage给出温柔陪伴句。数据：周期=${facts.label}，总支出=${facts.total}，记录笔数=${facts.count}，TOP分类=${facts.topCategory}（占比约${facts.topRatio}%），分类明细=${facts.categories}。`;
+    return `结合全月账单，写一段120-150字月度小记。只输出JSON：{"summary":"...","action":"...","encourage":"..."}。summary必须120-150字，具体、短句、像真实回看；内容包含月度消费趋势与生活节奏；action给出客观结构观察（如饮食占比、通勤稳定、零散消费）；encourage可以有理解，但必须落在账单事实上。禁止鸡汤和心理分析。数据：周期=${facts.label}，总支出=${facts.total}，记录笔数=${facts.count}，TOP分类=${facts.topCategory}（占比约${facts.topRatio}%），分类明细=${facts.categories}。`;
   }
   if (period === "weekly") {
-    return `结合本周账单，写一段70-90字温柔周复盘。只输出JSON：{"summary":"...","action":"...","encourage":"..."}。其中summary必须70-90字，强调消费结构与习惯观察；action给一句温和、有用的客观提示；encourage给一句治愈鼓励。数据：周期=${facts.label}，总支出=${facts.total}，记录笔数=${facts.count}，TOP分类=${facts.topCategory}（占比约${facts.topRatio}%），分类明细=${facts.categories}。`;
+    return `结合本周账单，写一段70-90字周记。只输出JSON：{"summary":"...","action":"...","encourage":"..."}。summary必须70-90字，具体、短句、像真实备注；强调消费结构与习惯观察；action给一句客观提示；encourage给一句落在事实上的理解。禁止鸡汤和心理分析。数据：周期=${facts.label}，总支出=${facts.total}，记录笔数=${facts.count}，TOP分类=${facts.topCategory}（占比约${facts.topRatio}%），分类明细=${facts.categories}。`;
   }
-  return `结合今日账单，写一段35-45字温柔小结。只输出JSON：{"summary":"...","action":"...","encourage":"..."}。其中summary必须35-45字且轻量好读；action与encourage各1句，延续温柔、不评判语气。数据：周期=${facts.label}，总支出=${facts.total}，记录笔数=${facts.count}，TOP分类=${facts.topCategory}（占比约${facts.topRatio}%），分类明细=${facts.categories}。`;
+  return `结合今日账单，写一段35-45字今日小记。只输出JSON：{"summary":"...","action":"...","encourage":"..."}。summary必须35-45字，具体、短、像真实备注；action与encourage各1句，不评判、不鸡汤。数据：周期=${facts.label}，总支出=${facts.total}，记录笔数=${facts.count}，TOP分类=${facts.topCategory}（占比约${facts.topRatio}%），分类明细=${facts.categories}。`;
 }
 
 function normalizeInsightResponse(data) {
@@ -2305,13 +2965,274 @@ function getCategoryMeta(value) {
 }
 
 function updateNotePlaceholder() {
-  const amountReady = isAmountReady();
-  if (!amountReady) {
-    refs.titleInput.placeholder = "已自动归类，可补充点细节（不填也能保存）";
+  refs.titleInput.placeholder = "这一笔想怎么被记住？";
+}
+
+function compactRecordTime(date = new Date()) {
+  const parsed = date instanceof Date ? date : new Date(date);
+  const safeDate = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  return safeDate.toLocaleTimeString("zh-CN", { hour: "numeric", minute: "2-digit" });
+}
+
+function recordPreviewDateText() {
+  if (!editingRecordId) return `今天 ${compactRecordTime()}`;
+  const item = state.items.find((x) => x.id === editingRecordId);
+  const selectedDate = refs.recordDateInput.value || item?.createdAt?.slice(0, 10) || localDayKey(new Date());
+  const itemDate = item?.createdAt ? new Date(item.createdAt) : new Date();
+  if (selectedDate === localDayKey(new Date())) return `今天 ${compactRecordTime(itemDate)}`;
+  const [, , month, day] = selectedDate.match(/^(\d{4})-(\d{2})-(\d{2})$/) || [];
+  if (month && day) return `${Number(month)}月${Number(day)}日`;
+  return selectedDate;
+}
+
+function matchBrandInNote(text = "") {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+  const matches = brandsLite
+    .flatMap((brand) => [...brand.aliases, ...(brand.lines || []), brand.emotion, brand.mood]
+      .filter(Boolean)
+      .map((alias) => ({ brand, alias })))
+    .sort((a, b) => b.alias.length - a.alias.length || a.brand.id.localeCompare(b.brand.id));
+  return matches.find(({ alias }) => raw.toLowerCase().includes(alias.toLowerCase()))?.brand || null;
+}
+
+function amountBandForHabit(amount) {
+  if (amount <= 20) return 0;
+  if (amount <= 50) return 1;
+  if (amount <= 120) return 2;
+  if (amount <= 300) return 3;
+  return 4;
+}
+
+function estimateHabitConfidence() {
+  const amount = getAmountValue();
+  if (!state.items.length || Number.isNaN(amount) || amount <= 0) return { confidence: 0, category: localRecommendedCategory(), title: "" };
+  const band = amountBandForHabit(amount);
+  const hour = new Date().getHours();
+  const hourBucket = Math.floor(hour / 3);
+  const recent = state.items.slice(0, 90).filter((item) => {
+    const itemAmount = Number(item.amount || 0);
+    const itemHour = new Date(item.createdAt || Date.now()).getHours();
+    return itemAmount > 0
+      && amountBandForHabit(itemAmount) === band
+      && Math.floor(itemHour / 3) === hourBucket;
+  });
+  if (recent.length < 3) return { confidence: 0.35, category: topCategoryFromHistory(), title: "" };
+  const counts = new Map();
+  recent.forEach((item) => counts.set(item.category, (counts.get(item.category) || 0) + 1));
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const top = ranked[0];
+  const second = ranked[1]?.[1] || 0;
+  const confidence = top ? top[1] / Math.max(top[1] + second, 1) : 0;
+  const titles = recent
+    .filter((item) => item.category === top?.[0])
+    .map((item) => (item.title || "").trim())
+    .filter((title) => title && !/消费$/.test(title) && title.length >= 2 && title.length <= 12);
+  const title = titles[0] || "";
+  return { confidence, category: top?.[0] || topCategoryFromHistory(), title };
+}
+
+function pickColdStartWhisper(amount = getAmountValue(), date = new Date()) {
+  const dateKey = localDayKey(date);
+  const hourBucket = Math.floor(date.getHours() / 3);
+  return coldStartWhispers[stableIndex(`${amount}|${dateKey}|${hourBucket}`, coldStartWhispers.length)] || coldStartWhispers[0];
+}
+
+function categoryFallbackLine(category) {
+  const map = {
+    餐饮: "吃饭的一小笔",
+    交通: "路上的一小段",
+    购物: "买到一件小东西",
+    娱乐: "留给放松的一笔",
+    日用: "日常的一点补给",
+    其他: "今天的一小笔",
+  };
+  return map[category] || "今天的一小笔";
+}
+
+function resolveRecordPreviewTier() {
+  const amount = getAmountValue();
+  if (!amount || Number.isNaN(amount) || amount <= 0) return { tier: "L0" };
+  const note = refs.titleInput.value.trim();
+  const brand = categoryLockedByUser ? null : matchBrandInNote(note);
+  const habit = estimateHabitConfidence();
+  const edited = Boolean(editingRecordId || note || previewLineWasRotated);
+  if (!brand && !edited && state.items.length < 3) {
+    return { tier: "L1", source: "cold", category: habit.category || localRecommendedCategory(), habit };
+  }
+  if (brand) return { tier: "L2", source: "brand", brand, category: brand.category, habit };
+  if (edited) return { tier: "L2", source: "edited", category: selectedCategory || habit.category || localRecommendedCategory(), habit };
+  if (habit.confidence >= 0.55) return { tier: "L2", source: "habit", category: habit.category, habit };
+  return { tier: "L1", source: "cold", category: habit.category || localRecommendedCategory(), habit };
+}
+
+function resolvePreviewEmotion(preview) {
+  if (preview.tier !== "L2") return "";
+  const category = preview.category || selectedCategory || localRecommendedCategory();
+  if (preview.brand && !categoryLockedByUser && preview.brand.category === category) return preview.brand.mood || preview.brand.emotion;
+  return resolveEmotionTagForRecord({
+    title: refs.titleInput.value.trim() || preview.habit?.title || "",
+    category,
+    amount: getAmountValue(),
+    allowBrand: !categoryLockedByUser,
+    seed: `${getAmountValue()}|${category}|preview`,
+  });
+}
+
+function previewHeadlineFor(preview) {
+  const userTitle = refs.titleInput.value.trim();
+  if (preview.tier === "L1") return pickColdStartWhisper();
+  if (preview.brand) {
+    const isAliasOnly = preview.brand.aliases.some((alias) => userTitle.toLowerCase() === alias.toLowerCase());
+    if (userTitle && !isAliasOnly) return userTitle;
+    const lines = preview.brand.lines || [preview.brand.emotion || preview.brand.displayName];
+    return lines[previewLineVariant % lines.length] || preview.brand.emotion || preview.brand.displayName;
+  }
+  if (userTitle) return userTitle;
+  if (preview.source === "habit" && preview.habit?.title) return preview.habit.title;
+  return categoryFallbackLine(preview.category || selectedCategory || localRecommendedCategory());
+}
+
+function showLifeEntryNoteEditor() {
+  noteEditorExpanded = true;
+  updateLifeEntryPreview();
+  setTimeout(() => refs.titleInput?.focus(), 60);
+}
+
+function makeQuietAction(label, onClick) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "life-slip-action";
+  btn.textContent = label;
+  btn.addEventListener("pointerdown", (event) => event.preventDefault());
+  btn.addEventListener("click", onClick);
+  return btn;
+}
+
+function renderQuietActions(preview) {
+  refs.lifeEntryQuietActions.innerHTML = "";
+  if (preview.tier === "L0") return;
+  const primaryLabel = preview.source === "brand"
+    ? "换说法"
+    : preview.tier === "L2"
+      ? "换一句"
+      : "帮我写一句";
+  refs.lifeEntryQuietActions.appendChild(makeQuietAction(primaryLabel, () => rotatePreviewLine(preview)));
+  if (preview.tier === "L2" && (previewLineWasRotated || preview.source !== "cold")) {
+    refs.lifeEntryQuietActions.appendChild(makeQuietAction("换个角度", openScenePackMoreSheet));
+  }
+  refs.lifeEntryQuietActions.appendChild(makeQuietAction("自己写备注", showLifeEntryNoteEditor));
+}
+
+function rotatePreviewLine(preview = resolveRecordPreviewTier()) {
+  const amount = getAmountValue();
+  if (!amount || Number.isNaN(amount) || amount <= 0) return;
+  previewLineVariant += 1;
+  previewLineWasRotated = true;
+  if (preview.brand) {
+    const lines = preview.brand.lines || [preview.brand.displayName];
+    refs.titleInput.value = lines[previewLineVariant % lines.length] || lines[0];
+    selectedCategory = preview.brand.category;
+  } else {
+    const packId = guessMemberScenePackId();
+    applyMemberScenePack(packId, { keepSelectedCategory: true, silent: true, variant: previewLineVariant });
     return;
   }
-  const meta = getCategoryMeta(selectedCategory || localRecommendedCategory());
-  refs.titleInput.placeholder = `已归类到「${meta.label}」，可补充点细节（不填也能保存）`;
+  updateCategoryUI();
+  updateLifeEntryPreview();
+}
+
+function openScenePackMoreSheet() {
+  const angleCopy = {
+    commute: { title: "路上的角度", tagline: "地铁公交，赶路路上的一小段" },
+    food: { title: "一顿饭的角度", tagline: "一顿饭、一杯喝的、小聚" },
+    travel: { title: "出发途中的角度", tagline: "出发、途中、沿路痕迹" },
+    care: { title: "身体记录的角度", tagline: "药店、护理、检查" },
+    home: { title: "居家日常的角度", tagline: "家用、清洁、住处" },
+    social: { title: "往来见面的角度", tagline: "见面、心意、聚一聚" },
+    shopping: { title: "添置物品的角度", tagline: "常用物、小补给、换新" },
+    pet: { title: "宠物日常的角度", tagline: "口粮、用品、护理" },
+  };
+  refs.scenePackMoreList.innerHTML = "";
+  memberScenePacks.forEach((pack) => {
+    const copy = angleCopy[pack.id] || { title: "另一种角度", tagline: "从另一种生活角度记下这一笔" };
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "scene-pack-more-option";
+    btn.innerHTML = `<span>${pack.emoji} ${copy.title}</span><small>${copy.tagline}</small>`;
+    btn.addEventListener("click", () => {
+      previewLineVariant += 1;
+      previewLineWasRotated = true;
+      applyMemberScenePack(pack.id, { keepSelectedCategory: false, silent: true, variant: previewLineVariant });
+      closeScenePackMoreSheet();
+    });
+    refs.scenePackMoreList.appendChild(btn);
+  });
+  refs.scenePackMoreSheet?.classList.remove("hidden");
+  syncOverlayScrollLock();
+}
+
+function closeScenePackMoreSheet() {
+  refs.scenePackMoreSheet?.classList.add("hidden");
+  syncOverlayScrollLock();
+}
+
+function updateLifeEntryPreview() {
+  const amountReady = isAmountReady();
+  refs.lifeEntryPreview?.classList.toggle("hidden", !amountReady);
+  refs.recordPrimaryActions?.classList.toggle("hidden", !amountReady && !editingRecordId);
+  refs.recordDetailsFold?.classList.add("hidden");
+  refs.prefillDemoBar?.classList.toggle("hidden", !DEBUG_UI_ENABLED || (!amountReady && !editingRecordId));
+  if (!amountReady && !editingRecordId) return;
+
+  const preview = resolveRecordPreviewTier();
+  const amount = getAmountValue();
+  const meta = getCategoryMeta(preview.category || selectedCategory || localRecommendedCategory());
+  if (preview.brand && !categoryLockedByUser) {
+    selectedCategory = preview.brand.category;
+  } else if (!selectedCategory && preview.category) {
+    selectedCategory = preview.category;
+  }
+  const headline = previewHeadlineFor(preview);
+  const emotion = resolvePreviewEmotion(preview);
+  const userTitle = refs.titleInput.value.trim();
+  const isAliasOnly = preview.brand && preview.brand.aliases.some((alias) => userTitle.toLowerCase() === alias.toLowerCase());
+  const shouldShowHint = preview.tier === "L2" && (previewLineWasRotated || preview.source === "habit" || isAliasOnly || (!userTitle && preview.source !== "edited"));
+  refs.lifeEntryPreview.classList.toggle("life-slip--whisper", preview.tier === "L1");
+  refs.lifeEntryPreview.classList.toggle("life-slip--confirm", preview.tier === "L2");
+  refs.lifeEntryHeadline.textContent = headline || "今天的一小笔";
+  if (refs.lifeEntryHeadlineHint) {
+    refs.lifeEntryHeadlineHint.textContent = "分类不对？点下方「改分类」即可";
+  }
+  refs.lifeEntryAmount.textContent = Number.isNaN(amount) ? "¥0.00" : formatCNY(amount);
+  refs.lifeEntryHeadlineHint?.classList.toggle("hidden", !shouldShowHint);
+  refs.lifeEntryEmotion.textContent = emotion;
+  refs.lifeEntryEmotion.classList.toggle("hidden", preview.tier !== "L2" || !emotion);
+  const dateText = recordPreviewDateText();
+  refs.lifeEntryMeta.textContent = preview.tier === "L1"
+    ? dateText.replace(" ", " · ")
+    : `${preview.brand ? `${preview.brand.displayName} · ` : ""}${meta.label} · ${dateText}`;
+  if (refs.lifeEntryChangeCategory) {
+    refs.lifeEntryChangeCategory.textContent = "改分类";
+    refs.lifeEntryChangeCategory.classList.toggle("hidden", preview.tier !== "L2");
+  }
+  refs.lifeEntryNoteEditor?.classList.toggle("hidden", !noteEditorExpanded);
+  refs.lifeEntryCategoryPanel?.classList.toggle("hidden", !categoryPanelExpanded || preview.tier !== "L2");
+  refs.amountAssist.textContent = preview.tier === "L1"
+    ? "数额够了。"
+    : "金额只是刻度";
+  refs.amountAssist.classList.toggle("hidden", preview.tier === "L2");
+  renderQuietActions(preview);
+}
+
+function toggleRecordDetails(force) {
+  recordDetailsExpanded = typeof force === "boolean" ? force : !recordDetailsExpanded;
+  noteEditorExpanded = recordDetailsExpanded;
+  refs.lifeEntryNoteEditor?.classList.toggle("hidden", !noteEditorExpanded);
+  refs.recordDetailsBody?.classList.toggle("hidden", true);
+  if (refs.recordDetailsToggleHint) {
+    refs.recordDetailsToggleHint.textContent = recordDetailsExpanded ? "收起" : "展开";
+  }
 }
 
 function updateCategoryUI() {
@@ -2319,11 +3240,13 @@ function updateCategoryUI() {
     renderCategoryOptions();
     updateNotePlaceholder();
     renderMemberScenePacks();
+    updateLifeEntryPreview();
     return;
   }
   renderCategoryOptions();
   updateNotePlaceholder();
   renderMemberScenePacks();
+  updateLifeEntryPreview();
 }
 
 function topCategoryFromHistory() {
@@ -2356,7 +3279,11 @@ async function recommendCategorySmart() {
     return { category: local, source: "local" };
   }
 
-  const note = refs.titleInput.value.trim();
+  const noteRisk = validateManualNote(refs.titleInput.value, { allowEmpty: true });
+  if (!noteRisk.ok) {
+    return { category: local, source: "local" };
+  }
+  const note = noteRisk.value;
   const prompt = `根据金额与备注推荐消费分类，只返回一个分类：餐饮/购物/交通/娱乐/日用/其他。金额：${amount}，备注：${note || "无"}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 1800);
@@ -2465,6 +3392,7 @@ function selectCategory(value) {
   categoryLockedByUser = true;
   triggerHaptic();
   updateCategoryUI();
+  updateLifeEntryPreview();
 }
 
 function renderNoteSuggestions() {
@@ -2493,6 +3421,7 @@ function renderNoteSuggestions() {
       refs.titleInput.value = text;
       refs.noteSuggestions.classList.add("hidden");
       refs.noteSuggestions.innerHTML = "";
+      updateLifeEntryPreview();
       refs.titleInput.focus();
     });
     refs.noteSuggestions.appendChild(chip);
@@ -2504,7 +3433,7 @@ function resolvePetNameForNote() {
   const raw = (state.settings.userPetNickname || "").trim();
   const isMember = Boolean(state.settings.isMember);
   if (isMember && /^[\u4e00-\u9fa5A-Za-z0-9]{2,6}$/.test(raw)) return raw;
-  return "小宠物";
+  return "小窝";
 }
 
 function personalizePetText(text) {
@@ -2512,33 +3441,102 @@ function personalizePetText(text) {
   return String(text).replace(/\{petName\}/g, resolvePetNameForNote());
 }
 
+function containsTravelKeyword(text) {
+  return ["旅行", "旅途", "景区", "景点", "行程", "酒店", "民宿", "住宿", "机票", "高铁", "机场", "返程", "摆渡"].some((word) =>
+    String(text || "").includes(word)
+  );
+}
+
 function pickHistoryKeyword(category) {
+  const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
   const keywords = state.items
     .filter((item) => item.category === category)
+    .filter((item) => new Date(item.createdAt).getTime() >= cutoff)
     .map((item) => (item.title || "").trim())
     .filter((text) => text && !/消费$/.test(text) && text.length >= 2 && text.length <= 8);
   if (!keywords.length) return "";
-  return pickRandom(keywords.slice(0, 10));
+  const counts = new Map();
+  keywords.forEach((text) => counts.set(text, (counts.get(text) || 0) + 1));
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] || "";
 }
 
-function enrichNoteWithHistory(note, category) {
+function enrichNoteWithHistory(note, category, seed = "") {
   const keyword = pickHistoryKeyword(category);
   if (!keyword) return note;
   if (note.includes(keyword)) return note;
-  if (Math.random() > 0.45) return note;
-  return `${note}，顺带记下「${keyword}」`;
+  if (stableIndex(`${seed}|historyChance`, 100) >= 45) return note;
+  return `${note}，也留一笔「${keyword}」`;
 }
 
-function applyMemberScenePack(packId, { keepSelectedCategory = false } = {}) {
+function contextualSceneNotes(pack, categoryContext) {
+  const hour = new Date().getHours();
+  if (pack.id === "travel" && (hour >= 22 || hour < 6) && categoryContext !== "住宿" && !containsTravelKeyword(refs.titleInput?.value || "")) {
+    return ["深夜这笔先记下", "夜里的一点小花费", "凌晨补上一笔", "晚归路上的小开销", "深夜日常一笔", "夜里这点花费记一下", "凌晨的小开销留个底", "夜深了也把账记稳"];
+  }
+  if (pack.id === "food" || categoryContext === "餐饮") {
+    if (hour >= 5 && hour < 10) return ["早餐简单吃一口", "晨间咖啡和小食", "上班前补点能量", "早饭热乎一下", "清晨的一份轻食", "早餐路上买一点", "豆浆包子早餐", "早间小食"];
+    if (hour >= 11 && hour < 14) return ["工作日午餐简餐", "中午一顿饭", "外卖点到工位", "食堂一份热乎饭", "中午吃一顿", "忙里抽空吃顿饭", "中午简单吃一顿", "饱腹又不折腾的一顿"];
+    if (hour >= 14 && hour < 17) return ["下午茶小点心", "午后一杯饮品", "忙里喝点什么", "咖啡时间缓一缓", "给下午添点甜", "便利店轻食补给", "下午补一点能量", "茶歇时刻记一下"];
+    if (hour >= 17 && hour < 21) return ["晚餐一顿热饭", "下班后的一顿热饭", "晚餐小聚一份主菜", "做了一顿家常饭", "热腾腾的面或饭", "今晚吃得挺实在", "给一天收个尾", "晚饭时间坐一会儿"];
+    return ["夜里补了一点夜宵", "加班后吃点热乎的", "深夜小食", "晚归路上的一口热食", "夜宵时间记下", "夜里补点吃的", "夜里饿了吃一口", "深夜一顿热食"];
+  }
+  if (pack.id === "commute" || categoryContext === "交通") {
+    if (hour >= 7 && hour < 10) return ["早班准时出门", "上班路上的一段车程", "早高峰顺利到达", "清晨出门的一笔路费", "赶早路上的交通记录", "地铁公交到岗", "早间路线走完了", "今天也准时出门"];
+    if (hour >= 17 && hour < 21) return ["下班路上的一段车程", "晚高峰回家", "结束一天后的返程", "回家路费记一下", "下班后的回家路", "晚间通勤完成", "下班回到家这边", "回程路上少赶一点"];
+  }
+  return null;
+}
+
+function localDayKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function stableHash(seed) {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function stableIndex(seed, count) {
+  if (!count) return 0;
+  return stableHash(seed) % count;
+}
+
+function scenePackTierIndex(pack, amount) {
+  const index = pack.rules.findIndex((rule) => amount <= rule.max);
+  return index >= 0 ? index : Math.max(0, pack.rules.length - 1);
+}
+
+function stableScenePackNote(pack, amount, categoryContext, variant = 0) {
+  const tierIndex = scenePackTierIndex(pack, amount);
+  const matchedRule = pack.rules[tierIndex] || pack.rules[pack.rules.length - 1];
+  const contextualNotes = contextualSceneNotes(pack, categoryContext);
+  const notes = contextualNotes || matchedRule?.notes || ["今天记一笔日常花费"];
+  const seed = `${localDayKey()}|${pack.id}|${tierIndex}|${categoryContext || pack.category}|${contextualNotes ? "context" : "tier"}`;
+  const baseIndex = stableIndex(seed, notes.length);
+  const noteIndex = (baseIndex + Math.max(0, variant)) % notes.length;
+  return {
+    seed: `${seed}|${variant}`,
+    note: notes[noteIndex] || notes[0],
+  };
+}
+
+function applyMemberScenePack(packId, { keepSelectedCategory = false, silent = false, variant = 0 } = {}) {
   const pack = memberScenePacks.find((x) => x.id === packId);
   if (!pack) return;
   const amount = getAmountValue();
-  const matchedRule = pack.rules.find((rule) => amount <= rule.max) || pack.rules[pack.rules.length - 1];
   const petName = resolvePetNameForNote();
   const effectiveCategory = keepSelectedCategory ? (selectedCategory || pack.category) : pack.category;
-  let phrase = pickRandom(matchedRule?.notes || ["今天记一笔日常花费"]);
+  const picked = stableScenePackNote(pack, amount, effectiveCategory, variant);
+  let phrase = picked.note;
   phrase = phrase.replace(/\{petName\}/g, petName);
-  phrase = enrichNoteWithHistory(phrase, effectiveCategory);
+  phrase = enrichNoteWithHistory(phrase, effectiveCategory, picked.seed);
   if (!keepSelectedCategory) {
     selectCategory(pack.category);
   }
@@ -2547,28 +3545,37 @@ function applyMemberScenePack(packId, { keepSelectedCategory = false } = {}) {
   refs.noteSuggestions.innerHTML = "";
   scenePackExpanded = false;
   renderRecord();
-  showToast(`已生成：${pack.label}`);
+  updateLifeEntryPreview();
+  if (!silent) {
+    showToast("已换一句说法");
+  }
 }
 
 function guessMemberScenePackId() {
   const amount = getAmountValue();
+  const hour = new Date().getHours();
+  const isLateNight = hour < 6;
+  if (isLateNight && selectedCategory === "餐饮") return "food";
+  if (isLateNight && selectedCategory === "其他" && amount <= 45 && !containsTravelKeyword(refs.titleInput.value)) return "food";
+  if ((selectedCategory === "其他" || selectedCategory === "娱乐") && containsTravelKeyword(refs.titleInput.value)) return "travel";
   const categoryToPackId = {
     餐饮: "food",
     交通: "commute",
-    日用: "pet",
-    购物: "travel",
-    娱乐: "travel",
-    其他: "travel",
+    日用: "home",
+    购物: "shopping",
+    娱乐: "social",
+    其他: "home",
   };
   const byCategory = categoryToPackId[selectedCategory || ""] || "";
   if (byCategory && memberScenePacks.some((pack) => pack.id === byCategory)) return byCategory;
   if (amount <= 15) return "commute";
   if (amount <= 45) return "food";
-  if (amount <= 120) return "pet";
-  return "travel";
+  if (amount <= 120) return "home";
+  return "shopping";
 }
 
 function renderMemberScenePacks() {
+  if (!refs.memberScenePackBlock) return;
   const isManualMode = state.recordMode === "manual";
   const isEditing = Boolean(editingRecordId);
   const amountReady = isAmountReady();
@@ -2661,16 +3668,29 @@ function addRecord({ title, amount, category, source, occurredAt }) {
     return false;
   }
   const finalCategory = category || "其他";
-  const finalTitle = title && title.trim() ? title.trim() : `${finalCategory}消费`;
+  const noteRisk = validateManualNote(title, { allowEmpty: true });
+  if (!noteRisk.ok) {
+    showToast(noteRisk.message);
+    return false;
+  }
+  const finalTitle = noteRisk.value || categoryFallbackLine(finalCategory);
   const finalDate = occurredAt ? mergeDateWithCurrentTime(occurredAt) : new Date().toISOString();
+  const numericAmount = Number(amount);
   state.items.unshift({
     id: crypto.randomUUID(),
     title: finalTitle,
-    amount: Number(amount),
+    amount: numericAmount,
     category: finalCategory,
     source,
     createdAt: finalDate,
-    emotionTag: inferEmotionTag({ category: finalCategory, amount: Number(amount) }),
+    updatedAt: new Date().toISOString(),
+    emotionTag: resolveEmotionTagForRecord({
+      title: finalTitle,
+      category: finalCategory,
+      amount: numericAmount,
+      allowBrand: !categoryLockedByUser,
+      seed: `${finalDate}|${finalTitle}`,
+    }),
   });
   persist();
   render();
@@ -2815,6 +3835,14 @@ function importOCRRecords(records) {
       category: x.category || "其他",
       source: "ocr",
       createdAt: x.createdAt || new Date().toISOString(),
+      updatedAt: importedAt,
+      emotionTag: resolveEmotionTagForRecord({
+        title: x.title || "",
+        category: x.category || "其他",
+        amount: Number(x.amount),
+        allowBrand: true,
+        seed: `${x.createdAt || ""}|${x.title || ""}`,
+      }),
       draftMeta: {
         batchId: importBatchId,
         importedAt,
@@ -2911,6 +3939,20 @@ function clearResolvedDraftMarks() {
   render();
 }
 
+function resolveAllPendingDrafts() {
+  let changed = 0;
+  state.items.forEach((item) => {
+    if (item.source === "ocr" && item.draftMeta?.status === "pending") {
+      item.draftMeta.status = "resolved";
+      changed += 1;
+    }
+  });
+  if (!changed) return 0;
+  persist();
+  render();
+  return changed;
+}
+
 function bindDraftSwipe(rowEl, itemId) {
   let startX = 0;
   rowEl.addEventListener("touchstart", (event) => {
@@ -2934,11 +3976,19 @@ function bindDraftSwipe(rowEl, itemId) {
 function renderOCRDraftArea() {
   const items = draftItemsByRecentBatches();
   const pendingItems = items.filter((x) => x.draftMeta?.status !== "resolved");
+  const resolvedCount = items.filter((x) => x.draftMeta?.status === "resolved").length;
   const total = pendingItems.reduce((sum, x) => sum + x.amount, 0);
   refs.ocrDraftSummary.textContent = `共 ${pendingItems.length} 笔待整理 · 合计 ${formatCNY(total)}`;
+  if (refs.ocrResolveAllBtn) {
+    refs.ocrResolveAllBtn.disabled = pendingItems.length === 0;
+  }
+  if (refs.ocrClearResolvedBtn) {
+    refs.ocrClearResolvedBtn.textContent = `完成整理（${resolvedCount} 笔）`;
+    refs.ocrClearResolvedBtn.disabled = resolvedCount === 0;
+  }
   refs.ocrDraftGroups.innerHTML = "";
   if (!items.length) {
-    refs.ocrDraftGroups.innerHTML = `<p class="muted">导入的账单会在这里变成草稿，方便你随时整理～</p>`;
+    refs.ocrDraftGroups.innerHTML = `<p class="ocr-draft-empty muted">选择账单截图后，识别结果会先进入确认页；确认导入后，会出现在这里继续整理。</p>`;
     return;
   }
   const grouped = new Map();
@@ -2961,25 +4011,35 @@ function renderOCRDraftArea() {
         const row = document.createElement("div");
         row.className = `ocr-draft-row ${item.draftMeta.status === "resolved" ? "resolved" : ""}`;
         const pending = item.draftMeta.status !== "resolved";
+        const statusText = pending ? "待整理 ↓" : "已整理";
         row.innerHTML = `
           <div class="ocr-draft-row-inner">
-            <input type="checkbox" ${pending ? "" : "checked"} />
+            <button type="button" class="ocr-draft-check" aria-label="${pending ? "标记已整理" : "标记待整理"}">${pending ? "○" : "✓"}</button>
             <div class="ocr-draft-main">
-              <p class="muted">${new Date(item.createdAt).toLocaleString()}</p>
-              <button type="button" class="ocr-draft-category">${item.category}${pending ? '<span class="ocr-draft-pending">待整理</span>' : ""}</button>
-            </div>
-            <div class="ocr-draft-amount-wrap">
-              <button type="button" class="ocr-draft-amount">${formatCNY(item.amount)}</button>
+              <div class="ocr-draft-title-row">
+                <p class="ocr-draft-title">${item.title}</p>
+                <button type="button" class="ocr-draft-amount">${formatCNY(item.amount)}</button>
+              </div>
+              <p class="muted ocr-draft-time">${new Date(item.createdAt).toLocaleString()}</p>
+              <div class="ocr-draft-meta-row">
+                <span>分类</span>
+                <button type="button" class="ocr-draft-category">${item.category}</button>
+                <span class="ocr-draft-status ${pending ? "pending" : "resolved"}">${statusText}</span>
+                <button type="button" class="ocr-draft-delete-inline" aria-label="删除">删除</button>
+              </div>
               <input type="text" inputmode="decimal" class="ocr-draft-amount-input hidden" value="${Number(item.amount).toFixed(2)}" />
             </div>
           </div>
           <button type="button" class="ocr-draft-delete">删除</button>
         `;
-        row.querySelector("input[type='checkbox']")?.addEventListener("change", (event) => {
-          toggleDraftStatus(item.id, event.target.checked);
+        row.querySelector(".ocr-draft-check")?.addEventListener("click", () => {
+          toggleDraftStatus(item.id, pending);
         });
         row.querySelector(".ocr-draft-category")?.addEventListener("click", () => {
           openDraftCategoryPicker(item.id);
+        });
+        row.querySelector(".ocr-draft-delete-inline")?.addEventListener("click", () => {
+          deleteDraftItem(item.id);
         });
         const amountBtn = row.querySelector(".ocr-draft-amount");
         const amountInput = row.querySelector(".ocr-draft-amount-input");
@@ -3057,8 +4117,8 @@ function monthlyInsightPayload() {
     structure: `本月记录 ${monthItems.length} 笔，其中${topCategory}占比最高，约 ${totalExpense ? Math.round((topAmount / totalExpense) * 100) : 0}% 。`,
     advice:
       totalExpense > 1000
-        ? "建议下月给高频分类设置预算上限，并每周复盘一次，波动会明显收敛。"
-        : "本月支出节奏整体平稳，继续保持按笔记录，下月更容易看见结构变化。",
+        ? "下个月可以继续按笔记，高频分类会更容易对照。"
+        : "本月支出节奏整体平稳，继续按笔记录，下月更容易看见结构变化。",
     createdAt: new Date().toISOString(),
   };
 }
@@ -3082,8 +4142,8 @@ function rangeInsightPayload(days, label) {
     structure: `${label}共记录 ${items.length} 笔，${topCategory}占比约 ${totalExpense ? Math.round((topAmount / totalExpense) * 100) : 0}% 。`,
     advice:
       totalExpense > 3000
-        ? "建议对高频支出分类设置分段预算，并在每周末回看预算达成率。"
-        : "整体支出节奏可控，继续保持按笔记录，长期会更容易优化消费结构。",
+        ? "高频分类比较明显，之后回看时可以先看这一类。"
+        : "整体支出节奏比较稳定，继续按笔记录会更容易看清结构。",
   };
 }
 
@@ -3097,29 +4157,29 @@ function openMonthlyTrialModal(title, body) {
 function getMemberCtaCopy(context = "default") {
   if (context === "playback_complete") {
     return {
-      intro: "把这周的生活轨迹长期留住，回看会更温柔。",
+      intro: "把这周的生活轨迹长期留住，之后回看更完整。",
       quickAction: "保留这周生活轨迹",
       nudge: "想把这些生活切片长期留住？开通会员可自动云端留存。",
     };
   }
   if (context === "share_success") {
     return {
-      intro: "这张分享卡很温柔，继续留存每周生活卡会更有连续感。",
+      intro: "这张分享卡已经生成，继续留存每周生活卡会更有连续感。",
       quickAction: "持续留存每周生活卡",
       nudge: "分享完成啦，开通会员可持续留存每周生活卡。",
     };
   }
   if (context === "ai_monthly") {
     return {
-      intro: "这次复盘只是开始，会员可解锁无限次生活复盘。",
-      quickAction: "解锁无限次生活复盘",
-      nudge: "想继续回看更多生活节奏？会员可解锁无限次复盘。",
+      intro: "这次月记只是开始，会员可解锁更多长期回看。",
+      quickAction: "解锁更多回看",
+      nudge: "想继续回看更多生活节奏？会员可解锁无限次月记与长期回看。",
     };
   }
   return {
-    intro: "让记账更轻松、更省心。",
+    intro: "把记录留清楚，之后回看更完整。",
     quickAction: "立即开通年度会员（推荐）",
-    nudge: "开通会员可持续留存生活记录，随时温柔回看。",
+    nudge: "开通会员可持续留存生活记录，随时回看。",
   };
 }
 
@@ -3175,11 +4235,7 @@ function renderAccountCenterBenefits() {
     titleEl.textContent = `✨ ${petName}在这儿陪着你呀～`;
     leadEl.textContent = "你的会员权益都已解锁：";
     leadEl.classList.remove("hidden");
-    listEl.innerHTML = [
-      `<li>不限次数复盘，${petName}会陪你随时回看生活节奏</li>`,
-      `<li>换机也不丢账单，和${petName}的生活记录会一直在</li>`,
-      `<li>全程无广告打扰，和${petName}的记账时光更轻松</li>`,
-    ].join("");
+    listEl.innerHTML = MEMBER_BENEFITS.slice(0, 3).map((item) => `<li>${item.title.replace(/^[^\s]+ /, "")}</li>`).join("");
     return;
   }
 
@@ -3187,28 +4243,14 @@ function renderAccountCenterBenefits() {
     titleEl.textContent = "✨ 你的会员权益已生效";
     leadEl.textContent = "感谢你的支持，以下权益你都可以随时使用：";
     leadEl.classList.remove("hidden");
-    listEl.innerHTML = [
-      "<li>不限次数复盘，随时回看你的生活节奏</li>",
-      "<li>换机也不丢账单，生活记录始终连续</li>",
-      "<li>全程无广告打扰，记录过程更专注更舒适</li>",
-    ].join("");
+    listEl.innerHTML = MEMBER_BENEFITS.slice(0, 3).map((item) => `<li>${item.title.replace(/^[^\s]+ /, "")}</li>`).join("");
     return;
   }
 
-  titleEl.textContent = petOn ? "✨ 升级会员，解锁更多温柔陪伴" : "✨ 升级会员，解锁更多实用权益";
+  titleEl.textContent = petOn ? "升级会员，解锁更多回看能力" : "升级会员，解锁更多实用权益";
   leadEl.textContent = "";
   leadEl.classList.add("hidden");
-  listEl.innerHTML = petOn
-    ? [
-        "<li>无限次 AI 复盘，更懂你的消费节奏</li>",
-        "<li>天气场景暖心互动，小宠物陪你说悄悄话</li>",
-        "<li>云端账单备份，换机不丢记录</li>",
-      ].join("")
-    : [
-        "<li>无限次 AI 复盘</li>",
-        "<li>云端账单备份</li>",
-        "<li>纯净无广告记账体验</li>",
-      ].join("");
+  listEl.innerHTML = MEMBER_BENEFITS.slice(0, 3).map((item) => `<li>${item.title.replace(/^[^\s]+ /, "")}</li>`).join("");
 }
 
 function renderMemberUpgradeBenefits() {
@@ -3225,28 +4267,11 @@ function renderMemberUpgradeBenefits() {
     refs.accountQuickBuyTip.textContent = "可随时取消，数据仍保留在本地。";
   }
 
-  if (petOn) {
-    titleEl.textContent = "✨ 升级会员，解锁更多温柔陪伴";
-    introEl.textContent = ctaCopy.intro;
-    listEl.innerHTML = [
-      "<li><strong>📊 无限次 AI 复盘，更懂你的消费节奏</strong><span>不限次数复盘，随时回顾账单</span></li>",
-      "<li><strong>🌤️ 解锁天气 / 季节场景互动，小宠物陪你说悄悄话</strong><span>开启后，小宠物会根据天气、时间，给你更贴合当下的温柔陪伴语</span></li>",
-      "<li><strong>☁️ 云端账单备份，换机不丢记录</strong><span>登录账号后，账单数据可安全同步云端，换手机也不怕丢失</span></li>",
-      "<li><strong>🚫 告别所有广告，享受纯净记账体验</strong><span>全程无任何弹窗广告，记账更专注、更安心</span></li>",
-      "<li><strong>📝 宠物专属昵称 + 智能习惯备注</strong><span>自定义宠物名字全覆盖，结合消费偏好自动生成专属温柔备注</span></li>",
-    ].join("");
-    return;
-  }
-
-  titleEl.textContent = "升级会员，解锁更多高级功能";
+  titleEl.textContent = petOn ? "升级会员，解锁更多回看能力" : "升级会员，解锁更多实用权益";
   introEl.textContent = ctaCopy.intro;
-  listEl.innerHTML = [
-    "<li><strong>📊 无限次 AI 消费复盘</strong><span>不限次数生成复盘报告，随时回顾账单，掌握消费节奏</span></li>",
-    "<li><strong>🌤️ 天气 / 季节场景智能提醒</strong><span>根据天气、时间提供贴合当下的消费与生活建议</span></li>",
-    "<li><strong>☁️ 云端账单备份，换机不丢记录</strong><span>登录账号后，账单数据可安全同步云端，换手机也不怕丢失</span></li>",
-    "<li><strong>🚫 无广告纯净记账体验</strong><span>全程无弹窗广告，记账更专注、不受打扰</span></li>",
-    "<li><strong>📝 智能习惯备注与个性化标签</strong><span>结合消费偏好自动生成消费备注，方便后续管理与回顾</span></li>",
-  ].join("");
+  listEl.innerHTML = MEMBER_BENEFITS
+    .map((item) => `<li><strong>${item.title}</strong><span>${item.desc}</span></li>`)
+    .join("");
 }
 
 function updatePetRenameCopy() {
@@ -3287,7 +4312,7 @@ function renderAccountOverlay() {
     accountOverlayView = "center";
   }
   const isLoggedIn = Boolean(state.settings.isLoggedIn);
-  const accountName = state.settings.displayName || "序帐用户";
+  const accountName = state.settings.displayName || "叙帐用户";
   if (!isLoggedIn) {
     if (accountOverlayView !== "member") {
       accountOverlayView = "login";
@@ -3308,14 +4333,13 @@ function renderAccountOverlay() {
   const memberStateText = !state.settings.isMember
     ? "轻享免费版"
     : memberTier === "monthly"
-      ? "月度陪伴中"
+      ? "月度会员已开通"
       : memberTier === "yearly"
-        ? "年度陪伴中"
+        ? "年度会员已开通"
         : memberTier === "lifetime"
-          ? "永久陪伴中"
-          : "会员陪伴中";
+          ? "永久会员已开通"
+          : "会员已开通";
   refs.accountCenterName.textContent = `你好呀，${accountName}`;
-  refs.accountCenterAvatar.textContent = petOn ? "🐱" : "👤";
   refs.accountCenterState.textContent = `当前状态：✨ ${memberStateText}`;
   refs.accountPetNameFeedback?.classList.add("hidden");
   refs.accountPetNameFeedback?.classList.remove("showing");
@@ -3331,7 +4355,7 @@ function renderAccountOverlay() {
   refs.accountPetNicknameSaveBtn.disabled = !showPetNicknameEditor;
   refs.accountPetNicknameTip.textContent = showPetNicknameEditor
     ? "可输入 2-6 个字，保存后将用于宠物包与宠物对话文案。"
-    : "升级会员并开启宠物陪伴后可自定义宠物昵称。";
+    : "升级会员并开启宠物入口后可自定义宠物昵称。";
   updatePetRenameCopy();
   if (refs.accountMemberBenefitsToggle && refs.accountMemberBenefitsBody) {
     refs.accountMemberBenefitsToggle.classList.remove("is-open");
@@ -3351,6 +4375,118 @@ function renderAccountOverlay() {
 function closeMonthlyTrialModal() {
   setUIModal("none");
   refs.monthlyTrialModal.classList.add("hidden");
+}
+
+function resetMonthlyJournalMotion() {
+  if (monthlyJournalRevealTimer) {
+    clearTimeout(monthlyJournalRevealTimer);
+    monthlyJournalRevealTimer = null;
+  }
+  refs.monthlyJournalBody?.classList.remove("monthly-journal-revealed", "monthly-journal-generating");
+  refs.monthlyJournalClosing?.classList.remove("monthly-journal-revealed", "monthly-journal-generating");
+}
+
+function escapeMonthlyJournalHTML(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function wrapMonthlyJournalRevealLines(el) {
+  if (!el || el.classList.contains("monthly-journal-generating")) return;
+  const text = el.textContent.trim();
+  if (!text) return;
+  const lines = text.match(/[^。！？；]+[。！？；]?/g) || [text];
+  const displayLines = lines.length > 4 ? [lines[0], lines[1], lines[2], lines.slice(3).join("")] : lines;
+  el.innerHTML = displayLines
+    .slice(0, 4)
+    .map((line, index) => `<span class="monthly-journal-line" style="--line-i:${index}">${escapeMonthlyJournalHTML(line.trim())}</span>`)
+    .join("");
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+}
+
+function queueMonthlyJournalReveal() {
+  if (monthlyJournalRevealTimer) {
+    clearTimeout(monthlyJournalRevealTimer);
+    monthlyJournalRevealTimer = null;
+  }
+  const modal = refs.monthlyInsightModal;
+  if (!modal || modal.classList.contains("hidden")) return;
+  refs.monthlyJournalBody?.classList.remove("monthly-journal-revealed");
+  refs.monthlyJournalClosing?.classList.remove("monthly-journal-revealed");
+  if (state.isGeneratingMonthlyInsight) {
+    refs.monthlyJournalBody?.classList.add("monthly-journal-generating");
+    return;
+  }
+  refs.monthlyJournalBody?.classList.remove("monthly-journal-generating");
+  monthlyJournalRevealTimer = setTimeout(() => {
+    if (modal.classList.contains("hidden") || state.isGeneratingMonthlyInsight) return;
+    wrapMonthlyJournalRevealLines(refs.monthlyJournalBody);
+    refs.monthlyJournalBody?.classList.add("monthly-journal-revealed");
+    refs.monthlyJournalClosing?.classList.add("monthly-journal-revealed");
+    monthlyJournalRevealTimer = null;
+  }, prefersReducedMotion() ? 0 : 200);
+}
+
+function openMonthlyInsightModal() {
+  setUIModal("monthlyInsight");
+  const modal = refs.monthlyInsightModal;
+  modal?.classList.remove("hidden");
+  modal?.classList.remove("monthly-sheet-opened");
+  resetMonthlyJournalMotion();
+  requestAnimationFrame(() => {
+    modal?.classList.add("monthly-sheet-opened");
+    queueMonthlyJournalReveal();
+  });
+}
+
+function closeMonthlyInsightModal() {
+  setUIModal("none");
+  refs.monthlyInsightModal?.classList.remove("monthly-sheet-opened");
+  resetMonthlyJournalMotion();
+  refs.monthlyInsightModal?.classList.add("hidden");
+}
+
+function openTodayInsightModal() {
+  setUIModal("todayInsight");
+  refs.todayInsightModal?.classList.remove("hidden");
+  refreshTodayInsightIfNeeded();
+}
+
+function closeTodayInsightModal() {
+  setUIModal("none");
+  refs.todayInsightModal?.classList.add("hidden");
+}
+
+function dailyInsightSnapshotSignature(todayItems, dayKey) {
+  const rows = todayItems
+    .filter((item) => Number(item.amount || 0) > 0)
+    .slice()
+    .sort((a, b) => String(a.id || "").localeCompare(String(b.id || "")))
+    .map((item) => [
+      item.id || "",
+      Number(item.amount || 0).toFixed(2),
+      item.category || "",
+      String(item.title || "").trim(),
+      item.updatedAt || item.createdAt || "",
+    ].join("#"));
+  return [dayKey, String(rows.length), ...rows].join("|");
+}
+
+function refreshTodayInsightIfNeeded() {
+  const dayKey = new Date().toISOString().slice(0, 10);
+  const todayItems = state.items.filter((x) => x.createdAt.slice(0, 10) === dayKey);
+  if (!todayItems.length || state.isGeneratingInsight) return;
+  const signature = dailyInsightSnapshotSignature(todayItems, dayKey);
+  const existing = state.insights.find((x) => x.dayKey === dayKey);
+  if (existing?.snapshotSignature === signature) return;
+  generateTodayInsight({ quiet: true });
 }
 
 function openDeleteConfirmModal(recordId) {
@@ -3393,6 +4529,18 @@ function getTodayPlaybackRecords() {
   const todayKey = new Date().toISOString().slice(0, 10);
   return state.items
     .filter((item) => item.createdAt.slice(0, 10) === todayKey)
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+    .slice(0, 16);
+}
+
+function getTraceHeroPlaybackRecords() {
+  const heroPeriod = state.period === "week" ? "week" : "month";
+  const range = getBillRangeForMode(heroPeriod);
+  return state.items
+    .filter((item) => {
+      const day = String(item.createdAt || "").slice(0, 10);
+      return item.amount > 0 && day && day >= range.start && day <= range.end;
+    })
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
     .slice(0, 16);
 }
@@ -3479,17 +4627,18 @@ function closeBillPlaybackModal() {
   refs.billPlaybackModal.classList.add("hidden");
 }
 
-function openBillPlaybackModal() {
-  const records = getTodayPlaybackRecords();
+function openBillPlaybackWithRecords(records, options = {}) {
   if (!records.length) {
-    trackAnalytics("bill_playback_open_empty");
-    showToast("今天还没有账单可回放。");
+    trackAnalytics("bill_playback_open_empty", { source: options.source || "today" });
+    showToast(options.emptyMessage || "这一段还没有账单可回放。");
     return;
   }
-  trackAnalytics("bill_playback_open", { count: records.length });
+  trackAnalytics("bill_playback_open", { count: records.length, source: options.source || "today" });
   playbackRecords = records;
   playbackElapsedBeforePause = 0;
   playbackActiveIndex = -1;
+  if (refs.billPlaybackTitle) refs.billPlaybackTitle.textContent = options.title || "今日生活回放";
+  if (refs.billPlaybackSubtitle) refs.billPlaybackSubtitle.textContent = options.subtitle || "10 秒看完今天的生活节奏";
   refs.billPlaybackTimeline.innerHTML = "";
   records.forEach((item) => {
     const li = document.createElement("li");
@@ -3511,6 +4660,26 @@ function openBillPlaybackModal() {
   startBillPlayback();
 }
 
+function openBillPlaybackModal() {
+  openBillPlaybackWithRecords(getTodayPlaybackRecords(), {
+    source: "today",
+    title: "今日生活回放",
+    subtitle: "10 秒看完今天的生活节奏",
+    emptyMessage: "今天还没有账单可回放。",
+  });
+}
+
+function openTraceHeroPlaybackModal() {
+  const heroPeriod = state.period === "week" ? "week" : "month";
+  const label = billPeriodLabel(heroPeriod);
+  openBillPlaybackWithRecords(getTraceHeroPlaybackRecords(), {
+    source: `trace_${heroPeriod}`,
+    title: `${label}生活回放`,
+    subtitle: "听听这一段生活的节奏",
+    emptyMessage: `${label}还没有账单可回放。`,
+  });
+}
+
 async function generateMonthlyInsight() {
   const TRIAL_TOTAL = 5;
   if (state.isGeneratingMonthlyInsight) return;
@@ -3518,7 +4687,7 @@ async function generateMonthlyInsight() {
   if (!isMember && state.monthlyTrialUsed >= TRIAL_TOTAL) {
     openMonthlyTrialModal(
       "免费次数已用完",
-      "您的免费月度复盘次数已用完，升级会员即可解锁无限次月度/季度/年度 AI 复盘，还有更多专属权益等你体验。"
+      "免费月记次数已用完，升级会员即可解锁无限次月度/季度/年度回看。"
     );
     return;
   }
@@ -3544,7 +4713,7 @@ async function generateMonthlyInsight() {
     : localReport;
   if (aiReport.ok) {
     setAIStatus("monthly", "live", getAIStatusText("live"));
-    triggerPetMicroAction("blink", "复盘写好啦，给你放在这儿咯～");
+    triggerPetMicroAction("blink", "月记写好了，放在这里。");
   } else {
     setAIStatus(
       "monthly",
@@ -3575,17 +4744,17 @@ async function generateMonthlyInsight() {
   if (firstTime) {
     openMonthlyTrialModal(
       "🎁 新用户福利",
-      `您已获得 5 次免费月度 AI 复盘机会，本次消耗 1 次，剩余 ${left} 次。`
+      `你有 5 次免费月记生成机会，本次消耗 1 次，剩余 ${left} 次。`
     );
     return;
   }
-  openMonthlyTrialModal("月度复盘已生成", `本次消耗 1 次免费次数，剩余 ${left} 次。`);
+  openMonthlyTrialModal("月记已生成", `本次消耗 1 次免费次数，剩余 ${left} 次。`);
   showPetBubble(buildAiReviewPetMessage());
 }
 
 async function generatePremiumInsight(label, days) {
   if (!state.settings.isMember) {
-    openMonthlyTrialModal("会员专属权益", "季度 / 年度复盘为会员专属权益，升级会员即可解锁。");
+    openMonthlyTrialModal("会员权益", "季度 / 年度回看为会员权益，升级会员即可解锁。");
     return;
   }
   const report = rangeInsightPayload(days, label);
@@ -3611,16 +4780,18 @@ async function generatePremiumInsight(label, days) {
       getAIStatusText(state.settings.remoteAIEnabled ? "error" : "fallback")
     );
   }
-  refs.monthlyInsightContent.classList.remove("hidden");
-  refs.monthlyInsightSummary.textContent = report.summary;
-  refs.monthlyInsightStructure.textContent = report.structure;
-  refs.monthlyInsightAdvice.textContent = report.advice;
+  if (refs.monthlyJournalBody) {
+    refs.monthlyJournalBody.textContent = formatMonthlyJournalText(report, rangeItems);
+  }
+  if (refs.monthlyJournalClosing) {
+    refs.monthlyJournalClosing.textContent = `${label}先写到这里，之后可以再翻出来看。`;
+  }
   renderAIStatus();
   showToast(getToastCopy().insightGenerated(label));
   showPetBubble(buildAiReviewPetMessage());
 }
 
-async function generateTodayInsight() {
+async function generateTodayInsight({ quiet = false } = {}) {
   if (state.isGeneratingInsight) return;
   state.isGeneratingInsight = true;
   setAIStatus("daily", "hidden", "");
@@ -3629,6 +4800,7 @@ async function generateTodayInsight() {
   const dayKey = new Date().toISOString().slice(0, 10);
   state.insights = state.insights.filter((x) => x.dayKey !== dayKey);
   const todayItems = state.items.filter((x) => x.createdAt.slice(0, 10) === dayKey);
+  const snapshotSignature = dailyInsightSnapshotSignature(todayItems, dayKey);
   const total = todayItems.reduce((sum, x) => sum + x.amount, 0);
   const topCategory = topCategoryFor(todayItems) || "暂无";
   const aiInsight = await requestAIInsight("daily", todayItems, "今日");
@@ -3641,6 +4813,7 @@ async function generateTodayInsight() {
     action: (aiInsight.ok ? aiInsight.payload.action : null) || localFallback.action,
     encourage: (aiInsight.ok ? aiInsight.payload.encourage : null) || localFallback.encourage,
     createdAt: new Date().toISOString(),
+    snapshotSignature,
   };
   if (aiInsight.ok) {
     setAIStatus("daily", "live", getAIStatusText("live"));
@@ -3660,7 +4833,7 @@ async function generateTodayInsight() {
     mode: aiInsight.ok ? "live" : state.settings.remoteAIEnabled ? "error_fallback" : "local_fallback",
     item_count: todayItems.length,
   });
-  showPetBubble(buildAiReviewPetMessage());
+  if (!quiet) showPetBubble(buildAiReviewPetMessage());
 }
 
 function topCategoryFor(items) {
@@ -3669,6 +4842,49 @@ function topCategoryFor(items) {
     map[item.category] = (map[item.category] || 0) + item.amount;
   });
   return Object.entries(map).sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
+function buildHomeStoryNarrative(todayItems) {
+  const count = todayItems.length;
+  const todayTotal = todayItems.reduce((sum, x) => sum + x.amount, 0);
+  const topCategory = topCategoryFor(todayItems);
+
+  if (count === 0) {
+    return {
+      title: "今天先记下来",
+      subtitle: "晚上再回头看，今天会清楚一点。",
+    };
+  }
+  if (count === 1) {
+    const item = todayItems[0];
+    const tag = item.emotionTag || inferEmotionTag(item);
+    return {
+      title: "今天的第一笔小痕迹",
+      subtitle: `${tag}，这一天刚翻开第一页。`,
+    };
+  }
+  if (count === 2) {
+    return {
+      title: "今天已留下 2 段小痕迹",
+      subtitle: topCategory
+        ? `主要在「${topCategory}」上，今天开始变得具体。`
+        : "两笔小账落下来，今天开始有了形状。",
+    };
+  }
+  if (count === 3) {
+    return {
+      title: "今天留下了 3 段小痕迹",
+      subtitle: todayTotal > 0
+        ? `合计 ${formatCNY(todayTotal)}，几笔小账轻轻串起今天。`
+        : "三笔落下来，这一天正在变得可看。",
+    };
+  }
+  return {
+    title: `今天留下了 ${count} 段小痕迹`,
+    subtitle: topCategory
+      ? `「${topCategory}」居多，几笔小账轻轻留住今天怎样过的。`
+      : "几笔小账不是评判，只是把今天怎样过的，轻轻留住。",
+  };
 }
 
 function renderHome() {
@@ -3681,11 +4897,20 @@ function renderHome() {
 
   refs.todayTotal.textContent = formatCNY(todayTotal);
   refs.weekTotal.textContent = `本周累计 ${formatCNY(weekTotal)}`;
+  const homeStory = buildHomeStoryNarrative(todayItems);
+  if (refs.homeStoryTitle) {
+    refs.homeStoryTitle.textContent = homeStory.title;
+  }
+  if (refs.homeStorySubtitle) {
+    refs.homeStorySubtitle.textContent = homeStory.subtitle;
+  }
 
   refs.homeTodayList.innerHTML = "";
-  if (refs.playbackTodayBtn) {
-    refs.playbackTodayBtn.disabled = todayItems.length === 0;
-    refs.playbackTodayBtn.textContent = todayItems.length ? "账单回放" : "暂无回放";
+  if (refs.homePlaybackEntryBtn) {
+    refs.homePlaybackEntryBtn.disabled = todayItems.length === 0;
+  }
+  if (refs.homePlaybackEntryHint) {
+    refs.homePlaybackEntryHint.textContent = todayItems.length ? "十几秒叙完今天" : "有记录后可播放";
   }
   const recent = [...todayItems]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -3705,13 +4930,7 @@ function renderHome() {
       <p class="muted">${item.category} · ${new Date(item.createdAt).toLocaleString()}</p>
     `;
     const openEditor = () => openRecordEditor(item.id);
-    li.addEventListener("click", openEditor);
-    li.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openEditor();
-      }
-    });
+    bindRecordRowActivation(li, openEditor);
     refs.homeTodayList.appendChild(li);
   });
 
@@ -3730,14 +4949,51 @@ function renderHome() {
   }
   const homeActionText = state.latestActionCard?.text || "";
   refs.homeActionCard.classList.remove("hidden");
-  refs.homeActionCardText.textContent = homeActionText || "随手记几笔，这里会慢慢长出你的生活痕迹。";
+  refs.homeActionCardText.textContent = homeActionText || "先记几笔，这里会留下今天的样子。";
   refs.homeActionCardMeta.textContent = homeActionText ? formatRelativeTime(state.latestActionCard?.updatedAt || "") : "";
 }
 
 function resetRecordEditorState() {
   editingRecordId = null;
-  refs.recordFormTitle.textContent = "记账";
+  refs.recordFormTitle.textContent = "记下这一笔";
   refs.deleteRecordBtn.classList.add("hidden");
+  refs.recordEditSecondaryRow?.classList.add("hidden");
+}
+
+function bindRecordRowActivation(row, activate) {
+  let startX = 0;
+  let startY = 0;
+  let moved = false;
+  const MOVE_THRESHOLD = 12;
+
+  row.addEventListener("pointerdown", (event) => {
+    startX = event.clientX;
+    startY = event.clientY;
+    moved = false;
+  });
+  row.addEventListener("pointermove", (event) => {
+    if (Math.abs(event.clientX - startX) > MOVE_THRESHOLD || Math.abs(event.clientY - startY) > MOVE_THRESHOLD) {
+      moved = true;
+    }
+  });
+  row.addEventListener("pointercancel", () => {
+    moved = true;
+  });
+  row.addEventListener("click", (event) => {
+    if (moved) {
+      event.preventDefault();
+      event.stopPropagation();
+      moved = false;
+      return;
+    }
+    activate();
+  });
+  row.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      activate();
+    }
+  });
 }
 
 function startNewManualRecordDraft() {
@@ -3748,6 +5004,11 @@ function startNewManualRecordDraft() {
   updateAmountInputFromStream();
   selectedCategory = topCategoryFromHistory();
   categoryLockedByUser = false;
+  recordDetailsExpanded = false;
+  noteEditorExpanded = false;
+  categoryPanelExpanded = false;
+  previewLineWasRotated = false;
+  previewLineVariant = 0;
   refs.noteSuggestions.classList.add("hidden");
   refs.noteSuggestions.innerHTML = "";
   refs.recordDateInput.value = new Date().toISOString().slice(0, 10);
@@ -3758,9 +5019,12 @@ function startNewManualRecordDraft() {
 function openRecordEditor(recordId) {
   const item = state.items.find((x) => x.id === recordId);
   if (!item) return;
+  if (refs.traceDetailModal && !refs.traceDetailModal.classList.contains("hidden")) {
+    closeTraceDetailModal();
+  }
   editingRecordId = recordId;
   state.recordMode = "manual";
-  refs.recordFormTitle.textContent = "编辑账单";
+  refs.recordFormTitle.textContent = "调整这一笔";
   refs.deleteRecordBtn.classList.remove("hidden");
   refs.titleInput.value = item.title || "";
   amountStream = parseAmountTextToStream(String(item.amount.toFixed(2)));
@@ -3768,6 +5032,11 @@ function openRecordEditor(recordId) {
   selectedCategory = item.category || "其他";
   categoryLockedByUser = true;
   refs.recordDateInput.value = item.createdAt.slice(0, 10);
+  recordDetailsExpanded = false;
+  noteEditorExpanded = false;
+  categoryPanelExpanded = false;
+  previewLineWasRotated = false;
+  previewLineVariant = 0;
   switchTab("record");
   renderRecord();
 }
@@ -3775,30 +5044,41 @@ function openRecordEditor(recordId) {
 function renderRecord() {
   const amountReady = isAmountReady();
   const isEditing = Boolean(editingRecordId);
-  refs.recordModeSegment.classList.toggle("hidden", Boolean(editingRecordId));
+  refs.recordModeSegment.classList.add("hidden");
   refs.modeButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.mode === state.recordMode));
   refs.manualForm.classList.toggle("hidden", state.recordMode !== "manual");
   refs.ocrForm.classList.toggle("hidden", state.recordMode !== "ocr");
+  refs.recordImportLink?.classList.toggle("hidden", state.recordMode !== "manual" || Boolean(editingRecordId));
+  refs.recordEditSecondaryRow?.classList.toggle("hidden", editingRecordId == null || state.recordMode !== "manual");
   refs.deleteRecordBtn.classList.toggle("hidden", editingRecordId == null || state.recordMode !== "manual");
   refs.amountQuickKeyboard?.classList.toggle(
     "hidden",
     !(state.recordMode === "manual" && (isAmountInputFocused || hasAmountStreamValue()))
   );
-  refs.recordFormTitle.textContent = editingRecordId ? "编辑账单" : "记账";
+  refs.recordFormTitle.textContent = editingRecordId ? "调整这一笔" : "记下这一笔";
   if (state.recordMode !== "manual") {
     renderOCRDraftArea();
     return;
   }
 
   const wasDisabled = refs.saveRecordBtn.disabled;
-  refs.categoryField.classList.toggle("hidden", !amountReady && !isEditing);
-  refs.noteField.classList.toggle("hidden", !amountReady && !isEditing);
+  refs.categoryField?.classList.toggle("hidden", true);
+  refs.noteField?.classList.toggle("hidden", true);
   refs.amountAssist.classList.toggle("hidden", amountReady || isEditing);
-  refs.networkHint.classList.toggle("hidden", !amountReady || !state.settings.remoteAIEnabled || isEditing);
-  refs.dateHint.classList.toggle("hidden", !amountReady && !isEditing);
-  refs.localPrivacyHint.classList.toggle("hidden", !amountReady && !isEditing);
-  refs.editDateBtn.classList.toggle("hidden", !amountReady && !isEditing);
+  if (!amountReady && !isEditing) {
+    refs.amountAssist.textContent = "记下一笔今天的生活";
+  }
+  refs.networkHint?.classList.toggle("hidden", true);
+  refs.dateHint?.classList.toggle("hidden", true);
+  refs.localPrivacyHint?.classList.toggle("hidden", true);
+  refs.editDateBtn.classList.toggle("hidden", !isEditing);
   refs.saveRecordBtn.disabled = !amountReady;
+  refs.saveRecordBtn.textContent = isEditing ? "更新这一笔" : "放进账本";
+  toggleRecordDetails(recordDetailsExpanded && (amountReady || isEditing));
+  updateLifeEntryPreview();
+  refs.prefillDemoButtons?.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.prefillMode === prefillDemoMode);
+  });
   if (wasDisabled && amountReady) {
     refs.saveRecordBtn.classList.remove("save-ready");
     requestAnimationFrame(() => {
@@ -3812,6 +5092,7 @@ function renderRecord() {
   }
   updateCategoryUI();
   renderMemberScenePacks();
+  updateLifeEntryPreview();
 }
 
 function renderStats() {
@@ -3825,10 +5106,12 @@ function renderStats() {
       persist();
     }
   }
+  const heroPeriod = period === "week" ? "week" : "month";
   const category = refs.billCategoryFilter.value;
   const periodRange = getBillRangeForMode(period);
   const rangeStart = periodRange?.start || "";
   const rangeEnd = periodRange?.end || "";
+  const heroRange = getBillRangeForMode(heroPeriod);
 
   const categoryOptions = ["", ...new Set(state.items.map((x) => x.category))];
   const currentSelect = refs.billCategoryFilter.value;
@@ -3847,34 +5130,175 @@ function renderStats() {
   filtered = filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   const expenseTotal = filtered.filter((x) => x.amount > 0).reduce((sum, x) => sum + x.amount, 0);
-  refs.billExpenseTotal.textContent = formatCNY(expenseTotal);
+  if (refs.billExpenseTotal) refs.billExpenseTotal.textContent = formatCNY(expenseTotal);
   renderBillTrendChart(filtered, period);
+  renderTraceTrendVisibility();
+  if (refs.traceDetailMeta) {
+    refs.traceDetailMeta.textContent = `${billPeriodLabel(period)} · ${category || "全部分类"} · ${filtered.length} 笔 · 合计 ${formatCNY(expenseTotal)}`;
+  }
 
   refs.billRecordsList.innerHTML = "";
   refs.billRecordsEmpty.style.display = filtered.length ? "none" : "block";
-  filtered.forEach((item) => {
+  filtered.forEach((item, index) => {
+    const emotion = String(item.emotionTag || item.emotion || "").trim();
     const li = document.createElement("li");
-    li.className = "home-record-item";
+    li.className = "trace-slip-item trace-detail-row";
+    li.dataset.category = item.category || "其他";
+    if (index > 0) li.classList.add("with-divider");
     li.tabIndex = 0;
     li.innerHTML = `
-      <div class="item-title-row">
-        <span>${item.title}</span>
-        <span>${formatCNY(item.amount)}</span>
+      <span class="trace-slip-accent" aria-hidden="true"></span>
+      <div class="trace-slip-copy">
+        <div class="trace-slip-title-row">
+          <span class="trace-slip-title">${item.title}</span>
+          <span class="trace-slip-amount muted">${formatCNY(item.amount)}</span>
+        </div>
+        ${emotion ? `<p class="life-slip-mood trace-slip-mood">${emotion}</p>` : ""}
+        <p class="trace-slip-meta muted">${item.category} · ${formatRecordDetailTime(item.createdAt)}</p>
       </div>
-      <p class="muted">${item.category} · ${new Date(item.createdAt).toLocaleString()}</p>
     `;
     const openEditor = () => openRecordEditor(item.id);
-    li.addEventListener("click", openEditor);
-    li.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openEditor();
-      }
-    });
+    bindRecordRowActivation(li, openEditor);
     refs.billRecordsList.appendChild(li);
   });
+
+  const heroItems = state.items
+    .filter((item) => {
+      const day = String(item.createdAt || "").slice(0, 10);
+      return item.amount > 0 && day && day >= heroRange.start && day <= heroRange.end;
+    })
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const heroTotal = heroItems.reduce((sum, item) => sum + item.amount, 0);
+  const topCategory = topCategoryFor(heroItems) || "日常";
+  refs.traceRangeWeekBtn?.classList.toggle("active", heroPeriod === "week");
+  refs.traceRangeMonthBtn?.classList.toggle("active", heroPeriod === "month");
+  if (refs.traceHeroPlayBtn) {
+    refs.traceHeroPlayBtn.disabled = heroItems.length === 0;
+  }
+  if (refs.traceHeroNarrative) {
+    refs.traceHeroNarrative.textContent = heroItems.length
+      ? `这一段留下 ${heroItems.length} 笔，合计 ${formatCNY(heroTotal)}。「${topCategory}」出现得多一点，像这段日子的一个小主题。`
+      : "这一段还安静着，先留下几笔，之后就能看清一点。";
+  }
+  if (refs.traceHeroPreview) {
+    refs.traceHeroPreview.textContent = heroItems.length >= 3
+      ? `${heroPeriod === "week" ? "本周生活切片" : "本月生活章"}已经有素材，可以听听这一段怎么走过。`
+      : "先记几笔，这里会变成能听的一段生活。";
+  }
+  renderTraceHeroRecords(representativeTraceItems(heroItems));
+
   updateBillCustomRangeBtnText();
   updateDebugHUD(`render-stats:${filtered.length}`);
+}
+
+function billPeriodLabel(period) {
+  if (period === "week") return "本周";
+  if (period === "month") return "本月";
+  if (period === "year") return "本年";
+  if (period === "custom") return "自定义";
+  return "这一段";
+}
+
+function defaultRecordTitleFor(category) {
+  const map = {
+    餐饮: "餐饮记录",
+    购物: "购物记录",
+    交通: "交通记录",
+    娱乐: "娱乐记录",
+    日用: "日用记录",
+    其他: "其他记录",
+  };
+  return map[category] || "其他记录";
+}
+
+function traceRepresentativeScore(item, index) {
+  const title = String(item.title || "").trim();
+  const defaultTitle = defaultRecordTitleFor(item.category);
+  const defaultEmotion = inferEmotionTag({ category: item.category, amount: item.amount });
+  const emotion = String(item.emotionTag || item.emotion || "").trim();
+  let score = 0;
+  if (emotion && emotion !== defaultEmotion) score += 40;
+  if (item.userEditedTitle === true) score += 30;
+  if (title && title !== defaultTitle && title.length >= 4 && title.length <= 18) score += 20;
+  if (item.source === "manual") score += 6;
+  score += Math.min(index, 6) * 2;
+  if (title === defaultTitle) score -= 12;
+  return score;
+}
+
+function representativeTraceItems(items) {
+  if (items.length <= 3) return items;
+  const ranked = items
+    .map((item, index) => ({ item, index, score: traceRepresentativeScore(item, index) }))
+    .sort((a, b) => b.score - a.score || new Date(b.item.createdAt) - new Date(a.item.createdAt));
+  const selected = [];
+  const selectedCategories = new Set();
+  ranked.forEach((candidate) => {
+    if (selected.length >= 3) return;
+    const categoryKey = candidate.item.category || "其他";
+    if (selectedCategories.has(categoryKey)) return;
+    selected.push(candidate.item);
+    selectedCategories.add(categoryKey);
+  });
+  ranked.forEach((candidate) => {
+    if (selected.length >= 3) return;
+    if (selected.some((item) => item.id === candidate.item.id)) return;
+    selected.push(candidate.item);
+  });
+  return selected.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function renderTraceHeroRecords(items) {
+  if (!refs.traceHeroRecordsList || !refs.traceHeroEmpty) return;
+  refs.traceHeroRecordsList.innerHTML = "";
+  refs.traceHeroEmpty.classList.toggle("hidden", items.length > 0);
+  items.forEach((item, index) => {
+    const emotion = String(item.emotionTag || item.emotion || "").trim();
+    const li = document.createElement("li");
+    li.className = "trace-slip-item";
+    li.dataset.category = item.category || "其他";
+    li.tabIndex = 0;
+    li.innerHTML = `
+      <span class="trace-slip-accent" aria-hidden="true"></span>
+      <div class="trace-slip-copy">
+        <div class="trace-slip-title-row">
+          <span class="trace-slip-title">${item.title}</span>
+          <span class="trace-slip-amount muted">${formatCNY(item.amount)}</span>
+        </div>
+        ${emotion ? `<p class="life-slip-mood trace-slip-mood">${emotion}</p>` : ""}
+        <p class="trace-slip-meta muted">${item.category} · ${formatRecordTime(item.createdAt)}</p>
+      </div>
+    `;
+    if (index > 0) li.classList.add("with-divider");
+    const openEditor = () => openRecordEditor(item.id);
+    bindRecordRowActivation(li, openEditor);
+    refs.traceHeroRecordsList.appendChild(li);
+  });
+}
+
+function formatRecordTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function formatRecordDetailTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 function renderBillTrendChart(sourceItems = [], period = "month") {
@@ -3968,12 +5392,74 @@ function renderBillTrendChart(sourceItems = [], period = "month") {
   const recent7 = safeTotals.slice(-7).reduce((sum, x) => sum + x, 0);
   const prev7 = safeTotals.slice(-14, -7).reduce((sum, x) => sum + x, 0);
   if (recent7 > prev7 * 1.15) {
-    refs.billTrendInsight.textContent = "最近一周支出有上升趋势，建议关注高频消费分类。";
+    refs.billTrendInsight.textContent = "最近几天花得密了一点，多集中在少数几笔。";
   } else if (recent7 < prev7 * 0.85) {
-    refs.billTrendInsight.textContent = "最近一周支出明显回落，当前消费节奏更稳了。";
+    refs.billTrendInsight.textContent = "最近几天节奏慢下来了。";
   } else {
-    refs.billTrendInsight.textContent = "本月支出整体平稳，保持记录就很棒。";
+    refs.billTrendInsight.textContent = "这一段整体比较匀，没有特别突出的起伏。";
   }
+}
+
+function formatJournalShortDate(date) {
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function formatInsightWeekKicker(start, end) {
+  return `这周 · ${formatJournalShortDate(start)}-${formatJournalShortDate(end)}`;
+}
+
+function formatWeeklyJournalText(report, items) {
+  if (!items.length) {
+    return "近 7 天记录还不多。多记几笔，这里会整理成一段周记。";
+  }
+  const total = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const top = traceSliceTopCategory(items);
+  const days = new Set(items.map((item) => String(item.createdAt || "").slice(0, 10)).filter(Boolean));
+  const countText = items.length <= 2 ? "几笔" : `${items.length} 笔`;
+  const amountMood = total <= 80 ? "花得不多" : total <= 300 ? "花得还算轻" : "花得比平时更有存在感";
+  const categoryText = top?.category && top.category !== "暂无" ? `「${top.category}」冒出来几次` : "一些零散的小事被记了下来";
+  const rhythmText = days.size <= 2
+    ? "它们没有铺满整周，更像几次单独留下的记录。"
+    : "这周分布得比较散，像几条分开的脚注。";
+  return `这周记下 ${countText}，${amountMood}，${categoryText}。${rhythmText}`;
+}
+
+function formatWeeklyJournalClosing(items) {
+  if (!items.length) return "";
+  const total = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  if (items.length <= 2) return "等记录多一点，再回来读这一周。";
+  if (total > 300) return "下周有新记录，再回来对照。";
+  return "下周有新记录，再回来对照。";
+}
+
+function formatMonthlySheetKicker(monthKey) {
+  const [year, month] = String(monthKey || "").split("-");
+  const monthNumber = Number(month);
+  if (!year || !monthNumber) return "这一月";
+  return `这一月 · ${year}年${monthNumber}月`;
+}
+
+function formatMonthlyJournalPlaceholder() {
+  return "这一月还没有回顾。生成后，这里会写成一段月记。";
+}
+
+function formatMonthlyJournalText(report, monthItems) {
+  if (!monthItems.length && !report) return formatMonthlyJournalPlaceholder();
+  const total = monthItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const top = traceSliceTopCategory(monthItems);
+  const countText = monthItems.length ? `${monthItems.length} 笔` : "几笔";
+  const amountText = total <= 120 ? "花费很轻" : total <= 600 ? "花得不算重" : "留下了更明显的生活痕迹";
+  const topText = top?.category ? `「${top.category}」偶尔露头` : "几处日常被留下来";
+  const spreadText = top && total > 0 && top.amount / total > 0.66
+    ? "这个月有一类事情更常被记住。"
+    : "没有哪一类占满整个月，更像几处被留下的注脚。";
+  return `这个月记下来 ${countText}，${amountText}，${topText}。${spreadText}`;
+}
+
+function formatMonthlyJournalClosing(monthItems) {
+  if (!monthItems.length) return "";
+  if (monthItems.length <= 2) return "先放在这里，想读的时候再打开。";
+  return "下个月有新记录，再翻开对照。";
 }
 
 function renderInsight() {
@@ -3997,23 +5483,19 @@ function renderInsight() {
   refs.insightAction.classList.toggle("skeleton-w-90", state.isGeneratingInsight);
   refs.insightEncourage.classList.toggle("skeleton-w-72", state.isGeneratingInsight);
 
-  refs.insightHistory.innerHTML = "";
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
   sevenDaysAgo.setHours(0, 0, 0, 0);
+  if (refs.insightWeekKicker) {
+    refs.insightWeekKicker.textContent = formatInsightWeekKicker(sevenDaysAgo, new Date());
+  }
   const weekItems = state.items.filter((item) => new Date(item.createdAt) >= sevenDaysAgo && item.amount > 0);
-  refs.insightHistoryEmpty.style.display = weekItems.length ? "none" : "block";
-
-  if (weekItems.length) {
-    const weeklyReport = rangeInsightPayload(7, "近7天");
-    const li = document.createElement("li");
-    li.innerHTML = `
-      <div class="item-title-row"><span>${new Date().toISOString().slice(0, 10)}</span><span>${copy.weeklyHistoryTag}</span></div>
-      <p>${weeklyReport.summary}</p>
-      <p class="muted">${weeklyReport.structure}</p>
-      <p class="muted">${weeklyReport.advice}</p>
-    `;
-    refs.insightHistory.appendChild(li);
+  const weeklyReport = rangeInsightPayload(7, "近7天");
+  if (refs.insightJournalBody) {
+    refs.insightJournalBody.textContent = formatWeeklyJournalText(weeklyReport, weekItems);
+  }
+  if (refs.insightJournalClosing) {
+    refs.insightJournalClosing.textContent = formatWeeklyJournalClosing(weekItems);
   }
 
   refs.generateInsightBtn.disabled = state.isGeneratingInsight;
@@ -4021,41 +5503,49 @@ function renderInsight() {
   refs.generateInsightBtn.classList.toggle("generating", state.isGeneratingInsight);
 
   const monthKey = thisMonthKey();
-  const monthlyReport = state.monthlyInsights.find((x) => x.monthKey === monthKey) || state.monthlyInsights[0];
+  const monthlyReport = state.monthlyInsights.find((x) => x.monthKey === monthKey);
+  const monthItems = state.items.filter((x) => x.createdAt.startsWith(monthKey) && x.amount > 0);
   const left = Math.max(0, TRIAL_TOTAL - state.monthlyTrialUsed);
   const isMember = Boolean(state.settings.isMember);
   const isMonthlyLocked = !isMember && left === 0;
-  refs.monthlyTrialText.classList.toggle("hidden", isMember);
-  if (!isMember) {
-    refs.monthlyTrialText.textContent = `剩余试用次数：${left}/${TRIAL_TOTAL}`;
+  if (refs.monthlySheetKicker) {
+    refs.monthlySheetKicker.textContent = formatMonthlySheetKicker(monthKey);
+  }
+  refs.monthlyTrialInline?.classList.toggle("hidden", isMember);
+  if (refs.monthlyTrialInline && !isMember) {
+    refs.monthlyTrialInline.textContent = `剩余 ${left}/${TRIAL_TOTAL} 次`;
   }
   refs.generateMonthlyInsightBtn.disabled = state.isGeneratingMonthlyInsight;
+  refs.generateMonthlyInsightBtn.classList.add("monthly-footnote-link", "monthly-footnote-primary-action");
   refs.generateMonthlyInsightBtn.classList.toggle("generating", state.isGeneratingMonthlyInsight);
-  refs.generateMonthlyInsightBtn.classList.toggle("primary-btn", !isMonthlyLocked);
-  refs.generateMonthlyInsightBtn.classList.toggle("locked-report-btn", isMonthlyLocked);
+  refs.generateMonthlyInsightBtn.classList.toggle("monthly-generate-locked", isMonthlyLocked);
   if (state.isGeneratingMonthlyInsight) {
-    refs.generateMonthlyInsightBtn.textContent = copy.monthlyBtnLoading;
+    refs.generateMonthlyInsightBtn.textContent = "正在梳理这一月...";
   } else if (isMonthlyLocked) {
-    refs.generateMonthlyInsightBtn.innerHTML = copy.monthlyBtnLocked;
-  } else {
-    refs.generateMonthlyInsightBtn.textContent = copy.monthlyBtnIdle;
-  }
-  refs.monthlyInsightContent.classList.toggle("hidden", !monthlyReport && !state.isGeneratingMonthlyInsight);
-  if (state.isGeneratingMonthlyInsight) {
-    refs.monthlyInsightSummary.textContent = " ";
-    refs.monthlyInsightStructure.textContent = " ";
-    refs.monthlyInsightAdvice.textContent = " ";
+    refs.generateMonthlyInsightBtn.textContent = "想多聊几句？了解会员 →";
   } else if (monthlyReport) {
-    refs.monthlyInsightSummary.textContent = monthlyReport.summary;
-    refs.monthlyInsightStructure.textContent = monthlyReport.structure;
-    refs.monthlyInsightAdvice.textContent = monthlyReport.advice;
+    refs.generateMonthlyInsightBtn.textContent = "再写一版 →";
+  } else {
+    refs.generateMonthlyInsightBtn.textContent = "生成这一月的回顾 →";
   }
-  refs.monthlyInsightSummary.classList.toggle("skeleton-line", state.isGeneratingMonthlyInsight);
-  refs.monthlyInsightStructure.classList.toggle("skeleton-line", state.isGeneratingMonthlyInsight);
-  refs.monthlyInsightAdvice.classList.toggle("skeleton-line", state.isGeneratingMonthlyInsight);
-  refs.monthlyInsightSummary.classList.toggle("skeleton-w-100", state.isGeneratingMonthlyInsight);
-  refs.monthlyInsightStructure.classList.toggle("skeleton-w-92", state.isGeneratingMonthlyInsight);
-  refs.monthlyInsightAdvice.classList.toggle("skeleton-w-76", state.isGeneratingMonthlyInsight);
+  if (state.isGeneratingMonthlyInsight) {
+    refs.monthlyJournalBody.textContent = "正在梳理这一月...";
+    refs.monthlyJournalClosing.textContent = "";
+  } else if (monthlyReport) {
+    refs.monthlyJournalBody.textContent = formatMonthlyJournalText(monthlyReport, monthItems);
+    refs.monthlyJournalClosing.textContent = formatMonthlyJournalClosing(monthItems);
+  } else {
+    refs.monthlyJournalBody.textContent = formatMonthlyJournalPlaceholder();
+    refs.monthlyJournalClosing.textContent = "";
+  }
+  refs.monthlyJournalBody.classList.remove("skeleton-line", "skeleton-w-100");
+  refs.monthlyJournalBody.classList.toggle("monthly-journal-generating", state.isGeneratingMonthlyInsight);
+  refs.monthlyJournalClosing.classList.remove("monthly-journal-generating");
+  if (refs.monthlyInsightModal && !refs.monthlyInsightModal.classList.contains("hidden")) {
+    refs.monthlyJournalBody.classList.remove("monthly-journal-revealed");
+    refs.monthlyJournalClosing.classList.remove("monthly-journal-revealed");
+    requestAnimationFrame(queueMonthlyJournalReveal);
+  }
   const showWeeklyActions = weekItems.length > 0 && !state.isGeneratingInsight;
   [refs.weeklyRhythmBtn, refs.weeklyShareBtn, refs.weeklyTagBtn].forEach((btn) => {
     if (!btn) return;
@@ -4063,13 +5553,16 @@ function renderInsight() {
     btn.disabled = !showWeeklyActions;
   });
   const showMonthlyActions = Boolean(monthlyReport) && !state.isGeneratingMonthlyInsight;
-  [refs.monthlySoftPlanBtn, refs.monthlySaveSummaryBtn, refs.monthlyToneSwitchBtn].forEach((btn) => {
+  [refs.monthlySaveSummaryBtn, refs.monthlyToneSwitchBtn].forEach((btn) => {
     if (!btn) return;
+    btn.classList.add("monthly-footnote-link", "monthly-footnote-secondary");
     btn.classList.toggle("hidden", !showMonthlyActions);
     btn.disabled = !showMonthlyActions;
   });
+  refs.monthlyFootnoteDot?.classList.toggle("hidden", !showMonthlyActions);
   if (refs.advancedInsightToggleBtn && refs.advancedInsightActions) {
-    refs.advancedInsightToggleBtn.textContent = advancedInsightExpanded ? "收起更多复盘" : "查看更多复盘";
+    refs.advancedInsightToggleBtn.classList.add("monthly-footnote-link", "monthly-footnote-appendix");
+    refs.advancedInsightToggleBtn.textContent = advancedInsightExpanded ? "收起更多时间段" : "更多时间段";
     refs.advancedInsightActions.classList.toggle("hidden", !advancedInsightExpanded);
   }
   const memberUnlocked = state.settings.isMember;
@@ -4077,20 +5570,53 @@ function renderInsight() {
   refs.generateYearlyInsightBtn.classList.toggle("member-unlocked", memberUnlocked);
   refs.generateQuarterlyInsightBtn.innerHTML = memberUnlocked
     ? "生成季度复盘"
-    : '<span class="lock-icon">🔒︎</span>生成季度复盘';
+    : "生成季度复盘";
   refs.generateYearlyInsightBtn.innerHTML = memberUnlocked
     ? "生成年度复盘"
-    : '<span class="lock-icon">🔒︎</span>生成年度复盘';
+    : "生成年度复盘";
   renderAIStatus();
 }
 
+function settingsMemberLabel() {
+  if (!state.settings.isMember) return "免费版";
+  const tier = String(state.settings.memberTier || "").toLowerCase();
+  if (tier === "monthly") return "月度会员";
+  if (tier === "yearly") return "年度会员";
+  if (tier === "lifetime") return "永久会员";
+  return "会员";
+}
+
+function settingsAppearanceLabel() {
+  if (state.settings.appearance === "dark") return "深色";
+  if (state.settings.appearance === "light") return "浅色";
+  return "跟随系统";
+}
+
+function openSettingsSheet(sheetId) {
+  const normalized = ["backup", "appearance", "companion", "privacy"].includes(sheetId) ? sheetId : "backup";
+  refs.settingsSheetSections.forEach((section) => {
+    section.classList.toggle("hidden", section.id !== `settingsSheet${normalized[0].toUpperCase()}${normalized.slice(1)}`);
+  });
+  setUIModal("settingsSheet");
+  refs.settingsSheetModal?.classList.remove("hidden");
+}
+
+function closeSettingsSheet() {
+  setUIModal("none");
+  refs.settingsSheetModal?.classList.add("hidden");
+}
+
 function renderSettings() {
-  const accountName = state.settings.displayName || "序帐用户";
+  const accountName = state.settings.displayName || "叙帐用户";
   const isLoggedIn = Boolean(state.settings.isLoggedIn);
-  refs.accountAvatar.textContent = isLoggedIn ? "🐱" : "👤";
+  const memberLabel = settingsMemberLabel();
+  refs.settingsIdentityName.textContent = accountName;
+  refs.settingsIdentityMeta.textContent = `${state.settings.syncEnabled ? "已同步云端" : "本地保存"} · ${memberLabel}`;
   refs.accountEntryText.textContent = isLoggedIn
-    ? `${accountName} > 管理账号与会员。`
-    : "点击登录，解锁云备份与会员权益 >";
+    ? "你的叙账在这里，账号和权益都可以按需整理。"
+    : "想备份或续聊时，再点这里登录。";
+  refs.settingsAccountRowMeta.textContent = isLoggedIn ? `已登录 · ${memberLabel}` : "未登录 · 可选";
+  refs.settingsAppearanceMeta.textContent = settingsAppearanceLabel();
   refs.displayNameInput.value = state.settings.displayName;
   refs.syncSwitch.checked = state.settings.syncEnabled;
   refs.remoteAISwitch.checked = state.settings.remoteAIEnabled;
@@ -4120,7 +5646,7 @@ function runStabilitySmokeChecks() {
     { id: "tab-sync", pass: uiRuntimeState.tab === currentTab && currentTab === activePage && currentTab === activeTab },
     { id: "modal-state", pass: UI_MODALS.has(uiRuntimeState.modal) },
     { id: "input-focus-state", pass: UI_INPUT_FOCUS.has(uiRuntimeState.inputFocus) },
-    { id: "stats-render-safe", pass: Boolean(refs.billExpenseTotal && refs.billRecordsList && refs.billRecordsEmpty) },
+    { id: "stats-render-safe", pass: Boolean(refs.traceDetailMeta && refs.billRecordsList && refs.billRecordsEmpty) },
     { id: "record-render-safe", pass: Boolean(refs.saveRecordBtn && refs.amountInput && refs.categoryOptions) },
     { id: "insight-render-safe", pass: Boolean(refs.generateInsightBtn && refs.insightSummary) },
     { id: "overlay-lock-safe", pass: typeof syncOverlayScrollLock === "function" },
@@ -4170,6 +5696,7 @@ function init() {
     if (refs.recordDateInput.value) {
       showToast(`已切换为补记日期：${refs.recordDateInput.value}`);
     }
+    updateLifeEntryPreview();
   });
   selectedCategory = topCategoryFromHistory();
   amountStream = parseAmountTextToStream(refs.amountInput.value);
@@ -4219,6 +5746,7 @@ function init() {
   refs.titleInput.addEventListener("input", () => {
     setUIInputFocus("title");
     renderNoteSuggestions();
+    updateLifeEntryPreview();
     if (!editingRecordId) {
       scheduleCategoryRecommendation();
     }
@@ -4228,6 +5756,53 @@ function init() {
     setTimeout(() => {
       refs.noteSuggestions.classList.add("hidden");
     }, 120);
+  });
+  refs.lifeEntryHeadline?.addEventListener("click", () => {
+    noteEditorExpanded = !noteEditorExpanded;
+    updateLifeEntryPreview();
+    if (noteEditorExpanded) {
+      setTimeout(() => refs.titleInput?.focus(), 60);
+    }
+  });
+  refs.lifeEntryChangeCategory?.addEventListener("click", () => {
+    categoryPanelExpanded = !categoryPanelExpanded;
+    updateLifeEntryPreview();
+  });
+  refs.scenePackMoreCloseBtn?.addEventListener("click", closeScenePackMoreSheet);
+  refs.scenePackMoreSheet?.addEventListener("click", (event) => {
+    if (event.target === refs.scenePackMoreSheet) {
+      closeScenePackMoreSheet();
+    }
+  });
+  refs.recordImportLink?.addEventListener("click", () => {
+    resetRecordEditorState();
+    state.recordMode = "ocr";
+    renderRecord();
+  });
+  refs.recordManualLink?.addEventListener("click", () => {
+    startNewManualRecordDraft();
+    state.recordMode = "manual";
+    renderRecord();
+  });
+  refs.recordDetailsToggle?.addEventListener("click", () => {
+    toggleRecordDetails();
+  });
+  refs.prefillDemoButtons?.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      prefillDemoMode = btn.dataset.prefillMode || "generic";
+      previewLineWasRotated = false;
+      if (prefillDemoMode === "brand") {
+        refs.titleInput.value = "瑞幸";
+      } else if (prefillDemoMode === "habit") {
+        refs.titleInput.value = "地铁通勤";
+        selectedCategory = "交通";
+        previewLineWasRotated = true;
+      } else {
+        refs.titleInput.value = "";
+      }
+      updateLifeEntryPreview();
+      renderRecord();
+    });
   });
   refs.tabs.forEach((btn) =>
     btn.addEventListener("click", () => {
@@ -4261,8 +5836,44 @@ function init() {
     })
   );
 
-  refs.billCategoryFilter.addEventListener("change", renderStats);
-  refs.billDateFilterBtn.addEventListener("click", openBillDateRangeModal);
+  refs.traceRangeWeekBtn?.addEventListener("click", () => setTraceHeroRange("week"));
+  refs.traceRangeMonthBtn?.addEventListener("click", () => setTraceHeroRange("month"));
+  refs.traceHeroPlayBtn?.addEventListener("click", openTraceSliceModal);
+  refs.traceDetailOpenBtn?.addEventListener("click", openTraceDetailModal);
+  refs.traceDetailCloseBtn?.addEventListener("click", closeTraceDetailModal);
+  refs.traceDetailModal?.addEventListener("click", (event) => {
+    if (event.target === refs.traceDetailModal) {
+      closeTraceDetailModal();
+    }
+  });
+  refs.traceTrendToggleBtn?.addEventListener("click", () => {
+    traceTrendExpanded = !traceTrendExpanded;
+    renderTraceTrendVisibility();
+  });
+  refs.traceSliceCloseBtn?.addEventListener("click", closeTraceSliceModal);
+  refs.traceSliceModal?.addEventListener("click", (event) => {
+    if (event.target === refs.traceSliceModal) {
+      closeTraceSliceModal();
+    }
+  });
+  refs.traceSlicePrevBtn?.addEventListener("click", () => {
+    stopTraceSliceTimer();
+    moveTraceSliceChapter(-1);
+  });
+  refs.traceSliceNextBtn?.addEventListener("click", () => {
+    stopTraceSliceTimer();
+    moveTraceSliceChapter(1);
+  });
+  refs.traceSlicePlayBtn?.addEventListener("click", () => {
+    if (traceSlicePlaying) {
+      stopTraceSliceTimer();
+      updateTraceSliceControls();
+    } else {
+      startTraceSliceTimer();
+    }
+  });
+  refs.billCategoryFilter?.addEventListener("change", renderStats);
+  refs.billDateFilterBtn?.addEventListener("click", openBillDateRangeModal);
   refs.billDateRangeCloseBtn.addEventListener("click", closeBillDateRangeModal);
   refs.billPresetWeekBtn.addEventListener("click", () => {
     billRangeDraftMode = "week";
@@ -4318,8 +5929,18 @@ function init() {
   refs.saveRecordBtn.addEventListener("click", async () => {
     updateDebugHUD("save-click-start");
     const wasEditing = Boolean(editingRecordId);
+    const noteRisk = validateManualNote(refs.titleInput.value, { allowEmpty: true });
+    if (!noteRisk.ok) {
+      showToast(noteRisk.message);
+      updateDebugHUD("save-blocked-risk");
+      return;
+    }
+    if (refs.titleInput.value !== noteRisk.value) {
+      refs.titleInput.value = noteRisk.value;
+      updateLifeEntryPreview();
+    }
     const draftRecordContext = {
-      title: refs.titleInput.value.trim(),
+      title: noteRisk.value,
       category: selectedCategory || "其他",
       amount: getAmountValue(),
       createdAt: refs.recordDateInput.value,
@@ -4332,18 +5953,25 @@ function init() {
         showToast("请先填写有效金额。");
       } else {
         const finalCategory = selectedCategory || "其他";
-        current.title = refs.titleInput.value.trim() || `${finalCategory}消费`;
+        current.title = noteRisk.value || categoryFallbackLine(finalCategory);
         current.amount = amount;
         current.category = finalCategory;
         current.createdAt = mergeDateWithCurrentTime(refs.recordDateInput.value);
-        current.emotionTag = inferEmotionTag({ category: finalCategory, amount });
+        current.updatedAt = new Date().toISOString();
+        current.emotionTag = resolveEmotionTagForRecord({
+          title: current.title,
+          category: finalCategory,
+          amount,
+          allowBrand: !categoryLockedByUser,
+          seed: `${current.id}|${current.title}`,
+        });
         persist();
         render();
         ok = true;
       }
     } else {
       ok = addRecord({
-        title: refs.titleInput.value.trim(),
+        title: noteRisk.value,
         amount: getAmountValue(),
         category: selectedCategory || "其他",
         source: "manual",
@@ -4356,13 +5984,19 @@ function init() {
       updateAmountInputFromStream();
       selectedCategory = topCategoryFromHistory();
       categoryLockedByUser = false;
+      recordDetailsExpanded = false;
+      noteEditorExpanded = false;
+      categoryPanelExpanded = false;
+      previewLineWasRotated = false;
+      previewLineVariant = 0;
+      prefillDemoMode = "generic";
       resetRecordEditorState();
       updateCategoryUI();
       refs.noteSuggestions.classList.add("hidden");
       refs.noteSuggestions.innerHTML = "";
       refs.recordDateInput.value = new Date().toISOString().slice(0, 10);
       goHomeAfterSave();
-      showToast(wasEditing ? "账单已更新" : "手动记录已保存");
+      showToast(wasEditing ? "这一笔已更新" : "已记下。去首页看看今天留下的痕迹。");
       updateDebugHUD("save-ok");
       setTimeout(() => {
         triggerPetMicroAction("stamp", "啪叽盖章，记进小本本啦～");
@@ -4393,6 +6027,10 @@ function init() {
     openOCRConfirm(result);
     refs.ocrImageInput.value = "";
   });
+  refs.ocrDemoResultBtn?.addEventListener("click", async () => {
+    const result = await runMockOCR({ name: "wechat-demo.png" });
+    openOCRConfirm(result);
+  });
   refs.ocrCancelBtn.addEventListener("click", () => {
     closeOCRConfirm();
   });
@@ -4409,6 +6047,10 @@ function init() {
     }
     clearResolvedDraftMarks();
     showToast(`已完成整理 ${resolvedCount} 条账单`);
+  });
+  refs.ocrResolveAllBtn?.addEventListener("click", () => {
+    const changed = resolveAllPendingDrafts();
+    showToast(changed ? `已标记 ${changed} 条为已整理` : "没有待整理账单");
   });
   refs.ocrCategoryOverlay.addEventListener("click", (event) => {
     if (event.target === refs.ocrCategoryOverlay) {
@@ -4494,19 +6136,11 @@ function init() {
     renderHome();
     showToast(`已标记常花类目：${topCategory}。`);
   });
-  refs.monthlySoftPlanBtn?.addEventListener("click", () => {
-    const result = buildMonthlySoftPlanText();
-    state.monthlyActionCard = result;
-    setLatestActionCard(result, { scope: "monthly" });
-    persist();
-    renderHome();
-    showToast("柔和下月参考已生成，已放到首页卡片。");
-  });
   refs.monthlySaveSummaryBtn?.addEventListener("click", () => {
     const monthKey = thisMonthKey();
-    const monthlyReport = state.monthlyInsights.find((x) => x.monthKey === monthKey) || state.monthlyInsights[0];
+    const monthlyReport = state.monthlyInsights.find((x) => x.monthKey === monthKey);
     if (!monthlyReport) {
-      showToast("先生成月度复盘，再保存小结。");
+      showToast("先生成月记，再保存小结。");
       return;
     }
     const result = `月度小结：${monthlyReport.summary}`;
@@ -4517,7 +6151,7 @@ function init() {
     showToast("月度小结已保存到首页行动卡。");
   });
   refs.monthlyToneSwitchBtn?.addEventListener("click", () => {
-    showToast("已切换叙述风格，给你另一种温柔表达。");
+    showToast("换一种说法，再读一遍。");
     generateMonthlyInsight();
   });
   refs.advancedInsightToggleBtn?.addEventListener("click", () => {
@@ -4588,6 +6222,7 @@ function init() {
   refs.monthlyTrialModalOkBtn.addEventListener("click", closeMonthlyTrialModal);
   refs.monthlyTrialUpgradeBtn.addEventListener("click", () => {
     closeMonthlyTrialModal();
+    closeMonthlyInsightModal();
     switchTab("settings");
     showToast(getToastCopy().memberEntryHint);
   });
@@ -4596,7 +6231,21 @@ function init() {
       closeMonthlyTrialModal();
     }
   });
-  refs.playbackTodayBtn?.addEventListener("click", openBillPlaybackModal);
+  refs.insightMonthlyOpenBtn?.addEventListener("click", openMonthlyInsightModal);
+  refs.monthlyInsightCloseBtn?.addEventListener("click", closeMonthlyInsightModal);
+  refs.monthlyInsightModal?.addEventListener("click", (event) => {
+    if (event.target === refs.monthlyInsightModal) {
+      closeMonthlyInsightModal();
+    }
+  });
+  refs.insightTodayOpenBtn?.addEventListener("click", openTodayInsightModal);
+  refs.todayInsightCloseBtn?.addEventListener("click", closeTodayInsightModal);
+  refs.todayInsightModal?.addEventListener("click", (event) => {
+    if (event.target === refs.todayInsightModal) {
+      closeTodayInsightModal();
+    }
+  });
+  refs.homePlaybackEntryBtn?.addEventListener("click", openBillPlaybackModal);
   refs.billPlaybackCloseBtn?.addEventListener("click", closeBillPlaybackModal);
   refs.billPlaybackPauseBtn?.addEventListener("click", () => {
     if (playbackRunning) {
@@ -4620,7 +6269,15 @@ function init() {
   });
 
   refs.displayNameInput.addEventListener("input", (e) => {
-    state.settings.displayName = e.target.value.trim() || "序帐用户";
+    const result = validateDisplayName(e.target.value, { fallback: "叙帐用户", label: "昵称", min: 1, max: 12 });
+    if (!result.ok) {
+      showToast(result.message);
+      return;
+    }
+    if (e.target.value !== result.value && e.target.value.trim().length > 12) {
+      e.target.value = result.value;
+    }
+    state.settings.displayName = result.value;
     persist();
     renderHome();
     renderSettings();
@@ -4628,6 +6285,24 @@ function init() {
   });
   refs.accountEntryBtn.addEventListener("click", () => {
     openAccountOverlay();
+  });
+  refs.settingsAccountRowBtn?.addEventListener("click", () => {
+    openAccountOverlay();
+  });
+  refs.settingsSheetButtons.forEach((btn) => {
+    btn.addEventListener("click", () => openSettingsSheet(btn.dataset.settingsSheet));
+  });
+  refs.settingsSheetCloseBtn?.addEventListener("click", closeSettingsSheet);
+  refs.settingsSheetModal?.addEventListener("click", (event) => {
+    if (event.target === refs.settingsSheetModal) {
+      closeSettingsSheet();
+    }
+  });
+  refs.privacyPolicyBtn?.addEventListener("click", () => {
+    openSettingsSheet("privacy");
+  });
+  refs.termsLinkBtn?.addEventListener("click", () => {
+    showToast("用户协议会在正式版中打开完整页面。");
   });
   refs.memberNudgeBtn?.addEventListener("click", () => {
     trackAnalytics("member_cta_clicked", { source: memberCtaContext, channel: "nudge_bar" });
@@ -4657,7 +6332,7 @@ function init() {
   };
   refs.accountPhoneLoginBtn.addEventListener("click", mockLogin);
   refs.accountWechatLoginBtn.addEventListener("click", mockLogin);
-  refs.memberScenePackEntryBtn.addEventListener("click", () => {
+  refs.memberScenePackEntryBtn?.addEventListener("click", () => {
     openAccountOverlay();
     memberPlansExpanded = false;
     accountOverlayView = state.settings.isMember ? "center" : "member";
@@ -4714,12 +6389,17 @@ function init() {
       showToast("升级会员后可自定义宠物昵称");
       return;
     }
-    const nextName = (refs.accountPetNicknameInput.value || "").trim();
-    const isValidName = /^[\u4e00-\u9fa5A-Za-z0-9]{2,6}$/.test(nextName);
-    if (!isValidName) {
-      playPetRenameFeedback("唔… 换个名字好不好？");
+    const result = validateDisplayName(refs.accountPetNicknameInput.value, {
+      fallback: "",
+      label: "宠物昵称",
+      min: 2,
+      max: 6,
+    });
+    if (!result.ok || !result.value) {
+      playPetRenameFeedback(result.message || "换个名字好不好？");
       return;
     }
+    const nextName = result.value;
     const previousName = (state.settings.userPetNickname || "").trim();
     state.settings.userPetNickname = nextName;
     persist();
@@ -4823,6 +6503,7 @@ function init() {
       state.settings.appearance = btn.dataset.appearance;
       persist();
       applyTheme();
+      renderSettings();
     })
   );
   systemThemeQuery.addEventListener("change", () => state.settings.appearance === "system" && applyTheme());
