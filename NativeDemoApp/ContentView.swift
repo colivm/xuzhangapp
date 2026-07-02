@@ -618,6 +618,7 @@ struct ContentView: View {
     @State private var lastMemberStatusRefreshAt: Date?
     @State private var homeLifeMarkRewardPrompt: LifeMarkSceneRewardPrompt?
     @State private var memoryPromptItem: HomeItem?
+    @State private var memoryPromptReason: PhotoMemoryPromptReason?
     @State private var memorySourceItem: HomeItem?
     @State private var memoryPreviewItem: HomeItem?
     @State private var selectedMemoryPhotos: [PhotosPickerItem] = []
@@ -872,6 +873,7 @@ struct ContentView: View {
                          },
                          onAttachMemoryImage: { item in
                              memoryPromptItem = nil
+                             memoryPromptReason = nil
                              memoryPreviewItem = nil
                              pendingMemoryImageDatas = []
                              selectedMemoryPhotos = []
@@ -882,8 +884,12 @@ struct ContentView: View {
                     onSaved: { prompt in
                         let savedItem = homeViewModel.items.first
                         selectTab(.today)
-                        if let savedItem, !savedItem.hasMemoryImages {
-                            showMemoryPrompt(for: savedItem)
+                        if let savedItem,
+                           let reason = PhotoMemoryPromptPolicy.reason(
+                               for: savedItem,
+                               existingItems: homeViewModel.items
+                           ) {
+                            showMemoryPrompt(for: savedItem, reason: reason)
                         }
                         if let prompt {
                             showHomeLifeMarkRewardPrompt(prompt)
@@ -902,6 +908,7 @@ struct ContentView: View {
                     onOpenInsight: { selectTab(.insight) },
                     onAttachMemoryImage: { item in
                         memoryPromptItem = nil
+                        memoryPromptReason = nil
                         memoryPreviewItem = nil
                         pendingMemoryImageDatas = []
                         selectedMemoryPhotos = []
@@ -954,10 +961,11 @@ struct ContentView: View {
         }
     }
 
-    private func showMemoryPrompt(for item: HomeItem) {
+    private func showMemoryPrompt(for item: HomeItem, reason: PhotoMemoryPromptReason) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
             guard memoryPromptItem == nil else { return }
             withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
+                memoryPromptReason = reason
                 memoryPromptItem = item
             }
         }
@@ -967,6 +975,7 @@ struct ContentView: View {
         withAnimation(.easeInOut(duration: 0.18)) {
             memoryPromptItem = nil
         }
+        memoryPromptReason = nil
         memorySourceItem = nil
         memoryPreviewItem = nil
         showMemoryPhotoPicker = false
@@ -992,9 +1001,11 @@ struct ContentView: View {
 
             MemorySuccessCard(
                 item: item,
+                reason: memoryPromptReason,
                 onAddImage: {
                     withAnimation(.easeInOut(duration: 0.16)) {
                         memoryPromptItem = nil
+                        memoryPromptReason = nil
                     }
                     openMemoryPhotoPicker(for: item)
                 },
@@ -1694,6 +1705,7 @@ struct RecordEditSheet: View {
     @State private var showEditPhotoPicker = false
     @State private var selectedEditPhotos: [PhotosPickerItem] = []
     @State private var didAttachMemoryImage = false
+    @State private var showDeleteConfirmation = false
     @FocusState private var isNoteFieldFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -1831,8 +1843,7 @@ struct RecordEditSheet: View {
                         }
 
                         Button(role: .destructive) {
-                            onDelete()
-                            dismiss()
+                            showDeleteConfirmation = true
                         } label: {
                             Image(systemName: "trash")
                                 .font(.system(size: 15, weight: .semibold))
@@ -1843,6 +1854,19 @@ struct RecordEditSheet: View {
             }
         }
         .presentationDetents([.large])
+        .confirmationDialog(
+            "删除这条账单？",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                onDelete()
+                dismiss()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("删除后不会保留在账本里。")
+        }
         .photosPicker(
             isPresented: $showEditPhotoPicker,
             selection: $selectedEditPhotos,

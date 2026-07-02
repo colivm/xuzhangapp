@@ -42,6 +42,7 @@ struct MemoryAttachmentThumbnail: View {
 
 struct MemorySuccessCard: View {
     let item: HomeItem
+    let reason: PhotoMemoryPromptReason?
     let onAddImage: () -> Void
     let onSkip: () -> Void
 
@@ -57,20 +58,21 @@ struct MemorySuccessCard: View {
             }
 
             VStack(spacing: 6) {
-                Text("已放进账本 ✨")
+                Text(reason?.title ?? "已放进账本")
                     .font(.system(size: 21, weight: .bold))
                     .foregroundStyle(AppColors.text)
-                Text("为这一笔留下一个回忆。")
+                Text(reason?.detail ?? "需要时再补一张图，不用每笔都加。")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(AppColors.subtext)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             memoryRecordSummary
 
             VStack(spacing: 10) {
                 Button(action: onAddImage) {
-                    Label("添加图片（可选）", systemImage: "photo.on.rectangle")
+                    Label(reason?.actionTitle ?? "添加图片", systemImage: "photo.on.rectangle")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -83,7 +85,7 @@ struct MemorySuccessCard: View {
                 .buttonStyle(.plain)
 
                 Button(action: onSkip) {
-                    Text("暂不添加")
+                    Text("先不加")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(AppColors.subtext)
                         .frame(maxWidth: .infinity)
@@ -118,6 +120,18 @@ struct MemorySuccessCard: View {
                 )
 
             VStack(alignment: .leading, spacing: 4) {
+                if let reason {
+                    Text(reason.sceneLabel)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppColors.accent)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(AppColors.accent.opacity(0.10))
+                        )
+                }
                 Text(item.displayTitle)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(AppColors.text)

@@ -355,6 +355,8 @@ struct HomeView: View {
     @State private var todayInlineEditingItemID: UUID?
     @State private var todaySwipedItemID: UUID?
     @State private var todayDeletingItemID: UUID?
+    @State private var todayPendingDeleteItem: HomeItem?
+    @State private var showTodayDeleteConfirmation = false
     @State private var todayPlaybackPrompt: TodayPlaybackPrompt?
     @State private var petHint: String = "有一笔就记一笔，晚点也能补。"
     @State private var petBubbleVisible = false
@@ -1553,9 +1555,27 @@ struct HomeView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .confirmationDialog(
+            "删除这条账单？",
+            isPresented: $showTodayDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                if let todayPendingDeleteItem {
+                    deleteTodayRecord(todayPendingDeleteItem)
+                }
+                todayPendingDeleteItem = nil
+            }
+            Button("取消", role: .cancel) {
+                todayPendingDeleteItem = nil
+            }
+        } message: {
+            Text("删除后不会保留在账本里。")
+        }
         .onDisappear {
             todayInlineEditingItemID = nil
             todaySwipedItemID = nil
+            todayPendingDeleteItem = nil
         }
     }
 
@@ -2138,7 +2158,7 @@ struct HomeView: View {
 
     private func todaySwipeActions(for item: HomeItem, isVisible: Bool) -> some View {
         Button(role: .destructive) {
-            deleteTodayRecord(item)
+            requestTodayDeleteConfirmation(for: item)
         } label: {
             ZStack {
                 Image(systemName: "trash")
@@ -2159,6 +2179,11 @@ struct HomeView: View {
         .offset(x: isVisible ? 0 : 18)
         .allowsHitTesting(isVisible)
         .animation(todayEditSpring, value: isVisible)
+    }
+
+    private func requestTodayDeleteConfirmation(for item: HomeItem) {
+        todayPendingDeleteItem = item
+        showTodayDeleteConfirmation = true
     }
 
     private func todaySwipeHandle(for item: HomeItem, isSwiped: Bool) -> some View {

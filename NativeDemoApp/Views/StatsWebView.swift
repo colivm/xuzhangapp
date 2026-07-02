@@ -35,6 +35,8 @@ struct StatsWebView: View {
     @State private var handledOpenTraceRequestID: UUID?
     @State var traceSwipedItemID: UUID?
     @State private var traceDeletingItemID: UUID?
+    @State private var tracePendingDeleteItem: HomeItem?
+    @State private var showTraceDeleteConfirmation = false
     @State private var traceAutoCommitRequestID: UUID?
     @GestureState private var traceSwipeDragState: TraceSwipeDragState?
     @State var showTraceCustomDatePanel = false
@@ -2265,6 +2267,26 @@ struct StatsWebView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .confirmationDialog(
+            "删除这条账单？",
+            isPresented: $showTraceDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                if let tracePendingDeleteItem {
+                    deleteRecord(tracePendingDeleteItem)
+                }
+                tracePendingDeleteItem = nil
+            }
+            Button("取消", role: .cancel) {
+                tracePendingDeleteItem = nil
+            }
+        } message: {
+            Text("删除后不会保留在账本里。")
+        }
+        .onDisappear {
+            tracePendingDeleteItem = nil
+        }
     }
 
     private var traceDetailEditorOverlay: some View {
@@ -3432,7 +3454,7 @@ struct StatsWebView: View {
 
     private func traceSwipeActions(for item: HomeItem, isVisible: Bool) -> some View {
         Button(role: .destructive) {
-            deleteRecord(item)
+            requestTraceDeleteConfirmation(for: item)
         } label: {
             traceSwipeActionLabel("删除", systemImage: "trash", tint: Color.red.opacity(0.82))
         }
@@ -3443,6 +3465,11 @@ struct StatsWebView: View {
         .offset(x: isVisible ? 0 : 18)
         .allowsHitTesting(isVisible)
         .animation(traceEditSpring, value: isVisible)
+    }
+
+    private func requestTraceDeleteConfirmation(for item: HomeItem) {
+        tracePendingDeleteItem = item
+        showTraceDeleteConfirmation = true
     }
 
     private func traceSwipeActionLabel(_ title: String, systemImage: String, tint: Color) -> some View {
@@ -3580,6 +3607,7 @@ struct FocusedRecordEditor: View {
     @State private var showPhotoPicker = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var didAttachMemoryImage = false
+    @State private var showDeleteConfirmation = false
     @FocusState private var focusedField: FocusedField?
 
     private enum EditorMode {
@@ -3683,6 +3711,18 @@ struct FocusedRecordEditor: View {
                     }
                 }
             }
+        }
+        .confirmationDialog(
+            "删除这条账单？",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                onDelete()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("删除后不会保留在账本里。")
         }
     }
 
@@ -3871,7 +3911,9 @@ struct FocusedRecordEditor: View {
                     .accessibilityLabel("更多")
                 }
 
-                Button(role: .destructive, action: onDelete) {
+                Button(role: .destructive) {
+                    showDeleteConfirmation = true
+                } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(accent)

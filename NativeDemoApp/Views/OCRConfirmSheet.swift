@@ -69,39 +69,7 @@ struct OCRConfirmSheet: View {
                 }
 
                 Divider()
-                VStack(spacing: 10) {
-                    Button {
-                        importSelected(asReviewDrafts: false)
-                    } label: {
-                        Label(
-                            importAction == .direct ? "正在直接导入" : "直接导入 \(selectedRows.count) 条",
-                            systemImage: "tray.and.arrow.down.fill"
-                        )
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(AppColors.accent)
-                            .frame(maxWidth: .infinity, minHeight: 42)
-                            .background(
-                                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                    .fill(Color.white.opacity(0.78))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                    .stroke(AppColors.accent.opacity(0.20), lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(selectedRows.isEmpty || isCollectingImport)
-
-                    HStack(spacing: 12) {
-                    Button("取消") { dismiss() }
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppColors.subtext)
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color.white.opacity(0.7))
-                        )
-
+                VStack(spacing: 11) {
                     Button {
                         importSelected(asReviewDrafts: true)
                     } label: {
@@ -109,15 +77,49 @@ struct OCRConfirmSheet: View {
                             importAction == .review ? "正在进入整理" : "进入整理 \(selectedRows.count) 条",
                             systemImage: isCollectingImport ? "tray.and.arrow.down.fill" : "checklist.checked"
                         )
-                            .font(.system(size: 15, weight: .semibold))
-                            .frame(maxWidth: .infinity, minHeight: 48)
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(maxWidth: .infinity, minHeight: 50)
                     }
+                    .buttonStyle(.plain)
                     .disabled(selectedRows.isEmpty || isCollectingImport)
                     .foregroundStyle(.white)
                     .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
                             .fill(selectedRows.isEmpty ? AppColors.subtext.opacity(0.35) : AppColors.accent)
                     )
+
+                    HStack(spacing: 12) {
+                        Button("取消") { dismiss() }
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(AppColors.subtext)
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                            .background(
+                                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                    .fill(Color.white.opacity(0.62))
+                            )
+                            .buttonStyle(.plain)
+
+                        Button {
+                            importSelected(asReviewDrafts: false)
+                        } label: {
+                            Label(
+                                importAction == .direct ? "正在直接导入" : "直接导入",
+                                systemImage: "tray.and.arrow.down"
+                            )
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(selectedRows.isEmpty || isCollectingImport)
+                        .foregroundStyle(AppColors.accent)
+                        .background(
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .fill(Color.white.opacity(0.74))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .stroke(AppColors.accent.opacity(0.18), lineWidth: 1)
+                        )
                     }
                 }
                 .padding(16)
@@ -401,6 +403,7 @@ struct OCRDraftPanel: View {
 
     @State private var activeDraftID: UUID?
     @State private var isClearingResolved = false
+    @State private var reviewSwipeDirection = 1
     @GestureState private var reviewDragOffset: CGFloat = 0
 
     private var pendingItems: [HomeItem] {
@@ -487,8 +490,13 @@ struct OCRDraftPanel: View {
                     clearResolvedDrafts()
                 } label: {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 32, height: 32)
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(Color.white.opacity(resolvedCount > 0 ? 0.70 : 0.34)))
+                        .overlay(
+                            Circle()
+                                .stroke(AppColors.accent.opacity(resolvedCount > 0 ? 0.18 : 0.06), lineWidth: 1)
+                        )
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(clearResolvedForeground)
@@ -509,40 +517,34 @@ struct OCRDraftPanel: View {
     }
 
     private var floatingDigestCard: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(AppColors.accent.opacity(0.14))
-                Image(systemName: pendingItems.isEmpty ? "checkmark.seal.fill" : "doc.viewfinder")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(AppColors.accent)
-            }
-            .frame(width: 46, height: 46)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.white.opacity(0.42), lineWidth: 1)
-            )
+        HStack(spacing: 10) {
+            Image(systemName: pendingItems.isEmpty ? "checkmark.seal.fill" : "doc.viewfinder")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(AppColors.accent)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(AppColors.accent.opacity(0.10)))
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(pendingItems.isEmpty ? "这批账单已经收好" : "导入账单待整理")
-                    .font(.system(size: 16, weight: .bold))
+            Text(floatingDigestText)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+
+            Spacer(minLength: 6)
+
+            if !pendingItems.isEmpty {
+                Text("待确认")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.82))
+                    .lineLimit(1)
+            } else {
+                Text("\(resolvedCount) 笔")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
                     .foregroundStyle(AppColors.text)
-                Text(floatingDigestText)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.subtext)
-                    .lineLimit(2)
             }
-
-            Spacer(minLength: 8)
-
-            Text(pendingItems.isEmpty ? "\(resolvedCount) 笔" : "\(pendingItems.count) 笔")
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-                .foregroundStyle(AppColors.accentDark)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.12)))
         }
-        .padding(14)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(floatingDigestBackground)
         .overlay(floatingDigestBorder)
         .transition(.opacity.combined(with: .scale(scale: 0.96)).combined(with: .offset(y: 8)))
@@ -550,21 +552,20 @@ struct OCRDraftPanel: View {
 
     private var floatingDigestText: String {
         if pendingItems.isEmpty {
-            return "确认后会进入正式账本，回放和统计会按真实记录继续计算。"
+            return "这批账单已整理 \(resolvedCount) 笔"
         }
         let total = pendingTotal.formatted(.cny.precision(.fractionLength(2)))
-        return "合计 \(total)，先悬在这里，确认后会收进账本。"
+        return "\(pendingItems.count) 笔待整理 · \(total)"
     }
 
     private var floatingDigestBackground: some View {
-        RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(AppColors.panelStrong.opacity(0.82))
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color.white.opacity(0.52))
             .overlay(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.34),
-                        AppColors.paperWarm.opacity(0.14),
-                        AppColors.accent.opacity(0.10)
+                        Color.white.opacity(0.24),
+                        AppColors.accent.opacity(0.06)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -573,13 +574,13 @@ struct OCRDraftPanel: View {
     }
 
     private var floatingDigestBorder: some View {
-        RoundedRectangle(cornerRadius: 20, style: .continuous)
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
             .stroke(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.60),
-                        AppColors.accent.opacity(0.24),
-                        AppColors.line.opacity(0.50)
+                        Color.white.opacity(0.48),
+                        AppColors.accent.opacity(0.16),
+                        AppColors.line.opacity(0.32)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -620,18 +621,20 @@ struct OCRDraftPanel: View {
                 reviewStackHeader(activeIndex: activeIndex)
 
                 ZStack {
-                    if pendingItems.indices.contains(activeIndex + 1) {
-                        backgroundReviewCard(pendingItems[activeIndex + 1], label: "下一条")
-                            .offset(y: 96)
-                            .scaleEffect(0.91)
-                            .opacity(0.48)
+                    if pendingItems.indices.contains(activeIndex - 1) {
+                        backgroundReviewCard(pendingItems[activeIndex - 1], label: "上一条", systemName: "chevron.up")
+                            .offset(y: -154)
+                            .scaleEffect(0.94)
+                            .opacity(0.34)
+                            .zIndex(0)
                     }
 
-                    if pendingItems.indices.contains(activeIndex - 1) {
-                        backgroundReviewCard(pendingItems[activeIndex - 1], label: "上一条")
-                            .offset(y: -54)
-                            .scaleEffect(0.92)
-                            .opacity(0.34)
+                    if pendingItems.indices.contains(activeIndex + 1) {
+                        backgroundReviewCard(pendingItems[activeIndex + 1], label: "下一条", systemName: "chevron.down")
+                            .offset(y: 158)
+                            .scaleEffect(0.94)
+                            .opacity(0.38)
+                            .zIndex(0)
                     }
 
                     OCRDraftRow(
@@ -643,13 +646,18 @@ struct OCRDraftPanel: View {
                         onUpdateItem: onUpdateItem,
                         onDelete: onDelete
                     )
+                    .id(activeItem.id)
                     .zIndex(2)
-                    .offset(y: reviewDragOffset * 0.18)
+                    .offset(y: reviewDragOffset * 0.32)
+                    .scaleEffect(1 - min(abs(reviewDragOffset) / 2600, 0.035))
+                    .transition(reviewCardTransition)
                 }
-                .padding(.vertical, 18)
-                .frame(minHeight: 386)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 46)
+                .frame(minHeight: 468)
                 .contentShape(Rectangle())
                 .gesture(reviewStackDragGesture(activeIndex: activeIndex))
+                .animation(.interactiveSpring(response: 0.34, dampingFraction: 0.86, blendDuration: 0.08), value: activeDraftID)
 
                 reviewStackControls(activeIndex: activeIndex, activeItem: activeItem)
             }
@@ -703,7 +711,7 @@ struct OCRDraftPanel: View {
             .updating($reviewDragOffset) { value, state, _ in
                 let vertical = value.translation.height
                 guard abs(vertical) > max(24, abs(value.translation.width) * 1.4) else { return }
-                state = min(92, max(-92, vertical))
+                state = min(118, max(-118, vertical))
             }
             .onEnded { value in
                 let vertical = value.translation.height
@@ -720,40 +728,59 @@ struct OCRDraftPanel: View {
             }
     }
 
-    private func backgroundReviewCard(_ item: HomeItem, label: String) -> some View {
+    private func backgroundReviewCard(_ item: HomeItem, label: String, systemName: String) -> some View {
         HStack(spacing: 10) {
-            Text(label)
+            Image(systemName: systemName)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(AppColors.accent.opacity(0.72))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(Capsule(style: .continuous).fill(Color.white.opacity(0.54)))
-            VStack(alignment: .leading, spacing: 5) {
+                .foregroundStyle(AppColors.accent.opacity(0.74))
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(AppColors.accent.opacity(0.12)))
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AppColors.accent.opacity(0.70))
+            VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(AppColors.text.opacity(0.72))
                     .lineLimit(1)
                 Text(item.createdAt.zhBillDateTime)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AppColors.subtext.opacity(0.64))
+                    .lineLimit(1)
             }
             Spacer()
             Text(item.amount.formatted(.cny.precision(.fractionLength(2))))
-                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .font(.system(size: 14, weight: .bold, design: .rounded))
                 .foregroundStyle(AppColors.text.opacity(0.66))
                 .lineLimit(1)
         }
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.56))
+                .fill(Color.white.opacity(0.72))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
+                .stroke(Color.white.opacity(0.62), lineWidth: 1)
         )
+        .shadow(color: Color.black.opacity(0.05), radius: 18, y: 8)
+        .padding(.horizontal, 10)
         .allowsHitTesting(false)
+    }
+
+    private var reviewCardTransition: AnyTransition {
+        let insertionEdge: Edge = reviewSwipeDirection >= 0 ? .bottom : .top
+        let removalEdge: Edge = reviewSwipeDirection >= 0 ? .top : .bottom
+        return .asymmetric(
+            insertion: .move(edge: insertionEdge)
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.985)),
+            removal: .move(edge: removalEdge)
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.985))
+        )
     }
 
     private func reviewStackControls(activeIndex: Int, activeItem: HomeItem) -> some View {
@@ -900,7 +927,8 @@ struct OCRDraftPanel: View {
         guard let activeIndex else { return }
         let nextIndex = min(max(activeIndex + delta, 0), pendingItems.count - 1)
         guard nextIndex != activeIndex else { return }
-        withAnimation(.spring(response: 0.30, dampingFraction: 0.88)) {
+        reviewSwipeDirection = delta >= 0 ? 1 : -1
+        withAnimation(.interactiveSpring(response: 0.34, dampingFraction: 0.86, blendDuration: 0.08)) {
             activeDraftID = pendingItems[nextIndex].id
         }
     }
@@ -912,7 +940,8 @@ struct OCRDraftPanel: View {
             : pendingItems.indices.contains(currentIndex - 1)
                 ? pendingItems[currentIndex - 1].id
                 : nil
-        withAnimation(.spring(response: 0.30, dampingFraction: 0.88)) {
+        reviewSwipeDirection = pendingItems.indices.contains(currentIndex + 1) ? 1 : -1
+        withAnimation(.interactiveSpring(response: 0.34, dampingFraction: 0.86, blendDuration: 0.08)) {
             activeDraftID = nextCandidate
         }
         onToggleResolved(item.id, true)
@@ -946,6 +975,7 @@ private struct OCRDraftRow: View {
     @State private var selectedDate: Date
     @State private var isEditingAmount = false
     @State private var datePanelExpanded = false
+    @State private var showDeleteConfirmation = false
 
     init(
         item: HomeItem,
@@ -1015,6 +1045,18 @@ private struct OCRDraftRow: View {
             guard selectedDate != newValue else { return }
             selectedDate = newValue
         }
+        .confirmationDialog(
+            "删除这条账单？",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                onDelete(item.id)
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("删除后不会导入账本。")
+        }
     }
 
     private var rowBackground: some View {
@@ -1051,11 +1093,20 @@ private struct OCRDraftRow: View {
         Button {
             onToggleResolved(item.id, !isResolved)
         } label: {
-            Image(systemName: isResolved || isFocused ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: isFocused ? 24 : 23, weight: .semibold))
-                .foregroundStyle(isResolved || isFocused ? AppColors.accent : AppColors.subtext.opacity(0.48))
+            Image(systemName: isResolved ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: isFocused ? 26 : 23, weight: .semibold))
+                .foregroundStyle(resolveButtonForeground)
+                .frame(width: isFocused ? 30 : 26, height: isFocused ? 30 : 26)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(isResolved ? "已确认整理" : "待确认整理")
+    }
+
+    private var resolveButtonForeground: Color {
+        if isResolved {
+            return AppColors.accent
+        }
+        return isFocused ? AppColors.accent.opacity(0.58) : AppColors.subtext.opacity(0.48)
     }
 
     private var titleBlock: some View {
@@ -1240,7 +1291,7 @@ private struct OCRDraftRow: View {
 
     private var deleteButton: some View {
         Button(role: .destructive) {
-            onDelete(item.id)
+            showDeleteConfirmation = true
         } label: {
             Image(systemName: "trash")
                 .font(.system(size: 12, weight: .semibold))
