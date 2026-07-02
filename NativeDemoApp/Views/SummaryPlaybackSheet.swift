@@ -1865,26 +1865,26 @@ private struct WeeklyStoryShareCardView: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 lifeSlicePosterHeader
-                    .padding(.top, 34)
+                    .padding(.top, 30)
 
                 lifeSlicePosterTitleBlock
-                    .padding(.top, 46)
+                    .padding(.top, 26)
 
                 lifeSlicePosterPhotoGrid
-                    .padding(.top, 24)
+                    .padding(.top, 18)
 
                 lifeSlicePosterScenePills
-                    .padding(.top, 22)
+                    .padding(.top, 16)
 
                 lifeSlicePosterReasonCard
-                    .padding(.top, 24)
+                    .padding(.top, 16)
 
-                Spacer(minLength: 18)
+                Spacer(minLength: 8)
 
                 lifeSlicePosterFooter
             }
             .padding(.horizontal, 34)
-            .padding(.bottom, 34)
+            .padding(.bottom, 28)
         }
         .frame(width: cardSize.width, height: cardSize.height)
         .clipped()
@@ -1951,24 +1951,25 @@ private struct WeeklyStoryShareCardView: View {
                 .foregroundStyle(deepGreen.opacity(0.86))
 
             Text(lifeSlicePosterHeadline)
-                .font(.system(size: 40, weight: .bold, design: .serif))
+                .font(.system(size: 34, weight: .bold, design: .serif))
                 .foregroundStyle(ink)
-                .lineLimit(2)
-                .minimumScaleFactor(0.72)
+                .lineLimit(1)
+                .minimumScaleFactor(0.70)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(lifeSlicePosterSubtitle)
-                .font(.system(size: 20, weight: .medium))
+                .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(muted.opacity(0.92))
-                .lineSpacing(5)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineSpacing(4)
+                .lineLimit(2)
+                .minimumScaleFactor(0.86)
         }
     }
 
     private var lifeSlicePosterPhotoGrid: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 14) {
             posterPrimaryPhoto
-            HStack(spacing: 18) {
+            HStack(spacing: 14) {
                 posterSmallPhoto(index: 1)
                 posterSmallPhoto(index: 2)
             }
@@ -1979,7 +1980,7 @@ private struct WeeklyStoryShareCardView: View {
         posterPhotoCard(
             anchor: posterAnchor(at: 0),
             fallbackCaption: "那次见面留在这一张里",
-            height: 360,
+            height: 300,
             cornerRadius: 18,
             iconSize: 30
         )
@@ -1989,7 +1990,7 @@ private struct WeeklyStoryShareCardView: View {
         posterPhotoCard(
             anchor: posterAnchor(at: index),
             fallbackCaption: index == 1 ? "回家路上" : "给家里添的",
-            height: 150,
+            height: 126,
             cornerRadius: 14,
             iconSize: 28
         )
@@ -2010,7 +2011,7 @@ private struct WeeklyStoryShareCardView: View {
 
             HStack(alignment: .center, spacing: 8) {
                 Text(posterCaption(anchor, fallback: fallbackCaption))
-                    .font(.system(size: height > 200 ? 19 : 17, weight: .semibold))
+                    .font(.system(size: height > 200 ? 18 : 15, weight: .semibold))
                     .foregroundStyle(ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
@@ -2020,7 +2021,7 @@ private struct WeeklyStoryShareCardView: View {
                 posterPhotoIcon(anchor, size: iconSize)
             }
             .padding(.horizontal, height > 200 ? 18 : 14)
-            .padding(.vertical, height > 200 ? 14 : 12)
+            .padding(.vertical, height > 200 ? 13 : 10)
             .background(Color.white.opacity(0.94))
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -2034,9 +2035,17 @@ private struct WeeklyStoryShareCardView: View {
     @ViewBuilder
     private func posterImage(_ anchor: SummaryMemoryAnchor?) -> some View {
         if let anchor, let uiImage = UIImage(data: anchor.imageData) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .scaledToFill()
+            ZStack {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .blur(radius: 18)
+                    .overlay(Color.white.opacity(0.10))
+
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+            }
         } else {
             ZStack {
                 LinearGradient(
@@ -2060,18 +2069,18 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var lifeSlicePosterScenePills: some View {
-        HStack(spacing: 40) {
+        HStack(spacing: 30) {
             ForEach(posterSceneLabels, id: \.self) { label in
                 HStack(spacing: 8) {
                     Image(systemName: posterSceneIcon(for: label))
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                     Text(label)
-                        .font(.system(size: 19, weight: .bold))
+                        .font(.system(size: 17, weight: .bold))
                         .lineLimit(1)
                 }
                 .foregroundStyle(deepGreen.opacity(0.84))
-                .padding(.horizontal, 17)
-                .frame(height: 36)
+                .padding(.horizontal, 15)
+                .frame(height: 32)
                 .background(Capsule(style: .continuous).fill(softGreen.opacity(0.62)))
             }
         }
@@ -2079,25 +2088,25 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var lifeSlicePosterReasonCard: some View {
-        HStack(alignment: .center, spacing: 22) {
+        HStack(alignment: .center, spacing: 18) {
             Image(systemName: "sparkles")
-                .font(.system(size: 31, weight: .semibold))
+                .font(.system(size: 27, weight: .semibold))
                 .foregroundStyle(Color(hex: "c3a36d"))
-                .frame(width: 58)
+                .frame(width: 52)
 
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text("这几张为什么被留下")
-                    .font(.system(size: 19, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(ink)
                 Text("它们代表这周的几种生活场景。\n每周只留少量画面，方便以后回看与回想。")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(muted.opacity(0.92))
-                    .lineSpacing(4)
+                    .lineSpacing(3)
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 28)
-        .frame(height: 96)
+        .padding(.horizontal, 24)
+        .frame(height: 82)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.white.opacity(0.78))
