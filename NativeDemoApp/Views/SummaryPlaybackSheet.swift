@@ -415,6 +415,8 @@ struct SummaryPlaybackSheet: View {
 
                     chapterStage
 
+                    memoryAnchorGallery
+
                     controls
 
                     if playbackDone {
@@ -832,6 +834,84 @@ struct SummaryPlaybackSheet: View {
     private func chapterElementChips(for chapter: SummaryChapter) -> [(symbol: String, text: String)] {
         LifeStorySignalService.chapterSignals(from: chapter)
             .map { (symbol: $0.symbol, text: $0.label) }
+    }
+
+    @ViewBuilder
+    private var memoryAnchorGallery: some View {
+        if !playback.memoryAnchors.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(playback.range == .week ? "这一周留下的画面" : "这个月的代表画面")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                    Spacer()
+                    Text("\(playback.memoryAnchors.count) 张")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppColors.subtext)
+                }
+                .padding(.horizontal, 2)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(playback.memoryAnchors) { anchor in
+                            memoryAnchorCard(anchor)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Color.white.opacity(0.48))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color.white.opacity(0.48), lineWidth: 0.8)
+            )
+        }
+    }
+
+    private func memoryAnchorCard(_ anchor: SummaryMemoryAnchor) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ZStack(alignment: .topLeading) {
+                if let uiImage = UIImage(data: anchor.imageData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 206, height: 132)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                } else {
+                    MemoryAttachmentThumbnail(imageData: anchor.imageData, height: 132, cornerRadius: 18)
+                        .frame(width: 206)
+                }
+
+                Text(anchor.label)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(Capsule(style: .continuous).fill(Color.black.opacity(0.28)))
+                    .padding(10)
+            }
+            .shadow(color: AppColors.subtext.opacity(0.12), radius: 12, x: 0, y: 8)
+
+            Text(anchor.caption)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 6) {
+                Text(anchor.createdAt.zhBillDateOnly)
+                Text("·")
+                Text(anchor.amount.formatted(.cny))
+            }
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(AppColors.subtext)
+            .lineLimit(1)
+        }
+        .frame(width: 206, alignment: .leading)
     }
 
 /*

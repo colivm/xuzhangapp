@@ -72,7 +72,7 @@ struct MemorySuccessCard: View {
 
             VStack(spacing: 10) {
                 Button(action: onAddImage) {
-                    Label(reason?.actionTitle ?? "添加图片", systemImage: "photo.on.rectangle")
+                    Label(reason?.actionTitle ?? "留张记忆图", systemImage: "photo.on.rectangle")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -160,21 +160,69 @@ struct MemorySuccessCard: View {
 struct MemoryPreviewSheet: View {
     let item: HomeItem
     let imageDatas: [Data]
-    let onConfirm: () -> Void
+    let onConfirm: (Int) -> Void
     let onReselect: () -> Void
+    @State private var selectedCoverIndex = 0
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    TabView {
-                        ForEach(Array(imageDatas.enumerated()), id: \.offset) { pair in
-                            MemoryAttachmentThumbnail(imageData: pair.element, height: 300, cornerRadius: 20)
-                                .tag(pair.offset)
+                    VStack(alignment: .leading, spacing: 12) {
+                        ZStack(alignment: .topLeading) {
+                            if imageDatas.indices.contains(selectedCoverIndex) {
+                                MemoryAttachmentThumbnail(
+                                    imageData: imageDatas[selectedCoverIndex],
+                                    height: 312,
+                                    cornerRadius: 22
+                                )
+                            }
+
+                            Label("代表这笔", systemImage: "sparkle")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(Capsule(style: .continuous).fill(Color.black.opacity(0.30)))
+                                .padding(12)
                         }
+
+                        if imageDatas.count > 1 {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 10) {
+                                    ForEach(Array(imageDatas.enumerated()), id: \.offset) { pair in
+                                        Button {
+                                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                                                selectedCoverIndex = pair.offset
+                                            }
+                                        } label: {
+                                            MemoryAttachmentThumbnail(imageData: pair.element, height: 58, cornerRadius: 12)
+                                                .frame(width: 58)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                        .stroke(pair.offset == selectedCoverIndex ? AppColors.accent : Color.white.opacity(0.55), lineWidth: pair.offset == selectedCoverIndex ? 2 : 1)
+                                                )
+                                                .overlay(alignment: .topTrailing) {
+                                                    if pair.offset == selectedCoverIndex {
+                                                        Image(systemName: "checkmark.circle.fill")
+                                                            .font(.system(size: 17, weight: .bold))
+                                                            .foregroundStyle(AppColors.accent)
+                                                            .background(Circle().fill(.white))
+                                                            .offset(x: 5, y: -5)
+                                                    }
+                                                }
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+
+                        Text("选一张最能代表这笔的图，复盘里会优先用这一张。")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
                     }
-                    .frame(height: 300)
-                    .tabViewStyle(.page(indexDisplayMode: imageDatas.count > 1 ? .automatic : .never))
 
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(alignment: .firstTextBaseline) {
@@ -204,7 +252,7 @@ struct MemoryPreviewSheet: View {
                             .fill(Color.white.opacity(0.66))
                     )
 
-                    Text("确认后，\(imageDatas.count) 张图片会作为这笔消费的回忆附件出现在痕迹和今日列表里。")
+                    Text("确认后，主图会成为这笔账的记忆锚点，其他图片先收在这笔里。")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(AppColors.subtext)
                         .padding(.horizontal, 2)
@@ -216,8 +264,10 @@ struct MemoryPreviewSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 10) {
-                    Button(action: onConfirm) {
-                        Text("关联到消费")
+                    Button {
+                        onConfirm(selectedCoverIndex)
+                    } label: {
+                        Text("留下这张")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -265,6 +315,7 @@ struct MemoryRecordDetailSheet: View {
     let onSave: (HomeItem) -> Bool
     let onAddImages: () -> Void
     let onRemoveImage: (Int) -> Void
+    let onSetCoverImage: (Int) -> Void
     let onDelete: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var selectedImageIndex = 0
@@ -288,12 +339,14 @@ struct MemoryRecordDetailSheet: View {
         onSave: @escaping (HomeItem) -> Bool,
         onAddImages: @escaping () -> Void,
         onRemoveImage: @escaping (Int) -> Void,
+        onSetCoverImage: @escaping (Int) -> Void,
         onDelete: @escaping () -> Void
     ) {
         self.item = item
         self.onSave = onSave
         self.onAddImages = onAddImages
         self.onRemoveImage = onRemoveImage
+        self.onSetCoverImage = onSetCoverImage
         self.onDelete = onDelete
         _amountText = State(initialValue: String(format: "%.2f", item.amount))
         _titleText = State(initialValue: item.hasMeaningfulTitle ? item.title : "")
@@ -311,6 +364,10 @@ struct MemoryRecordDetailSheet: View {
 
     private var selectedImageDisplayIndex: Int {
         min(selectedImageIndex + 1, max(memoryImages.count, 1))
+    }
+
+    private var selectedImageIsCover: Bool {
+        item.normalizedCoverMemoryImageIndex == selectedImageIndex
     }
 
     private var canAddMoreImages: Bool {
@@ -366,7 +423,7 @@ struct MemoryRecordDetailSheet: View {
                     memoryHeroSection
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("管理图片")
+                        Text("记忆图")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(AppColors.text)
 
@@ -452,7 +509,7 @@ struct MemoryRecordDetailSheet: View {
                 }
 
                 HStack(spacing: 5) {
-                    Text("\(selectedImageDisplayIndex)/\(memoryImages.count)")
+                    Text(selectedImageIsCover ? "主图 \(selectedImageDisplayIndex)/\(memoryImages.count)" : "\(selectedImageDisplayIndex)/\(memoryImages.count)")
                     Image(systemName: imageExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                         .font(.system(size: 9, weight: .bold))
                 }
@@ -505,6 +562,16 @@ struct MemoryRecordDetailSheet: View {
                                         .stroke(pair.offset == selectedImageIndex ? AppColors.accent : Color.clear, lineWidth: 2)
                                         .padding(1)
                                 )
+                                .overlay(alignment: .topTrailing) {
+                                    if pair.offset == item.normalizedCoverMemoryImageIndex {
+                                        Image(systemName: "sparkle")
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundStyle(.white)
+                                            .frame(width: 18, height: 18)
+                                            .background(Circle().fill(AppColors.accent.opacity(0.92)))
+                                            .offset(x: 4, y: -4)
+                                    }
+                                }
                         }
                         .buttonStyle(.plain)
                     }
@@ -514,7 +581,7 @@ struct MemoryRecordDetailSheet: View {
                             VStack(spacing: 6) {
                                 Image(systemName: "plus")
                                     .font(.system(size: 16, weight: .bold))
-                                Text("添加图片")
+                                Text("补一张")
                                     .font(.system(size: 10, weight: .semibold))
                             }
                             .foregroundStyle(AppColors.accent)
@@ -551,21 +618,39 @@ struct MemoryRecordDetailSheet: View {
                 .padding(.vertical, 2)
             }
 
-            Button(role: .destructive) {
-                onRemoveImage(selectedImageIndex)
-            } label: {
-                Text("删除当前图片")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.red.opacity(0.78))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 15, style: .continuous)
-                            .fill(Color.white.opacity(0.62))
-                    )
+            HStack(spacing: 10) {
+                Button {
+                    onSetCoverImage(selectedImageIndex)
+                } label: {
+                    Label(selectedImageIsCover ? "已是主图" : "设为主图", systemImage: selectedImageIsCover ? "checkmark.circle.fill" : "sparkle")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(selectedImageIsCover ? AppColors.accent.opacity(0.82) : AppColors.text)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                                .fill(Color.white.opacity(0.62))
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(memoryImages.isEmpty || selectedImageIsCover)
+
+                Button(role: .destructive) {
+                    onRemoveImage(selectedImageIndex)
+                } label: {
+                    Text("删除")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.red.opacity(0.78))
+                        .frame(width: 76)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                                .fill(Color.white.opacity(0.62))
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(memoryImages.isEmpty)
             }
-            .buttonStyle(.plain)
-            .disabled(memoryImages.isEmpty)
         }
         .padding(12)
         .background(

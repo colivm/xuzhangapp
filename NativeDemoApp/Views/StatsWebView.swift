@@ -2348,7 +2348,12 @@ struct StatsWebView: View {
                 requestAttachMemoryImage(item, preservesInlineEditor: true)
             },
             onAttachMemoryImages: { imageDatas in
-                let didAttach = homeViewModel.attachMemoryImages(imageDatas, to: item.id)
+                let didAttach = homeViewModel.attachMemoryImages(
+                    imageDatas,
+                    to: item.id,
+                    coverImageIndex: 0,
+                    anchorReason: PhotoMemoryPromptPolicy.anchorReason(for: item)
+                )
                 if didAttach {
                     openMemoryDetailAfterImageAttach(for: item, fromInlineEditor: true)
                 }
@@ -2631,6 +2636,11 @@ struct StatsWebView: View {
                     memoryDetailItem = nil
                 }
             },
+            onSetCoverImage: { imageIndex in
+                if homeViewModel.setCoverMemoryImageIndex(imageIndex, for: current.id) {
+                    memoryDetailItem = latestItem(matching: current)
+                }
+            },
             onDelete: {
                 if let idx = homeViewModel.items.firstIndex(where: { $0.id == current.id }) {
                     homeViewModel.delete(at: IndexSet(integer: idx))
@@ -2656,7 +2666,12 @@ struct StatsWebView: View {
             let target = latestItem(matching: item)
             requestAttachMemoryImage(target)
         } onAttachMemoryImages: { imageDatas in
-            let didAttach = homeViewModel.attachMemoryImages(imageDatas, to: item.id)
+            let didAttach = homeViewModel.attachMemoryImages(
+                imageDatas,
+                to: item.id,
+                coverImageIndex: 0,
+                anchorReason: PhotoMemoryPromptPolicy.anchorReason(for: item)
+            )
             if didAttach {
                 openMemoryDetailAfterImageAttach(for: item)
             }

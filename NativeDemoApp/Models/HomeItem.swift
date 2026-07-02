@@ -89,6 +89,11 @@ struct HomeItem: Identifiable, Codable, Equatable {
     var scenePackId: String?
     var memoryImageData: Data?
     var memoryImageDatas: [Data]
+    var coverMemoryImageIndex: Int?
+    var memoryAnchorRole: PhotoMemoryAssetRole?
+    var memoryAnchorSceneHint: PhotoMemorySceneHint?
+    var memoryAnchorCaption: String?
+    var memoryAnchorCreatedAt: Date?
 
     init(
         id: UUID = UUID(),
@@ -107,7 +112,12 @@ struct HomeItem: Identifiable, Codable, Equatable {
         memoryContext: MemoryContext? = nil,
         scenePackId: String? = nil,
         memoryImageData: Data? = nil,
-        memoryImageDatas: [Data] = []
+        memoryImageDatas: [Data] = [],
+        coverMemoryImageIndex: Int? = nil,
+        memoryAnchorRole: PhotoMemoryAssetRole? = nil,
+        memoryAnchorSceneHint: PhotoMemorySceneHint? = nil,
+        memoryAnchorCaption: String? = nil,
+        memoryAnchorCreatedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -127,6 +137,11 @@ struct HomeItem: Identifiable, Codable, Equatable {
         let normalizedImages = memoryImageDatas.isEmpty ? memoryImageData.map { [$0] } ?? [] : memoryImageDatas
         self.memoryImageDatas = normalizedImages
         self.memoryImageData = normalizedImages.first
+        self.coverMemoryImageIndex = Self.normalizedCoverIndex(coverMemoryImageIndex, imageCount: normalizedImages.count)
+        self.memoryAnchorRole = memoryAnchorRole
+        self.memoryAnchorSceneHint = memoryAnchorSceneHint
+        self.memoryAnchorCaption = memoryAnchorCaption
+        self.memoryAnchorCreatedAt = memoryAnchorCreatedAt
     }
 
     static func inferEmotionTag(category: Category, amount: Double) -> String {
@@ -681,7 +696,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
 extension HomeItem {
     enum CodingKeys: String, CodingKey {
-        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta, userEditedTitle, userEditedCategory, categoryCorrectionFrom, memoryContext, scenePackId, memoryImageData, memoryImageDatas
+        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta, userEditedTitle, userEditedCategory, categoryCorrectionFrom, memoryContext, scenePackId, memoryImageData, memoryImageDatas, coverMemoryImageIndex, memoryAnchorRole, memoryAnchorSceneHint, memoryAnchorCaption, memoryAnchorCreatedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -706,6 +721,14 @@ extension HomeItem {
         let decodedImages = try container.decodeIfPresent([Data].self, forKey: .memoryImageDatas) ?? []
         memoryImageDatas = decodedImages.isEmpty ? legacyImageData.map { [$0] } ?? [] : decodedImages
         memoryImageData = memoryImageDatas.first
+        coverMemoryImageIndex = Self.normalizedCoverIndex(
+            try container.decodeIfPresent(Int.self, forKey: .coverMemoryImageIndex),
+            imageCount: memoryImageDatas.count
+        )
+        memoryAnchorRole = try container.decodeIfPresent(PhotoMemoryAssetRole.self, forKey: .memoryAnchorRole)
+        memoryAnchorSceneHint = try container.decodeIfPresent(PhotoMemorySceneHint.self, forKey: .memoryAnchorSceneHint)
+        memoryAnchorCaption = try container.decodeIfPresent(String.self, forKey: .memoryAnchorCaption)
+        memoryAnchorCreatedAt = try container.decodeIfPresent(Date.self, forKey: .memoryAnchorCreatedAt)
     }
 
     var memoryImages: [Data] {
@@ -716,15 +739,28 @@ extension HomeItem {
         set {
             memoryImageDatas = newValue
             memoryImageData = newValue.first
+            coverMemoryImageIndex = Self.normalizedCoverIndex(coverMemoryImageIndex, imageCount: newValue.count)
         }
     }
 
     var coverMemoryImageData: Data? {
-        memoryImages.first
+        let images = memoryImages
+        guard !images.isEmpty else { return nil }
+        let index = Self.normalizedCoverIndex(coverMemoryImageIndex, imageCount: images.count) ?? 0
+        return images.indices.contains(index) ? images[index] : images.first
     }
 
+    var normalizedCoverMemoryImageIndex: Int? {
+        Self.normalizedCoverIndex(coverMemoryImageIndex, imageCount: memoryImages.count)
+    }
     var hasMemoryImages: Bool {
         !memoryImages.isEmpty
+    }
+
+    static func normalizedCoverIndex(_ index: Int?, imageCount: Int) -> Int? {
+        guard imageCount > 0 else { return nil }
+        guard let index else { return 0 }
+        return min(max(index, 0), imageCount - 1)
     }
 }
 

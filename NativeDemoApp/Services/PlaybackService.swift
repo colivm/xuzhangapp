@@ -31,6 +31,19 @@ struct SummaryChapter: Identifiable, Codable, Equatable {
     let durationSec: Double
 }
 
+struct SummaryMemoryAnchor: Identifiable, Codable, Equatable {
+    let id: UUID
+    let itemID: UUID
+    let title: String
+    let amount: Double
+    let createdAt: Date
+    let imageData: Data
+    let role: PhotoMemoryAssetRole
+    let sceneHint: PhotoMemorySceneHint
+    let label: String
+    let caption: String
+}
+
 struct SummaryPlayback: Identifiable, Codable, Equatable {
     let id: String
     let range: SummaryPlaybackRange
@@ -42,6 +55,7 @@ struct SummaryPlayback: Identifiable, Codable, Equatable {
     let topCategory: String?
     let topCategoryRatio: Int
     let chapters: [SummaryChapter]
+    let memoryAnchors: [SummaryMemoryAnchor]
 }
 
 struct ShareInsightSignal: Equatable {
@@ -147,9 +161,158 @@ struct PlaybackMomentSelection: Equatable {
     }
 }
 
+private final class MemoryAnchorSelectionService {
+    func selectAnchors(
+        from rows: [HomeItem],
+        range: SummaryPlaybackRange,
+        limit: Int
+    ) -> [SummaryMemoryAnchor] {
+        var usedSceneDayKeys = Set<String>()
+        var usedMerchantKeys = Set<String>()
+        var receiptCount = 0
+
+        return rows
+            .compactMap { candidate(for: $0, range: range) }
+            .sorted { lhs, rhs in
+                if lhs.score == rhs.score {
+                    return lhs.item.createdAt > rhs.item.createdAt
+                }
+                return lhs.score > rhs.score
+            }
+            .compactMap { scored -> SummaryMemoryAnchor? in
+                guard usedSceneDayKeys.insert(scored.sceneDayKey).inserted else { return nil }
+                if let merchantKey = scored.merchantKey,
+                   !usedMerchantKeys.insert(merchantKey).inserted {
+                    return nil
+                }
+                if scored.role == .receipt {
+                    guard receiptCount == 0 else { return nil }
+                    receiptCount += 1
+                }
+                return scored.anchor
+            }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    private struct ScoredAnchor {
+        let item: HomeItem
+        let anchor: SummaryMemoryAnchor
+        let score: Int
+        let sceneDayKey: String
+        let merchantKey: String?
+        let role: PhotoMemoryAssetRole
+    }
+
+    private func candidate(for item: HomeItem, range: SummaryPlaybackRange) -> ScoredAnchor? {
+        guard let imageData = item.coverMemoryImageData else { return nil }
+        let reason = PhotoMemoryPromptPolicy.anchorReason(for: item)
+        let role = item.memoryAnchorRole ?? reason.assetRole
+        let sceneHint = item.memoryAnchorSceneHint ?? reason.sceneHint
+        let caption = item.memoryAnchorCaption?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let label = label(for: role, sceneHint: sceneHint)
+        let anchor = SummaryMemoryAnchor(
+            id: item.id,
+            itemID: item.id,
+            title: item.displayTitle,
+            amount: item.amount,
+            createdAt: item.createdAt,
+            imageData: imageData,
+            role: role,
+            sceneHint: sceneHint,
+            label: label,
+            caption: caption?.isEmpty == false ? caption! : playbackCaption(for: role, sceneHint: sceneHint)
+        )
+        return ScoredAnchor(
+            item: item,
+            anchor: anchor,
+            score: score(item: item, role: role, sceneHint: sceneHint, range: range),
+            sceneDayKey: sceneDayKey(item: item, sceneHint: sceneHint),
+            merchantKey: merchantKey(item: item),
+            role: role
+        )
+    }
+
+    private func score(
+        item: HomeItem,
+        role: PhotoMemoryAssetRole,
+        sceneHint: PhotoMemorySceneHint,
+        range: SummaryPlaybackRange
+    ) -> Int {
+        var value = item.coverMemoryImageIndex == nil ? 18 : 30
+        switch sceneHint {
+        case .gathering, .travel:
+            value += 25
+        case .careRecord:
+            value += 22
+        case .homeLife, .importantPurchase, .experience, .giftMoment:
+            value += 18
+        case .healthRecord:
+            value += 12
+        case .vehicleCare, .travelTransport:
+            value += 8
+        }
+        if role == .receipt { value -= range == .week ? 10 : 6 }
+        if item.amount >= 300, role != .receipt { value += 4 }
+        if Calendar.current.isDateInToday(item.createdAt) { value += 2 }
+        return value
+    }
+
+    private func sceneDayKey(item: HomeItem, sceneHint: PhotoMemorySceneHint) -> String {
+        let day = Self.dayFormatter.string(from: item.createdAt)
+        return "\(day)-\(sceneHint.rawValue)"
+    }
+
+    private func merchantKey(item: HomeItem) -> String? {
+        if let merchantBrandId = item.merchantBrandId, !merchantBrandId.isEmpty {
+            return merchantBrandId
+        }
+        let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard title.count >= 2 else { return nil }
+        return title.lowercased()
+    }
+
+    private func label(for role: PhotoMemoryAssetRole, sceneHint: PhotoMemorySceneHint) -> String {
+        switch sceneHint {
+        case .gathering: return "见面"
+        case .travel, .travelTransport: return "出门"
+        case .vehicleCare, .healthRecord: return role == .receipt ? "票据" : "记录"
+        case .homeLife: return "家里"
+        case .careRecord: return "照护"
+        case .experience: return "现场"
+        case .giftMoment: return "心意"
+        case .importantPurchase: return "添置"
+        }
+    }
+
+    private func playbackCaption(for role: PhotoMemoryAssetRole, sceneHint: PhotoMemorySceneHint) -> String {
+        switch role {
+        case .moment:
+            return sceneHint == .gathering ? "这张图把那次见面留住了。" : "这张图把当时留了下来。"
+        case .receipt:
+            return "这类图不用好看，但以后查起来很有用。"
+        case .place:
+            return "这张图把那段出门的路留住了。"
+        case .object:
+            return "这件东西代表了那笔添置。"
+        case .careRecord:
+            return "照护相关的记录，有图会更容易回想起当时。"
+        }
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+}
+
 
 final class PlaybackService {
     private let momentSelector = PlaybackMomentSelector()
+    private let memoryAnchorSelector = MemoryAnchorSelectionService()
 
     func buildTodayPlayback(from items: [HomeItem], now: Date = Date()) -> PlaybackSnapshot {
         let calendar = Calendar.current
@@ -198,7 +361,8 @@ final class PlaybackService {
                 total: 0,
                 topCategory: nil,
                 topCategoryRatio: 0,
-                chapters: []
+                chapters: [],
+                memoryAnchors: []
             )
         }
 
@@ -417,7 +581,8 @@ final class PlaybackService {
             total: total,
             topCategory: top?.category,
             topCategoryRatio: ratio,
-            chapters: chapters
+            chapters: chapters,
+            memoryAnchors: memoryAnchorSelector.selectAnchors(from: rows, range: .week, limit: 3)
         )
     }
 
@@ -924,7 +1089,8 @@ final class PlaybackService {
                 total: 0,
                 topCategory: nil,
                 topCategoryRatio: 0,
-                chapters: []
+                chapters: [],
+                memoryAnchors: []
             )
         }
 
@@ -1114,7 +1280,8 @@ final class PlaybackService {
             total: total,
             topCategory: top?.category,
             topCategoryRatio: ratio,
-            chapters: chapters
+            chapters: chapters,
+            memoryAnchors: memoryAnchorSelector.selectAnchors(from: rows, range: .month, limit: 6)
         )
     }
 

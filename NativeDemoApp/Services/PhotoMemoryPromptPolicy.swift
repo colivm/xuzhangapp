@@ -1,6 +1,6 @@
 import Foundation
 
-enum PhotoMemorySceneHint: String, Equatable {
+enum PhotoMemorySceneHint: String, Codable, Equatable {
     case gathering
     case travel
     case vehicleCare
@@ -13,7 +13,7 @@ enum PhotoMemorySceneHint: String, Equatable {
     case importantPurchase
 }
 
-enum PhotoMemoryAssetRole: String, Equatable {
+enum PhotoMemoryAssetRole: String, Codable, Equatable {
     case moment
     case receipt
     case place
@@ -28,6 +28,21 @@ struct PhotoMemoryPromptReason: Equatable {
     let title: String
     let detail: String
     let actionTitle: String
+
+    var memoryAnchorCaption: String {
+        switch assetRole {
+        case .moment:
+            return "这张图把那次见面留住了。"
+        case .receipt:
+            return "这张图以后查起来更清楚。"
+        case .place:
+            return "这张图把那段出门的路留住了。"
+        case .object:
+            return "这件东西代表这笔添置。"
+        case .careRecord:
+            return "这张图把当时的照护记录留清楚。"
+        }
+    }
 }
 
 enum PhotoMemoryPromptPolicy {
@@ -157,6 +172,93 @@ enum PhotoMemoryPromptPolicy {
         }
 
         return nil
+    }
+
+    static func anchorReason(for item: HomeItem) -> PhotoMemoryPromptReason {
+        if let reason = reason(for: item) {
+            return reason
+        }
+
+        let signal = LifeSceneSemanticService.classify(item)
+        let text = semanticText(for: item)
+        if containsAny(text, travelKeywords) || item.category == .lodging || signal.kind == .lodging {
+            return PhotoMemoryPromptReason(
+                sceneHint: .travel,
+                assetRole: .place,
+                sceneLabel: "出门",
+                title: "留下一张路上的图",
+                detail: "这张图以后会帮你想起那段出门。",
+                actionTitle: "留下这张"
+            )
+        }
+        if containsAny(text, vehicleEvidenceKeywords) || item.category == .transport {
+            return PhotoMemoryPromptReason(
+                sceneHint: .vehicleCare,
+                assetRole: .receipt,
+                sceneLabel: "票据",
+                title: "留下一张票据图",
+                detail: "这张图以后查起来更清楚。",
+                actionTitle: "保存这张"
+            )
+        }
+        if isGathering(item: item, text: text) || item.category == .social {
+            return PhotoMemoryPromptReason(
+                sceneHint: .gathering,
+                assetRole: .moment,
+                sceneLabel: "见面",
+                title: "留下一张现场图",
+                detail: "这张图会让这笔以后更容易被想起。",
+                actionTitle: "留下这张"
+            )
+        }
+        if containsAny(text, careRecordKeywords) {
+            return PhotoMemoryPromptReason(
+                sceneHint: .careRecord,
+                assetRole: .careRecord,
+                sceneLabel: "照护",
+                title: "留下一张照护图",
+                detail: "这张图会把当时的照护记录留清楚。",
+                actionTitle: "留下这张"
+            )
+        }
+        if containsAny(text, healthRecordKeywords) || item.category == .health {
+            return PhotoMemoryPromptReason(
+                sceneHint: .healthRecord,
+                assetRole: .receipt,
+                sceneLabel: "健康",
+                title: "留下一张记录图",
+                detail: "这张图以后能帮你回看身体相关的事。",
+                actionTitle: "保存这张"
+            )
+        }
+        if containsAny(text, homeLifeKeywords) || item.category == .home {
+            return PhotoMemoryPromptReason(
+                sceneHint: .homeLife,
+                assetRole: .object,
+                sceneLabel: "家里",
+                title: "用这张代表这笔",
+                detail: "这张图会帮你想起家里添的这一件。",
+                actionTitle: "用这张代表它"
+            )
+        }
+        if item.category == .shopping || containsAny(text, hobbyOrImportantPurchaseKeywords) {
+            return PhotoMemoryPromptReason(
+                sceneHint: .importantPurchase,
+                assetRole: .object,
+                sceneLabel: "添置",
+                title: "用这张代表这笔",
+                detail: "这张图会帮你想起为什么买下它。",
+                actionTitle: "用这张代表它"
+            )
+        }
+        return PhotoMemoryPromptReason(
+            sceneHint: .experience,
+            assetRole: .moment,
+            sceneLabel: "记忆",
+            title: "留下这张图",
+            detail: "这张图会让这笔以后更容易被想起。",
+            actionTitle: "留下这张"
+        )
     }
 
     private static func semanticText(for item: HomeItem) -> String {
