@@ -341,10 +341,11 @@ extension HomeViewModel {
                 && commuteDirection(for: item.createdAt, calendar: calendar) == direction
                 && isCommuteRecord(item)
         }
-        guard candidates.count >= 5 else { return nil }
+        let minimumSupport = minimumCommuteSupport(isBackfill: isBackfill)
+        guard candidates.count >= minimumSupport.totalSamples else { return nil }
 
         let distinctDays = Set(candidates.map { quickRecordDayKey(for: $0.createdAt) }).count
-        guard distinctDays >= 4 else { return nil }
+        guard distinctDays >= minimumSupport.distinctDays else { return nil }
 
         let minuteSamples = candidates.map { minutesFromMidnight($0.createdAt, calendar: calendar) }.sorted()
         guard let medianMinute = medianMinute(in: minuteSamples) else { return nil }
@@ -368,11 +369,12 @@ extension HomeViewModel {
         guard let amountCluster = stableAmountCluster(in: candidates) else { return nil }
         let amount = Double(amountCluster.cents) / 100
         let supportRatio = Double(amountCluster.count) / Double(max(candidates.count, 1))
-        guard amountCluster.count >= 5, supportRatio >= 0.72 else { return nil }
+        guard amountCluster.count >= minimumSupport.amountCluster,
+              supportRatio >= minimumSupport.amountRatio else { return nil }
 
         let title = stableCommuteTitle(in: candidates, direction: direction)
         let confidence = min(0.98, 0.72 + min(supportRatio, 0.22) + min(Double(distinctDays) * 0.01, 0.04))
-        guard confidence >= 0.90 else { return nil }
+        guard confidence >= minimumSupport.confidence else { return nil }
 
         let recordDate = isBackfill
             ? date(onSameDayAs: now, minutesFromMidnight: medianMinute, calendar: calendar)
@@ -388,6 +390,19 @@ extension HomeViewModel {
             medianMinute: medianMinute,
             isBackfill: isBackfill
         )
+    }
+
+    private func minimumCommuteSupport(isBackfill: Bool) -> (
+        totalSamples: Int,
+        distinctDays: Int,
+        amountCluster: Int,
+        amountRatio: Double,
+        confidence: Double
+    ) {
+        if isBackfill {
+            return (totalSamples: 4, distinctDays: 3, amountCluster: 3, amountRatio: 0.64, confidence: 0.86)
+        }
+        return (totalSamples: 5, distinctDays: 4, amountCluster: 5, amountRatio: 0.72, confidence: 0.90)
     }
 
     private func stableAmountCluster(in items: [HomeItem]) -> (cents: Int, count: Int)? {
@@ -481,6 +496,7 @@ extension HomeViewModel {
 
     private func isCommuteRecord(_ item: HomeItem) -> Bool {
         guard item.category == .transport else { return false }
+        if item.scenePackId == "commute" { return true }
         let text = "\(item.title) \(item.emotionTag) \(item.memoryContext?.semanticPlace ?? "")".lowercased()
         return containsAny(
             text,

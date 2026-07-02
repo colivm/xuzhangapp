@@ -457,6 +457,15 @@ def scan_life_mark_boundaries(failures: list[str], text: str) -> None:
         )
 
 
+def scan_dashboard_boundaries(failures: list[str], text: str) -> None:
+    if "minimumCommuteSupport(isBackfill: Bool)" not in text:
+        failures.append("HomeViewModel+Dashboard: commute backfill must use separate support thresholds")
+    if "return (totalSamples: 4, distinctDays: 3, amountCluster: 3, amountRatio: 0.64, confidence: 0.86)" not in text:
+        failures.append("HomeViewModel+Dashboard: commute backfill threshold became too strict")
+    if 'if item.scenePackId == "commute" { return true }' not in text:
+        failures.append("HomeViewModel+Dashboard: commute scene pack records must count as commute samples")
+
+
 def scan_broad_keywords(failures: list[str], texts: dict[str, str]) -> None:
     checked = {
         "RecordSceneLexicon.json": LEXICON_PATH.read_text(encoding="utf-8"),
@@ -577,6 +586,7 @@ def main() -> int:
     scan_blocked_copy(failures, texts)
     scan_scene_pack_notes(failures, texts["scene_pack"])
     scan_life_mark_boundaries(failures, texts["life_mark"])
+    scan_dashboard_boundaries(failures, texts["dashboard"])
     scan_broad_keywords(failures, texts)
 
     if failures:
