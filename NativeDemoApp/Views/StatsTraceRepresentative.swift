@@ -51,7 +51,7 @@ enum TraceRepresentative {
         }
     }
 
-    private static func score(item: HomeItem, index: Int) -> Int {
+    static func score(item: HomeItem, index: Int) -> Int {
         let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let defaultTitle = item.category.defaultRecordTitle
         let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)

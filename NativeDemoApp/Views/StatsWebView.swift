@@ -20,6 +20,33 @@ private struct TraceLifeRingSegment: Identifiable {
     let color: Color
 }
 
+private struct TraceMonthHeatDay: Identifiable {
+    let id: String
+    let date: Date?
+    let count: Int
+    let isToday: Bool
+}
+
+private struct TraceMonthMilestone: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String?
+    let icon: String
+    let anchor: SummaryMemoryAnchor?
+}
+
+private struct TraceMonthDigest {
+    let monthTitle: String
+    let activeDays: Int
+    let totalDays: Int
+    let heatDays: [TraceMonthHeatDay]
+    let milestones: [TraceMonthMilestone]
+
+    var accessibilityLabel: String {
+        "\(monthTitle)，本月 \(totalDays) 天，记录了 \(activeDays) 天"
+    }
+}
+
 private struct TraceLifeCardLayout {
     let screenHeight: CGFloat
 
@@ -39,6 +66,9 @@ private struct TraceLifeCardLayout {
     var monthDiaryPhotoHeight: CGFloat { 92 + compactness * 8 }
     var monthRingSize: CGFloat { 112 + compactness * 20 }
     var monthRingLineWidth: CGFloat { 14 + compactness * 2 }
+    var monthHeatCellSize: CGFloat { 28 + compactness * 3 }
+    var monthHeatSpacing: CGFloat { 6 + compactness * 1.5 }
+    var milestoneThumb: CGFloat { 34 + compactness * 4 }
     var playButtonHeight: CGFloat { 44 + compactness * 4 }
 }
 
@@ -495,15 +525,12 @@ struct StatsWebView: View {
         let hasData = !snapshot.items.isEmpty
         let isMonthLocked = range == .month && !hasMemberAccess && quotaStore.monthRemaining(isMember: false) <= 0
         let canPlay = hasData && quotaStore.canPlay(range, isMember: hasMemberAccess)
+        let digest = traceLifeMonthDigest(snapshot: snapshot)
 
         return VStack(alignment: .center, spacing: 12) {
-            traceLifeMonthEditorialHero(snapshot: snapshot, layout: layout)
+            traceLifeMonthHeatmapCard(digest: digest, layout: layout)
 
-            traceLifeMonthKeywordSection(snapshot: snapshot)
-                .padding(.horizontal, 14)
-
-            traceLifeMonthDiaryStrip(snapshot: snapshot, layout: layout)
-                .padding(.horizontal, 14)
+            traceLifeMonthMilestonesCard(digest: digest, snapshot: snapshot, layout: layout)
 
             Button {
                 handleSummaryPlaybackTap(range: range, hasData: hasData)
@@ -517,17 +544,546 @@ struct StatsWebView: View {
             }
             .buttonStyle(PurposefulCardButtonStyle(radius: 24, depth: 1.05))
             .disabled(!hasData && !isMonthLocked)
-            .padding(.horizontal, 14)
 
             traceLifeSliceFooter(snapshot: snapshot)
-                .padding(.horizontal, 14)
         }
-        .padding(.horizontal, 0)
-        .padding(.top, 0)
+        .padding(.horizontal, 22)
+        .padding(.top, layout.monthTopPadding)
         .padding(.bottom, layout.bottomPadding)
         .background(traceLifeSliceCardBackground)
         .overlay(traceLifeSliceCardBorder)
         .shadow(color: AppColors.subtext.opacity(0.06), radius: 18, x: 0, y: 8)
+    }
+
+    private func traceLifeMonthHeatmapCard(digest: TraceMonthDigest, layout: TraceLifeCardLayout) -> some View {
+        let columns = Array(
+            repeating: GridItem(.fixed(layout.monthHeatCellSize), spacing: layout.monthHeatSpacing),
+            count: 7
+        )
+        let weekdays = ["一", "二", "三", "四", "五", "六", "日"]
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(digest.monthTitle) · 记录了 \(digest.activeDays) 天")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                Spacer(minLength: 8)
+                Image(systemName: "calendar")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.accentDark.opacity(0.74))
+            }
+
+            VStack(spacing: 8) {
+                HStack(spacing: layout.monthHeatSpacing) {
+                    ForEach(weekdays, id: \.self) { weekday in
+                        Text(weekday)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(AppColors.subtext.opacity(0.64))
+                            .frame(width: layout.monthHeatCellSize)
+                    }
+                }
+
+                LazyVGrid(columns: columns, spacing: layout.monthHeatSpacing) {
+                    ForEach(digest.heatDays) { day in
+                        traceLifeMonthHeatCell(day)
+                            .frame(width: layout.monthHeatCellSize, height: layout.monthHeatCellSize)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+
+            if digest.activeDays == 0 {
+                Text("这个月还空着，记下第一笔，月历就会亮起来。")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.78))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 15)
+        .padding(.vertical, 15)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.white.opacity(0.80))
+                .shadow(color: AppColors.subtext.opacity(0.035), radius: 10, x: 0, y: 5)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(digest.accessibilityLabel)
+    }
+
+    private func traceLifeMonthHeatCell(_ day: TraceMonthHeatDay) -> some View {
+        ZStack {
+            if day.date == nil {
+                Color.clear
+            } else if day.count == 0 {
+                Circle()
+                    .fill(AppColors.subtext.opacity(0.13))
+                    .frame(width: 5, height: 5)
+            } else {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(AppColors.accent.opacity(traceLifeMonthHeatOpacity(for: day.count)))
+            }
+
+            if day.isToday {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(AppColors.accentDark.opacity(0.82), lineWidth: 1)
+                    .padding(1)
+            }
+        }
+    }
+
+    private func traceLifeMonthMilestonesCard(
+        digest: TraceMonthDigest,
+        snapshot: TraceChapterSnapshot,
+        layout: TraceLifeCardLayout
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("本月里程碑")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(AppColors.text)
+
+            if digest.milestones.isEmpty {
+                Text(snapshot.items.isEmpty ? "有记录之后，这里会留下本月最值得回看的几件事。" : "这个月的线索还很轻，再多几笔会更清楚。")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.78))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(digest.milestones) { milestone in
+                        traceLifeMonthMilestoneRow(milestone, layout: layout)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 15)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.white.opacity(0.78))
+                .shadow(color: AppColors.subtext.opacity(0.032), radius: 10, x: 0, y: 5)
+        )
+    }
+
+    private func traceLifeMonthMilestoneRow(_ milestone: TraceMonthMilestone, layout: TraceLifeCardLayout) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(AppColors.accent.opacity(0.14))
+                    .frame(width: 28, height: 28)
+                Image(systemName: milestone.icon)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.accentDark.opacity(0.82))
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(milestone.title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.text.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
+                if let subtitle = milestone.subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(AppColors.subtext.opacity(0.72))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            traceLifeMonthMilestoneMedia(milestone, size: layout.milestoneThumb)
+        }
+        .frame(minHeight: layout.milestoneThumb)
+    }
+
+    @ViewBuilder
+    private func traceLifeMonthMilestoneMedia(_ milestone: TraceMonthMilestone, size: CGFloat) -> some View {
+        if let anchor = milestone.anchor {
+            traceLifeSliceFramedImage(anchor: anchor, height: size)
+                .frame(width: size)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        } else {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(TraceColors.surfaceMuted.opacity(0.92))
+                .frame(width: size, height: size)
+                .overlay(
+                    Image(systemName: milestone.icon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppColors.accentDark.opacity(0.62))
+                )
+        }
+    }
+
+    private func traceLifeMonthDigest(snapshot: TraceChapterSnapshot) -> TraceMonthDigest {
+        let calendar = Calendar.current
+        let now = Date()
+        guard let monthInterval = calendar.dateInterval(of: .month, for: now),
+              let dayRange = calendar.range(of: .day, in: .month, for: monthInterval.start) else {
+            return TraceMonthDigest(
+                monthTitle: traceLifeSlicePeriodText(for: .month),
+                activeDays: 0,
+                totalDays: 0,
+                heatDays: [],
+                milestones: []
+            )
+        }
+
+        let dayCounts = Dictionary(grouping: snapshot.items) { item in
+            calendar.startOfDay(for: item.createdAt)
+        }
+        .mapValues { $0.count }
+        let activeDays = dayCounts.values.filter { $0 > 0 }.count
+        let totalDays = dayRange.count
+        let heatDays = traceLifeMonthHeatDays(
+            monthStart: monthInterval.start,
+            totalDays: totalDays,
+            dayCounts: dayCounts,
+            calendar: calendar,
+            now: now
+        )
+
+        return TraceMonthDigest(
+            monthTitle: traceLifeMonthTitle(for: monthInterval.start),
+            activeDays: activeDays,
+            totalDays: totalDays,
+            heatDays: heatDays,
+            milestones: traceLifeMonthMilestones(
+                snapshot: snapshot,
+                monthStart: monthInterval.start,
+                calendar: calendar
+            )
+        )
+    }
+
+    private func traceLifeMonthHeatDays(
+        monthStart: Date,
+        totalDays: Int,
+        dayCounts: [Date: Int],
+        calendar: Calendar,
+        now: Date
+    ) -> [TraceMonthHeatDay] {
+        let firstWeekday = calendar.component(.weekday, from: monthStart)
+        let leadingBlankCount = (firstWeekday + 5) % 7
+        var days: [TraceMonthHeatDay] = (0..<leadingBlankCount).map { index in
+            TraceMonthHeatDay(id: "blank-leading-\(index)", date: nil, count: 0, isToday: false)
+        }
+
+        for offset in 0..<totalDays {
+            guard let date = calendar.date(byAdding: .day, value: offset, to: monthStart) else { continue }
+            let day = calendar.startOfDay(for: date)
+            days.append(
+                TraceMonthHeatDay(
+                    id: "day-\(offset)",
+                    date: day,
+                    count: dayCounts[day, default: 0],
+                    isToday: calendar.isDate(day, inSameDayAs: now)
+                )
+            )
+        }
+
+        while days.count % 7 != 0 {
+            days.append(TraceMonthHeatDay(id: "blank-trailing-\(days.count)", date: nil, count: 0, isToday: false))
+        }
+        return days
+    }
+
+    private func traceLifeMonthMilestones(
+        snapshot: TraceChapterSnapshot,
+        monthStart: Date,
+        calendar: Calendar
+    ) -> [TraceMonthMilestone] {
+        guard !snapshot.items.isEmpty else { return [] }
+
+        let anchorsByItemID = Dictionary(grouping: snapshot.memoryAnchors, by: \.itemID)
+        let itemIndex = Dictionary(uniqueKeysWithValues: snapshot.items.enumerated().map { ($0.element.id, $0.offset) })
+        var milestones: [TraceMonthMilestone] = []
+
+        if let busiest = traceLifeMonthBusiestDayMilestone(
+            items: snapshot.items,
+            anchorsByItemID: anchorsByItemID,
+            itemIndex: itemIndex,
+            calendar: calendar
+        ) {
+            milestones.append(busiest)
+        }
+
+        if let fresh = traceLifeMonthFreshOrFallbackMilestone(
+            items: snapshot.items,
+            monthStart: monthStart,
+            anchorsByItemID: anchorsByItemID,
+            itemIndex: itemIndex,
+            calendar: calendar
+        ) {
+            milestones.append(fresh)
+        }
+
+        if let quote = traceLifeMonthQuoteMilestone(
+            snapshot: snapshot,
+            anchorsByItemID: anchorsByItemID,
+            itemIndex: itemIndex
+        ) {
+            milestones.append(quote)
+        }
+
+        return Array(milestones.prefix(3))
+    }
+
+    private func traceLifeMonthBusiestDayMilestone(
+        items: [HomeItem],
+        anchorsByItemID: [UUID: [SummaryMemoryAnchor]],
+        itemIndex: [UUID: Int],
+        calendar: Calendar
+    ) -> TraceMonthMilestone? {
+        let groups = Dictionary(grouping: items) { item in
+            calendar.startOfDay(for: item.createdAt)
+        }
+
+        guard let best = groups
+            .map({ (day: $0.key, items: $0.value, total: $0.value.reduce(0) { $0 + $1.amount }) })
+            .sorted(by: { lhs, rhs in
+                if lhs.items.count != rhs.items.count { return lhs.items.count > rhs.items.count }
+                if lhs.total != rhs.total { return lhs.total > rhs.total }
+                return lhs.day > rhs.day
+            })
+            .first,
+            best.items.count >= 2 else {
+            return nil
+        }
+
+        return TraceMonthMilestone(
+            id: "busiest-day",
+            title: "\(traceLifeMonthShortDate(best.day)) 最热闹 · \(best.items.count) 笔",
+            subtitle: "这一天留下 \(best.total.formatted(.cny))",
+            icon: "flame.fill",
+            anchor: traceLifeMonthBestAnchor(for: best.items, anchorsByItemID: anchorsByItemID, itemIndex: itemIndex)
+        )
+    }
+
+    private func traceLifeMonthFreshOrFallbackMilestone(
+        items: [HomeItem],
+        monthStart: Date,
+        anchorsByItemID: [UUID: [SummaryMemoryAnchor]],
+        itemIndex: [UUID: Int],
+        calendar: Calendar
+    ) -> TraceMonthMilestone? {
+        let previousItems = homeViewModel.items
+            .filter { $0.amount > 0 && $0.draftMeta == nil && $0.createdAt < monthStart }
+        let previousScenes = Set(previousItems.map(traceLifeMonthSceneLabel(for:)))
+        let monthSceneRows = items.map { item in
+            (item: item, label: traceLifeMonthSceneLabel(for: item))
+        }
+        let freshGroups = Dictionary(grouping: monthSceneRows.filter { !previousScenes.contains($0.label) }) { row in
+            row.label
+        }
+
+        if let fresh = freshGroups
+            .map({ (label: $0.key, rows: $0.value, firstDate: $0.value.map { $0.item.createdAt }.min() ?? .distantFuture) })
+            .sorted(by: { lhs, rhs in
+                if lhs.rows.count != rhs.rows.count { return lhs.rows.count > rhs.rows.count }
+                return lhs.firstDate < rhs.firstDate
+            })
+            .first {
+            let relatedItems = fresh.rows.map { $0.item }
+            return TraceMonthMilestone(
+                id: "fresh-scene",
+                title: "第一次出现「\(fresh.label)」",
+                subtitle: "\(traceLifeMonthShortDate(fresh.firstDate)) 开始被记下",
+                icon: "sparkles",
+                anchor: traceLifeMonthBestAnchor(for: relatedItems, anchorsByItemID: anchorsByItemID, itemIndex: itemIndex)
+            )
+        }
+
+        let streak = traceLifeMonthLongestStreak(items: items, calendar: calendar)
+        if streak >= 3 {
+            return TraceMonthMilestone(
+                id: "streak",
+                title: "连续记录 \(streak) 天",
+                subtitle: "这一段节奏被接住了",
+                icon: "calendar.badge.checkmark",
+                anchor: nil
+            )
+        }
+
+        if let bestItem = items.sorted(by: {
+            traceLifeMonthRecordValueScore($0, anchorsByItemID: anchorsByItemID, itemIndex: itemIndex)
+            > traceLifeMonthRecordValueScore($1, anchorsByItemID: anchorsByItemID, itemIndex: itemIndex)
+        }).first {
+            return TraceMonthMilestone(
+                id: "best-record",
+                title: "最用心的一笔「\(traceLifeMonthShortTitle(bestItem.displayTitle))」",
+                subtitle: traceLifeMonthShortDate(bestItem.createdAt),
+                icon: "sparkles",
+                anchor: traceLifeMonthBestAnchor(for: [bestItem], anchorsByItemID: anchorsByItemID, itemIndex: itemIndex)
+            )
+        }
+
+        if let frequent = Dictionary(grouping: monthSceneRows, by: { row in row.label })
+            .map({ (label: $0.key, rows: $0.value) })
+            .sorted(by: { lhs, rhs in
+                if lhs.rows.count != rhs.rows.count { return lhs.rows.count > rhs.rows.count }
+                return lhs.label < rhs.label
+            })
+            .first {
+            return TraceMonthMilestone(
+                id: "frequent-scene",
+                title: "最常去 \(frequent.label) · \(frequent.rows.count) 次",
+                subtitle: "这个月反复出现的线索",
+                icon: "mappin.and.ellipse",
+                anchor: traceLifeMonthBestAnchor(for: frequent.rows.map { $0.item }, anchorsByItemID: anchorsByItemID, itemIndex: itemIndex)
+            )
+        }
+
+        return nil
+    }
+
+    private func traceLifeMonthQuoteMilestone(
+        snapshot: TraceChapterSnapshot,
+        anchorsByItemID: [UUID: [SummaryMemoryAnchor]],
+        itemIndex: [UUID: Int]
+    ) -> TraceMonthMilestone? {
+        if let item = snapshot.items
+            .filter({ traceLifeMonthIsQuoteWorthy($0.title, item: $0) })
+            .sorted(by: {
+                traceLifeMonthRecordValueScore($0, anchorsByItemID: anchorsByItemID, itemIndex: itemIndex)
+                > traceLifeMonthRecordValueScore($1, anchorsByItemID: anchorsByItemID, itemIndex: itemIndex)
+            })
+            .first {
+            return TraceMonthMilestone(
+                id: "quote",
+                title: "“\(traceLifeMonthShortTitle(item.title, limit: 20))”",
+                subtitle: "你在 \(traceLifeMonthShortDate(item.createdAt)) 写下",
+                icon: "quote.opening",
+                anchor: traceLifeMonthBestAnchor(for: [item], anchorsByItemID: anchorsByItemID, itemIndex: itemIndex)
+            )
+        }
+
+        if let moment = heroMomentSelection(from: snapshot.items).primary,
+           traceLifeMonthIsQuoteWorthy(moment.text, item: moment.item) {
+            return TraceMonthMilestone(
+                id: "voice",
+                title: "“\(traceLifeMonthShortTitle(moment.text, limit: 20))”",
+                subtitle: "你在 \(traceLifeMonthShortDate(moment.item.createdAt)) 写下",
+                icon: "quote.opening",
+                anchor: traceLifeMonthBestAnchor(for: [moment.item], anchorsByItemID: anchorsByItemID, itemIndex: itemIndex)
+            )
+        }
+
+        return nil
+    }
+
+    private func traceLifeMonthBestAnchor(
+        for items: [HomeItem],
+        anchorsByItemID: [UUID: [SummaryMemoryAnchor]],
+        itemIndex: [UUID: Int]
+    ) -> SummaryMemoryAnchor? {
+        let itemByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        return items
+            .flatMap { anchorsByItemID[$0.id] ?? [] }
+            .sorted { lhs, rhs in
+                guard let leftItem = itemByID[lhs.itemID],
+                      let rightItem = itemByID[rhs.itemID] else {
+                    return lhs.createdAt > rhs.createdAt
+                }
+                return traceLifeMonthImageValueScore(lhs, item: leftItem, itemIndex: itemIndex)
+                    > traceLifeMonthImageValueScore(rhs, item: rightItem, itemIndex: itemIndex)
+            }
+            .first
+    }
+
+    private func traceLifeMonthRecordValueScore(
+        _ item: HomeItem,
+        anchorsByItemID: [UUID: [SummaryMemoryAnchor]],
+        itemIndex: [UUID: Int]
+    ) -> Int {
+        let index = itemIndex[item.id] ?? 0
+        var score = TraceRepresentative.score(item: item, index: index)
+        if anchorsByItemID[item.id]?.isEmpty == false { score += 25 }
+        if traceLifeMonthIsHighArousalEmotion(item.displayEmotionTag) { score += 12 }
+        return score
+    }
+
+    private func traceLifeMonthImageValueScore(
+        _ anchor: SummaryMemoryAnchor,
+        item: HomeItem,
+        itemIndex: [UUID: Int]
+    ) -> Int {
+        var score = traceLifeMonthRecordValueScore(item, anchorsByItemID: [item.id: [anchor]], itemIndex: itemIndex)
+        if item.coverMemoryImageIndex != nil { score += 30 }
+        if traceLifeMonthLabelIsMeaningful(anchor.label) || traceLifeMonthLabelIsMeaningful(anchor.caption) { score += 15 }
+        return score
+    }
+
+    private func traceLifeMonthSceneLabel(for item: HomeItem) -> String {
+        let signal = LifeSceneSemanticService.classify(item)
+        if signal.kind == .general || signal.confidenceTier == .weak {
+            return item.category.rawValue
+        }
+        return signal.label
+    }
+
+    private func traceLifeMonthLongestStreak(items: [HomeItem], calendar: Calendar) -> Int {
+        let days = Set(items.map { calendar.startOfDay(for: $0.createdAt) }).sorted()
+        guard !days.isEmpty else { return 0 }
+        var best = 1
+        var current = 1
+        for index in 1..<days.count {
+            let expected = calendar.date(byAdding: .day, value: 1, to: days[index - 1])
+            if let expected = expected, calendar.isDate(expected, inSameDayAs: days[index]) {
+                current += 1
+                best = max(best, current)
+            } else {
+                current = 1
+            }
+        }
+        return best
+    }
+
+    private func traceLifeMonthHeatOpacity(for count: Int) -> Double {
+        if count <= 0 { return 0.12 }
+        if count == 1 { return 0.35 }
+        if count <= 3 { return 0.60 }
+        return 0.90
+    }
+
+    private func traceLifeMonthIsHighArousalEmotion(_ emotion: String) -> Bool {
+        let text = emotion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return false }
+        return ["惊喜", "开心", "心动", "难忘", "累", "焦虑", "赶", "庆祝", "远一点", "认真"].contains { text.contains($0) }
+    }
+
+    private func traceLifeMonthLabelIsMeaningful(_ label: String) -> Bool {
+        let text = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.count >= 2 else { return false }
+        let generic = ["现场", "记录", "票据", "这张图把当时留了下来。"]
+        return !generic.contains(text)
+    }
+
+    private func traceLifeMonthIsQuoteWorthy(_ raw: String, item: HomeItem) -> Bool {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (6...24).contains(text.count) else { return false }
+        guard text != item.category.defaultRecordTitle else { return false }
+        guard !text.allSatisfy({ $0.isNumber || $0 == "." || $0 == "¥" || $0 == "￥" }) else { return false }
+        let blocked = ["消费", "预算", "优化", "占比", "建议关注", "记录了", "支出"]
+        return !blocked.contains { text.contains($0) }
+    }
+
+    private func traceLifeMonthShortTitle(_ title: String, limit: Int = 18) -> String {
+        let text = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.count > limit else { return text }
+        return "\(text.prefix(limit))…"
+    }
+
+    private func traceLifeMonthTitle(for date: Date) -> String {
+        "\(Calendar.current.component(.month, from: date))月"
+    }
+
+    private func traceLifeMonthShortDate(_ date: Date) -> String {
+        let calendar = Calendar.current
+        return "\(calendar.component(.month, from: date))/\(calendar.component(.day, from: date))"
     }
 
     private func traceLifeMonthEditorialHero(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
