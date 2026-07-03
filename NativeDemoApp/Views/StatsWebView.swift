@@ -57,13 +57,13 @@ private struct TraceLifeCardLayout {
 
     var faceSpacing: CGFloat { 10 + compactness * 4 }
     var weekTopPadding: CGFloat { 22 + compactness * 6 }
-    var monthTopPadding: CGFloat { 16 + compactness * 6 }
+    var monthTopPadding: CGFloat { 14 + compactness * 4 }
     var bottomPadding: CGFloat { 14 + compactness * 2 }
     var primaryPhotoHeight: CGFloat { 184 + compactness * 44 }
     var secondaryPhotoHeight: CGFloat { 84 + compactness * 24 }
     var monthPhotoHeight: CGFloat { 72 + compactness * 18 }
-    var monthHeroHeight: CGFloat { 312 + compactness * 26 }
-    var monthDiaryPhotoHeight: CGFloat { 92 + compactness * 8 }
+    var monthHeroHeight: CGFloat { 322 + compactness * 30 }
+    var monthDiaryPhotoHeight: CGFloat { 94 + compactness * 10 }
     var monthRingSize: CGFloat { 112 + compactness * 20 }
     var monthRingLineWidth: CGFloat { 14 + compactness * 2 }
     var monthHeatCellSize: CGFloat { 28 + compactness * 3 }
@@ -525,12 +525,12 @@ struct StatsWebView: View {
         let hasData = !snapshot.items.isEmpty
         let isMonthLocked = range == .month && !hasMemberAccess && quotaStore.monthRemaining(isMember: false) <= 0
         let canPlay = hasData && quotaStore.canPlay(range, isMember: hasMemberAccess)
-        let digest = traceLifeMonthDigest(snapshot: snapshot)
+        return VStack(alignment: .center, spacing: 11) {
+            traceLifeMonthEditorialHero(snapshot: snapshot, layout: layout)
 
-        return VStack(alignment: .center, spacing: 12) {
-            traceLifeMonthHeatmapCard(digest: digest, layout: layout)
+            traceLifeMonthKeywordSection(snapshot: snapshot)
 
-            traceLifeMonthMilestonesCard(digest: digest, snapshot: snapshot, layout: layout)
+            traceLifeMonthDiaryStrip(snapshot: snapshot, layout: layout)
 
             Button {
                 handleSummaryPlaybackTap(range: range, hasData: hasData)
@@ -1122,7 +1122,8 @@ struct StatsWebView: View {
                         .lineSpacing(2)
                         .lineLimit(2)
                 }
-                .padding(.top, 28)
+                .padding(.top, 26)
+                .padding(.horizontal, 10)
 
                 Spacer(minLength: 0)
 
@@ -1132,7 +1133,7 @@ struct StatsWebView: View {
                     sceneCount: sceneCount
                 )
                 .padding(.horizontal, 10)
-                .padding(.bottom, 10)
+                .padding(.bottom, 11)
             }
         }
         .frame(maxWidth: .infinity)
@@ -1142,25 +1143,41 @@ struct StatsWebView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(Color.white.opacity(0.82), lineWidth: 1)
         )
-        .shadow(color: AppColors.subtext.opacity(0.07), radius: 14, x: 0, y: 8)
+        .shadow(color: AppColors.subtext.opacity(0.075), radius: 16, x: 0, y: 9)
     }
 
     private func traceLifeMonthRoomBackdrop() -> some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(hex: "eff7f0"),
-                    Color(hex: "dcefe6"),
-                    Color(hex: "f7efe1")
+                    Color(hex: "f4faf4"),
+                    Color(hex: "dcefe5"),
+                    Color(hex: "f7ecdc")
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
 
-            Circle()
-                .fill(Color.white.opacity(0.28))
-                .frame(width: 240, height: 240)
-                .offset(x: 118, y: -36)
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.52),
+                            Color(hex: "e8d8be").opacity(0.22),
+                            Color.white.opacity(0.10)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 82)
+                .rotationEffect(.degrees(7))
+                .offset(x: 116, y: -18)
+
+            RoundedRectangle(cornerRadius: 36, style: .continuous)
+                .fill(Color.white.opacity(0.22))
+                .frame(width: 260, height: 112)
+                .offset(x: 36, y: 112)
 
             RoundedRectangle(cornerRadius: 44, style: .continuous)
                 .fill(AppColors.accent.opacity(0.22))
@@ -1188,6 +1205,11 @@ struct StatsWebView: View {
                 .frame(width: 36, height: 24)
                 .offset(x: 8, y: 43)
 
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(Color(hex: "b99762").opacity(0.22))
+                .frame(width: 92, height: 6)
+                .offset(x: 30, y: 84)
+
             Capsule(style: .continuous)
                 .fill(AppColors.accent.opacity(0.42))
                 .frame(width: 22, height: 52)
@@ -1209,12 +1231,22 @@ struct StatsWebView: View {
 
             LinearGradient(
                 colors: [
-                    Color.white.opacity(0.56),
-                    Color.white.opacity(0.12),
-                    Color.white.opacity(0.34)
+                    Color.white.opacity(0.62),
+                    Color.white.opacity(0.10),
+                    Color.white.opacity(0.32)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
+            )
+
+            LinearGradient(
+                colors: [
+                    AppColors.accent.opacity(0.14),
+                    Color.clear,
+                    Color(hex: "eacb91").opacity(0.16)
+                ],
+                startPoint: .bottomLeading,
+                endPoint: .topTrailing
             )
         }
     }
@@ -1248,8 +1280,12 @@ struct StatsWebView: View {
         .frame(height: 94)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.93))
-                .shadow(color: AppColors.subtext.opacity(0.07), radius: 16, x: 0, y: 8)
+                .fill(Color.white.opacity(0.94))
+                .shadow(color: AppColors.subtext.opacity(0.08), radius: 18, x: 0, y: 9)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.92), lineWidth: 1)
         )
     }
 
@@ -1290,6 +1326,29 @@ struct StatsWebView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
+    private func traceLifeMonthSoftSectionBackground(cornerRadius: CGFloat = 18) -> some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color.white.opacity(0.82))
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.70),
+                        AppColors.paperWarm.opacity(0.14),
+                        AppColors.accent.opacity(0.045)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .shadow(color: AppColors.subtext.opacity(0.045), radius: 12, x: 0, y: 6)
+    }
+
     private func traceLifeMonthKeywordSection(snapshot: TraceChapterSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             Text("本月生活关键词")
@@ -1309,10 +1368,10 @@ struct StatsWebView: View {
         .padding(.horizontal, 13)
         .padding(.vertical, 13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
+        .background(traceLifeMonthSoftSectionBackground())
+        .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.78))
-                .shadow(color: AppColors.subtext.opacity(0.035), radius: 10, x: 0, y: 5)
+                .stroke(Color.white.opacity(0.76), lineWidth: 1)
         )
     }
 
@@ -1329,7 +1388,11 @@ struct StatsWebView: View {
         .frame(height: 26)
         .background(
             Capsule(style: .continuous)
-                .fill(TraceColors.surfaceMuted.opacity(0.92))
+                .fill(TraceColors.surfaceMuted.opacity(0.86))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(Color.white.opacity(0.68), lineWidth: 1)
         )
     }
 
@@ -1358,10 +1421,10 @@ struct StatsWebView: View {
         .padding(.horizontal, 13)
         .padding(.vertical, 13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
+        .background(traceLifeMonthSoftSectionBackground())
+        .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.78))
-                .shadow(color: AppColors.subtext.opacity(0.035), radius: 10, x: 0, y: 5)
+                .stroke(Color.white.opacity(0.76), lineWidth: 1)
         )
     }
 
@@ -1371,10 +1434,31 @@ struct StatsWebView: View {
         index: Int,
         layout: TraceLifeCardLayout
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            traceLifeSliceFramedImage(anchor: anchor, height: layout.monthDiaryPhotoHeight)
-                .frame(width: 108)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        VStack(alignment: .leading, spacing: 7) {
+            ZStack {
+                traceLifeSliceFramedImage(anchor: anchor, height: layout.monthDiaryPhotoHeight)
+                    .saturation(0.84)
+                    .contrast(0.94)
+                    .brightness(0.025)
+                    .frame(width: 108)
+
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.10),
+                        Color.clear,
+                        AppColors.text.opacity(0.10)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .frame(width: 108, height: layout.monthDiaryPhotoHeight)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.white.opacity(0.78), lineWidth: 1)
+            )
+            .shadow(color: AppColors.subtext.opacity(0.06), radius: 10, x: 0, y: 5)
 
             Text(traceLifeMonthPhotoCaption(anchor: anchor, item: item, index: index))
                 .font(.system(size: 11, weight: .bold))
