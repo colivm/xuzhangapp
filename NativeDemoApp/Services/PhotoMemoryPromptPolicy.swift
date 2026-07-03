@@ -32,7 +32,16 @@ struct PhotoMemoryPromptReason: Equatable {
     var memoryAnchorCaption: String {
         switch assetRole {
         case .moment:
-            return "这张图把那次见面留住了。"
+            switch sceneHint {
+            case .gathering:
+                return "这张图把那次见面留住了。"
+            case .giftMoment:
+                return "这张图把那份心意留住了。"
+            case .experience:
+                return "这张图把当时留了下来。"
+            default:
+                return "这张图把当时留了下来。"
+            }
         case .receipt:
             return "这张图以后查起来更清楚。"
         case .place:
