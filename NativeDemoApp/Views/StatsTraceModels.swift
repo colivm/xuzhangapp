@@ -75,12 +75,6 @@ struct TraceRhythmPoint: Identifiable {
     var id: String { label }
 }
 
-struct TrendPoint: Identifiable {
-    let id = UUID()
-    let day: String
-    let value: Double
-}
-
 struct TraceClueSnapshot {
     let items: [HomeItem]
     let clues: [TraceCategoryClue]

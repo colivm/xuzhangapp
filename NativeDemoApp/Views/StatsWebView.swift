@@ -60,7 +60,6 @@ struct StatsWebView: View {
     @State private var summaryPlayback: SummaryPlayback?
     @State private var summaryQuotaPrompt: SummaryQuotaPrompt?
     @State private var quotaRefreshID = UUID()
-    @State var isFiltersExpanded = false
     @State private var showTraceDetailSheet = false
     @State var showCategoryFilterSheet = false
     @State var traceInlineEditingItemID: UUID?
@@ -77,16 +76,11 @@ struct StatsWebView: View {
     @State private var traceDeepInsightExpanded = false
     @State private var traceInsightFocusedQuestion: String?
     @State private var lifeInsightRefreshID = UUID()
+    @State private var traceSnapshotStore = TraceSnapshotStore()
     private let playbackService = PlaybackService()
     private let momentSelector = PlaybackMomentSelector()
     private let quotaStore = SummaryPlaybackQuotaStore()
     private let lifeInsightService = LifeInsightService.shared
-    private static var traceChapterSnapshotCache: [String: TraceChapterSnapshot] = [:]
-    private static var traceChapterSnapshotCacheOrder: [String] = []
-    private static let traceChapterSnapshotCacheLimit = 8
-    private static var traceClueSnapshotCache: [String: TraceClueSnapshot] = [:]
-    private static var traceClueSnapshotCacheOrder: [String] = []
-    private static let traceClueSnapshotCacheLimit = 24
 
     var filteredItems: [HomeItem] {
         var items: [HomeItem]
@@ -141,16 +135,6 @@ struct StatsWebView: View {
         return "\(periodText) · \(categoryText)"
     }
 
-    private var overviewNarrativeText: String {
-        let count = filteredItems.count
-        guard count > 0 else {
-            return "这一段还没有记录。先留下几笔，之后会整理成一段场记。"
-        }
-        let trendData = computeTrendData()
-        let trendText = trendData.isEmpty ? "多记几天，节奏会更清楚。" : trendInsightText(data: trendData)
-        return "这一段留下 \(count) 笔，合计 \(totalExpense.formatted(.cny))。\(trendText)"
-    }
-
     @State var showPeriodSheet = false
     @State var customStartDate = Date()
     @State var customEndDate = Date()
@@ -182,6 +166,30 @@ struct StatsWebView: View {
             }
             .onChange(of: openTraceRequestID) { _, _ in
                 handleOpenTraceRequestIfNeeded()
+            }
+            .onChange(of: homeViewModel.items) { _, _ in
+                traceSnapshotStore.invalidateAll()
+            }
+            .onChange(of: selectedPeriod) { _, _ in
+                traceSnapshotStore.invalidateAll()
+            }
+            .onChange(of: useCustomRange) { _, _ in
+                traceSnapshotStore.invalidateAll()
+            }
+            .onChange(of: customStartDate) { _, _ in
+                traceSnapshotStore.invalidateAll()
+            }
+            .onChange(of: customEndDate) { _, _ in
+                traceSnapshotStore.invalidateAll()
+            }
+            .onChange(of: selectedCategory) { _, _ in
+                traceSnapshotStore.invalidateAll()
+            }
+            .onChange(of: hasMemberAccess) { _, _ in
+                traceSnapshotStore.invalidateAll()
+            }
+            .onChange(of: lifeInsightRefreshID) { _, _ in
+                traceSnapshotStore.invalidateClueCache()
             }
             .overlay {
                 if let summaryQuotaPrompt {
@@ -239,75 +247,7 @@ struct StatsWebView: View {
     }
 
     private var traceRepresentativeItems: [HomeItem] {
-        representativeTraceItems(from: heroScopedItems)
-    }
-
-    private func representativeTraceItems(from items: [HomeItem]) -> [HomeItem] {
-        guard items.count > 3 else { return items }
-        let ranked = Array(items.enumerated()).sorted { lhs, rhs in
-            let leftScore = traceRepresentativeScore(item: lhs.element, index: lhs.offset)
-            let rightScore = traceRepresentativeScore(item: rhs.element, index: rhs.offset)
-            if leftScore == rightScore {
-                return lhs.element.createdAt > rhs.element.createdAt
-            }
-            return leftScore > rightScore
-        }
-
-        var selected: [HomeItem] = []
-        var selectedCategories = Set<String>()
-        for candidate in ranked where selected.count < 3 {
-            let categoryKey = candidate.element.category.rawValue
-            guard !selectedCategories.contains(categoryKey) else { continue }
-            selected.append(candidate.element)
-            selectedCategories.insert(categoryKey)
-        }
-        for candidate in ranked where selected.count < 3 {
-            guard !selected.contains(where: { $0.id == candidate.element.id }) else { continue }
-            selected.append(candidate.element)
-        }
-        return selected.sorted { $0.createdAt > $1.createdAt }
-    }
-
-    private func representativeTraceItems(
-        from items: [HomeItem],
-        maxItems: Int,
-        maxPerCategory: Int
-    ) -> [HomeItem] {
-        guard maxItems > 0 else { return [] }
-        let ranked = Array(items.enumerated()).sorted { lhs, rhs in
-            let leftScore = traceRepresentativeScore(item: lhs.element, index: lhs.offset)
-            let rightScore = traceRepresentativeScore(item: rhs.element, index: rhs.offset)
-            if leftScore == rightScore {
-                return lhs.element.createdAt > rhs.element.createdAt
-            }
-            return leftScore > rightScore
-        }
-
-        var selected: [HomeItem] = []
-        var categoryCounts: [String: Int] = [:]
-        for candidate in ranked where selected.count < maxItems {
-            let categoryKey = candidate.element.category.rawValue
-            let count = categoryCounts[categoryKey, default: 0]
-            guard count < maxPerCategory else { continue }
-            selected.append(candidate.element)
-            categoryCounts[categoryKey] = count + 1
-        }
-        return selected.sorted { $0.createdAt > $1.createdAt }
-    }
-
-    private func traceRepresentativeScore(item: HomeItem, index: Int) -> Int {
-        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let defaultTitle = item.category.defaultRecordTitle
-        let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
-        let emotion = item.displayEmotionTag
-        var score = 0
-        if !emotion.isEmpty && emotion != defaultEmotion { score += 40 }
-        if item.userEditedTitle == true { score += 30 }
-        if title != defaultTitle && (4...18).contains(title.count) { score += 20 }
-        if case .manual = item.source { score += 6 }
-        score += min(index, 6) * 2
-        if title == defaultTitle { score -= 12 }
-        return score
+        TraceRepresentative.items(from: heroScopedItems)
     }
 
     private var heroNarrativeText: String {
@@ -839,7 +779,7 @@ struct StatsWebView: View {
 
     private func traceLifeMonthDiaryStrip(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
         let anchors = Array(snapshot.memoryAnchors.prefix(8))
-        let items = representativeTraceItems(from: snapshot.items, maxItems: 8, maxPerCategory: 2)
+        let items = TraceRepresentative.items(from: snapshot.items, maxItems: 8, maxPerCategory: 2)
         let count = max(anchors.count, min(max(items.count, 3), 6))
         return VStack(alignment: .leading, spacing: 9) {
             Text("本月日记")
@@ -850,7 +790,8 @@ struct StatsWebView: View {
                 HStack(spacing: 12) {
                     ForEach(0..<max(count, 1), id: \.self) { index in
                         let anchor = anchors.indices.contains(index) ? anchors[index] : nil
-                        let item = items.indices.contains(index) ? items[index] : nil
+                        let fallbackItem = items.indices.contains(index) ? items[index] : nil
+                        let item = traceLifeItem(for: anchor, in: snapshot.items, fallback: fallbackItem)
                         traceLifeMonthDiaryCard(anchor: anchor, item: item, index: index, layout: layout)
                     }
                 }
@@ -1009,7 +950,7 @@ struct StatsWebView: View {
 
     private func traceLifeMonthPhotoStrip(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
         let anchors = Array(snapshot.memoryAnchors.prefix(8))
-        let items = representativeTraceItems(from: snapshot.items, maxItems: 6, maxPerCategory: 1)
+        let items = TraceRepresentative.items(from: snapshot.items, maxItems: 6, maxPerCategory: 1)
         let count = anchors.isEmpty ? min(max(items.count, 3), 6) : anchors.count
         return ScrollView(.horizontal) {
             HStack(spacing: 10) {
@@ -1146,7 +1087,8 @@ struct StatsWebView: View {
         return HStack(spacing: 8) {
             ForEach(0..<2, id: \.self) { index in
                 let anchor = anchors.indices.contains(index) ? anchors[index] : nil
-                let item = fallbackItems.indices.contains(index) ? fallbackItems[index] : nil
+                let fallbackItem = fallbackItems.indices.contains(index) ? fallbackItems[index] : nil
+                let item = traceLifeItem(for: anchor, in: snapshot.items, fallback: fallbackItem)
                 traceLifeSliceSmallPhoto(anchor: anchor, item: item, index: index, height: height)
             }
         }
@@ -1358,7 +1300,7 @@ struct StatsWebView: View {
             openTraceDetail(for: snapshot.range)
         } label: {
             HStack(spacing: 8) {
-                Text("细查账单 \(snapshot.items.count) 笔")
+                Text("细查这一段 · \(snapshot.items.count) 笔")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppColors.subtext.opacity(0.92))
                     .lineLimit(1)
@@ -1398,9 +1340,10 @@ struct StatsWebView: View {
         }
         let countText = traceLifeSliceCountText(snapshot.items.count)
         if snapshot.memoryAnchors.isEmpty {
-            return "\(traceLifeSliceRangeLead(snapshot.range))不只是\(countText)消费，也把几段路上、见面和照护留下来了。"
+            return "\(traceLifeSliceRangeLead(snapshot.range))不只是\(countText)小痕迹，还缺几张画面把它留住。"
         }
-        return "\(traceLifeSliceRangeLead(snapshot.range))不只是\(countText)消费，也把几段路上、见面和照护留下来了。"
+        let photoCount = snapshot.memoryAnchors.count
+        return "\(traceLifeSliceRangeLead(snapshot.range))\(countText)小痕迹，\(photoCount)张照片把路上和现场留下来了。"
     }
 
     private func traceLifeSliceSummaryLine(snapshot: TraceChapterSnapshot) -> String {
@@ -1504,6 +1447,15 @@ struct StatsWebView: View {
             return traceLifeSliceCaption(for: item)
         }
         return index == 0 ? "回家路上" : "给家里添的"
+    }
+
+    private func traceLifeItem(
+        for anchor: SummaryMemoryAnchor?,
+        in items: [HomeItem],
+        fallback: HomeItem?
+    ) -> HomeItem? {
+        guard let anchor else { return fallback }
+        return items.first { $0.id == anchor.itemID } ?? fallback
     }
 
     private func traceLifeSliceCaption(for item: HomeItem) -> String {
@@ -1735,7 +1687,7 @@ struct StatsWebView: View {
     private func buildTraceChapterSnapshot(for range: SummaryPlaybackRange) -> TraceChapterSnapshot {
         let items = traceLifeScopedItems(for: range)
         let cacheKey = traceChapterSnapshotCacheKey(items: items, range: range)
-        if let cached = Self.traceChapterSnapshotCache[cacheKey] {
+        if let cached = traceSnapshotStore.chapterSnapshot(for: cacheKey) {
             return cached
         }
 
@@ -1751,7 +1703,7 @@ struct StatsWebView: View {
             evidenceGroups: traceMarkEvidenceGroups(from: items, marks: marks, maxItems: 3),
             preview: buildSummaryLaunchPreview(for: range, items: items)
         )
-        storeTraceChapterSnapshot(snapshot, for: cacheKey)
+        traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
         return snapshot
     }
 
@@ -1796,18 +1748,6 @@ struct StatsWebView: View {
             traceItemsSignature(items),
             traceItemsSignature(homeViewModel.items)
         ].joined(separator: "|")
-    }
-
-    private func storeTraceChapterSnapshot(_ snapshot: TraceChapterSnapshot, for key: String) {
-        guard Self.traceChapterSnapshotCache[key] == nil else {
-            return
-        }
-        Self.traceChapterSnapshotCache[key] = snapshot
-        Self.traceChapterSnapshotCacheOrder.append(key)
-        while Self.traceChapterSnapshotCacheOrder.count > Self.traceChapterSnapshotCacheLimit {
-            let staleKey = Self.traceChapterSnapshotCacheOrder.removeFirst()
-            Self.traceChapterSnapshotCache.removeValue(forKey: staleKey)
-        }
     }
 
     private func traceLifeMarks(from items: [HomeItem], limit: Int) -> [LifeMarkAggregate] {
@@ -1923,7 +1863,7 @@ struct StatsWebView: View {
             return groups
         }
 
-        let fallbackItems = representativeTraceItems(from: sortedItems, maxItems: maxItems, maxPerCategory: 2)
+        let fallbackItems = TraceRepresentative.items(from: sortedItems, maxItems: maxItems, maxPerCategory: 2)
         guard !fallbackItems.isEmpty else { return [] }
         return [
             TraceMarkEvidenceGroup(
@@ -2576,7 +2516,7 @@ struct StatsWebView: View {
     private func buildTraceClueSnapshot() -> TraceClueSnapshot {
         let items = traceClueItems
         let cacheKey = traceClueSnapshotCacheKey(items: items)
-        if let cached = Self.traceClueSnapshotCache[cacheKey] {
+        if let cached = traceSnapshotStore.clueSnapshot(for: cacheKey) {
             return cached
         }
 
@@ -2600,7 +2540,7 @@ struct StatsWebView: View {
             canUseDeepInsight: canUse,
             freeInsightRemaining: freeRemaining
         )
-        storeTraceClueSnapshot(snapshot, for: cacheKey)
+        traceSnapshotStore.storeClueSnapshot(snapshot, for: cacheKey)
         return snapshot
     }
 
@@ -2637,18 +2577,6 @@ struct StatsWebView: View {
             hasher.combine(item.scenePackId)
         }
         return "\(hasher.finalize())"
-    }
-
-    private func storeTraceClueSnapshot(_ snapshot: TraceClueSnapshot, for key: String) {
-        guard Self.traceClueSnapshotCache[key] == nil else {
-            return
-        }
-        Self.traceClueSnapshotCache[key] = snapshot
-        Self.traceClueSnapshotCacheOrder.append(key)
-        while Self.traceClueSnapshotCacheOrder.count > Self.traceClueSnapshotCacheLimit {
-            let staleKey = Self.traceClueSnapshotCacheOrder.removeFirst()
-            Self.traceClueSnapshotCache.removeValue(forKey: staleKey)
-        }
     }
 
     private func traceClueHeroCard(
@@ -3713,50 +3641,6 @@ struct StatsWebView: View {
         RoundedRectangle(cornerRadius: 22, style: .continuous)
             .stroke(Color.white.opacity(0.55), lineWidth: 1)
             .allowsHitTesting(false)
-    }
-
-    private var overviewPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("这一段")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(AppColors.text)
-            Text(overviewNarrativeText)
-                .font(.system(size: 14))
-                .foregroundStyle(AppColors.text.opacity(0.82))
-                .fixedSize(horizontal: false, vertical: true)
-            totalExpenseCard
-            trendChart
-        }
-        .glassPanel(radius: 24, padding: 20)
-    }
-
-    private var totalExpenseCard: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("合计")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppColors.subtext)
-            Spacer()
-            Text(totalExpense.formatted(.cny))
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(AppColors.accent.opacity(0.86))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.54))
-        )
-    }
-
-    private var recordListPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("这一段里的笔笔")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(AppColors.text)
-            recordListContent()
-        }
-        .glassPanel(radius: 24, padding: 20)
     }
 
     @ViewBuilder
