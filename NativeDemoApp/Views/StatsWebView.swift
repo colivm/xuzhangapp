@@ -205,7 +205,7 @@ struct StatsWebView: View {
 
     private func statsContent(availableHeight: CGFloat) -> some View {
         let layout = TraceLifeCardLayout(screenHeight: max(availableHeight, UIScreen.main.bounds.height))
-        VStack(spacing: 16) {
+        return VStack(spacing: 16) {
             traceViewModeKicker
             if traceViewMode == .life {
                 traceChapterCard(layout: layout)
