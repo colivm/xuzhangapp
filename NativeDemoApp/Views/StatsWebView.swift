@@ -20,6 +20,26 @@ private struct TraceLifeRingSegment: Identifiable {
     let color: Color
 }
 
+private struct TraceLifeCardLayout {
+    let screenHeight: CGFloat
+
+    private var compactness: CGFloat {
+        let normalized = (screenHeight - 700) / 220
+        return min(max(normalized, 0), 1)
+    }
+
+    var faceSpacing: CGFloat { 10 + compactness * 4 }
+    var weekTopPadding: CGFloat { 22 + compactness * 6 }
+    var monthTopPadding: CGFloat { 16 + compactness * 6 }
+    var bottomPadding: CGFloat { 14 + compactness * 2 }
+    var primaryPhotoHeight: CGFloat { 184 + compactness * 44 }
+    var secondaryPhotoHeight: CGFloat { 84 + compactness * 24 }
+    var monthPhotoHeight: CGFloat { 72 + compactness * 18 }
+    var monthRingSize: CGFloat { 112 + compactness * 20 }
+    var monthRingLineWidth: CGFloat { 14 + compactness * 2 }
+    var playButtonHeight: CGFloat { 44 + compactness * 4 }
+}
+
 struct StatsWebView: View {
 
     @EnvironmentObject private var homeViewModel: HomeViewModel
@@ -172,18 +192,21 @@ struct StatsWebView: View {
     }
 
     private var statsScrollView: some View {
-        ScrollView {
-            statsContent
+        GeometryReader { proxy in
+            ScrollView {
+                statsContent(availableHeight: proxy.size.height)
+            }
+            .scrollIndicators(.hidden)
+            .scrollDisabled(traceSwipeDragState != nil)
         }
-        .scrollIndicators(.hidden)
-        .scrollDisabled(traceSwipeDragState != nil)
     }
 
-    private var statsContent: some View {
+    private func statsContent(availableHeight: CGFloat) -> some View {
+        let layout = TraceLifeCardLayout(screenHeight: max(availableHeight, UIScreen.main.bounds.height))
         VStack(spacing: 16) {
             traceViewModeKicker
             if traceViewMode == .life {
-                traceChapterCard
+                traceChapterCard(layout: layout)
             } else {
                 traceClueBoard
             }
@@ -358,7 +381,7 @@ struct StatsWebView: View {
         selectedPeriod == .week ? .week : .month
     }
 
-    private var traceChapterCard: some View {
+    private func traceChapterCard(layout: TraceLifeCardLayout) -> some View {
         let _ = quotaRefreshID
         let weekSnapshot = buildTraceChapterSnapshot(for: .week)
         let monthSnapshot = buildTraceChapterSnapshot(for: .month)
@@ -369,8 +392,8 @@ struct StatsWebView: View {
                 .padding(.bottom, -6)
                 .zIndex(2)
 
-            ZStack {
-                traceLifeSliceCardFace(snapshot: weekSnapshot)
+            ZStack(alignment: .top) {
+                traceLifeSliceCardFace(snapshot: weekSnapshot, layout: layout)
                     .opacity(showsMonth ? 0 : 1)
                     .rotation3DEffect(
                         .degrees(reduceMotion ? 0 : (showsMonth ? -180 : 0)),
@@ -380,7 +403,7 @@ struct StatsWebView: View {
                     .zIndex(showsMonth ? 0 : 1)
                     .allowsHitTesting(!showsMonth)
 
-                traceLifeMonthCardFace(snapshot: monthSnapshot)
+                traceLifeMonthCardFace(snapshot: monthSnapshot, layout: layout)
                     .opacity(showsMonth ? 1 : 0)
                     .rotation3DEffect(
                         .degrees(reduceMotion ? 0 : (showsMonth ? 0 : 180)),
@@ -402,16 +425,16 @@ struct StatsWebView: View {
         }
     }
 
-    private func traceLifeSliceCardFace(snapshot: TraceChapterSnapshot) -> some View {
+    private func traceLifeSliceCardFace(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
         let range = snapshot.range
         let hasData = !snapshot.items.isEmpty
         let isMonthLocked = range == .month && !hasMemberAccess && quotaStore.monthRemaining(isMember: false) <= 0
         let canPlay = hasData && quotaStore.canPlay(range, isMember: hasMemberAccess)
 
-        return VStack(alignment: .center, spacing: 12) {
+        return VStack(alignment: .center, spacing: layout.faceSpacing) {
             traceLifeSliceHeader(snapshot: snapshot)
 
-            traceLifeSlicePhotoStory(snapshot: snapshot)
+            traceLifeSlicePhotoStory(snapshot: snapshot, layout: layout)
 
             traceLifeSliceScenePills(snapshot: snapshot)
 
@@ -420,7 +443,8 @@ struct StatsWebView: View {
             } label: {
                 traceLifeSlicePlayButton(
                     isMonthLocked: isMonthLocked,
-                    isEnabled: canPlay || isMonthLocked
+                    isEnabled: canPlay || isMonthLocked,
+                    height: layout.playButtonHeight
                 )
             }
             .buttonStyle(PurposefulCardButtonStyle(radius: 24, depth: 1.05))
@@ -429,8 +453,8 @@ struct StatsWebView: View {
             traceLifeSliceFooter(snapshot: snapshot)
         }
         .padding(.horizontal, 22)
-        .padding(.top, 28)
-        .padding(.bottom, 14)
+        .padding(.top, layout.weekTopPadding)
+        .padding(.bottom, layout.bottomPadding)
         .background(traceLifeSliceCardBackground)
         .overlay(traceLifeSliceCardBorder)
         .shadow(color: AppColors.subtext.opacity(0.06), radius: 18, x: 0, y: 8)
@@ -524,20 +548,20 @@ struct StatsWebView: View {
         }
     }
 
-    private func traceLifeMonthCardFace(snapshot: TraceChapterSnapshot) -> some View {
+    private func traceLifeMonthCardFace(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
         let range = snapshot.range
         let hasData = !snapshot.items.isEmpty
         let isMonthLocked = range == .month && !hasMemberAccess && quotaStore.monthRemaining(isMember: false) <= 0
         let canPlay = hasData && quotaStore.canPlay(range, isMember: hasMemberAccess)
 
-        return VStack(alignment: .center, spacing: 12) {
+        return VStack(alignment: .center, spacing: layout.faceSpacing) {
             traceLifeSliceHeader(snapshot: snapshot)
 
-            traceLifeMonthOverview(snapshot: snapshot)
+            traceLifeMonthOverview(snapshot: snapshot, layout: layout)
 
             traceLifeMonthHighlights(snapshot: snapshot)
 
-            traceLifeMonthPhotoStrip(snapshot: snapshot)
+            traceLifeMonthPhotoStrip(snapshot: snapshot, layout: layout)
 
             traceLifeSliceScenePills(snapshot: snapshot)
 
@@ -546,7 +570,8 @@ struct StatsWebView: View {
             } label: {
                 traceLifeSlicePlayButton(
                     isMonthLocked: isMonthLocked,
-                    isEnabled: canPlay || isMonthLocked
+                    isEnabled: canPlay || isMonthLocked,
+                    height: layout.playButtonHeight
                 )
             }
             .buttonStyle(PurposefulCardButtonStyle(radius: 24, depth: 1.05))
@@ -555,14 +580,14 @@ struct StatsWebView: View {
             traceLifeSliceFooter(snapshot: snapshot)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 18)
-        .padding(.bottom, 14)
+        .padding(.top, layout.monthTopPadding)
+        .padding(.bottom, layout.bottomPadding)
         .background(traceLifeSliceCardBackground)
         .overlay(traceLifeSliceCardBorder)
         .shadow(color: AppColors.subtext.opacity(0.06), radius: 18, x: 0, y: 8)
     }
 
-    private func traceLifeMonthOverview(snapshot: TraceChapterSnapshot) -> some View {
+    private func traceLifeMonthOverview(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
         let clues = traceCategoryClues(from: snapshot.items)
         let total = snapshot.items.reduce(0) { $0 + $1.amount }
         let segments = traceLifeMonthRingSegments(clues)
@@ -570,15 +595,15 @@ struct StatsWebView: View {
         return HStack(alignment: .center, spacing: 16) {
             ZStack {
                 Circle()
-                    .stroke(TraceColors.surfaceMuted, lineWidth: 16)
-                    .frame(width: 128, height: 128)
+                    .stroke(TraceColors.surfaceMuted, lineWidth: layout.monthRingLineWidth)
+                    .frame(width: layout.monthRingSize, height: layout.monthRingSize)
 
                 ForEach(segments) { segment in
                     Circle()
                         .trim(from: segment.start, to: segment.end)
-                        .stroke(segment.color, style: StrokeStyle(lineWidth: 16, lineCap: .round))
+                        .stroke(segment.color, style: StrokeStyle(lineWidth: layout.monthRingLineWidth, lineCap: .round))
                         .rotationEffect(.degrees(-90))
-                        .frame(width: 128, height: 128)
+                        .frame(width: layout.monthRingSize, height: layout.monthRingSize)
                 }
 
                 VStack(spacing: 4) {
@@ -674,7 +699,7 @@ struct StatsWebView: View {
         )
     }
 
-    private func traceLifeMonthPhotoStrip(snapshot: TraceChapterSnapshot) -> some View {
+    private func traceLifeMonthPhotoStrip(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
         let anchors = Array(snapshot.memoryAnchors.prefix(8))
         let items = representativeTraceItems(from: snapshot.items, maxItems: 6, maxPerCategory: 1)
         let count = anchors.isEmpty ? min(max(items.count, 3), 6) : anchors.count
@@ -684,7 +709,7 @@ struct StatsWebView: View {
                     let anchor = anchors.indices.contains(index) ? anchors[index] : nil
                     let item = items.indices.contains(index) ? items[index] : nil
                     VStack(alignment: .leading, spacing: 6) {
-                        traceLifeSliceFramedImage(anchor: anchor, height: 76)
+                        traceLifeSliceFramedImage(anchor: anchor, height: layout.monthPhotoHeight)
                             .frame(width: 112)
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         Text(traceLifeMonthPhotoCaption(anchor: anchor, item: item, index: index))
@@ -736,10 +761,10 @@ struct StatsWebView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func traceLifeSlicePhotoStory(snapshot: TraceChapterSnapshot) -> some View {
+    private func traceLifeSlicePhotoStory(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
         VStack(spacing: 12) {
-            traceLifeSlicePrimaryPhoto(snapshot: snapshot)
-            traceLifeSliceSecondaryPhotos(snapshot: snapshot)
+            traceLifeSlicePrimaryPhoto(snapshot: snapshot, height: layout.primaryPhotoHeight)
+            traceLifeSliceSecondaryPhotos(snapshot: snapshot, height: layout.secondaryPhotoHeight)
         }
         .padding(.top, 2)
     }
@@ -766,10 +791,10 @@ struct StatsWebView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func traceLifeSlicePrimaryPhoto(snapshot: TraceChapterSnapshot) -> some View {
+    private func traceLifeSlicePrimaryPhoto(snapshot: TraceChapterSnapshot, height: CGFloat) -> some View {
         let anchor = snapshot.memoryAnchors.first
         return ZStack(alignment: .bottomLeading) {
-            traceLifeSliceFramedImage(anchor: anchor, height: 178)
+            traceLifeSliceFramedImage(anchor: anchor, height: height)
 
             HStack(alignment: .center, spacing: 8) {
                 Text(traceLifeSlicePrimaryCaption(snapshot: snapshot))
@@ -807,14 +832,14 @@ struct StatsWebView: View {
         .shadow(color: AppColors.subtext.opacity(0.08), radius: 14, x: 0, y: 8)
     }
 
-    private func traceLifeSliceSecondaryPhotos(snapshot: TraceChapterSnapshot) -> some View {
+    private func traceLifeSliceSecondaryPhotos(snapshot: TraceChapterSnapshot, height: CGFloat) -> some View {
         let anchors = Array(snapshot.memoryAnchors.dropFirst().prefix(2))
         let fallbackItems = Array(snapshot.items.dropFirst().prefix(2))
         return HStack(spacing: 8) {
             ForEach(0..<2, id: \.self) { index in
                 let anchor = anchors.indices.contains(index) ? anchors[index] : nil
                 let item = fallbackItems.indices.contains(index) ? fallbackItems[index] : nil
-                traceLifeSliceSmallPhoto(anchor: anchor, item: item, index: index)
+                traceLifeSliceSmallPhoto(anchor: anchor, item: item, index: index, height: height)
             }
         }
     }
@@ -822,10 +847,11 @@ struct StatsWebView: View {
     private func traceLifeSliceSmallPhoto(
         anchor: SummaryMemoryAnchor?,
         item: HomeItem?,
-        index: Int
+        index: Int,
+        height: CGFloat
     ) -> some View {
         ZStack(alignment: .bottomLeading) {
-            traceLifeSliceFramedImage(anchor: anchor, height: 78)
+            traceLifeSliceFramedImage(anchor: anchor, height: height)
 
             HStack(alignment: .center, spacing: 7) {
                 Text(traceLifeSliceSmallCaption(anchor: anchor, item: item, index: index))
@@ -951,7 +977,7 @@ struct StatsWebView: View {
         }
     }
 
-    private func traceLifeSlicePlayButton(isMonthLocked: Bool, isEnabled: Bool) -> some View {
+    private func traceLifeSlicePlayButton(isMonthLocked: Bool, isEnabled: Bool, height: CGFloat) -> some View {
         HStack(spacing: 8) {
             Spacer(minLength: 0)
             ZStack {
@@ -969,7 +995,7 @@ struct StatsWebView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 44)
+        .frame(height: height)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(
