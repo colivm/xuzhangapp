@@ -366,6 +366,7 @@ struct HomeView: View {
     @State private var quickRecordCardDismissedID: String?
     @State private var quickRecordCardAutoCloseID: String?
     @State private var quickRecordCardPulse = false
+    @State private var quickRecordSaveMessage: String?
     @State private var quickRecordRefreshTick = 0
     @State private var quickRecordWeatherRefreshTick = 0
     @GestureState private var todaySwipeDragState: TodaySwipeDragState?
@@ -507,17 +508,40 @@ struct HomeView: View {
         let _ = quickRecordRefreshTick
         if let suggestion = homeViewModel.highConfidenceQuickRecordSuggestion,
            quickRecordCardDismissedID != suggestion.id {
-            HighConfidenceCommuteFloatingCard(
-                suggestion: suggestion,
-                weatherKind: quickRecordWeatherKind,
-                isPulsing: quickRecordCardPulse,
-                onClose: { dismissQuickRecordCard(suggestion.id) },
-                onSave: {
-                    if homeViewModel.addHighConfidenceQuickRecord(suggestion) {
-                        dismissQuickRecordCard(suggestion.id)
+            VStack(spacing: 8) {
+                HighConfidenceCommuteFloatingCard(
+                    suggestion: suggestion,
+                    weatherKind: quickRecordWeatherKind,
+                    isPulsing: quickRecordCardPulse,
+                    onClose: { dismissQuickRecordCard(suggestion.id) },
+                    onSave: {
+                        if homeViewModel.addHighConfidenceQuickRecord(suggestion) {
+                            quickRecordSaveMessage = "已补到今天的记录里"
+                            dismissQuickRecordCard(suggestion.id)
+                            todayBillsFocusTick += 1
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                                scheduleRecentSaveHighlight()
+                            }
+                        } else {
+                            quickRecordSaveMessage = homeViewModel.recordInputMessage ?? "这笔暂时没保存成功"
+                            scheduleQuickRecordMessageClear(for: suggestion.id)
+                        }
                     }
+                )
+
+                if let quickRecordSaveMessage {
+                    Text(quickRecordSaveMessage)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppColors.text.opacity(0.86))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.78))
+                        )
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
-            )
+            }
                 .frame(maxWidth: 430)
                 .padding(.horizontal, 12)
                 .padding(.top, 206)
@@ -555,12 +579,14 @@ struct HomeView: View {
                 quickRecordCardPulse = true
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 18.0) {
             guard quickRecordCardAutoCloseID == suggestion.id,
                   quickRecordCardDismissedID != suggestion.id else {
                 return
             }
-            dismissQuickRecordCard(suggestion.id)
+            withAnimation(.easeInOut(duration: 0.24)) {
+                quickRecordCardPulse = false
+            }
         }
     }
 
@@ -569,6 +595,16 @@ struct HomeView: View {
             quickRecordCardDismissedID = id
             quickRecordCardAutoCloseID = nil
             quickRecordCardPulse = false
+            quickRecordSaveMessage = nil
+        }
+    }
+
+    private func scheduleQuickRecordMessageClear(for id: String) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+            guard quickRecordCardDismissedID != id else { return }
+            withAnimation(.easeInOut(duration: 0.18)) {
+                quickRecordSaveMessage = nil
+            }
         }
     }
 

@@ -155,7 +155,7 @@ extension HomeViewModel {
     private func highConfidenceCommuteSuggestion(at now: Date) -> HighConfidenceQuickRecordSuggestion? {
         let calendar = Calendar.current
         guard isWorkday(now, calendar: calendar) else { return nil }
-        guard items.filter({ $0.amount > 0 }).count >= 16 else { return nil }
+        guard items.filter({ $0.amount > 0 }).count >= 8 else { return nil }
 
         if isMorningCommutePromptTime(now, calendar: calendar) {
             guard !hasTodayCommuteRecord(direction: .morning, now: now, calendar: calendar),
@@ -402,7 +402,7 @@ extension HomeViewModel {
         if isBackfill {
             return (totalSamples: 4, distinctDays: 3, amountCluster: 3, amountRatio: 0.64, confidence: 0.86)
         }
-        return (totalSamples: 5, distinctDays: 4, amountCluster: 5, amountRatio: 0.72, confidence: 0.90)
+        return (totalSamples: 4, distinctDays: 3, amountCluster: 3, amountRatio: 0.58, confidence: 0.82)
     }
 
     private func stableAmountCluster(in items: [HomeItem]) -> (cents: Int, count: Int)? {
@@ -453,7 +453,7 @@ extension HomeViewModel {
         let window: (before: Int, after: Int)
         switch direction {
         case .morning:
-            window = (before: 20, after: 55)
+            window = (before: 35, after: 90)
         case .evening:
             if weekdayGroup == "fri" {
                 window = (before: 35, after: 75)
@@ -474,7 +474,7 @@ extension HomeViewModel {
         let graceMinutes: Int
         switch direction {
         case .morning:
-            graceMinutes = 60
+            graceMinutes = 35
         case .evening:
             graceMinutes = weekdayGroup == "fri" ? 75 : 65
         }
@@ -509,11 +509,11 @@ extension HomeViewModel {
     }
 
     private func isMorningCommutePromptTime(_ date: Date, calendar: Calendar) -> Bool {
-        (390...585).contains(minutesFromMidnight(date, calendar: calendar))
+        (360...630).contains(minutesFromMidnight(date, calendar: calendar))
     }
 
     private func isNoonCommuteBackfillTime(_ date: Date, calendar: Calendar) -> Bool {
-        (600...810).contains(minutesFromMidnight(date, calendar: calendar))
+        (570...840).contains(minutesFromMidnight(date, calendar: calendar))
     }
 
     private func isEveningCommutePromptTime(_ date: Date, calendar: Calendar) -> Bool {

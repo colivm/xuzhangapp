@@ -1924,14 +1924,7 @@ struct InsightWebView: View {
             return false
         }()
         return HStack(spacing: 10) {
-            Image(systemName: isConflict ? "exclamationmark.triangle.fill" : "plus.circle.fill")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(isConflict ? AppColors.lockGold.opacity(0.95) : AppColors.accentDark.opacity(0.86))
-                .frame(width: 28, height: 28)
-                .background(
-                    Circle()
-                        .fill((isConflict ? AppColors.lockGold : AppColors.accent).opacity(0.10))
-                )
+            aiCommandDraftLeadingControl(draft, isConflict: isConflict)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(draft.title)
@@ -1961,6 +1954,36 @@ struct InsightWebView: View {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(AppColors.lockGold.opacity(0.10))
             }
+        }
+    }
+
+    @ViewBuilder
+    private func aiCommandDraftLeadingControl(_ draft: AICommandRecordDraft, isConflict: Bool) -> some View {
+        if isConflict {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(AppColors.lockGold.opacity(0.95))
+                .frame(width: 28, height: 28)
+                .background(
+                    Circle()
+                        .fill(AppColors.lockGold.opacity(0.10))
+                )
+        } else {
+            Button {
+                saveSingleAICommandDraft(draft)
+            } label: {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppColors.accentDark.opacity(0.86))
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle()
+                            .fill(AppColors.accent.opacity(0.10))
+                    )
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("保存这条补记")
         }
     }
 
@@ -2464,6 +2487,27 @@ struct InsightWebView: View {
             amountSource: amountSource,
             needsAmount: false
         )
+    }
+
+    private func saveSingleAICommandDraft(_ draft: AICommandRecordDraft) {
+        guard hasMemberAccess else {
+            openMemberPricingAfterAICommandDismiss()
+            return
+        }
+        guard draft.amount > 0 else {
+            aiCommandMessage = "这条金额不完整，先不能保存。"
+            return
+        }
+        if case .conflict = draft.status {
+            aiCommandMessage = "这条疑似已经存在，先不重复补。"
+            return
+        }
+        let count = homeViewModel.importAICommandDrafts([draft])
+        aiCommandSavedCount = (aiCommandSavedCount ?? 0) + count
+        aiCommandMessage = count > 0 ? "已保存这条补记。" : "这条暂时没保存成功。"
+        guard count > 0, var result = aiCommandResult else { return }
+        result.drafts.removeAll { $0.id == draft.id }
+        aiCommandResult = result.drafts.isEmpty ? nil : result
     }
 
     private func saveAICommandDrafts(_ drafts: [AICommandRecordDraft]) {

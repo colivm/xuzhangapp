@@ -1990,6 +1990,7 @@ final class HomeViewModel: ObservableObject {
         let calendar = Calendar.current
         let sortedItems = items.sorted { $0.createdAt > $1.createdAt }
         let currentWeekInterval = PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: now)
+        let currentMonthInterval = calendar.dateInterval(of: .month, for: now)
         let todayPositiveItems = sortedItems.filter {
             calendar.isDate($0.createdAt, inSameDayAs: now) && $0.amount > 0
         }
@@ -1997,8 +1998,9 @@ final class HomeViewModel: ObservableObject {
             guard let currentWeekInterval else { return false }
             return item.createdAt >= currentWeekInterval.start && item.createdAt < currentWeekInterval.end
         }
-        let currentMonthItems = sortedItems.filter {
-            calendar.isDate($0.createdAt, equalTo: now, toGranularity: .month)
+        let currentMonthItems = sortedItems.filter { item in
+            guard let currentMonthInterval else { return false }
+            return item.createdAt >= currentMonthInterval.start && item.createdAt < currentMonthInterval.end
         }
         let currentYearItems = sortedItems.filter {
             calendar.isDate($0.createdAt, equalTo: now, toGranularity: .year)
