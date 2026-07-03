@@ -35,6 +35,8 @@ private struct TraceLifeCardLayout {
     var primaryPhotoHeight: CGFloat { 184 + compactness * 44 }
     var secondaryPhotoHeight: CGFloat { 84 + compactness * 24 }
     var monthPhotoHeight: CGFloat { 72 + compactness * 18 }
+    var monthHeroHeight: CGFloat { 236 + compactness * 28 }
+    var monthDiaryPhotoHeight: CGFloat { 78 + compactness * 12 }
     var monthRingSize: CGFloat { 112 + compactness * 20 }
     var monthRingLineWidth: CGFloat { 14 + compactness * 2 }
     var playButtonHeight: CGFloat { 44 + compactness * 4 }
@@ -555,15 +557,11 @@ struct StatsWebView: View {
         let canPlay = hasData && quotaStore.canPlay(range, isMember: hasMemberAccess)
 
         return VStack(alignment: .center, spacing: layout.faceSpacing) {
-            traceLifeSliceHeader(snapshot: snapshot)
+            traceLifeMonthEditorialHero(snapshot: snapshot, layout: layout)
 
-            traceLifeMonthOverview(snapshot: snapshot, layout: layout)
+            traceLifeMonthKeywordSection(snapshot: snapshot)
 
-            traceLifeMonthHighlights(snapshot: snapshot)
-
-            traceLifeMonthPhotoStrip(snapshot: snapshot, layout: layout)
-
-            traceLifeSliceScenePills(snapshot: snapshot)
+            traceLifeMonthDiaryStrip(snapshot: snapshot, layout: layout)
 
             Button {
                 handleSummaryPlaybackTap(range: range, hasData: hasData)
@@ -585,6 +583,237 @@ struct StatsWebView: View {
         .background(traceLifeSliceCardBackground)
         .overlay(traceLifeSliceCardBorder)
         .shadow(color: AppColors.subtext.opacity(0.06), radius: 18, x: 0, y: 8)
+    }
+
+    private func traceLifeMonthEditorialHero(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
+        let total = snapshot.items.reduce(0) { $0 + $1.amount }
+        let sceneCount = traceLifeMonthSceneCount(snapshot: snapshot)
+        return ZStack(alignment: .bottom) {
+            traceLifeMonthHeroBackdrop(snapshot: snapshot)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+
+            VStack(spacing: 10) {
+                VStack(spacing: 6) {
+                    HStack(spacing: 6) {
+                        Text(traceLifeSlicePeriodText(for: .month))
+                        Image(systemName: "calendar")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppColors.subtext.opacity(0.78))
+
+                    HStack(alignment: .center, spacing: 7) {
+                        Text("这个月，生活有了轮廓")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                        Image(systemName: "leaf.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(AppColors.accent.opacity(0.76))
+                    }
+
+                    Text("\(snapshot.items.count) 次记录，\(sceneCount) 个场景\n每一条线索，都在拼出更完整的生活。")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppColors.subtext.opacity(0.84))
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(2)
+                        .lineLimit(2)
+                }
+                .padding(.top, 14)
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 10) {
+                    traceLifeMonthMetricCard(
+                        title: "本月总支出",
+                        value: total.formatted(.cny),
+                        subtitle: traceLifeMonthDeltaText(currentTotal: total),
+                        icon: "chart.line.downtrend.xyaxis"
+                    )
+
+                    traceLifeMonthMetricCard(
+                        title: "记录笔数",
+                        value: "\(snapshot.items.count) 笔",
+                        subtitle: "覆盖 \(sceneCount) 个场景",
+                        icon: "text.badge.checkmark"
+                    )
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 12)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: layout.monthHeroHeight)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(0.82), lineWidth: 1)
+        )
+        .shadow(color: AppColors.subtext.opacity(0.07), radius: 14, x: 0, y: 8)
+    }
+
+    @ViewBuilder
+    private func traceLifeMonthHeroBackdrop(snapshot: TraceChapterSnapshot) -> some View {
+        if let anchor = snapshot.memoryAnchors.first, let uiImage = UIImage(data: anchor.imageData) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFill()
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.78),
+                            Color.white.opacity(0.34),
+                            AppColors.accent.opacity(0.16)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+        } else {
+            LinearGradient(
+                colors: [
+                    Color(hex: "eef6ef"),
+                    Color(hex: "dceee4"),
+                    Color(hex: "f7efe2")
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .overlay(
+                Image(systemName: "leaf.fill")
+                    .font(.system(size: 96, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.34))
+                    .offset(x: 96, y: -34)
+            )
+        }
+    }
+
+    private func traceLifeMonthMetricCard(
+        title: String,
+        value: String,
+        subtitle: String,
+        icon: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
+                Text(title)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(AppColors.subtext.opacity(0.74))
+                Spacer(minLength: 4)
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(AppColors.accentDark.opacity(0.62))
+            }
+
+            Text(value)
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.66)
+
+            Text(subtitle)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.72))
+                .lineLimit(1)
+                .minimumScaleFactor(0.76)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.88))
+                .shadow(color: AppColors.subtext.opacity(0.05), radius: 10, x: 0, y: 5)
+        )
+    }
+
+    private func traceLifeMonthKeywordSection(snapshot: TraceChapterSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("本月生活关键词")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(AppColors.text)
+
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(traceLifeMonthKeywords(snapshot: snapshot), id: \.self) { keyword in
+                        traceLifeMonthKeywordPill(keyword)
+                    }
+                }
+                .padding(.horizontal, 1)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func traceLifeMonthKeywordPill(_ label: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: traceLifeSlicePillIcon(for: label))
+                .font(.system(size: 10, weight: .semibold))
+            Text(label)
+                .font(.system(size: 11, weight: .bold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(AppColors.accentDark.opacity(0.86))
+        .padding(.horizontal, 10)
+        .frame(height: 26)
+        .background(
+            Capsule(style: .continuous)
+                .fill(TraceColors.surfaceMuted.opacity(0.84))
+        )
+    }
+
+    private func traceLifeMonthDiaryStrip(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
+        let anchors = Array(snapshot.memoryAnchors.prefix(8))
+        let items = representativeTraceItems(from: snapshot.items, maxItems: 8, maxPerCategory: 2)
+        let count = max(anchors.count, min(max(items.count, 3), 6))
+        return VStack(alignment: .leading, spacing: 9) {
+            Text("本月日记")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(AppColors.text)
+
+            ScrollView(.horizontal) {
+                HStack(spacing: 10) {
+                    ForEach(0..<max(count, 1), id: \.self) { index in
+                        let anchor = anchors.indices.contains(index) ? anchors[index] : nil
+                        let item = items.indices.contains(index) ? items[index] : nil
+                        traceLifeMonthDiaryCard(anchor: anchor, item: item, index: index, layout: layout)
+                    }
+                }
+                .padding(.horizontal, 1)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func traceLifeMonthDiaryCard(
+        anchor: SummaryMemoryAnchor?,
+        item: HomeItem?,
+        index: Int,
+        layout: TraceLifeCardLayout
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            traceLifeSliceFramedImage(anchor: anchor, height: layout.monthDiaryPhotoHeight)
+                .frame(width: 104)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            Text(traceLifeMonthPhotoCaption(anchor: anchor, item: item, index: index))
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(AppColors.text.opacity(0.90))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(width: 104, alignment: .leading)
+
+            Text(traceLifeMonthDiaryAmountText(item: item))
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(AppColors.subtext.opacity(0.70))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(width: 104, alignment: .leading)
+        }
     }
 
     private func traceLifeMonthOverview(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
@@ -1095,6 +1324,54 @@ struct StatsWebView: View {
         let photoText = photoCount > 0 ? "精选 \(photoCount) 张" : "还没有精选照片"
         let total = snapshot.items.reduce(0) { $0 + $1.amount }
         return "\(photoText) · \(snapshot.items.count) 笔 · \(total.formatted(.cny))"
+    }
+
+    private func traceLifeMonthSceneCount(snapshot: TraceChapterSnapshot) -> Int {
+        var scenes = Set(snapshot.items.map { $0.category.rawValue })
+        snapshot.marks.forEach { scenes.insert(traceMarkDisplayLabel($0)) }
+        snapshot.memoryAnchors.forEach { anchor in
+            if !anchor.label.isEmpty {
+                scenes.insert(anchor.label)
+            }
+        }
+        return max(scenes.count, snapshot.items.isEmpty ? 0 : 1)
+    }
+
+    private func traceLifeMonthDeltaText(currentTotal: Double) -> String {
+        guard let monthInterval = traceLifeDateInterval(for: .month),
+              let previousStart = Calendar.current.date(byAdding: .month, value: -1, to: monthInterval.start),
+              let previousEnd = Calendar.current.date(byAdding: .month, value: -1, to: monthInterval.end)
+        else {
+            return "这个月的生活账"
+        }
+        let previousItems = homeViewModel.items(in: DateInterval(start: previousStart, end: previousEnd))
+            .filter { $0.amount > 0 && $0.draftMeta == nil }
+        let previousTotal = previousItems.reduce(0) { $0 + $1.amount }
+        guard previousTotal > 0 else {
+            return "这个月的生活账"
+        }
+        let percent = (currentTotal - previousTotal) / previousTotal * 100
+        let sign = percent >= 0 ? "+" : ""
+        return "较上月 \(sign)\(String(format: "%.1f", percent))%"
+    }
+
+    private func traceLifeMonthKeywords(snapshot: TraceChapterSnapshot) -> [String] {
+        let clueLabels = traceCategoryClues(from: snapshot.items)
+            .prefix(5)
+            .map { $0.category.rawValue }
+        let labels = Array(clueLabels) + traceLifeSliceLabels(snapshot: snapshot)
+        var seen = Set<String>()
+        var result: [String] = []
+        for label in labels where !label.isEmpty && seen.insert(label).inserted {
+            result.append(label)
+            if result.count >= 6 { break }
+        }
+        return result.isEmpty ? ["日常", "现场", "回看"] : result
+    }
+
+    private func traceLifeMonthDiaryAmountText(item: HomeItem?) -> String {
+        guard let item else { return "留在这个月里" }
+        return "花费 \(item.amount.formatted(.cny))"
     }
 
     private func traceLifeSlicePeriodText(for range: SummaryPlaybackRange) -> String {
