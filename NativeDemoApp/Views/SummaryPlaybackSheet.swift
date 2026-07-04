@@ -432,6 +432,7 @@ struct SummaryPlaybackSheet: View {
     @State private var shareSaveMessage: String?
     @State private var memorySaveMessage: String?
     @State private var showShareCardPrivacyConfirm = false
+    @State private var isShareStylePickerExpanded = false
     @State private var selectedShareCardStyle: LifeSliceShareCardStyle?
     @State private var customShareBackgroundItem: PhotosPickerItem?
     @State private var customShareBackgroundData: Data?
@@ -578,6 +579,7 @@ struct SummaryPlaybackSheet: View {
                 .ignoresSafeArea()
                 .onTapGesture {
                     showShareCardPrivacyConfirm = false
+                    isShareStylePickerExpanded = false
                 }
 
             VStack(alignment: .leading, spacing: 18) {
@@ -604,9 +606,17 @@ struct SummaryPlaybackSheet: View {
                     }
                 }
 
+                shareCardStyleSummary
+
+                if isShareStylePickerExpanded {
+                    shareCardStylePicker
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
                 HStack(spacing: 12) {
                     Button {
                         showShareCardPrivacyConfirm = false
+                        isShareStylePickerExpanded = false
                     } label: {
                         Text("先不保存")
                             .font(.system(size: 15, weight: .semibold))
@@ -623,6 +633,7 @@ struct SummaryPlaybackSheet: View {
 
                     Button {
                         showShareCardPrivacyConfirm = false
+                        isShareStylePickerExpanded = false
                         saveWeeklyStoryCard()
                     } label: {
                         Label("保存到相册", systemImage: "photo.badge.checkmark")
@@ -1348,9 +1359,8 @@ struct SummaryPlaybackSheet: View {
 
                 memoryLineButton
 
-                shareCardStylePicker
-
                 Button {
+                    isShareStylePickerExpanded = false
                     showShareCardPrivacyConfirm = true
                 } label: {
                     Label("保存本周故事图", systemImage: "square.and.arrow.down")
@@ -1554,6 +1564,7 @@ struct SummaryPlaybackSheet: View {
                 memoryLineButton
 
                 Button {
+                    isShareStylePickerExpanded = false
                     showShareCardPrivacyConfirm = true
                 } label: {
                     Label("保存本周故事图", systemImage: "square.and.arrow.down")
@@ -1641,6 +1652,56 @@ struct SummaryPlaybackSheet: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private var shareCardStyleSummary: some View {
+        if weeklySharePayload != nil {
+            Button {
+                withAnimation(.spring(response: 0.26, dampingFraction: 0.88)) {
+                    isShareStylePickerExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: currentShareCardStyle == .customBackground ? "photo.on.rectangle.angled" : currentShareCardStyle.icon)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(AppColors.accentDark.opacity(0.90))
+                        .frame(width: 34, height: 34)
+                        .background(
+                            Circle()
+                                .fill(AppColors.accent.opacity(0.12))
+                        )
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("当前样式")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(AppColors.subtext)
+                        Text(currentShareCardStyle.title)
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Text(isShareStylePickerExpanded ? "收起" : "更换样式")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(AppColors.accentDark.opacity(0.90))
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(AppColors.accentDark.opacity(0.75))
+                        .rotationEffect(.degrees(isShareStylePickerExpanded ? 180 : 0))
+                }
+                .padding(12)
+                .background(Color.white.opacity(0.58), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.52), lineWidth: 0.8)
+                )
             }
             .buttonStyle(.plain)
         }
