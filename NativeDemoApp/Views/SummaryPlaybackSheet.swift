@@ -409,6 +409,8 @@ private enum LifeSliceShareCardStyle: String, CaseIterable, Identifiable {
 }
 
 struct SummaryPlaybackSheet: View {
+    private static let doneActionsPeekAnchorID = "summaryPlaybackDoneActionsPeekAnchor"
+
     let playback: SummaryPlayback
     let petEnabled: Bool
     let isMember: Bool
@@ -476,31 +478,41 @@ struct SummaryPlaybackSheet: View {
                 .ignoresSafeArea()
                 .transition(.opacity)
 
-            ScrollView {
-                LazyVStack(spacing: 16) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.58))
-                        .frame(width: 42, height: 5)
-                        .padding(.top, 10)
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        Capsule()
+                            .fill(Color.white.opacity(0.58))
+                            .frame(width: 42, height: 5)
+                            .padding(.top, 10)
 
-                    header
+                        header
 
-                    chapterStage
+                        chapterStage
 
-                    memoryAnchorGallery
+                        memoryAnchorGallery
 
-                    controls
+                        controls
 
-                    if playbackDone {
-                        doneActions
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        if playbackDone {
+                            doneActions
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 12)
+                    .padding(.bottom, 24)
+                }
+                .scrollIndicators(.hidden)
+                .onChange(of: playbackDone) { _, done in
+                    guard done else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+                        withAnimation(.spring(response: 0.44, dampingFraction: 0.90)) {
+                            scrollProxy.scrollTo(Self.doneActionsPeekAnchorID, anchor: UnitPoint(x: 0.5, y: 0.72))
+                        }
                     }
                 }
-                .padding(.horizontal, 22)
-                .padding(.top, 12)
-                .padding(.bottom, 24)
             }
-            .scrollIndicators(.hidden)
 
             if showShareCardPrivacyConfirm {
                 shareCardPrivacyOverlay
@@ -605,6 +617,8 @@ struct SummaryPlaybackSheet: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+
+                shareCardPreviewPanel
 
                 shareCardStyleSummary
 
@@ -1548,6 +1562,10 @@ struct SummaryPlaybackSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            Color.clear
+                .frame(height: 1)
+                .id(Self.doneActionsPeekAnchorID)
+
             if playback.range == .week {
                 Button {
                     handlePrimaryDoneAction()
@@ -1654,6 +1672,66 @@ struct SummaryPlaybackSheet: View {
                     .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private var shareCardPreviewPanel: some View {
+        if let payload = weeklySharePayload {
+            HStack(alignment: .center, spacing: 14) {
+                WeeklyStoryShareCardView(
+                    payload: payload,
+                    memoryAnchors: playback.memoryAnchors,
+                    isPetMode: petEnabled,
+                    nickname: shareNickname.isEmpty ? "叙账用户" : shareNickname,
+                    theme: shareCardTheme,
+                    style: currentShareCardStyle,
+                    customBackgroundData: customShareBackgroundData
+                )
+                .scaleEffect(0.18, anchor: .topLeading)
+                .frame(width: 97, height: 173, alignment: .topLeading)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.white.opacity(0.70), lineWidth: 1)
+                )
+                .shadow(color: AppColors.text.opacity(0.10), radius: 16, x: 0, y: 10)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    shareCardPreviewFeature(icon: "rectangle.grid.1x2", title: "精美排版", detail: "自动生成分享卡片")
+                    shareCardPreviewFeature(icon: "shield.checkered", title: "保护隐私", detail: "不展示金额和敏感信息")
+                    shareCardPreviewFeature(icon: "square.and.arrow.down", title: "一键保存", detail: "保存后再决定分享")
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .background(Color.white.opacity(0.54), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.54), lineWidth: 0.8)
+            )
+        }
+    }
+
+    private func shareCardPreviewFeature(icon: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppColors.accentDark.opacity(0.88))
+                .frame(width: 27, height: 27)
+                .background(AppColors.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                Text(detail)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
         }
     }
 
@@ -2329,26 +2407,55 @@ private struct WeeklyStoryShareCardView: View {
     private var warmLightPosterContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             lifeSlicePosterHeader
-                .padding(.top, 30)
+                .padding(.top, 34)
+                .padding(.horizontal, 34)
 
-            lifeSlicePosterTitleBlock
+            Text(payload.periodText)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(deepGreen.opacity(0.78))
+                .padding(.top, 38)
+                .padding(.horizontal, 34)
+
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(warmLightPosterHeadline)
+                    .font(.system(size: 39, weight: .bold, design: .serif))
+                    .foregroundStyle(ink)
+                    .lineLimit(2)
+                    .lineSpacing(5)
+                    .minimumScaleFactor(0.70)
+
+                Image(systemName: "leaf.fill")
+                    .font(.system(size: 23, weight: .semibold))
+                    .foregroundStyle(deepGreen.opacity(0.72))
+                    .offset(y: -2)
+            }
+            .padding(.top, 18)
+            .padding(.horizontal, 34)
+
+            warmLightQuoteBlock
                 .padding(.top, 26)
+                .padding(.horizontal, 34)
 
-            lifeSlicePosterPhotoGrid
+            warmLightSceneRibbon
+                .padding(.top, 24)
+                .padding(.horizontal, 34)
+
+            warmLightPhotoTriptych
                 .padding(.top, 18)
+                .padding(.horizontal, 24)
 
-            lifeSlicePosterScenePills
-                .padding(.top, 16)
+            warmLightHandwrittenLine
+                .padding(.top, 22)
+                .padding(.horizontal, 42)
 
-            lifeSlicePosterReasonCard
-                .padding(.top, 16)
+            warmLightMetricBar
+                .padding(.top, 24)
+                .padding(.horizontal, 34)
 
-            Spacer(minLength: 8)
+            Spacer(minLength: 18)
 
-            lifeSlicePosterFooter
+            lifeSlicePosterBrandFooter
         }
-        .padding(.horizontal, 34)
-        .padding(.bottom, 28)
     }
 
     private var collagePosterContent: some View {
@@ -2369,7 +2476,7 @@ private struct WeeklyStoryShareCardView: View {
                 .minimumScaleFactor(0.76)
                 .padding(.top, 10)
 
-            Text(lifeSlicePosterSubtitle)
+            Text(collagePosterSubtitle)
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(muted.opacity(0.92))
                 .lineSpacing(4)
@@ -2412,7 +2519,7 @@ private struct WeeklyStoryShareCardView: View {
             .frame(height: 488)
             .padding(.top, 8)
 
-            Text("记录了日常，也记录了当下的心情。")
+            Text(collagePosterTagline)
                 .font(.system(size: 20, weight: .medium, design: .serif))
                 .foregroundStyle(ink.opacity(0.82))
                 .padding(.top, 6)
@@ -2448,7 +2555,7 @@ private struct WeeklyStoryShareCardView: View {
                 .minimumScaleFactor(0.72)
                 .padding(.top, 12)
 
-            Text(lifeSlicePosterSubtitle)
+            Text(cleanPosterSubtitle)
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(muted.opacity(0.92))
                 .lineSpacing(4)
@@ -2497,7 +2604,7 @@ private struct WeeklyStoryShareCardView: View {
                 .minimumScaleFactor(0.72)
                 .padding(.top, 10)
 
-            Text(lifeSlicePosterSubtitle)
+            Text(customBackgroundPosterSubtitle)
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(muted.opacity(0.94))
                 .lineSpacing(4)
@@ -2557,6 +2664,7 @@ private struct WeeklyStoryShareCardView: View {
                     startRadius: 0,
                     endRadius: 260
                 )
+                warmLightLeafShadow
             case .collageStory:
                 Color(hex: "fbf5e8")
                 LinearGradient(
@@ -2631,6 +2739,29 @@ private struct WeeklyStoryShareCardView: View {
         }
     }
 
+    private var warmLightLeafShadow: some View {
+        ZStack {
+            ForEach(0..<7, id: \.self) { index in
+                Image(systemName: "leaf.fill")
+                    .font(.system(size: CGFloat([44, 34, 28, 52, 24, 36, 30][index]), weight: .semibold))
+                    .foregroundStyle(deepGreen.opacity(index < 3 ? 0.12 : 0.08))
+                    .blur(radius: index < 3 ? 5 : 7)
+                    .rotationEffect(.degrees(Double([18, -24, 42, -8, 28, -38, 12][index])))
+                    .offset(
+                        x: CGFloat([190, 224, 166, 238, 120, 204, 250][index]),
+                        y: CGFloat([-396, -342, -302, -250, -214, -168, -110][index])
+                    )
+            }
+
+            Circle()
+                .fill(Color.white.opacity(0.34))
+                .frame(width: 260, height: 260)
+                .blur(radius: 42)
+                .offset(x: 190, y: -312)
+        }
+        .allowsHitTesting(false)
+    }
+
     private var lifeSlicePosterHeader: some View {
         HStack(spacing: 12) {
             HStack(spacing: 8) {
@@ -2682,6 +2813,129 @@ private struct WeeklyStoryShareCardView: View {
                 posterSmallPhoto(index: 2)
             }
         }
+    }
+
+    private var warmLightQuoteBlock: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text("“")
+                .font(.system(size: 38, weight: .bold, design: .serif))
+                .foregroundStyle(deepGreen.opacity(0.35))
+                .offset(y: -8)
+
+            Text(warmLightPosterSubtitle)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(ink.opacity(0.78))
+                .lineSpacing(7)
+                .lineLimit(3)
+                .minimumScaleFactor(0.82)
+
+            Spacer(minLength: 0)
+
+            Text("”")
+                .font(.system(size: 38, weight: .bold, design: .serif))
+                .foregroundStyle(deepGreen.opacity(0.35))
+                .offset(y: 34)
+        }
+    }
+
+    private var warmLightSceneRibbon: some View {
+        HStack(spacing: 8) {
+            Text(posterSceneLabels.first ?? "这一周的生活")
+                .font(.system(size: 17, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.76)
+
+            Image(systemName: "leaf.fill")
+                .font(.system(size: 13, weight: .semibold))
+        }
+        .foregroundStyle(Color.white.opacity(0.96))
+        .padding(.horizontal, 22)
+        .frame(height: 38)
+        .background(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(deepGreen.opacity(0.84))
+        )
+        .overlay(alignment: .bottomLeading) {
+            Rectangle()
+                .fill(deepGreen.opacity(0.42))
+                .frame(width: 52, height: 5)
+                .offset(x: -7, y: 5)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var warmLightPhotoTriptych: some View {
+        HStack(spacing: 13) {
+            ForEach(0..<3, id: \.self) { index in
+                posterImage(posterAnchor(at: index))
+                    .frame(width: 150, height: 235)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color.white.opacity(0.76), lineWidth: 1.4)
+                    )
+                    .shadow(color: deepGreen.opacity(0.08), radius: 13, x: 0, y: 8)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var warmLightHandwrittenLine: some View {
+        VStack(spacing: 6) {
+            Text(warmLightPosterTagline)
+                .font(.system(size: 20, weight: .medium, design: .serif))
+                .italic()
+                .foregroundStyle(ink.opacity(0.84))
+                .lineLimit(1)
+                .minimumScaleFactor(0.70)
+
+            Canvas { context, size in
+                var path = Path()
+                path.move(to: CGPoint(x: 6, y: size.height * 0.58))
+                path.addCurve(
+                    to: CGPoint(x: size.width - 8, y: size.height * 0.36),
+                    control1: CGPoint(x: size.width * 0.28, y: size.height * 0.82),
+                    control2: CGPoint(x: size.width * 0.72, y: size.height * 0.08)
+                )
+                context.stroke(path, with: .color(deepGreen.opacity(0.28)), lineWidth: 1.4)
+            }
+            .frame(height: 13)
+        }
+    }
+
+    private var warmLightMetricBar: some View {
+        HStack(spacing: 0) {
+            warmLightMetricItem(icon: "pencil", value: "\(payload.recordCount)", label: "笔记录")
+            warmLightMetricItem(icon: "photo", value: "\(posterImageCount)", label: "张画面")
+            warmLightMetricItem(icon: "calendar", value: "周", label: "回顾")
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 66)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.66))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.62), lineWidth: 1)
+        )
+        .shadow(color: deepGreen.opacity(0.07), radius: 14, x: 0, y: 8)
+    }
+
+    private func warmLightMetricItem(icon: String, value: String, label: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(deepGreen.opacity(0.78))
+            Text(value)
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(ink)
+            Text(label)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(ink.opacity(0.75))
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var posterPrimaryPhoto: some View {
@@ -2957,6 +3211,44 @@ private struct WeeklyStoryShareCardView: View {
         }
     }
 
+    private var lifeSlicePosterBrandFooter: some View {
+        HStack(alignment: .center, spacing: 16) {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.20))
+                .frame(width: 54, height: 54)
+                .overlay(brandLeafMark(size: 32, tint: Color.white.opacity(0.94)))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.34), lineWidth: 1)
+                )
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("来自 叙账")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.96))
+                Text("你的生活，我来记录")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.82))
+            }
+
+            Spacer(minLength: 8)
+
+            appStoreQRCodePlaceholder
+        }
+        .padding(.horizontal, 28)
+        .frame(height: 112)
+        .background(
+            LinearGradient(
+                colors: [
+                    deepGreen.opacity(0.94),
+                    green.opacity(0.86)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
+    }
+
     private var appStoreQRCodePlaceholder: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -3016,6 +3308,91 @@ private struct WeeklyStoryShareCardView: View {
     private var lifeSlicePosterSubtitle: String {
         let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这周"
         return "\(period)一共 \(payload.recordCount) 笔记录，\n挑了 \(posterImageCount) 张照片放在一起。"
+    }
+
+    private var warmLightPosterHeadline: String {
+        let count = max(1, posterImageCount)
+        let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
+        return "\(period)，留下\(chineseNumeral(count))张画面"
+    }
+
+    private var warmLightPosterSubtitle: String {
+        let scenes = posterSceneLabels.prefix(2).joined(separator: "、")
+        if !scenes.isEmpty {
+            return "有些日子过完就过去了，\n也有些会留在\(scenes)这些小事里。"
+        }
+        return "有些日子过完就过去了，\n也有些会留在账本和照片里。"
+    }
+
+    private var warmLightPosterTagline: String {
+        stablePosterCopy(
+            [
+                "记录生活，收藏每一刻值得回忆的瞬间",
+                "把日子拍下来，也把当时的心情留一点",
+                "不是特别的一天，也值得被认真记住",
+                "这些小画面，以后再看会想起当时"
+            ],
+            salt: "warmLightTagline"
+        )
+    }
+
+    private var collagePosterSubtitle: String {
+        stablePosterCopy(
+            [
+                "把几张照片贴在一起，这段日子就有了形状。",
+                "吃过的、见过的、路过的，都拼成这一页。",
+                "这不是大片，是这一周真实发生过的小事。"
+            ],
+            salt: "collageSubtitle"
+        )
+    }
+
+    private var collagePosterTagline: String {
+        stablePosterCopy(
+            [
+                "日常拼起来，也会很好看。",
+                "几张照片，就能把这一周带回来。",
+                "把当时的心情，贴在这一页里。"
+            ],
+            salt: "collageTagline"
+        )
+    }
+
+    private var cleanPosterSubtitle: String {
+        stablePosterCopy(
+            [
+                "这周的记录已经收好，照片放在最容易回看的地方。",
+                "把零散的小事整理一下，以后翻起来更清楚。",
+                "没有复杂修饰，只留下这段时间真正发生过的事。"
+            ],
+            salt: "cleanSubtitle"
+        )
+    }
+
+    private var customBackgroundPosterSubtitle: String {
+        stablePosterCopy(
+            [
+                "用一张熟悉的背景，装下这一周的几件小事。",
+                "这张背景在前面，记录就像发生在当时。",
+                "换成自己的照片，这段生活会更像你的。"
+            ],
+            salt: "customBackgroundSubtitle"
+        )
+    }
+
+    private func stablePosterCopy(_ options: [String], salt: String) -> String {
+        guard !options.isEmpty else { return "" }
+        let seed = [
+            style.rawValue,
+            salt,
+            payload.periodText,
+            "\(payload.recordCount)",
+            memoryAnchors.map { $0.id.uuidString }.joined(separator: "-")
+        ].joined(separator: "|")
+        let value = seed.unicodeScalars.reduce(0) { partial, scalar in
+            (partial &* 31 &+ Int(scalar.value)) & 0x7fffffff
+        }
+        return options[value % options.count]
     }
 
     private var posterImageCount: Int {
