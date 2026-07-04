@@ -125,7 +125,7 @@ struct MemberPricingView: View {
             )
         case .aiCommand:
             return MemberHeroContent(
-                title: "让指令台继续替你整理账本",
+                title: "让AI生活助手继续替你整理账本",
                 subtitle: "会员可以批量补记、连续追问，也能把本周、本月和上一次这些线索接着查下去。",
                 detail: "批量补记会先生成预览，确认后才写入账本；查询和整理都只基于真实记录，不额外编造。",
                 chips: ["批量补记", "连续追问", "真实账本"]

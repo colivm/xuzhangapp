@@ -2097,7 +2097,7 @@ struct HomeView: View {
     }
 
     private var todayRecordAmountInk: Color {
-        AppColors.accentDark
+        AppColors.text
     }
 
     private var todayRecordEmotionInk: Color {

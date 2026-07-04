@@ -32,6 +32,8 @@ struct InsightWebView: View {
     @State private var aiCommandMessage: String?
     @State private var aiCommandSavedCount: Int?
     @State private var aiCommandPreviewItem: HomeItem?
+    @State private var isAICommandRunning = false
+    @State private var aiCommandRunTask: Task<Void, Never>?
     private let trialTotal = 5
     private static var aiCommandSuggestionsCache: [String: [String]] = [:]
     private static var aiCommandItemsCache: [String: [HomeItem]] = [:]
@@ -61,6 +63,7 @@ struct InsightWebView: View {
 
     private enum AICommandKind: Equatable {
         case query
+        case compare
         case memoryLookup
         case duplicateCheck
         case batchCreate
@@ -280,6 +283,8 @@ struct InsightWebView: View {
         }
         .sheet(isPresented: $showAICommandSheet, onDismiss: {
             aiCommandPreviewItem = nil
+            aiCommandRunTask?.cancel()
+            isAICommandRunning = false
         }) {
             aiCommandSheet
         }
@@ -1351,7 +1356,7 @@ struct InsightWebView: View {
 
                 aiCommandPreviewOverlay(topPadding: 46)
             }
-            .navigationTitle("AI 指令台")
+            .navigationTitle("AI生活助手")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -1455,9 +1460,11 @@ struct InsightWebView: View {
         }
         if recentItems.contains(where: { $0.category == .dining }) {
             suggestions.append("过去三天餐饮花了多少？")
+            suggestions.append("上次买可乐是哪天？")
         }
         if recentItems.contains(where: { $0.category == .transport }) {
             suggestions.append("看一下这周交通")
+            suggestions.append("这周交通和上周比呢？")
         }
         if recentItems.contains(where: { $0.category == .entertainment }) {
             suggestions.append("上周休闲娱乐花了多少钱？")
@@ -1476,7 +1483,7 @@ struct InsightWebView: View {
             suggestions.append("补记过去一周工作日通勤，早晚各一次")
         }
 
-        let fallback = ["过去三天餐饮花了多少？", "看一下这周交通", "找找最近有没有重复账单"]
+        let fallback = ["总结这周生活", "过去三天餐饮花了多少？", "看一下这周交通", "找找最近有没有重复账单"]
         let result = Array(uniqueAICommandSuggestions(suggestions + fallback + lockedPreviewSuggestions).prefix(5))
         storeAICommandSuggestions(result, for: cacheKey)
         return result
@@ -1549,7 +1556,9 @@ struct InsightWebView: View {
 
     @ViewBuilder
     private var aiCommandResultPanel: some View {
-        if let result = aiCommandResult {
+        if isAICommandRunning {
+            aiCommandLoadingPanel
+        } else if let result = aiCommandResult {
             LazyVStack(alignment: .leading, spacing: 14) {
                 aiCommandIntentCard(result)
                 if let memoryCard = result.memoryCard {
@@ -1957,6 +1966,24 @@ struct InsightWebView: View {
         }
     }
 
+    private var aiCommandLoadingPanel: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .tint(AppColors.accentDark)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("正在整理账本")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                Text("只会基于已有记录生成结果，涉及新增会先给你确认。")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .glassPanel(radius: 20, padding: 18)
+    }
+
     @ViewBuilder
     private func aiCommandDraftLeadingControl(_ draft: AICommandRecordDraft, isConflict: Bool) -> some View {
         if isConflict {
@@ -2084,23 +2111,36 @@ struct InsightWebView: View {
             aiCommandMessage = "先写一句你想让它整理什么。"
             return
         }
+        guard command.count <= 120 else {
+            aiCommandMessage = "这句有点长，先缩成一个问题或一个动作。"
+            return
+        }
+        aiCommandRunTask?.cancel()
         aiCommandSavedCount = nil
-        aiCommandMessage = nil
+        aiCommandMessage = "正在整理..."
         aiCommandShowsAllRelatedItems = false
-        aiCommandResult = buildAICommandResult(for: command)
-        if let successMessage {
+        isAICommandRunning = true
+        aiCommandRunTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 90_000_000)
+            guard !Task.isCancelled else { return }
+            let result = buildAICommandResult(for: command)
+            guard !Task.isCancelled else { return }
             withAnimation(.easeInOut(duration: 0.18)) {
+                aiCommandResult = result
+                isAICommandRunning = false
                 aiCommandMessage = successMessage
             }
         }
     }
 
     private func clearAICommandInput() {
+        aiCommandRunTask?.cancel()
         aiCommandAmountText = ""
         aiCommandShowsAllRelatedItems = false
         aiCommandResult = nil
         aiCommandMessage = nil
         aiCommandSavedCount = nil
+        isAICommandRunning = false
     }
 
     private func buildAICommandResult(for command: String) -> AICommandResult {
@@ -2125,8 +2165,33 @@ struct InsightWebView: View {
             return buildLifeMarkLookupResult(intent: lifeMarkIntent, command: normalized)
         }
 
+        if containsAny(normalized, ["上一次", "上次", "最近一次", "什么时候", "哪天"]) {
+            if let lastResult = buildLastRecordLookupResult(command: normalized, lifeMarkIntent: lifeMarkIntent) {
+                return lastResult
+            }
+        }
+
         let range = aiCommandTimeRange(from: normalized)
         let categoryIntent = aiCommandCategoryIntent(from: normalized)
+        if containsAny(normalized, ["总结", "概括", "回顾", "复盘", "生活节奏", "最近怎么样", "这周怎么样", "这个月怎么样"]) {
+            return buildLifestyleSummaryResult(range: range, command: normalized)
+        }
+        if containsAny(normalized, ["对比", "比上", "比起", "相比", "变化", "增加", "减少", "多了", "少了"]) {
+            return buildCompareResult(
+                range: range,
+                categoryIntent: categoryIntent,
+                lifeMarkIntent: lifeMarkIntent,
+                command: normalized
+            )
+        }
+        if containsAny(normalized, ["最大一笔", "最贵", "最高", "花得最多", "最贵的一笔"]) {
+            return buildLargestRecordResult(
+                range: range,
+                categoryIntent: categoryIntent,
+                lifeMarkIntent: lifeMarkIntent,
+                command: normalized
+            )
+        }
         if lifeMarkIntent != nil || categoryIntent != nil || aiCommandAsksCategoryBreakdown(normalized) || containsAny(normalized, ["查", "看", "多少", "几次", "花了", "消费", "账本", "记录", "流水", "明细", "整理", "概览", "最近", "近来", "这阵子", "这段时间", "今天", "今日", "今儿", "昨日", "昨天", "昨儿", "前天", "前日", "本周", "这周", "这一周", "本自然周", "这个自然周", "本星期", "这个星期", "这星期", "本礼拜", "这个礼拜", "这礼拜", "上周", "上一周", "上个自然周", "上一个自然周", "上星期", "上个星期", "上礼拜", "上个礼拜", "本月", "这个月", "这月", "上个月", "上月"]) {
             return buildQueryResult(
                 range: range,
@@ -2188,9 +2253,164 @@ struct InsightWebView: View {
             title: title,
             summary: "找到了 \(item.createdAt.zhBillDateOnly) 的那次记录。",
             detail: aiCommandMemoryContextLine(item.memoryContext),
-            items: sortedAICommandEvidenceItems(relatedItems),
+            items: cappedAICommandEvidenceItems(relatedItems),
             memoryCard: card,
             bars: [],
+            drafts: [],
+            amountSource: nil,
+            needsAmount: false
+        )
+    }
+
+    private func buildLastRecordLookupResult(command: String, lifeMarkIntent: LifeMarkQueryIntent?) -> AICommandResult? {
+        let range = aiCommandHasExplicitTimeRange(command)
+            ? aiCommandTimeRange(from: command, defaultRecentDays: 31)
+            : aiCommandAllTimeRange
+        let items: [HomeItem]
+        let label: String
+        if let lifeMarkIntent {
+            items = filteredAICommandLifeMarkItems(range: range, intent: lifeMarkIntent, command: command)
+            label = aiCommandLifeMarkLabel(lifeMarkIntent, command: command) ?? lifeMarkIntent.label
+        } else if let intent = aiCommandCategoryIntent(from: command) {
+            items = filteredAICommandItems(range: range, intent: intent)
+            label = intent.label
+        } else {
+            return nil
+        }
+        guard let item = items.max(by: { $0.createdAt < $1.createdAt }) else {
+            return AICommandResult(
+                kind: .memoryLookup,
+                title: "还没找到上一次\(label)",
+                summary: "账本里暂时没有匹配到\(label)记录。",
+                detail: "可以换个关键词再问，比如「上次买可乐」或「最近一次打车」。",
+                items: [],
+                bars: [],
+                drafts: [],
+                amountSource: nil,
+                needsAmount: false
+            )
+        }
+        let related = items.filter { $0.id != item.id && abs($0.createdAt.timeIntervalSince(item.createdAt)) <= 7 * 24 * 60 * 60 }
+        let card = AICommandMemoryCard(
+            title: "上一次\(label)",
+            subtitle: item.createdAt.zhBillDateOnly,
+            item: item,
+            context: item.memoryContext
+        )
+        return AICommandResult(
+            kind: .memoryLookup,
+            title: "上一次\(label)",
+            summary: "是 \(item.createdAt.zhBillDateOnly) 的「\(item.displayTitle)」，金额 \(item.amount.formatted(.cny))。",
+            detail: "只按账本里已有的分类、备注和标题匹配，不会补造没记过的记录。",
+            items: cappedAICommandEvidenceItems(uniqueAICommandItems([item] + related)),
+            memoryCard: card,
+            bars: [],
+            drafts: [],
+            amountSource: nil,
+            needsAmount: false
+        )
+    }
+
+    private func buildLifestyleSummaryResult(range: AICommandTimeRange, command _: String) -> AICommandResult {
+        let items = filteredAICommandItems(range: range, intent: nil)
+        let total = items.reduce(0) { $0 + $1.amount }
+        let activeDays = Set(items.map { aiCommandCalendar.startOfDay(for: $0.createdAt) }).count
+        let top = aiCommandTopCategorySummary(items)
+        let photoCount = items.filter(\.hasMemoryImages).count
+        let summary: String
+        if items.isEmpty {
+            summary = "\(range.label)还没有记录，暂时总结不出生活线索。"
+        } else if let top {
+            summary = "\(range.label)有 \(items.count) 笔记录，\(activeDays) 天有动静，最明显的是\(top.category.rawValue)。"
+        } else {
+            summary = "\(range.label)有 \(items.count) 笔记录，合计 \(total.formatted(.cny))。"
+        }
+        let detailParts = [
+            top.map { "\($0.category.rawValue)出现 \($0.count) 笔，合计 \($0.total.formatted(.cny))。" },
+            photoCount > 0 ? "其中 \(photoCount) 笔带照片，适合回看具体场景。" : nil,
+            "这是按已有记录做的轻总结，不会生成预算建议。"
+        ].compactMap { $0 }
+        return AICommandResult(
+            kind: .query,
+            title: "\(range.label)的生活小结",
+            summary: summary,
+            detail: detailParts.joined(separator: " "),
+            items: cappedAICommandEvidenceItems(items),
+            bars: dailyBars(range: range, items: items),
+            drafts: [],
+            amountSource: nil,
+            needsAmount: false
+        )
+    }
+
+    private func buildCompareResult(
+        range: AICommandTimeRange,
+        categoryIntent: AICommandCategoryIntent?,
+        lifeMarkIntent: LifeMarkQueryIntent?,
+        command: String
+    ) -> AICommandResult {
+        let previous = aiCommandPreviousRange(matching: range)
+        let currentItems = lifeMarkIntent.map { filteredAICommandLifeMarkItems(range: range, intent: $0, command: command) }
+            ?? filteredAICommandItems(range: range, intent: categoryIntent)
+        let previousItems = lifeMarkIntent.map { filteredAICommandLifeMarkItems(range: previous, intent: $0, command: command) }
+            ?? filteredAICommandItems(range: previous, intent: categoryIntent)
+        let label = aiCommandLifeMarkLabel(lifeMarkIntent, command: command) ?? categoryIntent?.label ?? "全部记录"
+        let currentTotal = currentItems.reduce(0) { $0 + $1.amount }
+        let previousTotal = previousItems.reduce(0) { $0 + $1.amount }
+        let delta = currentTotal - previousTotal
+        let direction = delta > 0.005 ? "多了" : (delta < -0.005 ? "少了" : "差不多")
+        let summary: String
+        if currentItems.isEmpty && previousItems.isEmpty {
+            summary = "\(range.label)和\(previous.label)都没有\(label)。"
+        } else if direction == "差不多" {
+            summary = "\(range.label)的\(label)和\(previous.label)差不多。"
+        } else {
+            summary = "\(range.label)的\(label)比\(previous.label)\(direction) \(abs(delta).formatted(.cny))。"
+        }
+        let detail = "\(range.label)：\(currentItems.count) 笔，\(currentTotal.formatted(.cny))；\(previous.label)：\(previousItems.count) 笔，\(previousTotal.formatted(.cny))。只做临时对比，不写入账本。"
+        return AICommandResult(
+            kind: .compare,
+            title: "\(label)对比",
+            summary: summary,
+            detail: detail,
+            items: cappedAICommandEvidenceItems(currentItems),
+            bars: dailyBars(range: range, items: currentItems),
+            drafts: [],
+            amountSource: nil,
+            needsAmount: false
+        )
+    }
+
+    private func buildLargestRecordResult(
+        range: AICommandTimeRange,
+        categoryIntent: AICommandCategoryIntent?,
+        lifeMarkIntent: LifeMarkQueryIntent?,
+        command: String
+    ) -> AICommandResult {
+        let items = lifeMarkIntent.map { filteredAICommandLifeMarkItems(range: range, intent: $0, command: command) }
+            ?? filteredAICommandItems(range: range, intent: categoryIntent)
+        let label = aiCommandLifeMarkLabel(lifeMarkIntent, command: command) ?? categoryIntent?.label ?? "记录"
+        guard let item = items.max(by: { $0.amount < $1.amount }) else {
+            return AICommandResult(
+                kind: .query,
+                title: "\(range.label)最大一笔\(label)",
+                summary: "\(range.label)暂时没有找到\(label)。",
+                detail: "可以换个范围或关键词再问。",
+                items: [],
+                bars: [],
+                drafts: [],
+                amountSource: nil,
+                needsAmount: false
+            )
+        }
+        let related = items.filter { $0.id != item.id }
+        return AICommandResult(
+            kind: .query,
+            title: "\(range.label)最大一笔\(label)",
+            summary: "最大一笔是「\(item.displayTitle)」，\(item.amount.formatted(.cny))。",
+            detail: "时间在 \(item.createdAt.zhBillDateTime)，分类是\(item.category.rawValue)。",
+            items: cappedAICommandEvidenceItems(uniqueAICommandItems([item] + related)),
+            bars: dailyBars(range: range, items: items),
             drafts: [],
             amountSource: nil,
             needsAmount: false
@@ -2221,7 +2441,7 @@ struct InsightWebView: View {
                 title: "\(range.label)的分类分布",
                 summary: summary,
                 detail: aiCommandCategoryBreakdownDetail(items: items, total: total, fallback: ""),
-                items: sortedAICommandEvidenceItems(items),
+                items: cappedAICommandEvidenceItems(items),
                 bars: dailyBars(range: range, items: items),
                 drafts: [],
                 amountSource: nil,
@@ -2243,7 +2463,7 @@ struct InsightWebView: View {
             title: "\(range.label)的\(categoryText)记录",
             summary: summary,
             detail: detail,
-            items: sortedAICommandEvidenceItems(items),
+            items: cappedAICommandEvidenceItems(items),
             bars: dailyBars(range: range, items: items),
             drafts: [],
             amountSource: nil,
@@ -2315,7 +2535,7 @@ struct InsightWebView: View {
             title: title,
             summary: "找到了 \(item.createdAt.zhBillDateOnly) 的「\(item.displayTitle)」。",
             detail: detailParts.joined(separator: " "),
-            items: sortedAICommandEvidenceItems(uniqueAICommandItems([item] + related)),
+            items: cappedAICommandEvidenceItems(uniqueAICommandItems([item] + related)),
             memoryCard: card,
             bars: dailyBars(range: relatedRange, items: related),
             drafts: [],
@@ -2394,6 +2614,10 @@ struct InsightWebView: View {
         return rows.isEmpty ? fallback : rows
     }
 
+    private func cappedAICommandEvidenceItems(_ items: [HomeItem], limit: Int = 60) -> [HomeItem] {
+        Array(sortedAICommandEvidenceItems(items).prefix(limit))
+    }
+
     private func buildDuplicateCheckResult(range: AICommandTimeRange) -> AICommandResult {
         let groups = duplicateGroups(in: range)
         let suspects = uniqueAICommandItems(groups.flatMap(\.items))
@@ -2408,7 +2632,7 @@ struct InsightWebView: View {
             title: "重复记录初筛",
             summary: summary,
             detail: detail,
-            items: sortedAICommandEvidenceItems(suspects),
+            items: cappedAICommandEvidenceItems(suspects),
             bars: suspects.isEmpty ? [] : dailyBars(range: range, items: suspects),
             drafts: [],
             amountSource: nil,
@@ -2815,20 +3039,26 @@ struct InsightWebView: View {
     private func aiCommandItemsSignature(_ items: [HomeItem]) -> String {
         var hasher = Hasher()
         hasher.combine(items.count)
+        var latestUpdated: TimeInterval = 0
+        var latestCreated: TimeInterval = 0
+        var amountChecksum = 0
+        var textChecksum = 0
+        var categoryCounts: [HomeItem.Category: Int] = [:]
         for item in items {
-            hasher.combine(item.id)
-            hasher.combine(item.createdAt.timeIntervalSince1970)
-            hasher.combine(item.updatedAt.timeIntervalSince1970)
-            hasher.combine(item.amount)
-            hasher.combine(item.category.rawValue)
-            hasher.combine(item.title)
-            hasher.combine(item.emotionTag)
-            hasher.combine(item.source.rawValue)
-            hasher.combine(item.draftMeta?.status.rawValue)
-            hasher.combine(item.memoryContext?.weatherKind)
-            hasher.combine(item.memoryContext?.cityName)
-            hasher.combine(item.memoryContext?.semanticPlace)
-            hasher.combine(item.scenePackId)
+            latestUpdated = max(latestUpdated, item.updatedAt.timeIntervalSince1970)
+            latestCreated = max(latestCreated, item.createdAt.timeIntervalSince1970)
+            amountChecksum = amountChecksum &* 31 &+ Int((item.amount * 100).rounded())
+            textChecksum = textChecksum &* 31 &+ item.title.hashValue
+            textChecksum = textChecksum &* 31 &+ item.emotionTag.hashValue
+            categoryCounts[item.category, default: 0] += 1
+        }
+        hasher.combine(Int(latestUpdated))
+        hasher.combine(Int(latestCreated))
+        hasher.combine(amountChecksum)
+        hasher.combine(textChecksum)
+        for category in HomeItem.Category.allCases {
+            hasher.combine(category.rawValue)
+            hasher.combine(categoryCounts[category, default: 0])
         }
         return "\(hasher.finalize())"
     }
@@ -3157,6 +3387,21 @@ struct InsightWebView: View {
         return AICommandTimeRange(label: label, start: start, end: end, barDays: daysBetween(start, end))
     }
 
+    private func aiCommandPreviousRange(matching range: AICommandTimeRange) -> AICommandTimeRange {
+        let days = max(1, aiCommandCalendar.dateComponents([.day], from: range.start, to: range.end).day ?? range.barDays)
+        let previousEnd = range.start
+        let previousStart = aiCommandCalendar.date(byAdding: .day, value: -days, to: previousEnd) ?? previousEnd
+        let label: String
+        if range.label.contains("本周") || range.label.contains("这周") || range.label.contains("最近 7 天") || days == 7 {
+            label = "上一段 7 天"
+        } else if range.label.contains("本月") || range.label.contains("这个月") || days >= 28 {
+            label = "上一段"
+        } else {
+            label = "前 \(days) 天"
+        }
+        return AICommandTimeRange(label: label, start: previousStart, end: previousEnd, barDays: min(7, days))
+    }
+
     private var aiCommandAllTimeRange: AICommandTimeRange {
         AICommandTimeRange(
             label: "全部",
@@ -3456,7 +3701,7 @@ struct InsightWebView: View {
             AICommandCategoryIntent(
                 categories: [.dining],
                 label: "餐饮",
-                keywords: ["餐饮", "吃饭", "吃的", "饭", "美食", "外卖", "美团外卖", "饿了么", "抖音团购", "七欣天", "海底捞", "肯德基", "麦当劳", "必胜客", "塔斯汀", "华莱士", "食堂", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "简餐", "咖啡", "奶茶", "饮品", "饭店", "餐厅", "火锅", "烤肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "面条", "米粉", "河粉", "粉丝", "包子", "盒饭"]
+                keywords: ["餐饮", "吃饭", "吃的", "饭", "美食", "外卖", "美团外卖", "饿了么", "抖音团购", "七欣天", "海底捞", "肯德基", "麦当劳", "必胜客", "塔斯汀", "华莱士", "食堂", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "简餐", "咖啡", "奶茶", "饮品", "饮料", "可乐", "矿泉水", "瓶装水", "果汁", "汽水", "饭店", "餐厅", "火锅", "烤肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "面条", "米粉", "河粉", "粉丝", "包子", "盒饭"]
             ),
             AICommandCategoryIntent(
                 categories: [.transport, .lodging, .entertainment, .dining, .shopping],
@@ -3465,9 +3710,33 @@ struct InsightWebView: View {
                 requiresKeywordMatch: true
             ),
             AICommandCategoryIntent(
+                categories: [.dining, .daily],
+                label: "可乐",
+                keywords: ["可乐"],
+                requiresKeywordMatch: true
+            ),
+            AICommandCategoryIntent(
+                categories: [.dining],
+                label: "咖啡",
+                keywords: ["咖啡", "美式", "拿铁", "瑞幸", "星巴克", "库迪"],
+                requiresKeywordMatch: true
+            ),
+            AICommandCategoryIntent(
+                categories: [.dining],
+                label: "奶茶",
+                keywords: ["奶茶", "茶饮", "霸王茶姬", "喜茶", "奈雪", "蜜雪冰城"],
+                requiresKeywordMatch: true
+            ),
+            AICommandCategoryIntent(
                 categories: [.shopping, .daily, .health, .entertainment],
                 label: "兴趣装备",
                 keywords: ["兴趣装备", "装备", "渔具", "鱼竿", "鱼线", "鱼饵", "路亚", "钓箱", "钓椅", "露营", "帐篷", "天幕", "睡袋", "骑行", "头盔", "码表", "摄影", "相机", "镜头", "模型", "手办", "乐器", "吉他", "键盘", "茶具", "咖啡器具", "磨豆机", "滤杯"],
+                requiresKeywordMatch: true
+            ),
+            AICommandCategoryIntent(
+                categories: [.transport],
+                label: "打车",
+                keywords: ["打车", "出租", "网约车", "滴滴", "花小猪"],
                 requiresKeywordMatch: true
             ),
             AICommandCategoryIntent(
@@ -3613,6 +3882,8 @@ struct InsightWebView: View {
         switch kind {
         case .query:
             return "查账"
+        case .compare:
+            return "对比"
         case .memoryLookup:
             return "回望"
         case .duplicateCheck:
