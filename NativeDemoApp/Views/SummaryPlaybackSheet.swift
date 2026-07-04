@@ -2321,11 +2321,11 @@ private func lifeSliceConcretePhotoCaption(
         return "一次现场体验"
     }
 
-    if lifeSliceContainsAny(text, ["朋友", "同学", "聚餐", "约饭", "见面", "饭局", "火锅", "烧烤", "生日"]) {
-        return text.localizedCaseInsensitiveContains("见面") ? "和朋友的一次聚会" : "一次聚餐"
+    if lifeSliceContainsAny(text, ["朋友", "同学", "约饭", "见面", "生日"]) {
+        return "和朋友的一次聚会"
     }
-    if lifeSliceContainsAny(text, ["早餐", "午餐", "晚餐", "外卖", "饭", "餐"]) {
-        return "这一顿饭"
+    if lifeSliceContainsAny(text, ["早餐", "午餐", "晚餐", "外卖", "饭", "餐", "火锅", "烧烤", "饭局"]) {
+        return "这一餐"
     }
     if lifeSliceContainsAny(text, ["通勤", "公交", "地铁", "打车", "路上", "回家", "上班"]) {
         return text.localizedCaseInsensitiveContains("回家") ? "回家路上" : "路上的一段"
@@ -2493,7 +2493,7 @@ private struct WeeklyStoryShareCardView: View {
 
                 collagePhoto(
                     index: 0,
-                    fallback: "一次聚餐",
+                    fallback: "这一餐",
                     size: CGSize(width: 356, height: 260),
                     rotation: -4,
                     offset: CGSize(width: -22, height: -58)
@@ -2563,7 +2563,7 @@ private struct WeeklyStoryShareCardView: View {
                 .padding(.top, 10)
 
             VStack(spacing: 14) {
-                cleanPhotoRow(index: 0, fallback: "一次聚餐")
+                cleanPhotoRow(index: 0, fallback: "这一餐")
                 cleanPhotoRow(index: 1, fallback: "回家路上")
                 cleanPhotoRow(index: 2, fallback: "这次买的东西")
             }
@@ -2840,7 +2840,7 @@ private struct WeeklyStoryShareCardView: View {
 
     private var warmLightSceneRibbon: some View {
         HStack(spacing: 8) {
-            Text(posterSceneLabels.first ?? "这一周的生活")
+            Text(warmLightSceneLabel)
                 .font(.system(size: 17, weight: .bold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.76)
@@ -2855,12 +2855,6 @@ private struct WeeklyStoryShareCardView: View {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
                 .fill(deepGreen.opacity(0.84))
         )
-        .overlay(alignment: .bottomLeading) {
-            Rectangle()
-                .fill(deepGreen.opacity(0.42))
-                .frame(width: 52, height: 5)
-                .offset(x: -7, y: 5)
-        }
         .frame(maxWidth: .infinity)
     }
 
@@ -2884,8 +2878,7 @@ private struct WeeklyStoryShareCardView: View {
     private var warmLightHandwrittenLine: some View {
         VStack(spacing: 6) {
             Text(warmLightPosterTagline)
-                .font(.system(size: 20, weight: .medium, design: .serif))
-                .italic()
+                .font(chineseHandwritingFont(size: 21))
                 .foregroundStyle(ink.opacity(0.84))
                 .lineLimit(1)
                 .minimumScaleFactor(0.70)
@@ -2941,7 +2934,7 @@ private struct WeeklyStoryShareCardView: View {
     private var posterPrimaryPhoto: some View {
         posterPhotoCard(
             anchor: posterAnchor(at: 0),
-            fallbackCaption: "一次聚餐",
+            fallbackCaption: "这一餐",
             height: 300,
             cornerRadius: 18,
             iconSize: 30
@@ -3336,6 +3329,58 @@ private struct WeeklyStoryShareCardView: View {
         )
     }
 
+    private var warmLightSceneLabel: String {
+        let evidence = posterEvidenceText
+        if lifeSliceContainsAny(evidence, ["朋友", "同学", "见面", "生日", "约饭"]) {
+            return "和朋友的一次聚会"
+        }
+        if lifeSliceContainsAny(evidence, ["早餐", "午餐", "晚餐", "外卖", "饭", "餐", "菜", "面", "米饭", "食堂", "小吃"]) {
+            return "这一餐"
+        }
+        if lifeSliceContainsAny(evidence, ["可乐", "饮料", "饮品", "咖啡", "奶茶", "矿泉水", "瓶装水"]) {
+            return "一瓶饮料"
+        }
+        if lifeSliceContainsAny(evidence, ["通勤", "公交", "地铁", "打车", "路上", "回家", "上班"]) {
+            return "路上的一段"
+        }
+        if lifeSliceContainsAny(evidence, ["购物", "添置", "快递", "买"]) {
+            return "一次添置"
+        }
+        if let first = posterSceneLabels.first, !first.isEmpty {
+            if first == "聚会" {
+                return "日常"
+            }
+            return first
+        }
+        return "这一周的生活"
+    }
+
+    private var posterEvidenceText: String {
+        memoryAnchors
+            .map { anchor in
+                [
+                    anchor.title,
+                    anchor.caption
+                ].joined(separator: " ")
+            }
+            .joined(separator: " ")
+    }
+
+    private func chineseHandwritingFont(size: CGFloat) -> Font {
+        let candidates = [
+            "HanziPenSC-W3",
+            "HanziPenSC-W5",
+            "HanziPen SC",
+            "KaitiSC-Regular",
+            "Kaiti SC",
+            "STKaiti"
+        ]
+        if let name = candidates.first(where: { UIFont(name: $0, size: size) != nil }) {
+            return .custom(name, size: size)
+        }
+        return .system(size: size, weight: .regular, design: .serif)
+    }
+
     private var collagePosterSubtitle: String {
         stablePosterCopy(
             [
@@ -3404,7 +3449,7 @@ private struct WeeklyStoryShareCardView: View {
         if labels.isEmpty {
             labels = payload.categorySlices.map(\.label)
         }
-        labels.append(contentsOf: ["聚餐", "通勤", "添置"])
+        labels.append(contentsOf: ["日常", "通勤", "添置"])
         var seen = Set<String>()
         return labels.compactMap { raw in
             let label = posterNormalizedSceneLabel(raw)
@@ -3444,7 +3489,8 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private func posterNormalizedSceneLabel(_ raw: String) -> String {
-        if raw.contains("餐") || raw.contains("饭") || raw.contains("饮") || raw.contains("咖啡") { return "聚餐" }
+        if raw.contains("可乐") || raw.contains("饮料") || raw.contains("饮品") || raw.contains("咖啡") || raw.contains("奶茶") { return "饮料" }
+        if raw.contains("餐") || raw.contains("饭") || raw.contains("菜") || raw.contains("面") || raw.contains("食堂") { return "一餐" }
         if raw.contains("见面") || raw.contains("朋友") || raw.contains("聚会") { return "聚会" }
         if raw.contains("现场") || raw.contains("体验") { return "体验" }
         if raw.contains("通勤") || raw.contains("交通") || raw.contains("公交") || raw.contains("地铁") || raw.contains("路") { return "通勤" }
@@ -3456,7 +3502,8 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private func posterSceneIcon(for label: String) -> String {
-        if label.contains("餐") || label.contains("饭") || label.contains("饮") || label.contains("咖啡") { return "fork.knife" }
+        if label.contains("饮料") || label.contains("饮品") || label.contains("咖啡") || label.contains("奶茶") { return "cup.and.saucer.fill" }
+        if label.contains("餐") || label.contains("饭") || label.contains("菜") || label.contains("面") { return "fork.knife" }
         if label.contains("见面") || label.contains("朋友") || label.contains("聚会") { return "person.2.fill" }
         if label.contains("现场") || label.contains("体验") { return "ticket.fill" }
         if label.contains("通勤") || label.contains("交通") || label.contains("公交") || label.contains("地铁") || label.contains("路") { return "bus.fill" }
