@@ -24,7 +24,7 @@ final class MemberFlowService {
             )
         case .shareSuccess:
             return MemberCtaCopy(
-                intro: "这张摘页已经把一周留住了，连续生成会更像一本生活册。",
+                intro: "这张摘页已经整理好这一周，连续生成会更像一本生活册。",
                 quickAction: "继续留下生活摘页",
                 nudge: "会员可持续生成周记、月章和故事图，让记录不只停在这一张。"
             )

@@ -1999,24 +1999,28 @@ struct InsightWebView: View {
                 return draft.amount > 0
             }
             VStack(alignment: .leading, spacing: 9) {
-                Button {
-                    saveAICommandDrafts(saveableDrafts)
-                } label: {
-                    aiCommandPrimaryLabel(
-                        hasMemberAccess ? "确认保存 \(saveableDrafts.count) 条" : "开通会员保存全部",
-                        systemImage: hasMemberAccess ? "checkmark.circle.fill" : "lock.fill"
-                    )
+                if !saveableDrafts.isEmpty {
+                    Button {
+                        saveAICommandDrafts(saveableDrafts)
+                    } label: {
+                        aiCommandPrimaryLabel(
+                            hasMemberAccess ? "确认保存 \(saveableDrafts.count) 条" : "开通会员保存全部",
+                            systemImage: hasMemberAccess ? "checkmark.circle.fill" : "lock.fill"
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .disabled(saveableDrafts.isEmpty && hasMemberAccess)
-                .opacity(saveableDrafts.isEmpty && hasMemberAccess ? 0.52 : 1)
 
                 if let aiCommandSavedCount {
                     Text("已保存 \(aiCommandSavedCount) 条到账本。")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.subtext)
+                } else if saveableDrafts.isEmpty {
+                    Text("这些候选都像已经记过了，先不提供批量保存。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.subtext)
                 } else if saveableDrafts.count < result.drafts.count {
-                    Text("高亮的记录疑似已经存在，已先排除；真要补记，可以改成单笔手动添加。")
+                    Text("高亮的记录疑似已经存在，已先排除；如果确实要补记，可以改成单笔手动添加。")
                         .font(.system(size: 12))
                         .foregroundStyle(AppColors.subtext)
                 } else if !hasMemberAccess {
@@ -2123,7 +2127,7 @@ struct InsightWebView: View {
 
         let range = aiCommandTimeRange(from: normalized)
         let categoryIntent = aiCommandCategoryIntent(from: normalized)
-        if lifeMarkIntent != nil || categoryIntent != nil || aiCommandAsksCategoryBreakdown(normalized) || containsAny(normalized, ["查", "看", "多少", "几次", "花了", "消费", "账本", "记录", "流水", "明细", "整理", "概览", "最近", "近来", "这阵子", "这段时间", "今天", "昨日", "昨天", "本周", "这周", "这一周", "本自然周", "这个自然周", "本星期", "这个星期", "这星期", "本礼拜", "这个礼拜", "这礼拜", "上周", "上一周", "上个自然周", "上一个自然周", "上星期", "上个星期", "上礼拜", "上个礼拜", "本月", "这个月", "这月", "上个月", "上月"]) {
+        if lifeMarkIntent != nil || categoryIntent != nil || aiCommandAsksCategoryBreakdown(normalized) || containsAny(normalized, ["查", "看", "多少", "几次", "花了", "消费", "账本", "记录", "流水", "明细", "整理", "概览", "最近", "近来", "这阵子", "这段时间", "今天", "今日", "今儿", "昨日", "昨天", "昨儿", "前天", "前日", "本周", "这周", "这一周", "本自然周", "这个自然周", "本星期", "这个星期", "这星期", "本礼拜", "这个礼拜", "这礼拜", "上周", "上一周", "上个自然周", "上一个自然周", "上星期", "上个星期", "上礼拜", "上个礼拜", "本月", "这个月", "这月", "上个月", "上月"]) {
             return buildQueryResult(
                 range: range,
                 categoryIntent: categoryIntent,
@@ -2433,7 +2437,7 @@ struct InsightWebView: View {
             return AICommandResult(
                 kind: .needsAmount,
                 title: "可以补通勤，但还缺单程金额",
-                summary: "我会按\(range.label)工作日，早晚各一次，先生成待确认记录。",
+                summary: commuteDraftPlanSummary(for: range),
                 detail: "没有找到足够明确的历史通勤金额，填一个单程金额后再生成。",
                 items: [],
                 bars: [],
@@ -2443,16 +2447,19 @@ struct InsightWebView: View {
             )
         }
 
-        let draftWeekdays = Array(commuteWorkdays(in: range).suffix(5))
+        let allDraftWeekdays = commuteWorkdays(in: range)
+        let draftWeekdays = Array(allDraftWeekdays.suffix(commuteDraftWorkdayLimit(for: range)))
+        let didLimitDraftDays = allDraftWeekdays.count > draftWeekdays.count
         let commuteCandidates = filteredAICommandItems(range: range, category: .transport)
         let drafts = draftWeekdays.flatMap { day in
             commuteDrafts(for: day, amount: resolvedAmount, candidates: commuteCandidates)
         }
         guard !drafts.isEmpty else {
+            let singleDayText = commuteSingleDayBlockedText(for: range)
             return AICommandResult(
                 kind: .unsupported,
                 title: "\(range.label)没有可补的工作日",
-                summary: "这条补记指令需要落在工作日上，换成本周、上周或最近一周会更稳。",
+                summary: singleDayText ?? "这条补记指令需要落在工作日上，换成本周、上周或最近一周会更稳。",
                 detail: "不会自动新增任何记录。",
                 items: [],
                 bars: [],
@@ -2464,6 +2471,19 @@ struct InsightWebView: View {
         let saveableDrafts = drafts.filter { draft in
             if case .conflict = draft.status { return false }
             return true
+        }
+        guard !saveableDrafts.isEmpty else {
+            return AICommandResult(
+                kind: .batchCreate,
+                title: "\(range.label)通勤可能已经补过",
+                summary: "我找到了相近时间和金额的通勤记录，先不重复生成可保存草稿。",
+                detail: "下面把疑似已有的记录标出来；如果确实还要补，可以改成单笔手动添加。",
+                items: [],
+                bars: dailyBarsForDrafts(drafts, weekdays: draftWeekdays),
+                drafts: drafts,
+                amountSource: nil,
+                needsAmount: false
+            )
         }
         let total = saveableDrafts.reduce(0) { $0 + $1.amount }
         let amountSource: String
@@ -2478,9 +2498,11 @@ struct InsightWebView: View {
             kind: .batchCreate,
             title: "补上\(range.label)通勤",
             summary: "可新增 \(saveableDrafts.count) 条出行记录，合计 \(total.formatted(.cny))。",
-            detail: drafts.count == saveableDrafts.count
-                ? "按周一到周五早晚生成，遇到节假日会跳过；保存前可先核对，不会自动写入账本。"
-                : "已发现部分工作日早晚通勤可能已经存在，先用高亮标出并排除保存；节假日会跳过。",
+            detail: commuteDraftDetail(
+                for: range,
+                didLimitDraftDays: didLimitDraftDays,
+                hasConflicts: drafts.count != saveableDrafts.count
+            ),
             items: [],
             bars: dailyBarsForDrafts(drafts, weekdays: draftWeekdays),
             drafts: drafts,
@@ -3074,6 +3096,11 @@ struct InsightWebView: View {
             let start = calendar.date(byAdding: .day, value: -1, to: todayStart) ?? todayStart
             return AICommandTimeRange(label: "昨天", start: start, end: todayStart, barDays: 1)
         }
+        if containsAny(text, ["前天", "前日"]) {
+            let end = calendar.date(byAdding: .day, value: -1, to: todayStart) ?? todayStart
+            let start = calendar.date(byAdding: .day, value: -2, to: todayStart) ?? end
+            return AICommandTimeRange(label: "前天", start: start, end: end, barDays: 1)
+        }
         if containsAny(text, ["过去三天", "近三天", "最近三天", "3天", "3 天", "三天"]) {
             return aiCommandRecentRange(days: 3, label: "过去 3 天")
         }
@@ -3267,10 +3294,64 @@ struct InsightWebView: View {
 
     private func commuteDraftRange(from text: String) -> AICommandTimeRange {
         let explicitRange = aiCommandTimeRange(from: text, defaultRecentDays: 7)
-        if containsAny(text, ["上周", "上一周", "上个自然周", "上一个自然周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜", "本周", "这周", "这一周", "本自然周", "这个自然周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜", "最近", "过去", "近", "前", "7天", "七天", "一周", "一星期", "一个星期", "一礼拜", "一个礼拜", "半个月", "半月", "个月"]) {
+        if containsAny(text, ["今天", "今日", "今儿", "昨天", "昨日", "昨儿", "前天", "前日", "上周", "上一周", "上个自然周", "上一个自然周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜", "本周", "这周", "这一周", "本自然周", "这个自然周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜", "最近", "过去", "近", "前", "7天", "七天", "一周", "一星期", "一个星期", "一礼拜", "一个礼拜", "半个月", "半月", "个月"]) {
             return explicitRange
         }
         return aiCommandRecentRange(days: 7, label: "最近一周")
+    }
+
+    private func commuteDraftPlanSummary(for range: AICommandTimeRange) -> String {
+        if isSingleDayRange(range) {
+            return "我会按\(range.label)早晚通勤各一条，先生成待确认记录。"
+        }
+        return "我会按\(range.label)工作日，早晚各一次，先生成待确认记录。"
+    }
+
+    private func commuteDraftSuccessDetail(for range: AICommandTimeRange) -> String {
+        if isSingleDayRange(range) {
+            return "按\(range.label)早晚各一条生成；保存前可先核对，不会自动写入账本。"
+        }
+        return "按周一到周五早晚生成，遇到节假日会跳过；保存前可先核对，不会自动写入账本。"
+    }
+
+    private func commuteDraftDetail(
+        for range: AICommandTimeRange,
+        didLimitDraftDays: Bool,
+        hasConflicts: Bool
+    ) -> String {
+        var lines: [String] = []
+        if hasConflicts {
+            lines.append("已发现部分通勤可能已经存在，先用高亮标出并排除保存。")
+        } else {
+            lines.append(commuteDraftSuccessDetail(for: range))
+        }
+        if didLimitDraftDays {
+            lines.append("范围较长时先取最近 10 个工作日，避免一次生成太多待确认记录。")
+        }
+        if hasConflicts {
+            lines.append("保存前可核对，不会自动写入账本。")
+        }
+        return lines.joined(separator: "")
+    }
+
+    private func commuteDraftWorkdayLimit(for range: AICommandTimeRange) -> Int {
+        isSingleDayRange(range) ? 1 : 10
+    }
+
+    private func commuteSingleDayBlockedText(for range: AICommandTimeRange) -> String? {
+        guard isSingleDayRange(range) else { return nil }
+        let day = aiCommandCalendar.startOfDay(for: range.start)
+        if !isWeekday(day) {
+            return "\(range.label)不是工作日，先不自动生成通勤草稿。如果确实要补，可以改成单笔手动添加。"
+        }
+        if isKnownMainlandChinaHoliday(day) {
+            return "\(range.label)按节假日处理，先不自动生成通勤草稿。如果确实要补，可以改成单笔手动添加。"
+        }
+        return nil
+    }
+
+    private func isSingleDayRange(_ range: AICommandTimeRange) -> Bool {
+        daysBetween(range.start, range.end) == 1
     }
 
     private func commuteWorkdays(in range: AICommandTimeRange) -> [Date] {

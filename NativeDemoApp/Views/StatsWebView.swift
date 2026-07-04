@@ -1058,7 +1058,7 @@ struct StatsWebView: View {
     private func traceLifeMonthLabelIsMeaningful(_ label: String) -> Bool {
         let text = label.trimmingCharacters(in: .whitespacesAndNewlines)
         guard text.count >= 2 else { return false }
-        let generic = ["现场", "记录", "票据", "这张图把当时留了下来。"]
+        let generic = ["现场", "记录", "票据", "当时拍下的一张图"]
         return !generic.contains(text)
     }
 
@@ -2066,13 +2066,13 @@ struct StatsWebView: View {
             return traceLifeResolvedAnchorCaption(
                 anchor: firstAnchor,
                 item: item,
-                fallback: "这张图把当时留了下来。"
+                fallback: "当时拍下的一张图"
             )
         }
         if let first = snapshot.items.first {
             return traceLifeSliceCaption(for: first)
         }
-        return "这张图把当时留了下来。"
+        return "当时拍下的一张图"
     }
 
     private func traceLifeSliceSmallCaption(
@@ -2100,23 +2100,23 @@ struct StatsWebView: View {
 
     private func traceLifeSliceCaption(for item: HomeItem) -> String {
         if traceLifeIsBeverageOrSnack(item) {
-            return "这张图把这次饮品补给留了下来。"
+            return traceLifeBeverageCaption(for: item)
         }
         switch item.category {
         case .transport:
-            return "回家路上"
+            return traceLifeTransportCaption(for: item)
         case .dining:
             return traceLifeLooksLikeGathering(item)
-                ? "这张图把那次见面留住了。"
-                : "这张图把这顿饭留了下来。"
+                ? traceLifeGatheringCaption(for: item)
+                : "这一顿饭"
         case .daily, .home:
-            return "给家里添的"
+            return "给家里买的"
         case .shopping:
-            return "添置的一点"
+            return traceLifeShoppingCaption(for: item)
         case .social:
-            return "见面留下的"
+            return traceLifeGatheringCaption(for: item)
         case .health:
-            return "照护留下的"
+            return "身体相关的一张记录"
         case .lodging:
             return "住下来的那晚"
         case .entertainment:
@@ -2185,18 +2185,90 @@ struct StatsWebView: View {
            !traceLifeLooksLikeGathering(item) {
             return traceLifeSliceCaption(for: item)
         }
+        if let item,
+           traceLifeShouldRewriteAwkwardPhotoCaption(caption) {
+            return traceLifeSliceCaption(for: item)
+        }
         if !caption.isEmpty {
             return caption
         }
         if let item {
             return traceLifeSliceCaption(for: item)
         }
-        return fallback ?? "这张图把当时留了下来。"
+        return fallback ?? "当时拍下的一张图"
     }
 
     private func traceLifeIsOverclaimedGatheringCaption(_ caption: String) -> Bool {
         caption.localizedCaseInsensitiveContains("见面")
             || caption.localizedCaseInsensitiveContains("聚餐")
+    }
+
+    private func traceLifeShouldRewriteAwkwardPhotoCaption(_ caption: String) -> Bool {
+        let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return false }
+        let awkwardFragments = [
+            "这张图把",
+            "留住了",
+            "留了下来",
+            "代表了那笔",
+            "代表这笔",
+            "这件东西代表",
+            "当时留了下来"
+        ]
+        return awkwardFragments.contains { text.localizedCaseInsensitiveContains($0) }
+    }
+
+    private func traceLifeGatheringCaption(for item: HomeItem) -> String {
+        let text = traceLifeSemanticText(for: item)
+        if text.localizedCaseInsensitiveContains("朋友") {
+            return "和朋友的一次聚会"
+        }
+        if text.localizedCaseInsensitiveContains("同学") {
+            return "和同学的一次聚会"
+        }
+        if text.localizedCaseInsensitiveContains("生日") {
+            return "一次生日聚会"
+        }
+        if text.localizedCaseInsensitiveContains("家庭") || text.localizedCaseInsensitiveContains("家人") {
+            return "和家里人的一顿饭"
+        }
+        if item.category == .social {
+            return "和人见了一面"
+        }
+        return "一次聚餐"
+    }
+
+    private func traceLifeBeverageCaption(for item: HomeItem) -> String {
+        let text = traceLifeSemanticText(for: item)
+        if text.localizedCaseInsensitiveContains("可乐") { return "买了一瓶可乐" }
+        if text.localizedCaseInsensitiveContains("矿泉水") || text.localizedCaseInsensitiveContains("瓶装水") || text.localizedCaseInsensitiveContains("纯净水") {
+            return "买了几瓶水"
+        }
+        if text.localizedCaseInsensitiveContains("咖啡") { return "喝了一杯咖啡" }
+        if text.localizedCaseInsensitiveContains("奶茶") { return "喝了一杯奶茶" }
+        return "买了点喝的"
+    }
+
+    private func traceLifeTransportCaption(for item: HomeItem) -> String {
+        let text = traceLifeSemanticText(for: item)
+        if text.localizedCaseInsensitiveContains("下班") || text.localizedCaseInsensitiveContains("回家") {
+            return "下班回家路上"
+        }
+        if text.localizedCaseInsensitiveContains("上班") || text.localizedCaseInsensitiveContains("通勤") {
+            return "上班路上"
+        }
+        return "路上的一段"
+    }
+
+    private func traceLifeShoppingCaption(for item: HomeItem) -> String {
+        let text = traceLifeSemanticText(for: item)
+        if text.localizedCaseInsensitiveContains("快递") {
+            return "收到的快递"
+        }
+        if text.localizedCaseInsensitiveContains("衣服") || text.localizedCaseInsensitiveContains("鞋") || text.localizedCaseInsensitiveContains("包") {
+            return "买了件穿用的"
+        }
+        return "这次买的东西"
     }
 
     private func traceLifeLooksLikeGathering(_ item: HomeItem) -> Bool {
@@ -2385,8 +2457,7 @@ struct StatsWebView: View {
             "\(Int(customEndDate.timeIntervalSince1970))",
             selectedCategory?.rawValue ?? "all",
             hasMemberAccess ? "member" : "free",
-            traceItemsSignature(items),
-            traceItemsSignature(homeViewModel.items)
+            traceItemsSignature(items)
         ].joined(separator: "|")
     }
 
@@ -3193,8 +3264,7 @@ struct StatsWebView: View {
             selectedCategory?.rawValue ?? "all",
             hasMemberAccess ? "member" : "free",
             lifeInsightRefreshID.uuidString,
-            traceItemsSignature(items),
-            traceItemsSignature(homeViewModel.items)
+            traceItemsSignature(items)
         ].joined(separator: "|")
     }
 
@@ -3833,7 +3903,7 @@ struct StatsWebView: View {
                 let second = topClues[1]
                 let overlapDays = traceDaysContaining(categories: [first.category, second.category], items: items)
                 if overlapDays > 0 {
-                    return "\(first.category.rawValue)和\(second.category.rawValue)在 \(overlapDays) 天里同时出现。它们可能不是两件散事，而是同一天的外出、工作节奏或集中补给带出来的。"
+                    return "\(first.category.rawValue)和\(second.category.rawValue)在 \(overlapDays) 天里同时出现。可以先把它们放到同一天的外出、工作节奏或集中补给里一起看。"
                 }
                 return "\(first.category.rawValue)和\(second.category.rawValue)都靠前，但不太落在同一天。可以分开看这两类记录。"
             }
@@ -3888,17 +3958,17 @@ struct StatsWebView: View {
         case .social:
             base = "「\(categoryName)」变明显，主要来自见面、送礼或人情往来。"
         case .lodging:
-            base = "「\(categoryName)」变明显，说明这段时间有停留和位置变化，可能是旅行、出差，或临时过夜。"
+            base = "「\(categoryName)」变明显，说明这段时间有停留和位置变化。可以回头看看是不是旅行、出差，或临时过夜。"
         case .other:
             base = "这类记录变明显，说明有些记录还没归进固定分类。可以回头看备注。"
         }
 
         var tails: [String] = []
         if let peak, peak.count > 0 {
-            tails.append("\(traceRhythmNarrativeLabel(peak))最集中，原因很可能就在\(traceRhythmPeriodReference)的安排里。")
+            tails.append("\(traceRhythmNarrativeLabel(peak))最集中，先回头看\(traceRhythmPeriodReference)那天怎么安排的。")
         }
         if let second {
-            tails.append("它还和「\(second.category.rawValue)」一起靠前，可能是同一段生活带出来的两种记录。")
+            tails.append("它还和「\(second.category.rawValue)」一起靠前，可以放在同一段生活里看。")
         }
         return ([base] + tails).joined(separator: " ")
     }

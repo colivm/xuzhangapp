@@ -288,15 +288,15 @@ private final class MemoryAnchorSelectionService {
     private func playbackCaption(for role: PhotoMemoryAssetRole, sceneHint: PhotoMemorySceneHint) -> String {
         switch role {
         case .moment:
-            return sceneHint == .gathering ? "这张图把那次见面留住了。" : "这张图把当时留了下来。"
+            return sceneHint == .gathering ? "和朋友的一次聚会。" : "当时拍下的一张图。"
         case .receipt:
             return "这类图不用好看，但以后查起来很有用。"
         case .place:
-            return "这张图把那段出门的路留住了。"
+            return "路上拍下的一张图。"
         case .object:
-            return "这件东西代表了那笔添置。"
+            return "这次买的东西。"
         case .careRecord:
-            return "照护相关的记录，有图会更容易回想起当时。"
+            return "照护相关的一张记录。"
         }
     }
 

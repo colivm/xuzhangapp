@@ -34,22 +34,22 @@ struct PhotoMemoryPromptReason: Equatable {
         case .moment:
             switch sceneHint {
             case .gathering:
-                return "这张图把那次见面留住了。"
+                return "和朋友的一次聚会。"
             case .giftMoment:
-                return "这张图把那份心意留住了。"
+                return "这次带去的心意。"
             case .experience:
-                return "这张图把当时留了下来。"
+                return "当时拍下的一张图。"
             default:
-                return "这张图把当时留了下来。"
+                return "当时拍下的一张图。"
             }
         case .receipt:
             return "这张图以后查起来更清楚。"
         case .place:
-            return "这张图把那段出门的路留住了。"
+            return "路上拍下的一张图。"
         case .object:
-            return "这件东西代表这笔添置。"
+            return "这次买的东西。"
         case .careRecord:
-            return "这张图把当时的照护记录留清楚。"
+            return "照护相关的一张记录。"
         }
     }
 }
@@ -215,8 +215,8 @@ enum PhotoMemoryPromptPolicy {
                 sceneHint: .gathering,
                 assetRole: .moment,
                 sceneLabel: "见面",
-                title: "留下一张现场图",
-                detail: "这张图会让这笔以后更容易被想起。",
+                title: "保存这次聚会的照片",
+                detail: "以后回看这笔，会知道是和谁吃了这一顿。",
                 actionTitle: "留下这张"
             )
         }
@@ -245,9 +245,9 @@ enum PhotoMemoryPromptPolicy {
                 sceneHint: .homeLife,
                 assetRole: .object,
                 sceneLabel: "家里",
-                title: "用这张代表这笔",
-                detail: "这张图会帮你想起家里添的这一件。",
-                actionTitle: "用这张代表它"
+                title: "设为这笔的照片",
+                detail: "以后回看时，会知道家里买了这一件。",
+                actionTitle: "设为这笔照片"
             )
         }
         if item.category == .shopping || containsAny(text, hobbyOrImportantPurchaseKeywords) {
@@ -255,9 +255,9 @@ enum PhotoMemoryPromptPolicy {
                 sceneHint: .importantPurchase,
                 assetRole: .object,
                 sceneLabel: "添置",
-                title: "用这张代表这笔",
-                detail: "这张图会帮你想起为什么买下它。",
-                actionTitle: "用这张代表它"
+                title: "设为这笔的照片",
+                detail: "以后回看时，会知道当时买了什么。",
+                actionTitle: "设为这笔照片"
             )
         }
         return PhotoMemoryPromptReason(
@@ -265,7 +265,7 @@ enum PhotoMemoryPromptPolicy {
             assetRole: .moment,
             sceneLabel: "记忆",
             title: "留下这张图",
-            detail: "这张图会让这笔以后更容易被想起。",
+            detail: "以后回看这笔，会多一点当时的画面。",
             actionTitle: "留下这张"
         )
     }

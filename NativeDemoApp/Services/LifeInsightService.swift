@@ -14,6 +14,24 @@ final class LifeInsightService {
 
     static let freeMonthlyLimit = 5
 
+    private struct TraceInsightSignal {
+        let kind: LifeSceneKind
+        let category: HomeItem.Category
+        let title: String
+        let teaser: String
+        let detail: String
+        let supportLine: String
+        let question: String
+        let periodName: String
+        let score: Double
+        let anchorDate: Date?
+    }
+
+    private struct TraceInsightRow {
+        let item: HomeItem
+        let signal: LifeSceneSignal
+    }
+
     private enum Keys {
         static let freeMonthKey = "life_insight_free_month_key"
         static let freeMonthUsedCount = "life_insight_free_month_used_count"
@@ -79,6 +97,24 @@ final class LifeInsightService {
             )
         }
 
+        let signals = rankedTraceSignals(from: validItems, periodLabel: periodLabel)
+        if let primary = signals.first {
+            let secondary = signals.dropFirst().first
+            var fullLines = [primary.detail, primary.supportLine]
+            if let secondary {
+                fullLines.append(secondary.detail)
+            }
+            let chips = signals.prefix(3).map(\.question)
+            return LifeInsightResult(
+                leadQuestion: primary.title,
+                teaser: primary.teaser,
+                previewLine: primary.detail,
+                fullLines: Array(fullLines.prefix(3)),
+                questionChips: chips.isEmpty ? ["哪天最特别？", "什么事出现了好几次？", "给这段时间起个名字"] : Array(chips),
+                periodName: primary.periodName
+            )
+        }
+
         let categories = categoryStats(from: validItems)
         let top = categories.first
         let second = categories.dropFirst().first
@@ -94,11 +130,11 @@ final class LifeInsightService {
         if let top {
             let secondName = second.map { focusName(for: $0.category, items: validItems) }
             if let peak, let secondName {
-                teaser = "\(primaryFocusName)在\(peak.label)最集中，旁边还跟着「\(secondName)」。这不像一笔孤立消费，更像那几天生活在同一个节奏里。"
+                teaser = "\(primaryFocusName)在\(peak.label)最集中，旁边还跟着「\(secondName)」。这几笔可以放在同一天的节奏里一起看。"
             } else if let peak {
-                teaser = "\(primaryFocusName)在\(peak.label)最明显。回头看那天，可能比只看金额更接近真实原因。"
+                teaser = "\(primaryFocusName)在\(peak.label)最明显。回头看那天，会比只看金额更容易想起原因。"
             } else {
-                teaser = "\(primaryFocusName)已经不止出现一次，它可能是这段时间反复发生的一件事。"
+                teaser = "\(primaryFocusName)已经不止出现一次，可以当作这段时间反复发生的一件事来看。"
             }
         } else {
             teaser = "这段记录还比较散。先看哪天最集中、哪类最常出现。"
@@ -115,7 +151,7 @@ final class LifeInsightService {
         if let second, let top, second.count > 0 {
             let topName = focusName(for: top.category, items: validItems)
             let secondName = focusName(for: second.category, items: validItems)
-            fullLines.append("「\(topName)」和「\(secondName)」一起靠前，可能是同一段生活带出来的两种开销。")
+            fullLines.append("「\(topName)」和「\(secondName)」一起靠前，可以放在同一段生活里看。")
         } else {
             fullLines.append("平均每笔约 \(average.formatted(.cny))。可以先看它们集中在哪些日期。")
         }
@@ -165,6 +201,335 @@ final class LifeInsightService {
                 if $0.count == $1.count { return $0.total > $1.total }
                 return $0.count > $1.count
             }
+    }
+
+    private func rankedTraceSignals(from items: [HomeItem], periodLabel: String) -> [TraceInsightSignal] {
+        guard !items.isEmpty else { return [] }
+        let rows = items.map { TraceInsightRow(item: $0, signal: LifeSceneSemanticService.classify($0)) }
+        var signals: [TraceInsightSignal] = []
+        signals += repeatedSceneSignals(from: rows, periodLabel: periodLabel)
+        if let peak = denseDaySignal(from: rows, periodLabel: periodLabel) {
+            signals.append(peak)
+        }
+        if let relation = relationSignal(from: rows, periodLabel: periodLabel) {
+            signals.append(relation)
+        }
+        if let personal = personalNoteSignal(from: rows, periodLabel: periodLabel) {
+            signals.append(personal)
+        }
+
+        var usedKeys = Set<String>()
+        return signals
+            .sorted { lhs, rhs in
+                if abs(lhs.score - rhs.score) < 0.001 {
+                    return (lhs.anchorDate ?? .distantPast) > (rhs.anchorDate ?? .distantPast)
+                }
+                return lhs.score > rhs.score
+            }
+            .filter { signal in
+                let key = "\(signal.kind.rawValue)|\(signal.category.rawValue)"
+                guard !usedKeys.contains(key) else { return false }
+                usedKeys.insert(key)
+                return true
+            }
+    }
+
+    private func repeatedSceneSignals(from rows: [TraceInsightRow], periodLabel: String) -> [TraceInsightSignal] {
+        let grouped = Dictionary(grouping: rows, by: { $0.signal.kind })
+        return grouped.compactMap { _, entries -> TraceInsightSignal? in
+            guard entries.count >= 2,
+                  let strongest = entries.map({ $0.signal }).max(by: { $0.score < $1.score }) else {
+                return nil
+            }
+            let sceneItems = entries.map({ $0.item }).sorted { $0.createdAt < $1.createdAt }
+            let activeDays = Set(sceneItems.map { calendar.startOfDay(for: $0.createdAt) }).count
+            let userEditedCount = sceneItems.filter { $0.userEditedTitle == true }.count
+            let imageCount = sceneItems.filter { $0.hasMemoryImages }.count
+            let amountSpread = amountSpreadText(for: sceneItems)
+            let timeHint = sceneTimeHint(for: sceneItems)
+            let label = readableSceneLabel(for: strongest, items: sceneItems)
+            let count = sceneItems.count
+            let score = Double(count) * 12
+                + Double(activeDays) * 8
+                + Double(userEditedCount) * 10
+                + Double(imageCount) * 8
+                + (strongest.confidenceTier == .strong ? 8 : 0)
+
+            return TraceInsightSignal(
+                kind: strongest.kind,
+                category: strongest.category,
+                title: "「\(label)」为什么反复出现？",
+                teaser: "\(label)出现了 \(count) 次。它不只是分类变多了，背后是\(sceneLifeSummary(for: strongest.kind, activeDays: activeDays))。",
+                detail: repeatedSceneDetail(label: label, count: count, activeDays: activeDays, timeHint: timeHint, amountSpread: amountSpread),
+                supportLine: sceneSupportLine(items: sceneItems, label: label),
+                question: "\(label)为什么变明显？",
+                periodName: "\(label)撑起来的\(periodLabel)",
+                score: score,
+                anchorDate: sceneItems.last?.createdAt
+            )
+        }
+    }
+
+    private func denseDaySignal(from rows: [TraceInsightRow], periodLabel: String) -> TraceInsightSignal? {
+        let grouped = Dictionary(grouping: rows) { calendar.startOfDay(for: $0.item.createdAt) }
+        guard let entry = grouped.max(by: { lhs, rhs in
+            if lhs.value.count == rhs.value.count {
+                return lhs.value.reduce(0) { $0 + $1.item.amount } < rhs.value.reduce(0) { $0 + $1.item.amount }
+            }
+            return lhs.value.count < rhs.value.count
+        }),
+              entry.value.count >= 2 else {
+            return nil
+        }
+        let dayRows = entry.value.sorted { $0.item.createdAt < $1.item.createdAt }
+        let dayItems = dayRows.map(\.item)
+        let sceneLabels = distinctSceneLabels(from: dayRows, limit: 3)
+        let label = calendarDayLabel(for: entry.key)
+        let sceneText = sceneLabels.isEmpty ? "几笔记录" : sceneLabels.joined(separator: "、")
+        let score = Double(dayItems.count) * 14 + Double(sceneLabels.count) * 9
+        return TraceInsightSignal(
+            kind: .general,
+            category: dayItems.first?.category ?? .other,
+            title: "\(label)为什么值得回头看？",
+            teaser: "\(label)不只是多了几笔，\(sceneText)都落在这一天。",
+            detail: "\(label)留下 \(dayItems.count) 笔，里面有\(sceneText)。回头看这一天，比只看哪类花得多更有用。",
+            supportLine: sceneSupportLine(items: dayItems, label: label),
+            question: "\(label)发生了什么？",
+            periodName: "\(label)撑起来的\(periodLabel)",
+            score: score,
+            anchorDate: entry.key
+        )
+    }
+
+    private func relationSignal(from rows: [TraceInsightRow], periodLabel: String) -> TraceInsightSignal? {
+        let groupedByDay = Dictionary(grouping: rows) { calendar.startOfDay(for: $0.item.createdAt) }
+        let candidates = groupedByDay.compactMap { day, entries -> (Date, [LifeSceneSignal], [HomeItem])? in
+            let uniqueSignals = Array(Dictionary(grouping: entries.map { $0.signal }, by: { $0.kind }).values.compactMap { signals in
+                signals.max { $0.score < $1.score }
+            })
+            guard uniqueSignals.count >= 2 else { return nil }
+            return (day, uniqueSignals.sorted { $0.priority < $1.priority }, entries.map { $0.item })
+        }
+        guard let best = candidates.sorted(by: { lhs, rhs in
+            if lhs.1.count == rhs.1.count { return lhs.0 > rhs.0 }
+            return lhs.1.count > rhs.1.count
+        }).first else {
+            return nil
+        }
+        let first = best.1[0]
+        let second = best.1[1]
+        let firstLabel = readableSceneLabel(for: first, items: best.2)
+        let secondLabel = readableSceneLabel(for: second, items: best.2)
+        let dayLabel = calendarDayLabel(for: best.0)
+        return TraceInsightSignal(
+            kind: first.kind,
+            category: first.category,
+            title: "\(firstLabel)和\(secondLabel)是同一段事吗？",
+            teaser: "\(dayLabel)，\(firstLabel)和\(secondLabel)一起出现，像是同一天安排带出来的两条线。",
+            detail: "\(dayLabel)同时有\(firstLabel)和\(secondLabel)。它们不一定要分开看，可以先当作同一天外出、工作节奏或临时安排的一部分。",
+            supportLine: sceneSupportLine(items: best.2, label: dayLabel),
+            question: "\(firstLabel)和\(secondLabel)同天出现了吗？",
+            periodName: "\(firstLabel)和\(secondLabel)交叠的\(periodLabel)",
+            score: 38 + Double(best.1.count) * 8 + Double(best.2.count) * 5,
+            anchorDate: best.0
+        )
+    }
+
+    private func personalNoteSignal(from rows: [TraceInsightRow], periodLabel: String) -> TraceInsightSignal? {
+        let candidates = rows
+            .filter { row in
+                let title = row.item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                return row.item.userEditedTitle == true
+                    && !title.isEmpty
+                    && title != row.item.category.defaultRecordTitle
+                    && !RecordSemanticLexicon.isSystemGeneratedTitle(title)
+            }
+            .sorted { lhs, rhs in
+                personalSignalScore(lhs.item) > personalSignalScore(rhs.item)
+            }
+        guard let row = candidates.first else { return nil }
+        let item = row.item
+        let signal = row.signal
+        let label = readableSceneLabel(for: signal, items: [item])
+        let dayLabel = calendarDayLabel(for: item.createdAt)
+        let summary = personalNoteSummary(for: item, label: label)
+        return TraceInsightSignal(
+            kind: signal.kind,
+            category: item.category,
+            title: "这笔为什么值得留意？",
+            teaser: "\(dayLabel)这笔写得更具体，像是你当时有意想把它留下来。",
+            detail: summary,
+            supportLine: "\(dayLabel) \(item.createdAt.zhBillTime)，\(item.amount.formatted(.cny))。不用复述原备注，记住它比默认记录更有现场感就够了。",
+            question: "哪条备注最值得回看？",
+            periodName: "有具体备注的\(periodLabel)",
+            score: personalSignalScore(item),
+            anchorDate: item.createdAt
+        )
+    }
+
+    private func personalSignalScore(_ item: HomeItem) -> Double {
+        var score = 30.0
+        if item.hasMemoryImages { score += 16 }
+        if item.memoryContext?.weatherKind != nil { score += 8 }
+        if item.memoryContext?.semanticPlace != nil { score += 8 }
+        if item.userEditedCategory == true { score += 8 }
+        score += min(Double(item.title.count), 18)
+        return score
+    }
+
+    private func repeatedSceneDetail(
+        label: String,
+        count: Int,
+        activeDays: Int,
+        timeHint: String?,
+        amountSpread: String?
+    ) -> String {
+        var parts = ["\(label)留下 \(count) 笔"]
+        if activeDays > 1 {
+            parts.append("分布在 \(activeDays) 天")
+        }
+        if let timeHint {
+            parts.append(timeHint)
+        }
+        if let amountSpread {
+            parts.append(amountSpread)
+        }
+        return parts.joined(separator: "，") + "。它比单看分类更能说明这段日子怎么过的。"
+    }
+
+    private func sceneSupportLine(items: [HomeItem], label: String) -> String {
+        let anchors = representativeSupportItems(from: items).map { item in
+            "\(calendarDayLabel(for: item.createdAt)) \(item.createdAt.zhBillTime) \(item.amount.formatted(.cny))"
+        }
+        guard !anchors.isEmpty else { return "\(label)的记录还不多，再多几笔会看得更准。" }
+        return "能对应上的记录：\(anchors.joined(separator: "；"))。"
+    }
+
+    private func representativeSupportItems(from items: [HomeItem]) -> [HomeItem] {
+        let sorted = items.sorted { lhs, rhs in
+            if lhs.userEditedTitle == rhs.userEditedTitle {
+                return lhs.createdAt > rhs.createdAt
+            }
+            return lhs.userEditedTitle == true
+        }
+        var days = Set<String>()
+        var result: [HomeItem] = []
+        for item in sorted {
+            let key = dayKey(for: item.createdAt)
+            guard !days.contains(key) || result.count < 1 else { continue }
+            result.append(item)
+            days.insert(key)
+            if result.count >= 3 { break }
+        }
+        return result
+    }
+
+    private func amountSpreadText(for items: [HomeItem]) -> String? {
+        let amounts = items.map(\.amount).filter { $0 > 0 }
+        guard let minAmount = amounts.min(), let maxAmount = amounts.max() else { return nil }
+        if abs(maxAmount - minAmount) < 0.01 {
+            return "金额都在 \(maxAmount.formatted(.cny))"
+        }
+        if maxAmount <= minAmount * 1.25 {
+            return "金额接近日常水平"
+        }
+        return nil
+    }
+
+    private func sceneTimeHint(for items: [HomeItem]) -> String? {
+        let hours = items.map { calendar.component(.hour, from: $0.createdAt) }
+        guard !hours.isEmpty else { return nil }
+        let morning = hours.filter { (6...10).contains($0) }.count
+        let noon = hours.filter { (11...14).contains($0) }.count
+        let evening = hours.filter { (17...21).contains($0) }.count
+        let night = hours.filter { $0 >= 22 || $0 < 5 }.count
+        let ranked = [
+            ("集中在早上", morning),
+            ("集中在饭点", noon),
+            ("集中在傍晚", evening),
+            ("有夜间记录", night)
+        ].sorted { $0.1 > $1.1 }
+        guard let top = ranked.first, top.1 >= 2 else { return nil }
+        return top.0
+    }
+
+    private func distinctSceneLabels(from rows: [TraceInsightRow], limit: Int) -> [String] {
+        var labels: [String] = []
+        var used = Set<LifeSceneKind>()
+        for row in rows {
+            let signal = row.signal
+            guard !used.contains(signal.kind) else { continue }
+            used.insert(signal.kind)
+            labels.append(readableSceneLabel(for: signal, items: [row.item]))
+            if labels.count >= limit { break }
+        }
+        return labels
+    }
+
+    private func readableSceneLabel(for signal: LifeSceneSignal, items: [HomeItem]) -> String {
+        let joined = items.map { "\($0.title) \($0.displayEmotionTag)" }.joined(separator: " ")
+        switch signal.kind {
+        case .breakfast: return "早餐"
+        case .quickMeal: return "饭点"
+        case .coffee: return containsAny(joined, ["奶茶", "饮品"]) ? "饮品" : "咖啡"
+        case .workMeal: return "工作餐"
+        case .commute: return "通勤"
+        case .cityRoute: return "出门办事"
+        case .convenienceSupply: return "临时补给"
+        case .groceries: return "买菜补货"
+        case .homeSupply: return "家用补给"
+        case .telecomBill: return "话费账单"
+        case .shopping: return "添置"
+        case .medicalVisit: return "就医检查"
+        case .medicineCare: return "用药护理"
+        case .fitness: return "锻炼恢复"
+        case .bodyCare: return "身体护理"
+        case .lodging: return "停留住宿"
+        case .social: return "见面人情"
+        case .leisure: return "放松安排"
+        case .errand: return "临时事务"
+        case .general: return signal.category.label
+        }
+    }
+
+    private func sceneLifeSummary(for kind: LifeSceneKind, activeDays: Int) -> String {
+        switch kind {
+        case .commute:
+            return activeDays > 1 ? "工作日路线" : "路上的来回"
+        case .workMeal, .quickMeal, .breakfast:
+            return "饭点节奏"
+        case .coffee:
+            return "忙里提神的小节点"
+        case .groceries, .homeSupply, .convenienceSupply:
+            return "生活补给"
+        case .medicalVisit, .medicineCare, .fitness, .bodyCare:
+            return "身体相关安排"
+        case .cityRoute:
+            return "外出和办事"
+        case .social:
+            return "见面和心意往来"
+        default:
+            return "反复出现的生活小事"
+        }
+    }
+
+    private func personalNoteSummary(for item: HomeItem, label: String) -> String {
+        let dayLabel = calendarDayLabel(for: item.createdAt)
+        switch item.category {
+        case .transport:
+            return "\(dayLabel)这笔是一次具体的\(label)，不是默认的交通记录。回头看时，可以从上班、下班，或者为了某件事出门这几个方向想起。"
+        case .dining:
+            return "\(dayLabel)这笔把\(label)写得更具体，说明那顿饭或那杯饮品在当天有一点位置。"
+        case .health:
+            return "\(dayLabel)这笔和身体安排有关，具体备注比金额更有用，后面回看恢复、问诊或护理会更清楚。"
+        default:
+            return "\(dayLabel)这笔留下了更具体的生活事实，适合作为这段时间的一个回看锚点。"
+        }
+    }
+
+    private func dayKey(for date: Date) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return "\(components.year ?? 0)-\(components.month ?? 0)-\(components.day ?? 0)"
     }
 
     private func peakDay(from items: [HomeItem]) -> (label: String, count: Int)? {
@@ -263,7 +628,7 @@ final class LifeInsightService {
         case .social:
             return "「\(name)」变多，主要来自见面、送礼或人情往来。"
         case .lodging:
-            return "「\(name)」通常意味着位置变了。这段时间可能有旅行、出差，或者一段临时停留。"
+            return "「\(name)」通常意味着位置变了。这段时间可以回头看看有没有旅行、出差，或者一段临时停留。"
         case .other:
             return "这些记录还没归进固定分类，但它们反复出现，可以回头看备注。"
         }

@@ -178,7 +178,7 @@ struct MemoryPreviewSheet: View {
                                 )
                             }
 
-                            Label("代表这笔", systemImage: "sparkle")
+                            Label("封面图", systemImage: "sparkle")
                                 .font(.system(size: 12, weight: .bold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 10)
@@ -219,7 +219,7 @@ struct MemoryPreviewSheet: View {
                             }
                         }
 
-                        Text("选一张最能代表这笔的图，复盘里会优先用这一张。")
+                        Text("选一张以后回看时最先看到的图。")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(AppColors.subtext)
                     }
@@ -509,7 +509,7 @@ struct MemoryRecordDetailSheet: View {
                 }
 
                 HStack(spacing: 5) {
-                    Text(selectedImageIsCover ? "代表这笔 \(selectedImageDisplayIndex)/\(memoryImages.count)" : "\(selectedImageDisplayIndex)/\(memoryImages.count)")
+                    Text(selectedImageIsCover ? "封面图 \(selectedImageDisplayIndex)/\(memoryImages.count)" : "\(selectedImageDisplayIndex)/\(memoryImages.count)")
                     Image(systemName: imageExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                         .font(.system(size: 9, weight: .bold))
                 }
@@ -622,7 +622,7 @@ struct MemoryRecordDetailSheet: View {
                 Button {
                     onSetCoverImage(selectedImageIndex)
                 } label: {
-                    Label(selectedImageIsCover ? "正在代表这笔" : "用这张代表这笔", systemImage: selectedImageIsCover ? "checkmark.circle.fill" : "sparkle")
+                    Label(selectedImageIsCover ? "正在优先显示" : "优先显示这张", systemImage: selectedImageIsCover ? "checkmark.circle.fill" : "sparkle")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(selectedImageIsCover ? AppColors.accent.opacity(0.82) : AppColors.text)
                         .frame(maxWidth: .infinity)
@@ -652,7 +652,7 @@ struct MemoryRecordDetailSheet: View {
                 .disabled(memoryImages.isEmpty)
             }
 
-            Text(selectedImageIsCover ? "以后回看这笔、做周月复盘时，会优先看到这张。" : "想让这张以后更容易被看到，就用它代表这笔。")
+            Text(selectedImageIsCover ? "以后回看这笔、做周月复盘时，会优先看到这张。" : "设好以后，回看这笔时会优先看到这张。")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
                 .lineLimit(2)

@@ -1979,7 +1979,7 @@ private struct WeeklyStoryShareCardView: View {
     private var posterPrimaryPhoto: some View {
         posterPhotoCard(
             anchor: posterAnchor(at: 0),
-            fallbackCaption: "那次见面留在这一张里",
+            fallbackCaption: "和朋友的一次聚会",
             height: 300,
             cornerRadius: 18,
             iconSize: 30
