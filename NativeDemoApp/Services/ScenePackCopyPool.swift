@@ -551,6 +551,10 @@ enum ScenePackCopyPool {
         SemanticBoundaryGuard.matchesPetSupply(text)
     }
 
+    private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.localizedCaseInsensitiveContains($0) }
+    }
+
     private static func dayKey(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.calendar = .current
