@@ -349,12 +349,12 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["尿不湿", "纸尿裤", "拉拉裤"]) { return "照护用品补齐" }
             if containsAny(text, ["辅食", "奶瓶", "安抚奶嘴", "托育费", "托班费", "幼儿园学费", "早教课"]) { return "宝宝照护补上" }
             if containsAny(text, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) { return "毛孩子口粮补上" }
-            if containsAny(text, ["猫砂", "尿垫", "冻干", "宠物罐头", "罐头"]) { return "毛孩子日常补给" }
+            if containsAny(text, ["猫砂", "尿垫", "猫冻干", "狗冻干", "宠物冻干", "猫罐头", "狗罐头", "宠物罐头"]) { return "毛孩子日常补给" }
             if containsAny(text, ["衣服", "上衣", "裤子", "裙", "外套", "内衣"]) { return "给衣柜添一件" }
             if containsAny(text, ["鞋", "袜"]) { return "脚下换新一点" }
             if containsAny(text, ["护肤", "洗面奶", "面霜", "防晒", "口红", "化妆"]) { return "洗护美妆补上" }
             if containsAny(text, ["手机", "耳机", "充电器", "数据线", "充电宝", "电脑", "键盘"]) { return "数码小物到位" }
-            if containsAny(text, ["书", "文具", "本子", "笔"]) { return "书桌添点东西" }
+            if containsAny(text, ["书", "文具", "本子", "笔"]) { return "书桌常用的补上" }
             if containsAny(text, ["花", "香薰", "摆件"]) { return "给日子添点好看" }
             if containsAny(text, ["快递", "运费"]) { return "路上的小费用" }
         case .daily:
@@ -362,7 +362,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["尿不湿", "纸尿裤", "拉拉裤"]) { return "照护用品补齐" }
             if containsAny(text, ["辅食", "奶瓶", "安抚奶嘴"]) { return "宝宝照护补上" }
             if containsAny(text, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) { return "毛孩子口粮补上" }
-            if containsAny(text, ["猫砂", "尿垫", "冻干", "宠物罐头", "罐头"]) { return "毛孩子日常补给" }
+            if containsAny(text, ["猫砂", "尿垫", "猫冻干", "狗冻干", "宠物冻干", "猫罐头", "狗罐头", "宠物罐头"]) { return "毛孩子日常补给" }
             if containsAny(text, ["纸巾", "卷纸", "抽纸", "湿巾"]) { return "纸品补上了" }
             if containsAny(text, ["洗衣液", "洗洁精", "清洁", "垃圾袋", "消毒"]) { return "清洁用品补齐" }
             if containsAny(text, ["洗发水", "沐浴露", "牙刷", "毛巾"]) { return "洗护日常补上" }
@@ -378,7 +378,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["直播打赏", "主播打赏", "抖音打赏", "直播礼物"]) { return "直播互动记下" }
             if containsAny(text, ["游戏", "点券", "皮肤"]) { return "娱乐里充一笔" }
             if containsAny(text, ["演唱会", "音乐节", "live", "话剧", "剧场"]) { return "看一场现场" }
-            if containsAny(text, ["展", "博物馆", "美术馆"]) { return "出去看点东西" }
+            if containsAny(text, ["展览", "看展", "博物馆", "美术馆"]) { return "出去看展一回" }
             if containsAny(text, ["ktv", "唱歌"]) { return "唱一会儿" }
             if containsAny(text, ["桌游", "密室", "剧本杀"]) { return "和人玩一局" }
         case .lodging:
@@ -649,8 +649,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
     }
 
     private static func isWeekend(_ date: Date) -> Bool {
-        let weekday = Calendar.current.component(.weekday, from: date)
-        return weekday == 1 || weekday == 7
+        RecordCalendarContext.isNonWorkday(date)
     }
 
     private static func containsWorkMealKeyword(_ text: String) -> Bool {
@@ -676,10 +675,11 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
     private static func weekendDiningTag(for date: Date, amount: Double) -> String {
         let hour = Calendar.current.component(.hour, from: date)
+        let prefix = RecordCalendarContext.dayKind(for: date) == .holiday ? "假期" : "周末"
         switch hour {
-        case 5..<10: return "周末早餐"
-        case 11..<14: return "周末午餐"
-        case 17..<21: return "周末晚饭"
+        case 5..<10: return "\(prefix)早餐"
+        case 11..<14: return "\(prefix)午餐"
+        case 17..<21: return "\(prefix)晚饭"
         default: return amount >= 40 ? "认真吃了一顿" : "简单吃一顿"
         }
     }
@@ -1020,17 +1020,17 @@ enum RecordSemanticLexicon {
         version: 0,
         keywordRules: [
             .init(category: .transport, score: 4.0, keywords: ["地铁", "公交", "打车", "滴滴", "花小猪", "洗车", "汽车保养", "车辆保养", "保养车", "ETC", "etc", "充车", "充电桩", "电车充电", "汽车充电", "车辆充电", "新能源充电", "补能", "高铁", "机票", "机场", "路费", "通勤"]),
-            .init(category: .dining, score: 4.8, keywords: ["咖啡", "奶茶", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "宵夜", "外卖", "饭", "餐", "一顿", "这顿", "吃", "垫一下", "垫一口", "夜里补", "热食", "热乎", "轻食", "小食", "点心", "补点能量", "吃一口", "饮品", "饮料", "喝的", "可乐", "雪碧", "汽水", "果汁", "水溶", "c100", "维C", "维c", "维他", "拿铁", "美式", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "七欣天", "海底捞", "老乡鸡", "塔斯汀", "库迪", "绝味", "鸭脖", "鸭货", "周黑鸭", "煌上煌", "袁记云饺", "萨莉亚", "火锅", "烤肉", "烤鸭", "烧鸭", "卤鸭", "鸭肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "生蚝", "烤生蚝", "海鲜", "鱿鱼", "铁板鱿鱼", "烧烤", "夜市", "夜摊", "大排档", "小吃", "美团外卖", "饿了么"]),
+            .init(category: .dining, score: 4.8, keywords: ["咖啡", "奶茶", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "宵夜", "外卖", "吃顿饭", "一顿饭", "垫一下", "垫一口", "夜里补", "热食", "热乎", "轻食", "小食", "点心", "补点能量", "吃一口", "饮品", "饮料", "喝的", "可乐", "雪碧", "汽水", "果汁", "水溶", "c100", "维C", "维c", "维他", "拿铁", "美式", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "七欣天", "海底捞", "老乡鸡", "塔斯汀", "库迪", "绝味", "鸭脖", "鸭货", "周黑鸭", "煌上煌", "袁记云饺", "萨莉亚", "火锅", "烤肉", "烤鸭", "烧鸭", "卤鸭", "鸭肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "生蚝", "烤生蚝", "海鲜", "鱿鱼", "铁板鱿鱼", "烧烤", "夜市", "夜摊", "大排档", "小吃", "美团外卖", "饿了么"]),
             .init(category: .dining, score: 2.8, keywords: ["便利蜂", "便利店", "全家", "罗森", "711", "7-11", "美宜佳", "茶叶蛋", "饭团", "关东煮"]),
-            .init(category: .shopping, score: 4.0, keywords: ["淘宝", "京东", "拼多多", "购物", "下单", "快递", "衣服", "鞋", "数码", "耳机", "手机", "电脑", "Office 365", "Microsoft 365", "Adobe订阅", "Creative Cloud", "Notion订阅", "Notion会员", "充电器", "数据线", "充电宝", "渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "谷子", "潮玩", "吧唧", "徽章", "亚克力", "立牌", "盲盒", "泡泡玛特", "POP MART", "POPMART", "LABUBU", "棉花娃娃", "痛包", "同人本", "乙游周边", "漫展周边", "乐器", "茶具", "咖啡器具"]),
-            .init(category: .daily, score: 6.4, keywords: ["奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "奶瓶", "安抚奶嘴", "宝宝湿巾", "婴儿湿巾", "童装", "儿童座椅", "推车", "托育费", "托班费", "幼儿园学费", "早教课", "狗粮", "猫粮", "猫砂", "宠物粮", "宠物口粮", "尿垫", "冻干", "宠物罐头"]),
-            .init(category: .daily, score: 3.0, keywords: ["超市", "日用品", "纸巾", "洗衣", "打印", "理发", "宠物", "买菜", "生鲜", "盒马", "叮咚买菜", "小象超市", "朴朴超市", "美团闪购", "京东秒送", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈"]),
+            .init(category: .shopping, score: 4.0, keywords: ["淘宝", "京东", "拼多多", "购物", "下单", "快递", "衣服", "外套", "裤子", "裙", "数码", "耳机", "手机", "电脑", "Office 365", "Microsoft 365", "Adobe订阅", "Creative Cloud", "Notion订阅", "Notion会员", "充电器", "数据线", "充电宝", "渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "谷子", "潮玩", "吧唧", "徽章", "亚克力", "立牌", "盲盒", "泡泡玛特", "POP MART", "POPMART", "LABUBU", "棉花娃娃", "痛包", "同人本", "乙游周边", "漫展周边", "乐器", "茶具", "咖啡器具"]),
+            .init(category: .daily, score: 6.4, keywords: SemanticBoundaryGuard.babyStrongKeywords + SemanticBoundaryGuard.petStrongKeywords),
+            .init(category: .daily, score: 3.0, keywords: ["超市", "日用品", "纸巾", "洗衣", "打印", "理发", "宠物用品", "买菜", "生鲜", "盒马", "叮咚买菜", "小象超市", "朴朴超市", "美团闪购", "京东秒送", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈"]),
             .init(category: .daily, score: 4.6, keywords: ["纸巾", "抽纸", "卷纸", "湿巾", "洗衣液", "洗衣凝珠", "洗洁精", "垃圾袋", "清洁", "日化", "日用品", "家用", "补货", "买菜", "生鲜", "水果", "蔬菜", "肉禽", "水产", "鸡蛋", "给家补货"]),
             .init(category: .entertainment, score: 3.0, keywords: ["电影", "影院", "游戏", "网吧", "网咖", "上网费", "直播打赏", "主播打赏", "抖音打赏", "直播礼物", "B站会员", "哔哩哔哩会员", "爱奇艺会员", "腾讯视频会员", "优酷会员", "芒果TV会员", "网易云会员", "网易云音乐会员", "QQ音乐会员", "喜马拉雅会员", "百度网盘会员", "WPS会员", "iCloud订阅", "Apple Music", "演唱会", "门票"]),
             .init(category: .lodging, score: 4.0, keywords: ["酒店", "民宿", "住宿", "宾馆", "电竞酒店"]),
-            .init(category: .health, score: 4.0, keywords: ["药店", "药房", "医院", "挂号", "门诊", "体检", "洗牙", "配镜", "验光", "医美", "医美脱毛", "光子嫩肤", "水光针", "健身", "健身房", "健身卡", "月卡", "年卡", "私教", "团课", "课程", "跑步", "理疗", "康复", "按摩", "补剂", "蛋白", "运动装备", "运动鞋", "运动服"]),
+            .init(category: .health, score: 4.0, keywords: ["药店", "药房", "买药", "医院", "挂号", "门诊", "体检", "洗牙", "配镜", "验光", "医美", "医美脱毛", "光子嫩肤", "水光针", "健身", "健身房", "健身卡", "月卡", "年卡", "私教", "团课", "课程", "跑步", "理疗", "康复", "按摩", "补剂", "蛋白", "能量胶", "运动装备", "运动鞋", "运动服"]),
             .init(category: .home, score: 4.0, keywords: ["房租", "水电", "电费", "燃气", "物业", "宽带", "暖气费", "取暖费", "供暖费", "采暖费", "热力费", "供热费", "暖气缴费", "热力公司", "网上国网", "国网", "保洁", "家政", "钟点工", "开荒保洁", "上门保洁", "深度保洁", "擦玻璃", "清洗油烟机", "空调清洗", "搬家", "搬家公司", "货拉拉搬家"]),
-            .init(category: .social, score: 4.0, keywords: ["红包", "礼物", "请客", "份子钱", "随礼", "探望", "白事", "白事随礼", "奠仪", "帛金", "花圈"]),
+            .init(category: .social, score: 4.0, keywords: ["红包", "送礼", "请客", "份子钱", "随礼", "探望", "白事", "白事随礼", "奠仪", "帛金", "花圈"]),
             .init(category: .other, score: 3.0, keywords: ["驾校", "驾校报名费", "驾考", "学车", "彩票", "福彩", "体彩", "刮刮乐"]),
         ],
         ocrKeywordRules: [
@@ -1044,22 +1044,26 @@ enum RecordSemanticLexicon {
             .init(keywords: ["高铁", "机票", "机场", "车站", "返程", "出发"], scores: [.transport: 3.2, .lodging: 1.2, .entertainment: 1.0])
         ],
         emotionKeywordRules: [
-            .init(id: "fitness", category: .health, keywords: ["运动", "健身", "健身房", "训练", "跑步", "瑜伽", "补给", "能量", "护具", "恢复", "锻炼", "理疗", "康复", "运动装备"]),
+            .init(id: "fitness", category: .health, keywords: ["健身", "健身房", "训练", "跑步", "瑜伽", "能量胶", "护具", "锻炼", "理疗", "康复", "运动装备"]),
             .init(id: "drink", category: .dining, keywords: ["饮料", "喝的", "可乐", "雪碧", "汽水", "果汁", "茶饮", "奶茶", "咖啡", "拿铁", "美式", "冰饮", "水溶", "c100", "维C", "维c", "维他"]),
             .init(id: "transport", category: .transport, keywords: ["地铁", "公交", "打车", "出租", "网约车", "路费", "车程", "通勤", "上班", "下班", "返程", "回家"]),
             .init(id: "meal", category: .dining, keywords: ["食堂", "午餐", "午饭", "简餐", "轻食", "小食", "点心", "热饭", "外卖", "饭点", "吃一口", "夜宵", "晚饭", "早餐", "早饭", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "七欣天", "海底捞", "老乡鸡", "塔斯汀", "绝味", "鸭脖", "鸭货", "袁记云饺", "萨莉亚", "火锅", "烤肉", "烤鸭", "烧鸭", "卤鸭", "鸭肉", "麻辣烫", "卤味", "生蚝", "烤生蚝", "鱿鱼", "铁板鱿鱼", "烧烤", "夜市", "大排档", "便当", "盖饭"]),
             .init(id: "convenience", category: .dining, keywords: ["便利蜂", "便利店", "全家", "罗森", "711", "7-11", "美宜佳", "茶叶蛋", "饭团", "关东煮", "便当", "三明治"]),
-            .init(id: "baby_supply", category: .daily, keywords: ["宝宝", "孩子", "婴儿", "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "奶瓶", "安抚奶嘴", "宝宝湿巾", "婴儿湿巾", "童装", "儿童座椅", "推车"]),
-            .init(id: "pet_supply", category: .daily, keywords: ["宠物", "毛孩子", "毛孩", "狗粮", "猫粮", "猫砂", "宠物粮", "宠物口粮", "尿垫", "冻干", "罐头", "宠物罐头", "驱虫", "宠物医院", "洗护"]),
+            .init(id: "baby_supply", category: .daily, keywords: SemanticBoundaryGuard.babyStrongKeywords),
+            .init(id: "pet_supply", category: .daily, keywords: SemanticBoundaryGuard.petStrongKeywords),
         ]
     )
 
     static func matchingCategories(in text: String) -> Set<HomeItem.Category> {
         let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return [] }
-        return Set(keywordRules.compactMap { rule in
+        var categories = Set(keywordRules.compactMap { rule in
             rule.keywords.contains(where: { normalized.contains($0.lowercased()) }) ? rule.category : nil
         })
+        if SemanticBoundaryGuard.familyCareKind(in: normalized) != nil {
+            categories.insert(.daily)
+        }
+        return categories
     }
 
     static func bestMatchingCategory(in text: String) -> HomeItem.Category? {
@@ -1068,6 +1072,9 @@ enum RecordSemanticLexicon {
         var scores: [HomeItem.Category: Double] = [:]
         for rule in keywordRules where rule.keywords.contains(where: { normalized.contains($0.lowercased()) }) {
             scores[rule.category, default: 0] += rule.score
+        }
+        if SemanticBoundaryGuard.familyCareKind(in: normalized) != nil {
+            scores[.daily, default: 0] += 6.4
         }
         guard !scores.isEmpty else { return nil }
         return HomeItem.Category.allCases
@@ -1167,7 +1174,7 @@ enum RecordSemanticLexicon {
         emptyNoteTitle,
         "早间一段路", "公共交通一段", "日常出行",
         "早餐先记下", "中午一顿饭", "晚饭记一笔", "认真吃一顿", "日常餐饮",
-        "添置一件东西", "日常添置", "日用补齐", "日用记录",
+        "买到一件需要的", "日常添置", "日用补齐", "日用记录",
         "一次娱乐安排", "轻量娱乐", "住宿安排", "短暂停留",
         "健康安排", "健康记录", "居家安排", "居家补给",
         "心意往来", "见面记录", "单独记录", "日常记录",
@@ -1177,7 +1184,14 @@ enum RecordSemanticLexicon {
         let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return [] }
         return Set(emotionKeywordRules.compactMap { rule in
-            rule.keywords.contains(where: { normalized.contains($0.lowercased()) }) ? rule.id : nil
+            guard rule.keywords.contains(where: { normalized.contains($0.lowercased()) }) else { return nil }
+            if rule.id == "baby_supply" {
+                return SemanticBoundaryGuard.matchesBabySupply(normalized) ? rule.id : nil
+            }
+            if rule.id == "pet_supply" {
+                return SemanticBoundaryGuard.matchesPetSupply(normalized) ? rule.id : nil
+            }
+            return rule.id
         })
     }
 
@@ -1217,7 +1231,7 @@ enum RecordSemanticLexicon {
             if (21...23).contains(hour) || (0..<5).contains(hour) { return "夜里吃点东西" }
             return amount >= 40 ? "认真吃一顿" : "日常餐饮"
         case .shopping:
-            return amount >= 100 ? "添置一件东西" : "日常添置"
+            return amount >= 100 ? "买到一件需要的" : "日常添置"
         case .daily:
             return amount >= 50 ? "日用补齐" : "日用记录"
         case .entertainment:

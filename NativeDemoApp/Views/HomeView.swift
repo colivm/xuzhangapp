@@ -731,7 +731,7 @@ struct HomeView: View {
             return homeViewModel.weekLifeThemeText
         }
         return homeViewModel.weekTopCategoryText != "暂无"
-            ? "最近「\(homeViewModel.weekTopCategoryText)」这类记录多一点。"
+            ? "最近「\(homeViewModel.weekTopCategoryText)」记得多一点。"
             : "先记几笔，这里会长出最近的生活线索。"
     }
 
@@ -3359,7 +3359,7 @@ struct BillPlaybackSheet: View {
             }
             return "今天买了杯喝的。"
         case .convenienceSupply, .groceries, .homeSupply:
-            return "买了点需要的东西。"
+            return "家里常用的补上了。"
         case .medicalVisit, .medicineCare, .fitness, .bodyCare:
             return "今天身体这边有笔安排。"
         default:
@@ -3410,7 +3410,7 @@ struct BillPlaybackSheet: View {
         case .convenienceSupply, .groceries, .homeSupply:
             return "今天补了些需要的"
         case .shopping:
-            return "今天买到了一些东西"
+            return "今天买到几样需要的"
         case .medicalVisit, .medicineCare:
             return "今天身体这边没落下"
         case .fitness, .bodyCare:
@@ -3439,9 +3439,9 @@ struct BillPlaybackSheet: View {
         case .coffee:
             return "咖啡饮品出现了 \(dominantScene.count) 次。有的是提神，有的是解渴，先照着发生的顺序放好。"
         case .convenienceSupply, .groceries, .homeSupply:
-            return "补给出现了 \(dominantScene.count) 次，都是让今天少一点缺口的小东西。"
+            return "日用相关记了 \(dominantScene.count) 次，家里常用的今天补上不少。"
         case .shopping:
-            return "添置出现了 \(dominantScene.count) 次，可能是需要，也可能是兴趣里的一点投入。"
+            return "购物相关记了 \(dominantScene.count) 次，能看出今天买了哪些具体物件。"
         case .medicalVisit, .medicineCare:
             return "健康相关出现了 \(dominantScene.count) 次，看诊、用药或检查都先记清楚。"
         case .fitness, .bodyCare:
@@ -3449,7 +3449,7 @@ struct BillPlaybackSheet: View {
         case .social:
             return "人情往来出现了 \(dominantScene.count) 次，日子里也有和别人相连的部分。"
         default:
-            return "这类记录出现了 \(dominantScene.count) 次，今天的主要内容更清楚。"
+            return "\(dominantScene.signal.label)记了 \(dominantScene.count) 次，今天这条线更清楚。"
         }
     }
 

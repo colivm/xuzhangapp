@@ -62,35 +62,95 @@ enum LifeSceneSemanticService {
             ?? MerchantBrandCatalog.matchBrand(in: item.title)
         let text = semanticText(item: item, brand: brand)
         var candidates = signals(category: item.category, text: text, brand: brand)
-        candidates.append(defaultSignal(for: item.category))
-        return candidates.sorted { lhs, rhs in
+        let fallback = defaultSignal(for: item.category)
+        candidates.append(fallback)
+        let ranked = candidates.sorted { lhs, rhs in
             if abs(lhs.score - rhs.score) < 0.001 {
                 return lhs.priority < rhs.priority
             }
             return lhs.score > rhs.score
-        }.first ?? defaultSignal(for: item.category)
+        }
+        return resolvedSignal(from: ranked, fallback: fallback)
     }
 
     static func dominantScene(in items: [HomeItem]) -> (signal: LifeSceneSignal, count: Int, latest: Date)? {
         let rows = items.map { (item: $0, signal: classify($0)) }
         let grouped = Dictionary(grouping: rows, by: { $0.signal.kind })
-        return grouped.compactMap { _, entries -> (signal: LifeSceneSignal, count: Int, latest: Date, score: Double)? in
+        return grouped.compactMap { _, entries -> (signal: LifeSceneSignal, count: Int, latest: Date, score: Double, value: Double)? in
             guard let strongest = entries.map({ $0.signal }).max(by: { $0.score < $1.score }) else { return nil }
             let latest = entries.map({ $0.item.createdAt }).max() ?? .distantPast
             let score = entries.reduce(0) { $0 + $1.signal.score }
-            return (strongest, entries.count, latest, score)
+            let value = dominantSceneValue(signal: strongest, count: entries.count, totalScore: score, latest: latest)
+            return (strongest, entries.count, latest, score, value)
         }
         .sorted { lhs, rhs in
-            if lhs.count == rhs.count {
-                if abs(lhs.score - rhs.score) < 0.001 {
+            if abs(lhs.value - rhs.value) < 0.001 {
+                if lhs.count == rhs.count {
                     return lhs.latest > rhs.latest
                 }
-                return lhs.score > rhs.score
+                return lhs.count > rhs.count
             }
-            return lhs.count > rhs.count
+            return lhs.value > rhs.value
         }
         .first
         .map { ($0.signal, $0.count, $0.latest) }
+    }
+
+    private static func resolvedSignal(from ranked: [LifeSceneSignal], fallback: LifeSceneSignal) -> LifeSceneSignal {
+        guard let best = ranked.first else { return fallback }
+        guard best.confidenceTier != .weak else { return fallback }
+        guard let second = ranked.dropFirst().first else { return best }
+        let requiredGap: Double
+        switch best.confidenceTier {
+        case .strong:
+            requiredGap = 0.35
+        case .medium:
+            requiredGap = 0.55
+        case .weak:
+            requiredGap = 0.85
+        }
+        if best.category != fallback.category,
+           best.score < 7.0,
+           best.score - second.score < requiredGap {
+            return fallback
+        }
+        return best
+    }
+
+    private static func dominantSceneValue(
+        signal: LifeSceneSignal,
+        count: Int,
+        totalScore: Double,
+        latest: Date
+    ) -> Double {
+        let countWeight = min(Double(count), 4) * 1.25
+        let averageScore = totalScore / max(Double(count), 1)
+        let recencyHours = max(0, Date().timeIntervalSince(latest) / 3600)
+        let recencyWeight = max(0, 1.2 - min(recencyHours / 72, 1.2))
+        return averageScore + countWeight + narrativeBoost(for: signal) + recencyWeight
+    }
+
+    private static func narrativeBoost(for signal: LifeSceneSignal) -> Double {
+        switch signal.kind {
+        case .medicalVisit:
+            return 4.2
+        case .lodging:
+            return 3.8
+        case .social:
+            return 3.2
+        case .fitness, .bodyCare:
+            return 2.4
+        case .commute:
+            return 1.8
+        case .shopping:
+            return signal.confidenceTier == .strong ? 1.6 : 0.4
+        case .homeSupply:
+            return signal.label == "家庭照护" ? 2.6 : 0.6
+        case .telecomBill, .convenienceSupply, .groceries:
+            return 0.2
+        default:
+            return signal.confidenceTier == .strong ? 1.0 : 0
+        }
     }
 
     static func weeklyCopy(for signal: LifeSceneSignal, count: Int) -> LifeSceneWeeklyCopy {
@@ -380,7 +440,7 @@ enum LifeSceneSemanticService {
         if containsAny(text, ["夜市", "夜摊", "大排档", "生蚝", "烤生蚝", "鱿鱼", "铁板鱿鱼", "烧烤", "烤串", "串串"]) {
             add(.quickMeal, 6.9, .dining, "夜市小吃", "#夜市小吃", 17)
         }
-        if containsAny(text, ["午餐", "午饭", "晚餐", "晚饭", "外卖", "简餐", "热饭", "吃一口", "饭点", "夜宵", "面", "粉", "馄饨", "盖饭", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "七欣天", "海底捞", "老乡鸡", "塔斯汀", "袁记云饺", "萨莉亚", "火锅", "烤肉", "烤鸭", "烧鸭", "卤鸭", "鸭肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "便当"]) {
+        if containsAny(text, ["午餐", "午饭", "晚餐", "晚饭", "外卖", "简餐", "热饭", "吃一口", "饭点", "夜宵", "馄饨", "盖饭", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "七欣天", "海底捞", "老乡鸡", "塔斯汀", "袁记云饺", "萨莉亚", "火锅", "烤肉", "烤鸭", "烧鸭", "卤鸭", "鸭肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "便当"]) {
             add(.quickMeal, 6.2, .dining, "饭点外卖", "#饭点外卖", 22)
         }
         if containsAny(text, ["咖啡", "拿铁", "美式", "奶茶", "饮品", "饮料", "喝的", "茶饮", "可乐", "雪碧", "汽水", "果汁", "柠檬茶", "水溶", "c100", "维c", "维C", "维他", "提神", "库迪"]) {
@@ -395,7 +455,7 @@ enum LifeSceneSemanticService {
         if containsAny(text, ["便利蜂", "便利店", "全家", "罗森", "7-11", "711", "美宜佳", "茶叶蛋", "饭团", "关东煮", "小食"]) {
             add(.convenienceSupply, 6.6, .daily, "便利店补给", "#便利店", 26)
         }
-        if containsAny(text, ["买菜", "食材", "盒马", "叮咚", "小象超市", "京东到家", "京东秒送", "朴朴", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈", "菜场", "水果", "厨房", "饭桌", "生鲜", "蔬菜", "鸡蛋", "淘宝买菜", "美团买菜", "牛奶", "鲜奶", "纯牛奶", "酸奶", "认养一头牛", "特仑苏", "伊利", "蒙牛", "光明", "金典", "简爱", "悦鲜活", "奶粉"]) {
+        if containsAny(text, ["买菜", "食材", "盒马", "叮咚", "小象超市", "京东到家", "京东秒送", "朴朴", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈", "菜场", "水果", "饭桌", "生鲜", "蔬菜", "鸡蛋", "淘宝买菜", "美团买菜", "牛奶", "鲜奶", "纯牛奶", "酸奶", "认养一头牛", "特仑苏", "伊利", "蒙牛", "光明", "金典", "简爱", "悦鲜活", "奶粉"]) {
             add(.groceries, 6.6, .daily, "超市买菜", "#超市买菜", 31)
         }
         if containsAny(text, ["纸巾", "洗衣液", "洗洁精", "清洁", "垃圾袋", "洗发水", "沐浴露", "牙刷", "毛巾", "美团闪购", "即时零售", "给家补货"]) {
@@ -407,7 +467,7 @@ enum LifeSceneSemanticService {
         if containsAny(text, ["保洁", "家政", "钟点工", "开荒保洁", "上门保洁", "深度保洁", "擦玻璃", "清洗油烟机", "空调清洗", "搬家", "搬家公司", "货拉拉搬家", "网上国网", "国网", "暖气费", "取暖费", "供暖费", "采暖费", "热力费", "供热费", "暖气缴费", "热力公司", "水费", "电费", "燃气", "物业", "宽带"]) {
             add(.homeSupply, 6.5, .home, "居家账单", "#居家安排", 35)
         }
-        if containsAny(text, ["宝宝", "孩子", "婴儿", "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "奶瓶", "安抚奶嘴", "宝宝湿巾", "婴儿湿巾", "童装", "儿童座椅", "推车", "托育费", "托班费", "幼儿园学费", "早教课", "宠物", "毛孩子", "毛孩", "狗粮", "猫粮", "猫砂", "宠物粮", "宠物口粮", "尿垫", "冻干", "宠物罐头", "驱虫", "宠物医院", "洗护"]) {
+        if SemanticBoundaryGuard.familyCareKind(in: text) != nil {
             add(.homeSupply, 6.9, .daily, "家庭照护", "#照护补给", 13)
         }
         if containsAny(text, ["打印", "复印", "证件照", "配钥匙", "钥匙", "修锁", "手续费", "服务费", "押金"]) {
@@ -417,7 +477,7 @@ enum LifeSceneSemanticService {
             add(.shopping, 6.3, .shopping, "数字服务", "#数字订阅", 45)
         }
         if !containsTelecomBillCue(text),
-           containsAny(text, ["淘宝", "京东", "拼多多", "购物", "下单", "快递", "衣服", "鞋", "护肤", "充电器", "数据线", "充电宝", "耳机", "手机", "文具", "渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "谷子", "潮玩", "吧唧", "徽章", "亚克力", "立牌", "盲盒", "泡泡玛特", "POP MART", "POPMART", "LABUBU", "棉花娃娃", "痛包", "同人本", "乙游周边", "漫展周边", "乐器", "茶具", "咖啡器具"]) {
+           containsAny(text, ["淘宝", "京东", "拼多多", "购物", "下单", "快递", "衣服", "外套", "裤子", "裙", "护肤", "充电器", "数据线", "充电宝", "耳机", "手机", "文具", "渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "谷子", "潮玩", "吧唧", "徽章", "亚克力", "立牌", "盲盒", "泡泡玛特", "POP MART", "POPMART", "LABUBU", "棉花娃娃", "痛包", "同人本", "乙游周边", "漫展周边", "乐器", "茶具", "咖啡器具"]) {
             add(.shopping, 6.1, .shopping, "网购添置", "#快递到了", 46)
         }
         if containsAny(text, ["医院", "门诊", "诊所", "挂号", "问诊", "体检", "检查", "拍片", "验血", "口腔", "牙科", "洗牙", "配镜", "验光", "医美", "医美脱毛", "光子嫩肤", "水光针"]) {
@@ -426,7 +486,7 @@ enum LifeSceneSemanticService {
         if containsAny(text, ["药店", "药房", "买药", "用药", "感冒", "退烧", "消炎", "止痛", "维生素", "眼药水", "创可贴"]) {
             add(.medicineCare, 7.0, .health, "用药护理", "#用药护理", 8)
         }
-        if containsAny(text, ["健身", "健身卡", "月卡", "年卡", "私教", "团课", "跑步", "瑜伽", "运动", "训练", "球场", "游泳", "课程", "锻炼"]) {
+        if containsAny(text, ["健身", "健身卡", "月卡", "年卡", "私教", "团课", "跑步", "瑜伽", "训练", "球场", "游泳", "课程", "锻炼"]) {
             add(.fitness, 6.8, .health, "锻炼", "#锻炼", 14)
         }
         if containsAny(text, ["按摩", "理疗", "康复", "护具", "筋膜", "贴膏", "膏药", "护理"]) {
@@ -435,10 +495,10 @@ enum LifeSceneSemanticService {
         if containsAny(text, ["酒店", "宾馆", "民宿", "住宿", "客栈", "电竞酒店", "房费", "续住"]) {
             add(.lodging, 6.6, .lodging, "停留住宿", "#住宿", 50)
         }
-        if containsAny(text, ["红包", "礼物", "送礼", "份子", "随礼", "生日", "探望", "拜访", "请客", "聚餐", "朋友", "白事", "白事随礼", "奠仪", "帛金", "花圈"]) {
+        if containsAny(text, ["红包", "送礼", "伴手礼", "份子", "随礼", "生日礼物", "生日", "探望", "拜访", "请客", "聚餐", "朋友", "白事", "白事随礼", "奠仪", "帛金", "花圈"]) {
             add(.social, 6.3, .social, "人情往来", "#人情", 55)
         }
-        if containsAny(text, ["电影", "影院", "游戏", "网吧", "网咖", "上网费", "直播打赏", "主播打赏", "抖音打赏", "直播礼物", "B站会员", "哔哩哔哩会员", "爱奇艺会员", "腾讯视频会员", "优酷会员", "芒果TV会员", "网易云会员", "网易云音乐会员", "QQ音乐会员", "喜马拉雅会员", "百度网盘会员", "WPS会员", "iCloud订阅", "Apple Music", "演唱会", "音乐节", "剧场", "展", "博物馆", "ktv", "唱歌", "桌游"]) {
+        if containsAny(text, ["电影", "影院", "游戏", "网吧", "网咖", "上网费", "直播打赏", "主播打赏", "抖音打赏", "直播礼物", "B站会员", "哔哩哔哩会员", "爱奇艺会员", "腾讯视频会员", "优酷会员", "芒果TV会员", "网易云会员", "网易云音乐会员", "QQ音乐会员", "喜马拉雅会员", "百度网盘会员", "WPS会员", "iCloud订阅", "Apple Music", "演唱会", "音乐节", "剧场", "展览", "看展", "博物馆", "ktv", "唱歌", "桌游"]) {
             add(.leisure, 6.1, .entertainment, "放松安排", "#放松", 60)
         }
         if containsAny(text, ["驾校", "驾校报名费", "驾考", "学车", "彩票", "福彩", "体彩", "刮刮乐"]) {

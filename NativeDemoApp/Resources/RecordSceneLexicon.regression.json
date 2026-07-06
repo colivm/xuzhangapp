@@ -476,6 +476,77 @@
       "amount": 18,
       "inputTitle": "全家纸巾",
       "expectedCategory": "日用"
+    },
+    {
+      "id": "manual-kitchen-wipes-must-not-be-baby",
+      "mode": "manual",
+      "amount": 19.9,
+      "inputTitle": "厨房湿巾",
+      "expectedCategory": "日用",
+      "expectedEmotionRule": "not:baby_supply"
+    },
+    {
+      "id": "manual-plain-wipes-must-not-be-baby",
+      "mode": "manual",
+      "amount": 12.9,
+      "inputTitle": "湿巾",
+      "expectedCategory": "日用",
+      "expectedEmotionRule": "not:baby_supply"
+    },
+    {
+      "id": "manual-plain-child-stays-neutral",
+      "mode": "manual",
+      "amount": 29,
+      "inputTitle": "孩子",
+      "expectedCategory": null,
+      "expectedEmotionRule": "not:baby_supply"
+    },
+    {
+      "id": "manual-plain-pet-word-stays-neutral",
+      "mode": "manual",
+      "amount": 29,
+      "inputTitle": "宠物",
+      "expectedCategory": null,
+      "expectedEmotionRule": "not:pet_supply"
+    },
+    {
+      "id": "manual-pet-hospital-is-family-care",
+      "mode": "manual",
+      "amount": 198,
+      "inputTitle": "宠物医院",
+      "expectedCategory": "日用",
+      "expectedEmotionRule": "pet_supply"
+    },
+    {
+      "id": "manual-plain-freeze-dried-stays-neutral",
+      "mode": "manual",
+      "amount": 29,
+      "inputTitle": "冻干",
+      "expectedCategory": null,
+      "expectedEmotionRule": "not:pet_supply"
+    },
+    {
+      "id": "manual-plain-can-stays-neutral",
+      "mode": "manual",
+      "amount": 18,
+      "inputTitle": "罐头",
+      "expectedCategory": null,
+      "expectedEmotionRule": "not:pet_supply"
+    },
+    {
+      "id": "manual-plain-sport-stays-neutral",
+      "mode": "manual",
+      "amount": 36,
+      "inputTitle": "运动",
+      "expectedCategory": null,
+      "expectedEmotionRule": "not:fitness"
+    },
+    {
+      "id": "manual-live-gift-is-entertainment",
+      "mode": "manual",
+      "amount": 30,
+      "inputTitle": "直播礼物",
+      "expectedCategory": "娱乐"
     }
   ]
 }

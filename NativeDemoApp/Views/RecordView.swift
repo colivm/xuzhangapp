@@ -1,4 +1,4 @@
-﻿import SwiftUI
+import SwiftUI
 import PhotosUI
 import UIKit
 
@@ -378,14 +378,11 @@ struct RecordView: View {
 
     private func containsPetKeyword(_ text: String) -> Bool {
         let petName = settingsViewModel.petNickname.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !petName.isEmpty, text.contains(petName) { return true }
-        let keywords = ["宠物", "猫粮", "狗粮", "猫砂", "狗窝", "猫窝", "牵引绳", "冻干", "驱虫", "宠物医院", "洗护美容", "毛孩子", "毛孩"]
-        return keywords.contains { text.contains($0) }
+        return SemanticBoundaryGuard.matchesPetSupply(text, petName: petName)
     }
 
     private func containsBabyKeyword(_ text: String) -> Bool {
-        let keywords = ["宝宝", "孩子", "婴儿", "奶粉", "尿不湿", "纸尿裤", "辅食", "湿巾", "童装", "早教", "早教课", "托育费", "托班费", "幼儿园学费", "儿童座椅", "推车"]
-        return keywords.contains { text.contains($0) }
+        SemanticBoundaryGuard.matchesBabySupply(text)
     }
 
     private func containsFitnessKeyword(_ text: String) -> Bool {
@@ -415,7 +412,7 @@ struct RecordView: View {
         case "travel":
             return "会员可直接换到出去玩这一包，把路费、住宿和门票放回同一段行程里。"
         case "family":
-            return "会员可直接换到娃和毛孩这一包，奶粉尿不湿、宠物粮猫砂和洗护就医都能放回照护场景。"
+            return "会员可直接换到娃和毛孩这一包，奶粉尿不湿、宠物粮猫砂和宠物洗护就医都能放回照护场景。"
         case "care":
             return "会员可直接换到身体相关角度，区分健身房、运动装备、理疗和恢复。"
         default:
@@ -455,7 +452,8 @@ struct RecordView: View {
             historyItems: homeViewModel.items,
             allowPetCopy: settingsViewModel.petCompanionEnabled,
             variant: variant,
-            allowTravelSpecificCopy: !keepSelectedCategory || containsTravelKeyword(homeViewModel.inputTitle)
+            allowTravelSpecificCopy: !keepSelectedCategory || containsTravelKeyword(homeViewModel.inputTitle),
+            factText: homeViewModel.inputTitle
         )
         if !keepSelectedCategory {
             activeScenePack = pack
@@ -816,17 +814,7 @@ struct RecordView: View {
         if title == homeViewModel.recordPrefillResult?.title?.trimmingCharacters(in: .whitespacesAndNewlines) {
             return false
         }
-        let brandId = MerchantBrandCatalog.matchBrand(in: title)?.id
-        let draft = HomeItem(
-            title: title,
-            amount: inputAmountValue,
-            category: homeViewModel.selectedCategory,
-            createdAt: homeViewModel.selectedDate,
-            emotionTag: previewEmotion,
-            merchantBrandId: brandId,
-            userEditedTitle: true
-        )
-        return EchoAnchorService.shared.isEligibleLifeTraceTitle(title, item: draft)
+        return lastDraftIntent == .note
     }
 
     private var previewQuickActionTitle: String {
@@ -1088,7 +1076,7 @@ struct RecordView: View {
         case .shopping:
             notes = amount <= 80
                 ? ["买到常用的小东西", "下单一个需要的", "快递路上记下", "买点实用的", "小物件补上"]
-                : ["买到需要的东西", "添点常用装备", "这次下单记下", "常用物件买回来了", "购物安排补上"]
+                : ["买到需要的", "添点常用装备", "这次下单记下", "常用物件买回来了", "购物安排补上"]
         case .daily:
             notes = amount <= 50
                 ? ["日用小补给", "日常小物补上", "刚好需要的小东西", "小补给记下来", "常用的先补一点", "便利袋里的一点日常"]
@@ -1100,7 +1088,7 @@ struct RecordView: View {
         case .health:
             notes = ["健康相关补上", "身体相关记下", "健康事项留个记录", "护理恢复补上"]
         case .home:
-            notes = ["家里需要的补上", "住处日常账单", "居家安排补上", "给住处添点东西"]
+            notes = ["家里需要的补上", "住处日常账单", "居家安排补上", "给住处添点实用的"]
         case .social:
             notes = ["这份心意记下", "人情往来放好", "见面留个记录", "关系里的往来记下"]
         case .other:
@@ -1249,7 +1237,8 @@ struct RecordView: View {
             historyItems: homeViewModel.items,
             allowPetCopy: settingsViewModel.petCompanionEnabled,
             variant: variant,
-            allowTravelSpecificCopy: containsTravelKeyword(sourceTitle)
+            allowTravelSpecificCopy: containsTravelKeyword(sourceTitle),
+            factText: sourceTitle
         )
         return polishedRecordNoteCopy(note)
     }
@@ -1453,7 +1442,7 @@ struct RecordView: View {
             } else if containsAny(normalized, ["保洁", "家政", "钟点工", "开荒保洁", "上门保洁", "深度保洁", "擦玻璃", "清洗油烟机", "空调清洗"]) {
                 notes = ["家里清洁一回", "住处收拾一下", "居家安排补上", "家里这件事办完"]
             } else if containsAny(normalized, ["维修", "家电", "家具", "床品", "收纳", "厨房"]) {
-                notes = ["给住处添点东西", "家里需要的补上", "居家安排补上", "住处小调整记下"]
+                notes = ["给住处添点实用的", "家里需要的补上", "居家安排补上", "住处小调整记下"]
             } else {
                 notes = nil
             }

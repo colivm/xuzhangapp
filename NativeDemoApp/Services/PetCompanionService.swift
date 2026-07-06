@@ -136,8 +136,7 @@ final class PetCompanionService {
     }
 
     private func isWeekend(_ date: Date) -> Bool {
-        let weekday = Calendar.current.component(.weekday, from: date)
-        return weekday == 1 || weekday == 7
+        RecordCalendarContext.isNonWorkday(date)
     }
 
     private func isMonthEnd(_ date: Date) -> Bool {

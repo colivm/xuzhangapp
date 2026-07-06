@@ -12,6 +12,11 @@ struct RecordContextSignal: Equatable {
     enum DayType: Equatable {
         case workday
         case weekend
+        case holiday
+
+        var isNonWorkday: Bool {
+            self != .workday
+        }
     }
 
     enum TimeBand: Equatable {
@@ -72,19 +77,21 @@ struct RecordContextSignal: Equatable {
     }
 
     private static func dayType(for date: Date) -> DayType {
-        let weekday = Calendar.current.component(.weekday, from: date)
-        return (weekday == 1 || weekday == 7) ? .weekend : .workday
+        switch RecordCalendarContext.dayKind(for: date) {
+        case .workday: return .workday
+        case .weekend: return .weekend
+        case .holiday: return .holiday
+        }
     }
 
     private static func timeBand(for date: Date) -> TimeBand {
-        let hour = Calendar.current.component(.hour, from: date)
-        switch hour {
-        case 7..<10: return .morning
-        case 11..<14: return .lunch
-        case 14..<17: return .afternoon
-        case 17..<21: return .evening
-        case 22...23, 0..<6: return .lateNight
-        default: return .other
+        switch RecordCalendarContext.timeBand(for: date) {
+        case .morningCommute: return .morning
+        case .lunch: return .lunch
+        case .afternoon: return .afternoon
+        case .eveningCommute, .lateEvening: return .evening
+        case .lateNight: return .lateNight
+        case .earlyMorning, .other: return .other
         }
     }
 }
@@ -135,6 +142,10 @@ struct CategoryRecommendService {
     func recommend(input: CategoryRecommendInput) -> CategoryRecommendResult? {
         guard !input.locked, input.amount > 0 else { return nil }
 
+        if let explicit = explicitNoteCategory(input.noteDraft) {
+            return CategoryRecommendResult(recommended: explicit, reasonTag: "note")
+        }
+
         var scores = Dictionary(
             uniqueKeysWithValues: HomeItem.Category.allCases.map { ($0, ScoreBreakdown()) }
         )
@@ -161,6 +172,16 @@ struct CategoryRecommendService {
             recommended: best.category,
             reasonTag: dominantReason(for: best.breakdown)
         )
+    }
+
+    private func explicitNoteCategory(_ note: String) -> HomeItem.Category? {
+        let normalized = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.count >= 2 else { return nil }
+        guard let match = SemanticBoundaryGuard.strongestCategory(in: normalized),
+              match.strength >= 3.2 else {
+            return nil
+        }
+        return match.category
     }
 
     private func applyHistoryScores(
@@ -259,11 +280,10 @@ struct CategoryRecommendService {
 
     private func sameCorrectionContext(_ lhs: Date, _ rhs: Date) -> Bool {
         let calendar = Calendar.current
-        let lhsWeekday = calendar.component(.weekday, from: lhs)
-        let rhsWeekday = calendar.component(.weekday, from: rhs)
-        let lhsWeekend = lhsWeekday == 1 || lhsWeekday == 7
-        let rhsWeekend = rhsWeekday == 1 || rhsWeekday == 7
-        guard lhsWeekend == rhsWeekend else { return false }
+        guard RecordCalendarContext.dayKind(for: lhs, calendar: calendar)
+            == RecordCalendarContext.dayKind(for: rhs, calendar: calendar) else {
+            return false
+        }
         return calendar.component(.hour, from: lhs) / 3 == calendar.component(.hour, from: rhs) / 3
     }
 
@@ -280,10 +300,11 @@ struct CategoryRecommendService {
     ) {
         let calendar = Calendar.current
         let hour = calendar.component(.hour, from: input.referenceDate)
-        let weekday = calendar.component(.weekday, from: input.referenceDate)
-        let isWeekend = weekday == 1 || weekday == 7
+        let dayKind = RecordCalendarContext.dayKind(for: input.referenceDate, calendar: calendar)
+        let isWorkday = dayKind == .workday
+        let isNonWorkday = dayKind != .workday
 
-        if !isWeekend, (7..<10).contains(hour) {
+        if isWorkday, (7..<10).contains(hour) {
             addTime(input.amount <= 30 ? 3.4 : 3, to: .transport, scores: &scores)
             addTime(input.amount <= 35 ? 0.8 : 0.2, to: .dining, scores: &scores)
         }
@@ -292,13 +313,16 @@ struct CategoryRecommendService {
         }
         if (17..<20).contains(hour) {
             addTime(input.amount <= 120 ? 2 : 0.5, to: .dining, scores: &scores)
-            addTime(1, to: .transport, scores: &scores)
+            addTime(isWorkday ? 1.2 : 0.5, to: .transport, scores: &scores)
+        }
+        if isWorkday, (20..<24).contains(hour), input.amount <= 80 {
+            addTime(0.8, to: .transport, scores: &scores)
         }
         if hour >= 22 || hour < 6 {
             addTime(input.amount <= 100 ? 2 : 0.5, to: .dining, scores: &scores)
             addTime(1, to: .entertainment, scores: &scores)
         }
-        if isWeekend, (14..<22).contains(hour) {
+        if isNonWorkday, (14..<22).contains(hour) {
             addTime(2, to: .entertainment, scores: &scores)
             addTime(1, to: .shopping, scores: &scores)
             addTime(0.8, to: .social, scores: &scores)
@@ -391,10 +415,11 @@ struct CategoryRecommendService {
             addContext(1.6, to: .dining, scores: &scores)
         }
 
-        if context.dayType == .weekend,
+        if context.dayType.isNonWorkday,
            [.afternoon, .evening].contains(context.timeBand) {
             addContext(0.7, to: .entertainment, scores: &scores)
             addContext(0.5, to: .shopping, scores: &scores)
+            addContext(0.4, to: .social, scores: &scores)
         }
 
         if context.cityContext == .awayCity {

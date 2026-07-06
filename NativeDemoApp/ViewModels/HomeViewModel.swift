@@ -1435,20 +1435,32 @@ final class HomeViewModel: ObservableObject {
 
     func noteSuggestions(for category: HomeItem.Category, at date: Date = .now) -> [String] {
         let defaults: [String]
+        let isWorkday = RecordCalendarContext.isWorkday(date)
+        let nonWorkdayPrefix = RecordCalendarContext.dayKind(for: date) == .holiday ? "假期" : "休息日"
         switch category {
         case .dining:
             let hour = Calendar.current.component(.hour, from: date)
             switch hour {
             case 5..<10:
-                defaults = ["早餐路上买点吃的", "早班前续一杯咖啡", "出门前吃一口热的"]
+                defaults = isWorkday
+                    ? ["早餐路上买点吃的", "早班前续一杯咖啡", "出门前吃一口热的"]
+                    : ["早上买点吃的", "\(nonWorkdayPrefix)早餐先记下", "出门前吃一口热的"]
             case 10..<14:
-                defaults = ["午间简单吃一顿", "食堂一份热饭", "饭点买杯喝的"]
+                defaults = isWorkday
+                    ? ["午间简单吃一顿", "食堂一份热饭", "饭点买杯喝的"]
+                    : ["午间简单吃一顿", "\(nonWorkdayPrefix)午饭记一笔", "饭点买杯喝的"]
             case 14..<17:
-                defaults = ["下午续一杯咖啡", "便利店买点轻食", "忙到一半补一口"]
+                defaults = isWorkday
+                    ? ["下午续一杯咖啡", "便利店买点轻食", "忙到一半补一口"]
+                    : ["下午续一杯咖啡", "便利店买点轻食", "\(nonWorkdayPrefix)下午垫一口"]
             case 17..<21:
-                defaults = ["晚餐吃一顿热饭", "下班后吃点热乎的", "和人一起吃晚饭"]
+                defaults = isWorkday
+                    ? ["晚餐吃一顿热饭", "下班后吃点热乎的", "和人一起吃晚饭"]
+                    : ["晚餐吃一顿热饭", "\(nonWorkdayPrefix)晚饭记一下", "和人一起吃晚饭"]
             default:
-                defaults = ["加班后吃点热乎的", "晚归路上的一口热食", "深夜买点小食"]
+                defaults = isWorkday
+                    ? ["加班后吃点热乎的", "晚归路上的一口热食", "深夜买点小食"]
+                    : ["夜里吃点热乎的", "晚归路上的一口热食", "深夜买点小食"]
             }
         case .transport:
             defaults = ["地铁到站，路上这一段", "打车走完这一程", "停车和油费记一笔"]
@@ -1457,9 +1469,13 @@ final class HomeViewModel: ObservableObject {
         case .daily:
             defaults = ["便利店补一袋日常", "超市买点家里要用的", "日用品刚好补上"]
         case .entertainment:
-            defaults = ["买了这场电影票", "游戏里充了一笔", "周末出去坐一会儿"]
+            defaults = RecordCalendarContext.isNonWorkday(date)
+                ? ["买了这场电影票", "游戏里充了一笔", "\(nonWorkdayPrefix)出去坐一会儿"]
+                : ["买了这场电影票", "游戏里充了一笔", "下班后放松一下"]
         case .lodging:
-            defaults = ["今晚住在这里", "出差住宿记一笔", "短住一晚记下"]
+            defaults = isWorkday
+                ? ["今晚住在这里", "出差住宿记一笔", "短住一晚记下"]
+                : ["今晚住在这里", "短住一晚记下", "这晚住宿记下来"]
         case .health:
             defaults = healthNoteSuggestions()
         case .home:
@@ -1511,10 +1527,10 @@ final class HomeViewModel: ObservableObject {
         guard recentItems.count >= 6 else { return [] }
 
         let targetBucket = hourHabitBucket(for: date)
-        let targetWeekend = isHabitWeekend(date)
+        let targetDayKind = habitDayKind(for: date)
         let contextItems = recentItems.filter { item in
             hourHabitBucket(for: item.createdAt) == targetBucket &&
-            isHabitWeekend(item.createdAt) == targetWeekend
+            habitDayKind(for: item.createdAt) == targetDayKind
         }
         guard contextItems.count >= 3 else { return [] }
 
@@ -1574,7 +1590,7 @@ final class HomeViewModel: ObservableObject {
                 && item.category == suggestion.category
                 && Int((item.amount * 100).rounded()) == amountCents
                 && hourHabitBucket(for: item.createdAt) == hourHabitBucket(for: date)
-                && isHabitWeekend(item.createdAt) == isHabitWeekend(date)
+                && habitDayKind(for: item.createdAt) == habitDayKind(for: date)
         }
         guard supportItems.count >= 2 else { return nil }
 
@@ -1666,9 +1682,8 @@ final class HomeViewModel: ObservableObject {
         Calendar.current.component(.hour, from: date) / 3
     }
 
-    private func isHabitWeekend(_ date: Date) -> Bool {
-        let weekday = Calendar.current.component(.weekday, from: date)
-        return weekday == 1 || weekday == 7
+    private func habitDayKind(for date: Date) -> RecordCalendarContext.DayKind {
+        RecordCalendarContext.dayKind(for: date)
     }
 
     var todayItems: [HomeItem] {
@@ -2160,7 +2175,7 @@ final class HomeViewModel: ObservableObject {
         if top == "暂无" {
             return "\(rhythm)，先把这一周放在这里。"
         }
-        return "\(rhythm)，「\(top)」这类记录多一点。先把这一周放在这里。"
+        return "\(rhythm)，「\(top)」记得更多一点。先把这一周放在这里。"
     }
 
     func markWeeklyTag() {

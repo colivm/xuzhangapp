@@ -147,22 +147,22 @@ final class LifeMarkSceneRewardService {
 
     private func rewardCandidate(for item: HomeItem) -> RewardCandidate? {
         let text = semanticText(for: item)
-        if containsAny(text, ["奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "宝宝", "婴儿", "湿巾", "奶瓶"]) {
+        if SemanticBoundaryGuard.matchesBabySupply(text) {
             return RewardCandidate(
                 groupId: "family_baby",
                 packId: "family",
-                keywords: ["奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "宝宝", "婴儿", "湿巾", "奶瓶"],
+                keywords: SemanticBoundaryGuard.babyStrongKeywords,
                 title: "宝宝照护这条线开始了",
                 detail: "奖励体验「娃和毛孩」场景包 7 天，把奶粉、尿不湿和照护用品放到同一条生活线里。"
             )
         }
-        if containsAny(text, ["狗粮", "猫粮", "猫砂", "宠物", "毛孩子", "毛孩", "罐头", "冻干", "驱虫", "宠物医院"]) {
+        if SemanticBoundaryGuard.matchesPetSupply(text) {
             return RewardCandidate(
                 groupId: "family_pet",
                 packId: "family",
-                keywords: ["狗粮", "猫粮", "猫砂", "宠物", "毛孩子", "毛孩", "罐头", "冻干", "驱虫", "宠物医院"],
+                keywords: SemanticBoundaryGuard.petStrongKeywords,
                 title: "毛孩子照护这条线开始了",
-                detail: "奖励体验「娃和毛孩」场景包 7 天，把口粮、猫砂、洗护和就医都放回照护日常。"
+                detail: "奖励体验「娃和毛孩」场景包 7 天，把口粮、猫砂、宠物洗护和就医都放回照护日常。"
             )
         }
         if containsAny(text, ["露营", "帐篷", "天幕", "睡袋", "渔具", "鱼竿", "鱼线", "鱼饵", "骑行", "摄影", "相机", "镜头", "乐器", "吉他", "键盘"]) {

@@ -364,7 +364,7 @@ private enum LifeSliceShareCardStyle: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .warmLight: return "自然治愈"
+        case .warmLight: return "自然暖光"
         case .collageStory: return "拼贴故事"
         case .cleanTexture: return "简约质感"
         case .customBackground: return "自定义背景"
@@ -2775,7 +2775,7 @@ private struct WeeklyStoryShareCardView: View {
                 .fill(muted.opacity(0.32))
                 .frame(width: 1, height: 20)
 
-            Text("生活切片")
+            Text("生活记录")
                 .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(deepGreen.opacity(0.86))
 

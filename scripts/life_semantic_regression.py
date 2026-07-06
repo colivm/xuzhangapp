@@ -15,6 +15,7 @@ SWIFT_FILES = {
     "brands": "NativeDemoApp/Services/MerchantBrandCatalog.swift",
     "life_insight": "NativeDemoApp/Services/LifeInsightService.swift",
     "semantic_fallback": "NativeDemoApp/Models/HomeItem.swift",
+    "semantic_boundary": "NativeDemoApp/Services/SemanticBoundaryGuard.swift",
     "life_scene": "NativeDemoApp/Services/LifeSceneSemanticService.swift",
     "life_mark": "NativeDemoApp/Services/LifeMarkService.swift",
     "record_view": "NativeDemoApp/Views/RecordView.swift",
@@ -39,7 +40,7 @@ EXPECTED_JSON_KEYWORDS = {
     ],
     "keywordRules:日用": [
         "鸡蛋", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈",
-        "托育费", "幼儿园学费",
+        "托育费", "幼儿园学费", "宠物医院", "宠物洗护",
     ],
     "keywordRules:交通": [
         "花小猪", "洗车", "汽车保养", "车辆保养", "保养车", "ETC", "etc",
@@ -121,7 +122,13 @@ EXPECTED_SWIFT_SNIPPETS = {
         "山姆", "永辉", "大润发", "钱大妈", "花小猪", "洗车", "汽车保养",
         "配镜", "验光", "洗牙", "网上国网", "暖气费", "取暖费", "B站会员",
         "供暖费", "热力费", "腾讯视频会员", "充电器", "Office 365", "谷子", "潮玩", "泡泡玛特", "POP MART", "搬家",
-        "托育费", "直播打赏", "网吧", "电竞酒店", "医美", "白事随礼", "驾校", "彩票",
+        "托育费", "直播打赏", "直播礼物", "网吧", "电竞酒店", "医美", "白事随礼", "驾校", "彩票",
+    ],
+    "semantic_boundary": [
+        "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "米粉", "宝宝湿巾", "婴儿湿巾",
+        "托育费", "幼儿园学费", "狗粮", "猫粮", "猫砂", "宠物粮", "宠物口粮",
+        "宠物医院", "猫驱虫", "狗驱虫", "宠物驱虫", "猫狗洗护", "宠物洗护",
+        "直播礼物", "厨房湿巾", "isHouseholdCleaningSupply", "matchesBabySupply", "matchesPetSupply",
     ],
     "life_scene": [
         "茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴",
@@ -129,7 +136,7 @@ EXPECTED_SWIFT_SNIPPETS = {
         "山姆", "永辉", "大润发", "钱大妈", "花小猪", "洗车", "汽车保养",
         "配镜", "验光", "洗牙", "网上国网", "暖气费", "取暖费", "B站会员",
         "供暖费", "热力费", "腾讯视频会员", "充电器", "Office 365", "谷子", "潮玩", "泡泡玛特", "POP MART", "搬家",
-        "托育费", "直播打赏", "网吧", "电竞酒店", "医美", "白事随礼", "驾校", "彩票", "telecomBill", "手机话费",
+        "直播打赏", "网吧", "电竞酒店", "医美", "白事随礼", "驾校", "彩票", "telecomBill", "手机话费",
     ],
     "life_mark": [
         "茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴",
@@ -144,7 +151,7 @@ EXPECTED_SWIFT_SNIPPETS = {
         "山姆", "永辉", "大润发", "钱大妈", "花小猪", "洗车", "汽车保养",
         "配镜", "验光", "洗牙", "b站会员",
         "腾讯视频会员", "供暖费", "上门保洁", "充电桩", "office 365", "谷子", "泡泡玛特", "pop mart", "搬家",
-        "托育费", "直播打赏", "网吧", "电竞酒店", "医美", "白事随礼", "驾校", "彩票",
+        "直播打赏", "网吧", "电竞酒店", "医美", "白事随礼", "驾校", "彩票",
     ],
     "memory_context": [
         "充电桩", "电车充电", "汽车充电", "补能",
@@ -218,7 +225,6 @@ BLOCKED_COPY_SNIPPETS = [
     "那几刻",
     "一下子有了热度",
     "生活资产",
-    "生活切片",
     "小标记",
     "硬总结",
     "被照顾到",

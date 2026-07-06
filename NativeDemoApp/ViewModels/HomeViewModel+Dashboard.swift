@@ -158,16 +158,27 @@ extension HomeViewModel {
         guard items.filter({ $0.amount > 0 }).count >= 8 else { return nil }
 
         if isMorningCommutePromptTime(now, calendar: calendar) {
-            guard !hasTodayCommuteRecord(direction: .morning, now: now, calendar: calendar),
-                  let candidate = commuteHabitCandidate(
+            guard !hasTodayCommuteRecord(direction: .morning, now: now, calendar: calendar) else {
+                return nil
+            }
+            if let candidate = commuteHabitCandidate(
                     direction: .morning,
                     now: now,
                     isBackfill: false,
                     calendar: calendar
-                  ) else {
-                return nil
+            ) {
+                return quickRecordSuggestion(from: candidate, now: now)
             }
-            return quickRecordSuggestion(from: candidate, now: now)
+            if isNoonCommuteBackfillTime(now, calendar: calendar),
+               let backfillCandidate = commuteHabitCandidate(
+                    direction: .morning,
+                    now: now,
+                    isBackfill: true,
+                    calendar: calendar
+               ) {
+                return quickRecordSuggestion(from: backfillCandidate, now: now)
+            }
+            return nil
         } else if isNoonCommuteBackfillTime(now, calendar: calendar) {
             guard !hasTodayCommuteRecord(direction: .morning, now: now, calendar: calendar),
                   let candidate = commuteHabitCandidate(
@@ -806,7 +817,7 @@ extension HomeViewModel {
         }
 
         let topCategory = topCategoryLabel(from: weekItems)
-        let summary = "近 7 天里，「\(topCategory)」这类记录多一些。"
+        let summary = "近 7 天里，「\(topCategory)」记得更多一些。"
         let structure = "这一周的记录已经分出几段。"
         let advice = weekItems.count >= 8
             ? "继续按笔记下去，下周回放会更贴近真实记录。"

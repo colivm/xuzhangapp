@@ -79,7 +79,8 @@ enum NarrativeCopyResolver {
                 petName: "小窝",
                 historyItems: [],
                 allowPetCopy: false,
-                variant: stableIndex(seed: context.seed + "|scene", count: 7)
+                variant: stableIndex(seed: context.seed + "|scene", count: 7),
+                factText: context.note
             )
         }
 
@@ -104,7 +105,8 @@ enum NarrativeCopyResolver {
 
         if !hasIncompatibleSemanticCue,
            [.shopping, .daily].contains(context.category),
-           emotionRuleIDs.contains("baby_supply") {
+           emotionRuleIDs.contains("baby_supply"),
+           SemanticBoundaryGuard.matchesBabySupply(lower) {
             if containsAny(lower, ["奶粉"]) {
                 return pick(
                     ["宝宝口粮补上", "今天的奶粉安排好", "照护宝宝这一笔", "宝宝日常不断档"],
@@ -125,7 +127,8 @@ enum NarrativeCopyResolver {
 
         if !hasIncompatibleSemanticCue,
            [.shopping, .daily].contains(context.category),
-           emotionRuleIDs.contains("pet_supply") {
+           emotionRuleIDs.contains("pet_supply"),
+           SemanticBoundaryGuard.matchesPetSupply(lower) {
             if containsAny(lower, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) {
                 return pick(
                     ["毛孩子口粮补上", "毛孩子饭碗续上", "宠物口粮记下", "照护毛孩子这一笔"],
@@ -370,8 +373,7 @@ enum NarrativeCopyResolver {
     }
 
     private static func isWeekend(_ date: Date) -> Bool {
-        let weekday = Calendar.current.component(.weekday, from: date)
-        return weekday == 1 || weekday == 7
+        RecordCalendarContext.isNonWorkday(date)
     }
 
     private static func containsWeekendWorkMealCue(_ text: String) -> Bool {
@@ -398,19 +400,20 @@ enum NarrativeCopyResolver {
     }
 
     private static func weekendMealNotes(for date: Date, note: String) -> [String] {
+        let prefix = RecordCalendarContext.dayKind(for: date) == .holiday ? "假期" : "周末"
         if containsAny(note, ["夜宵", "夜里饿了", "深夜", "夜里", "凌晨"]) {
-            return ["周末夜里补一点", "夜里吃点东西", "深夜这顿记下", "晚点吃上了", "这口先垫一下", "夜里一口热的"]
+            return ["\(prefix)夜里补一点", "夜里吃点东西", "深夜这顿记下", "晚点吃上了", "这口先垫一下", "夜里一口热的"]
         }
         let hour = Calendar.current.component(.hour, from: date)
         switch hour {
         case 5..<10:
-            return ["周末早餐", "早上简单吃点", "早餐先记下", "早间小食", "今天早餐有着落", "早上补点能量"]
+            return ["\(prefix)早餐", "早上简单吃点", "早餐先记下", "早间小食", "今天早餐有着落", "早上补点能量"]
         case 11..<14:
-            return ["周末午餐", "午间吃点热乎的", "这顿午饭记下", "周末饭点留一笔", "中午简单吃一顿", "午间一顿饭"]
+            return ["\(prefix)午餐", "午间吃点热乎的", "这顿午饭记下", "\(prefix)饭点留一笔", "中午简单吃一顿", "午间一顿饭"]
         case 17..<21:
-            return ["周末晚饭", "晚餐吃点热乎的", "今晚这顿记下", "晚饭时间坐一会儿", "这顿晚饭有着落", "周末晚餐"]
+            return ["\(prefix)晚饭", "晚餐吃点热乎的", "今晚这顿记下", "晚饭时间坐一会儿", "这顿晚饭有着落", "\(prefix)晚餐"]
         default:
-            return ["周末吃一顿", "简单吃点东西", "这顿先记下", "饭点留一笔", "吃点热乎的", "今天这顿记下"]
+            return ["\(prefix)吃一顿", "简单吃点东西", "这顿先记下", "饭点留一笔", "吃点热乎的", "今天这顿记下"]
         }
     }
 
@@ -437,8 +440,7 @@ enum NarrativeCopyResolver {
     }
 
     private static func containsFamilyCareKeyword(_ text: String) -> Bool {
-        let keywords = ["宝宝", "孩子", "婴儿", "奶粉", "尿不湿", "纸尿裤", "辅食", "童装", "儿童座椅", "推车", "宠物", "猫粮", "狗粮", "猫砂", "尿垫", "罐头", "冻干", "宠物医院", "毛孩", "毛孩子"]
-        return keywords.contains { text.contains($0) }
+        SemanticBoundaryGuard.familyCareKind(in: text) != nil
     }
 
     private static func containsTravelKeyword(_ text: String) -> Bool {
@@ -450,10 +452,10 @@ enum NarrativeCopyResolver {
         switch category {
         case .daily:
             return [
-                ScenePackTier(maxAmount: 30, notes: ["补点日用", "日常小物补上", "刚好需要的小东西", "小东西补齐一点", "小补给记下来", "便利袋里的一点日常"]),
+                ScenePackTier(maxAmount: 30, notes: ["补点日用", "日常小物补上", "刚好需要的小物", "常用的补齐一点", "小补给记下来", "便利袋里的一点日常"]),
                 ScenePackTier(maxAmount: 100, notes: ["日常用品补齐", "家用小物安排好", "添点方便", "买了一袋日用品", "常用的先补上", "超市补给记一笔"]),
                 ScenePackTier(maxAmount: 300, notes: ["日用品换新一点", "把常用的补上", "日常用品补到位", "家里缺的补齐", "这一笔给日常用品", "常用物件买回来了"]),
-                ScenePackTier(maxAmount: 9_999, notes: ["长期日常安排", "添置一件常用物", "日常大项记下", "日用品大笔支出", "家里要用的大件", "这笔给长期会用的东西"]),
+                ScenePackTier(maxAmount: 9_999, notes: ["长期日常安排", "添置一件常用物", "日常大项记下", "日用品大笔支出", "家里要用的大件", "长期会用的先备上"]),
             ]
         default:
             return []

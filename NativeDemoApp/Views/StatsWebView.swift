@@ -355,9 +355,9 @@ struct StatsWebView: View {
 
     private func traceChapterCard(layout: TraceLifeCardLayout) -> some View {
         let _ = quotaRefreshID
-        let weekSnapshot = buildTraceChapterSnapshot(for: .week)
-        let monthSnapshot = buildTraceChapterSnapshot(for: .month)
         let showsMonth = traceLifeCardRange == .month
+        let weekSnapshot = showsMonth ? traceEmptyChapterSnapshot(for: .week) : buildTraceChapterSnapshot(for: .week)
+        let monthSnapshot = showsMonth ? buildTraceChapterSnapshot(for: .month) : traceEmptyChapterSnapshot(for: .month)
 
         return VStack(spacing: 0) {
             traceLifeFlipCue(isMonth: showsMonth)
@@ -488,7 +488,7 @@ struct StatsWebView: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(isMonth ? "切换到本周生活切片" : "切换到本月生活切片")
+        .accessibilityLabel(isMonth ? "切换到本周记录回放" : "切换到本月记录回放")
     }
 
     private var traceLifeCardFlipGesture: some Gesture {
@@ -890,7 +890,7 @@ struct StatsWebView: View {
             let relatedItems = fresh.rows.map { $0.item }
             return TraceMonthMilestone(
                 id: "fresh-scene",
-                title: "第一次出现「\(fresh.label)」",
+                title: "新出现「\(fresh.label)」",
                 subtitle: "\(traceLifeMonthShortDate(fresh.firstDate)) 开始被记下",
                 icon: "sparkles",
                 anchor: traceLifeMonthBestAnchor(for: relatedItems, anchorsByItemID: anchorsByItemID, itemIndex: itemIndex)
@@ -902,7 +902,7 @@ struct StatsWebView: View {
             return TraceMonthMilestone(
                 id: "streak",
                 title: "连续记录 \(streak) 天",
-                subtitle: "这一段节奏被接住了",
+                subtitle: "这一段记录连续起来了",
                 icon: "calendar.badge.checkmark",
                 anchor: nil
             )
@@ -2396,6 +2396,19 @@ struct StatsWebView: View {
         buildTraceChapterSnapshot(for: heroRange)
     }
 
+    private func traceEmptyChapterSnapshot(for range: SummaryPlaybackRange) -> TraceChapterSnapshot {
+        TraceChapterSnapshot(
+            range: range,
+            items: [],
+            marks: [],
+            memoryAnchors: [],
+            narrative: "",
+            chapterSummary: nil,
+            evidenceGroups: [],
+            preview: SummaryLaunchPreview(count: 0, total: 0, chapterCount: 0, topCategory: nil)
+        )
+    }
+
     private func buildTraceChapterSnapshot(for range: SummaryPlaybackRange) -> TraceChapterSnapshot {
         let items = traceLifeScopedItems(for: range)
         let cacheKey = traceChapterSnapshotCacheKey(items: items, range: range)
@@ -2439,14 +2452,160 @@ struct StatsWebView: View {
         for range: SummaryPlaybackRange,
         items: [HomeItem]
     ) -> [SummaryMemoryAnchor] {
-        let itemIDs = Set(items.map(\.id))
-        guard !itemIDs.isEmpty else { return [] }
-        let playback = buildSummaryPlayback(for: range, copySeed: "trace-life-preview")
-        return playback.memoryAnchors
-            .filter { itemIDs.contains($0.itemID) }
+        var usedSceneDayKeys = Set<String>()
+        var usedMerchantKeys = Set<String>()
+        var receiptCount = 0
+
+        return items
+            .compactMap { traceLifeMemoryAnchorCandidate(for: $0, range: range) }
+            .sorted { lhs, rhs in
+                if lhs.score == rhs.score {
+                    return lhs.item.createdAt > rhs.item.createdAt
+                }
+                return lhs.score > rhs.score
+            }
+            .compactMap { candidate -> SummaryMemoryAnchor? in
+                guard usedSceneDayKeys.insert(candidate.sceneDayKey).inserted else { return nil }
+                if let merchantKey = candidate.merchantKey,
+                   !usedMerchantKeys.insert(merchantKey).inserted {
+                    return nil
+                }
+                if candidate.role == .receipt {
+                    guard receiptCount == 0 else { return nil }
+                    receiptCount += 1
+                }
+                return candidate.anchor
+            }
             .prefix(3)
             .map { $0 }
     }
+
+    private struct TraceMemoryAnchorCandidate {
+        let item: HomeItem
+        let anchor: SummaryMemoryAnchor
+        let score: Int
+        let sceneDayKey: String
+        let merchantKey: String?
+        let role: PhotoMemoryAssetRole
+    }
+
+    private func traceLifeMemoryAnchorCandidate(
+        for item: HomeItem,
+        range: SummaryPlaybackRange
+    ) -> TraceMemoryAnchorCandidate? {
+        guard let imageData = item.coverMemoryImageData else { return nil }
+        let reason = PhotoMemoryPromptPolicy.anchorReason(for: item)
+        let role = item.memoryAnchorRole ?? reason.assetRole
+        let sceneHint = item.memoryAnchorSceneHint ?? reason.sceneHint
+        let caption = item.memoryAnchorCaption?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let anchor = SummaryMemoryAnchor(
+            id: item.id,
+            itemID: item.id,
+            title: item.displayTitle,
+            amount: item.amount,
+            createdAt: item.createdAt,
+            imageData: imageData,
+            role: role,
+            sceneHint: sceneHint,
+            label: traceLifeMemoryAnchorLabel(role: role, sceneHint: sceneHint),
+            caption: caption?.isEmpty == false ? caption! : traceLifeMemoryAnchorCaption(role: role, sceneHint: sceneHint)
+        )
+        return TraceMemoryAnchorCandidate(
+            item: item,
+            anchor: anchor,
+            score: traceLifeMemoryAnchorScore(item: item, role: role, sceneHint: sceneHint, range: range),
+            sceneDayKey: traceLifeMemoryAnchorSceneDayKey(item: item, sceneHint: sceneHint),
+            merchantKey: traceLifeMemoryAnchorMerchantKey(item: item),
+            role: role
+        )
+    }
+
+    private func traceLifeMemoryAnchorScore(
+        item: HomeItem,
+        role: PhotoMemoryAssetRole,
+        sceneHint: PhotoMemorySceneHint,
+        range: SummaryPlaybackRange
+    ) -> Int {
+        var value = item.coverMemoryImageIndex == nil ? 18 : 30
+        switch sceneHint {
+        case .gathering, .travel:
+            value += 25
+        case .careRecord:
+            value += 22
+        case .homeLife, .importantPurchase, .experience, .giftMoment:
+            value += 18
+        case .healthRecord:
+            value += 12
+        case .vehicleCare, .travelTransport:
+            value += 8
+        }
+        if role == .receipt { value -= range == .week ? 10 : 6 }
+        if item.amount >= 300, role != .receipt { value += 4 }
+        if Calendar.current.isDateInToday(item.createdAt) { value += 2 }
+        return value
+    }
+
+    private func traceLifeMemoryAnchorSceneDayKey(
+        item: HomeItem,
+        sceneHint: PhotoMemorySceneHint
+    ) -> String {
+        "\(traceLifeMemoryAnchorDayKey(for: item.createdAt))-\(sceneHint.rawValue)"
+    }
+
+    private func traceLifeMemoryAnchorDayKey(for date: Date) -> String {
+        Self.traceLifeMemoryAnchorDayFormatter.string(from: date)
+    }
+
+    private func traceLifeMemoryAnchorMerchantKey(item: HomeItem) -> String? {
+        if let merchantBrandId = item.merchantBrandId, !merchantBrandId.isEmpty {
+            return merchantBrandId
+        }
+        let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard title.count >= 2 else { return nil }
+        return title.lowercased()
+    }
+
+    private func traceLifeMemoryAnchorLabel(
+        role: PhotoMemoryAssetRole,
+        sceneHint: PhotoMemorySceneHint
+    ) -> String {
+        switch sceneHint {
+        case .gathering: return "见面"
+        case .travel, .travelTransport: return "出门"
+        case .vehicleCare, .healthRecord: return role == .receipt ? "票据" : "记录"
+        case .homeLife: return "家里"
+        case .careRecord: return "照护"
+        case .experience: return "现场"
+        case .giftMoment: return "心意"
+        case .importantPurchase: return "添置"
+        }
+    }
+
+    private func traceLifeMemoryAnchorCaption(
+        role: PhotoMemoryAssetRole,
+        sceneHint: PhotoMemorySceneHint
+    ) -> String {
+        switch role {
+        case .moment:
+            return sceneHint == .gathering ? "和朋友的一次聚会。" : "当时拍下的一张图。"
+        case .receipt:
+            return "这张图以后查起来更清楚。"
+        case .place:
+            return "路上拍下的一张图。"
+        case .object:
+            return "这次买的东西。"
+        case .careRecord:
+            return "照护相关的一张记录。"
+        }
+    }
+
+    private static let traceLifeMemoryAnchorDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 
     private func traceChapterSnapshotCacheKey(items: [HomeItem], range: SummaryPlaybackRange) -> String {
         [
@@ -3960,7 +4119,7 @@ struct StatsWebView: View {
         case .lodging:
             base = "「\(categoryName)」变明显，说明这段时间有停留和位置变化。可以回头看看是不是旅行、出差，或临时过夜。"
         case .other:
-            base = "这类记录变明显，说明有些记录还没归进固定分类。可以回头看备注。"
+            base = "「其他」变明显，说明有些记录还没归进固定分类。可以回头看备注。"
         }
 
         var tails: [String] = []

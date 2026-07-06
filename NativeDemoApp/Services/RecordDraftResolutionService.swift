@@ -59,15 +59,20 @@ enum RecordDraftResolutionService {
             MerchantBrandCatalog.isExactBrandAlias(resolvedTitle, for: brand.id)
                 || MerchantBrandCatalog.matchBrand(in: resolvedTitle)?.id == brand.id
         } ?? false
-        let title = shouldPreserveBrandTitle
-            ? resolvedTitle
-            : RecordSemanticLexicon.repairedTitle(
-                for: resolvedTitle,
-                category: category,
-                amount: input.amount,
-                date: input.date,
-                userEditedTitle: input.userEditedTitle
-            )
+        let shouldKeepUserTitle = input.userEditedTitle
+            && !initialTitle.isEmpty
+            && initialTitle != RecordSemanticLexicon.emptyNoteTitle
+        let title = shouldKeepUserTitle
+            ? initialTitle
+            : shouldPreserveBrandTitle
+                ? resolvedTitle
+                : RecordSemanticLexicon.repairedTitle(
+                    for: resolvedTitle,
+                    category: category,
+                    amount: input.amount,
+                    date: input.date,
+                    userEditedTitle: input.userEditedTitle
+                )
         if title != resolvedTitle { trace.append("title:semanticRepair") }
 
         let emotionBrandId = MerchantBrandCatalog.definition(for: brandId)?.category == category ? brandId : nil
@@ -90,7 +95,7 @@ enum RecordDraftResolutionService {
             category: category,
             title: title,
             emotionTag: emotionTag,
-            merchantBrandId: brand?.id,
+            merchantBrandId: brandId,
             source: input.source,
             trace: trace
         )

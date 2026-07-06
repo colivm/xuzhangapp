@@ -221,9 +221,8 @@ enum RecordMemoryContextService {
         existingItems: [HomeItem]
     ) -> String? {
         let calendar = Calendar.current
-        let weekday = calendar.component(.weekday, from: date)
-        let isWeekend = weekday == 1 || weekday == 7
-        guard isWeekend else { return nil }
+        guard RecordCalendarContext.isNonWorkday(date, calendar: calendar) else { return nil }
+        let prefix = RecordCalendarContext.dayKind(for: date, calendar: calendar) == .holiday ? "假期" : "周末"
 
         let dayItems = existingItems.filter { calendar.isDate($0.createdAt, inSameDayAs: date) }
         let dayText = (dayItems.map { "\($0.title) \($0.emotionTag) \($0.category.rawValue)" } + [title]).joined(separator: " ")
@@ -232,10 +231,10 @@ enum RecordMemoryContextService {
         let hasLeisureCue = containsAny(dayText, ["景区", "景点", "电影", "展", "公园", "旅行", "酒店", "民宿", "朋友", "聚"])
 
         if hasTransport, hasDining, dayItems.count >= 1 {
-            return hasLeisureCue ? "周末出门玩了一趟" : "周末路上和饭点都有了"
+            return hasLeisureCue ? "\(prefix)出门玩了一趟" : "\(prefix)路上和饭点都有了"
         }
         if hasTransport, hasLeisureCue {
-            return "周末出门的路线"
+            return "\(prefix)出门的路线"
         }
         return nil
     }

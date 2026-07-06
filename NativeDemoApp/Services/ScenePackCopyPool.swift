@@ -77,7 +77,7 @@ enum ScenePackCopyPool {
             tiers: [
                 ScenePackTier(maxAmount: 20, notes: ["家里小维修", "住处小消耗", "临时家用一笔", "配件小修小补", "给住处添点方便", "住处这点花费", "家里缺的补一点", "家里的小消耗"]),
                 ScenePackTier(maxAmount: 80, notes: ["住处日常开销一笔", "家里固定一笔日常", "家里实用小物", "住处运转的小日常", "家里的小维护", "住处相关记一下", "维修小费用", "居家小安排"]),
-                ScenePackTier(maxAmount: 300, notes: ["家电小维修记一笔", "住处相关一笔日常", "给房间添一件东西", "床品收纳换新一点", "家里需要的东西补齐", "居住相关安排", "家里收拾一处", "这笔留给住处"]),
+                ScenePackTier(maxAmount: 300, notes: ["家电小维修记一笔", "住处相关一笔日常", "给房间添点实用的", "床品收纳换新一点", "家里需要的补齐", "居住相关安排", "家里收拾一处", "这笔留给住处"]),
                 ScenePackTier(maxAmount: 9_999, notes: ["家里重要一笔安排", "大件家电或家具添置", "搬家相关安排", "家里维修的一笔大项", "长期居住安排", "家的基础支出", "住处安稳下来", "为家安排的一笔"]),
             ]
         ),
@@ -88,9 +88,9 @@ enum ScenePackCopyPool {
             desc: "聚餐、送礼、探望、红包、节日相聚",
             category: .social,
             tiers: [
-                ScenePackTier(maxAmount: 30, notes: ["顺路带了点心意", "咖啡时间叙旧", "给这次见面留一句", "带了点心意记下", "路过时想起了对方", "一起坐坐这一回", "带点东西去见面", "日常往来一笔"]),
+                ScenePackTier(maxAmount: 30, notes: ["顺路带了点心意", "咖啡时间叙旧", "给这次见面留一句", "带了点心意记下", "路过时想起了对方", "一起坐坐这一回", "见面前带点心意", "日常往来一笔"]),
                 ScenePackTier(maxAmount: 100, notes: ["聚会里的一段热闹", "请一顿饭叙旧", "节日里带份小礼", "同事小聚记一笔", "和朋友见面一回", "这次相聚记下来", "一顿饭里的熟悉感", "关系里的一点往来"]),
-                ScenePackTier(maxAmount: 300, notes: ["探望时带了份心意", "家庭聚餐的一点贡献", "一次相聚记下", "重要日子里见一面", "给记挂的人添点东西", "团圆时刻的一笔记录", "赴约的一段记录", "这次见面记下"]),
+                ScenePackTier(maxAmount: 300, notes: ["探望时带了份心意", "家庭聚餐的一点贡献", "一次相聚记下", "重要日子里见一面", "给记挂的人备份心意", "团圆时刻的一笔记录", "赴约的一段记录", "这次见面记下"]),
                 ScenePackTier(maxAmount: 9_999, notes: ["为一次相聚安排", "长途探望的一段记录", "仪式里的陪伴", "把这份记挂郑重记下", "为团圆多安排一点", "这一程是为了见面", "这次见面记清楚", "给牵挂的人留一笔"]),
             ]
         ),
@@ -102,9 +102,9 @@ enum ScenePackCopyPool {
             category: .shopping,
             tiers: [
                 ScenePackTier(maxAmount: 30, notes: ["买个小物件", "给日常添一点方便", "看到合适的小东西", "小补给记一下", "刚好需要，就带回来了", "一点新鲜感", "给自己添个小物", "今天的小添置"]),
-                ScenePackTier(maxAmount: 100, notes: ["补一件常用小物", "买到一件刚好需要的东西", "日常用品补齐", "兴趣装备添一件", "这件小东西挺实用", "逛到合适的就带回家", "爱好里的小投入", "把需要的东西安排上"]),
-                ScenePackTier(maxAmount: 300, notes: ["挑了一件喜欢的", "给自己添一件好用的东西", "换新一件常用物", "这件会陪一阵子", "计划里的小升级", "把想买的那件拿下", "给喜欢的事添点装备", "买到一件合适的"]),
-                ScenePackTier(maxAmount: 9_999, notes: ["入手一件大件", "长期使用的一次升级", "选过的一笔添置", "这件会用一阵子", "把心里惦记的东西带回来", "一次比较正式的换新", "给喜欢的事添点装备", "一个重要物件"]),
+                ScenePackTier(maxAmount: 100, notes: ["补一件常用小物", "买到一件刚好需要的", "日常用品补齐", "兴趣装备添一件", "这件小物挺实用", "逛到合适的就带回家", "爱好里的小投入", "把需要的安排上"]),
+                ScenePackTier(maxAmount: 300, notes: ["挑了一件喜欢的", "给自己添一件好用的", "换新一件常用物", "这件会陪一阵子", "计划里的小升级", "把想买的那件拿下", "给喜欢的事添点装备", "买到一件合适的"]),
+                ScenePackTier(maxAmount: 9_999, notes: ["入手一件大件", "长期使用的一次升级", "计划里的一次换新", "这件会用一阵子", "把心里惦记的带回来", "一次比较正式的换新", "给喜欢的事添点装备", "一个重要物件"]),
             ]
         ),
         ScenePackDefinition(
@@ -124,12 +124,12 @@ enum ScenePackCopyPool {
             id: "family",
             emoji: "🍼",
             label: "娃和毛孩的补给站",
-            desc: "奶粉尿不湿、宠物粮猫砂、洗护就医，家里小成员的日常照护",
+            desc: "奶粉尿不湿、宠物粮猫砂、宠物洗护就医，家里小成员的日常照护",
             category: .daily,
             tiers: [
-                ScenePackTier(maxAmount: 30, notes: ["家里小成员补点日常", "奶粉尿不湿或小零食先补上", "猫砂尿垫和湿巾这类小消耗", "照护路上的一笔", "今天给家里小成员添一点", "小衣物小点心补上", "日常消耗记下", "小补给先到位"]),
-                ScenePackTier(maxAmount: 100, notes: ["娃和毛孩的日用品补货", "奶粉辅食和宠物口粮都算这里", "尿不湿湿巾或猫砂罐头补齐", "洗护用品安排上", "家里小成员需要的先补上", "照护用品到位", "口粮和日用品补一轮", "这笔留给家里小成员"]),
-                ScenePackTier(maxAmount: 300, notes: ["照护用品集中补货", "奶粉尿不湿囤一点", "宠物粮猫砂补一轮", "童装推车或宠物用品添置", "洗护就医相关一笔记清楚", "家里小成员的长期用品安排好", "成长和照护一起记下", "这次补给挺完整"]),
+                ScenePackTier(maxAmount: 30, notes: ["家里小成员补点日常", "奶粉尿不湿或小零食先补上", "猫砂尿垫这类小消耗", "照护路上的一笔", "今天给家里小成员添一点", "小衣物小点心补上", "日常消耗记下", "小补给先到位"]),
+                ScenePackTier(maxAmount: 100, notes: ["娃和毛孩的日用品补货", "奶粉辅食和宠物口粮都算这里", "尿不湿宝宝湿巾或猫砂猫罐头补齐", "宠物洗护安排上", "家里小成员需要的先补上", "照护用品到位", "口粮和日用品补一轮", "这笔留给家里小成员"]),
+                ScenePackTier(maxAmount: 300, notes: ["照护用品集中补货", "奶粉尿不湿囤一点", "宠物粮猫砂补一轮", "童装推车或宠物用品添置", "宠物洗护就医相关一笔记清楚", "家里小成员的长期用品安排好", "成长和照护一起记下", "这次补给挺完整"]),
                 ScenePackTier(maxAmount: 9_999, notes: ["家里小成员的大件安排", "母婴或宠物大项认真记下", "儿童座椅、推车或宠物就医相关", "照护计划里重要的一笔", "给家里小成员准备长期会用的", "家里照护配置升级", "成长阶段的大笔开销", "这笔留给家里小成员成长"]),
             ]
         ),
@@ -144,7 +144,8 @@ enum ScenePackCopyPool {
         historyItems: [HomeItem],
         allowPetCopy: Bool = true,
         variant: Int = 0,
-        allowTravelSpecificCopy: Bool = false
+        allowTravelSpecificCopy: Bool = false,
+        factText: String = ""
     ) -> String {
         let tierIndex = tierIndex(for: pack, amount: amount)
         let tier = pack.tiers[tierIndex]
@@ -155,7 +156,9 @@ enum ScenePackCopyPool {
             allowTravelSpecificCopy: allowTravelSpecificCopy,
             historyItems: historyItems
         )
-        let notes = context?.notes ?? tier.notes
+        let notes = factFirstNotes(for: pack, category: categoryContext, factText: factText)
+            ?? context?.notes
+            ?? tier.notes
         let baseSeed = "\(dayKey(for: date))|\(pack.id)|\(tierIndex)|\(categoryContext.rawValue)|\(context?.key ?? "tier")"
         let baseIndex = stableIndex(seed: baseSeed, count: notes.count)
         let index = (baseIndex + max(0, variant)) % max(1, notes.count)
@@ -177,6 +180,79 @@ enum ScenePackCopyPool {
         )
     }
 
+    private static func factFirstNotes(
+        for pack: ScenePackDefinition,
+        category: HomeItem.Category,
+        factText: String
+    ) -> [String]? {
+        let text = factText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.count >= 2 else { return nil }
+        let normalized = text.lowercased()
+
+        if SemanticBoundaryGuard.matchesBabySupply(normalized) {
+            if containsAny(normalized, ["奶粉"]) { return ["奶粉给宝宝补上了"] }
+            if containsAny(normalized, ["尿不湿", "纸尿裤", "拉拉裤"]) { return ["尿不湿这类照护用品补上了"] }
+            if containsAny(normalized, ["辅食", "米粉"]) { return ["宝宝辅食补上了"] }
+            if containsAny(normalized, ["托育费", "托班费", "幼儿园学费", "早教课"]) { return ["托育早教这笔记下"] }
+            return ["宝宝照护用品补上了"]
+        }
+
+        if SemanticBoundaryGuard.matchesPetSupply(normalized) {
+            if containsAny(normalized, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) { return ["宠物口粮补上了"] }
+            if containsAny(normalized, ["猫砂", "尿垫"]) { return ["猫砂尿垫这类日常补上了"] }
+            if containsAny(normalized, ["宠物医院", "猫驱虫", "狗驱虫", "宠物驱虫", "猫狗洗护", "宠物洗护"]) { return ["宠物照护这次记下"] }
+            return ["宠物用品补上了"]
+        }
+
+        if containsAny(normalized, ["朋友", "同学", "同事", "聚餐", "聚会", "约饭"]) {
+            return ["和朋友的一次聚会"]
+        }
+        if containsAny(normalized, ["请客"]) {
+            return ["请朋友吃了一顿"]
+        }
+        if containsAny(normalized, ["红包", "随礼", "份子", "份子钱", "白事", "奠仪", "帛金"]) {
+            return ["这份人情往来记下"]
+        }
+        if containsAny(normalized, ["礼物", "送礼", "伴手礼"]) {
+            return ["给对方准备了一份心意"]
+        }
+
+        if containsAny(normalized, ["厨房湿巾"]) { return ["厨房湿巾补上了"] }
+        if containsAny(normalized, ["纸巾", "抽纸", "卷纸", "洗衣液", "洗洁精", "垃圾袋"]) {
+            return ["家用日用品补上了"]
+        }
+
+        if containsAny(normalized, ["挂号", "问诊", "门诊", "医院"]) {
+            return ["挂号问诊这次记下"]
+        }
+        if containsAny(normalized, ["药店", "药房", "买药", "用药"]) {
+            return ["买药这次记下"]
+        }
+        if containsAny(normalized, ["健身", "跑步", "瑜伽", "游泳", "训练"]) {
+            return ["运动这次记下"]
+        }
+
+        if containsAny(normalized, ["地铁", "公交"]) { return ["公共交通这一程"] }
+        if containsAny(normalized, ["打车", "出租", "网约车", "滴滴", "花小猪"]) { return ["打车这一程"] }
+        if containsAny(normalized, ["高铁", "火车", "机票", "机场"]) { return ["远一点的路程记下"] }
+
+        if containsAny(normalized, ["酒店", "民宿", "住宿", "宾馆", "客栈"]) {
+            return ["这次住宿记下"]
+        }
+        if containsAny(normalized, ["电影", "影院"]) {
+            return ["看电影这次记下"]
+        }
+
+        if pack.id == "shopping" || category == .shopping {
+            if let match = SemanticBoundaryGuard.strongestCategory(in: normalized),
+               match.category == .shopping {
+                return ["\(match.keyword)买好了"]
+            }
+        }
+
+        return nil
+    }
+
     static func tierIndex(for pack: ScenePackDefinition, amount: Double) -> Int {
         pack.tiers.firstIndex { amount <= $0.maxAmount } ?? max(0, pack.tiers.count - 1)
     }
@@ -189,6 +265,7 @@ enum ScenePackCopyPool {
         historyItems: [HomeItem]
     ) -> (key: String, notes: [String])? {
         let hour = Calendar.current.component(.hour, from: date)
+        let nonWorkdayLabel = RecordCalendarContext.dayKind(for: date) == .holiday ? "假期" : "周末"
 
         if pack.id == "travel",
            (hour >= 22 || hour < 6),
@@ -203,22 +280,22 @@ enum ScenePackCopyPool {
                 if shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
                     return ("breakfast", ["早餐简单吃一口", "晨间咖啡和小食", "上班前补点能量", "早饭热乎一下", "清晨的一份轻食", "早餐路上买一点", "豆浆包子早餐", "早间小食"])
                 }
-                return ("weekendBreakfast", ["早餐简单吃一口", "晨间咖啡和小食", "早饭热乎一下", "清晨的一份轻食", "早餐路上买一点", "豆浆包子早餐", "早间小食", "周末早餐有着落"])
+                return ("weekendBreakfast", ["早餐简单吃一口", "晨间咖啡和小食", "早饭热乎一下", "清晨的一份轻食", "早餐路上买一点", "豆浆包子早餐", "早间小食", "\(nonWorkdayLabel)早餐有着落"])
             case 11..<14:
                 if shouldUseWorkdayMealCopy(date: date, historyItems: historyItems) {
                     return ("lunch", ["工作日午餐简餐", "中午一顿饭", "外卖点到工位", "食堂一份热乎饭", "中午吃一顿", "忙里抽空吃顿饭", "中午简单吃一顿", "饱腹又不折腾的一顿"])
                 }
-                return ("weekendLunch", ["周末午餐简单吃一顿", "午间吃点热乎的", "周末中午补点能量", "今天午饭先记下", "中午吃得简单一点", "午间一顿饭", "周末饭点留一笔", "这顿午饭记下"])
+                return ("weekendLunch", ["\(nonWorkdayLabel)午餐简单吃一顿", "午间吃点热乎的", "\(nonWorkdayLabel)中午补点能量", "今天午饭先记下", "中午吃得简单一点", "午间一顿饭", "\(nonWorkdayLabel)饭点留一笔", "这顿午饭记下"])
             case 14..<17:
                 if shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
                     return ("tea", ["下午茶小点心", "午后一杯饮品", "忙里喝点什么", "咖啡时间记一下", "给下午添点甜", "便利店轻食补给", "下午补一点能量", "茶歇时刻记一下"])
                 }
-                return ("weekendTea", ["下午茶小点心", "午后一杯饮品", "咖啡时间记一下", "给下午添点甜", "便利店轻食补给", "下午补一点能量", "茶歇时刻记一下", "周末下午吃点小的"])
+                return ("weekendTea", ["下午茶小点心", "午后一杯饮品", "咖啡时间记一下", "给下午添点甜", "便利店轻食补给", "下午补一点能量", "茶歇时刻记一下", "\(nonWorkdayLabel)下午吃点小的"])
             case 17..<21:
                 if shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
                     return ("dinner", ["晚餐一顿热饭", "下班后的一顿热饭", "晚餐小聚一份主菜", "做了一顿家常饭", "热腾腾的面或饭", "今晚吃得挺实在", "给一天收个尾", "晚饭时间坐一会儿"])
                 }
-                return ("weekendDinner", ["晚餐一顿热饭", "晚餐小聚一份主菜", "做了一顿家常饭", "热腾腾的面或饭", "今晚吃得挺实在", "给一天收个尾", "晚饭时间坐一会儿", "周末晚饭记下"])
+                return ("weekendDinner", ["晚餐一顿热饭", "晚餐小聚一份主菜", "做了一顿家常饭", "热腾腾的面或饭", "今晚吃得挺实在", "给一天收个尾", "晚饭时间坐一会儿", "\(nonWorkdayLabel)晚饭记下"])
             default:
                 if shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
                     return ("nightSnack", ["夜里补了一点夜宵", "加班后吃点热乎的", "深夜小食", "晚归路上的一口热食", "夜宵时间记下", "夜里补点吃的", "夜里饿了吃一口", "深夜一顿热食"])
@@ -227,20 +304,22 @@ enum ScenePackCopyPool {
             }
         }
 
-        if pack.id == "commute" || category == .transport {
+        if pack.id == "commute" {
             switch hour {
-            case 7..<10:
+            case 5..<10:
                 if shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
                     return ("morningCommute", ["早上路上这一程", "早间的一笔路费", "早高峰这一段", "清晨出门的一笔路费", "赶早路上的交通记录", "地铁公交到站", "早上这趟路走完了", "今天的出行记下"])
                 }
                 return ("weekendMorningRoute", ["早上出门的一段路", "清晨出门的一笔路费", "早上这趟路走完了", "今天的出行记下", "短途出行记一下", "公交地铁一段路", "这一程走完了", "早上的路费"])
-            case 17..<21:
+            case 17..<24:
                 if shouldUseWorkdayCopy(date: date, historyItems: historyItems) {
                     return ("eveningCommute", ["下班路上这一程", "晚高峰回家", "结束一天后的返程", "回家路费记一下", "下班后的回家路", "下班这趟路到家了", "下班回到家这边", "回程路上少赶一点"])
                 }
                 return ("weekendEveningRoute", ["傍晚的一段路", "回家路费记一下", "晚间出行完成", "回到家这边", "回程路上少赶一点", "这一程走完了", "晚上路费记一下", "短途回程"])
+            case 0..<5:
+                return ("lateNightRoute", ["晚归路上的一程", "夜里这段路费", "回家路上补一笔", "深夜出行记下", "这趟到家了", "晚点回家的路"])
             default:
-                return nil
+                return ("daytimeRoute", ["路上这一程", "出门这段记下", "今天出行记下", "这趟走完了", "路费补一笔", "公共交通一段路", "短途出行记一下", "路上花费补上"])
             }
         }
 
@@ -248,27 +327,23 @@ enum ScenePackCopyPool {
     }
 
     private static func shouldUseWorkdayMealCopy(date: Date, historyItems: [HomeItem]) -> Bool {
-        guard isWeekend(date) else { return true }
+        guard RecordCalendarContext.isNonWorkday(date) else { return true }
         guard shouldUseWorkdayCopy(date: date, historyItems: historyItems) else { return false }
         return historyItems.contains { item in
             guard item.source == .manual,
                   item.category == .dining,
-                  isWeekend(item.createdAt) else { return false }
+                  RecordCalendarContext.isNonWorkday(item.createdAt) else { return false }
             return containsWeekendWorkMealCue("\(item.title) \(item.emotionTag)")
         }
     }
 
     private static func shouldUseWorkdayCopy(date: Date, historyItems: [HomeItem]) -> Bool {
-        guard isWeekend(date) else { return true }
+        guard RecordCalendarContext.isNonWorkday(date) else { return true }
         return historyItems.contains { item in
-            guard item.source == .manual, isWeekend(item.createdAt) else { return false }
+            guard item.source == .manual,
+                  RecordCalendarContext.isNonWorkday(item.createdAt) else { return false }
             return containsWeekendWorkCue("\(item.title) \(item.emotionTag)")
         }
-    }
-
-    private static func isWeekend(_ date: Date) -> Bool {
-        let weekday = Calendar.current.component(.weekday, from: date)
-        return weekday == 1 || weekday == 7
     }
 
     private static func containsWeekendWorkMealCue(_ text: String) -> Bool {
@@ -473,9 +548,7 @@ enum ScenePackCopyPool {
     }
 
     private static func containsPetKeyword(_ text: String) -> Bool {
-        ["猫", "狗", "宠物", "猫砂", "尿垫", "罐头", "冻干", "驱虫", "毛孩", "小窝"].contains {
-            text.localizedCaseInsensitiveContains($0)
-        }
+        SemanticBoundaryGuard.matchesPetSupply(text)
     }
 
     private static func dayKey(for date: Date) -> String {

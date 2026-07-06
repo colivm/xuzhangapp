@@ -40,9 +40,6 @@ struct InsightWebView: View {
     private static var aiCommandLifeMarkItemsCache: [String: [HomeItem]] = [:]
     private static var aiCommandCacheOrder: [String] = []
     private static let aiCommandCacheLimit = 48
-    private static let mainlandChinaHolidayOverrides: Set<String> = [
-        "2026-06-19" // Dragon Boat Festival holiday.
-    ]
 
     private struct AIStatusPill: Equatable {
         enum Kind {
@@ -878,7 +875,7 @@ struct InsightWebView: View {
             return [normalized]
         }
 
-        let candidates = ["咖啡", "奶茶", "早餐", "午餐", "晚餐", "夜宵", "七欣天", "外卖", "食堂", "热饭", "打车", "地铁", "公交", "停车", "充电桩", "超市", "便利店", "买菜", "小象", "京东到家", "水果", "药", "运动", "健身", "奶粉", "尿不湿", "狗粮", "猫粮", "宠物", "酒店", "民宿", "旅行", "电影", "渔具", "露营", "摄影", "手办"]
+        let candidates = ["咖啡", "奶茶", "早餐", "午餐", "晚餐", "夜宵", "七欣天", "外卖", "食堂", "热饭", "打车", "地铁", "公交", "停车", "充电桩", "超市", "便利店", "买菜", "小象", "京东到家", "水果", "药", "运动", "健身", "奶粉", "尿不湿", "狗粮", "猫粮", "宠物用品", "酒店", "民宿", "旅行", "电影", "渔具", "露营", "摄影", "手办"]
         return candidates.filter { title.contains($0) }
     }
 
@@ -3247,7 +3244,7 @@ struct InsightWebView: View {
         candidates: [HomeItem]
     ) -> HomeItem? {
         let calendar = Calendar.current
-        guard isWeekday(date) else { return nil }
+        guard isCommuteWorkday(date) else { return nil }
         return candidates
             .filter { item in
                 guard item.amount > 0,
@@ -3282,7 +3279,7 @@ struct InsightWebView: View {
                 let isRushHour = (6...10).contains(hour) || (16...21).contains(hour)
                 return item.amount > 0
                     && item.amount <= 80
-                    && isWeekday(item.createdAt)
+                    && isCommuteWorkday(item.createdAt)
                     && isRushHour
                     && (containsAny(text, ["通勤", "地铁", "公交", "早高峰", "晚高峰", "上班", "下班"]) || item.amount <= 15)
             }
@@ -3586,11 +3583,11 @@ struct InsightWebView: View {
     private func commuteSingleDayBlockedText(for range: AICommandTimeRange) -> String? {
         guard isSingleDayRange(range) else { return nil }
         let day = aiCommandCalendar.startOfDay(for: range.start)
-        if !isWeekday(day) {
-            return "\(range.label)不是工作日，先不自动生成通勤草稿。如果确实要补，可以改成单笔手动添加。"
-        }
-        if isKnownMainlandChinaHoliday(day) {
+        if RecordCalendarContext.dayKind(for: day, calendar: aiCommandCalendar) == .holiday {
             return "\(range.label)按节假日处理，先不自动生成通勤草稿。如果确实要补，可以改成单笔手动添加。"
+        }
+        if !isCommuteWorkday(day) {
+            return "\(range.label)不是工作日，先不自动生成通勤草稿。如果确实要补，可以改成单笔手动添加。"
         }
         return nil
     }
@@ -3627,61 +3624,11 @@ struct InsightWebView: View {
     }
 
     private func isCommuteWorkday(_ date: Date) -> Bool {
-        guard isWeekday(date) else { return false }
-        return !isKnownMainlandChinaHoliday(date)
-    }
-
-    private func isWeekday(_ date: Date) -> Bool {
-        let weekday = aiCommandCalendar.component(.weekday, from: date)
-        return weekday >= 2 && weekday <= 6
+        RecordCalendarContext.isWorkday(date, calendar: aiCommandCalendar)
     }
 
     private func daysBetween(_ start: Date, _ end: Date) -> Int {
         max(1, aiCommandCalendar.dateComponents([.day], from: start, to: end).day ?? 0)
-    }
-
-    private func isKnownMainlandChinaHoliday(_ date: Date) -> Bool {
-        if Self.mainlandChinaHolidayOverrides.contains(gregorianDateKey(for: date)) {
-            return true
-        }
-        let components = aiCommandCalendar.dateComponents([.month, .day], from: date)
-        if components.month == 1 && components.day == 1 {
-            return true
-        }
-        if components.month == 5 && components.day == 1 {
-            return true
-        }
-        if components.month == 10 && (1...3).contains(components.day ?? 0) {
-            return true
-        }
-        return isTraditionalMainlandChinaPublicFestival(date)
-    }
-
-    private func isTraditionalMainlandChinaPublicFestival(_ date: Date) -> Bool {
-        var lunarCalendar = Calendar(identifier: .chinese)
-        lunarCalendar.timeZone = aiCommandCalendar.timeZone
-        let components = lunarCalendar.dateComponents([.month, .day, .isLeapMonth], from: date)
-        guard components.isLeapMonth != true else { return false }
-        if components.month == 1 && (1...3).contains(components.day ?? 0) {
-            return true
-        }
-        if components.month == 5 && components.day == 5 {
-            return true
-        }
-        if components.month == 8 && components.day == 15 {
-            return true
-        }
-        return false
-    }
-
-    private func gregorianDateKey(for date: Date) -> String {
-        let components = aiCommandCalendar.dateComponents([.year, .month, .day], from: date)
-        return String(
-            format: "%04d-%02d-%02d",
-            components.year ?? 0,
-            components.month ?? 0,
-            components.day ?? 0
-        )
     }
 
     private func aiCommandCategoryIntent(from text: String) -> AICommandCategoryIntent? {
@@ -3695,7 +3642,7 @@ struct InsightWebView: View {
             AICommandCategoryIntent(
                 categories: [.daily, .shopping, .health],
                 label: "娃和毛孩",
-                keywords: ["娃", "宝宝", "孩子", "婴儿", "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "奶瓶", "安抚奶嘴", "宝宝湿巾", "婴儿湿巾", "童装", "儿童座椅", "推车", "宠物", "毛孩子", "毛孩", "狗粮", "猫粮", "猫砂", "宠物粮", "宠物口粮", "尿垫", "冻干", "宠物罐头", "驱虫", "宠物医院", "洗护"],
+                keywords: SemanticBoundaryGuard.babyStrongKeywords + SemanticBoundaryGuard.petStrongKeywords,
                 requiresKeywordMatch: true
             ),
             AICommandCategoryIntent(

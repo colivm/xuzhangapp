@@ -208,7 +208,7 @@ struct RecordPrefillService {
         let sameTime = historyItems.filter { item in
             item.category == category
                 && hourBucket(for: item.createdAt) == hourBucket(for: input.referenceDate)
-                && isWeekend(item.createdAt) == isWeekend(input.referenceDate)
+                && dayKind(for: item.createdAt) == dayKind(for: input.referenceDate)
         }
         if sameTime.count >= 3,
            let title = mostCommonTitle(in: sameTime, category: category, minimumScore: 3) {
@@ -309,7 +309,7 @@ struct RecordPrefillService {
 
     private func sameHabitContext(item: HomeItem, amount: Double, referenceDate: Date) -> Bool {
         hourBucket(for: item.createdAt) == hourBucket(for: referenceDate)
-            && isWeekend(item.createdAt) == isWeekend(referenceDate)
+            && dayKind(for: item.createdAt) == dayKind(for: referenceDate)
             && sameAmountContext(historyAmount: item.amount, inputAmount: amount)
     }
 
@@ -418,9 +418,8 @@ struct RecordPrefillService {
         Calendar.current.component(.hour, from: date) / 3
     }
 
-    private func isWeekend(_ date: Date) -> Bool {
-        let weekday = Calendar.current.component(.weekday, from: date)
-        return weekday == 1 || weekday == 7
+    private func dayKind(for date: Date) -> RecordCalendarContext.DayKind {
+        RecordCalendarContext.dayKind(for: date)
     }
 
     private func amountBand(for amount: Double) -> Int {

@@ -109,7 +109,7 @@ enum PhotoMemoryPromptPolicy {
                 assetRole: .moment,
                 sceneLabel: "心意时刻",
                 title: "这份心意可以留一下",
-                detail: "礼物、蛋糕、鲜花这类记录，适合以后和人情回看连起来。",
+                detail: "礼物、蛋糕、鲜花这些记录，适合以后和人情回看连起来。",
                 actionTitle: "留张心意图"
             )
         }
@@ -125,7 +125,7 @@ enum PhotoMemoryPromptPolicy {
             )
         }
 
-        if containsAny(text, careRecordKeywords) {
+        if SemanticBoundaryGuard.familyCareKind(in: text) != nil {
             return PhotoMemoryPromptReason(
                 sceneHint: .careRecord,
                 assetRole: .careRecord,
@@ -153,7 +153,7 @@ enum PhotoMemoryPromptPolicy {
                 assetRole: .object,
                 sceneLabel: "家里添置",
                 title: "这件家里的事可以留图",
-                detail: "家电、家具、搬家或家政这类记录，以后看家里变化会更有参照。",
+                detail: "家电、家具、搬家或家政这些记录，以后看家里变化会更有参照。",
                 actionTitle: "拍下这一件"
             )
         }
@@ -220,7 +220,7 @@ enum PhotoMemoryPromptPolicy {
                 actionTitle: "留下这张"
             )
         }
-        if containsAny(text, careRecordKeywords) {
+        if SemanticBoundaryGuard.familyCareKind(in: text) != nil {
             return PhotoMemoryPromptReason(
                 sceneHint: .careRecord,
                 assetRole: .careRecord,
@@ -378,11 +378,6 @@ enum PhotoMemoryPromptPolicy {
     private static let experienceKeywords = [
         "电影", "影院", "演唱会", "音乐节", "live", "剧场", "话剧", "展览", "美术馆",
         "博物馆", "密室", "剧本杀", "桌游", "游乐园", "景区", "门票", "露营"
-    ]
-
-    private static let careRecordKeywords = [
-        "宝宝", "孩子", "婴儿", "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "奶瓶",
-        "托育", "幼儿园", "早教", "宠物", "狗粮", "猫粮", "猫砂", "宠物医院", "驱虫"
     ]
 
     private static let healthRecordKeywords = [

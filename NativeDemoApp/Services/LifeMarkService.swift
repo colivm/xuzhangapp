@@ -217,7 +217,7 @@ enum LifeMarkService {
             label: "宝宝照护",
             category: .daily,
             categories: [.daily, .shopping, .health],
-            keywords: ["宝宝", "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "母婴", "婴儿", "辅食", "湿巾", "奶瓶", "安抚奶嘴", "早教", "早教课", "托育费", "托班费", "幼儿园学费", "童装", "儿童座椅", "推车"],
+            keywords: ["宝宝", "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "母婴", "婴儿", "辅食", "宝宝湿巾", "婴儿湿巾", "奶瓶", "安抚奶嘴", "早教", "早教课", "托育费", "托班费", "幼儿园学费", "童装", "儿童座椅", "推车"],
             access: .free,
             priority: 12,
             minimumCount: 1,
@@ -316,7 +316,7 @@ enum LifeMarkService {
             label: "宠物照护",
             category: .daily,
             categories: [.daily, .health, .shopping],
-            keywords: ["宠物", "猫", "狗", "猫砂", "狗粮", "猫粮", "罐头", "冻干", "尿垫", "驱虫", "宠物医院", "洗护"],
+            keywords: ["宠物", "毛孩子", "毛孩", "猫砂", "狗粮", "猫粮", "宠物粮", "宠物口粮", "猫罐头", "狗罐头", "宠物罐头", "猫冻干", "狗冻干", "宠物冻干", "尿垫", "猫驱虫", "狗驱虫", "宠物驱虫", "宠物医院", "猫狗洗护", "宠物洗护"],
             access: .free,
             priority: 38,
             minimumCount: 1,
@@ -442,7 +442,13 @@ enum LifeMarkService {
             )
         }
         return definitions.first { definition in
-            containsAny(normalized, definition.keywords) || normalized.contains(definition.label)
+            if definition.id == "baby_supply" {
+                return SemanticBoundaryGuard.matchesBabySupply(normalized) || normalized.contains(definition.label)
+            }
+            if definition.id == "pet_supply" {
+                return SemanticBoundaryGuard.matchesPetSupply(normalized) || normalized.contains(definition.label)
+            }
+            return containsAny(normalized, definition.keywords) || normalized.contains(definition.label)
         }
         .map { definition in
             LifeMarkQueryIntent(
@@ -469,7 +475,14 @@ enum LifeMarkService {
                 && (containsAny(semanticText(for: item), ["通勤", "上班", "下班", "地铁", "公交"]) || item.amount <= 80)
         }
         let categoryMatched = intent.categories.contains(item.category)
-        let keywordMatched = containsAny(semanticText(for: item), intent.keywords)
+        let text = semanticText(for: item)
+        if intent.id == "baby_supply" {
+            return categoryMatched && SemanticBoundaryGuard.matchesBabySupply(text)
+        }
+        if intent.id == "pet_supply" {
+            return categoryMatched && SemanticBoundaryGuard.matchesPetSupply(text)
+        }
+        let keywordMatched = containsAny(text, intent.keywords)
         return intent.requiresKeywordMatch
             ? categoryMatched && keywordMatched
             : categoryMatched || keywordMatched
@@ -561,16 +574,20 @@ enum LifeMarkService {
                 && (containsAny(semanticText(for: item), ["聚餐", "朋友", "请客", "约饭", "火锅", "烤肉", "生日", "家庭", "见面"]) || item.amount >= 60)
         }
         if !weekendGathering.isEmpty {
+            let hasHoliday = weekendGathering.contains {
+                RecordCalendarContext.dayKind(for: $0.createdAt) == .holiday
+            }
+            let label = hasHoliday ? "假期聚餐" : "周末聚餐"
             rows.append(aggregate(
                 id: "weekend_gathering_context",
                 kind: .context,
                 access: .member,
-                label: "周末聚餐",
-                title: "周末聚餐",
-                detail: "周末的餐饮和见面记录连在一起，更像一次相聚，而不只是餐饮分类。",
+                label: label,
+                title: label,
+                detail: "\(hasHoliday ? "假期" : "周末")的餐饮和见面记录连在一起，更像一次相聚，而不只是餐饮分类。",
                 category: .social,
                 items: weekendGathering,
-                queryHint: "这周末聚餐花了多少？"
+                queryHint: hasHoliday ? "这次假期聚餐花了多少？" : "这周末聚餐花了多少？"
             ))
         }
 
@@ -690,14 +707,17 @@ enum LifeMarkService {
         if definition.id == "travel", item.memoryContext?.semanticPlace == "外地" {
             return true
         }
+        let text = semanticText(for: item)
         let categoryMatched = definition.categories.contains(item.category)
-        let keywordMatched = containsAny(semanticText(for: item), definition.keywords)
+        let keywordMatched = containsAny(text, definition.keywords)
+        if definition.id == "baby_supply" {
+            return categoryMatched && SemanticBoundaryGuard.matchesBabySupply(text)
+        }
+        if definition.id == "pet_supply" {
+            return categoryMatched && SemanticBoundaryGuard.matchesPetSupply(text)
+        }
         if item.scenePackId == "family", definition.id == "daily_supply" {
             return false
-        }
-        if item.scenePackId == "family",
-           ["baby_supply", "pet_supply"].contains(definition.id) {
-            return categoryMatched && keywordMatched
         }
         if definition.id == "daily_supply",
            isTelecomBill(item) {
@@ -722,14 +742,24 @@ enum LifeMarkService {
     private static func matchesAnySpecificDefinition(_ item: HomeItem, ids specificIDs: Set<String>) -> Bool {
         let text = semanticText(for: item)
         return definitions.contains { definition in
-            specificIDs.contains(definition.id)
-                && definition.categories.contains(item.category)
-                && containsAny(text, definition.keywords)
+            guard specificIDs.contains(definition.id),
+                  definition.categories.contains(item.category) else { return false }
+            if definition.id == "baby_supply" {
+                return SemanticBoundaryGuard.matchesBabySupply(text)
+            }
+            if definition.id == "pet_supply" {
+                return SemanticBoundaryGuard.matchesPetSupply(text)
+            }
+            return containsAny(text, definition.keywords)
         }
     }
 
     private static func isTelecomBill(_ item: HomeItem) -> Bool {
         containsAny(semanticText(for: item), telecomBillKeywords)
+    }
+
+    private static func isHouseholdCleaningSupply(_ item: HomeItem) -> Bool {
+        SemanticBoundaryGuard.isHouseholdCleaningSupply(semanticText(for: item))
     }
 
     private static func matches(_ item: HomeItem, definitionID: String) -> Bool {
@@ -749,9 +779,9 @@ enum LifeMarkService {
             return count == 1 ? "健身恢复被记下来了，这是身体这条线的开头。" : "健身恢复出现 \(count) 次，身体这条线正在变清楚。"
         case "咖啡饮品":
             if recurring {
-                return "咖啡饮品又落进这段记录\(historyText)，这类小补给已经是生活里的固定节点。"
+                return "咖啡饮品又记下来了\(historyText)，以后能看出常在哪些时段会买。"
             }
-            return count == 1 ? "咖啡饮品被记下来了，以后再看会知道今天从哪一杯开始。" : "咖啡饮品出现 \(count) 次，这些小补给正在连成一天里的节奏。"
+            return count == 1 ? "咖啡饮品被记下来了，以后再看会知道今天从哪一杯开始。" : "咖啡饮品记了 \(count) 次，今天哪几次买了喝的会更清楚。"
         case "宝宝照护":
             if recurring {
                 return "宝宝相关用品又被记下\(historyText)，奶粉、尿不湿或辅食这些细项会更清楚。"
@@ -781,7 +811,7 @@ enum LifeMarkService {
             if recurring {
                 return "\(label)又出现了\(historyText)，同类记录可以放在一起回看。"
             }
-            return "\(label)出现 \(count) 次，先把这类记录归在一起。"
+            return "\(label)记了 \(count) 次，后面可以一起回看。"
         }
     }
 
@@ -807,7 +837,7 @@ enum LifeMarkService {
             case "给毛孩子买猫砂":
                 return "第一次给毛孩子买猫砂被记下来了；以后再买，会和同类记录放在一起。"
             case "给毛孩子买零食":
-                return "第一次给毛孩子买零食被记下来了；以后再买，也能看见这些小补给。"
+                return "第一次给毛孩子买零食被记下来了；以后再买，也能看到上一次是什么时候。"
             case "毛孩子护理", "毛孩子照护":
                 return "第一次毛孩子护理被记下来了；以后同类记录会显示时间和次数。"
             case "露营":
@@ -830,7 +860,7 @@ enum LifeMarkService {
         case "健身恢复":
             return "健身恢复来到第 \(target) 次，坚持已经开始有形状了。"
         case "咖啡饮品":
-            return "咖啡饮品来到第 \(target) 次，这类小补给已经成为生活里的固定节点。"
+            return "咖啡饮品来到第 \(target) 次，常买的时段会慢慢清楚。"
         case "给宝宝买奶粉", "给宝宝买尿不湿", "给宝宝买辅食", "给宝宝买照护用品", "宝宝照护":
             return "\(label)来到第 \(target) 次，上一次和这一次的间隔会更清楚。"
         case "给毛孩子买狗粮", "给毛孩子买猫粮", "给毛孩子买猫砂", "给毛孩子买零食", "毛孩子护理", "毛孩子照护":
@@ -863,6 +893,9 @@ enum LifeMarkService {
 
     private static func babySupplyLabel(for item: HomeItem) -> String {
         let text = semanticText(for: item)
+        if !SemanticBoundaryGuard.matchesBabySupply(text) || isHouseholdCleaningSupply(item) {
+            return "日用补货"
+        }
         if containsAny(text, ["奶粉"]) {
             return "给宝宝买奶粉"
         }
@@ -875,7 +908,7 @@ enum LifeMarkService {
         if containsAny(text, ["托育费", "托班费", "幼儿园学费", "早教课"]) {
             return "托育早教"
         }
-        if containsAny(text, ["湿巾", "奶瓶", "安抚奶嘴"]) {
+        if containsAny(text, ["宝宝湿巾", "婴儿湿巾", "奶瓶", "安抚奶嘴"]) {
             return "给宝宝买照护用品"
         }
         return "宝宝照护"
@@ -883,6 +916,9 @@ enum LifeMarkService {
 
     private static func petSupplyLabel(for item: HomeItem) -> String {
         let text = semanticText(for: item)
+        guard SemanticBoundaryGuard.matchesPetSupply(text) else {
+            return "日用补货"
+        }
         if containsAny(text, ["狗粮"]) {
             return "给毛孩子买狗粮"
         }
@@ -892,10 +928,10 @@ enum LifeMarkService {
         if containsAny(text, ["猫砂"]) {
             return "给毛孩子买猫砂"
         }
-        if containsAny(text, ["冻干", "罐头"]) {
+        if containsAny(text, ["猫冻干", "狗冻干", "宠物冻干", "猫罐头", "狗罐头", "宠物罐头"]) {
             return "给毛孩子买零食"
         }
-        if containsAny(text, ["宠物医院", "驱虫", "洗护"]) {
+        if containsAny(text, ["宠物医院", "猫驱虫", "狗驱虫", "宠物驱虫", "猫狗洗护", "宠物洗护"]) {
             return "毛孩子护理"
         }
         return "毛孩子照护"
@@ -997,8 +1033,7 @@ enum LifeMarkService {
     }
 
     private static func isWeekend(_ date: Date) -> Bool {
-        let weekday = Calendar.current.component(.weekday, from: date)
-        return weekday == 1 || weekday == 7
+        RecordCalendarContext.isNonWorkday(date)
     }
 
     private static func longestStreak(in days: [Date]) -> (count: Int, days: Set<Date>)? {
