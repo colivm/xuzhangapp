@@ -2330,7 +2330,7 @@ private func lifeSliceConcretePhotoCaption(
     if lifeSliceContainsAny(text, ["通勤", "公交", "地铁", "打车", "路上", "回家", "上班"]) {
         return text.localizedCaseInsensitiveContains("回家") ? "回家路上" : "路上的一段"
     }
-    if lifeSliceContainsAny(text, ["购物", "添置", "快递", "买"]) {
+    if lifeSliceContainsAny(text, ["购物", "添置", "快递", "下单", "衣服", "鞋", "背包", "数码", "盲盒", "手办"]) {
         return "这次买的东西"
     }
 
@@ -3343,7 +3343,7 @@ private struct WeeklyStoryShareCardView: View {
         if lifeSliceContainsAny(evidence, ["通勤", "公交", "地铁", "打车", "路上", "回家", "上班"]) {
             return "路上的一段"
         }
-        if lifeSliceContainsAny(evidence, ["购物", "添置", "快递", "买"]) {
+        if lifeSliceContainsAny(evidence, ["购物", "添置", "快递", "下单", "衣服", "鞋", "背包", "数码", "盲盒", "手办"]) {
             return "一次添置"
         }
         if let first = posterSceneLabels.first, !first.isEmpty {

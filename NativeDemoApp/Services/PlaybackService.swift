@@ -1025,7 +1025,8 @@ final class PlaybackService {
             if containsAny(text, ["健身", "跑步", "瑜伽", "运动", "训练", "球场", "游泳", "课程"]) { return .fitness }
             return .care
         case .daily:
-            if containsAny(text, ["买菜", "食材", "盒马", "叮咚", "菜", "水果", "厨房", "饭桌"]) { return .groceries }
+            if !SemanticBoundaryGuard.isHouseholdCleaningSupply(text),
+               containsAny(text, ["买菜", "食材", "盒马", "叮咚", "水果", "蔬菜", "鸡蛋", "菜场", "厨房食材", "饭桌"]) { return .groceries }
             return .homeSupply
         case .shopping:
             return .shopping

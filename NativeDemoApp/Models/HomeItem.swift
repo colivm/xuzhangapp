@@ -263,7 +263,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["医美", "医美脱毛", "光子嫩肤", "水光针"]) {
                 return "身体护理安排"
             }
-            if containsAny(text, ["药", "药店", "感冒", "退烧", "消炎", "止痛", "维生素", "眼药水", "创可贴"]) {
+            if containsAny(text, ["买药", "药店", "药房", "感冒药", "退烧药", "消炎药", "止痛药", "用药", "维生素", "眼药水", "创可贴"]) {
                 return "药品护理记下"
             }
             if containsAny(text, ["按摩", "理疗", "康复", "护具", "筋膜", "贴膏", "膏药", "蛋白", "补剂", "能量胶"]) {
@@ -348,26 +348,36 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["露营", "帐篷", "天幕", "睡袋", "骑行", "头盔", "摄影", "相机", "镜头", "模型", "手办", "谷子", "潮玩", "吧唧", "徽章", "亚克力", "立牌", "盲盒", "泡泡玛特", "POP MART", "POPMART", "LABUBU", "棉花娃娃", "痛包", "同人本", "乙游周边", "漫展周边", "乐器", "吉他", "键盘"]) {
                 return "爱好里的小投入"
             }
-            if containsAny(text, ["奶粉"]) { return "宝宝口粮补上" }
-            if containsAny(text, ["尿不湿", "纸尿裤", "拉拉裤"]) { return "照护用品补齐" }
-            if containsAny(text, ["辅食", "奶瓶", "安抚奶嘴", "托育费", "托班费", "幼儿园学费", "早教课"]) { return "宝宝照护补上" }
-            if containsAny(text, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) { return "毛孩子口粮补上" }
-            if containsAny(text, ["猫砂", "尿垫", "猫冻干", "狗冻干", "宠物冻干", "猫罐头", "狗罐头", "宠物罐头"]) { return "毛孩子日常补给" }
+            if containsTelecomBillKeyword(text) { return "手机话费记下" }
+            if SemanticBoundaryGuard.matchesBabySupply(text) {
+                if containsAny(text, ["奶粉"]) { return "宝宝口粮补上" }
+                if containsAny(text, ["尿不湿", "纸尿裤", "拉拉裤"]) { return "照护用品补齐" }
+                if containsAny(text, ["辅食", "奶瓶", "安抚奶嘴", "托育费", "托班费", "幼儿园学费", "早教课"]) { return "宝宝照护补上" }
+                return "宝宝照护补上"
+            }
+            if SemanticBoundaryGuard.matchesPetSupply(text) {
+                if containsAny(text, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) { return "毛孩子口粮补上" }
+                return "毛孩子日常补给"
+            }
             if containsAny(text, ["衣服", "上衣", "裤子", "裙", "外套", "内衣"]) { return "给衣柜添一件" }
             if containsAny(text, ["鞋", "袜"]) { return "脚下换新一点" }
             if containsAny(text, ["护肤", "洗面奶", "面霜", "防晒", "口红", "化妆"]) { return "洗护美妆补上" }
-            if containsAny(text, ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国联通", "中国电信", "运营商缴费"]) { return "手机话费记下" }
             if containsAny(text, ["手机", "耳机", "充电器", "数据线", "充电宝", "电脑", "键盘"]) { return "数码小物到位" }
             if containsAny(text, ["书", "文具", "本子", "笔"]) { return "书桌常用的补上" }
             if containsAny(text, ["花", "香薰", "摆件"]) { return "给日子添点好看" }
             if containsAny(text, ["快递", "运费"]) { return "路上的小费用" }
         case .daily:
-            if containsAny(text, ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国联通", "中国电信", "运营商缴费"]) { return "手机话费记下" }
-            if containsAny(text, ["奶粉"]) { return "宝宝口粮补上" }
-            if containsAny(text, ["尿不湿", "纸尿裤", "拉拉裤"]) { return "照护用品补齐" }
-            if containsAny(text, ["辅食", "奶瓶", "安抚奶嘴"]) { return "宝宝照护补上" }
-            if containsAny(text, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) { return "毛孩子口粮补上" }
-            if containsAny(text, ["猫砂", "尿垫", "猫冻干", "狗冻干", "宠物冻干", "猫罐头", "狗罐头", "宠物罐头"]) { return "毛孩子日常补给" }
+            if containsTelecomBillKeyword(text) { return "手机话费记下" }
+            if SemanticBoundaryGuard.matchesBabySupply(text) {
+                if containsAny(text, ["奶粉"]) { return "宝宝口粮补上" }
+                if containsAny(text, ["尿不湿", "纸尿裤", "拉拉裤"]) { return "照护用品补齐" }
+                if containsAny(text, ["辅食", "奶瓶", "安抚奶嘴", "托育费", "托班费", "幼儿园学费", "早教课"]) { return "宝宝照护补上" }
+                return "宝宝照护补上"
+            }
+            if SemanticBoundaryGuard.matchesPetSupply(text) {
+                if containsAny(text, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) { return "毛孩子口粮补上" }
+                return "毛孩子日常补给"
+            }
             if containsAny(text, ["纸巾", "卷纸", "抽纸", "湿巾"]) { return "纸品补上了" }
             if containsAny(text, ["洗衣液", "洗洁精", "清洁", "垃圾袋", "消毒"]) { return "清洁用品补齐" }
             if containsAny(text, ["洗发水", "沐浴露", "牙刷", "毛巾"]) { return "洗护日常补上" }

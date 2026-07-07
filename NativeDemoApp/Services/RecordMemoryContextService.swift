@@ -107,10 +107,12 @@ enum RecordMemoryContextService {
         if category == .dining {
             return .dining
         }
-        if category == .daily, containsAny(text, ["买菜", "食材", "生鲜", "水果", "厨房"]) {
+        if category == .daily,
+           !SemanticBoundaryGuard.isHouseholdCleaningSupply(text),
+           containsAny(text, ["买菜", "食材", "生鲜", "水果", "蔬菜", "鸡蛋", "菜场"]) {
             return .groceries
         }
-        if category == .health, containsAny(text, ["药", "药店", "医院", "挂号", "问诊", "护理"]) {
+        if category == .health, containsAny(text, ["买药", "药店", "药房", "用药", "医院", "挂号", "问诊", "护理"]) {
             return .medicine
         }
         if category == .social {
@@ -225,7 +227,7 @@ enum RecordMemoryContextService {
         let prefix = RecordCalendarContext.dayKind(for: date, calendar: calendar) == .holiday ? "假期" : "周末"
 
         let dayItems = existingItems.filter { calendar.isDate($0.createdAt, inSameDayAs: date) }
-        let dayText = (dayItems.map { "\($0.title) \($0.emotionTag) \($0.category.rawValue)" } + [title]).joined(separator: " ")
+        let dayText = (dayItems.map { "\($0.title) \($0.displayEmotionTag) \($0.category.rawValue)" } + [title]).joined(separator: " ")
         let hasTransport = dayItems.contains { $0.category == .transport } || itemCategory == .transport
         let hasDining = dayItems.contains { $0.category == .dining } || itemCategory == .dining
         let hasLeisureCue = containsAny(dayText, ["景区", "景点", "电影", "展", "公园", "旅行", "酒店", "民宿", "朋友", "聚"])

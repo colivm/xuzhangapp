@@ -85,7 +85,7 @@ enum LifeMarkService {
             label: "健身恢复",
             category: .health,
             categories: [.health, .shopping, .entertainment, .daily],
-            keywords: ["运动", "健身", "健身房", "训练", "锻炼", "跑步", "瑜伽", "普拉提", "游泳", "球场", "羽毛球", "网球", "篮球", "私教", "团课", "课程", "健身卡", "月卡", "年卡", "护具", "运动鞋", "运动服", "蛋白", "补剂", "能量胶", "恢复", "按摩", "理疗", "康复", "运动装备"],
+            keywords: ["健身", "健身房", "健身训练", "锻炼", "跑步", "瑜伽", "普拉提", "游泳", "球场", "羽毛球", "网球", "篮球", "私教", "团课", "健身课程", "健身卡", "健身月卡", "健身年卡", "护具", "运动鞋", "运动服", "蛋白", "补剂", "能量胶", "恢复按摩", "理疗", "康复", "运动装备"],
             access: .free,
             priority: 10,
             minimumCount: 1,
@@ -283,7 +283,7 @@ enum LifeMarkService {
             label: "超市买菜",
             category: .daily,
             categories: [.daily, .dining, .shopping],
-            keywords: ["买菜", "菜场", "生鲜", "水果", "蔬菜", "鸡蛋", "盒马", "叮咚", "叮咚买菜", "小象超市", "京东到家", "京东秒送", "朴朴超市", "淘宝买菜", "美团买菜", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈", "牛奶", "鲜奶", "纯牛奶", "酸奶", "认养一头牛", "认养牛奶", "特仑苏", "伊利", "蒙牛", "光明", "金典", "简爱", "悦鲜活", "食材", "厨房", "做饭"],
+            keywords: ["买菜", "菜场", "生鲜", "水果", "蔬菜", "鸡蛋", "盒马", "叮咚", "叮咚买菜", "小象超市", "京东到家", "京东秒送", "朴朴超市", "淘宝买菜", "美团买菜", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈", "牛奶", "鲜奶", "纯牛奶", "酸奶", "认养一头牛", "认养牛奶", "特仑苏", "伊利", "蒙牛", "光明", "金典", "简爱", "悦鲜活", "食材", "厨房食材", "做饭食材"],
             access: .free,
             priority: 34,
             minimumCount: 1,
@@ -715,6 +715,10 @@ enum LifeMarkService {
         }
         if definition.id == "pet_supply" {
             return categoryMatched && SemanticBoundaryGuard.matchesPetSupply(text)
+        }
+        if definition.id == "groceries",
+           SemanticBoundaryGuard.isHouseholdCleaningSupply(text) {
+            return false
         }
         if item.scenePackId == "family", definition.id == "daily_supply" {
             return false

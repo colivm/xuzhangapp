@@ -2265,7 +2265,10 @@ struct StatsWebView: View {
         if text.localizedCaseInsensitiveContains("快递") {
             return "收到的快递"
         }
-        if text.localizedCaseInsensitiveContains("衣服") || text.localizedCaseInsensitiveContains("鞋") || text.localizedCaseInsensitiveContains("包") {
+        if text.localizedCaseInsensitiveContains("衣服")
+            || text.localizedCaseInsensitiveContains("鞋")
+            || text.localizedCaseInsensitiveContains("包包")
+            || text.localizedCaseInsensitiveContains("背包") {
             return "买了件穿用的"
         }
         return "这次买的东西"

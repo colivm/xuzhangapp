@@ -21,6 +21,7 @@ SWIFT_FILES = {
     "free_scene_pack": "NativeDemoApp/Services/FreeScenePackService.swift",
     "record_view": "NativeDemoApp/Views/RecordView.swift",
     "scene_pack": "NativeDemoApp/Services/ScenePackCopyPool.swift",
+    "playback_service": "NativeDemoApp/Services/PlaybackService.swift",
     "playback_copy": "NativeDemoApp/Services/PlaybackCopyPool.swift",
     "playback_support": "NativeDemoApp/Services/PlaybackSupportServices.swift",
     "share_insight": "NativeDemoApp/Services/ShareInsightCopyPool.swift",
@@ -146,7 +147,10 @@ EXPECTED_SWIFT_SNIPPETS = {
         "配镜", "验光", "洗牙", "网上国网", "暖气费", "取暖费", "B站会员",
         "供暖费", "热力费", "腾讯视频会员", "Office 365", "谷子", "潮玩", "泡泡玛特", "POP MART", "搬家",
         "托育费", "直播打赏", "网吧", "医美", "白事随礼", "驾校", "telecom_bill", "手机话费",
-        "casualDrinkKeywords", "isCasualDrinkOnly",
+        "casualDrinkKeywords", "isCasualDrinkOnly", "definition.id == \"groceries\"", "isHouseholdCleaningSupply",
+    ],
+    "free_scene_pack": [
+        "健身训练", "运动装备",
     ],
     "record_view": [
         "茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴",
@@ -158,6 +162,7 @@ EXPECTED_SWIFT_SNIPPETS = {
     ],
     "memory_context": [
         "充电桩", "电车充电", "汽车充电", "补能",
+        "SemanticBoundaryGuard.isHouseholdCleaningSupply(text)", "displayEmotionTag",
     ],
     "home_view": [
         "haidilao", "laoxiangji", "tastien", "cotti", "juewei", "yuanjiyunjiao",
@@ -169,7 +174,10 @@ EXPECTED_SWIFT_SNIPPETS = {
         "转账时间",
     ],
     "insight_web_view": [
-        "花小猪", "单车", "上班", "下班", "早高峰", "晚高峰",
+        "花小猪", "单车", "上班", "下班", "早高峰", "晚高峰", "小象超市", "买药", "包包",
+    ],
+    "playback_service": [
+        "SemanticBoundaryGuard.isHouseholdCleaningSupply(text)",
     ],
 }
 
@@ -221,6 +229,7 @@ DISPLAY_EMOTION_ONLY_SCOPES = [
     ("scene_pack", "shouldUseWorkdayMealCopy(date: Date, historyItems: [HomeItem])", ["item.emotionTag"]),
     ("scene_pack", "shouldUseWorkdayCopy(date: Date, historyItems: [HomeItem])", ["item.emotionTag"]),
     ("scene_pack", "containsTravelIntent(in items: [HomeItem], near date: Date)", ["item.emotionTag"]),
+    ("memory_context", "private static func weekendOutingLine", ["item.emotionTag"]),
 ]
 
 SCENE_PACK_BLOCKED_TERMS = [
@@ -474,9 +483,18 @@ def scan_scene_pack_notes(failures: list[str], text: str) -> None:
 
 
 def scan_life_mark_boundaries(failures: list[str], text: str) -> None:
+    fitness = extract_life_mark_block(text, "fitness")
+    for blocked in ['"运动"', '"恢复"', '"补给"', '"月卡"', '"年卡"', '"课程"']:
+        if blocked in fitness:
+            failures.append(f"LifeMarkService: fitness must not absorb broad keyword {blocked}")
+
     home_utilities = extract_life_mark_block(text, "home_utilities")
     if '"话费"' in home_utilities or '"手机话费"' in home_utilities:
         failures.append("LifeMarkService: home_utilities must not absorb telecom bill keywords")
+
+    groceries = extract_life_mark_block(text, "groceries")
+    if '"厨房"' in groceries:
+        failures.append("LifeMarkService: groceries must not absorb broad kitchen keywords")
 
     commute = extract_life_mark_block(text, "commute")
     if '"花小猪"' in commute:
@@ -511,6 +529,20 @@ def scan_display_emotion_boundaries(failures: list[str], texts: dict[str, str]) 
                 f"{SWIFT_FILES[file_key]}: {signature} must use displayEmotionTag, not "
                 + ", ".join(blocked)
             )
+
+
+def scan_ai_command_boundaries(failures: list[str], text: str) -> None:
+    scope = extract_swift_scope(text, "aiCommandCategoryIntent(from text: String)")
+    if not scope:
+        failures.append(f"{SWIFT_FILES['insight_web_view']}: missing ai command intent scope")
+        return
+    blocked = ['"药"', '"包"', '"小象"', '"补给"', '"恢复"']
+    present = [token for token in blocked if token in scope]
+    if present:
+        failures.append(
+            f"{SWIFT_FILES['insight_web_view']}: ai command intents contain broad keywords "
+            + ", ".join(present)
+        )
 
 
 def scan_dashboard_boundaries(failures: list[str], text: str) -> None:
@@ -643,6 +675,7 @@ def main() -> int:
     scan_scene_pack_notes(failures, texts["scene_pack"])
     scan_life_mark_boundaries(failures, texts["life_mark"])
     scan_display_emotion_boundaries(failures, texts)
+    scan_ai_command_boundaries(failures, texts["insight_web_view"])
     scan_dashboard_boundaries(failures, texts["dashboard"])
     scan_broad_keywords(failures, texts)
 
