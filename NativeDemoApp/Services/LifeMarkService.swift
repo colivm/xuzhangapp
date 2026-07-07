@@ -129,7 +129,7 @@ enum LifeMarkService {
             label: "超市买菜和家用",
             category: .daily,
             categories: [.daily, .shopping, .home],
-            keywords: ["日用", "日用品", "生活用品", "生活补给", "生活补寄", "超市", "便利店", "纸巾", "抽纸", "卷纸", "湿巾", "洗衣液", "洗洁精", "垃圾袋", "清洁", "洗发水", "沐浴露", "牙刷", "毛巾", "收纳", "买菜", "生鲜", "水果", "蔬菜", "鸡蛋", "盒马", "叮咚买菜", "小象超市", "京东到家", "京东秒送", "美团闪购", "朴朴超市", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈", "即时零售"],
+            keywords: ["日用", "日用品", "生活用品", "生活补给", "生活补寄", "超市", "便利店", "纸巾", "抽纸", "卷纸", "湿巾", "洗衣液", "洗洁精", "垃圾袋", "清洁", "洗发水", "沐浴露", "牙刷", "毛巾", "收纳", "买菜", "生鲜", "水果", "蔬菜", "鸡蛋", "盒马", "叮咚买菜", "小象超市", "京东到家", "京东秒送", "美团闪购", "朴朴超市", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈"],
             access: .free,
             priority: 28,
             minimumCount: 1,
@@ -1017,7 +1017,6 @@ enum LifeMarkService {
     private static func semanticText(for item: HomeItem) -> String {
         [
             item.title,
-            item.emotionTag,
             item.displayEmotionTag,
             item.category.rawValue,
             item.category.label,

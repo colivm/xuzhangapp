@@ -18,6 +18,7 @@ SWIFT_FILES = {
     "semantic_boundary": "NativeDemoApp/Services/SemanticBoundaryGuard.swift",
     "life_scene": "NativeDemoApp/Services/LifeSceneSemanticService.swift",
     "life_mark": "NativeDemoApp/Services/LifeMarkService.swift",
+    "free_scene_pack": "NativeDemoApp/Services/FreeScenePackService.swift",
     "record_view": "NativeDemoApp/Views/RecordView.swift",
     "scene_pack": "NativeDemoApp/Services/ScenePackCopyPool.swift",
     "playback_copy": "NativeDemoApp/Services/PlaybackCopyPool.swift",
@@ -123,6 +124,7 @@ EXPECTED_SWIFT_SNIPPETS = {
         "配镜", "验光", "洗牙", "网上国网", "暖气费", "取暖费", "B站会员",
         "供暖费", "热力费", "腾讯视频会员", "充电器", "Office 365", "谷子", "潮玩", "泡泡玛特", "POP MART", "搬家",
         "托育费", "直播打赏", "直播礼物", "网吧", "电竞酒店", "医美", "白事随礼", "驾校", "彩票",
+        "correctedStoredEmotionTag", "isBabyLikeEmotionTag", "isPetLikeEmotionTag", "containsTelecomBillKeyword",
     ],
     "semantic_boundary": [
         "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "米粉", "宝宝湿巾", "婴儿湿巾",
@@ -152,6 +154,7 @@ EXPECTED_SWIFT_SNIPPETS = {
         "配镜", "验光", "洗牙", "b站会员",
         "腾讯视频会员", "供暖费", "上门保洁", "充电桩", "office 365", "谷子", "泡泡玛特", "pop mart", "搬家",
         "直播打赏", "网吧", "电竞酒店", "医美", "白事随礼", "驾校", "彩票",
+        "containstelecombillkeyword", "手机话费缴好了",
     ],
     "memory_context": [
         "充电桩", "电车充电", "汽车充电", "补能",
@@ -204,6 +207,20 @@ LEISURE_EXCLUSION_IDS = [
     "travel",
     "interest_gear",
     "learning_growth",
+]
+
+DISPLAY_EMOTION_ONLY_SCOPES = [
+    ("life_mark", "semanticText(for item: HomeItem)", ["item.emotionTag"]),
+    ("free_scene_pack", "semanticText(for item: HomeItem)", ["item.emotionTag"]),
+    ("life_insight", "focusName(for category: HomeItem.Category, items: [HomeItem])", ["item.emotionTag"]),
+    ("stats_web_view", "traceCategoryLifeName(for category: HomeItem.Category, items: [HomeItem])", ["item.emotionTag"]),
+    ("dashboard", "isCommuteRecord(_ item: HomeItem)", ["item.emotionTag"]),
+    ("insight_web_view", "aiCommandMemoryItemMatches(_ item: HomeItem, command: String)", ["item.emotionTag"]),
+    ("insight_web_view", "aiCommandSameSceneMemoryItem(_ item: HomeItem, anchor: HomeItem, command: String)", ["item.emotionTag", "anchor.emotionTag"]),
+    ("insight_web_view", "aiCommandItemMatchesKeywords(_ item: HomeItem, keywords: [String])", ["item.emotionTag"]),
+    ("scene_pack", "shouldUseWorkdayMealCopy(date: Date, historyItems: [HomeItem])", ["item.emotionTag"]),
+    ("scene_pack", "shouldUseWorkdayCopy(date: Date, historyItems: [HomeItem])", ["item.emotionTag"]),
+    ("scene_pack", "containsTravelIntent(in items: [HomeItem], near date: Date)", ["item.emotionTag"]),
 ]
 
 SCENE_PACK_BLOCKED_TERMS = [
@@ -369,6 +386,25 @@ def extract_swift_string_set(text: str, name: str) -> set[str]:
     return set(re.findall(r'"([^"]+)"', text[start:end]))
 
 
+def extract_swift_scope(text: str, signature_fragment: str) -> str:
+    marker_index = text.find(signature_fragment)
+    if marker_index < 0:
+        return ""
+    start = text.find("{", marker_index)
+    if start < 0:
+        return ""
+    depth = 0
+    for index in range(start, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:index + 1]
+    return text[start:]
+
+
 def scan_json(failures: list[str]) -> None:
     payload = json.loads(LEXICON_PATH.read_text(encoding="utf-8"))
     for label, expected in EXPECTED_JSON_KEYWORDS.items():
@@ -461,6 +497,20 @@ def scan_life_mark_boundaries(failures: list[str], text: str) -> None:
             "LifeMarkService: leisure broad match missing exclusions "
             + ", ".join(missing_leisure)
         )
+
+
+def scan_display_emotion_boundaries(failures: list[str], texts: dict[str, str]) -> None:
+    for file_key, signature, blocked_tokens in DISPLAY_EMOTION_ONLY_SCOPES:
+        scope = extract_swift_scope(texts[file_key], signature)
+        if not scope:
+            failures.append(f"{SWIFT_FILES[file_key]}: missing scope {signature}")
+            continue
+        blocked = [token for token in blocked_tokens if token in scope]
+        if blocked:
+            failures.append(
+                f"{SWIFT_FILES[file_key]}: {signature} must use displayEmotionTag, not "
+                + ", ".join(blocked)
+            )
 
 
 def scan_dashboard_boundaries(failures: list[str], text: str) -> None:
@@ -592,6 +642,7 @@ def main() -> int:
     scan_blocked_copy(failures, texts)
     scan_scene_pack_notes(failures, texts["scene_pack"])
     scan_life_mark_boundaries(failures, texts["life_mark"])
+    scan_display_emotion_boundaries(failures, texts)
     scan_dashboard_boundaries(failures, texts["dashboard"])
     scan_broad_keywords(failures, texts)
 

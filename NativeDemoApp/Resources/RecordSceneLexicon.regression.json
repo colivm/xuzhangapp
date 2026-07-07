@@ -436,7 +436,8 @@
       "amount": 20,
       "rawText": "支付成功\n¥20.00\n中国移动通信集团江苏有限公司\n支付有福利\n6元 自动缴费券\n生活缴费\n3元 话费券\n0.3元 生活缴费券\n淘宝缴费",
       "expectedCategory": "日用",
-      "expectedTitle": "not:淘宝"
+      "expectedTitle": "not:淘宝",
+      "expectedEmotionRule": "telecom_bill"
     },
     {
       "id": "ocr-phone-recharge-other-stays-daily",
@@ -444,7 +445,16 @@
       "amount": 20,
       "rawText": "话费充值\n¥20.00\n其他\n淘宝缴费",
       "expectedCategory": "日用",
-      "expectedTitle": "not:淘宝"
+      "expectedTitle": "not:淘宝",
+      "expectedEmotionRule": "telecom_bill"
+    },
+    {
+      "id": "manual-phone-bill-never-becomes-supply",
+      "mode": "manual",
+      "amount": 20,
+      "inputTitle": "话费",
+      "expectedCategory": "日用",
+      "expectedEmotionRule": "telecom_bill"
     },
     {
       "id": "manual-convenience-breakfast-dining",

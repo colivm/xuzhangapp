@@ -46,11 +46,11 @@ enum ScenePackCopyPool {
             id: "supply",
             emoji: "🧻",
             label: "超市买菜和家用",
-            desc: "清洁、纸巾、日用、即时零售、给家补货",
+            desc: "清洁、纸巾、买菜、日用、给家补货",
             category: .daily,
             tiers: [
                 ScenePackTier(maxAmount: 20, notes: ["超市买点小东西", "纸巾清洁补一点", "便利店顺路补货", "今天给家补点", "买菜顺带一件日用", "小补给记下来", "缺的东西补上", "家用小补给"]),
-                ScenePackTier(maxAmount: 80, notes: ["超市买菜和家用", "清洁纸巾一起补", "即时零售送到家", "给冰箱添点东西", "日用补货记一下", "便利店和超市这一单", "家里缺口补齐", "今天补货到位"]),
+                ScenePackTier(maxAmount: 80, notes: ["超市买菜和家用", "清洁纸巾一起补", "买菜日用送到家", "给冰箱添点东西", "日用补货记一下", "超市日用这一单", "家里缺口补齐", "今天补货到位"]),
                 ScenePackTier(maxAmount: 300, notes: ["家用集中补一轮", "买菜日用一起安排", "清洁和纸品补齐", "给家里添点底气", "这一单挺实用", "吃的用的都备上", "超市补货很具体", "把家里的日常补上"]),
                 ScenePackTier(maxAmount: 9_999, notes: ["一轮家用大补货", "给家里集中备一批", "几天要用的都安排上", "超市这一单挺完整", "家里的日常更稳了", "把吃用都补齐", "长期会用的补上", "这次补货很踏实"]),
             ]
@@ -188,6 +188,10 @@ enum ScenePackCopyPool {
         let text = factText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard text.count >= 2 else { return nil }
         let normalized = text.lowercased()
+
+        if containsTelecomBillCue(normalized) {
+            return ["手机话费缴好了"]
+        }
 
         if SemanticBoundaryGuard.matchesBabySupply(normalized) {
             if containsAny(normalized, ["奶粉"]) { return ["奶粉给宝宝补上了"] }
@@ -333,7 +337,7 @@ enum ScenePackCopyPool {
             guard item.source == .manual,
                   item.category == .dining,
                   RecordCalendarContext.isNonWorkday(item.createdAt) else { return false }
-            return containsWeekendWorkMealCue("\(item.title) \(item.emotionTag)")
+            return containsWeekendWorkMealCue("\(item.title) \(item.displayEmotionTag)")
         }
     }
 
@@ -342,7 +346,7 @@ enum ScenePackCopyPool {
         return historyItems.contains { item in
             guard item.source == .manual,
                   RecordCalendarContext.isNonWorkday(item.createdAt) else { return false }
-            return containsWeekendWorkCue("\(item.title) \(item.emotionTag)")
+            return containsWeekendWorkCue("\(item.title) \(item.displayEmotionTag)")
         }
     }
 
@@ -458,7 +462,7 @@ enum ScenePackCopyPool {
         return items.contains { item in
             item.createdAt >= start
                 && item.createdAt <= end
-                && containsTravelKeyword("\(item.title) \(item.emotionTag)")
+                && containsTravelKeyword("\(item.title) \(item.displayEmotionTag)")
         }
     }
 
@@ -553,6 +557,10 @@ enum ScenePackCopyPool {
 
     private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
         keywords.contains { text.localizedCaseInsensitiveContains($0) }
+    }
+
+    private static func containsTelecomBillCue(_ text: String) -> Bool {
+        containsAny(text, ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国移动通信集团", "中国联通", "中国电信", "移动通信", "运营商缴费"])
     }
 
     private static func dayKey(for date: Date) -> String {

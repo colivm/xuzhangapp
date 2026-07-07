@@ -166,6 +166,9 @@ struct HomeItem: Identifiable, Codable, Equatable {
            Self.shouldPreferLateWorkCommuteTag(current: trimmed) {
             return lateCommute
         }
+        if let corrected = Self.correctedStoredEmotionTag(for: self, current: trimmed) {
+            return corrected
+        }
         if Self.isAggregateStyleEmotionTag(trimmed) {
             return Self.singleRecordEmotionTag(for: self)
         }
@@ -353,11 +356,13 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["衣服", "上衣", "裤子", "裙", "外套", "内衣"]) { return "给衣柜添一件" }
             if containsAny(text, ["鞋", "袜"]) { return "脚下换新一点" }
             if containsAny(text, ["护肤", "洗面奶", "面霜", "防晒", "口红", "化妆"]) { return "洗护美妆补上" }
+            if containsAny(text, ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国联通", "中国电信", "运营商缴费"]) { return "手机话费记下" }
             if containsAny(text, ["手机", "耳机", "充电器", "数据线", "充电宝", "电脑", "键盘"]) { return "数码小物到位" }
             if containsAny(text, ["书", "文具", "本子", "笔"]) { return "书桌常用的补上" }
             if containsAny(text, ["花", "香薰", "摆件"]) { return "给日子添点好看" }
             if containsAny(text, ["快递", "运费"]) { return "路上的小费用" }
         case .daily:
+            if containsAny(text, ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国联通", "中国电信", "运营商缴费"]) { return "手机话费记下" }
             if containsAny(text, ["奶粉"]) { return "宝宝口粮补上" }
             if containsAny(text, ["尿不湿", "纸尿裤", "拉拉裤"]) { return "照护用品补齐" }
             if containsAny(text, ["辅食", "奶瓶", "安抚奶嘴"]) { return "宝宝照护补上" }
@@ -510,6 +515,60 @@ struct HomeItem: Identifiable, Codable, Equatable {
         if genericExact.contains(current) { return true }
         let genericFragments = ["恢复用品", "恢复补给", "健康相关", "身体相关", "护理用品", "日常记录"]
         return genericFragments.contains { current.contains($0) }
+    }
+
+    private static func correctedStoredEmotionTag(for item: HomeItem, current: String) -> String? {
+        let evidence = "\(item.title) \(item.merchantBrandId ?? "") \(item.category.rawValue)"
+        if containsTelecomBillKeyword(evidence) {
+            return refinedEmotionTag(
+                title: evidence,
+                category: item.category,
+                amount: item.amount,
+                date: item.createdAt
+            ) ?? "手机话费记下"
+        }
+
+        if isBabyLikeEmotionTag(current),
+           !SemanticBoundaryGuard.matchesBabySupply(evidence) {
+            return correctedEmotionFallback(for: item)
+        }
+
+        if isPetLikeEmotionTag(current),
+           !SemanticBoundaryGuard.matchesPetSupply(evidence) {
+            return correctedEmotionFallback(for: item)
+        }
+
+        if isSupplyOverclaimTag(current),
+           containsTelecomBillKeyword(evidence) {
+            return "手机话费记下"
+        }
+
+        return nil
+    }
+
+    private static func correctedEmotionFallback(for item: HomeItem) -> String {
+        refinedEmotionTag(
+            title: item.title,
+            category: item.category,
+            amount: item.amount,
+            date: item.createdAt
+        ) ?? inferEmotionTag(category: item.category, amount: item.amount)
+    }
+
+    private static func isBabyLikeEmotionTag(_ text: String) -> Bool {
+        containsAny(text.lowercased(), ["宝宝", "婴儿", "母婴", "幼儿", "成长里的小补给"])
+    }
+
+    private static func isPetLikeEmotionTag(_ text: String) -> Bool {
+        containsAny(text.lowercased(), ["宠物", "毛孩子", "毛孩", "猫砂", "狗粮", "猫粮"])
+    }
+
+    private static func isSupplyOverclaimTag(_ text: String) -> Bool {
+        containsAny(text.lowercased(), ["即时零售", "便利店和超市", "便利店补给", "超市买菜", "家用补给"])
+    }
+
+    private static func containsTelecomBillKeyword(_ text: String) -> Bool {
+        containsAny(text.lowercased(), ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国移动通信集团", "中国联通", "中国电信", "移动通信", "运营商缴费", "telecom_bill"])
     }
 
     private static func lateWorkCommuteEmotionTag(

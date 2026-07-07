@@ -590,7 +590,7 @@ final class LifeInsightService {
 
     private func focusName(for category: HomeItem.Category, items: [HomeItem]) -> String {
         let categoryItems = items.filter { $0.category == category }
-        let joined = categoryItems.map { "\($0.title) \($0.emotionTag)" }.joined(separator: " ")
+        let joined = categoryItems.map { "\($0.title) \($0.displayEmotionTag)" }.joined(separator: " ")
         switch category {
         case .transport:
             return containsAny(joined, ["通勤", "上班", "下班", "地铁", "公交"]) ? "通勤交通" : "交通"

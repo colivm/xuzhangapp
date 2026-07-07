@@ -4133,7 +4133,7 @@ struct StatsWebView: View {
     }
 
     private func traceCategoryLifeName(for category: HomeItem.Category, items: [HomeItem]) -> String {
-        let text = items.map { "\($0.title) \($0.emotionTag)" }.joined(separator: " ")
+        let text = items.map { "\($0.title) \($0.displayEmotionTag)" }.joined(separator: " ")
         switch category {
         case .transport:
             return traceContainsAny(text, ["通勤", "上班", "下班", "地铁", "公交"]) ? "通勤交通" : "交通"
@@ -5004,13 +5004,13 @@ struct StatsWebView: View {
         if let imageData = item.coverMemoryImageData {
             traceMemoryBillCard(item: item, imageData: imageData)
         } else {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(alignment: .top, spacing: 9) {
                     traceRecordLeadingMark(item)
 
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(item.displayTitle)
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(AppColors.text)
                             .lineLimit(1)
 
@@ -5018,7 +5018,7 @@ struct StatsWebView: View {
 
                         if let note = traceRecordNote(item) {
                             Text(note)
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(AppColors.subtext)
                                 .lineLimit(1)
                         }
@@ -5027,15 +5027,14 @@ struct StatsWebView: View {
                     Spacer(minLength: 8)
 
                     Text(item.amount.formatted(.cny))
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
                         .foregroundStyle(AppColors.text)
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
-                        .padding(.top, 1)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 13)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
             .background(traceListRecordBackground)
             .overlay(traceListRecordBorder)
         }
@@ -5115,34 +5114,31 @@ struct StatsWebView: View {
     private func traceRecordTagLine(_ item: HomeItem) -> some View {
         HStack(spacing: 5) {
             Text(item.category.rawValue)
+            Text("·")
+            Text(traceRecordTimeText(item.createdAt))
             if !item.displayEmotionTag.isEmpty {
                 Text("·")
                 Text(item.displayEmotionTag)
             }
         }
-        .font(.system(size: 11, weight: .semibold))
+        .font(.system(size: 10.5, weight: .semibold))
         .foregroundStyle(AppColors.accent)
         .lineLimit(1)
     }
 
     private func traceRecordLeadingMark(_ item: HomeItem) -> some View {
-        VStack(spacing: 7) {
+        VStack(spacing: 0) {
             Image(systemName: MemoryAttachmentVisuals.categorySystemImage(item.category))
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(traceAccentColor(for: item.category))
-                .frame(width: 36, height: 36)
+                .frame(width: 28, height: 28)
                 .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(traceAccentColor(for: item.category).opacity(0.14))
                 )
-
-            Text(traceRecordTimeText(item.createdAt))
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundStyle(AppColors.subtext)
-                .lineLimit(1)
         }
-        .frame(width: 44)
+        .frame(width: 30)
         .padding(.top, 1)
     }
 
@@ -5162,17 +5158,17 @@ struct StatsWebView: View {
     }
 
     private var traceListRecordBackground: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
             .fill(Color.white.opacity(0.74))
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(.ultraThinMaterial)
             )
-            .shadow(color: Color.black.opacity(0.035), radius: 9, y: 3)
+            .shadow(color: Color.black.opacity(0.03), radius: 7, y: 2)
     }
 
     private var traceListRecordBorder: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
             .stroke(Color.white.opacity(0.58), lineWidth: 1)
     }
 

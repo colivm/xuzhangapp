@@ -53,6 +53,10 @@ enum NarrativeCopyResolver {
             return lateNightTag
         }
 
+        if let note = telecomBillEmotionTag(context: context) {
+            return note
+        }
+
         if let brand = MerchantBrandCatalog.definition(for: context.brandId) {
             if let note = drinkBrandEmotionTag(brand: brand, context: context) {
                 return note
@@ -294,6 +298,21 @@ enum NarrativeCopyResolver {
         return nil
     }
 
+    private static func telecomBillEmotionTag(context: Context) -> String? {
+        switch context.category {
+        case .daily, .home, .shopping, .other:
+            break
+        default:
+            return nil
+        }
+        let text = "\(context.note) \(context.seed)"
+        guard containsTelecomBillCue(text) else { return nil }
+        return pick(
+            ["手机话费缴好了", "话费这笔记下", "这个月话费缴好", "通信账单补上"],
+            seed: context.seed + "|telecomBill"
+        )
+    }
+
     private static func note(from tiers: [ScenePackTier], amount: Double, seed: String) -> String? {
         guard !tiers.isEmpty else { return nil }
         let tier = tiers.first { amount <= $0.maxAmount } ?? tiers[tiers.count - 1]
@@ -372,6 +391,11 @@ enum NarrativeCopyResolver {
         keywords.contains { text.contains($0.lowercased()) }
     }
 
+    private static func containsTelecomBillCue(_ text: String) -> Bool {
+        let normalized = text.lowercased()
+        return containsAny(normalized, ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国移动通信集团", "中国联通", "中国电信", "移动通信", "运营商缴费"])
+    }
+
     private static func isWeekend(_ date: Date) -> Bool {
         RecordCalendarContext.isNonWorkday(date)
     }
@@ -418,6 +442,9 @@ enum NarrativeCopyResolver {
     }
 
     private static func scenePack(for context: Context) -> ScenePackDefinition? {
+        if telecomBillEmotionTag(context: context) != nil {
+            return nil
+        }
         if let scenePackId = context.scenePackId,
            let pack = ScenePackCopyPool.definitions.first(where: { $0.id == scenePackId }) {
             return pack

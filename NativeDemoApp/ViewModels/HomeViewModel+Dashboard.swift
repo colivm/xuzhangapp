@@ -508,7 +508,7 @@ extension HomeViewModel {
     private func isCommuteRecord(_ item: HomeItem) -> Bool {
         guard item.category == .transport else { return false }
         if item.scenePackId == "commute" { return true }
-        let text = "\(item.title) \(item.emotionTag) \(item.memoryContext?.semanticPlace ?? "")".lowercased()
+        let text = "\(item.title) \(item.displayEmotionTag) \(item.memoryContext?.semanticPlace ?? "")".lowercased()
         return containsAny(
             text,
             [

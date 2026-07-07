@@ -390,6 +390,10 @@ struct RecordView: View {
         return keywords.contains { text.contains($0) }
     }
 
+    private func containsTelecomBillKeyword(_ text: String) -> Bool {
+        containsAny(text, ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国移动通信集团", "中国联通", "中国电信", "移动通信", "运营商缴费", "telecom_bill"])
+    }
+
     private func containsAny(_ text: String, _ keywords: [String]) -> Bool {
         keywords.contains { text.localizedCaseInsensitiveContains($0) }
     }
@@ -1291,7 +1295,9 @@ struct RecordView: View {
         let normalized = sourceTitle.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return nil }
         let notes: [String]?
-        if containsAny(normalized, ["猫砂", "尿垫"]) {
+        if containsTelecomBillKeyword(normalized) {
+            notes = ["手机话费缴好了", "话费这笔记下", "这个月话费缴好", "通信账单补上"]
+        } else if containsAny(normalized, ["猫砂", "尿垫"]) {
             notes = ["猫砂日常补上", "毛孩子日常补给", "猫砂用品补上", "猫砂清爽补上"]
         } else if containsAny(normalized, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) {
             notes = ["毛孩子口粮补上", "毛孩子饭碗续上", "宠物口粮补上", "给毛孩子备点口粮"]
@@ -1403,7 +1409,9 @@ struct RecordView: View {
                 notes = nil
             }
         case "supply":
-            if containsAny(normalized, ["买菜", "生鲜", "水果", "蔬菜", "肉", "鸡蛋", "牛奶", "鲜奶", "纯牛奶", "酸奶", "盒马", "叮咚", "山姆", "永辉", "大润发", "钱大妈"]) {
+            if containsTelecomBillKeyword(normalized) {
+                notes = ["手机话费缴好了", "话费这笔记下", "这个月话费缴好", "通信账单补上"]
+            } else if containsAny(normalized, ["买菜", "生鲜", "水果", "蔬菜", "肉", "鸡蛋", "牛奶", "鲜奶", "纯牛奶", "酸奶", "盒马", "叮咚", "山姆", "永辉", "大润发", "钱大妈"]) {
                 notes = ["给家里补点吃的", "买菜补齐", "冰箱补一点", "日常食材补上"]
             } else if containsAny(normalized, ["纸巾", "抽纸", "卷纸", "洗衣", "清洁", "垃圾袋", "日化"]) {
                 notes = ["日用品补上", "家用消耗品补齐", "清洁日用补齐", "常用的先备好"]

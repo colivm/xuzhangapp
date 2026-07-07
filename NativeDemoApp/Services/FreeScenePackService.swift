@@ -209,7 +209,7 @@ final class LifeMarkSceneRewardService {
     private func semanticText(for item: HomeItem) -> String {
         [
             item.title,
-            item.emotionTag,
+            item.displayEmotionTag,
             item.memoryContext?.semanticPlace ?? "",
             item.memoryContext?.cityName ?? ""
         ].joined(separator: " ")

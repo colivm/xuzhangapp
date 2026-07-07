@@ -1790,10 +1790,10 @@ struct InsightWebView: View {
     private func aiCommandItemsPreview(_ items: [HomeItem], resultID: UUID) -> some View {
         let previewLimit = 12
         let visibleItems = aiCommandShowsAllRelatedItems ? items : Array(items.prefix(previewLimit))
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("相关记录")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(AppColors.subtext)
                 Spacer()
                 Text("\(items.count) 笔")
@@ -1829,7 +1829,7 @@ struct InsightWebView: View {
                 .id(resultID)
             }
         }
-        .glassPanel(radius: 20, padding: 16)
+        .glassPanel(radius: 16, padding: 12)
     }
 
     private func aiCommandItemRow(_ item: HomeItem) -> some View {
@@ -1838,35 +1838,35 @@ struct InsightWebView: View {
                 aiCommandPreviewItem = item
             }
         } label: {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Text(item.category.emoji)
-                .font(.system(size: 15))
-                .frame(width: 30, height: 30)
+                .font(.system(size: 13))
+                .frame(width: 24, height: 24)
                 .background(
                     Circle()
                         .fill(AppColors.accent.opacity(0.08))
                 )
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(item.displayTitle)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 12.5, weight: .medium))
                     .foregroundStyle(AppColors.text)
                     .lineLimit(1)
-                Text(item.createdAt.zhBillDateTime)
+                Text("\(item.createdAt.zhBillDateTime) · \(item.source.displayName)")
                     .font(.system(size: 11))
                     .foregroundStyle(AppColors.subtext)
-                Text(item.source.displayName)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(AppColors.subtext.opacity(0.72))
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 8)
 
             Text(item.amount.formatted(.cny))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(AppColors.text.opacity(0.86))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
         }
-        .padding(.vertical, 7)
+        .padding(.vertical, 5)
         .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -2776,7 +2776,6 @@ struct InsightWebView: View {
     private func aiCommandMemoryItemMatches(_ item: HomeItem, command: String) -> Bool {
         let text = [
             item.title,
-            item.emotionTag,
             item.displayEmotionTag,
             item.category.rawValue,
             item.category.label,
@@ -2835,8 +2834,8 @@ struct InsightWebView: View {
     }
 
     private func aiCommandSameSceneMemoryItem(_ item: HomeItem, anchor: HomeItem, command: String) -> Bool {
-        let text = "\(item.title) \(item.emotionTag) \(item.displayEmotionTag) \(item.category.rawValue)"
-        let anchorText = "\(anchor.title) \(anchor.emotionTag) \(anchor.displayEmotionTag) \(anchor.category.rawValue)"
+        let text = "\(item.title) \(item.displayEmotionTag) \(item.category.rawValue)"
+        let anchorText = "\(anchor.title) \(anchor.displayEmotionTag) \(anchor.category.rawValue)"
         let asksRain = containsAny(command, ["下雨", "雨天", "雨"])
         let asksCommute = containsAny(command, ["通勤", "上班", "下班", "地铁", "公交"])
 
@@ -3120,7 +3119,6 @@ struct InsightWebView: View {
         }
 
         let tagText = [
-            item.emotionTag,
             item.displayEmotionTag
         ]
             .filter { !$0.localizedCaseInsensitiveContains("房租水电物业") }
@@ -3133,7 +3131,6 @@ struct InsightWebView: View {
         guard !keywords.isEmpty else { return false }
         let text = [
             item.title,
-            item.emotionTag,
             item.displayEmotionTag,
             item.category.rawValue,
             item.category.label
@@ -3646,17 +3643,6 @@ struct InsightWebView: View {
                 requiresKeywordMatch: true
             ),
             AICommandCategoryIntent(
-                categories: [.dining],
-                label: "餐饮",
-                keywords: ["餐饮", "吃饭", "吃的", "饭", "美食", "外卖", "美团外卖", "饿了么", "抖音团购", "七欣天", "海底捞", "肯德基", "麦当劳", "必胜客", "塔斯汀", "华莱士", "食堂", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "简餐", "咖啡", "奶茶", "饮品", "饮料", "可乐", "矿泉水", "瓶装水", "果汁", "汽水", "饭店", "餐厅", "火锅", "烤肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "面条", "米粉", "河粉", "粉丝", "包子", "盒饭"]
-            ),
-            AICommandCategoryIntent(
-                categories: [.transport, .lodging, .entertainment, .dining, .shopping],
-                label: "旅行出行",
-                keywords: ["旅行", "旅游", "出去玩", "异地", "外地", "出差", "酒店", "民宿", "住宿", "机票", "机场", "高铁", "火车", "车站", "景区", "景点", "门票", "返程", "行程", "伴手礼", "露营地"],
-                requiresKeywordMatch: true
-            ),
-            AICommandCategoryIntent(
                 categories: [.dining, .daily],
                 label: "可乐",
                 keywords: ["可乐"],
@@ -3672,6 +3658,17 @@ struct InsightWebView: View {
                 categories: [.dining],
                 label: "奶茶",
                 keywords: ["奶茶", "茶饮", "霸王茶姬", "喜茶", "奈雪", "蜜雪冰城"],
+                requiresKeywordMatch: true
+            ),
+            AICommandCategoryIntent(
+                categories: [.dining],
+                label: "餐饮",
+                keywords: ["餐饮", "吃饭", "吃的", "饭", "美食", "外卖", "美团外卖", "饿了么", "抖音团购", "七欣天", "海底捞", "肯德基", "麦当劳", "必胜客", "塔斯汀", "华莱士", "食堂", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "简餐", "咖啡", "奶茶", "饮品", "饮料", "可乐", "矿泉水", "瓶装水", "果汁", "汽水", "饭店", "餐厅", "火锅", "烤肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "面条", "米粉", "河粉", "粉丝", "包子", "盒饭"]
+            ),
+            AICommandCategoryIntent(
+                categories: [.transport, .lodging, .entertainment, .dining, .shopping],
+                label: "旅行出行",
+                keywords: ["旅行", "旅游", "出去玩", "异地", "外地", "出差", "酒店", "民宿", "住宿", "机票", "机场", "高铁", "火车", "车站", "景区", "景点", "门票", "返程", "行程", "伴手礼", "露营地"],
                 requiresKeywordMatch: true
             ),
             AICommandCategoryIntent(
@@ -3694,7 +3691,7 @@ struct InsightWebView: View {
             AICommandCategoryIntent(
                 categories: [.daily, .home],
                 label: "日用",
-                keywords: ["日用", "超市", "便利店", "纸巾", "清洁", "生活用品", "洗衣", "洗护", "日用品", "买菜", "水果", "蔬菜", "生鲜", "盒马", "叮咚", "叮咚买菜", "小象", "小象超市", "京东到家", "京东秒送", "美团闪购", "朴朴", "淘宝买菜", "即时零售", "居家"]
+                keywords: ["日用", "超市", "便利店", "纸巾", "清洁", "生活用品", "洗衣", "洗护", "日用品", "买菜", "水果", "蔬菜", "生鲜", "盒马", "叮咚", "叮咚买菜", "小象超市", "京东到家", "京东秒送", "美团闪购", "朴朴", "淘宝买菜", "居家"]
             ),
             AICommandCategoryIntent(
                 categories: [.health],

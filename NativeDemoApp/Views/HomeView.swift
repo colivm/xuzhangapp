@@ -2087,7 +2087,7 @@ struct HomeView: View {
     }
 
     private func shouldUseRainMemoryBackground(for item: HomeItem) -> Bool {
-        let text = "\(item.title) \(item.emotionTag) \(item.displayEmotionTag)"
+        let text = "\(item.title) \(item.displayEmotionTag)"
         return item.category == .transport
             && (item.memoryContext?.weatherKind == "rain" || text.contains("雨天") || text.contains("下雨"))
     }
@@ -3431,23 +3431,23 @@ struct BillPlaybackSheet: View {
         }
         switch dominantScene.signal.kind {
         case .commute:
-            return "通勤出现了 \(dominantScene.count) 次。它不只是上班两个字，也包括出门、等车、到达和回来的那段时间。"
+            return "今天有 \(dominantScene.count) 段通勤，来回路上的时间都记下了。"
         case .cityRoute:
-            return "出行出现了 \(dominantScene.count) 次，今天确实在城市里换过几个位置。"
+            return "今天出门跑了 \(dominantScene.count) 趟，位置变化挺明显。"
         case .breakfast, .quickMeal, .workMeal:
-            return "吃饭出现了 \(dominantScene.count) 次，按时间能看到今天的饭点。"
+            return "今天吃饭记了 \(dominantScene.count) 次，饭点基本都留住了。"
         case .coffee:
-            return "咖啡饮品出现了 \(dominantScene.count) 次。有的是提神，有的是解渴，先照着发生的顺序放好。"
+            return "今天买了 \(dominantScene.count) 次喝的，忙的时候也有小补给。"
         case .convenienceSupply, .groceries, .homeSupply:
-            return "日用相关记了 \(dominantScene.count) 次，家里常用的今天补上不少。"
+            return "今天补了 \(dominantScene.count) 笔日用，家里缺的已经补上不少。"
         case .shopping:
-            return "购物相关记了 \(dominantScene.count) 次，能看出今天买了哪些具体物件。"
+            return "今天买了 \(dominantScene.count) 样东西，都是账本里能回看的具体物件。"
         case .medicalVisit, .medicineCare:
-            return "健康相关出现了 \(dominantScene.count) 次，看诊、用药或检查都先记清楚。"
+            return "今天有 \(dominantScene.count) 笔健康相关记录，看诊用药先记清楚。"
         case .fitness, .bodyCare:
-            return "身体相关出现了 \(dominantScene.count) 次，训练、护理或恢复都在今天的位置上。"
+            return "今天有 \(dominantScene.count) 笔身体相关记录，训练或护理没漏掉。"
         case .social:
-            return "人情往来出现了 \(dominantScene.count) 次，日子里也有和别人相连的部分。"
+            return "今天有 \(dominantScene.count) 笔人情往来，见面和心意都记下了。"
         default:
             return "\(dominantScene.signal.label)记了 \(dominantScene.count) 次，今天这条线更清楚。"
         }

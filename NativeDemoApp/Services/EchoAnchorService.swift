@@ -88,7 +88,7 @@ final class EchoAnchorService {
             let defaultEmotion = HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
             var score = stableHash("\(item.id.uuidString)|\(periodKey)") % 5
             if item.createdAt >= recentStart { score += 30 }
-            if item.emotionTag != defaultEmotion { score += 25 }
+            if item.displayEmotionTag != defaultEmotion { score += 25 }
             if item.amount >= p25 && item.amount <= p75 || item.amount <= median * 2 { score += 15 }
             if (6...14).contains(item.title.trimmingCharacters(in: .whitespacesAndNewlines).count) { score += 10 }
             if item.merchantBrandId != nil, item.userEditedTitle == true { score += 5 }
