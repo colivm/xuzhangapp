@@ -1243,50 +1243,61 @@ struct HomeView: View {
             if let imageData = item.coverMemoryImageData {
                 homeMemoryBillCardV2(item: item, imageData: imageData, isHighlighted: isHighlighted)
             } else {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline) {
+                HStack(alignment: .center, spacing: 10) {
+                    Image(systemName: MemoryAttachmentVisuals.categorySystemImage(item.category))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(accent)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(accent.opacity(0.10)))
+
+                    VStack(alignment: .leading, spacing: 5) {
                         Text(item.displayTitle)
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(AppColors.text)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.88)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Spacer(minLength: 10)
-                        Text(item.amount.formatted(.cny))
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(AppColors.text)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.78)
+                            .minimumScaleFactor(0.84)
+
+                        HStack(spacing: 6) {
+                            Text(item.category.rawValue)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(AppColors.readableSubtext)
+
+                            Text("·")
+                                .foregroundStyle(AppColors.readableSubtext)
+
+                            Text(item.createdAt.zhBillTime)
+                                .font(.system(size: 12))
+                                .foregroundStyle(AppColors.readableSubtext)
+
+                            if shouldShowHomeEmotion(for: item) {
+                                Text("·")
+                                    .foregroundStyle(AppColors.readableSubtext.opacity(0.72))
+                                Text(item.displayEmotionTag)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(AppColors.readableAccent)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+
+                        if let lifeMarkText = homeLifeMarkText(for: item) {
+                            homeLifeMarkChip(lifeMarkText)
+                                .lineLimit(1)
+                        }
                     }
 
-                    if shouldShowHomeEmotion(for: item) {
-                        let emotionTag = item.displayEmotionTag
-                        Text(emotionTag)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(AppColors.readableAccent)
-                            .padding(.horizontal, 8).padding(.vertical, 3)
-                            .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.08)))
-                            .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.18), lineWidth: 0.7))
-                            .padding(.bottom, 4)
-                    }
-                    if let lifeMarkText = homeLifeMarkText(for: item) {
-                        homeLifeMarkChip(lifeMarkText)
-                            .padding(.bottom, 3)
-                    }
-                    HStack(spacing: 6) {
-                        Text(item.category.rawValue)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(AppColors.readableSubtext)
+                    Spacer(minLength: 6)
 
-                        Text("·").foregroundStyle(AppColors.readableSubtext)
-
-                        Text(item.createdAt.zhBillTime)
-                            .font(.system(size: 12))
-                            .foregroundStyle(AppColors.readableSubtext)
-                    }
+                    Text(item.amount.formatted(.cny))
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .layoutPriority(1)
                 }
-                .padding(.vertical, 10)
-                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 8)
                 .background {
                     if isHighlighted {
                         Color.clear
