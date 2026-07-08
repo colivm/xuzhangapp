@@ -4158,18 +4158,21 @@ private struct WeeklyStoryShareCardView: View {
 
     private var fullPhotoPosterHeadline: String {
         let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
-        if let first = posterSceneLabels.first, !first.isEmpty {
-            return "\(period)，\(first)也在记得我"
+        if posterImageCount == 1 {
+            return "\(period)，有一张照片"
         }
-        return "\(period)，风景也在记得我"
+        if posterImageCount > 1 {
+            return "\(period)，有\(chineseNumeral(posterImageCount))张照片"
+        }
+        return "\(period)，按记录整理"
     }
 
     private var fullPhotoPosterSubtitle: String {
         stablePosterCopy(
             [
-                "走过的路，会留在这一段记录里。",
-                "这一张照片，对应这段时间的一笔记录。",
-                "照片在前面，记录在后面。"
+                "\(periodLeadShort)有 \(payload.recordCount) 笔记录。",
+                "这张照片对应其中一笔记录。",
+                "日期、照片和记录放在同一张卡片里。"
             ],
             salt: "fullPhotoSubtitle"
         )

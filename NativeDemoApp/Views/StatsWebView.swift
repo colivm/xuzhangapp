@@ -1776,7 +1776,6 @@ struct StatsWebView: View {
 
     private func traceLifeSliceFallbackTile(item: HomeItem?, index: Int, height: CGFloat) -> some View {
         let category = item?.category ?? (index == 0 ? .transport : .daily)
-        let title = traceLifeSliceFallbackTitle(for: item, index: index)
         let amount = item.map { $0.amount.formatted(.cny) } ?? traceLifeSlicePeriodText(for: .week)
         let colors = traceLifeSliceFallbackColors(for: category, index: index)
         return ZStack(alignment: .topLeading) {
@@ -1802,16 +1801,13 @@ struct StatsWebView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                traceLifeSliceRoundIcon(
-                    systemName: MemoryAttachmentVisuals.categorySystemImage(category),
-                    size: 30,
-                    iconSize: 14
-                )
-                Text(title)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(AppColors.accentDark.opacity(0.78))
+                Image(systemName: MemoryAttachmentVisuals.categorySystemImage(category))
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(AppColors.accentDark.opacity(0.22))
+                Text(category.rawValue)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.accentDark.opacity(0.54))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.78)
                 Text(amount)
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundStyle(AppColors.accentDark.opacity(0.52))
@@ -1842,31 +1838,6 @@ struct StatsWebView: View {
             return index.isMultiple(of: 2)
                 ? [Color(hex: "f6efe2"), Color(hex: "e5efe8"), Color(hex: "f7f4ea")]
                 : [Color(hex: "edf2ee"), Color(hex: "f2e7d6"), Color(hex: "f8f4e8")]
-        }
-    }
-
-    private func traceLifeSliceFallbackTitle(for item: HomeItem?, index: Int) -> String {
-        guard let item else { return index == 0 ? "路上的记录" : "一笔日常" }
-        if traceLifeIsBeverageOrSnack(item) { return "饮品记录" }
-        switch item.category {
-        case .transport:
-            return "出行记录"
-        case .dining:
-            return traceLifeLooksLikeGathering(item) ? "聚餐记录" : "餐食记录"
-        case .daily, .home:
-            return "家用记录"
-        case .shopping:
-            return "添置记录"
-        case .social:
-            return "见面记录"
-        case .health:
-            return "照护记录"
-        case .lodging:
-            return "住宿记录"
-        case .entertainment:
-            return "放松记录"
-        case .other:
-            return "日常记录"
         }
     }
 
@@ -2087,7 +2058,7 @@ struct StatsWebView: View {
         }
         let photoCount = snapshot.memoryAnchors.count
         if photoCount == 1 {
-            return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，先放进1张照片和几段记录。"
+            return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，1张照片对应其中一笔。"
         }
         return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，\(photoCount)张照片放在回看里。"
     }
@@ -2097,12 +2068,12 @@ struct StatsWebView: View {
             return "这个月，生活有了轮廓"
         }
         if snapshot.memoryAnchors.isEmpty {
-            return "这一周，按记录整理"
+            return "这一周，\(traceLifeSliceCountText(snapshot.items.count))记录"
         }
         if snapshot.memoryAnchors.count == 1 {
-            return "这一周，有一张现场照片"
+            return "这一周，1张照片和\(traceLifeSliceCountText(snapshot.items.count))记录"
         }
-        return "这一周，有这些画面"
+        return "这一周，\(snapshot.memoryAnchors.count)张照片和\(traceLifeSliceCountText(snapshot.items.count))记录"
     }
 
     private func traceLifeSliceSummaryLine(snapshot: TraceChapterSnapshot) -> String {
