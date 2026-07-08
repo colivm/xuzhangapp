@@ -1741,7 +1741,11 @@ struct StatsWebView: View {
         height: CGFloat
     ) -> some View {
         ZStack(alignment: .bottomLeading) {
-            traceLifeSliceFramedImage(anchor: anchor, height: height)
+            if let anchor {
+                traceLifeSliceFramedImage(anchor: anchor, height: height)
+            } else {
+                traceLifeSliceFallbackTile(item: item, index: index, height: height)
+            }
 
             HStack(alignment: .center, spacing: 7) {
                 Text(traceLifeSliceSmallCaption(anchor: anchor, item: item, index: index))
@@ -1768,6 +1772,102 @@ struct StatsWebView: View {
                 .stroke(Color.white.opacity(0.78), lineWidth: 1)
         )
         .shadow(color: AppColors.subtext.opacity(0.06), radius: 10, x: 0, y: 6)
+    }
+
+    private func traceLifeSliceFallbackTile(item: HomeItem?, index: Int, height: CGFloat) -> some View {
+        let category = item?.category ?? (index == 0 ? .transport : .daily)
+        let title = traceLifeSliceFallbackTitle(for: item, index: index)
+        let amount = item.map { $0.amount.formatted(.cny) } ?? traceLifeSlicePeriodText(for: .week)
+        let colors = traceLifeSliceFallbackColors(for: category, index: index)
+        return ZStack(alignment: .topLeading) {
+            LinearGradient(
+                colors: colors,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Canvas { context, size in
+                let line = Color.white.opacity(0.20)
+                for row in 0..<4 {
+                    let y = size.height * (0.20 + CGFloat(row) * 0.17)
+                    var path = Path()
+                    path.move(to: CGPoint(x: size.width * 0.10, y: y))
+                    path.addCurve(
+                        to: CGPoint(x: size.width * 0.88, y: y + CGFloat(row % 2 == 0 ? 7 : -5)),
+                        control1: CGPoint(x: size.width * 0.30, y: y - 8),
+                        control2: CGPoint(x: size.width * 0.66, y: y + 9)
+                    )
+                    context.stroke(path, with: .color(line), lineWidth: 1)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                traceLifeSliceRoundIcon(
+                    systemName: MemoryAttachmentVisuals.categorySystemImage(category),
+                    size: 30,
+                    iconSize: 14
+                )
+                Text(title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(AppColors.accentDark.opacity(0.78))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                Text(amount)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(AppColors.accentDark.opacity(0.52))
+                    .lineLimit(1)
+            }
+            .padding(12)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .clipped()
+    }
+
+    private func traceLifeSliceFallbackColors(for category: HomeItem.Category, index: Int) -> [Color] {
+        switch category {
+        case .transport:
+            return [Color(hex: "edf4f5"), Color(hex: "dcebe8"), Color(hex: "f8f1e2")]
+        case .dining:
+            return [Color(hex: "fff3df"), Color(hex: "f4dfc4"), Color(hex: "edf0df")]
+        case .shopping, .daily, .home:
+            return [Color(hex: "f5eee4"), Color(hex: "eadcc8"), Color(hex: "e4eee6")]
+        case .social, .entertainment:
+            return [Color(hex: "f7eee7"), Color(hex: "ead8d1"), Color(hex: "e8efe5")]
+        case .health:
+            return [Color(hex: "eef4ec"), Color(hex: "dcecdf"), Color(hex: "f6efe1")]
+        case .lodging:
+            return [Color(hex: "edf1f5"), Color(hex: "dce5ef"), Color(hex: "f5eadf")]
+        case .other:
+            return index.isMultiple(of: 2)
+                ? [Color(hex: "f6efe2"), Color(hex: "e5efe8"), Color(hex: "f7f4ea")]
+                : [Color(hex: "edf2ee"), Color(hex: "f2e7d6"), Color(hex: "f8f4e8")]
+        }
+    }
+
+    private func traceLifeSliceFallbackTitle(for item: HomeItem?, index: Int) -> String {
+        guard let item else { return index == 0 ? "路上的记录" : "一笔日常" }
+        if traceLifeIsBeverageOrSnack(item) { return "饮品记录" }
+        switch item.category {
+        case .transport:
+            return "出行记录"
+        case .dining:
+            return traceLifeLooksLikeGathering(item) ? "聚餐记录" : "餐食记录"
+        case .daily, .home:
+            return "家用记录"
+        case .shopping:
+            return "添置记录"
+        case .social:
+            return "见面记录"
+        case .health:
+            return "照护记录"
+        case .lodging:
+            return "住宿记录"
+        case .entertainment:
+            return "放松记录"
+        case .other:
+            return "日常记录"
+        }
     }
 
     @ViewBuilder
@@ -1860,10 +1960,10 @@ struct StatsWebView: View {
                 Image(systemName: "text.alignleft")
                     .font(.system(size: 34, weight: .semibold))
                     .foregroundStyle(AppColors.accentDark.opacity(0.34))
-                Text("照片不多，记录还在")
+                Text("按记录整理")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppColors.accentDark.opacity(0.62))
-                Text("会先整理成记录片段")
+                Text("分类、金额和时间都在")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AppColors.accentDark.opacity(0.46))
             }
@@ -1983,9 +2083,12 @@ struct StatsWebView: View {
         }
         let countText = traceLifeSliceCountText(snapshot.items.count)
         if snapshot.memoryAnchors.isEmpty {
-            return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，照片不多，就先用文字切片补上。"
+            return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，已按类别整理成几段内容。"
         }
         let photoCount = snapshot.memoryAnchors.count
+        if photoCount == 1 {
+            return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，先放进1张照片和几段记录。"
+        }
         return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，\(photoCount)张照片放在回看里。"
     }
 
@@ -1993,7 +2096,13 @@ struct StatsWebView: View {
         if snapshot.range == .month {
             return "这个月，生活有了轮廓"
         }
-        return snapshot.memoryAnchors.isEmpty ? "这一周，记录还在" : "这一周，被这些画面留住"
+        if snapshot.memoryAnchors.isEmpty {
+            return "这一周，按记录整理"
+        }
+        if snapshot.memoryAnchors.count == 1 {
+            return "这一周，有一张现场照片"
+        }
+        return "这一周，有这些画面"
     }
 
     private func traceLifeSliceSummaryLine(snapshot: TraceChapterSnapshot) -> String {
@@ -2351,20 +2460,20 @@ struct StatsWebView: View {
 
         rows.append((
             icon: "calendar",
-            title: "\(activeDays) 天留下记录",
+            title: "\(activeDays) 天有记录",
             subtitle: "\(snapshot.items.count) 笔账单，合计 \(total.formatted(.cny))"
         ))
 
         if snapshot.memoryAnchors.isEmpty {
             rows.append((
                 icon: "text.alignleft",
-                title: "照片不多，记录还在",
-                subtitle: "先用文字切片进入月回看"
+                title: "按记录整理",
+                subtitle: "用分类、金额和时间进入月回看"
             ))
         } else {
             rows.append((
                 icon: "photo.on.rectangle.angled",
-                title: "留下 \(snapshot.memoryAnchors.count) 张画面",
+                title: "\(snapshot.memoryAnchors.count) 张画面",
                 subtitle: "它们会作为这个月的回看入口"
             ))
         }

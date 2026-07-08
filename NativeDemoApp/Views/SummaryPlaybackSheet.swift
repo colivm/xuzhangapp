@@ -2703,48 +2703,87 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var filmStoryPosterContent: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("叙账")
-                    .font(.system(size: 14, weight: .bold))
-                Spacer()
-                Text(payload.periodText)
-                    .font(.system(size: 12, weight: .semibold))
+        ZStack {
+            filmGrainOverlay
+
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color(hex: "b88b48").opacity(0.46), lineWidth: 1)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 18)
+
+            HStack(spacing: 0) {
+                filmSideRail(mark: "KODAK PORTRA 400", alignLeading: true)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(alignment: .center) {
+                        HStack(spacing: 7) {
+                            brandLeafMark(size: 15, tint: Color(hex: "d6b876"))
+                            Text("叙账")
+                                .font(.system(size: 15, weight: .bold))
+                        }
+
+                        Spacer()
+
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(Color(hex: "f7efe3").opacity(0.88))
+                            .frame(width: 22, height: 14)
+                    }
+                    .foregroundStyle(Color(hex: "d6b876").opacity(0.88))
+                    .padding(.top, 28)
+
+                    Rectangle()
+                        .fill(Color(hex: "b88b48").opacity(0.34))
+                        .frame(height: 1)
+                        .padding(.top, 13)
+
+                    Text(payload.periodText)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(hex: "d6b876").opacity(0.82))
+                        .padding(.top, 18)
+
+                    Text(filmPosterHeadline)
+                        .font(.system(size: 33, weight: .bold, design: .serif))
+                        .foregroundStyle(Color(hex: "f7efe3"))
+                        .lineLimit(2)
+                        .lineSpacing(3)
+                        .minimumScaleFactor(0.70)
+                        .padding(.top, 16)
+
+                    posterVisualImage(posterVisualItem(at: 0), index: 0)
+                        .frame(width: 350, height: 262)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .stroke(Color(hex: "f7efe3").opacity(0.12), lineWidth: 1)
+                        )
+                        .padding(.top, 22)
+                        .frame(maxWidth: .infinity)
+
+                    Text(filmPosterSubtitle)
+                        .font(chineseHandwritingFont(size: 17))
+                        .foregroundStyle(Color(hex: "f7efe3").opacity(0.86))
+                        .lineSpacing(6)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.82)
+                        .padding(.top, 20)
+                        .padding(.horizontal, 5)
+
+                    Spacer(minLength: 18)
+
+                    Rectangle()
+                        .fill(Color(hex: "b88b48").opacity(0.42))
+                        .frame(height: 1)
+
+                    filmPosterFooter
+                        .padding(.top, 16)
+                        .padding(.bottom, 20)
+                }
+                .padding(.horizontal, 18)
+
+                filmSideRail(mark: "43", alignLeading: false)
             }
-            .foregroundStyle(Color(hex: "d6b876").opacity(0.88))
-            .padding(.top, 28)
-            .padding(.horizontal, 30)
-
-            Text(warmLightPosterHeadline)
-                .font(.system(size: 35, weight: .bold, design: .serif))
-                .foregroundStyle(Color(hex: "f7efe3"))
-                .lineLimit(2)
-                .lineSpacing(4)
-                .minimumScaleFactor(0.72)
-                .padding(.top, 42)
-                .padding(.horizontal, 48)
-
-            posterVisualImage(posterVisualItem(at: 0), index: 0)
-                .frame(height: 385)
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                .overlay(filmPerforation)
-                .padding(.top, 28)
-                .padding(.horizontal, 48)
-
-            Text(filmPosterSubtitle)
-                .font(chineseHandwritingFont(size: 18))
-                .foregroundStyle(Color(hex: "f7efe3").opacity(0.86))
-                .lineSpacing(7)
-                .lineLimit(3)
-                .padding(.top, 22)
-                .padding(.horizontal, 48)
-
-            Spacer(minLength: 20)
-
-            filmPosterFooter
-                .padding(.horizontal, 30)
-                .padding(.bottom, 28)
+            .padding(.horizontal, 20)
         }
     }
 
@@ -3373,6 +3412,48 @@ private struct WeeklyStoryShareCardView: View {
         .frame(maxWidth: .infinity)
     }
 
+    private var filmGrainOverlay: some View {
+        Canvas { context, size in
+            let fleck = Color.white.opacity(0.035)
+            for index in 0..<90 {
+                let x = CGFloat((index * 47) % 100) / 100 * size.width
+                let y = CGFloat((index * 71) % 100) / 100 * size.height
+                let rect = CGRect(x: x, y: y, width: CGFloat(index % 3 + 1), height: CGFloat(index % 2 + 1))
+                context.fill(Path(ellipseIn: rect), with: .color(fleck))
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func filmSideRail(mark: String, alignLeading: Bool) -> some View {
+        VStack(spacing: 12) {
+            Text(mark)
+                .font(.system(size: mark.count > 3 ? 9 : 11, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: "c99a4f").opacity(0.88))
+                .rotationEffect(.degrees(alignLeading ? -90 : 90))
+                .frame(width: 22, height: 88)
+
+            Spacer(minLength: 10)
+
+            VStack(spacing: 12) {
+                ForEach(0..<10, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(Color(hex: "f7efe3").opacity(0.90))
+                        .frame(width: 20, height: 12)
+                }
+            }
+
+            Spacer(minLength: 10)
+
+            Image(systemName: "triangle.fill")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color(hex: "c99a4f").opacity(0.90))
+                .rotationEffect(.degrees(alignLeading ? 0 : 180))
+        }
+        .frame(width: 36)
+        .padding(.vertical, 34)
+    }
+
     private var filmPerforation: some View {
         HStack {
             VStack(spacing: 11) {
@@ -3529,15 +3610,16 @@ private struct WeeklyStoryShareCardView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(posterVisualCaption(item, fallback: fallback))
+                Text(posterCleanRowTitle(item, fallback: fallback))
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(ink)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
-                Text(posterVisualFootnote(item))
+                Text(posterCleanRowDetail(item))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(muted.opacity(0.78))
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
             }
             Spacer(minLength: 0)
         }
@@ -3549,6 +3631,30 @@ private struct WeeklyStoryShareCardView: View {
                 .stroke(Color.white.opacity(0.68), lineWidth: 1)
         )
         .shadow(color: deepGreen.opacity(0.05), radius: 12, x: 0, y: 7)
+    }
+
+    private func posterCleanRowTitle(_ item: PosterVisualItem, fallback: String) -> String {
+        switch item {
+        case .photo:
+            return posterVisualCaption(item, fallback: fallback)
+        case .story:
+            return "按记录整理"
+        case .keywords:
+            return "本期关键词"
+        case .rhythm:
+            return "记录节奏"
+        }
+    }
+
+    private func posterCleanRowDetail(_ item: PosterVisualItem) -> String {
+        switch item {
+        case .photo(let anchor):
+            return anchor.createdAt.zhBillDateOnly
+        case .story(let text), .rhythm(let text):
+            return text
+        case .keywords(let labels):
+            return labels.prefix(3).joined(separator: " / ")
+        }
     }
 
     private func lifeSlicePosterMetric(icon: String, value: String, label: String) -> some View {
@@ -3596,7 +3702,7 @@ private struct WeeklyStoryShareCardView: View {
                 VStack(spacing: 10) {
                     Image(systemName: "text.alignleft")
                         .font(.system(size: 34, weight: .semibold))
-                    Text("照片不多，记录还在")
+                    Text("按记录整理")
                         .font(.system(size: 15, weight: .semibold))
                 }
                 .foregroundStyle(deepGreen.opacity(0.50))
@@ -3735,7 +3841,7 @@ private struct WeeklyStoryShareCardView: View {
                 .frame(width: 52)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text("为什么选这几张")
+                Text("这张卡片怎么来的")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(ink)
                 Text(lifeSlicePosterReasonText)
@@ -3907,26 +4013,26 @@ private struct WeeklyStoryShareCardView: View {
     private var warmLightPosterHeadline: String {
         let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
         if posterImageCount > 0 {
-            return "\(period)，留下\(chineseNumeral(posterImageCount))张照片"
+            return "\(period)，有\(chineseNumeral(posterImageCount))张照片"
         }
-        return "\(period)，留下几段记录"
+        return "\(period)，整理成几段记录"
     }
 
     private var warmLightPosterSubtitle: String {
         let scenes = posterSceneLabels.prefix(2).joined(separator: "、")
         if !scenes.isEmpty {
-            return "\(periodLeadShort)出现过\(scenes)，\n后来被整理进这张卡片里。"
+            return "\(periodLeadShort)的记录里有\(scenes)，\n这张卡片按时间和画面整理。"
         }
-        return "照片不多，记录还在。\n这段时间有几笔记录。"
+        return "\(periodLeadShort)一共 \(payload.recordCount) 笔记录，\n按时间整理成这一页。"
     }
 
     private var warmLightPosterTagline: String {
         stablePosterCopy(
             [
-                "照片不多，记录还在",
+                "按记录整理这一页",
                 "一张照片，对应一笔记录",
-                "这段时间，有几笔记录",
-                "这些片段，以后再看会有出处"
+                "\(periodLeadShort)有 \(payload.recordCount) 笔记录",
+                "这些片段，都有出处"
             ],
             salt: "warmLightTagline"
         )
@@ -4036,12 +4142,18 @@ private struct WeeklyStoryShareCardView: View {
     private var filmPosterSubtitle: String {
         stablePosterCopy(
             [
-                "记录生活，把这一周的瞬间放在一起。",
-                "这一周有几张照片，也有几笔记录。",
-                "画面和记录放在一起，回看时更清楚。"
+                "把画面、日期和记录放在同一格里。",
+                "\(periodLeadShort)有 \(payload.recordCount) 笔记录，排成一张胶片。",
+                "画面在前，记录在后，回看时更清楚。"
             ],
             salt: "filmSubtitle"
         )
+    }
+
+    private var filmPosterHeadline: String {
+        let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
+        let photoText = posterImageCount > 0 ? "\(chineseNumeral(posterImageCount))张画面入卷" : "几段记录入卷"
+        return "\(period)，\n\(photoText)"
     }
 
     private var fullPhotoPosterHeadline: String {
@@ -4146,7 +4258,7 @@ private struct WeeklyStoryShareCardView: View {
 
     private var posterFallbackTiles: [PosterVisualItem] {
         let keywords = Array(posterSceneLabels.prefix(3))
-        let keywordTile = PosterVisualItem.keywords(keywords.isEmpty ? ["日常", "记录", "回看"] : keywords)
+        let keywordTile = PosterVisualItem.keywords(keywords.isEmpty ? posterRecordKeywordLabels : keywords)
         let storyTile = PosterVisualItem.story(posterFactStoryText)
         let rhythmTile = PosterVisualItem.rhythm(posterRhythmText)
 
@@ -4169,8 +4281,8 @@ private struct WeeklyStoryShareCardView: View {
         if label == "通勤" { return "\(periodLeadShort)路上的一段。" }
         if label == "添置" { return "\(periodLeadShort)买过的一件东西。" }
         if label == "聚会" { return "\(periodLeadShort)见过的人和事。" }
-        if !label.isEmpty { return "\(periodLeadShort)出现过的\(label)。" }
-        return "\(periodLeadShort)留下的几笔记录。"
+        if !label.isEmpty { return "\(periodLeadShort)的\(label)记录。" }
+        return "\(periodLeadShort)共 \(payload.recordCount) 笔记录。"
     }
 
     private var posterRhythmText: String {
@@ -4181,23 +4293,37 @@ private struct WeeklyStoryShareCardView: View {
         if payload.recordCount > 0 {
             return "\(periodLeadShort)有 \(payload.recordCount) 笔记录。"
         }
-        return "照片不多，记录还在。"
+        return "\(periodLeadShort)暂时还没有记录。"
     }
 
     private var posterSceneLabels: [String] {
-        var labels = memoryAnchors.map(\.label).filter { !$0.isEmpty }
-        if labels.isEmpty {
-            labels = payload.categorySlices.map(\.label)
-        }
-        labels.append(contentsOf: ["日常", "通勤", "添置"])
+        let labels = memoryAnchors.map(\.label).filter { !$0.isEmpty } + payload.categorySlices.map(\.label)
         var seen = Set<String>()
         return labels.compactMap { raw in
             let label = posterNormalizedSceneLabel(raw)
-            guard !label.isEmpty, seen.insert(label).inserted else { return nil }
+            guard !label.isEmpty,
+                  !posterIsWeakSceneLabel(label),
+                  seen.insert(label).inserted else { return nil }
             return label
         }
         .prefix(3)
         .map { $0 }
+    }
+
+    private var posterRecordKeywordLabels: [String] {
+        let activeDays = payload.dailyCountTrend.filter { $0.1 > 0 }.count
+        var labels: [String] = []
+        if payload.recordCount > 0 {
+            labels.append("\(payload.recordCount)笔记录")
+        }
+        if activeDays > 0 {
+            labels.append("\(activeDays)天有记录")
+        }
+        let top = posterNormalizedSceneLabel(payload.topCategory)
+        if !top.isEmpty && !posterIsWeakSceneLabel(top) {
+            labels.append(top)
+        }
+        return Array(labels.prefix(3))
     }
 
     private func posterVisualItem(at index: Int) -> PosterVisualItem {
@@ -4239,9 +4365,9 @@ private struct WeeklyStoryShareCardView: View {
     private var lifeSlicePosterReasonText: String {
         let scenes = posterSceneLabels.prefix(3).joined(separator: "、")
         guard !scenes.isEmpty else {
-            return "图片不够时，会用记录里的文字和节奏补上。\n这张卡片仍然对应真实记录。"
+            return "这张卡片来自\(periodLeadShort)的 \(payload.recordCount) 笔记录。\n系统按类别、日期和画面自动排版。"
         }
-        return "这几段内容对应\(periodLeadShort)的具体记录：\(scenes)。\n照片不够时，也不会用空占位补齐。"
+        return "这张卡片来自\(periodLeadShort)的记录：\(scenes)。\n系统按照片、类别和记录时间自动排版。"
     }
 
     private func posterPhotoIcon(_ anchor: SummaryMemoryAnchor?, size: CGFloat) -> some View {
@@ -4294,6 +4420,10 @@ private struct WeeklyStoryShareCardView: View {
         if raw.contains("住宿") || raw.contains("旅行") || raw.contains("出行") { return "出行" }
         if raw.contains("娱乐") || raw.contains("放松") { return "放松" }
         return raw
+    }
+
+    private func posterIsWeakSceneLabel(_ label: String) -> Bool {
+        ["体验", "日常", "生活", "现场", "记录", "回看"].contains(label)
     }
 
     private func posterSceneIcon(for label: String) -> String {
