@@ -2508,6 +2508,118 @@ private struct WeeklyStoryShareCardView: View {
         case rhythm(String)
     }
 
+    private struct PosterCopyModel {
+        let title: String
+        let subtitle: String
+        let tagline: String
+        let sceneLabel: String
+        let body: String
+
+        init(
+            payload: WeeklyShareCardPayload,
+            memoryAnchors: [SummaryMemoryAnchor],
+            imageCount: Int,
+            sceneLabels: [String]
+        ) {
+            let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
+            let shortPeriod = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这周"
+            let imageText = Self.imageText(imageCount)
+            let firstScene = sceneLabels.first(where: { !Self.isWeakLabel($0) }) ?? Self.normalizedLabel(payload.topCategory)
+            let safeScene = Self.isWeakLabel(firstScene) ? "" : firstScene
+            let photoLine = memoryAnchors.first.flatMap(Self.safeAnchorLine)
+
+            if imageCount > 0 {
+                title = "\(period)，\(imageText)"
+                subtitle = photoLine ?? "\(shortPeriod)有 \(payload.recordCount) 笔记录，\(imageText)对应其中\(imageCount)笔。"
+            } else {
+                title = "\(period)，\(payload.recordCount)笔记录"
+                subtitle = Self.safeLine(payload.subtitle)
+                    ?? Self.safeLine(payload.insight.fact)
+                    ?? "\(shortPeriod)的记录按时间和分类整理成这一页。"
+            }
+
+            if !safeScene.isEmpty {
+                sceneLabel = safeScene
+                tagline = "\(payload.recordCount)笔记录 · \(safeScene)"
+            } else {
+                sceneLabel = "\(payload.recordCount)笔记录"
+                tagline = imageCount > 0 ? "\(payload.recordCount)笔记录 · \(imageText)" : "\(payload.recordCount)笔记录"
+            }
+
+            let bodyLines = [
+                Self.safeLine(payload.anchorLine),
+                Self.safeLine(payload.contextLine),
+                Self.safeLine(payload.insight.care),
+                photoLine
+            ].compactMap { $0 }
+            if bodyLines.isEmpty {
+                body = "\(shortPeriod)有 \(payload.recordCount) 笔记录。\n\(imageCount > 0 ? imageText : "这些记录")按时间整理在一起。"
+            } else {
+                body = bodyLines.prefix(2).joined(separator: "\n")
+            }
+        }
+
+        private static func imageText(_ count: Int) -> String {
+            switch count {
+            case 1: return "一张照片"
+            case 2: return "两张照片"
+            case 3: return "三张照片"
+            default: return "\(count)张照片"
+            }
+        }
+
+        private static func safeAnchorLine(_ anchor: SummaryMemoryAnchor) -> String? {
+            safeLine(anchor.caption)
+                ?? safeLine(anchor.title)
+                ?? (isWeakLabel(anchor.label) ? nil : "\(anchor.label)对应其中一笔记录。")
+        }
+
+        private static func safeLine(_ raw: String?) -> String? {
+            let text = raw?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "\n", with: " ") ?? ""
+            guard !text.isEmpty else { return nil }
+            let blocked = [
+                "记" + "得我",
+                "也在" + "记得",
+                "也在" + "这周",
+                "值" + "得",
+                "小小",
+                "认真" + "发生",
+                "生活" + "不是赶路",
+                "刚好" + "是",
+                "照片" + "不多",
+                "照片" + "不够",
+                "空" + "占位",
+                "留下"
+            ]
+            guard !blocked.contains(where: { text.localizedCaseInsensitiveContains($0) }) else { return nil }
+            return text.count > 34 ? "\(text.prefix(34))" : text
+        }
+
+        private static func normalizedLabel(_ raw: String) -> String {
+            if raw.contains("可乐") || raw.contains("饮料") || raw.contains("饮品") || raw.contains("咖啡") || raw.contains("奶茶") { return "饮品" }
+            if raw.contains("餐") || raw.contains("饭") || raw.contains("菜") || raw.contains("面") || raw.contains("食堂") { return "餐食" }
+            if raw.contains("公交") || raw.contains("地铁") || raw.contains("打车") || raw.contains("交通") || raw.contains("通勤") { return "出行" }
+            if raw.contains("购物") || raw.contains("添置") || raw.contains("日用") || raw.contains("快递") { return "添置" }
+            if raw.contains("朋友") || raw.contains("见面") || raw.contains("聚会") { return "见面" }
+            return raw
+        }
+
+        private static func isWeakLabel(_ label: String) -> Bool {
+            ["", "体验", "日常", "生活", "现场", "记录", "回看", "其他", "通勤"].contains(label)
+        }
+    }
+
+    private var posterCopy: PosterCopyModel {
+        PosterCopyModel(
+            payload: payload,
+            memoryAnchors: memoryAnchors,
+            imageCount: posterImageCount,
+            sceneLabels: posterSceneLabels
+        )
+    }
+
     var body: some View {
         ZStack {
             lifeSlicePosterBackground
@@ -3995,73 +4107,27 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var lifeSlicePosterHeadline: String {
-        let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
-        if posterImageCount > 0 {
-            return "\(period)，有\(chineseNumeral(posterImageCount))张照片"
-        }
-        return "\(period)，留下几段记录"
+        posterCopy.title
     }
 
     private var lifeSlicePosterSubtitle: String {
-        let period = periodLeadShort
-        if posterImageCount > 0 {
-            return "\(period)一共 \(payload.recordCount) 笔记录，\n把照片和几段记录放在一起。"
-        }
-        return "\(period)一共 \(payload.recordCount) 笔记录，\n整理成几段可以回看的内容。"
+        posterCopy.subtitle
     }
 
     private var warmLightPosterHeadline: String {
-        let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
-        if posterImageCount > 0 {
-            return "\(period)，有\(chineseNumeral(posterImageCount))张照片"
-        }
-        return "\(period)，整理成几段记录"
+        posterCopy.title
     }
 
     private var warmLightPosterSubtitle: String {
-        let scenes = posterSceneLabels.prefix(2).joined(separator: "、")
-        if !scenes.isEmpty {
-            return "\(periodLeadShort)的记录里有\(scenes)，\n这张卡片按时间和画面整理。"
-        }
-        return "\(periodLeadShort)一共 \(payload.recordCount) 笔记录，\n按时间整理成这一页。"
+        posterCopy.subtitle
     }
 
     private var warmLightPosterTagline: String {
-        stablePosterCopy(
-            [
-                "按记录整理这一页",
-                "一张照片，对应一笔记录",
-                "\(periodLeadShort)有 \(payload.recordCount) 笔记录",
-                "这些片段，都有出处"
-            ],
-            salt: "warmLightTagline"
-        )
+        posterCopy.tagline
     }
 
     private var warmLightSceneLabel: String {
-        let evidence = posterEvidenceText
-        if lifeSliceContainsAny(evidence, ["朋友", "同学", "见面", "生日", "约饭"]) {
-            return "和朋友的一次聚会"
-        }
-        if lifeSliceContainsAny(evidence, ["早餐", "午餐", "晚餐", "外卖", "饭", "餐", "菜", "面", "米饭", "食堂", "小吃"]) {
-            return "这一餐"
-        }
-        if lifeSliceContainsAny(evidence, ["可乐", "饮料", "饮品", "咖啡", "奶茶", "矿泉水", "瓶装水"]) {
-            return "一瓶饮料"
-        }
-        if lifeSliceContainsAny(evidence, ["通勤", "公交", "地铁", "打车", "路上", "回家", "上班"]) {
-            return "路上的一段"
-        }
-        if lifeSliceContainsAny(evidence, ["购物", "添置", "快递", "下单", "衣服", "鞋", "背包", "数码", "盲盒", "手办"]) {
-            return "一次添置"
-        }
-        if let first = posterSceneLabels.first, !first.isEmpty {
-            if first == "聚会" {
-                return "日常"
-            }
-            return first
-        }
-        return "这一周的生活"
+        posterCopy.sceneLabel
     }
 
     private var posterEvidenceText: String {
@@ -4091,139 +4157,51 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var collagePosterSubtitle: String {
-        stablePosterCopy(
-            [
-                "把几张照片贴在一起，这段日子就有了形状。",
-                "吃过的、见过的、路过的，都拼成这一页。",
-                "这不是大片，是这一周真实发生过的小事。"
-            ],
-            salt: "collageSubtitle"
-        )
+        posterCopy.subtitle
     }
 
     private var magazinePosterSubtitle: String {
-        stablePosterCopy(
-            [
-                "在平凡的日子里，收编一些具体片段。",
-                "几笔记录，几张照片，排成这一周的版面。",
-                "生活没有刻意安排，也会留下自己的顺序。"
-            ],
-            salt: "magazineSubtitle"
-        )
+        posterCopy.subtitle
     }
 
     private var magazinePosterTagline: String {
-        stablePosterCopy(
-            [
-                "这些片段，构成这一页。",
-                "这一周的内容，被放在一起。",
-                "有图的地方，就多留一眼。"
-            ],
-            salt: "magazineTagline"
-        )
+        posterCopy.tagline
     }
 
     private var journalPosterHeadline: String {
-        let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
-        return "\(period)，这样也很好"
+        posterCopy.title
     }
 
     private var journalPosterBody: String {
-        stablePosterCopy(
-            [
-                "生活不是赶路，\n而是在每个当下，\n找到属于自己的节奏。",
-                "照片不一定很多，\n但记录里的日期、地点和事情，\n会把这段时间接起来。",
-                "不多不少，\n刚好是自己的生活。"
-            ],
-            salt: "journalBody"
-        )
+        posterCopy.body
     }
 
     private var filmPosterSubtitle: String {
-        stablePosterCopy(
-            [
-                "把画面、日期和记录放在同一格里。",
-                "\(periodLeadShort)有 \(payload.recordCount) 笔记录，排成一张胶片。",
-                "画面在前，记录在后，回看时更清楚。"
-            ],
-            salt: "filmSubtitle"
-        )
+        posterCopy.subtitle
     }
 
     private var filmPosterHeadline: String {
-        let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
-        let photoText = posterImageCount > 0 ? "\(chineseNumeral(posterImageCount))张画面入卷" : "几段记录入卷"
-        return "\(period)，\n\(photoText)"
+        posterCopy.title.replacingOccurrences(of: "，", with: "，\n")
     }
 
     private var fullPhotoPosterHeadline: String {
-        let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
-        if posterImageCount == 1 {
-            return "\(period)，有一张照片"
-        }
-        if posterImageCount > 1 {
-            return "\(period)，有\(chineseNumeral(posterImageCount))张照片"
-        }
-        return "\(period)，按记录整理"
+        posterCopy.title
     }
 
     private var fullPhotoPosterSubtitle: String {
-        stablePosterCopy(
-            [
-                "\(periodLeadShort)有 \(payload.recordCount) 笔记录。",
-                "这张照片对应其中一笔记录。",
-                "日期、照片和记录放在同一张卡片里。"
-            ],
-            salt: "fullPhotoSubtitle"
-        )
+        posterCopy.subtitle
     }
 
     private var collagePosterTagline: String {
-        stablePosterCopy(
-            [
-                "日常拼起来，也会很好看。",
-                "几张照片，就能把这一周带回来。",
-                "把当时的心情，贴在这一页里。"
-            ],
-            salt: "collageTagline"
-        )
+        posterCopy.tagline
     }
 
     private var cleanPosterSubtitle: String {
-        stablePosterCopy(
-            [
-                "这周的记录已经收好，照片放在最容易回看的地方。",
-                "把零散的小事整理一下，以后翻起来更清楚。",
-                "没有复杂修饰，只留下这段时间真正发生过的事。"
-            ],
-            salt: "cleanSubtitle"
-        )
+        posterCopy.subtitle
     }
 
     private var customBackgroundPosterSubtitle: String {
-        stablePosterCopy(
-            [
-                "用一张熟悉的背景，装下这一周的几件小事。",
-                "这张背景在前面，记录就像发生在当时。",
-                "换成自己的照片，这段生活会更像你的。"
-            ],
-            salt: "customBackgroundSubtitle"
-        )
-    }
-
-    private func stablePosterCopy(_ options: [String], salt: String) -> String {
-        guard !options.isEmpty else { return "" }
-        let seed = [
-            style.rawValue,
-            salt,
-            payload.periodText,
-            "\(payload.recordCount)",
-            memoryAnchors.map { $0.id.uuidString }.joined(separator: "-")
-        ].joined(separator: "|")
-        let value = seed.unicodeScalars.reduce(0) { partial, scalar in
-            (partial &* 31 &+ Int(scalar.value)) & 0x7fffffff
-        }
-        return options[value % options.count]
+        posterCopy.subtitle
     }
 
     private var posterImageCount: Int {
@@ -4447,21 +4425,6 @@ private struct WeeklyStoryShareCardView: View {
             .font(.system(size: size, weight: .regular))
             .foregroundStyle(tint.opacity(0.92))
             .rotationEffect(.degrees(-18))
-    }
-
-    private func chineseNumeral(_ value: Int) -> String {
-        switch value {
-        case 1: return "一"
-        case 2: return "两"
-        case 3: return "三"
-        case 4: return "四"
-        case 5: return "五"
-        case 6: return "六"
-        case 7: return "七"
-        case 8: return "八"
-        case 9: return "九"
-        default: return "\(value)"
-        }
     }
 
     private var storySelection: SignalSelectionPolicyResult {
