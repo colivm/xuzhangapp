@@ -356,41 +356,61 @@ struct WeeklyStoryShareCardTheme {
 
 private enum LifeSliceShareCardStyle: String, CaseIterable, Identifiable {
     case warmLight
+    case magazine
+    case appleMemories
+    case journal
+    case filmStory
     case collageStory
     case cleanTexture
+    case fullPhoto
     case customBackground
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .warmLight: return "自然暖光"
-        case .collageStory: return "拼贴故事"
-        case .cleanTexture: return "简约质感"
+        case .warmLight: return "Hero Story"
+        case .magazine: return "Magazine"
+        case .appleMemories: return "Memories"
+        case .journal: return "Journal"
+        case .filmStory: return "Film"
+        case .collageStory: return "Scrapbook"
+        case .cleanTexture: return "Minimal"
+        case .fullPhoto: return "Full Photo"
         case .customBackground: return "自定义背景"
         }
     }
 
     var subtitle: String {
         switch self {
-        case .warmLight: return "暖光和叶影"
-        case .collageStory: return "照片像手账"
-        case .cleanTexture: return "干净留白"
+        case .warmLight: return "大图叙事"
+        case .magazine: return "杂志排版"
+        case .appleMemories: return "记忆卡片"
+        case .journal: return "手账留白"
+        case .filmStory: return "胶片质感"
+        case .collageStory: return "拼贴手账"
+        case .cleanTexture: return "极简留白"
+        case .fullPhoto: return "沉浸照片"
         case .customBackground: return "本地相册"
         }
     }
 
     var icon: String {
         switch self {
-        case .warmLight: return "leaf.fill"
+        case .warmLight: return "photo.fill"
+        case .magazine: return "rectangle.split.2x2"
+        case .appleMemories: return "sparkles"
+        case .journal: return "book.closed"
+        case .filmStory: return "film"
         case .collageStory: return "photo.on.rectangle.angled"
         case .cleanTexture: return "rectangle.split.3x1"
+        case .fullPhoto: return "mountain.2.fill"
         case .customBackground: return "plus"
         }
     }
 
     static var presetCases: [LifeSliceShareCardStyle] {
-        [.warmLight, .collageStory, .cleanTexture]
+        [.warmLight, .magazine, .appleMemories, .journal, .filmStory, .collageStory, .cleanTexture, .fullPhoto]
     }
 
     static func stableDefault(seed: String) -> LifeSliceShareCardStyle {
@@ -405,6 +425,100 @@ private enum LifeSliceShareCardStyle: String, CaseIterable, Identifiable {
         let styles = LifeSliceShareCardStyle.presetCases
         guard let index = styles.firstIndex(of: self) else { return styles[0] }
         return styles[(index + 1) % styles.count]
+    }
+
+    static func recommended(
+        payload: WeeklyShareCardPayload?,
+        memoryAnchors: [SummaryMemoryAnchor],
+        seed: String
+    ) -> LifeSliceShareCardStyle {
+        guard let payload else {
+            return stableDefault(seed: seed)
+        }
+
+        let photoCount = memoryAnchors.count
+        let activeDays = payload.dailyCountTrend.filter { $0.1 > 0 }.count
+        let sceneLabels = (memoryAnchors.map(\.label) + payload.categorySlices.map(\.label))
+            .map(Self.normalizedSceneLabel)
+            .filter { !$0.isEmpty }
+        let sceneDiversity = Set(sceneLabels).count
+        let evidence = (
+            [
+                payload.topCategory,
+                payload.headline,
+                payload.subtitle,
+                payload.anchorLine ?? "",
+                payload.lifeMarkLine ?? "",
+                payload.contextLine ?? "",
+                payload.emotionLine ?? "",
+                payload.insight.fact,
+                payload.insight.care
+            ]
+            + payload.insight.tags
+            + memoryAnchors.flatMap { [$0.title, $0.label, $0.caption, $0.sceneHint.rawValue, $0.role.rawValue] }
+        )
+        .joined(separator: " ")
+
+        if photoCount <= 0 {
+            if payload.recordCount <= 5 {
+                return .cleanTexture
+            }
+            if activeDays >= 4 || sceneDiversity >= 3 {
+                return .journal
+            }
+            return .cleanTexture
+        }
+
+        if photoCount == 1 {
+            if containsAny(evidence, ["旅行", "风景", "住宿", "现场", "体验", "山", "海", "天空", "公园", "travel", "experience"]) {
+                return .fullPhoto
+            }
+            if containsAny(evidence, ["夜", "电影", "酒", "演出", "live", "KTV", "ktv"]) {
+                return .filmStory
+            }
+            if payload.recordCount <= 6 {
+                return .cleanTexture
+            }
+            return .warmLight
+        }
+
+        if photoCount == 2 {
+            if containsAny(evidence, ["夜", "电影", "演出", "live", "KTV", "ktv"]) {
+                return .filmStory
+            }
+            if activeDays >= 4 || payload.recordCount >= 10 {
+                return .appleMemories
+            }
+            return .journal
+        }
+
+        if containsAny(evidence, ["朋友", "同学", "聚会", "约饭", "生日", "饭局", "拼贴"]) {
+            return .collageStory
+        }
+        if containsAny(evidence, ["夜", "电影", "演出", "live", "KTV", "ktv"]) {
+            return .filmStory
+        }
+        if payload.recordCount >= 10 || sceneDiversity >= 3 {
+            return .magazine
+        }
+        return .appleMemories
+    }
+
+    private static func normalizedSceneLabel(_ raw: String) -> String {
+        if raw.contains("可乐") || raw.contains("饮料") || raw.contains("饮品") || raw.contains("咖啡") || raw.contains("奶茶") { return "饮料" }
+        if raw.contains("餐") || raw.contains("饭") || raw.contains("菜") || raw.contains("面") || raw.contains("食堂") { return "一餐" }
+        if raw.contains("见面") || raw.contains("朋友") || raw.contains("聚会") || raw.contains("约饭") { return "聚会" }
+        if raw.contains("现场") || raw.contains("体验") || raw.contains("电影") || raw.contains("演出") { return "体验" }
+        if raw.contains("通勤") || raw.contains("交通") || raw.contains("公交") || raw.contains("地铁") || raw.contains("路") { return "通勤" }
+        if raw.contains("家") || raw.contains("居家") || raw.contains("日用") || raw.contains("添") || raw.contains("购物") { return "添置" }
+        if raw.contains("健康") || raw.contains("照护") || raw.contains("药") { return "照护" }
+        if raw.contains("住宿") || raw.contains("旅行") || raw.contains("出行") { return "出行" }
+        if raw.contains("娱乐") || raw.contains("放松") { return "娱乐" }
+        return raw
+    }
+
+    private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.localizedCaseInsensitiveContains($0) }
     }
 }
 
@@ -445,7 +559,15 @@ struct SummaryPlaybackSheet: View {
     }
 
     private var currentShareCardStyle: LifeSliceShareCardStyle {
-        selectedShareCardStyle ?? LifeSliceShareCardStyle.stableDefault(seed: shareCardStyleSeed)
+        selectedShareCardStyle ?? recommendedShareCardStyle
+    }
+
+    private var recommendedShareCardStyle: LifeSliceShareCardStyle {
+        LifeSliceShareCardStyle.recommended(
+            payload: weeklySharePayload,
+            memoryAnchors: playback.memoryAnchors,
+            seed: shareCardStyleSeed
+        )
     }
 
     private var shareCardStyleSeed: String {
@@ -533,9 +655,6 @@ struct SummaryPlaybackSheet: View {
         .animation(.easeInOut(duration: 0.20), value: memorySaveMessage)
         .animation(.spring(response: 0.28, dampingFraction: 0.88), value: showShareCardPrivacyConfirm)
         .onAppear {
-            if selectedShareCardStyle == nil {
-                selectedShareCardStyle = LifeSliceShareCardStyle.stableDefault(seed: shareCardStyleSeed)
-            }
             startPlayback()
         }
         .onChange(of: isPlaying) { _, newValue in
@@ -619,13 +738,6 @@ struct SummaryPlaybackSheet: View {
                 }
 
                 shareCardPreviewPanel
-
-                shareCardStyleSummary
-
-                if isShareStylePickerExpanded {
-                    shareCardStylePicker
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
 
                 HStack(spacing: 12) {
                     Button {
@@ -1678,32 +1790,74 @@ struct SummaryPlaybackSheet: View {
     @ViewBuilder
     private var shareCardPreviewPanel: some View {
         if let payload = weeklySharePayload {
-            HStack(alignment: .center, spacing: 14) {
-                WeeklyStoryShareCardView(
-                    payload: payload,
-                    memoryAnchors: playback.memoryAnchors,
-                    isPetMode: petEnabled,
-                    nickname: shareNickname.isEmpty ? "叙账用户" : shareNickname,
-                    theme: shareCardTheme,
-                    style: currentShareCardStyle,
-                    customBackgroundData: customShareBackgroundData
-                )
-                .scaleEffect(0.18, anchor: .topLeading)
-                .frame(width: 97, height: 173, alignment: .topLeading)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Color.white.opacity(0.70), lineWidth: 1)
-                )
-                .shadow(color: AppColors.text.opacity(0.10), radius: 16, x: 0, y: 10)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 14) {
+                    WeeklyStoryShareCardView(
+                        payload: payload,
+                        memoryAnchors: playback.memoryAnchors,
+                        isPetMode: petEnabled,
+                        nickname: shareNickname.isEmpty ? "叙账用户" : shareNickname,
+                        theme: shareCardTheme,
+                        style: currentShareCardStyle,
+                        customBackgroundData: customShareBackgroundData
+                    )
+                    .scaleEffect(0.18, anchor: .topLeading)
+                    .frame(width: 97, height: 173, alignment: .topLeading)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color.white.opacity(0.70), lineWidth: 1)
+                    )
+                    .shadow(color: AppColors.text.opacity(0.10), radius: 16, x: 0, y: 10)
 
-                VStack(alignment: .leading, spacing: 12) {
-                    shareCardPreviewFeature(icon: "rectangle.grid.1x2", title: "精美排版", detail: "自动生成分享卡片")
-                    shareCardPreviewFeature(icon: "shield.checkered", title: "保护隐私", detail: "不展示金额和敏感信息")
-                    shareCardPreviewFeature(icon: "square.and.arrow.down", title: "一键保存", detail: "保存后再决定分享")
+                    VStack(alignment: .leading, spacing: 12) {
+                        shareCardPreviewFeature(
+                            icon: currentShareCardStyle == .customBackground ? "photo.on.rectangle.angled" : currentShareCardStyle.icon,
+                            title: selectedShareCardStyle == nil ? "自动生成" : "手动样式",
+                            detail: currentShareCardStyle.title
+                        )
+                        shareCardPreviewFeature(icon: "shield.checkered", title: "保护隐私", detail: "不展示金额和敏感信息")
+                        shareCardPreviewFeature(icon: "square.and.arrow.down", title: "一键保存", detail: "保存后再决定分享")
+                    }
+
+                    Spacer(minLength: 0)
                 }
 
-                Spacer(minLength: 0)
+                HStack(spacing: 8) {
+                    Button {
+                        withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
+                            selectedShareCardStyle = currentShareCardStyle.next
+                            isShareStylePickerExpanded = false
+                        }
+                    } label: {
+                        Label("换一版", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(AppColors.accentDark.opacity(0.92))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(AppColors.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
+                            isShareStylePickerExpanded.toggle()
+                        }
+                    } label: {
+                        Label(isShareStylePickerExpanded ? "收起" : "手动换", systemImage: "slider.horizontal.3")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(AppColors.text.opacity(0.86))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.white.opacity(0.62), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if isShareStylePickerExpanded {
+                    shareCardStylePicker
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
             .padding(12)
             .background(Color.white.opacity(0.54), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -1736,56 +1890,6 @@ struct SummaryPlaybackSheet: View {
     }
 
     @ViewBuilder
-    private var shareCardStyleSummary: some View {
-        if weeklySharePayload != nil {
-            Button {
-                withAnimation(.spring(response: 0.26, dampingFraction: 0.88)) {
-                    isShareStylePickerExpanded.toggle()
-                }
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: currentShareCardStyle == .customBackground ? "photo.on.rectangle.angled" : currentShareCardStyle.icon)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(AppColors.accentDark.opacity(0.90))
-                        .frame(width: 34, height: 34)
-                        .background(
-                            Circle()
-                                .fill(AppColors.accent.opacity(0.12))
-                        )
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("当前样式")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(AppColors.subtext)
-                        Text(currentShareCardStyle.title)
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(AppColors.text)
-                            .lineLimit(1)
-                    }
-
-                    Spacer()
-
-                    Text(isShareStylePickerExpanded ? "收起" : "更换样式")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(AppColors.accentDark.opacity(0.90))
-
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(AppColors.accentDark.opacity(0.75))
-                        .rotationEffect(.degrees(isShareStylePickerExpanded ? 180 : 0))
-                }
-                .padding(12)
-                .background(Color.white.opacity(0.58), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.white.opacity(0.52), lineWidth: 0.8)
-                )
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    @ViewBuilder
     private var shareCardStylePicker: some View {
         if weeklySharePayload != nil {
             VStack(alignment: .leading, spacing: 10) {
@@ -1794,6 +1898,18 @@ struct SummaryPlaybackSheet: View {
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(AppColors.text.opacity(0.86))
                     Spacer()
+                    if selectedShareCardStyle != nil {
+                        Button {
+                            withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
+                                selectedShareCardStyle = nil
+                            }
+                        } label: {
+                            Label("自动", systemImage: "wand.and.stars")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(AppColors.accentDark.opacity(0.88))
+                        }
+                        .buttonStyle(.plain)
+                    }
                     Button {
                         withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
                             selectedShareCardStyle = currentShareCardStyle.next
@@ -1806,11 +1922,16 @@ struct SummaryPlaybackSheet: View {
                     .buttonStyle(.plain)
                 }
 
-                HStack(spacing: 8) {
-                    ForEach(LifeSliceShareCardStyle.presetCases) { style in
-                        shareCardStyleChip(style)
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        ForEach(LifeSliceShareCardStyle.presetCases) { style in
+                            shareCardStyleChip(style)
+                                .frame(width: 116)
+                        }
                     }
+                    .padding(.vertical, 1)
                 }
+                .scrollIndicators(.hidden)
 
                 customShareBackgroundCard
             }
@@ -1943,7 +2064,7 @@ struct SummaryPlaybackSheet: View {
                         customShareBackgroundItem = nil
                         customShareBackgroundData = nil
                         if currentShareCardStyle == .customBackground {
-                            selectedShareCardStyle = LifeSliceShareCardStyle.stableDefault(seed: shareCardStyleSeed)
+                            selectedShareCardStyle = nil
                         }
                     }
                 } label: {
@@ -2380,6 +2501,13 @@ private struct WeeklyStoryShareCardView: View {
     private var travelGold: Color { theme.travelAccent }
     private var cityIndigo: Color { theme.cityAccent }
 
+    private enum PosterVisualItem {
+        case photo(SummaryMemoryAnchor)
+        case story(String)
+        case keywords([String])
+        case rhythm(String)
+    }
+
     var body: some View {
         ZStack {
             lifeSlicePosterBackground
@@ -2394,13 +2522,271 @@ private struct WeeklyStoryShareCardView: View {
     private var posterContent: some View {
         switch style {
         case .warmLight:
+            heroStoryPosterContent
+        case .magazine:
+            magazinePosterContent
+        case .appleMemories:
             warmLightPosterContent
+        case .journal:
+            journalPosterContent
+        case .filmStory:
+            filmStoryPosterContent
         case .collageStory:
             collagePosterContent
         case .cleanTexture:
             cleanPosterContent
+        case .fullPhoto:
+            fullPhotoPosterContent
         case .customBackground:
             customBackgroundPosterContent
+        }
+    }
+
+    private var heroStoryPosterContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            lifeSlicePosterHeader
+                .padding(.top, 34)
+                .padding(.horizontal, 34)
+
+            Text(payload.periodText)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(deepGreen.opacity(0.78))
+                .padding(.top, 42)
+                .padding(.horizontal, 34)
+
+            Text(warmLightPosterHeadline)
+                .font(.system(size: 40, weight: .bold, design: .serif))
+                .foregroundStyle(ink)
+                .lineLimit(2)
+                .lineSpacing(5)
+                .minimumScaleFactor(0.70)
+                .padding(.top, 18)
+                .padding(.horizontal, 34)
+
+            Text(warmLightPosterSubtitle)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(ink.opacity(0.76))
+                .lineSpacing(6)
+                .lineLimit(3)
+                .minimumScaleFactor(0.78)
+                .padding(.top, 18)
+                .padding(.horizontal, 34)
+
+            posterVisualImage(posterVisualItem(at: 0), index: 0)
+                .frame(height: 430)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.white.opacity(0.78), lineWidth: 1.5)
+                )
+                .shadow(color: deepGreen.opacity(0.10), radius: 18, x: 0, y: 10)
+                .padding(.top, 26)
+                .padding(.horizontal, 34)
+
+            Spacer(minLength: 14)
+
+            warmLightMetricBar
+                .padding(.horizontal, 34)
+                .padding(.bottom, 20)
+
+            lifeSlicePosterBrandFooter
+        }
+    }
+
+    private var magazinePosterContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            lifeSlicePosterHeader
+                .padding(.top, 32)
+
+            Text(payload.periodText)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(deepGreen.opacity(0.78))
+                .padding(.top, 34)
+
+            Text(lifeSlicePosterHeadline)
+                .font(.system(size: 37, weight: .bold, design: .serif))
+                .foregroundStyle(ink)
+                .lineLimit(2)
+                .lineSpacing(4)
+                .minimumScaleFactor(0.72)
+                .padding(.top, 12)
+
+            Text(magazinePosterSubtitle)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(muted.opacity(0.92))
+                .lineSpacing(4)
+                .lineLimit(2)
+                .padding(.top, 10)
+
+            HStack(spacing: 14) {
+                posterVisualImage(posterVisualItem(at: 0), index: 0)
+                    .frame(width: 304, height: 428)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                VStack(spacing: 14) {
+                    posterVisualImage(posterVisualItem(at: 1), index: 1)
+                        .frame(height: 207)
+                    posterVisualImage(posterVisualItem(at: 2), index: 2)
+                        .frame(height: 207)
+                }
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .padding(.top, 24)
+
+            Text(magazinePosterTagline)
+                .font(.system(size: 19, weight: .medium, design: .serif))
+                .foregroundStyle(ink.opacity(0.82))
+                .padding(.top, 18)
+
+            Spacer(minLength: 10)
+
+            lifeSlicePosterFooter
+        }
+        .padding(.horizontal, 34)
+        .padding(.bottom, 28)
+    }
+
+    private var journalPosterContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            lifeSlicePosterHeader
+                .padding(.top, 34)
+                .padding(.horizontal, 34)
+
+            Text(payload.periodText)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(deepGreen.opacity(0.74))
+                .padding(.top, 42)
+                .padding(.horizontal, 34)
+
+            Text(journalPosterHeadline)
+                .font(.system(size: 38, weight: .bold, design: .serif))
+                .foregroundStyle(ink)
+                .lineLimit(2)
+                .lineSpacing(5)
+                .minimumScaleFactor(0.72)
+                .padding(.top, 18)
+                .padding(.horizontal, 34)
+
+            Text(journalPosterBody)
+                .font(chineseHandwritingFont(size: 20))
+                .foregroundStyle(ink.opacity(0.82))
+                .lineSpacing(11)
+                .lineLimit(4)
+                .padding(.top, 42)
+                .padding(.horizontal, 64)
+
+            Spacer(minLength: 22)
+
+            HStack(spacing: 13) {
+                ForEach(0..<3, id: \.self) { index in
+                    posterVisualImage(posterVisualItem(at: index), index: index)
+                        .frame(width: 138, height: 126)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.white.opacity(0.70), lineWidth: 1)
+                        )
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 34)
+
+            Spacer(minLength: 24)
+
+            lifeSlicePosterFooter
+                .padding(.horizontal, 34)
+                .padding(.bottom, 28)
+        }
+    }
+
+    private var filmStoryPosterContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("叙账")
+                    .font(.system(size: 14, weight: .bold))
+                Spacer()
+                Text(payload.periodText)
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(Color(hex: "d6b876").opacity(0.88))
+            .padding(.top, 28)
+            .padding(.horizontal, 30)
+
+            Text(warmLightPosterHeadline)
+                .font(.system(size: 35, weight: .bold, design: .serif))
+                .foregroundStyle(Color(hex: "f7efe3"))
+                .lineLimit(2)
+                .lineSpacing(4)
+                .minimumScaleFactor(0.72)
+                .padding(.top, 42)
+                .padding(.horizontal, 48)
+
+            posterVisualImage(posterVisualItem(at: 0), index: 0)
+                .frame(height: 385)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .overlay(filmPerforation)
+                .padding(.top, 28)
+                .padding(.horizontal, 48)
+
+            Text(filmPosterSubtitle)
+                .font(chineseHandwritingFont(size: 18))
+                .foregroundStyle(Color(hex: "f7efe3").opacity(0.86))
+                .lineSpacing(7)
+                .lineLimit(3)
+                .padding(.top, 22)
+                .padding(.horizontal, 48)
+
+            Spacer(minLength: 20)
+
+            filmPosterFooter
+                .padding(.horizontal, 30)
+                .padding(.bottom, 28)
+        }
+    }
+
+    private var fullPhotoPosterContent: some View {
+        ZStack(alignment: .bottomLeading) {
+            posterVisualImage(posterVisualItem(at: 0), index: 0)
+                .frame(width: cardSize.width, height: cardSize.height)
+                .clipped()
+
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.06),
+                    Color.black.opacity(0.24),
+                    Color.black.opacity(0.72)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            VStack(alignment: .leading, spacing: 14) {
+                Text(payload.periodText)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.80))
+
+                Text(fullPhotoPosterHeadline)
+                    .font(.system(size: 39, weight: .bold, design: .serif))
+                    .foregroundStyle(Color.white.opacity(0.96))
+                    .lineLimit(2)
+                    .lineSpacing(5)
+                    .minimumScaleFactor(0.72)
+
+                Text(fullPhotoPosterSubtitle)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.84))
+                    .lineSpacing(5)
+                    .lineLimit(2)
+
+                filmPosterFooter
+                    .padding(.top, 18)
+            }
+            .padding(.horizontal, 34)
+            .padding(.bottom, 34)
         }
     }
 
@@ -2571,7 +2957,7 @@ private struct WeeklyStoryShareCardView: View {
 
             HStack(spacing: 12) {
                 lifeSlicePosterMetric(icon: "pencil", value: "\(payload.recordCount)", label: "笔记录")
-                lifeSlicePosterMetric(icon: "photo", value: "\(posterImageCount)", label: "张照片")
+                lifeSlicePosterMetric(icon: posterImageMetricIcon, value: posterImageMetricValue, label: posterImageMetricLabel)
                 lifeSlicePosterMetric(icon: "calendar", value: payload.recordCount > 0 ? "周" : "生活", label: "回顾")
             }
             .padding(.top, 18)
@@ -2616,7 +3002,7 @@ private struct WeeklyStoryShareCardView: View {
 
             HStack(spacing: 12) {
                 lifeSlicePosterMetric(icon: "pencil", value: "\(payload.recordCount)", label: "笔记录")
-                lifeSlicePosterMetric(icon: "photo", value: "\(posterImageCount)", label: "张照片")
+                lifeSlicePosterMetric(icon: posterImageMetricIcon, value: posterImageMetricValue, label: posterImageMetricLabel)
                 lifeSlicePosterMetric(icon: "calendar", value: "周", label: "回顾")
             }
             .padding(.top, 18)
@@ -2665,6 +3051,60 @@ private struct WeeklyStoryShareCardView: View {
                     endRadius: 260
                 )
                 warmLightLeafShadow
+            case .magazine:
+                Color(hex: "f7f5ee")
+                LinearGradient(
+                    colors: [Color(hex: "fbfaf4"), Color(hex: "edf2ed"), Color(hex: "f7f5ee")],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                warmLightLeafShadow.opacity(0.50)
+            case .appleMemories:
+                Color(hex: "f1f6ee")
+                LinearGradient(
+                    colors: [Color(hex: "eef5ed"), Color(hex: "f8f3e8"), Color(hex: "e6f0e9")],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                warmLightLeafShadow
+            case .journal:
+                Color(hex: "f8f1e4")
+                LinearGradient(
+                    colors: [Color(hex: "fbf4e7"), Color(hex: "f3eadb"), Color(hex: "fbf7ee")],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                Canvas { context, size in
+                    let inkLine = ink.opacity(0.18)
+                    var flower = Path()
+                    flower.move(to: CGPoint(x: size.width * 0.76, y: size.height * 0.33))
+                    flower.addCurve(
+                        to: CGPoint(x: size.width * 0.72, y: size.height * 0.56),
+                        control1: CGPoint(x: size.width * 0.70, y: size.height * 0.42),
+                        control2: CGPoint(x: size.width * 0.78, y: size.height * 0.48)
+                    )
+                    context.stroke(flower, with: .color(inkLine), lineWidth: 1)
+                    for offset in [0.0, 0.04, 0.08] {
+                        context.stroke(
+                            Path(ellipseIn: CGRect(x: size.width * (0.74 + offset), y: size.height * (0.34 + offset), width: 28, height: 18)),
+                            with: .color(inkLine),
+                            lineWidth: 0.9
+                        )
+                    }
+                }
+            case .filmStory:
+                Color(hex: "10100d")
+                LinearGradient(
+                    colors: [Color(hex: "15130f"), Color(hex: "090908"), Color(hex: "17130d")],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                RadialGradient(
+                    colors: [Color(hex: "b98f53").opacity(0.18), Color.clear],
+                    center: UnitPoint(x: 0.92, y: 0.18),
+                    startRadius: 0,
+                    endRadius: 240
+                )
             case .collageStory:
                 Color(hex: "fbf5e8")
                 LinearGradient(
@@ -2709,6 +3149,8 @@ private struct WeeklyStoryShareCardView: View {
                     startRadius: 0,
                     endRadius: 300
                 )
+            case .fullPhoto:
+                Color(hex: "1c241f")
             case .customBackground:
                 if let customBackgroundData,
                    let uiImage = UIImage(data: customBackgroundData) {
@@ -2861,7 +3303,7 @@ private struct WeeklyStoryShareCardView: View {
     private var warmLightPhotoTriptych: some View {
         HStack(spacing: 13) {
             ForEach(0..<3, id: \.self) { index in
-                posterImage(posterAnchor(at: index))
+                posterVisualImage(posterVisualItem(at: index), index: index)
                     .frame(width: 150, height: 235)
                     .clipped()
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -2900,7 +3342,7 @@ private struct WeeklyStoryShareCardView: View {
     private var warmLightMetricBar: some View {
         HStack(spacing: 0) {
             warmLightMetricItem(icon: "pencil", value: "\(payload.recordCount)", label: "笔记录")
-            warmLightMetricItem(icon: "photo", value: "\(posterImageCount)", label: "张画面")
+            warmLightMetricItem(icon: posterImageMetricIcon, value: posterImageMetricValue, label: posterImageMetricLabel)
             warmLightMetricItem(icon: "calendar", value: "周", label: "回顾")
         }
         .padding(.horizontal, 14)
@@ -2931,9 +3373,58 @@ private struct WeeklyStoryShareCardView: View {
         .frame(maxWidth: .infinity)
     }
 
+    private var filmPerforation: some View {
+        HStack {
+            VStack(spacing: 11) {
+                ForEach(0..<7, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(Color(hex: "f7efe3").opacity(0.78))
+                        .frame(width: 11, height: 16)
+                }
+            }
+            .padding(.leading, 10)
+
+            Spacer(minLength: 0)
+
+            VStack(spacing: 11) {
+                ForEach(0..<7, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(Color(hex: "f7efe3").opacity(0.78))
+                        .frame(width: 11, height: 16)
+                }
+            }
+            .padding(.trailing, 10)
+        }
+        .padding(.vertical, 18)
+        .allowsHitTesting(false)
+    }
+
+    private var filmPosterFooter: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "leaf")
+                .font(.system(size: 14, weight: .semibold))
+            Text("来自叙账")
+                .font(.system(size: 13, weight: .bold))
+            Text("·")
+                .font(.system(size: 13, weight: .semibold))
+            Text("\(payload.recordCount) 笔记录")
+                .font(.system(size: 13, weight: .medium))
+            Text("·")
+                .font(.system(size: 13, weight: .semibold))
+            Text(posterImageMetricText)
+                .font(.system(size: 13, weight: .medium))
+
+            Spacer(minLength: 6)
+
+            appStoreQRCodePlaceholder
+                .scaleEffect(0.78)
+        }
+        .foregroundStyle(Color.white.opacity(0.84))
+    }
+
     private var posterPrimaryPhoto: some View {
         posterPhotoCard(
-            anchor: posterAnchor(at: 0),
+            index: 0,
             fallbackCaption: "这一餐",
             height: 300,
             cornerRadius: 18,
@@ -2943,7 +3434,7 @@ private struct WeeklyStoryShareCardView: View {
 
     private func posterSmallPhoto(index: Int) -> some View {
         posterPhotoCard(
-            anchor: posterAnchor(at: index),
+            index: index,
             fallbackCaption: index == 1 ? "回家路上" : "这次买的东西",
             height: 126,
             cornerRadius: 14,
@@ -2952,20 +3443,21 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private func posterPhotoCard(
-        anchor: SummaryMemoryAnchor?,
+        index: Int,
         fallbackCaption: String,
         height: CGFloat,
         cornerRadius: CGFloat,
         iconSize: CGFloat
     ) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            posterImage(anchor)
+        let item = posterVisualItem(at: index)
+        return ZStack(alignment: .bottomLeading) {
+            posterVisualImage(item, index: index)
                 .frame(maxWidth: .infinity)
                 .frame(height: height)
                 .clipped()
 
             HStack(alignment: .center, spacing: 8) {
-                Text(posterCaption(anchor, fallback: fallbackCaption))
+                Text(posterVisualCaption(item, fallback: fallbackCaption))
                     .font(.system(size: height > 200 ? 18 : 15, weight: .semibold))
                     .foregroundStyle(ink)
                     .lineLimit(1)
@@ -2973,7 +3465,7 @@ private struct WeeklyStoryShareCardView: View {
 
                 Spacer(minLength: 8)
 
-                posterPhotoIcon(anchor, size: iconSize)
+                posterVisualIcon(item, size: iconSize)
             }
             .padding(.horizontal, height > 200 ? 18 : 14)
             .padding(.vertical, height > 200 ? 13 : 10)
@@ -2994,14 +3486,14 @@ private struct WeeklyStoryShareCardView: View {
         rotation: Double,
         offset: CGSize
     ) -> some View {
-        let anchor = posterAnchor(at: index)
+        let item = posterVisualItem(at: index)
         return VStack(alignment: .leading, spacing: 9) {
-            posterImage(anchor)
+            posterVisualImage(item, index: index)
                 .frame(width: size.width, height: size.height)
                 .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-            Text(posterCaption(anchor, fallback: fallback))
+            Text(posterVisualCaption(item, fallback: fallback))
                 .font(.system(size: 14, weight: .medium, design: .serif))
                 .foregroundStyle(ink.opacity(0.82))
                 .lineLimit(1)
@@ -3029,20 +3521,20 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private func cleanPhotoRow(index: Int, fallback: String) -> some View {
-        let anchor = posterAnchor(at: index)
+        let item = posterVisualItem(at: index)
         return HStack(spacing: 12) {
-            posterImage(anchor)
+            posterVisualImage(item, index: index)
                 .frame(width: 178, height: 116)
                 .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(posterCaption(anchor, fallback: fallback))
+                Text(posterVisualCaption(item, fallback: fallback))
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(ink)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
-                Text(anchor?.createdAt.zhBillDateOnly ?? payload.periodText)
+                Text(posterVisualFootnote(item))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(muted.opacity(0.78))
                     .lineLimit(1)
@@ -3102,12 +3594,116 @@ private struct WeeklyStoryShareCardView: View {
                     endPoint: .bottomTrailing
                 )
                 VStack(spacing: 10) {
-                    Image(systemName: "photo.on.rectangle.angled")
+                    Image(systemName: "text.alignleft")
                         .font(.system(size: 34, weight: .semibold))
-                    Text("等待一张生活照片")
+                    Text("照片不多，记录还在")
                         .font(.system(size: 15, weight: .semibold))
                 }
                 .foregroundStyle(deepGreen.opacity(0.50))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func posterVisualImage(_ item: PosterVisualItem, index: Int) -> some View {
+        switch item {
+        case .photo(let anchor):
+            posterImage(anchor)
+        case .story(let text):
+            posterVisualTile(text: text, eyebrow: "记录片段", icon: "text.alignleft", index: index)
+        case .keywords(let labels):
+            posterKeywordTile(labels, index: index)
+        case .rhythm(let text):
+            posterVisualTile(text: text, eyebrow: periodLeadShort, icon: "calendar", index: index)
+        }
+    }
+
+    private func posterVisualTile(text: String, eyebrow: String, icon: String, index: Int) -> some View {
+        ZStack(alignment: .topLeading) {
+            posterVisualTileBackground(index: index)
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 7) {
+                    Image(systemName: icon)
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(eyebrow)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .textCase(.uppercase)
+                }
+                .foregroundStyle(deepGreen.opacity(0.58))
+
+                Spacer(minLength: 4)
+
+                Text(text)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(ink.opacity(0.86))
+                    .lineSpacing(4)
+                    .lineLimit(4)
+                    .minimumScaleFactor(0.72)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+            }
+            .padding(16)
+        }
+    }
+
+    private func posterKeywordTile(_ labels: [String], index: Int) -> some View {
+        ZStack(alignment: .topLeading) {
+            posterVisualTileBackground(index: index)
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 7) {
+                    Image(systemName: "tag")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("关键词")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .textCase(.uppercase)
+                }
+                .foregroundStyle(deepGreen.opacity(0.58))
+
+                Spacer(minLength: 0)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(labels.prefix(3), id: \.self) { label in
+                        Text(label)
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(ink.opacity(0.86))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(16)
+        }
+    }
+
+    private func posterVisualTileBackground(index: Int) -> some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(hex: index.isMultiple(of: 2) ? "f7efe2" : "edf4ed"),
+                    green.opacity(index.isMultiple(of: 2) ? 0.12 : 0.18),
+                    Color.white.opacity(0.38)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Canvas { context, size in
+                for line in 0..<5 {
+                    let y = size.height * (0.18 + CGFloat(line) * 0.16)
+                    var path = Path()
+                    path.move(to: CGPoint(x: size.width * 0.10, y: y))
+                    path.addCurve(
+                        to: CGPoint(x: size.width * 0.92, y: y + CGFloat(line % 2 == 0 ? 6 : -5)),
+                        control1: CGPoint(x: size.width * 0.34, y: y - 8),
+                        control2: CGPoint(x: size.width * 0.68, y: y + 9)
+                    )
+                    context.stroke(path, with: .color(Color.white.opacity(0.18)), lineWidth: 1)
+                }
             }
         }
     }
@@ -3186,7 +3782,7 @@ private struct WeeklyStoryShareCardView: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(muted.opacity(0.62))
 
-            Text("\(posterImageCount) 张照片")
+            Text(posterImageMetricText)
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(muted.opacity(0.92))
 
@@ -3293,37 +3889,44 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var lifeSlicePosterHeadline: String {
-        let count = max(1, posterImageCount)
         let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
-        return "\(period)，有\(chineseNumeral(count))张照片"
+        if posterImageCount > 0 {
+            return "\(period)，有\(chineseNumeral(posterImageCount))张照片"
+        }
+        return "\(period)，留下几段记录"
     }
 
     private var lifeSlicePosterSubtitle: String {
-        let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这周"
-        return "\(period)一共 \(payload.recordCount) 笔记录，\n挑了 \(posterImageCount) 张照片放在一起。"
+        let period = periodLeadShort
+        if posterImageCount > 0 {
+            return "\(period)一共 \(payload.recordCount) 笔记录，\n把照片和几段记录放在一起。"
+        }
+        return "\(period)一共 \(payload.recordCount) 笔记录，\n整理成几段可以回看的内容。"
     }
 
     private var warmLightPosterHeadline: String {
-        let count = max(1, posterImageCount)
         let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
-        return "\(period)，留下\(chineseNumeral(count))张画面"
+        if posterImageCount > 0 {
+            return "\(period)，留下\(chineseNumeral(posterImageCount))张照片"
+        }
+        return "\(period)，留下几段记录"
     }
 
     private var warmLightPosterSubtitle: String {
         let scenes = posterSceneLabels.prefix(2).joined(separator: "、")
         if !scenes.isEmpty {
-            return "有些日子过完就过去了，\n也有些会留在\(scenes)这些小事里。"
+            return "\(periodLeadShort)出现过\(scenes)，\n后来被整理进这张卡片里。"
         }
-        return "有些日子过完就过去了，\n也有些会留在账本和照片里。"
+        return "照片不多，记录还在。\n这段时间有几笔记录。"
     }
 
     private var warmLightPosterTagline: String {
         stablePosterCopy(
             [
-                "记录生活，收藏每一刻值得回忆的瞬间",
-                "把日子拍下来，也把当时的心情留一点",
-                "不是特别的一天，也值得被认真记住",
-                "这些小画面，以后再看会想起当时"
+                "照片不多，记录还在",
+                "一张照片，对应一笔记录",
+                "这段时间，有几笔记录",
+                "这些片段，以后再看会有出处"
             ],
             salt: "warmLightTagline"
         )
@@ -3392,6 +3995,74 @@ private struct WeeklyStoryShareCardView: View {
         )
     }
 
+    private var magazinePosterSubtitle: String {
+        stablePosterCopy(
+            [
+                "在平凡的日子里，收编一些具体片段。",
+                "几笔记录，几张照片，排成这一周的版面。",
+                "生活没有刻意安排，也会留下自己的顺序。"
+            ],
+            salt: "magazineSubtitle"
+        )
+    }
+
+    private var magazinePosterTagline: String {
+        stablePosterCopy(
+            [
+                "这些片段，构成这一页。",
+                "这一周的内容，被放在一起。",
+                "有图的地方，就多留一眼。"
+            ],
+            salt: "magazineTagline"
+        )
+    }
+
+    private var journalPosterHeadline: String {
+        let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
+        return "\(period)，这样也很好"
+    }
+
+    private var journalPosterBody: String {
+        stablePosterCopy(
+            [
+                "生活不是赶路，\n而是在每个当下，\n找到属于自己的节奏。",
+                "照片不一定很多，\n但记录里的日期、地点和事情，\n会把这段时间接起来。",
+                "不多不少，\n刚好是自己的生活。"
+            ],
+            salt: "journalBody"
+        )
+    }
+
+    private var filmPosterSubtitle: String {
+        stablePosterCopy(
+            [
+                "记录生活，把这一周的瞬间放在一起。",
+                "这一周有几张照片，也有几笔记录。",
+                "画面和记录放在一起，回看时更清楚。"
+            ],
+            salt: "filmSubtitle"
+        )
+    }
+
+    private var fullPhotoPosterHeadline: String {
+        let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
+        if let first = posterSceneLabels.first, !first.isEmpty {
+            return "\(period)，\(first)也在记得我"
+        }
+        return "\(period)，风景也在记得我"
+    }
+
+    private var fullPhotoPosterSubtitle: String {
+        stablePosterCopy(
+            [
+                "走过的路，会留在这一段记录里。",
+                "这一张照片，对应这段时间的一笔记录。",
+                "照片在前面，记录在后面。"
+            ],
+            salt: "fullPhotoSubtitle"
+        )
+    }
+
     private var collagePosterTagline: String {
         stablePosterCopy(
             [
@@ -3441,7 +4112,76 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var posterImageCount: Int {
-        3
+        min(memoryAnchors.count, 3)
+    }
+
+    private var posterImageMetricIcon: String {
+        posterImageCount > 0 ? "photo" : "text.alignleft"
+    }
+
+    private var posterImageMetricValue: String {
+        posterImageCount > 0 ? "\(posterImageCount)" : "3"
+    }
+
+    private var posterImageMetricLabel: String {
+        posterImageCount > 0 ? "张照片" : "段内容"
+    }
+
+    private var posterImageMetricText: String {
+        posterImageCount > 0 ? "\(posterImageCount) 张照片" : "3 段内容"
+    }
+
+    private var periodLeadShort: String {
+        payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这周"
+    }
+
+    private var posterVisualItems: [PosterVisualItem] {
+        var items = memoryAnchors.prefix(3).map { PosterVisualItem.photo($0) }
+        for tile in posterFallbackTiles {
+            guard items.count < 3 else { break }
+            items.append(tile)
+        }
+        return Array(items.prefix(3))
+    }
+
+    private var posterFallbackTiles: [PosterVisualItem] {
+        let keywords = Array(posterSceneLabels.prefix(3))
+        let keywordTile = PosterVisualItem.keywords(keywords.isEmpty ? ["日常", "记录", "回看"] : keywords)
+        let storyTile = PosterVisualItem.story(posterFactStoryText)
+        let rhythmTile = PosterVisualItem.rhythm(posterRhythmText)
+
+        switch posterImageCount {
+        case 0:
+            return [storyTile, rhythmTile, keywordTile]
+        case 1:
+            return [storyTile, keywordTile, rhythmTile]
+        case 2:
+            return [storyTile, keywordTile]
+        default:
+            return []
+        }
+    }
+
+    private var posterFactStoryText: String {
+        let label = posterSceneLabels.first ?? ""
+        if label == "饮料" { return "\(periodLeadShort)买过的一瓶饮料。" }
+        if label == "一餐" { return "\(periodLeadShort)吃过的一餐。" }
+        if label == "通勤" { return "\(periodLeadShort)路上的一段。" }
+        if label == "添置" { return "\(periodLeadShort)买过的一件东西。" }
+        if label == "聚会" { return "\(periodLeadShort)见过的人和事。" }
+        if !label.isEmpty { return "\(periodLeadShort)出现过的\(label)。" }
+        return "\(periodLeadShort)留下的几笔记录。"
+    }
+
+    private var posterRhythmText: String {
+        let activeDays = payload.dailyCountTrend.filter { $0.1 > 0 }.count
+        if activeDays > 0 {
+            return "\(periodLeadShort)有 \(activeDays) 天，留下了记录。"
+        }
+        if payload.recordCount > 0 {
+            return "\(periodLeadShort)有 \(payload.recordCount) 笔记录。"
+        }
+        return "照片不多，记录还在。"
     }
 
     private var posterSceneLabels: [String] {
@@ -3460,21 +4200,48 @@ private struct WeeklyStoryShareCardView: View {
         .map { $0 }
     }
 
-    private func posterAnchor(at index: Int) -> SummaryMemoryAnchor? {
-        memoryAnchors.indices.contains(index) ? memoryAnchors[index] : nil
+    private func posterVisualItem(at index: Int) -> PosterVisualItem {
+        let items = posterVisualItems
+        if items.indices.contains(index) {
+            return items[index]
+        }
+        return .story(posterFactStoryText)
     }
 
     private func posterCaption(_ anchor: SummaryMemoryAnchor?, fallback: String) -> String {
         lifeSliceResolvedPhotoCaption(for: anchor, fallback: fallback)
     }
 
+    private func posterVisualCaption(_ item: PosterVisualItem, fallback: String) -> String {
+        switch item {
+        case .photo(let anchor):
+            return posterCaption(anchor, fallback: fallback)
+        case .story(let text), .rhythm(let text):
+            return text
+        case .keywords(let labels):
+            return labels.prefix(3).joined(separator: " / ")
+        }
+    }
+
+    private func posterVisualFootnote(_ item: PosterVisualItem) -> String {
+        switch item {
+        case .photo(let anchor):
+            return anchor.createdAt.zhBillDateOnly
+        case .story:
+            return "记录片段"
+        case .keywords:
+            return "本期关键词"
+        case .rhythm:
+            return payload.periodText
+        }
+    }
+
     private var lifeSlicePosterReasonText: String {
         let scenes = posterSceneLabels.prefix(3).joined(separator: "、")
-        let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这周"
         guard !scenes.isEmpty else {
-            return "这几张照片来自这段时间的具体记录。\n以后回看时更容易想起当天发生了什么。"
+            return "图片不够时，会用记录里的文字和节奏补上。\n这张卡片仍然对应真实记录。"
         }
-        return "这几张照片对应\(period)的具体事：\(scenes)。\n以后回看时更容易想起当天发生了什么。"
+        return "这几段内容对应\(periodLeadShort)的具体记录：\(scenes)。\n照片不够时，也不会用空占位补齐。"
     }
 
     private func posterPhotoIcon(_ anchor: SummaryMemoryAnchor?, size: CGFloat) -> some View {
@@ -3485,6 +4252,34 @@ private struct WeeklyStoryShareCardView: View {
             Image(systemName: posterSceneIcon(for: anchor?.label ?? "生活"))
                 .font(.system(size: size * 0.48, weight: .semibold))
                 .foregroundStyle(deepGreen.opacity(0.76))
+        }
+    }
+
+    @ViewBuilder
+    private func posterVisualIcon(_ item: PosterVisualItem, size: CGFloat) -> some View {
+        switch item {
+        case .photo(let anchor):
+            posterPhotoIcon(anchor, size: size)
+        case .story:
+            posterPhotoIcon(nil, size: size)
+        case .keywords:
+            ZStack {
+                Circle()
+                    .fill(green.opacity(0.18))
+                    .frame(width: size, height: size)
+                Image(systemName: "tag.fill")
+                    .font(.system(size: size * 0.42, weight: .semibold))
+                    .foregroundStyle(deepGreen.opacity(0.76))
+            }
+        case .rhythm:
+            ZStack {
+                Circle()
+                    .fill(green.opacity(0.18))
+                    .frame(width: size, height: size)
+                Image(systemName: "calendar")
+                    .font(.system(size: size * 0.42, weight: .semibold))
+                    .foregroundStyle(deepGreen.opacity(0.76))
+            }
         }
     }
 

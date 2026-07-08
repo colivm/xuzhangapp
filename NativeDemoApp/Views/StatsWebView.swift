@@ -1627,7 +1627,7 @@ struct StatsWebView: View {
             .foregroundStyle(AppColors.subtext.opacity(0.74))
 
             HStack(alignment: .center, spacing: 8) {
-                Text(snapshot.range == .week ? "这一周，被这些画面留住" : "这个月，生活有了轮廓")
+                Text(traceLifeSliceTitle(snapshot: snapshot))
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(AppColors.text)
                     .lineLimit(2)
@@ -1857,12 +1857,15 @@ struct StatsWebView: View {
             )
 
             VStack(spacing: 10) {
-                Image(systemName: "photo.on.rectangle.angled")
+                Image(systemName: "text.alignleft")
                     .font(.system(size: 34, weight: .semibold))
                     .foregroundStyle(AppColors.accentDark.opacity(0.34))
-                Text("先留下以后能回看的画面")
+                Text("照片不多，记录还在")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppColors.accentDark.opacity(0.56))
+                    .foregroundStyle(AppColors.accentDark.opacity(0.62))
+                Text("会先整理成记录片段")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.accentDark.opacity(0.46))
             }
         }
     }
@@ -1976,19 +1979,26 @@ struct StatsWebView: View {
 
     private func traceLifeSliceSubtitle(snapshot: TraceChapterSnapshot) -> String {
         if snapshot.items.isEmpty {
-            return "先记下几笔，照片和账单会一起长成回看的片段。"
+            return "先记下几笔，之后会整理成回看的片段。"
         }
         let countText = traceLifeSliceCountText(snapshot.items.count)
         if snapshot.memoryAnchors.isEmpty {
-            return "\(traceLifeSliceRangeLead(snapshot.range))不只是\(countText)小痕迹，还缺几张画面把它留住。"
+            return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，照片不多，就先用文字切片补上。"
         }
         let photoCount = snapshot.memoryAnchors.count
-        return "\(traceLifeSliceRangeLead(snapshot.range))\(countText)小痕迹，\(photoCount)张照片把路上和现场留下来了。"
+        return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，\(photoCount)张照片放在回看里。"
+    }
+
+    private func traceLifeSliceTitle(snapshot: TraceChapterSnapshot) -> String {
+        if snapshot.range == .month {
+            return "这个月，生活有了轮廓"
+        }
+        return snapshot.memoryAnchors.isEmpty ? "这一周，记录还在" : "这一周，被这些画面留住"
     }
 
     private func traceLifeSliceSummaryLine(snapshot: TraceChapterSnapshot) -> String {
         let photoCount = snapshot.memoryAnchors.count
-        let photoText = photoCount > 0 ? "精选 \(photoCount) 张" : "还没有精选照片"
+        let photoText = photoCount > 0 ? "精选 \(photoCount) 张" : "记录片段"
         let total = snapshot.items.reduce(0) { $0 + $1.amount }
         return "\(photoText) · \(snapshot.items.count) 笔 · \(total.formatted(.cny))"
     }
@@ -2347,9 +2357,9 @@ struct StatsWebView: View {
 
         if snapshot.memoryAnchors.isEmpty {
             rows.append((
-                icon: "photo.on.rectangle.angled",
-                title: "还没有精选画面",
-                subtitle: "之后有图的记录会优先进入月回看"
+                icon: "text.alignleft",
+                title: "照片不多，记录还在",
+                subtitle: "先用文字切片进入月回看"
             ))
         } else {
             rows.append((
