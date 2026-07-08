@@ -125,6 +125,191 @@ struct WeeklyShareCardPayload {
     let insight: ShareInsight
 }
 
+struct MemoryAnchorSelectionPolicy {
+    struct Candidate {
+        let item: HomeItem
+        let imageData: Data
+        let imageIndex: Int
+        let role: PhotoMemoryAssetRole
+        let sceneHint: PhotoMemorySceneHint
+        let label: String
+        let caption: String
+        let score: Int
+        let sceneDayKey: String
+        let merchantKey: String?
+    }
+
+    static func selectAnchors(
+        from rows: [HomeItem],
+        range: SummaryPlaybackRange,
+        limit: Int,
+        label: (PhotoMemoryAssetRole, PhotoMemorySceneHint) -> String,
+        caption: (PhotoMemoryAssetRole, PhotoMemorySceneHint) -> String
+    ) -> [SummaryMemoryAnchor] {
+        var usedItemIDs = Set<UUID>()
+        var usedSceneDayKeys = Set<String>()
+        var usedMerchantKeys = Set<String>()
+        var receiptCount = 0
+        let candidates = rows
+            .flatMap { candidates(for: $0, range: range, label: label, caption: caption) }
+            .sorted { lhs, rhs in
+                if lhs.score == rhs.score {
+                    return lhs.item.createdAt > rhs.item.createdAt
+                }
+                return lhs.score > rhs.score
+            }
+
+        return candidates
+            .compactMap { candidate -> SummaryMemoryAnchor? in
+                guard candidate.score >= selectedScoreThreshold(for: range) else { return nil }
+                guard usedItemIDs.insert(candidate.item.id).inserted else { return nil }
+                guard usedSceneDayKeys.insert(candidate.sceneDayKey).inserted else { return nil }
+                if let merchantKey = candidate.merchantKey,
+                   !usedMerchantKeys.insert(merchantKey).inserted {
+                    return nil
+                }
+                if candidate.role == .receipt {
+                    guard receiptCount == 0, candidate.score >= receiptScoreThreshold(for: range) else { return nil }
+                    receiptCount += 1
+                }
+                return anchor(from: candidate)
+            }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    private static func candidates(
+        for item: HomeItem,
+        range: SummaryPlaybackRange,
+        label: (PhotoMemoryAssetRole, PhotoMemorySceneHint) -> String,
+        caption: (PhotoMemoryAssetRole, PhotoMemorySceneHint) -> String
+    ) -> [Candidate] {
+        let images = item.memoryImages
+        guard !images.isEmpty else { return [] }
+        let reason = PhotoMemoryPromptPolicy.anchorReason(for: item)
+        let role = item.memoryAnchorRole ?? reason.assetRole
+        let sceneHint = item.memoryAnchorSceneHint ?? reason.sceneHint
+        let anchorCaption = item.memoryAnchorCaption?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCoverIndex = item.normalizedCoverMemoryImageIndex ?? 0
+        return images.enumerated().map { index, imageData in
+            Candidate(
+                item: item,
+                imageData: imageData,
+                imageIndex: index,
+                role: role,
+                sceneHint: sceneHint,
+                label: label(role, sceneHint),
+                caption: anchorCaption?.isEmpty == false ? anchorCaption! : caption(role, sceneHint),
+                score: score(
+                    item: item,
+                    imageData: imageData,
+                    imageIndex: index,
+                    coverIndex: normalizedCoverIndex,
+                    role: role,
+                    sceneHint: sceneHint,
+                    range: range
+                ),
+                sceneDayKey: sceneDayKey(item: item, sceneHint: sceneHint),
+                merchantKey: merchantKey(item: item)
+            )
+        }
+    }
+
+    private static func anchor(from candidate: Candidate) -> SummaryMemoryAnchor {
+        SummaryMemoryAnchor(
+            id: candidate.item.id,
+            itemID: candidate.item.id,
+            title: candidate.item.displayTitle,
+            amount: candidate.item.amount,
+            createdAt: candidate.item.createdAt,
+            imageData: candidate.imageData,
+            role: candidate.role,
+            sceneHint: candidate.sceneHint,
+            label: candidate.label,
+            caption: candidate.caption
+        )
+    }
+
+    private static func score(
+        item: HomeItem,
+        imageData: Data,
+        imageIndex: Int,
+        coverIndex: Int,
+        role: PhotoMemoryAssetRole,
+        sceneHint: PhotoMemorySceneHint,
+        range: SummaryPlaybackRange
+    ) -> Int {
+        var value = 24
+        value += imageIndex == coverIndex ? 12 : 3
+        value += imageQualityScore(imageData)
+        switch sceneHint {
+        case .gathering, .travel:
+            value += 24
+        case .careRecord:
+            value += 22
+        case .homeLife, .importantPurchase, .experience, .giftMoment:
+            value += 17
+        case .healthRecord:
+            value += 12
+        case .vehicleCare, .travelTransport:
+            value += 8
+        }
+        switch role {
+        case .moment, .place:
+            value += 10
+        case .object, .careRecord:
+            value += 6
+        case .receipt:
+            value -= range == .week ? 18 : 14
+        }
+        if item.amount >= 300, role != .receipt { value += 4 }
+        if item.amount >= 1000, role != .receipt { value += 3 }
+        if item.merchantBrandId?.isEmpty == false { value += 3 }
+        if item.userEditedTitle == true { value += 2 }
+        if Calendar.current.isDateInToday(item.createdAt) { value += 2 }
+        return value
+    }
+
+    private static func imageQualityScore(_ data: Data) -> Int {
+        switch data.count {
+        case 700_000...: return 10
+        case 350_000..<700_000: return 7
+        case 140_000..<350_000: return 4
+        case 60_000..<140_000: return 1
+        default: return -6
+        }
+    }
+
+    private static func selectedScoreThreshold(for range: SummaryPlaybackRange) -> Int {
+        range == .week ? 42 : 40
+    }
+
+    private static func receiptScoreThreshold(for range: SummaryPlaybackRange) -> Int {
+        range == .week ? 48 : 46
+    }
+
+    private static func sceneDayKey(item: HomeItem, sceneHint: PhotoMemorySceneHint) -> String {
+        "\(dayFormatter.string(from: item.createdAt))-\(sceneHint.rawValue)"
+    }
+
+    private static func merchantKey(item: HomeItem) -> String? {
+        if let merchantBrandId = item.merchantBrandId, !merchantBrandId.isEmpty {
+            return merchantBrandId
+        }
+        let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard title.count >= 2 else { return nil }
+        return title.lowercased()
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+}
+
 struct PlaybackMoment: Equatable {
     enum Source: String, Equatable {
         case title
@@ -167,32 +352,13 @@ private final class MemoryAnchorSelectionService {
         range: SummaryPlaybackRange,
         limit: Int
     ) -> [SummaryMemoryAnchor] {
-        var usedSceneDayKeys = Set<String>()
-        var usedMerchantKeys = Set<String>()
-        var receiptCount = 0
-
-        return rows
-            .compactMap { candidate(for: $0, range: range) }
-            .sorted { lhs, rhs in
-                if lhs.score == rhs.score {
-                    return lhs.item.createdAt > rhs.item.createdAt
-                }
-                return lhs.score > rhs.score
-            }
-            .compactMap { scored -> SummaryMemoryAnchor? in
-                guard usedSceneDayKeys.insert(scored.sceneDayKey).inserted else { return nil }
-                if let merchantKey = scored.merchantKey,
-                   !usedMerchantKeys.insert(merchantKey).inserted {
-                    return nil
-                }
-                if scored.role == .receipt {
-                    guard receiptCount == 0 else { return nil }
-                    receiptCount += 1
-                }
-                return scored.anchor
-            }
-            .prefix(limit)
-            .map { $0 }
+        MemoryAnchorSelectionPolicy.selectAnchors(
+            from: rows,
+            range: range,
+            limit: limit,
+            label: label(for:sceneHint:),
+            caption: playbackCaption(for:sceneHint:)
+        )
     }
 
     private struct ScoredAnchor {

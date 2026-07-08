@@ -2545,117 +2545,13 @@ struct StatsWebView: View {
         for range: SummaryPlaybackRange,
         items: [HomeItem]
     ) -> [SummaryMemoryAnchor] {
-        var usedSceneDayKeys = Set<String>()
-        var usedMerchantKeys = Set<String>()
-        var receiptCount = 0
-
-        return items
-            .compactMap { traceLifeMemoryAnchorCandidate(for: $0, range: range) }
-            .sorted { lhs, rhs in
-                if lhs.score == rhs.score {
-                    return lhs.item.createdAt > rhs.item.createdAt
-                }
-                return lhs.score > rhs.score
-            }
-            .compactMap { candidate -> SummaryMemoryAnchor? in
-                guard usedSceneDayKeys.insert(candidate.sceneDayKey).inserted else { return nil }
-                if let merchantKey = candidate.merchantKey,
-                   !usedMerchantKeys.insert(merchantKey).inserted {
-                    return nil
-                }
-                if candidate.role == .receipt {
-                    guard receiptCount == 0 else { return nil }
-                    receiptCount += 1
-                }
-                return candidate.anchor
-            }
-            .prefix(3)
-            .map { $0 }
-    }
-
-    private struct TraceMemoryAnchorCandidate {
-        let item: HomeItem
-        let anchor: SummaryMemoryAnchor
-        let score: Int
-        let sceneDayKey: String
-        let merchantKey: String?
-        let role: PhotoMemoryAssetRole
-    }
-
-    private func traceLifeMemoryAnchorCandidate(
-        for item: HomeItem,
-        range: SummaryPlaybackRange
-    ) -> TraceMemoryAnchorCandidate? {
-        guard let imageData = item.coverMemoryImageData else { return nil }
-        let reason = PhotoMemoryPromptPolicy.anchorReason(for: item)
-        let role = item.memoryAnchorRole ?? reason.assetRole
-        let sceneHint = item.memoryAnchorSceneHint ?? reason.sceneHint
-        let caption = item.memoryAnchorCaption?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let anchor = SummaryMemoryAnchor(
-            id: item.id,
-            itemID: item.id,
-            title: item.displayTitle,
-            amount: item.amount,
-            createdAt: item.createdAt,
-            imageData: imageData,
-            role: role,
-            sceneHint: sceneHint,
-            label: traceLifeMemoryAnchorLabel(role: role, sceneHint: sceneHint),
-            caption: caption?.isEmpty == false ? caption! : traceLifeMemoryAnchorCaption(role: role, sceneHint: sceneHint)
+        MemoryAnchorSelectionPolicy.selectAnchors(
+            from: items,
+            range: range,
+            limit: 3,
+            label: traceLifeMemoryAnchorLabel(role:sceneHint:),
+            caption: traceLifeMemoryAnchorCaption(role:sceneHint:)
         )
-        return TraceMemoryAnchorCandidate(
-            item: item,
-            anchor: anchor,
-            score: traceLifeMemoryAnchorScore(item: item, role: role, sceneHint: sceneHint, range: range),
-            sceneDayKey: traceLifeMemoryAnchorSceneDayKey(item: item, sceneHint: sceneHint),
-            merchantKey: traceLifeMemoryAnchorMerchantKey(item: item),
-            role: role
-        )
-    }
-
-    private func traceLifeMemoryAnchorScore(
-        item: HomeItem,
-        role: PhotoMemoryAssetRole,
-        sceneHint: PhotoMemorySceneHint,
-        range: SummaryPlaybackRange
-    ) -> Int {
-        var value = item.coverMemoryImageIndex == nil ? 18 : 30
-        switch sceneHint {
-        case .gathering, .travel:
-            value += 25
-        case .careRecord:
-            value += 22
-        case .homeLife, .importantPurchase, .experience, .giftMoment:
-            value += 18
-        case .healthRecord:
-            value += 12
-        case .vehicleCare, .travelTransport:
-            value += 8
-        }
-        if role == .receipt { value -= range == .week ? 10 : 6 }
-        if item.amount >= 300, role != .receipt { value += 4 }
-        if Calendar.current.isDateInToday(item.createdAt) { value += 2 }
-        return value
-    }
-
-    private func traceLifeMemoryAnchorSceneDayKey(
-        item: HomeItem,
-        sceneHint: PhotoMemorySceneHint
-    ) -> String {
-        "\(traceLifeMemoryAnchorDayKey(for: item.createdAt))-\(sceneHint.rawValue)"
-    }
-
-    private func traceLifeMemoryAnchorDayKey(for date: Date) -> String {
-        Self.traceLifeMemoryAnchorDayFormatter.string(from: date)
-    }
-
-    private func traceLifeMemoryAnchorMerchantKey(item: HomeItem) -> String? {
-        if let merchantBrandId = item.merchantBrandId, !merchantBrandId.isEmpty {
-            return merchantBrandId
-        }
-        let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard title.count >= 2 else { return nil }
-        return title.lowercased()
     }
 
     private func traceLifeMemoryAnchorLabel(
@@ -2691,14 +2587,6 @@ struct StatsWebView: View {
             return "照护相关的一张记录。"
         }
     }
-
-    private static let traceLifeMemoryAnchorDayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
 
     private func traceChapterSnapshotCacheKey(items: [HomeItem], range: SummaryPlaybackRange) -> String {
         [

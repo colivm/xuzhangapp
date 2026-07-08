@@ -2509,6 +2509,11 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private struct PosterCopyModel {
+        let period: String
+        let shortPeriod: String
+        let imageText: String
+        let imageCount: Int
+        let recordCount: Int
         let title: String
         let subtitle: String
         let tagline: String
@@ -2521,9 +2526,11 @@ private struct WeeklyStoryShareCardView: View {
             imageCount: Int,
             sceneLabels: [String]
         ) {
-            let period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
-            let shortPeriod = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这周"
-            let imageText = Self.imageText(imageCount)
+            period = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这一周"
+            shortPeriod = payload.periodText.contains("月") && !payload.periodText.contains("-") ? "这个月" : "这周"
+            imageText = Self.imageText(imageCount)
+            self.imageCount = imageCount
+            recordCount = payload.recordCount
             let firstScene = sceneLabels.first(where: { !Self.isWeakLabel($0) }) ?? Self.normalizedLabel(payload.topCategory)
             let safeScene = Self.isWeakLabel(firstScene) ? "" : firstScene
             let photoLine = memoryAnchors.first.flatMap(Self.safeAnchorLine)
@@ -2559,8 +2566,45 @@ private struct WeeklyStoryShareCardView: View {
             }
         }
 
+        func title(for style: LifeSliceShareCardStyle) -> String {
+            switch style {
+            case .filmStory:
+                return "\(period)，\(imageText)入卷"
+            case .magazine:
+                return "\(period)的记录版面"
+            case .fullPhoto:
+                return title
+            case .journal:
+                return "\(period)，\(recordCount)笔记录"
+            default:
+                return title
+            }
+        }
+
+        func subtitle(for style: LifeSliceShareCardStyle) -> String {
+            switch style {
+            case .filmStory:
+                if imageCount > 0 {
+                    return "\(shortPeriod)有 \(recordCount) 笔记录，\(imageText)排进胶片。"
+                }
+                return "\(shortPeriod)有 \(recordCount) 笔记录，按时间排进胶片。"
+            case .magazine:
+                if imageCount > 0 {
+                    return "\(shortPeriod)有 \(recordCount) 笔记录，按照片、分类和时间排成这一页。"
+                }
+                return "\(shortPeriod)有 \(recordCount) 笔记录，按分类和时间排成这一页。"
+            case .fullPhoto:
+                return subtitle
+            case .journal:
+                return body
+            default:
+                return subtitle
+            }
+        }
+
         private static func imageText(_ count: Int) -> String {
             switch count {
+            case 0: return "几段记录"
             case 1: return "一张照片"
             case 2: return "两张照片"
             case 3: return "三张照片"
@@ -4107,19 +4151,19 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var lifeSlicePosterHeadline: String {
-        posterCopy.title
+        posterCopy.title(for: style)
     }
 
     private var lifeSlicePosterSubtitle: String {
-        posterCopy.subtitle
+        posterCopy.subtitle(for: style)
     }
 
     private var warmLightPosterHeadline: String {
-        posterCopy.title
+        posterCopy.title(for: style)
     }
 
     private var warmLightPosterSubtitle: String {
-        posterCopy.subtitle
+        posterCopy.subtitle(for: style)
     }
 
     private var warmLightPosterTagline: String {
@@ -4157,11 +4201,11 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var collagePosterSubtitle: String {
-        posterCopy.subtitle
+        posterCopy.subtitle(for: .collageStory)
     }
 
     private var magazinePosterSubtitle: String {
-        posterCopy.subtitle
+        posterCopy.subtitle(for: .magazine)
     }
 
     private var magazinePosterTagline: String {
@@ -4169,27 +4213,27 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var journalPosterHeadline: String {
-        posterCopy.title
+        posterCopy.title(for: .journal)
     }
 
     private var journalPosterBody: String {
-        posterCopy.body
+        posterCopy.subtitle(for: .journal)
     }
 
     private var filmPosterSubtitle: String {
-        posterCopy.subtitle
+        posterCopy.subtitle(for: .filmStory)
     }
 
     private var filmPosterHeadline: String {
-        posterCopy.title.replacingOccurrences(of: "，", with: "，\n")
+        posterCopy.title(for: .filmStory).replacingOccurrences(of: "，", with: "，\n")
     }
 
     private var fullPhotoPosterHeadline: String {
-        posterCopy.title
+        posterCopy.title(for: .fullPhoto)
     }
 
     private var fullPhotoPosterSubtitle: String {
-        posterCopy.subtitle
+        posterCopy.subtitle(for: .fullPhoto)
     }
 
     private var collagePosterTagline: String {
@@ -4197,11 +4241,11 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var cleanPosterSubtitle: String {
-        posterCopy.subtitle
+        posterCopy.subtitle(for: .cleanTexture)
     }
 
     private var customBackgroundPosterSubtitle: String {
-        posterCopy.subtitle
+        posterCopy.subtitle(for: .customBackground)
     }
 
     private var posterImageCount: Int {
