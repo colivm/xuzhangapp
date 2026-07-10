@@ -56,6 +56,23 @@
       "expectedEmotionRule": "meal"
     },
     {
+      "id": "ocr-lanzhou-beef-noodle-dining",
+      "mode": "ocr",
+      "amount": 16,
+      "rawText": "支付宝账单 寻味兰州纯汤牛肉面 商户_马吉雷四 付款金额 ¥16.00 交易时间 2026年7月9日 18:07:17",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
+      "id": "manual-beef-noodle-dining",
+      "mode": "manual",
+      "amount": 16,
+      "time": "18:07",
+      "inputTitle": "寻味兰州纯汤牛肉面",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
       "id": "manual-coca-cola-drink",
       "mode": "manual",
       "amount": 3.5,
