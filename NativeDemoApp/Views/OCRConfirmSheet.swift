@@ -136,11 +136,15 @@ struct OCRConfirmSheet: View {
         guard !selectedDrafts.isEmpty, !isCollectingImport else { return }
         isCollectingImport = true
         importAction = asReviewDrafts ? .review : .direct
-        if onConfirm(selectedDrafts, asReviewDrafts) > 0 {
-            dismiss()
-        } else {
-            isCollectingImport = false
-            importAction = nil
+        Task { @MainActor in
+            // Show the collection state before importing a large receipt list.
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            if onConfirm(selectedDrafts, asReviewDrafts) > 0 {
+                dismiss()
+            } else {
+                isCollectingImport = false
+                importAction = nil
+            }
         }
     }
 

@@ -2994,17 +2994,11 @@ struct RecordView: View {
             .disabled(isOCRRecognizing)
 
             if isOCRRecognizing {
-                VStack(alignment: .leading, spacing: 8) {
-                    ProgressView(value: ocrProgress)
-                        .tint(recordAccent)
-                    Text("正在识别账单，请稍候…")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AppColors.subtext)
-                }
-                .padding(14)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(0.68))
+                ComputationLoadingView(
+                    message: "正在辨认账单里的每一笔…",
+                    detail: "识别完成后会先给你确认，不会直接写入",
+                    presentation: .card,
+                    progress: ocrProgress
                 )
             }
 

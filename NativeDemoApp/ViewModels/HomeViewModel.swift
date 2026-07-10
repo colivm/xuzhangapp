@@ -918,6 +918,9 @@ final class HomeViewModel: ObservableObject {
         insightErrorMessage = nil
         defer { isGeneratingMonthlyInsight = false }
 
+        // Allow the monthly loading state to render before local aggregation starts.
+        try? await Task.sleep(nanoseconds: 80_000_000)
+
         let local = localMonthlyInsightBlocks()
         var report = MonthlyInsightReport(
             summary: local.summary,

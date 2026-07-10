@@ -273,13 +273,28 @@ struct MemberPricingView: View {
                 scheduleLifetimeArchiveSnapshotRefresh()
             }
             .overlay {
-                if let purchaseNotice {
+                if isPurchasing {
+                    ZStack {
+                        Color.black.opacity(0.14)
+                            .ignoresSafeArea()
+                        ComputationLoadingView(
+                            message: "正在确认会员状态…",
+                            detail: "请不要重复发起购买或恢复",
+                            presentation: .card
+                        )
+                        .frame(maxWidth: 320)
+                        .padding(.horizontal, 24)
+                    }
+                    .transition(.opacity)
+                    .zIndex(21)
+                } else if let purchaseNotice {
                     purchaseNoticeOverlay(purchaseNotice)
                         .transition(.opacity)
                         .zIndex(20)
                 }
             }
             .animation(.easeInOut(duration: 0.18), value: purchaseNotice)
+            .animation(.easeInOut(duration: 0.18), value: isPurchasing)
 
         }
     }

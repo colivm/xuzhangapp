@@ -2263,19 +2263,31 @@ struct SummaryPlaybackSheet: View {
 
     private func saveWeeklyStoryCard() {
         guard let payload = weeklySharePayload, !isSavingShareCard else { return }
-        let card = WeeklyStoryShareCardView(
-            payload: payload,
-            memoryAnchors: playback.memoryAnchors,
-            isPetMode: petEnabled,
-            nickname: shareNickname.isEmpty ? "叙账用户" : shareNickname,
-            theme: shareCardTheme,
-            style: currentShareCardStyle,
-            customBackgroundData: customShareBackgroundData
-        )
-        guard let image = card.snapshot() else { return }
         isSavingShareCard = true
         shareSaveMessage = nil
-        Task {
+        let nickname = shareNickname.isEmpty ? "叙账用户" : shareNickname
+        let anchors = playback.memoryAnchors
+        let theme = shareCardTheme
+        let style = currentShareCardStyle
+        let backgroundData = customShareBackgroundData
+
+        Task { @MainActor in
+            // Let the button state update before rendering a potentially image-heavy card.
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            let card = WeeklyStoryShareCardView(
+                payload: payload,
+                memoryAnchors: anchors,
+                isPetMode: petEnabled,
+                nickname: nickname,
+                theme: theme,
+                style: style,
+                customBackgroundData: backgroundData
+            )
+            guard let image = card.snapshot() else {
+                shareSaveMessage = "分享图暂时没有生成成功，请稍后再试。"
+                isSavingShareCard = false
+                return
+            }
             do {
                 try await PhotoLibrarySaveService.shared.saveImageToLibrary(image)
                 shareSaveMessage = "已保存到相册。"

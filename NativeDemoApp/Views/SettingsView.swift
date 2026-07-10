@@ -2994,33 +2994,43 @@ struct SettingsView: View {
     }
 
     private func cloudSyncHelper() -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: homeViewModel.isSyncingCloudLedger ? "arrow.triangle.2.circlepath" : "icloud")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(settingsInkAccent.opacity(0.82))
-                .frame(width: 22, height: 22)
-                .background(
-                    Circle()
-                        .fill(settingsInkAccent.opacity(0.10))
+        Group {
+            if homeViewModel.isSyncingCloudLedger {
+                ComputationLoadingView(
+                    message: "正在合并云端与本机账本…",
+                    detail: "会保留更新时间较新的记录",
+                    presentation: .inline
                 )
+            } else {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "icloud")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(settingsInkAccent.opacity(0.82))
+                        .frame(width: 22, height: 22)
+                        .background(
+                            Circle()
+                                .fill(settingsInkAccent.opacity(0.10))
+                        )
 
-            Text(cloudSyncHelperText)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(AppColors.text.opacity(0.72))
-                .fixedSize(horizontal: false, vertical: true)
+                    Text(cloudSyncHelperText)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppColors.text.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
 
-            Spacer(minLength: 0)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.52))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(settingsInkAccent.opacity(0.12), lineWidth: 1)
+                )
+            }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.52))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(settingsInkAccent.opacity(0.12), lineWidth: 1)
-        )
         .padding(.top, -4)
     }
 

@@ -107,6 +107,12 @@ struct StatsWebView: View {
     @State private var traceInsightFocusedQuestion: String?
     @State private var lifeInsightRefreshID = UUID()
     @State private var traceSnapshotStore = TraceSnapshotStore()
+    @State private var preparedWeekSnapshot: TraceChapterSnapshot?
+    @State private var preparedMonthSnapshot: TraceChapterSnapshot?
+    @State private var preparedClueSnapshot: TraceClueSnapshot?
+    @State private var isPreparingTrace = false
+    @State private var tracePreparationTask: Task<Void, Never>?
+    @State private var tracePreparationRequestID = UUID()
     private let playbackService = PlaybackService()
     private let momentSelector = PlaybackMomentSelector()
     private let quotaStore = SummaryPlaybackQuotaStore()
@@ -193,33 +199,56 @@ struct StatsWebView: View {
             }
             .onAppear {
                 handleOpenTraceRequestIfNeeded()
+                scheduleTracePreparation(showInitialLoader: true)
+            }
+            .onDisappear {
+                tracePreparationTask?.cancel()
             }
             .onChange(of: openTraceRequestID) { _, _ in
                 handleOpenTraceRequestIfNeeded()
             }
             .onChange(of: homeViewModel.items) { _, _ in
                 traceSnapshotStore.invalidateAll()
+                preparedClueSnapshot = nil
+                scheduleTracePreparation()
             }
             .onChange(of: selectedPeriod) { _, _ in
                 traceSnapshotStore.invalidateAll()
+                preparedClueSnapshot = nil
+                scheduleTracePreparation()
             }
             .onChange(of: useCustomRange) { _, _ in
                 traceSnapshotStore.invalidateAll()
+                preparedClueSnapshot = nil
+                scheduleTracePreparation()
             }
             .onChange(of: customStartDate) { _, _ in
                 traceSnapshotStore.invalidateAll()
+                preparedClueSnapshot = nil
+                scheduleTracePreparation()
             }
             .onChange(of: customEndDate) { _, _ in
                 traceSnapshotStore.invalidateAll()
+                preparedClueSnapshot = nil
+                scheduleTracePreparation()
             }
             .onChange(of: selectedCategory) { _, _ in
                 traceSnapshotStore.invalidateAll()
+                preparedClueSnapshot = nil
+                scheduleTracePreparation()
             }
             .onChange(of: hasMemberAccess) { _, _ in
                 traceSnapshotStore.invalidateAll()
+                preparedClueSnapshot = nil
+                scheduleTracePreparation()
             }
             .onChange(of: lifeInsightRefreshID) { _, _ in
                 traceSnapshotStore.invalidateClueCache()
+                preparedClueSnapshot = nil
+                scheduleTracePreparation()
+            }
+            .onChange(of: traceViewMode) { _, _ in
+                scheduleTracePreparation(showInitialLoader: true)
             }
             .overlay {
                 if let summaryQuotaPrompt {
@@ -243,12 +272,47 @@ struct StatsWebView: View {
 
     private func statsContent(availableHeight: CGFloat) -> some View {
         let layout = TraceLifeCardLayout(screenHeight: max(availableHeight, UIScreen.main.bounds.height))
-        return VStack(spacing: 16) {
-            traceViewModeKicker
-            if traceViewMode == .life {
-                traceChapterCard(layout: layout)
-            } else {
-                traceClueBoard
+        let hasVisibleSnapshot = traceViewMode == .life
+            ? preparedWeekSnapshot != nil && preparedMonthSnapshot != nil
+            : preparedClueSnapshot != nil
+
+        return ZStack(alignment: .top) {
+            VStack(spacing: 16) {
+                traceViewModeKicker
+                if traceViewMode == .life,
+                   let preparedWeekSnapshot,
+                   let preparedMonthSnapshot {
+                    traceChapterCard(
+                        layout: layout,
+                        weekSnapshot: preparedWeekSnapshot,
+                        monthSnapshot: preparedMonthSnapshot
+                    )
+                    .transition(.opacity)
+                } else if traceViewMode == .clues,
+                          let preparedClueSnapshot {
+                    traceClueBoard(snapshot: preparedClueSnapshot)
+                        .transition(.opacity)
+                } else {
+                    ComputationLoadingView(
+                        message: traceViewMode == .life
+                            ? "正在把这一段整理成章…"
+                            : "正在从记录里寻找线索…",
+                        detail: "整理好后会一次完整呈现",
+                        presentation: .page
+                    )
+                    .frame(minHeight: max(360, availableHeight - 120))
+                }
+            }
+
+            if isPreparingTrace && hasVisibleSnapshot {
+                ComputationUpdatePill(
+                    message: traceViewMode == .life
+                        ? "正在更新这一段痕迹…"
+                        : "正在更新这些线索…"
+                )
+                .padding(.horizontal, 18)
+                .padding(.top, 46)
+                .zIndex(20)
             }
         }
         .padding(.horizontal, 12)
@@ -256,6 +320,57 @@ struct StatsWebView: View {
         .padding(.bottom, 120)
         .frame(maxWidth: 430)
         .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func scheduleTracePreparation(showInitialLoader: Bool = false) {
+        tracePreparationTask?.cancel()
+        let requestID = UUID()
+        tracePreparationRequestID = requestID
+        let needsLife = traceViewMode == .life
+        let needsClues = traceViewMode == .clues
+        let lacksVisibleSnapshot = needsLife
+            ? preparedWeekSnapshot == nil || preparedMonthSnapshot == nil
+            : preparedClueSnapshot == nil
+
+        if showInitialLoader || lacksVisibleSnapshot {
+            isPreparingTrace = true
+        } else {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                isPreparingTrace = true
+            }
+        }
+
+        tracePreparationTask = Task { @MainActor in
+            // Give the tab/filter transition one frame to render its loading state first.
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard !Task.isCancelled, tracePreparationRequestID == requestID else { return }
+
+            var weekSnapshot: TraceChapterSnapshot?
+            var monthSnapshot: TraceChapterSnapshot?
+            var clueSnapshot: TraceClueSnapshot?
+
+            if needsLife {
+                weekSnapshot = buildTraceChapterSnapshot(for: .week)
+                guard !Task.isCancelled else { return }
+                await Task.yield()
+                monthSnapshot = buildTraceChapterSnapshot(for: .month)
+            }
+            if needsClues {
+                clueSnapshot = buildTraceClueSnapshot()
+            }
+
+            guard !Task.isCancelled, tracePreparationRequestID == requestID else { return }
+            withAnimation(.easeInOut(duration: 0.18)) {
+                if let weekSnapshot, let monthSnapshot {
+                    preparedWeekSnapshot = weekSnapshot
+                    preparedMonthSnapshot = monthSnapshot
+                }
+                if let clueSnapshot {
+                    preparedClueSnapshot = clueSnapshot
+                }
+                isPreparingTrace = false
+            }
+        }
     }
 
     private var heroScopedItems: [HomeItem] {
@@ -353,11 +468,13 @@ struct StatsWebView: View {
         selectedPeriod == .week ? .week : .month
     }
 
-    private func traceChapterCard(layout: TraceLifeCardLayout) -> some View {
+    private func traceChapterCard(
+        layout: TraceLifeCardLayout,
+        weekSnapshot: TraceChapterSnapshot,
+        monthSnapshot: TraceChapterSnapshot
+    ) -> some View {
         let _ = quotaRefreshID
         let showsMonth = traceLifeCardRange == .month
-        let weekSnapshot = showsMonth ? traceEmptyChapterSnapshot(for: .week) : buildTraceChapterSnapshot(for: .week)
-        let monthSnapshot = showsMonth ? buildTraceChapterSnapshot(for: .month) : traceEmptyChapterSnapshot(for: .month)
 
         return VStack(spacing: 0) {
             traceLifeFlipCue(isMonth: showsMonth)
@@ -3332,9 +3449,8 @@ struct StatsWebView: View {
         .buttonStyle(.plain)
     }
 
-    private var traceClueBoard: some View {
-        let snapshot = buildTraceClueSnapshot()
-        return VStack(spacing: 16) {
+    private func traceClueBoard(snapshot: TraceClueSnapshot) -> some View {
+        VStack(spacing: 16) {
             traceClueHeroCard(
                 items: snapshot.items,
                 clues: snapshot.clues,

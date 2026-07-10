@@ -34,12 +34,23 @@ struct InsightWebView: View {
     @State private var aiCommandPreviewItem: HomeItem?
     @State private var isAICommandRunning = false
     @State private var aiCommandRunTask: Task<Void, Never>?
+    @State private var preparedInsightSnapshot: InsightPageSnapshot?
+    @State private var isPreparingInsightPage = false
+    @State private var insightPreparationTask: Task<Void, Never>?
+    @State private var insightPreparationRequestID = UUID()
     private let trialTotal = 5
     private static var aiCommandSuggestionsCache: [String: [String]] = [:]
     private static var aiCommandItemsCache: [String: [HomeItem]] = [:]
     private static var aiCommandLifeMarkItemsCache: [String: [HomeItem]] = [:]
     private static var aiCommandCacheOrder: [String] = []
     private static let aiCommandCacheLimit = 48
+
+    private struct InsightPageSnapshot {
+        let journalText: String
+        let journalClosing: String
+        let rhythmText: String
+        let keywords: [KeywordBubbleData]
+    }
 
     private struct AIStatusPill: Equatable {
         enum Kind {
@@ -241,9 +252,28 @@ struct InsightWebView: View {
     var body: some View {
         ZStack {
             ScrollView {
-                insightContent
+                if let preparedInsightSnapshot {
+                    insightContent(snapshot: preparedInsightSnapshot)
+                        .transition(.opacity)
+                } else {
+                    ComputationLoadingView(
+                        message: "正在翻看最近的生活…",
+                        detail: "整理好后会一次完整呈现",
+                        presentation: .page
+                    )
+                    .frame(minHeight: 480)
+                }
             }
             .scrollIndicators(.hidden)
+            .allowsHitTesting(!isPreparingInsightPage)
+
+            if isPreparingInsightPage, preparedInsightSnapshot != nil {
+                ComputationUpdatePill(message: "正在更新这段生活复盘…")
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .zIndex(20)
+            }
 
             if let modal = monthlyTrialModal, !showMonthlyInsightSheet {
                 monthlyTrialOverlay(modal)
@@ -285,17 +315,22 @@ struct InsightWebView: View {
         }) {
             aiCommandSheet
         }
+        .onAppear {
+            scheduleInsightPreparation(showInitialLoader: true)
+        }
+        .onDisappear {
+            insightPreparationTask?.cancel()
+        }
+        .onChange(of: homeViewModel.items) { _, _ in
+            scheduleInsightPreparation()
+        }
     }
 
-    private var insightContent: some View {
-        let weeklyBlocks = homeViewModel.localWeeklyInsightBlocks()
-        let weekItems = recentPositiveItems(days: 7)
-        let keywords = weeklyKeywordBubbles(from: flexibleBubblePositiveItems)
-
-        return VStack(alignment: .leading, spacing: 0) {
-            insightJournalCard(weeklyBlocks: weeklyBlocks, weekItems: weekItems)
+    private func insightContent(snapshot: InsightPageSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            insightJournalCard(snapshot: snapshot)
             insightChapterFootnote
-            keywordBubbleSection(keywords: keywords)
+            keywordBubbleSection(keywords: snapshot.keywords)
                 .padding(.top, -2)
                 .padding(.bottom, 12)
             insightNextChapter
@@ -305,6 +340,39 @@ struct InsightWebView: View {
         .padding(.bottom, 120)
         .frame(maxWidth: 430)
         .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func scheduleInsightPreparation(showInitialLoader: Bool = false) {
+        insightPreparationTask?.cancel()
+        let requestID = UUID()
+        insightPreparationRequestID = requestID
+        if showInitialLoader || preparedInsightSnapshot == nil {
+            isPreparingInsightPage = true
+        } else {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                isPreparingInsightPage = true
+            }
+        }
+
+        insightPreparationTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard !Task.isCancelled, insightPreparationRequestID == requestID else { return }
+
+            let weeklyBlocks = homeViewModel.localWeeklyInsightBlocks()
+            let weekItems = recentPositiveItems(days: 7)
+            let snapshot = InsightPageSnapshot(
+                journalText: formatWeeklyJournalText(weeklyBlocks, weekItems: weekItems),
+                journalClosing: weeklyJournalClosing(weeklyBlocks),
+                rhythmText: homeViewModel.buildWeeklyRhythmText(),
+                keywords: weeklyKeywordBubbles(from: flexibleBubblePositiveItems)
+            )
+
+            guard !Task.isCancelled, insightPreparationRequestID == requestID else { return }
+            withAnimation(.easeInOut(duration: 0.18)) {
+                preparedInsightSnapshot = snapshot
+                isPreparingInsightPage = false
+            }
+        }
     }
 
     @ViewBuilder
@@ -334,35 +402,25 @@ struct InsightWebView: View {
         "lifetime_neon_cathedral"
     ]
 
-    private var insightJournalCard: some View {
-        insightJournalCard(
-            weeklyBlocks: homeViewModel.localWeeklyInsightBlocks(),
-            weekItems: recentPositiveItems(days: 7)
-        )
-    }
-
-    private func insightJournalCard(
-        weeklyBlocks: (summary: String, structure: String, advice: String),
-        weekItems: [HomeItem]
-    ) -> some View {
+    private func insightJournalCard(snapshot: InsightPageSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 13) {
             Text(weekKickerText)
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(AppColors.subtext.opacity(0.78))
 
-            Text(formatWeeklyJournalText(weeklyBlocks, weekItems: weekItems))
+            Text(snapshot.journalText)
                 .font(.system(size: 17, weight: .medium))
                 .lineSpacing(6)
                 .foregroundStyle(AppColors.text)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(weeklyJournalClosing(weeklyBlocks))
+            Text(snapshot.journalClosing)
                 .font(.system(size: 13))
                 .italic()
                 .foregroundStyle(AppColors.subtext.opacity(0.86))
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(homeViewModel.buildWeeklyRhythmText())
+            Text(snapshot.rhythmText)
                 .font(.system(size: 13))
                 .lineSpacing(4)
                 .foregroundStyle(AppColors.text.opacity(0.78))
@@ -1225,12 +1283,11 @@ struct InsightWebView: View {
     @ViewBuilder
     private var todayInsightLoading: some View {
         if homeViewModel.isGeneratingInsight {
-            HStack(spacing: 8) {
-                ProgressView()
-                Text("正在整理今天的小记…")
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext)
-            }
+            ComputationLoadingView(
+                message: "正在整理今天的小记…",
+                detail: "写好后会完整放进这一页",
+                presentation: .inline
+            )
             .padding(.top, 4)
         }
     }
@@ -1268,17 +1325,27 @@ struct InsightWebView: View {
                         .foregroundStyle(AppColors.subtext.opacity(0.78))
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(monthlyJournalText)
-                            .font(.system(size: 17, weight: .medium))
-                            .lineSpacing(6)
-                            .foregroundStyle(AppColors.text)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if homeViewModel.isGeneratingMonthlyInsight {
+                            ComputationLoadingView(
+                                message: "正在梳理这个月留下的痕迹…",
+                                detail: settingsViewModel.useRemoteAI
+                                    ? "写好后会完整放进这一页"
+                                    : "正在根据本地记录整理",
+                                presentation: .card
+                            )
+                        } else {
+                            Text(monthlyJournalText)
+                                .font(.system(size: 17, weight: .medium))
+                                .lineSpacing(6)
+                                .foregroundStyle(AppColors.text)
+                                .fixedSize(horizontal: false, vertical: true)
 
-                        Text(monthlyJournalClosingText)
-                            .font(.system(size: 13))
-                            .italic()
-                            .foregroundStyle(AppColors.subtext.opacity(0.84))
-                            .fixedSize(horizontal: false, vertical: true)
+                            Text(monthlyJournalClosingText)
+                                .font(.system(size: 13))
+                                .italic()
+                                .foregroundStyle(AppColors.subtext.opacity(0.84))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
 
                         monthlyJournalFootnote(left: left, isMember: isMember, exhausted: exhausted)
                     }
@@ -1964,21 +2031,11 @@ struct InsightWebView: View {
     }
 
     private var aiCommandLoadingPanel: some View {
-        HStack(spacing: 12) {
-            ProgressView()
-                .tint(AppColors.accentDark)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("正在整理账本")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                Text("只会基于已有记录生成结果，涉及新增会先给你确认。")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.subtext)
-                    .lineLimit(2)
-            }
-            Spacer(minLength: 0)
-        }
-        .glassPanel(radius: 20, padding: 18)
+        ComputationLoadingView(
+            message: "正在从已有记录里寻找…",
+            detail: "涉及新增记录时，会先给你确认",
+            presentation: .card
+        )
     }
 
     @ViewBuilder
@@ -4427,24 +4484,37 @@ struct InsightWebView: View {
     // MARK: - Share Card Generation
 
     private func generateAndShareWeeklyCard() {
-        guard !isSavingWeeklyShareCard,
-              let payload = PlaybackService().buildWeeklyShareCardPayload(from: homeViewModel.items) else { return }
+        guard !isSavingWeeklyShareCard else { return }
+        isSavingWeeklyShareCard = true
+        weeklyShareSaveMessage = nil
+        showWeeklyShareThemeNudge = false
+
+        let items = homeViewModel.items
         let petMode = settingsViewModel.petCompanionEnabled
         let nick = settingsViewModel.displayName.isEmpty ? "叙账用户" : settingsViewModel.displayName
         let shareTheme: WeeklyShareCardView.ShareCardTheme = settingsViewModel.shareCardUsesAppTheme && settingsViewModel.settings.hasMemberAccess
             ? .appTheme(ThemeResolver.current)
             : .journal
-        let card = WeeklyShareCardView(
-            payload: payload,
-            isPetMode: petMode,
-            nickname: nick,
-            theme: shareTheme
-        )
-        guard let img = card.snapshot() else { return }
-        isSavingWeeklyShareCard = true
-        weeklyShareSaveMessage = nil
-        showWeeklyShareThemeNudge = false
-        Task {
+
+        Task { @MainActor in
+            // Let the saving state render before snapshotting the share card.
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard let payload = PlaybackService().buildWeeklyShareCardPayload(from: items) else {
+                weeklyShareSaveMessage = "这一周还没有足够内容生成摘页。"
+                isSavingWeeklyShareCard = false
+                return
+            }
+            let card = WeeklyShareCardView(
+                payload: payload,
+                isPetMode: petMode,
+                nickname: nick,
+                theme: shareTheme
+            )
+            guard let img = card.snapshot() else {
+                weeklyShareSaveMessage = "摘页暂时没有生成成功，请稍后再试。"
+                isSavingWeeklyShareCard = false
+                return
+            }
             do {
                 try await PhotoLibrarySaveService.shared.saveImageToLibrary(img)
                 weeklyShareSaveMessage = "已保存到相册。"
