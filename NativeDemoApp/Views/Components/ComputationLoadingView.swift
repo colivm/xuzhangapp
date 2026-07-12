@@ -29,7 +29,8 @@ struct ComputationLoadingView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(message)
-        .accessibilityValue(detail ?? "")
+        .accessibilityValue(accessibilityStatusValue)
+        .accessibilityAddTraits(.updatesFrequently)
         .onAppear {
             guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 1.35).repeatForever(autoreverses: true)) {
@@ -103,8 +104,8 @@ struct ComputationLoadingView: View {
     private var inlineBody: some View {
         HStack(spacing: 10) {
             paperGlyph
-                .scaleEffect(0.68)
-                .frame(width: 38, height: 30)
+                .scaleEffect(0.61)
+                .frame(width: 54, height: 38)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(message)
@@ -172,6 +173,18 @@ struct ComputationLoadingView: View {
             .fill(AppColors.accent.opacity(reduceMotion ? 0.28 : (isBreathing ? 0.42 - delay * 0.22 : 0.20 + delay * 0.16)))
             .frame(width: width, height: 4)
             .offset(x: reduceMotion ? 0 : (isBreathing ? 3 : 0))
+    }
+
+    private var accessibilityStatusValue: String {
+        var values: [String] = []
+        if let detail, !detail.isEmpty {
+            values.append(detail)
+        }
+        if let progress {
+            let percent = Int((min(max(progress, 0), 1) * 100).rounded())
+            values.append("完成百分之\(percent)")
+        }
+        return values.joined(separator: "，")
     }
 }
 

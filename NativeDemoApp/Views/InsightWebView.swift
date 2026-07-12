@@ -38,6 +38,9 @@ struct InsightWebView: View {
     @State private var isPreparingInsightPage = false
     @State private var insightPreparationTask: Task<Void, Never>?
     @State private var insightPreparationRequestID = UUID()
+    @State private var insightSnapshotNeedsRefresh = true
+    @State private var showsInsightUpdatePill = false
+    @State private var insightUpdatePillTask: Task<Void, Never>?
     private let trialTotal = 5
     private static var aiCommandSuggestionsCache: [String: [String]] = [:]
     private static var aiCommandItemsCache: [String: [HomeItem]] = [:]
@@ -265,9 +268,8 @@ struct InsightWebView: View {
                 }
             }
             .scrollIndicators(.hidden)
-            .allowsHitTesting(!isPreparingInsightPage)
 
-            if isPreparingInsightPage, preparedInsightSnapshot != nil {
+            if showsInsightUpdatePill, preparedInsightSnapshot != nil {
                 ComputationUpdatePill(message: "正在更新这段生活复盘…")
                     .padding(.horizontal, 24)
                     .padding(.top, 8)
@@ -316,12 +318,18 @@ struct InsightWebView: View {
             aiCommandSheet
         }
         .onAppear {
-            scheduleInsightPreparation(showInitialLoader: true)
+            prepareInsightIfNeeded()
         }
         .onDisappear {
             insightPreparationTask?.cancel()
+            insightPreparationTask = nil
+            insightUpdatePillTask?.cancel()
+            insightUpdatePillTask = nil
+            showsInsightUpdatePill = false
+            isPreparingInsightPage = false
         }
         .onChange(of: homeViewModel.items) { _, _ in
+            insightSnapshotNeedsRefresh = true
             scheduleInsightPreparation()
         }
     }
@@ -342,20 +350,44 @@ struct InsightWebView: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private func scheduleInsightPreparation(showInitialLoader: Bool = false) {
+    private func prepareInsightIfNeeded() {
+        guard insightSnapshotNeedsRefresh || preparedInsightSnapshot == nil else {
+            insightPreparationTask?.cancel()
+            insightPreparationTask = nil
+            insightUpdatePillTask?.cancel()
+            insightUpdatePillTask = nil
+            showsInsightUpdatePill = false
+            isPreparingInsightPage = false
+            return
+        }
+        scheduleInsightPreparation()
+    }
+
+    private func scheduleInsightPreparation() {
         insightPreparationTask?.cancel()
         let requestID = UUID()
         insightPreparationRequestID = requestID
-        if showInitialLoader || preparedInsightSnapshot == nil {
+        insightUpdatePillTask?.cancel()
+        showsInsightUpdatePill = false
+        if preparedInsightSnapshot == nil {
             isPreparingInsightPage = true
         } else {
             withAnimation(.easeInOut(duration: 0.16)) {
                 isPreparingInsightPage = true
             }
+            insightUpdatePillTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                guard !Task.isCancelled,
+                      isPreparingInsightPage,
+                      insightPreparationRequestID == requestID else { return }
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    showsInsightUpdatePill = true
+                }
+            }
         }
 
         insightPreparationTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 80_000_000)
+            await Task.yield()
             guard !Task.isCancelled, insightPreparationRequestID == requestID else { return }
 
             let weeklyBlocks = homeViewModel.localWeeklyInsightBlocks()
@@ -368,8 +400,13 @@ struct InsightWebView: View {
             )
 
             guard !Task.isCancelled, insightPreparationRequestID == requestID else { return }
+            insightUpdatePillTask?.cancel()
+            insightUpdatePillTask = nil
+            insightPreparationTask = nil
             withAnimation(.easeInOut(duration: 0.18)) {
                 preparedInsightSnapshot = snapshot
+                insightSnapshotNeedsRefresh = false
+                showsInsightUpdatePill = false
                 isPreparingInsightPage = false
             }
         }
@@ -4497,8 +4534,11 @@ struct InsightWebView: View {
             : .journal
 
         Task { @MainActor in
-            // Let the saving state render before snapshotting the share card.
-            try? await Task.sleep(nanoseconds: 80_000_000)
+            await Task.yield()
+            guard !Task.isCancelled else {
+                isSavingWeeklyShareCard = false
+                return
+            }
             guard let payload = PlaybackService().buildWeeklyShareCardPayload(from: items) else {
                 weeklyShareSaveMessage = "这一周还没有足够内容生成摘页。"
                 isSavingWeeklyShareCard = false

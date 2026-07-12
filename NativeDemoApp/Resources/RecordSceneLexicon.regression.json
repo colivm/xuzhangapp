@@ -73,6 +73,30 @@
       "expectedEmotionRule": "meal"
     },
     {
+      "id": "manual-face-mask-not-dining",
+      "mode": "manual",
+      "amount": 49.9,
+      "time": "19:20",
+      "inputTitle": "买一盒补水面膜",
+      "expectedCategoryNot": "餐饮"
+    },
+    {
+      "id": "manual-desktop-service-not-dining",
+      "mode": "manual",
+      "amount": 28,
+      "time": "14:10",
+      "inputTitle": "桌面服务订阅",
+      "expectedCategoryNot": "餐饮"
+    },
+    {
+      "id": "manual-fabric-not-dining",
+      "mode": "manual",
+      "amount": 36,
+      "time": "16:40",
+      "inputTitle": "买了新的棉麻面料",
+      "expectedCategoryNot": "餐饮"
+    },
+    {
       "id": "manual-coca-cola-drink",
       "mode": "manual",
       "amount": 3.5,

@@ -113,6 +113,10 @@ struct StatsWebView: View {
     @State private var isPreparingTrace = false
     @State private var tracePreparationTask: Task<Void, Never>?
     @State private var tracePreparationRequestID = UUID()
+    @State private var lifeTraceNeedsRefresh = true
+    @State private var clueTraceNeedsRefresh = true
+    @State private var showsTraceUpdatePill = false
+    @State private var traceUpdatePillTask: Task<Void, Never>?
     private let playbackService = PlaybackService()
     private let momentSelector = PlaybackMomentSelector()
     private let quotaStore = SummaryPlaybackQuotaStore()
@@ -199,56 +203,76 @@ struct StatsWebView: View {
             }
             .onAppear {
                 handleOpenTraceRequestIfNeeded()
-                scheduleTracePreparation(showInitialLoader: true)
+                prepareTraceIfNeeded()
             }
             .onDisappear {
                 tracePreparationTask?.cancel()
+                tracePreparationTask = nil
+                traceUpdatePillTask?.cancel()
+                traceUpdatePillTask = nil
+                showsTraceUpdatePill = false
+                isPreparingTrace = false
             }
             .onChange(of: openTraceRequestID) { _, _ in
                 handleOpenTraceRequestIfNeeded()
             }
             .onChange(of: homeViewModel.items) { _, _ in
                 traceSnapshotStore.invalidateAll()
+                lifeTraceNeedsRefresh = true
+                clueTraceNeedsRefresh = true
                 preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: selectedPeriod) { _, _ in
                 traceSnapshotStore.invalidateAll()
+                lifeTraceNeedsRefresh = true
+                clueTraceNeedsRefresh = true
                 preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: useCustomRange) { _, _ in
                 traceSnapshotStore.invalidateAll()
+                lifeTraceNeedsRefresh = true
+                clueTraceNeedsRefresh = true
                 preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: customStartDate) { _, _ in
                 traceSnapshotStore.invalidateAll()
+                lifeTraceNeedsRefresh = true
+                clueTraceNeedsRefresh = true
                 preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: customEndDate) { _, _ in
                 traceSnapshotStore.invalidateAll()
+                lifeTraceNeedsRefresh = true
+                clueTraceNeedsRefresh = true
                 preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: selectedCategory) { _, _ in
                 traceSnapshotStore.invalidateAll()
+                lifeTraceNeedsRefresh = true
+                clueTraceNeedsRefresh = true
                 preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: hasMemberAccess) { _, _ in
                 traceSnapshotStore.invalidateAll()
+                lifeTraceNeedsRefresh = true
+                clueTraceNeedsRefresh = true
                 preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: lifeInsightRefreshID) { _, _ in
                 traceSnapshotStore.invalidateClueCache()
+                clueTraceNeedsRefresh = true
                 preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: traceViewMode) { _, _ in
-                scheduleTracePreparation(showInitialLoader: true)
+                prepareTraceIfNeeded()
             }
             .overlay {
                 if let summaryQuotaPrompt {
@@ -304,7 +328,7 @@ struct StatsWebView: View {
                 }
             }
 
-            if isPreparingTrace && hasVisibleSnapshot {
+            if showsTraceUpdatePill && hasVisibleSnapshot {
                 ComputationUpdatePill(
                     message: traceViewMode == .life
                         ? "正在更新这一段痕迹…"
@@ -322,27 +346,59 @@ struct StatsWebView: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private func scheduleTracePreparation(showInitialLoader: Bool = false) {
+    private var currentTraceNeedsRefresh: Bool {
+        switch traceViewMode {
+        case .life:
+            return lifeTraceNeedsRefresh || preparedWeekSnapshot == nil || preparedMonthSnapshot == nil
+        case .clues:
+            return clueTraceNeedsRefresh || preparedClueSnapshot == nil
+        }
+    }
+
+    private func prepareTraceIfNeeded() {
+        guard currentTraceNeedsRefresh else {
+            tracePreparationTask?.cancel()
+            tracePreparationTask = nil
+            traceUpdatePillTask?.cancel()
+            traceUpdatePillTask = nil
+            showsTraceUpdatePill = false
+            isPreparingTrace = false
+            return
+        }
+        scheduleTracePreparation()
+    }
+
+    private func scheduleTracePreparation() {
         tracePreparationTask?.cancel()
         let requestID = UUID()
         tracePreparationRequestID = requestID
+        traceUpdatePillTask?.cancel()
+        showsTraceUpdatePill = false
         let needsLife = traceViewMode == .life
         let needsClues = traceViewMode == .clues
         let lacksVisibleSnapshot = needsLife
             ? preparedWeekSnapshot == nil || preparedMonthSnapshot == nil
             : preparedClueSnapshot == nil
 
-        if showInitialLoader || lacksVisibleSnapshot {
+        if lacksVisibleSnapshot {
             isPreparingTrace = true
         } else {
             withAnimation(.easeInOut(duration: 0.16)) {
                 isPreparingTrace = true
             }
+            traceUpdatePillTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                guard !Task.isCancelled,
+                      isPreparingTrace,
+                      tracePreparationRequestID == requestID else { return }
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    showsTraceUpdatePill = true
+                }
+            }
         }
 
         tracePreparationTask = Task { @MainActor in
-            // Give the tab/filter transition one frame to render its loading state first.
-            try? await Task.sleep(nanoseconds: 80_000_000)
+            await Task.yield()
             guard !Task.isCancelled, tracePreparationRequestID == requestID else { return }
 
             var weekSnapshot: TraceChapterSnapshot?
@@ -360,14 +416,20 @@ struct StatsWebView: View {
             }
 
             guard !Task.isCancelled, tracePreparationRequestID == requestID else { return }
+            traceUpdatePillTask?.cancel()
+            traceUpdatePillTask = nil
+            tracePreparationTask = nil
             withAnimation(.easeInOut(duration: 0.18)) {
                 if let weekSnapshot, let monthSnapshot {
                     preparedWeekSnapshot = weekSnapshot
                     preparedMonthSnapshot = monthSnapshot
+                    lifeTraceNeedsRefresh = false
                 }
                 if let clueSnapshot {
                     preparedClueSnapshot = clueSnapshot
+                    clueTraceNeedsRefresh = false
                 }
+                showsTraceUpdatePill = false
                 isPreparingTrace = false
             }
         }
@@ -2600,23 +2662,6 @@ struct StatsWebView: View {
             }
         }
         return index == 0 ? "最常去的店" : (index == 1 ? "通勤日常" : "本月添置")
-    }
-
-    private func buildTraceChapterSnapshot() -> TraceChapterSnapshot {
-        buildTraceChapterSnapshot(for: heroRange)
-    }
-
-    private func traceEmptyChapterSnapshot(for range: SummaryPlaybackRange) -> TraceChapterSnapshot {
-        TraceChapterSnapshot(
-            range: range,
-            items: [],
-            marks: [],
-            memoryAnchors: [],
-            narrative: "",
-            chapterSummary: nil,
-            evidenceGroups: [],
-            preview: SummaryLaunchPreview(count: 0, total: 0, chapterCount: 0, topCategory: nil)
-        )
     }
 
     private func buildTraceChapterSnapshot(for range: SummaryPlaybackRange) -> TraceChapterSnapshot {

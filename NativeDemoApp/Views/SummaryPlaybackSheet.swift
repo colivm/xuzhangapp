@@ -2272,8 +2272,11 @@ struct SummaryPlaybackSheet: View {
         let backgroundData = customShareBackgroundData
 
         Task { @MainActor in
-            // Let the button state update before rendering a potentially image-heavy card.
-            try? await Task.sleep(nanoseconds: 80_000_000)
+            await Task.yield()
+            guard !Task.isCancelled else {
+                isSavingShareCard = false
+                return
+            }
             let card = WeeklyStoryShareCardView(
                 payload: payload,
                 memoryAnchors: anchors,

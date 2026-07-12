@@ -598,7 +598,7 @@ def score_text(payload: dict, text: str, sections: list[str], tie_priority: dict
 def should_score_regression_case(case: dict) -> bool:
     if not isinstance(case, dict):
         return False
-    if "expectedCategory" not in case:
+    if "expectedCategory" not in case and "expectedCategoryNot" not in case:
         return False
     if case.get("history") or case.get("selectedCategory") or case.get("categoryLockedByUser"):
         return False
@@ -650,9 +650,15 @@ def scan_regression_cases(failures: list[str], payload: dict) -> None:
             sections = ["keywordRules", "ocrKeywordRules"] if mode == "ocr" else ["keywordRules"]
             tie_priority = OCR_TIE_PRIORITY if mode == "ocr" else SEMANTIC_TIE_PRIORITY
             actual = score_text(payload, str(text or ""), sections, tie_priority)
-            expected = case.get("expectedCategory")
-            if actual != expected:
-                failures.append(f"RecordSceneLexicon.regression.json:{case_id}: expected {expected}, got {actual}")
+            if "expectedCategory" in case:
+                expected = case.get("expectedCategory")
+                if actual != expected:
+                    failures.append(f"RecordSceneLexicon.regression.json:{case_id}: expected {expected}, got {actual}")
+            blocked = case.get("expectedCategoryNot")
+            if blocked is not None and actual == blocked:
+                failures.append(
+                    f"RecordSceneLexicon.regression.json:{case_id}: expected category not {blocked}, got {actual}"
+                )
         if should_score_emotion_case(case):
             actual_rule = score_emotion_rule(payload, str(text or ""))
             expected_rule = str(case.get("expectedEmotionRule"))

@@ -10,12 +10,17 @@ struct OCRConfirmSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var rows: [ConfirmRow]
-    @State private var isCollectingImport = false
-    @State private var importAction: ImportAction?
+    @State private var importSubmissionState: ImportSubmissionState = .idle
+    @State private var importTask: Task<Void, Never>?
 
     private enum ImportAction: Equatable {
         case review
         case direct
+    }
+
+    private enum ImportSubmissionState: Equatable {
+        case idle
+        case submitting(ImportAction)
     }
 
     let onConfirm: ([OCRReceiptDraft], Bool) -> Int
@@ -35,6 +40,18 @@ struct OCRConfirmSheet: View {
 
     private var reviewNotes: [String] {
         Array(Set(rows.compactMap { $0.draft.reviewNote })).sorted()
+    }
+
+    private var isCollectingImport: Bool {
+        if case .submitting = importSubmissionState {
+            return true
+        }
+        return false
+    }
+
+    private var importAction: ImportAction? {
+        guard case let .submitting(action) = importSubmissionState else { return nil }
+        return action
     }
 
     var body: some View {
@@ -98,6 +115,7 @@ struct OCRConfirmSheet: View {
                                     .fill(Color.white.opacity(0.62))
                             )
                             .buttonStyle(.plain)
+                            .disabled(isCollectingImport)
 
                         Button {
                             importSelected(asReviewDrafts: false)
@@ -129,21 +147,33 @@ struct OCRConfirmSheet: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.large])
+        .interactiveDismissDisabled(isCollectingImport)
+        .onDisappear {
+            importTask?.cancel()
+            importTask = nil
+        }
     }
 
     private func importSelected(asReviewDrafts: Bool) {
         let selectedDrafts = selectedRows.map(\.draft)
         guard !selectedDrafts.isEmpty, !isCollectingImport else { return }
-        isCollectingImport = true
-        importAction = asReviewDrafts ? .review : .direct
-        Task { @MainActor in
-            // Show the collection state before importing a large receipt list.
-            try? await Task.sleep(nanoseconds: 80_000_000)
-            if onConfirm(selectedDrafts, asReviewDrafts) > 0 {
+        let action: ImportAction = asReviewDrafts ? .review : .direct
+        importSubmissionState = .submitting(action)
+        importTask?.cancel()
+        importTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else {
+                importSubmissionState = .idle
+                importTask = nil
+                return
+            }
+
+            let importedCount = onConfirm(selectedDrafts, asReviewDrafts)
+            importTask = nil
+            if importedCount > 0 {
                 dismiss()
             } else {
-                isCollectingImport = false
-                importAction = nil
+                importSubmissionState = .idle
             }
         }
     }
