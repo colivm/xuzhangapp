@@ -150,16 +150,17 @@ struct MemoryAnchorSelectionPolicy {
         var usedSceneDayKeys = Set<String>()
         var usedMerchantKeys = Set<String>()
         var receiptCount = 0
-        let candidates = rows
-            .flatMap { candidates(for: $0, range: range, label: label, caption: caption) }
-            .sorted { lhs, rhs in
-                if lhs.score == rhs.score {
-                    return lhs.item.createdAt > rhs.item.createdAt
-                }
-                return lhs.score > rhs.score
+        let anchorCandidates: [Candidate] = rows.flatMap { item -> [Candidate] in
+            Self.candidates(for: item, range: range, label: label, caption: caption)
+        }
+        let sortedCandidates: [Candidate] = anchorCandidates.sorted(by: { (lhs: Candidate, rhs: Candidate) -> Bool in
+            if lhs.score == rhs.score {
+                return lhs.item.createdAt > rhs.item.createdAt
             }
+            return lhs.score > rhs.score
+        })
 
-        return candidates
+        return sortedCandidates
             .compactMap { candidate -> SummaryMemoryAnchor? in
                 guard candidate.score >= selectedScoreThreshold(for: range) else { return nil }
                 guard usedItemIDs.insert(candidate.item.id).inserted else { return nil }
