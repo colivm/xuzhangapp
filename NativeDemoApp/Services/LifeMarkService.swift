@@ -52,6 +52,7 @@ enum LifeMarkService {
     private static var aggregateCache: [String: [LifeMarkAggregate]] = [:]
     private static var aggregateCacheOrder: [String] = []
     private static let aggregateCacheLimit = 48
+    private static let aggregateCacheLock = NSLock()
     private static let telecomBillKeywords = ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国移动通信集团", "中国联通", "中国电信", "移动通信", "运营商缴费"]
     private static let casualDrinkKeywords = ["可乐", "雪碧", "汽水", "水溶", "c100", "维c", "维他", "果汁", "饮料"]
     private static let intentionalDrinkKeywords = ["咖啡", "拿铁", "美式", "奶茶", "茶饮", "柠檬茶", "瑞幸", "星巴克", "manner", "蜜雪", "喜茶", "奈雪"]
@@ -341,7 +342,7 @@ enum LifeMarkService {
             isMember: isMember,
             limit: limit
         )
-        if let cached = aggregateCache[cacheKey] {
+        if let cached = cachedAggregates(for: cacheKey) {
             return cached
         }
 
@@ -418,6 +419,8 @@ enum LifeMarkService {
     }
 
     private static func storeAggregateCache(_ result: [LifeMarkAggregate], for key: String) {
+        aggregateCacheLock.lock()
+        defer { aggregateCacheLock.unlock() }
         guard aggregateCache[key] == nil else {
             return
         }
@@ -427,6 +430,12 @@ enum LifeMarkService {
             let staleKey = aggregateCacheOrder.removeFirst()
             aggregateCache.removeValue(forKey: staleKey)
         }
+    }
+
+    private static func cachedAggregates(for key: String) -> [LifeMarkAggregate]? {
+        aggregateCacheLock.lock()
+        defer { aggregateCacheLock.unlock() }
+        return aggregateCache[key]
     }
 
     static func queryIntent(from text: String) -> LifeMarkQueryIntent? {

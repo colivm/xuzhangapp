@@ -33,7 +33,7 @@ struct ComputationLoadingView: View {
         .accessibilityAddTraits(.updatesFrequently)
         .onAppear {
             guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 1.35).repeatForever(autoreverses: true)) {
+            withAnimation(.easeInOut(duration: 1.15).repeatForever(autoreverses: true)) {
                 isBreathing = true
             }
         }
@@ -41,7 +41,7 @@ struct ComputationLoadingView: View {
             if shouldReduce {
                 isBreathing = false
             } else {
-                withAnimation(.easeInOut(duration: 1.35).repeatForever(autoreverses: true)) {
+                withAnimation(.easeInOut(duration: 1.15).repeatForever(autoreverses: true)) {
                     isBreathing = true
                 }
             }
@@ -61,7 +61,7 @@ struct ComputationLoadingView: View {
 
     private var loadingCard: some View {
         VStack(spacing: 16) {
-            paperGlyph
+            quietIndicator
 
             VStack(spacing: 6) {
                 Text(message)
@@ -89,23 +89,19 @@ struct ComputationLoadingView: View {
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(AppColors.panelStrong.opacity(0.90))
-                .background(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(Color.white.opacity(0.68), lineWidth: 1)
         )
-        .shadow(color: AppColors.subtext.opacity(0.07), radius: 18, x: 0, y: 8)
+        .shadow(color: AppColors.subtext.opacity(0.05), radius: 10, x: 0, y: 4)
     }
 
     private var inlineBody: some View {
         HStack(spacing: 10) {
-            paperGlyph
-                .scaleEffect(0.61)
-                .frame(width: 54, height: 38)
+            quietIndicator
+                .scaleEffect(0.78)
+                .frame(width: 28, height: 28)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(message)
@@ -132,47 +128,16 @@ struct ComputationLoadingView: View {
         )
     }
 
-    private var paperGlyph: some View {
-        ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.92),
-                            AppColors.paperWarm.opacity(0.72),
-                            AppColors.paperMist.opacity(0.64)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(AppColors.paperBorder.opacity(0.46), lineWidth: 1)
-                )
-
-            VStack(alignment: .leading, spacing: 6) {
-                loadingLine(width: 46, delay: 0)
-                loadingLine(width: 64, delay: 0.12)
-                loadingLine(width: 36, delay: 0.24)
-            }
-            .padding(.leading, 14)
-
+    private var quietIndicator: some View {
+        ZStack {
             Circle()
-                .fill(AppColors.accent.opacity(0.82))
-                .frame(width: 7, height: 7)
-                .shadow(color: AppColors.accent.opacity(0.28), radius: 5)
-                .offset(x: reduceMotion ? 62 : (isBreathing ? 65 : 9), y: -23)
+                .stroke(AppColors.accent.opacity(0.16), lineWidth: 3)
+            Circle()
+                .fill(AppColors.accent.opacity(reduceMotion ? 0.58 : (isBreathing ? 0.72 : 0.38)))
+                .frame(width: 9, height: 9)
+                .scaleEffect(reduceMotion ? 1 : (isBreathing ? 1.08 : 0.82))
         }
-        .frame(width: 86, height: 62)
-        .scaleEffect(reduceMotion ? 1 : (isBreathing ? 1 : 0.985))
-    }
-
-    private func loadingLine(width: CGFloat, delay: Double) -> some View {
-        Capsule(style: .continuous)
-            .fill(AppColors.accent.opacity(reduceMotion ? 0.28 : (isBreathing ? 0.42 - delay * 0.22 : 0.20 + delay * 0.16)))
-            .frame(width: width, height: 4)
-            .offset(x: reduceMotion ? 0 : (isBreathing ? 3 : 0))
+        .frame(width: 34, height: 34)
     }
 
     private var accessibilityStatusValue: String {

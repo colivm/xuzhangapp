@@ -72,6 +72,12 @@ private struct TraceLifeCardLayout {
     var playButtonHeight: CGFloat { 44 + compactness * 4 }
 }
 
+private enum TracePreparedPiece {
+    case week(TraceChapterSnapshot, cacheKey: String)
+    case month(TraceChapterSnapshot, cacheKey: String)
+    case clue(TraceClueSnapshot, cacheKey: String)
+}
+
 struct StatsWebView: View {
 
     @EnvironmentObject private var homeViewModel: HomeViewModel
@@ -88,6 +94,8 @@ struct StatsWebView: View {
     @State private var editingItem: HomeItem?
     @State private var memoryDetailItem: HomeItem?
     @State private var summaryPlayback: SummaryPlayback?
+    @State private var summaryPlaybackTask: Task<Void, Never>?
+    @State private var preparingSummaryRange: SummaryPlaybackRange?
     @State private var summaryQuotaPrompt: SummaryQuotaPrompt?
     @State private var quotaRefreshID = UUID()
     @State private var showTraceDetailSheet = false
@@ -208,6 +216,9 @@ struct StatsWebView: View {
             .onDisappear {
                 tracePreparationTask?.cancel()
                 tracePreparationTask = nil
+                summaryPlaybackTask?.cancel()
+                summaryPlaybackTask = nil
+                preparingSummaryRange = nil
                 traceUpdatePillTask?.cancel()
                 traceUpdatePillTask = nil
                 showsTraceUpdatePill = false
@@ -220,55 +231,47 @@ struct StatsWebView: View {
                 traceSnapshotStore.invalidateAll()
                 lifeTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
-                preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: selectedPeriod) { _, _ in
                 traceSnapshotStore.invalidateAll()
                 lifeTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
-                preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: useCustomRange) { _, _ in
                 traceSnapshotStore.invalidateAll()
                 lifeTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
-                preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: customStartDate) { _, _ in
                 traceSnapshotStore.invalidateAll()
                 lifeTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
-                preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: customEndDate) { _, _ in
                 traceSnapshotStore.invalidateAll()
                 lifeTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
-                preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: selectedCategory) { _, _ in
                 traceSnapshotStore.invalidateAll()
                 lifeTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
-                preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: hasMemberAccess) { _, _ in
                 traceSnapshotStore.invalidateAll()
                 lifeTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
-                preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: lifeInsightRefreshID) { _, _ in
                 traceSnapshotStore.invalidateClueCache()
                 clueTraceNeedsRefresh = true
-                preparedClueSnapshot = nil
                 scheduleTracePreparation()
             }
             .onChange(of: traceViewMode) { _, _ in
@@ -397,22 +400,130 @@ struct StatsWebView: View {
             }
         }
 
+        let allItems = homeViewModel.items
+        let memberAccess = hasMemberAccess
+        let now = Date()
+        var cachedWeek: TraceChapterSnapshot?
+        var cachedMonth: TraceChapterSnapshot?
+        var cachedClue: TraceClueSnapshot?
+        var weekInput: (TraceChapterComputationInput, String)?
+        var monthInput: (TraceChapterComputationInput, String)?
+        var clueInput: (TraceClueComputationInput, String)?
+
+        if needsLife {
+            let weekItems = traceLifeScopedItems(for: .week)
+            let weekKey = traceChapterSnapshotCacheKey(items: weekItems, range: .week)
+            cachedWeek = traceSnapshotStore.chapterSnapshot(for: weekKey)
+            if cachedWeek == nil {
+                let periodKey = quotaStore.currentWeekKey()
+                weekInput = (
+                    TraceChapterComputationInput(
+                        range: .week,
+                        items: weekItems,
+                        allItems: allItems,
+                        isMember: memberAccess,
+                        prioritizeRecurringMarks: false,
+                        periodKey: periodKey,
+                        usesEchoAnchor: !useCustomRange && selectedPeriod != .year,
+                        now: now
+                    ),
+                    weekKey
+                )
+            }
+
+            let monthItems = traceLifeScopedItems(for: .month)
+            let monthKey = traceChapterSnapshotCacheKey(items: monthItems, range: .month)
+            cachedMonth = traceSnapshotStore.chapterSnapshot(for: monthKey)
+            if cachedMonth == nil {
+                let periodKey = EchoAnchorService.shared.periodKeyForMonth()
+                monthInput = (
+                    TraceChapterComputationInput(
+                        range: .month,
+                        items: monthItems,
+                        allItems: allItems,
+                        isMember: memberAccess,
+                        prioritizeRecurringMarks: !useCustomRange && selectedPeriod == .month,
+                        periodKey: periodKey,
+                        usesEchoAnchor: !useCustomRange && selectedPeriod != .year,
+                        now: now
+                    ),
+                    monthKey
+                )
+            }
+        }
+
+        if needsClues {
+            let items = traceClueItems
+            let clueKey = traceClueSnapshotCacheKey(items: items)
+            cachedClue = traceSnapshotStore.clueSnapshot(for: clueKey)
+            if cachedClue == nil {
+                let unlockKey = traceInsightUnlockKey(from: items)
+                let freeRemaining = lifeInsightService.freeRemaining(isMember: memberAccess, now: now)
+                clueInput = (
+                    TraceClueComputationInput(
+                        items: items,
+                        allItems: allItems,
+                        period: selectedPeriod,
+                        periodLabel: traceInsightPeriodLabel,
+                        isMember: memberAccess,
+                        freeRemaining: freeRemaining,
+                        storedUnlock: lifeInsightService.hasUnlockedTrace(unlockKey, isMember: memberAccess, now: now),
+                        now: now
+                    ),
+                    clueKey
+                )
+            }
+        }
+
+        let initialWeekSnapshot = cachedWeek
+        let initialMonthSnapshot = cachedMonth
+        let initialClueSnapshot = cachedClue
+        let pendingWeekInput = weekInput
+        let pendingMonthInput = monthInput
+        let pendingClueInput = clueInput
+
         tracePreparationTask = Task { @MainActor in
             await Task.yield()
             guard !Task.isCancelled, tracePreparationRequestID == requestID else { return }
 
-            var weekSnapshot: TraceChapterSnapshot?
-            var monthSnapshot: TraceChapterSnapshot?
-            var clueSnapshot: TraceClueSnapshot?
+            var weekSnapshot = initialWeekSnapshot
+            var monthSnapshot = initialMonthSnapshot
+            var clueSnapshot = initialClueSnapshot
 
-            if needsLife {
-                weekSnapshot = buildTraceChapterSnapshot(for: .week)
-                guard !Task.isCancelled else { return }
-                await Task.yield()
-                monthSnapshot = buildTraceChapterSnapshot(for: .month)
-            }
-            if needsClues {
-                clueSnapshot = buildTraceClueSnapshot()
+            await withTaskGroup(of: TracePreparedPiece.self) { group in
+                if let (input, cacheKey) = pendingWeekInput {
+                    group.addTask(priority: .userInitiated) {
+                        .week(TraceSnapshotComputation.buildChapter(input), cacheKey: cacheKey)
+                    }
+                }
+                if let (input, cacheKey) = pendingMonthInput {
+                    group.addTask(priority: .utility) {
+                        .month(TraceSnapshotComputation.buildChapter(input), cacheKey: cacheKey)
+                    }
+                }
+                if let (input, cacheKey) = pendingClueInput {
+                    group.addTask(priority: .userInitiated) {
+                        .clue(TraceSnapshotComputation.buildClue(input), cacheKey: cacheKey)
+                    }
+                }
+
+                for await piece in group {
+                    guard !Task.isCancelled else {
+                        group.cancelAll()
+                        return
+                    }
+                    switch piece {
+                    case let .week(snapshot, cacheKey):
+                        weekSnapshot = snapshot
+                        traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
+                    case let .month(snapshot, cacheKey):
+                        monthSnapshot = snapshot
+                        traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
+                    case let .clue(snapshot, cacheKey):
+                        clueSnapshot = snapshot
+                        traceSnapshotStore.storeClueSnapshot(snapshot, for: cacheKey)
+                    }
+                }
             }
 
             guard !Task.isCancelled, tracePreparationRequestID == requestID else { return }
@@ -586,11 +697,12 @@ struct StatsWebView: View {
                 traceLifeSlicePlayButton(
                     isMonthLocked: isMonthLocked,
                     isEnabled: canPlay || isMonthLocked,
-                    height: layout.playButtonHeight
+                    height: layout.playButtonHeight,
+                    isPreparing: preparingSummaryRange == range
                 )
             }
             .buttonStyle(PurposefulCardButtonStyle(radius: 24, depth: 1.05))
-            .disabled(!hasData && !isMonthLocked)
+            .disabled((!hasData && !isMonthLocked) || preparingSummaryRange != nil)
 
             traceLifeSliceFooter(snapshot: snapshot)
         }
@@ -676,11 +788,12 @@ struct StatsWebView: View {
                     isMonthLocked: isMonthLocked,
                     isEnabled: canPlay || isMonthLocked,
                     height: layout.playButtonHeight,
-                    title: "回顾这个月"
+                    title: "回顾这个月",
+                    isPreparing: preparingSummaryRange == range
                 )
             }
             .buttonStyle(PurposefulCardButtonStyle(radius: 24, depth: 1.05))
-            .disabled(!hasData && !isMonthLocked)
+            .disabled((!hasData && !isMonthLocked) || preparingSummaryRange != nil)
 
             traceLifeSliceFooter(snapshot: snapshot)
         }
@@ -2208,7 +2321,8 @@ struct StatsWebView: View {
         isMonthLocked: Bool,
         isEnabled: Bool,
         height: CGFloat,
-        title: String = "回看这一段"
+        title: String = "回看这一段",
+        isPreparing: Bool = false
     ) -> some View {
         HStack(spacing: 8) {
             Spacer(minLength: 0)
@@ -2216,12 +2330,18 @@ struct StatsWebView: View {
                 Circle()
                     .fill(Color.white.opacity(isEnabled ? 0.92 : 0.58))
                     .frame(width: 26, height: 26)
-            Image(systemName: isMonthLocked ? "lock.fill" : "play.fill")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(isEnabled ? AppColors.accentDark : AppColors.subtext.opacity(0.72))
-                    .offset(x: isMonthLocked ? 0 : 1.5)
+                if isPreparing {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .tint(AppColors.accentDark)
+                } else {
+                    Image(systemName: isMonthLocked ? "lock.fill" : "play.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(isEnabled ? AppColors.accentDark : AppColors.subtext.opacity(0.72))
+                        .offset(x: isMonthLocked ? 0 : 1.5)
+                }
             }
-            Text(isMonthLocked ? "了解会员" : title)
+            Text(isPreparing ? "正在整理…" : (isMonthLocked ? "了解会员" : title))
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(isEnabled ? Color.white : AppColors.subtext.opacity(0.74))
             Spacer(minLength: 0)
@@ -5097,7 +5217,7 @@ struct StatsWebView: View {
     }
 
     private func handleSummaryPlaybackTap(range: SummaryPlaybackRange, hasData: Bool) {
-        guard hasData else { return }
+        guard hasData, preparingSummaryRange == nil else { return }
         guard quotaStore.canPlay(range, isMember: hasMemberAccess) else {
             switch range {
             case .week:
@@ -5118,15 +5238,27 @@ struct StatsWebView: View {
             return
         }
         let copySeed = nextSummaryCopySeed(for: range)
-        summaryPlayback = buildSummaryPlayback(for: range, copySeed: copySeed)
-    }
-
-    private func buildSummaryPlayback(for range: SummaryPlaybackRange, copySeed: String) -> SummaryPlayback {
-        switch range {
-        case .week:
-            return playbackService.buildWeekSummary(from: homeViewModel.items, copySeed: copySeed)
-        case .month:
-            return playbackService.buildMonthSummary(from: homeViewModel.items, copySeed: copySeed)
+        let items = homeViewModel.items
+        summaryPlaybackTask?.cancel()
+        preparingSummaryRange = range
+        summaryPlaybackTask = Task { @MainActor in
+            await Task.yield()
+            let playback = await withTaskGroup(of: SummaryPlayback.self) { group -> SummaryPlayback? in
+                group.addTask(priority: .userInitiated) {
+                    let service = PlaybackService()
+                    switch range {
+                    case .week:
+                        return service.buildWeekSummary(from: items, copySeed: copySeed)
+                    case .month:
+                        return service.buildMonthSummary(from: items, copySeed: copySeed)
+                    }
+                }
+                return await group.next()
+            }
+            guard !Task.isCancelled, preparingSummaryRange == range else { return }
+            summaryPlaybackTask = nil
+            preparingSummaryRange = nil
+            summaryPlayback = playback
         }
     }
 
