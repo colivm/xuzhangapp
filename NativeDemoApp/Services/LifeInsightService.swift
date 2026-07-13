@@ -104,13 +104,13 @@ final class LifeInsightService {
             if let secondary {
                 fullLines.append(secondary.detail)
             }
-            let chips = signals.prefix(3).map(\.question)
+            let chips = followUpQuestionChips(from: signals, periodLabel: periodLabel)
             return LifeInsightResult(
                 leadQuestion: primary.title,
                 teaser: primary.teaser,
                 previewLine: primary.detail,
                 fullLines: Array(fullLines.prefix(3)),
-                questionChips: chips.isEmpty ? ["哪天最特别？", "什么事出现了好几次？", "给这段时间起个名字"] : Array(chips),
+                questionChips: chips,
                 periodName: primary.periodName
             )
         }
@@ -168,7 +168,8 @@ final class LifeInsightService {
                 top: top?.category,
                 second: second?.category,
                 peakLabel: peak?.label,
-                items: validItems
+                items: validItems,
+                periodLabel: periodLabel
             ),
             periodName: periodName(top: top?.category, peakLabel: peak?.label, periodLabel: periodLabel)
         )
@@ -563,10 +564,9 @@ final class LifeInsightService {
         top: HomeItem.Category?,
         second: HomeItem.Category?,
         peakLabel: String?,
-        items: [HomeItem]
+        items: [HomeItem],
+        periodLabel: String
     ) -> [String] {
-        let primary = top.map { "\(focusName(for: $0, items: items))为什么变明显？" }
-            ?? "哪类记录最明显？"
         let rhythm = peakLabel.map { "\($0)发生了什么？" }
             ?? "哪天最特别？"
         let relation: String
@@ -575,7 +575,29 @@ final class LifeInsightService {
         } else {
             relation = "什么事出现了好几次？"
         }
-        return [primary, rhythm, relation]
+        return [rhythm, relation, "给\(periodLabel)起个名字"]
+    }
+
+    private func followUpQuestionChips(from signals: [TraceInsightSignal], periodLabel: String) -> [String] {
+        let followUps = signals.dropFirst().map(\.question)
+        var result: [String] = []
+
+        func appendFirst(where predicate: (String) -> Bool) {
+            guard let question = followUps.first(where: predicate), !result.contains(question) else { return }
+            result.append(question)
+        }
+
+        // 主问题已经在卡片标题里出现，Chip 只保留不同的后续角度。
+        appendFirst { $0.contains("发生了什么") || $0.contains("哪天") }
+        appendFirst { $0.contains("同天") || $0.contains("同一段") || $0.contains("一起") }
+        appendFirst { $0.contains("备注") || $0.contains("哪条") }
+        appendFirst { $0.contains("为什么") || $0.contains("好几次") }
+
+        for fallback in ["给\(periodLabel)起个名字", "哪天最特别？"]
+            where result.count < 2 && !result.contains(fallback) {
+            result.append(fallback)
+        }
+        return Array(result.prefix(3))
     }
 
     private func periodName(top: HomeItem.Category?, peakLabel: String?, periodLabel: String) -> String {

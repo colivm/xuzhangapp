@@ -428,6 +428,10 @@ struct StatsWebView: View {
                 if let clueSnapshot {
                     preparedClueSnapshot = clueSnapshot
                     clueTraceNeedsRefresh = false
+                    if let focusedQuestion = traceInsightFocusedQuestion,
+                       !clueSnapshot.insight.questionChips.contains(focusedQuestion) {
+                        traceInsightFocusedQuestion = clueSnapshot.insight.questionChips.first
+                    }
                 }
                 showsTraceUpdatePill = false
                 isPreparingTrace = false
@@ -3183,11 +3187,6 @@ struct StatsWebView: View {
         traceLifeMarks(from: traceClueItems, limit: 6)
     }
 
-    private var traceLockedLifeMarkPreview: LifeMarkAggregate? {
-        guard !hasMemberAccess else { return nil }
-        return LifeMarkService.lockedPreview(for: traceClueItems, allItems: homeViewModel.items)
-    }
-
     private func traceCategoryClues(from items: [HomeItem]) -> [TraceCategoryClue] {
         guard !items.isEmpty else { return [] }
         let totalCount = Double(items.count)
@@ -3342,74 +3341,6 @@ struct StatsWebView: View {
         return selectedPeriod == .week ? "\(active) 天有记录" : "\(active) 周有记录"
     }
 
-    private var traceClueInsightLines: [String] {
-        traceClueInsightLines(
-            items: traceClueItems,
-            clues: traceCategoryClues,
-            rhythmPoints: traceRhythmPoints,
-            marks: traceLifeMarks,
-            lockedPreview: traceLockedLifeMarkPreview
-        )
-    }
-
-    private func traceClueInsightLines(
-        items: [HomeItem],
-        clues: [TraceCategoryClue],
-        rhythmPoints: [TraceRhythmPoint],
-        marks: [LifeMarkAggregate],
-        lockedPreview: LifeMarkAggregate?
-    ) -> [String] {
-        guard !items.isEmpty else {
-            return [
-                "先记几笔，不用急着总结。",
-                "等同类事情出现两三次，这里会把它们串起来。",
-                "我会优先看日期、场景和你写过的备注。"
-            ]
-        }
-        var lines: [String] = []
-        if let contextLine = traceContextualMemoryLine(from: items) {
-            lines.append(contextLine)
-        }
-        if let mark = marks.first {
-            lines.append(LifeMarkService.primaryLine(for: mark))
-        } else if let locked = lockedPreview, !hasMemberAccess {
-            lines.append("这段里还有「\(locked.label)」这类深层印记。会员会按账本里已有的日期、分类、备注和上下文线索整理，不额外编造。")
-        }
-        if let top = clues.first {
-            let percent = Int((top.ratio * 100).rounded())
-            lines.append("\(top.category.rawValue)出现 \(top.count) 笔，占这一段 \(percent)%。这是最先浮出来的一面。")
-        }
-        if let peak = rhythmPoints.max(by: { $0.count < $1.count }), peak.count > 0 {
-            lines.append("\(traceRhythmNarrativeLabel(peak))记录最集中，适合回头看\(traceRhythmPeriodReference)具体发生了什么。")
-        }
-        let total = items.reduce(0) { $0 + $1.amount }
-        if items.count >= 2 {
-            let average = total / Double(items.count)
-            lines.append("这一段共 \(items.count) 笔，平均约 \(average.formatted(.cny))。先看原因，不急着评判金额。")
-        } else {
-            lines.append("现在只有一笔，先把这个瞬间留住就好。")
-        }
-        return Array(lines.prefix(3))
-    }
-
-    private func traceContextualMemoryLine(from items: [HomeItem]) -> String? {
-        let sorted = items.sorted { $0.createdAt > $1.createdAt }
-        if let item = sorted.first(where: { $0.category == .transport && $0.memoryContext?.weatherKind == "rain" }) {
-            if let city = item.memoryContext?.cityName, item.memoryContext?.semanticPlace == "外地" {
-                return "\(city)那次雨天出行有天气和地点信息。"
-            }
-            return "这段里有一次雨天出行，那笔交通记录带着当天的天气。"
-        }
-        if let item = sorted.first(where: { $0.memoryContext?.semanticPlace == "外地" }),
-           let city = item.memoryContext?.cityName {
-            return "有一笔记录留在\(city)。城市变了，这段生活的背景也变了。"
-        }
-        if let item = sorted.first(where: { $0.memoryContext?.weatherKind == "rain" }) {
-            return "\(item.createdAt.zhBillDateTime)那天有雨。这笔记录把天气也一起留下来了。"
-        }
-        return nil
-    }
-
     private var traceRhythmPoints: [TraceRhythmPoint] {
         traceRhythmPoints(from: traceClueItems)
     }
@@ -3505,13 +3436,6 @@ struct StatsWebView: View {
             traceClueCompositionCard(items: snapshot.items, clues: snapshot.clues)
             traceLifeMarkCard(marks: snapshot.marks, lockedPreview: snapshot.lockedMark)
             traceClueRhythmCard(rhythmPoints: snapshot.rhythmPoints)
-            traceClueInsightCard(
-                items: snapshot.items,
-                clues: snapshot.clues,
-                rhythmPoints: snapshot.rhythmPoints,
-                marks: snapshot.marks,
-                lockedPreview: snapshot.lockedMark
-            )
             traceDeepInsightCard(
                 insight: snapshot.insight,
                 items: snapshot.items,
@@ -3880,33 +3804,6 @@ struct StatsWebView: View {
         .traceGlassPanel(radius: 20, padding: 18)
     }
 
-    private func traceClueInsightCard(
-        items: [HomeItem],
-        clues: [TraceCategoryClue],
-        rhythmPoints: [TraceRhythmPoint],
-        marks: [LifeMarkAggregate],
-        lockedPreview: LifeMarkAggregate?
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("变化线索")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(TraceColors.primaryText)
-
-            VStack(spacing: 10) {
-                ForEach(Array(traceClueInsightLines(
-                    items: items,
-                    clues: clues,
-                    rhythmPoints: rhythmPoints,
-                    marks: marks,
-                    lockedPreview: lockedPreview
-                ).enumerated()), id: \.offset) { index, line in
-                    traceClueInsightRow(line, index: index)
-                }
-            }
-        }
-        .traceGlassPanel(radius: 20, padding: 18)
-    }
-
     private func traceDeepInsightCard(
         insight: LifeInsightResult,
         items: [HomeItem],
@@ -3917,6 +3814,7 @@ struct StatsWebView: View {
         freeRemaining: Int
     ) -> some View {
         let isUnlocked = snapshotUnlocked || traceDeepInsightExpanded
+        let supportingLines = traceDeepInsightSupportingLines(insight)
         return VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .center, spacing: 10) {
                 ZStack {
@@ -3929,10 +3827,10 @@ struct StatsWebView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("多看一层")
+                    Text("线索解读")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(TraceColors.primaryText)
-                    Text(hasMemberAccess ? "把这些记录连成一段生活" : "本月还可展开 \(freeRemaining)/\(LifeInsightService.freeMonthlyLimit) 次")
+                    Text(isUnlocked ? insight.periodName : "本月还可展开 \(freeRemaining)/\(LifeInsightService.freeMonthlyLimit) 次")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(TraceColors.tertiaryText)
                 }
@@ -3956,13 +3854,22 @@ struct StatsWebView: View {
                     .overlay(TraceColors.surfaceMuted)
                     .padding(.top, 2)
 
-                VStack(spacing: 8) {
-                    ForEach(Array(insight.fullLines.enumerated()), id: \.offset) { index, line in
-                        traceDeepInsightLine(line, index: index)
-                    }
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                if !supportingLines.isEmpty {
+                    Text("从记录里看到")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(TraceColors.tertiaryText)
 
+                    VStack(spacing: 8) {
+                        ForEach(Array(supportingLines.enumerated()), id: \.offset) { index, line in
+                            traceDeepInsightLine(line, index: index)
+                        }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                Text("换个角度")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(TraceColors.tertiaryText)
                 traceInsightQuestionChips(insight.questionChips)
                     .transition(.opacity)
 
@@ -3978,39 +3885,53 @@ struct StatsWebView: View {
                 }
             }
 
-            Button {
-                handleTraceDeepInsightTap()
-            } label: {
-                let buttonIsOpen = hasMemberAccess || snapshotCanUse || isUnlocked
-                if buttonIsOpen {
-                    HStack(spacing: 8) {
-                        Text(traceDeepInsightButtonTitle(isUnlocked: isUnlocked, canUse: snapshotCanUse, hasData: !items.isEmpty))
-                            .font(.system(size: 14, weight: .semibold))
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 11, weight: .semibold))
-                        Spacer(minLength: 0)
+            if !isUnlocked {
+                Button {
+                    handleTraceDeepInsightTap()
+                } label: {
+                    let buttonIsOpen = snapshotCanUse
+                    if buttonIsOpen {
+                        HStack(spacing: 8) {
+                            Text(traceDeepInsightButtonTitle(canUse: snapshotCanUse, hasData: !items.isEmpty))
+                                .font(.system(size: 14, weight: .semibold))
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 11, weight: .semibold))
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 14)
+                        .background(traceDeepCTAButtonBackground(isOpen: true))
+                    } else {
+                        HStack(spacing: 7) {
+                            Text(traceDeepInsightButtonTitle(canUse: snapshotCanUse, hasData: !items.isEmpty))
+                                .font(.system(size: 13, weight: .semibold))
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .frame(minHeight: 36)
+                        .foregroundStyle(AppColors.lockGold)
+                        .padding(.horizontal, 12)
+                        .background(traceDeepCTAButtonBackground(isOpen: false))
                     }
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .foregroundStyle(Color.white)
-                    .padding(.horizontal, 14)
-                    .background(traceDeepCTAButtonBackground(isOpen: true))
-                } else {
-                    HStack(spacing: 7) {
-                        Text(traceDeepInsightButtonTitle(isUnlocked: isUnlocked, canUse: snapshotCanUse, hasData: !items.isEmpty))
-                            .font(.system(size: 13, weight: .semibold))
-                        Image(systemName: "lock.fill")
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    .frame(minHeight: 36)
-                    .foregroundStyle(AppColors.lockGold)
-                    .padding(.horizontal, 12)
-                    .background(traceDeepCTAButtonBackground(isOpen: false))
                 }
+                .buttonStyle(.plain)
+                .disabled(items.isEmpty)
             }
-            .buttonStyle(.plain)
-            .disabled(items.isEmpty)
         }
         .traceGlassPanel(radius: 20, padding: 18)
+    }
+
+    private func traceDeepInsightSupportingLines(_ insight: LifeInsightResult) -> [String] {
+        var seen = Set<String>()
+        seen.insert(insight.previewLine.trimmingCharacters(in: .whitespacesAndNewlines))
+        return insight.fullLines.compactMap { line in
+            let normalized = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty, seen.insert(normalized).inserted else { return nil }
+            return line
+        }
+        .prefix(2)
+        .map { $0 }
     }
 
     private func traceDeepInsightLine(_ text: String, index: Int) -> some View {
@@ -4109,11 +4030,9 @@ struct StatsWebView: View {
             )
     }
 
-    private func traceDeepInsightButtonTitle(isUnlocked: Bool, canUse: Bool, hasData: Bool) -> String {
+    private func traceDeepInsightButtonTitle(canUse: Bool, hasData: Bool) -> String {
         if !hasData { return "先留下几笔" }
-        if hasMemberAccess { return "展开这段生活" }
-        if isUnlocked { return "再看一个角度" }
-        if canUse { return "试一次多看一层" }
+        if canUse { return "展开线索" }
         return "解锁完整解读"
     }
 
@@ -4412,32 +4331,6 @@ struct StatsWebView: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
-    }
-
-    private func traceClueInsightRow(_ text: String, index: Int) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Circle()
-                .fill(TraceColors.tertiaryText)
-                .frame(width: 6, height: 6)
-                .padding(.top, 6)
-                .frame(width: 18)
-            Text(text)
-                .font(.system(size: 13, weight: .regular))
-                .lineSpacing(3)
-                .foregroundStyle(TraceColors.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 11)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(TraceColors.surfaceMuted)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(TraceColors.stroke, lineWidth: 1)
-        )
     }
 
     private func traceQuietCluePlaceholder(_ text: String) -> some View {
