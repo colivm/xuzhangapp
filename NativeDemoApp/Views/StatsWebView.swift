@@ -3223,6 +3223,7 @@ struct StatsWebView: View {
         _ = lifeInsightRefreshID
         return lifeInsightService.buildTraceInsight(
             items: items,
+            historyItems: homeViewModel.items,
             periodLabel: traceInsightPeriodLabel
         )
     }
@@ -3518,7 +3519,6 @@ struct StatsWebView: View {
             )
             traceClueCompositionCard(items: snapshot.items, clues: snapshot.clues)
             traceLifeMarkCard(marks: snapshot.marks, lockedPreview: snapshot.lockedMark)
-            traceClueRhythmCard(rhythmPoints: snapshot.rhythmPoints)
             traceDeepInsightCard(
                 insight: snapshot.insight,
                 items: snapshot.items,
@@ -3546,8 +3546,9 @@ struct StatsWebView: View {
         let lockedMark = hasMemberAccess ? nil : LifeMarkService.lockedPreview(for: items, allItems: homeViewModel.items)
         let unlockKey = traceInsightUnlockKey(from: items)
         let freeRemaining = lifeInsightService.freeRemaining(isMember: hasMemberAccess)
-        let isUnlocked = lifeInsightService.hasUnlockedTrace(unlockKey, isMember: hasMemberAccess)
-        let canUse = !items.isEmpty && (isUnlocked || freeRemaining > 0)
+        let storedUnlock = lifeInsightService.hasUnlockedTrace(unlockKey, isMember: hasMemberAccess)
+        let isUnlocked = !insight.isMeaningful || storedUnlock
+        let canUse = insight.isMeaningful && !items.isEmpty && (storedUnlock || freeRemaining > 0)
         let snapshot = TraceClueSnapshot(
             items: items,
             clues: clues,
@@ -3859,34 +3860,6 @@ struct StatsWebView: View {
         }
     }
 
-    private func traceClueRhythmCard(rhythmPoints: [TraceRhythmPoint]) -> some View {
-        VStack(alignment: .leading, spacing: 13) {
-            HStack {
-                Text(selectedPeriod == .week ? "一周节奏" : "这一月的节奏")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(TraceColors.primaryText)
-                Spacer()
-                Text(traceRhythmSummary(rhythmPoints: rhythmPoints))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(TraceColors.tertiaryText)
-            }
-
-            if rhythmPoints.isEmpty {
-                traceQuietCluePlaceholder("多记几天，节奏会自然出来。")
-            } else {
-                let maxCount = max(rhythmPoints.map(\.count).max() ?? 1, 1)
-                HStack(alignment: .bottom, spacing: 9) {
-                    ForEach(rhythmPoints) { point in
-                        traceRhythmColumn(point, maxCount: maxCount)
-                    }
-                }
-                .frame(height: 92)
-                .padding(.top, 2)
-            }
-        }
-        .traceGlassPanel(radius: 20, padding: 18)
-    }
-
     private func traceDeepInsightCard(
         insight: LifeInsightResult,
         items: [HomeItem],
@@ -3902,15 +3875,15 @@ struct StatsWebView: View {
             HStack(alignment: .center, spacing: 10) {
                 ZStack {
                     Circle()
-                        .fill(AppColors.accent.opacity(0.10))
-                        .frame(width: 28, height: 28)
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(AppColors.accent.opacity(0.80))
+                        .fill(traceInsightThemeColor(insight.theme).opacity(0.12))
+                        .frame(width: 32, height: 32)
+                    Image(systemName: traceInsightThemeIcon(insight.theme))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(traceInsightThemeColor(insight.theme).opacity(0.88))
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("线索解读")
+                    Text(traceInsightThemeTitle(insight.theme))
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(TraceColors.primaryText)
                     Text(isUnlocked ? insight.periodName : "本月还可展开 \(freeRemaining)/\(LifeInsightService.freeMonthlyLimit) 次")
@@ -3922,7 +3895,7 @@ struct StatsWebView: View {
             }
 
             Text(insight.leadQuestion)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 19, weight: .bold))
                 .foregroundStyle(TraceColors.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -3937,8 +3910,10 @@ struct StatsWebView: View {
                     .overlay(TraceColors.surfaceMuted)
                     .padding(.top, 2)
 
+                traceInsightRhythmOverview(insight: insight, rhythmPoints: rhythmPoints)
+
                 if !supportingLines.isEmpty {
-                    Text("从记录里看到")
+                    Text("为什么这样说")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(TraceColors.tertiaryText)
 
@@ -3950,19 +3925,20 @@ struct StatsWebView: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
-                Text("换个角度")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(TraceColors.tertiaryText)
-                traceInsightQuestionChips(insight.questionChips)
-                    .transition(.opacity)
+                if !insight.questionChips.isEmpty {
+                    Text("继续看看")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(TraceColors.tertiaryText)
+                    traceInsightQuestionChips(insight.questionChips)
+                        .transition(.opacity)
+                }
 
                 if let focusedQuestion = traceInsightFocusedQuestion {
                     traceFocusedInsightAnswer(
                         question: focusedQuestion,
                         insight: insight,
                         items: items,
-                        clues: clues,
-                        rhythmPoints: rhythmPoints
+                        clues: clues
                     )
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -4005,6 +3981,129 @@ struct StatsWebView: View {
         .traceGlassPanel(radius: 20, padding: 18)
     }
 
+    private func traceInsightThemeTitle(_ theme: LifeInsightTheme) -> String {
+        switch theme {
+        case .forming: return "线索还在形成"
+        case .steady: return "这段日子很平稳"
+        case .change: return "有一处变化"
+        case .effort: return "你付出的这些时间"
+        case .memory: return "被留下的现场"
+        case .relation: return "两条生活线"
+        }
+    }
+
+    private func traceInsightThemeIcon(_ theme: LifeInsightTheme) -> String {
+        switch theme {
+        case .forming: return "ellipsis"
+        case .steady: return "water.waves"
+        case .change: return "waveform.path.ecg"
+        case .effort: return "sunrise.fill"
+        case .memory: return "photo.fill"
+        case .relation: return "link"
+        }
+    }
+
+    private func traceInsightThemeColor(_ theme: LifeInsightTheme) -> Color {
+        switch theme {
+        case .forming: return AppColors.subtext
+        case .steady: return AppColors.accent.opacity(0.72)
+        case .change: return AppColors.accentDark
+        case .effort: return Color(hex: "c08a4b")
+        case .memory: return Color(hex: "9b7bb8")
+        case .relation: return Color(hex: "5d8fa3")
+        }
+    }
+
+    @ViewBuilder
+    private func traceInsightRhythmOverview(
+        insight: LifeInsightResult,
+        rhythmPoints: [TraceRhythmPoint]
+    ) -> some View {
+        if !rhythmPoints.isEmpty {
+            let maxCount = max(rhythmPoints.map(\.count).max() ?? 1, 1)
+            let highlightedIndex = traceInsightHighlightedRhythmIndex(insight: insight, pointCount: rhythmPoints.count)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(selectedPeriod == .week ? "这一周的节奏" : "这个月的节奏")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(TraceColors.primaryText)
+                    Spacer()
+                    Text(traceRhythmSummary(rhythmPoints: rhythmPoints))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(TraceColors.tertiaryText)
+                }
+
+                HStack(alignment: .bottom, spacing: 8) {
+                    ForEach(Array(rhythmPoints.enumerated()), id: \.offset) { index, point in
+                        traceInsightRhythmColumn(
+                            point,
+                            maxCount: maxCount,
+                            isHighlighted: highlightedIndex == index,
+                            tint: traceInsightThemeColor(insight.theme)
+                        )
+                    }
+                }
+                .frame(height: 112)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(TraceColors.surfaceMuted.opacity(0.72))
+            )
+        }
+    }
+
+    private func traceInsightRhythmColumn(
+        _ point: TraceRhythmPoint,
+        maxCount: Int,
+        isHighlighted: Bool,
+        tint: Color
+    ) -> some View {
+        let ratio = CGFloat(point.count) / CGFloat(maxCount)
+        let barHeight = max(8, 70 * ratio)
+        return VStack(spacing: 7) {
+            Spacer(minLength: 0)
+            Text(point.count > 0 ? "\(point.count)" : "")
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .foregroundStyle(isHighlighted ? tint : TraceColors.tertiaryText)
+                .frame(height: 11)
+
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(
+                    point.count > 0
+                        ? AnyShapeStyle(
+                            LinearGradient(
+                                colors: [
+                                    tint.opacity(isHighlighted ? 0.90 : 0.56),
+                                    AppColors.accent.opacity(isHighlighted ? 0.32 : 0.12)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        : AnyShapeStyle(Color.white.opacity(0.52))
+                )
+                .frame(width: isHighlighted ? 20 : 16, height: barHeight)
+
+            Text(point.label)
+                .font(.system(size: 10, weight: isHighlighted ? .semibold : .medium))
+                .foregroundStyle(isHighlighted ? tint : TraceColors.tertiaryText)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func traceInsightHighlightedRhythmIndex(insight: LifeInsightResult, pointCount: Int) -> Int? {
+        guard let date = insight.highlightedDate, pointCount > 0 else { return nil }
+        if selectedPeriod == .month {
+            let day = Calendar.current.component(.day, from: date)
+            return min(max((day - 1) / 7, 0), pointCount - 1)
+        }
+        let weekday = Calendar.current.component(.weekday, from: date)
+        return min(max((weekday + 5) % 7, 0), pointCount - 1)
+    }
+
     private func traceDeepInsightSupportingLines(_ insight: LifeInsightResult) -> [String] {
         var seen = Set<String>()
         seen.insert(insight.previewLine.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -4019,9 +4118,9 @@ struct StatsWebView: View {
 
     private func traceDeepInsightLine(_ text: String, index: Int) -> some View {
         HStack(alignment: .top, spacing: 9) {
-            Text("\(index + 1)")
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(index == 0 ? AppColors.accentDark : TraceColors.secondaryText)
+            Image(systemName: index == 0 ? "quote.opening" : "circle.fill")
+                .font(.system(size: index == 0 ? 10 : 5, weight: .semibold))
+                .foregroundStyle(index == 0 ? AppColors.accentDark : TraceColors.tertiaryText)
                 .frame(width: 20, height: 20)
                 .background(
                     Circle()
@@ -4052,14 +4151,15 @@ struct StatsWebView: View {
                         Text(chip)
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(traceInsightFocusedQuestion == chip ? AppColors.accentDark : TraceColors.secondaryText)
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 8)
+                            .lineLimit(1)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
                             .background(
-                                Capsule(style: .continuous)
+                                RoundedRectangle(cornerRadius: 13, style: .continuous)
                                     .fill(traceInsightFocusedQuestion == chip ? AppColors.accent.opacity(0.12) : TraceColors.surfaceMuted)
                             )
                             .overlay(
-                                Capsule(style: .continuous)
+                                RoundedRectangle(cornerRadius: 13, style: .continuous)
                                     .stroke(
                                         traceInsightFocusedQuestion == chip ? AppColors.accent.opacity(0.20) : Color.clear,
                                         lineWidth: 1
@@ -4076,8 +4176,7 @@ struct StatsWebView: View {
         question: String,
         insight: LifeInsightResult,
         items: [HomeItem],
-        clues: [TraceCategoryClue],
-        rhythmPoints: [TraceRhythmPoint]
+        clues: [TraceCategoryClue]
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(question)
@@ -4085,7 +4184,7 @@ struct StatsWebView: View {
                 .foregroundStyle(TraceColors.primaryText)
                 .lineLimit(2)
 
-            Text(traceInsightAnswer(for: question, insight: insight, items: items, clues: clues, rhythmPoints: rhythmPoints))
+            Text(traceInsightAnswer(for: question, insight: insight, items: items, clues: clues))
                 .font(.system(size: 13, weight: .medium))
                 .lineSpacing(3)
                 .foregroundStyle(TraceColors.secondaryText)
@@ -4115,7 +4214,7 @@ struct StatsWebView: View {
 
     private func traceDeepInsightButtonTitle(canUse: Bool, hasData: Bool) -> String {
         if !hasData { return "先留下几笔" }
-        if canUse { return "展开线索" }
+        if canUse { return "展开这条线索" }
         return "解锁完整解读"
     }
 
@@ -4189,9 +4288,48 @@ struct StatsWebView: View {
         for question: String,
         insight: LifeInsightResult,
         items: [HomeItem],
-        clues: [TraceCategoryClue],
-        rhythmPoints: [TraceRhythmPoint]
+        clues: [TraceCategoryClue]
     ) -> String {
+        if question.contains("早晨") {
+            let earlyItems = items.filter {
+                let hour = Calendar.current.component(.hour, from: $0.createdAt)
+                return (5..<9).contains(hour)
+            }
+            let days = Set(earlyItems.map { Calendar.current.startOfDay(for: $0.createdAt) }).count
+            guard days > 0 else { return insight.previewLine }
+            return "有 \(days) 天在 9 点前留下记录。这里想保留的不是早起次数，而是你在那些早晨已经开始处理出行、饭点或一天的准备。"
+        }
+
+        if question.contains("晚一些") || question.contains("晚归") {
+            let lateItems = items.filter {
+                let hour = Calendar.current.component(.hour, from: $0.createdAt)
+                return hour >= 21 || hour < 3
+            }
+            let days = Set(lateItems.map { Calendar.current.startOfDay(for: $0.createdAt) }).count
+            guard days > 0 else { return insight.previewLine }
+            return "有 \(days) 天在 21 点后仍有记录。它们可能是晚归、晚些吃饭或临时安排，不需要被评价，只适合被记住。"
+        }
+
+        if question.contains("找回") || question.contains("回到") || question.contains("现场") {
+            if let highlightedDate = insight.highlightedDate {
+                let dayItems = items.filter { Calendar.current.isDate($0.createdAt, inSameDayAs: highlightedDate) }
+                var seen = Set<String>()
+                let labels = dayItems
+                    .sorted { $0.createdAt < $1.createdAt }
+                    .compactMap { item -> String? in
+                        let title = item.displayTitle
+                        return seen.insert(title).inserted ? title : nil
+                    }
+                    .prefix(3)
+                    .joined(separator: "、")
+                let dayLabel = traceCalendarDayNarrativeLabel(highlightedDate)
+                if !labels.isEmpty {
+                    return "\(dayLabel)留下了\(labels)。这些具体名字、照片和时间，比一个分类更接近当天真正发生的事。"
+                }
+            }
+            return insight.previewLine
+        }
+
         if question.contains("哪天") || question.contains("不太像") || question.contains("更密") || question.contains("发生了什么") {
             if let peakDay = tracePeakCalendarDay(from: items) {
                 return "\(traceCalendarDayNarrativeLabel(peakDay.date))留下 \(peakDay.count) 笔，是这一段最集中的一天。先回头看那天去了哪里、见了谁，很多原因会比金额本身更清楚。"
@@ -4224,74 +4362,7 @@ struct StatsWebView: View {
             return insight.periodName
         }
 
-        if question.contains("为什么") {
-            if let top = clues.first {
-                return traceWhyCategoryBecameVisible(top, items: items, clues: clues, rhythmPoints: rhythmPoints)
-            }
-            return insight.previewLine
-        }
-
         return insight.previewLine
-    }
-
-    private func traceWhyCategoryBecameVisible(
-        _ clue: TraceCategoryClue,
-        items: [HomeItem],
-        clues: [TraceCategoryClue],
-        rhythmPoints: [TraceRhythmPoint]
-    ) -> String {
-        let categoryItems = items.filter { $0.category == clue.category }
-        let peak = rhythmPoints.max(by: { $0.count < $1.count })
-        let second = clues.dropFirst().first
-        let categoryName = traceCategoryLifeName(for: clue.category, items: categoryItems)
-        let base: String
-        switch clue.category {
-        case .dining:
-            base = "「\(categoryName)」变明显，通常不是某一顿特别贵，而是饭点、外卖、咖啡这些小节点把这段日子撑了起来。"
-        case .transport:
-            base = "「\(categoryName)」变明显，往往说明你在移动：通勤、办事、见人、往返变多了。看的不是车费，是这段时间你去了哪些地方。"
-        case .health:
-            base = "「\(categoryName)」变明显，主要来自健身、看诊、买药或恢复相关记录。"
-        case .shopping, .daily:
-            base = "「\(categoryName)」变明显，主要来自买菜、家用、网购或兴趣装备。"
-        case .entertainment:
-            base = "「\(categoryName)」变明显，娱乐相关记录在这段时间更多。"
-        case .home:
-            base = "「\(categoryName)」变明显，主要来自修补、布置或家用安排。"
-        case .social:
-            base = "「\(categoryName)」变明显，主要来自见面、送礼或人情往来。"
-        case .lodging:
-            base = "「\(categoryName)」变明显，说明这段时间有停留和位置变化。可以回头看看是不是旅行、出差，或临时过夜。"
-        case .other:
-            base = "「其他」变明显，说明有些记录还没归进固定分类。可以回头看备注。"
-        }
-
-        var tails: [String] = []
-        if let peak, peak.count > 0 {
-            tails.append("\(traceRhythmNarrativeLabel(peak))最集中，先回头看\(traceRhythmPeriodReference)那天怎么安排的。")
-        }
-        if let second {
-            tails.append("它还和「\(second.category.rawValue)」一起靠前，可以放在同一段生活里看。")
-        }
-        return ([base] + tails).joined(separator: " ")
-    }
-
-    private func traceCategoryLifeName(for category: HomeItem.Category, items: [HomeItem]) -> String {
-        let text = items.map { "\($0.title) \($0.displayEmotionTag)" }.joined(separator: " ")
-        switch category {
-        case .transport:
-            return traceContainsAny(text, ["通勤", "上班", "下班", "地铁", "公交"]) ? "通勤交通" : "交通"
-        case .health:
-            return traceContainsAny(text, ["健身", "运动", "跑步", "瑜伽", "私教", "游泳", "理疗", "恢复"]) ? "健身恢复" : "看病买药"
-        case .dining:
-            return traceContainsAny(text, ["咖啡", "奶茶"]) ? "饭点饮品" : "饭点外卖"
-        case .shopping:
-            return traceContainsAny(text, ["渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "乐器", "茶具", "咖啡器具"]) ? "兴趣装备" : "网购添置"
-        case .daily:
-            return traceContainsAny(text, ["买菜", "生鲜", "盒马", "叮咚", "小象", "京东到家", "朴朴"]) ? "超市买菜" : "家用补货"
-        default:
-            return category.rawValue
-        }
     }
 
     private func traceContainsAny(_ text: String, _ keywords: [String]) -> Bool {
@@ -4379,41 +4450,6 @@ struct StatsWebView: View {
                 .foregroundStyle(TraceColors.tertiaryText)
                 .frame(width: 40, alignment: .trailing)
         }
-    }
-
-    private func traceRhythmColumn(_ point: TraceRhythmPoint, maxCount: Int) -> some View {
-        let ratio = CGFloat(point.count) / CGFloat(maxCount)
-        let barHeight = max(8, 54 * ratio)
-        return VStack(spacing: 7) {
-            Spacer(minLength: 0)
-            ZStack(alignment: .top) {
-                RoundedRectangle(cornerRadius: 999, style: .continuous)
-                    .fill(
-                        point.count > 0
-                            ? AnyShapeStyle(
-                                LinearGradient(
-                                    colors: [AppColors.accent.opacity(point.isToday ? 0.82 : 0.64), traceClueMist.opacity(0.54)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            : AnyShapeStyle(TraceColors.surfaceMuted)
-                    )
-                    .frame(width: point.isToday ? 18 : 16, height: barHeight)
-
-                if point.isToday && point.count > 0 {
-                    Circle()
-                        .fill(TraceColors.primaryText)
-                        .frame(width: 2.5, height: 2.5)
-                        .offset(y: 3)
-                }
-            }
-            Text(point.label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(point.isToday ? AppColors.accentDark : TraceColors.tertiaryText)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity)
     }
 
     private func traceQuietCluePlaceholder(_ text: String) -> some View {

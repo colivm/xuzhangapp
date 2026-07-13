@@ -224,8 +224,8 @@ LEISURE_EXCLUSION_IDS = [
 DISPLAY_EMOTION_ONLY_SCOPES = [
     ("life_mark", "semanticText(for item: HomeItem)", ["item.emotionTag"]),
     ("free_scene_pack", "semanticText(for item: HomeItem)", ["item.emotionTag"]),
-    ("life_insight", "focusName(for category: HomeItem.Category, items: [HomeItem])", ["item.emotionTag"]),
-    ("stats_web_view", "traceCategoryLifeName(for category: HomeItem.Category, items: [HomeItem])", ["item.emotionTag"]),
+    ("life_insight", "photoMemorySignal(from rows: [TraceInsightRow], periodLabel: String)", ["item.emotionTag"]),
+    ("stats_web_view", "traceInsightAnswer(", ["item.emotionTag"]),
     ("dashboard", "isCommuteRecord(_ item: HomeItem)", ["item.emotionTag"]),
     ("insight_web_view", "aiCommandMemoryItemMatches(_ item: HomeItem, command: String)", ["item.emotionTag"]),
     ("insight_web_view", "aiCommandSameSceneMemoryItem(_ item: HomeItem, anchor: HomeItem, command: String)", ["item.emotionTag", "anchor.emotionTag"]),

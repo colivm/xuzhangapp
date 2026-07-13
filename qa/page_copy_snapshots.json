@@ -99,16 +99,16 @@
     "id": "trace_category_health_plain",
     "surface": "trace_clue",
     "source_paths": ["NativeDemoApp/Views/StatsWebView.swift", "NativeDemoApp/Services/LifeInsightService.swift"],
-    "evidence_required": ["health category trend"],
-    "expected_copy": ["健康相关记录更明显", "主要来自训练、恢复、看诊或身体相关记录。"],
+    "evidence_required": ["fitness or medical scene", "repeated days or concrete context"],
+    "expected_copy": ["身体相关的安排，正在成为这段时间的一部分", "比起一次做了多少，更重要的是它几次回到了日程中。"],
     "forbidden_copy": ["把身体放回", "值得被看见", "不只是消费"]
   },
   {
     "id": "trace_category_daily_plain",
     "surface": "trace_clue",
     "source_paths": ["NativeDemoApp/Views/StatsWebView.swift", "NativeDemoApp/Services/LifeInsightService.swift"],
-    "evidence_required": ["shopping or daily category trend"],
-    "expected_copy": ["主要来自买菜、家用、网购或兴趣装备。"],
+    "evidence_required": ["ordinary daily records", "no baseline change or concrete context"],
+    "expected_copy": ["通勤、饭点和普通日常没有出现足够明显的变化。", "不会只凭出现次数下结论。"],
     "forbidden_copy": ["给生活补库存", "重新整理", "生活意义"]
   }
 ]
