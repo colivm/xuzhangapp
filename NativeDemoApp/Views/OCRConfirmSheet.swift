@@ -430,6 +430,7 @@ struct OCRDraftPanel: View {
     let onToggleResolved: (UUID, Bool) -> Void
     let onCategoryChange: (UUID, HomeItem.Category) -> Void
     let onAmountChange: (UUID, Double) -> Void
+    let onTitleCommit: (UUID, String) -> Void
     let onUpdateItem: (HomeItem) -> Void
     let onDelete: (UUID) -> Void
     let onClearResolved: () -> Void
@@ -675,6 +676,7 @@ struct OCRDraftPanel: View {
                         onToggleResolved: onToggleResolved,
                         onCategoryChange: onCategoryChange,
                         onAmountChange: onAmountChange,
+                        onTitleCommit: onTitleCommit,
                         onUpdateItem: onUpdateItem,
                         onDelete: onDelete
                     )
@@ -881,6 +883,7 @@ struct OCRDraftPanel: View {
                         onToggleResolved: onToggleResolved,
                         onCategoryChange: onCategoryChange,
                         onAmountChange: onAmountChange,
+                        onTitleCommit: onTitleCommit,
                         onUpdateItem: onUpdateItem,
                         onDelete: onDelete
                     )
@@ -960,15 +963,18 @@ private struct OCRDraftRow: View {
     let onToggleResolved: (UUID, Bool) -> Void
     let onCategoryChange: (UUID, HomeItem.Category) -> Void
     let onAmountChange: (UUID, Double) -> Void
+    let onTitleCommit: (UUID, String) -> Void
     let onUpdateItem: (HomeItem) -> Void
     let onDelete: (UUID) -> Void
 
     @State private var amountText: String
     @State private var titleText: String
+    @State private var lastCommittedTitle: String
     @State private var selectedDate: Date
     @State private var isEditingAmount = false
     @State private var datePanelExpanded = false
     @State private var showDeleteConfirmation = false
+    @FocusState private var isTitleFocused: Bool
 
     init(
         item: HomeItem,
@@ -976,6 +982,7 @@ private struct OCRDraftRow: View {
         onToggleResolved: @escaping (UUID, Bool) -> Void,
         onCategoryChange: @escaping (UUID, HomeItem.Category) -> Void,
         onAmountChange: @escaping (UUID, Double) -> Void,
+        onTitleCommit: @escaping (UUID, String) -> Void,
         onUpdateItem: @escaping (HomeItem) -> Void,
         onDelete: @escaping (UUID) -> Void
     ) {
@@ -984,10 +991,12 @@ private struct OCRDraftRow: View {
         self.onToggleResolved = onToggleResolved
         self.onCategoryChange = onCategoryChange
         self.onAmountChange = onAmountChange
+        self.onTitleCommit = onTitleCommit
         self.onUpdateItem = onUpdateItem
         self.onDelete = onDelete
         _amountText = State(initialValue: String(format: "%.2f", item.amount))
         _titleText = State(initialValue: item.title)
+        _lastCommittedTitle = State(initialValue: item.title)
         _selectedDate = State(initialValue: item.createdAt)
     }
 
@@ -1026,19 +1035,28 @@ private struct OCRDraftRow: View {
         }
         .onChange(of: item.id) { _, _ in
             titleText = item.title
+            lastCommittedTitle = item.title
             selectedDate = item.createdAt
             amountText = amountInputText(item.amount)
             isEditingAmount = false
             datePanelExpanded = false
         }
         .onChange(of: item.title) { _, newValue in
+            guard !isTitleFocused else { return }
             guard titleText != newValue else { return }
             titleText = newValue
+            lastCommittedTitle = newValue
         }
         .onChange(of: item.createdAt) { _, newValue in
             guard selectedDate != newValue else { return }
             selectedDate = newValue
         }
+        .onChange(of: isTitleFocused) { _, isFocused in
+            if !isFocused {
+                commitTitle()
+            }
+        }
+        .onDisappear(perform: commitTitle)
         .confirmationDialog(
             "删除这条账单？",
             isPresented: $showDeleteConfirmation,
@@ -1158,12 +1176,13 @@ private struct OCRDraftRow: View {
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(AppColors.text)
                     .textFieldStyle(.plain)
+                    .focused($isTitleFocused)
                     .padding(.horizontal, 11)
                     .padding(.vertical, 9)
                     .background(inputBackground)
-                    .onSubmit(commitTitle)
-                    .onChange(of: titleText) { _, _ in
+                    .onSubmit {
                         commitTitle()
+                        isTitleFocused = false
                     }
             }
 
@@ -1399,11 +1418,10 @@ private struct OCRDraftRow: View {
     private func commitTitle() {
         let cleanTitle = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty,
-              cleanTitle != item.title else { return }
-        var updated = item
-        updated.title = cleanTitle
-        updated.userEditedTitle = true
-        onUpdateItem(updated)
+              cleanTitle != lastCommittedTitle else { return }
+        titleText = cleanTitle
+        lastCommittedTitle = cleanTitle
+        onTitleCommit(item.id, cleanTitle)
     }
 
     private func commitDate() {

@@ -653,6 +653,18 @@ final class HomeViewModel: ObservableObject {
         Task { await syncUpsertToCloud(items[idx]) }
     }
 
+    func updateOCRDraftTitle(id: UUID, title: String) {
+        guard let idx = items.firstIndex(where: { $0.id == id }),
+              items[idx].draftMeta != nil else { return }
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty,
+              cleanTitle != items[idx].title else { return }
+        var updated = items[idx]
+        updated.title = cleanTitle
+        updated.userEditedTitle = true
+        _ = updateItem(updated)
+    }
+
     func deleteOCRDraftItem(id: UUID) {
         guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
         items.remove(at: idx)
