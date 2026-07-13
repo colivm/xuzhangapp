@@ -339,10 +339,10 @@ struct StatsWebView: View {
                 .zIndex(20)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, traceViewMode == .life ? 6 : 12)
         .padding(.top, 6)
         .padding(.bottom, 120)
-        .frame(maxWidth: 430)
+        .frame(maxWidth: traceViewMode == .life ? 560 : 430)
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
@@ -542,41 +542,28 @@ struct StatsWebView: View {
         let _ = quotaRefreshID
         let showsMonth = traceLifeCardRange == .month
 
-        return VStack(spacing: 0) {
-            traceLifeFlipCue(isMonth: showsMonth)
-                .padding(.bottom, -6)
-                .zIndex(2)
-
-            ZStack(alignment: .top) {
-                traceLifeSliceCardFace(snapshot: weekSnapshot, layout: layout)
-                    .opacity(showsMonth ? 0 : 1)
-                    .rotation3DEffect(
-                        .degrees(reduceMotion ? 0 : (showsMonth ? -180 : 0)),
-                        axis: (x: 1, y: 0, z: 0),
-                        perspective: 0.72
-                    )
-                    .zIndex(showsMonth ? 0 : 1)
-                    .allowsHitTesting(!showsMonth)
-
+        return Group {
+            if showsMonth {
                 traceLifeMonthCardFace(snapshot: monthSnapshot, layout: layout)
-                    .opacity(showsMonth ? 1 : 0)
-                    .rotation3DEffect(
-                        .degrees(reduceMotion ? 0 : (showsMonth ? 0 : 180)),
-                        axis: (x: 1, y: 0, z: 0),
-                        perspective: 0.72
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .move(edge: .trailing).combined(with: .opacity)
                     )
-                    .zIndex(showsMonth ? 1 : 0)
-                    .allowsHitTesting(showsMonth)
+            } else {
+                traceLifeSliceCardFace(snapshot: weekSnapshot, layout: layout)
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .move(edge: .leading).combined(with: .opacity)
+                    )
             }
-            .animation(
-                reduceMotion
-                    ? .easeInOut(duration: 0.16)
-                    : .interactiveSpring(response: 0.46, dampingFraction: 0.86, blendDuration: 0.08),
-                value: traceLifeCardRange
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .simultaneousGesture(traceLifeCardFlipGesture)
-            .accessibilityHint(showsMonth ? "在卡片区域下滑，回到本周" : "在卡片区域上滑，查看本月")
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .simultaneousGesture(traceLifeCardPagingGesture)
+        .accessibilityHint(showsMonth ? "向右轻扫，回到本周" : "向左轻扫，查看本月")
+        .accessibilityAction(named: Text(showsMonth ? "回到本周" : "查看本月")) {
+            setTraceLifeCardRange(showsMonth ? .week : .month)
         }
     }
 
@@ -607,7 +594,7 @@ struct StatsWebView: View {
 
             traceLifeSliceFooter(snapshot: snapshot)
         }
-        .padding(.horizontal, 22)
+        .padding(.horizontal, 16)
         .padding(.top, layout.weekTopPadding)
         .padding(.bottom, layout.bottomPadding)
         .background(traceLifeSliceCardBackground)
@@ -644,43 +631,13 @@ struct StatsWebView: View {
             .allowsHitTesting(false)
     }
 
-    private func traceLifeFlipCue(isMonth: Bool) -> some View {
-        Button {
-            toggleTraceLifeCardRange()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: isMonth ? "chevron.compact.down" : "chevron.compact.up")
-                    .font(.system(size: 12, weight: .bold))
-                    .offset(y: isMonth ? 1 : -1)
-                Text(isMonth ? "轻扫这张卡片下翻，回到本周" : "轻扫这张卡片上翻，查看本月")
-                    .font(.system(size: 11, weight: .medium))
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 9, weight: .semibold))
-            }
-            .foregroundStyle(AppColors.subtext.opacity(0.66))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.72))
-                    .shadow(color: AppColors.subtext.opacity(0.05), radius: 8, x: 0, y: 3)
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(Color.white.opacity(0.82), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(isMonth ? "切换到本周记录回放" : "切换到本月记录回放")
-    }
-
-    private var traceLifeCardFlipGesture: some Gesture {
+    private var traceLifeCardPagingGesture: some Gesture {
         DragGesture(minimumDistance: 18)
             .onEnded { value in
-                guard abs(value.translation.height) > abs(value.translation.width),
-                      abs(value.translation.height) > 42
+                guard abs(value.translation.width) > abs(value.translation.height),
+                      abs(value.translation.width) > 52
                 else { return }
-                if value.translation.height < 0 {
+                if value.translation.width < 0 {
                     setTraceLifeCardRange(.month)
                 } else {
                     setTraceLifeCardRange(.week)
@@ -688,16 +645,13 @@ struct StatsWebView: View {
             }
     }
 
-    private func toggleTraceLifeCardRange() {
-        setTraceLifeCardRange(traceLifeCardRange == .week ? .month : .week)
-    }
-
     private func setTraceLifeCardRange(_ range: SummaryPlaybackRange) {
         guard traceLifeCardRange != range else { return }
+        UISelectionFeedbackGenerator().selectionChanged()
         withAnimation(
             reduceMotion
                 ? .easeInOut(duration: 0.16)
-                : .interactiveSpring(response: 0.46, dampingFraction: 0.86, blendDuration: 0.08)
+                : .interactiveSpring(response: 0.38, dampingFraction: 0.90, blendDuration: 0.05)
         ) {
             traceLifeCardRange = range
         }
@@ -730,7 +684,7 @@ struct StatsWebView: View {
 
             traceLifeSliceFooter(snapshot: snapshot)
         }
-        .padding(.horizontal, 22)
+        .padding(.horizontal, 16)
         .padding(.top, layout.monthTopPadding)
         .padding(.bottom, layout.bottomPadding)
         .background(traceLifeSliceCardBackground)
@@ -1833,12 +1787,138 @@ struct StatsWebView: View {
         .frame(maxWidth: .infinity)
     }
 
+    @ViewBuilder
     private func traceLifeSlicePhotoStory(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
-        VStack(spacing: 12) {
-            traceLifeSlicePrimaryPhoto(snapshot: snapshot, height: layout.primaryPhotoHeight)
-            traceLifeSliceSecondaryPhotos(snapshot: snapshot, height: layout.secondaryPhotoHeight)
+        let photoCount = snapshot.memoryAnchors.count
+        switch photoCount {
+        case 0:
+            traceLifeSliceRecordCanvas(snapshot: snapshot)
+                .padding(.top, 2)
+        case 1:
+            traceLifeSlicePrimaryPhoto(
+                snapshot: snapshot,
+                height: layout.primaryPhotoHeight + 30
+            )
+            .padding(.top, 2)
+        case 2:
+            traceLifeSliceTwoPhotoStory(
+                snapshot: snapshot,
+                height: layout.primaryPhotoHeight * 0.72
+            )
+            .padding(.top, 2)
+        default:
+            VStack(spacing: 10) {
+                traceLifeSlicePrimaryPhoto(snapshot: snapshot, height: layout.primaryPhotoHeight)
+                traceLifeSliceSecondaryPhotos(snapshot: snapshot, height: layout.secondaryPhotoHeight)
+            }
+            .padding(.top, 2)
         }
-        .padding(.top, 2)
+    }
+
+    private func traceLifeSliceRecordCanvas(snapshot: TraceChapterSnapshot) -> some View {
+        let items = TraceRepresentative.items(from: snapshot.items, maxItems: 3, maxPerCategory: 1)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(AppColors.accent.opacity(0.12))
+                        .frame(width: 34, height: 34)
+                    Image(systemName: "doc.text.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppColors.accentDark.opacity(0.76))
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(items.isEmpty ? "这一周还在等记录" : "这一周的生活片段")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                    Text(items.isEmpty ? "先记下一笔，这里会逐渐有内容。" : "没有照片也没关系，记录本身已经留下了现场。")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(AppColors.subtext.opacity(0.78))
+                }
+                Spacer(minLength: 0)
+            }
+
+            if items.isEmpty {
+                Text("再记下几笔，这里会自动整理出适合回看的片段。")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .frame(maxWidth: .infinity, minHeight: 88, alignment: .center)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(items) { item in
+                        traceLifeSliceRecordCanvasRow(item)
+                    }
+                }
+            }
+        }
+        .padding(15)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.94),
+                            AppColors.paperWarm.opacity(0.48),
+                            AppColors.accent.opacity(0.09)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.80), lineWidth: 1)
+        )
+    }
+
+    private func traceLifeSliceRecordCanvasRow(_ item: HomeItem) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(AppColors.accent.opacity(0.09))
+                    .frame(width: 34, height: 34)
+                Image(systemName: MemoryAttachmentVisuals.categorySystemImage(item.category))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.accentDark.opacity(0.72))
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.displayTitle)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                Text("\(item.createdAt.zhBillDateTime) · \(item.category.rawValue)")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.72))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 6)
+
+            Text(item.amount.formatted(.cny))
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text.opacity(0.84))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .frame(minHeight: 48)
+        .background(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(Color.white.opacity(0.70))
+        )
+    }
+
+    private func traceLifeSliceTwoPhotoStory(snapshot: TraceChapterSnapshot, height: CGFloat) -> some View {
+        let anchors = Array(snapshot.memoryAnchors.prefix(2))
+        return HStack(spacing: 10) {
+            ForEach(Array(anchors.enumerated()), id: \.offset) { index, anchor in
+                let item = traceLifeItem(for: anchor, in: snapshot.items, fallback: nil)
+                traceLifeSliceSmallPhoto(anchor: anchor, item: item, index: index, height: height)
+            }
+        }
     }
 
     private func traceLifeSlicePhotoMosaic(_ anchors: [SummaryMemoryAnchor]) -> some View {
@@ -2237,26 +2317,29 @@ struct StatsWebView: View {
         }
         let countText = traceLifeSliceCountText(snapshot.items.count)
         if snapshot.memoryAnchors.isEmpty {
-            return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，已按类别整理成几段内容。"
+            return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，照片不多，也能从日期和场景里看见生活。"
         }
         let photoCount = snapshot.memoryAnchors.count
         if photoCount == 1 {
-            return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，1张照片对应其中一笔。"
+            return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，这一个画面会和其他片段一起被记住。"
         }
-        return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，\(photoCount)张照片放在回看里。"
+        return "\(traceLifeSliceRangeLead(snapshot.range))有\(countText)记录，挑出\(photoCount)个不同场景放进回看。"
     }
 
     private func traceLifeSliceTitle(snapshot: TraceChapterSnapshot) -> String {
         if snapshot.range == .month {
             return "这个月，生活有了轮廓"
         }
+        if snapshot.items.isEmpty {
+            return "这一周，还在等第一笔"
+        }
         if snapshot.memoryAnchors.isEmpty {
-            return "这一周，\(traceLifeSliceCountText(snapshot.items.count))记录"
+            return "这一周，日常有了几条线"
         }
         if snapshot.memoryAnchors.count == 1 {
-            return "这一周，1张照片和\(traceLifeSliceCountText(snapshot.items.count))记录"
+            return "这一周，有一幕被留下"
         }
-        return "这一周，\(snapshot.memoryAnchors.count)张照片和\(traceLifeSliceCountText(snapshot.items.count))记录"
+        return "这一周，留下了\(snapshot.memoryAnchors.count)个画面"
     }
 
     private func traceLifeSliceSummaryLine(snapshot: TraceChapterSnapshot) -> String {

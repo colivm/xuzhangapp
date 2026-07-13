@@ -151,6 +151,9 @@ Assert-NoPattern 'NativeDemoApp' 'nanoseconds: 80_000_000\)' 'no fixed 80ms oper
 Assert-Pattern 'NativeDemoApp/Views/Components/ComputationLoadingView.swift' 'accessibilityStatusValue|updatesFrequently' 'loading accessibility progress'
 Assert-Pattern 'NativeDemoApp/Views/InsightWebView.swift' 'insightSnapshotNeedsRefresh|insightUpdatePillTask|prepareInsightIfNeeded' 'insight refresh state guard'
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'lifeTraceNeedsRefresh|clueTraceNeedsRefresh|traceUpdatePillTask|prepareTraceIfNeeded' 'trace refresh state guard'
+Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceLifeCardPagingGesture|translation\.width|move\(edge: \.trailing\)' 'trace horizontal life paging'
+Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceLifeSliceRecordCanvas|case 0:|case 1:|case 2:' 'weekly photo count adaptive layout'
+Assert-Pattern 'NativeDemoApp/Services/PlaybackService.swift' 'routineVisualPenalty|isHighValueExperience' 'weekly memory anchor visual ranking'
 Assert-JsonFixtureIds 'qa/life_story_regression_fixtures.json' @(
     'rain_commute',
     'first_fitness',

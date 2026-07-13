@@ -266,9 +266,38 @@ struct MemoryAnchorSelectionPolicy {
         if item.amount >= 300, role != .receipt { value += 4 }
         if item.amount >= 1000, role != .receipt { value += 3 }
         if item.merchantBrandId?.isEmpty == false { value += 3 }
-        if item.userEditedTitle == true { value += 2 }
+        if item.userEditedTitle == true { value += 10 }
+        if item.memoryContext?.weatherKind != nil { value += 5 }
+        if item.memoryContext?.semanticPlace != nil { value += 7 }
+        if isHighValueExperience(item: item, sceneHint: sceneHint) { value += 8 }
+        value -= routineVisualPenalty(item: item, role: role, sceneHint: sceneHint)
+        if RecordSemanticLexicon.isSystemGeneratedTitle(item.title) { value -= 8 }
         if Calendar.current.isDateInToday(item.createdAt) { value += 2 }
         return value
+    }
+
+    private static func isHighValueExperience(item: HomeItem, sceneHint: PhotoMemorySceneHint) -> Bool {
+        guard sceneHint == .experience else { return false }
+        let text = "\(item.displayTitle) \(item.displayEmotionTag)".lowercased()
+        return ["演出", "展览", "音乐节", "电影", "游乐", "体验", "旅行", "聚会", "生日", "live"]
+            .contains { text.contains($0) }
+    }
+
+    private static func routineVisualPenalty(
+        item: HomeItem,
+        role: PhotoMemoryAssetRole,
+        sceneHint: PhotoMemorySceneHint
+    ) -> Int {
+        guard role == .moment,
+              sceneHint == .experience,
+              item.category == .dining else {
+            return 0
+        }
+        let text = "\(item.displayTitle) \(item.displayEmotionTag)".lowercased()
+        let isRoutine = ["咖啡", "美式", "拿铁", "奶茶", "饮品", "早餐", "午餐", "晚餐", "外卖", "便利店"]
+            .contains { text.contains($0) }
+        guard isRoutine else { return 0 }
+        return item.userEditedTitle == true ? 14 : 20
     }
 
     private static func imageQualityScore(_ data: Data) -> Int {
