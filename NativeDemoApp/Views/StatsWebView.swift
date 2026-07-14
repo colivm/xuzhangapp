@@ -112,6 +112,7 @@ struct StatsWebView: View {
     @State private var traceViewMode: TraceViewMode = .life
     @State private var traceLifeCardRange: SummaryPlaybackRange = .week
     @State private var traceLifeCardPagingBlocksTap = false
+    @State private var showsTraceLifeSwipeHint = !UserDefaults.standard.bool(forKey: "trace_life_swipe_hint_seen_v1")
     @State private var traceDeepInsightExpanded = false
     @State private var traceInsightFocusedQuestion: String?
     @State private var lifeInsightRefreshID = UUID()
@@ -689,6 +690,11 @@ struct StatsWebView: View {
         return VStack(alignment: .center, spacing: layout.faceSpacing) {
             traceLifeSliceHeader(snapshot: snapshot)
 
+            if showsTraceLifeSwipeHint {
+                traceLifeSwipeHint
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
+
             traceLifeSlicePhotoStory(snapshot: snapshot, layout: layout)
 
             traceLifeSliceScenePills(snapshot: snapshot)
@@ -777,7 +783,30 @@ struct StatsWebView: View {
                 : .interactiveSpring(response: 0.38, dampingFraction: 0.90, blendDuration: 0.05)
         ) {
             traceLifeCardRange = range
+            showsTraceLifeSwipeHint = false
         }
+        UserDefaults.standard.set(true, forKey: "trace_life_swipe_hint_seen_v1")
+    }
+
+    private var traceLifeSwipeHint: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "chevron.left")
+            Text("左右滑动查看周 / 月")
+            Image(systemName: "chevron.right")
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(AppColors.accentDark.opacity(0.72))
+        .padding(.horizontal, 11)
+        .frame(height: 26)
+        .background(
+            Capsule(style: .continuous)
+                .fill(TraceColors.surfaceMuted.opacity(0.76))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(Color.white.opacity(0.66), lineWidth: 1)
+        )
+        .accessibilityLabel("左右滑动可以切换本周和本月")
     }
 
     private func traceLifeMonthCardFace(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {

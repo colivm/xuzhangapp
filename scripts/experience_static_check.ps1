@@ -160,6 +160,7 @@ Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'preparingSummaryRange|s
 Assert-Pattern 'NativeDemoApp/Services/LifeMarkService.swift' 'aggregateCacheLock|cachedAggregates' 'life mark cache thread safety'
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceLifeCardPagingGesture|translation\.width|move\(edge: \.trailing\)' 'trace horizontal life paging'
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceLifeCardPagingBlocksTap|guard !traceLifeCardPagingBlocksTap' 'trace paging prevents detail button misfire'
+Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'showsTraceLifeSwipeHint|traceLifeSwipeHint|trace_life_swipe_hint_seen_v1' 'trace paging one-time discovery hint'
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceLifeSliceRecordCanvas|case 0:|case 1:|case 2:' 'weekly photo count adaptive layout'
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceLifeMonthDiaryRecordCover|traceLifeMonthDiaryCoverTitle|anchorItemIDs' 'monthly diary uses real record covers'
 Assert-Pattern 'NativeDemoApp/Services/PlaybackService.swift' 'routineVisualPenalty|isHighValueExperience' 'weekly memory anchor visual ranking'
