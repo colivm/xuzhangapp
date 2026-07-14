@@ -156,6 +156,7 @@ Assert-Pattern 'NativeDemoApp/Views/Components/ComputationLoadingView.swift' 'qu
 Assert-Pattern 'NativeDemoApp/Views/InsightWebView.swift' 'insightSnapshotNeedsRefresh|insightUpdatePillTask|prepareInsightIfNeeded' 'insight refresh state guard'
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'lifeTraceNeedsRefresh|clueTraceNeedsRefresh|traceUpdatePillTask|prepareTraceIfNeeded' 'trace refresh state guard'
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'withTaskGroup|group\.addTask\(priority: \.userInitiated\)|TraceSnapshotComputation' 'trace computation leaves main actor'
+Assert-Pattern 'NativeDemoApp/Views/StatsTraceSnapshotStore.swift' 'CategoryPreviewRow|groupedRows: \[HomeItem\.Category: \[HomeItem\]\]|categories\.sort' 'trace snapshot compiler-friendly category aggregation'
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'preparingSummaryRange|summaryPlaybackTask|ProgressView' 'playback generation interaction feedback'
 Assert-Pattern 'NativeDemoApp/Services/LifeMarkService.swift' 'aggregateCacheLock|cachedAggregates' 'life mark cache thread safety'
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceLifeCardPagingGesture|translation\.width|move\(edge: \.trailing\)' 'trace horizontal life paging'

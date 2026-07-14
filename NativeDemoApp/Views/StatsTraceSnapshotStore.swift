@@ -23,6 +23,12 @@ struct TraceClueComputationInput {
 }
 
 enum TraceSnapshotComputation {
+    private struct CategoryPreviewRow {
+        let name: String
+        let count: Int
+        let amount: Double
+    }
+
     static func buildChapter(_ input: TraceChapterComputationInput) -> TraceChapterSnapshot {
         let rawMarks = LifeMarkService.aggregates(
             for: input.items,
@@ -204,13 +210,27 @@ enum TraceSnapshotComputation {
     ) -> SummaryLaunchPreview {
         let rows = items.filter { $0.amount > 0 && $0.draftMeta == nil }
         let total = rows.reduce(0) { $0 + $1.amount }
-        let categories: [(category: String, count: Int, amount: Double)] = Dictionary(grouping: rows, by: \.category)
-            .map { category, grouped in
-                (category.rawValue, grouped.count, grouped.reduce(0) { $0 + $1.amount })
+        let groupedRows: [HomeItem.Category: [HomeItem]] = Dictionary(grouping: rows, by: { $0.category })
+        var categories: [CategoryPreviewRow] = []
+        categories.reserveCapacity(groupedRows.count)
+        for (category, groupedItems) in groupedRows {
+            let categoryTotal = groupedItems.reduce(0.0) { partial, item in
+                partial + item.amount
             }
-            .sorted { lhs, rhs in
-                lhs.count == rhs.count ? lhs.amount > rhs.amount : lhs.count > rhs.count
+            categories.append(
+                CategoryPreviewRow(
+                    name: category.rawValue,
+                    count: groupedItems.count,
+                    amount: categoryTotal
+                )
+            )
+        }
+        categories.sort { lhs, rhs in
+            if lhs.count == rhs.count {
+                return lhs.amount > rhs.amount
             }
+            return lhs.count > rhs.count
+        }
         let chapterCount: Int
         if rows.isEmpty {
             chapterCount = 0
@@ -223,25 +243,36 @@ enum TraceSnapshotComputation {
             count: rows.count,
             total: total,
             chapterCount: chapterCount,
-            topCategory: categories.first?.category
+            topCategory: categories.first?.name
         )
     }
 
     private static func categoryClues(from items: [HomeItem]) -> [TraceCategoryClue] {
         guard !items.isEmpty else { return [] }
         let totalCount = Double(items.count)
-        let clues: [TraceCategoryClue] = Dictionary(grouping: items, by: \.category)
-            .map { category, grouped in
+        let groupedItems: [HomeItem.Category: [HomeItem]] = Dictionary(grouping: items, by: { $0.category })
+        var clues: [TraceCategoryClue] = []
+        clues.reserveCapacity(groupedItems.count)
+        for (category, categoryItems) in groupedItems {
+            let categoryTotal = categoryItems.reduce(0.0) { partial, item in
+                partial + item.amount
+            }
+            clues.append(
                 TraceCategoryClue(
                     category: category,
-                    count: grouped.count,
-                    total: grouped.reduce(0) { $0 + $1.amount },
-                    ratio: Double(grouped.count) / totalCount
+                    count: categoryItems.count,
+                    total: categoryTotal,
+                    ratio: Double(categoryItems.count) / totalCount
                 )
-            }
-        return clues.sorted { lhs, rhs in
-            lhs.count == rhs.count ? lhs.total > rhs.total : lhs.count > rhs.count
+            )
         }
+        clues.sort { lhs, rhs in
+            if lhs.count == rhs.count {
+                return lhs.total > rhs.total
+            }
+            return lhs.count > rhs.count
+        }
+        return clues
     }
 
     private static func rhythmPoints(
@@ -251,8 +282,12 @@ enum TraceSnapshotComputation {
     ) -> [TraceRhythmPoint] {
         guard !items.isEmpty else { return [] }
         let calendar = Calendar.current
-        let countsByDay = Dictionary(grouping: items) { calendar.startOfDay(for: $0.createdAt) }
-            .mapValues { $0.count }
+        let groupedByDay: [Date: [HomeItem]] = Dictionary(grouping: items) { item in
+            calendar.startOfDay(for: item.createdAt)
+        }
+        let countsByDay: [Date: Int] = groupedByDay.mapValues { dayItems in
+            dayItems.count
+        }
 
         if period == .month, let interval = calendar.dateInterval(of: .month, for: now) {
             let end = min(interval.end, now)
