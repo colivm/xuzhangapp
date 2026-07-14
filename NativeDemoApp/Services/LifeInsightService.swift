@@ -1,10 +1,11 @@
 import Foundation
 
-enum LifeInsightTheme: String {
+enum LifeInsightTheme: String, Hashable {
     case forming
     case steady
     case change
     case effort
+    case day
     case memory
     case relation
 }
@@ -667,12 +668,12 @@ final class LifeInsightService {
             title: "\(label)，生活留下的细节最多",
             teaser: "那一天不只是记录多，\(sceneText)也一起被留下。它更像一段完整的小现场。",
             detail: "\(label)共有 \(dayItems.count) 笔。回到那天的安排、地点或见过的人，可能比分类和金额更容易唤起记忆。",
-            supportLine: sceneSupportLine(items: dayItems, label: label),
+            supportLine: denseDaySupportLine(items: dayItems, label: label),
             question: "回到\(label)",
             periodName: "有一天被记得更完整的\(periodLabel)",
             score: score + (hasRichContext ? 18 : 0),
             anchorDate: entry.key,
-            theme: .memory
+            theme: .day
         )
     }
 
@@ -725,6 +726,17 @@ final class LifeInsightService {
         }
         guard !anchors.isEmpty else { return "\(label)的记录还不多，再多几笔会看得更准。" }
         return "能对应上的记录：\(anchors.joined(separator: "；"))。"
+    }
+
+    private func denseDaySupportLine(items: [HomeItem], label: String) -> String {
+        let sorted = items.sorted { $0.createdAt < $1.createdAt }
+        let visible = sorted.prefix(3).map { item in
+            "\(item.createdAt.zhBillTime) \(item.displayTitle) \(item.amount.formatted(.cny))"
+        }
+        guard !visible.isEmpty else { return "\(label)还没有可展开的记录。" }
+        let remaining = max(sorted.count - visible.count, 0)
+        let tail = remaining > 0 ? "；另有 \(remaining) 笔" : ""
+        return "\(label)的时间线：\(visible.joined(separator: "；"))\(tail)。"
     }
 
     private func representativeSupportItems(from items: [HomeItem]) -> [HomeItem] {
@@ -833,9 +845,11 @@ final class LifeInsightService {
 
     private func followUpQuestionChips(from signals: [TraceInsightSignal]) -> [String] {
         var result: [String] = []
+        var usedThemes = Set<LifeInsightTheme>()
         for signal in signals where !signal.question.isEmpty && !result.contains(signal.question) {
+            guard usedThemes.insert(signal.theme).inserted else { continue }
             result.append(signal.question)
-            if result.count >= 3 { break }
+            if result.count >= 2 { break }
         }
         return result
     }

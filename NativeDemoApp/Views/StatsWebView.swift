@@ -111,6 +111,7 @@ struct StatsWebView: View {
     @State var showTraceCustomDatePanel = false
     @State private var traceViewMode: TraceViewMode = .life
     @State private var traceLifeCardRange: SummaryPlaybackRange = .week
+    @State private var traceLifeCardPagingBlocksTap = false
     @State private var traceDeepInsightExpanded = false
     @State private var traceInsightFocusedQuestion: String?
     @State private var lifeInsightRefreshID = UUID()
@@ -219,6 +220,7 @@ struct StatsWebView: View {
                 summaryPlaybackTask?.cancel()
                 summaryPlaybackTask = nil
                 preparingSummaryRange = nil
+                traceLifeCardPagingBlocksTap = false
                 traceUpdatePillTask?.cancel()
                 traceUpdatePillTask = nil
                 showsTraceUpdatePill = false
@@ -692,6 +694,7 @@ struct StatsWebView: View {
             traceLifeSliceScenePills(snapshot: snapshot)
 
             Button {
+                guard !traceLifeCardPagingBlocksTap else { return }
                 handleSummaryPlaybackTap(range: range, hasData: hasData)
             } label: {
                 traceLifeSlicePlayButton(
@@ -702,7 +705,7 @@ struct StatsWebView: View {
                 )
             }
             .buttonStyle(PurposefulCardButtonStyle(radius: 24, depth: 1.05))
-            .disabled((!hasData && !isMonthLocked) || preparingSummaryRange != nil)
+            .disabled((!hasData && !isMonthLocked) || preparingSummaryRange != nil || traceLifeCardPagingBlocksTap)
 
             traceLifeSliceFooter(snapshot: snapshot)
         }
@@ -745,14 +748,22 @@ struct StatsWebView: View {
 
     private var traceLifeCardPagingGesture: some Gesture {
         DragGesture(minimumDistance: 18)
-            .onEnded { value in
+            .onChanged { value in
                 guard abs(value.translation.width) > abs(value.translation.height),
-                      abs(value.translation.width) > 52
-                else { return }
-                if value.translation.width < 0 {
-                    setTraceLifeCardRange(.month)
-                } else {
-                    setTraceLifeCardRange(.week)
+                      abs(value.translation.width) > 14 else { return }
+                traceLifeCardPagingBlocksTap = true
+            }
+            .onEnded { value in
+                if abs(value.translation.width) > abs(value.translation.height),
+                   abs(value.translation.width) > 52 {
+                    if value.translation.width < 0 {
+                        setTraceLifeCardRange(.month)
+                    } else {
+                        setTraceLifeCardRange(.week)
+                    }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
+                    traceLifeCardPagingBlocksTap = false
                 }
             }
     }
@@ -782,6 +793,7 @@ struct StatsWebView: View {
             traceLifeMonthDiaryStrip(snapshot: snapshot, layout: layout)
 
             Button {
+                guard !traceLifeCardPagingBlocksTap else { return }
                 handleSummaryPlaybackTap(range: range, hasData: hasData)
             } label: {
                 traceLifeSlicePlayButton(
@@ -793,7 +805,7 @@ struct StatsWebView: View {
                 )
             }
             .buttonStyle(PurposefulCardButtonStyle(radius: 24, depth: 1.05))
-            .disabled((!hasData && !isMonthLocked) || preparingSummaryRange != nil)
+            .disabled((!hasData && !isMonthLocked) || preparingSummaryRange != nil || traceLifeCardPagingBlocksTap)
 
             traceLifeSliceFooter(snapshot: snapshot)
         }
@@ -1611,7 +1623,7 @@ struct StatsWebView: View {
                         traceLifeMonthKeywordPill(keyword)
                     }
                 }
-                .padding(.horizontal, 1)
+                .padding(.horizontal, 4)
             }
             .scrollIndicators(.hidden)
         }
@@ -1647,26 +1659,38 @@ struct StatsWebView: View {
     }
 
     private func traceLifeMonthDiaryStrip(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
-        let anchors = Array(snapshot.memoryAnchors.prefix(8))
-        let items = TraceRepresentative.items(from: snapshot.items, maxItems: 8, maxPerCategory: 2)
-        let count = max(anchors.count, min(max(items.count, 3), 6))
+        let anchors = Array(snapshot.memoryAnchors.prefix(6))
+        let anchorItemIDs = Set(anchors.map(\.itemID))
+        let items = TraceRepresentative.items(from: snapshot.items, maxItems: 10, maxPerCategory: 2)
+            .filter { !anchorItemIDs.contains($0.id) }
+        let count = min(anchors.count + items.count, 6)
         return VStack(alignment: .leading, spacing: 9) {
             Text("本月日记")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(AppColors.text)
 
-            ScrollView(.horizontal) {
-                HStack(spacing: 12) {
-                    ForEach(0..<max(count, 1), id: \.self) { index in
-                        let anchor = anchors.indices.contains(index) ? anchors[index] : nil
-                        let fallbackItem = items.indices.contains(index) ? items[index] : nil
-                        let item = traceLifeItem(for: anchor, in: snapshot.items, fallback: fallbackItem)
-                        traceLifeMonthDiaryCard(anchor: anchor, item: item, index: index, layout: layout)
+            if count > 0 {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 12) {
+                        ForEach(0..<count, id: \.self) { index in
+                            let anchor = anchors.indices.contains(index) ? anchors[index] : nil
+                            let fallbackIndex = index - anchors.count
+                            let fallbackItem = fallbackIndex >= 0 && items.indices.contains(fallbackIndex)
+                                ? items[fallbackIndex]
+                                : nil
+                            let item = traceLifeItem(for: anchor, in: snapshot.items, fallback: fallbackItem)
+                            traceLifeMonthDiaryCard(anchor: anchor, item: item, index: index, layout: layout)
+                        }
                     }
+                    .padding(.horizontal, 4)
                 }
-                .padding(.horizontal, 1)
+                .scrollIndicators(.hidden)
+            } else {
+                Text("这个月还没有适合放进日记的记录。")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext.opacity(0.74))
+                    .padding(.vertical, 8)
             }
-            .scrollIndicators(.hidden)
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 13)
@@ -1686,11 +1710,17 @@ struct StatsWebView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             ZStack {
-                traceLifeSliceFramedImage(anchor: anchor, height: layout.monthDiaryPhotoHeight)
-                    .saturation(0.84)
-                    .contrast(0.94)
-                    .brightness(0.025)
-                    .frame(width: 108)
+                Group {
+                    if anchor != nil {
+                        traceLifeSliceFramedImage(anchor: anchor, height: layout.monthDiaryPhotoHeight)
+                            .saturation(0.84)
+                            .contrast(0.94)
+                            .brightness(0.025)
+                    } else {
+                        traceLifeMonthDiaryRecordCover(item: item, index: index, height: layout.monthDiaryPhotoHeight)
+                    }
+                }
+                .frame(width: 108)
 
                 LinearGradient(
                     colors: [
@@ -1710,7 +1740,7 @@ struct StatsWebView: View {
             )
             .shadow(color: AppColors.subtext.opacity(0.06), radius: 10, x: 0, y: 5)
 
-            Text(traceLifeMonthPhotoCaption(anchor: anchor, item: item, index: index))
+            Text(traceLifeMonthDiaryCaption(anchor: anchor, item: item, index: index))
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(AppColors.text.opacity(0.90))
                 .lineLimit(1)
@@ -1838,34 +1868,6 @@ struct StatsWebView: View {
         )
     }
 
-    private func traceLifeMonthPhotoStrip(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
-        let anchors = Array(snapshot.memoryAnchors.prefix(8))
-        let items = TraceRepresentative.items(from: snapshot.items, maxItems: 6, maxPerCategory: 1)
-        let count = anchors.isEmpty ? min(max(items.count, 3), 6) : anchors.count
-        return ScrollView(.horizontal) {
-            HStack(spacing: 10) {
-                ForEach(0..<max(count, 1), id: \.self) { index in
-                    let anchor = anchors.indices.contains(index) ? anchors[index] : nil
-                    let item = items.indices.contains(index) ? items[index] : nil
-                    VStack(alignment: .leading, spacing: 6) {
-                        traceLifeSliceFramedImage(anchor: anchor, height: layout.monthPhotoHeight)
-                            .frame(width: 112)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        Text(traceLifeMonthPhotoCaption(anchor: anchor, item: item, index: index))
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(AppColors.text.opacity(0.86))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.74)
-                            .frame(width: 112, alignment: .leading)
-                    }
-                }
-            }
-            .padding(.horizontal, 1)
-        }
-        .scrollIndicators(.hidden)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
     private func traceLifeSliceHeader(snapshot: TraceChapterSnapshot) -> some View {
         VStack(spacing: 6) {
             HStack(spacing: 6) {
@@ -1926,6 +1928,73 @@ struct StatsWebView: View {
             }
             .padding(.top, 2)
         }
+    }
+
+    private func traceLifeMonthDiaryRecordCover(item: HomeItem?, index: Int, height: CGFloat) -> some View {
+        let category = item?.category ?? .other
+        let baseColors = traceLifeSliceFallbackColors(for: category, index: index)
+        let colors = index.isMultiple(of: 2)
+            ? baseColors
+            : Array(baseColors.dropFirst()) + Array(baseColors.prefix(1))
+        return ZStack(alignment: .topLeading) {
+            LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+
+            VStack(alignment: .leading, spacing: 7) {
+                HStack {
+                    Image(systemName: MemoryAttachmentVisuals.categorySystemImage(category))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(AppColors.accentDark.opacity(0.66))
+                    Spacer(minLength: 4)
+                    Text(traceLifeMonthDiaryDateText(item: item))
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .foregroundStyle(AppColors.accentDark.opacity(0.54))
+                }
+
+                Spacer(minLength: 0)
+
+                Text(traceLifeMonthDiaryCoverTitle(item: item, index: index))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.text.opacity(0.82))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.76)
+
+                Text(category.rawValue)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(AppColors.subtext.opacity(0.72))
+            }
+            .padding(10)
+        }
+        .frame(width: 108, height: height)
+    }
+
+    private func traceLifeMonthDiaryDateText(item: HomeItem?) -> String {
+        guard let item else { return "本月" }
+        let month = Calendar.current.component(.month, from: item.createdAt)
+        let day = Calendar.current.component(.day, from: item.createdAt)
+        return "\(month)/\(day)"
+    }
+
+    private func traceLifeMonthDiaryCoverTitle(item: HomeItem?, index: Int) -> String {
+        guard let item else { return "这个月的一笔" }
+        let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty,
+           title != item.category.defaultRecordTitle,
+           !RecordSemanticLexicon.isSystemGeneratedTitle(title) {
+            return title
+        }
+        return traceLifeMonthPhotoCaption(anchor: nil, item: item, index: index)
+    }
+
+    private func traceLifeMonthDiaryCaption(
+        anchor: SummaryMemoryAnchor?,
+        item: HomeItem?,
+        index: Int
+    ) -> String {
+        if anchor != nil {
+            return traceLifeMonthPhotoCaption(anchor: anchor, item: item, index: index)
+        }
+        guard let item else { return "本月记录" }
+        return "\(item.category.rawValue) · \(item.createdAt.zhBillTime)"
     }
 
     private func traceLifeSliceRecordCanvas(snapshot: TraceChapterSnapshot) -> some View {
@@ -2394,6 +2463,7 @@ struct StatsWebView: View {
 
     private func traceLifeSliceFooter(snapshot: TraceChapterSnapshot) -> some View {
         Button {
+            guard !traceLifeCardPagingBlocksTap else { return }
             openTraceDetail(for: snapshot.range)
         } label: {
             HStack(spacing: 8) {
@@ -2415,6 +2485,7 @@ struct StatsWebView: View {
             )
         }
         .buttonStyle(.plain)
+        .disabled(traceLifeCardPagingBlocksTap)
     }
 
     private func traceLifeSliceLabels(snapshot: TraceChapterSnapshot) -> [String] {
@@ -4107,6 +4178,7 @@ struct StatsWebView: View {
         case .steady: return "这段日子很平稳"
         case .change: return "有一处变化"
         case .effort: return "你付出的这些时间"
+        case .day: return "被记完整的一天"
         case .memory: return "被留下的现场"
         case .relation: return "两条生活线"
         }
@@ -4118,6 +4190,7 @@ struct StatsWebView: View {
         case .steady: return "water.waves"
         case .change: return "waveform.path.ecg"
         case .effort: return "sunrise.fill"
+        case .day: return "calendar"
         case .memory: return "photo.fill"
         case .relation: return "link"
         }
@@ -4129,6 +4202,7 @@ struct StatsWebView: View {
         case .steady: return AppColors.accent.opacity(0.72)
         case .change: return AppColors.accentDark
         case .effort: return Color(hex: "c08a4b")
+        case .day: return Color(hex: "7d8fa6")
         case .memory: return Color(hex: "9b7bb8")
         case .relation: return Color(hex: "5d8fa3")
         }
@@ -4430,22 +4504,31 @@ struct StatsWebView: View {
             return "有 \(days) 天在 21 点后仍有记录。它们可能是晚归、晚些吃饭或临时安排，不需要被评价，只适合被记住。"
         }
 
-        if question.contains("找回") || question.contains("回到") || question.contains("现场") {
-            if let highlightedDate = insight.highlightedDate {
-                let dayItems = items.filter { Calendar.current.isDate($0.createdAt, inSameDayAs: highlightedDate) }
-                var seen = Set<String>()
-                let labels = dayItems
-                    .sorted { $0.createdAt < $1.createdAt }
-                    .compactMap { item -> String? in
-                        let title = item.displayTitle
-                        return seen.insert(title).inserted ? title : nil
-                    }
-                    .prefix(3)
-                    .joined(separator: "、")
-                let dayLabel = traceCalendarDayNarrativeLabel(highlightedDate)
-                if !labels.isEmpty {
-                    return "\(dayLabel)留下了\(labels)。这些具体名字、照片和时间，比一个分类更接近当天真正发生的事。"
-                }
+        if question.contains("这笔记录") {
+            if let item = traceSpecificInsightRecord(items: items, highlightedDate: insight.highlightedDate) {
+                return "\(traceCalendarDayNarrativeLabel(item.createdAt)) \(item.createdAt.zhBillTime)，你写下了「\(item.displayTitle)」，金额是 \(item.amount.formatted(.cny))。这条具体备注本身，就是它和普通分类最不同的地方。"
+            }
+            return insight.previewLine
+        }
+
+        if question.contains("现场") {
+            if let item = tracePhotoInsightRecord(items: items, highlightedDate: insight.highlightedDate) {
+                let photoCount = item.memoryImages.count
+                let countText = photoCount > 1 ? "\(photoCount) 张照片" : "一张照片"
+                return "\(traceCalendarDayNarrativeLabel(item.createdAt))的「\(item.displayTitle)」附了\(countText)。这里单独保留的是你当时主动留下的画面，不是同一天所有分类的汇总。"
+            }
+            return insight.previewLine
+        }
+
+        if question.hasPrefix("回到"), let highlightedDate = insight.highlightedDate {
+            let dayItems = items
+                .filter { Calendar.current.isDate($0.createdAt, inSameDayAs: highlightedDate) }
+                .sorted { $0.createdAt < $1.createdAt }
+            if !dayItems.isEmpty {
+                let timeline = dayItems.prefix(4).map { "\($0.createdAt.zhBillTime) \($0.displayTitle)" }
+                let remaining = max(dayItems.count - timeline.count, 0)
+                let tail = remaining > 0 ? "，另有 \(remaining) 笔" : ""
+                return "\(traceCalendarDayNarrativeLabel(highlightedDate))共留下 \(dayItems.count) 笔：\(timeline.joined(separator: "、"))\(tail)。按时间读，比只看其中一笔更接近那天的安排。"
             }
             return insight.previewLine
         }
@@ -4483,6 +4566,40 @@ struct StatsWebView: View {
         }
 
         return insight.previewLine
+    }
+
+    private func tracePhotoInsightRecord(items: [HomeItem], highlightedDate: Date?) -> HomeItem? {
+        items
+            .filter { $0.hasMemoryImages }
+            .sorted { lhs, rhs in
+                let leftHighlighted = highlightedDate.map { Calendar.current.isDate(lhs.createdAt, inSameDayAs: $0) } ?? false
+                let rightHighlighted = highlightedDate.map { Calendar.current.isDate(rhs.createdAt, inSameDayAs: $0) } ?? false
+                if leftHighlighted != rightHighlighted { return leftHighlighted }
+                if lhs.memoryImages.count != rhs.memoryImages.count {
+                    return lhs.memoryImages.count > rhs.memoryImages.count
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+            .first
+    }
+
+    private func traceSpecificInsightRecord(items: [HomeItem], highlightedDate: Date?) -> HomeItem? {
+        items
+            .filter { item in
+                let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                return item.userEditedTitle == true
+                    && !title.isEmpty
+                    && title != item.category.defaultRecordTitle
+                    && !RecordSemanticLexicon.isSystemGeneratedTitle(title)
+            }
+            .sorted { lhs, rhs in
+                let leftHighlighted = highlightedDate.map { Calendar.current.isDate(lhs.createdAt, inSameDayAs: $0) } ?? false
+                let rightHighlighted = highlightedDate.map { Calendar.current.isDate(rhs.createdAt, inSameDayAs: $0) } ?? false
+                if leftHighlighted != rightHighlighted { return leftHighlighted }
+                if lhs.title.count != rhs.title.count { return lhs.title.count > rhs.title.count }
+                return lhs.createdAt > rhs.createdAt
+            }
+            .first
     }
 
     private func traceContainsAny(_ text: String, _ keywords: [String]) -> Bool {

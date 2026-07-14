@@ -159,13 +159,16 @@ Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'withTaskGroup|group\.ad
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'preparingSummaryRange|summaryPlaybackTask|ProgressView' 'playback generation interaction feedback'
 Assert-Pattern 'NativeDemoApp/Services/LifeMarkService.swift' 'aggregateCacheLock|cachedAggregates' 'life mark cache thread safety'
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceLifeCardPagingGesture|translation\.width|move\(edge: \.trailing\)' 'trace horizontal life paging'
+Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceLifeCardPagingBlocksTap|guard !traceLifeCardPagingBlocksTap' 'trace paging prevents detail button misfire'
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceLifeSliceRecordCanvas|case 0:|case 1:|case 2:' 'weekly photo count adaptive layout'
+Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceLifeMonthDiaryRecordCover|traceLifeMonthDiaryCoverTitle|anchorItemIDs' 'monthly diary uses real record covers'
 Assert-Pattern 'NativeDemoApp/Services/PlaybackService.swift' 'routineVisualPenalty|isHighValueExperience' 'weekly memory anchor visual ranking'
 Assert-Pattern 'NativeDemoApp/Services/LifeInsightService.swift' 'previousPeriodItems|earlyStartChangeSignal|lateReturnChangeSignal' 'trace personal baseline insight'
 Assert-Pattern 'NativeDemoApp/Services/LifeInsightService.swift' 'guard !isRoutineScene\(strongest\.kind\)' 'trace routine-only insight suppression'
 Assert-Pattern 'NativeDemoApp/Services/LifeInsightService.swift' 'repeatedRelationSignal|photoMemorySignal|isMeaningful' 'trace meaningful signal layers'
+Assert-Pattern 'NativeDemoApp/Services/LifeInsightService.swift' 'denseDaySupportLine|theme: \.day|usedThemes' 'trace dense day evidence and follow-up diversity'
 Assert-NoPattern 'NativeDemoApp/Services/LifeInsightService.swift' 'repeatedSceneDetail|questionChips\(' 'trace avoids legacy tautological insight path'
-Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceInsightRhythmOverview|traceInsightThemeTitle|!insight\.isMeaningful' 'trace emotional insight presentation'
+Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceInsightRhythmOverview|traceInsightThemeTitle|!insight\.isMeaningful|tracePhotoInsightRecord|traceSpecificInsightRecord' 'trace emotional insight presentation'
 Assert-JsonFixtureIds 'qa/life_story_regression_fixtures.json' @(
     'rain_commute',
     'first_fitness',
