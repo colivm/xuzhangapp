@@ -11,6 +11,8 @@ struct SettingsView: View {
     var onAppearanceRequestHandled: (() -> Void)? = nil
     @State private var showAccountSheet = false
     @State private var activeSettingsSheet: SettingsSheet?
+    @State private var accountSheetDismissRoute: SheetDismissRoute?
+    @State private var settingsSheetDismissRoute: SheetDismissRoute?
     @State private var draftDisplayName = ""
     @State private var draftPetNickname = ""
     @State private var showDeleteCloudLedgerConfirm = false
@@ -27,9 +29,20 @@ struct SettingsView: View {
     @State private var lifetimeTrialOfferTheme: ThemeDefinition?
     @State private var handledAppearanceRequestID: UUID?
     @State private var showNicknameEditor = false
+    @State private var localBackupDocument: LedgerLocalBackupDocument?
+    @State private var localBackupSummary: LedgerLocalBackupDocument.Summary?
+    @State private var isExportingLocalBackup = false
+    @State private var isPreparingLocalBackup = false
+    @State private var localBackupExportMessage: String?
     @FocusState private var focusedField: SettingsField?
     private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
     private let privacyURL = URL(string: "https://xuzhangapp.com/legal/privacy.html")!
+    private static let localBackupFilenameFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd-HHmm"
+        return formatter
+    }()
 
     private enum SettingsField {
         case displayName
@@ -52,6 +65,10 @@ struct SettingsView: View {
             case .privacy: return "数据与隐私"
             }
         }
+    }
+
+    private enum SheetDismissRoute {
+        case memberPricing(highlightPlanId: String?)
     }
 
     private enum SettingsConfirmationHost {
@@ -178,15 +195,32 @@ struct SettingsView: View {
                 }
             }
         }
-        .sheet(isPresented: $showAccountSheet) {
+        .sheet(isPresented: $showAccountSheet, onDismiss: {
+            let route = accountSheetDismissRoute
+            accountSheetDismissRoute = nil
+            handleSheetDismissRoute(route)
+        }) {
             settingsConfirmations(accountSheet, host: .accountSheet)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .sheet(item: $activeSettingsSheet) { sheet in
+        .sheet(item: $activeSettingsSheet, onDismiss: {
+            let route = settingsSheetDismissRoute
+            settingsSheetDismissRoute = nil
+            handleSheetDismissRoute(route)
+        }) { sheet in
             settingsConfirmations(settingsSheet(sheet), host: .settingsSheet)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+                .interactiveDismissDisabled(isPreparingLocalBackup)
+                .fileExporter(
+                    isPresented: $isExportingLocalBackup,
+                    document: localBackupDocument,
+                    contentType: LedgerLocalBackupDocument.contentType,
+                    defaultFilename: localBackupFilename
+                ) { result in
+                    handleLocalBackupExportResult(result)
+                }
         }
         .onChange(of: openAppearanceRequestID) { _, requestID in
             openAppearanceSheetIfNeeded(requestID)
@@ -327,7 +361,9 @@ struct SettingsView: View {
         if isLifetimeMember {
             return "典藏主题、完整回放和长期故事已经为你保留。"
         }
-        return settingsViewModel.hasCloudSession ? "云端备份已准备好，照常记就好。" : "不用登录也能记；换机备份时再放进云端。"
+        return settingsViewModel.hasCloudSession
+            ? "账单字段可云端备份；记忆照片仍在本机。"
+            : "不用登录也能记；换机前可导出含可用照片的本地备份。"
     }
 
     private var lifetimeIdentitySeal: some View {
@@ -589,7 +625,7 @@ struct SettingsView: View {
         if isLifetimeMember {
             return "永久档案馆 · 随账号保留"
         }
-        let sync = settingsViewModel.syncEnabled ? "已同步云端" : "本地保存"
+        let sync = settingsViewModel.syncEnabled ? "账单字段已同步" : "本地保存"
         let expiry = hasExpiredPaidMemberTier ? " · 会员待续期" : ""
         return "\(sync) · \(memberTierName)\(expiry)"
     }
@@ -623,8 +659,8 @@ struct SettingsView: View {
 
     private var backupRowSummary: String {
         switch (settingsViewModel.syncEnabled, settingsViewModel.useRemoteAI) {
-        case (true, true): return "云端开 · AI 开"
-        case (true, false): return "云端备份已开"
+        case (true, true): return "账单字段云端开 · 联网整理开"
+        case (true, false): return "账单字段云端已开"
         case (false, true): return "联网梳理已开"
         case (false, false): return "仅本地保存"
         }
@@ -632,15 +668,65 @@ struct SettingsView: View {
 
     private var cloudSyncHelperText: String {
         if homeViewModel.isSyncingCloudLedger {
-            return "正在合并云端账本。"
+            return "正在合并云端与本机的账单字段；照片不会上传。"
         }
         if let message = homeViewModel.syncStatusMessage, !message.isEmpty {
             return message
         }
         if settingsViewModel.syncEnabled {
-            return "已开启；新增、编辑、删除会自动同步。"
+            return "金额、分类、备注、日期等账单字段会自动同步；记忆照片不上传，只保存在本机。"
         }
-        return "首次开启会先合并云端与本机；冲突保留更新时间较新的记录。"
+        return "首次开启只合并云端与本机的账单字段；记忆照片不上传，冲突仍保留更新时间较新的记录。"
+    }
+
+    private var localBackupFilename: String {
+        "叙账本地备份-\(Self.localBackupFilenameFormatter.string(from: Date())).xuzhangbackup"
+    }
+
+    private func prepareLocalBackupExport() {
+        guard !isPreparingLocalBackup else { return }
+        isPreparingLocalBackup = true
+        localBackupExportMessage = nil
+        Task { @MainActor in
+            await Task.yield()
+            defer { isPreparingLocalBackup = false }
+            do {
+                let document = try LedgerLocalBackupDocument(items: homeViewModel.items)
+                localBackupDocument = document
+                localBackupSummary = document.summary
+                isExportingLocalBackup = true
+            } catch {
+                localBackupDocument = nil
+                localBackupSummary = nil
+                localBackupExportMessage = (error as? LocalizedError)?.errorDescription
+                    ?? "本地备份暂时没有生成，请稍后再试。"
+            }
+        }
+    }
+
+    private func handleLocalBackupExportResult(_ result: Result<URL, Error>) {
+        defer {
+            localBackupDocument = nil
+            localBackupSummary = nil
+        }
+        switch result {
+        case .success:
+            guard let summary = localBackupSummary else {
+                localBackupExportMessage = "本地备份已导出。"
+                return
+            }
+            if summary.unavailablePhotoCount > 0 {
+                localBackupExportMessage = "已导出 \(summary.recordCount) 条记录和 \(summary.exportedPhotoFileCount) 个照片文件；另有 \(summary.unavailablePhotoCount) 张照片当前不可用，未写入备份包。"
+            } else {
+                localBackupExportMessage = "已导出 \(summary.recordCount) 条记录和 \(summary.exportedPhotoFileCount) 个照片文件。请保留整个备份包。"
+            }
+        case .failure(let error):
+            let nsError = error as NSError
+            if nsError.domain == NSCocoaErrorDomain, nsError.code == NSUserCancelledError {
+                return
+            }
+            localBackupExportMessage = "本地备份没有导出：\(error.localizedDescription)"
+        }
     }
 
     private var companionRowSummary: String {
@@ -720,14 +806,14 @@ struct SettingsView: View {
     private var clearAllRecordsHelperText: String {
         let count = homeViewModel.items.count
         if settingsViewModel.syncEnabled && settingsViewModel.hasCloudSession {
-            return count > 0 ? "当前 \(count) 笔；会同时清空本机和云端账本。" : "当前没有本机记录；云端账本也会一并清空。"
+            return count > 0 ? "当前 \(count) 笔；会清空本机记录与照片，并删除云端账单字段。" : "当前没有本机记录；云端账单字段也会一并清空。"
         }
         return count > 0 ? "当前 \(count) 笔；只清空这台设备上的本机账本。" : "当前没有本机记录。"
     }
 
     private var clearAllRecordsConfirmMessage: String {
         if settingsViewModel.syncEnabled && settingsViewModel.hasCloudSession {
-            return "这会删除本机记录，并清空服务器上的同步账本；云端备份会同时关闭。这个操作不能撤销。"
+            return "这会删除本机记录和本机照片，并清空服务器上的账单字段；云端备份会同时关闭。这个操作不能撤销。"
         }
         return "这会删除这台设备上的全部本机记录、今日回放和本地复盘缓存。这个操作不能撤销。"
     }
@@ -754,11 +840,30 @@ struct SettingsView: View {
         }
     }
 
-    private func openMemberPricingFromSettingsSheet(highlightPlanId: String? = nil) {
-        activeSettingsSheet = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+    private func handleSheetDismissRoute(_ route: SheetDismissRoute?) {
+        guard let route else { return }
+        switch route {
+        case .memberPricing(let highlightPlanId):
             openMemberPricing(highlightPlanId: highlightPlanId)
         }
+    }
+
+    private func openMemberPricingFromSettingsSheet(highlightPlanId: String? = nil) {
+        guard activeSettingsSheet != nil else {
+            openMemberPricing(highlightPlanId: highlightPlanId)
+            return
+        }
+        settingsSheetDismissRoute = .memberPricing(highlightPlanId: highlightPlanId)
+        activeSettingsSheet = nil
+    }
+
+    private func openMemberPricingFromAccountSheet(highlightPlanId: String? = nil) {
+        guard showAccountSheet else {
+            openMemberPricing(highlightPlanId: highlightPlanId)
+            return
+        }
+        accountSheetDismissRoute = .memberPricing(highlightPlanId: highlightPlanId)
+        showAccountSheet = false
     }
 
     private func openAppearanceSheetIfNeeded(_ requestID: UUID?) {
@@ -770,17 +875,13 @@ struct SettingsView: View {
 
     private func handleLockedThemeTap(_ theme: ThemeDefinition, style: ThemeSwatchStyle) {
         guard style == .lifetime else {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                openMemberPricingFromSettingsSheet()
-            }
+            openMemberPricingFromSettingsSheet()
             return
         }
         if settingsViewModel.canStartLifetimeThemeTrial(for: theme.id) {
             lifetimeTrialOfferTheme = theme
         } else {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                openMemberPricingFromSettingsSheet(highlightPlanId: "lifetime")
-            }
+            openMemberPricingFromSettingsSheet(highlightPlanId: "lifetime")
         }
     }
 
@@ -1052,14 +1153,14 @@ struct SettingsView: View {
         case .deleteCloudLedger:
             return (
                 "icloud.slash",
-                "删除云端账本",
-                "只删除服务器上的同步账本，本机记录仍保留。为避免重新上传，云端同步会同时关闭。",
+                "删除云端账单字段",
+                "只删除服务器上的账单字段，本机记录和本机照片仍保留。为避免重新上传，云端同步会同时关闭。",
                 Color(hex: "C7473D"),
                 [
                     SettingsConfirmationAction(id: "cancel", title: "取消", style: .secondary) {
                         dismissSettingsConfirmation(.deleteCloudLedger)
                     },
-                    SettingsConfirmationAction(id: "deleteCloudLedger", title: "删除云端账本", style: .destructive) {
+                    SettingsConfirmationAction(id: "deleteCloudLedger", title: "确认删除云端字段", style: .destructive) {
                         dismissSettingsConfirmation(.deleteCloudLedger)
                         Task { await settingsViewModel.deleteCloudLedger() }
                     }
@@ -1069,7 +1170,7 @@ struct SettingsView: View {
             return (
                 "icloud.and.arrow.up",
                 "开启云端备份",
-                "会先把云端账本和本机记录合并，再把最新结果同步上去。重复或冲突记录会保留更新时间较新的版本。",
+                "会先合并云端与本机的金额、分类、备注、日期等账单字段，再同步最新结果。记忆照片不会上传；重复或冲突记录仍保留更新时间较新的版本。",
                 AppColors.accent,
                 [
                     SettingsConfirmationAction(id: "cancel", title: "先不开启", style: .secondary) {
@@ -1085,7 +1186,7 @@ struct SettingsView: View {
             return (
                 "arrow.triangle.2.circlepath",
                 "这台设备已有本地账本",
-                "当前账号的云端备份偏好是开启的。要把这台设备上的本地记录和当前账号的云端账本合并吗？",
+                "当前账号的云端备份偏好是开启的。要合并这台设备与当前账号的账单字段吗？记忆照片只保留在各自设备，不会上传或从云端恢复。",
                 AppColors.accent,
                 [
                     SettingsConfirmationAction(id: "mergeLocal", title: "合并到当前账号", style: .primary) {
@@ -1094,7 +1195,7 @@ struct SettingsView: View {
                     SettingsConfirmationAction(id: "keepLocal", title: "先不同步，只看本机", style: .secondary) {
                         keepLocalLedgerOnlyForCurrentLogin()
                     },
-                    SettingsConfirmationAction(id: "replaceLocal", title: "清空本机后同步云端", style: .destructive) {
+                    SettingsConfirmationAction(id: "replaceLocal", title: "删除本机记录和照片，再同步字段", style: .destructive) {
                         replaceLocalLedgerWithCurrentAccountCloud()
                     }
                 ]
@@ -1119,7 +1220,7 @@ struct SettingsView: View {
             return (
                 "person.crop.circle.badge.xmark",
                 "注销账号",
-                "这会退出登录，并清空服务器上的账号、云端账本和会员绑定状态。Apple 订阅不会自动取消，之后可用同一 Apple ID 登录后恢复购买。",
+                "这会退出登录，并清空服务器上的账号、账单字段和会员绑定状态。本机记录与照片是否保留由下方操作决定；Apple 订阅不会自动取消，之后可用同一 Apple ID 登录后恢复购买。",
                 Color(hex: "C7473D"),
                 [
                     SettingsConfirmationAction(id: "keepLocal", title: "保留本机账本并注销", style: .destructive) {
@@ -1263,11 +1364,26 @@ struct SettingsView: View {
                 set: { requestCloudSyncChange($0) }
             ))
             cloudSyncHelper()
+            settingHelper("云端备份不包含记忆照片。换机、卸载或清理设备前，请另外导出一份含可用照片的本地备份包。")
+            if isPreparingLocalBackup {
+                ComputationLoadingView(
+                    message: "正在整理本地备份…",
+                    detail: "会把账单字段和当前可读取的照片放进同一个备份包",
+                    presentation: .inline
+                )
+            } else {
+                webButton("导出本地备份（含可用照片）") {
+                    prepareLocalBackupExport()
+                }
+            }
+            if let localBackupExportMessage {
+                settingHelper(localBackupExportMessage)
+            }
             settingToggle("允许联网梳理复盘（可选）", isOn: Binding(
                 get: { settingsViewModel.useRemoteAI },
                 set: { settingsViewModel.useRemoteAI = $0 }
             ))
-            settingHelper("关闭后仍可使用本地回望，不强制登录。")
+            settingHelper("只影响今日小记和月度整理：开启后会尝试远程模型，失败自动回退；AI 指令台、周记、月章和生活线索始终在本机处理。")
         case .appearance:
             appearanceSheetContent(proxy: proxy)
         case .companion:
@@ -1303,7 +1419,7 @@ struct SettingsView: View {
                 }
             }
         case .privacy:
-            sectionBody("默认本地存储，无需登录即可完整使用。开启云端备份后，仅同步必要账单数据与会员状态。")
+            sectionBody("默认本地存储，无需登录即可完整使用。开启云端备份后，仅同步金额、分类、备注、日期等账单字段与会员状态；记忆照片仍只保存在本机。")
             destructiveSettingsButton("清空所有记录") {
                 confirmationHost = .settingsSheet
                 showClearAllRecordsConfirm = true
@@ -1334,8 +1450,8 @@ struct SettingsView: View {
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(AppColors.text)
                         Text(settingsViewModel.hasCloudSession
-                             ? "\(settingsViewModel.displayName)，账号、备份和会员状态都放在这里。"
-                             : "不用登录也能完整记录；想换机备份时，再把它放进云端。")
+                             ? "\(settingsViewModel.displayName)，账号、账单字段备份和会员状态都放在这里；照片仍在本机。"
+                             : "不用登录也能完整记录；换机前可手动导出含可用照片的本地备份。")
                             .font(.system(size: 12))
                             .foregroundStyle(AppColors.subtext)
                             .lineLimit(2)
@@ -1368,7 +1484,7 @@ struct SettingsView: View {
 
     private var mainSettingsPanel: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionBody("这些偏好只属于你的叙账空间。默认保存在手机里；登录并开启同步后，才会上传云端备份。")
+            sectionBody("这些偏好只属于你的叙账空间。默认保存在手机里；登录并开启同步后，只上传必要账单字段，记忆照片仍留在本机。")
 
             // Display name
             settingField(label: "显示名称") {
@@ -1388,13 +1504,14 @@ struct SettingsView: View {
                 set: { requestCloudSyncChange($0) }
             ))
             cloudSyncHelper()
+            settingHelper("云端不包含记忆照片；换机前请在“备份与联网”中导出本地完整备份。")
 
             // AI toggle
             settingToggle("允许联网梳理复盘（可选）", isOn: Binding(
                 get: { settingsViewModel.useRemoteAI },
                 set: { settingsViewModel.useRemoteAI = $0 }
             ))
-            settingHelper("关闭后仍可使用本地回望，不强制登录。")
+            settingHelper("只影响今日小记和月度整理：开启后会尝试远程模型，失败自动回退；AI 指令台、周记、月章和生活线索始终在本机处理。")
 
             // Pet companion
             settingToggle("开启宠物陪伴", isOn: Binding(
@@ -2391,7 +2508,7 @@ struct SettingsView: View {
                     .foregroundStyle(AppColors.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.86)
-                Text("登录后可同步会员与云端备份")
+                Text("登录后可同步会员状态与账单字段")
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.subtext.opacity(0.88))
                     .lineLimit(1)
@@ -2480,7 +2597,7 @@ struct SettingsView: View {
                         }
                     }
 
-                    Text("云端备份已准备好，照常记就好。")
+                    Text("账单字段可云端备份；记忆照片仍只在本机。")
                         .font(.system(size: 12))
                         .italic()
                         .foregroundStyle(AppColors.subtext.opacity(0.88))
@@ -2565,10 +2682,7 @@ struct SettingsView: View {
                 if hasExpiredPaidMemberTier {
                     settingHelper("会员待续期，续费后可恢复权益。")
                     Button {
-                        showAccountSheet = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                            openMemberPricing()
-                        }
+                        openMemberPricingFromAccountSheet()
                     } label: {
                         HStack(spacing: 6) {
                             Text("续费会员")
@@ -2583,10 +2697,7 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                 } else if hasMemberAccess {
                     Button {
-                        showAccountSheet = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                            openMemberPricing()
-                        }
+                        openMemberPricingFromAccountSheet()
                     } label: {
                         HStack(spacing: 6) {
                             Text("查看完整生活档案包含")
@@ -2602,12 +2713,9 @@ struct SettingsView: View {
                 }
             } else {
                 accountInfoRow(title: "当前档位", value: memberTierName)
-                settingHelper("免费版适合轻度记录。会员会持续整理这些痕迹，让周记、月章和生活回放不断档。")
+                settingHelper("免费版适合轻度记录。会员会持续整理这些痕迹，让今日回放、周记和月章不断档。")
                 Button {
-                    showAccountSheet = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        openMemberPricing()
-                    }
+                    openMemberPricingFromAccountSheet()
                 } label: {
                     HStack(spacing: 6) {
                         Text("让账本更懂我的生活")
@@ -2684,9 +2792,9 @@ struct SettingsView: View {
 
     private var accountMemorySubtitle: String {
         if isLifetimeMember {
-            return "AI 会长期整理这些日子，典藏主题和完整回放随账号保留。"
+            return "叙账会按真实记录长期整理这些日子，典藏主题和完整回望随账号保留。"
         }
-        return hasMemberAccess ? "AI 正在持续整理和连接每一天。" : "开通会员后，这些痕迹会继续整理成周记、月章和回放。"
+        return hasMemberAccess ? "叙账正在按真实记录持续整理每一天。" : "开通会员后，这些痕迹会继续整理成周记、月章和回望。"
     }
 
     private var accountSessionSection: some View {
@@ -2713,7 +2821,7 @@ struct SettingsView: View {
         accountPanel("危险操作") {
             DisclosureGroup(isExpanded: $isAccountDangerExpanded) {
                 VStack(spacing: 8) {
-                    Button("删除云端账本", role: .destructive) {
+                    Button("删除云端账单字段", role: .destructive) {
                         confirmationHost = .accountSheet
                         showDeleteCloudLedgerConfirm = true
                     }
@@ -2859,12 +2967,10 @@ struct SettingsView: View {
 
     private var accountMemberBenefits: [String] {
         [
-            "周/月生活回放无限",
-            "每月生活章持续整理",
-            "今日回放不限",
-            "OCR 导入不限",
-            "AI 回顾额度提升",
-            "生活场景换角度",
+            "省力记：OCR 连续导入与批量补记",
+            "长期回望：今日回放、周记与月章",
+            "完整生活场景与生活线索",
+            "25+ 生活风格",
         ]
     }
 
@@ -2903,7 +3009,7 @@ struct SettingsView: View {
             Text("数据与隐私")
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(AppColors.text)
-            Text("默认本地存储，无需登录即可完整使用。开启云端备份后，仅同步必要账单数据与会员状态。")
+            Text("默认本地存储，无需登录即可完整使用。开启云端备份后，仅同步金额、分类、备注、日期等账单字段与会员状态；记忆照片仍只保存在本机。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
             legalLinksRow

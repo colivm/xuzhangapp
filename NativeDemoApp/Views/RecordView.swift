@@ -2,13 +2,63 @@ import SwiftUI
 import PhotosUI
 import UIKit
 
+enum RecordEntryMode: String, CaseIterable, Identifiable {
+    case manual = "手动录入"
+    case ocr = "账单识别"
+
+    var id: String { rawValue }
+}
+
+fileprivate enum RecordDraftIntent {
+    case automatic
+    case note
+    case category
+}
+
+final class RecordTabSession: ObservableObject {
+    @Published var selectedEntryMode: RecordEntryMode = .manual
+    @Published var scenePackExpanded = false
+    @Published var scenePackVariants: [String: Int] = [:]
+    @Published var amountPadActive = false
+    @Published var recordDetailsExpanded = false
+    @Published var categoryGridExpanded = false
+    @Published var noteEditorExpanded = false
+    @Published var datePanelExpanded = false
+    @Published var previewLineWasRotated = false
+    @Published var activeScenePack: ScenePackDefinition?
+    @Published var didAutoFocusAmountPad = false
+    @Published fileprivate var lastDraftIntent: RecordDraftIntent = .automatic
+    @Published var userNoteAnchorTitle: String?
+    @Published var ocrQuotaUpsellVisibleThisSession = false
+    @Published var suppressNextNoteSemanticUnlock = false
+
+    func resetAfterCommittedDraft() {
+        selectedEntryMode = .manual
+        scenePackExpanded = false
+        scenePackVariants = [:]
+        amountPadActive = false
+        recordDetailsExpanded = false
+        categoryGridExpanded = false
+        noteEditorExpanded = false
+        datePanelExpanded = false
+        previewLineWasRotated = false
+        activeScenePack = nil
+        didAutoFocusAmountPad = false
+        lastDraftIntent = .automatic
+        userNoteAnchorTitle = nil
+        ocrQuotaUpsellVisibleThisSession = false
+        suppressNextNoteSemanticUnlock = false
+    }
+}
+
 struct RecordView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ObservedObject var tabSession: RecordTabSession
     var onSaved: ((LifeMarkSceneRewardPrompt?) -> Void)? = nil
     var onShowMemberPricing: ((MemberPricingEntryContext) -> Void)? = nil
-    @State private var selectedEntryMode: EntryMode = .manual
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isOCRRecognizing = false
     @State private var ocrProgress = 0.0
@@ -16,25 +66,12 @@ struct RecordView: View {
     @State private var showOCRConfirmSheet = false
     @State private var didImportOCRConfirmSheet = false
     @State private var ocrDraftStageDismissed = false
-    @State private var scenePackExpanded = false
-    @State private var scenePackVariants: [String: Int] = [:]
-    @State private var amountPadActive = false
-    @State private var recordDetailsExpanded = false
-    @State private var categoryGridExpanded = false
-    @State private var noteEditorExpanded = false
-    @State private var datePanelExpanded = false
-    @State private var previewLineWasRotated = false
     @State private var showScenePackAngleSheet = false
+    @State private var opensMemberPricingAfterScenePackDismiss = false
     @State private var recommendedCategoryRefreshTask: Task<Void, Never>?
-    @State private var activeScenePack: ScenePackDefinition?
     @State private var scenePackFeedback: String?
-    @State private var didAutoFocusAmountPad = false
-    @State private var lastDraftIntent: RecordDraftIntent = .automatic
-    @State private var userNoteAnchorTitle: String?
     @State private var freeScenePackRefreshToken = 0
     @State private var freeLockedSceneHint: ScenePackAngleSheet.LockedSceneHint?
-    @State private var ocrQuotaUpsellVisibleThisSession = false
-    @State private var suppressNextNoteSemanticUnlock = false
     @AppStorage("scene_pack_order_v1") private var scenePackOrderStorage = ""
     @AppStorage("scene_pack_manual_order_v1") private var scenePackManualOrderEnabled = false
     @AppStorage("scene_pack_more_expanded_v1") private var scenePackMoreExpanded = false
@@ -46,12 +83,6 @@ struct RecordView: View {
     private enum RecordField {
         case amount
         case note
-    }
-
-    private enum RecordDraftIntent {
-        case automatic
-        case note
-        case category
     }
 
     private enum ScenePackNoteRelation: Equatable {
@@ -74,6 +105,81 @@ struct RecordView: View {
     private let extensionScenePackIds: Set<String> = ["travel", "family"]
     private let scenePackSilenceInterval: TimeInterval = 7 * 24 * 60 * 60
     private let ocrImportUpsellCooldown: TimeInterval = 3 * 24 * 60 * 60
+
+    private var selectedEntryMode: RecordEntryMode {
+        get { tabSession.selectedEntryMode }
+        nonmutating set { tabSession.selectedEntryMode = newValue }
+    }
+
+    private var scenePackExpanded: Bool {
+        get { tabSession.scenePackExpanded }
+        nonmutating set { tabSession.scenePackExpanded = newValue }
+    }
+
+    private var scenePackVariants: [String: Int] {
+        get { tabSession.scenePackVariants }
+        nonmutating set { tabSession.scenePackVariants = newValue }
+    }
+
+    private var amountPadActive: Bool {
+        get { tabSession.amountPadActive }
+        nonmutating set { tabSession.amountPadActive = newValue }
+    }
+
+    private var recordDetailsExpanded: Bool {
+        get { tabSession.recordDetailsExpanded }
+        nonmutating set { tabSession.recordDetailsExpanded = newValue }
+    }
+
+    private var categoryGridExpanded: Bool {
+        get { tabSession.categoryGridExpanded }
+        nonmutating set { tabSession.categoryGridExpanded = newValue }
+    }
+
+    private var noteEditorExpanded: Bool {
+        get { tabSession.noteEditorExpanded }
+        nonmutating set { tabSession.noteEditorExpanded = newValue }
+    }
+
+    private var datePanelExpanded: Bool {
+        get { tabSession.datePanelExpanded }
+        nonmutating set { tabSession.datePanelExpanded = newValue }
+    }
+
+    private var previewLineWasRotated: Bool {
+        get { tabSession.previewLineWasRotated }
+        nonmutating set { tabSession.previewLineWasRotated = newValue }
+    }
+
+    private var activeScenePack: ScenePackDefinition? {
+        get { tabSession.activeScenePack }
+        nonmutating set { tabSession.activeScenePack = newValue }
+    }
+
+    private var didAutoFocusAmountPad: Bool {
+        get { tabSession.didAutoFocusAmountPad }
+        nonmutating set { tabSession.didAutoFocusAmountPad = newValue }
+    }
+
+    private var lastDraftIntent: RecordDraftIntent {
+        get { tabSession.lastDraftIntent }
+        nonmutating set { tabSession.lastDraftIntent = newValue }
+    }
+
+    private var userNoteAnchorTitle: String? {
+        get { tabSession.userNoteAnchorTitle }
+        nonmutating set { tabSession.userNoteAnchorTitle = newValue }
+    }
+
+    private var ocrQuotaUpsellVisibleThisSession: Bool {
+        get { tabSession.ocrQuotaUpsellVisibleThisSession }
+        nonmutating set { tabSession.ocrQuotaUpsellVisibleThisSession = newValue }
+    }
+
+    private var suppressNextNoteSemanticUnlock: Bool {
+        get { tabSession.suppressNextNoteSemanticUnlock }
+        nonmutating set { tabSession.suppressNextNoteSemanticUnlock = newValue }
+    }
 
     private struct ScenePackUsageStat {
         var count: Int
@@ -539,12 +645,6 @@ struct RecordView: View {
         return pack.category.label
     }
 
-    enum EntryMode: String, CaseIterable, Identifiable {
-        case manual = "手动录入"
-        case ocr = "智能导入"
-        var id: String { rawValue }
-    }
-
     private var hasValidAmount: Bool {
         guard let v = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) else { return false }
         return v > 0
@@ -701,7 +801,7 @@ struct RecordView: View {
         }
         switch mark.kind {
         case .milestone, .context, .streak:
-            return "生活印记 · \(mark.title)"
+            return "生活线索 · \(mark.title)"
         case .scene:
             return "会进入「\(mark.label)」印记"
         }
@@ -833,6 +933,14 @@ struct RecordView: View {
         !homeViewModel.inputAmount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var hasUncommittedManualDraft: Bool {
+        hasAmountDraft
+            || !homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || homeViewModel.categoryLockedByUser
+            || homeViewModel.selectedDateEditedByUser
+            || activeScenePack != nil
+    }
+
     private var shouldShowAmountQuickKeys: Bool {
         selectedEntryMode == .manual && amountPadActive
     }
@@ -900,13 +1008,7 @@ struct RecordView: View {
             }
             return
         }
-        recordDetailsExpanded = false
-        categoryGridExpanded = false
-        noteEditorExpanded = false
-        datePanelExpanded = false
-        lastDraftIntent = .automatic
-        userNoteAnchorTitle = nil
-        activeScenePack = nil
+        tabSession.resetAfterCommittedDraft()
         let savedItem = homeViewModel.items.first
         onSaved?(nil)
         if let savedItem {
@@ -957,7 +1059,7 @@ struct RecordView: View {
             id: "cold_start_scene_pack_guide",
             title: "新的生活线索诞生",
             badge: "先选 3 个常用场景包",
-            detail: "这条记录已经长成生活印记了。可以先把最常用的 3 个场景包选好，之后记账会更贴近你的日常。",
+            detail: "这条记录已经长成生活线索了。可以先把最常用的 3 个场景包选好，之后记账会更贴近你的日常。",
             primaryTitle: "去看看",
             secondaryTitle: "知道了",
             kind: .coldStart
@@ -1742,11 +1844,14 @@ struct RecordView: View {
             }
             .onReceive(draftClock) { now in
                 guard selectedEntryMode == .manual else { return }
+                guard !hasUncommittedManualDraft else { return }
                 homeViewModel.refreshDraftSelectedDate(now: now)
             }
             .onAppear {
                 freeScenePackService.recordFirstOpenIfNeeded()
-                homeViewModel.refreshDraftSelectedDate(force: true)
+                if !hasUncommittedManualDraft {
+                    homeViewModel.refreshDraftSelectedDate(force: true)
+                }
                 guard !didAutoFocusAmountPad else { return }
                 didAutoFocusAmountPad = true
                 focusAmountPad()
@@ -1771,7 +1876,13 @@ struct RecordView: View {
                     return importedCount
                 }
             }
-            .sheet(isPresented: $showScenePackAngleSheet) {
+            .sheet(isPresented: $showScenePackAngleSheet, onDismiss: {
+                let shouldOpenMemberPricing = opensMemberPricingAfterScenePackDismiss
+                opensMemberPricingAfterScenePackDismiss = false
+                if shouldOpenMemberPricing {
+                    onShowMemberPricing?(.scenePack(nil))
+                }
+            }) {
                 if isMember {
                     ScenePackAngleSheet(
                         primaryScenePacks: primaryScenePacks,
@@ -1820,7 +1931,8 @@ struct RecordView: View {
                             claimLifeMarkSceneReward(reward, shouldApplyPack: false)
                         },
                         onShowMemberPricing: {
-                            onShowMemberPricing?(.scenePack(nil))
+                            opensMemberPricingAfterScenePackDismiss = onShowMemberPricing != nil
+                            showScenePackAngleSheet = false
                         }
                     )
                 }
@@ -1848,24 +1960,23 @@ struct RecordView: View {
     private var recordPanelHeader: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("把生活放进账本")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(AppColors.accent.opacity(0.78))
 
             Text(hasAmountDraft ? "先放进账本" : "先记金额")
-                .font(.system(size: 20, weight: .bold))
+                .font(.title3.weight(.bold))
                 .foregroundStyle(recordInk)
 
             Text(hasAmountDraft ? "先落到账本，之后可以回看。" : "先敲金额，分类和备注会跟着浮出来。")
-                .font(.system(size: 12))
-                .foregroundStyle(AppColors.subtext.opacity(0.76))
+                .font(.footnote)
+                .foregroundStyle(AppColors.subtext)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(height: 17, alignment: .leading)
         }
     }
 
     private var recordModeSegment: some View {
         HStack(spacing: 4) {
-            ForEach(EntryMode.allCases) { mode in
+            ForEach(RecordEntryMode.allCases) { mode in
                 recordModeButton(mode)
             }
         }
@@ -1876,11 +1987,11 @@ struct RecordView: View {
         )
     }
 
-    private func recordModeButton(_ mode: EntryMode) -> some View {
+    private func recordModeButton(_ mode: RecordEntryMode) -> some View {
         let isSelected = selectedEntryMode == mode
         return Button {
             dismissKeyboard()
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                 selectedEntryMode = mode
             }
             if mode == .manual {
@@ -1890,16 +2001,19 @@ struct RecordView: View {
             recordModeLabel(mode, isSelected: isSelected)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(mode.rawValue)
+        .accessibilityValue(isSelected ? "已选中" : "")
+        .accessibilityHint(mode == .manual ? "切换到手动记录" : "切换到账单截图识别")
     }
 
-    private func recordModeLabel(_ mode: EntryMode, isSelected: Bool) -> some View {
+    private func recordModeLabel(_ mode: RecordEntryMode, isSelected: Bool) -> some View {
         let weight: Font.Weight = isSelected ? .semibold : .regular
         let shadow = isSelected ? Color.black.opacity(0.08) : Color.clear
         return Text(mode.rawValue)
-            .font(.system(size: 15, weight: weight))
+            .font(.body.weight(weight))
             .foregroundStyle(recordInk)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .padding(.horizontal, 10)
             .background(recordModeBackground(isSelected: isSelected))
             .shadow(color: shadow, radius: 2, y: 1)
     }
@@ -2003,10 +2117,10 @@ struct RecordView: View {
             selectedEntryMode = .ocr
         } label: {
             Text("有账单截图？从截图导入 →")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppColors.subtext.opacity(0.86))
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(AppColors.subtext)
+                .frame(minHeight: 44)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 7)
                 .background(
                     Capsule(style: .continuous)
                         .fill(Color.white.opacity(0.48))
@@ -2018,6 +2132,8 @@ struct RecordView: View {
         }
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityLabel("账单识别")
+        .accessibilityHint("从微信或支付宝账单截图导入")
     }
 
     @ViewBuilder
@@ -2039,17 +2155,18 @@ struct RecordView: View {
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("补充细节")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.headline.weight(.semibold))
                             .foregroundStyle(recordInk.opacity(0.88))
                         Text("不急，想补再补。")
-                            .font(.system(size: 11))
-                            .foregroundStyle(AppColors.subtext.opacity(0.78))
+                            .font(.footnote)
+                            .foregroundStyle(AppColors.subtext)
                     }
                     Spacer()
                     Image(systemName: recordDetailsExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(AppColors.subtext.opacity(0.72))
                 }
+                .frame(minHeight: 44)
                 .padding(14)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -2063,24 +2180,35 @@ struct RecordView: View {
             .buttonStyle(.plain)
 
             if recordDetailsExpanded {
-                HStack(spacing: 8) {
-                    detailToggleButton("改分类", isActive: categoryGridExpanded) {
-                        withAnimation(.easeInOut(duration: 0.16)) { categoryGridExpanded.toggle() }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        recordDetailToggleActions
                     }
-                    detailToggleButton("写点细节", isActive: noteEditorExpanded) {
-                        withAnimation(.easeInOut(duration: 0.16)) {
-                            noteEditorExpanded.toggle()
-                            if noteEditorExpanded {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
-                                    focusedField = .note
-                                }
-                            }
-                        }
+
+                    VStack(spacing: 8) {
+                        recordDetailToggleActions
                     }
                 }
 
                 if categoryGridExpanded { categorySection }
                 if noteEditorExpanded { noteSection }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var recordDetailToggleActions: some View {
+        detailToggleButton("改分类", isActive: categoryGridExpanded) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) { categoryGridExpanded.toggle() }
+        }
+        detailToggleButton("写点细节", isActive: noteEditorExpanded) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
+                noteEditorExpanded.toggle()
+                if noteEditorExpanded {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+                        focusedField = .note
+                    }
+                }
             }
         }
     }
@@ -2098,10 +2226,10 @@ struct RecordView: View {
     private func detailToggleLabel(_ title: String, isActive: Bool) -> some View {
         let foreground = isActive ? AppColors.accent.opacity(0.9) : recordInk.opacity(0.78)
         return Text(title)
-            .font(.system(size: 13, weight: .medium))
+            .font(.subheadline.weight(.medium))
             .foregroundStyle(foreground)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .padding(.horizontal, 10)
             .background(detailToggleBackground(isActive: isActive))
             .overlay(detailToggleBorder(isActive: isActive))
     }
@@ -2429,7 +2557,7 @@ struct RecordView: View {
             Image(systemName: "keyboard.chevron.compact.down")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(foreground)
-                .frame(width: 42, height: 34)
+                .frame(width: 44, height: 44)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(fill)
@@ -2878,7 +3006,7 @@ struct RecordView: View {
                 }
             }
         }
-        .animation(.spring(response: 0.34, dampingFraction: 0.84), value: isOCRDraftStageVisible)
+        .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.84), value: isOCRDraftStageVisible)
     }
 
     private var ocrDraftStageLayer: some View {
@@ -2922,10 +3050,10 @@ struct RecordView: View {
     }
 
     private var resumeOCRDraftStageButton: some View {
-        Button {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                ocrDraftStageDismissed = false
-            }
+            Button {
+                withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86)) {
+                    ocrDraftStageDismissed = false
+                }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "tray.full.fill")
@@ -2933,10 +3061,10 @@ struct RecordView: View {
                     .foregroundStyle(recordAccent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("继续整理 \(homeViewModel.ocrDraftItems.count) 笔")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppColors.text)
                     Text("关闭只是收起，待整理账单还在。")
-                        .font(.system(size: 11))
+                        .font(.footnote)
                         .foregroundStyle(AppColors.subtext)
                 }
                 Spacer()
@@ -2944,6 +3072,7 @@ struct RecordView: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(AppColors.subtext)
             }
+            .frame(minHeight: 44)
             .padding(12)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -2964,18 +3093,19 @@ struct RecordView: View {
                 selectedEntryMode = .manual
             } label: {
                 Text("回到手动记录 →")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.subtext.opacity(0.86))
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .frame(minHeight: 44)
             }
             .buttonStyle(.plain)
 
             Text("导入微信/支付宝账单列表或单笔详情截图，识别后先确认，再写入账单。")
-                .font(.system(size: 13))
+                .font(.subheadline)
                 .foregroundStyle(AppColors.subtext)
 
             Text("请保证每笔完整在画面内，上下留一点边；首尾笔被裁切可能漏识别。")
-                .font(.system(size: 12))
-                .foregroundStyle(AppColors.subtext.opacity(0.86))
+                .font(.footnote)
+                .foregroundStyle(AppColors.subtext)
 
             PhotosPicker(selection: $selectedPhoto, matching: .images, photoLibrary: .shared()) {
                 Label("导入账单截图", systemImage: "photo")
@@ -3020,9 +3150,14 @@ struct RecordView: View {
 
             if !homeViewModel.ocrStatus.isEmpty {
                 Text(homeViewModel.ocrStatus)
-                    .font(.system(size: 12, weight: isOCRQuotaExhausted ? .semibold : .regular))
+                    .font(.system(
+                        .footnote,
+                        design: .default,
+                        weight: isOCRQuotaExhausted ? .semibold : .regular
+                    ))
                     .foregroundStyle(isOCRQuotaExhausted ? recordAccent : AppColors.subtext)
                     .padding(.top, 4)
+                    .accessibilityLabel("识别状态，\(homeViewModel.ocrStatus)")
             }
 
             if shouldShowOCRQuotaUpsell {
@@ -3035,8 +3170,8 @@ struct RecordView: View {
         }
         .padding(isOCRDraftStageVisible ? 12 : 0)
         .background(ocrSecondaryLayerBackground)
-        .scaleEffect(isOCRDraftStageVisible ? 0.92 : 1, anchor: .top)
-        .offset(y: isOCRDraftStageVisible ? -6 : 0)
+        .scaleEffect(reduceMotion ? 1 : (isOCRDraftStageVisible ? 0.92 : 1), anchor: .top)
+        .offset(y: reduceMotion ? 0 : (isOCRDraftStageVisible ? -6 : 0))
         .opacity(isOCRDraftStageVisible ? 0.28 : 1)
         .saturation(isOCRDraftStageVisible ? 0.62 : 1)
         .allowsHitTesting(!isOCRDraftStageVisible)
@@ -3081,9 +3216,10 @@ struct RecordView: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(AppColors.subtext)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("关闭会员提示")
             }
 
             Button {
@@ -3097,13 +3233,14 @@ struct RecordView: View {
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: 38)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(recordAccent)
                 )
             }
             .buttonStyle(.plain)
+            .accessibilityHint("打开会员页继续使用账单识别")
         }
         .padding(14)
         .background(

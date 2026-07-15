@@ -1,0 +1,76 @@
+[
+  {
+    "id": "11111111-1111-1111-1111-111111111111",
+    "title": "早餐",
+    "amount": 12.5,
+    "category": "餐饮",
+    "source": "manual",
+    "createdAt": 800000000,
+    "updatedAt": 800000000,
+    "emotionTag": "早餐先记下"
+  },
+  {
+    "id": "22222222-2222-2222-2222-222222222222",
+    "title": "酒店",
+    "amount": 88,
+    "category": "住宿",
+    "source": "manual",
+    "createdAt": 800010000,
+    "updatedAt": 800010100,
+    "emotionTag": "短暂停留",
+    "memoryImageData": "AQID",
+    "coverMemoryImageIndex": 0,
+    "memoryAnchorRole": "place",
+    "memoryAnchorSceneHint": "travel",
+    "memoryAnchorCaption": "路上拍下的一张图。",
+    "memoryAnchorCreatedAt": 800010200
+  },
+  {
+    "id": "33333333-3333-3333-3333-333333333333",
+    "title": "新相机",
+    "amount": 199.9,
+    "category": "购物",
+    "source": "manual",
+    "createdAt": 800020000,
+    "updatedAt": 800020100,
+    "emotionTag": "爱好里的小投入",
+    "memoryImageDatas": ["BAUG", "BwgJ"],
+    "coverMemoryImageIndex": 1,
+    "memoryAnchorRole": "object",
+    "memoryAnchorSceneHint": "importantPurchase",
+    "memoryAnchorCaption": "这次买的东西。",
+    "memoryAnchorCreatedAt": 800020200
+  },
+  {
+    "id": "44444444-4444-4444-4444-444444444444",
+    "title": "超市小票",
+    "amount": 45.6,
+    "category": "日用",
+    "source": "ocr",
+    "createdAt": 800030000,
+    "updatedAt": 800030000,
+    "emotionTag": "日用记录",
+    "draftMeta": {
+      "batchId": "ocr-batch-001",
+      "importedAt": 800030100,
+      "status": "pending"
+    }
+  },
+  {
+    "id": "55555555-5555-5555-5555-555555555555",
+    "title": "下班地铁",
+    "amount": 23,
+    "category": "交通",
+    "source": "manual",
+    "createdAt": 800040000,
+    "updatedAt": 800040000,
+    "emotionTag": "公共交通一段",
+    "memoryContext": {
+      "weatherKind": "rain",
+      "temperatureCelsius": 24.5,
+      "cityName": "杭州",
+      "semanticPlace": "公司附近"
+    },
+    "scenePackId": "commute"
+  }
+]

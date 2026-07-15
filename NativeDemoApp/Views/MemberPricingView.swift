@@ -30,10 +30,10 @@ struct MemberPricingView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var iapService = IAPService.shared
     let highlightPlanId: String?
     let entryContext: MemberPricingEntryContext
-    @State private var benefitsExpanded = false
     @State private var morePlansExpanded = false
     @State private var purchaseNotice: String?
     @State private var isPurchasing = false
@@ -53,19 +53,13 @@ struct MemberPricingView: View {
     ]
 
     private let benefits = [
-        ("无限生活回放", "通勤、聚餐、旅行、看病、送礼、养宠等记录持续保留，随时回看。"),
-        ("AI 深度生活分析", "按日期、分类、金额和备注整理规律，查看哪些支出增加、哪些场景出现更频繁。"),
-        ("持续生成周月回放", "周记、月记、年度内容按真实记录自动整理，多年以后依然能翻阅今天。"),
-        ("账单连续整理", "把重复整理交给 AI。微信、支付宝截图可以连续导入，一年账单也能整理成可回看的记录。"),
-        ("全部生活场景", "地铁公交打车停车、外卖咖啡、超市买菜、网购、看病买药、健身恢复、娃和毛孩等场景都能分类整理。"),
-        ("今日无限回放", "睡前重新看看今天。按时间、地点、分类和备注回看当天记录。"),
-        ("25+ 生活风格", "纸境、档案馆、夜读、观察者、旅行手账和博物馆等风格可切换。"),
+        ("省力记", "手动记账和基础统计始终免费；会员把 OCR 连续导入、批量补记和完整生活场景接起来。"),
+        ("长期回望", "今日回放、周记、月章和生活线索持续可用，多年以后仍能按真实记录回看。"),
     ]
 
     private let boundaryRows = [
-        ("生活场景", "轻度记录常用角度", "完整打开出去玩、看病买药健身恢复、娃和毛孩、人情局、兴趣装备等生活面"),
-        ("生活回放", "基础体验最近片段", "持续保存周/月/年度回放，不让记录断档"),
-        ("账单整理", "适合少量截图", "大段账单也能连续整理成可回看的记录"),
+        ("省力记", "手动记账免费，OCR 每日有体验次数", "OCR 连续导入、批量补记和全部生活场景"),
+        ("长期回望", "各入口提供今日回放、周记、月章和生活线索体验", "长期回望持续可用，不被次数打断"),
     ]
 
     init(
@@ -76,7 +70,7 @@ struct MemberPricingView: View {
         self.entryContext = entryContext
     }
 
-    private let freeQuotaFootnote = "免费版适合轻度记录。会员适合希望长期保存生活轨迹、获得 AI 深度分析与持续回顾的用户。所有账单数据均由你掌控。"
+    private let freeQuotaFootnote = "手动记账、基础统计和本地保存始终免费。具体体验次数只在对应入口显示；会员核心是省力记和长期回望。"
 
     private var isMember: Bool {
         settingsViewModel.settings.hasMemberAccess
@@ -93,7 +87,7 @@ struct MemberPricingView: View {
                 title: "把这段记录继续往后查",
                 subtitle: "会员会继续整理本周、本月和更长时间的记录，不只停在分类和金额。",
                 detail: "雨天通勤、健身恢复、旅行停留、家庭照护这些线索，会按账本里已有的日期、分类、备注和上下文连接起来。",
-                chips: ["按日期回看", "周/月连续", "真实记录"]
+                chips: ["按日期回看", "周记月章连续", "真实记录"]
             )
         case .playbackQuota:
             return MemberHeroContent(
@@ -106,7 +100,7 @@ struct MemberPricingView: View {
             return MemberHeroContent(
                 title: "连续整理截图账单",
                 subtitle: "微信、支付宝截图多的时候，会员可以继续导入，不用等明天刷新。",
-                detail: "导入后会继续参与重复账单判断、分类整理和周/月回顾，账单不是只进列表里。",
+                detail: "导入后会继续参与重复账单判断、分类整理、周记和月章，账单不是只进列表里。",
                 chips: ["连续导入", "重复整理", "进入回顾"]
             )
         case .scenePack(_):
@@ -125,17 +119,17 @@ struct MemberPricingView: View {
             )
         case .aiCommand:
             return MemberHeroContent(
-                title: "让AI生活助手继续替你整理账本",
-                subtitle: "会员可以批量补记、连续追问，也能把本周、本月和上一次这些线索接着查下去。",
-                detail: "批量补记会先生成预览，确认后才写入账本；查询和整理都只基于真实记录，不额外编造。",
+                title: "用本机指令台批量整理真实账本",
+                subtitle: "按时间、分类、金额和备注查账、对比、核对重复，并生成待确认补记预览。",
+                detail: "AI 指令台不联网；批量补记确认后才写入，结果只基于真实记录，不额外编造。",
                 chips: ["批量补记", "连续追问", "真实账本"]
             )
         case .settings:
             return MemberHeroContent(
                 title: "让账本以后还能看懂",
                 subtitle: "多年以后，你未必记得今天花了多少钱，但会想知道那时的自己正在过怎样的生活。",
-                detail: "会员让 AI 按日期、分类、备注和上下文整理，帮你看见习惯、场景和变化。",
-                chips: ["生活回放", "深度分析", "长期记录"]
+                detail: "本机规则会按日期、分类、备注和上下文整理；开启联网整理后，今日小记和月度整理可尝试远程模型。",
+                chips: ["周记月章", "深度分析", "长期记录"]
             )
         }
     }
@@ -158,7 +152,7 @@ struct MemberPricingView: View {
             return [
                 MemberValuePoint(symbol: "doc.viewfinder", title: "连续导入截图", detail: "微信、支付宝截图多的时候可以接着整理。"),
                 MemberValuePoint(symbol: "checklist", title: "减少重复整理", detail: "导入后的账单继续参与重复判断和分类线索。"),
-                MemberValuePoint(symbol: "chart.line.uptrend.xyaxis", title: "导入后能回看", detail: "账单会进入痕迹页、回放和 AI 查询。")
+                MemberValuePoint(symbol: "chart.line.uptrend.xyaxis", title: "导入后能回看", detail: "账单会进入痕迹页、回放和指令台查询。")
             ]
         case .scenePack(_):
             return [
@@ -181,8 +175,8 @@ struct MemberPricingView: View {
         case .settings:
             return [
                 MemberValuePoint(symbol: "book.closed", title: "多年以后仍能回看", detail: "金额、备注、天气和地点都能一起看。"),
-                MemberValuePoint(symbol: "sparkles", title: "AI 帮你整理账本", detail: "发现消费习惯、场景变化和重复记录。"),
-                MemberValuePoint(symbol: "clock.arrow.circlepath", title: "长期连续记录", detail: "回放、月章和账单整理持续接上。")
+                MemberValuePoint(symbol: "sparkles", title: "规则帮你整理账本", detail: "按真实记录查看习惯、场景变化和重复记录。"),
+                MemberValuePoint(symbol: "clock.arrow.circlepath", title: "长期连续记录", detail: "今日回放、周记、月章和账单整理持续接上。")
             ]
         }
     }
@@ -293,8 +287,8 @@ struct MemberPricingView: View {
                         .zIndex(20)
                 }
             }
-            .animation(.easeInOut(duration: 0.18), value: purchaseNotice)
-            .animation(.easeInOut(duration: 0.18), value: isPurchasing)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: purchaseNotice)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: isPurchasing)
 
         }
     }
@@ -345,41 +339,35 @@ struct MemberPricingView: View {
         let content = heroContent
         return VStack(alignment: .leading, spacing: 8) {
             Text(content.title)
-                .font(.system(size: 20, weight: .bold))
+                .font(.title3.weight(.bold))
                 .foregroundStyle(AppColors.text)
 
             Text(content.subtitle)
-                .font(.system(size: 13))
+                .font(.subheadline)
                 .lineSpacing(3)
                 .foregroundStyle(AppColors.subtext)
 
             Text(content.detail)
-                .font(.system(size: 12))
+                .font(.footnote)
                 .lineSpacing(3)
-                .foregroundStyle(AppColors.subtext.opacity(0.88))
+                .foregroundStyle(AppColors.subtext)
                 .padding(.top, 2)
 
             if !isMember {
                 Text(memberProofLine)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.footnote.weight(.medium))
                     .foregroundStyle(AppColors.text.opacity(0.82))
                     .lineSpacing(3)
                     .padding(.top, 4)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: 7) {
-                    ForEach(content.chips, id: \.self) { chip in
-                        Text(chip)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(AppColors.accentDark.opacity(0.9))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.82)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 5)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(AppColors.accent.opacity(0.10))
-                            )
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 7) {
+                        memberHeroChips(content.chips)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        memberHeroChips(content.chips)
                     }
                 }
                 .padding(.top, 4)
@@ -401,6 +389,22 @@ struct MemberPricingView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.white.opacity(0.4), lineWidth: 1)
         )
+    }
+
+    @ViewBuilder
+    private func memberHeroChips(_ chips: [String]) -> some View {
+        ForEach(chips, id: \.self) { chip in
+            Text(chip)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(AppColors.accentDark.opacity(0.9))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(AppColors.accent.opacity(0.10))
+                )
+        }
     }
 
     private var memberValueSection: some View {
@@ -427,10 +431,10 @@ struct MemberPricingView: View {
                 )
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.headline.weight(.semibold))
                     .foregroundStyle(AppColors.text.opacity(0.9))
                 Text(detail)
-                    .font(.system(size: 12))
+                    .font(.footnote)
                     .lineSpacing(3)
                     .foregroundStyle(AppColors.subtext.opacity(0.9))
                     .fixedSize(horizontal: false, vertical: true)
@@ -446,32 +450,25 @@ struct MemberPricingView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(Color.white.opacity(0.42), lineWidth: 1)
         )
+        .accessibilityElement(children: .combine)
     }
 
     private var memberBoundarySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("完整长期记录包含")
-                .font(.system(size: 15, weight: .semibold))
+            Text("免费与会员的差别")
+                .font(.headline.weight(.semibold))
                 .foregroundStyle(AppColors.text.opacity(0.9))
 
             VStack(spacing: 0) {
                 ForEach(boundaryRows.indices, id: \.self) { index in
                     let row = boundaryRows[index]
-                    HStack(alignment: .top, spacing: 10) {
-                        Text(row.0)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(AppColors.text.opacity(0.74))
-                            .frame(width: 62, alignment: .leading)
-                        Text(row.1)
-                            .font(.system(size: 12))
-                            .foregroundStyle(AppColors.subtext)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(row.2)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AppColors.accent.opacity(0.9))
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    ViewThatFits(in: .horizontal) {
+                        memberBoundaryHorizontalRow(row)
+                        memberBoundaryVerticalRow(row)
                     }
                     .padding(.vertical, 9)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(row.0)，免费：\(row.1)，会员：\(row.2)")
 
                     if index < boundaryRows.count - 1 {
                         Divider()
@@ -491,52 +488,68 @@ struct MemberPricingView: View {
         )
     }
 
+    private func memberBoundaryHorizontalRow(_ row: (String, String, String)) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(row.0)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(AppColors.text.opacity(0.82))
+                .frame(width: 62, alignment: .leading)
+            Text(row.1)
+                .font(.footnote)
+                .foregroundStyle(AppColors.subtext)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(row.2)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(AppColors.accent.opacity(0.9))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func memberBoundaryVerticalRow(_ row: (String, String, String)) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(row.0)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppColors.text)
+            Text("免费：\(row.1)")
+                .font(.footnote)
+                .foregroundStyle(AppColors.subtext)
+            Text("会员：\(row.2)")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(AppColors.accent)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     // MARK: - Benefits
 
     private var benefitsSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) { benefitsExpanded.toggle() }
-            } label: {
-                HStack {
-                    Text("你会得到什么")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(AppColors.text.opacity(0.86))
-                    Spacer()
-                    Text(benefitsExpanded ? "收起" : "展开")
-                        .font(.system(size: 12))
+        VStack(alignment: .leading, spacing: 10) {
+            Text("会员核心价值")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppColors.text.opacity(0.86))
+
+            ForEach(benefits.indices, id: \.self) { idx in
+                let (title, desc) = benefits[idx]
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AppColors.text)
+                    Text(desc)
+                        .font(.footnote)
                         .foregroundStyle(AppColors.subtext)
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(Color.white.opacity(0.58))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .stroke(Color.white.opacity(0.35), lineWidth: 1)
                 )
-            }
-            .buttonStyle(.plain)
-
-            if benefitsExpanded {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(benefits.indices, id: \.self) { idx in
-                        let (title, desc) = benefits[idx]
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(title)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(AppColors.text)
-                            Text(desc)
-                                .font(.system(size: 11))
-                                .foregroundStyle(AppColors.subtext)
-                                .lineSpacing(2)
-                        }
-                    }
-                }
-                .padding(14)
-                .padding(.top, 4)
             }
         }
     }
@@ -552,20 +565,19 @@ struct MemberPricingView: View {
 
             // More plans toggle
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) { morePlansExpanded.toggle() }
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { morePlansExpanded.toggle() }
             } label: {
                 HStack {
                     Text("查看更多套餐")
-                        .font(.system(size: 14))
+                        .font(.body)
                         .foregroundStyle(AppColors.text.opacity(0.8))
                     Spacer()
                     Image(systemName: morePlansExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(AppColors.subtext)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(Color.white.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
@@ -581,15 +593,15 @@ struct MemberPricingView: View {
             restorePurchaseButton
 
             Text("订阅可随时在 App Store 账户设置中取消。新用户首月优惠以购买页显示为准。")
-                .font(.system(size: 11))
-                .foregroundStyle(AppColors.subtext.opacity(0.8))
+                .font(.footnote)
+                .foregroundStyle(AppColors.subtext)
                 .padding(.top, 4)
         }
     }
 
     private var lifetimeTeaserSection: some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                 morePlansExpanded.toggle()
             }
         } label: {
@@ -605,10 +617,10 @@ struct MemberPricingView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("想长期保存记录？")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppColors.text.opacity(0.9))
                     Text("永久会员一次开通，含 3 款典藏风格。")
-                        .font(.system(size: 11))
+                        .font(.footnote)
                         .foregroundStyle(AppColors.subtext)
                 }
 
@@ -619,7 +631,9 @@ struct MemberPricingView: View {
                     .foregroundStyle(AppColors.subtext.opacity(0.7))
                     .rotationEffect(.degrees(morePlansExpanded ? 180 : 0))
             }
-            .padding(12)
+            .frame(minHeight: 44)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(Color.white.opacity(0.54))
@@ -642,7 +656,7 @@ struct MemberPricingView: View {
             Text(isLifetimeMember ? "你的永久记录已开启" : "感谢成为 xLife 会员")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(AppColors.text)
-            Text(isLifetimeMember ? "这些日子会随账号长期保留，AI 会继续替你整理和连接。" : "你的周月回放正在持续整理中")
+            Text(isLifetimeMember ? "这些日子会随账号长期保留，叙账会按真实记录继续整理。" : "你的周记和月章正在持续整理中")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
                 .multilineTextAlignment(.center)
@@ -656,7 +670,7 @@ struct MemberPricingView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Color(hex: "8B6F38"))
             }
-            Text(isLifetimeMember ? "你买下的不是一组功能，而是把生活长期留住的能力。" : "AI 将继续为你整理和连接每一天。")
+            Text(isLifetimeMember ? "你买下的不是一组功能，而是把生活长期留住的能力。" : "叙账会继续按真实记录整理每一天。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
                 .multilineTextAlignment(.center)
@@ -950,9 +964,9 @@ struct MemberPricingView: View {
         spanDays: Int
     ) -> String {
         if let primaryMark {
-            return "最近最清楚的是「\(primaryMark.label)」：\(primaryMark.count) 次、合计 \(primaryMark.total.formatted(.cny))，以后能继续和天气、地点、周月回放连起来。"
+            return "最近最清楚的是「\(primaryMark.label)」：\(primaryMark.count) 次、合计 \(primaryMark.total.formatted(.cny))，以后能继续和天气、地点、周记和月章连起来。"
         }
-        return "\(traceCount) 条账单已经覆盖 \(spanDays) 天。记录越多，AI 能整理出的日期、分类和场景就越完整。"
+        return "\(traceCount) 条账单已经覆盖 \(spanDays) 天。记录越多，本机规则能整理出的日期、分类和场景就越完整。"
     }
 
     private func lifetimeArchiveClosingLine(
@@ -999,34 +1013,51 @@ struct MemberPricingView: View {
     // MARK: - Privacy
 
     private var privacyNote: some View {
-        Text("默认不登录也能记账。开启云端备份后，仅同步必要账单数据与会员状态；OCR 原始图片不会上传服务器。")
-            .font(.system(size: 11))
-            .foregroundStyle(AppColors.subtext.opacity(0.75))
+        Text("默认不登录也能记账。开启云端备份后，仅同步金额、分类、备注、日期等账单字段与会员状态；OCR 原始图片和记忆照片都不会上传服务器。")
+            .font(.footnote)
+            .foregroundStyle(AppColors.subtext)
             .lineSpacing(3)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private var legalPurchaseNote: some View {
-        HStack(spacing: 4) {
-            Text("购买前请阅读")
-                .foregroundStyle(AppColors.subtext.opacity(0.78))
-            Link("用户协议", destination: termsURL)
-                .foregroundStyle(AppColors.accentDark.opacity(0.9))
-            Text("和")
-                .foregroundStyle(AppColors.subtext.opacity(0.78))
-            Link("隐私政策", destination: privacyURL)
-                .foregroundStyle(AppColors.accentDark.opacity(0.9))
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 4) {
+                legalPurchaseLinks
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("购买前请阅读")
+                    .foregroundStyle(AppColors.subtext)
+                HStack(spacing: 6) {
+                    Link("用户协议", destination: termsURL)
+                    Text("和")
+                        .foregroundStyle(AppColors.subtext)
+                    Link("隐私政策", destination: privacyURL)
+                }
+                .foregroundStyle(AppColors.accentDark)
+            }
         }
-        .font(.system(size: 11))
-        .lineLimit(1)
-        .minimumScaleFactor(0.82)
+        .font(.footnote)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var legalPurchaseLinks: some View {
+        Text("购买前请阅读")
+            .foregroundStyle(AppColors.subtext)
+        Link("用户协议", destination: termsURL)
+            .foregroundStyle(AppColors.accentDark)
+        Text("和")
+            .foregroundStyle(AppColors.subtext)
+        Link("隐私政策", destination: privacyURL)
+            .foregroundStyle(AppColors.accentDark)
     }
 
     private var freeQuotaNote: some View {
         Text(freeQuotaFootnote)
-            .font(.system(size: 11))
-            .foregroundStyle(AppColors.subtext.opacity(0.75))
+            .font(.footnote)
+            .foregroundStyle(AppColors.subtext)
             .lineSpacing(3)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -1040,7 +1071,7 @@ struct MemberPricingView: View {
             VStack(alignment: .leading, spacing: 3) {
                 if let badge = plan.badge {
                     Text(badge)
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.caption.weight(.bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
@@ -1051,13 +1082,14 @@ struct MemberPricingView: View {
                         .padding(.bottom, 2)
                 }
                 Text("\(plan.name)：\(displayPrice(for: plan)) / \(plan.period)")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.headline.weight(.semibold))
                     .foregroundStyle(.white)
                 Text(plan.dailyHint)
-                    .font(.system(size: 11))
+                    .font(.footnote)
                     .foregroundStyle(.white.opacity(0.82))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: 44)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .background(
@@ -1085,10 +1117,10 @@ struct MemberPricingView: View {
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text("\(plan.name)：\(displayPrice(for: plan)) / \(plan.period)")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.headline.weight(.medium))
                     .foregroundStyle(AppColors.text.opacity(0.88))
                 Text(plan.dailyHint)
-                    .font(.system(size: 11))
+                    .font(.footnote)
                     .foregroundStyle(AppColors.subtext)
                 if plan.id == "lifetime" {
                     lifetimeThemeBullet
@@ -1096,6 +1128,7 @@ struct MemberPricingView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: 44)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(
@@ -1123,7 +1156,7 @@ struct MemberPricingView: View {
             Text("随账号永久保留，年度会员不可用")
                 .foregroundStyle(AppColors.subtext)
         }
-        .font(.system(size: 11))
+        .font(.footnote)
         .lineSpacing(2)
     }
 
@@ -1159,8 +1192,7 @@ struct MemberPricingView: View {
                     .font(.system(size: 14, weight: .semibold))
             }
             .foregroundStyle(AppColors.accent)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(AppColors.accent.opacity(0.35), lineWidth: 1)
@@ -1174,11 +1206,13 @@ struct MemberPricingView: View {
 
     private func handlePurchase(_ plan: MemberPlan) {
         guard settingsViewModel.hasCloudSession else {
+            homeViewModel.markMemberPurchaseCompleted(plan: plan.id, outcome: .blocked)
             purchaseNotice = "请先在设置页登录账号，再开通会员。这样换机后也能恢复你的会员状态。"
             return
         }
         guard let tier = IAPTier(rawValue: plan.id) else { return }
         guard let appAccountToken = UUID(uuidString: settingsViewModel.cloudUserId) else {
+            homeViewModel.markMemberPurchaseCompleted(plan: plan.id, outcome: .blocked)
             purchaseNotice = "当前账号状态异常，请重新登录手机号账号后再开通会员。"
             return
         }
@@ -1189,8 +1223,10 @@ struct MemberPricingView: View {
                 let payload = try await iapService.purchase(tier: tier, appAccountToken: appAccountToken)
                 try await settingsViewModel.verifyIAPPurchase(payload)
                 await iapService.finish(transactionId: payload.transactionId)
+                homeViewModel.markMemberPurchaseCompleted(plan: plan.id, outcome: .success)
                 purchaseNotice = "会员已开通，回放和导入额度已更新。"
             } catch {
+                homeViewModel.markMemberPurchaseCompleted(plan: plan.id, outcome: .failure)
                 purchaseNotice = (error as? LocalizedError)?.errorDescription ?? "购买没有完成。请确认支付状态后再试。"
             }
         }
@@ -1198,6 +1234,7 @@ struct MemberPricingView: View {
 
     private func restorePurchases() {
         guard settingsViewModel.hasCloudSession else {
+            homeViewModel.markMemberRestoreCompleted(outcome: .blocked)
             purchaseNotice = "请先在设置页登录账号，再恢复购买，这样能确认你的会员权益。"
             return
         }
@@ -1207,6 +1244,7 @@ struct MemberPricingView: View {
             do {
                 let payloads = try await iapService.restorePurchases()
                 guard !payloads.isEmpty else {
+                    homeViewModel.markMemberRestoreCompleted(outcome: .empty)
                     purchaseNotice = "暂时没有找到可恢复的购买记录。请确认已登录购买时绑定的手机号账号。"
                     return
                 }
@@ -1221,12 +1259,15 @@ struct MemberPricingView: View {
                     }
                 }
                 guard let restoredPayload else {
+                    homeViewModel.markMemberRestoreCompleted(outcome: .empty)
                     purchaseNotice = "当前账号暂时没有可恢复的会员权益。请确认使用的是购买时的账号。"
                     return
                 }
                 await iapService.finish(transactionId: restoredPayload.transactionId)
+                homeViewModel.markMemberRestoreCompleted(outcome: .success)
                 purchaseNotice = "会员权益已恢复，可以继续使用。"
             } catch {
+                homeViewModel.markMemberRestoreCompleted(outcome: .failure)
                 purchaseNotice = (error as? LocalizedError)?.errorDescription ?? "恢复购买没有完成，请稍后再试。"
             }
         }
@@ -1279,9 +1320,9 @@ private struct LifetimeArchiveSnapshot {
         stages: [
             LifetimeArchiveStage(value: "1天", label: "开始"),
             LifetimeArchiveStage(value: "7天", label: "连起来"),
-            LifetimeArchiveStage(value: "30天", label: "月度回放")
+            LifetimeArchiveStage(value: "30天", label: "月章")
         ],
-        primaryLine: "有了真实记录后，这里会自动换成你的连续天数、同类记录和周月回放素材。",
+        primaryLine: "有了真实记录后，这里会自动换成你的连续天数、同类记录、周记和月章素材。",
         closingLine: "它会跟着你的账本长，不是一张固定权益图。"
     )
 }

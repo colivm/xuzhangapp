@@ -1,4 +1,4 @@
-﻿import Foundation
+import Foundation
 
 struct PlaybackEntry: Identifiable, Codable, Equatable {
     let id: UUID
@@ -542,7 +542,7 @@ final class PlaybackService {
         let busiest = active.max { lhs, rhs in
             lhs.count == rhs.count ? lhs.amount < rhs.amount : lhs.count < rhs.count
         }
-        let title = "本周回放"
+        let title = "周记"
         let weekKey = SummaryPlaybackQuotaStore().currentWeekKey(now: now)
         let weekSeed = playbackCopySeed(base: "week-\(weekKey)", suffix: copySeed)
 
@@ -1270,7 +1270,7 @@ final class PlaybackService {
         let end = interval?.end ?? now
         let rows = positiveItems(items, from: start, to: end)
         let total = rows.reduce(0) { $0 + $1.amount }
-        let title = "本月回放"
+        let title = "月章"
         let rangeLabel = Self.monthFormatter.string(from: now)
         let top = topCategoryStats(rows).first
         let ratio = total > 0 ? Int(round(((top?.amount ?? 0) / total) * 100)) : 0

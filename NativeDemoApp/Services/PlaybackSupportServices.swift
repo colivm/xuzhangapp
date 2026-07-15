@@ -1,4 +1,4 @@
-﻿import Foundation
+import Foundation
 
 enum PlaybackMaterialScoring {
     static func stableScore(item: HomeItem, periodKey: String, now: Date) -> Int {
@@ -38,26 +38,26 @@ enum ExperienceRuleCopy {
         hasData: Bool,
         isMember: Bool
     ) -> String {
-        guard hasData else { return "回放使用本地模板生成，不依赖 AI 服务。" }
-        guard !isMember else { return "会员可无限回看周/月回放。" }
+        guard hasData else { return "周记和月章使用本地规则生成，不联网。" }
+        guard !isMember else { return "会员可无限回看周记和月章。" }
         switch range {
         case .week:
             let text = quotaText(remaining: remaining, limit: SummaryPlaybackQuotaStore.weeklyFreeLimit)
             return remaining > 0
-                ? "本周回放剩余 \(text) 次 · 会员可连续回看周/月节奏"
-                : "本周回放剩余 \(text) 次 · 下个自然周刷新"
+                ? "周记本周剩余 \(text) 次 · 会员可连续整理周记和月章"
+                : "周记本周剩余 \(text) 次 · 下个自然周刷新"
         case .month:
             let text = quotaText(remaining: remaining, limit: SummaryPlaybackQuotaStore.lifetimeMonthFreeLimit)
-            return "新用户月章剩余 \(text) 次 · 会员可继续整理更多月份"
+            return "月章体验剩余 \(text) 次 · 会员可继续整理更多月份"
         }
     }
 
     static func summaryQuotaExhaustedMessage(range: SummaryPlaybackRange) -> String {
         switch range {
         case .week:
-            return "本周免费回放剩余 \(quotaText(remaining: 0, limit: SummaryPlaybackQuotaStore.weeklyFreeLimit)) 次。下个自然周会刷新。会员可以连续回看周/月生活节奏。"
+            return "周记本周剩余 \(quotaText(remaining: 0, limit: SummaryPlaybackQuotaStore.weeklyFreeLimit)) 次。下个自然周会刷新。会员可以连续整理周记和月章。"
         case .month:
-            return "新用户月章剩余 \(quotaText(remaining: 0, limit: SummaryPlaybackQuotaStore.lifetimeMonthFreeLimit)) 次。月章额度不是每月刷新。会员可以继续整理更多月份。"
+            return "月章体验剩余 \(quotaText(remaining: 0, limit: SummaryPlaybackQuotaStore.lifetimeMonthFreeLimit)) 次。月章额度不是每月刷新。会员可以继续整理更多月份。"
         }
     }
 

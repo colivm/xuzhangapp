@@ -55,6 +55,7 @@ struct ScenePackAngleSheet: View {
     private let mode: Mode
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedPackID: String?
     @State private var selectedReplaceSlot: Int?
     @State private var pendingReplacement: PendingReplacement?
@@ -153,7 +154,7 @@ struct ScenePackAngleSheet: View {
                     .zIndex(20)
             }
         }
-        .animation(.easeInOut(duration: 0.18), value: pendingReplacement?.id)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: pendingReplacement?.id)
 
     }
 
@@ -212,6 +213,8 @@ struct ScenePackAngleSheet: View {
     private var closeToolbar: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
             Button("关闭") { dismiss() }
+                .minimumTapTarget()
+                .accessibilityHint("关闭场景选择")
         }
     }
 
@@ -695,7 +698,7 @@ struct ScenePackAngleSheet: View {
 
     private func memberUnlockCard(_ configuration: FreeConfiguration) -> some View {
         Button {
-            openMemberPricingAfterDismiss(configuration)
+            requestMemberPricing(configuration)
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "sparkles")
@@ -1074,7 +1077,7 @@ struct ScenePackAngleSheet: View {
                     .background(Circle().fill(AppColors.accent.opacity(0.12)))
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("有 1 次生活印记奖励待领取")
+                    Text("有 1 次生活线索奖励待领取")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(AppColors.text)
                     Text("奖励一次免费体验")
@@ -1148,7 +1151,7 @@ struct ScenePackAngleSheet: View {
                             .padding(.vertical, 2)
                             .background(Capsule().fill(AppColors.accent.opacity(0.12)))
                     }
-                    Text("生活印记奖励，不占基础免费名额")
+                    Text("生活线索奖励，不占基础免费名额")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppColors.readableSubtext)
                         .lineLimit(2)
@@ -1211,7 +1214,7 @@ struct ScenePackAngleSheet: View {
         configuration: FreeConfiguration
     ) -> some View {
         Button {
-            openMemberPricingAfterDismiss(configuration)
+            requestMemberPricing(configuration)
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 Text(hint.pack.emoji)
@@ -1293,7 +1296,7 @@ struct ScenePackAngleSheet: View {
         configuration: FreeConfiguration
     ) {
         if isLocked {
-            openMemberPricingAfterDismiss(configuration)
+            requestMemberPricing(configuration)
             return
         }
 
@@ -1480,11 +1483,8 @@ struct ScenePackAngleSheet: View {
         return days <= 1 ? "出去玩、娃和毛孩等扩展角度今天后锁定" : "出去玩、娃和毛孩等扩展角度还有 \(days) 天锁定"
     }
 
-    private func openMemberPricingAfterDismiss(_ configuration: FreeConfiguration) {
-        dismiss()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            configuration.onShowMemberPricing()
-        }
+    private func requestMemberPricing(_ configuration: FreeConfiguration) {
+        configuration.onShowMemberPricing()
     }
 
     private func lockedPackSubtitle(for pack: ScenePackDefinition) -> String {

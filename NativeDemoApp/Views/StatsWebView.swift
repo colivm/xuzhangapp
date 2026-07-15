@@ -79,18 +79,24 @@ private enum TracePreparedPiece {
 }
 
 struct StatsWebView: View {
+    private enum SheetDismissRoute {
+        case memoryDetail(HomeItem)
+        case attachMemoryImage(HomeItem)
+        case memberPricing(MemberPricingEntryContext)
+        case openWeekly
+        case openInsight
+    }
 
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @Environment(\.appTheme) private var appTheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Binding var tabState: StatsTabState
     var openTraceRequestID: UUID? = nil
     var onShowMemberPricing: ((MemberPricingEntryContext) -> Void)? = nil
     var onOpenInsight: (() -> Void)? = nil
     var onAttachMemoryImage: ((HomeItem) -> Void)? = nil
 
-    @State var selectedPeriod: StatsPeriod = .week
-    @State var selectedCategory: HomeItem.Category? = nil
     @State private var editingItem: HomeItem?
     @State private var memoryDetailItem: HomeItem?
     @State private var summaryPlayback: SummaryPlayback?
@@ -99,6 +105,10 @@ struct StatsWebView: View {
     @State private var summaryQuotaPrompt: SummaryQuotaPrompt?
     @State private var quotaRefreshID = UUID()
     @State private var showTraceDetailSheet = false
+    @State private var traceDetailDismissRoute: SheetDismissRoute?
+    @State private var editingDismissRoute: SheetDismissRoute?
+    @State private var memoryDetailDismissRoute: SheetDismissRoute?
+    @State private var summaryPlaybackDismissRoute: SheetDismissRoute?
     @State var showCategoryFilterSheet = false
     @State var traceInlineEditingItemID: UUID?
     @State private var handledOpenTraceRequestID: UUID?
@@ -108,22 +118,14 @@ struct StatsWebView: View {
     @State private var showTraceDeleteConfirmation = false
     @State private var traceAutoCommitRequestID: UUID?
     @GestureState private var traceSwipeDragState: TraceSwipeDragState?
-    @State var showTraceCustomDatePanel = false
-    @State private var traceViewMode: TraceViewMode = .life
-    @State private var traceLifeCardRange: SummaryPlaybackRange = .week
     @State private var traceLifeCardPagingBlocksTap = false
     @State private var showsTraceLifeSwipeHint = !UserDefaults.standard.bool(forKey: "trace_life_swipe_hint_seen_v1")
-    @State private var traceDeepInsightExpanded = false
-    @State private var traceInsightFocusedQuestion: String?
     @State private var lifeInsightRefreshID = UUID()
-    @State private var traceSnapshotStore = TraceSnapshotStore()
-    @State private var preparedWeekSnapshot: TraceChapterSnapshot?
-    @State private var preparedMonthSnapshot: TraceChapterSnapshot?
-    @State private var preparedClueSnapshot: TraceClueSnapshot?
     @State private var isPreparingTrace = false
     @State private var tracePreparationTask: Task<Void, Never>?
-    @State private var tracePreparationRequestID = UUID()
-    @State private var lifeTraceNeedsRefresh = true
+    @State private var tracePreparationGate = LatestRequestGate()
+    @State private var weekTraceNeedsRefresh = true
+    @State private var monthTraceNeedsRefresh = true
     @State private var clueTraceNeedsRefresh = true
     @State private var showsTraceUpdatePill = false
     @State private var traceUpdatePillTask: Task<Void, Never>?
@@ -131,6 +133,80 @@ struct StatsWebView: View {
     private let momentSelector = PlaybackMomentSelector()
     private let quotaStore = SummaryPlaybackQuotaStore()
     private let lifeInsightService = LifeInsightService.shared
+
+    var selectedPeriod: StatsPeriod {
+        get { tabState.selectedPeriod }
+        nonmutating set { tabState.selectedPeriod = newValue }
+    }
+
+    var selectedCategory: HomeItem.Category? {
+        get { tabState.selectedCategory }
+        nonmutating set { tabState.selectedCategory = newValue }
+    }
+
+    var customStartDate: Date {
+        get { tabState.customStartDate }
+        nonmutating set { tabState.customStartDate = newValue }
+    }
+
+    var customEndDate: Date {
+        get { tabState.customEndDate }
+        nonmutating set { tabState.customEndDate = newValue }
+    }
+
+    var customDateFocus: CustomDateEndpoint {
+        get { tabState.customDateFocus }
+        nonmutating set { tabState.customDateFocus = newValue }
+    }
+
+    var useCustomRange: Bool {
+        get { tabState.useCustomRange }
+        nonmutating set { tabState.useCustomRange = newValue }
+    }
+
+    var showTraceCustomDatePanel: Bool {
+        get { tabState.showsCustomDatePanel }
+        nonmutating set { tabState.showsCustomDatePanel = newValue }
+    }
+
+    private var traceViewMode: TraceViewMode {
+        get { tabState.viewMode }
+        nonmutating set { tabState.viewMode = newValue }
+    }
+
+    private var traceLifeCardRange: SummaryPlaybackRange {
+        get { tabState.lifeCardRange }
+        nonmutating set { tabState.lifeCardRange = newValue }
+    }
+
+    private var traceDeepInsightExpanded: Bool {
+        get { tabState.deepInsightExpanded }
+        nonmutating set { tabState.deepInsightExpanded = newValue }
+    }
+
+    private var traceInsightFocusedQuestion: String? {
+        get { tabState.focusedInsightQuestion }
+        nonmutating set { tabState.focusedInsightQuestion = newValue }
+    }
+
+    private var traceSnapshotStore: TraceSnapshotStore {
+        tabState.snapshotStore
+    }
+
+    private var preparedWeekSnapshot: TraceChapterSnapshot? {
+        get { tabState.preparedWeekSnapshot }
+        nonmutating set { tabState.preparedWeekSnapshot = newValue }
+    }
+
+    private var preparedMonthSnapshot: TraceChapterSnapshot? {
+        get { tabState.preparedMonthSnapshot }
+        nonmutating set { tabState.preparedMonthSnapshot = newValue }
+    }
+
+    private var preparedClueSnapshot: TraceClueSnapshot? {
+        get { tabState.preparedClueSnapshot }
+        nonmutating set { tabState.preparedClueSnapshot = newValue }
+    }
 
     var filteredItems: [HomeItem] {
         var items: [HomeItem]
@@ -186,10 +262,6 @@ struct StatsWebView: View {
     }
 
     @State var showPeriodSheet = false
-    @State var customStartDate = Date()
-    @State var customEndDate = Date()
-    @State var customDateFocus: CustomDateEndpoint = .start
-    @State var useCustomRange = false
 
     var body: some View {
         statsScrollView
@@ -199,16 +271,32 @@ struct StatsWebView: View {
             .sheet(isPresented: $showCategoryFilterSheet) {
                 categoryFilterSheet
             }
-            .sheet(isPresented: $showTraceDetailSheet) {
+            .sheet(isPresented: $showTraceDetailSheet, onDismiss: {
+                let route = traceDetailDismissRoute
+                traceDetailDismissRoute = nil
+                handleSheetDismissRoute(route)
+            }) {
                 traceDetailSheet
             }
-            .sheet(item: $editingItem) { item in
+            .sheet(item: $editingItem, onDismiss: {
+                let route = editingDismissRoute
+                editingDismissRoute = nil
+                handleSheetDismissRoute(route)
+            }) { item in
                 editSheet(for: item)
             }
-            .sheet(item: $memoryDetailItem) { item in
+            .sheet(item: $memoryDetailItem, onDismiss: {
+                let route = memoryDetailDismissRoute
+                memoryDetailDismissRoute = nil
+                handleSheetDismissRoute(route)
+            }) { item in
                 memoryRecordDetailSheet(for: item)
             }
-            .sheet(item: $summaryPlayback) { playback in
+            .sheet(item: $summaryPlayback, onDismiss: {
+                let route = summaryPlaybackDismissRoute
+                summaryPlaybackDismissRoute = nil
+                handleSheetDismissRoute(route)
+            }) { playback in
                 summaryPlaybackSheet(playback)
             }
             .onAppear {
@@ -218,6 +306,7 @@ struct StatsWebView: View {
             .onDisappear {
                 tracePreparationTask?.cancel()
                 tracePreparationTask = nil
+                tracePreparationGate.invalidate()
                 summaryPlaybackTask?.cancel()
                 summaryPlaybackTask = nil
                 preparingSummaryRange = nil
@@ -232,43 +321,50 @@ struct StatsWebView: View {
             }
             .onChange(of: homeViewModel.items) { _, _ in
                 traceSnapshotStore.invalidateAll()
-                lifeTraceNeedsRefresh = true
+                weekTraceNeedsRefresh = true
+                monthTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
                 scheduleTracePreparation()
             }
             .onChange(of: selectedPeriod) { _, _ in
                 traceSnapshotStore.invalidateAll()
-                lifeTraceNeedsRefresh = true
+                weekTraceNeedsRefresh = true
+                monthTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
                 scheduleTracePreparation()
             }
             .onChange(of: useCustomRange) { _, _ in
                 traceSnapshotStore.invalidateAll()
-                lifeTraceNeedsRefresh = true
+                weekTraceNeedsRefresh = true
+                monthTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
                 scheduleTracePreparation()
             }
             .onChange(of: customStartDate) { _, _ in
                 traceSnapshotStore.invalidateAll()
-                lifeTraceNeedsRefresh = true
+                weekTraceNeedsRefresh = true
+                monthTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
                 scheduleTracePreparation()
             }
             .onChange(of: customEndDate) { _, _ in
                 traceSnapshotStore.invalidateAll()
-                lifeTraceNeedsRefresh = true
+                weekTraceNeedsRefresh = true
+                monthTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
                 scheduleTracePreparation()
             }
             .onChange(of: selectedCategory) { _, _ in
                 traceSnapshotStore.invalidateAll()
-                lifeTraceNeedsRefresh = true
+                weekTraceNeedsRefresh = true
+                monthTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
                 scheduleTracePreparation()
             }
             .onChange(of: hasMemberAccess) { _, _ in
                 traceSnapshotStore.invalidateAll()
-                lifeTraceNeedsRefresh = true
+                weekTraceNeedsRefresh = true
+                monthTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
                 scheduleTracePreparation()
             }
@@ -277,7 +373,8 @@ struct StatsWebView: View {
                 clueTraceNeedsRefresh = true
                 scheduleTracePreparation()
             }
-            .onChange(of: traceViewMode) { _, _ in
+            .onChange(of: traceViewMode) { _, mode in
+                tabState.scrollAnchorID = mode == .life ? "trace-life-card" : "trace-clue-board"
                 prepareTraceIfNeeded()
             }
             .overlay {
@@ -297,30 +394,37 @@ struct StatsWebView: View {
             }
             .scrollIndicators(.hidden)
             .scrollDisabled(traceSwipeDragState != nil)
+            .scrollPosition(id: $tabState.scrollAnchorID, anchor: .top)
         }
     }
 
     private func statsContent(availableHeight: CGFloat) -> some View {
         let layout = TraceLifeCardLayout(screenHeight: max(availableHeight, UIScreen.main.bounds.height))
         let hasVisibleSnapshot = traceViewMode == .life
-            ? preparedWeekSnapshot != nil && preparedMonthSnapshot != nil
+            ? TraceLifePreparationPolicy.hasVisibleSnapshot(
+                selectedRange: traceLifeCardRange,
+                hasWeek: preparedWeekSnapshot != nil,
+                hasMonth: preparedMonthSnapshot != nil
+            )
             : preparedClueSnapshot != nil
 
         return ZStack(alignment: .top) {
             VStack(spacing: 16) {
                 traceViewModeKicker
+                    .id("trace-mode-picker")
                 if traceViewMode == .life,
-                   let preparedWeekSnapshot,
-                   let preparedMonthSnapshot {
+                   preparedWeekSnapshot != nil || preparedMonthSnapshot != nil {
                     traceChapterCard(
                         layout: layout,
                         weekSnapshot: preparedWeekSnapshot,
                         monthSnapshot: preparedMonthSnapshot
                     )
+                    .id("trace-life-card")
                     .transition(.opacity)
                 } else if traceViewMode == .clues,
                           let preparedClueSnapshot {
                     traceClueBoard(snapshot: preparedClueSnapshot)
+                        .id("trace-clue-board")
                         .transition(.opacity)
                 } else {
                     ComputationLoadingView(
@@ -330,9 +434,11 @@ struct StatsWebView: View {
                         detail: "整理好后会一次完整呈现",
                         presentation: .page
                     )
+                    .id(traceViewMode == .life ? "trace-life-card" : "trace-clue-board")
                     .frame(minHeight: max(360, availableHeight - 120))
                 }
             }
+            .scrollTargetLayout()
 
             if showsTraceUpdatePill && hasVisibleSnapshot {
                 ComputationUpdatePill(
@@ -355,9 +461,24 @@ struct StatsWebView: View {
     private var currentTraceNeedsRefresh: Bool {
         switch traceViewMode {
         case .life:
-            return lifeTraceNeedsRefresh || preparedWeekSnapshot == nil || preparedMonthSnapshot == nil
+            return TraceLifePreparationPolicy.needsPrimaryPreparation(
+                selectedRange: traceLifeCardRange,
+                weekNeedsRefresh: weekTraceNeedsRefresh,
+                monthNeedsRefresh: monthTraceNeedsRefresh,
+                hasWeek: preparedWeekSnapshot != nil,
+                hasMonth: preparedMonthSnapshot != nil
+            )
         case .clues:
             return clueTraceNeedsRefresh || preparedClueSnapshot == nil
+        }
+    }
+
+    private func lifeTraceNeedsRefresh(for range: SummaryPlaybackRange) -> Bool {
+        switch range {
+        case .week:
+            return weekTraceNeedsRefresh
+        case .month:
+            return monthTraceNeedsRefresh
         }
     }
 
@@ -374,16 +495,52 @@ struct StatsWebView: View {
         scheduleTracePreparation()
     }
 
+    private func traceChapterPreparation(
+        for range: SummaryPlaybackRange,
+        allItems: [HomeItem],
+        memberAccess: Bool,
+        now: Date
+    ) -> (cached: TraceChapterSnapshot?, input: (TraceChapterComputationInput, String)?) {
+        let items = traceLifeScopedItems(for: range)
+        let cacheKey = traceChapterSnapshotCacheKey(items: items, range: range)
+        if let cached = traceSnapshotStore.chapterSnapshot(for: cacheKey) {
+            return (cached, nil)
+        }
+        let periodKey = range == .week
+            ? quotaStore.currentWeekKey()
+            : EchoAnchorService.shared.periodKeyForMonth()
+        return (
+            nil,
+            (
+                TraceChapterComputationInput(
+                    range: range,
+                    items: items,
+                    allItems: allItems,
+                    isMember: memberAccess,
+                    prioritizeRecurringMarks: range == .month && !useCustomRange && selectedPeriod == .month,
+                    periodKey: periodKey,
+                    usesEchoAnchor: !useCustomRange && selectedPeriod != .year,
+                    now: now
+                ),
+                cacheKey
+            )
+        )
+    }
+
     private func scheduleTracePreparation() {
         tracePreparationTask?.cancel()
-        let requestID = UUID()
-        tracePreparationRequestID = requestID
+        let requestID = tracePreparationGate.begin()
+        let performanceStartedAt = ProcessInfo.processInfo.systemUptime
         traceUpdatePillTask?.cancel()
         showsTraceUpdatePill = false
         let needsLife = traceViewMode == .life
         let needsClues = traceViewMode == .clues
         let lacksVisibleSnapshot = needsLife
-            ? preparedWeekSnapshot == nil || preparedMonthSnapshot == nil
+            ? !TraceLifePreparationPolicy.hasVisibleSnapshot(
+                selectedRange: traceLifeCardRange,
+                hasWeek: preparedWeekSnapshot != nil,
+                hasMonth: preparedMonthSnapshot != nil
+            )
             : preparedClueSnapshot == nil
 
         if lacksVisibleSnapshot {
@@ -396,7 +553,7 @@ struct StatsWebView: View {
                 try? await Task.sleep(nanoseconds: 150_000_000)
                 guard !Task.isCancelled,
                       isPreparingTrace,
-                      tracePreparationRequestID == requestID else { return }
+                      tracePreparationGate.accepts(requestID) else { return }
                 withAnimation(.easeInOut(duration: 0.16)) {
                     showsTraceUpdatePill = true
                 }
@@ -406,6 +563,7 @@ struct StatsWebView: View {
         let allItems = homeViewModel.items
         let memberAccess = hasMemberAccess
         let now = Date()
+        let primaryLifeRange = traceLifeCardRange
         var cachedWeek: TraceChapterSnapshot?
         var cachedMonth: TraceChapterSnapshot?
         var cachedClue: TraceClueSnapshot?
@@ -414,44 +572,25 @@ struct StatsWebView: View {
         var clueInput: (TraceClueComputationInput, String)?
 
         if needsLife {
-            let weekItems = traceLifeScopedItems(for: .week)
-            let weekKey = traceChapterSnapshotCacheKey(items: weekItems, range: .week)
-            cachedWeek = traceSnapshotStore.chapterSnapshot(for: weekKey)
-            if cachedWeek == nil {
-                let periodKey = quotaStore.currentWeekKey()
-                weekInput = (
-                    TraceChapterComputationInput(
-                        range: .week,
-                        items: weekItems,
-                        allItems: allItems,
-                        isMember: memberAccess,
-                        prioritizeRecurringMarks: false,
-                        periodKey: periodKey,
-                        usesEchoAnchor: !useCustomRange && selectedPeriod != .year,
-                        now: now
-                    ),
-                    weekKey
+            switch traceLifeCardRange {
+            case .week:
+                let prepared = traceChapterPreparation(
+                    for: .week,
+                    allItems: allItems,
+                    memberAccess: memberAccess,
+                    now: now
                 )
-            }
-
-            let monthItems = traceLifeScopedItems(for: .month)
-            let monthKey = traceChapterSnapshotCacheKey(items: monthItems, range: .month)
-            cachedMonth = traceSnapshotStore.chapterSnapshot(for: monthKey)
-            if cachedMonth == nil {
-                let periodKey = EchoAnchorService.shared.periodKeyForMonth()
-                monthInput = (
-                    TraceChapterComputationInput(
-                        range: .month,
-                        items: monthItems,
-                        allItems: allItems,
-                        isMember: memberAccess,
-                        prioritizeRecurringMarks: !useCustomRange && selectedPeriod == .month,
-                        periodKey: periodKey,
-                        usesEchoAnchor: !useCustomRange && selectedPeriod != .year,
-                        now: now
-                    ),
-                    monthKey
+                cachedWeek = prepared.cached
+                weekInput = prepared.input
+            case .month:
+                let prepared = traceChapterPreparation(
+                    for: .month,
+                    allItems: allItems,
+                    memberAccess: memberAccess,
+                    now: now
                 )
+                cachedMonth = prepared.cached
+                monthInput = prepared.input
             }
         }
 
@@ -487,7 +626,7 @@ struct StatsWebView: View {
 
         tracePreparationTask = Task { @MainActor in
             await Task.yield()
-            guard !Task.isCancelled, tracePreparationRequestID == requestID else { return }
+            guard !Task.isCancelled, tracePreparationGate.accepts(requestID) else { return }
 
             var weekSnapshot = initialWeekSnapshot
             var monthSnapshot = initialMonthSnapshot
@@ -500,7 +639,7 @@ struct StatsWebView: View {
                     }
                 }
                 if let (input, cacheKey) = pendingMonthInput {
-                    group.addTask(priority: .utility) {
+                    group.addTask(priority: .userInitiated) {
                         .month(TraceSnapshotComputation.buildChapter(input), cacheKey: cacheKey)
                     }
                 }
@@ -529,15 +668,17 @@ struct StatsWebView: View {
                 }
             }
 
-            guard !Task.isCancelled, tracePreparationRequestID == requestID else { return }
+            guard !Task.isCancelled, tracePreparationGate.accepts(requestID) else { return }
             traceUpdatePillTask?.cancel()
             traceUpdatePillTask = nil
-            tracePreparationTask = nil
             withAnimation(.easeInOut(duration: 0.18)) {
-                if let weekSnapshot, let monthSnapshot {
+                if let weekSnapshot {
                     preparedWeekSnapshot = weekSnapshot
+                    weekTraceNeedsRefresh = false
+                }
+                if let monthSnapshot {
                     preparedMonthSnapshot = monthSnapshot
-                    lifeTraceNeedsRefresh = false
+                    monthTraceNeedsRefresh = false
                 }
                 if let clueSnapshot {
                     preparedClueSnapshot = clueSnapshot
@@ -550,6 +691,81 @@ struct StatsWebView: View {
                 showsTraceUpdatePill = false
                 isPreparingTrace = false
             }
+            homeViewModel.markPerformance(
+                operation: needsLife ? .traceLifePreparation : .traceCluePreparation,
+                startedAtUptime: performanceStartedAt,
+                itemCount: allItems.count
+            )
+
+            if needsLife {
+                await prewarmTraceChapter(
+                    range: TraceLifePreparationPolicy.prewarmRange(after: primaryLifeRange),
+                    requestID: requestID,
+                    allItems: allItems,
+                    memberAccess: memberAccess,
+                    now: now
+                )
+            }
+            guard tracePreparationGate.accepts(requestID) else { return }
+            tracePreparationTask = nil
+        }
+    }
+
+    @MainActor
+    private func prewarmTraceChapter(
+        range: SummaryPlaybackRange,
+        requestID: UUID,
+        allItems: [HomeItem],
+        memberAccess: Bool,
+        now: Date
+    ) async {
+        guard lifeTraceNeedsRefresh(for: range),
+              !Task.isCancelled,
+              tracePreparationGate.accepts(requestID) else { return }
+        await Task.yield()
+        guard !Task.isCancelled, tracePreparationGate.accepts(requestID) else { return }
+
+        let prepared = traceChapterPreparation(
+            for: range,
+            allItems: allItems,
+            memberAccess: memberAccess,
+            now: now
+        )
+        if let cached = prepared.cached {
+            if range == .week {
+                preparedWeekSnapshot = cached
+                weekTraceNeedsRefresh = false
+            } else {
+                preparedMonthSnapshot = cached
+                monthTraceNeedsRefresh = false
+            }
+            return
+        }
+        guard let (input, cacheKey) = prepared.input else { return }
+
+        let piece = await withTaskGroup(of: TracePreparedPiece.self, returning: TracePreparedPiece?.self) { group in
+            group.addTask(priority: .utility) {
+                let snapshot = TraceSnapshotComputation.buildChapter(input)
+                return range == .week
+                    ? .week(snapshot, cacheKey: cacheKey)
+                    : .month(snapshot, cacheKey: cacheKey)
+            }
+            return await group.next()
+        }
+        guard let piece,
+              !Task.isCancelled,
+              tracePreparationGate.accepts(requestID) else { return }
+        switch piece {
+        case let .week(snapshot, cacheKey):
+            traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
+            preparedWeekSnapshot = snapshot
+            weekTraceNeedsRefresh = false
+        case let .month(snapshot, cacheKey):
+            traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
+            preparedMonthSnapshot = snapshot
+            monthTraceNeedsRefresh = false
+        case .clue:
+            break
         }
     }
 
@@ -650,34 +866,57 @@ struct StatsWebView: View {
 
     private func traceChapterCard(
         layout: TraceLifeCardLayout,
-        weekSnapshot: TraceChapterSnapshot,
-        monthSnapshot: TraceChapterSnapshot
+        weekSnapshot: TraceChapterSnapshot?,
+        monthSnapshot: TraceChapterSnapshot?
     ) -> some View {
         let _ = quotaRefreshID
-        let showsMonth = traceLifeCardRange == .month
+        let desiredSnapshot = traceLifeCardRange == .month ? monthSnapshot : weekSnapshot
+        let fallbackSnapshot = traceLifeCardRange == .month ? weekSnapshot : monthSnapshot
+        let displayedSnapshot = desiredSnapshot ?? fallbackSnapshot
+        let displayedRange = displayedSnapshot?.range ?? traceLifeCardRange
+        let showsMonth = displayedRange == .month
+        let waitsForDesiredRange = desiredSnapshot == nil && fallbackSnapshot != nil
 
-        return Group {
-            if showsMonth {
-                traceLifeMonthCardFace(snapshot: monthSnapshot, layout: layout)
-                    .transition(
-                        reduceMotion
-                            ? .opacity
-                            : .move(edge: .trailing).combined(with: .opacity)
-                    )
-            } else {
-                traceLifeSliceCardFace(snapshot: weekSnapshot, layout: layout)
-                    .transition(
-                        reduceMotion
-                            ? .opacity
-                            : .move(edge: .leading).combined(with: .opacity)
-                    )
+        return ZStack(alignment: .topTrailing) {
+            if let displayedSnapshot {
+                Group {
+                    if showsMonth {
+                        traceLifeMonthCardFace(snapshot: displayedSnapshot, layout: layout)
+                            .transition(
+                                reduceMotion
+                                    ? .opacity
+                                    : .move(edge: .trailing).combined(with: .opacity)
+                            )
+                    } else {
+                        traceLifeSliceCardFace(snapshot: displayedSnapshot, layout: layout)
+                            .transition(
+                                reduceMotion
+                                    ? .opacity
+                                    : .move(edge: .leading).combined(with: .opacity)
+                            )
+                    }
+                }
+            }
+
+            if waitsForDesiredRange {
+                HStack(spacing: 7) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(traceLifeCardRange == .month ? "正在整理本月" : "正在整理本周")
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(AppColors.accentDark.opacity(0.78))
+                .padding(.horizontal, 10)
+                .frame(minHeight: 32)
+                .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+                .padding(12)
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .simultaneousGesture(traceLifeCardPagingGesture)
-        .accessibilityHint(showsMonth ? "向右轻扫，回到本周" : "向左轻扫，查看本月")
-        .accessibilityAction(named: Text(showsMonth ? "回到本周" : "查看本月")) {
-            setTraceLifeCardRange(showsMonth ? .week : .month)
+        .accessibilityHint(displayedRange == .month ? "向右轻扫，回到本周" : "向左轻扫，查看本月")
+        .accessibilityAction(named: Text(displayedRange == .month ? "回到本周" : "查看本月")) {
+            setTraceLifeCardRange(displayedRange == .month ? .week : .month)
         }
     }
 
@@ -786,6 +1025,7 @@ struct StatsWebView: View {
             showsTraceLifeSwipeHint = false
         }
         UserDefaults.standard.set(true, forKey: "trace_life_swipe_hint_seen_v1")
+        prepareTraceIfNeeded()
     }
 
     private var traceLifeSwipeHint: some View {
@@ -794,10 +1034,10 @@ struct StatsWebView: View {
             Text("左右滑动查看周 / 月")
             Image(systemName: "chevron.right")
         }
-        .font(.system(size: 11, weight: .semibold))
+        .font(.footnote.weight(.semibold))
         .foregroundStyle(AppColors.accentDark.opacity(0.72))
         .padding(.horizontal, 11)
-        .frame(height: 26)
+        .frame(minHeight: 32)
         .background(
             Capsule(style: .continuous)
                 .fill(TraceColors.surfaceMuted.opacity(0.76))
@@ -2440,12 +2680,12 @@ struct StatsWebView: View {
                 }
             }
             Text(isPreparing ? "正在整理…" : (isMonthLocked ? "了解会员" : title))
-                .font(.system(size: 15, weight: .bold))
+                .font(.headline.weight(.bold))
                 .foregroundStyle(isEnabled ? Color.white : AppColors.subtext.opacity(0.74))
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: height)
+        .frame(minHeight: max(44, height))
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(
@@ -2463,9 +2703,17 @@ struct StatsWebView: View {
 
     private func traceLifeSliceScenePills(snapshot: TraceChapterSnapshot) -> some View {
         let labels = traceLifeSliceLabels(snapshot: snapshot)
-        return HStack(spacing: 12) {
-            ForEach(labels, id: \.self) { label in
-                traceLifeSliceScenePill(label)
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                ForEach(labels, id: \.self) { label in
+                    traceLifeSliceScenePill(label)
+                }
+            }
+
+            VStack(spacing: 8) {
+                ForEach(labels, id: \.self) { label in
+                    traceLifeSliceScenePill(label)
+                }
             }
         }
         .frame(maxWidth: .infinity)
@@ -2476,13 +2724,13 @@ struct StatsWebView: View {
             Image(systemName: traceLifeSlicePillIcon(for: label))
                 .font(.system(size: 11, weight: .semibold))
             Text(label)
-                .font(.system(size: 13, weight: .bold))
+                .font(.footnote.weight(.bold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
         }
         .foregroundStyle(AppColors.accentDark.opacity(0.86))
         .padding(.horizontal, 10)
-        .frame(height: 28)
+        .padding(.vertical, 7)
         .frame(maxWidth: .infinity)
         .background(
             Capsule(style: .continuous)
@@ -2497,7 +2745,7 @@ struct StatsWebView: View {
         } label: {
             HStack(spacing: 8) {
                 Text("细查这一段 · \(snapshot.items.count) 笔")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppColors.subtext.opacity(0.92))
                     .lineLimit(1)
                 Spacer(minLength: 8)
@@ -2506,7 +2754,7 @@ struct StatsWebView: View {
                     .foregroundStyle(AppColors.subtext.opacity(0.74))
             }
             .padding(.horizontal, 16)
-            .frame(height: 42)
+            .frame(minHeight: 44)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(Color.white.opacity(0.74))
@@ -3242,7 +3490,7 @@ struct StatsWebView: View {
         primaryMark: LifeMarkAggregate?
     ) -> String {
         if isMonthLocked {
-            return "本月章节需要会员继续回看。"
+            return "月章需要会员继续回看。"
         }
         guard hasData else {
             return "先记几笔，这里会把它们读成一段。"
@@ -3304,7 +3552,7 @@ struct StatsWebView: View {
                 traceViewModeTab(.life)
                 traceViewModeTab(.clues)
             }
-            .frame(height: 42)
+            .frame(minHeight: 44)
 
             GeometryReader { proxy in
                 let tabWidth = proxy.size.width / 2
@@ -3922,7 +4170,7 @@ struct StatsWebView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .center) {
-                Text("生活印记")
+                Text("生活线索")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(TraceColors.primaryText)
                 Spacer()
@@ -4104,10 +4352,10 @@ struct StatsWebView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(traceInsightThemeTitle(insight.theme))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(TraceColors.primaryText)
                     Text(isUnlocked ? insight.periodName : "本月还可展开 \(freeRemaining)/\(LifeInsightService.freeMonthlyLimit) 次")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(TraceColors.tertiaryText)
                 }
 
@@ -4115,12 +4363,12 @@ struct StatsWebView: View {
             }
 
             Text(insight.leadQuestion)
-                .font(.system(size: 19, weight: .bold))
+                .font(.title3.weight(.bold))
                 .foregroundStyle(TraceColors.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(isUnlocked ? insight.previewLine : insight.teaser)
-                .font(.system(size: 13, weight: .regular))
+                .font(.subheadline)
                 .lineSpacing(3)
                 .foregroundStyle(TraceColors.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -4134,7 +4382,7 @@ struct StatsWebView: View {
 
                 if !supportingLines.isEmpty {
                     Text("为什么这样说")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(TraceColors.tertiaryText)
 
                     VStack(spacing: 8) {
@@ -4142,26 +4390,14 @@ struct StatsWebView: View {
                             traceDeepInsightLine(line, index: index)
                         }
                     }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                 }
 
-                if !insight.questionChips.isEmpty {
-                    Text("继续看看")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(TraceColors.tertiaryText)
-                    traceInsightQuestionChips(insight.questionChips)
-                        .transition(.opacity)
-                }
-
-                if let focusedQuestion = traceInsightFocusedQuestion {
-                    traceFocusedInsightAnswer(
-                        question: focusedQuestion,
-                        insight: insight,
-                        items: items,
-                        clues: clues
-                    )
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
+                Text("继续问")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(TraceColors.tertiaryText)
+                traceContinueInReviewButton
+                    .transition(.opacity)
             }
 
             if !isUnlocked {
@@ -4172,7 +4408,7 @@ struct StatsWebView: View {
                     if buttonIsOpen {
                         HStack(spacing: 8) {
                             Text(traceDeepInsightButtonTitle(canUse: snapshotCanUse, hasData: !items.isEmpty))
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.headline.weight(.semibold))
                             Image(systemName: "arrow.right")
                                 .font(.system(size: 11, weight: .semibold))
                             Spacer(minLength: 0)
@@ -4184,11 +4420,11 @@ struct StatsWebView: View {
                     } else {
                         HStack(spacing: 7) {
                             Text(traceDeepInsightButtonTitle(canUse: snapshotCanUse, hasData: !items.isEmpty))
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.subheadline.weight(.semibold))
                             Image(systemName: "lock.fill")
                                 .font(.system(size: 10, weight: .semibold))
                         }
-                        .frame(minHeight: 36)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                         .foregroundStyle(AppColors.lockGold)
                         .padding(.horizontal, 12)
                         .background(traceDeepCTAButtonBackground(isOpen: false))
@@ -4248,11 +4484,11 @@ struct StatsWebView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(selectedPeriod == .week ? "这一周的节奏" : "这个月的节奏")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(TraceColors.primaryText)
                     Spacer()
                     Text(traceRhythmSummary(rhythmPoints: rhythmPoints))
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(TraceColors.tertiaryText)
                 }
 
@@ -4267,6 +4503,8 @@ struct StatsWebView: View {
                     }
                 }
                 .frame(height: 112)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(selectedPeriod == .week ? "这一周" : "这个月")的节奏，\(traceRhythmSummary(rhythmPoints: rhythmPoints))")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 12)
@@ -4350,7 +4588,7 @@ struct StatsWebView: View {
                         .fill(index == 0 ? AppColors.accent.opacity(0.10) : TraceColors.surfaceMuted)
                 )
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(.subheadline.weight(.medium))
                 .lineSpacing(3)
                 .foregroundStyle(TraceColors.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -4439,6 +4677,35 @@ struct StatsWebView: View {
         if !hasData { return "先留下几笔" }
         if canUse { return "展开这条线索" }
         return "解锁完整解读"
+    }
+
+    private var traceContinueInReviewButton: some View {
+        Button {
+            onOpenInsight?()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("去复盘查账、对比或继续问")
+                    .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(AppColors.accentDark)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 44)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(AppColors.accent.opacity(0.10))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(AppColors.accent.opacity(0.16), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("打开复盘页继续提问")
     }
 
     private func handleTraceDeepInsightTap() {
@@ -4756,6 +5023,7 @@ struct StatsWebView: View {
         withAnimation(traceEditSpring) {
             traceViewMode = .life
         }
+        tabState.scrollAnchorID = "trace-mode-picker"
     }
 
     private var traceDetailSheet: some View {
@@ -5061,15 +5329,30 @@ struct StatsWebView: View {
         }
     }
 
+    private func handleSheetDismissRoute(_ route: SheetDismissRoute?) {
+        guard let route else { return }
+        switch route {
+        case .memoryDetail(let item):
+            memoryDetailItem = latestItem(matching: item)
+        case .attachMemoryImage(let item):
+            requestAttachMemoryImage(item)
+        case .memberPricing(let context):
+            onShowMemberPricing?(context)
+        case .openWeekly:
+            useCustomRange = false
+            selectedPeriod = .week
+        case .openInsight:
+            onOpenInsight?()
+        }
+    }
+
     private func openEditor(for item: HomeItem, fromTraceDetail: Bool = false) {
         if item.hasMemoryImages {
             traceSwipedItemID = nil
             traceInlineEditingItemID = nil
             if showTraceDetailSheet || fromTraceDetail {
+                traceDetailDismissRoute = .memoryDetail(latestItem(matching: item))
                 showTraceDetailSheet = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
-                    memoryDetailItem = latestItem(matching: item)
-                }
             } else {
                 memoryDetailItem = latestItem(matching: item)
             }
@@ -5102,16 +5385,15 @@ struct StatsWebView: View {
                 traceSwipedItemID = nil
             }
         }
-        editingItem = nil
-        let delay: TimeInterval
+        let target = latestItem(matching: item)
         if showTraceDetailSheet {
+            traceDetailDismissRoute = .memoryDetail(target)
             showTraceDetailSheet = false
-            delay = 0.42
+        } else if editingItem != nil {
+            editingDismissRoute = .memoryDetail(target)
+            editingItem = nil
         } else {
-            delay = 0.35
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            memoryDetailItem = latestItem(matching: item)
+            memoryDetailItem = target
         }
     }
 
@@ -5127,10 +5409,8 @@ struct StatsWebView: View {
                 homeViewModel.updateItem(updated)
             },
             onAddImages: {
+                memoryDetailDismissRoute = .attachMemoryImage(current)
                 memoryDetailItem = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-                    requestAttachMemoryImage(current)
-                }
             },
             onRemoveImage: { imageIndex in
                 if homeViewModel.removeMemoryImage(at: imageIndex, from: current.id) {
@@ -5211,19 +5491,21 @@ struct StatsWebView: View {
                 : .journal,
             onCompleted: { progress in
                 quotaStore.markCompleted(playback.range, isMember: hasMemberAccess, progress: progress)
-                if progress >= 0.8 {
-                    homeViewModel.markSummaryPlaybackCompleted(playback.range)
-                }
+                homeViewModel.markSummaryPlaybackCompleted(playback.range, progress: progress)
                 quotaRefreshID = UUID()
             },
             onShowMemberPricing: {
-                onShowMemberPricing?(.playbackQuota)
+                summaryPlaybackDismissRoute = .memberPricing(.playbackQuota)
+                summaryPlayback = nil
             },
             onOpenWeekly: {
-                useCustomRange = false
-                selectedPeriod = .week
+                summaryPlaybackDismissRoute = .openWeekly
+                summaryPlayback = nil
             },
-            onOpenInsight: onOpenInsight,
+            onOpenInsight: {
+                summaryPlaybackDismissRoute = .openInsight
+                summaryPlayback = nil
+            },
             onSaveMemoryLine: { line, range in
                 homeViewModel.markPlaybackMemoryLine(line, range: range)
             }
@@ -5238,22 +5520,22 @@ struct StatsWebView: View {
         case .week:
             if !quotaStore.hasCompletedWeekPlaybackEver() {
                 return SummaryPlaybackMemberPitch(
-                    headline: "这是本周回放的首听。",
-                    detail: "这次免费已经能看到本周的基本记录。之后会员会继续整理情绪标签、生活印记和反复出现的场景。",
-                    cta: "保留每周生活回放"
+                    headline: "这是周记的首听。",
+                    detail: "这次免费已经能看到本周的基本记录。之后会员会继续整理情绪标签、生活线索和反复出现的场景。",
+                    cta: "持续保留周记"
                 )
             }
             if quotaStore.weekRemaining(isMember: false) <= 1 {
                 return SummaryPlaybackMemberPitch(
-                    headline: "本周免费回放快用完了。",
-                    detail: "这次免费已经生成本周回看。会员可以继续整理周记、月章和生活印记。",
+                    headline: "周记本周免费次数快用完了。",
+                    detail: "这次免费已经生成本周回看。会员可以继续整理周记、月章和生活线索。",
                     cta: "让回放继续留下来"
                 )
             }
             return SummaryPlaybackMemberPitch(
-                headline: "本周回放已完成",
-                detail: "这次免费会先保留基础回看。会员可以继续整理情绪标签、生活印记和反复出现的场景。",
-                cta: "继续整理周/月回放"
+                headline: "周记已完成",
+                detail: "这次免费会先保留基础回看。会员可以继续整理情绪标签、生活线索和反复出现的场景。",
+                cta: "继续整理周记和月章"
             )
         case .month:
             if quotaStore.monthRemaining(isMember: false) <= 1 {
@@ -5264,9 +5546,9 @@ struct StatsWebView: View {
                 )
             }
             return SummaryPlaybackMemberPitch(
-                headline: "本月回放已完成",
-                detail: "这次免费会先保留这一段月章。会员可以继续整理更多月份里的天气、路线、情绪标签和生活印记。",
-                cta: "继续整理月度回放"
+                headline: "月章已完成",
+                detail: "这次免费会先保留这一段月章。会员可以继续整理更多月份里的天气、路线、情绪标签和生活线索。",
+                cta: "继续整理月章"
             )
         }
     }
@@ -5368,14 +5650,14 @@ struct StatsWebView: View {
             switch range {
             case .week:
                 summaryQuotaPrompt = SummaryQuotaPrompt(
-                    title: "本周回放用完了",
+                    title: "周记本周次数已用完",
                     message: ExperienceRuleCopy.summaryQuotaExhaustedMessage(range: .week),
                     primaryTitle: "了解连续回放",
                     opensMember: true
                 )
             case .month:
                 summaryQuotaPrompt = SummaryQuotaPrompt(
-                    title: "本月章体验用完了",
+                    title: "月章体验用完了",
                     message: ExperienceRuleCopy.summaryQuotaExhaustedMessage(range: .month),
                     primaryTitle: "继续留住月章",
                     opensMember: true
@@ -5385,6 +5667,8 @@ struct StatsWebView: View {
         }
         let copySeed = nextSummaryCopySeed(for: range)
         let items = homeViewModel.items
+        let performanceStartedAt = ProcessInfo.processInfo.systemUptime
+        homeViewModel.markSummaryPlaybackStarted(range)
         summaryPlaybackTask?.cancel()
         preparingSummaryRange = range
         summaryPlaybackTask = Task { @MainActor in
@@ -5405,6 +5689,12 @@ struct StatsWebView: View {
             summaryPlaybackTask = nil
             preparingSummaryRange = nil
             summaryPlayback = playback
+            homeViewModel.markPerformance(
+                operation: range == .week ? .summaryWeek : .summaryMonth,
+                startedAtUptime: performanceStartedAt,
+                itemCount: items.count,
+                outcome: playback == nil ? .empty : .success
+            )
         }
     }
 
@@ -5664,8 +5954,8 @@ struct StatsWebView: View {
             .frame(width: 0)
     }
 
-    var traceEditSpring: Animation {
-        .spring(response: 0.38, dampingFraction: 0.90, blendDuration: 0.08)
+    var traceEditSpring: Animation? {
+        reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.90, blendDuration: 0.08)
     }
 
     private func traceDetailRecordSummary(_ item: HomeItem, isEditing: Bool) -> some View {
@@ -6363,10 +6653,11 @@ struct FocusedRecordEditor: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(AppColors.text)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                         .background(Circle().fill(AppColors.panelStrong.opacity(0.76)))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("关闭分类选择")
 
                 Spacer()
 
@@ -6376,7 +6667,7 @@ struct FocusedRecordEditor: View {
 
                 Spacer()
 
-                Color.clear.frame(width: 36, height: 36)
+                Color.clear.frame(width: 44, height: 44)
             }
             .padding(.bottom, 12)
 
@@ -6402,10 +6693,11 @@ struct FocusedRecordEditor: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppColors.text)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                     .background(Circle().fill(AppColors.panelStrong.opacity(0.76)))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("关闭记录编辑")
 
             Spacer()
 
@@ -6428,11 +6720,12 @@ struct FocusedRecordEditor: View {
                         Image(systemName: "ellipsis.circle")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(accent)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 44, height: 44)
                             .background(Circle().fill(AppColors.panelStrong.opacity(0.76)))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("更多")
+                    .accessibilityHint("补充这条记录的图片")
                 }
 
                 Button(role: .destructive) {
@@ -6441,10 +6734,11 @@ struct FocusedRecordEditor: View {
                     Image(systemName: "trash")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(accent)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                         .background(Circle().fill(AppColors.panelStrong.opacity(0.76)))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("删除记录")
             }
         }
     }

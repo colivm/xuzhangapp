@@ -89,6 +89,8 @@ struct HomeItem: Identifiable, Codable, Equatable {
     var scenePackId: String?
     var memoryImageData: Data?
     var memoryImageDatas: [Data]
+    var memoryImageReferences: [String]
+    var unavailableMemoryImageIndices: Set<Int>
     var coverMemoryImageIndex: Int?
     var memoryAnchorRole: PhotoMemoryAssetRole?
     var memoryAnchorSceneHint: PhotoMemorySceneHint?
@@ -113,6 +115,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
         scenePackId: String? = nil,
         memoryImageData: Data? = nil,
         memoryImageDatas: [Data] = [],
+        memoryImageReferences: [String] = [],
         coverMemoryImageIndex: Int? = nil,
         memoryAnchorRole: PhotoMemoryAssetRole? = nil,
         memoryAnchorSceneHint: PhotoMemorySceneHint? = nil,
@@ -134,9 +137,16 @@ struct HomeItem: Identifiable, Codable, Equatable {
         self.categoryCorrectionFrom = categoryCorrectionFrom
         self.memoryContext = memoryContext
         self.scenePackId = scenePackId
-        let normalizedImages = memoryImageDatas.isEmpty ? memoryImageData.map { [$0] } ?? [] : memoryImageDatas
+        let normalizedImages: [Data]
+        if memoryImageDatas.isEmpty, memoryImageData == nil, !memoryImageReferences.isEmpty {
+            normalizedImages = Array(repeating: Data(), count: memoryImageReferences.count)
+        } else {
+            normalizedImages = memoryImageDatas.isEmpty ? memoryImageData.map { [$0] } ?? [] : memoryImageDatas
+        }
         self.memoryImageDatas = normalizedImages
         self.memoryImageData = normalizedImages.first
+        self.memoryImageReferences = memoryImageReferences.count == normalizedImages.count ? memoryImageReferences : []
+        self.unavailableMemoryImageIndices = Set(normalizedImages.indices.filter { normalizedImages[$0].isEmpty && self.memoryImageReferences.indices.contains($0) })
         self.coverMemoryImageIndex = Self.normalizedCoverIndex(coverMemoryImageIndex, imageCount: normalizedImages.count)
         self.memoryAnchorRole = memoryAnchorRole
         self.memoryAnchorSceneHint = memoryAnchorSceneHint
@@ -765,7 +775,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
 extension HomeItem {
     enum CodingKeys: String, CodingKey {
-        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta, userEditedTitle, userEditedCategory, categoryCorrectionFrom, memoryContext, scenePackId, memoryImageData, memoryImageDatas, coverMemoryImageIndex, memoryAnchorRole, memoryAnchorSceneHint, memoryAnchorCaption, memoryAnchorCreatedAt
+        case id, title, amount, category, source, createdAt, updatedAt, emotionTag, merchantBrandId, draftMeta, userEditedTitle, userEditedCategory, categoryCorrectionFrom, memoryContext, scenePackId, memoryImageData, memoryImageDatas, memoryImageReferences, coverMemoryImageIndex, memoryAnchorRole, memoryAnchorSceneHint, memoryAnchorCaption, memoryAnchorCreatedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -788,8 +798,18 @@ extension HomeItem {
         scenePackId = try container.decodeIfPresent(String.self, forKey: .scenePackId)
         let legacyImageData = try container.decodeIfPresent(Data.self, forKey: .memoryImageData)
         let decodedImages = try container.decodeIfPresent([Data].self, forKey: .memoryImageDatas) ?? []
-        memoryImageDatas = decodedImages.isEmpty ? legacyImageData.map { [$0] } ?? [] : decodedImages
+        let decodedReferences = try container.decodeIfPresent([String].self, forKey: .memoryImageReferences) ?? []
+        if decodedImages.isEmpty, legacyImageData == nil, !decodedReferences.isEmpty {
+            memoryImageDatas = Array(repeating: Data(), count: decodedReferences.count)
+            memoryImageReferences = decodedReferences
+        } else {
+            memoryImageDatas = decodedImages.isEmpty ? legacyImageData.map { [$0] } ?? [] : decodedImages
+            memoryImageReferences = decodedReferences.count == memoryImageDatas.count ? decodedReferences : []
+        }
         memoryImageData = memoryImageDatas.first
+        unavailableMemoryImageIndices = Set(memoryImageDatas.indices.filter {
+            memoryImageDatas[$0].isEmpty && memoryImageReferences.indices.contains($0)
+        })
         coverMemoryImageIndex = Self.normalizedCoverIndex(
             try container.decodeIfPresent(Int.self, forKey: .coverMemoryImageIndex),
             imageCount: memoryImageDatas.count
@@ -800,6 +820,41 @@ extension HomeItem {
         memoryAnchorCreatedAt = try container.decodeIfPresent(Date.self, forKey: .memoryAnchorCreatedAt)
     }
 
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(amount, forKey: .amount)
+        try container.encode(category, forKey: .category)
+        try container.encode(source, forKey: .source)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(emotionTag, forKey: .emotionTag)
+        try container.encodeIfPresent(merchantBrandId, forKey: .merchantBrandId)
+        try container.encodeIfPresent(draftMeta, forKey: .draftMeta)
+        try container.encodeIfPresent(userEditedTitle, forKey: .userEditedTitle)
+        try container.encodeIfPresent(userEditedCategory, forKey: .userEditedCategory)
+        try container.encodeIfPresent(categoryCorrectionFrom, forKey: .categoryCorrectionFrom)
+        try container.encodeIfPresent(memoryContext, forKey: .memoryContext)
+        try container.encodeIfPresent(scenePackId, forKey: .scenePackId)
+
+        let hasCompleteReferences = !memoryImageReferences.isEmpty
+            && memoryImageReferences.count == memoryImageDatas.count
+            && memoryImageReferences.allSatisfy { !$0.isEmpty }
+        if hasCompleteReferences {
+            try container.encode(memoryImageReferences, forKey: .memoryImageReferences)
+        } else if !memoryImageDatas.isEmpty {
+            try container.encode(memoryImageDatas, forKey: .memoryImageDatas)
+            try container.encodeIfPresent(memoryImageDatas.first, forKey: .memoryImageData)
+        }
+
+        try container.encodeIfPresent(coverMemoryImageIndex, forKey: .coverMemoryImageIndex)
+        try container.encodeIfPresent(memoryAnchorRole, forKey: .memoryAnchorRole)
+        try container.encodeIfPresent(memoryAnchorSceneHint, forKey: .memoryAnchorSceneHint)
+        try container.encodeIfPresent(memoryAnchorCaption, forKey: .memoryAnchorCaption)
+        try container.encodeIfPresent(memoryAnchorCreatedAt, forKey: .memoryAnchorCreatedAt)
+    }
+
     var memoryImages: [Data] {
         get {
             if !memoryImageDatas.isEmpty { return memoryImageDatas }
@@ -808,8 +863,44 @@ extension HomeItem {
         set {
             memoryImageDatas = newValue
             memoryImageData = newValue.first
+            memoryImageReferences = []
+            unavailableMemoryImageIndices = []
             coverMemoryImageIndex = Self.normalizedCoverIndex(coverMemoryImageIndex, imageCount: newValue.count)
         }
+    }
+
+    mutating func appendMemoryImages(_ imageDatas: [Data]) {
+        memoryImageDatas.append(contentsOf: imageDatas)
+        memoryImageData = memoryImageDatas.first
+        memoryImageReferences.append(contentsOf: Array(repeating: "", count: imageDatas.count))
+    }
+
+    mutating func removeMemoryImage(at index: Int) {
+        guard memoryImageDatas.indices.contains(index) else { return }
+        memoryImageDatas.remove(at: index)
+        memoryImageData = memoryImageDatas.first
+        if memoryImageReferences.indices.contains(index) {
+            memoryImageReferences.remove(at: index)
+        } else {
+            memoryImageReferences = []
+        }
+        unavailableMemoryImageIndices = Set(unavailableMemoryImageIndices.compactMap { unavailableIndex in
+            if unavailableIndex == index { return nil }
+            return unavailableIndex > index ? unavailableIndex - 1 : unavailableIndex
+        })
+    }
+
+    mutating func setExternalMemoryImages(
+        references: [String],
+        data: [Data],
+        unavailableIndices: Set<Int> = []
+    ) {
+        guard references.count == data.count else { return }
+        memoryImageReferences = references
+        memoryImageDatas = data
+        memoryImageData = data.first
+        unavailableMemoryImageIndices = unavailableIndices
+        coverMemoryImageIndex = Self.normalizedCoverIndex(coverMemoryImageIndex, imageCount: data.count)
     }
 
     var coverMemoryImageData: Data? {
@@ -843,7 +934,7 @@ extension HomeItem.Source {
     var displayName: String {
         switch self {
         case .manual: return "手动记录"
-        case .ocr: return "智能导入"
+        case .ocr: return "账单识别"
         }
     }
 }

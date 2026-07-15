@@ -22,14 +22,14 @@ enum AIReportServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidEndpoint(let endpoint):
-            return "AI 服务地址配置异常：\(endpoint)"
+            return "远程模型地址配置异常：\(endpoint)"
         case .badStatus(let code, let body):
             if body.contains("AI_INPUT_REJECTED") || body.contains("BANK_CARD") {
-                return "远程 AI 触发内容保护，已回退本地建议。"
+                return "远程模型触发内容保护，将使用本地规则。"
             }
-            return "AI 请求失败（\(code)），已回退本地建议。"
+            return "远程模型请求失败（\(code)），将使用本地规则。"
         case .invalidResponse:
-            return "AI 返回格式异常。"
+            return "远程模型返回格式异常，将使用本地规则。"
         }
     }
 }

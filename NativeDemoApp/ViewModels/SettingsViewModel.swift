@@ -450,7 +450,7 @@ final class SettingsViewModel: ObservableObject {
         hasPendingLoginCloudSyncDecision = false
         settings.syncEnabled = false
         persist()
-        authMessage = "已先保留本机账本，不会自动同步到当前账号。"
+        authMessage = "已先保留本机账本，不会自动同步账单字段到当前账号；照片仍只在本机。"
     }
 
     @discardableResult
@@ -467,10 +467,10 @@ final class SettingsViewModel: ObservableObject {
         do {
             try await client.deleteCloudLedger(accessToken: token)
             setCloudSyncEnabled(false, rememberForAccount: true)
-            authMessage = "云端账本已删除，本机记录仍保留。"
+            authMessage = "云端账单字段已删除，本机记录和照片仍保留。"
             return true
         } catch {
-            authMessage = "云端账本暂时没删除成功，请稍后再试。"
+            authMessage = "云端账单字段暂时没删除成功，请稍后再试。"
             return false
         }
     }
@@ -712,8 +712,8 @@ final class SettingsViewModel: ObservableObject {
                 )
             } catch {
                 authMessage = enabled
-                    ? "云端备份已在本机开启，账号开关稍后会再同步。"
-                    : "云端备份已在本机关闭，账号开关稍后会再同步。"
+                    ? "账单字段云端备份已在本机开启，账号开关稍后会再同步；照片不会上传。"
+                    : "账单字段云端备份已在本机关闭，账号开关稍后会再同步。"
             }
         }
     }

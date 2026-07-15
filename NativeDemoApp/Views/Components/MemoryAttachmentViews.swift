@@ -33,9 +33,13 @@ struct MemoryAttachmentThumbnail: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            Image(systemName: "photo")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(AppColors.accent.opacity(0.68))
+            VStack(spacing: 6) {
+                Image(systemName: "photo.badge.exclamationmark")
+                    .font(.system(size: 22, weight: .semibold))
+                Text("图片暂时不可用")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(AppColors.accent.opacity(0.68))
         }
     }
 }

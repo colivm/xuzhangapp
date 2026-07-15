@@ -1,0 +1,127 @@
+{
+  "dateEncoding": "secondsSinceAppleReferenceDateUTC",
+  "fixtureSetDigestSha256": "df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129",
+  "fixtures": [
+    {
+      "amountMinorUnitTotal": 2462750,
+      "categoryCounts": {
+        "交通": 10,
+        "人情": 10,
+        "住宿": 10,
+        "健康": 10,
+        "其他": 10,
+        "娱乐": 10,
+        "居家": 10,
+        "日用": 10,
+        "购物": 10,
+        "餐饮": 10
+      },
+      "coverSelectionDigestSha256": "b9cdb2e002379952e4ac4b6a3f3a58ebfb8a39147d49bb4bf5d057a8b6b296ec",
+      "file": "ledger_100.json",
+      "firstRecordID": "10000000-0000-4000-8000-000000000001",
+      "imageCount": 15,
+      "imageSequenceDigestSha256": "a1820c4dc0b460884ee162fbd8f0f19813cdcae1d51f194daf70543a638b9247",
+      "lastRecordID": "10000000-0000-4000-8000-000000000064",
+      "ocrDraftCounts": {
+        "pending": 5,
+        "resolved": 5,
+        "total": 10
+      },
+      "photoRecordCount": 8,
+      "recordCount": 100,
+      "recordDigestSha256": "f3a282ed166f215d85e8c615fd85721b2e70067726e7521742ea8e6239ca23ed",
+      "years": [
+        2024,
+        2025,
+        2026
+      ]
+    },
+    {
+      "amountMinorUnitTotal": 25077500,
+      "categoryCounts": {
+        "交通": 100,
+        "人情": 100,
+        "住宿": 100,
+        "健康": 100,
+        "其他": 100,
+        "娱乐": 100,
+        "居家": 100,
+        "日用": 100,
+        "购物": 100,
+        "餐饮": 100
+      },
+      "coverSelectionDigestSha256": "cbffa798900035e7e4f45d3846b9af79024bc59002e247bd912d5f936582de59",
+      "file": "ledger_1000.json",
+      "firstRecordID": "10000000-0000-4000-8000-000000000001",
+      "imageCount": 153,
+      "imageSequenceDigestSha256": "5358a81fa30c26fbb2a17709281829e11c9079f2ff141e5c47990a9c1f1b0674",
+      "lastRecordID": "10000000-0000-4000-8000-0000000003e8",
+      "ocrDraftCounts": {
+        "pending": 46,
+        "resolved": 45,
+        "total": 91
+      },
+      "photoRecordCount": 77,
+      "recordCount": 1000,
+      "recordDigestSha256": "0117d6c97b789d8bcbe687f9617febe13936849b8c1902a400aea16d57ee258b",
+      "years": [
+        2024,
+        2025,
+        2026
+      ]
+    },
+    {
+      "amountMinorUnitTotal": 125487500,
+      "categoryCounts": {
+        "交通": 500,
+        "人情": 500,
+        "住宿": 500,
+        "健康": 500,
+        "其他": 500,
+        "娱乐": 500,
+        "居家": 500,
+        "日用": 500,
+        "购物": 500,
+        "餐饮": 500
+      },
+      "coverSelectionDigestSha256": "1b42dc1227a135578843ded2a295bb00b80e472af8b523eb129545311225ff66",
+      "file": "ledger_5000.json",
+      "firstRecordID": "10000000-0000-4000-8000-000000000001",
+      "imageCount": 769,
+      "imageSequenceDigestSha256": "5b180d57a1a8ae12ab3780d743085d2e1a87151606477174479145a6f0996a9f",
+      "lastRecordID": "10000000-0000-4000-8000-000000001388",
+      "ocrDraftCounts": {
+        "pending": 228,
+        "resolved": 227,
+        "total": 455
+      },
+      "photoRecordCount": 385,
+      "recordCount": 5000,
+      "recordDigestSha256": "6c597531a746f4bf96bc1d4c62233dfe9e579d1cadb4951907b5e76876a9eaea",
+      "years": [
+        2024,
+        2025,
+        2026
+      ]
+    }
+  ],
+  "generatorVersion": "release-fixture-v1",
+  "requiredCategories": [
+    "餐饮",
+    "交通",
+    "购物",
+    "日用",
+    "娱乐",
+    "住宿",
+    "健康",
+    "居家",
+    "人情",
+    "其他"
+  ],
+  "schemaVersion": 1,
+  "supportedRecordCounts": [
+    100,
+    1000,
+    5000
+  ]
+}

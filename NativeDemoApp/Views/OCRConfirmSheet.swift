@@ -1,6 +1,27 @@
 import Foundation
 import SwiftUI
 
+enum OCRImportAction: Equatable {
+    case review
+    case direct
+}
+
+struct OCRImportSubmissionGate: Equatable {
+    private(set) var action: OCRImportAction?
+
+    var isSubmitting: Bool { action != nil }
+
+    mutating func begin(_ action: OCRImportAction) -> Bool {
+        guard !isSubmitting else { return false }
+        self.action = action
+        return true
+    }
+
+    mutating func reset() {
+        action = nil
+    }
+}
+
 struct OCRConfirmSheet: View {
     private struct ConfirmRow: Identifiable {
         let id: UUID
@@ -10,18 +31,8 @@ struct OCRConfirmSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var rows: [ConfirmRow]
-    @State private var importSubmissionState: ImportSubmissionState = .idle
+    @State private var importSubmissionGate = OCRImportSubmissionGate()
     @State private var importTask: Task<Void, Never>?
-
-    private enum ImportAction: Equatable {
-        case review
-        case direct
-    }
-
-    private enum ImportSubmissionState: Equatable {
-        case idle
-        case submitting(ImportAction)
-    }
 
     let onConfirm: ([OCRReceiptDraft], Bool) -> Int
 
@@ -43,15 +54,11 @@ struct OCRConfirmSheet: View {
     }
 
     private var isCollectingImport: Bool {
-        if case .submitting = importSubmissionState {
-            return true
-        }
-        return false
+        importSubmissionGate.isSubmitting
     }
 
-    private var importAction: ImportAction? {
-        guard case let .submitting(action) = importSubmissionState else { return nil }
-        return action
+    private var importAction: OCRImportAction? {
+        importSubmissionGate.action
     }
 
     var body: some View {
@@ -61,11 +68,11 @@ struct OCRConfirmSheet: View {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("先帮你把截图里的支出整理出来，请核对金额、备注和分类。")
-                                .font(.system(size: 15, weight: .semibold))
+                                .font(.headline.weight(.semibold))
                                 .foregroundStyle(AppColors.text)
 
                             Text("识别均在本地完成，原图不会上传。退款和收入会尽量忽略。")
-                                .font(.system(size: 13))
+                                .font(.subheadline)
                                 .foregroundStyle(AppColors.subtext)
 
                             HStack(spacing: 10) {
@@ -94,7 +101,7 @@ struct OCRConfirmSheet: View {
                             importAction == .review ? "正在进入整理" : "进入整理 \(selectedRows.count) 条",
                             systemImage: isCollectingImport ? "tray.and.arrow.down.fill" : "checklist.checked"
                         )
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.headline.weight(.semibold))
                         .frame(maxWidth: .infinity, minHeight: 50)
                     }
                     .buttonStyle(.plain)
@@ -105,39 +112,14 @@ struct OCRConfirmSheet: View {
                             .fill(selectedRows.isEmpty ? AppColors.subtext.opacity(0.35) : AppColors.accent)
                     )
 
-                    HStack(spacing: 12) {
-                        Button("取消") { dismiss() }
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(AppColors.subtext)
-                            .frame(maxWidth: .infinity, minHeight: 42)
-                            .background(
-                                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                    .fill(Color.white.opacity(0.62))
-                            )
-                            .buttonStyle(.plain)
-                            .disabled(isCollectingImport)
-
-                        Button {
-                            importSelected(asReviewDrafts: false)
-                        } label: {
-                            Label(
-                                importAction == .direct ? "正在直接导入" : "直接导入",
-                                systemImage: "tray.and.arrow.down"
-                            )
-                            .font(.system(size: 14, weight: .semibold))
-                            .frame(maxWidth: .infinity, minHeight: 42)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 12) {
+                            secondaryImportActions
                         }
-                        .buttonStyle(.plain)
-                        .disabled(selectedRows.isEmpty || isCollectingImport)
-                        .foregroundStyle(AppColors.accent)
-                        .background(
-                            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                .fill(Color.white.opacity(0.74))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                .stroke(AppColors.accent.opacity(0.18), lineWidth: 1)
-                        )
+
+                        VStack(spacing: 8) {
+                            secondaryImportActions
+                        }
                     }
                 }
                 .padding(16)
@@ -151,19 +133,58 @@ struct OCRConfirmSheet: View {
         .onDisappear {
             importTask?.cancel()
             importTask = nil
+            importSubmissionGate.reset()
         }
+    }
+
+    @ViewBuilder
+    private var secondaryImportActions: some View {
+        Button("取消") { dismiss() }
+            .font(.body.weight(.semibold))
+            .foregroundStyle(AppColors.subtext)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(Color.white.opacity(0.62))
+            )
+            .buttonStyle(.plain)
+            .disabled(isCollectingImport)
+            .accessibilityHint("关闭确认页，不导入账单")
+
+        Button {
+            importSelected(asReviewDrafts: false)
+        } label: {
+            Label(
+                importAction == .direct ? "正在直接导入" : "直接导入",
+                systemImage: "tray.and.arrow.down"
+            )
+            .font(.body.weight(.semibold))
+            .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .disabled(selectedRows.isEmpty || isCollectingImport)
+        .foregroundStyle(AppColors.accent)
+        .background(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(Color.white.opacity(0.74))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(AppColors.accent.opacity(0.18), lineWidth: 1)
+        )
+        .accessibilityHint("跳过待整理区，直接写入所选账单")
     }
 
     private func importSelected(asReviewDrafts: Bool) {
         let selectedDrafts = selectedRows.map(\.draft)
-        guard !selectedDrafts.isEmpty, !isCollectingImport else { return }
-        let action: ImportAction = asReviewDrafts ? .review : .direct
-        importSubmissionState = .submitting(action)
+        guard !selectedDrafts.isEmpty else { return }
+        let action: OCRImportAction = asReviewDrafts ? .review : .direct
+        guard importSubmissionGate.begin(action) else { return }
         importTask?.cancel()
         importTask = Task { @MainActor in
             await Task.yield()
             guard !Task.isCancelled else {
-                importSubmissionState = .idle
+                importSubmissionGate.reset()
                 importTask = nil
                 return
             }
@@ -173,7 +194,7 @@ struct OCRConfirmSheet: View {
             if importedCount > 0 {
                 dismiss()
             } else {
-                importSubmissionState = .idle
+                importSubmissionGate.reset()
             }
         }
     }
@@ -540,7 +561,7 @@ struct OCRDraftPanel: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(AppColors.subtext.opacity(0.82))
-                        .frame(width: 32, height: 32)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
                 .background(Circle().fill(Color.white.opacity(0.58)))
@@ -835,8 +856,8 @@ struct OCRDraftPanel: View {
                 confirmActiveDraft(activeItem)
             } label: {
                 Label("确认这一条", systemImage: "checkmark.circle.fill")
-                    .font(.system(size: 12, weight: .bold))
-                    .frame(maxWidth: .infinity, minHeight: 38)
+                    .font(.footnote.weight(.bold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.plain)
             .foregroundStyle(.white)
@@ -1208,10 +1229,11 @@ private struct OCRDraftRow: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
                         .padding(.horizontal, 14)
-                        .frame(height: 36)
+                        .frame(minHeight: 44)
                         .background(dateChipBackground)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("修改日期，当前 \(ocrDateText)")
 
                 Button {
                     withAnimation(.spring(response: 0.30, dampingFraction: 0.88)) {
@@ -1224,10 +1246,11 @@ private struct OCRDraftRow: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
                         .padding(.horizontal, 14)
-                        .frame(height: 36)
+                        .frame(minHeight: 44)
                         .background(dateChipBackground)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("修改时间，当前 \(ocrTimeText)")
             }
 
             if datePanelExpanded {
@@ -1355,7 +1378,7 @@ private struct OCRDraftRow: View {
             Image(systemName: "keyboard.chevron.compact.down")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(AppColors.accent)
-                .frame(width: 42, height: 32)
+                .frame(width: 44, height: 44)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color.white.opacity(0.82))

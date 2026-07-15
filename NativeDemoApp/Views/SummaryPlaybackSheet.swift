@@ -539,6 +539,7 @@ struct SummaryPlaybackSheet: View {
     var onSaveMemoryLine: ((String, SummaryPlaybackRange) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var activeIndex = 0
     @State private var isPlaying = true
     @State private var playbackDone = false
@@ -628,9 +629,13 @@ struct SummaryPlaybackSheet: View {
                 .scrollIndicators(.hidden)
                 .onChange(of: playbackDone) { _, done in
                     guard done else { return }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
-                        withAnimation(.spring(response: 0.44, dampingFraction: 0.90)) {
-                            scrollProxy.scrollTo(Self.doneActionsPeekAnchorID, anchor: UnitPoint(x: 0.5, y: 0.72))
+                    if reduceMotion {
+                        scrollProxy.scrollTo(Self.doneActionsPeekAnchorID, anchor: UnitPoint(x: 0.5, y: 0.72))
+                    } else {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+                            withAnimation(.spring(response: 0.44, dampingFraction: 0.90)) {
+                                scrollProxy.scrollTo(Self.doneActionsPeekAnchorID, anchor: UnitPoint(x: 0.5, y: 0.72))
+                            }
                         }
                     }
                 }
@@ -651,9 +656,9 @@ struct SummaryPlaybackSheet: View {
                     .zIndex(12)
             }
         }
-        .animation(.easeInOut(duration: 0.28), value: currentChapter?.id)
-        .animation(.easeInOut(duration: 0.20), value: memorySaveMessage)
-        .animation(.spring(response: 0.28, dampingFraction: 0.88), value: showShareCardPrivacyConfirm)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.28), value: currentChapter?.id)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.20), value: memorySaveMessage)
+        .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.88), value: showShareCardPrivacyConfirm)
         .onAppear {
             startPlayback()
         }
@@ -831,8 +836,8 @@ struct SummaryPlaybackSheet: View {
                 HStack(spacing: 8) {
                     Image(systemName: playback.range == .week ? "calendar.badge.clock" : "calendar")
                         .font(.system(size: 12, weight: .bold))
-                    Text(playback.range == .week ? "本周章节" : "本月章节")
-                        .font(.system(size: 12, weight: .bold))
+                    Text(playback.range == .week ? "周记" : "月章")
+                        .font(.footnote.weight(.bold))
                 }
                 .foregroundStyle(AppColors.accentDark.opacity(0.82))
                 .padding(.horizontal, 10)
@@ -844,10 +849,10 @@ struct SummaryPlaybackSheet: View {
                 )
 
                 Text(playback.title)
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .font(.system(.title, design: .rounded, weight: .bold))
                     .foregroundStyle(AppColors.text)
                 Text(playback.teaserLine)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(AppColors.subtext)
                     .lineLimit(2)
             }
@@ -858,11 +863,11 @@ struct SummaryPlaybackSheet: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(AppColors.subtext)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 44, height: 44)
                     .background(Color.white.opacity(0.64), in: Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("关闭")
+            .accessibilityLabel("关闭回放")
         }
         .padding(.top, 4)
     }
@@ -1156,7 +1161,7 @@ struct SummaryPlaybackSheet: View {
         if isPresenceChapter(chapter) {
             if let lifeMarkLine = chapter.metrics["lifeMarkLine"]?.trimmingCharacters(in: .whitespacesAndNewlines),
                !lifeMarkLine.isEmpty {
-                return "生活印记：\(lifeMarkLine)"
+                return "生活线索：\(lifeMarkLine)"
             }
             let count = chapter.metrics["count"] ?? "\(playback.count)"
             let total = chapter.metrics["total"] ?? playback.total.formatted(.cny)
@@ -1218,7 +1223,7 @@ struct SummaryPlaybackSheet: View {
         if isPresenceChapter(chapter) {
             if let lifeMarkLine = chapter.metrics["lifeMarkLine"]?.trimmingCharacters(in: .whitespacesAndNewlines),
                !lifeMarkLine.isEmpty {
-                return "生活印记：\(lifeMarkLine)"
+                return "生活线索：\(lifeMarkLine)"
             }
             let count = chapter.metrics["count"] ?? "\(playback.count)"
             let total = chapter.metrics["total"] ?? playback.total.formatted(.cny)
@@ -1475,10 +1480,10 @@ struct SummaryPlaybackSheet: View {
                     handlePrimaryDoneAction()
                 } label: {
                     Text(primaryDoneTitle)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .padding(.horizontal, 12)
                         .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(PurposefulCardButtonStyle())
@@ -1490,10 +1495,10 @@ struct SummaryPlaybackSheet: View {
                     showShareCardPrivacyConfirm = true
                 } label: {
                     Label("保存本周故事图", systemImage: "square.and.arrow.down")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(weeklySharePayload == nil || isSavingShareCard ? AppColors.subtext.opacity(0.64) : AppColors.text)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .padding(.horizontal, 12)
                         .themedInteractionSurface(
                             radius: 16,
                             tint: AppColors.accent,
@@ -1513,16 +1518,17 @@ struct SummaryPlaybackSheet: View {
                 }
 
                 Button {
-                    dismiss()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        onOpenInsight?()
+                    if let onOpenInsight {
+                        onOpenInsight()
+                    } else {
+                        dismiss()
                     }
                 } label: {
-                    Text("想多聊一句？")
-                        .font(.system(size: 15, weight: .semibold))
+                    Text("继续问")
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(AppColors.text)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .padding(.horizontal, 12)
                         .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(PurposefulCardButtonStyle())
@@ -1531,10 +1537,10 @@ struct SummaryPlaybackSheet: View {
                     handlePrimaryDoneAction()
                 } label: {
                     Text(primaryDoneTitle)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .padding(.horizontal, 12)
                         .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(PurposefulCardButtonStyle())
@@ -1544,14 +1550,17 @@ struct SummaryPlaybackSheet: View {
 
             if playback.range == .month {
                 Button {
-                    onOpenWeekly?()
-                    dismiss()
+                    if let onOpenWeekly {
+                        onOpenWeekly()
+                    } else {
+                        dismiss()
+                    }
                 } label: {
                     Text("先看本周")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(AppColors.text)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .padding(.horizontal, 12)
                         .themedInteractionSurface(radius: 16, tint: AppColors.accent, glowIntensity: 0.48)
                 }
                 .buttonStyle(PurposefulCardButtonStyle())
@@ -1683,10 +1692,10 @@ struct SummaryPlaybackSheet: View {
                     handlePrimaryDoneAction()
                 } label: {
                     Text(primaryDoneTitle)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .padding(.horizontal, 12)
                         .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(PurposefulCardButtonStyle())
@@ -1698,10 +1707,10 @@ struct SummaryPlaybackSheet: View {
                     showShareCardPrivacyConfirm = true
                 } label: {
                     Label("保存本周故事图", systemImage: "square.and.arrow.down")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(weeklySharePayload == nil || isSavingShareCard ? AppColors.subtext.opacity(0.64) : AppColors.text)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .padding(.horizontal, 12)
                         .themedInteractionSurface(
                             radius: 16,
                             tint: AppColors.accent,
@@ -1723,16 +1732,17 @@ struct SummaryPlaybackSheet: View {
                 }
 
                 Button {
-                    dismiss()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        onOpenInsight?()
+                    if let onOpenInsight {
+                        onOpenInsight()
+                    } else {
+                        dismiss()
                     }
                 } label: {
-                    Text("想多聊一句？")
-                        .font(.system(size: 15, weight: .semibold))
+                    Text("继续问")
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(AppColors.text)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .padding(.horizontal, 12)
                         .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(PurposefulCardButtonStyle())
@@ -1741,10 +1751,10 @@ struct SummaryPlaybackSheet: View {
                     handlePrimaryDoneAction()
                 } label: {
                     Text(primaryDoneTitle)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .padding(.horizontal, 12)
                         .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(PurposefulCardButtonStyle())
@@ -1754,14 +1764,17 @@ struct SummaryPlaybackSheet: View {
 
             if playback.range == .month {
                 Button {
-                    onOpenWeekly?()
-                    dismiss()
+                    if let onOpenWeekly {
+                        onOpenWeekly()
+                    } else {
+                        dismiss()
+                    }
                 } label: {
                     Text("先看本周")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(AppColors.text)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .padding(.horizontal, 12)
                         .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -2060,7 +2073,7 @@ struct SummaryPlaybackSheet: View {
 
             if customShareBackgroundData != nil {
                 Button {
-                    withAnimation(.spring(response: 0.24, dampingFraction: 0.88)) {
+                    withAnimation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.88)) {
                         customShareBackgroundItem = nil
                         customShareBackgroundData = nil
                         if currentShareCardStyle == .customBackground {
@@ -2071,12 +2084,12 @@ struct SummaryPlaybackSheet: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(AppColors.text.opacity(0.82))
-                        .frame(width: 28, height: 28)
+                        .frame(width: 44, height: 44)
                         .background(.ultraThinMaterial, in: Circle())
                         .overlay(Circle().stroke(Color.white.opacity(0.58), lineWidth: 0.8))
                 }
                 .buttonStyle(.plain)
-                .padding(8)
+                .accessibilityLabel("移除自定义背景")
             }
         }
         .buttonStyle(.plain)
@@ -2233,9 +2246,9 @@ struct SummaryPlaybackSheet: View {
 
     private var doneHeadline: String {
         if isMember {
-            return playback.range == .week ? "本周回放已完成" : "本月回放已完成"
+            return playback.range == .week ? "周记已完成" : "月章已完成"
         }
-        return memberPitch?.headline ?? (playback.range == .week ? "本周回放已完成" : "本月回放已完成")
+        return memberPitch?.headline ?? (playback.range == .week ? "周记已完成" : "月章已完成")
     }
 
     private var doneDetail: String? {
@@ -2254,9 +2267,10 @@ struct SummaryPlaybackSheet: View {
         if isMember {
             playback.range == .month ? restartPlayback() : dismiss()
         } else {
-            dismiss()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                onShowMemberPricing?()
+            if let onShowMemberPricing {
+                onShowMemberPricing()
+            } else {
+                dismiss()
             }
         }
     }
@@ -4067,7 +4081,7 @@ private struct WeeklyStoryShareCardView: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(muted.opacity(0.62))
 
-            Text(payload.recordCount > 0 ? "周回放" : "回放")
+            Text(payload.recordCount > 0 ? "周记" : "回放")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(ink.opacity(0.80))
 
@@ -4802,7 +4816,7 @@ private struct WeeklyStoryShareCardView: View {
 
         if storySelection.primary?.signal.kind != .lifeMark,
            let lifeMark = normalizedShareLine(payload.lifeMarkLine) {
-            rows.append("生活印记：\(lifeMark)")
+            rows.append("生活线索：\(lifeMark)")
         }
         if storySelection.primary?.signal.kind != .emotion,
            let emotion = normalizedShareLine(payload.emotionLine) {

@@ -548,6 +548,24 @@ def scan_ai_command_boundaries(failures: list[str], text: str) -> None:
             + ", ".join(present)
         )
 
+    sheet_scope = extract_swift_scope(text, "private var aiCommandSheet")
+    if (
+        ".onChange(of: aiCommandResult?.id)" not in sheet_scope
+        or "scrollProxy.scrollTo(Self.aiCommandTopAnchorID" not in sheet_scope
+    ):
+        failures.append(
+            f"{SWIFT_FILES['insight_web_view']}: ai command sheet must reset scroll after result content collapses"
+        )
+
+    commute_scope = extract_swift_scope(text, "private func commuteDrafts(")
+    schedule_scope = extract_swift_scope(text, "static func eligibleSlots(")
+    uses_schedule = "AICommuteDraftSchedule.eligibleSlots(for: day, now: now)" in commute_scope
+    excludes_future = "return date <= now" in schedule_scope
+    if "now: Date = Date()" not in text or not uses_schedule or not excludes_future:
+        failures.append(
+            f"{SWIFT_FILES['insight_web_view']}: commute backfill must exclude future commute slots"
+        )
+
 
 def scan_dashboard_boundaries(failures: list[str], text: str) -> None:
     if "minimumCommuteSupport(isBackfill: Bool)" not in text:

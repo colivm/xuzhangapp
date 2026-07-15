@@ -6,11 +6,14 @@ private struct TodaySwipeDragState: Equatable {
 }
 
 private enum TodayPlaybackPrompt: Equatable {
+    case firstRecord
     case firstUse
     case quotaExhausted(String)
 
     var title: String {
         switch self {
+        case .firstRecord:
+            return "第一笔已经记好"
         case .firstUse:
             return "今日回放，适合晚一点听"
         case .quotaExhausted:
@@ -20,6 +23,11 @@ private enum TodayPlaybackPrompt: Equatable {
 
     func message(remaining: Int) -> String {
         switch self {
+        case .firstRecord:
+            if remaining <= 0 {
+                return "第一笔已经放进账本。今天的免费回放次数已用完，仍可以继续记录。"
+            }
+            return "可以继续记，也可以现在听一遍今天。只有点播放后，才会使用一次今日回放。"
         case .firstUse:
             return ExperienceRuleCopy.todayPlaybackFirstUseMessage(remaining: remaining)
         case .quotaExhausted(let message):
@@ -337,6 +345,12 @@ private struct CommuteQuickCardWeatherLayer: View {
 }
 
 struct HomeView: View {
+    private enum SheetDismissRoute {
+        case memoryDetail(HomeItem)
+        case attachMemoryImage(HomeItem)
+        case memberPricing
+    }
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
@@ -346,12 +360,20 @@ struct HomeView: View {
     var onNavigateSettings: (() -> Void)? = nil
     var onShowMemberPricing: (() -> Void)? = nil
     var onAttachMemoryImage: ((HomeItem) -> Void)? = nil
+    var firstRecordPromptRequestID: UUID? = nil
+    var isExternalPostSavePresentationActive = false
+    var onFirstRecordPromptCompleted: ((Bool) -> Void)? = nil
     @State private var showPlayback = false
     @State private var playbackSheetID = UUID()
-    @State private var showFirstRecordToast = false
+    @State private var firstRecordPromptFlowIsActive = false
+    @State private var completeFirstRecordPromptAfterPlayback = false
     @State private var showTodayRecordsSheet = false
     @State private var editingItem: HomeItem?
     @State private var memoryDetailItem: HomeItem?
+    @State private var playbackDismissRoute: SheetDismissRoute?
+    @State private var todayRecordsDismissRoute: SheetDismissRoute?
+    @State private var editingDismissRoute: SheetDismissRoute?
+    @State private var memoryDetailDismissRoute: SheetDismissRoute?
     @State private var todayInlineEditingItemID: UUID?
     @State private var todaySwipedItemID: UUID?
     @State private var todayDeletingItemID: UUID?
@@ -392,14 +414,6 @@ struct HomeView: View {
                 }
             }
 
-            if showFirstRecordToast {
-                firstRecordToast
-                    .padding(.horizontal, 18)
-                    .padding(.top, 10)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(18)
-            }
-
             highConfidenceQuickRecordOverlay
                 .zIndex(12)
 
@@ -409,7 +423,9 @@ struct HomeView: View {
                     .zIndex(20)
             }
 
-            if settingsViewModel.petCompanionEnabled {
+            if settingsViewModel.petCompanionEnabled,
+               !isExternalPostSavePresentationActive,
+               todayPlaybackPrompt == nil {
                 todayPetStamp
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(.trailing, 16)
@@ -420,11 +436,19 @@ struct HomeView: View {
         .scrollIndicators(.hidden)
         .background(Color.clear)
         .onAppear {
-            handleRouteGuidance(homeViewModel.activeRouteGuidance)
+            presentFirstRecordPromptIfNeeded()
             scheduleRecentSaveHighlight()
         }
         .onChange(of: homeViewModel.activeRouteGuidance) { _, guidance in
             handleRouteGuidance(guidance)
+        }
+        .onChange(of: firstRecordPromptRequestID) { _, _ in
+            presentFirstRecordPromptIfNeeded()
+        }
+        .onChange(of: isExternalPostSavePresentationActive) { _, isActive in
+            if !isActive {
+                presentFirstRecordPromptIfNeeded()
+            }
         }
         .onChange(of: homeViewModel.recentThreeItems.first?.id) { _, _ in
             scheduleRecentSaveHighlight()
@@ -439,6 +463,12 @@ struct HomeView: View {
         }
         .onChange(of: homeViewModel.petMessage) { _, message in
             guard let message, settingsViewModel.petCompanionEnabled else { return }
+            guard !isExternalPostSavePresentationActive,
+                  todayPlaybackPrompt == nil,
+                  !firstRecordPromptFlowIsActive else {
+                homeViewModel.petMessage = nil
+                return
+            }
             petHint = message
             withAnimation(.easeInOut(duration: 0.24)) {
                 petBubbleVisible = true
@@ -450,21 +480,44 @@ struct HomeView: View {
             }
             homeViewModel.petMessage = nil
         }
-        .sheet(isPresented: $showPlayback) {
+        .sheet(isPresented: $showPlayback, onDismiss: {
+            let route = playbackDismissRoute
+            playbackDismissRoute = nil
+            handleSheetDismissRoute(route)
+            if completeFirstRecordPromptAfterPlayback {
+                completeFirstRecordPromptAfterPlayback = false
+                finishFirstRecordPromptFlow(continuesRecording: false)
+            }
+        }) {
             BillPlaybackSheet(
                 onNavigateToSettings: { onNavigateSettings?() },
-                onShowMemberPricing: { onShowMemberPricing?() }
+                onShowMemberPricing: {
+                    playbackDismissRoute = .memberPricing
+                    showPlayback = false
+                }
             )
                 .id(playbackSheetID)
                 .environmentObject(homeViewModel)
         }
-        .sheet(isPresented: $showTodayRecordsSheet) {
+        .sheet(isPresented: $showTodayRecordsSheet, onDismiss: {
+            let route = todayRecordsDismissRoute
+            todayRecordsDismissRoute = nil
+            handleSheetDismissRoute(route)
+        }) {
             todayRecordsSheet
         }
-        .sheet(item: $editingItem) { item in
+        .sheet(item: $editingItem, onDismiss: {
+            let route = editingDismissRoute
+            editingDismissRoute = nil
+            handleSheetDismissRoute(route)
+        }) { item in
             editSheet(for: item)
         }
-        .sheet(item: $memoryDetailItem) { item in
+        .sheet(item: $memoryDetailItem, onDismiss: {
+            let route = memoryDetailDismissRoute
+            memoryDetailDismissRoute = nil
+            handleSheetDismissRoute(route)
+        }) { item in
             memoryRecordDetailSheet(for: item)
         }
     }
@@ -909,34 +962,6 @@ struct HomeView: View {
         }
     }
 
-    private var firstRecordToast: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "play.circle.fill")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(AppColors.readableAccent)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("用十几秒叙一下今天")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                Text("第一笔已经记好，听一遍今日回放。")
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppColors.readableSubtext)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.56), lineWidth: 1)
-        )
-        .shadow(color: AppColors.subtext.opacity(0.16), radius: 16, y: 8)
-    }
-
     private func routeGuidanceBar(_ guidance: HomeViewModel.PlaybackRouteGuidance) -> some View {
         Button {
             homeViewModel.consumeRouteGuidance(guidance)
@@ -978,12 +1003,36 @@ struct HomeView: View {
 
     private func handleRouteGuidance(_ guidance: HomeViewModel.PlaybackRouteGuidance?) {
         guard guidance == .firstRecordTodayPlayback else { return }
-        showFirstRecordToast = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            requestTodayPlayback(allowsFirstUsePrompt: false)
-            showFirstRecordToast = false
+        presentFirstRecordPromptIfNeeded()
+    }
+
+    private func presentFirstRecordPromptIfNeeded() {
+        let hasPendingFirstRecordPrompt = firstRecordPromptRequestID != nil
+            || homeViewModel.activeRouteGuidance == .firstRecordTodayPlayback
+        guard hasPendingFirstRecordPrompt else { return }
+        guard !homeViewModel.todayItems.isEmpty else {
             homeViewModel.consumeRouteGuidance(.firstRecordTodayPlayback)
+            onFirstRecordPromptCompleted?(false)
+            return
         }
+        guard !isExternalPostSavePresentationActive,
+              todayPlaybackPrompt == nil,
+              !firstRecordPromptFlowIsActive else {
+            return
+        }
+        firstRecordPromptFlowIsActive = true
+        markTodayPlaybackFirstUsePromptSeen()
+        homeViewModel.markTodayPlaybackPromptShown("first_record")
+        withAnimation(.easeInOut(duration: 0.18)) {
+            todayPlaybackPrompt = .firstRecord
+        }
+    }
+
+    private func finishFirstRecordPromptFlow(continuesRecording: Bool) {
+        guard firstRecordPromptFlowIsActive else { return }
+        firstRecordPromptFlowIsActive = false
+        homeViewModel.consumeRouteGuidance(.firstRecordTodayPlayback)
+        onFirstRecordPromptCompleted?(continuesRecording)
     }
 
     private func requestTodayPlayback(allowsFirstUsePrompt: Bool = true) {
@@ -1000,6 +1049,7 @@ struct HomeView: View {
 
         if allowsFirstUsePrompt && shouldShowTodayPlaybackFirstUsePrompt(isMember: isMember) {
             markTodayPlaybackFirstUsePromptSeen()
+            homeViewModel.markTodayPlaybackPromptShown("first_use")
             todayPlaybackPrompt = .firstUse
             return
         }
@@ -1017,6 +1067,7 @@ struct HomeView: View {
 
     private func startTodayPlayback(isMember: Bool) {
         dailyQuotaStore.markTodayPlaybackStarted(isMember: isMember)
+        homeViewModel.markTodayPlaybackStarted()
         presentTodayPlaybackSheet()
     }
 
@@ -1028,6 +1079,10 @@ struct HomeView: View {
     private func todayPlaybackRemaining(isMember: Bool? = nil) -> Int {
         let member = isMember ?? settingsViewModel.settings.hasMemberAccess
         return dailyQuotaStore.todayPlaybackRemaining(isMember: member)
+    }
+
+    private var canStartTodayPlaybackNow: Bool {
+        settingsViewModel.settings.hasMemberAccess || todayPlaybackRemaining(isMember: false) > 0
     }
 
     private func todayPlaybackQuotaText(remaining: Int? = nil) -> String {
@@ -1060,7 +1115,7 @@ struct HomeView: View {
                         Text(todayPlaybackPrompt?.title ?? "")
                             .font(.system(size: 19, weight: .bold))
                             .foregroundStyle(AppColors.text)
-                        Text(todayPlaybackPrompt?.message(remaining: todayPlaybackRemaining(isMember: false)) ?? "")
+                        Text(todayPlaybackPrompt?.message(remaining: todayPlaybackRemaining()) ?? "")
                             .font(.system(size: 14, weight: .medium))
                             .lineSpacing(4)
                             .foregroundStyle(AppColors.readableSubtext)
@@ -1070,9 +1125,15 @@ struct HomeView: View {
 
                 HStack(spacing: 10) {
                     Button {
-                        dismissTodayPlaybackPrompt()
+                        dismissTodayPlaybackPrompt(
+                            continuesRecording: todayPlaybackPrompt == .firstRecord
+                        )
                     } label: {
-                        Text(todayPlaybackPrompt == .firstUse ? "晚点再说" : "知道了")
+                        Text(
+                            todayPlaybackPrompt == .firstRecord
+                                ? "继续记"
+                                : (todayPlaybackPrompt == .firstUse ? "晚点再说" : "知道了")
+                        )
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(AppColors.text)
                             .frame(maxWidth: .infinity, minHeight: 46)
@@ -1089,6 +1150,15 @@ struct HomeView: View {
 
                     Button {
                         switch todayPlaybackPrompt {
+                        case .firstRecord:
+                            if canStartTodayPlaybackNow {
+                                completeFirstRecordPromptAfterPlayback = true
+                                dismissTodayPlaybackPrompt(completesFirstRecordFlow: false)
+                                startTodayPlayback(isMember: settingsViewModel.settings.hasMemberAccess)
+                            } else {
+                                dismissTodayPlaybackPrompt()
+                                onShowMemberPricing?()
+                            }
                         case .firstUse:
                             dismissTodayPlaybackPrompt()
                             startTodayPlayback(isMember: settingsViewModel.settings.hasMemberAccess)
@@ -1099,7 +1169,11 @@ struct HomeView: View {
                             dismissTodayPlaybackPrompt()
                         }
                     } label: {
-                        Text(todayPlaybackPrompt == .firstUse ? "现在听一遍" : "了解不限回放")
+                        Text(
+                            todayPlaybackPrompt == .firstRecord
+                                ? (canStartTodayPlaybackNow ? "听今日回放" : "了解不限回放")
+                                : (todayPlaybackPrompt == .firstUse ? "现在听一遍" : "了解不限回放")
+                        )
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(AppColors.onAccent)
                             .frame(maxWidth: .infinity, minHeight: 46)
@@ -1142,9 +1216,16 @@ struct HomeView: View {
         .animation(.easeInOut(duration: 0.18), value: todayPlaybackPrompt != nil)
     }
 
-    private func dismissTodayPlaybackPrompt() {
+    private func dismissTodayPlaybackPrompt(
+        completesFirstRecordFlow: Bool = true,
+        continuesRecording: Bool = false
+    ) {
+        let shouldCompleteFirstRecordFlow = todayPlaybackPrompt == .firstRecord && completesFirstRecordFlow
         withAnimation(.easeInOut(duration: 0.18)) {
             todayPlaybackPrompt = nil
+        }
+        if shouldCompleteFirstRecordFlow {
+            finishFirstRecordPromptFlow(continuesRecording: continuesRecording)
         }
     }
 
@@ -1863,9 +1944,9 @@ struct HomeView: View {
         }
         switch mark.kind {
         case .scene:
-            return "生活印记 · \(mark.label)"
+            return "生活线索 · \(mark.label)"
         case .context, .milestone, .streak:
-            return "生活印记 · \(mark.title)"
+            return "生活线索 · \(mark.title)"
         }
     }
 
@@ -2299,15 +2380,25 @@ struct HomeView: View {
         }
     }
 
+    private func handleSheetDismissRoute(_ route: SheetDismissRoute?) {
+        guard let route else { return }
+        switch route {
+        case .memoryDetail(let item):
+            memoryDetailItem = latestItem(matching: item)
+        case .attachMemoryImage(let item):
+            requestAttachMemoryImage(item)
+        case .memberPricing:
+            onShowMemberPricing?()
+        }
+    }
+
     private func openRecord(_ item: HomeItem) {
         if item.hasMemoryImages {
             todayInlineEditingItemID = nil
             todaySwipedItemID = nil
             if showTodayRecordsSheet {
+                todayRecordsDismissRoute = .memoryDetail(latestItem(matching: item))
                 showTodayRecordsSheet = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
-                    memoryDetailItem = latestItem(matching: item)
-                }
             } else {
                 memoryDetailItem = latestItem(matching: item)
             }
@@ -2332,17 +2423,16 @@ struct HomeView: View {
                 todaySwipedItemID = nil
             }
         }
-        editingItem = nil
         highlightSavedItem(item.id)
-        let delay: TimeInterval
+        let target = latestItem(matching: item)
         if showTodayRecordsSheet {
+            todayRecordsDismissRoute = .memoryDetail(target)
             showTodayRecordsSheet = false
-            delay = 0.42
+        } else if editingItem != nil {
+            editingDismissRoute = .memoryDetail(target)
+            editingItem = nil
         } else {
-            delay = 0.35
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            memoryDetailItem = latestItem(matching: item)
+            memoryDetailItem = target
         }
     }
 
@@ -2362,10 +2452,8 @@ struct HomeView: View {
                 return didSave
             },
             onAddImages: {
+                memoryDetailDismissRoute = .attachMemoryImage(current)
                 memoryDetailItem = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-                    requestAttachMemoryImage(current)
-                }
             },
             onRemoveImage: { imageIndex in
                 if homeViewModel.removeMemoryImage(at: imageIndex, from: current.id) {
@@ -2520,6 +2608,7 @@ struct BillPlaybackSheet: View {
         }
         .onDisappear {
             playbackTask?.cancel()
+            homeViewModel.markTodayPlaybackEnded(progress: playbackProgressFraction)
         }
     }
 
@@ -2570,7 +2659,7 @@ struct BillPlaybackSheet: View {
     private var playbackHeader: some View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("今日生活回放")
+                Text("今日回放")
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundStyle(AppColors.text)
                 Text(todayPlaybackSubtitle)
@@ -2966,9 +3055,10 @@ struct BillPlaybackSheet: View {
                     .minimumTapTarget()
             }
             Button {
-                dismiss()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    onShowMemberPricing?()
+                if let onShowMemberPricing {
+                    onShowMemberPricing()
+                } else {
+                    dismiss()
                 }
             } label: {
                 memberPlaybackNudgePrimaryLabel

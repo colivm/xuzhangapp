@@ -100,7 +100,7 @@ final class HomeViewModel: ObservableObject {
             case .firstRecordTodayPlayback:
                 return "用十几秒叙一下今天"
             case .weekSliceReady:
-                return "本周回放可播放"
+                return "周记可以播放"
             case .fiveRecordsNeverPlayed:
                 return "可以讲这周的故事了"
             }
@@ -113,7 +113,7 @@ final class HomeViewModel: ObservableObject {
             case .weekSliceReady:
                 return "本周已经有 3 笔以上记录，去看看花听一遍。"
             case .fiveRecordsNeverPlayed:
-                return "已记 5 笔以上，还没完整听过周切片。"
+                return "已记 5 笔以上，还没完整听过周记。"
             }
         }
     }
@@ -171,9 +171,18 @@ final class HomeViewModel: ObservableObject {
     private var itemDerivedCache = ItemDerivedCache()
     private var itemDerivedCacheDayKey: String?
     private var itemDerivedCacheNeedsRebuild = true
+    private var localLedgerWritesBlocked = false
 
     init() {
-        items = LocalStore.loadHomeItems().sorted { $0.createdAt > $1.createdAt }
+        let ledgerLoadResult = LocalStore.loadHomeItemsResult()
+        items = ledgerLoadResult.items.sorted { $0.createdAt > $1.createdAt }
+        localLedgerWritesBlocked = ledgerLoadResult.writesBlocked
+        if let issueMessage = ledgerLoadResult.issueMessage {
+            syncStatusMessage = issueMessage
+            if ledgerLoadResult.writesBlocked {
+                recordInputMessage = issueMessage
+            }
+        }
         rebuildItemDerivedCache()
         insights = LocalStore.loadDailyInsights().sorted { $0.createdAt > $1.createdAt }
         if let data = UserDefaults.standard.data(forKey: "latest_action_card_v1"),
@@ -190,7 +199,10 @@ final class HomeViewModel: ObservableObject {
             }()
             if !expired, !Self.isLowValueActionCardText(card.text) { latestActionCard = card }
         }
-        analyticsService.track("app_open", props: ["items": String(items.count)])
+        analyticsService.track(
+            .appOpened,
+            props: [.ledgerSizeBucket: AnalyticsService.countBucket(for: items.count)]
+        )
         refreshTodayPlayback()
         refreshRouteGuidanceIfNeeded()
     }
@@ -202,6 +214,7 @@ final class HomeViewModel: ObservableObject {
         categoryLockedForSave: Bool? = nil,
         scenePackId: String? = nil
     ) -> Bool {
+        guard ensureLedgerWritesAllowed() else { return false }
         guard let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0 else { return false }
         let wasEmpty = items.isEmpty
         let shouldLockCategory = categoryLockedForSave ?? categoryLockedByUser
@@ -259,8 +272,8 @@ final class HomeViewModel: ObservableObject {
             scenePackId: scenePackId
         )
         items.insert(newItem, at: 0)
+        guard persistItems() else { return false }
         resetInput()
-        persistItems()
         schedulePostManualRecordWork(for: newItem, wasEmpty: wasEmpty)
         return true
     }
@@ -269,13 +282,16 @@ final class HomeViewModel: ObservableObject {
         Task { @MainActor in
             await Task.yield()
             analyticsService.track(
-                "record_saved",
+                .recordSaved,
                 props: [
-                    "category": newItem.category.rawValue,
-                    "amount": String(format: "%.2f", newItem.amount),
-                    "source": newItem.source.rawValue,
+                    .source: "manual",
+                    .isFirst: wasEmpty ? "true" : "false",
+                    .ledgerSizeBucket: AnalyticsService.countBucket(for: items.count),
                 ]
             )
+            if wasEmpty {
+                analyticsService.track(.firstRecordSaved, props: [.source: "manual"])
+            }
             refreshTodayPlayback()
             if wasEmpty {
                 emitRouteGuidance(.firstRecordTodayPlayback)
@@ -356,6 +372,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func importOCRDrafts(_ drafts: [OCRReceiptDraft], isMember: Bool, sendToDrafts: Bool = true) -> Int {
+        guard ensureLedgerWritesAllowed() else { return 0 }
         let validDrafts = drafts.filter { $0.amount > 0 }
         guard !validDrafts.isEmpty else {
             ocrStatus = "未选择可导入的账单。"
@@ -368,6 +385,7 @@ final class HomeViewModel: ObservableObject {
 
         let now = Date()
         let batchId = UUID().uuidString
+        let wasEmpty = items.isEmpty
         var memorySeedItems = items
         let importedItems = validDrafts.map { rawDraft in
             let draft = reviewedOCRDraft(rawDraft)
@@ -416,15 +434,18 @@ final class HomeViewModel: ObservableObject {
             return item
         }
         items.insert(contentsOf: importedItems, at: 0)
+        guard persistItems() else { return 0 }
         dailyQuotaStore.markOCRImported(isMember: isMember)
-        persistItems()
         analyticsService.track(
-            "ocr_records_imported",
+            .ocrRecordsImported,
             props: [
-                "count": String(importedItems.count),
-                "source": "ocr",
+                .countBucket: AnalyticsService.countBucket(for: importedItems.count),
+                .destination: sendToDrafts ? "drafts" : "ledger",
             ]
         )
+        if wasEmpty {
+            analyticsService.track(.firstRecordSaved, props: [.source: "ocr"])
+        }
         refreshTodayPlayback()
         refreshRouteGuidanceIfNeeded()
         updateOCRSuccessStatus(
@@ -444,6 +465,7 @@ final class HomeViewModel: ObservableObject {
 
     @discardableResult
     func importAICommandDrafts(_ drafts: [AICommandRecordDraft]) -> Int {
+        guard ensureLedgerWritesAllowed() else { return 0 }
         let validDrafts = drafts.filter {
             guard $0.amount > 0 else { return false }
             if case .conflict = $0.status { return false }
@@ -493,14 +515,16 @@ final class HomeViewModel: ObservableObject {
         }
 
         items.insert(contentsOf: importedItems, at: 0)
-        persistItems()
+        guard persistItems() else { return 0 }
         analyticsService.track(
-            "ai_command_records_saved",
+            .aiCommandRecordsSaved,
             props: [
-                "count": String(importedItems.count),
-                "source": "ai_command",
+                .countBucket: AnalyticsService.countBucket(for: importedItems.count),
             ]
         )
+        if wasEmpty {
+            analyticsService.track(.firstRecordSaved, props: [.source: "ai_command"])
+        }
         refreshTodayPlayback()
         if wasEmpty {
             emitRouteGuidance(.firstRecordTodayPlayback)
@@ -528,10 +552,11 @@ final class HomeViewModel: ObservableObject {
     }
 
     func updateOCRDraftStatus(id: UUID, isResolved: Bool) {
+        guard ensureLedgerWritesAllowed() else { return }
         guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
         items[idx].draftMeta?.status = isResolved ? .resolved : .pending
         items[idx].updatedAt = Date()
-        persistItems()
+        guard persistItems() else { return }
         clearOCRStatusIfNoPendingDrafts()
         Task { await syncUpsertToCloud(items[idx]) }
     }
@@ -579,6 +604,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func updateOCRDraftCategory(id: UUID, category: HomeItem.Category) {
+        guard ensureLedgerWritesAllowed() else { return }
         guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
         let originalCategory = items[idx].category
         let resolution = RecordDraftResolutionService.resolve(
@@ -612,11 +638,12 @@ final class HomeViewModel: ObservableObject {
             items[idx].categoryCorrectionFrom = originalCategory
         }
         items[idx].updatedAt = Date()
-        persistItems()
+        guard persistItems() else { return }
         Task { await syncUpsertToCloud(items[idx]) }
     }
 
     func updateOCRDraftAmount(id: UUID, amount: Double) {
+        guard ensureLedgerWritesAllowed() else { return }
         guard amount > 0,
               let idx = items.firstIndex(where: { $0.id == id }),
               items[idx].draftMeta != nil else { return }
@@ -649,11 +676,12 @@ final class HomeViewModel: ObservableObject {
             items[idx].memoryContext = memoryContextForRecord(date: items[idx].createdAt)
         }
         items[idx].updatedAt = Date()
-        persistItems()
+        guard persistItems() else { return }
         Task { await syncUpsertToCloud(items[idx]) }
     }
 
     func updateOCRDraftTitle(id: UUID, title: String) {
+        guard ensureLedgerWritesAllowed() else { return }
         guard let idx = items.firstIndex(where: { $0.id == id }),
               items[idx].draftMeta != nil else { return }
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -666,16 +694,18 @@ final class HomeViewModel: ObservableObject {
     }
 
     func deleteOCRDraftItem(id: UUID) {
+        guard ensureLedgerWritesAllowed() else { return }
         guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
         items.remove(at: idx)
-        persistItems()
+        guard persistItems() else { return }
         clearOCRStatusIfNoPendingDrafts()
-        analyticsService.track("ocr_draft_deleted")
+        analyticsService.track(.ocrDraftDeleted)
         refreshTodayPlayback()
         Task { await syncDeleteFromCloud(id: id) }
     }
 
     func clearResolvedOCRDrafts() {
+        guard ensureLedgerWritesAllowed() else { return }
         var changedItems: [HomeItem] = []
         for idx in items.indices where items[idx].draftMeta?.status == .resolved {
             items[idx].draftMeta = nil
@@ -684,8 +714,11 @@ final class HomeViewModel: ObservableObject {
         }
         clearOCRStatusIfNoPendingDrafts()
         guard !changedItems.isEmpty else { return }
-        persistItems()
-        analyticsService.track("ocr_drafts_resolved", props: ["count": String(changedItems.count)])
+        guard persistItems() else { return }
+        analyticsService.track(
+            .ocrDraftsResolved,
+            props: [.countBucket: AnalyticsService.countBucket(for: changedItems.count)]
+        )
         Task {
             for item in changedItems {
                 await syncUpsertToCloud(item)
@@ -694,6 +727,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func resolveAllPendingOCRDrafts() {
+        guard ensureLedgerWritesAllowed() else { return }
         var changedItems: [HomeItem] = []
         for idx in items.indices where items[idx].draftMeta?.status == .pending {
             items[idx].draftMeta?.status = .resolved
@@ -701,9 +735,12 @@ final class HomeViewModel: ObservableObject {
             changedItems.append(items[idx])
         }
         guard !changedItems.isEmpty else { return }
-        persistItems()
+        guard persistItems() else { return }
         clearOCRStatusIfNoPendingDrafts()
-        analyticsService.track("ocr_drafts_resolve_all", props: ["count": String(changedItems.count)])
+        analyticsService.track(
+            .ocrDraftsResolveAll,
+            props: [.countBucket: AnalyticsService.countBucket(for: changedItems.count)]
+        )
         Task {
             for item in changedItems {
                 await syncUpsertToCloud(item)
@@ -712,10 +749,14 @@ final class HomeViewModel: ObservableObject {
     }
 
     func delete(at offsets: IndexSet) {
+        guard ensureLedgerWritesAllowed() else { return }
         let deletedIDs = offsets.compactMap { items.indices.contains($0) ? items[$0].id : nil }
         items.remove(atOffsets: offsets)
-        persistItems()
-        analyticsService.track("record_deleted_batch", props: ["count": String(deletedIDs.count)])
+        guard persistItems() else { return }
+        analyticsService.track(
+            .recordDeletedBatch,
+            props: [.countBucket: AnalyticsService.countBucket(for: deletedIDs.count)]
+        )
         refreshTodayPlayback()
         Task {
             for id in deletedIDs {
@@ -726,6 +767,7 @@ final class HomeViewModel: ObservableObject {
 
     @discardableResult
     func updateItem(_ updated: HomeItem) -> Bool {
+        guard ensureLedgerWritesAllowed() else { return false }
         guard let idx = items.firstIndex(where: { $0.id == updated.id }) else { return false }
         let original = items[idx]
         var resolved = updated
@@ -785,12 +827,10 @@ final class HomeViewModel: ObservableObject {
         } else if original.categoryCorrectionFrom != nil {
             resolved.categoryCorrectionFrom = original.categoryCorrectionFrom
         }
+        resolved.updatedAt = Date()
         items[idx] = resolved
-        persistItems()
-        analyticsService.track("record_updated", props: [
-            "category": resolved.category.rawValue,
-            "amount": String(format: "%.2f", resolved.amount)
-        ])
+        guard persistItems() else { return false }
+        analyticsService.track(.recordUpdated)
         refreshTodayPlayback()
         Task { await syncUpsertToCloud(resolved) }
         return true
@@ -808,14 +848,14 @@ final class HomeViewModel: ObservableObject {
         coverImageIndex: Int? = nil,
         anchorReason: PhotoMemoryPromptReason? = nil
     ) -> Bool {
+        guard ensureLedgerWritesAllowed() else { return false }
         guard let idx = items.firstIndex(where: { $0.id == itemID }) else { return false }
         var images = items[idx].memoryImages
         let originalCount = images.count
         let availableSlots = max(0, 9 - images.count)
         let cleanImages = Array(imageDatas.filter { !$0.isEmpty }.prefix(availableSlots))
         guard !cleanImages.isEmpty else { return false }
-        images.append(contentsOf: cleanImages)
-        items[idx].memoryImages = images
+        items[idx].appendMemoryImages(cleanImages)
         let selectedNewIndex = min(max(coverImageIndex ?? 0, 0), cleanImages.count - 1)
         if originalCount == 0 || items[idx].coverMemoryImageIndex == nil {
             items[idx].coverMemoryImageIndex = originalCount + selectedNewIndex
@@ -827,12 +867,11 @@ final class HomeViewModel: ObservableObject {
         items[idx].memoryAnchorCreatedAt = items[idx].memoryAnchorCreatedAt ?? Date()
         items[idx].updatedAt = Date()
         let updated = items[idx]
-        persistItems()
-        analyticsService.track("record_memory_image_attached", props: [
-            "category": updated.category.rawValue,
-            "amount": String(format: "%.2f", updated.amount),
-            "image_count": String(cleanImages.count)
-        ])
+        guard persistItems() else { return false }
+        analyticsService.track(
+            .recordMemoryImageAttached,
+            props: [.imageCountBucket: AnalyticsService.countBucket(for: cleanImages.count)]
+        )
         refreshTodayPlayback()
         Task { await syncUpsertToCloud(updated) }
         return true
@@ -845,11 +884,12 @@ final class HomeViewModel: ObservableObject {
 
     @discardableResult
     func removeMemoryImage(at imageIndex: Int, from itemID: UUID) -> Bool {
+        guard ensureLedgerWritesAllowed() else { return false }
         guard let idx = items.firstIndex(where: { $0.id == itemID }) else { return false }
         var images = items[idx].memoryImages
         guard images.indices.contains(imageIndex) else { return false }
-        images.remove(at: imageIndex)
-        items[idx].memoryImages = images
+        items[idx].removeMemoryImage(at: imageIndex)
+        images = items[idx].memoryImages
         if images.isEmpty {
             items[idx].coverMemoryImageIndex = nil
             items[idx].memoryAnchorRole = nil
@@ -866,12 +906,11 @@ final class HomeViewModel: ObservableObject {
         }
         items[idx].updatedAt = Date()
         let updated = items[idx]
-        persistItems()
-        analyticsService.track("record_memory_image_removed", props: [
-            "category": updated.category.rawValue,
-            "amount": String(format: "%.2f", updated.amount),
-            "remaining_image_count": String(updated.memoryImages.count)
-        ])
+        guard persistItems() else { return false }
+        analyticsService.track(
+            .recordMemoryImageRemoved,
+            props: [.imageCountBucket: AnalyticsService.countBucket(for: updated.memoryImages.count)]
+        )
         refreshTodayPlayback()
         Task { await syncUpsertToCloud(updated) }
         return true
@@ -879,6 +918,7 @@ final class HomeViewModel: ObservableObject {
 
     @discardableResult
     func setCoverMemoryImageIndex(_ imageIndex: Int, for itemID: UUID) -> Bool {
+        guard ensureLedgerWritesAllowed() else { return false }
         guard let idx = items.firstIndex(where: { $0.id == itemID }),
               items[idx].memoryImages.indices.contains(imageIndex) else { return false }
         items[idx].coverMemoryImageIndex = imageIndex
@@ -891,20 +931,25 @@ final class HomeViewModel: ObservableObject {
         }
         items[idx].updatedAt = Date()
         let updated = items[idx]
-        persistItems()
-        analyticsService.track("record_memory_cover_selected", props: [
-            "category": updated.category.rawValue,
-            "image_index": String(imageIndex)
-        ])
+        guard persistItems() else { return false }
+        analyticsService.track(.recordMemoryCoverSelected)
         refreshTodayPlayback()
         Task { await syncUpsertToCloud(updated) }
         return true
     }
 
     func syncCloudLedgerNow() async {
+        guard !LocalStore.isReleaseFixtureMode else {
+            syncStatusMessage = "QA 发布夹具使用隔离账本，已停用云端同步；R-11 请使用专用测试账号单独验证。"
+            return
+        }
+        guard ensureLedgerWritesAllowed() else {
+            syncStatusMessage = recordInputMessage
+            return
+        }
         let context = cloudContext()
         guard let context else {
-            syncStatusMessage = "当前只保存在本机。登录并开启云端备份后，可以同步到云端。"
+            syncStatusMessage = "当前只保存在本机。登录并开启云端备份后，只同步账单字段；记忆照片仍在本机。"
             return
         }
         isSyncingCloudLedger = true
@@ -914,25 +959,43 @@ final class HomeViewModel: ObservableObject {
             let remoteItems = try await service.fetchAll().sorted { $0.createdAt > $1.createdAt }
             let merged = mergeLedgers(local: items, remote: remoteItems).sorted { $0.createdAt > $1.createdAt }
             items = merged
-            persistItems()
+            guard persistItems() else {
+                syncStatusMessage = "同步结果没有写入本机，原账本仍保留。请重启后再试。"
+                return
+            }
             // Re-upload merged result to converge both sides (idempotent upsert).
             for item in merged {
                 try? await service.upload(item)
             }
-            syncStatusMessage = "账本已同步。重复的记录已自动保留最新版本。"
+            syncStatusMessage = "账单字段已同步；记忆照片仍只在本机。重复记录已保留最新版本。"
         } catch {
             syncStatusMessage = "同步没有完成，请稍后再试。你的本机记录已保留。"
         }
     }
 
     func generateMonthlyInsight(settings: AppSettings) async -> MonthlyInsightReport {
+        let performanceStartedAt = ProcessInfo.processInfo.systemUptime
         isGeneratingMonthlyInsight = true
         insightErrorMessage = nil
         defer { isGeneratingMonthlyInsight = false }
 
         await Task.yield()
 
-        let local = localMonthlyInsightBlocks()
+        let input = InsightComputationInput(
+            items: items,
+            isMember: hasMemberAccess,
+            now: Date()
+        )
+        let preparation = await withTaskGroup(
+            of: MonthlyInsightPreparation.self,
+            returning: MonthlyInsightPreparation.self
+        ) { group in
+            group.addTask(priority: .userInitiated) {
+                InsightComputationService.monthlyPreparation(input)
+            }
+            return await group.next()!
+        }
+        let local = preparation.blocks
         var report = MonthlyInsightReport(
             summary: local.summary,
             structure: local.structure,
@@ -946,23 +1009,9 @@ final class HomeViewModel: ObservableObject {
             let isDirectModelEndpoint = endpoint.isEmpty || endpoint.contains("open.bigmodel.cn")
             if AIUsageLimiter.canUseRemoteAI(limitPerMonth: settings.remoteAIMonthlyLimit),
                !(isDirectModelEndpoint && apiKey.isEmpty) {
-                let monthItems = filteredItems(in: .month).filter { $0.amount > 0 }
-                let grouped = Dictionary(grouping: monthItems, by: \.category)
-                    .map { key, value in
-                        (category: key, amount: value.reduce(0) { $0 + $1.amount })
-                    }
-                    .sorted { $0.amount > $1.amount }
-                let monthKey = Self.monthKey(for: .now)
-                let snapshot = AISnapshot(
-                    date: monthKey,
-                    todayTotal: todayExpenseTotal,
-                    weekAverage: weeklyAverageExpense(),
-                    monthTotal: monthExpenseTotal,
-                    topCategories: grouped.prefix(3).map { $0.category.rawValue }
-                )
                 do {
                     let payload = try await aiReportService.generateInsight(
-                        snapshot: snapshot,
+                        snapshot: preparation.snapshot,
                         endpoint: endpoint,
                         apiKey: apiKey,
                         tone: settings.aiTone,
@@ -982,18 +1031,24 @@ final class HomeViewModel: ObservableObject {
                 }
             } else {
                 insightErrorMessage = !AIUsageLimiter.canUseRemoteAI(limitPerMonth: settings.remoteAIMonthlyLimit)
-                    ? "本月远程 AI 配额已达上限。"
-                    : "直连模型需要 API Key，已回退本地建议。"
+                    ? "本月远程模型调用额度已达上限。"
+                    : "直连模型需要 API Key，已使用本地规则。"
                 report.source = .errorFallback
             }
         }
 
         analyticsService.track(
-            "ai_monthly_generated",
+            .aiMonthlyGenerated,
             props: [
-                "mode": report.source.analyticsValue,
-                "items": String(filteredItems(in: .month).count),
+                .mode: report.source.analyticsValue,
+                .ledgerSizeBucket: AnalyticsService.countBucket(for: input.items.count),
+                .outcome: AnalyticsOutcome.success.rawValue,
             ]
+        )
+        analyticsService.trackPerformance(
+            operation: .monthlyInsight,
+            startedAtUptime: performanceStartedAt,
+            itemCount: input.items.count
         )
         triggerMemberNudge(scene: .aiMonthly)
         return report
@@ -1377,7 +1432,9 @@ final class HomeViewModel: ObservableObject {
     }
 
     func clearLocalLedgerData() {
+        guard ensureLedgerWritesAllowed() else { return }
         items = []
+        guard persistItems() else { return }
         insights = []
         latestPlayback = nil
         latestActionCard = nil
@@ -1385,7 +1442,6 @@ final class HomeViewModel: ObservableObject {
         recordPrefillResult = nil
         recordPrefillAmount = nil
         petMessage = nil
-        LocalStore.saveHomeItems([])
         LocalStore.saveDailyInsights([])
         UserDefaults.standard.removeObject(forKey: "latest_action_card_v1")
     }
@@ -1765,9 +1821,9 @@ final class HomeViewModel: ObservableObject {
             let apiKey = KeychainService.loadAIAPIKey()
             let isDirectModelEndpoint = settings.aiEndpoint.isEmpty || settings.aiEndpoint.contains("open.bigmodel.cn")
             if !AIUsageLimiter.canUseRemoteAI(limitPerMonth: settings.remoteAIMonthlyLimit) {
-                insightErrorMessage = "本月远程 AI 配额已达上限，已回退本地建议。"
+                insightErrorMessage = "本月远程模型调用额度已达上限，已使用本地规则。"
             } else if isDirectModelEndpoint && apiKey.isEmpty {
-                insightErrorMessage = "直连模型需要 API Key，已回退本地建议。"
+                insightErrorMessage = "直连模型需要 API Key，已使用本地规则。"
             } else {
             let snapshot = AISnapshot(
                 date: key,
@@ -1795,7 +1851,14 @@ final class HomeViewModel: ObservableObject {
                 insights.insert(remoteInsight, at: 0)
                 persistInsights()
                 _ = AIUsageLimiter.consumeOnce(limitPerMonth: settings.remoteAIMonthlyLimit)
-                analyticsService.track("ai_daily_generated", props: ["mode": "live", "items": String(todayItems.count)])
+                analyticsService.track(
+                    .aiDailyGenerated,
+                    props: [
+                        .mode: "live",
+                        .ledgerSizeBucket: AnalyticsService.countBucket(for: todayItems.count),
+                        .outcome: AnalyticsOutcome.success.rawValue,
+                    ]
+                )
                 isGeneratingInsight = false
                 return
             } catch {
@@ -1829,7 +1892,14 @@ final class HomeViewModel: ObservableObject {
         )
         insights.insert(insight, at: 0)
         persistInsights()
-        analyticsService.track("ai_daily_generated", props: ["mode": "local_fallback", "items": String(todayItems.count)])
+        analyticsService.track(
+            .aiDailyGenerated,
+            props: [
+                .mode: "local_fallback",
+                .ledgerSizeBucket: AnalyticsService.countBucket(for: todayItems.count),
+                .outcome: AnalyticsOutcome.success.rawValue,
+            ]
+        )
         isGeneratingInsight = false
     }
 
@@ -1849,23 +1919,97 @@ final class HomeViewModel: ObservableObject {
     private func remoteAIInsightFallbackMessage(for error: Error) -> String {
         let message = error.localizedDescription
         if message.contains("内容保护") || message.contains("隐私") || message.contains("链接") {
-            return "远程 AI 已跳过，已回退本地建议。"
+            return "远程模型已跳过，已使用本地规则。"
         }
-        return "远程 AI 暂时不可用，已回退本地建议。"
+        return "远程模型暂时不可用，已使用本地规则。"
     }
 
     func markWeeklyShareGenerated() {
-        analyticsService.track("weekly_share_card_generated")
+        analyticsService.track(.weeklyShareCardGenerated)
         triggerMemberNudge(scene: .shareSuccess)
     }
 
     func markWeeklyRhythmReviewed() {
-        analyticsService.track("weekly_rhythm_review", props: ["top": weekTopCategoryText])
+        analyticsService.track(.weeklyRhythmReviewed)
     }
 
     func markPlaybackCompleted() {
-        analyticsService.track("bill_playback_completed", props: ["count": String(latestPlayback?.entries.count ?? 0)])
+        analyticsService.track(.todayPlaybackCompleted, props: [.progressBucket: "80_plus"])
         triggerMemberNudge(scene: .playbackComplete)
+    }
+
+    func markTodayPlaybackPromptShown(_ prompt: String) {
+        analyticsService.track(.todayPlaybackPromptShown, props: [.prompt: prompt])
+    }
+
+    func markTodayPlaybackStarted() {
+        let isFirst = !analyticsService.loadEvents().contains { $0.name == .todayPlaybackStarted }
+        analyticsService.track(.todayPlaybackStarted, props: [.isFirst: isFirst ? "true" : "false"])
+    }
+
+    func markTodayPlaybackEnded(progress: Double) {
+        analyticsService.track(
+            .todayPlaybackCompleted,
+            props: [.progressBucket: progress >= 0.8 ? "80_plus" : "under_80"]
+        )
+    }
+
+    func markSummaryPlaybackStarted(_ range: SummaryPlaybackRange) {
+        analyticsService.track(.summaryPlaybackStarted, props: [.range: range.rawValue])
+    }
+
+    func markAICommandRun(
+        resultKind: String,
+        outcome: AnalyticsOutcome,
+        startedAtUptime: TimeInterval,
+        itemCount: Int
+    ) {
+        analyticsService.track(
+            .aiCommandRunCompleted,
+            props: [
+                .resultKind: resultKind,
+                .outcome: outcome.rawValue,
+                .ledgerSizeBucket: AnalyticsService.countBucket(for: itemCount),
+            ]
+        )
+        analyticsService.trackPerformance(
+            operation: .aiCommand,
+            startedAtUptime: startedAtUptime,
+            itemCount: itemCount,
+            outcome: outcome
+        )
+    }
+
+    func markMemberEntryOpened(scene: String) {
+        analyticsService.track(.memberEntryOpened, props: [.scene: scene])
+    }
+
+    func markMemberPurchaseCompleted(plan: String, outcome: AnalyticsOutcome) {
+        analyticsService.track(
+            .memberPurchaseCompleted,
+            props: [.plan: plan, .outcome: outcome.rawValue]
+        )
+    }
+
+    func markMemberRestoreCompleted(outcome: AnalyticsOutcome) {
+        analyticsService.track(
+            .memberRestoreCompleted,
+            props: [.plan: "unknown", .outcome: outcome.rawValue]
+        )
+    }
+
+    func markPerformance(
+        operation: AnalyticsOperation,
+        startedAtUptime: TimeInterval,
+        itemCount: Int,
+        outcome: AnalyticsOutcome = .success
+    ) {
+        analyticsService.trackPerformance(
+            operation: operation,
+            startedAtUptime: startedAtUptime,
+            itemCount: itemCount,
+            outcome: outcome
+        )
     }
 
     func triggerMemberNudge(scene: MemberFlowScene) {
@@ -1878,19 +2022,28 @@ final class HomeViewModel: ObservableObject {
         nudgePolicyService.markShown(scene: scene.rawValue)
         memberNudgeCopy = memberFlowService.ctaCopy(scene: scene)
         activeMemberNudgeScene = scene
-        analyticsService.track("member_cta_exposed", props: ["scene": scene.rawValue, "channel": "ios_home"])
+        analyticsService.track(
+            .memberCTAExposed,
+            props: [.scene: scene.rawValue, .channel: "ios_home"]
+        )
     }
 
     func dismissMemberNudge(scene: MemberFlowScene) {
         nudgePolicyService.markDismissed(scene: scene.rawValue)
         memberNudgeCopy = nil
         activeMemberNudgeScene = nil
-        analyticsService.track("member_cta_dismissed", props: ["scene": scene.rawValue, "channel": "ios_home"])
+        analyticsService.track(
+            .memberCTADismissed,
+            props: [.scene: scene.rawValue, .channel: "ios_home"]
+        )
     }
 
     func handleMemberNudgePrimaryAction() {
         guard let scene = activeMemberNudgeScene else { return }
-        analyticsService.track("member_cta_clicked", props: ["scene": scene.rawValue, "channel": "ios_home"])
+        analyticsService.track(
+            .memberCTAClicked,
+            props: [.scene: scene.rawValue, .channel: "ios_home"]
+        )
         memberNudgeCopy = nil
         activeMemberNudgeScene = nil
         syncStatusMessage = "已为你打开会员路径：请到设置页完成开通。"
@@ -1908,8 +2061,15 @@ final class HomeViewModel: ObservableObject {
         self.activeRouteGuidance = nil
     }
 
-    func markSummaryPlaybackCompleted(_ range: SummaryPlaybackRange) {
-        if range == .week {
+    func markSummaryPlaybackCompleted(_ range: SummaryPlaybackRange, progress: Double) {
+        analyticsService.track(
+            .summaryPlaybackCompleted,
+            props: [
+                .range: range.rawValue,
+                .progressBucket: progress >= 0.8 ? "80_plus" : "under_80",
+            ]
+        )
+        if range == .week, progress >= 0.8 {
             consumeRouteGuidance(.weekSliceReady)
             consumeRouteGuidance(.fiveRecordsNeverPlayed)
         }
@@ -1941,7 +2101,7 @@ final class HomeViewModel: ObservableObject {
         activeRouteGuidance = guidance
         emittedRouteGuidanceKeys.insert(key)
         persistRouteGuidanceHandled(guidance)
-        analyticsService.track("route_guidance_shown", props: ["type": guidance.rawValue])
+        analyticsService.track(.routeGuidanceShown, props: [.route: guidance.rawValue])
     }
 
     private func hasHandledRouteGuidance(_ guidance: PlaybackRouteGuidance) -> Bool {
@@ -2070,8 +2230,30 @@ final class HomeViewModel: ObservableObject {
         pendingCategoryCorrectionFrom = nil
     }
 
-    private func persistItems() {
-        LocalStore.saveHomeItems(items)
+    private func ensureLedgerWritesAllowed() -> Bool {
+        guard !localLedgerWritesBlocked else {
+            let message = "本机账本暂时无法读取，原文件已保留。请重启后再试，暂时不要新增或修改记录。"
+            recordInputMessage = message
+            syncStatusMessage = message
+            return false
+        }
+        return true
+    }
+
+    @discardableResult
+    private func persistItems() -> Bool {
+        guard ensureLedgerWritesAllowed() else { return false }
+        guard LocalStore.saveHomeItems(items) else {
+            let reloadResult = LocalStore.loadHomeItemsResult()
+            items = reloadResult.items.sorted { $0.createdAt > $1.createdAt }
+            localLedgerWritesBlocked = reloadResult.writesBlocked
+            let message = reloadResult.issueMessage
+                ?? "这次修改没有写入本机，原账本仍保留。请重启后再试。"
+            recordInputMessage = message
+            syncStatusMessage = message
+            return false
+        }
+        return true
     }
 
     private func persistInsights() {
@@ -2087,22 +2269,24 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func syncUpsertToCloud(_ item: HomeItem) async {
+        guard !LocalStore.isReleaseFixtureMode else { return }
         guard let context = cloudContext() else { return }
         let service = LedgerSyncService(baseURL: context.baseURL, accessToken: context.accessToken)
         do {
             try await service.upload(item)
-            syncStatusMessage = "已同步到云端。"
+            syncStatusMessage = "账单字段已同步；照片仍只在本机。"
         } catch {
             syncStatusMessage = "这笔记录已保存在本机，云端暂时没同步成功。"
         }
     }
 
     private func syncDeleteFromCloud(id: UUID) async {
+        guard !LocalStore.isReleaseFixtureMode else { return }
         guard let context = cloudContext() else { return }
         let service = LedgerSyncService(baseURL: context.baseURL, accessToken: context.accessToken)
         do {
             try await service.delete(id: id)
-            syncStatusMessage = "云端账单已删除。"
+            syncStatusMessage = "云端账单字段已删除；本机照片不受影响。"
         } catch {
             syncStatusMessage = "本机已更新，云端暂时没同步删除。"
         }
@@ -2204,14 +2388,14 @@ final class HomeViewModel: ObservableObject {
             result = "这周更常记录到「\(top)」，先把这个生活主题留下。"
         }
         setLatestActionCard(result, scope: "weekly")
-        analyticsService.track("weekly_tag_marked", props: ["top": top])
+        analyticsService.track(.weeklyTagMarked)
     }
 
     func buildMonthlyClosingText() -> String {
         let total = monthExpenseTotal
         let top = monthTopCategoryText
         guard total > 0 else {
-            return "这个月还没有足够账单，先继续记几笔，月记会更像你的日子。"
+            return "这个月还没有足够账单，先继续记几笔，月章会更像你的日子。"
         }
         let monthItems = filteredItems(in: .month).filter { $0.amount > 0 }
         if let scene = LifeSceneSemanticService.dominantScene(in: monthItems),
@@ -2224,20 +2408,20 @@ final class HomeViewModel: ObservableObject {
     func markMonthlyClosing() {
         let result = buildMonthlyClosingText()
         setLatestActionCard(result, scope: "monthly")
-        analyticsService.track("monthly_closing_saved")
+        analyticsService.track(.monthlyClosingSaved)
     }
 
     func markMonthlySaveSummary() {
         let blocks = localMonthlyInsightBlocks()
         let result = "月度小结：\(blocks.summary)"
         setLatestActionCard(result, scope: "monthly")
-        analyticsService.track("monthly_summary_saved")
+        analyticsService.track(.monthlySummarySaved)
     }
 
     func markPlaybackMemoryLine(_ line: String, range: SummaryPlaybackRange) {
         let scope = range == .week ? "weekly" : "monthly"
         setLatestActionCard(line, scope: scope)
-        analyticsService.track("playback_memory_line_saved", props: ["range": range.rawValue])
+        analyticsService.track(.playbackMemoryLineSaved, props: [.range: range.rawValue])
     }
 
     func regenerateMonthlyInsight() {

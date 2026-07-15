@@ -79,7 +79,29 @@
 		T10000020000000000000001 /* ThemeResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = T10000120000000000000001 /* ThemeResolver.swift */; };
 		T10000030000000000000001 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = T10000130000000000000001 /* AppTheme.swift */; };
 		T10000040000000000000001 /* ThemeCatalog.json in Resources */ = {isa = PBXBuildFile; fileRef = T10000140000000000000001 /* ThemeCatalog.json */; };
+		U10000010000000000000001 /* InteractionStateModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = U10000110000000000000001 /* InteractionStateModels.swift */; };
+		U10000020000000000000001 /* StateRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = U10000120000000000000001 /* StateRegressionTests.swift */; };
+		U20000010000000000000001 /* LedgerMigrationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = U20000110000000000000001 /* LedgerMigrationModels.swift */; };
+		U30000010000000000000001 /* LedgerImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = U30000110000000000000001 /* LedgerImageStore.swift */; };
+		U30000020000000000000001 /* LedgerImageStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = U30000120000000000000001 /* LedgerImageStoreTests.swift */; };
+		U40000010000000000000001 /* LedgerMetadataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = U40000110000000000000001 /* LedgerMetadataStore.swift */; };
+		U40000020000000000000001 /* LedgerHomeItemsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = U40000120000000000000001 /* LedgerHomeItemsRepository.swift */; };
+		U40000030000000000000001 /* LedgerMetadataStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = U40000130000000000000001 /* LedgerMetadataStoreTests.swift */; };
+		U40000040000000000000001 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = U40000140000000000000001 /* libsqlite3.tbd */; };
+		U50000010000000000000001 /* LedgerLocalBackupDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = U50000110000000000000001 /* LedgerLocalBackupDocument.swift */; };
+		U50000020000000000000001 /* LedgerLocalBackupDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = U50000120000000000000001 /* LedgerLocalBackupDocumentTests.swift */; };
+		U60000010000000000000001 /* InsightComputationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = U60000110000000000000001 /* InsightComputationService.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		U10000350000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000600000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000400000000000000001;
+			remoteInfo = NativeDemoApp;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		A10000100000000000000001 /* NativeDemoApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NativeDemoApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -157,6 +179,19 @@
 		T10000120000000000000001 /* ThemeResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeResolver.swift; sourceTree = "<group>"; };
 		T10000130000000000000001 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		T10000140000000000000001 /* ThemeCatalog.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ThemeCatalog.json; sourceTree = "<group>"; };
+		U10000110000000000000001 /* InteractionStateModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractionStateModels.swift; sourceTree = "<group>"; };
+		U10000120000000000000001 /* StateRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateRegressionTests.swift; sourceTree = "<group>"; };
+		U10000130000000000000001 /* NativeDemoAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NativeDemoAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		U20000110000000000000001 /* LedgerMigrationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerMigrationModels.swift; sourceTree = "<group>"; };
+		U30000110000000000000001 /* LedgerImageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerImageStore.swift; sourceTree = "<group>"; };
+		U30000120000000000000001 /* LedgerImageStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerImageStoreTests.swift; sourceTree = "<group>"; };
+		U40000110000000000000001 /* LedgerMetadataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerMetadataStore.swift; sourceTree = "<group>"; };
+		U40000120000000000000001 /* LedgerHomeItemsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerHomeItemsRepository.swift; sourceTree = "<group>"; };
+		U40000130000000000000001 /* LedgerMetadataStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerMetadataStoreTests.swift; sourceTree = "<group>"; };
+		U40000140000000000000001 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.text-based-dylib-definition; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
+		U50000110000000000000001 /* LedgerLocalBackupDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerLocalBackupDocument.swift; sourceTree = "<group>"; };
+		U50000120000000000000001 /* LedgerLocalBackupDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerLocalBackupDocumentTests.swift; sourceTree = "<group>"; };
+		U60000110000000000000001 /* InsightComputationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightComputationService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -167,6 +202,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		U10000320000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				U40000040000000000000001 /* libsqlite3.tbd in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -174,6 +217,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000310000000000000001 /* NativeDemoApp */,
+				U10000200000000000000001 /* NativeDemoAppTests */,
 				A10000320000000000000001 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -201,6 +245,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000100000000000000001 /* NativeDemoApp.app */,
+				U10000130000000000000001 /* NativeDemoAppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -211,6 +256,8 @@
 				A10000130000000000000001 /* HomeItem.swift */,
 				A10000140000000000000001 /* AppSettings.swift */,
 				F12000020000000000000001 /* RecordPreviewTier.swift */,
+				U10000110000000000000001 /* InteractionStateModels.swift */,
+				U20000110000000000000001 /* LedgerMigrationModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -219,6 +266,10 @@
 			isa = PBXGroup;
 			children = (
 				A10000150000000000000001 /* LocalStore.swift */,
+				U40000120000000000000001 /* LedgerHomeItemsRepository.swift */,
+				U40000110000000000000001 /* LedgerMetadataStore.swift */,
+				U50000110000000000000001 /* LedgerLocalBackupDocument.swift */,
+				U60000110000000000000001 /* InsightComputationService.swift */,
 				A100001E0000000000000001 /* OCRService.swift */,
 				A100001F0000000000000001 /* AIReportService.swift */,
 				A10000210000000000000001 /* KeychainService.swift */,
@@ -253,6 +304,7 @@
 				F23000020000000000000001 /* FreeScenePackService.swift */,
 				F24000020000000000000001 /* LifeInsightService.swift */,
 				A10000440000000000000001 /* IAPService.swift */,
+				U30000110000000000000001 /* LedgerImageStore.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -331,6 +383,17 @@
 			path = Theme;
 			sourceTree = "<group>";
 		};
+		U10000200000000000000001 /* NativeDemoAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				U10000120000000000000001 /* StateRegressionTests.swift */,
+				U30000120000000000000001 /* LedgerImageStoreTests.swift */,
+				U40000130000000000000001 /* LedgerMetadataStoreTests.swift */,
+				U50000120000000000000001 /* LedgerLocalBackupDocumentTests.swift */,
+			);
+			path = NativeDemoAppTests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -351,6 +414,24 @@
 			productReference = A10000100000000000000001 /* NativeDemoApp.app */;
 			productType = "com.apple.product-type.application";
 		};
+		U10000300000000000000001 /* NativeDemoAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = U10000400000000000000001 /* Build configuration list for PBXNativeTarget "NativeDemoAppTests" */;
+			buildPhases = (
+				U10000310000000000000001 /* Sources */,
+				U10000320000000000000001 /* Frameworks */,
+				U10000330000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				U10000340000000000000001 /* PBXTargetDependency */,
+			);
+			name = NativeDemoAppTests;
+			productName = NativeDemoAppTests;
+			productReference = U10000130000000000000001 /* NativeDemoAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -363,6 +444,10 @@
 				TargetAttributes = {
 					A10000400000000000000001 = {
 						CreatedOnToolsVersion = 16.0;
+					};
+					U10000300000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = A10000400000000000000001;
 					};
 				};
 			};
@@ -380,6 +465,7 @@
 			projectRoot = "";
 			targets = (
 				A10000400000000000000001 /* NativeDemoApp */,
+				U10000300000000000000001 /* NativeDemoAppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -394,6 +480,13 @@
 				A100000B2000000000000001 /* RecordSceneLexicon.regression.json in Resources */,
 				F13000010000000000000001 /* LaunchScreen.storyboard in Resources */,
 				T10000040000000000000001 /* ThemeCatalog.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		U10000330000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -471,10 +564,36 @@
 				T10000010000000000000001 /* ThemeTokens.swift in Sources */,
 				T10000020000000000000001 /* ThemeResolver.swift in Sources */,
 				T10000030000000000000001 /* AppTheme.swift in Sources */,
+				U10000010000000000000001 /* InteractionStateModels.swift in Sources */,
+				U20000010000000000000001 /* LedgerMigrationModels.swift in Sources */,
+				U30000010000000000000001 /* LedgerImageStore.swift in Sources */,
+				U40000010000000000000001 /* LedgerMetadataStore.swift in Sources */,
+				U40000020000000000000001 /* LedgerHomeItemsRepository.swift in Sources */,
+				U50000010000000000000001 /* LedgerLocalBackupDocument.swift in Sources */,
+				U60000010000000000000001 /* InsightComputationService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		U10000310000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				U10000020000000000000001 /* StateRegressionTests.swift in Sources */,
+				U30000020000000000000001 /* LedgerImageStoreTests.swift in Sources */,
+				U40000030000000000000001 /* LedgerMetadataStoreTests.swift in Sources */,
+				U50000020000000000000001 /* LedgerLocalBackupDocumentTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		U10000340000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000400000000000000001 /* NativeDemoApp */;
+			targetProxy = U10000350000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A10000700000000000000001 /* Debug */ = {
@@ -649,6 +768,48 @@
 			};
 			name = Release;
 		};
+		U10000410000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4SYY8L84JV;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.xuzhang.appTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/NativeDemoApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/NativeDemoApp";
+			};
+			name = Debug;
+		};
+		U10000420000000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4SYY8L84JV;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.xuzhang.appTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/NativeDemoApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/NativeDemoApp";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -666,6 +827,15 @@
 			buildConfigurations = (
 				A10000720000000000000001 /* Debug */,
 				A10000730000000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		U10000400000000000000001 /* Build configuration list for PBXNativeTarget "NativeDemoAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				U10000410000000000000001 /* Debug */,
+				U10000420000000000000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

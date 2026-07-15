@@ -77,7 +77,7 @@ struct AppColors {
 }
 
 extension View {
-    func minimumTapTarget(_ size: CGFloat = 44) -> some View {
+    func minimumTapTarget(_ size: CGFloat = CGFloat(AccessibilityLayoutPolicy.minimumTapTarget)) -> some View {
         frame(minWidth: size, minHeight: size)
             .contentShape(Rectangle())
     }
@@ -610,6 +610,9 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedTab: AppTab = .today
+    @StateObject private var recordTabSession = RecordTabSession()
+    @State private var statsTabState = StatsTabState()
+    @State private var insightTabState = InsightTabState()
     @State private var showMemberPricing = false
     @State private var pricingHighlightPlanId: String?
     @State private var pricingEntryContext: MemberPricingEntryContext = .settings
@@ -617,18 +620,38 @@ struct ContentView: View {
     @State private var settingsAppearanceOpenRequestID: UUID?
     @State private var lastMemberStatusRefreshAt: Date?
     @State private var homeLifeMarkRewardPrompt: LifeMarkSceneRewardPrompt?
+    @State private var pendingHomeLifeMarkRewardPrompts = UniqueFIFOQueue<LifeMarkSceneRewardPrompt>()
     @State private var memoryPromptItem: HomeItem?
     @State private var memoryPromptReason: PhotoMemoryPromptReason?
+    @State private var pendingPostSaveMemoryPrompts = UniqueFIFOQueue<PostSaveMemoryPrompt>()
+    @State private var firstRecordPlaybackPromptRequestID: UUID?
     @State private var memorySourceItem: HomeItem?
     @State private var memoryPreviewItem: HomeItem?
     @State private var selectedMemoryPhotos: [PhotosPickerItem] = []
     @State private var pendingMemoryImageDatas: [Data] = []
     @State private var showMemoryPhotoPicker = false
+    @State private var memoryPreviewReselectItem: HomeItem?
     @State private var memoryAttachMode: MemoryAttachMode = .preview
 
     private enum MemoryAttachMode {
         case preview
         case direct
+    }
+
+    private struct PostSaveMemoryPrompt: Identifiable {
+        let item: HomeItem
+        let reason: PhotoMemoryPromptReason
+
+        var id: UUID { item.id }
+    }
+
+    private var hasActivePostSavePresentation: Bool {
+        homeLifeMarkRewardPrompt != nil
+            || memoryPromptItem != nil
+            || memorySourceItem != nil
+            || memoryPreviewItem != nil
+            || showMemoryPhotoPicker
+            || showMemberPricing
     }
 
     private var memoryPhotoPickerSelectionLimit: Int {
@@ -704,7 +727,15 @@ struct ContentView: View {
             matching: .images,
             photoLibrary: .shared()
         )
-        .sheet(item: $memoryPreviewItem) { item in
+        .sheet(item: $memoryPreviewItem, onDismiss: {
+            if let item = memoryPreviewReselectItem {
+                memoryPreviewReselectItem = nil
+                openMemoryPhotoPicker(for: item)
+                return
+            }
+            guard !pendingMemoryImageDatas.isEmpty else { return }
+            closeMemoryFlow()
+        }) { item in
             if !pendingMemoryImageDatas.isEmpty {
                 MemoryPreviewSheet(
                     item: item,
@@ -721,10 +752,9 @@ struct ContentView: View {
                         }
                     },
                     onReselect: {
+                        memoryPreviewReselectItem = item
+                        pendingMemoryImageDatas = []
                         memoryPreviewItem = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                            openMemoryPhotoPicker(for: item)
-                        }
                     }
                 )
             }
@@ -743,6 +773,11 @@ struct ContentView: View {
                     pricingHighlightPlanId = nil
                     pricingEntryContext = .settings
                 }
+        }
+        .onChange(of: showMemberPricing) { _, isPresented in
+            if !isPresented {
+                presentNextPostSavePromptIfPossible()
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -764,6 +799,10 @@ struct ContentView: View {
                 await MainActor.run {
                     guard !compressedImages.isEmpty else {
                         selectedMemoryPhotos = []
+                        memorySourceItem = nil
+                        showMemoryPhotoPicker = false
+                        memoryAttachMode = .preview
+                        presentNextPostSavePromptIfPossible()
                         return
                     }
                     pendingMemoryImageDatas = compressedImages
@@ -779,11 +818,29 @@ struct ContentView: View {
                         pendingMemoryImageDatas = []
                         showMemoryPhotoPicker = false
                         memoryAttachMode = .preview
+                        Task { @MainActor in
+                            await Task.yield()
+                            presentNextPostSavePromptIfPossible()
+                        }
                     } else {
                         memorySourceItem = nil
                         memoryPreviewItem = item
                     }
                 }
+            }
+        }
+        .onChange(of: showMemoryPhotoPicker) { _, isPresented in
+            guard !isPresented else { return }
+            Task { @MainActor in
+                await Task.yield()
+                guard selectedMemoryPhotos.isEmpty,
+                      memoryPreviewItem == nil,
+                      memorySourceItem != nil else {
+                    return
+                }
+                memorySourceItem = nil
+                memoryAttachMode = .preview
+                presentNextPostSavePromptIfPossible()
             }
         }
         .task {
@@ -889,22 +946,15 @@ struct ContentView: View {
                              pendingMemoryImageDatas = []
                              selectedMemoryPhotos = []
                              openMemoryPhotoPicker(for: item, mode: .direct)
-                         })
+                         },
+                         firstRecordPromptRequestID: firstRecordPlaybackPromptRequestID,
+                         isExternalPostSavePresentationActive: hasActivePostSavePresentation,
+                         onFirstRecordPromptCompleted: completeFirstRecordPlaybackPrompt)
             case .record:
                 RecordView(
+                    tabSession: recordTabSession,
                     onSaved: { prompt in
-                        let savedItem = homeViewModel.items.first
-                        selectTab(.today)
-                        if let savedItem,
-                           let reason = PhotoMemoryPromptPolicy.reason(
-                               for: savedItem,
-                               existingItems: homeViewModel.items
-                           ) {
-                            showMemoryPrompt(for: savedItem, reason: reason)
-                        }
-                        if let prompt {
-                            showHomeLifeMarkRewardPrompt(prompt)
-                        }
+                        handleManualRecordSaved(prompt: prompt)
                     },
                     onShowMemberPricing: { entryContext in
                         showMemberPricingSheet(entryContext: entryContext)
@@ -912,6 +962,7 @@ struct ContentView: View {
                 )
             case .stats:
                 StatsWebView(
+                    tabState: $statsTabState,
                     openTraceRequestID: statsTraceOpenRequestID,
                     onShowMemberPricing: { entryContext in
                         showMemberPricingSheet(entryContext: entryContext)
@@ -935,7 +986,12 @@ struct ContentView: View {
                     onOpenAppearanceSettings: {
                         settingsAppearanceOpenRequestID = UUID()
                         selectTab(.settings)
-                    }
+                    },
+                    onOpenTrace: { range in
+                        statsTabState.openLifeChapter(range)
+                        selectTab(.stats)
+                    },
+                    tabState: $insightTabState
                 )
             case .settings:
                 SettingsView(
@@ -962,22 +1018,79 @@ struct ContentView: View {
         withTransaction(transaction) {
             selectedTab = tab
         }
-    }
-
-    private func showHomeLifeMarkRewardPrompt(_ prompt: LifeMarkSceneRewardPrompt) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                homeLifeMarkRewardPrompt = prompt
+        if tab == .today {
+            Task { @MainActor in
+                await Task.yield()
+                presentNextPostSavePromptIfPossible()
             }
         }
     }
 
-    private func showMemoryPrompt(for item: HomeItem, reason: PhotoMemoryPromptReason) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
-            guard memoryPromptItem == nil else { return }
+    private func handleManualRecordSaved(prompt: LifeMarkSceneRewardPrompt?) {
+        if let prompt {
+            enqueueHomeLifeMarkRewardPrompt(prompt)
+            return
+        }
+
+        guard let savedItem = homeViewModel.items.first else { return }
+        if homeViewModel.items.count == 1,
+           Calendar.current.isDateInToday(savedItem.createdAt) {
+            firstRecordPlaybackPromptRequestID = UUID()
+        }
+        selectTab(.today)
+        if let reason = PhotoMemoryPromptPolicy.reason(
+            for: savedItem,
+            existingItems: homeViewModel.items
+        ) {
+            enqueuePostSaveMemoryPrompt(for: savedItem, reason: reason)
+        }
+    }
+
+    private func enqueuePostSaveMemoryPrompt(for item: HomeItem, reason: PhotoMemoryPromptReason) {
+        guard memoryPromptItem?.id != item.id,
+              !pendingPostSaveMemoryPrompts.contains(id: item.id) else {
+            return
+        }
+        pendingPostSaveMemoryPrompts.enqueue(PostSaveMemoryPrompt(item: item, reason: reason))
+        presentNextPostSavePromptIfPossible()
+    }
+
+    private func enqueueHomeLifeMarkRewardPrompt(_ prompt: LifeMarkSceneRewardPrompt) {
+        guard homeLifeMarkRewardPrompt?.id != prompt.id,
+              !pendingHomeLifeMarkRewardPrompts.contains(id: prompt.id) else {
+            return
+        }
+        pendingHomeLifeMarkRewardPrompts.enqueue(prompt)
+        presentNextPostSavePromptIfPossible()
+    }
+
+    private func completeFirstRecordPlaybackPrompt(continuesRecording: Bool) {
+        firstRecordPlaybackPromptRequestID = nil
+        if continuesRecording {
+            selectTab(.record)
+        }
+        Task { @MainActor in
+            await Task.yield()
+            presentNextPostSavePromptIfPossible()
+        }
+    }
+
+    private func presentNextPostSavePromptIfPossible() {
+        guard firstRecordPlaybackPromptRequestID == nil,
+              selectedTab == .today,
+              !hasActivePostSavePresentation else {
+            return
+        }
+        if let pendingPostSaveMemoryPrompt = pendingPostSaveMemoryPrompts.dequeue() {
             withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
-                memoryPromptReason = reason
-                memoryPromptItem = item
+                memoryPromptReason = pendingPostSaveMemoryPrompt.reason
+                memoryPromptItem = pendingPostSaveMemoryPrompt.item
+            }
+            return
+        }
+        if let pendingHomeLifeMarkRewardPrompt = pendingHomeLifeMarkRewardPrompts.dequeue() {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                homeLifeMarkRewardPrompt = pendingHomeLifeMarkRewardPrompt
             }
         }
     }
@@ -992,7 +1105,12 @@ struct ContentView: View {
         showMemoryPhotoPicker = false
         pendingMemoryImageDatas = []
         selectedMemoryPhotos = []
+        memoryPreviewReselectItem = nil
         memoryAttachMode = .preview
+        Task { @MainActor in
+            await Task.yield()
+            presentNextPostSavePromptIfPossible()
+        }
     }
 
     private func openMemoryPhotoPicker(for item: HomeItem, mode: MemoryAttachMode = .preview) {
@@ -1032,6 +1150,10 @@ struct ContentView: View {
         }
         withAnimation(.easeInOut(duration: 0.18)) {
             homeLifeMarkRewardPrompt = nil
+        }
+        Task { @MainActor in
+            await Task.yield()
+            presentNextPostSavePromptIfPossible()
         }
     }
 
@@ -1168,11 +1290,24 @@ struct ContentView: View {
         highlightPlanId: String? = nil,
         entryContext: MemberPricingEntryContext = .settings
     ) {
+        homeViewModel.markMemberEntryOpened(scene: memberAnalyticsScene(for: entryContext))
         pricingHighlightPlanId = highlightPlanId
         pricingEntryContext = highlightPlanId == "lifetime" ? .lifetime : entryContext
         showMemberPricing = true
         Task {
             await settingsViewModel.refreshMemberFromLocalEntitlements(syncToCloud: true)
+        }
+    }
+
+    private func memberAnalyticsScene(for context: MemberPricingEntryContext) -> String {
+        switch context {
+        case .traceDeepInsight: return "trace_deep_insight"
+        case .playbackQuota: return "playback_quota"
+        case .ocrImport: return "ocr_import"
+        case .scenePack(_): return "scene_pack"
+        case .lifetime: return "lifetime"
+        case .aiCommand: return "ai_command"
+        case .settings: return "settings"
         }
     }
 
@@ -1187,24 +1322,36 @@ struct ContentView: View {
                     VStack(spacing: 3) {
                         tabIcon(for: tab, isSelected: selectedTab == tab)
                         Text(tab.title)
-                            .font(.system(size: 11, weight: selectedTab == tab ? .semibold : .regular))
+                            .font(.system(
+                                .caption,
+                                design: .default,
+                                weight: selectedTab == tab ? .semibold : .regular
+                            ))
                             .foregroundStyle(
                                 selectedTab == tab
                                     ? AppColors.accent.opacity(0.9)
                                     : AppColors.subtext.opacity(0.88)
                             )
+                            .lineLimit(1)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .contentShape(Rectangle())
                     .overlay(alignment: .topTrailing) {
                         if tab == .stats, shouldShowStatsGuidanceBadge {
                             Circle()
                                 .fill(AppColors.lockGold)
                                 .frame(width: 8, height: 8)
                                 .offset(x: -18, y: 4)
+                                .accessibilityHidden(true)
                         }
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(tab.title)
+                .accessibilityValue(selectedTab == tab ? "已选中" : "")
+                .accessibilityHint("切换到\(tab.pageTitle)")
             }
         }
         .padding(.horizontal, 8)

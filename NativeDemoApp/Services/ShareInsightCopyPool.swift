@@ -1,4 +1,4 @@
-﻿import Foundation
+import Foundation
 
 enum ShareInsightCopyPool {
     static func insight(for signal: ShareInsightSignal, seed: String) -> ShareInsight {
@@ -18,7 +18,7 @@ enum ShareInsightCopyPool {
             )
         case let .lifeMark(kind, title, line, label, count):
             let markName = label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? title : label
-            let markTag = kind == .milestone ? "#里程碑" : "#生活印记"
+            let markTag = kind == .milestone ? "#里程碑" : "#生活线索"
             return ShareInsight(
                 fact: "这周留下「\(title)」",
                 care: compactLifeMarkLine(line),

@@ -1,4 +1,4 @@
-﻿import Foundation
+import Foundation
 
 @MainActor
 extension HomeViewModel {
@@ -811,7 +811,7 @@ extension HomeViewModel {
             let summary = LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count)
             let structure = "这一周更明显的是「\(LifeSceneSemanticService.displayTheme(for: scene.signal))」这条线。"
             let advice = weekItems.count >= 8
-                ? "继续按笔记下去，下周回放会更贴近真实记录。"
+                ? "继续按笔记下去，下周的周记会更贴近真实记录。"
                 : copy.cares.dropFirst().first ?? "再多记几笔，这一周会更容易回头看。"
             return (summary, structure, advice)
         }
@@ -820,7 +820,7 @@ extension HomeViewModel {
         let summary = "近 7 天里，「\(topCategory)」记得更多一些。"
         let structure = "这一周的记录已经分出几段。"
         let advice = weekItems.count >= 8
-            ? "继续按笔记下去，下周回放会更贴近真实记录。"
+            ? "继续按笔记下去，下周的周记会更贴近真实记录。"
             : "再多记几笔，这一周会更容易回头看。"
         return (summary, structure, advice)
     }
@@ -833,7 +833,7 @@ extension HomeViewModel {
         let top = topCategoryCountLabel(from: monthItems)
         let summary: String
         if total <= 0 {
-            summary = "本月还没有足够账单，多记几笔再来生成月度复盘吧。"
+            summary = "本月还没有足够账单，多记几笔再来生成月度整理吧。"
         } else if let memoryLine = contextualMemoryLine(from: positiveMonthItems) {
             summary = memoryLine
         } else if let photoLine = photoMemoryLine(from: positiveMonthItems, periodName: "这个月") {
@@ -851,7 +851,7 @@ extension HomeViewModel {
             : monthlyStructureText(fallbackTop: top, monthItems: positiveMonthItems)
         let advice = total <= 0
             ? "先记下一周，复盘会更有内容。"
-            : "这个月已经有一些记录，继续记几天，月记会更完整。"
+            : "这个月已经有一些记录，继续记几天，月度整理会更完整。"
         return (summary, structure, advice)
     }
 
