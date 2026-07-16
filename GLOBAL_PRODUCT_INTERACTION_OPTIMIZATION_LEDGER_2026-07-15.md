@@ -1131,6 +1131,19 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 | 2.1 | ARCH-FIX-02 | 修复 `PlaybackService` 候选闭包缺少返回 | `CODE_DONE` | 只补齐闭包显式返回，不改变回放候选、评分或照片加载语义 |
 | 3 | ARCH-03 | 拆分设置、首页、记录、复盘与回放页面 | `NOT_STARTED` | 每次只拆一个职责，逐项回归 |
 
+### ARCH-03 启动前新增冻结边界（2026-07-16）
+
+用户再次强调：首页、痕迹和复盘已经经历较大产品、交互、性能与视觉调整，后续页面拆分不得把这些稳定结果重新改乱。启动 `ARCH-03` 时必须额外遵守：
+
+1. 以提交 `7aa2f6e` 及其后真机定向修复为冻结基线；最新基线未完成 Xcode 编译和核心真机流程前，不开始大页面迁移。
+2. 首页、痕迹、复盘属于高风险页面。拆分只允许移动一个完整、自包含的 View、Modifier 或辅助类型，不重组页面层级，不顺手改文案、卡片、间距、颜色、动画或任务入口。
+3. 页面状态所有权保持原处；不得在拆分时改动 `@State`、`@Binding`、`EnvironmentObject`、异步任务门、缓存键、`sourceRevision`、滚动锚点、Sheet 路由或保存后队列的生命周期。
+4. 痕迹的周/月按钮、图片横滑、按需图片加载和快照预热保持不变；复盘的查/比/补数据口径、懒加载、主题 Token 和补记确认边界保持不变；首页主动作优先级、草稿/OCR 承接和提示预算保持不变。
+5. 不为了减少文件间参数而新建跨页面全局状态或共享抽象；允许暂时保留显式参数和局部重复，等所有拆分完成并真机验证后再单独评审抽象。
+6. 每个子项开始前先记录迁出类型、原文件、目标文件、调用方和冻结行为；完成后必须逐项核对差异、工程 Sources 接线、Windows 门禁和 Xcode 编译。当前子项出现编译或真机回归时，只修当前迁移，不进入下一块。
+
+`ARCH-03` 继续保持 `NOT_STARTED`；本段只加固未来执行边界，不代表已经授权或启动拆分。
+
 ### 核心页面体积治理执行记录
 
 | 日期 | 任务 | 状态变化 | 修改文件 | 验证 | 结果/残留风险 | 下一项 |
@@ -1142,6 +1155,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 | 2026-07-16 | ARCH-02 `ContentView` 编辑与日期组件拆分 | `IN_PROGRESS` → `CODE_DONE` | `ContentView.swift`、`WarmRecordDatePanel.swift`、`RecordEditSheet.swift`、Xcode 工程、静态门禁、本文档 | 两个完整顶层类型共 742 行迁出；`ContentView.swift` 2,401 → 1,653 行；唯一类型定义、跨页面调用和工程 Sources 接线通过；完整 Windows release gate 通过 | 根 Tab、Sheet、保存后提示队列、编辑/日期/照片/删除行为未改；待 Xcode 编译确认 | ARCH-03 |
 | 2026-07-16 | ARCH-FIX-02 回放候选闭包返回 | `NOT_STARTED` → `IN_PROGRESS` | `PlaybackService.swift`、本文档 | Xcode 报告 `Missing return in closure expected to return 'MemoryAnchorSelectionPolicy.Candidate'`，定位为多语句 `map` 闭包缺少显式返回 | 仅补 `return Candidate(...)`；回放候选内容、排序、去重、评分和图片按需加载保持不变 | ARCH-FIX-02 |
 | 2026-07-16 | ARCH-FIX-02 回放候选闭包返回 | `IN_PROGRESS` → `CODE_DONE` | `PlaybackService.swift`、`experience_static_check.ps1`、本文档 | `map` 闭包改为 `return Candidate(...)`；新增显式返回防回流检查；完整 Windows release gate 通过 | 当前 Windows 无 Swift/Xcode，需在 macOS 重新编译确认；未改变候选内容、评分、去重、排序或图片加载语义 | ARCH-03 |
+| 2026-07-16 | ARCH-03 启动边界加固 | `NOT_STARTED`（保持） | 本文档 | 固化当前首页、痕迹、复盘的状态、手势、缓存、主题、按需加载、路由与产品动作边界 | 未启动拆分；后续必须先完成最新基线 Xcode/核心真机签收，再按一个完整职责逐项机械迁移 | 统一 Xcode/真机签收 |
 
 ---
 
@@ -1312,3 +1326,37 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - “补上昨天通勤”可进入待确认补记；“不要补记今天通勤”“生成今天通勤”“减少这周餐饮记录”均不生成候选；带明确“统计/查账”的表达仍可安全只读。
 - “交通不错吗”“老板今天怎么样”“为什么这个月比上个月多”等主观、外部主体和原因问题不会借时间/分类弱词进入账本结论。
 - 没有引入编辑距离或开放式猜测；未识别输入继续明确回退。`ARCH-03` 保持 `NOT_STARTED`，没有夹带页面拆分。
+
+---
+
+## 17. AI 指令台对比依据双层收敛（2026-07-16）
+
+用户真机确认当前“主要分类变化”和“对比依据”分处上下两个区域，下面的原始记录容易被理解成逐条配对。用户选择方案 C：保留顶部两段总览，把分类变化与原始证据合并为“差异来源 / 原始记录”双层切换。
+
+| 顺序 | ID | 任务 | 状态 | 冻结边界 |
+|---:|---|---|---|---|
+| 1 | LOGIC-11 | AI 对比差异来源与原始记录双层呈现 | `CODE_DONE` | 只改对比结果的信息层级；不改时间范围、分类筛选、金额/笔数、证据集合、排序上限、只读边界、主题体系或其他指令结果 |
+
+### 实施与验收边界
+
+- 顶部“本周对比上周同期”和“两段对比”金额、笔数、同尺度金额条保持原口径。
+- 移除“两段对比”卡内重复的“主要分类变化”；其数据迁入默认的“差异来源”。
+- “差异来源”按分类已有金额与笔数识别新增、消失、增加、减少、持续，不进行商户或标题模糊配对。
+- 变化占比使用各分类金额差绝对值在全部分类变化绝对值中的占比，只表达差异构成，不声称消费原因或因果。
+- “原始记录”继续按两个周期分组、时间倒序、默认各 5 笔、每段最多 30 笔；汇总仍按全部匹配记录计算。
+- 新结果、清空和任务切换必须回到默认“差异来源”并收起扩展内容；切换只影响展示，不触发重新计算或写入。
+- 保持 AI 指令台当前主题 Token、轻量 Surface、LazyVStack、44pt 触控、VoiceOver 和 Reduce Motion 边界。
+- `ARCH-03` 继续保持 `NOT_STARTED`，本项不得夹带页面拆分。
+
+| 日期 | 任务 | 状态变化 | 修改文件 | 验证 | 结果/残留风险 | 下一项 |
+|---|---|---|---|---|---|---|
+| 2026-07-16 | LOGIC-11 AI 对比双层呈现 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 完整复读台账并保护既有脏工作区；确认方案 C 合并“主要分类变化”和“对比依据” | 先保持计算模型不变，只重组对比结果视图、状态与专项门禁 | LOGIC-11 |
+| 2026-07-16 | LOGIC-11 AI 对比双层呈现 | `IN_PROGRESS` → `CODE_DONE` | `InteractionStateModels.swift`、`InsightWebView.swift`、`StateRegressionTests.swift`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、`experience_static_check.ps1`、本文档 | 顶部两段总览保持；分类变化迁入默认“差异来源”；新增/消失/增加/减少/持续和绝对变化占比策略已测试；“原始记录”保留两段分组、时间倒序、5/30 笔边界；新结果、清空、任务切换重置默认态；`python scripts/validate_release_gate.py --phase windows` 完整通过 | 未改对比时间、筛选、金额/笔数、证据集合、查询/补记、额度、会员、保存或主题；当前无 Xcode/Swift，编译、Dynamic Type、VoiceOver、主题和 FLOW-19 真机切换仍待验证 | 统一 Xcode/真机签收 |
+
+### 本项收口结论
+
+- 对比结果仍先展示结论和两段金额/笔数；“两段对比”卡不再重复承载分类变化。
+- 下一层默认显示“差异来源”，按现有分类金额与笔数标记新增、消失、增加、减少和持续，并展示分类金额变化占比；不进行标题、商户或场景模糊配对。
+- 用户可切换到“原始记录”核对原来的两段账单；记录集合、排序、默认显示数量和证据上限没有变化。
+- 切换只改变 SwiftUI 展示状态，不重新聚合账本、不产生写入；新指令、清空和任务切换回到默认差异来源。
+- `ARCH-03` 保持 `NOT_STARTED`，本项没有拆分页面或调整其他页面。

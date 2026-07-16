@@ -780,6 +780,80 @@ final class AICommandRecognitionPolicyTests: XCTestCase {
     }
 }
 
+final class AICommandComparisonPresentationPolicyTests: XCTestCase {
+    func testChangeKindsUseExistingAmountsAndCountsWithoutFuzzyPairing() {
+        XCTAssertEqual(
+            AICommandComparisonPresentationPolicy.changeKind(
+                currentAmount: 0,
+                previousAmount: 96,
+                currentCount: 0,
+                previousCount: 3
+            ),
+            .disappeared
+        )
+        XCTAssertEqual(
+            AICommandComparisonPresentationPolicy.changeKind(
+                currentAmount: 32,
+                previousAmount: 0,
+                currentCount: 2,
+                previousCount: 0
+            ),
+            .appeared
+        )
+        XCTAssertEqual(
+            AICommandComparisonPresentationPolicy.changeKind(
+                currentAmount: 40,
+                previousAmount: 20,
+                currentCount: 4,
+                previousCount: 2
+            ),
+            .increased
+        )
+        XCTAssertEqual(
+            AICommandComparisonPresentationPolicy.changeKind(
+                currentAmount: 20,
+                previousAmount: 40,
+                currentCount: 2,
+                previousCount: 4
+            ),
+            .decreased
+        )
+        XCTAssertEqual(
+            AICommandComparisonPresentationPolicy.changeKind(
+                currentAmount: 33.25,
+                previousAmount: 33.25,
+                currentCount: 7,
+                previousCount: 7
+            ),
+            .steady
+        )
+    }
+
+    func testChangeShareUsesAbsoluteCategoryMovementInsteadOfNetDifference() {
+        XCTAssertEqual(
+            AICommandComparisonPresentationPolicy.changeSharePercent(
+                delta: -96,
+                categoryDeltas: [-96, -18.82, 0]
+            ),
+            84
+        )
+        XCTAssertEqual(
+            AICommandComparisonPresentationPolicy.changeSharePercent(
+                delta: 100,
+                categoryDeltas: [100, -100]
+            ),
+            50
+        )
+        XCTAssertEqual(
+            AICommandComparisonPresentationPolicy.changeSharePercent(
+                delta: 0,
+                categoryDeltas: [0, 0]
+            ),
+            0
+        )
+    }
+}
+
 final class MembershipQuotaBoundaryTests: XCTestCase {
     func testDisplaySimplificationDoesNotChangeExistingQuotaConstants() {
         XCTAssertEqual(MembershipQuotaBaseline.todayPlaybackDaily, 3)

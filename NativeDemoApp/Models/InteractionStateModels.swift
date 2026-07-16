@@ -363,6 +363,47 @@ enum AccessibilityLayoutPolicy {
     }
 }
 
+enum AICommandComparisonChangeKind: String, Equatable, Sendable {
+    case appeared
+    case disappeared
+    case increased
+    case decreased
+    case steady
+}
+
+enum AICommandComparisonPresentationPolicy {
+    private static let amountEpsilon = 0.005
+
+    static func changeKind(
+        currentAmount: Double,
+        previousAmount: Double,
+        currentCount: Int,
+        previousCount: Int
+    ) -> AICommandComparisonChangeKind {
+        if currentCount > 0, previousCount == 0 {
+            return .appeared
+        }
+        if currentCount == 0, previousCount > 0 {
+            return .disappeared
+        }
+        let delta = currentAmount - previousAmount
+        if delta > amountEpsilon {
+            return .increased
+        }
+        if delta < -amountEpsilon {
+            return .decreased
+        }
+        return .steady
+    }
+
+    static func changeSharePercent(delta: Double, categoryDeltas: [Double]) -> Int {
+        let denominator = categoryDeltas.reduce(0) { $0 + abs($1) }
+        guard denominator > amountEpsilon, abs(delta) > amountEpsilon else { return 0 }
+        let value = Int(((abs(delta) / denominator) * 100).rounded())
+        return min(max(value, 0), 100)
+    }
+}
+
 enum AICommandRecognitionIntent: String, Equatable, Sendable {
     case commuteDraft
     case duplicateCheck
