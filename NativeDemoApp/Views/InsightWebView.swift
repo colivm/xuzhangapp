@@ -2618,7 +2618,7 @@ struct InsightWebView: View {
                 .lazy
                 .filter { item in
                     guard item.amount > 0 else { return false }
-                    return aiCommandMemoryItemMatches(item, command: command)
+                    return self.aiCommandMemoryItemMatches(item, command: command)
                 }
                 .max { $0.createdAt < $1.createdAt }
 
@@ -3187,8 +3187,8 @@ struct InsightWebView: View {
             }
             let related = sameDayItems.filter { item in
                 if item.id == anchor.id { return true }
-                return aiCommandMemoryItemMatches(item, command: command)
-                    || aiCommandSameSceneMemoryItem(item, anchor: anchor, command: command)
+                return self.aiCommandMemoryItemMatches(item, command: command)
+                    || self.aiCommandSameSceneMemoryItem(item, anchor: anchor, command: command)
             }
             return uniqueAICommandItems(related).sorted { $0.createdAt > $1.createdAt }
         }

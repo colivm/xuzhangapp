@@ -2,6 +2,20 @@ import SwiftUI
 
 extension StatsWebView {
 
+    private var customStartDateBinding: Binding<Date> {
+        Binding(
+            get: { customStartDate },
+            set: { customStartDate = $0 }
+        )
+    }
+
+    private var customEndDateBinding: Binding<Date> {
+        Binding(
+            get: { customEndDate },
+            set: { customEndDate = $0 }
+        )
+    }
+
     var tracePeriodFilter: some View {
         VStack(alignment: .leading, spacing: 4) {
             filterLabel("时间")
@@ -55,8 +69,8 @@ extension StatsWebView {
             traceQuickRangeGrid
 
             HStack(spacing: 8) {
-                traceInlineDatePicker(title: "开始", selection: $customStartDate)
-                traceInlineDatePicker(title: "结束", selection: $customEndDate)
+                traceInlineDatePicker(title: "开始", selection: customStartDateBinding)
+                traceInlineDatePicker(title: "结束", selection: customEndDateBinding)
             }
 
             HStack(spacing: 8) {
@@ -383,10 +397,10 @@ extension StatsWebView {
             }
 
             if customDateFocus == .start {
-                WarmRecordDatePanel(selection: $customStartDate)
+                WarmRecordDatePanel(selection: customStartDateBinding)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             } else {
-                WarmRecordDatePanel(selection: $customEndDate)
+                WarmRecordDatePanel(selection: customEndDateBinding)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
 

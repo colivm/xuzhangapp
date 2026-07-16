@@ -347,7 +347,7 @@ enum InsightComputationService {
     }
 
     private static func flexibleBubblePositiveItems(_ items: [HomeItem], now: Date) -> [HomeItem] {
-        let currentWeek = items(in: .week, from: items, now: now).filter { $0.amount > 0 }
+        let currentWeek = Self.items(in: .week, from: items, now: now).filter { $0.amount > 0 }
         let recentCutoff = Calendar.current.date(byAdding: .day, value: -3, to: now) ?? now
         let weekIDs = Set(currentWeek.map(\.id))
         return currentWeek + items.filter { $0.amount > 0 && $0.updatedAt >= recentCutoff && !weekIDs.contains($0.id) }

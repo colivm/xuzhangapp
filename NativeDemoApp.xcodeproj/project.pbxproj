@@ -49,6 +49,7 @@
 		F26000090000000000000001 /* StatsTraceFilters.swift in Sources */ = {isa = PBXBuildFile; fileRef = F260000A0000000000000001 /* StatsTraceFilters.swift */; };
 		F260000B0000000000000001 /* StatsTraceRepresentative.swift in Sources */ = {isa = PBXBuildFile; fileRef = F260000C0000000000000001 /* StatsTraceRepresentative.swift */; };
 		F260000D0000000000000001 /* StatsTraceSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F260000E0000000000000001 /* StatsTraceSnapshotStore.swift */; };
+		F260000F0000000000000001 /* FocusedRecordEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26000100000000000000001 /* FocusedRecordEditor.swift */; };
 		A10000490000000000000001 /* PlaybackCopyPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004A0000000000000001 /* PlaybackCopyPool.swift */; };
 		A100004B0000000000000001 /* ScenePackSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004C0000000000000001 /* ScenePackSectionView.swift */; };
 		A100004B1000000000000001 /* ScenePackVisualStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100004C1000000000000001 /* ScenePackVisualStyle.swift */; };
@@ -72,6 +73,8 @@
 		E10000010000000000000001 /* LifeEntryPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000020000000000000001 /* LifeEntryPreviewCard.swift */; };
 		E10000030000000000000001 /* MemoryAttachmentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000040000000000000001 /* MemoryAttachmentViews.swift */; };
 		F27000010000000000000001 /* ComputationLoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F27000020000000000000001 /* ComputationLoadingView.swift */; };
+		F28000010000000000000001 /* WarmRecordDatePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28000020000000000000001 /* WarmRecordDatePanel.swift */; };
+		F28000030000000000000001 /* RecordEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28000040000000000000001 /* RecordEditSheet.swift */; };
 		F12000010000000000000001 /* RecordPreviewTier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F12000020000000000000001 /* RecordPreviewTier.swift */; };
 		F12000030000000000000001 /* ScenePackAngleSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F12000040000000000000001 /* ScenePackAngleSheet.swift */; };
 		F13000010000000000000001 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = F13000020000000000000001 /* LaunchScreen.storyboard */; };
@@ -150,6 +153,7 @@
 		F260000A0000000000000001 /* StatsTraceFilters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsTraceFilters.swift; sourceTree = "<group>"; };
 		F260000C0000000000000001 /* StatsTraceRepresentative.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsTraceRepresentative.swift; sourceTree = "<group>"; };
 		F260000E0000000000000001 /* StatsTraceSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsTraceSnapshotStore.swift; sourceTree = "<group>"; };
+		F26000100000000000000001 /* FocusedRecordEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusedRecordEditor.swift; sourceTree = "<group>"; };
 		A100004A0000000000000001 /* PlaybackCopyPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackCopyPool.swift; sourceTree = "<group>"; };
 		A100004C0000000000000001 /* ScenePackSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackSectionView.swift; sourceTree = "<group>"; };
 		A100004C1000000000000001 /* ScenePackVisualStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackVisualStyle.swift; sourceTree = "<group>"; };
@@ -173,6 +177,8 @@
 		E10000020000000000000001 /* LifeEntryPreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeEntryPreviewCard.swift; sourceTree = "<group>"; };
 		E10000040000000000000001 /* MemoryAttachmentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryAttachmentViews.swift; sourceTree = "<group>"; };
 		F27000020000000000000001 /* ComputationLoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputationLoadingView.swift; sourceTree = "<group>"; };
+		F28000020000000000000001 /* WarmRecordDatePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WarmRecordDatePanel.swift; sourceTree = "<group>"; };
+		F28000040000000000000001 /* RecordEditSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordEditSheet.swift; sourceTree = "<group>"; };
 		F12000020000000000000001 /* RecordPreviewTier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordPreviewTier.swift; sourceTree = "<group>"; };
 		F12000040000000000000001 /* ScenePackAngleSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePackAngleSheet.swift; sourceTree = "<group>"; };
 		F13000020000000000000001 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -333,6 +339,7 @@
 				F260000A0000000000000001 /* StatsTraceFilters.swift */,
 				F260000C0000000000000001 /* StatsTraceRepresentative.swift */,
 				F260000E0000000000000001 /* StatsTraceSnapshotStore.swift */,
+				F26000100000000000000001 /* FocusedRecordEditor.swift */,
 				A100004E0000000000000001 /* InsightWebView.swift */,
 				A100004C0000000000000001 /* ScenePackSectionView.swift */,
 				A100004C1000000000000001 /* ScenePackVisualStyle.swift */,
@@ -341,6 +348,7 @@
 				A10000390000000000000001 /* MemberPricingView.swift */,
 				A100003A0000000000000001 /* SummaryPlaybackSheet.swift */,
 				A100003D0000000000000001 /* OCRConfirmSheet.swift */,
+				F28000040000000000000001 /* RecordEditSheet.swift */,
 				A10000380000000000000001 /* Components */,
 			);
 			path = Views;
@@ -371,6 +379,7 @@
 				A100001A0000000000000001 /* StatCardView.swift */,
 				E10000020000000000000001 /* LifeEntryPreviewCard.swift */,
 				E10000040000000000000001 /* MemoryAttachmentViews.swift */,
+				F28000020000000000000001 /* WarmRecordDatePanel.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -540,6 +549,7 @@
 				F26000090000000000000001 /* StatsTraceFilters.swift in Sources */,
 				F260000B0000000000000001 /* StatsTraceRepresentative.swift in Sources */,
 				F260000D0000000000000001 /* StatsTraceSnapshotStore.swift in Sources */,
+				F260000F0000000000000001 /* FocusedRecordEditor.swift in Sources */,
 				A10000490000000000000001 /* PlaybackCopyPool.swift in Sources */,
 				A100004B0000000000000001 /* ScenePackSectionView.swift in Sources */,
 				A100004B1000000000000001 /* ScenePackVisualStyle.swift in Sources */,
@@ -563,6 +573,8 @@
 				E10000010000000000000001 /* LifeEntryPreviewCard.swift in Sources */,
 				E10000030000000000000001 /* MemoryAttachmentViews.swift in Sources */,
 				F27000010000000000000001 /* ComputationLoadingView.swift in Sources */,
+				F28000010000000000000001 /* WarmRecordDatePanel.swift in Sources */,
+				F28000030000000000000001 /* RecordEditSheet.swift in Sources */,
 				F12000010000000000000001 /* RecordPreviewTier.swift in Sources */,
 				F12000030000000000000001 /* ScenePackAngleSheet.swift in Sources */,
 				T10000010000000000000001 /* ThemeTokens.swift in Sources */,

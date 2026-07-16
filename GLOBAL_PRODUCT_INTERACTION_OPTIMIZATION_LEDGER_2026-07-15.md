@@ -1039,7 +1039,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ## 9. 当前交接状态
 
-- 当前无 `IN_PROGRESS`；`RELEASE-02` 因当前 Windows 环境缺少 Xcode、iPhone、StoreKit 沙盒与权限/无障碍真机条件而 `BLOCKED`。
+- 当前无 `IN_PROGRESS`；`ARCH-FIX-01`、`ARCH-01`、`ARCH-02` 已完成 Windows 代码与回归，`RELEASE-02` 继续因缺少 Xcode、iPhone、StoreKit 沙盒与权限/无障碍真机条件而 `BLOCKED`。
 - 保留阻塞任务：`GATE-00`，等待后续 macOS/Xcode 与真机补签收。
 - 用户例外授权：2026-07-15 第一次允许启动 `INT-01`，第二次允许启动 `NAV-01`；第三次明确要求后续任务不再逐项询问、全部代码完成后统一真机验证。所有授权均不代表前序 Xcode/真机验收通过。
 - 当前代码完成待签收：`INT-01`、`NAV-01`、`NAV-02`、`TEST-01`、`DATA-01`、`DATA-02`、`DATA-03`、`DATA-04`、`PERF-01`、`PERF-02`、`PROD-01`、`PROD-02`、`MEMBER-01`、`AI-01`、`A11Y-01`、`OBS-01`、`RELEASE-01`、`COPY-01`、`PERF-03`、`DATA-05`、`PERF-04`、`INT-02`、`DATA-06`、`MEMBER-02`。
@@ -1116,3 +1116,26 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 | 2026-07-16 | MEMBER-02 会员登录直达与登录后续购 | `IN_PROGRESS` → `CODE_DONE` | `InteractionStateModels.swift`、`SettingsViewModel.swift`、`MemberPricingView.swift`、XCTest、静态门禁、真机矩阵、本文档 | 未登录购买/恢复直达登录 Sheet；失败可重试、取消清意图；登录成功保留原套餐/恢复意图并只续接一次；再次明确点击才调用 StoreKit；七项 Windows 回归通过 | Product ID、展示价格来源、交易验证、finish 与 appAccountToken 绑定未改；待 Xcode、短信账号和 StoreKit 沙盒签收 | RELEASE-02 |
 | 2026-07-16 | RELEASE-02 统一 Xcode/真机签收 | `NOT_STARTED` → `IN_PROGRESS` | 本文档、统一矩阵 | 开始完整 Windows release gate、差异审计与外部环境可用性检查 | 只做签收及定向修复；Xcode/iPhone/StoreKit/权限/无障碍缺少环境时如实标记 `NOT_RUN`/`BLOCKED` | RELEASE-02 |
 | 2026-07-16 | RELEASE-02 统一 Xcode/真机签收 | `IN_PROGRESS` → `BLOCKED` | 本文档、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` | `python scripts/validate_release_gate.py --phase windows` 全通过；确认 Windows 10 下 `xcodebuild`、`swift`、`simctl`、`instruments` 全不可用；矩阵逐项回填 | Windows repository gate `PASS`；Debug/Release/XCTest、100/1,000/5,000、REAL-01～05、文件恢复、短信登录续购、StoreKit、同步、权限、VoiceOver/Dynamic Type/Reduce Motion 均保持 `BLOCKED`/`NOT_RUN`，未冒充已验证 | macOS/Xcode 与 iPhone 统一补签收 |
+
+---
+
+## 11. 核心页面体积治理（2026-07-16）
+
+本轮只做可审计的机械拆分；不改变页面状态所有权、业务规则、文案、路由、数据保存和视觉结果。每次只移动一个独立类型，编译错误或回归未清零前不得继续下一块。
+
+| 顺序 | ID | 任务 | 状态 | 冻结边界 |
+|---:|---|---|---|---|
+| 0 | ARCH-FIX-01 | 修复拆分后首批编译错误 | `CODE_DONE` | 只修复名称遮蔽、闭包捕获与 Binding，不改变计算结果 |
+| 1 | ARCH-01 | 从痕迹页抽离 `FocusedRecordEditor` | `CODE_DONE` | 只移动完整顶层类型并接线工程，不修改编辑/照片/删除动作 |
+| 2 | ARCH-02 | 拆分 `ContentView` 的编辑与日期组件 | `CODE_DONE` | 根路由、Tab 与保存后队列保持原所有权 |
+| 3 | ARCH-03 | 拆分设置、首页、记录、复盘与回放页面 | `NOT_STARTED` | 每次只拆一个职责，逐项回归 |
+
+### 核心页面体积治理执行记录
+
+| 日期 | 任务 | 状态变化 | 修改文件 | 验证 | 结果/残留风险 | 下一项 |
+|---|---|---|---|---|---|---|
+| 2026-07-16 | ARCH-FIX-01 首批编译错误 | `NOT_STARTED` → `CODE_DONE` | `InsightComputationService.swift`、`InsightWebView.swift`、`StatsTraceFilters.swift`、本文档 | `Self.items` 消除函数/数组遮蔽；惰性闭包显式 `self`；日期使用显式 `Binding<Date>`；`git diff --check` 与体验静态门禁通过 | 当前 Windows 无 Xcode，需 macOS 再确认完整编译；未改计算、筛选或日期含义 | ARCH-01 |
+| 2026-07-16 | ARCH-01 痕迹页独立编辑器拆分 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 确认 `FocusedRecordEditor` 为完整顶层类型，首页和痕迹页共同调用 | 只移动类型到独立文件并更新 Xcode 工程 | ARCH-01 |
+| 2026-07-16 | ARCH-01 痕迹页独立编辑器拆分 | `IN_PROGRESS` → `CODE_DONE` | `StatsWebView.swift`、`FocusedRecordEditor.swift`、Xcode 工程、静态门禁、本文档 | 编辑器 608 行完整迁出；痕迹根文件 7,022 → 6,411 行；唯一类型定义和工程 Sources 接线检查通过；五项基础回归通过 | 编辑、照片、日期、删除闭包与状态保持原样；待 Xcode 编译确认 | ARCH-02 |
+| 2026-07-16 | ARCH-02 `ContentView` 编辑与日期组件拆分 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 确认 `WarmRecordDatePanel` 与 `RecordEditSheet` 均为独立顶层类型并被多页面复用 | 只移动完整类型并更新工程；不改根路由、Tab 或保存后队列 | ARCH-02 |
+| 2026-07-16 | ARCH-02 `ContentView` 编辑与日期组件拆分 | `IN_PROGRESS` → `CODE_DONE` | `ContentView.swift`、`WarmRecordDatePanel.swift`、`RecordEditSheet.swift`、Xcode 工程、静态门禁、本文档 | 两个完整顶层类型共 742 行迁出；`ContentView.swift` 2,401 → 1,653 行；唯一类型定义、跨页面调用和工程 Sources 接线通过；完整 Windows release gate 通过 | 根 Tab、Sheet、保存后提示队列、编辑/日期/照片/删除行为未改；待 Xcode 编译确认 | ARCH-03 |
