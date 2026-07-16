@@ -691,6 +691,95 @@ final class InsightBackgroundComputationTests: XCTestCase {
     }
 }
 
+final class AICommandRecognitionPolicyTests: XCTestCase {
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func digest(_ command: String) -> String {
+        InsightWebView.aiCommandRecognitionDigestForTesting(command: command, now: now)
+    }
+
+    func testNaturalQueryExpressionsShareTheSameSupportedIntent() {
+        let weekDining = digest("这礼拜吃饭用了多少")
+        let recentTransport = digest("最近坐车花销")
+        let recentCoffee = digest("前仨月咖啡花费")
+
+        XCTAssertTrue(weekDining.hasPrefix("query#"))
+        XCTAssertTrue(weekDining.contains("#餐饮#"))
+        XCTAssertTrue(recentTransport.hasPrefix("query#"))
+        XCTAssertTrue(recentTransport.contains("#交通#"))
+        XCTAssertTrue(recentCoffee.hasPrefix("query#"))
+        XCTAssertTrue(recentCoffee.contains("前三个月咖啡花费"))
+        XCTAssertTrue(recentCoffee.contains("#咖啡#"))
+    }
+
+    func testTraditionalChineseAndColloquialTimeAreNormalizedBeforeRecognition() {
+        let traditionalQuery = digest("這週吃飯花了多少錢？")
+        let traditionalCompare = digest("這個月跟上個月差在哪？")
+
+        XCTAssertTrue(traditionalQuery.hasPrefix("query#"))
+        XCTAssertTrue(traditionalQuery.contains("这周吃饭花了多少钱"))
+        XCTAssertTrue(traditionalQuery.contains("#餐饮#"))
+        XCTAssertTrue(traditionalCompare.hasPrefix("compare#"))
+        XCTAssertTrue(traditionalCompare.contains("这个月跟上个月差在哪"))
+    }
+
+    func testComparisonCanBeImplicitButStillRequiresComparableEvidence() {
+        XCTAssertTrue(digest("本月比上月多多少").hasPrefix("compare#"))
+        XCTAssertTrue(digest("这个月跟上个月差在哪").hasPrefix("compare#"))
+        XCTAssertTrue(digest("今天怎么样").hasPrefix("unsupported#"))
+    }
+
+    func testBackfillRequiresStrongAffirmativeWriteLanguage() {
+        XCTAssertTrue(digest("补上昨天上下班通勤").hasPrefix("commuteDraft#"))
+        XCTAssertTrue(digest("昨天通勤花了多少").hasPrefix("query#"))
+
+        let negated = digest("不要补记今天通勤")
+        XCTAssertTrue(negated.hasPrefix("unsupported#"))
+        XCTAssertTrue(negated.contains("guard:negatedWrite"))
+        let negatedResult = InsightWebView.aiCommandComputationDigestForTesting(
+            command: "不要补记今天通勤",
+            items: [],
+            hasMemberAccess: true,
+            amountText: "10",
+            now: now
+        )
+        XCTAssertTrue(negatedResult.hasPrefix("unsupported#"))
+        XCTAssertFalse(negatedResult.contains("早高峰"))
+        XCTAssertFalse(negatedResult.contains("晚高峰"))
+
+        let genericGeneration = digest("生成今天通勤")
+        XCTAssertTrue(genericGeneration.hasPrefix("unsupported#"))
+        XCTAssertTrue(genericGeneration.contains("guard:unsupportedWrite"))
+
+        XCTAssertTrue(digest("生成一份今天通勤统计").hasPrefix("query#"))
+        XCTAssertTrue(digest("不要补记，查一下今天通勤花了多少").hasPrefix("query#"))
+        XCTAssertTrue(digest("减少这周餐饮记录").hasPrefix("unsupported#"))
+        XCTAssertTrue(digest("这周餐饮减少了多少").hasPrefix("compare#"))
+    }
+
+    func testSubjectiveAndOutsideLedgerQuestionsDoNotBorrowWeakLedgerWords() {
+        let transportOpinion = digest("交通不错吗")
+        let bossState = digest("老板今天怎么样")
+        let causalGuess = digest("为什么这个月比上个月多")
+
+        XCTAssertTrue(transportOpinion.hasPrefix("unsupported#"))
+        XCTAssertTrue(transportOpinion.contains("guard:subjective"))
+        XCTAssertTrue(bossState.hasPrefix("unsupported#"))
+        XCTAssertTrue(bossState.contains("guard:outsideSubject"))
+        XCTAssertTrue(causalGuess.hasPrefix("unsupported#"))
+        XCTAssertTrue(causalGuess.contains("guard:subjective"))
+    }
+
+    func testIntentPriorityKeepsReadOnlyTasksDistinct() {
+        XCTAssertTrue(digest("查一下本周有没有重复账单").hasPrefix("duplicateCheck#"))
+        XCTAssertTrue(digest("这月最贵的一笔").hasPrefix("largestRecord#"))
+        XCTAssertTrue(digest("本月比上月多多少").hasPrefix("compare#"))
+        XCTAssertTrue(digest("上次买可乐是哪天").hasPrefix("lastRecordLookup#"))
+        XCTAssertTrue(digest("这周打车是哪天").hasPrefix("query#"))
+        XCTAssertTrue(digest("这个月消费怎么样").hasPrefix("lifestyleSummary#"))
+    }
+}
+
 final class MembershipQuotaBoundaryTests: XCTestCase {
     func testDisplaySimplificationDoesNotChangeExistingQuotaConstants() {
         XCTAssertEqual(MembershipQuotaBaseline.todayPlaybackDaily, 3)

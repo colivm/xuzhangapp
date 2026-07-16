@@ -363,6 +363,304 @@ enum AccessibilityLayoutPolicy {
     }
 }
 
+enum AICommandRecognitionIntent: String, Equatable, Sendable {
+    case commuteDraft
+    case duplicateCheck
+    case memoryLookup
+    case lifeMarkLookup
+    case lastRecordLookup
+    case lifestyleSummary
+    case compare
+    case largestRecord
+    case query
+    case unsupported
+}
+
+struct AICommandRecognitionContext: Equatable, Sendable {
+    var hasCategory: Bool
+    var hasLifeMark: Bool
+    var hasExplicitTimeRange: Bool
+    var asksCategoryBreakdown: Bool
+}
+
+struct AICommandRecognitionDecision: Equatable, Sendable {
+    let intent: AICommandRecognitionIntent
+    let normalizedText: String
+    let confidence: Int
+    let evidence: [String]
+}
+
+enum AICommandRecognitionPolicy {
+    private static let writeActions = [
+        "补记", "补上", "补录", "补一笔", "补一条", "漏记", "漏了一笔", "漏了一条"
+    ]
+    private static let commuteConcepts = [
+        "通勤", "上班", "下班", "上下班", "早高峰", "晚高峰", "地铁", "公交",
+        "坐车", "乘车", "搭车", "车费", "往返"
+    ]
+    private static let duplicateConcepts = [
+        "重复账单", "重复记录", "重复导入", "记重了", "重复记", "记了两遍", "多记了一笔", "查重", "重复"
+    ]
+    private static let compareConcepts = [
+        "对比", "比较", "相比", "相较", "比起", "差多少", "差在哪", "差别",
+        "区别", "有什么变化", "变化如何", "变多", "变少", "涨了", "降了", "多了", "少了", "高了", "低了"
+    ]
+    private static let largestConcepts = [
+        "最大一笔", "金额最大", "单笔最大", "最高一笔", "金额最高", "单笔最高",
+        "最贵的一笔", "最贵", "花得最多", "最烧钱"
+    ]
+    private static let memoryActions = [
+        "上一次", "上次", "最近一次", "哪一次", "哪次", "什么时候", "哪天", "记得",
+        "回忆", "回看", "第一次", "首次", "第一回"
+    ]
+    private static let lastRecordActions = [
+        "上一次", "上次", "最近一次", "上一笔", "最近一笔", "最后一次", "最后一笔"
+    ]
+    private static let memoryContextConcepts = [
+        "下雨", "雨天", "雪天", "下雪", "天气", "温度", "外地", "异地", "城市", "旅游", "旅行", "出差"
+    ]
+    private static let summaryConcepts = [
+        "总结", "概括", "回顾", "复盘", "生活节奏", "整体情况", "消费情况", "收支情况"
+    ]
+    private static let queryActions = [
+        "查一下", "查下", "查询", "查找", "查", "找一下", "找找", "找出", "看看", "看下",
+        "看一下", "瞅瞅", "统计", "算算", "算一下", "列出", "列一下", "明细", "记录",
+        "账单", "账本", "流水", "多少", "几笔", "几条", "几次", "哪天", "什么时候"
+    ]
+    private static let moneyConcepts = [
+        "花了", "花费", "花销", "开销", "支出", "消费", "用了", "用掉", "总共", "合计", "金额", "多少钱"
+    ]
+    private static let stateQuestions = [
+        "怎么样", "如何", "什么情况", "情况怎样", "情况怎么样"
+    ]
+    private static let subjectiveQuestions = [
+        "心情", "想法", "在想什么", "不错吗", "好吗", "好不好", "合理吗", "划算吗",
+        "值不值", "\u{503C}\u{5F97}\u{5417}", "应该吗", "正常吗", "异常吗", "有问题吗", "建议", "预测",
+        "会不会发生", "为什么"
+    ]
+    private static let unsupportedSubjects = [
+        "老板", "领导", "同事", "客户", "甲方"
+    ]
+    private static let ledgerScopeConcepts = [
+        "账单", "账本", "流水", "记录", "明细", "金额", "花费", "花销", "开销", "支出",
+        "消费", "收支", "几笔", "几条", "几次", "分类", "占比", "分布", "总共", "合计"
+    ]
+    private static let negatedWritePhrases = [
+        "不要补", "别补", "不用补", "不需要补", "先别补", "不补记", "不要补记",
+        "别补记", "不要新增", "别新增", "不要添加", "别添加", "不要生成", "别生成"
+    ]
+    private static let unsupportedCreationPhrases = [
+        "新增一笔", "新增一条", "添加一笔", "添加一条", "加一笔", "加一条", "记一笔", "记一条"
+    ]
+    private static let unsupportedMutationActions = [
+        "删除", "删掉", "移除", "修改", "改成", "调整", "增加", "减少"
+    ]
+
+    static func interpret(
+        _ rawText: String,
+        context: AICommandRecognitionContext
+    ) -> AICommandRecognitionDecision {
+        let normalized = normalize(rawText)
+        guard !normalized.isEmpty else {
+            return decision(.unsupported, normalized, 100, ["guard:empty"])
+        }
+
+        let hasWriteAction = containsAny(normalized, writeActions)
+        let hasCommute = containsAny(normalized, commuteConcepts)
+        let hasNegatedWrite = containsAny(normalized, negatedWritePhrases)
+        let hasDuplicate = containsAny(normalized, duplicateConcepts)
+        let hasPairedPeriods = containsPairedPeriods(normalized)
+        let hasQuantifiedChange = containsAny(normalized, ["增加", "减少"])
+            && containsAny(normalized, ["多少", "几成", "幅度", "比例", "了吗", "没有", "情况", "变化"])
+        let hasCompareLanguage = containsAny(normalized, compareConcepts) || hasPairedPeriods || hasQuantifiedChange
+        let hasLargest = containsAny(normalized, largestConcepts)
+        let hasMemoryAction = containsAny(normalized, memoryActions) || containsMilestone(normalized)
+        let hasLastRecordAction = containsAny(normalized, lastRecordActions)
+        let hasMemoryContext = containsAny(normalized, memoryContextConcepts)
+        let hasSummary = containsAny(normalized, summaryConcepts)
+        let hasQueryAction = containsAny(normalized, queryActions)
+        let hasMoneyConcept = containsAny(normalized, moneyConcepts)
+        let hasStateQuestion = containsAny(normalized, stateQuestions)
+        let hasSubjectiveQuestion = containsAny(normalized, subjectiveQuestions)
+        let hasUnsupportedSubject = containsAny(normalized, unsupportedSubjects)
+        let hasUnsupportedCreation = containsAny(normalized, unsupportedCreationPhrases)
+        let hasUnsupportedMutation = containsAny(normalized, unsupportedMutationActions) && !hasCompareLanguage
+        let hasGenericCommuteGeneration = containsAny(normalized, ["生成", "新增", "添加"])
+            && hasCommute
+        let hasReadOnlySignal = hasDuplicate
+            || hasCompareLanguage
+            || hasLargest
+            || hasMemoryAction
+            || hasSummary
+            || hasQueryAction
+        let hasLedgerScope = context.hasCategory
+            || context.hasLifeMark
+            || context.asksCategoryBreakdown
+            || hasMoneyConcept
+            || containsAny(normalized, ledgerScopeConcepts)
+
+        var slots: [String] = []
+        if context.hasExplicitTimeRange { slots.append("slot:time") }
+        if context.hasCategory { slots.append("slot:category") }
+        if context.hasLifeMark { slots.append("slot:lifeMark") }
+        if context.asksCategoryBreakdown { slots.append("slot:categoryBreakdown") }
+        if hasMoneyConcept { slots.append("slot:money") }
+
+        if hasSubjectiveQuestion || hasUnsupportedSubject {
+            let guardEvidence = hasUnsupportedSubject ? "guard:outsideSubject" : "guard:subjective"
+            return decision(.unsupported, normalized, 98, [guardEvidence] + slots)
+        }
+
+        if hasWriteAction, hasCommute, !hasNegatedWrite {
+            return decision(.commuteDraft, normalized, 98, ["action:backfill", "entity:commute"] + slots)
+        }
+
+        if hasNegatedWrite, !hasReadOnlySignal {
+            return decision(.unsupported, normalized, 100, ["guard:negatedWrite"] + slots)
+        }
+
+        if hasUnsupportedCreation
+            || hasUnsupportedMutation
+            || (hasGenericCommuteGeneration && !hasWriteAction && !hasReadOnlySignal) {
+            return decision(.unsupported, normalized, 96, ["guard:unsupportedWrite"] + slots)
+        }
+
+        if hasDuplicate {
+            return decision(.duplicateCheck, normalized, 94, ["action:duplicate"] + slots)
+        }
+
+        if hasCompareLanguage,
+           hasPairedPeriods || context.hasExplicitTimeRange || context.hasCategory || context.hasLifeMark || hasMoneyConcept {
+            return decision(.compare, normalized, 92, ["action:compare"] + slots)
+        }
+
+        if hasLargest {
+            return decision(.largestRecord, normalized, 90, ["action:largest"] + slots)
+        }
+
+        if containsMilestone(normalized), context.hasLifeMark {
+            return decision(.lifeMarkLookup, normalized, 92, ["action:milestone"] + slots)
+        }
+
+        if hasMemoryAction, hasMemoryContext {
+            return decision(.memoryLookup, normalized, 90, ["action:memory", "slot:context"] + slots)
+        }
+
+        if hasMemoryAction, context.hasLifeMark {
+            return decision(.lifeMarkLookup, normalized, 88, ["action:lifeMarkLookup"] + slots)
+        }
+
+        if hasLastRecordAction, context.hasCategory {
+            return decision(.lastRecordLookup, normalized, 86, ["action:lastRecord"] + slots)
+        }
+
+        if (hasSummary && !context.hasCategory && !context.hasLifeMark)
+            || (hasStateQuestion
+                && context.hasExplicitTimeRange
+                && !context.hasCategory
+                && !context.hasLifeMark
+                && hasLedgerScope) {
+            return decision(.lifestyleSummary, normalized, 84, ["action:summary"] + slots)
+        }
+
+        var queryScore = 0
+        if hasQueryAction { queryScore += 4 }
+        if context.hasExplicitTimeRange { queryScore += 2 }
+        if context.hasCategory || context.hasLifeMark { queryScore += 2 }
+        if context.asksCategoryBreakdown { queryScore += 3 }
+        if hasMoneyConcept { queryScore += 2 }
+        if hasStateQuestion { queryScore += 2 }
+
+        if queryScore >= 4, hasLedgerScope {
+            return decision(
+                .query,
+                normalized,
+                min(90, 66 + queryScore * 3),
+                ["action:query", "score:\(queryScore)"] + slots
+            )
+        }
+
+        return decision(.unsupported, normalized, 78, ["guard:lowConfidence", "score:\(queryScore)"] + slots)
+    }
+
+    static func normalize(_ rawText: String) -> String {
+        var value = rawText
+            .folding(options: [.widthInsensitive, .caseInsensitive], locale: Locale(identifier: "zh_CN"))
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let replacements: [(String, String)] = [
+            ("這個", "这个"), ("這一", "这一"), ("這週", "这周"), ("這周", "这周"),
+            ("本週", "本周"), ("上週", "上周"), ("這幾天", "这几天"), ("個月", "个月"),
+            ("賬單", "账单"), ("帳單", "账单"), ("賬本", "账本"), ("帳本", "账本"),
+            ("記錄", "记录"), ("對比", "对比"), ("比較", "比较"), ("補記", "补记"),
+            ("花銷", "花销"), ("消費", "消费"), ("開銷", "开销"), ("總共", "总共"),
+            ("多少錢", "多少钱"), ("禮拜", "礼拜"), ("車費", "车费"), ("計程車", "出租车"),
+            ("捷運", "地铁"), ("公車", "公交"), ("搭車", "搭车"), ("坐車", "坐车"),
+            ("乘車", "乘车"), ("吃飯", "吃饭"), ("飯錢", "饭钱"), ("餐費", "餐费"),
+            ("夥食", "伙食"), ("醫療", "医疗"), ("醫藥", "医药"), ("藥費", "药费"),
+            ("網購", "网购"), ("購物", "购物"), ("買東西", "买东西"), ("裝備", "装备"),
+            ("這", "这"), ("今个儿", "今天"),
+            ("昨个儿", "昨天"), ("前儿个", "前天"), ("这几天", "最近几天"),
+            ("这两天", "最近两天"), ("这俩天", "最近两天"), ("这三天", "最近三天"),
+            ("前仨月", "前三个月"), ("近仨月", "近三个月"), ("仨个月", "三个月"),
+            ("仨月", "三个月"), ("俩个月", "两个月"), ("俩月", "两个月")
+        ]
+        for (source, target) in replacements {
+            value = value.replacingOccurrences(of: source, with: target)
+        }
+
+        for punctuation in ["，", ",", "。", "！", "!", "？", "?", "；", ";", "：", ":", "、", "（", "）", "(", ")", "“", "”", "\"", "'", "\n", "\t"] {
+            value = value.replacingOccurrences(of: punctuation, with: " ")
+        }
+        return value.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+    }
+
+    private static func decision(
+        _ intent: AICommandRecognitionIntent,
+        _ normalizedText: String,
+        _ confidence: Int,
+        _ evidence: [String]
+    ) -> AICommandRecognitionDecision {
+        AICommandRecognitionDecision(
+            intent: intent,
+            normalizedText: normalizedText,
+            confidence: min(max(confidence, 0), 100),
+            evidence: evidence
+        )
+    }
+
+    private static func containsPairedPeriods(_ text: String) -> Bool {
+        let hasCurrentWeek = containsAny(text, ["本周", "这周", "这个星期", "这星期", "这个礼拜", "这礼拜"])
+        let hasPreviousWeek = containsAny(text, ["上周", "上星期", "上个星期", "上礼拜", "上个礼拜"])
+        let hasCurrentMonth = containsAny(text, ["本月", "这个月", "这月"])
+        let hasPreviousMonth = containsAny(text, ["上个月", "上月"])
+        let hasConnector = containsAny(text, ["和", "跟", "与", "比", "较", "相比", "对比", "差"])
+        return hasConnector && ((hasCurrentWeek && hasPreviousWeek) || (hasCurrentMonth && hasPreviousMonth))
+    }
+
+    private static func containsMilestone(_ text: String) -> Bool {
+        if containsAny(text, ["第一次", "首次", "第一回", "第十次", "第三十次", "第五十次", "第几次", "第几回"]) {
+            return true
+        }
+        guard let regex = try? NSRegularExpression(pattern: #"第?\s*\d{1,2}\s*(次|回|笔|条|单)"#) else {
+            return false
+        }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.firstMatch(in: text, range: range) != nil
+    }
+
+    private static func containsAny(_ text: String, _ phrases: [String]) -> Bool {
+        let compactText = compact(text)
+        return phrases.contains { compactText.contains(compact($0)) }
+    }
+
+    private static func compact(_ text: String) -> String {
+        text.replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "　", with: "")
+    }
+}
+
 enum MemberLoginContinuationIntent: Equatable {
     case purchase(planID: String)
     case restorePurchases

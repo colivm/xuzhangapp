@@ -1,6 +1,132 @@
 import SwiftUI
 import UIKit
 
+private enum AICommandSurfaceRole {
+    case panel
+    case metric
+    case quiet
+    case interactive
+    case input
+    case memory
+}
+
+private struct AICommandSurfaceModifier: ViewModifier {
+    let role: AICommandSurfaceRole
+    var radius: CGFloat
+    var padding: CGFloat
+    var tint: Color
+    var isSelected: Bool
+
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(baseFill)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(tint.opacity(tintOpacity))
+                    }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(borderColor, lineWidth: isSelected ? 1.15 : 1)
+                    .allowsHitTesting(false)
+            }
+    }
+
+    private var baseFill: Color {
+        if reduceTransparency {
+            return AppColors.surfaceMuted
+        }
+        switch role {
+        case .panel, .memory:
+            return AppColors.panelStrong.opacity(0.96)
+        case .metric, .input:
+            return AppColors.surfaceMuted.opacity(0.84)
+        case .quiet:
+            return AppColors.panel.opacity(0.92)
+        case .interactive:
+            return AppColors.panelStrong.opacity(isSelected ? 0.98 : 0.90)
+        }
+    }
+
+    private var tintOpacity: Double {
+        switch role {
+        case .panel: return 0.030
+        case .metric: return 0.020
+        case .quiet: return 0.015
+        case .interactive: return isSelected ? 0.105 : 0.026
+        case .input: return 0.012
+        case .memory: return 0.052
+        }
+    }
+
+    private var borderColor: Color {
+        isSelected ? tint.opacity(0.32) : AppColors.stroke.opacity(0.54)
+    }
+}
+
+private struct AICommandPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.82 : 1)
+            .scaleEffect(reduceMotion || !configuration.isPressed ? 1 : 0.988)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+private struct AICommandRatioBar: View {
+    let progress: Double
+    let fill: Color
+    let track: Color
+    var minimumFill: CGFloat = 4
+
+    var body: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            guard size.width > 0, size.height > 0 else { return }
+            let bounds = CGRect(origin: .zero, size: size)
+            context.fill(
+                Capsule(style: .continuous).path(in: bounds),
+                with: .color(track)
+            )
+
+            let boundedProgress = min(max(progress, 0), 1)
+            guard boundedProgress > 0 else { return }
+            let width = min(size.width, max(minimumFill, size.width * CGFloat(boundedProgress)))
+            let fillBounds = CGRect(x: 0, y: 0, width: width, height: size.height)
+            context.fill(
+                Capsule(style: .continuous).path(in: fillBounds),
+                with: .color(fill)
+            )
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private extension View {
+    func aiCommandSurface(
+        _ role: AICommandSurfaceRole,
+        radius: CGFloat,
+        padding: CGFloat = 0,
+        tint: Color = .accentColor,
+        isSelected: Bool = false
+    ) -> some View {
+        modifier(AICommandSurfaceModifier(
+            role: role,
+            radius: radius,
+            padding: padding,
+            tint: tint,
+            isSelected: isSelected
+        ))
+    }
+}
+
 // MARK: - Insight View
 
 struct ReviewOverviewDay: Equatable, Sendable, Identifiable {
@@ -291,14 +417,7 @@ struct InsightWebView: View {
                     .submitLabel(.done)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 13)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.white.opacity(0.62))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.white.opacity(0.64), lineWidth: 1)
-                    )
+                    .aiCommandSurface(.input, radius: 16, tint: tint)
                     .onChange(of: commandText) { _, value in
                         guard value != draftText else { return }
                         draftText = value
@@ -319,7 +438,7 @@ struct InsightWebView: View {
                     }
                 }
             }
-            .glassPanel(radius: 22, padding: 18)
+            .aiCommandSurface(.panel, radius: 22, padding: 18, tint: tint)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -357,7 +476,11 @@ struct InsightWebView: View {
                     .padding(.horizontal, 13)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color.white.opacity(0.46))
+                            .fill(AppColors.surfaceMuted.opacity(0.78))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(AppColors.stroke.opacity(0.46), lineWidth: 1)
                     )
             }
             .buttonStyle(.plain)
@@ -371,7 +494,7 @@ struct InsightWebView: View {
                 Text(title)
                     .font(.headline.weight(.bold))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.onAccent)
             .frame(maxWidth: .infinity, minHeight: 44)
             .padding(.horizontal, 12)
             .background(
@@ -384,7 +507,6 @@ struct InsightWebView: View {
                         )
                     )
             )
-            .shadow(color: tint.opacity(0.18), radius: 10, x: 0, y: 5)
         }
     }
 
@@ -443,6 +565,8 @@ struct InsightWebView: View {
 
     var body: some View {
         ZStack {
+            AppColors.bg.ignoresSafeArea()
+
             ScrollView {
                 if !allowsReviewTasks {
                     insightEmptyLedgerState
@@ -702,7 +826,7 @@ struct InsightWebView: View {
                 }
             }
         }
-        .paperChapterPanel(radius: 26, padding: 18, showsAccentLine: false)
+        .aiCommandSurface(.panel, radius: 26, padding: 18, tint: AppColors.accent)
     }
 
     private var reviewLandingHeaderCopy: some View {
@@ -797,21 +921,7 @@ struct InsightWebView: View {
             }
             .frame(height: 76)
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.76), AppColors.accent.opacity(0.10), AppColors.paperMist.opacity(0.54)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.white.opacity(0.68), lineWidth: 1)
-        )
+        .aiCommandSurface(.metric, radius: 22, padding: 16, tint: AppColors.accent)
     }
 
     private func reviewOverviewAmount(_ overview: ReviewOverviewSnapshot) -> some View {
@@ -870,7 +980,11 @@ struct InsightWebView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         .padding(.horizontal, 9)
-        .background(Color.white.opacity(0.52), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(AppColors.surfaceMuted.opacity(0.78), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(AppColors.stroke.opacity(0.42), lineWidth: 1)
+        )
     }
 
     private func reviewOverviewTopCategoryText(_ overview: ReviewOverviewSnapshot) -> String {
@@ -914,7 +1028,7 @@ struct InsightWebView: View {
             } label: {
                 Label("去记一笔", systemImage: "plus.circle.fill")
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.onAccent)
                     .frame(maxWidth: .infinity, minHeight: 48)
                     .background(AppColors.accent, in: Capsule(style: .continuous))
             }
@@ -922,7 +1036,7 @@ struct InsightWebView: View {
             .disabled(onStartRecording == nil)
         }
         .padding(24)
-        .paperChapterPanel(radius: 24, padding: 20)
+        .aiCommandSurface(.panel, radius: 24, padding: 20, tint: AppColors.accent)
         .padding(.horizontal, 16)
         .padding(.top, 36)
         .frame(maxWidth: 430)
@@ -938,9 +1052,9 @@ struct InsightWebView: View {
             .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
             .padding(.horizontal, 13)
             .padding(.vertical, 9)
-            .themedInteractionSurface(radius: 18, tint: tint, glowIntensity: 0.72)
+            .aiCommandSurface(.interactive, radius: 18, tint: tint)
         }
-        .buttonStyle(PurposefulCardButtonStyle(radius: 18, depth: 0.8))
+        .buttonStyle(AICommandPressStyle())
         .minimumTapTarget()
         .accessibilityLabel("\(intent.title)，\(reviewTaskContext(intent, overview: overview))")
         .accessibilityHint(reviewTaskActionTitle(intent))
@@ -1136,18 +1250,18 @@ struct InsightWebView: View {
                             }
                             .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
                             .padding(.horizontal, 11)
-                            .themedInteractionSurface(
+                            .aiCommandSurface(
+                                .interactive,
                                 radius: 15,
-                                tint: AppColors.categoryColor(category),
-                                glowIntensity: 0.5
+                                tint: AppColors.categoryColor(category)
                             )
                         }
-                        .buttonStyle(PurposefulCardButtonStyle(radius: 15, depth: 0.6))
+                        .buttonStyle(AICommandPressStyle())
                         .accessibilityLabel("查最近七天\(category.rawValue)类记录")
                     }
                 }
             }
-            .appSurface(.action, radius: 22, padding: 16, tint: AppColors.accent)
+            .aiCommandSurface(.panel, radius: 22, padding: 16, tint: AppColors.accent)
         }
     }
 
@@ -1173,7 +1287,7 @@ struct InsightWebView: View {
                 }
             }
         }
-        .appSurface(.quiet, radius: 22, padding: 16, tint: AppColors.monthlyInsightBg)
+        .aiCommandSurface(.quiet, radius: 22, padding: 16, tint: AppColors.accent)
     }
 
     private func insightTraceLink(
@@ -1198,9 +1312,13 @@ struct InsightWebView: View {
             }
             .frame(maxWidth: .infinity, minHeight: 48)
             .padding(.horizontal, 12)
-            .background(AppColors.monthlyInsightBg.opacity(0.70), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .background(AppColors.surfaceMuted.opacity(0.74), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(AppColors.stroke.opacity(0.42), lineWidth: 1)
+            )
         }
-        .buttonStyle(PurposefulCardButtonStyle(radius: 15, depth: 0.6))
+        .buttonStyle(AICommandPressStyle())
         .accessibilityHint("前往痕迹查看完整章节")
     }
 
@@ -2067,6 +2185,8 @@ struct InsightWebView: View {
             }
             .navigationTitle("AI 指令台")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(AppColors.bg, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("完成") {
@@ -2145,7 +2265,7 @@ struct InsightWebView: View {
                         : "本机规则，只读结果"
                 )
         }
-        .paperChapterPanel(radius: 22, padding: 18, showsAccentLine: false)
+        .aiCommandSurface(.panel, radius: 22, padding: 18, tint: tint)
     }
 
     private var aiCommandTaskPicker: some View {
@@ -2179,14 +2299,14 @@ struct InsightWebView: View {
                 .foregroundStyle(isSelected ? tint : AppColors.subtext)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .padding(.horizontal, 9)
-                .themedInteractionSurface(
+                .aiCommandSurface(
+                    .interactive,
                     radius: 14,
                     tint: tint,
-                    isSelected: isSelected,
-                    glowIntensity: isSelected ? 0.9 : 0.35
+                    isSelected: isSelected
                 )
             }
-            .buttonStyle(PurposefulCardButtonStyle(radius: 14, depth: 0.5))
+            .buttonStyle(AICommandPressStyle())
             .accessibilityValue(isSelected ? "已选择" : "")
         }
     }
@@ -2350,7 +2470,7 @@ struct InsightWebView: View {
             activeReviewTask.rawValue,
             hasMemberAccess ? "member" : "free",
             weatherKind,
-            aiCommandItemsSignature(homeViewModel.items)
+            String(tabState.sourceRevision ?? 0)
         ].joined(separator: "|")
     }
 
@@ -2388,11 +2508,11 @@ struct InsightWebView: View {
                 .frame(minHeight: 44)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.56))
+                        .fill(AppColors.panelStrong.opacity(0.92))
                 )
                 .overlay(
                     Capsule(style: .continuous)
-                        .stroke(Color.white.opacity(0.52), lineWidth: 1)
+                        .stroke(AppColors.stroke.opacity(0.48), lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
@@ -2443,7 +2563,12 @@ struct InsightWebView: View {
                     .lineSpacing(3)
                     .foregroundStyle(AppColors.subtext)
             }
-            .appSurface(.quiet, radius: 20, padding: 18, tint: reviewTaskTint(activeReviewTask))
+            .aiCommandSurface(
+                .quiet,
+                radius: 20,
+                padding: 18,
+                tint: reviewTaskTint(activeReviewTask)
+            )
         }
     }
 
@@ -2494,7 +2619,7 @@ struct InsightWebView: View {
                     .padding(.top, 2)
             }
         }
-        .appSurface(.metric, radius: 22, padding: 18, tint: tint)
+        .aiCommandSurface(.metric, radius: 22, padding: 18, tint: tint)
     }
 
     private func aiCommandResultTint(_ kind: AICommandKind) -> Color {
@@ -2549,7 +2674,7 @@ struct InsightWebView: View {
                 }
             }
         }
-        .appSurface(.metric, radius: 20, padding: 16, tint: AppColors.accent)
+        .aiCommandSurface(.metric, radius: 20, padding: 16, tint: AppColors.accent)
     }
 
     @ViewBuilder
@@ -2575,20 +2700,27 @@ struct InsightWebView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         .padding(.horizontal, 9)
-        .background(Color.white.opacity(0.50), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(AppColors.panelStrong.opacity(0.82), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(AppColors.stroke.opacity(0.40), lineWidth: 1)
+        )
     }
 
     private func aiCommandMemoryCard(_ card: AICommandMemoryCard) -> some View {
         let isRain = card.context?.weatherKind == "rain"
+        let weatherTint = isRain
+            ? Color(red: 0.42, green: 0.58, blue: 0.66)
+            : AppColors.accent
         let contextLine = aiCommandMemoryContextLine(card.context)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 10) {
                 ZStack {
                     Circle()
-                        .fill((isRain ? Color(red: 0.42, green: 0.58, blue: 0.66) : AppColors.accent).opacity(0.14))
+                        .fill(weatherTint.opacity(0.14))
                     Image(systemName: isRain ? "cloud.rain.fill" : "sparkles")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(isRain ? Color(red: 0.34, green: 0.50, blue: 0.58) : AppColors.accentDark)
+                        .foregroundStyle(isRain ? weatherTint : AppColors.accentDark)
                 }
                 .frame(width: 38, height: 38)
 
@@ -2620,82 +2752,22 @@ struct InsightWebView: View {
                 if shouldShowHomeEmotionLike(card.item) {
                     Text(card.item.displayEmotionTag)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(isRain ? Color(red: 0.30, green: 0.48, blue: 0.56) : AppColors.accentDark)
+                        .foregroundStyle(isRain ? weatherTint : AppColors.accentDark)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .background(
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(isRain ? Color(red: 0.76, green: 0.84, blue: 0.88).opacity(0.54) : Color.white.opacity(0.54))
-                        if isRain {
-                            WeatherMemoryBackdrop(kind: .rain)
-                                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        }
-                    }
-                )
-                .overlay(
-                    ZStack {
-                        LinearGradient(
-                            colors: isRain
-                                ? [
-                                    Color.white.opacity(0.74),
-                                    Color(red: 0.62, green: 0.76, blue: 0.82).opacity(0.26),
-                                    Color(red: 0.36, green: 0.54, blue: 0.62).opacity(0.16)
-                                ]
-                                : [
-                                    Color.white.opacity(0.70),
-                                    Color.white.opacity(0.42),
-                                    AppColors.accent.opacity(0.12)
-                                ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                        if isRain {
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.22),
-                                    Color.white.opacity(0.04),
-                                    Color(red: 0.30, green: 0.45, blue: 0.54).opacity(0.12)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        }
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                )
-                .overlay(alignment: .topTrailing) {
-                    if isRain {
-                        Image(systemName: "cloud.rain")
-                            .font(.system(size: 78, weight: .ultraLight))
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(Color.white.opacity(0.24))
-                            .offset(x: 12, y: -8)
-                            .allowsHitTesting(false)
-                    }
-                }
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.78),
-                                    Color.white.opacity(isRain ? 0.28 : 0.42),
-                                    (isRain ? Color(red: 0.36, green: 0.54, blue: 0.62) : AppColors.accent).opacity(0.18)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1
-                        )
-                )
-        )
+        .aiCommandSurface(.memory, radius: 20, padding: 16, tint: weatherTint)
+        .overlay(alignment: .topTrailing) {
+            if isRain {
+                Image(systemName: "cloud.rain")
+                    .font(.system(size: 68, weight: .ultraLight))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(weatherTint.opacity(0.12))
+                    .offset(x: 8, y: -6)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 
     private func aiCommandComparisonOverview(_ comparison: AICommandComparison) -> some View {
@@ -2767,7 +2839,7 @@ struct InsightWebView: View {
                 }
             }
         }
-        .glassPanel(radius: 22, padding: 16)
+        .aiCommandSurface(.panel, radius: 22, padding: 16, tint: AppColors.accent)
         .accessibilityElement(children: .contain)
     }
 
@@ -2793,7 +2865,7 @@ struct InsightWebView: View {
         .padding(.vertical, 11)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(isCurrent ? AppColors.accent.opacity(0.10) : Color.white.opacity(0.54))
+                .fill(isCurrent ? AppColors.accent.opacity(0.10) : AppColors.surfaceMuted.opacity(0.76))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -2846,19 +2918,12 @@ struct InsightWebView: View {
                     .foregroundStyle(AppColors.text.opacity(0.82))
             }
 
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule(style: .continuous)
-                        .fill(AppColors.surfaceMuted.opacity(0.72))
-                    Capsule(style: .continuous)
-                        .fill(color)
-                        .frame(
-                            width: period.total > 0
-                                ? max(5, proxy.size.width * CGFloat(period.total / maxTotal))
-                                : 0
-                        )
-                }
-            }
+            AICommandRatioBar(
+                progress: period.total / maxTotal,
+                fill: color,
+                track: AppColors.surfaceMuted.opacity(0.72),
+                minimumFill: 5
+            )
             .frame(height: 8)
         }
         .accessibilityElement(children: .ignore)
@@ -2929,19 +2994,11 @@ struct InsightWebView: View {
                 .lineLimit(1)
                 .frame(width: 52, alignment: .leading)
 
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule(style: .continuous)
-                        .fill(AppColors.surfaceMuted.opacity(0.54))
-                    Capsule(style: .continuous)
-                        .fill(color)
-                        .frame(
-                            width: amount > 0
-                                ? max(4, proxy.size.width * CGFloat(amount / maxAmount))
-                                : 0
-                        )
-                }
-            }
+            AICommandRatioBar(
+                progress: amount / maxAmount,
+                fill: color,
+                track: AppColors.surfaceMuted.opacity(0.54)
+            )
             .frame(height: 5)
 
             Text(amount.formatted(.cny))
@@ -2966,7 +3023,7 @@ struct InsightWebView: View {
     ) -> some View {
         let previewLimit = 5
         let hasMore = comparison.current.items.count > previewLimit || comparison.previous.items.count > previewLimit
-        return VStack(alignment: .leading, spacing: 14) {
+        return LazyVStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("对比依据")
                     .font(.headline.weight(.bold))
@@ -3003,7 +3060,7 @@ struct InsightWebView: View {
                 .id(resultID)
             }
         }
-        .glassPanel(radius: 20, padding: 14)
+        .aiCommandSurface(.panel, radius: 20, padding: 14, tint: AppColors.accent)
     }
 
     @ViewBuilder
@@ -3012,7 +3069,7 @@ struct InsightWebView: View {
         previewLimit: Int
     ) -> some View {
         let visibleItems = aiCommandShowsAllRelatedItems ? period.items : Array(period.items.prefix(previewLimit))
-        VStack(alignment: .leading, spacing: 8) {
+        LazyVStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text(period.label)
                     .font(.subheadline.weight(.bold))
@@ -3029,8 +3086,10 @@ struct InsightWebView: View {
                     .foregroundStyle(AppColors.subtext)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             } else {
-                ForEach(visibleItems) { item in
-                    aiCommandItemRow(item)
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(visibleItems) { item in
+                        aiCommandItemRow(item)
+                    }
                 }
             }
 
@@ -3076,7 +3135,7 @@ struct InsightWebView: View {
                                 if bar.count > 0 {
                                     Text("\(bar.count)")
                                         .font(.caption2.weight(.bold))
-                                        .foregroundStyle(.white.opacity(0.92))
+                                        .foregroundStyle(AppColors.onAccent.opacity(0.92))
                                         .padding(.top, 4)
                                 }
                             }
@@ -3092,13 +3151,13 @@ struct InsightWebView: View {
             }
             .frame(height: 120)
         }
-        .glassPanel(radius: 20, padding: 16)
+        .aiCommandSurface(.panel, radius: 20, padding: 16, tint: AppColors.accent)
     }
 
     private func aiCommandItemsPreview(_ items: [HomeItem], resultID: UUID) -> some View {
         let previewLimit = 12
         let visibleItems = aiCommandShowsAllRelatedItems ? items : Array(items.prefix(previewLimit))
-        return VStack(alignment: .leading, spacing: 8) {
+        return LazyVStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("相关记录")
                     .font(.footnote.weight(.bold))
@@ -3109,8 +3168,10 @@ struct InsightWebView: View {
                     .foregroundStyle(AppColors.subtext)
             }
 
-            ForEach(visibleItems) { item in
-                aiCommandItemRow(item)
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(visibleItems) { item in
+                    aiCommandItemRow(item)
+                }
             }
 
             if items.count > previewLimit {
@@ -3136,7 +3197,7 @@ struct InsightWebView: View {
                 .id(resultID)
             }
         }
-        .glassPanel(radius: 16, padding: 12)
+        .aiCommandSurface(.panel, radius: 16, padding: 12, tint: AppColors.accent)
     }
 
     private func aiCommandItemRow(_ item: HomeItem) -> some View {
@@ -3204,7 +3265,7 @@ struct InsightWebView: View {
                 }
             }
         }
-        .appSurface(.metric, radius: 20, padding: 16, tint: AppColors.accent)
+        .aiCommandSurface(.metric, radius: 20, padding: 16, tint: AppColors.accent)
     }
 
     private var aiCommandAmountField: some View {
@@ -3213,10 +3274,7 @@ struct InsightWebView: View {
             .font(.body.weight(.semibold))
             .frame(minHeight: 44)
             .padding(.horizontal, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .fill(Color.white.opacity(0.58))
-            )
+            .aiCommandSurface(.input, radius: 13, tint: AppColors.accent)
             .accessibilityLabel("单程金额")
     }
 
@@ -3244,7 +3302,7 @@ struct InsightWebView: View {
         let visibleDrafts = aiCommandShowsAllRelatedItems
             ? result.drafts
             : Array(result.drafts.prefix(previewLimit))
-        return VStack(alignment: .leading, spacing: 12) {
+        return LazyVStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("待确认记录")
                     .font(.headline.weight(.bold))
@@ -3270,8 +3328,10 @@ struct InsightWebView: View {
                 }
             }
 
-            ForEach(visibleDrafts) { draft in
-                aiCommandDraftRow(draft)
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(visibleDrafts) { draft in
+                    aiCommandDraftRow(draft)
+                }
             }
 
             if result.drafts.count > previewLimit {
@@ -3292,7 +3352,7 @@ struct InsightWebView: View {
                 .buttonStyle(.plain)
             }
         }
-        .appSurface(.metric, radius: 20, padding: 16, tint: AppColors.lockGold)
+        .aiCommandSurface(.metric, radius: 20, padding: 16, tint: AppColors.lockGold)
     }
 
     private func aiCommandDraftMetric(title: String, value: String) -> some View {
@@ -3308,7 +3368,11 @@ struct InsightWebView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         .padding(.horizontal, 9)
-        .background(Color.white.opacity(0.50), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(AppColors.panelStrong.opacity(0.82), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(AppColors.stroke.opacity(0.40), lineWidth: 1)
+        )
     }
 
     private func aiCommandDraftRow(_ draft: AICommandRecordDraft) -> some View {
@@ -3329,7 +3393,7 @@ struct InsightWebView: View {
                 if case let .conflict(message) = draft.status {
                     Text(message)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color(hex: "8B6F38"))
+                        .foregroundStyle(AppColors.lockGold)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -3452,7 +3516,7 @@ struct InsightWebView: View {
             Text(title)
                 .font(.headline.weight(.bold))
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(AppColors.onAccent)
         .frame(maxWidth: .infinity, minHeight: 44)
         .padding(.horizontal, 12)
         .background(
@@ -3465,7 +3529,6 @@ struct InsightWebView: View {
                     )
                 )
         )
-        .shadow(color: AppColors.accent.opacity(0.18), radius: 10, x: 0, y: 5)
     }
 
     private func aiCommandSecondaryLabel(_ title: String, systemImage: String) -> some View {
@@ -3480,7 +3543,11 @@ struct InsightWebView: View {
         .padding(.horizontal, 12)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.52))
+                .fill(AppColors.surfaceMuted.opacity(0.78))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(AppColors.stroke.opacity(0.44), lineWidth: 1)
         )
     }
 
@@ -3565,6 +3632,18 @@ struct InsightWebView: View {
         case .unsupported:
             return nil
         }
+    }
+
+    static func aiCommandRecognitionDigestForTesting(
+        command: String,
+        now: Date
+    ) -> String {
+        AICommandEngine(
+            items: [],
+            hasMemberAccess: true,
+            amountText: "",
+            now: now
+        ).recognitionDigest(for: command)
     }
 
     static func aiCommandComputationDigestForTesting(
@@ -3662,67 +3741,156 @@ struct InsightWebView: View {
         }
 
         func buildAICommandResult(for command: String) -> AICommandResult {
-            let normalized = command.lowercased()
-            if containsAny(normalized, ["补记", "补上", "生成", "新增"]) && containsAny(normalized, ["通勤", "交通", "上班", "下班", "早晚"]) {
-                return buildCommuteDraftResult(command: normalized)
-            }
-            if containsAny(normalized, ["重复", "重复账单", "重复记录"]) {
-                return buildDuplicateCheckResult(range: aiCommandTimeRange(from: normalized, defaultRecentDays: 7))
-            }
-            let lifeMarkIntent = LifeMarkService.queryIntent(from: normalized)
+            let recognition = recognizeAICommand(command)
+            let decision = recognition.decision
+            let normalized = decision.normalizedText
+            let range = aiCommandTimeRange(from: normalized)
+            let categoryIntent = recognition.categoryIntent
+            let lifeMarkIntent = recognition.lifeMarkIntent
+
             if let lifeMarkIntent,
+               decision.intent != .unsupported,
                !hasMemberAccess,
                shouldRequireMemberForLifeMark(intent: lifeMarkIntent, command: normalized) {
                 return buildLifeMarkLockedResult(intent: lifeMarkIntent, command: normalized)
             }
-            if let memoryResult = buildMemoryLookupResult(command: normalized) {
-                return memoryResult
-            }
-            if let lifeMarkIntent,
-               containsAny(normalized, ["上一次", "上次", "最近一次", "什么时候", "哪天", "第一次", "首次", "第一笔", "第1笔", "第一条", "第1条", "第一单", "第1单", "第十次", "第10次", "10次", "十次"]) {
-                return buildLifeMarkLookupResult(intent: lifeMarkIntent, command: normalized)
-            }
 
-            if containsAny(normalized, ["上一次", "上次", "最近一次", "什么时候", "哪天"]) {
+            switch decision.intent {
+            case .commuteDraft:
+                return buildCommuteDraftResult(command: normalized)
+            case .duplicateCheck:
+                return buildDuplicateCheckResult(range: aiCommandTimeRange(from: normalized, defaultRecentDays: 7))
+            case .memoryLookup:
+                if let memoryResult = buildMemoryLookupResult(command: normalized) {
+                    return memoryResult
+                }
+                return buildUnsupportedRecognitionResult(decision)
+            case .lifeMarkLookup:
+                guard let lifeMarkIntent else {
+                    return buildUnsupportedRecognitionResult(decision)
+                }
+                return buildLifeMarkLookupResult(intent: lifeMarkIntent, command: normalized)
+            case .lastRecordLookup:
                 if let lastResult = buildLastRecordLookupResult(command: normalized, lifeMarkIntent: lifeMarkIntent) {
                     return lastResult
                 }
-            }
-
-            let range = aiCommandTimeRange(from: normalized)
-            let categoryIntent = aiCommandCategoryIntent(from: normalized)
-            if containsAny(normalized, ["总结", "概括", "回顾", "复盘", "生活节奏", "最近怎么样", "这周怎么样", "这个月怎么样"]) {
+                return buildUnsupportedRecognitionResult(decision)
+            case .lifestyleSummary:
                 return buildLifestyleSummaryResult(range: range, command: normalized)
-            }
-            if containsAny(normalized, ["对比", "比上", "比起", "相比", "变化", "增加", "减少", "多了", "少了"]) {
+            case .compare:
                 return buildCompareResult(
                     range: range,
                     categoryIntent: categoryIntent,
                     lifeMarkIntent: lifeMarkIntent,
                     command: normalized
                 )
-            }
-            if containsAny(normalized, ["最大一笔", "最贵", "最高", "花得最多", "最贵的一笔"]) {
+            case .largestRecord:
                 return buildLargestRecordResult(
                     range: range,
                     categoryIntent: categoryIntent,
                     lifeMarkIntent: lifeMarkIntent,
                     command: normalized
                 )
-            }
-            if lifeMarkIntent != nil || categoryIntent != nil || aiCommandAsksCategoryBreakdown(normalized) || containsAny(normalized, ["查", "看", "多少", "几次", "花了", "消费", "账本", "记录", "流水", "明细", "整理", "概览", "最近", "近来", "这阵子", "这段时间", "今天", "今日", "今儿", "昨日", "昨天", "昨儿", "前天", "前日", "本周", "这周", "这一周", "本自然周", "这个自然周", "本星期", "这个星期", "这星期", "本礼拜", "这个礼拜", "这礼拜", "上周", "上一周", "上个自然周", "上一个自然周", "上星期", "上个星期", "上礼拜", "上个礼拜", "本月", "这个月", "这月", "上个月", "上月"]) {
+            case .query:
                 return buildQueryResult(
                     range: range,
                     categoryIntent: categoryIntent,
                     lifeMarkIntent: lifeMarkIntent,
                     command: normalized
                 )
+            case .unsupported:
+                return buildUnsupportedRecognitionResult(decision)
+            }
+        }
+
+        func recognitionDigest(for command: String) -> String {
+            let recognition = recognizeAICommand(command)
+            return [
+                recognition.decision.intent.rawValue,
+                String(recognition.decision.confidence),
+                recognition.decision.normalizedText,
+                recognition.categoryIntent?.label ?? "none",
+                recognition.lifeMarkIntent?.id ?? "none",
+                recognition.decision.evidence.joined(separator: ",")
+            ].joined(separator: "#")
+        }
+
+        private struct RecognizedAICommand {
+            let decision: AICommandRecognitionDecision
+            let categoryIntent: AICommandCategoryIntent?
+            let lifeMarkIntent: LifeMarkQueryIntent?
+        }
+
+        private func recognizeAICommand(_ command: String) -> RecognizedAICommand {
+            let normalized = AICommandRecognitionPolicy.normalize(command)
+            let categoryIntent = aiCommandCategoryIntent(from: normalized)
+            let candidateLifeMarkIntent = LifeMarkService.queryIntent(from: normalized)
+            let context = AICommandRecognitionContext(
+                hasCategory: categoryIntent != nil,
+                hasLifeMark: candidateLifeMarkIntent != nil,
+                hasExplicitTimeRange: aiCommandHasExplicitTimeRange(normalized),
+                asksCategoryBreakdown: aiCommandAsksCategoryBreakdown(normalized)
+            )
+            let decision = AICommandRecognitionPolicy.interpret(normalized, context: context)
+            let lifeMarkIntent = resolvedLifeMarkIntent(
+                candidateLifeMarkIntent,
+                categoryIntent: categoryIntent,
+                decision: decision
+            )
+            return RecognizedAICommand(
+                decision: decision,
+                categoryIntent: categoryIntent,
+                lifeMarkIntent: lifeMarkIntent
+            )
+        }
+
+        private func resolvedLifeMarkIntent(
+            _ candidate: LifeMarkQueryIntent?,
+            categoryIntent: AICommandCategoryIntent?,
+            decision: AICommandRecognitionDecision
+        ) -> LifeMarkQueryIntent? {
+            guard let candidate else { return nil }
+            switch decision.intent {
+            case .memoryLookup, .lifeMarkLookup:
+                return candidate
+            default:
+                break
+            }
+            if categoryIntent == nil || candidate.id == "rainy_commute" {
+                return candidate
+            }
+            return decision.normalizedText.contains(candidate.label.lowercased()) ? candidate : nil
+        }
+
+        private func buildUnsupportedRecognitionResult(
+            _ decision: AICommandRecognitionDecision
+        ) -> AICommandResult {
+            let title: String
+            let summary: String
+            let detail: String
+            if decision.evidence.contains("guard:negatedWrite") {
+                title = "没有生成补记"
+                summary = "识别到你是否定这次补记，所以没有创建候选，也没有写入账本。"
+                detail = "如果只是想查看通勤，可以说：查一下今天通勤。"
+            } else if decision.evidence.contains("guard:unsupportedWrite") {
+                title = "这类新增需要再明确一点"
+                summary = "AI 指令台目前只支持通勤补记预览，其他记录请从「记下」添加。"
+                detail = "补记通勤可以说：补上昨天上下班通勤；确认前仍不会写入账本。"
+            } else if decision.evidence.contains("guard:subjective")
+                        || decision.evidence.contains("guard:outsideSubject") {
+                title = "这条问题超出了账本事实"
+                summary = "我可以整理金额、时间、分类和已有备注，但不会猜测心情、原因或价值判断。"
+                detail = "可以改问：这周交通有几笔，或者这个月比上个月多了多少。"
+            } else {
+                title = "这条指令还需要再具体一点"
+                summary = "可以先问一段时间、一个分类，或明确说要比较、查找还是补记通勤。"
+                detail = "例子：这礼拜吃饭用了多少？或者：这个月跟上个月差在哪。"
             }
             return AICommandResult(
                 kind: .unsupported,
-                title: "这条指令还需要再具体一点",
-                summary: "可以先问一段时间、一个分类，或明确说要补记哪类记录。",
-                detail: "例子：过去三天餐饮花了多少？或者：补记过去一周工作日通勤，早晚各一次。",
+                title: title,
+                summary: summary,
+                detail: detail,
                 items: [],
                 bars: [],
                 drafts: [],
@@ -3732,8 +3900,8 @@ struct InsightWebView: View {
         }
 
         private func buildMemoryLookupResult(command: String) -> AICommandResult? {
-            let asksMemory = containsAny(command, ["上一次", "上次", "最近一次", "什么时候", "哪天", "记得", "回忆", "回看"])
-            let hasContextSignal = containsAny(command, ["下雨", "雨天", "雨", "雪", "外地", "城市", "旅游", "旅行", "出差", "温度", "天气"])
+            let asksMemory = containsAny(command, ["上一次", "上次", "最近一次", "哪一次", "哪次", "什么时候", "哪天", "记得", "回忆", "回看"])
+            let hasContextSignal = containsAny(command, ["下雨", "雨天", "雨", "雪", "外地", "异地", "城市", "旅游", "旅行", "出差", "温度", "天气"])
             guard asksMemory && hasContextSignal else { return nil }
 
             let item = items
@@ -4157,7 +4325,7 @@ struct InsightWebView: View {
         }
 
         private func aiCommandAsksCategoryBreakdown(_ command: String) -> Bool {
-            containsAny(command, ["哪一类", "哪类", "什么类", "分类", "最多", "占比", "花在哪"])
+            containsAny(command, ["哪一类", "哪类", "哪一项", "哪项", "哪块", "什么类", "分类", "分布", "构成", "最多", "占比", "花在哪", "主要花在"])
         }
 
         private func aiCommandTopCategorySummary(_ items: [HomeItem]) -> (category: HomeItem.Category, count: Int, total: Double)? {
@@ -4351,9 +4519,9 @@ struct InsightWebView: View {
                 .joined(separator: " ")
                 .lowercased()
 
-            if containsAny(command, ["通勤", "上班", "下班", "地铁", "公交"]) {
+            if containsAny(command, ["通勤", "上班", "下班", "上下班", "地铁", "公交", "坐车", "乘车", "搭车"]) {
                 guard item.category == .transport,
-                      containsAny(text, ["通勤", "上班", "下班", "地铁", "公交", "早高峰", "晚高峰"]) || item.amount <= 80 else {
+                      containsAny(text, ["通勤", "上班", "下班", "上下班", "地铁", "公交", "坐车", "乘车", "搭车", "早高峰", "晚高峰"]) || item.amount <= 80 else {
                     return false
                 }
             } else if let intent = aiCommandCategoryIntent(from: command) {
@@ -4376,9 +4544,9 @@ struct InsightWebView: View {
                 return item.memoryContext?.weatherKind == "snow"
                     || containsAny(text, ["下雪", "雪天"])
             }
-            if containsAny(command, ["外地", "旅游", "旅行", "出差"]) {
+            if containsAny(command, ["外地", "异地", "旅游", "旅行", "出差"]) {
                 return item.memoryContext?.semanticPlace == "外地"
-                    || containsAny(text, ["外地", "旅游", "旅行", "出差"])
+                    || containsAny(text, ["外地", "异地", "旅游", "旅行", "出差"])
             }
             if containsAny(command, ["城市"]) {
                 return item.memoryContext?.cityName != nil
@@ -4403,12 +4571,12 @@ struct InsightWebView: View {
             let text = "\(item.title) \(item.displayEmotionTag) \(item.category.rawValue)"
             let anchorText = "\(anchor.title) \(anchor.displayEmotionTag) \(anchor.category.rawValue)"
             let asksRain = containsAny(command, ["下雨", "雨天", "雨"])
-            let asksCommute = containsAny(command, ["通勤", "上班", "下班", "地铁", "公交"])
+            let asksCommute = containsAny(command, ["通勤", "上班", "下班", "上下班", "地铁", "公交", "坐车", "乘车", "搭车"])
 
             if asksRain && asksCommute {
                 guard item.category == .transport else { return false }
                 let itemRain = item.memoryContext?.weatherKind == "rain" || containsAny(text, ["下雨", "雨天"])
-                let itemCommute = containsAny(text, ["通勤", "上班", "下班", "地铁", "公交"]) || item.amount <= 40
+                let itemCommute = containsAny(text, ["通勤", "上班", "下班", "上下班", "地铁", "公交", "坐车", "乘车", "搭车"]) || item.amount <= 40
                 return itemRain && itemCommute
             }
 
@@ -4418,7 +4586,7 @@ struct InsightWebView: View {
 
             if asksCommute {
                 guard item.category == .transport else { return false }
-                return containsAny(text, ["通勤", "上班", "下班", "地铁", "公交"]) || item.amount <= 40
+                return containsAny(text, ["通勤", "上班", "下班", "上下班", "地铁", "公交", "坐车", "乘车", "搭车"]) || item.amount <= 40
             }
 
             if let semantic = anchor.memoryContext?.semanticPlace, semantic == item.memoryContext?.semanticPlace {
@@ -4433,7 +4601,7 @@ struct InsightWebView: View {
 
         private func aiCommandMemoryTitle(command: String, item: HomeItem) -> String {
             if containsAny(command, ["下雨", "雨天", "雨"]),
-               containsAny(command, ["通勤", "上班", "下班", "地铁", "公交"]) {
+               containsAny(command, ["通勤", "上班", "下班", "上下班", "地铁", "公交", "坐车", "乘车", "搭车"]) {
                 return "上一次雨天通勤"
             }
             if containsAny(command, ["下雨", "雨天", "雨"]) {
@@ -4707,7 +4875,7 @@ struct InsightWebView: View {
         }
 
         private func aiCommandHasExplicitTimeRange(_ text: String) -> Bool {
-            if containsAny(text, ["今天", "今日", "今儿", "昨天", "昨日", "昨儿", "这阵子", "近来", "这段时间"]) {
+            if containsAny(text, ["今天", "今日", "今儿", "昨天", "昨日", "昨儿", "前天", "前日", "这阵子", "最近", "近来", "这段时间"]) {
                 return true
             }
             if containsAny(text, ["本周", "这周", "这一周", "本自然周", "这个自然周", "本星期", "这个星期", "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜", "上周", "上一周", "上个自然周", "上一个自然周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜"]) {
@@ -5273,7 +5441,7 @@ struct InsightWebView: View {
                 AICommandCategoryIntent(
                     categories: [.dining],
                     label: "咖啡",
-                    keywords: ["咖啡", "美式", "拿铁", "瑞幸", "星巴克", "库迪"],
+                    keywords: ["咖啡", "美式", "拿铁", "手冲", "咖啡豆", "瑞幸", "星巴克", "库迪"],
                     requiresKeywordMatch: true
                 ),
                 AICommandCategoryIntent(
@@ -5285,7 +5453,7 @@ struct InsightWebView: View {
                 AICommandCategoryIntent(
                     categories: [.dining],
                     label: "餐饮",
-                    keywords: ["餐饮", "吃饭", "吃的", "饭", "美食", "外卖", "美团外卖", "饿了么", "抖音团购", "七欣天", "海底捞", "肯德基", "麦当劳", "必胜客", "塔斯汀", "华莱士", "食堂", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "简餐", "咖啡", "奶茶", "饮品", "饮料", "可乐", "矿泉水", "瓶装水", "果汁", "汽水", "饭店", "餐厅", "火锅", "烤肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "面条", "米粉", "河粉", "粉丝", "包子", "盒饭"]
+                    keywords: ["餐饮", "吃饭", "吃的", "吃喝", "饭", "饭钱", "餐费", "伙食", "伙食费", "美食", "点餐", "堂食", "外卖", "美团外卖", "饿了么", "抖音团购", "七欣天", "海底捞", "肯德基", "麦当劳", "必胜客", "塔斯汀", "华莱士", "食堂", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "简餐", "咖啡", "奶茶", "饮品", "饮料", "可乐", "矿泉水", "瓶装水", "果汁", "汽水", "饭店", "餐厅", "火锅", "烤肉", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "面条", "米粉", "河粉", "粉丝", "包子", "盒饭"]
                 ),
                 AICommandCategoryIntent(
                     categories: [.transport, .lodging, .entertainment, .dining, .shopping],
@@ -5302,34 +5470,34 @@ struct InsightWebView: View {
                 AICommandCategoryIntent(
                     categories: [.transport],
                     label: "打车",
-                    keywords: ["打车", "出租", "网约车", "滴滴", "花小猪"],
+                    keywords: ["打车", "叫车", "出租", "出租车", "的士", "网约车", "滴滴", "花小猪"],
                     requiresKeywordMatch: true
                 ),
                 AICommandCategoryIntent(
                     categories: [.transport],
                     label: "交通",
-                    keywords: ["交通", "出行", "通勤", "地铁", "公交", "打车", "出租", "网约车", "滴滴", "花小猪", "单车", "骑车", "上班", "下班", "早高峰", "晚高峰", "回家", "停车", "加油", "路费", "高铁", "火车", "机票", "机场"]
+                    keywords: ["交通", "出行", "通勤", "地铁", "乘地铁", "地铁票", "公交", "公交车", "巴士", "坐车", "乘车", "搭车", "车费", "打车", "叫车", "出租", "出租车", "的士", "网约车", "滴滴", "花小猪", "单车", "共享单车", "骑车", "上班", "下班", "上下班", "早高峰", "晚高峰", "回家", "停车", "停车费", "加油", "充电费", "路费", "过路费", "高速费", "高铁", "火车", "机票", "机场"]
                 ),
                 AICommandCategoryIntent(
                     categories: [.daily, .home],
                     label: "日用",
-                    keywords: ["日用", "超市", "便利店", "纸巾", "清洁", "生活用品", "洗衣", "洗护", "日用品", "买菜", "水果", "蔬菜", "生鲜", "盒马", "叮咚", "叮咚买菜", "小象超市", "京东到家", "京东秒送", "美团闪购", "朴朴", "淘宝买菜", "居家"]
+                    keywords: ["日用", "日杂", "杂货", "超市", "便利店", "纸巾", "清洁", "生活用品", "洗衣", "洗护", "日用品", "买菜", "水果", "蔬菜", "生鲜", "盒马", "叮咚", "叮咚买菜", "小象超市", "京东到家", "京东秒送", "美团闪购", "朴朴", "淘宝买菜", "居家"]
                 ),
                 AICommandCategoryIntent(
                     categories: [.health],
                     label: "健康",
-                    keywords: ["健康", "买药", "药店", "药房", "用药", "医院", "挂号", "门诊", "体检", "护理", "牙科", "口腔", "洗牙", "补牙", "眼镜", "配镜", "验光"]
+                    keywords: ["健康", "看病", "医疗", "医药", "药费", "诊所", "买药", "药店", "药房", "用药", "医院", "挂号", "门诊", "体检", "护理", "牙科", "口腔", "洗牙", "补牙", "眼镜", "配镜", "验光"]
                 ),
                 AICommandCategoryIntent(
                     categories: [.shopping],
                     label: "购物",
-                    keywords: ["购物", "衣服", "鞋", "包包", "背包", "手提包", "淘宝", "京东", "拼多多", "买到", "添置", "快递", "数码", "渔具", "鱼竿", "鱼线", "鱼饵", "路亚", "钓箱", "钓椅", "露营", "帐篷", "天幕", "睡袋", "骑行", "头盔", "码表", "摄影", "相机", "镜头", "模型", "手办", "乐器", "茶具", "咖啡器具"]
+                    keywords: ["购物", "网购", "买东西", "购置", "衣服", "鞋", "包包", "背包", "手提包", "淘宝", "京东", "拼多多", "买到", "添置", "快递", "数码", "渔具", "鱼竿", "鱼线", "鱼饵", "路亚", "钓箱", "钓椅", "露营", "帐篷", "天幕", "睡袋", "骑行", "头盔", "码表", "摄影", "相机", "镜头", "模型", "手办", "乐器", "茶具", "咖啡器具"]
                 ),
                 AICommandCategoryIntent(
                     categories: [.entertainment],
                     label: "娱乐",
                     keywords: [
-                        "娱乐", "休闲", "电影", "影院", "游戏", "演出", "门票", "放松", "唱歌", "ktv",
+                        "娱乐", "休闲", "玩乐", "电影", "看电影", "影院", "游戏", "演出", "门票", "放松", "唱歌", "ktv",
                         "动物园", "游乐场", "乐园", "主题乐园", "迪士尼", "环球影城", "海洋馆", "水族馆",
                         "公园", "景区", "景点", "展览", "看展", "展馆", "博物馆", "美术馆",
                         "演唱会", "音乐节", "剧场", "话剧", "脱口秀", "密室", "剧本杀", "桌游", "台球"
@@ -5525,33 +5693,6 @@ struct InsightWebView: View {
         let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !tag.isEmpty else { return false }
         return tag != HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
-    }
-
-    private func aiCommandItemsSignature(_ items: [HomeItem]) -> String {
-        var hasher = Hasher()
-        hasher.combine(items.count)
-        var latestUpdated: TimeInterval = 0
-        var latestCreated: TimeInterval = 0
-        var amountChecksum = 0
-        var textChecksum = 0
-        var categoryCounts: [HomeItem.Category: Int] = [:]
-        for item in items {
-            latestUpdated = max(latestUpdated, item.updatedAt.timeIntervalSince1970)
-            latestCreated = max(latestCreated, item.createdAt.timeIntervalSince1970)
-            amountChecksum = amountChecksum &* 31 &+ Int((item.amount * 100).rounded())
-            textChecksum = textChecksum &* 31 &+ item.title.hashValue
-            textChecksum = textChecksum &* 31 &+ item.emotionTag.hashValue
-            categoryCounts[item.category, default: 0] += 1
-        }
-        hasher.combine(Int(latestUpdated))
-        hasher.combine(Int(latestCreated))
-        hasher.combine(amountChecksum)
-        hasher.combine(textChecksum)
-        for category in HomeItem.Category.allCases {
-            hasher.combine(category.rawValue)
-            hasher.combine(categoryCounts[category, default: 0])
-        }
-        return "\(hasher.finalize())"
     }
 
     private func rememberAICommandCacheKey(_ typedKey: String) {
@@ -6247,122 +6388,6 @@ struct InsightWebView: View {
                 showWeeklyShareThemeNudge = false
             }
             isSavingWeeklyShareCard = false
-        }
-    }
-}
-
-// MARK: - Weather Memory Backdrop
-
-private struct WeatherMemoryBackdrop: View {
-    enum Kind: Equatable {
-        case rain
-    }
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    let kind: Kind
-
-    @ViewBuilder
-    var body: some View {
-        if reduceMotion {
-            backdrop(time: 0, phase: 0, isAnimated: false)
-                .allowsHitTesting(false)
-        } else {
-            TimelineView(.periodic(from: Date(), by: 1 / 8)) { timeline in
-                let time = timeline.date.timeIntervalSinceReferenceDate
-                let phase = time.truncatingRemainder(dividingBy: 12) / 12
-                backdrop(time: time, phase: phase, isAnimated: true)
-            }
-            .allowsHitTesting(false)
-        }
-    }
-
-    private func backdrop(time: TimeInterval, phase: Double, isAnimated: Bool) -> some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.45, green: 0.61, blue: 0.70).opacity(0.34),
-                    Color(red: 0.72, green: 0.82, blue: 0.88).opacity(0.28),
-                    Color(red: 0.28, green: 0.43, blue: 0.52).opacity(0.22)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            movingMist(phase: phase)
-
-            if kind == .rain {
-                rainCanvas(time: time)
-                    .opacity(isAnimated ? 0.42 : 0.24)
-            }
-
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.34),
-                    Color.white.opacity(0.02),
-                    Color(red: 0.22, green: 0.36, blue: 0.44).opacity(0.12)
-                ],
-                startPoint: UnitPoint(x: isAnimated ? 0.1 + phase * 0.22 : 0.1, y: 0),
-                endPoint: .bottomTrailing
-            )
-        }
-        .saturation(0.92)
-    }
-
-    private func movingMist(phase: Double) -> some View {
-        ZStack {
-            RadialGradient(
-                colors: [
-                    Color.white.opacity(0.38),
-                    Color.white.opacity(0.12),
-                    Color.white.opacity(0)
-                ],
-                center: .center,
-                startRadius: 0,
-                endRadius: 120
-            )
-            .frame(width: 220, height: 120)
-            .offset(x: CGFloat(-72 + phase * 54), y: -34)
-            .blur(radius: 8)
-
-            RadialGradient(
-                colors: [
-                    Color(red: 0.78, green: 0.90, blue: 0.96).opacity(0.28),
-                    Color.white.opacity(0.06),
-                    Color.white.opacity(0)
-                ],
-                center: .center,
-                startRadius: 0,
-                endRadius: 150
-            )
-            .frame(width: 260, height: 150)
-            .offset(x: CGFloat(80 - phase * 42), y: 54)
-            .blur(radius: 12)
-        }
-    }
-
-    private func rainCanvas(time: TimeInterval) -> some View {
-        Canvas(rendersAsynchronously: true) { context, size in
-            let diagonalDrift = size.height * 0.20
-            for index in 0..<42 {
-                let seed = Double(index)
-                let lane = (seed * 37).truncatingRemainder(dividingBy: 100) / 100
-                let speed = 0.34 + (seed * 13).truncatingRemainder(dividingBy: 19) / 45
-                let progress = (time * speed + seed * 0.071).truncatingRemainder(dividingBy: 1)
-                let length = 10 + (seed * 11).truncatingRemainder(dividingBy: 14)
-                let x = lane * size.width + progress * diagonalDrift - 26
-                let y = progress * (size.height + 54) - 34
-                let opacity = 0.18 + (seed * 7).truncatingRemainder(dividingBy: 11) / 70
-
-                var path = Path()
-                path.move(to: CGPoint(x: x, y: y))
-                path.addLine(to: CGPoint(x: x + length * 0.32, y: y + length))
-                context.stroke(
-                    path,
-                    with: .color(Color.white.opacity(opacity)),
-                    style: StrokeStyle(lineWidth: seed.truncatingRemainder(dividingBy: 3) == 0 ? 1.15 : 0.8, lineCap: .round)
-                )
-            }
         }
     }
 }
