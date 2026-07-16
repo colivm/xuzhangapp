@@ -116,8 +116,6 @@ struct StatsWebView: View {
     @State private var showTraceDeleteConfirmation = false
     @State private var traceAutoCommitRequestID: UUID?
     @GestureState private var traceSwipeDragState: TraceSwipeDragState?
-    @State private var traceLifeCardPagingBlocksTap = false
-    @State private var showsTraceLifeSwipeHint = !UserDefaults.standard.bool(forKey: "trace_life_swipe_hint_seen_v1")
     @State private var lifeInsightRefreshID = UUID()
     @State private var isPreparingTrace = false
     @State private var tracePreparationTask: Task<Void, Never>?
@@ -172,7 +170,7 @@ struct StatsWebView: View {
         nonmutating set { tabState.viewMode = newValue }
     }
 
-    private var traceLifeCardRange: SummaryPlaybackRange {
+    var traceLifeCardRange: SummaryPlaybackRange {
         get { tabState.lifeCardRange }
         nonmutating set { tabState.lifeCardRange = newValue }
     }
@@ -308,7 +306,6 @@ struct StatsWebView: View {
                 summaryPlaybackTask?.cancel()
                 summaryPlaybackTask = nil
                 preparingSummaryRange = nil
-                traceLifeCardPagingBlocksTap = false
                 traceUpdatePillTask?.cancel()
                 traceUpdatePillTask = nil
                 showsTraceUpdatePill = false
@@ -325,39 +322,45 @@ struct StatsWebView: View {
                 scheduleTracePreparation()
             }
             .onChange(of: selectedPeriod) { _, _ in
-                traceSnapshotStore.invalidateAll()
-                weekTraceNeedsRefresh = true
-                monthTraceNeedsRefresh = true
+                if let range = TraceRangeContextPolicy.lifeRange(for: selectedPeriod),
+                   !useCustomRange {
+                    traceLifeCardRange = range
+                }
+                traceSnapshotStore.invalidateClueCache()
                 clueTraceNeedsRefresh = true
-                scheduleTracePreparation()
+                if traceViewMode == .clues {
+                    scheduleTracePreparation()
+                } else {
+                    prepareTraceIfNeeded()
+                }
             }
             .onChange(of: useCustomRange) { _, _ in
-                traceSnapshotStore.invalidateAll()
-                weekTraceNeedsRefresh = true
-                monthTraceNeedsRefresh = true
+                traceSnapshotStore.invalidateClueCache()
                 clueTraceNeedsRefresh = true
-                scheduleTracePreparation()
+                if traceViewMode == .clues {
+                    scheduleTracePreparation()
+                }
             }
             .onChange(of: customStartDate) { _, _ in
-                traceSnapshotStore.invalidateAll()
-                weekTraceNeedsRefresh = true
-                monthTraceNeedsRefresh = true
+                traceSnapshotStore.invalidateClueCache()
                 clueTraceNeedsRefresh = true
-                scheduleTracePreparation()
+                if traceViewMode == .clues, useCustomRange {
+                    scheduleTracePreparation()
+                }
             }
             .onChange(of: customEndDate) { _, _ in
-                traceSnapshotStore.invalidateAll()
-                weekTraceNeedsRefresh = true
-                monthTraceNeedsRefresh = true
+                traceSnapshotStore.invalidateClueCache()
                 clueTraceNeedsRefresh = true
-                scheduleTracePreparation()
+                if traceViewMode == .clues, useCustomRange {
+                    scheduleTracePreparation()
+                }
             }
             .onChange(of: selectedCategory) { _, _ in
-                traceSnapshotStore.invalidateAll()
-                weekTraceNeedsRefresh = true
-                monthTraceNeedsRefresh = true
+                traceSnapshotStore.invalidateClueCache()
                 clueTraceNeedsRefresh = true
-                scheduleTracePreparation()
+                if traceViewMode == .clues {
+                    scheduleTracePreparation()
+                }
             }
             .onChange(of: hasMemberAccess) { _, _ in
                 traceSnapshotStore.invalidateAll()
@@ -410,6 +413,9 @@ struct StatsWebView: View {
             VStack(spacing: 16) {
                 traceViewModeKicker
                     .id("trace-mode-picker")
+                if traceViewMode == .life {
+                    traceLifeRangeKicker
+                }
                 if traceViewMode == .life,
                    preparedWeekSnapshot != nil || preparedMonthSnapshot != nil {
                     traceChapterCard(
@@ -880,18 +886,10 @@ struct StatsWebView: View {
                 Group {
                     if showsMonth {
                         traceLifeMonthCardFace(snapshot: displayedSnapshot, layout: layout)
-                            .transition(
-                                reduceMotion
-                                    ? .opacity
-                                    : .move(edge: .trailing).combined(with: .opacity)
-                            )
+                            .transition(.opacity)
                     } else {
                         traceLifeSliceCardFace(snapshot: displayedSnapshot, layout: layout)
-                            .transition(
-                                reduceMotion
-                                    ? .opacity
-                                    : .move(edge: .leading).combined(with: .opacity)
-                            )
+                            .transition(.opacity)
                     }
                 }
             }
@@ -911,11 +909,7 @@ struct StatsWebView: View {
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .simultaneousGesture(traceLifeCardPagingGesture)
-        .accessibilityHint(displayedRange == .month ? "向右轻扫，回到本周" : "向左轻扫，查看本月")
-        .accessibilityAction(named: Text(displayedRange == .month ? "回到本周" : "查看本月")) {
-            setTraceLifeCardRange(displayedRange == .month ? .week : .month)
-        }
+        .accessibilityValue(displayedRange == .month ? "本月" : "本周")
     }
 
     private func traceLifeSliceCardFace(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
@@ -927,17 +921,11 @@ struct StatsWebView: View {
         return VStack(alignment: .center, spacing: layout.faceSpacing) {
             traceLifeSliceHeader(snapshot: snapshot)
 
-            if showsTraceLifeSwipeHint {
-                traceLifeSwipeHint
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
-            }
-
             traceLifeSlicePhotoStory(snapshot: snapshot, layout: layout)
 
             traceLifeSliceScenePills(snapshot: snapshot)
 
             Button {
-                guard !traceLifeCardPagingBlocksTap else { return }
                 handleSummaryPlaybackTap(range: range, hasData: hasData)
             } label: {
                 traceLifeSlicePlayButton(
@@ -948,7 +936,7 @@ struct StatsWebView: View {
                 )
             }
             .buttonStyle(PurposefulCardButtonStyle(radius: 24, depth: 1.05))
-            .disabled((!hasData && !isMonthLocked) || preparingSummaryRange != nil || traceLifeCardPagingBlocksTap)
+            .disabled((!hasData && !isMonthLocked) || preparingSummaryRange != nil)
 
             traceLifeSliceFooter(snapshot: snapshot)
         }
@@ -989,62 +977,27 @@ struct StatsWebView: View {
             .allowsHitTesting(false)
     }
 
-    private var traceLifeCardPagingGesture: some Gesture {
-        DragGesture(minimumDistance: 18)
-            .onChanged { value in
-                guard abs(value.translation.width) > abs(value.translation.height),
-                      abs(value.translation.width) > 14 else { return }
-                traceLifeCardPagingBlocksTap = true
-            }
-            .onEnded { value in
-                if abs(value.translation.width) > abs(value.translation.height),
-                   abs(value.translation.width) > 52 {
-                    if value.translation.width < 0 {
-                        setTraceLifeCardRange(.month)
-                    } else {
-                        setTraceLifeCardRange(.week)
-                    }
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
-                    traceLifeCardPagingBlocksTap = false
-                }
-            }
-    }
-
     private func setTraceLifeCardRange(_ range: SummaryPlaybackRange) {
-        guard traceLifeCardRange != range else { return }
-        UISelectionFeedbackGenerator().selectionChanged()
-        withAnimation(
-            reduceMotion
-                ? .easeInOut(duration: 0.16)
-                : .interactiveSpring(response: 0.38, dampingFraction: 0.90, blendDuration: 0.05)
-        ) {
-            traceLifeCardRange = range
-            showsTraceLifeSwipeHint = false
+        let period = TraceRangeContextPolicy.period(for: range)
+        let rangeChanged = traceLifeCardRange != range
+        guard rangeChanged || useCustomRange || selectedPeriod != period else { return }
+        if rangeChanged {
+            UISelectionFeedbackGenerator().selectionChanged()
+            withAnimation(
+                reduceMotion
+                    ? nil
+                    : .easeOut(duration: 0.16)
+            ) {
+                traceLifeCardRange = range
+            }
         }
-        UserDefaults.standard.set(true, forKey: "trace_life_swipe_hint_seen_v1")
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            useCustomRange = false
+            selectedPeriod = period
+        }
         prepareTraceIfNeeded()
-    }
-
-    private var traceLifeSwipeHint: some View {
-        HStack(spacing: 7) {
-            Image(systemName: "chevron.left")
-            Text("左右滑动查看周 / 月")
-            Image(systemName: "chevron.right")
-        }
-        .font(.footnote.weight(.semibold))
-        .foregroundStyle(AppColors.accentDark.opacity(0.72))
-        .padding(.horizontal, 11)
-        .frame(minHeight: 32)
-        .background(
-            Capsule(style: .continuous)
-                .fill(TraceColors.surfaceMuted.opacity(0.76))
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(Color.white.opacity(0.66), lineWidth: 1)
-        )
-        .accessibilityLabel("左右滑动可以切换本周和本月")
     }
 
     private func traceLifeMonthCardFace(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
@@ -1060,7 +1013,6 @@ struct StatsWebView: View {
             traceLifeMonthDiaryStrip(snapshot: snapshot, layout: layout)
 
             Button {
-                guard !traceLifeCardPagingBlocksTap else { return }
                 handleSummaryPlaybackTap(range: range, hasData: hasData)
             } label: {
                 traceLifeSlicePlayButton(
@@ -1072,7 +1024,7 @@ struct StatsWebView: View {
                 )
             }
             .buttonStyle(PurposefulCardButtonStyle(radius: 24, depth: 1.05))
-            .disabled((!hasData && !isMonthLocked) || preparingSummaryRange != nil || traceLifeCardPagingBlocksTap)
+            .disabled((!hasData && !isMonthLocked) || preparingSummaryRange != nil)
 
             traceLifeSliceFooter(snapshot: snapshot)
         }
@@ -2566,18 +2518,17 @@ struct StatsWebView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: height)
                     .clipped()
-                    .blur(radius: 18)
-                    .overlay(Color.white.opacity(0.16))
 
-                MemoryAttachmentThumbnail(
-                    imageData: anchor.imageData,
-                    imageReference: anchor.imageReference,
-                    height: height,
-                    cornerRadius: 0
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.04),
+                        Color.clear,
+                        AppColors.text.opacity(0.08),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
                 )
-                    .frame(maxWidth: .infinity)
-                    .frame(height: height)
-                    .clipped()
+                .allowsHitTesting(false)
             }
             .frame(maxWidth: .infinity)
             .frame(height: height)
@@ -2738,7 +2689,6 @@ struct StatsWebView: View {
 
     private func traceLifeSliceFooter(snapshot: TraceChapterSnapshot) -> some View {
         Button {
-            guard !traceLifeCardPagingBlocksTap else { return }
             openTraceDetail(for: snapshot.range)
         } label: {
             HStack(spacing: 8) {
@@ -2760,7 +2710,6 @@ struct StatsWebView: View {
             )
         }
         .buttonStyle(.plain)
-        .disabled(traceLifeCardPagingBlocksTap)
     }
 
     private func traceLifeSliceLabels(snapshot: TraceChapterSnapshot) -> [String] {
@@ -3306,11 +3255,6 @@ struct StatsWebView: View {
     private func traceChapterSnapshotCacheKey(items: [HomeItem], range: SummaryPlaybackRange) -> String {
         [
             range.rawValue,
-            selectedPeriod.rawValue,
-            useCustomRange ? "custom" : "preset",
-            "\(Int(customStartDate.timeIntervalSince1970))",
-            "\(Int(customEndDate.timeIntervalSince1970))",
-            selectedCategory?.rawValue ?? "all",
             hasMemberAccess ? "member" : "free",
             traceItemsSignature(items)
         ].joined(separator: "|")
@@ -4435,6 +4379,43 @@ struct StatsWebView: View {
         .traceGlassPanel(radius: 20, padding: 18)
     }
 
+    private var traceLifeRangeKicker: some View {
+        HStack(spacing: 4) {
+            traceLifeRangeTab("本周", range: .week)
+            traceLifeRangeTab("本月", range: .month)
+        }
+        .padding(4)
+        .frame(height: 44)
+        .frame(maxWidth: .infinity)
+        .background(
+            Capsule(style: .continuous)
+                .fill(TraceColors.surfaceMuted)
+        )
+        .padding(.horizontal, 18)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("痕迹时间范围")
+    }
+
+    private func traceLifeRangeTab(_ title: String, range: SummaryPlaybackRange) -> some View {
+        let isSelected = traceLifeCardRange == range
+        return Button {
+            setTraceLifeCardRange(range)
+        } label: {
+            Text(title)
+                .font(.system(size: 15, weight: isSelected ? .bold : .medium))
+                .foregroundStyle(isSelected ? TraceColors.primaryText : TraceColors.secondaryText)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(isSelected ? Color.white.opacity(0.92) : Color.clear)
+                        .shadow(color: isSelected ? AppColors.subtext.opacity(0.06) : .clear, radius: 8, x: 0, y: 3)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(isSelected ? "已选中" : "")
+    }
+
     private func traceInsightThemeTitle(_ theme: LifeInsightTheme) -> String {
         switch theme {
         case .forming: return "线索还在形成"
@@ -5003,7 +4984,8 @@ struct StatsWebView: View {
 
     private func openTraceDetail(for range: SummaryPlaybackRange) {
         useCustomRange = false
-        selectedPeriod = range == .week ? .week : .month
+        traceLifeCardRange = range
+        selectedPeriod = TraceRangeContextPolicy.period(for: range)
         selectedCategory = nil
         traceInlineEditingItemID = nil
         traceSwipedItemID = nil
@@ -5017,6 +4999,7 @@ struct StatsWebView: View {
         handledOpenTraceRequestID = openTraceRequestID
         useCustomRange = false
         selectedPeriod = .week
+        traceLifeCardRange = .week
         selectedCategory = nil
         withAnimation(traceEditSpring) {
             traceViewMode = .life

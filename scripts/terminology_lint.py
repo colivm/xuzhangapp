@@ -39,7 +39,7 @@ STRING_LITERAL = re.compile(r'"(?:\\.|[^"\\])*"')
 REQUIRED_CANONICAL_COPY = {
     "PRODUCT_TERMINOLOGY_v1.md": ("今日回放", "周记", "月章", "生活线索", "AI 指令台", "继续问", "月度整理"),
     "NativeDemoApp/Services/PlaybackService.swift": ('let title = "周记"', 'let title = "月章"'),
-    "NativeDemoApp/Views/InsightWebView.swift": ('navigationTitle("AI 指令台")', "继续问这一周", "生成一次月度整理"),
+    "NativeDemoApp/Views/InsightWebView.swift": ('navigationTitle("AI 指令台")', "查记录", "做对比", "补遗漏"),
     "NativeDemoApp/Views/SummaryPlaybackSheet.swift": ('? "周记" : "月章"', 'Text("继续问")'),
 }
 

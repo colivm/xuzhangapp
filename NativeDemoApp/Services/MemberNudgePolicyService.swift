@@ -15,13 +15,38 @@ struct MemberNudgeState: Codable, Equatable {
     var dailyDayKey: String
     var dailyCount: Int
     var sceneCooldownUntil: [String: Date]
+    var automaticCooldownUntil: Date?
 
     static let empty = MemberNudgeState(
         lastShownAt: nil,
         dailyDayKey: "",
         dailyCount: 0,
-        sceneCooldownUntil: [:]
+        sceneCooldownUntil: [:],
+        automaticCooldownUntil: nil
     )
+}
+
+enum MemberNudgePresentationSource: Equatable {
+    case automatic
+    case explicitUserAction
+}
+
+enum MemberNudgeEligibilityPolicy {
+    static func canPresent(
+        source: MemberNudgePresentationSource,
+        scene: String,
+        policy: MemberNudgePolicy,
+        state: MemberNudgeState,
+        now: Date
+    ) -> Bool {
+        if source == .explicitUserAction { return true }
+
+        let today = MemberNudgePolicyService.dayKey(for: now)
+        if state.dailyDayKey == today, state.dailyCount >= policy.prodDailyLimit { return false }
+        if let until = state.automaticCooldownUntil, until > now { return false }
+        if let until = state.sceneCooldownUntil[scene], until > now { return false }
+        return true
+    }
 }
 
 final class MemberNudgePolicyService {
@@ -50,19 +75,24 @@ final class MemberNudgePolicyService {
         saveState(.empty)
     }
 
-    func canShow(scene: String) -> Bool {
+    func canShow(
+        scene: String,
+        source: MemberNudgePresentationSource = .automatic,
+        now: Date = Date()
+    ) -> Bool {
         let policy = loadPolicy()
         let state = loadState()
-        let now = Date()
-        let today = Self.dayKey(for: now)
-        if state.dailyDayKey == today, state.dailyCount >= policy.prodDailyLimit { return false }
-        if let until = state.sceneCooldownUntil[scene], until > now { return false }
-        return true
+        return MemberNudgeEligibilityPolicy.canPresent(
+            source: source,
+            scene: scene,
+            policy: policy,
+            state: state,
+            now: now
+        )
     }
 
-    func markShown(scene: String) {
+    func markShown(scene: String, now: Date = Date()) {
         var state = loadState()
-        let now = Date()
         state.lastShownAt = now
         let today = Self.dayKey(for: now)
         if state.dailyDayKey == today {
@@ -74,11 +104,13 @@ final class MemberNudgePolicyService {
         saveState(state)
     }
 
-    func markDismissed(scene: String) {
+    func markDismissed(scene: String, now: Date = Date()) {
         let policy = loadPolicy()
         var state = loadState()
         let cooldownDays = max(1, policy.prodSceneCooldownDays)
-        state.sceneCooldownUntil[scene] = Calendar.current.date(byAdding: .day, value: cooldownDays, to: Date())
+        let cooldownUntil = Calendar.current.date(byAdding: .day, value: cooldownDays, to: now)
+        state.sceneCooldownUntil[scene] = cooldownUntil
+        state.automaticCooldownUntil = cooldownUntil
         saveState(state)
     }
 
@@ -87,7 +119,7 @@ final class MemberNudgePolicyService {
         UserDefaults.standard.set(data, forKey: stateKey)
     }
 
-    private static func dayKey(for date: Date) -> String {
+    static func dayKey(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)

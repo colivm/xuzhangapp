@@ -111,6 +111,172 @@ final class InteractionStateRegressionTests: XCTestCase {
         XCTAssertEqual(result.state.strongPromptCount, 1)
     }
 
+    func testHomeJourneyActionPrioritizesUnfinishedWorkThenPlaybackAndTrace() {
+        var snapshot = HomeJourneySnapshot(
+            hasOCRDrafts: true,
+            hasManualDraft: true,
+            todayRecordCount: 2,
+            hasUnplayedTodayRecords: true,
+            weekTraceReady: true,
+            monthTraceReady: true
+        )
+        XCTAssertEqual(HomeJourneyActionPolicy.primaryAction(for: snapshot), .resumeOCR)
+
+        snapshot.hasOCRDrafts = false
+        XCTAssertEqual(HomeJourneyActionPolicy.primaryAction(for: snapshot), .continueManualDraft)
+
+        snapshot.hasManualDraft = false
+        XCTAssertEqual(HomeJourneyActionPolicy.primaryAction(for: snapshot), .todayPlayback)
+
+        snapshot.hasUnplayedTodayRecords = false
+        XCTAssertEqual(HomeJourneyActionPolicy.primaryAction(for: snapshot), .weekTrace)
+
+        snapshot.weekTraceReady = false
+        XCTAssertEqual(HomeJourneyActionPolicy.primaryAction(for: snapshot), .monthTrace)
+    }
+
+    func testHomeJourneyActionKeepsRecordingAvailableAsSecondaryAction() {
+        XCTAssertEqual(
+            HomeJourneyActionPolicy.secondaryAction(for: .todayPlayback, hasTodayRecords: true),
+            .continueRecording
+        )
+        XCTAssertEqual(
+            HomeJourneyActionPolicy.secondaryAction(for: .record, hasTodayRecords: false),
+            .resumeOCR
+        )
+    }
+
+    func testNewUserProgressionUnlocksOneNextStageWithoutEmptyReviewSelling() {
+        var snapshot = NewUserProgressionSnapshot(
+            totalRecordCount: 0,
+            hasUnplayedTodayRecords: false,
+            weekRecordCount: 0,
+            monthRecordCount: 0,
+            dayOfMonth: 16,
+            canPlayWeek: true,
+            canPlayMonth: true,
+            hasCompletedCurrentWeekPlayback: false,
+            hasCompletedCurrentMonthPlayback: false
+        )
+        XCTAssertEqual(NewUserProgressionPolicy.stage(for: snapshot), .recordFirstEntry)
+        XCTAssertFalse(NewUserProgressionPolicy.allowsReviewTasks(totalRecordCount: 0))
+
+        snapshot.totalRecordCount = 1
+        snapshot.hasUnplayedTodayRecords = true
+        XCTAssertEqual(NewUserProgressionPolicy.stage(for: snapshot), .todayPlayback)
+
+        snapshot.hasUnplayedTodayRecords = false
+        snapshot.totalRecordCount = 3
+        snapshot.weekRecordCount = 3
+        XCTAssertEqual(NewUserProgressionPolicy.stage(for: snapshot), .weekTrace)
+
+        snapshot.weekRecordCount = 0
+        snapshot.monthRecordCount = 3
+        snapshot.dayOfMonth = 25
+        XCTAssertEqual(NewUserProgressionPolicy.stage(for: snapshot), .monthChapter)
+
+        snapshot.monthRecordCount = 0
+        snapshot.hasCompletedCurrentWeekPlayback = true
+        XCTAssertEqual(NewUserProgressionPolicy.stage(for: snapshot), .reviewTasks)
+        XCTAssertEqual(
+            HomeJourneyActionPolicy.primaryAction(
+                for: HomeJourneySnapshot(
+                    hasOCRDrafts: false,
+                    hasManualDraft: false,
+                    todayRecordCount: 0,
+                    hasUnplayedTodayRecords: false,
+                    weekTraceReady: false,
+                    monthTraceReady: false
+                ),
+                progressionStage: .reviewTasks
+            ),
+            .review
+        )
+    }
+
+    func testRecordFlowKeepsOCRAndOptionalDetailsOutOfThePrimarySavePath() {
+        XCTAssertTrue(RecordFlowVisibilityPolicy.showsOCRSideDoor(hasAmountDraft: false))
+        XCTAssertFalse(RecordFlowVisibilityPolicy.showsOCRSideDoor(hasAmountDraft: true))
+        XCTAssertFalse(RecordFlowVisibilityPolicy.showsOptionalDetails(hasValidAmount: false))
+        XCTAssertTrue(RecordFlowVisibilityPolicy.showsOptionalDetails(hasValidAmount: true))
+    }
+
+    func testTraceRangeContextUsesOneWeekMonthSource() {
+        XCTAssertEqual(TraceRangeContextPolicy.period(for: .week), .week)
+        XCTAssertEqual(TraceRangeContextPolicy.period(for: .month), .month)
+        XCTAssertEqual(TraceRangeContextPolicy.lifeRange(for: .week), .week)
+        XCTAssertEqual(TraceRangeContextPolicy.lifeRange(for: .month), .month)
+        XCTAssertNil(TraceRangeContextPolicy.lifeRange(for: .year))
+    }
+
+    func testReviewTaskIntentsMapToSupportedExplicitCommands() {
+        XCTAssertEqual(ReviewTaskIntent.allCases.count, 3)
+        XCTAssertTrue(ReviewTaskIntent.query.presetCommand.contains("过去三天"))
+        XCTAssertTrue(ReviewTaskIntent.compare.presetCommand.contains("本周和上周"))
+        XCTAssertTrue(ReviewTaskIntent.backfill.presetCommand.contains("补记"))
+    }
+
+    func testPlaybackMaturityAndCompletionUseOnePrimaryRule() {
+        XCTAssertFalse(PlaybackMaturityPolicy.weekIsReady(recordCount: 2))
+        XCTAssertTrue(PlaybackMaturityPolicy.weekIsReady(recordCount: 3))
+        XCTAssertFalse(PlaybackMaturityPolicy.monthIsReady(recordCount: 8, dayOfMonth: 24))
+        XCTAssertTrue(PlaybackMaturityPolicy.monthIsReady(recordCount: 3, dayOfMonth: 25))
+        XCTAssertEqual(PlaybackCompletionPolicy.primaryAction(isMember: true), .dismiss)
+        XCTAssertEqual(PlaybackCompletionPolicy.primaryAction(isMember: false), .showMemberPricing)
+        XCTAssertEqual(PlaybackCompletionPolicy.primaryTitle(isMember: true, memberTitle: nil), "完成")
+    }
+
+    func testAutomaticMemberNudgesRespectBudgetWhileExplicitEntriesStayImmediate() throws {
+        let now = Date(timeIntervalSince1970: 1_752_643_200)
+        let policy = MemberNudgePolicy(prodDailyLimit: 1, prodSceneCooldownDays: 7)
+        let dailyLimitedState = MemberNudgeState(
+            lastShownAt: now,
+            dailyDayKey: MemberNudgePolicyService.dayKey(for: now),
+            dailyCount: 1,
+            sceneCooldownUntil: [:],
+            automaticCooldownUntil: nil
+        )
+
+        XCTAssertFalse(MemberNudgeEligibilityPolicy.canPresent(
+            source: .automatic,
+            scene: "share_success",
+            policy: policy,
+            state: dailyLimitedState,
+            now: now
+        ))
+        XCTAssertTrue(MemberNudgeEligibilityPolicy.canPresent(
+            source: .explicitUserAction,
+            scene: "locked_month_chapter",
+            policy: policy,
+            state: dailyLimitedState,
+            now: now
+        ))
+
+        var dismissedState = MemberNudgeState.empty
+        dismissedState.automaticCooldownUntil = now.addingTimeInterval(7 * 24 * 60 * 60)
+        XCTAssertFalse(MemberNudgeEligibilityPolicy.canPresent(
+            source: .automatic,
+            scene: "ai_monthly",
+            policy: policy,
+            state: dismissedState,
+            now: now
+        ))
+
+        struct LegacyState: Encodable {
+            let lastShownAt: Date?
+            let dailyDayKey: String
+            let dailyCount: Int
+            let sceneCooldownUntil: [String: Date]
+        }
+        let legacyData = try JSONEncoder().encode(LegacyState(
+            lastShownAt: nil,
+            dailyDayKey: "",
+            dailyCount: 0,
+            sceneCooldownUntil: [:]
+        ))
+        XCTAssertNil(try JSONDecoder().decode(MemberNudgeState.self, from: legacyData).automaticCooldownUntil)
+    }
+
     func testMemberLoginContinuationResumesSelectedPlanExactlyOnce() {
         var state = MemberLoginContinuationState()
 

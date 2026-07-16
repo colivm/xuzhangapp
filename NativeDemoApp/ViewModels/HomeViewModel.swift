@@ -80,8 +80,6 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var syncStatusMessage: String?
     @Published private(set) var isSyncingCloudLedger: Bool = false
     @Published private(set) var isRestoringLocalBackup: Bool = false
-    @Published private(set) var memberNudgeCopy: MemberCtaCopy?
-    @Published private(set) var activeMemberNudgeScene: MemberFlowScene?
     @Published private(set) var latestPlayback: PlaybackSnapshot?
     @Published private(set) var latestActionCard: ActionCardData?
     @Published private(set) var activeRouteGuidance: PlaybackRouteGuidance?
@@ -159,9 +157,7 @@ final class HomeViewModel: ObservableObject {
     private let categoryRecommendService = CategoryRecommendService()
     private let recordPrefillService = RecordPrefillService()
     private let petCompanionService = PetCompanionService.shared
-    private let nudgePolicyService = MemberNudgePolicyService()
     private let playbackService = PlaybackService()
-    private let memberFlowService = MemberFlowService()
     private let routeQuotaStore = SummaryPlaybackQuotaStore()
     private let dailyQuotaStore = DailyFeatureQuotaStore()
     private static let routeGuidanceHandledDefaultsKey = "route_guidance_handled_v1"
@@ -1113,7 +1109,6 @@ final class HomeViewModel: ObservableObject {
             startedAtUptime: performanceStartedAt,
             itemCount: input.items.count
         )
-        triggerMemberNudge(scene: .aiMonthly)
         return report
     }
 
@@ -1990,7 +1985,6 @@ final class HomeViewModel: ObservableObject {
 
     func markWeeklyShareGenerated() {
         analyticsService.track(.weeklyShareCardGenerated)
-        triggerMemberNudge(scene: .shareSuccess)
     }
 
     func markWeeklyRhythmReviewed() {
@@ -1999,7 +1993,6 @@ final class HomeViewModel: ObservableObject {
 
     func markPlaybackCompleted() {
         analyticsService.track(.todayPlaybackCompleted, props: [.progressBucket: "80_plus"])
-        triggerMemberNudge(scene: .playbackComplete)
     }
 
     func markTodayPlaybackPromptShown(_ prompt: String) {
@@ -2074,43 +2067,6 @@ final class HomeViewModel: ObservableObject {
             itemCount: itemCount,
             outcome: outcome
         )
-    }
-
-    func triggerMemberNudge(scene: MemberFlowScene) {
-        guard !LocalStore.loadSettings().hasMemberAccess else {
-            memberNudgeCopy = nil
-            activeMemberNudgeScene = nil
-            return
-        }
-        guard nudgePolicyService.canShow(scene: scene.rawValue) else { return }
-        nudgePolicyService.markShown(scene: scene.rawValue)
-        memberNudgeCopy = memberFlowService.ctaCopy(scene: scene)
-        activeMemberNudgeScene = scene
-        analyticsService.track(
-            .memberCTAExposed,
-            props: [.scene: scene.rawValue, .channel: "ios_home"]
-        )
-    }
-
-    func dismissMemberNudge(scene: MemberFlowScene) {
-        nudgePolicyService.markDismissed(scene: scene.rawValue)
-        memberNudgeCopy = nil
-        activeMemberNudgeScene = nil
-        analyticsService.track(
-            .memberCTADismissed,
-            props: [.scene: scene.rawValue, .channel: "ios_home"]
-        )
-    }
-
-    func handleMemberNudgePrimaryAction() {
-        guard let scene = activeMemberNudgeScene else { return }
-        analyticsService.track(
-            .memberCTAClicked,
-            props: [.scene: scene.rawValue, .channel: "ios_home"]
-        )
-        memberNudgeCopy = nil
-        activeMemberNudgeScene = nil
-        syncStatusMessage = "已为你打开会员路径：请到设置页完成开通。"
     }
 
     func consumeRouteGuidance(_ guidance: PlaybackRouteGuidance? = nil) {

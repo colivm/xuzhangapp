@@ -136,6 +136,205 @@ final class PostSavePromptBudgetStore {
     }
 }
 
+enum HomeJourneyAction: Equatable {
+    case resumeOCR
+    case continueManualDraft
+    case record
+    case todayPlayback
+    case weekTrace
+    case monthTrace
+    case review
+    case continueRecording
+}
+
+enum NewUserProgressionStage: Equatable {
+    case recordFirstEntry
+    case todayPlayback
+    case continueRecording
+    case weekTrace
+    case monthChapter
+    case reviewTasks
+}
+
+struct NewUserProgressionSnapshot: Equatable {
+    var totalRecordCount: Int
+    var hasUnplayedTodayRecords: Bool
+    var weekRecordCount: Int
+    var monthRecordCount: Int
+    var dayOfMonth: Int
+    var canPlayWeek: Bool
+    var canPlayMonth: Bool
+    var hasCompletedCurrentWeekPlayback: Bool
+    var hasCompletedCurrentMonthPlayback: Bool
+}
+
+enum NewUserProgressionPolicy {
+    static func stage(for snapshot: NewUserProgressionSnapshot) -> NewUserProgressionStage {
+        if snapshot.totalRecordCount == 0 { return .recordFirstEntry }
+        if snapshot.hasUnplayedTodayRecords { return .todayPlayback }
+        if PlaybackMaturityPolicy.weekIsReady(recordCount: snapshot.weekRecordCount),
+           snapshot.canPlayWeek,
+           !snapshot.hasCompletedCurrentWeekPlayback {
+            return .weekTrace
+        }
+        if PlaybackMaturityPolicy.monthIsReady(
+            recordCount: snapshot.monthRecordCount,
+            dayOfMonth: snapshot.dayOfMonth
+        ), snapshot.canPlayMonth, !snapshot.hasCompletedCurrentMonthPlayback {
+            return .monthChapter
+        }
+        if snapshot.hasCompletedCurrentWeekPlayback || snapshot.hasCompletedCurrentMonthPlayback {
+            return .reviewTasks
+        }
+        return .continueRecording
+    }
+
+    static func allowsReviewTasks(totalRecordCount: Int) -> Bool {
+        totalRecordCount > 0
+    }
+}
+
+struct HomeJourneySnapshot: Equatable {
+    var hasOCRDrafts: Bool
+    var hasManualDraft: Bool
+    var todayRecordCount: Int
+    var hasUnplayedTodayRecords: Bool
+    var weekTraceReady: Bool
+    var monthTraceReady: Bool
+}
+
+enum HomeJourneyActionPolicy {
+    static func primaryAction(
+        for snapshot: HomeJourneySnapshot,
+        progressionStage: NewUserProgressionStage? = nil
+    ) -> HomeJourneyAction {
+        if snapshot.hasOCRDrafts { return .resumeOCR }
+        if snapshot.hasManualDraft { return .continueManualDraft }
+        if let progressionStage {
+            switch progressionStage {
+            case .recordFirstEntry: return .record
+            case .todayPlayback: return .todayPlayback
+            case .continueRecording: return .continueRecording
+            case .weekTrace: return .weekTrace
+            case .monthChapter: return .monthTrace
+            case .reviewTasks: return .review
+            }
+        }
+        if snapshot.todayRecordCount == 0 { return .record }
+        if snapshot.hasUnplayedTodayRecords { return .todayPlayback }
+        if snapshot.weekTraceReady { return .weekTrace }
+        if snapshot.monthTraceReady { return .monthTrace }
+        return .continueRecording
+    }
+
+    static func secondaryAction(
+        for primary: HomeJourneyAction,
+        hasTodayRecords: Bool
+    ) -> HomeJourneyAction? {
+        switch primary {
+        case .resumeOCR, .continueManualDraft:
+            return hasTodayRecords ? .todayPlayback : .record
+        case .record:
+            return .resumeOCR
+        case .todayPlayback, .weekTrace, .monthTrace, .review:
+            return .continueRecording
+        case .continueRecording:
+            return hasTodayRecords ? .todayPlayback : nil
+        }
+    }
+}
+
+enum RecordFlowVisibilityPolicy {
+    static func showsOCRSideDoor(hasAmountDraft: Bool) -> Bool {
+        !hasAmountDraft
+    }
+
+    static func showsOptionalDetails(hasValidAmount: Bool) -> Bool {
+        hasValidAmount
+    }
+}
+
+enum TraceRangeContextPolicy {
+    static func period(for range: SummaryPlaybackRange) -> StatsPeriod {
+        range == .week ? .week : .month
+    }
+
+    static func lifeRange(for period: StatsPeriod) -> SummaryPlaybackRange? {
+        switch period {
+        case .week: return .week
+        case .month: return .month
+        case .year: return nil
+        }
+    }
+}
+
+enum ReviewTaskIntent: String, CaseIterable, Hashable {
+    case query
+    case compare
+    case backfill
+
+    var title: String {
+        switch self {
+        case .query: return "查记录"
+        case .compare: return "做对比"
+        case .backfill: return "补遗漏"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .query: return "按时间、分类或备注查账"
+        case .compare: return "比较两段时间的变化"
+        case .backfill: return "先生成预览，确认后保存"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .query: return "magnifyingglass"
+        case .compare: return "arrow.left.arrow.right"
+        case .backfill: return "plus.rectangle.on.rectangle"
+        }
+    }
+
+    var presetCommand: String {
+        switch self {
+        case .query: return "帮我看一下过去三天餐饮类的消费"
+        case .compare: return "对比本周和上周的消费"
+        case .backfill: return "补记今天通勤"
+        }
+    }
+}
+
+enum PlaybackMaturityPolicy {
+    static let minimumWeekRecordCount = 3
+    static let minimumMonthRecordCount = 3
+    static let monthSurfaceStartDay = 25
+
+    static func weekIsReady(recordCount: Int) -> Bool {
+        recordCount >= minimumWeekRecordCount
+    }
+
+    static func monthIsReady(recordCount: Int, dayOfMonth: Int) -> Bool {
+        recordCount >= minimumMonthRecordCount && dayOfMonth >= monthSurfaceStartDay
+    }
+}
+
+enum PlaybackCompletionPrimaryAction: Equatable {
+    case dismiss
+    case showMemberPricing
+}
+
+enum PlaybackCompletionPolicy {
+    static func primaryAction(isMember: Bool) -> PlaybackCompletionPrimaryAction {
+        isMember ? .dismiss : .showMemberPricing
+    }
+
+    static func primaryTitle(isMember: Bool, memberTitle: String?) -> String {
+        isMember ? "完成" : (memberTitle ?? "了解会员")
+    }
+}
+
 enum MembershipQuotaBaseline {
     static let monthlyInsightTrialTotal = 5
 

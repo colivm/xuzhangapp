@@ -2254,16 +2254,17 @@ struct SummaryPlaybackSheet: View {
     }
 
     private var primaryDoneTitle: String {
-        if isMember {
-            return playback.range == .week ? "下周再来" : "再看一遍"
-        }
-        return memberPitch?.cta ?? "了解会员"
+        PlaybackCompletionPolicy.primaryTitle(
+            isMember: isMember,
+            memberTitle: memberPitch?.cta
+        )
     }
 
     private func handlePrimaryDoneAction() {
-        if isMember {
-            playback.range == .month ? restartPlayback() : dismiss()
-        } else {
+        switch PlaybackCompletionPolicy.primaryAction(isMember: isMember) {
+        case .dismiss:
+            dismiss()
+        case .showMemberPricing:
             if let onShowMemberPricing {
                 onShowMemberPricing()
             } else {

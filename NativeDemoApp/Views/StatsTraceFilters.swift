@@ -273,6 +273,9 @@ extension StatsWebView {
         withTransaction(transaction) {
             useCustomRange = false
             selectedPeriod = period
+            if let range = TraceRangeContextPolicy.lifeRange(for: period) {
+                traceLifeCardRange = range
+            }
             showTraceCustomDatePanel = false
             traceInlineEditingItemID = nil
             traceSwipedItemID = nil

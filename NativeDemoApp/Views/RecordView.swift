@@ -985,6 +985,7 @@ struct RecordView: View {
     private func openNoteEditor() {
         dismissKeyboard()
         withAnimation(.easeInOut(duration: 0.2)) {
+            recordDetailsExpanded = true
             noteEditorExpanded = true
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
@@ -2037,18 +2038,11 @@ struct RecordView: View {
                 saveRow
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
-            ocrSideDoor
-            if hasValidAmount {
-                recordDateQuietActions
-                if datePanelExpanded {
-                    WarmRecordDatePanel(selection: recordDateBinding) {
-                        dismissKeyboard()
-                    }
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
+            if RecordFlowVisibilityPolicy.showsOCRSideDoor(hasAmountDraft: hasAmountDraft) {
+                ocrSideDoor
             }
-            if hasValidAmount {
-                expandedDetails
+            if RecordFlowVisibilityPolicy.showsOptionalDetails(hasValidAmount: hasValidAmount) {
+                recordDetailsFold
             }
         }
     }
@@ -2079,6 +2073,7 @@ struct RecordView: View {
             onChangeCategory: {
                 dismissKeyboard()
                 withAnimation(.easeInOut(duration: 0.2)) {
+                    recordDetailsExpanded = true
                     categoryGridExpanded = true
                 }
             },
@@ -2192,6 +2187,12 @@ struct RecordView: View {
 
                 if categoryGridExpanded { categorySection }
                 if noteEditorExpanded { noteSection }
+                if datePanelExpanded {
+                    WarmRecordDatePanel(selection: recordDateBinding) {
+                        dismissKeyboard()
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
         }
     }
@@ -2209,6 +2210,11 @@ struct RecordView: View {
                         focusedField = .note
                     }
                 }
+            }
+        }
+        detailToggleButton("改时间", isActive: datePanelExpanded) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
+                datePanelExpanded.toggle()
             }
         }
     }

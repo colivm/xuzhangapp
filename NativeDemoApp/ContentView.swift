@@ -930,13 +930,21 @@ struct ContentView: View {
         ZStack {
             switch selectedTab {
             case .today:
-                HomeView(onQuickRecord: { selectTab(.record) },
+                HomeView(onQuickRecord: { mode in
+                             recordTabSession.selectedEntryMode = mode
+                             selectTab(.record)
+                         },
                          onNavigateStats: { selectTab(.stats) },
                          onNavigateWeeklyTrace: {
                              statsTraceOpenRequestID = UUID()
                              selectTab(.stats)
                          },
-                         onNavigateSettings: { selectTab(.settings) },
+                          onNavigateMonthlyTrace: {
+                              statsTabState.openLifeChapter(.month)
+                              selectTab(.stats)
+                          },
+                          onNavigateInsight: { selectTab(.insight) },
+                          onNavigateSettings: { selectTab(.settings) },
                          onShowMemberPricing: {
                              showMemberPricingSheet(entryContext: .playbackQuota)
                          },
@@ -980,6 +988,10 @@ struct ContentView: View {
                 )
             case .insight:
                 InsightWebView(
+                    onStartRecording: {
+                        recordTabSession.selectedEntryMode = .manual
+                        selectTab(.record)
+                    },
                     onNavigateSettings: { selectTab(.settings) },
                     onShowMemberPricing: {
                         showMemberPricingSheet(entryContext: .aiCommand)

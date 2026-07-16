@@ -57,6 +57,7 @@ struct InsightWebView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    var onStartRecording: (() -> Void)? = nil
     var onNavigateSettings: (() -> Void)? = nil
     var onShowMemberPricing: (() -> Void)? = nil
     var onOpenAppearanceSettings: (() -> Void)? = nil
@@ -355,10 +356,17 @@ struct InsightWebView: View {
         return hasher.finalize()
     }
 
+    private var allowsReviewTasks: Bool {
+        let hasReviewableRecord = homeViewModel.items.contains { $0.amount > 0 && $0.draftMeta == nil }
+        return NewUserProgressionPolicy.allowsReviewTasks(totalRecordCount: hasReviewableRecord ? 1 : 0)
+    }
+
     var body: some View {
         ZStack {
             ScrollView {
-                if let preparedInsightSnapshot {
+                if !allowsReviewTasks {
+                    insightEmptyLedgerState
+                } else if let preparedInsightSnapshot {
                     insightContent(snapshot: preparedInsightSnapshot)
                         .transition(.opacity)
                 } else {
@@ -477,6 +485,10 @@ struct InsightWebView: View {
     }
 
     private func prepareInsightIfNeeded() {
+        guard allowsReviewTasks else {
+            resetInsightPreparationForEmptyLedger()
+            return
+        }
         guard insightSnapshotNeedsRefresh || preparedInsightSnapshot == nil else {
             insightPreparationTask?.cancel()
             insightPreparationTask = nil
@@ -490,6 +502,10 @@ struct InsightWebView: View {
     }
 
     private func scheduleInsightPreparation() {
+        guard allowsReviewTasks else {
+            resetInsightPreparationForEmptyLedger()
+            return
+        }
         insightPreparationTask?.cancel()
         let requestID = insightPreparationGate.begin()
         let performanceStartedAt = ProcessInfo.processInfo.systemUptime
@@ -585,13 +601,13 @@ struct InsightWebView: View {
                 .font(.footnote.weight(.bold))
                 .foregroundStyle(AppColors.subtext)
 
-            Text("从这一周继续查、继续比，或补上遗漏的记录")
+            Text("先选一件要完成的事")
                 .font(.title3.weight(.semibold))
                 .lineSpacing(5)
                 .foregroundStyle(AppColors.text)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("完整的周记和月章统一放在「痕迹」；这里不再重复铺一份周记。")
+            Text("这里负责查记录、做对比和补遗漏；完整周记和月章统一放在「痕迹」。")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(AppColors.subtext)
                 .fixedSize(horizontal: false, vertical: true)
@@ -619,13 +635,97 @@ struct InsightWebView: View {
 
     @ViewBuilder
     private var insightContinueQuestionActions: some View {
-        quietTextButton("继续问这一周 →") {
-            openWeeklyAICommand()
+        ForEach(ReviewTaskIntent.allCases, id: \.self) { intent in
+            reviewTaskButton(intent)
         }
+    }
 
-        quietTextButton("看本周痕迹") {
-            onOpenTrace?(.week)
+    private func resetInsightPreparationForEmptyLedger() {
+        insightPreparationTask?.cancel()
+        insightPreparationTask = nil
+        insightUpdatePillTask?.cancel()
+        insightUpdatePillTask = nil
+        insightPreparationGate.invalidate()
+        preparedInsightSnapshot = nil
+        insightSnapshotNeedsRefresh = true
+        showsInsightUpdatePill = false
+        isPreparingInsightPage = false
+    }
+
+    private var insightEmptyLedgerState: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "text.book.closed.fill")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(AppColors.accentDark)
+                .frame(width: 72, height: 72)
+                .background(AppColors.accent.opacity(0.12), in: Circle())
+
+            VStack(spacing: 8) {
+                Text("先记下一笔，再来复盘")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(AppColors.text)
+                Text("有了真实记录后，这里才会开放查记录、做对比和补遗漏；现在先把第一笔生活记下来。")
+                    .font(.subheadline)
+                    .foregroundStyle(AppColors.subtext)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Button {
+                onStartRecording?()
+            } label: {
+                Label("去记一笔", systemImage: "plus.circle.fill")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .background(AppColors.accent, in: Capsule(style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(onStartRecording == nil)
         }
+        .padding(24)
+        .paperChapterPanel(radius: 24, padding: 20)
+        .padding(.horizontal, 16)
+        .padding(.top, 36)
+        .frame(maxWidth: 430)
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func reviewTaskButton(_ intent: ReviewTaskIntent) -> some View {
+        Button {
+            openReviewTask(intent)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: intent.systemImage)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(AppColors.accentDark)
+                    .frame(width: 34, height: 34)
+                    .background(AppColors.accent.opacity(0.10), in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(intent.title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(AppColors.text)
+                    Text(intent.subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(AppColors.subtext)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(AppColors.subtext.opacity(0.70))
+            }
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+            .padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .fill(Color.white.opacity(0.55))
+            )
+        }
+        .buttonStyle(.plain)
+        .minimumTapTarget()
     }
 
     private var insightChapterFootnote: some View {
@@ -644,11 +744,9 @@ struct InsightWebView: View {
         .padding(.bottom, 10)
     }
 
-    private func openWeeklyAICommand() {
+    private func openReviewTask(_ intent: ReviewTaskIntent) {
+        aiCommandText = intent.presetCommand
         showAICommandSheet = true
-        if aiCommandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            aiCommandText = "帮我看看最近这段生活，整理生活节奏、变化和可以回看的细节。"
-        }
     }
 
     @ViewBuilder
@@ -700,18 +798,18 @@ struct InsightWebView: View {
 
     private var insightNextChapter: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("按范围继续")
+            Text("完整章节")
                 .font(.footnote.weight(.bold))
                 .foregroundStyle(AppColors.subtext)
 
             Button {
-                showMonthlyInsightSheet = true
+                onOpenTrace?(.week)
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("继续问这个月")
+                    Text("本周")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(AppColors.subtext)
-                    Text("生成一次月度整理 →")
+                    Text("去痕迹看本周完整章节 →")
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(AppColors.accent.opacity(0.82))
                 }
@@ -732,26 +830,21 @@ struct InsightWebView: View {
             Button {
                 onOpenTrace?(.month)
             } label: {
-                Text("去痕迹看本月完整章节 →")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(AppColors.subtext)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                showTodayInsightSheet = true
-                Task {
-                    await homeViewModel.refreshTodayInsightIfNeeded(
-                        userName: settingsViewModel.displayName,
-                        settings: settingsViewModel.settings
-                    )
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("本月")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(AppColors.subtext)
+                    Text("去痕迹看本月完整章节 →")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AppColors.accent.opacity(0.82))
                 }
-            } label: {
-                Text("今日小记（可选） →")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(AppColors.subtext)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(AppColors.monthlyInsightBg.opacity(0.72))
+                )
             }
             .buttonStyle(.plain)
         }

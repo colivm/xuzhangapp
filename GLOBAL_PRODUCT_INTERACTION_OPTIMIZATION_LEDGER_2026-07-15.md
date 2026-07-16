@@ -1107,7 +1107,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 | 2026-07-16 | DATA-05 变化记录与图片增量保存 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 盘点 15 个持久化入口与 Repository 全量预处理路径 | 只改本地变化集持久化，不改 UI、同步冲突或字段含义 | DATA-05 |
 | 2026-07-16 | DATA-05 变化记录与图片增量保存 | `IN_PROGRESS` → `CODE_DONE` | `HomeViewModel.swift`、`LocalStore.swift`、`LedgerHomeItemsRepository.swift`、`LedgerMetadataStore.swift`、`LedgerImageStore.swift`、XCTest、静态门禁、本文档 | 变化集/定向图片门禁、五项基础回归、迁移样本与 SQLite schema 通过 | 正常写入只处理显式 upsert/delete；全量路径仅用于迁移和失败回退；待 Xcode/XCTest/大账本真机签收 | PERF-04 |
 | 2026-07-16 | PERF-04 真实尺寸照片性能门禁 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 审计现有 1×1 PNG 夹具与发布验证器 | 只新增真实照片 QA 资产、测量入口和证据格式 | PERF-04 |
-| 2026-07-16 | PERF-04 真实尺寸照片性能门禁 | `IN_PROGRESS` → `CODE_DONE` | 3 张 12MP JPEG、生成/验证脚本、Debug realistic profile、Xcode 资源、启动耗时事件、XCTest、真机矩阵、本文档 | 真实照片尺寸/字节/SHA、资源接线与全量 Windows 门禁通过 | REAL-01～05 仍为 `NOT_RUN`，等待最后 Xcode/iPhone/Instruments 统一签收 | INT-02 |
+| 2026-07-16 | PERF-04 真实尺寸照片性能门禁 | `IN_PROGRESS` → `CODE_DONE` | 3 张 12MP JPEG、生成/验证脚本、Debug realistic profile、Xcode 资源、启动耗时事件、XCTest、真机矩阵、本文档 | 真实照片尺寸/字节/SHA、资源接线与全量 Windows 门禁通过 | REAL-01～06 仍为 `NOT_RUN`，等待最后 Xcode/iPhone/Instruments 统一签收 | INT-02 |
 | 2026-07-16 | INT-02 保存后提示预算 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 审计首笔回放、照片、奖励、宠物的保存后触发顺序 | 不改资格、额度或用户主动入口，只限制强提示频率 | INT-02 |
 | 2026-07-16 | INT-02 保存后提示预算 | `IN_PROGRESS` → `CODE_DONE` | `InteractionStateModels.swift`、`ContentView.swift`、XCTest、静态门禁、真机矩阵、本文档 | 每日 2 次、20 分钟冷却、首笔/奖励/照片共享预算的回归通过 | 奖励仍待领取、照片仍可主动添加、回放仍明确点击才扣额；待真机节奏签收 | DATA-06 |
 | 2026-07-16 | DATA-06 本地备份导入与恢复 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 审计 `.xuzhangbackup` 导出结构、设置入口与变化集回滚能力 | 先只读校验/预览，再安全合并；不做无预览覆盖 | DATA-06 |
@@ -1142,3 +1142,63 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 | 2026-07-16 | ARCH-02 `ContentView` 编辑与日期组件拆分 | `IN_PROGRESS` → `CODE_DONE` | `ContentView.swift`、`WarmRecordDatePanel.swift`、`RecordEditSheet.swift`、Xcode 工程、静态门禁、本文档 | 两个完整顶层类型共 742 行迁出；`ContentView.swift` 2,401 → 1,653 行；唯一类型定义、跨页面调用和工程 Sources 接线通过；完整 Windows release gate 通过 | 根 Tab、Sheet、保存后提示队列、编辑/日期/照片/删除行为未改；待 Xcode 编译确认 | ARCH-03 |
 | 2026-07-16 | ARCH-FIX-02 回放候选闭包返回 | `NOT_STARTED` → `IN_PROGRESS` | `PlaybackService.swift`、本文档 | Xcode 报告 `Missing return in closure expected to return 'MemoryAnchorSelectionPolicy.Candidate'`，定位为多语句 `map` 闭包缺少显式返回 | 仅补 `return Candidate(...)`；回放候选内容、排序、去重、评分和图片按需加载保持不变 | ARCH-FIX-02 |
 | 2026-07-16 | ARCH-FIX-02 回放候选闭包返回 | `IN_PROGRESS` → `CODE_DONE` | `PlaybackService.swift`、`experience_static_check.ps1`、本文档 | `map` 闭包改为 `return Candidate(...)`；新增显式返回防回流检查；完整 Windows release gate 通过 | 当前 Windows 无 Swift/Xcode，需在 macOS 重新编译确认；未改变候选内容、评分、去重、排序或图片加载语义 | ARCH-03 |
+
+---
+
+## 12. 痕迹性能与产品逻辑收敛（2026-07-16）
+
+用户明确要求把痕迹页掉帧/误切原因修复与前述产品逻辑收敛合并执行。`ARCH-03` 保持 `NOT_STARTED`，本队列完成前不继续页面拆分。每次只允许一个任务为 `IN_PROGRESS`；编译错误或回归未清零前不得进入下一项。
+
+| 顺序 | ID | 任务 | 状态 | 冻结边界 |
+|---:|---|---|---|---|
+| 1 | PERF-05 | 痕迹页周/月切换、图片横滑与渲染掉帧 | `CODE_DONE` | 不改周/月内容、额度、照片选择和回放数据，只调整手势所有权、图片解码缓存与切换渲染 |
+| 2 | LOGIC-01 | 全局下一步动作与提示优先级 | `CODE_DONE` | 不改变保存数据、奖励/照片资格和回放额度 |
+| 3 | LOGIC-02 | 手动记账与 OCR 主链缩短 | `CODE_DONE` | 金额、分类、标题、日期保存含义和 OCR 确认规则不变 |
+| 4 | LOGIC-03 | 痕迹周/月时间范围与筛选语义统一 | `CODE_DONE` | 不改变周/月聚合、配额和历史数据 |
+| 5 | LOGIC-04 | 复盘任务化：查、比、补 | `CODE_DONE` | 不扩张 AI 事实能力；补记仍须预览确认 |
+| 6 | LOGIC-05 | 回放完成承接与内容成熟度 | `CODE_DONE` | 不改额度常量、扣次存储和章节事实来源 |
+| 7 | LOGIC-06 | 会员触发与登录续购节奏 | `CODE_DONE` | Product ID、价格、StoreKit 验证、账号绑定和一次性续接不变 |
+| 8 | LOGIC-07 | 新用户七日渐进路径 | `CODE_DONE` | 不增加强制引导页、不阻断免费手动记账 |
+| 9 | LOGIC-08 | 状态矩阵、全量回归与统一真机清单 | `CODE_DONE` | Windows 不冒充 Xcode/真机签收 |
+
+### 本轮统一产品状态优先级
+
+1. OCR 待整理内容。
+2. 未保存的手动草稿。
+3. 今天没有记录：记下一笔。
+4. 今天有新增且未回放：今日回放。
+5. 本周内容成熟且未回看：本周痕迹。
+6. 月末且本月章节未回看：本月章节。
+7. 当前周/月回放已完成：可选进入复盘查、比、补。
+8. 其余状态：继续记录，回看保持次入口。
+
+通勤补记、宠物消息、照片、奖励和系统会员提示不得覆盖前四级动作；用户主动点击的功能入口仍然可达。
+
+### 合并执行记录
+
+| 日期 | 任务 | 状态变化 | 修改文件 | 验证 | 结果/残留风险 | 下一项 |
+|---|---|---|---|---|---|---|
+| 2026-07-16 | PERF-05 痕迹页横滑与掉帧 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 代码审计确认整卡 `simultaneousGesture` 与内部横向 ScrollView 同时接收手势；图片在 SwiftUI `body` 中 `UIImage(data:)`；同图双实例并实时模糊；整卡移动弹簧切换 | 先解除手势竞争，再移出主线程解码、复用解码图并降低整卡过渡成本 | PERF-05 |
+| 2026-07-16 | PERF-05 痕迹页横滑与掉帧 | `IN_PROGRESS` → `CODE_DONE` | `StatsWebView.swift`、`MemoryAttachmentViews.swift`、静态门禁、本文档 | 整卡横滑改为显式本周/本月按钮；内部照片/关键词横滑不再触发时间切换；图片后台降采样解码并缓存 `UIImage`；移除同图双实例实时模糊；整卡过渡改为轻量淡入；完整 Windows release gate 通过 | 待 iPhone 用真实 12MP 照片确认 Core Animation hitch、横滑和内存；周/月内容、额度与照片数据未改 | LOGIC-01 |
+| 2026-07-16 | LOGIC-01 全局下一步动作 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 开始把 OCR 待整理、手动草稿、今日回放和周/月回看收敛为一个可测试的首页主动作 | 保留用户主动入口，不改保存、额度或系统提示资格 | LOGIC-01 |
+| 2026-07-16 | LOGIC-01 全局下一步动作 | `IN_PROGRESS` → `CODE_DONE` | `InteractionStateModels.swift`、`PlaybackSupportServices.swift`、`ContentView.swift`、`HomeView.swift`、XCTest、静态门禁、本文档 | 首页主动作按 OCR 待整理→手动草稿→今日回放→本周→本月→继续记录计算；次入口始终保留记录/回放；今日回放完成后记录账单签名，新增或编辑才再次提示；完整 Windows release gate 通过 | 回放次数、保存内容、奖励/照片资格未改；待 Xcode 与真机确认动态按钮布局和跨 Tab 恢复 | LOGIC-02 |
+| 2026-07-16 | LOGIC-02 手动记录与 OCR 主链 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 收拢保存前选择，只在尚未开始手动草稿时提示 OCR；分类、备注和日期统一为可选补充 | 保存含义、OCR 预览确认和草稿保留规则不变 | LOGIC-02 |
+| 2026-07-16 | LOGIC-02 手动记录与 OCR 主链 | `IN_PROGRESS` → `CODE_DONE` | `InteractionStateModels.swift`、`RecordView.swift`、XCTest、静态门禁、本文档 | 尚未输入金额时保留截图导入；进入手动草稿后不再用 OCR 抢主任务；分类、备注、日期统一收进“补充细节”；金额键盘和普通页面均保留保存入口；完整 Windows release gate 通过 | 保存失败、切换 OCR 和返回手动均保留草稿；保存字段与 OCR 确认规则未改；待真机确认小屏/大字下三项补充操作 | LOGIC-03 |
+| 2026-07-16 | LOGIC-03 痕迹时间范围统一 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 让生活章节、明细时间筛选和首页跳转共享本周/本月状态；自定义时间与分类只影响细查/线索 | 周/月聚合、额度与历史记录不变 | LOGIC-03 |
+| 2026-07-16 | LOGIC-03 痕迹时间范围统一 | `IN_PROGRESS` → `CODE_DONE` | `InteractionStateModels.swift`、`StatsWebView.swift`、`StatsTraceFilters.swift`、XCTest、静态门禁、本文档 | 本周/本月主卡、首页跳转和细查筛选共享同一映射；自定义时间与分类只刷新线索/明细，不再使生活章节缓存失效；完整 Windows release gate 通过 | 周/月聚合、额度和历史记录未改；待真机确认从细查返回主卡的范围一致和切换流畅度 | LOGIC-04 |
+| 2026-07-16 | LOGIC-04 复盘任务化 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 首屏收敛为查记录、做对比、补遗漏三类明确任务；完整周记/月章继续归痕迹 | 不扩张本机指令能力，不跳过补记预览确认 | LOGIC-04 |
+| 2026-07-16 | LOGIC-04 复盘任务化 | `IN_PROGRESS` → `CODE_DONE` | `InteractionStateModels.swift`、`InsightWebView.swift`、`PRODUCT_TERMINOLOGY_v1.md`、术语 lint、XCTest、静态门禁、本文档 | 复盘首屏固定为查记录、做对比、补遗漏，分别进入真实支持的本机规则指令；完整周/月章节只回痕迹；不再从首屏打开重复今日/月度内容；完整 Windows release gate 通过 | AI 能力、事实边界和补记预览确认未改；旧月度/今日实现仍保留但不争首屏，待后续稳定后再决定是否清理 | LOGIC-05 |
+| 2026-07-16 | LOGIC-05 回放承接与成熟度 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 把首页周/月推荐成熟度和回放完成后的唯一主动作变成可测试规则 | 不改额度常量、扣次时点或章节事实来源 | LOGIC-05 |
+| 2026-07-16 | LOGIC-05 回放承接与成熟度 | `IN_PROGRESS` → `CODE_DONE` | `InteractionStateModels.swift`、`HomeView.swift`、`SummaryPlaybackSheet.swift`、XCTest、静态门禁、本文档 | 首页周记至少 3 笔才推荐，月章至少 3 笔且到 25 日后才推荐；周/月回放完成统一为一个主动作，会员完成退出、非会员进入对应会员价值页；完整 Windows release gate 通过 | 额度常量、扣次存储、章节事实来源和次级保存/继续问入口未改；待 Xcode/真机确认完成区布局 | LOGIC-06 |
+| 2026-07-16 | LOGIC-06 会员触发与登录续购节奏 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 自动会员提示统一纳入每日频率、场景冷却和拒绝后的跨场景冷却；用户主动点击受限能力不等待自动提示预算 | Product ID、展示价格、StoreKit 校验、账号绑定和登录后一次性续接不变 | LOGIC-06 |
+| 2026-07-16 | LOGIC-06 会员触发与登录续购节奏 | `IN_PROGRESS` → `CODE_DONE` | `MemberNudgePolicyService.swift`、`HomeView.swift`、`HomeViewModel.swift`、XCTest、静态门禁、本文档 | 自动会员提示区分于用户主动入口，受每日一次、场景冷却及拒绝后的跨场景冷却约束；今日回放的“稍后再说”会记录冷却；移除未实际展示却消耗预算的后台提示；旧状态可兼容解码；登录后购买/恢复的一次性续接回归仍通过；完整 Windows release gate 通过 | Product ID、价格、StoreKit 校验、账号绑定和主动受限入口未改；待真机确认提示关闭后跨页面不再连续出现 | LOGIC-07 |
+| 2026-07-16 | LOGIC-07 新用户七日渐进路径 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 用一个可测试阶段描述空账本、首笔回放、周记成熟、月章成熟和回放后复盘；零数据不展示空复盘或会员推销 | 不增加强制引导页，不阻断免费手动记账 | LOGIC-07 |
+| 2026-07-16 | LOGIC-07 新用户七日渐进路径 | `IN_PROGRESS` → `CODE_DONE` | `InteractionStateModels.swift`、`HomeView.swift`、`ContentView.swift`、`InsightWebView.swift`、XCTest、静态门禁、本文档 | 空账本→记第一笔，有未回放记录→今日回放，成熟周/月数据→对应痕迹，完成当前周/月回放→可选复盘；首页仍保留继续记录次入口；空账本进入复盘直接提示记一笔，不执行空聚合、不展示会员动作；完整 Windows release gate 通过 | 未新增强制引导页，免费手动记账和已有用户主动 Tab 不受阻；待真机确认空态与动态按钮布局 | LOGIC-08 |
+| 2026-07-16 | LOGIC-08 状态矩阵与统一收口 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 汇总数据成熟度、草稿、回放、会员、取消/失败、照片横滑和周/月范围的回归矩阵，并统一列出 Xcode/真机待签项 | Windows 只签静态、脚本和仓库门禁，不冒充 Xcode、StoreKit 或 iPhone 性能结论 | LOGIC-08 |
+| 2026-07-16 | LOGIC-08 状态矩阵与统一收口 | `IN_PROGRESS` → `CODE_DONE` | `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、静态门禁、本文档 | 新增 FLOW-01～14 产品状态矩阵与 REAL-06 痕迹手势/掉帧真机项；完整 Windows release gate 再次通过，夹具、差异、语义、交互、文案、迁移和 SQLite schema 均通过 | 当前无 `IN_PROGRESS`；PERF-05、LOGIC-01～08 均为 `CODE_DONE`；Xcode Debug/Release、XCTest、iPhone 真实照片/掉帧、StoreKit、权限和无障碍仍为 `BLOCKED/NOT_RUN`；`ARCH-03` 保持 `NOT_STARTED` | 统一 Xcode/真机签收 |
+
+### 本轮收口结论
+
+- 本轮队列已全部完成 Windows 代码与仓库门禁，当前无 `IN_PROGRESS`。
+- `ARCH-03` 页面继续拆分保持 `NOT_STARTED`，没有在本轮产品逻辑收敛中夹带继续拆分。
+- 真机统一按 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 的 REAL-01～06、FLOW-01～14、R-01～12、StoreKit、权限和无障碍矩阵执行；未执行项不得写为 `VERIFIED`。

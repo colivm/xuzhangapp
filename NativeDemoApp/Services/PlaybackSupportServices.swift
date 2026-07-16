@@ -1118,6 +1118,8 @@ final class SummaryPlaybackQuotaStore {
         static let lifetimeWeekPlaybackCompleted = "lifetimeWeekPlaybackCompleted"
         static let quotaSchemaVersion = "summaryPlaybackQuotaSchemaVersion"
         static let lastLoginQuotaSyncUserId = "summaryPlaybackLastLoginQuotaSyncUserId"
+        static let lastCompletedWeekKey = "lastCompletedWeekPlaybackKey"
+        static let lastCompletedMonthKey = "lastCompletedMonthPlaybackKey"
     }
 
     static let weeklyFreeLimit = 3
@@ -1161,6 +1163,9 @@ final class SummaryPlaybackQuotaStore {
         guard progress >= 0.8 else { return }
         if range == .week {
             defaults.set(true, forKey: Keys.lifetimeWeekPlaybackCompleted)
+            defaults.set(currentWeekKey(now: now), forKey: Keys.lastCompletedWeekKey)
+        } else {
+            defaults.set(currentMonthKey(now: now), forKey: Keys.lastCompletedMonthKey)
         }
         guard !isMember else { return }
         switch range {
@@ -1179,6 +1184,23 @@ final class SummaryPlaybackQuotaStore {
 
     func hasCompletedWeekPlaybackEver() -> Bool {
         defaults.bool(forKey: Keys.lifetimeWeekPlaybackCompleted)
+    }
+
+    func hasCompletedCurrentWeekPlayback(now: Date = Date()) -> Bool {
+        defaults.string(forKey: Keys.lastCompletedWeekKey) == currentWeekKey(now: now)
+    }
+
+    func hasCompletedCurrentMonthPlayback(now: Date = Date()) -> Bool {
+        defaults.string(forKey: Keys.lastCompletedMonthKey) == currentMonthKey(now: now)
+    }
+
+    func currentMonthKey(now: Date = Date()) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar.current
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM"
+        return formatter.string(from: now)
     }
 
     func syncLocalUsageAfterLogin(userId: String, now: Date = Date()) {
@@ -1227,6 +1249,8 @@ final class DailyFeatureQuotaStore {
         static let ocrImportUsedCount = "ocrImportUsedCount"
         static let todayPlaybackDayKey = "todayPlaybackDayKey"
         static let todayPlaybackUsedCount = "todayPlaybackUsedCount"
+        static let todayPlaybackCompletedDayKey = "todayPlaybackCompletedDayKey"
+        static let todayPlaybackCompletedSignature = "todayPlaybackCompletedSignature"
     }
 
     static let todayPlaybackFreeLimit = 3
@@ -1272,6 +1296,28 @@ final class DailyFeatureQuotaStore {
         defaults.set(min(Self.todayPlaybackFreeLimit, used + 1), forKey: Keys.todayPlaybackUsedCount)
     }
 
+    func hasUnplayedTodayItems(_ items: [HomeItem], now: Date = Date()) -> Bool {
+        let todayItems = items.filter { Calendar.current.isDate($0.createdAt, inSameDayAs: now) }
+        guard !todayItems.isEmpty else { return false }
+        let dayKey = Self.localDayKey(for: now)
+        guard defaults.string(forKey: Keys.todayPlaybackCompletedDayKey) == dayKey else {
+            return true
+        }
+        return defaults.string(forKey: Keys.todayPlaybackCompletedSignature) != Self.todayItemsSignature(todayItems)
+    }
+
+    func markTodayPlaybackCompleted(
+        items: [HomeItem],
+        progress: Double,
+        now: Date = Date()
+    ) {
+        guard progress >= 0.8 else { return }
+        let todayItems = items.filter { Calendar.current.isDate($0.createdAt, inSameDayAs: now) }
+        guard !todayItems.isEmpty else { return }
+        defaults.set(Self.localDayKey(for: now), forKey: Keys.todayPlaybackCompletedDayKey)
+        defaults.set(Self.todayItemsSignature(todayItems), forKey: Keys.todayPlaybackCompletedSignature)
+    }
+
     private func syncDayIfNeeded(dayKey: String, usedKey: String, now: Date) {
         let key = Self.localDayKey(for: now)
         if defaults.string(forKey: dayKey) != key {
@@ -1287,5 +1333,15 @@ final class DailyFeatureQuotaStore {
         formatter.timeZone = .current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
+    }
+
+    private static func todayItemsSignature(_ items: [HomeItem]) -> String {
+        items
+            .sorted { lhs, rhs in
+                if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
+                return lhs.createdAt < rhs.createdAt
+            }
+            .map { "\($0.id.uuidString.lowercased()):\(Int($0.updatedAt.timeIntervalSince1970 * 1_000))" }
+            .joined(separator: "|")
     }
 }

@@ -354,9 +354,11 @@ struct HomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
-    var onQuickRecord: () -> Void = {}
+    var onQuickRecord: (RecordEntryMode) -> Void = { _ in }
     var onNavigateStats: (() -> Void)? = nil
     var onNavigateWeeklyTrace: (() -> Void)? = nil
+    var onNavigateMonthlyTrace: (() -> Void)? = nil
+    var onNavigateInsight: (() -> Void)? = nil
     var onNavigateSettings: (() -> Void)? = nil
     var onShowMemberPricing: (() -> Void)? = nil
     var onAttachMemoryImage: ((HomeItem) -> Void)? = nil
@@ -393,6 +395,7 @@ struct HomeView: View {
     @State private var quickRecordWeatherRefreshTick = 0
     @GestureState private var todaySwipeDragState: TodaySwipeDragState?
     private let dailyQuotaStore = DailyFeatureQuotaStore()
+    private let summaryQuotaStore = SummaryPlaybackQuotaStore()
     private static let todayPlaybackFirstUsePromptSeenKey = "today_playback_first_use_prompt_seen_v1"
 
     private var todayInlineEditingItem: HomeItem? {
@@ -414,8 +417,10 @@ struct HomeView: View {
                 }
             }
 
-            highConfidenceQuickRecordOverlay
-                .zIndex(12)
+            if shouldShowHighConfidenceQuickRecord {
+                highConfidenceQuickRecordOverlay
+                    .zIndex(12)
+            }
 
             if todayPlaybackPrompt != nil {
                 todayPlaybackPromptOverlay
@@ -526,7 +531,6 @@ struct HomeView: View {
         VStack(spacing: 10) {
             todayStoryHero
             homeActionRow
-            routeGuidanceContent
             todayBillsPanel
             lifeRhythmPanel
         }
@@ -538,21 +542,145 @@ struct HomeView: View {
     }
 
     private var homeActionRow: some View {
-        HStack(spacing: 10) {
-            homeActionCard(
-                title: "记下一笔",
-                subtitle: homeViewModel.quickRecordNudgeText,
-                systemImage: "plus.circle.fill",
-                isPrimary: true,
-                action: onQuickRecord
+        let primary = homeJourneyPrimaryAction
+        let secondary = HomeJourneyActionPolicy.secondaryAction(
+            for: primary,
+            hasTodayRecords: !homeViewModel.todayItems.isEmpty
+        )
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                homeJourneyActionCard(primary, isPrimary: true)
+                if let secondary {
+                    homeJourneyActionCard(secondary, isPrimary: false)
+                }
+            }
+
+            VStack(spacing: 10) {
+                homeJourneyActionCard(primary, isPrimary: true)
+                if let secondary {
+                    homeJourneyActionCard(secondary, isPrimary: false)
+                }
+            }
+        }
+    }
+
+    private var homeJourneyPrimaryAction: HomeJourneyAction {
+        let now = Date()
+        let totalRecordCount = homeViewModel.items.lazy.filter { $0.amount > 0 && $0.draftMeta == nil }.count
+        let weekItems = homeViewModel.filteredItems(in: .week).filter { $0.amount > 0 && $0.draftMeta == nil }
+        let monthItems = homeViewModel.filteredItems(in: .month).filter { $0.amount > 0 && $0.draftMeta == nil }
+        let hasUnplayedTodayRecords = dailyQuotaStore.hasUnplayedTodayItems(homeViewModel.todayItems, now: now)
+        let isMember = settingsViewModel.settings.hasMemberAccess
+        let day = Calendar.current.component(.day, from: now)
+        let progressionStage = NewUserProgressionPolicy.stage(
+            for: NewUserProgressionSnapshot(
+                totalRecordCount: totalRecordCount,
+                hasUnplayedTodayRecords: hasUnplayedTodayRecords,
+                weekRecordCount: weekItems.count,
+                monthRecordCount: monthItems.count,
+                dayOfMonth: day,
+                canPlayWeek: summaryQuotaStore.canPlay(.week, isMember: isMember, now: now),
+                canPlayMonth: summaryQuotaStore.canPlay(.month, isMember: isMember, now: now),
+                hasCompletedCurrentWeekPlayback: summaryQuotaStore.hasCompletedCurrentWeekPlayback(now: now),
+                hasCompletedCurrentMonthPlayback: summaryQuotaStore.hasCompletedCurrentMonthPlayback(now: now)
             )
-            homeActionCard(
-                title: "听今日回放",
-                subtitle: todayPlaybackActionSubtitle,
-                systemImage: "play.circle.fill",
-                isPrimary: false,
-                action: { requestTodayPlayback() }
-            )
+        )
+        return HomeJourneyActionPolicy.primaryAction(
+            for: HomeJourneySnapshot(
+                hasOCRDrafts: !homeViewModel.ocrDraftItems.isEmpty,
+                hasManualDraft: !homeViewModel.inputAmount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                todayRecordCount: homeViewModel.todayItems.count,
+                hasUnplayedTodayRecords: hasUnplayedTodayRecords,
+                weekTraceReady: progressionStage == .weekTrace,
+                monthTraceReady: progressionStage == .monthChapter
+            ),
+            progressionStage: progressionStage
+        )
+    }
+
+    private var shouldShowHighConfidenceQuickRecord: Bool {
+        guard !isExternalPostSavePresentationActive,
+              todayPlaybackPrompt == nil,
+              !firstRecordPromptFlowIsActive else {
+            return false
+        }
+        let primaryAction = homeJourneyPrimaryAction
+        return primaryAction == .record || primaryAction == .continueRecording
+    }
+
+    private func homeJourneyActionCard(_ action: HomeJourneyAction, isPrimary: Bool) -> some View {
+        homeActionCard(
+            title: homeJourneyTitle(action),
+            subtitle: homeJourneySubtitle(action),
+            systemImage: homeJourneySystemImage(action),
+            isPrimary: isPrimary,
+            action: { performHomeJourneyAction(action) }
+        )
+    }
+
+    private func homeJourneyTitle(_ action: HomeJourneyAction) -> String {
+        switch action {
+        case .resumeOCR: return "继续整理账单"
+        case .continueManualDraft: return "继续这笔草稿"
+        case .record: return "记下一笔"
+        case .todayPlayback: return "听今日回放"
+        case .weekTrace: return "看看本周痕迹"
+        case .monthTrace: return "回顾这个月"
+        case .review: return "做一次复盘"
+        case .continueRecording: return "继续记录"
+        }
+    }
+
+    private func homeJourneySubtitle(_ action: HomeJourneyAction) -> String {
+        switch action {
+        case .resumeOCR:
+            return "待整理区还有 \(homeViewModel.ocrDraftItems.count) 笔"
+        case .continueManualDraft:
+            return "金额和已填内容都还在"
+        case .record:
+            return homeViewModel.quickRecordNudgeText
+        case .todayPlayback:
+            return todayPlaybackActionSubtitle
+        case .weekTrace:
+            let count = homeViewModel.filteredItems(in: .week).filter { $0.amount > 0 }.count
+            return "本周已有 \(count) 笔可回看"
+        case .monthTrace:
+            return "把这个月整理成一章"
+        case .review:
+            return "查记录、做对比，或补上遗漏"
+        case .continueRecording:
+            return "有一笔就记一笔，晚点再回看"
+        }
+    }
+
+    private func homeJourneySystemImage(_ action: HomeJourneyAction) -> String {
+        switch action {
+        case .resumeOCR: return "tray.full.fill"
+        case .continueManualDraft: return "pencil.line"
+        case .record, .continueRecording: return "plus.circle.fill"
+        case .todayPlayback: return "play.circle.fill"
+        case .weekTrace: return "calendar.badge.clock"
+        case .monthTrace: return "books.vertical.fill"
+        case .review: return "checklist"
+        }
+    }
+
+    private func performHomeJourneyAction(_ action: HomeJourneyAction) {
+        switch action {
+        case .resumeOCR:
+            onQuickRecord(.ocr)
+        case .continueManualDraft, .record, .continueRecording:
+            onQuickRecord(.manual)
+        case .todayPlayback:
+            requestTodayPlayback()
+        case .weekTrace:
+            homeViewModel.consumeRouteGuidance(.weekSliceReady)
+            homeViewModel.consumeRouteGuidance(.fiveRecordsNeverPlayed)
+            onNavigateWeeklyTrace?()
+        case .monthTrace:
+            onNavigateMonthlyTrace?()
+        case .review:
+            onNavigateInsight?()
         }
     }
 
@@ -921,7 +1049,7 @@ struct HomeView: View {
 
     private func handleTodayTotalTap() {
         guard !homeViewModel.todayItems.isEmpty else {
-            onQuickRecord()
+            onQuickRecord(.manual)
             return
         }
 
@@ -2609,7 +2737,8 @@ struct BillPlaybackSheet: View {
                 if !Task.isCancelled, self.isPlaying {
                     self.playbackDone = true
                     self.isPlaying = false
-                    if !settingsViewModel.settings.hasMemberAccess && nudgeService.canShow(scene: "playback_complete") {
+                    if !settingsViewModel.settings.hasMemberAccess,
+                       nudgeService.canShow(scene: "playback_complete", source: .automatic) {
                         self.showMemberNudge = true
                         nudgeService.markShown(scene: "playback_complete")
                     }
@@ -2618,7 +2747,9 @@ struct BillPlaybackSheet: View {
         }
         .onDisappear {
             playbackTask?.cancel()
-            homeViewModel.markTodayPlaybackEnded(progress: playbackProgressFraction)
+            let progress = playbackProgressFraction
+            dailyQuotaStore.markTodayPlaybackCompleted(items: todayItems, progress: progress)
+            homeViewModel.markTodayPlaybackEnded(progress: progress)
         }
     }
 
@@ -3057,6 +3188,8 @@ struct BillPlaybackSheet: View {
     private var memberPlaybackNudgeActions: some View {
         HStack(spacing: 20) {
             Button {
+                nudgeService.markDismissed(scene: "playback_complete")
+                showMemberNudge = false
                 dismiss()
             } label: {
                 Text("稍后再说")

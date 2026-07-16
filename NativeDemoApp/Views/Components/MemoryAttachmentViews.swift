@@ -1,5 +1,31 @@
 import SwiftUI
 import UIKit
+import ImageIO
+
+private struct DecodedMemoryAttachmentImage: @unchecked Sendable {
+    let image: UIImage
+}
+
+private final class MemoryAttachmentImageCache: @unchecked Sendable {
+    static let shared = MemoryAttachmentImageCache()
+
+    private let cache = NSCache<NSString, UIImage>()
+
+    private init() {
+        cache.countLimit = 96
+        cache.totalCostLimit = 128 * 1024 * 1024
+    }
+
+    func image(forKey key: String) -> UIImage? {
+        cache.object(forKey: key as NSString)
+    }
+
+    func insert(_ image: UIImage, forKey key: String) {
+        let pixels = max(1, Int(image.size.width * image.scale))
+            * max(1, Int(image.size.height * image.scale))
+        cache.setObject(image, forKey: key as NSString, cost: pixels * 4)
+    }
+}
 
 struct MemoryAttachmentThumbnail: View {
     let imageData: Data?
@@ -8,13 +34,8 @@ struct MemoryAttachmentThumbnail: View {
     var contentMode: ContentMode = .fill
     var height: CGFloat? = 120
     var cornerRadius: CGFloat = 12
-    @State private var loadedImageData: Data? = nil
+    @State private var loadedImage: UIImage? = nil
     @State private var loadFailed = false
-
-    private var resolvedImageData: Data? {
-        if let imageData, !imageData.isEmpty { return imageData }
-        return loadedImageData
-    }
 
     private var normalizedReference: String? {
         guard let reference = imageReference?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -23,13 +44,21 @@ struct MemoryAttachmentThumbnail: View {
     }
 
     private var loadRequestID: String {
-        "\(variant.rawValue)|\(normalizedReference ?? "inline")"
+        if let normalizedReference {
+            return "\(variant.rawValue)|\(normalizedReference)"
+        }
+        guard let imageData, !imageData.isEmpty else {
+            return "\(variant.rawValue)|missing"
+        }
+        let prefix = Data(imageData.prefix(12)).base64EncodedString()
+        let suffix = Data(imageData.suffix(12)).base64EncodedString()
+        return "\(variant.rawValue)|inline|\(imageData.count)|\(prefix)|\(suffix)"
     }
 
     var body: some View {
         Group {
-            if let resolvedImageData, let uiImage = UIImage(data: resolvedImageData) {
-                Image(uiImage: uiImage)
+            if let loadedImage {
+                Image(uiImage: loadedImage)
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
             } else {
@@ -45,17 +74,51 @@ struct MemoryAttachmentThumbnail: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .task(id: loadRequestID) {
-            loadedImageData = nil
+            loadedImage = nil
             loadFailed = false
-            guard resolvedImageData == nil, let reference = normalizedReference else { return }
+            let requestID = loadRequestID
+            if let cached = MemoryAttachmentImageCache.shared.image(forKey: requestID) {
+                loadedImage = cached
+                return
+            }
+            let reference = normalizedReference
+            let inlineData = imageData.flatMap { $0.isEmpty ? nil : $0 }
             let requestedVariant = variant
-            let data = await Task.detached(priority: .utility) {
-                LocalStore.loadMemoryImageData(reference: reference, variant: requestedVariant)
+            let decoded = await Task.detached(priority: .utility) {
+                let data = reference.flatMap {
+                    LocalStore.loadMemoryImageData(reference: $0, variant: requestedVariant)
+                } ?? inlineData
+                guard let data, !data.isEmpty,
+                      let image = Self.decodeImage(data, variant: requestedVariant) else {
+                    return nil as DecodedMemoryAttachmentImage?
+                }
+                return DecodedMemoryAttachmentImage(image: image)
             }.value
             guard !Task.isCancelled else { return }
-            loadedImageData = data
-            loadFailed = data == nil
+            if let decoded {
+                MemoryAttachmentImageCache.shared.insert(decoded.image, forKey: requestID)
+                loadedImage = decoded.image
+            } else {
+                loadFailed = true
+            }
         }
+    }
+
+    private static func decodeImage(_ data: Data, variant: LedgerImageLoadVariant) -> UIImage? {
+        if case .thumbnail = variant,
+           let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) {
+            let options: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true,
+                kCGImageSourceThumbnailMaxPixelSize: 900,
+            ]
+            if let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) {
+                return UIImage(cgImage: cgImage)
+            }
+        }
+        guard let image = UIImage(data: data) else { return nil }
+        return image.preparingForDisplay() ?? image
     }
 
     private func memoryImageFallback(isLoading: Bool) -> some View {
