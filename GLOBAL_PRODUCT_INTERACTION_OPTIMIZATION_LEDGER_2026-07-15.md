@@ -1201,4 +1201,25 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 - 本轮队列已全部完成 Windows 代码与仓库门禁，当前无 `IN_PROGRESS`。
 - `ARCH-03` 页面继续拆分保持 `NOT_STARTED`，没有在本轮产品逻辑收敛中夹带继续拆分。
-- 真机统一按 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 的 REAL-01～06、FLOW-01～14、R-01～12、StoreKit、权限和无障碍矩阵执行；未执行项不得写为 `VERIFIED`。
+- 真机统一按 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 的 REAL-01～06、FLOW-01～15、R-01～12、StoreKit、权限和无障碍矩阵执行；未执行项不得写为 `VERIFIED`。
+
+---
+
+## 13. AI 指令台对比可视化（2026-07-16）
+
+用户真机反馈“做对比”仍主要依赖文字阅读，简图只展示当前周期，相关记录也只列当前周期，无法直观看出两段差异来源。本项只优化对比结果的数据承载与呈现，不改变查询、补记、额度、会员和账本写入边界。
+
+| 顺序 | ID | 任务 | 状态 | 冻结边界 |
+|---:|---|---|---|---|
+| 1 | LOGIC-09 | AI 指令台双周期对比与证据分组 | `CODE_DONE` | 对比仍只读；不改变查询/补记结果、AI 事实来源、额度或保存规则 |
+
+| 日期 | 任务 | 状态变化 | 修改文件 | 验证 | 结果/残留风险 | 下一项 |
+|---|---|---|---|---|---|---|
+| 2026-07-16 | LOGIC-09 AI 对比可视化 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 定位到对比计算虽读取两段数据，但结果模型只向 UI 输出当前周期的柱图和记录 | 增加双周期总览、同尺度金额条、分类变化和两段证据记录；本周/月按同期口径比较 | LOGIC-09 |
+| 2026-07-16 | LOGIC-09 AI 对比可视化 | `IN_PROGRESS` → `CODE_DONE` | `InsightWebView.swift`、`StateRegressionTests.swift`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、体验静态门禁、本文档 | 双周期金额/笔数卡、同尺度金额条、分类双条、增减提示和两段证据分组已接线；XCTest 数据用例与防回流检查已补齐；完整 Windows release gate 通过 | 汇总按全部记录计算，证据每段最多保留 30 条、默认展示 5 条并可展开；本周/月按上一周期相同已过天数比较；Xcode 编译、iPhone 动态布局和真实数据可读性仍为 `BLOCKED`/`NOT_RUN` | 统一 Xcode/真机签收 |
+
+### 本项收口结论
+
+- `LOGIC-09` 已完成 Windows 代码、数据用例、静态护栏和仓库门禁，当前无 `IN_PROGRESS`。
+- 对比页从“阅读文字结论”调整为“先看两段总览与同尺度差异，再看分类变化，最后核对两段原始记录”；查询、补记和写入路径未改。
+- Xcode Debug/Release、XCTest、iPhone 小屏/大字布局、长列表展开和真实账本可读性尚未执行，不标记为 `VERIFIED`。

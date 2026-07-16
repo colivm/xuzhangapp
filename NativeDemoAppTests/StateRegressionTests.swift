@@ -557,6 +557,71 @@ final class InsightBackgroundComputationTests: XCTestCase {
         XCTAssertFalse(gate.accepts(latest))
     }
 
+    func testAICommandComparisonKeepsBothPeriodsAndCategoryChanges() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        calendar.firstWeekday = 2
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 16,
+            hour: 12
+        ))!
+        func date(_ day: Int, _ hour: Int) -> Date {
+            calendar.date(from: DateComponents(
+                timeZone: calendar.timeZone,
+                year: 2026,
+                month: 7,
+                day: day,
+                hour: hour
+            ))!
+        }
+        let items = [
+            HomeItem(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000101")!,
+                title: "本周午餐",
+                amount: 10,
+                category: .dining,
+                createdAt: date(13, 12)
+            ),
+            HomeItem(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000102")!,
+                title: "本周地铁",
+                amount: 20,
+                category: .transport,
+                createdAt: date(14, 8)
+            ),
+            HomeItem(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000201")!,
+                title: "上周午餐",
+                amount: 30,
+                category: .dining,
+                createdAt: date(6, 12)
+            ),
+            HomeItem(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000202")!,
+                title: "上周日用",
+                amount: 20,
+                category: .shopping,
+                createdAt: date(7, 18)
+            ),
+        ]
+
+        let digest = InsightWebView.aiCommandComputationDigestForTesting(
+            command: "对比本周和上周的消费",
+            items: items,
+            hasMemberAccess: true,
+            now: now
+        )
+
+        XCTAssertTrue(digest.hasPrefix("compare#本周 对比 上周同期#"))
+        XCTAssertTrue(digest.contains("本周:30.0:2"))
+        XCTAssertTrue(digest.contains("上周同期:50.0:2"))
+        XCTAssertTrue(digest.contains("餐饮:10.0:30.0:1:1"))
+        XCTAssertTrue(digest.contains("00000000-0000-0000-0000-000000000201"))
+    }
+
     func testUnsupportedAICommandDoesNotInventFactsOutsideTheLedger() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let items = [

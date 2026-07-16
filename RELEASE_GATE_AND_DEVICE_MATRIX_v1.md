@@ -222,6 +222,7 @@ python scripts/validate_release_gate.py --phase device-audit `
 | FLOW-12 | 周/月卡包含 1～9 张真实尺寸照片 | 横滑图片、关键词，再用显式按钮切本周/本月 | 内部横滑不切时间范围；显式按钮切换不丢筛选；无双图实时模糊、串图、黑屏和明显掉帧 | `NOT_RUN` |
 | FLOW-13 | 痕迹主卡为本周/本月，细查分别选择周/月/年、自定义日期和分类 | 打开细查、切换条件、关闭并返回主卡 | 周/月细查与主卡范围同步；年/自定义/分类只影响线索和明细，不污染周/月生活章节缓存 | `NOT_RUN` |
 | FLOW-14 | 备份导入预览、图片选择、AI/OCR 和保存均准备失败样本 | 逐项取消、失败、重试并快速重复点击 | 确认前零写入；失败不清空原账本/草稿/图片；旧异步结果不回写；重试只提交一次 | `NOT_RUN` |
+| FLOW-15 | 本周与上周同期准备不同金额、笔数和分类，并补测其中一段为空 | 在复盘选择“做对比”，查看双周期总览、分类变化和对比依据 | 两段金额/笔数并列且使用同尺度；本周按上周相同已过天数比较；分类差额可见；相关记录分别归入两段，任一段为空仍明确显示；全程只读 | `NOT_RUN` |
 
 ## 9. 无障碍与权限矩阵
 
@@ -247,7 +248,7 @@ python scripts/validate_release_gate.py --phase device-audit `
 | 1,000 条真机 | `BLOCKED` | 无 iPhone/Xcode 设备部署环境 | Codex | 2026-07-16 |
 | 5,000 条真机 | `BLOCKED` | 无 iPhone/Xcode 设备部署环境 | Codex | 2026-07-16 |
 | 真实照片 REAL-01～06 | `BLOCKED` | 真实照片资产与夹具通过；无 iPhone/Instruments | Codex | 2026-07-16 |
-| PERF-05 / LOGIC-01～07 FLOW-01～14 | `BLOCKED` | 代码策略、静态护栏和 Windows 门禁通过；无 Xcode/iPhone 完成交互、掉帧与手势签收 | Codex | 2026-07-16 |
+| PERF-05 / LOGIC-01～09 FLOW-01～15 | `BLOCKED` | 代码策略、静态护栏和 Windows 门禁通过；无 Xcode/iPhone 完成交互、掉帧与手势签收 | Codex | 2026-07-16 |
 | FIX-001/002 | `BLOCKED` | 无 iPhone，详细场景保持 `NOT_RUN` | Codex | 2026-07-16 |
 | R-01～R-12 | `BLOCKED` | 无 iPhone；StoreKit/同步场景还需要沙盒账号与专用环境 | Codex | 2026-07-16 |
 | DATA-06 BACKUP-01～05 | `BLOCKED` | 无 iOS 文件 App、iPhone 与 1,000 条恢复性能环境 | Codex | 2026-07-16 |

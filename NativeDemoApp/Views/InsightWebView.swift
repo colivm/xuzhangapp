@@ -141,6 +141,32 @@ struct InsightWebView: View {
         var context: HomeItem.MemoryContext?
     }
 
+    private struct AICommandComparisonPeriod: Equatable {
+        var label: String
+        var total: Double
+        var count: Int
+        var items: [HomeItem]
+    }
+
+    private struct AICommandCategoryComparison: Identifiable, Equatable {
+        var category: HomeItem.Category
+        var currentAmount: Double
+        var previousAmount: Double
+        var currentCount: Int
+        var previousCount: Int
+
+        var id: String { category.rawValue }
+        var deltaAmount: Double { currentAmount - previousAmount }
+    }
+
+    private struct AICommandComparison: Equatable {
+        var current: AICommandComparisonPeriod
+        var previous: AICommandComparisonPeriod
+        var deltaAmount: Double
+        var deltaCount: Int
+        var categories: [AICommandCategoryComparison]
+    }
+
     private struct AICommandResult: @unchecked Sendable, Identifiable, Equatable {
         let id = UUID()
         var kind: AICommandKind
@@ -149,6 +175,7 @@ struct InsightWebView: View {
         var detail: String
         var items: [HomeItem]
         var memoryCard: AICommandMemoryCard? = nil
+        var comparison: AICommandComparison? = nil
         var bars: [AICommandBar]
         var drafts: [AICommandRecordDraft]
         var amountSource: String?
@@ -1937,11 +1964,16 @@ struct InsightWebView: View {
                 if let memoryCard = result.memoryCard {
                     aiCommandMemoryCard(memoryCard)
                 }
-                if !result.bars.isEmpty {
-                    aiCommandBarChart(result.bars)
-                }
-                if !result.items.isEmpty {
-                    aiCommandItemsPreview(result.items, resultID: result.id)
+                if let comparison = result.comparison {
+                    aiCommandComparisonOverview(comparison)
+                    aiCommandComparisonRecords(comparison, resultID: result.id)
+                } else {
+                    if !result.bars.isEmpty {
+                        aiCommandBarChart(result.bars)
+                    }
+                    if !result.items.isEmpty {
+                        aiCommandItemsPreview(result.items, resultID: result.id)
+                    }
                 }
                 if result.needsAmount {
                     aiCommandAmountInput(result)
@@ -2121,6 +2153,335 @@ struct InsightWebView: View {
                         )
                 )
         )
+    }
+
+    private func aiCommandComparisonOverview(_ comparison: AICommandComparison) -> some View {
+        let maxTotal = max(max(comparison.current.total, comparison.previous.total), 1)
+        let maxCategoryAmount = max(
+            comparison.categories.flatMap { [$0.currentAmount, $0.previousAmount] }.max() ?? 0,
+            1
+        )
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("两段对比")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(AppColors.text)
+                    Text("金额和笔数使用同一口径")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.subtext)
+                }
+                Spacer(minLength: 8)
+                aiCommandComparisonDeltaBadge(comparison)
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    aiCommandComparisonPeriodCard(comparison.current, isCurrent: true)
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(AppColors.subtext.opacity(0.72))
+                        .accessibilityHidden(true)
+                    aiCommandComparisonPeriodCard(comparison.previous, isCurrent: false)
+                }
+
+                VStack(spacing: 8) {
+                    aiCommandComparisonPeriodCard(comparison.current, isCurrent: true)
+                    aiCommandComparisonPeriodCard(comparison.previous, isCurrent: false)
+                }
+            }
+
+            VStack(spacing: 10) {
+                aiCommandComparisonScaleRow(
+                    period: comparison.current,
+                    maxTotal: maxTotal,
+                    color: AppColors.accent
+                )
+                aiCommandComparisonScaleRow(
+                    period: comparison.previous,
+                    maxTotal: maxTotal,
+                    color: AppColors.subtext.opacity(0.42)
+                )
+            }
+
+            if !comparison.categories.isEmpty {
+                Divider()
+                    .overlay(AppColors.line.opacity(0.48))
+
+                VStack(alignment: .leading, spacing: 11) {
+                    Text("主要分类变化")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(AppColors.text)
+
+                    ForEach(comparison.categories.prefix(4)) { category in
+                        aiCommandCategoryComparisonRow(
+                            category,
+                            currentLabel: comparison.current.label,
+                            previousLabel: comparison.previous.label,
+                            maxAmount: maxCategoryAmount
+                        )
+                    }
+                }
+            }
+        }
+        .glassPanel(radius: 22, padding: 16)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func aiCommandComparisonPeriodCard(
+        _ period: AICommandComparisonPeriod,
+        isCurrent: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(period.label)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(isCurrent ? AppColors.accentDark : AppColors.subtext)
+            Text(period.total.formatted(.cny))
+                .font(.system(size: 21, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text)
+                .minimumScaleFactor(0.78)
+                .lineLimit(1)
+            Text("\(period.count) 笔")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(AppColors.subtext)
+        }
+        .frame(maxWidth: .infinity, minHeight: 86, alignment: .leading)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 11)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(isCurrent ? AppColors.accent.opacity(0.10) : Color.white.opacity(0.54))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(isCurrent ? AppColors.accent.opacity(0.20) : AppColors.line.opacity(0.42), lineWidth: 1)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(period.label)，\(period.count) 笔")
+        .accessibilityValue(period.total.formatted(.cny))
+    }
+
+    private func aiCommandComparisonDeltaBadge(_ comparison: AICommandComparison) -> some View {
+        let delta = comparison.deltaAmount
+        let symbol = delta > 0.005 ? "arrow.up.right" : (delta < -0.005 ? "arrow.down.right" : "equal")
+        let text = delta > 0.005
+            ? "多 \(abs(delta).formatted(.cny))"
+            : (delta < -0.005 ? "少 \(abs(delta).formatted(.cny))" : "金额持平")
+        let color = delta > 0.005
+            ? Color.orange.opacity(0.88)
+            : (delta < -0.005 ? AppColors.accentDark : AppColors.subtext)
+        return Label(text, systemImage: symbol)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 30)
+            .background(color.opacity(0.10), in: Capsule(style: .continuous))
+            .accessibilityLabel("\(comparison.current.label)比\(comparison.previous.label)\(text)")
+    }
+
+    private func aiCommandComparisonScaleRow(
+        period: AICommandComparisonPeriod,
+        maxTotal: Double,
+        color: Color
+    ) -> some View {
+        VStack(spacing: 5) {
+            HStack(spacing: 8) {
+                Text(period.label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer(minLength: 8)
+                Text(period.total.formatted(.cny))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(AppColors.text.opacity(0.82))
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule(style: .continuous)
+                        .fill(AppColors.surfaceMuted.opacity(0.72))
+                    Capsule(style: .continuous)
+                        .fill(color)
+                        .frame(
+                            width: period.total > 0
+                                ? max(5, proxy.size.width * CGFloat(period.total / maxTotal))
+                                : 0
+                        )
+                }
+            }
+            .frame(height: 8)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(period.label)金额")
+        .accessibilityValue(period.total.formatted(.cny))
+    }
+
+    private func aiCommandCategoryComparisonRow(
+        _ comparison: AICommandCategoryComparison,
+        currentLabel: String,
+        previousLabel: String,
+        maxAmount: Double
+    ) -> some View {
+        let delta = comparison.deltaAmount
+        let deltaText = delta > 0.005
+            ? "+\(abs(delta).formatted(.cny))"
+            : (delta < -0.005 ? "−\(abs(delta).formatted(.cny))" : "持平")
+        return VStack(spacing: 7) {
+            HStack(spacing: 8) {
+                Text(comparison.category.emoji)
+                    .font(.system(size: 14))
+                Text(comparison.category.rawValue)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AppColors.text)
+                Spacer(minLength: 8)
+                Text(deltaText)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(aiCommandComparisonDeltaColor(delta))
+            }
+
+            VStack(spacing: 4) {
+                aiCommandCategoryComparisonBar(
+                    label: currentLabel,
+                    amount: comparison.currentAmount,
+                    maxAmount: maxAmount,
+                    color: AppColors.accent
+                )
+                aiCommandCategoryComparisonBar(
+                    label: previousLabel,
+                    amount: comparison.previousAmount,
+                    maxAmount: maxAmount,
+                    color: AppColors.subtext.opacity(0.36)
+                )
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(comparison.category.rawValue)对比")
+        .accessibilityValue("当前\(comparison.currentAmount.formatted(.cny))，上一段\(comparison.previousAmount.formatted(.cny))，\(deltaText)")
+    }
+
+    private func aiCommandCategoryComparisonBar(
+        label: String,
+        amount: Double,
+        maxAmount: Double,
+        color: Color
+    ) -> some View {
+        HStack(spacing: 7) {
+            Text(label)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(AppColors.subtext)
+                .lineLimit(1)
+                .frame(width: 52, alignment: .leading)
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule(style: .continuous)
+                        .fill(AppColors.surfaceMuted.opacity(0.54))
+                    Capsule(style: .continuous)
+                        .fill(color)
+                        .frame(
+                            width: amount > 0
+                                ? max(4, proxy.size.width * CGFloat(amount / maxAmount))
+                                : 0
+                        )
+                }
+            }
+            .frame(height: 5)
+
+            Text(amount.formatted(.cny))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppColors.text.opacity(0.76))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(width: 66, alignment: .trailing)
+        }
+        .frame(minHeight: 18)
+    }
+
+    private func aiCommandComparisonDeltaColor(_ delta: Double) -> Color {
+        if delta > 0.005 { return Color.orange.opacity(0.88) }
+        if delta < -0.005 { return AppColors.accentDark }
+        return AppColors.subtext
+    }
+
+    private func aiCommandComparisonRecords(
+        _ comparison: AICommandComparison,
+        resultID: UUID
+    ) -> some View {
+        let previewLimit = 5
+        let hasMore = comparison.current.items.count > previewLimit || comparison.previous.items.count > previewLimit
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("对比依据")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(AppColors.text)
+                Spacer()
+                Text("两段共 \(comparison.current.count + comparison.previous.count) 笔")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(AppColors.subtext)
+            }
+
+            aiCommandComparisonRecordSection(comparison.current, previewLimit: previewLimit)
+
+            Divider()
+                .overlay(AppColors.line.opacity(0.42))
+
+            aiCommandComparisonRecordSection(comparison.previous, previewLimit: previewLimit)
+
+            if hasMore {
+                Button {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.20)) {
+                        aiCommandShowsAllRelatedItems.toggle()
+                    }
+                } label: {
+                    Label(
+                        aiCommandShowsAllRelatedItems ? "收起对比记录" : "展开更多对比记录",
+                        systemImage: aiCommandShowsAllRelatedItems ? "chevron.up" : "chevron.down"
+                    )
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AppColors.accentDark)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(AppColors.accent.opacity(0.08), in: Capsule(style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .id(resultID)
+            }
+        }
+        .glassPanel(radius: 20, padding: 14)
+    }
+
+    @ViewBuilder
+    private func aiCommandComparisonRecordSection(
+        _ period: AICommandComparisonPeriod,
+        previewLimit: Int
+    ) -> some View {
+        let visibleItems = aiCommandShowsAllRelatedItems ? period.items : Array(period.items.prefix(previewLimit))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(period.label)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AppColors.text)
+                Text("\(period.count) 笔 · \(period.total.formatted(.cny))")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer(minLength: 0)
+            }
+
+            if visibleItems.isEmpty {
+                Text("这段时间没有匹配记录")
+                    .font(.footnote)
+                    .foregroundStyle(AppColors.subtext)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            } else {
+                ForEach(visibleItems) { item in
+                    aiCommandItemRow(item)
+                }
+            }
+
+            if period.count > period.items.count {
+                Text("按时间展示最近 \(period.items.count) 笔，汇总仍按全部 \(period.count) 笔计算。")
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.subtext.opacity(0.82))
+            }
+        }
     }
 
     private func aiCommandBarChart(_ bars: [AICommandBar]) -> some View {
@@ -2581,6 +2942,24 @@ struct InsightWebView: View {
         case .unsupported: kind = "unsupported"
         }
         let bars = result.bars.map { "\($0.label):\($0.amount):\($0.count)" }.joined(separator: "|")
+        let comparison = result.comparison.map { comparison in
+            let categories = comparison.categories.map {
+                "\($0.category.rawValue):\($0.currentAmount):\($0.previousAmount):\($0.currentCount):\($0.previousCount)"
+            }.joined(separator: "|")
+            return [
+                comparison.current.label,
+                String(comparison.current.total),
+                String(comparison.current.count),
+                comparison.current.items.map { $0.id.uuidString }.joined(separator: ","),
+                comparison.previous.label,
+                String(comparison.previous.total),
+                String(comparison.previous.count),
+                comparison.previous.items.map { $0.id.uuidString }.joined(separator: ","),
+                String(comparison.deltaAmount),
+                String(comparison.deltaCount),
+                categories
+            ].joined(separator: ":")
+        } ?? ""
         let drafts = result.drafts.map { draft in
             let status: String
             switch draft.status {
@@ -2596,6 +2975,7 @@ struct InsightWebView: View {
             result.detail,
             result.items.map { $0.id.uuidString }.joined(separator: ","),
             bars,
+            comparison,
             drafts,
             result.amountSource ?? "",
             String(result.needsAmount)
@@ -2848,6 +3228,28 @@ struct InsightWebView: View {
             let previousTotal = previousItems.reduce(0) { $0 + $1.amount }
             let delta = currentTotal - previousTotal
             let direction = delta > 0.005 ? "多了" : (delta < -0.005 ? "少了" : "差不多")
+            let currentEvidence = cappedAICommandEvidenceItems(currentItems, limit: 30)
+            let previousEvidence = cappedAICommandEvidenceItems(previousItems, limit: 30)
+            let comparison = AICommandComparison(
+                current: AICommandComparisonPeriod(
+                    label: range.label,
+                    total: currentTotal,
+                    count: currentItems.count,
+                    items: currentEvidence
+                ),
+                previous: AICommandComparisonPeriod(
+                    label: previous.label,
+                    total: previousTotal,
+                    count: previousItems.count,
+                    items: previousEvidence
+                ),
+                deltaAmount: delta,
+                deltaCount: currentItems.count - previousItems.count,
+                categories: aiCommandCategoryComparisons(
+                    currentItems: currentItems,
+                    previousItems: previousItems
+                )
+            )
             let summary: String
             if currentItems.isEmpty && previousItems.isEmpty {
                 summary = "\(range.label)和\(previous.label)都没有\(label)。"
@@ -2857,17 +3259,51 @@ struct InsightWebView: View {
                 summary = "\(range.label)的\(label)比\(previous.label)\(direction) \(abs(delta).formatted(.cny))。"
             }
             let detail = "\(range.label)：\(currentItems.count) 笔，\(currentTotal.formatted(.cny))；\(previous.label)：\(previousItems.count) 笔，\(previousTotal.formatted(.cny))。只做临时对比，不写入账本。"
+            let title = label == "全部记录"
+                ? "\(range.label) 对比 \(previous.label)"
+                : "\(label)：\(range.label) 对比 \(previous.label)"
             return AICommandResult(
                 kind: .compare,
-                title: "\(label)对比",
+                title: title,
                 summary: summary,
                 detail: detail,
-                items: cappedAICommandEvidenceItems(currentItems),
-                bars: dailyBars(range: range, items: currentItems),
+                items: cappedAICommandEvidenceItems(uniqueAICommandItems(currentItems + previousItems)),
+                comparison: comparison,
+                bars: [],
                 drafts: [],
                 amountSource: nil,
                 needsAmount: false
             )
+        }
+
+        private func aiCommandCategoryComparisons(
+            currentItems: [HomeItem],
+            previousItems: [HomeItem]
+        ) -> [AICommandCategoryComparison] {
+            let currentGroups = Dictionary(grouping: currentItems, by: \.category)
+            let previousGroups = Dictionary(grouping: previousItems, by: \.category)
+            return HomeItem.Category.allCases
+                .compactMap { category in
+                    let current = currentGroups[category] ?? []
+                    let previous = previousGroups[category] ?? []
+                    guard !current.isEmpty || !previous.isEmpty else { return nil }
+                    return AICommandCategoryComparison(
+                        category: category,
+                        currentAmount: current.reduce(0) { $0 + $1.amount },
+                        previousAmount: previous.reduce(0) { $0 + $1.amount },
+                        currentCount: current.count,
+                        previousCount: previous.count
+                    )
+                }
+                .sorted { lhs, rhs in
+                    let lhsDelta = abs(lhs.deltaAmount)
+                    let rhsDelta = abs(rhs.deltaAmount)
+                    if abs(lhsDelta - rhsDelta) > 0.005 { return lhsDelta > rhsDelta }
+                    let lhsTotal = lhs.currentAmount + lhs.previousAmount
+                    let rhsTotal = rhs.currentAmount + rhs.previousAmount
+                    if abs(lhsTotal - rhsTotal) > 0.005 { return lhsTotal > rhsTotal }
+                    return lhs.category.rawValue < rhs.category.rawValue
+                }
         }
 
         private func buildLargestRecordResult(
@@ -3834,14 +4270,56 @@ struct InsightWebView: View {
         }
 
         private func aiCommandPreviousRange(matching range: AICommandTimeRange) -> AICommandTimeRange {
-            let days = max(1, aiCommandCalendar.dateComponents([.day], from: range.start, to: range.end).day ?? range.barDays)
+            let calendar = aiCommandCalendar
+            let days = max(1, calendar.dateComponents([.day], from: range.start, to: range.end).day ?? range.barDays)
+
+            if range.label == "本周" {
+                let previousStart = calendar.date(byAdding: .day, value: -7, to: range.start) ?? range.start
+                let previousEnd = calendar.date(byAdding: .day, value: -7, to: range.end) ?? previousStart
+                return AICommandTimeRange(
+                    label: "上周同期",
+                    start: previousStart,
+                    end: previousEnd,
+                    barDays: min(7, days)
+                )
+            }
+
+            if range.label == "本月" {
+                let previousStart = calendar.date(byAdding: .month, value: -1, to: range.start) ?? range.start
+                let naturalEnd = calendar.date(byAdding: .month, value: 1, to: previousStart) ?? range.start
+                let matchingEnd = calendar.date(byAdding: .day, value: days, to: previousStart) ?? naturalEnd
+                return AICommandTimeRange(
+                    label: "上月同期",
+                    start: previousStart,
+                    end: min(matchingEnd, naturalEnd),
+                    barDays: min(7, days)
+                )
+            }
+
+            if range.label == "上周" {
+                let previousStart = calendar.date(byAdding: .day, value: -7, to: range.start) ?? range.start
+                let previousEnd = calendar.date(byAdding: .day, value: -7, to: range.end) ?? previousStart
+                return AICommandTimeRange(label: "前一周", start: previousStart, end: previousEnd, barDays: min(7, days))
+            }
+
+            if range.label == "上个月" {
+                let previousStart = calendar.date(byAdding: .month, value: -1, to: range.start) ?? range.start
+                return AICommandTimeRange(label: "前一个月", start: previousStart, end: range.start, barDays: min(7, days))
+            }
+
+            if range.label == "今天" {
+                let previousStart = calendar.date(byAdding: .day, value: -1, to: range.start) ?? range.start
+                let previousEnd = calendar.date(byAdding: .day, value: -1, to: range.end) ?? previousStart
+                return AICommandTimeRange(label: "昨天", start: previousStart, end: previousEnd, barDays: 1)
+            }
+
             let previousEnd = range.start
-            let previousStart = aiCommandCalendar.date(byAdding: .day, value: -days, to: previousEnd) ?? previousEnd
+            let previousStart = calendar.date(byAdding: .day, value: -days, to: previousEnd) ?? previousEnd
             let label: String
-            if range.label.contains("本周") || range.label.contains("这周") || range.label.contains("最近 7 天") || days == 7 {
-                label = "上一段 7 天"
-            } else if range.label.contains("本月") || range.label.contains("这个月") || days >= 28 {
-                label = "上一段"
+            if range.label.contains("最近 7 天") || days == 7 {
+                label = "前 7 天"
+            } else if days == 1 {
+                label = "前一天"
             } else {
                 label = "前 \(days) 天"
             }
