@@ -3,11 +3,35 @@ import UIKit
 
 // MARK: - Insight View
 
+struct ReviewOverviewDay: Equatable, Sendable, Identifiable {
+    let id: String
+    let label: String
+    let amount: Double
+    let count: Int
+}
+
+struct ReviewOverviewSnapshot: Equatable, Sendable {
+    let currentTotal: Double
+    let currentCount: Int
+    let previousTotal: Double
+    let previousCount: Int
+    let activeDayCount: Int
+    let todayCount: Int
+    let topCategoryLabel: String?
+    let topCategoryEmoji: String?
+    let topCategoryAmount: Double
+    let days: [ReviewOverviewDay]
+
+    var amountDelta: Double { currentTotal - previousTotal }
+    var countDelta: Int { currentCount - previousCount }
+}
+
 struct InsightPageSnapshot: @unchecked Sendable {
     let journalText: String
     let journalClosing: String
     let rhythmText: String
     let keywords: [KeywordBubbleData]
+    let reviewOverview: ReviewOverviewSnapshot
 }
 
 struct AICommuteDraftSlot: Equatable {
@@ -75,6 +99,7 @@ struct InsightWebView: View {
     @State private var monthlyActionMessage: String?
     @State private var showWeeklySharePrivacyConfirm = false
     @State private var showAICommandSheet = false
+    @State private var activeReviewTask: ReviewTaskIntent = .query
     @State private var aiCommandDismissRoutes = DeferredRouteQueue<DeferredDismissRoute>()
     @State private var aiCommandText = ""
     @State private var aiCommandAmountText = ""
@@ -167,6 +192,14 @@ struct InsightWebView: View {
         var categories: [AICommandCategoryComparison]
     }
 
+    private struct AICommandResultMetrics: Equatable {
+        var total: Double
+        var count: Int
+        var activeDayCount: Int
+        var topCategoryLabel: String?
+        var topCategoryAmount: Double
+    }
+
     private struct AICommandResult: @unchecked Sendable, Identifiable, Equatable {
         let id = UUID()
         var kind: AICommandKind
@@ -176,6 +209,7 @@ struct InsightWebView: View {
         var items: [HomeItem]
         var memoryCard: AICommandMemoryCard? = nil
         var comparison: AICommandComparison? = nil
+        var metrics: AICommandResultMetrics? = nil
         var bars: [AICommandBar]
         var drafts: [AICommandRecordDraft]
         var amountSource: String?
@@ -210,13 +244,32 @@ struct InsightWebView: View {
 
     private struct AICommandInputPanelView: View {
         @Binding var commandText: String
+        let promptTitle: String
+        let placeholder: String
+        let actionTitle: String
+        let actionSystemImage: String
+        let tint: Color
         let onRun: (String) -> Void
         let onClear: () -> Void
         @State private var draftText: String
         @FocusState private var isFocused: Bool
 
-        init(commandText: Binding<String>, onRun: @escaping (String) -> Void, onClear: @escaping () -> Void) {
+        init(
+            commandText: Binding<String>,
+            promptTitle: String,
+            placeholder: String,
+            actionTitle: String,
+            actionSystemImage: String,
+            tint: Color,
+            onRun: @escaping (String) -> Void,
+            onClear: @escaping () -> Void
+        ) {
             _commandText = commandText
+            self.promptTitle = promptTitle
+            self.placeholder = placeholder
+            self.actionTitle = actionTitle
+            self.actionSystemImage = actionSystemImage
+            self.tint = tint
             self.onRun = onRun
             self.onClear = onClear
             _draftText = State(initialValue: commandText.wrappedValue)
@@ -224,11 +277,11 @@ struct InsightWebView: View {
 
         var body: some View {
             VStack(alignment: .leading, spacing: 12) {
-                Text("你想让它做什么？")
+                Text(promptTitle)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppColors.text.opacity(0.86))
 
-                TextField("例如：帮我看一下过去三天餐饮类的消费", text: $draftText, axis: .vertical)
+                TextField(placeholder, text: $draftText, axis: .vertical)
                     .font(.body.weight(.medium))
                     .foregroundStyle(AppColors.text)
                     .lineLimit(2...4)
@@ -284,7 +337,7 @@ struct InsightWebView: View {
                 isFocused = false
                 onRun(trimmed)
             } label: {
-                aiCommandPrimaryLabel("生成预览", systemImage: "sparkles")
+                aiCommandPrimaryLabel(actionTitle, systemImage: actionSystemImage)
             }
             .buttonStyle(.plain)
             .minimumTapTarget()
@@ -325,13 +378,13 @@ struct InsightWebView: View {
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [AppColors.accent.opacity(0.94), AppColors.accentDark.opacity(0.94)],
+                            colors: [tint.opacity(0.94), AppColors.accentDark.opacity(0.94)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
             )
-            .shadow(color: AppColors.accent.opacity(0.18), radius: 10, x: 0, y: 5)
+            .shadow(color: tint.opacity(0.18), radius: 10, x: 0, y: 5)
         }
     }
 
@@ -623,48 +676,206 @@ struct InsightWebView: View {
     ]
 
     private func insightContinueQuestionCard(snapshot: InsightPageSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 13) {
-            Text("继续问")
-                .font(.footnote.weight(.bold))
-                .foregroundStyle(AppColors.subtext)
-
-            Text("先选一件要完成的事")
-                .font(.title3.weight(.semibold))
-                .lineSpacing(5)
-                .foregroundStyle(AppColors.text)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text("这里负责查记录、做对比和补遗漏；完整周记和月章统一放在「痕迹」。")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(AppColors.subtext)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text(snapshot.rhythmText)
-                .font(.subheadline)
-                .lineSpacing(4)
-                .foregroundStyle(AppColors.text.opacity(0.82))
-                .padding(.top, 2)
-
+        let overview = snapshot.reviewOverview
+        return VStack(alignment: .leading, spacing: 18) {
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) {
-                    insightContinueQuestionActions
+                HStack(alignment: .top, spacing: 12) {
+                    reviewLandingHeaderCopy
+                    Spacer(minLength: 8)
+                    reviewLandingLocalBadge
                 }
-
-                VStack(spacing: 8) {
-                    insightContinueQuestionActions
+                VStack(alignment: .leading, spacing: 10) {
+                    reviewLandingHeaderCopy
+                    reviewLandingLocalBadge
                 }
             }
-            .padding(.top, 2)
+
+            reviewOverviewHero(overview)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("现在要完成哪件事？")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(AppColors.text)
+
+                ForEach(ReviewTaskIntent.allCases, id: \.self) { intent in
+                    reviewTaskButton(intent, overview: overview)
+                }
+            }
         }
-        .padding(.leading, 4)
-        .paperChapterPanel(radius: 22, padding: 20)
+        .paperChapterPanel(radius: 26, padding: 18, showsAccentLine: false)
     }
 
-    @ViewBuilder
-    private var insightContinueQuestionActions: some View {
-        ForEach(ReviewTaskIntent.allCases, id: \.self) { intent in
-            reviewTaskButton(intent)
+    private var reviewLandingHeaderCopy: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("生活复盘")
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(AppColors.accentDark)
+            Text("先看清，再完成一件事")
+                .font(.title2.weight(.bold))
+                .foregroundStyle(AppColors.text)
+            Text("数据只来自账本；完整周记和月章仍在「痕迹」。")
+                .font(.footnote)
+                .foregroundStyle(AppColors.subtext)
+                .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var reviewLandingLocalBadge: some View {
+        Label("本机整理", systemImage: "iphone")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(AppColors.accentDark)
+            .padding(.horizontal, 9)
+            .frame(minHeight: 30)
+            .background(AppColors.accent.opacity(0.09), in: Capsule(style: .continuous))
+    }
+
+    private func reviewOverviewHero(_ overview: ReviewOverviewSnapshot) -> some View {
+        let maxAmount = max(overview.days.map(\.amount).max() ?? 0, 1)
+        return VStack(alignment: .leading, spacing: 14) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 12) {
+                    reviewOverviewAmount(overview)
+                    Spacer(minLength: 8)
+                    reviewOverviewDeltaBadge(overview)
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    reviewOverviewAmount(overview)
+                    reviewOverviewDeltaBadge(overview)
+                }
+            }
+
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 8) {
+                    reviewOverviewMetric(title: "记录", value: "\(overview.currentCount) 笔", systemImage: "list.bullet")
+                    reviewOverviewMetric(title: "有记录", value: "\(overview.activeDayCount) 天", systemImage: "calendar")
+                    reviewOverviewMetric(
+                        title: "最高分类",
+                        value: reviewOverviewTopCategoryText(overview),
+                        systemImage: "chart.pie.fill"
+                    )
+                }
+            } else {
+                HStack(spacing: 8) {
+                    reviewOverviewMetric(title: "记录", value: "\(overview.currentCount) 笔", systemImage: "list.bullet")
+                    reviewOverviewMetric(title: "有记录", value: "\(overview.activeDayCount) 天", systemImage: "calendar")
+                    reviewOverviewMetric(
+                        title: "最高分类",
+                        value: reviewOverviewTopCategoryText(overview),
+                        systemImage: "chart.pie.fill"
+                    )
+                }
+            }
+
+            HStack(alignment: .bottom, spacing: 7) {
+                ForEach(overview.days) { day in
+                    VStack(spacing: 5) {
+                        Spacer(minLength: 0)
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [AppColors.accent.opacity(0.90), AppColors.accent.opacity(0.26)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .frame(
+                                height: day.amount > 0
+                                    ? max(6, 46 * CGFloat(day.amount / maxAmount))
+                                    : 3
+                            )
+                            .opacity(day.amount > 0 ? 1 : 0.34)
+                        Text(day.label)
+                            .font(.system(size: 9, weight: day.label == "今天" ? .bold : .medium))
+                            .foregroundStyle(day.label == "今天" ? AppColors.accentDark : AppColors.subtext)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(day.label)，\(day.count) 笔，\(day.amount.formatted(.cny))")
+                }
+            }
+            .frame(height: 76)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.76), AppColors.accent.opacity(0.10), AppColors.paperMist.opacity(0.54)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(0.68), lineWidth: 1)
+        )
+    }
+
+    private func reviewOverviewAmount(_ overview: ReviewOverviewSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("近 7 天")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(AppColors.subtext)
+            Text(overview.currentTotal.formatted(.cny))
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .foregroundStyle(AppColors.text)
+                .minimumScaleFactor(0.72)
+                .lineLimit(1)
+        }
+    }
+
+    private func reviewOverviewDeltaBadge(_ overview: ReviewOverviewSnapshot) -> some View {
+        let delta = overview.amountDelta
+        let color = delta > 0.005
+            ? Color.orange.opacity(0.90)
+            : (delta < -0.005 ? AppColors.accentDark : AppColors.subtext)
+        let amountText = delta > 0.005
+            ? "多 \(abs(delta).formatted(.cny))"
+            : (delta < -0.005 ? "少 \(abs(delta).formatted(.cny))" : "金额持平")
+        let countText = overview.countDelta > 0
+            ? "多 \(overview.countDelta) 笔"
+            : (overview.countDelta < 0 ? "少 \(abs(overview.countDelta)) 笔" : "笔数持平")
+        return VStack(alignment: .trailing, spacing: 3) {
+            Label(amountText, systemImage: delta > 0.005 ? "arrow.up.right" : (delta < -0.005 ? "arrow.down.right" : "equal"))
+                .font(.caption.weight(.bold))
+            Text("比前 7 天 · \(countText)")
+                .font(.caption2.weight(.medium))
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(color.opacity(0.09), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("比前七天\(amountText)，\(countText)")
+    }
+
+    private func reviewOverviewMetric(title: String, value: String, systemImage: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(AppColors.accentDark)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.subtext)
+                Text(value)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(AppColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .padding(.horizontal, 9)
+        .background(Color.white.opacity(0.52), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func reviewOverviewTopCategoryText(_ overview: ReviewOverviewSnapshot) -> String {
+        guard let label = overview.topCategoryLabel else { return "暂无" }
+        return "\(overview.topCategoryEmoji ?? "")\(label)"
     }
 
     private func resetInsightPreparationForEmptyLedger() {
@@ -718,41 +929,119 @@ struct InsightWebView: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private func reviewTaskButton(_ intent: ReviewTaskIntent) -> some View {
-        Button {
+    private func reviewTaskButton(_ intent: ReviewTaskIntent, overview: ReviewOverviewSnapshot) -> some View {
+        let tint = reviewTaskTint(intent)
+        return Button {
             openReviewTask(intent)
         } label: {
-            HStack(spacing: 10) {
-                Image(systemName: intent.systemImage)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(AppColors.accentDark)
-                    .frame(width: 34, height: 34)
-                    .background(AppColors.accent.opacity(0.10), in: Circle())
+            reviewTaskButtonLabel(intent, overview: overview, tint: tint)
+            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 9)
+            .themedInteractionSurface(radius: 18, tint: tint, glowIntensity: 0.72)
+        }
+        .buttonStyle(PurposefulCardButtonStyle(radius: 18, depth: 0.8))
+        .minimumTapTarget()
+        .accessibilityLabel("\(intent.title)，\(reviewTaskContext(intent, overview: overview))")
+        .accessibilityHint(reviewTaskActionTitle(intent))
+    }
 
-                VStack(alignment: .leading, spacing: 2) {
+    @ViewBuilder
+    private func reviewTaskButtonLabel(
+        _ intent: ReviewTaskIntent,
+        overview: ReviewOverviewSnapshot,
+        tint: Color
+    ) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    reviewTaskIcon(intent, tint: tint)
                     Text(intent.title)
-                        .font(.subheadline.weight(.bold))
+                        .font(.headline.weight(.bold))
                         .foregroundStyle(AppColors.text)
-                    Text(intent.subtitle)
-                        .font(.footnote)
+                    Spacer(minLength: 4)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(tint.opacity(0.76))
+                }
+                Text(reviewTaskContext(intent, overview: overview))
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(reviewTaskActionTitle(intent))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+            }
+        } else {
+            HStack(spacing: 12) {
+                reviewTaskIcon(intent, tint: tint)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(intent.title)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(AppColors.text)
+                    Text(reviewTaskContext(intent, overview: overview))
+                        .font(.footnote.weight(.medium))
                         .foregroundStyle(AppColors.subtext)
                         .lineLimit(2)
                 }
-
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(AppColors.subtext.opacity(0.70))
+                Spacer(minLength: 6)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(reviewTaskActionTitle(intent))
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(tint)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(tint.opacity(0.76))
+                }
             }
-            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-            .padding(.horizontal, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .fill(Color.white.opacity(0.55))
-            )
         }
-        .buttonStyle(.plain)
-        .minimumTapTarget()
+    }
+
+    private func reviewTaskIcon(_ intent: ReviewTaskIntent, tint: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(tint.opacity(0.12))
+            Image(systemName: intent.systemImage)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(tint)
+        }
+        .frame(width: 44, height: 44)
+    }
+
+    private func reviewTaskTint(_ intent: ReviewTaskIntent) -> Color {
+        switch intent {
+        case .query: return AppColors.accentDark
+        case .compare: return AppColors.categoryColor(.transport)
+        case .backfill: return AppColors.lockGold
+        }
+    }
+
+    private func reviewTaskActionTitle(_ intent: ReviewTaskIntent) -> String {
+        switch intent {
+        case .query: return "去查找"
+        case .compare: return "看变化"
+        case .backfill: return "生成预览"
+        }
+    }
+
+    private func reviewTaskContext(_ intent: ReviewTaskIntent, overview: ReviewOverviewSnapshot) -> String {
+        switch intent {
+        case .query:
+            if let category = overview.topCategoryLabel {
+                return "近 7 天 \(overview.currentCount) 笔，\(category) \(overview.topCategoryAmount.formatted(.cny)) 最高"
+            }
+            return "按时间、分类或备注定位记录"
+        case .compare:
+            if abs(overview.amountDelta) <= 0.005 {
+                return "近 7 天与前 7 天金额持平"
+            }
+            let direction = overview.amountDelta > 0 ? "多" : "少"
+            return "近 7 天比前 7 天\(direction) \(abs(overview.amountDelta).formatted(.cny))"
+        case .backfill:
+            return overview.todayCount > 0
+                ? "今天已记 \(overview.todayCount) 笔，先核对是否还有遗漏"
+                : "今天还没有记录，先生成候选再确认"
+        }
     }
 
     private var insightChapterFootnote: some View {
@@ -772,8 +1061,28 @@ struct InsightWebView: View {
     }
 
     private func openReviewTask(_ intent: ReviewTaskIntent) {
-        aiCommandText = intent.presetCommand
-        showAICommandSheet = true
+        selectReviewTask(intent, command: intent.presetCommand, opensSheet: true)
+    }
+
+    private func selectReviewTask(
+        _ intent: ReviewTaskIntent,
+        command: String? = nil,
+        opensSheet: Bool = false
+    ) {
+        aiCommandRunTask?.cancel()
+        aiCommandRunTask = nil
+        aiCommandRunGate.invalidate()
+        activeReviewTask = intent
+        aiCommandText = command ?? intent.presetCommand
+        aiCommandAmountText = ""
+        aiCommandResult = nil
+        aiCommandMessage = nil
+        aiCommandSavedCount = nil
+        aiCommandShowsAllRelatedItems = false
+        isAICommandRunning = false
+        if opensSheet {
+            showAICommandSheet = true
+        }
     }
 
     @ViewBuilder
@@ -783,105 +1092,116 @@ struct InsightWebView: View {
 
     @ViewBuilder
     private func keywordBubbleSection(keywords: [KeywordBubbleData]) -> some View {
-        if keywords.count >= 3 {
-            VStack(alignment: .leading, spacing: 8) {
+        let categories = HomeItem.Category.allCases.filter { category in
+            keywords.contains { $0.category == category }
+        }
+        if !categories.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("可继续追问的线索")
+                    Text("从最近出现的分类继续查")
                         .font(.headline.weight(.bold))
                         .foregroundStyle(AppColors.text.opacity(0.88))
-                    Text("这些词来自真实记录；进入 AI 指令台后可以按时间、分类或变化继续问。")
+                    Text("这些入口来自真实记录，点一下会带着明确范围进入查记录。")
                         .font(.footnote)
                         .foregroundStyle(AppColors.subtext)
                 }
-                .padding(.horizontal, 4)
 
-                KeywordBubbleCloudView(keywords: keywords)
-                    .frame(minHeight: dynamicTypeSize.isAccessibilitySize ? 270 : 206)
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 180 : 132), spacing: 8)],
+                    spacing: 8
+                ) {
+                    ForEach(Array(categories.prefix(4)), id: \.self) { category in
+                        Button {
+                            selectReviewTask(
+                                .query,
+                                command: "帮我看一下最近 7 天\(category.rawValue)类的记录",
+                                opensSheet: true
+                            )
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text(category.emoji)
+                                    .font(.system(size: 17))
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(category.rawValue)
+                                        .font(.subheadline.weight(.bold))
+                                        .foregroundStyle(AppColors.text)
+                                    Text("查最近 7 天")
+                                        .font(.caption2)
+                                        .foregroundStyle(AppColors.subtext)
+                                }
+                                Spacer(minLength: 2)
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(AppColors.accentDark.opacity(0.76))
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                            .padding(.horizontal, 11)
+                            .themedInteractionSurface(
+                                radius: 15,
+                                tint: AppColors.categoryColor(category),
+                                glowIntensity: 0.5
+                            )
+                        }
+                        .buttonStyle(PurposefulCardButtonStyle(radius: 15, depth: 0.6))
+                        .accessibilityLabel("查最近七天\(category.rawValue)类记录")
+                    }
+                }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 15)
-            .padding(.bottom, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.58),
-                                AppColors.monthlyInsightBg.opacity(0.38),
-                                AppColors.accent.opacity(0.055)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(Color.white.opacity(0.56), lineWidth: 1)
-            )
-            .shadow(color: AppColors.subtext.opacity(0.055), radius: 18, x: 0, y: 8)
+            .appSurface(.action, radius: 22, padding: 16, tint: AppColors.accent)
         }
     }
 
     private var insightNextChapter: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("完整章节")
-                .font(.footnote.weight(.bold))
-                .foregroundStyle(AppColors.subtext)
-
-            Button {
-                onOpenTrace?(.week)
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("本周")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(AppColors.subtext)
-                    Text("去痕迹看本周完整章节 →")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(AppColors.accent.opacity(0.82))
-                }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(AppColors.monthlyInsightBg)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color(red: 0.94, green: 0.82, blue: 0.68).opacity(0.35), lineWidth: 1)
-                )
+            VStack(alignment: .leading, spacing: 3) {
+                Text("想读完整故事？")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(AppColors.text)
+                Text("复盘负责完成任务，周记和月章继续放在痕迹。")
+                    .font(.footnote)
+                    .foregroundStyle(AppColors.subtext)
             }
-            .buttonStyle(.plain)
 
-            Button {
-                onOpenTrace?(.month)
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("本月")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(AppColors.subtext)
-                    Text("去痕迹看本月完整章节 →")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(AppColors.accent.opacity(0.82))
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    insightTraceLink(range: .week, title: "看周记", systemImage: "calendar.badge.clock")
+                    insightTraceLink(range: .month, title: "看月章", systemImage: "calendar")
                 }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(AppColors.monthlyInsightBg.opacity(0.72))
-                )
+                VStack(spacing: 8) {
+                    insightTraceLink(range: .week, title: "看周记", systemImage: "calendar.badge.clock")
+                    insightTraceLink(range: .month, title: "看月章", systemImage: "calendar")
+                }
             }
-            .buttonStyle(.plain)
         }
-        .padding(.leading, 14)
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(Color(red: 0.79, green: 0.56, blue: 0.34).opacity(0.18))
-                .frame(width: 1)
+        .appSurface(.quiet, radius: 22, padding: 16, tint: AppColors.monthlyInsightBg)
+    }
+
+    private func insightTraceLink(
+        range: SummaryPlaybackRange,
+        title: String,
+        systemImage: String
+    ) -> some View {
+        Button {
+            onOpenTrace?(range)
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppColors.accentDark)
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppColors.text)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(AppColors.subtext)
+            }
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .padding(.horizontal, 12)
+            .background(AppColors.monthlyInsightBg.opacity(0.70), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
         }
-        .padding(.leading, 8)
+        .buttonStyle(PurposefulCardButtonStyle(radius: 15, depth: 0.6))
+        .accessibilityHint("前往痕迹查看完整章节")
     }
 
     private var weekKickerText: String {
@@ -1715,6 +2035,7 @@ struct InsightWebView: View {
                         LazyVStack(alignment: .leading, spacing: 16) {
                             aiCommandSheetHeader
                                 .id(Self.aiCommandTopAnchorID)
+                            aiCommandTaskPicker
                             aiCommandInputPanel
                             aiCommandSuggestionRow
                             if let aiCommandMessage {
@@ -1755,7 +2076,7 @@ struct InsightWebView: View {
                     .font(.body.weight(.semibold))
                     .foregroundStyle(AppColors.accentDark)
                     .minimumTapTarget()
-                    .accessibilityHint("关闭 AI 指令台")
+                    .accessibilityHint("关闭复盘任务")
                 }
             }
         }
@@ -1781,45 +2102,146 @@ struct InsightWebView: View {
     }
 
     private var aiCommandSheetHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let tint = reviewTaskTint(activeReviewTask)
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 ZStack {
                     Circle()
-                        .fill(AppColors.accent.opacity(0.12))
-                    Image(systemName: "wand.and.stars")
+                        .fill(tint.opacity(0.12))
+                    Image(systemName: activeReviewTask.systemImage)
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(AppColors.accentDark)
+                        .foregroundStyle(tint)
                 }
                 .frame(width: 42, height: 42)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("按账本规则查、比、补")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(tint)
+                    Text(aiCommandTaskHeaderTitle)
                         .font(.title3.weight(.bold))
                         .foregroundStyle(AppColors.text)
-                    Text("按时间、分类、金额和备注匹配；涉及新增记录时，确认后才会保存。")
+                    Text(aiCommandTaskHeaderSubtitle)
                         .font(.subheadline)
                         .foregroundStyle(AppColors.subtext)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            Label("本机规则 · 不联网", systemImage: "iphone")
+            Label(
+                activeReviewTask == .backfill
+                    ? "本机规则 · 不联网 · 确认后写入"
+                    : "本机规则 · 不联网 · 只读结果",
+                systemImage: activeReviewTask == .backfill ? "checkmark.shield" : "iphone"
+            )
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(AppColors.accentDark.opacity(0.86))
+                .foregroundStyle(tint.opacity(0.92))
                 .padding(.horizontal, 10)
                 .frame(minHeight: 32)
-                .background(AppColors.accent.opacity(0.09), in: Capsule(style: .continuous))
-                .accessibilityLabel("本机规则，不联网")
+                .background(tint.opacity(0.09), in: Capsule(style: .continuous))
+                .accessibilityLabel(
+                    activeReviewTask == .backfill
+                        ? "本机规则，确认后写入"
+                        : "本机规则，只读结果"
+                )
         }
         .paperChapterPanel(radius: 22, padding: 18, showsAccentLine: false)
+    }
+
+    private var aiCommandTaskPicker: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                aiCommandTaskPickerButtons
+            }
+            VStack(spacing: 8) {
+                aiCommandTaskPickerButtons
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var aiCommandTaskPickerButtons: some View {
+        ForEach(ReviewTaskIntent.allCases, id: \.self) { intent in
+            let isSelected = activeReviewTask == intent
+            let tint = reviewTaskTint(intent)
+            Button {
+                guard !isSelected else { return }
+                dismissKeyboard()
+                selectReviewTask(intent)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: intent.systemImage)
+                        .font(.system(size: 11, weight: .bold))
+                    Text(intent.title)
+                        .font(.footnote.weight(.bold))
+                }
+                .foregroundStyle(isSelected ? tint : AppColors.subtext)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .padding(.horizontal, 9)
+                .themedInteractionSurface(
+                    radius: 14,
+                    tint: tint,
+                    isSelected: isSelected,
+                    glowIntensity: isSelected ? 0.9 : 0.35
+                )
+            }
+            .buttonStyle(PurposefulCardButtonStyle(radius: 14, depth: 0.5))
+            .accessibilityValue(isSelected ? "已选择" : "")
+        }
     }
 
     private var aiCommandInputPanel: some View {
         AICommandInputPanelView(
             commandText: $aiCommandText,
+            promptTitle: aiCommandInputPromptTitle,
+            placeholder: aiCommandInputPlaceholder,
+            actionTitle: aiCommandInputActionTitle,
+            actionSystemImage: activeReviewTask.systemImage,
+            tint: reviewTaskTint(activeReviewTask),
             onRun: { runAICommand($0) },
             onClear: clearAICommandInput
         )
+    }
+
+    private var aiCommandTaskHeaderTitle: String {
+        switch activeReviewTask {
+        case .query: return "从账本里定位一件事实"
+        case .compare: return "把两段时间放在同一尺度"
+        case .backfill: return "先生成候选，再逐条确认"
+        }
+    }
+
+    private var aiCommandTaskHeaderSubtitle: String {
+        switch activeReviewTask {
+        case .query: return "按时间、分类、金额或备注查找，并保留原始记录作为依据。"
+        case .compare: return "同时展示两段金额、笔数、分类变化和各自的原始记录。"
+        case .backfill: return "只生成已经到时间的候选；疑似重复会排除，确认前不写入账本。"
+        }
+    }
+
+    private var aiCommandInputPromptTitle: String {
+        switch activeReviewTask {
+        case .query: return "你想查什么？"
+        case .compare: return "你想比较哪两段？"
+        case .backfill: return "你想补记哪段通勤？"
+        }
+    }
+
+    private var aiCommandInputPlaceholder: String {
+        switch activeReviewTask {
+        case .query: return "例如：过去三天餐饮花了多少"
+        case .compare: return "例如：对比本周和上周的消费"
+        case .backfill: return "例如：补记今天通勤"
+        }
+    }
+
+    private var aiCommandInputActionTitle: String {
+        switch activeReviewTask {
+        case .query: return "查找记录"
+        case .compare: return "生成对比"
+        case .backfill: return "生成待确认记录"
+        }
     }
 
     private var aiCommandSuggestionRow: some View {
@@ -1882,10 +2304,32 @@ struct InsightWebView: View {
             suggestions.append("补记过去一周工作日通勤，早晚各一次")
         }
 
-        let fallback = ["总结这周生活", "过去三天餐饮花了多少？", "看一下这周交通", "找找最近有没有重复账单"]
-        let result = Array(uniqueAICommandSuggestions(suggestions + fallback + lockedPreviewSuggestions).prefix(5))
+        let fallback: [String]
+        switch activeReviewTask {
+        case .query:
+            fallback = ["过去三天餐饮花了多少？", "看一下这周交通", "找找最近有没有重复账单"]
+        case .compare:
+            fallback = ["对比本周和上周的消费", "这周交通和上周比呢？", "对比本月和上月的消费"]
+        case .backfill:
+            fallback = ["补记今天通勤", "补记过去一周工作日通勤，早晚各一次"]
+        }
+        let taskSuggestions = (suggestions + lockedPreviewSuggestions).filter {
+            aiCommandSuggestion($0, matches: activeReviewTask)
+        }
+        let result = Array(uniqueAICommandSuggestions(taskSuggestions + fallback).prefix(5))
         storeAICommandSuggestions(result, for: cacheKey)
         return result
+    }
+
+    private func aiCommandSuggestion(_ suggestion: String, matches task: ReviewTaskIntent) -> Bool {
+        switch task {
+        case .query:
+            return !containsAny(suggestion, ["对比", "比呢", "补记", "生成"])
+        case .compare:
+            return containsAny(suggestion, ["对比", "比呢", "相比", "变化"])
+        case .backfill:
+            return containsAny(suggestion, ["补记", "补上", "生成"])
+        }
     }
 
     private func uniqueAICommandSuggestions(_ suggestions: [String]) -> [String] {
@@ -1903,6 +2347,7 @@ struct InsightWebView: View {
         ) ?? "none"
         return [
             "suggestions",
+            activeReviewTask.rawValue,
             hasMemberAccess ? "member" : "free",
             weatherKind,
             aiCommandItemsSignature(homeViewModel.items)
@@ -1967,7 +2412,15 @@ struct InsightWebView: View {
                 if let comparison = result.comparison {
                     aiCommandComparisonOverview(comparison)
                     aiCommandComparisonRecords(comparison, resultID: result.id)
+                } else if !result.drafts.isEmpty {
+                    aiCommandDraftPreview(result)
+                    if !result.bars.isEmpty {
+                        aiCommandBarChart(result.bars)
+                    }
                 } else {
+                    if let metrics = result.metrics {
+                        aiCommandQueryOverview(metrics)
+                    }
                     if !result.bars.isEmpty {
                         aiCommandBarChart(result.bars)
                     }
@@ -1978,41 +2431,49 @@ struct InsightWebView: View {
                 if result.needsAmount {
                     aiCommandAmountInput(result)
                 }
-                if !result.drafts.isEmpty {
-                    aiCommandDraftPreview(result)
-                }
                 aiCommandResultActions(result)
             }
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                Text("可以先从一个小问题开始")
+                Text(aiCommandEmptyTitle)
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(AppColors.text)
-                Text("比如查一段时间的餐饮、交通，或者让它先生成一批待确认的通勤记录。")
+                Text(aiCommandEmptyDetail)
                     .font(.subheadline)
                     .lineSpacing(3)
                     .foregroundStyle(AppColors.subtext)
             }
-            .glassPanel(radius: 20, padding: 18)
+            .appSurface(.quiet, radius: 20, padding: 18, tint: reviewTaskTint(activeReviewTask))
+        }
+    }
+
+    private var aiCommandEmptyTitle: String {
+        switch activeReviewTask {
+        case .query: return "写清时间或分类，结果会更准确"
+        case .compare: return "先确定当前周期，系统会自动找上一同期"
+        case .backfill: return "先生成候选，确认前不会改动账本"
+        }
+    }
+
+    private var aiCommandEmptyDetail: String {
+        switch activeReviewTask {
+        case .query: return "可以查某段时间的餐饮、交通、最大一笔或疑似重复记录。"
+        case .compare: return "本周会对齐上周相同已过天数，本月会对齐上月相同已过日期。"
+        case .backfill: return "今天只补已经到点的通勤时段；疑似重复会标出并排除保存。"
         }
     }
 
     private func aiCommandIntentCard(_ result: AICommandResult) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
+        let tint = aiCommandResultTint(result.kind)
+        return VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 8) {
-                Text("匹配到的指令")
+                Label(aiCommandKindText(result.kind), systemImage: aiCommandResultIcon(result.kind))
                     .font(.footnote.weight(.bold))
-                    .foregroundStyle(AppColors.subtext)
+                    .foregroundStyle(tint)
                 Spacer()
-                Text(aiCommandKindText(result.kind))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(result.kind == .batchCreate ? AppColors.lockGold : AppColors.accentDark)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill((result.kind == .batchCreate ? AppColors.lockGold : AppColors.accent).opacity(0.10))
-                    )
+                Text(result.kind == .batchCreate || result.kind == .needsAmount ? "确认前不写入" : "只读")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppColors.subtext)
             }
 
             Text(result.title)
@@ -2030,9 +2491,91 @@ struct InsightWebView: View {
                     .font(.footnote)
                     .lineSpacing(3)
                     .foregroundStyle(AppColors.subtext)
+                    .padding(.top, 2)
             }
         }
-        .glassPanel(radius: 22, padding: 18)
+        .appSurface(.metric, radius: 22, padding: 18, tint: tint)
+    }
+
+    private func aiCommandResultTint(_ kind: AICommandKind) -> Color {
+        switch kind {
+        case .compare: return reviewTaskTint(.compare)
+        case .batchCreate, .needsAmount: return reviewTaskTint(.backfill)
+        case .unsupported: return AppColors.subtext
+        case .query, .memoryLookup, .duplicateCheck: return reviewTaskTint(.query)
+        }
+    }
+
+    private func aiCommandResultIcon(_ kind: AICommandKind) -> String {
+        switch kind {
+        case .query: return "magnifyingglass"
+        case .compare: return "arrow.left.arrow.right"
+        case .memoryLookup: return "clock.arrow.circlepath"
+        case .duplicateCheck: return "doc.on.doc"
+        case .batchCreate: return "plus.rectangle.on.rectangle"
+        case .needsAmount: return "yensign.circle"
+        case .unsupported: return "questionmark.circle"
+        }
+    }
+
+    private func aiCommandQueryOverview(_ metrics: AICommandResultMetrics) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("结果总览")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(AppColors.subtext)
+                    Text(metrics.total.formatted(.cny))
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                }
+                Spacer(minLength: 8)
+                Text("\(metrics.count) 笔")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(AppColors.accentDark)
+                    .padding(.horizontal, 10)
+                    .frame(minHeight: 34)
+                    .background(AppColors.accent.opacity(0.10), in: Capsule(style: .continuous))
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    aiCommandMetricChips(metrics)
+                }
+                VStack(spacing: 8) {
+                    aiCommandMetricChips(metrics)
+                }
+            }
+        }
+        .appSurface(.metric, radius: 20, padding: 16, tint: AppColors.accent)
+    }
+
+    @ViewBuilder
+    private func aiCommandMetricChips(_ metrics: AICommandResultMetrics) -> some View {
+        aiCommandMetricChip(title: "有记录", value: "\(metrics.activeDayCount) 天")
+        aiCommandMetricChip(title: "金额最高", value: metrics.topCategoryLabel ?? "暂无")
+        aiCommandMetricChip(
+            title: "该类金额",
+            value: metrics.topCategoryLabel == nil ? "—" : metrics.topCategoryAmount.formatted(.cny)
+        )
+    }
+
+    private func aiCommandMetricChip(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(AppColors.subtext)
+            Text(value)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.68)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .padding(.horizontal, 9)
+        .background(Color.white.opacity(0.50), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func aiCommandMemoryCard(_ card: AICommandMemoryCard) -> some View {
@@ -2270,13 +2813,21 @@ struct InsightWebView: View {
         let color = delta > 0.005
             ? Color.orange.opacity(0.88)
             : (delta < -0.005 ? AppColors.accentDark : AppColors.subtext)
-        return Label(text, systemImage: symbol)
-            .font(.caption.weight(.bold))
-            .foregroundStyle(color)
-            .padding(.horizontal, 10)
-            .frame(minHeight: 30)
-            .background(color.opacity(0.10), in: Capsule(style: .continuous))
-            .accessibilityLabel("\(comparison.current.label)比\(comparison.previous.label)\(text)")
+        let countText = comparison.deltaCount > 0
+            ? "多 \(comparison.deltaCount) 笔"
+            : (comparison.deltaCount < 0 ? "少 \(abs(comparison.deltaCount)) 笔" : "笔数持平")
+        return VStack(alignment: .trailing, spacing: 3) {
+            Label(text, systemImage: symbol)
+                .font(.caption.weight(.bold))
+            Text(countText)
+                .font(.caption2.weight(.medium))
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(comparison.current.label)比\(comparison.previous.label)\(text)，\(countText)")
     }
 
     private func aiCommandComparisonScaleRow(
@@ -2329,9 +2880,16 @@ struct InsightWebView: View {
             HStack(spacing: 8) {
                 Text(comparison.category.emoji)
                     .font(.system(size: 14))
-                Text(comparison.category.rawValue)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(AppColors.text)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(comparison.category.rawValue)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(AppColors.text)
+                    Text("\(currentLabel) \(comparison.currentCount) 笔 · \(previousLabel) \(comparison.previousCount) 笔")
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.subtext)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.68)
+                }
                 Spacer(minLength: 8)
                 Text(deltaText)
                     .font(.caption.weight(.bold))
@@ -2355,7 +2913,7 @@ struct InsightWebView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(comparison.category.rawValue)对比")
-        .accessibilityValue("当前\(comparison.currentAmount.formatted(.cny))，上一段\(comparison.previousAmount.formatted(.cny))，\(deltaText)")
+        .accessibilityValue("当前\(comparison.currentCount)笔，\(comparison.currentAmount.formatted(.cny))；上一段\(comparison.previousCount)笔，\(comparison.previousAmount.formatted(.cny))；\(deltaText)")
     }
 
     private func aiCommandCategoryComparisonBar(
@@ -2486,10 +3044,21 @@ struct InsightWebView: View {
 
     private func aiCommandBarChart(_ bars: [AICommandBar]) -> some View {
         let maxAmount = max(bars.map(\.amount).max() ?? 0, 1)
+        let peak = bars.max { lhs, rhs in lhs.amount < rhs.amount }
         return VStack(alignment: .leading, spacing: 12) {
-            Text("简图")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(AppColors.subtext)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("按天分布")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AppColors.text)
+                Spacer(minLength: 8)
+                if let peak, peak.amount > 0 {
+                    Text("最高 \(peak.label) · \(peak.amount.formatted(.cny))")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(AppColors.subtext)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                }
+            }
 
             HStack(alignment: .bottom, spacing: 9) {
                 ForEach(bars) { bar in
@@ -2635,7 +3204,7 @@ struct InsightWebView: View {
                 }
             }
         }
-        .glassPanel(radius: 20, padding: 16)
+        .appSurface(.metric, radius: 20, padding: 16, tint: AppColors.accent)
     }
 
     private var aiCommandAmountField: some View {
@@ -2662,11 +3231,24 @@ struct InsightWebView: View {
     }
 
     private func aiCommandDraftPreview(_ result: AICommandResult) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let previewLimit = 8
+        let saveableDrafts = result.drafts.filter { draft in
+            if case .conflict = draft.status { return false }
+            return draft.amount > 0
+        }
+        let conflictCount = result.drafts.filter { draft in
+            if case .conflict = draft.status { return true }
+            return false
+        }.count
+        let total = saveableDrafts.reduce(0) { $0 + $1.amount }
+        let visibleDrafts = aiCommandShowsAllRelatedItems
+            ? result.drafts
+            : Array(result.drafts.prefix(previewLimit))
+        return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("待确认记录")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(AppColors.subtext)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(AppColors.text)
                 Spacer()
                 if let amountSource = result.amountSource {
                     Text(amountSource)
@@ -2675,11 +3257,58 @@ struct InsightWebView: View {
                 }
             }
 
-            ForEach(result.drafts.prefix(12)) { draft in
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    aiCommandDraftMetric(title: "可保存", value: "\(saveableDrafts.count) 笔")
+                    aiCommandDraftMetric(title: "合计", value: total.formatted(.cny))
+                    aiCommandDraftMetric(title: "疑似重复", value: "\(conflictCount) 笔")
+                }
+                VStack(spacing: 8) {
+                    aiCommandDraftMetric(title: "可保存", value: "\(saveableDrafts.count) 笔")
+                    aiCommandDraftMetric(title: "合计", value: total.formatted(.cny))
+                    aiCommandDraftMetric(title: "疑似重复", value: "\(conflictCount) 笔")
+                }
+            }
+
+            ForEach(visibleDrafts) { draft in
                 aiCommandDraftRow(draft)
             }
+
+            if result.drafts.count > previewLimit {
+                Button {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.20)) {
+                        aiCommandShowsAllRelatedItems.toggle()
+                    }
+                } label: {
+                    Label(
+                        aiCommandShowsAllRelatedItems ? "收起候选记录" : "展开剩余 \(result.drafts.count - previewLimit) 条",
+                        systemImage: aiCommandShowsAllRelatedItems ? "chevron.up" : "chevron.down"
+                    )
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AppColors.lockGold)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(AppColors.lockGold.opacity(0.08), in: Capsule(style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .glassPanel(radius: 20, padding: 16)
+        .appSurface(.metric, radius: 20, padding: 16, tint: AppColors.lockGold)
+    }
+
+    private func aiCommandDraftMetric(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(AppColors.subtext)
+            Text(value)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(AppColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.68)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .padding(.horizontal, 9)
+        .background(Color.white.opacity(0.50), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func aiCommandDraftRow(_ draft: AICommandRecordDraft) -> some View {
@@ -2723,8 +3352,12 @@ struct InsightWebView: View {
 
     private var aiCommandLoadingPanel: some View {
         ComputationLoadingView(
-            message: "正在从已有记录里寻找…",
-            detail: "涉及新增记录时，会先给你确认",
+            message: activeReviewTask == .compare
+                ? "正在对齐两段时间…"
+                : (activeReviewTask == .backfill ? "正在检查可补记时段…" : "正在从已有记录里寻找…"),
+            detail: activeReviewTask == .backfill
+                ? "会先排除未到时间和疑似重复记录"
+                : "结果会保留原始记录作为依据",
             presentation: .card
         )
     }
@@ -2898,6 +3531,9 @@ struct InsightWebView: View {
                 startedAtUptime: performanceStartedAt,
                 itemCount: itemCount
             )
+            if let resolvedTask = aiCommandTask(for: result.kind) {
+                activeReviewTask = resolvedTask
+            }
             withAnimation(.easeInOut(duration: 0.18)) {
                 aiCommandResult = result
                 isAICommandRunning = false
@@ -2915,6 +3551,19 @@ struct InsightWebView: View {
         case .batchCreate: return "batch_create"
         case .needsAmount: return "needs_amount"
         case .unsupported: return "unsupported"
+        }
+    }
+
+    private func aiCommandTask(for kind: AICommandKind) -> ReviewTaskIntent? {
+        switch kind {
+        case .query, .memoryLookup, .duplicateCheck:
+            return .query
+        case .compare:
+            return .compare
+        case .batchCreate, .needsAmount:
+            return .backfill
+        case .unsupported:
+            return nil
         }
     }
 
@@ -3205,6 +3854,7 @@ struct InsightWebView: View {
                 summary: summary,
                 detail: detailParts.joined(separator: " "),
                 items: cappedAICommandEvidenceItems(items),
+                metrics: aiCommandResultMetrics(items),
                 bars: dailyBars(range: range, items: items),
                 drafts: [],
                 amountSource: nil,
@@ -3367,6 +4017,7 @@ struct InsightWebView: View {
                     summary: summary,
                     detail: aiCommandCategoryBreakdownDetail(items: items, total: total, fallback: ""),
                     items: cappedAICommandEvidenceItems(items),
+                    metrics: aiCommandResultMetrics(items),
                     bars: dailyBars(range: range, items: items),
                     drafts: [],
                     amountSource: nil,
@@ -3389,6 +4040,7 @@ struct InsightWebView: View {
                 summary: summary,
                 detail: detail,
                 items: cappedAICommandEvidenceItems(items),
+                metrics: aiCommandResultMetrics(items),
                 bars: dailyBars(range: range, items: items),
                 drafts: [],
                 amountSource: nil,
@@ -3518,6 +4170,31 @@ struct InsightWebView: View {
                     return $0.count > $1.count
                 }
                 .first
+        }
+
+        private func aiCommandResultMetrics(_ items: [HomeItem]) -> AICommandResultMetrics {
+            let calendar = aiCommandCalendar
+            let topCategory = Dictionary(grouping: items, by: \.category)
+                .map { category, rows in
+                    (
+                        category: category,
+                        amount: rows.reduce(0) { $0 + $1.amount },
+                        count: rows.count
+                    )
+                }
+                .sorted { lhs, rhs in
+                    if abs(lhs.amount - rhs.amount) > 0.005 { return lhs.amount > rhs.amount }
+                    if lhs.count != rhs.count { return lhs.count > rhs.count }
+                    return lhs.category.rawValue < rhs.category.rawValue
+                }
+                .first
+            return AICommandResultMetrics(
+                total: items.reduce(0) { $0 + $1.amount },
+                count: items.count,
+                activeDayCount: Set(items.map { calendar.startOfDay(for: $0.createdAt) }).count,
+                topCategoryLabel: topCategory?.category.rawValue,
+                topCategoryAmount: topCategory?.amount ?? 0
+            )
         }
 
         private func aiCommandCategoryBreakdownDetail(items: [HomeItem], total: Double, fallback: String) -> String {

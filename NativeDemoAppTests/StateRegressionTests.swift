@@ -528,6 +528,7 @@ final class InsightBackgroundComputationTests: XCTestCase {
         XCTAssertEqual(firstSnapshot.journalClosing, secondSnapshot.journalClosing)
         XCTAssertEqual(firstSnapshot.rhythmText, secondSnapshot.rhythmText)
         XCTAssertEqual(firstSnapshot.keywords, secondSnapshot.keywords)
+        XCTAssertEqual(firstSnapshot.reviewOverview, secondSnapshot.reviewOverview)
 
         let firstDigest = InsightWebView.aiCommandComputationDigestForTesting(
             command: "最近 90 天餐饮花了多少",
@@ -555,6 +556,50 @@ final class InsightBackgroundComputationTests: XCTestCase {
 
         gate.invalidate()
         XCTAssertFalse(gate.accepts(latest))
+    }
+
+    func testReviewOverviewMakesCurrentAndPreviousSevenDaysDirectlyComparable() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 16,
+            hour: 12
+        ))!
+        func date(_ day: Int, _ hour: Int) -> Date {
+            calendar.date(from: DateComponents(
+                timeZone: calendar.timeZone,
+                year: 2026,
+                month: 7,
+                day: day,
+                hour: hour
+            ))!
+        }
+        let items = [
+            HomeItem(title: "午餐", amount: 10, category: .dining, createdAt: date(13, 12)),
+            HomeItem(title: "今天地铁", amount: 20, category: .transport, createdAt: date(16, 8)),
+            HomeItem(title: "前七天地铁", amount: 40, category: .transport, createdAt: date(9, 8)),
+        ]
+
+        let overview = InsightComputationService.weeklyPageSnapshot(
+            InsightComputationInput(items: items, isMember: true, now: now)
+        ).reviewOverview
+
+        XCTAssertEqual(overview.currentTotal, 30, accuracy: 0.001)
+        XCTAssertEqual(overview.currentCount, 2)
+        XCTAssertEqual(overview.previousTotal, 40, accuracy: 0.001)
+        XCTAssertEqual(overview.previousCount, 1)
+        XCTAssertEqual(overview.amountDelta, -10, accuracy: 0.001)
+        XCTAssertEqual(overview.countDelta, 1)
+        XCTAssertEqual(overview.activeDayCount, 2)
+        XCTAssertEqual(overview.todayCount, 1)
+        XCTAssertEqual(overview.topCategoryLabel, HomeItem.Category.transport.rawValue)
+        XCTAssertEqual(overview.topCategoryAmount, 20, accuracy: 0.001)
+        XCTAssertEqual(overview.days.count, 7)
+        XCTAssertEqual(overview.days.last?.label, "今天")
+        XCTAssertEqual(overview.days.last?.count, 1)
     }
 
     func testAICommandComparisonKeepsBothPeriodsAndCategoryChanges() {
@@ -975,6 +1020,7 @@ final class ReleaseScaleFixtureTests: XCTestCase {
             XCTAssertEqual(firstSnapshot.journalClosing, secondSnapshot.journalClosing)
             XCTAssertEqual(firstSnapshot.rhythmText, secondSnapshot.rhythmText)
             XCTAssertEqual(firstSnapshot.keywords, secondSnapshot.keywords)
+            XCTAssertEqual(firstSnapshot.reviewOverview, secondSnapshot.reviewOverview)
 
             let firstDigest = InsightWebView.aiCommandComputationDigestForTesting(
                 command: "最近 90 天餐饮花了多少",

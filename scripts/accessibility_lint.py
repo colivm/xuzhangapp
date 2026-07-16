@@ -56,8 +56,10 @@ def main() -> None:
             "@Environment(\\.accessibilityReduceMotion) private var reduceMotion",
             "@Environment(\\.dynamicTypeSize) private var dynamicTypeSize",
             "ViewThatFits(in: .horizontal)",
-            "dynamicTypeSize.isAccessibilitySize ? 270 : 206",
-            ".accessibilityLabel(\"本机规则，不联网\")",
+            "if dynamicTypeSize.isAccessibilitySize",
+            ".accessibilityValue(isSelected ? \"已选择\" : \"\")",
+            "本机规则，确认后写入",
+            ".accessibilityLabel(\"比前七天",
             ".accessibilityHint(\"打开这条记录的详情预览\")",
         ],
     )

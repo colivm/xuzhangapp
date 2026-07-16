@@ -43,7 +43,61 @@ enum InsightComputationService {
                 from: bubbleItems,
                 allItems: input.items,
                 now: input.now
+            ),
+            reviewOverview: reviewOverview(input.items, now: input.now)
+        )
+    }
+
+    private static func reviewOverview(_ items: [HomeItem], now: Date) -> ReviewOverviewSnapshot {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        let currentStart = calendar.date(byAdding: .day, value: -6, to: today) ?? today
+        let currentEnd = calendar.date(byAdding: .day, value: 1, to: today) ?? now
+        let previousEnd = currentStart
+        let previousStart = calendar.date(byAdding: .day, value: -7, to: previousEnd) ?? previousEnd
+        let positiveItems = items.filter { $0.amount > 0 }
+        let currentItems = positiveItems.filter { $0.createdAt >= currentStart && $0.createdAt < currentEnd }
+        let previousItems = positiveItems.filter { $0.createdAt >= previousStart && $0.createdAt < previousEnd }
+        let currentTotal = currentItems.reduce(0) { $0 + $1.amount }
+        let previousTotal = previousItems.reduce(0) { $0 + $1.amount }
+        let grouped = Dictionary(grouping: currentItems, by: \.category)
+            .map { category, records in
+                (
+                    category: category,
+                    amount: records.reduce(0) { $0 + $1.amount },
+                    count: records.count
+                )
+            }
+            .sorted { lhs, rhs in
+                if abs(lhs.amount - rhs.amount) > 0.005 { return lhs.amount > rhs.amount }
+                if lhs.count != rhs.count { return lhs.count > rhs.count }
+                return lhs.category.rawValue < rhs.category.rawValue
+            }
+        let topCategory = grouped.first
+        let itemsByDay = Dictionary(grouping: currentItems) { calendar.startOfDay(for: $0.createdAt) }
+        let days = (0..<7).compactMap { offset -> ReviewOverviewDay? in
+            guard let day = calendar.date(byAdding: .day, value: offset, to: currentStart) else { return nil }
+            let dayItems = itemsByDay[day] ?? []
+            let dayComponent = calendar.component(.day, from: day)
+            let monthComponent = calendar.component(.month, from: day)
+            return ReviewOverviewDay(
+                id: "\(calendar.component(.year, from: day))-\(monthComponent)-\(dayComponent)",
+                label: calendar.isDate(day, inSameDayAs: today) ? "今天" : "\(monthComponent)/\(dayComponent)",
+                amount: dayItems.reduce(0) { $0 + $1.amount },
+                count: dayItems.count
             )
+        }
+        return ReviewOverviewSnapshot(
+            currentTotal: currentTotal,
+            currentCount: currentItems.count,
+            previousTotal: previousTotal,
+            previousCount: previousItems.count,
+            activeDayCount: Set(currentItems.map { calendar.startOfDay(for: $0.createdAt) }).count,
+            todayCount: itemsByDay[today]?.count ?? 0,
+            topCategoryLabel: topCategory?.category.rawValue,
+            topCategoryEmoji: topCategory?.category.emoji,
+            topCategoryAmount: topCategory?.amount ?? 0,
+            days: days
         )
     }
 

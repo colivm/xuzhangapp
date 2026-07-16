@@ -1201,7 +1201,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 - 本轮队列已全部完成 Windows 代码与仓库门禁，当前无 `IN_PROGRESS`。
 - `ARCH-03` 页面继续拆分保持 `NOT_STARTED`，没有在本轮产品逻辑收敛中夹带继续拆分。
-- 真机统一按 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 的 REAL-01～06、FLOW-01～15、R-01～12、StoreKit、权限和无障碍矩阵执行；未执行项不得写为 `VERIFIED`。
+- 真机统一按 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 的 REAL-01～06、FLOW-01～16、R-01～12、StoreKit、权限和无障碍矩阵执行；未执行项不得写为 `VERIFIED`。
 
 ---
 
@@ -1223,3 +1223,25 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - `LOGIC-09` 已完成 Windows 代码、数据用例、静态护栏和仓库门禁，当前无 `IN_PROGRESS`。
 - 对比页从“阅读文字结论”调整为“先看两段总览与同尺度差异，再看分类变化，最后核对两段原始记录”；查询、补记和写入路径未改。
 - Xcode Debug/Release、XCTest、iPhone 小屏/大字布局、长列表展开和真实账本可读性尚未执行，不标记为 `VERIFIED`。
+
+---
+
+## 14. 复盘任务工作台完善（2026-07-16）
+
+用户确认复盘已收敛为真正的任务入口，并要求数据表达更直观、UI 更完整。本项把首屏、任务切换和查/比/补结果统一为同一套任务工作台；不恢复重复周记/月章，不扩张本机规则能力，也不改变补记确认、会员、额度和账本写入边界。
+
+| 顺序 | ID | 任务 | 状态 | 冻结边界 |
+|---:|---|---|---|---|
+| 1 | LOGIC-10 | 复盘数据看板、任务导航与三类结果视觉统一 | `CODE_DONE` | 查/比保持只读；补记确认前零写入；不改变 AI 事实来源、额度、会员或痕迹章节 |
+
+| 日期 | 任务 | 状态变化 | 修改文件 | 验证 | 结果/残留风险 | 下一项 |
+|---|---|---|---|---|---|---|
+| 2026-07-16 | LOGIC-10 复盘任务工作台 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 审计确认首屏只有说明文字和三个同质按钮；近 7 天事实未形成看板；进入任务后仍共用通用标题、输入和结果层级 | 增加后台聚合的近 7 天/前 7 天看板、带真实上下文的任务卡、任务内切换、可执行分类入口，以及查询/对比/补记专用结果总览 | LOGIC-10 |
+| 2026-07-16 | LOGIC-10 复盘任务工作台 | `IN_PROGRESS` → `CODE_DONE` | `InsightComputationService.swift`、`InsightWebView.swift`、`StateRegressionTests.swift`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、体验/无障碍静态门禁、本文档 | 首屏看板、同期差额、每日分布、任务上下文、分类快捷查找、任务内切换、查询指标、对比笔数/分类、补记候选汇总与长列表展开已接线；完整 Windows release gate 通过 | 聚合一次在后台快照完成，不在 SwiftUI `body` 遍历账本；查/比仍只读，补记确认前零写入；Xcode 编译、iPhone 默认/特大/无障碍字号与真实长列表仍为 `BLOCKED`/`NOT_RUN` | 统一 Xcode/真机签收 |
+
+### 本项收口结论
+
+- `LOGIC-10` 已完成 Windows 代码、确定性数据用例、静态护栏和仓库门禁，当前无 `IN_PROGRESS`。
+- 复盘首屏现在先展示真实数据，再给出带上下文的查记录、做对比、补遗漏任务；原先不可操作的动态词泡改成带明确时间与分类的快捷查找。
+- 三种任务在同一指令台内可切换，但拥有各自标题、说明、输入提示、推荐指令、加载态和结果总览；完整周记/月章仍只在痕迹。
+- Xcode Debug/Release、XCTest、iPhone 小屏/大字、VoiceOver、长候选展开和真实账本视觉密度尚未执行，不标记为 `VERIFIED`。
