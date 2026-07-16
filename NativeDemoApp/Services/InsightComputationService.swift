@@ -393,9 +393,9 @@ enum InsightComputationService {
 
     private static func photoMemoryLine(from target: [HomeItem], periodName: String) -> String? {
         let photoItems = target.filter { $0.amount > 0 && $0.hasMemoryImages }.sorted {
-            $0.memoryImages.count == $1.memoryImages.count
+            $0.memoryImageCount == $1.memoryImageCount
                 ? $0.createdAt > $1.createdAt
-                : $0.memoryImages.count > $1.memoryImages.count
+                : $0.memoryImageCount > $1.memoryImageCount
         }
         guard let first = photoItems.first else { return nil }
         if photoItems.count >= 2 {

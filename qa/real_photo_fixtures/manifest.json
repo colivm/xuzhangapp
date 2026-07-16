@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "fixtures": [
+    {
+      "file": "qa_real_01.jpg",
+      "width": 3024,
+      "height": 4032,
+      "byteCount": 3183655,
+      "sha256": "a9b83c9ad01da4909ee6ad8a9e0c605e3d909456a93dc490efa2a7a506f187dd"
+    },
+    {
+      "file": "qa_real_02.jpg",
+      "width": 4032,
+      "height": 3024,
+      "byteCount": 3148248,
+      "sha256": "1872c66027969d990515f71367ff44410dc8b4e799a868b5bdea7017191410cc"
+    },
+    {
+      "file": "qa_real_03.jpg",
+      "width": 3024,
+      "height": 4032,
+      "byteCount": 3133968,
+      "sha256": "175bb0bb7945ea649231e827939bb081dffd3c7d7357047f6302abe509e66171"
+    }
+  ]
+}

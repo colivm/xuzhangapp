@@ -2,7 +2,7 @@
 
 > 日期：2026-07-15
 > 适用：`NativeDemoApp` iOS 主产品
-> 当前状态：Windows/代码门禁已通过；Xcode、StoreKit 沙盒和 iPhone 真机证据待集中签收
+> 当前状态：2026-07-16 Windows/代码门禁通过；当前为 Windows 环境，Xcode、StoreKit 沙盒和 iPhone 真机矩阵因工具与设备不可用而阻塞
 > 结论规则：自动门禁、Xcode 门禁和本文件全部必测项都通过后，才允许把相关任务标为 `VERIFIED`。
 
 ## 1. 冻结边界
@@ -41,6 +41,8 @@ python scripts/validate_release_gate.py --phase fixtures
 
 生成后若摘要变化，必须先解释公式或数据边界为什么变化；不得直接更新基线掩盖回归。
 
+PERF-04 另提供 3 张确定性真实尺寸 JPEG，位于 `NativeDemoApp/Resources/QARealPhotos/`：均不少于 12 MP、单张不少于 2 MB。它们只用于真机冷启动、滚动、缩略图和原图内存压力，不替代上表迁移夹具。
+
 ## 3. 自动门禁顺序
 
 ### 3.1 Windows/跨平台代码门禁
@@ -66,6 +68,8 @@ python3 scripts/validate_release_gate.py --phase all \
 
 同时检查 Xcode 日志中无新增 Swift concurrency、actor isolation、Sendable、SQLite 链接、SwiftUI 泛型推断或可访问性 API 警告/错误。
 
+2026-07-16 环境审计：当前系统为 Windows 10（10.0.19045），`xcodebuild`、`swift`、`simctl`、`instruments` 均不可用。因此本节没有执行，状态为 `BLOCKED`；解除条件是在 macOS/Xcode 环境运行上述三段命令并保存独立日志。
+
 ## 4. Debug 真机夹具装载
 
 在 Xcode Scheme 的 Run Arguments 添加：
@@ -78,9 +82,10 @@ python3 scripts/validate_release_gate.py --phase all \
 记录数只接受 `100`、`1000`、`5000`。也可使用环境变量 `QA_RELEASE_FIXTURE_COUNT` 和 `QA_RELEASE_FIXTURE_RESET=1`。
 
 - 仅 Debug 生效；Release 构建不会装载。
-- 账本写入 `Documents/QAReleaseFixtures/ledger_<count>/`，不覆盖普通账本。
+- 账本写入 `Documents/QAReleaseFixtures/ledger_<count>_<photo-profile>/`，不覆盖普通账本。
 - `-QAReleaseFixtureReset` 每次新进程先重建对应隔离账本；同一进程不会反复清空。
 - 首次启动先写旧格式 JSON，再走真实图片文件化和 SQLite 激活路径。
+- `tiny` 默认配置按上一条执行；`realistic` 配置直接建立隔离 SQLite/图片目录，避免把数百 MB Base64 JSON 当作性能目标本身。
 - 夹具模式自动停止 `HomeViewModel` 云端上传/删除/合并，防止假数据进入真实账号。
 - R-11 同步必须关闭夹具参数，并使用专用测试账号与可清理的云端环境。
 
@@ -89,10 +94,33 @@ python3 scripts/validate_release_gate.py --phase all \
 ```powershell
 python scripts/validate_release_gate.py --phase device-audit `
   --device-container "D:\evidence\NativeDemoApp.xcappdata" `
-  --expected-count 5000
+  --expected-count 5000 `
+  --photo-profile tiny
 ```
 
 审计会读取隔离目录中的 SQLite 和图片文件，核对 quick check、schema、记录数、金额分、分类、OCR 状态、图片 SHA/顺序/封面、文件 byte count 和迁移 manifest。
+
+### 4.1 PERF-04 真实照片性能装载
+
+首次建立隔离数据：
+
+```text
+-QAReleaseFixtureCount 1000
+-QAReleasePhotoProfile realistic
+-QAReleaseFixtureReset
+```
+
+建立完成后移除 `-QAReleaseFixtureReset`，完全杀进程并连续冷启动 5 次。控制台必须出现 `PERF-04 ledger metadata cold start`，同时使用 Instruments 的 App Launch、Core Animation 和 Allocations/Memory Graph 记录：
+
+| ID | 操作 | 通过标准 | 状态 |
+|---|---|---|---|
+| REAL-01 | 1,000 条、153 张 12 MP/约 3 MB 照片，连续冷启动 5 次 | 启动只读元数据；首屏可交互 p50 ≤ 1.8s、p95 ≤ 2.5s；无逐张原图读取峰值 | `NOT_RUN` |
+| REAL-02 | 首页连续上下滚动 30 秒，再进入痕迹周/月卡 | 列表只加载缩略图；>100ms hitch 不超过 3 次，无单次 >400ms；图片出现时不跳错记录 | `NOT_RUN` |
+| REAL-03 | 快速打开/关闭 10 条带图详情，并切换多图 | 详情才读取原图；关闭后内存可回落；无图片串位、黑屏或持续增长 | `NOT_RUN` |
+| REAL-04 | 编辑一条无图记录、编辑一条带图记录、删中间图、换封面 | 只变更对应 SQLite 行和记录图片目录；其他图片修改时间不变 | `NOT_RUN` |
+| REAL-05 | 记录稳定内存 | 首页稳定内存 ≤220 MB、滚动峰值 ≤320 MB、原图详情峰值 ≤420 MB；退出详情后 30 秒内明显回落 | `NOT_RUN` |
+
+若设备低于 iPhone 13 或系统调试开销明显，允许同时记录设备基线对照，但不得只用模拟器替代以上真机结论。
 
 ## 5. 统一真机环境
 
@@ -139,14 +167,39 @@ python scripts/validate_release_gate.py --phase device-audit `
 | 范围 | 必测项 | 通过标准 | 状态 |
 |---|---|---|---|
 | INT-01 | 连续保存两笔，分别触发照片与奖励；首笔选两种承接 | 同一时刻一个提示；FIFO 不丢失；回放只在点击后扣额度 | `NOT_RUN` |
+| INT-02 | 首笔后连续保存、20 分钟内/后、跨自然日分别触发照片与奖励 | 单次保存最多一个强提示；每天最多两个；20 分钟冷却；奖励资格和照片入口仍存在 | `NOT_RUN` |
 | NAV-01 | AI/痕迹/回放/设置会员入口快速连点和下滑关闭 | 不出现 `Attempt to present...`、空白 Sheet、重复页或目标丢失 | `NOT_RUN` |
 | NAV-02 | 痕迹、复盘、记录页分别建立上下文后跨 Tab 往返 | 模式、筛选、滚动和未提交草稿保留；只构建当前 Tab | `NOT_RUN` |
 | DATA-02/03 | 三档夹具首次启动迁移、单笔增删改、重启 | device-audit 全通过；已有图片/旧 JSON 不被无关重写；失败可恢复 | `NOT_RUN` |
 | DATA-04 | 本地备份导出、缺图导出、清空本机危险提示 | 包含可用照片并报告缺图；不声称云端含照片 | `NOT_RUN` |
+| DATA-06 | 导出后重新导入、预览取消、较新/较旧冲突、缺图包、篡改包与恢复失败 | 确认前零写入；只合并新增或较新记录；本机相同/较新版本保留；缺图位置可见；篡改/失败不替换原账本 | `NOT_RUN` |
 | PERF-01/02 | 1,000/5,000 条滚动、输入、切范围、快速重跑/取消 | 主线程无明显长卡顿；加载态可取消；旧结果不回写 | `NOT_RUN` |
+| PERF-03/DATA-05 | 真实照片启动、缩略图/原图加载、单笔增删改 | 启动不 hydrate 原图；只处理变化记录和对应图片目录；失败可回退 | `NOT_RUN` |
+| PERF-04 | 执行 REAL-01～REAL-05 | 真实照片尺寸/字节验证通过，冷启动、滚动和内存达到阈值 | `NOT_RUN` |
 | PROD-01/02 | 从痕迹看周/月章，从复盘继续问；全入口术语巡检 | 职责可理解；不出现并行旧称或第二份完整周/月章 | `NOT_RUN` |
-| MEMBER/AI | 免费、会员、联网开关、远程成功/失败/缺 Key/额度耗尽 | 两层价值清晰；次数不变；本机/远程/回退来源真实；不编造事实 | `NOT_RUN` |
+| MEMBER-01/AI | 免费、会员、联网开关、远程成功/失败/缺 Key/额度耗尽 | 两层价值清晰；次数不变；本机/远程/回退来源真实；不编造事实 | `NOT_RUN` |
+| MEMBER-02 | 未登录购买/恢复、登录取消/失败/成功、登录后再次确认、快速重复点 | 会员页直达登录；套餐/恢复意图只续接一次；登录后不自动扣款；Product ID、价格、验证和账号绑定不变 | `NOT_RUN` |
 | OBS-01 | 首记、首播、周/月、AI、会员漏斗与耗时 | 事件顺序/桶正确；本机最多 1,000 条/30 天；无金额、标题、备注等敏感字段 | `NOT_RUN` |
+
+### 8.1 DATA-06 本地备份恢复专项
+
+| ID | 操作 | 通过标准 | 状态 |
+|---|---|---|---|
+| BACKUP-01 | 导出含多图/非首图封面的备份，再从“备份与联网”选择该包 | 校验在后台完成；预览显示时间、记录数和照片数；尚未确认时本机账本与图片目录不变 | `NOT_RUN` |
+| BACKUP-02 | 在预览页取消、点遮罩取消，再重新选择并确认 | 两种取消都零写入；确认后新增记录进入正确日期顺序，照片顺序和封面不变 | `NOT_RUN` |
+| BACKUP-03 | 同 ID 分别准备“本机较新、时间相同、备份较新”三组冲突 | 本机较新和相同版本保留；只有备份较新版本更新；每个恢复意图只执行一次 | `NOT_RUN` |
+| BACKUP-04 | 导入官方导出但报告缺图的包，再导入照片内容被篡改或清单数量不符的包 | 官方缺图包可恢复并保留缺图位置；篡改/清单异常包拒绝，原账本和原照片保持不变 | `NOT_RUN` |
+| BACKUP-05 | 1,000 条真实照片夹具导出并恢复，恢复时尝试下滑关闭 | 有明确加载态；恢复期间不可误关或重复提交；完成后仅变化记录/图片落盘，无空账本或持续卡死 | `NOT_RUN` |
+
+### 8.2 MEMBER-02 登录续购专项
+
+| ID | 操作 | 通过标准 | 状态 |
+|---|---|---|---|
+| MEMBER-LOGIN-01 | 未登录时分别点年度、月度、永久会员 | 直接打开账号登录 Sheet；返回后仍保留原套餐和实时价格；未再次点击前不出现 StoreKit 购买页 | `NOT_RUN` |
+| MEMBER-LOGIN-02 | 登录 Sheet 发送验证码失败、验证码错误、取消和下滑关闭 | 可安全重试或取消；不调用购买、不出现重复 Sheet；回到会员页后可重新选择 | `NOT_RUN` |
+| MEMBER-LOGIN-03 | 免费账号登录成功，再点续接卡片一次并快速重复点 | 只在明确点击后发起一次原套餐购买；购买遮罩阻止重复提交；Product ID 与 appAccountToken 绑定不变 | `NOT_RUN` |
+| MEMBER-LOGIN-04 | 未登录点恢复购买，登录成功后暂不继续，再重新操作并确认 | 登录后不自动查询 StoreKit；恢复意图只消费一次；取消后可重新发起，恢复结果仍绑定当前账号 | `NOT_RUN` |
+| MEMBER-LOGIN-05 | 登录到已有有效会员或永久会员的账号 | 直接同步现有权益并停止续购意图，不重复购买；会员页显示正确层级与到期状态 | `NOT_RUN` |
 
 ## 9. 无障碍与权限矩阵
 
@@ -164,17 +217,20 @@ python scripts/validate_release_gate.py --phase device-audit `
 
 | 门禁 | 结果 | 证据位置/日志 | 签收人 | 日期 |
 |---|---|---|---|---|
-| Windows repository gate | `PASS` | `python scripts/validate_release_gate.py --phase windows`；仅有既有 7 条文案软提示 | Codex | 2026-07-15 |
-| Xcode Debug build | `NOT_RUN` |  |  |  |
-| Xcode Release build | `NOT_RUN` |  |  |  |
-| 全部 XCTest | `NOT_RUN` |  |  |  |
-| 100 条真机 | `NOT_RUN` |  |  |  |
-| 1,000 条真机 | `NOT_RUN` |  |  |  |
-| 5,000 条真机 | `NOT_RUN` |  |  |  |
-| FIX-001/002 | `NOT_RUN` |  |  |  |
-| R-01～R-12 | `NOT_RUN` |  |  |  |
-| 无障碍/权限 | `NOT_RUN` |  |  |  |
-| StoreKit/同步 | `NOT_RUN` |  |  |  |
+| Windows repository gate | `PASS` | `python scripts/validate_release_gate.py --phase windows`；夹具、差异、语义、交互、文案、迁移和 SQLite schema 全通过；仅有既有 7 条文案软提示 | Codex | 2026-07-16 |
+| Xcode Debug build | `BLOCKED` | Windows 环境无 `xcodebuild`/Swift 工具链 | Codex | 2026-07-16 |
+| Xcode Release build | `BLOCKED` | Windows 环境无 `xcodebuild`/Swift 工具链 | Codex | 2026-07-16 |
+| 全部 XCTest | `BLOCKED` | 测试已接线；当前环境无法运行 iOS XCTest | Codex | 2026-07-16 |
+| 100 条真机 | `BLOCKED` | 无 iPhone/Xcode 设备部署环境 | Codex | 2026-07-16 |
+| 1,000 条真机 | `BLOCKED` | 无 iPhone/Xcode 设备部署环境 | Codex | 2026-07-16 |
+| 5,000 条真机 | `BLOCKED` | 无 iPhone/Xcode 设备部署环境 | Codex | 2026-07-16 |
+| 真实照片 REAL-01～05 | `BLOCKED` | 真实照片资产与夹具通过；无 iPhone/Instruments | Codex | 2026-07-16 |
+| FIX-001/002 | `BLOCKED` | 无 iPhone，详细场景保持 `NOT_RUN` | Codex | 2026-07-16 |
+| R-01～R-12 | `BLOCKED` | 无 iPhone；StoreKit/同步场景还需要沙盒账号与专用环境 | Codex | 2026-07-16 |
+| DATA-06 BACKUP-01～05 | `BLOCKED` | 无 iOS 文件 App、iPhone 与 1,000 条恢复性能环境 | Codex | 2026-07-16 |
+| MEMBER-02 MEMBER-LOGIN-01～05 | `BLOCKED` | 无短信测试账号、iPhone 与 StoreKit 沙盒 | Codex | 2026-07-16 |
+| 无障碍/权限 | `BLOCKED` | 无 iPhone VoiceOver、Dynamic Type、Reduce Motion 与权限环境 | Codex | 2026-07-16 |
+| StoreKit/同步 | `BLOCKED` | 无 StoreKit 沙盒、短信/同步测试账号与第二设备 | Codex | 2026-07-16 |
 
 最终结论只能填写：
 

@@ -68,6 +68,7 @@ enum AnalyticsOutcome: String {
 }
 
 enum AnalyticsOperation: String {
+    case ledgerColdStart = "ledger_cold_start"
     case traceLifePreparation = "trace_life_preparation"
     case traceCluePreparation = "trace_clue_preparation"
     case insightPreparation = "insight_preparation"

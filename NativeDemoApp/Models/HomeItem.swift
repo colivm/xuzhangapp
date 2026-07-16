@@ -90,6 +90,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
     var memoryImageData: Data?
     var memoryImageDatas: [Data]
     var memoryImageReferences: [String]
+    var memoryImageByteCounts: [Int]
     var unavailableMemoryImageIndices: Set<Int>
     var coverMemoryImageIndex: Int?
     var memoryAnchorRole: PhotoMemoryAssetRole?
@@ -116,6 +117,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
         memoryImageData: Data? = nil,
         memoryImageDatas: [Data] = [],
         memoryImageReferences: [String] = [],
+        memoryImageByteCounts: [Int] = [],
         coverMemoryImageIndex: Int? = nil,
         memoryAnchorRole: PhotoMemoryAssetRole? = nil,
         memoryAnchorSceneHint: PhotoMemorySceneHint? = nil,
@@ -146,7 +148,10 @@ struct HomeItem: Identifiable, Codable, Equatable {
         self.memoryImageDatas = normalizedImages
         self.memoryImageData = normalizedImages.first
         self.memoryImageReferences = memoryImageReferences.count == normalizedImages.count ? memoryImageReferences : []
-        self.unavailableMemoryImageIndices = Set(normalizedImages.indices.filter { normalizedImages[$0].isEmpty && self.memoryImageReferences.indices.contains($0) })
+        self.memoryImageByteCounts = memoryImageByteCounts.count == normalizedImages.count
+            ? memoryImageByteCounts
+            : normalizedImages.map(\.count)
+        self.unavailableMemoryImageIndices = []
         self.coverMemoryImageIndex = Self.normalizedCoverIndex(coverMemoryImageIndex, imageCount: normalizedImages.count)
         self.memoryAnchorRole = memoryAnchorRole
         self.memoryAnchorSceneHint = memoryAnchorSceneHint
@@ -807,9 +812,8 @@ extension HomeItem {
             memoryImageReferences = decodedReferences.count == memoryImageDatas.count ? decodedReferences : []
         }
         memoryImageData = memoryImageDatas.first
-        unavailableMemoryImageIndices = Set(memoryImageDatas.indices.filter {
-            memoryImageDatas[$0].isEmpty && memoryImageReferences.indices.contains($0)
-        })
+        memoryImageByteCounts = memoryImageDatas.map(\.count)
+        unavailableMemoryImageIndices = []
         coverMemoryImageIndex = Self.normalizedCoverIndex(
             try container.decodeIfPresent(Int.self, forKey: .coverMemoryImageIndex),
             imageCount: memoryImageDatas.count
@@ -864,6 +868,7 @@ extension HomeItem {
             memoryImageDatas = newValue
             memoryImageData = newValue.first
             memoryImageReferences = []
+            memoryImageByteCounts = newValue.map(\.count)
             unavailableMemoryImageIndices = []
             coverMemoryImageIndex = Self.normalizedCoverIndex(coverMemoryImageIndex, imageCount: newValue.count)
         }
@@ -873,6 +878,7 @@ extension HomeItem {
         memoryImageDatas.append(contentsOf: imageDatas)
         memoryImageData = memoryImageDatas.first
         memoryImageReferences.append(contentsOf: Array(repeating: "", count: imageDatas.count))
+        memoryImageByteCounts.append(contentsOf: imageDatas.map(\.count))
     }
 
     mutating func removeMemoryImage(at index: Int) {
@@ -884,6 +890,11 @@ extension HomeItem {
         } else {
             memoryImageReferences = []
         }
+        if memoryImageByteCounts.indices.contains(index) {
+            memoryImageByteCounts.remove(at: index)
+        } else {
+            memoryImageByteCounts = memoryImageDatas.map(\.count)
+        }
         unavailableMemoryImageIndices = Set(unavailableMemoryImageIndices.compactMap { unavailableIndex in
             if unavailableIndex == index { return nil }
             return unavailableIndex > index ? unavailableIndex - 1 : unavailableIndex
@@ -893,12 +904,14 @@ extension HomeItem {
     mutating func setExternalMemoryImages(
         references: [String],
         data: [Data],
+        byteCounts: [Int]? = nil,
         unavailableIndices: Set<Int> = []
     ) {
         guard references.count == data.count else { return }
         memoryImageReferences = references
         memoryImageDatas = data
         memoryImageData = data.first
+        memoryImageByteCounts = byteCounts?.count == data.count ? byteCounts! : data.map(\.count)
         unavailableMemoryImageIndices = unavailableIndices
         coverMemoryImageIndex = Self.normalizedCoverIndex(coverMemoryImageIndex, imageCount: data.count)
     }
@@ -907,14 +920,44 @@ extension HomeItem {
         let images = memoryImages
         guard !images.isEmpty else { return nil }
         let index = Self.normalizedCoverIndex(coverMemoryImageIndex, imageCount: images.count) ?? 0
-        return images.indices.contains(index) ? images[index] : images.first
+        let data = images.indices.contains(index) ? images[index] : images.first ?? Data()
+        return data.isEmpty ? nil : data
+    }
+
+    var coverMemoryImageReference: String? {
+        guard memoryImageCount > 0 else { return nil }
+        let index = Self.normalizedCoverIndex(coverMemoryImageIndex, imageCount: memoryImageCount) ?? 0
+        guard memoryImageReferences.indices.contains(index) else { return nil }
+        let reference = memoryImageReferences[index]
+        return reference.isEmpty ? nil : reference
+    }
+
+    func memoryImageData(at index: Int) -> Data? {
+        guard memoryImageDatas.indices.contains(index), !memoryImageDatas[index].isEmpty else { return nil }
+        return memoryImageDatas[index]
+    }
+
+    func memoryImageReference(at index: Int) -> String? {
+        guard memoryImageReferences.indices.contains(index), !memoryImageReferences[index].isEmpty else { return nil }
+        return memoryImageReferences[index]
+    }
+
+    func memoryImageByteCount(at index: Int) -> Int {
+        if memoryImageByteCounts.indices.contains(index), memoryImageByteCounts[index] > 0 {
+            return memoryImageByteCounts[index]
+        }
+        return memoryImageDatas.indices.contains(index) ? memoryImageDatas[index].count : 0
+    }
+
+    var memoryImageCount: Int {
+        max(memoryImageDatas.count, memoryImageReferences.count)
     }
 
     var normalizedCoverMemoryImageIndex: Int? {
-        Self.normalizedCoverIndex(coverMemoryImageIndex, imageCount: memoryImages.count)
+        Self.normalizedCoverIndex(coverMemoryImageIndex, imageCount: memoryImageCount)
     }
     var hasMemoryImages: Bool {
-        !memoryImages.isEmpty
+        memoryImageCount > 0
     }
 
     static func normalizedCoverIndex(_ index: Int?, imageCount: Int) -> Int? {

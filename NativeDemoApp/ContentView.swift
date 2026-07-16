@@ -632,6 +632,7 @@ struct ContentView: View {
     @State private var showMemoryPhotoPicker = false
     @State private var memoryPreviewReselectItem: HomeItem?
     @State private var memoryAttachMode: MemoryAttachMode = .preview
+    private let postSavePromptBudgetStore = PostSavePromptBudgetStore()
 
     private enum MemoryAttachMode {
         case preview
@@ -656,7 +657,7 @@ struct ContentView: View {
 
     private var memoryPhotoPickerSelectionLimit: Int {
         guard let item = memorySourceItem else { return 1 }
-        return max(1, 9 - item.memoryImages.count)
+        return max(1, 9 - item.memoryImageCount)
     }
 
     enum AppTab: Int, CaseIterable, Identifiable {
@@ -1027,21 +1028,29 @@ struct ContentView: View {
     }
 
     private func handleManualRecordSaved(prompt: LifeMarkSceneRewardPrompt?) {
-        if let prompt {
-            enqueueHomeLifeMarkRewardPrompt(prompt)
+        guard let savedItem = homeViewModel.items.first else { return }
+        let isFirstTodayRecord = homeViewModel.items.count == 1
+            && Calendar.current.isDateInToday(savedItem.createdAt)
+        selectTab(.today)
+
+        if isFirstTodayRecord {
+            if postSavePromptBudgetStore.reserve(.firstPlayback) {
+                firstRecordPlaybackPromptRequestID = UUID()
+            }
             return
         }
 
-        guard let savedItem = homeViewModel.items.first else { return }
-        if homeViewModel.items.count == 1,
-           Calendar.current.isDateInToday(savedItem.createdAt) {
-            firstRecordPlaybackPromptRequestID = UUID()
+        if let prompt {
+            if postSavePromptBudgetStore.reserve(.sceneReward) {
+                enqueueHomeLifeMarkRewardPrompt(prompt)
+            }
+            return
         }
-        selectTab(.today)
+
         if let reason = PhotoMemoryPromptPolicy.reason(
             for: savedItem,
             existingItems: homeViewModel.items
-        ) {
+        ), postSavePromptBudgetStore.reserve(.memoryPhoto) {
             enqueuePostSaveMemoryPrompt(for: savedItem, reason: reason)
         }
     }
@@ -1114,7 +1123,7 @@ struct ContentView: View {
     }
 
     private func openMemoryPhotoPicker(for item: HomeItem, mode: MemoryAttachMode = .preview) {
-        guard item.memoryImages.count < 9 else { return }
+        guard item.memoryImageCount < 9 else { return }
         memoryAttachMode = mode
         memorySourceItem = item
         showMemoryPhotoPicker = true
@@ -2056,7 +2065,7 @@ struct RecordEditSheet: View {
     }
 
     private var editPhotoPickerSelectionLimit: Int {
-        max(1, 9 - item.memoryImages.count)
+        max(1, 9 - item.memoryImageCount)
     }
 
     private var hasRecordEditMoreActions: Bool {

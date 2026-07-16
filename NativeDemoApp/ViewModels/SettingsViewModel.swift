@@ -380,6 +380,10 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    func clearAuthMessage() {
+        authMessage = nil
+    }
+
     func verifySMSLogin() async {
         authMessage = nil
         guard !isAuthBusy else { return }

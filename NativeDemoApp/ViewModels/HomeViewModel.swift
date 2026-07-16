@@ -79,6 +79,7 @@ final class HomeViewModel: ObservableObject {
     }
     @Published private(set) var syncStatusMessage: String?
     @Published private(set) var isSyncingCloudLedger: Bool = false
+    @Published private(set) var isRestoringLocalBackup: Bool = false
     @Published private(set) var memberNudgeCopy: MemberCtaCopy?
     @Published private(set) var activeMemberNudgeScene: MemberFlowScene?
     @Published private(set) var latestPlayback: PlaybackSnapshot?
@@ -174,8 +175,22 @@ final class HomeViewModel: ObservableObject {
     private var localLedgerWritesBlocked = false
 
     init() {
+        let ledgerLoadStartedAt = ProcessInfo.processInfo.systemUptime
         let ledgerLoadResult = LocalStore.loadHomeItemsResult()
         items = ledgerLoadResult.items.sorted { $0.createdAt > $1.createdAt }
+        analyticsService.trackPerformance(
+            operation: .ledgerColdStart,
+            startedAtUptime: ledgerLoadStartedAt,
+            itemCount: items.count
+        )
+        #if DEBUG
+        if ReleaseFixtureLaunchConfiguration.resolve()?.photoProfile == .realistic {
+            let elapsedMs = Int(
+                ((ProcessInfo.processInfo.systemUptime - ledgerLoadStartedAt) * 1_000).rounded()
+            )
+            print("PERF-04 ledger metadata cold start: \(elapsedMs)ms, records=\(items.count)")
+        }
+        #endif
         localLedgerWritesBlocked = ledgerLoadResult.writesBlocked
         if let issueMessage = ledgerLoadResult.issueMessage {
             syncStatusMessage = issueMessage
@@ -272,7 +287,7 @@ final class HomeViewModel: ObservableObject {
             scenePackId: scenePackId
         )
         items.insert(newItem, at: 0)
-        guard persistItems() else { return false }
+        guard persistItems(upserting: [newItem]) else { return false }
         resetInput()
         schedulePostManualRecordWork(for: newItem, wasEmpty: wasEmpty)
         return true
@@ -434,7 +449,7 @@ final class HomeViewModel: ObservableObject {
             return item
         }
         items.insert(contentsOf: importedItems, at: 0)
-        guard persistItems() else { return 0 }
+        guard persistItems(upserting: importedItems) else { return 0 }
         dailyQuotaStore.markOCRImported(isMember: isMember)
         analyticsService.track(
             .ocrRecordsImported,
@@ -515,7 +530,7 @@ final class HomeViewModel: ObservableObject {
         }
 
         items.insert(contentsOf: importedItems, at: 0)
-        guard persistItems() else { return 0 }
+        guard persistItems(upserting: importedItems) else { return 0 }
         analyticsService.track(
             .aiCommandRecordsSaved,
             props: [
@@ -556,7 +571,7 @@ final class HomeViewModel: ObservableObject {
         guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
         items[idx].draftMeta?.status = isResolved ? .resolved : .pending
         items[idx].updatedAt = Date()
-        guard persistItems() else { return }
+        guard persistItems(upserting: [items[idx]]) else { return }
         clearOCRStatusIfNoPendingDrafts()
         Task { await syncUpsertToCloud(items[idx]) }
     }
@@ -638,7 +653,7 @@ final class HomeViewModel: ObservableObject {
             items[idx].categoryCorrectionFrom = originalCategory
         }
         items[idx].updatedAt = Date()
-        guard persistItems() else { return }
+        guard persistItems(upserting: [items[idx]]) else { return }
         Task { await syncUpsertToCloud(items[idx]) }
     }
 
@@ -676,7 +691,7 @@ final class HomeViewModel: ObservableObject {
             items[idx].memoryContext = memoryContextForRecord(date: items[idx].createdAt)
         }
         items[idx].updatedAt = Date()
-        guard persistItems() else { return }
+        guard persistItems(upserting: [items[idx]]) else { return }
         Task { await syncUpsertToCloud(items[idx]) }
     }
 
@@ -697,7 +712,7 @@ final class HomeViewModel: ObservableObject {
         guard ensureLedgerWritesAllowed() else { return }
         guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
         items.remove(at: idx)
-        guard persistItems() else { return }
+        guard persistItems(deleting: [id]) else { return }
         clearOCRStatusIfNoPendingDrafts()
         analyticsService.track(.ocrDraftDeleted)
         refreshTodayPlayback()
@@ -714,7 +729,7 @@ final class HomeViewModel: ObservableObject {
         }
         clearOCRStatusIfNoPendingDrafts()
         guard !changedItems.isEmpty else { return }
-        guard persistItems() else { return }
+        guard persistItems(upserting: changedItems) else { return }
         analyticsService.track(
             .ocrDraftsResolved,
             props: [.countBucket: AnalyticsService.countBucket(for: changedItems.count)]
@@ -735,7 +750,7 @@ final class HomeViewModel: ObservableObject {
             changedItems.append(items[idx])
         }
         guard !changedItems.isEmpty else { return }
-        guard persistItems() else { return }
+        guard persistItems(upserting: changedItems) else { return }
         clearOCRStatusIfNoPendingDrafts()
         analyticsService.track(
             .ocrDraftsResolveAll,
@@ -752,7 +767,7 @@ final class HomeViewModel: ObservableObject {
         guard ensureLedgerWritesAllowed() else { return }
         let deletedIDs = offsets.compactMap { items.indices.contains($0) ? items[$0].id : nil }
         items.remove(atOffsets: offsets)
-        guard persistItems() else { return }
+        guard persistItems(deleting: Set(deletedIDs)) else { return }
         analyticsService.track(
             .recordDeletedBatch,
             props: [.countBucket: AnalyticsService.countBucket(for: deletedIDs.count)]
@@ -829,7 +844,7 @@ final class HomeViewModel: ObservableObject {
         }
         resolved.updatedAt = Date()
         items[idx] = resolved
-        guard persistItems() else { return false }
+        guard persistItems(upserting: [resolved]) else { return false }
         analyticsService.track(.recordUpdated)
         refreshTodayPlayback()
         Task { await syncUpsertToCloud(resolved) }
@@ -850,9 +865,8 @@ final class HomeViewModel: ObservableObject {
     ) -> Bool {
         guard ensureLedgerWritesAllowed() else { return false }
         guard let idx = items.firstIndex(where: { $0.id == itemID }) else { return false }
-        var images = items[idx].memoryImages
-        let originalCount = images.count
-        let availableSlots = max(0, 9 - images.count)
+        let originalCount = items[idx].memoryImageCount
+        let availableSlots = max(0, 9 - originalCount)
         let cleanImages = Array(imageDatas.filter { !$0.isEmpty }.prefix(availableSlots))
         guard !cleanImages.isEmpty else { return false }
         items[idx].appendMemoryImages(cleanImages)
@@ -867,7 +881,7 @@ final class HomeViewModel: ObservableObject {
         items[idx].memoryAnchorCreatedAt = items[idx].memoryAnchorCreatedAt ?? Date()
         items[idx].updatedAt = Date()
         let updated = items[idx]
-        guard persistItems() else { return false }
+        guard persistItems(upserting: [updated]) else { return false }
         analyticsService.track(
             .recordMemoryImageAttached,
             props: [.imageCountBucket: AnalyticsService.countBucket(for: cleanImages.count)]
@@ -886,11 +900,10 @@ final class HomeViewModel: ObservableObject {
     func removeMemoryImage(at imageIndex: Int, from itemID: UUID) -> Bool {
         guard ensureLedgerWritesAllowed() else { return false }
         guard let idx = items.firstIndex(where: { $0.id == itemID }) else { return false }
-        var images = items[idx].memoryImages
-        guard images.indices.contains(imageIndex) else { return false }
+        guard (0..<items[idx].memoryImageCount).contains(imageIndex) else { return false }
         items[idx].removeMemoryImage(at: imageIndex)
-        images = items[idx].memoryImages
-        if images.isEmpty {
+        let remainingImageCount = items[idx].memoryImageCount
+        if remainingImageCount == 0 {
             items[idx].coverMemoryImageIndex = nil
             items[idx].memoryAnchorRole = nil
             items[idx].memoryAnchorSceneHint = nil
@@ -901,15 +914,15 @@ final class HomeViewModel: ObservableObject {
             if imageIndex < currentCover {
                 items[idx].coverMemoryImageIndex = currentCover - 1
             } else if imageIndex == currentCover {
-                items[idx].coverMemoryImageIndex = min(currentCover, images.count - 1)
+                items[idx].coverMemoryImageIndex = min(currentCover, remainingImageCount - 1)
             }
         }
         items[idx].updatedAt = Date()
         let updated = items[idx]
-        guard persistItems() else { return false }
+        guard persistItems(upserting: [updated]) else { return false }
         analyticsService.track(
             .recordMemoryImageRemoved,
-            props: [.imageCountBucket: AnalyticsService.countBucket(for: updated.memoryImages.count)]
+            props: [.imageCountBucket: AnalyticsService.countBucket(for: updated.memoryImageCount)]
         )
         refreshTodayPlayback()
         Task { await syncUpsertToCloud(updated) }
@@ -920,7 +933,7 @@ final class HomeViewModel: ObservableObject {
     func setCoverMemoryImageIndex(_ imageIndex: Int, for itemID: UUID) -> Bool {
         guard ensureLedgerWritesAllowed() else { return false }
         guard let idx = items.firstIndex(where: { $0.id == itemID }),
-              items[idx].memoryImages.indices.contains(imageIndex) else { return false }
+              (0..<items[idx].memoryImageCount).contains(imageIndex) else { return false }
         items[idx].coverMemoryImageIndex = imageIndex
         if items[idx].memoryAnchorRole == nil || items[idx].memoryAnchorSceneHint == nil {
             let reason = PhotoMemoryPromptPolicy.anchorReason(for: items[idx])
@@ -931,7 +944,7 @@ final class HomeViewModel: ObservableObject {
         }
         items[idx].updatedAt = Date()
         let updated = items[idx]
-        guard persistItems() else { return false }
+        guard persistItems(upserting: [updated]) else { return false }
         analyticsService.track(.recordMemoryCoverSelected)
         refreshTodayPlayback()
         Task { await syncUpsertToCloud(updated) }
@@ -958,8 +971,9 @@ final class HomeViewModel: ObservableObject {
         do {
             let remoteItems = try await service.fetchAll().sorted { $0.createdAt > $1.createdAt }
             let merged = mergeLedgers(local: items, remote: remoteItems).sorted { $0.createdAt > $1.createdAt }
+            let changes = ledgerChanges(from: items, to: merged)
             items = merged
-            guard persistItems() else {
+            guard persistItems(upserting: changes.upserts, deleting: changes.deletedIDs) else {
                 syncStatusMessage = "同步结果没有写入本机，原账本仍保留。请重启后再试。"
                 return
             }
@@ -971,6 +985,55 @@ final class HomeViewModel: ObservableObject {
         } catch {
             syncStatusMessage = "同步没有完成，请稍后再试。你的本机记录已保留。"
         }
+    }
+
+    @discardableResult
+    func restoreLocalBackup(
+        _ preparedImport: LedgerLocalBackupPreparedImport
+    ) async -> LedgerLocalBackupRestoreSummary? {
+        guard ensureLedgerWritesAllowed() else { return nil }
+        guard !isRestoringLocalBackup else { return nil }
+        guard !isSyncingCloudLedger else {
+            syncStatusMessage = "云端账本仍在合并，请稍后再恢复本地备份。"
+            return nil
+        }
+
+        let plan: LedgerLocalBackupRestorePlan
+        do {
+            plan = try LedgerLocalBackupRestorePlanner.makePlan(
+                localItems: items,
+                backupItems: preparedImport.items
+            )
+        } catch {
+            syncStatusMessage = (error as? LocalizedError)?.errorDescription
+                ?? "这份备份暂时无法恢复，本机原账本仍保留。"
+            return nil
+        }
+
+        guard !plan.changes.isEmpty else {
+            return plan.summary
+        }
+
+        isRestoringLocalBackup = true
+        defer { isRestoringLocalBackup = false }
+        let didPersist = await Task.detached(priority: .userInitiated) {
+            LocalStore.saveHomeItemChanges(
+                plan.changes,
+                currentItemsForFallback: plan.mergedItems
+            )
+        }.value
+        guard didPersist else {
+            let message = "这次恢复没有写入本机，本机原账本和照片仍保留。请稍后再试。"
+            recordInputMessage = message
+            syncStatusMessage = message
+            return nil
+        }
+
+        items = plan.mergedItems
+        rebuildItemDerivedCache()
+        refreshTodayPlayback()
+        refreshRouteGuidanceIfNeeded()
+        return plan.summary
     }
 
     func generateMonthlyInsight(settings: AppSettings) async -> MonthlyInsightReport {
@@ -1433,8 +1496,9 @@ final class HomeViewModel: ObservableObject {
 
     func clearLocalLedgerData() {
         guard ensureLedgerWritesAllowed() else { return }
+        let deletedIDs = Set(items.map(\.id))
         items = []
-        guard persistItems() else { return }
+        guard persistItems(deleting: deletedIDs) else { return }
         insights = []
         latestPlayback = nil
         latestActionCard = nil
@@ -2231,6 +2295,12 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func ensureLedgerWritesAllowed() -> Bool {
+        guard !isRestoringLocalBackup else {
+            let message = "正在安全合并本地备份，请稍候。"
+            recordInputMessage = message
+            syncStatusMessage = message
+            return false
+        }
         guard !localLedgerWritesBlocked else {
             let message = "本机账本暂时无法读取，原文件已保留。请重启后再试，暂时不要新增或修改记录。"
             recordInputMessage = message
@@ -2241,9 +2311,13 @@ final class HomeViewModel: ObservableObject {
     }
 
     @discardableResult
-    private func persistItems() -> Bool {
+    private func persistItems(
+        upserting: [HomeItem] = [],
+        deleting: Set<UUID> = []
+    ) -> Bool {
         guard ensureLedgerWritesAllowed() else { return false }
-        guard LocalStore.saveHomeItems(items) else {
+        let changes = LedgerHomeItemsChangeSet(upserts: upserting, deletedIDs: deleting)
+        guard LocalStore.saveHomeItemChanges(changes, currentItemsForFallback: items) else {
             let reloadResult = LocalStore.loadHomeItemsResult()
             items = reloadResult.items.sorted { $0.createdAt > $1.createdAt }
             localLedgerWritesBlocked = reloadResult.writesBlocked
@@ -2254,6 +2328,17 @@ final class HomeViewModel: ObservableObject {
             return false
         }
         return true
+    }
+
+    private func ledgerChanges(from oldItems: [HomeItem], to newItems: [HomeItem]) -> LedgerHomeItemsChangeSet {
+        let oldByID = Dictionary(uniqueKeysWithValues: oldItems.map { ($0.id, $0) })
+        let newByID = Dictionary(uniqueKeysWithValues: newItems.map { ($0.id, $0) })
+        let upserts = newItems.filter { item in
+            guard let oldItem = oldByID[item.id] else { return true }
+            return oldItem != item
+        }
+        let deletedIDs = Set(oldByID.keys).subtracting(newByID.keys)
+        return LedgerHomeItemsChangeSet(upserts: upserts, deletedIDs: deletedIDs)
     }
 
     private func persistInsights() {

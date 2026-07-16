@@ -2,7 +2,7 @@
 
 > 创建日期：2026-07-15
 > 当前基线提交：`d425389`（`fix trace snapshot type checking`）
-> 状态：代码阶段完成，等待统一 Xcode/真机签收；本文档仍是唯一顺序与状态来源
+> 状态：第二轮全局收口进行中；本文档仍是唯一顺序与状态来源
 > 适用范围：`NativeDemoApp` iOS 主产品；除非任务明确写入，默认不修改 `web-preview`
 
 ---
@@ -1039,9 +1039,80 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ## 9. 当前交接状态
 
-- 当前唯一 `IN_PROGRESS`：无；代码优化任务已全部收口。
+- 当前无 `IN_PROGRESS`；`RELEASE-02` 因当前 Windows 环境缺少 Xcode、iPhone、StoreKit 沙盒与权限/无障碍真机条件而 `BLOCKED`。
 - 保留阻塞任务：`GATE-00`，等待后续 macOS/Xcode 与真机补签收。
 - 用户例外授权：2026-07-15 第一次允许启动 `INT-01`，第二次允许启动 `NAV-01`；第三次明确要求后续任务不再逐项询问、全部代码完成后统一真机验证。所有授权均不代表前序 Xcode/真机验收通过。
-- 当前代码完成待签收：`INT-01`、`NAV-01`、`NAV-02`、`TEST-01`、`DATA-01`、`DATA-02`、`DATA-03`、`DATA-04`、`PERF-01`、`PERF-02`、`PROD-01`、`PROD-02`、`MEMBER-01`、`AI-01`、`A11Y-01`、`OBS-01`、`RELEASE-01`。
-- 当前阶段：停止新增优化，按 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 统一补全部 Xcode/真机/StoreKit/同步证据。
+- 当前代码完成待签收：`INT-01`、`NAV-01`、`NAV-02`、`TEST-01`、`DATA-01`、`DATA-02`、`DATA-03`、`DATA-04`、`PERF-01`、`PERF-02`、`PROD-01`、`PROD-02`、`MEMBER-01`、`AI-01`、`A11Y-01`、`OBS-01`、`RELEASE-01`、`COPY-01`、`PERF-03`、`DATA-05`、`PERF-04`、`INT-02`、`DATA-06`、`MEMBER-02`。
+- 当前阶段：Windows 代码阶段和完整 repository gate 已完成；等待 macOS/Xcode、iPhone、短信/同步测试账号与 StoreKit 沙盒补签收，只允许处理签收发现的定向问题。
 - 后续策略：只处理统一签收发现的定向问题；每个修复必须回填所属任务、边界和回归，不得重新展开产品范围。
+
+---
+
+## 10. 第二轮全局收口队列（2026-07-16）
+
+用户指定以下顺序连续执行，不再逐项请求继续授权。一次只允许一个任务为 `IN_PROGRESS`；前一项达到 `CODE_DONE` 或 `VERIFIED` 并回填证据后，才能进入下一项。
+
+| 顺序 | ID | 任务 | 当前状态 | 进入边界 |
+|---:|---|---|---|---|
+| 1 | COPY-01 | 修复用户可见乱码 | `CODE_DONE` | 只修复已发现的乱码区域并增加防回流检查，不改弹层结构或业务动作 |
+| 2 | PERF-03 | 照片缩略图与按需加载 | `CODE_DONE` | 启动只读取元数据；保持原图、顺序、封面和缺图语义 |
+| 3 | DATA-05 | 变化记录与图片增量保存 | `CODE_DONE` | 只处理变化集；保持排序、字段、回滚和同步冲突规则 |
+| 4 | PERF-04 | 真实尺寸照片性能门禁 | `CODE_DONE` | 只新增真实尺寸 QA 夹具、测量和证据，不借测试改业务结论 |
+| 5 | INT-02 | 保存后提示预算 | `CODE_DONE` | 减少主动打断；不改变照片/奖励资格、回放扣额和会员常量 |
+| 6 | DATA-06 | 本地备份导入与恢复 | `CODE_DONE` | 校验、预览、冲突与回滚优先；不得覆盖现有账本后才报告失败 |
+| 7 | MEMBER-02 | 会员登录直达与登录后续购 | `CODE_DONE` | 保持 Product ID、价格、权益验证与账号绑定规则 |
+| 8 | RELEASE-02 | 统一 Xcode/真机签收 | `BLOCKED` | 最后执行 Debug/Release、XCTest、iPhone、StoreKit、权限和无障碍矩阵 |
+
+### COPY-01：修复用户可见乱码
+
+目标：修复会员购买结果、免费场景包更换确认和典藏主题试用弹层中的 UTF-8 乱码，并阻止同类字符串重新进入生产 Swift 文案。
+
+允许修改：
+
+- `MemberPricingView.swift` 中购买结果弹层文案。
+- `ScenePackAngleSheet.swift` 中免费场景包更换确认弹层文案。
+- `SettingsView.swift` 中典藏主题试用弹层文案。
+- 现有文案 lint/静态门禁与本台账。
+
+冻结边界：
+
+- 不改变弹层出现条件、按钮动作、会员状态、场景包更换规则和 24 小时窗口。
+- 不改变套餐、价格、Product ID、额度、主题试用资格或持续时间。
+- 不修改照片、存储、保存队列、备份、登录和 `web-preview`。
+
+验收：
+
+- 上述弹层全部显示正常中文，按钮语义与原动作一致。
+- 全量 Swift 用户文案扫描不存在 C1 控制字符或常见 UTF-8→Latin-1 乱码片段。
+- 五项基础回归通过；无法在当前环境完成的 Xcode/真机显示签收记录为待办，不得标为 `VERIFIED`。
+
+### 后续任务固定边界
+
+- `PERF-03` 不顺带改保存协议；`DATA-05` 不重新设计 UI。
+- `PERF-04` 只建立真实压力证据，性能修复必须回到所属任务定向处理。
+- `INT-02` 不删除用户主动打开的功能，只限制系统主动打断。
+- `DATA-06` 导入前必须只读校验和预览，恢复失败必须保留原账本与照片。
+- `MEMBER-02` 登录成功后只恢复原购买意图一次，取消/失败不得自动购买。
+- `RELEASE-02` 只做统一签收及签收发现问题的定向修复，不新增功能范围。
+
+### 第二轮执行记录
+
+| 日期 | 任务 | 状态变化 | 修改文件 | 验证 | 结果/残留风险 | 下一项 |
+|---|---|---|---|---|---|---|
+| 2026-07-16 | 第二轮顺序与边界建档 | `NOT_STARTED` → `VERIFIED` | 本文档 | 顺序、单一 `IN_PROGRESS`、冻结边界复核 | 已按用户指定八项建立唯一队列；保留既有工作区修改 | COPY-01 |
+| 2026-07-16 | COPY-01 用户可见乱码 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 全量乱码扫描定位 3 个弹层共 10 条受损字符串 | 只修复文案与防回流门禁 | COPY-01 |
+| 2026-07-16 | COPY-01 用户可见乱码 | `IN_PROGRESS` → `CODE_DONE` | `MemberPricingView.swift`、`ScenePackAngleSheet.swift`、`SettingsView.swift`、`copy_lint.py`、本文档 | 全量乱码扫描无残留；五项基础回归通过；仅保留既有 7 条 soft warning | 弹层结构、按钮动作、会员/场景/主题规则未改；待 Xcode/真机显示签收 | PERF-03 |
+| 2026-07-16 | PERF-03 照片缩略图与按需加载 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 先审计图片模型、存储与所有消费点 | 不改保存协议、图片顺序、封面或缺图语义 | PERF-03 |
+| 2026-07-16 | PERF-03 照片缩略图与按需加载 | `IN_PROGRESS` → `CODE_DONE` | `HomeItem.swift`、图片/元数据 Repository、图片视图、首页/痕迹/回放、备份导出、XCTest、静态门禁、本文档 | 启动路径无 `hydrate`；缩略图/原图按需加载门禁通过；五项基础回归、迁移样本与 SQLite schema 通过 | 启动只保留元数据/引用/字节数；列表异步缩略图、详情原图；待 Xcode 编译和真实照片真机签收 | DATA-05 |
+| 2026-07-16 | DATA-05 变化记录与图片增量保存 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 盘点 15 个持久化入口与 Repository 全量预处理路径 | 只改本地变化集持久化，不改 UI、同步冲突或字段含义 | DATA-05 |
+| 2026-07-16 | DATA-05 变化记录与图片增量保存 | `IN_PROGRESS` → `CODE_DONE` | `HomeViewModel.swift`、`LocalStore.swift`、`LedgerHomeItemsRepository.swift`、`LedgerMetadataStore.swift`、`LedgerImageStore.swift`、XCTest、静态门禁、本文档 | 变化集/定向图片门禁、五项基础回归、迁移样本与 SQLite schema 通过 | 正常写入只处理显式 upsert/delete；全量路径仅用于迁移和失败回退；待 Xcode/XCTest/大账本真机签收 | PERF-04 |
+| 2026-07-16 | PERF-04 真实尺寸照片性能门禁 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 审计现有 1×1 PNG 夹具与发布验证器 | 只新增真实照片 QA 资产、测量入口和证据格式 | PERF-04 |
+| 2026-07-16 | PERF-04 真实尺寸照片性能门禁 | `IN_PROGRESS` → `CODE_DONE` | 3 张 12MP JPEG、生成/验证脚本、Debug realistic profile、Xcode 资源、启动耗时事件、XCTest、真机矩阵、本文档 | 真实照片尺寸/字节/SHA、资源接线与全量 Windows 门禁通过 | REAL-01～05 仍为 `NOT_RUN`，等待最后 Xcode/iPhone/Instruments 统一签收 | INT-02 |
+| 2026-07-16 | INT-02 保存后提示预算 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 审计首笔回放、照片、奖励、宠物的保存后触发顺序 | 不改资格、额度或用户主动入口，只限制强提示频率 | INT-02 |
+| 2026-07-16 | INT-02 保存后提示预算 | `IN_PROGRESS` → `CODE_DONE` | `InteractionStateModels.swift`、`ContentView.swift`、XCTest、静态门禁、真机矩阵、本文档 | 每日 2 次、20 分钟冷却、首笔/奖励/照片共享预算的回归通过 | 奖励仍待领取、照片仍可主动添加、回放仍明确点击才扣额；待真机节奏签收 | DATA-06 |
+| 2026-07-16 | DATA-06 本地备份导入与恢复 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 审计 `.xuzhangbackup` 导出结构、设置入口与变化集回滚能力 | 先只读校验/预览，再安全合并；不做无预览覆盖 | DATA-06 |
+| 2026-07-16 | DATA-06 本地备份导入与恢复 | `IN_PROGRESS` → `CODE_DONE` | `LedgerLocalBackupDocument.swift`、`HomeViewModel.swift`、`SettingsView.swift`、备份 XCTest、静态门禁、真机矩阵、本文档 | 包结构/字段/重复 ID/路径/SHA/清单只读校验；显式预览确认；按 ID 且仅较新备份胜出；缺图保位；持久化成功前不替换内存账本；七项 Windows 回归通过 | 不提供清空覆盖；取消零写入，失败保留原账本与照片；待 Xcode/XCTest、文件 App 与 1,000 条真实照片真机签收 | MEMBER-02 |
+| 2026-07-16 | MEMBER-02 会员登录直达与登录后续购 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 审计会员购买/恢复的未登录分支、根路由和账号登录回调 | 保留套餐、Product ID、价格、StoreKit 验证和账号绑定；登录后不自动扣款 | MEMBER-02 |
+| 2026-07-16 | MEMBER-02 会员登录直达与登录后续购 | `IN_PROGRESS` → `CODE_DONE` | `InteractionStateModels.swift`、`SettingsViewModel.swift`、`MemberPricingView.swift`、XCTest、静态门禁、真机矩阵、本文档 | 未登录购买/恢复直达登录 Sheet；失败可重试、取消清意图；登录成功保留原套餐/恢复意图并只续接一次；再次明确点击才调用 StoreKit；七项 Windows 回归通过 | Product ID、展示价格来源、交易验证、finish 与 appAccountToken 绑定未改；待 Xcode、短信账号和 StoreKit 沙盒签收 | RELEASE-02 |
+| 2026-07-16 | RELEASE-02 统一 Xcode/真机签收 | `NOT_STARTED` → `IN_PROGRESS` | 本文档、统一矩阵 | 开始完整 Windows release gate、差异审计与外部环境可用性检查 | 只做签收及定向修复；Xcode/iPhone/StoreKit/权限/无障碍缺少环境时如实标记 `NOT_RUN`/`BLOCKED` | RELEASE-02 |
+| 2026-07-16 | RELEASE-02 统一 Xcode/真机签收 | `IN_PROGRESS` → `BLOCKED` | 本文档、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` | `python scripts/validate_release_gate.py --phase windows` 全通过；确认 Windows 10 下 `xcodebuild`、`swift`、`simctl`、`instruments` 全不可用；矩阵逐项回填 | Windows repository gate `PASS`；Debug/Release/XCTest、100/1,000/5,000、REAL-01～05、文件恢复、短信登录续购、StoreKit、同步、权限、VoiceOver/Dynamic Type/Reduce Motion 均保持 `BLOCKED`/`NOT_RUN`，未冒充已验证 | macOS/Xcode 与 iPhone 统一补签收 |

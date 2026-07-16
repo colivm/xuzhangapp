@@ -106,7 +106,8 @@ enum LocalStore {
         var result = repository.load()
         #if DEBUG
         if let configuration = ReleaseFixtureLaunchConfiguration.resolve() {
-            let fixtureMessage = "QA 发布夹具：\(configuration.count) 条，本机账本使用隔离目录，云端自动同步已停用。"
+            let photoLabel = configuration.photoProfile == .realistic ? "真实尺寸照片" : "轻量照片"
+            let fixtureMessage = "QA 发布夹具：\(configuration.count) 条 · \(photoLabel)，本机账本使用隔离目录，云端自动同步已停用。"
             result.issueMessage = [fixtureMessage, result.issueMessage]
                 .compactMap { $0 }
                 .joined(separator: " ")
@@ -119,6 +120,24 @@ enum LocalStore {
     static func saveHomeItems(_ items: [HomeItem]) -> Bool {
         guard let repository = homeItemsRepository() else { return false }
         return repository.save(items)
+    }
+
+    @discardableResult
+    static func saveHomeItemChanges(
+        _ changes: LedgerHomeItemsChangeSet,
+        currentItemsForFallback: [HomeItem]
+    ) -> Bool {
+        guard let repository = homeItemsRepository() else { return false }
+        return repository.saveChanges(changes, currentItemsForFallback: currentItemsForFallback)
+    }
+
+    static func loadMemoryImageData(
+        reference: String,
+        variant: LedgerImageLoadVariant = .thumbnail
+    ) -> Data? {
+        guard !reference.isEmpty,
+              let repository = homeItemsRepository() else { return nil }
+        return repository.loadImageData(reference: reference, variant: variant)
     }
 
     private static func homeItemsRepository() -> LedgerHomeItemsRepository? {
@@ -161,11 +180,14 @@ enum LocalStore {
               let baseDocumentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
             return nil
         }
-        let suiteName = "\(Bundle.main.bundleIdentifier ?? "NativeDemoApp").qa.releaseFixture.\(configuration.count)"
+        let suiteName = "\(Bundle.main.bundleIdentifier ?? "NativeDemoApp").qa.releaseFixture.\(configuration.count).\(configuration.photoProfile.rawValue)"
         guard let defaults = UserDefaults(suiteName: suiteName) else { return nil }
         let documentsURL = baseDocumentsURL
             .appendingPathComponent("QAReleaseFixtures", isDirectory: true)
-            .appendingPathComponent("ledger_\(configuration.count)", isDirectory: true)
+            .appendingPathComponent(
+                "ledger_\(configuration.count)_\(configuration.photoProfile.rawValue)",
+                isDirectory: true
+            )
         return ReleaseFixtureStoreContext(
             configuration: configuration,
             documentsURL: documentsURL,
@@ -195,9 +217,28 @@ enum LocalStore {
             return
         }
 
+        let items = ReleaseFixtureFactory.makeItems(
+            count: context.configuration.count,
+            photoProfile: context.configuration.photoProfile
+        )
+        if context.configuration.photoProfile == .realistic {
+            let repository = LedgerHomeItemsRepository(
+                documentsURL: context.documentsURL,
+                defaults: context.defaults,
+                homeItemsBackupKey: homeItemsBackupKey,
+                homeItemsFile: homeItemsFile,
+                preImageMigrationBackupFile: preImageMigrationBackupFile
+            )
+            guard repository.save(items) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            context.defaults.set(true, forKey: releaseFixtureSeededKey)
+            return
+        }
+
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(ReleaseFixtureFactory.makeItems(count: context.configuration.count))
+        let data = try encoder.encode(items)
         try data.write(to: legacyURL, options: .atomic)
         context.defaults.set(data, forKey: homeItemsBackupKey)
         context.defaults.set(true, forKey: releaseFixtureSeededKey)

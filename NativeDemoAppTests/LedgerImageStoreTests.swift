@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import NativeDemoApp
 
 final class LedgerImageStoreTests: XCTestCase {
@@ -92,5 +93,31 @@ final class LedgerImageStoreTests: XCTestCase {
         XCTAssertTrue(hydrated.memoryImages[0].isEmpty)
         XCTAssertEqual(hydrated.unavailableMemoryImageIndices, [0])
         XCTAssertTrue(hydrated.hasMemoryImages)
+    }
+
+    func testMetadataOnlyStartupDefersOriginalAndCreatesThumbnailOnDemand() throws {
+        let image = try XCTUnwrap(
+            Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mN4l+MLAAPzAajtSvbZAAAAAElFTkSuQmCC")
+        )
+        let externalized = try XCTUnwrap(store.prepareForPersistence([
+            HomeItem(
+                id: UUID(uuidString: "DDDDDDDD-DDDD-DDDD-DDDD-DDDDDDDDDDDD")!,
+                title: "按需加载",
+                amount: 50,
+                category: .shopping,
+                memoryImageDatas: [image]
+            )
+        ]).first)
+        let metadataOnly = try XCTUnwrap(store.metadataOnly([externalized]).first)
+        let reference = try XCTUnwrap(metadataOnly.coverMemoryImageReference)
+
+        XCTAssertTrue(metadataOnly.hasMemoryImages)
+        XCTAssertNil(metadataOnly.coverMemoryImageData)
+        XCTAssertEqual(metadataOnly.memoryImageByteCount(at: 0), image.count)
+        XCTAssertEqual(store.loadData(reference: reference, variant: .original), image)
+
+        let thumbnail = try XCTUnwrap(store.loadData(reference: reference, variant: .thumbnail))
+        XCTAssertNotNil(UIImage(data: thumbnail))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: rootURL.appendingPathComponent("thumbnails").path))
     }
 }

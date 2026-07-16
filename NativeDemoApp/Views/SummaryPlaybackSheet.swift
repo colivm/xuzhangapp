@@ -1091,16 +1091,13 @@ struct SummaryPlaybackSheet: View {
     private func memoryAnchorCard(_ anchor: SummaryMemoryAnchor) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             ZStack(alignment: .topLeading) {
-                if let uiImage = UIImage(data: anchor.imageData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 206, height: 132)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                } else {
-                    MemoryAttachmentThumbnail(imageData: anchor.imageData, height: 132, cornerRadius: 18)
-                        .frame(width: 206)
-                }
+                MemoryAttachmentThumbnail(
+                    imageData: anchor.imageData,
+                    imageReference: anchor.imageReference,
+                    height: 132,
+                    cornerRadius: 18
+                )
+                .frame(width: 206)
 
                 Text(anchor.label)
                     .font(.system(size: 11, weight: .bold))
@@ -3861,17 +3858,24 @@ private struct WeeklyStoryShareCardView: View {
 
     @ViewBuilder
     private func posterImage(_ anchor: SummaryMemoryAnchor?) -> some View {
-        if let anchor, let uiImage = UIImage(data: anchor.imageData) {
+        if let anchor {
             ZStack {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
+                MemoryAttachmentThumbnail(
+                    imageData: anchor.imageData,
+                    imageReference: anchor.imageReference,
+                    height: nil,
+                    cornerRadius: 0
+                )
                     .blur(radius: 18)
                     .overlay(Color.white.opacity(0.10))
 
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFit()
+                MemoryAttachmentThumbnail(
+                    imageData: anchor.imageData,
+                    imageReference: anchor.imageReference,
+                    contentMode: .fit,
+                    height: nil,
+                    cornerRadius: 0
+                )
             }
         } else {
             ZStack {

@@ -38,6 +38,8 @@ struct SummaryMemoryAnchor: Identifiable, Codable, Equatable {
     let amount: Double
     let createdAt: Date
     let imageData: Data
+    let imageReference: String?
+    let imageByteCount: Int?
     let role: PhotoMemoryAssetRole
     let sceneHint: PhotoMemorySceneHint
     let label: String
@@ -129,6 +131,8 @@ struct MemoryAnchorSelectionPolicy {
     struct Candidate {
         let item: HomeItem
         let imageData: Data
+        let imageReference: String?
+        let imageByteCount: Int
         let imageIndex: Int
         let role: PhotoMemoryAssetRole
         let sceneHint: PhotoMemorySceneHint
@@ -185,17 +189,19 @@ struct MemoryAnchorSelectionPolicy {
         label: (PhotoMemoryAssetRole, PhotoMemorySceneHint) -> String,
         caption: (PhotoMemoryAssetRole, PhotoMemorySceneHint) -> String
     ) -> [Candidate] {
-        let images = item.memoryImages
-        guard !images.isEmpty else { return [] }
+        guard item.hasMemoryImages else { return [] }
         let reason = PhotoMemoryPromptPolicy.anchorReason(for: item)
         let role = item.memoryAnchorRole ?? reason.assetRole
         let sceneHint = item.memoryAnchorSceneHint ?? reason.sceneHint
         let anchorCaption = item.memoryAnchorCaption?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedCoverIndex = item.normalizedCoverMemoryImageIndex ?? 0
-        return images.enumerated().map { index, imageData in
+        return (0..<item.memoryImageCount).map { index in
+            let imageData = item.memoryImageData(at: index) ?? Data()
             Candidate(
                 item: item,
                 imageData: imageData,
+                imageReference: item.memoryImageReference(at: index),
+                imageByteCount: item.memoryImageByteCount(at: index),
                 imageIndex: index,
                 role: role,
                 sceneHint: sceneHint,
@@ -203,7 +209,7 @@ struct MemoryAnchorSelectionPolicy {
                 caption: anchorCaption?.isEmpty == false ? anchorCaption! : caption(role, sceneHint),
                 score: score(
                     item: item,
-                    imageData: imageData,
+                    imageByteCount: item.memoryImageByteCount(at: index),
                     imageIndex: index,
                     coverIndex: normalizedCoverIndex,
                     role: role,
@@ -224,6 +230,8 @@ struct MemoryAnchorSelectionPolicy {
             amount: candidate.item.amount,
             createdAt: candidate.item.createdAt,
             imageData: candidate.imageData,
+            imageReference: candidate.imageReference,
+            imageByteCount: candidate.imageByteCount,
             role: candidate.role,
             sceneHint: candidate.sceneHint,
             label: candidate.label,
@@ -233,7 +241,7 @@ struct MemoryAnchorSelectionPolicy {
 
     private static func score(
         item: HomeItem,
-        imageData: Data,
+        imageByteCount: Int,
         imageIndex: Int,
         coverIndex: Int,
         role: PhotoMemoryAssetRole,
@@ -242,7 +250,7 @@ struct MemoryAnchorSelectionPolicy {
     ) -> Int {
         var value = 24
         value += imageIndex == coverIndex ? 12 : 3
-        value += imageQualityScore(imageData)
+        value += imageQualityScore(byteCount: imageByteCount)
         switch sceneHint {
         case .gathering, .travel:
             value += 24
@@ -300,8 +308,8 @@ struct MemoryAnchorSelectionPolicy {
         return item.userEditedTitle == true ? 14 : 20
     }
 
-    private static func imageQualityScore(_ data: Data) -> Int {
-        switch data.count {
+    private static func imageQualityScore(byteCount: Int) -> Int {
+        switch byteCount {
         case 700_000...: return 10
         case 350_000..<700_000: return 7
         case 140_000..<350_000: return 4
@@ -401,7 +409,9 @@ private final class MemoryAnchorSelectionService {
     }
 
     private func candidate(for item: HomeItem, range: SummaryPlaybackRange) -> ScoredAnchor? {
-        guard let imageData = item.coverMemoryImageData else { return nil }
+        guard item.hasMemoryImages else { return nil }
+        let coverIndex = item.normalizedCoverMemoryImageIndex ?? 0
+        let imageData = item.memoryImageData(at: coverIndex) ?? Data()
         let reason = PhotoMemoryPromptPolicy.anchorReason(for: item)
         let role = item.memoryAnchorRole ?? reason.assetRole
         let sceneHint = item.memoryAnchorSceneHint ?? reason.sceneHint
@@ -414,6 +424,8 @@ private final class MemoryAnchorSelectionService {
             amount: item.amount,
             createdAt: item.createdAt,
             imageData: imageData,
+            imageReference: item.memoryImageReference(at: coverIndex),
+            imageByteCount: item.memoryImageByteCount(at: coverIndex),
             role: role,
             sceneHint: sceneHint,
             label: label,
@@ -1737,10 +1749,10 @@ final class PlaybackService {
                 return item.hasMemoryImages
             }
             .sorted { lhs, rhs in
-                if lhs.memoryImages.count == rhs.memoryImages.count {
+                if lhs.memoryImageCount == rhs.memoryImageCount {
                     return lhs.createdAt > rhs.createdAt
                 }
-                return lhs.memoryImages.count > rhs.memoryImages.count
+                return lhs.memoryImageCount > rhs.memoryImageCount
             }
         guard let first = photoRows.first else { return nil }
         if photoRows.count >= 2 {

@@ -34,6 +34,11 @@ struct SettingsView: View {
     @State private var isExportingLocalBackup = false
     @State private var isPreparingLocalBackup = false
     @State private var localBackupExportMessage: String?
+    @State private var isImportingLocalBackup = false
+    @State private var isPreparingLocalBackupImport = false
+    @State private var isRestoringLocalBackup = false
+    @State private var preparedLocalBackupImport: LedgerLocalBackupPreparedImport?
+    @State private var localBackupImportMessage: String?
     @FocusState private var focusedField: SettingsField?
     private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
     private let privacyURL = URL(string: "https://xuzhangapp.com/legal/privacy.html")!
@@ -71,7 +76,7 @@ struct SettingsView: View {
         case memberPricing(highlightPlanId: String?)
     }
 
-    private enum SettingsConfirmationHost {
+    private enum SettingsConfirmationHost: Equatable {
         case main
         case settingsSheet
         case accountSheet
@@ -81,8 +86,14 @@ struct SettingsView: View {
         case deleteCloudLedger
         case enableCloudSync
         case loginCloudSyncMerge
+        case restoreLocalBackup
         case clearAllRecords
         case deleteAccount
+    }
+
+    private enum LocalBackupImportPreparationOutcome: @unchecked Sendable {
+        case success(LedgerLocalBackupPreparedImport)
+        case failure(String)
     }
 
     private enum SettingsConfirmationActionStyle {
@@ -212,7 +223,7 @@ struct SettingsView: View {
             settingsConfirmations(settingsSheet(sheet), host: .settingsSheet)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
-                .interactiveDismissDisabled(isPreparingLocalBackup)
+                .interactiveDismissDisabled(isLocalBackupFlowBlocking)
                 .fileExporter(
                     isPresented: $isExportingLocalBackup,
                     document: localBackupDocument,
@@ -220,6 +231,13 @@ struct SettingsView: View {
                     defaultFilename: localBackupFilename
                 ) { result in
                     handleLocalBackupExportResult(result)
+                }
+                .fileImporter(
+                    isPresented: $isImportingLocalBackup,
+                    allowedContentTypes: [LedgerLocalBackupDocument.contentType],
+                    allowsMultipleSelection: false
+                ) { result in
+                    handleLocalBackupImportSelection(result)
                 }
         }
         .onChange(of: openAppearanceRequestID) { _, requestID in
@@ -254,17 +272,17 @@ struct SettingsView: View {
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(AppColors.accent.opacity(0.12)))
                     VStack(alignment: .leading, spacing: 7) {
-                        Text("è¯ä¸å¤©å¸èç®")
+                        Text("试一天典藏皮")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(AppColors.text)
-                        Text("è¿æ¬¡ä¸ä¼æ¹åä¼åç¶æï¼åªä¸´æ¶è¯ç¨ 24 å°æ¶ãè¯ç¨ç»æåä¼åå°é»è®¤ä¸»é¢ã")
+                        Text("这次不会改变会员状态，只临时试用 24 小时。试用结束后会回到默认主题。")
                             .font(.system(size: 15))
                             .foregroundStyle(AppColors.text.opacity(0.76))
                             .lineSpacing(4)
                     }
                 }
                 HStack(spacing: 10) {
-                    Button("ä»¥ååè¯´") {
+                    Button("以后再说") {
                         lifetimeTrialOfferTheme = nil
                         openMemberPricingFromSettingsSheet(highlightPlanId: "lifetime")
                     }
@@ -273,7 +291,7 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity, minHeight: 46)
                     .background(Color.white.opacity(0.72), in: Capsule(style: .continuous))
 
-                    Button("å¼å§è¯ç¨") {
+                    Button("开始试用") {
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         _ = settingsViewModel.startLifetimeThemeTrial(themeId: theme.id)
                         lifetimeTrialOfferTheme = nil
@@ -683,8 +701,18 @@ struct SettingsView: View {
         "叙账本地备份-\(Self.localBackupFilenameFormatter.string(from: Date())).xuzhangbackup"
     }
 
+    private var isLocalBackupFlowBlocking: Bool {
+        isPreparingLocalBackup
+            || isExportingLocalBackup
+            || isImportingLocalBackup
+            || isPreparingLocalBackupImport
+            || isRestoringLocalBackup
+            || preparedLocalBackupImport != nil
+            || homeViewModel.isRestoringLocalBackup
+    }
+
     private func prepareLocalBackupExport() {
-        guard !isPreparingLocalBackup else { return }
+        guard !isLocalBackupFlowBlocking else { return }
         isPreparingLocalBackup = true
         localBackupExportMessage = nil
         Task { @MainActor in
@@ -727,6 +755,99 @@ struct SettingsView: View {
             }
             localBackupExportMessage = "本地备份没有导出：\(error.localizedDescription)"
         }
+    }
+
+    private func requestLocalBackupImport() {
+        guard !isLocalBackupFlowBlocking else { return }
+        localBackupImportMessage = nil
+        preparedLocalBackupImport = nil
+        isImportingLocalBackup = true
+    }
+
+    private func handleLocalBackupImportSelection(_ result: Result<[URL], Error>) {
+        switch result {
+        case .failure(let error):
+            let nsError = error as NSError
+            if nsError.domain == NSCocoaErrorDomain, nsError.code == NSUserCancelledError {
+                return
+            }
+            localBackupImportMessage = "没有打开备份：\(error.localizedDescription)"
+        case .success(let urls):
+            guard urls.count == 1, let url = urls.first else {
+                localBackupImportMessage = "请选择一份完整的 .xuzhangbackup 备份包。"
+                return
+            }
+            prepareLocalBackupImport(from: url)
+        }
+    }
+
+    private func prepareLocalBackupImport(from url: URL) {
+        guard !isPreparingLocalBackupImport,
+              !isRestoringLocalBackup,
+              preparedLocalBackupImport == nil else { return }
+        isPreparingLocalBackupImport = true
+        localBackupImportMessage = nil
+        Task { @MainActor in
+            let outcome = await Task.detached(priority: .userInitiated) {
+                do {
+                    return LocalBackupImportPreparationOutcome.success(
+                        try LedgerLocalBackupImporter.prepare(from: url)
+                    )
+                } catch {
+                    let message = (error as? LocalizedError)?.errorDescription
+                        ?? "这份备份无法读取。"
+                    return LocalBackupImportPreparationOutcome.failure(message)
+                }
+            }.value
+            isPreparingLocalBackupImport = false
+            switch outcome {
+            case .success(let prepared):
+                confirmationHost = .settingsSheet
+                preparedLocalBackupImport = prepared
+            case .failure(let message):
+                preparedLocalBackupImport = nil
+                localBackupImportMessage = message
+            }
+        }
+    }
+
+    private func confirmPreparedLocalBackupRestore() {
+        guard let preparedLocalBackupImport,
+              !isRestoringLocalBackup else { return }
+        isRestoringLocalBackup = true
+        Task { @MainActor in
+            let result = await homeViewModel.restoreLocalBackup(preparedLocalBackupImport)
+            if let result {
+                localBackupImportMessage = localBackupRestoreResultMessage(
+                    result,
+                    importSummary: preparedLocalBackupImport.summary
+                )
+            } else {
+                localBackupImportMessage = homeViewModel.syncStatusMessage
+                    ?? "这次恢复没有完成，本机原账本和照片仍保留。"
+            }
+            self.preparedLocalBackupImport = nil
+            isRestoringLocalBackup = false
+        }
+    }
+
+    private func localBackupRestoreResultMessage(
+        _ result: LedgerLocalBackupRestoreSummary,
+        importSummary: LedgerLocalBackupPreparedImport.Summary
+    ) -> String {
+        let recordMessage: String
+        if result.restoredRecordCount == 0 {
+            recordMessage = "本机记录已经是相同或更新版本，没有重复写入"
+        } else {
+            recordMessage = "已新增 \(result.insertedRecordCount) 条、更新 \(result.updatedRecordCount) 条"
+        }
+        let keptMessage = result.keptLocalRecordCount > 0
+            ? "；保留了 \(result.keptLocalRecordCount) 条本机相同或更新版本"
+            : ""
+        let photoMessage = importSummary.unavailablePhotoCount > 0
+            ? "；恢复了 \(importSummary.availablePhotoCount) 张照片，另有 \(importSummary.unavailablePhotoCount) 张在备份包中不可用，已保留缺图位置"
+            : "；恢复了 \(importSummary.availablePhotoCount) 张照片"
+        return "\(recordMessage)\(keptMessage)\(photoMessage)。"
     }
 
     private var companionRowSummary: String {
@@ -1079,6 +1200,7 @@ struct SettingsView: View {
 
     private func activeSettingsConfirmation(for host: SettingsConfirmationHost) -> SettingsConfirmationKind? {
         guard confirmationHost == host else { return nil }
+        if host == .settingsSheet, preparedLocalBackupImport != nil { return .restoreLocalBackup }
         if showDeleteCloudLedgerConfirm { return .deleteCloudLedger }
         if showEnableCloudSyncConfirm { return .enableCloudSync }
         if showLoginCloudSyncMergeConfirm { return .loginCloudSyncMerge }
@@ -1199,6 +1321,47 @@ struct SettingsView: View {
                         replaceLocalLedgerWithCurrentAccountCloud()
                     }
                 ]
+            )
+        case .restoreLocalBackup:
+            guard let preparedLocalBackupImport else {
+                return (
+                    "externaldrive.badge.exclamationmark",
+                    "备份预览已失效",
+                    "请关闭后重新选择备份包。",
+                    Color(hex: "C7473D"),
+                    [
+                        SettingsConfirmationAction(id: "close", title: "关闭", style: .secondary) {
+                            self.preparedLocalBackupImport = nil
+                        }
+                    ]
+                )
+            }
+            let summary = preparedLocalBackupImport.summary
+            let exportedAt = summary.exportedAt.formatted(date: .numeric, time: .shortened)
+            let photoMessage = summary.unavailablePhotoCount > 0
+                ? "其中 \(summary.availablePhotoCount) 张照片可恢复，\(summary.unavailablePhotoCount) 张在导出时已不可用，将保留缺图位置。"
+                : "其中 \(summary.availablePhotoCount) 张照片可恢复。"
+            let actions: [SettingsConfirmationAction]
+            if isRestoringLocalBackup {
+                actions = [
+                    SettingsConfirmationAction(id: "restoring", title: "正在安全合并，请稍候", style: .secondary) {}
+                ]
+            } else {
+                actions = [
+                    SettingsConfirmationAction(id: "cancel", title: "取消，不改本机账本", style: .secondary) {
+                        self.preparedLocalBackupImport = nil
+                    },
+                    SettingsConfirmationAction(id: "restore", title: "确认合并恢复", style: .primary) {
+                        confirmPreparedLocalBackupRestore()
+                    }
+                ]
+            }
+            return (
+                "externaldrive.badge.checkmark",
+                "确认合并这份备份",
+                "备份时间：\(exportedAt)\n共 \(summary.recordCount) 条记录。\(photoMessage)\n\n不会清空本机账本；相同记录只在备份更新时间更晚时更新，本机相同或更新版本会保留。",
+                AppColors.accent,
+                actions
             )
         case .clearAllRecords:
             return (
@@ -1348,6 +1511,10 @@ struct SettingsView: View {
             showEnableCloudSyncConfirm = false
         case .loginCloudSyncMerge:
             keepLocalLedgerOnlyForCurrentLogin()
+        case .restoreLocalBackup:
+            if !isRestoringLocalBackup {
+                preparedLocalBackupImport = nil
+            }
         case .clearAllRecords:
             showClearAllRecordsConfirm = false
         case .deleteAccount:
@@ -1378,6 +1545,20 @@ struct SettingsView: View {
             }
             if let localBackupExportMessage {
                 settingHelper(localBackupExportMessage)
+            }
+            if isPreparingLocalBackupImport {
+                ComputationLoadingView(
+                    message: "正在校验备份…",
+                    detail: "只读取备份清单、记录和照片校验值，确认前不会修改本机账本",
+                    presentation: .inline
+                )
+            } else {
+                webButton("导入并恢复本地备份") {
+                    requestLocalBackupImport()
+                }
+            }
+            if let localBackupImportMessage {
+                settingHelper(localBackupImportMessage)
             }
             settingToggle("允许联网梳理复盘（可选）", isOn: Binding(
                 get: { settingsViewModel.useRemoteAI },

@@ -55,6 +55,91 @@ final class InteractionStateRegressionTests: XCTestCase {
         XCTAssertFalse(gate.accepts(second))
     }
 
+    func testPostSavePromptBudgetLimitsFrequencyAndResetsNextDay() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let start = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 16,
+            hour: 9
+        ))!
+        var state = PostSavePromptBudgetState()
+
+        var result = PostSavePromptBudgetPolicy.reserving(
+            .firstPlayback,
+            state: state,
+            now: start,
+            calendar: calendar
+        )
+        XCTAssertTrue(result.allowed)
+        state = result.state
+
+        result = PostSavePromptBudgetPolicy.reserving(
+            .sceneReward,
+            state: state,
+            now: start.addingTimeInterval(5 * 60),
+            calendar: calendar
+        )
+        XCTAssertFalse(result.allowed)
+
+        result = PostSavePromptBudgetPolicy.reserving(
+            .sceneReward,
+            state: state,
+            now: start.addingTimeInterval(21 * 60),
+            calendar: calendar
+        )
+        XCTAssertTrue(result.allowed)
+        state = result.state
+
+        result = PostSavePromptBudgetPolicy.reserving(
+            .memoryPhoto,
+            state: state,
+            now: start.addingTimeInterval(60 * 60),
+            calendar: calendar
+        )
+        XCTAssertFalse(result.allowed)
+
+        result = PostSavePromptBudgetPolicy.reserving(
+            .memoryPhoto,
+            state: state,
+            now: start.addingTimeInterval(24 * 60 * 60),
+            calendar: calendar
+        )
+        XCTAssertTrue(result.allowed)
+        XCTAssertEqual(result.state.strongPromptCount, 1)
+    }
+
+    func testMemberLoginContinuationResumesSelectedPlanExactlyOnce() {
+        var state = MemberLoginContinuationState()
+
+        state.beginLogin(for: .purchase(planID: "lifetime"))
+        XCTAssertEqual(state.pendingLoginIntent, .purchase(planID: "lifetime"))
+        XCTAssertNil(state.resumedIntent)
+
+        state.loginSucceeded()
+        state.loginSucceeded()
+
+        XCTAssertNil(state.pendingLoginIntent)
+        XCTAssertEqual(state.takeResumedIntent(), .purchase(planID: "lifetime"))
+        XCTAssertNil(state.takeResumedIntent())
+    }
+
+    func testMemberLoginCancellationClearsIntentWithoutResumingPurchaseOrRestore() {
+        var state = MemberLoginContinuationState()
+        state.beginLogin(for: .restorePurchases)
+        state.loginCancelled()
+
+        XCTAssertNil(state.pendingLoginIntent)
+        XCTAssertNil(state.takeResumedIntent())
+
+        state.beginLogin(for: .purchase(planID: "monthly"))
+        state.loginSucceeded()
+        state.clearResumedIntent()
+        XCTAssertNil(state.takeResumedIntent())
+    }
+
     @MainActor
     func testRecordSessionPersistsDraftUIUntilCommittedReset() {
         let session = RecordTabSession()
@@ -509,6 +594,37 @@ final class ReleaseScaleFixtureTests: XCTestCase {
             ),
             ReleaseFixtureLaunchConfiguration(count: 1_000, reset: true)
         )
+        XCTAssertEqual(
+            ReleaseFixtureLaunchConfiguration.resolve(
+                arguments: [
+                    "app", "-QAReleaseFixtureCount", "1000",
+                    "-QAReleasePhotoProfile", "realistic",
+                ],
+                environment: [:]
+            ),
+            ReleaseFixtureLaunchConfiguration(
+                count: 1_000,
+                reset: false,
+                photoProfile: .realistic
+            )
+        )
+    }
+
+    func testRealisticPhotoFixtureUsesPhoneSizedJPEGResources() throws {
+        let items = ReleaseFixtureFactory.makeItems(count: 1_000, photoProfile: .realistic)
+        let photos = items.flatMap(\.memoryImages)
+        XCTAssertFalse(photos.isEmpty)
+        var uniquePhotos: [Data] = []
+        for data in photos where !uniquePhotos.contains(data) {
+            uniquePhotos.append(data)
+            if uniquePhotos.count == 3 { break }
+        }
+        XCTAssertEqual(uniquePhotos.count, 3)
+        for data in uniquePhotos {
+            let image = try XCTUnwrap(UIImage(data: data))
+            XCTAssertGreaterThanOrEqual(Int(image.size.width * image.scale) * Int(image.size.height * image.scale), 12_000_000)
+            XCTAssertGreaterThanOrEqual(data.count, 2_000_000)
+        }
     }
 
     func testGeneratedReleaseFixturesMatchSwiftFactoryAndDecodeValidImages() throws {
@@ -602,9 +718,17 @@ final class ReleaseScaleFixtureTests: XCTestCase {
                 XCTAssertEqual(loaded.amount, source.amount)
                 XCTAssertEqual(loaded.category, source.category)
                 XCTAssertEqual(loaded.draftMeta, source.draftMeta)
-                XCTAssertEqual(loaded.memoryImages, source.memoryImages)
+                XCTAssertEqual(loaded.memoryImageCount, source.memoryImageCount)
+                XCTAssertTrue(loaded.memoryImages.allSatisfy(\.isEmpty))
                 XCTAssertEqual(loaded.normalizedCoverMemoryImageIndex, source.normalizedCoverMemoryImageIndex)
                 XCTAssertEqual(loaded.memoryImageReferences.count, source.memoryImages.count)
+                for index in 0..<loaded.memoryImageCount {
+                    let reference = try XCTUnwrap(loaded.memoryImageReference(at: index))
+                    XCTAssertEqual(
+                        repository.loadImageData(reference: reference, variant: .original),
+                        source.memoryImageData(at: index)
+                    )
+                }
             }
         }
     }

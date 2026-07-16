@@ -126,6 +126,46 @@ final class LedgerMetadataStoreTests: XCTestCase {
         XCTAssertEqual(loaded.first(where: { $0.id == updatedFirst.id })?.title, "第一笔已修改")
     }
 
+    func testChangeSetWritesOnlyExplicitUpsertsAndDeletes() throws {
+        let root = documentsURL.appendingPathComponent(LedgerStorageSchema.storeDirectoryName, isDirectory: true)
+        let metadataStore = LedgerMetadataStore(storeRootURL: root)
+        let first = HomeItem(
+            id: UUID(uuidString: "11111111-1111-4111-8111-111111111111")!,
+            title: "保留记录",
+            amount: 10,
+            category: .dining
+        )
+        let second = HomeItem(
+            id: UUID(uuidString: "22222222-2222-4222-8222-222222222222")!,
+            title: "待删除记录",
+            amount: 20,
+            category: .transport
+        )
+        try metadataStore.activate(items: [first, second], sourceDigest: "fixture-digest")
+
+        var updatedFirst = first
+        updatedFirst.title = "只更新这一笔"
+        updatedFirst.amount = 12
+        updatedFirst.updatedAt = first.updatedAt.addingTimeInterval(60)
+        let inserted = HomeItem(
+            id: UUID(uuidString: "33333333-3333-4333-8333-333333333333")!,
+            title: "新增记录",
+            amount: 30,
+            category: .shopping
+        )
+
+        XCTAssertEqual(
+            try metadataStore.applyChanges(upserts: [updatedFirst, inserted], deletedIDs: [second.id]),
+            LedgerMetadataWriteSummary(inserted: 1, updated: 1, deleted: 1, unchanged: 0)
+        )
+        let loaded = try metadataStore.loadItems()
+        XCTAssertEqual(Set(loaded.map(\.id)), Set([first.id, inserted.id]))
+        XCTAssertEqual(loaded.first(where: { $0.id == first.id })?.title, "只更新这一笔")
+        let manifest = try XCTUnwrap(metadataStore.loadManifest())
+        XCTAssertEqual(manifest.recordCount, 2)
+        XCTAssertEqual(manifest.amountMinorUnitTotal, 4_200)
+    }
+
     func testCorruptActiveDatabaseFallsBackToRetainedLegacyWithoutEmptyOverwrite() throws {
         let legacyItem = HomeItem(
             id: UUID(uuidString: "EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE")!,

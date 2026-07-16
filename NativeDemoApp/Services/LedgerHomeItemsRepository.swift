@@ -6,6 +6,13 @@ struct LedgerHomeItemsLoadResult {
     var writesBlocked: Bool
 }
 
+struct LedgerHomeItemsChangeSet {
+    var upserts: [HomeItem] = []
+    var deletedIDs: Set<UUID> = []
+
+    var isEmpty: Bool { upserts.isEmpty && deletedIDs.isEmpty }
+}
+
 final class LedgerHomeItemsRepository {
     private enum LegacyPayloadState {
         case missing
@@ -48,7 +55,7 @@ final class LedgerHomeItemsRepository {
                 do {
                     let items = try metadataStore.loadItems()
                     return LedgerHomeItemsLoadResult(
-                        items: imageStore.hydrate(items),
+                        items: items,
                         issueMessage: nil,
                         writesBlocked: false
                     )
@@ -99,14 +106,14 @@ final class LedgerHomeItemsRepository {
                 )
                 try imageStore.cleanupOrphans(keeping: imageStore.referencedPaths(in: externalized))
                 return LedgerHomeItemsLoadResult(
-                    items: imageStore.hydrate(externalized),
+                    items: imageStore.metadataOnly(externalized),
                     issueMessage: nil,
                     writesBlocked: false
                 )
             } catch {
                 print("Failed to activate metadata ledger: \(error)")
                 return LedgerHomeItemsLoadResult(
-                    items: imageStore.hydrate(decodedItems),
+                    items: imageStore.metadataOnly(decodedItems),
                     issueMessage: "本机账本暂时使用兼容存储，原数据仍保留。",
                     writesBlocked: false
                 )
@@ -155,6 +162,51 @@ final class LedgerHomeItemsRepository {
         }
     }
 
+    @discardableResult
+    func saveChanges(
+        _ changes: LedgerHomeItemsChangeSet,
+        currentItemsForFallback: [HomeItem]
+    ) -> Bool {
+        guard !changes.isEmpty else { return true }
+        do {
+            let manifest = try metadataStore.loadManifest()
+            guard manifest?.activeStore == .metadataV2 else {
+                return save(currentItemsForFallback)
+            }
+            let externalized = try imageStore.prepareForPersistence(changes.upserts)
+            _ = try metadataStore.applyChanges(
+                upserts: externalized,
+                deletedIDs: changes.deletedIDs
+            )
+            for item in externalized {
+                do {
+                    try imageStore.cleanupRecordOrphans(
+                        recordID: item.id,
+                        keeping: Set(item.memoryImageReferences.filter { !$0.isEmpty })
+                    )
+                } catch {
+                    print("Failed to clean changed record images \(item.id): \(error)")
+                }
+            }
+            let upsertedIDs = Set(externalized.map(\.id))
+            for id in changes.deletedIDs.subtracting(upsertedIDs) {
+                do {
+                    try imageStore.removeRecordFiles(recordID: id)
+                } catch {
+                    print("Failed to remove deleted record images \(id): \(error)")
+                }
+            }
+            return true
+        } catch {
+            print("Failed to save changed ledger records: \(error)")
+            return save(currentItemsForFallback)
+        }
+    }
+
+    func loadImageData(reference: String, variant: LedgerImageLoadVariant) -> Data? {
+        imageStore.loadData(reference: reference, variant: variant)
+    }
+
     private func recoverFromActiveMetadataFailure(_ error: Error) -> LedgerHomeItemsLoadResult {
         print("Failed to load active metadata ledger: \(error)")
         switch legacyPayloadState() {
@@ -167,7 +219,7 @@ final class LedgerHomeItemsRepository {
                 sourceDigest: LedgerMetadataStore.sha256Hex(payload)
             )
             return LedgerHomeItemsLoadResult(
-                items: imageStore.hydrate(items),
+                items: imageStore.metadataOnly(items),
                 issueMessage: "增量账本暂时无法打开，已使用本机保留账本，原文件没有被覆盖。",
                 writesBlocked: false
             )

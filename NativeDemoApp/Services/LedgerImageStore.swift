@@ -1,5 +1,12 @@
 import CryptoKit
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
+
+enum LedgerImageLoadVariant: String, Sendable {
+    case thumbnail
+    case original
+}
 
 enum LedgerImageStoreError: LocalizedError {
     case missingImageData(recordID: UUID, index: Int)
@@ -19,12 +26,16 @@ final class LedgerImageStore {
     private let fileManager: FileManager
     let storeRootURL: URL
     let imageRootURL: URL
+    let thumbnailRootURL: URL
 
     init(storeRootURL: URL, fileManager: FileManager = .default) {
         self.fileManager = fileManager
         self.storeRootURL = storeRootURL.standardizedFileURL
         self.imageRootURL = self.storeRootURL
             .appendingPathComponent(LedgerStorageSchema.imageDirectoryName, isDirectory: true)
+            .standardizedFileURL
+        self.thumbnailRootURL = self.storeRootURL
+            .appendingPathComponent("thumbnails", isDirectory: true)
             .standardizedFileURL
     }
 
@@ -37,15 +48,72 @@ final class LedgerImageStore {
         items.map(hydratedItem)
     }
 
+    func metadataOnly(_ items: [HomeItem]) -> [HomeItem] {
+        items.map { source in
+            guard !source.memoryImageReferences.isEmpty else { return source }
+            var item = source
+            item.setExternalMemoryImages(
+                references: source.memoryImageReferences,
+                data: Array(repeating: Data(), count: source.memoryImageReferences.count),
+                byteCounts: source.memoryImageByteCounts,
+                unavailableIndices: []
+            )
+            return item
+        }
+    }
+
+    func loadData(reference: String, variant: LedgerImageLoadVariant) -> Data? {
+        switch variant {
+        case .original:
+            guard let url = try? safeURL(for: reference),
+                  let data = try? Data(contentsOf: url),
+                  !data.isEmpty else { return nil }
+            return data
+        case .thumbnail:
+            return loadThumbnailData(reference: reference)
+        }
+    }
+
     func referencedPaths(in items: [HomeItem]) -> Set<String> {
         Set(items.flatMap(\.memoryImageReferences).filter { !$0.isEmpty })
     }
 
     func cleanupOrphans(keeping referencedPaths: Set<String>) throws {
-        guard fileManager.fileExists(atPath: imageRootURL.path) else { return }
-        let rootPath = imageRootURL.standardizedFileURL.path
+        try cleanupFiles(in: imageRootURL, keeping: referencedPaths)
+        let thumbnailReferences = Set(referencedPaths.compactMap(thumbnailReference(for:)))
+        try cleanupFiles(in: thumbnailRootURL, keeping: thumbnailReferences)
+    }
+
+    func cleanupRecordOrphans(recordID: UUID, keeping referencedPaths: Set<String>) throws {
+        let component = recordID.uuidString.lowercased()
+        let imageDirectory = imageRootURL.appendingPathComponent(component, isDirectory: true).standardizedFileURL
+        let thumbnailDirectory = thumbnailRootURL.appendingPathComponent(component, isDirectory: true).standardizedFileURL
+        try assertChild(imageDirectory, of: imageRootURL)
+        try assertChild(thumbnailDirectory, of: thumbnailRootURL)
+        try cleanupFiles(in: imageDirectory, keeping: referencedPaths)
+        let thumbnailReferences = Set(referencedPaths.compactMap(thumbnailReference(for:)))
+        try cleanupFiles(in: thumbnailDirectory, keeping: thumbnailReferences)
+    }
+
+    func removeRecordFiles(recordID: UUID) throws {
+        let component = recordID.uuidString.lowercased()
+        let directories = [
+            imageRootURL.appendingPathComponent(component, isDirectory: true).standardizedFileURL,
+            thumbnailRootURL.appendingPathComponent(component, isDirectory: true).standardizedFileURL,
+        ]
+        for (directory, root) in zip(directories, [imageRootURL, thumbnailRootURL]) {
+            try assertChild(directory, of: root)
+            if fileManager.fileExists(atPath: directory.path) {
+                try fileManager.removeItem(at: directory)
+            }
+        }
+    }
+
+    private func cleanupFiles(in rootURL: URL, keeping referencedPaths: Set<String>) throws {
+        guard fileManager.fileExists(atPath: rootURL.path) else { return }
+        let rootPath = rootURL.standardizedFileURL.path
         guard let enumerator = fileManager.enumerator(
-            at: imageRootURL,
+            at: rootURL,
             includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else { return }
@@ -73,6 +141,19 @@ final class LedgerImageStore {
             if contents.isEmpty {
                 try fileManager.removeItem(at: directory)
             }
+        }
+        if rootURL != imageRootURL,
+           rootURL != thumbnailRootURL,
+           fileManager.fileExists(atPath: rootURL.path),
+           (try fileManager.contentsOfDirectory(atPath: rootURL.path)).isEmpty {
+            try fileManager.removeItem(at: rootURL)
+        }
+    }
+
+    private func assertChild(_ url: URL, of root: URL) throws {
+        let rootPath = root.standardizedFileURL.path
+        guard url.standardizedFileURL.path.hasPrefix(rootPath + pathSeparator) else {
+            throw LedgerImageStoreError.unsafeRelativePath(url.path)
         }
     }
 
@@ -140,6 +221,9 @@ final class LedgerImageStore {
         item.setExternalMemoryImages(
             references: references,
             data: persistedData,
+            byteCounts: persistedData.enumerated().map { index, imageData in
+                imageData.isEmpty ? source.memoryImageByteCount(at: index) : imageData.count
+            },
             unavailableIndices: unavailable
         )
         return item
@@ -166,9 +250,84 @@ final class LedgerImageStore {
         item.setExternalMemoryImages(
             references: source.memoryImageReferences,
             data: data,
+            byteCounts: data.enumerated().map { index, imageData in
+                imageData.isEmpty ? source.memoryImageByteCount(at: index) : imageData.count
+            },
             unavailableIndices: unavailable
         )
         return item
+    }
+
+    private func loadThumbnailData(reference: String) -> Data? {
+        guard let originalURL = try? safeURL(for: reference),
+              fileManager.fileExists(atPath: originalURL.path),
+              let thumbnailReference = thumbnailReference(for: reference),
+              let thumbnailURL = try? safeThumbnailURL(for: thumbnailReference) else {
+            return nil
+        }
+        if let cached = try? Data(contentsOf: thumbnailURL), !cached.isEmpty {
+            return cached
+        }
+        guard let generated = createThumbnailData(from: originalURL, maxPixelSize: 720),
+              !generated.isEmpty else {
+            return try? Data(contentsOf: originalURL)
+        }
+        do {
+            try fileManager.createDirectory(
+                at: thumbnailURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try generated.write(to: thumbnailURL, options: .atomic)
+        } catch {
+            return generated
+        }
+        return generated
+    }
+
+    private func createThumbnailData(from url: URL, maxPixelSize: Int) -> Data? {
+        let sourceOptions: [CFString: Any] = [kCGImageSourceShouldCache: false]
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions as CFDictionary) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            output,
+            UTType.jpeg.identifier as CFString,
+            1,
+            nil
+        ) else { return nil }
+        CGImageDestinationAddImage(
+            destination,
+            image,
+            [kCGImageDestinationLossyCompressionQuality: 0.82] as CFDictionary
+        )
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return output as Data
+    }
+
+    private func thumbnailReference(for imageReference: String) -> String? {
+        let components = imageReference.split(separator: "/", omittingEmptySubsequences: true)
+        guard components.count >= 3,
+              components.first.map(String.init) == LedgerStorageSchema.imageDirectoryName,
+              !components.dropFirst().contains(where: { $0 == ".." }) else { return nil }
+        return (["thumbnails"] + components.dropFirst().map(String.init)).joined(separator: "/")
+    }
+
+    private func safeThumbnailURL(for relativePath: String) throws -> URL {
+        guard !relativePath.isEmpty, !relativePath.contains("..") else {
+            throw LedgerImageStoreError.unsafeRelativePath(relativePath)
+        }
+        let url = storeRootURL.appendingPathComponent(relativePath).standardizedFileURL
+        let rootPath = thumbnailRootURL.path
+        guard url.path.hasPrefix(rootPath + pathSeparator) else {
+            throw LedgerImageStoreError.unsafeRelativePath(relativePath)
+        }
+        return url
     }
 
     private func imageReference(recordID: UUID, digest: String) -> String {

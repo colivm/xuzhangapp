@@ -2375,7 +2375,7 @@ struct StatsWebView: View {
     private func traceLifeSlicePhotoMosaic(_ anchors: [SummaryMemoryAnchor]) -> some View {
         ZStack(alignment: .topTrailing) {
             if let primary = anchors.first {
-                traceLifeSliceImage(data: primary.imageData)
+                traceLifeSliceImage(anchor: primary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
             } else {
@@ -2557,20 +2557,26 @@ struct StatsWebView: View {
 
     @ViewBuilder
     private func traceLifeSliceFramedImage(anchor: SummaryMemoryAnchor?, height: CGFloat) -> some View {
-        if let anchor, let uiImage = UIImage(data: anchor.imageData) {
+        if let anchor {
             ZStack {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
+                MemoryAttachmentThumbnail(
+                    imageData: anchor.imageData,
+                    imageReference: anchor.imageReference,
+                    height: height,
+                    cornerRadius: 0
+                )
                     .frame(maxWidth: .infinity)
                     .frame(height: height)
                     .clipped()
                     .blur(radius: 18)
                     .overlay(Color.white.opacity(0.16))
 
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
+                MemoryAttachmentThumbnail(
+                    imageData: anchor.imageData,
+                    imageReference: anchor.imageReference,
+                    height: height,
+                    cornerRadius: 0
+                )
                     .frame(maxWidth: .infinity)
                     .frame(height: height)
                     .clipped()
@@ -2587,20 +2593,14 @@ struct StatsWebView: View {
     }
 
     @ViewBuilder
-    private func traceLifeSliceImage(data: Data) -> some View {
-        if let uiImage = UIImage(data: data) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .scaledToFill()
-        } else {
-            traceLifeSliceEmptyBackdrop
-        }
-    }
-
-    @ViewBuilder
     private func traceLifeSliceImage(anchor: SummaryMemoryAnchor?) -> some View {
         if let anchor {
-            traceLifeSliceImage(data: anchor.imageData)
+            MemoryAttachmentThumbnail(
+                imageData: anchor.imageData,
+                imageReference: anchor.imageReference,
+                height: nil,
+                cornerRadius: 0
+            )
         } else {
             traceLifeSliceEmptyBackdrop
         }
@@ -2608,7 +2608,7 @@ struct StatsWebView: View {
 
     private func traceLifeSliceThumbnail(_ anchor: SummaryMemoryAnchor) -> some View {
         ZStack(alignment: .bottomLeading) {
-            traceLifeSliceImage(data: anchor.imageData)
+            traceLifeSliceImage(anchor: anchor)
                 .frame(width: 104, height: 78)
                 .clipped()
 
@@ -4809,7 +4809,7 @@ struct StatsWebView: View {
 
         if question.contains("现场") {
             if let item = tracePhotoInsightRecord(items: items, highlightedDate: insight.highlightedDate) {
-                let photoCount = item.memoryImages.count
+                let photoCount = item.memoryImageCount
                 let countText = photoCount > 1 ? "\(photoCount) 张照片" : "一张照片"
                 return "\(traceCalendarDayNarrativeLabel(item.createdAt))的「\(item.displayTitle)」附了\(countText)。这里单独保留的是你当时主动留下的画面，不是同一天所有分类的汇总。"
             }
@@ -4871,8 +4871,8 @@ struct StatsWebView: View {
                 let leftHighlighted = highlightedDate.map { Calendar.current.isDate(lhs.createdAt, inSameDayAs: $0) } ?? false
                 let rightHighlighted = highlightedDate.map { Calendar.current.isDate(rhs.createdAt, inSameDayAs: $0) } ?? false
                 if leftHighlighted != rightHighlighted { return leftHighlighted }
-                if lhs.memoryImages.count != rhs.memoryImages.count {
-                    return lhs.memoryImages.count > rhs.memoryImages.count
+                if lhs.memoryImageCount != rhs.memoryImageCount {
+                    return lhs.memoryImageCount > rhs.memoryImageCount
                 }
                 return lhs.createdAt > rhs.createdAt
             }
@@ -5723,8 +5723,8 @@ struct StatsWebView: View {
 
     @ViewBuilder
     private func billRecordRow(_ item: HomeItem, isFirst: Bool) -> some View {
-        if let imageData = item.coverMemoryImageData {
-            traceMemoryBillCard(item: item, imageData: imageData)
+        if item.hasMemoryImages {
+            traceMemoryBillCard(item: item)
         } else {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(alignment: .top, spacing: 9) {
@@ -5762,10 +5762,15 @@ struct StatsWebView: View {
         }
     }
 
-    private func traceMemoryBillCard(item: HomeItem, imageData: Data) -> some View {
+    private func traceMemoryBillCard(item: HomeItem) -> some View {
         let accent = traceAccentColor(for: item.category)
         return ZStack(alignment: .bottom) {
-            MemoryAttachmentThumbnail(imageData: imageData, height: 92, cornerRadius: 14)
+            MemoryAttachmentThumbnail(
+                imageData: item.coverMemoryImageData,
+                imageReference: item.coverMemoryImageReference,
+                height: 92,
+                cornerRadius: 14
+            )
                 .overlay(
                     LinearGradient(
                         colors: [
@@ -5779,8 +5784,8 @@ struct StatsWebView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 )
 
-            if item.memoryImages.count > 1 {
-                Text("\(item.memoryImages.count) 张")
+            if item.memoryImageCount > 1 {
+                Text("\(item.memoryImageCount) 张")
                     .font(.system(size: 10, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
@@ -5994,18 +5999,23 @@ struct StatsWebView: View {
                     .opacity(isEditing ? 0.24 : 1)
             }
 
-            if let imageData = item.coverMemoryImageData {
-                traceDetailMemoryStrip(item: item, imageData: imageData)
+            if item.hasMemoryImages {
+                traceDetailMemoryStrip(item: item)
                     .opacity(isEditing ? 0 : 1)
                     .frame(height: isEditing ? 0 : nil)
             }
         }
     }
 
-    private func traceDetailMemoryStrip(item: HomeItem, imageData: Data) -> some View {
+    private func traceDetailMemoryStrip(item: HomeItem) -> some View {
         ZStack(alignment: .bottomLeading) {
-            MemoryAttachmentThumbnail(imageData: imageData, height: 78, cornerRadius: 12)
-            Text("\(item.memoryImages.count) 张照片")
+            MemoryAttachmentThumbnail(
+                imageData: item.coverMemoryImageData,
+                imageReference: item.coverMemoryImageReference,
+                height: 78,
+                cornerRadius: 12
+            )
+            Text("\(item.memoryImageCount) 张照片")
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(AppColors.text.opacity(0.78))
                 .padding(.horizontal, 8)
@@ -6748,7 +6758,7 @@ struct FocusedRecordEditor: View {
     }
 
     private var photoPickerSelectionLimit: Int {
-        max(1, 9 - item.memoryImages.count)
+        max(1, 9 - item.memoryImageCount)
     }
 
     private func attachMemoryImage() {

@@ -968,10 +968,10 @@ extension HomeViewModel {
         let photoItems = target
             .filter { $0.amount > 0 && $0.hasMemoryImages }
             .sorted { lhs, rhs in
-                if lhs.memoryImages.count == rhs.memoryImages.count {
+                if lhs.memoryImageCount == rhs.memoryImageCount {
                     return lhs.createdAt > rhs.createdAt
                 }
-                return lhs.memoryImages.count > rhs.memoryImages.count
+                return lhs.memoryImageCount > rhs.memoryImageCount
             }
         guard let first = photoItems.first else { return nil }
         if photoItems.count >= 2 {

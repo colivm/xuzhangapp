@@ -52,6 +52,11 @@ final class LedgerMetadataStore {
         var updatedAt: Double
     }
 
+    private struct ExistingRecordStats {
+        var amountMinorUnits: Int64
+        var imageCount: Int
+    }
+
     private let fileManager: FileManager
     let storeRootURL: URL
     let databaseURL: URL
@@ -174,6 +179,79 @@ final class LedgerMetadataStore {
         return summary
     }
 
+    func applyChanges(
+        upserts: [HomeItem],
+        deletedIDs: Set<UUID>
+    ) throws -> LedgerMetadataWriteSummary {
+        try validateExternalizedItems(upserts)
+        let incomingByID = try itemsByID(upserts)
+        let incomingIDs = Set(incomingByID.keys)
+        let normalizedDeletedIDs = Set(deletedIDs.map { $0.uuidString.lowercased() })
+            .subtracting(incomingIDs)
+        guard !incomingByID.isEmpty || !normalizedDeletedIDs.isEmpty else {
+            return LedgerMetadataWriteSummary(inserted: 0, updated: 0, deleted: 0, unchanged: 0)
+        }
+
+        guard let manifest = try loadManifest(), manifest.activeStore == .metadataV2 else {
+            throw LedgerMetadataStoreError.databaseOpenFailed("增量账本尚未激活")
+        }
+
+        var existingStats: [String: ExistingRecordStats] = [:]
+        let summary = try withDatabase(at: databaseURL, createIfNeeded: false) { database in
+            try validateSchemaVersion(database)
+            try execute(database, sql: "PRAGMA journal_mode = WAL", operation: "启用变化集写入日志")
+            for id in incomingIDs.union(normalizedDeletedIDs) {
+                if let stats = try readRecordStats(id: id, from: database) {
+                    existingStats[id] = stats
+                }
+            }
+
+            try inTransaction(database) {
+                for id in normalizedDeletedIDs {
+                    try deleteRecord(id: id, from: database)
+                }
+                for item in incomingByID.values {
+                    try upsert(item, in: database)
+                }
+            }
+
+            return LedgerMetadataWriteSummary(
+                inserted: incomingIDs.filter { existingStats[$0] == nil }.count,
+                updated: incomingIDs.filter { existingStats[$0] != nil }.count,
+                deleted: normalizedDeletedIDs.filter { existingStats[$0] != nil }.count,
+                unchanged: 0
+            )
+        }
+
+        var recordCount = manifest.recordCount
+        var imageCount = manifest.imageCount
+        var amountMinorUnitTotal = manifest.amountMinorUnitTotal
+        for id in normalizedDeletedIDs {
+            guard let previous = existingStats[id] else { continue }
+            recordCount -= 1
+            imageCount -= previous.imageCount
+            amountMinorUnitTotal -= previous.amountMinorUnits
+        }
+        for (id, item) in incomingByID {
+            let previous = existingStats[id]
+            if previous == nil { recordCount += 1 }
+            imageCount += item.memoryImageReferences.count - (previous?.imageCount ?? 0)
+            amountMinorUnitTotal += Self.minorUnits(item.amount) - (previous?.amountMinorUnits ?? 0)
+        }
+        try writeManifest(
+            LedgerStoreManifest(
+                schemaVersion: LedgerStorageSchema.targetVersion,
+                activeStore: .metadataV2,
+                sourceDigest: manifest.sourceDigest,
+                recordCount: max(0, recordCount),
+                imageCount: max(0, imageCount),
+                amountMinorUnitTotal: amountMinorUnitTotal,
+                completedAt: Date()
+            )
+        )
+        return summary
+    }
+
     func markLegacyActive(items: [HomeItem], sourceDigest: String) throws {
         let imageCount = items.reduce(0) { $0 + $1.memoryImageReferences.count }
         let total = items.reduce(Int64(0)) { $0 + Self.minorUnits($1.amount) }
@@ -279,13 +357,17 @@ final class LedgerMetadataStore {
     }
 
     private func validateDatabase(_ database: OpaquePointer) throws {
-        let version = try singleInt(database, sql: "PRAGMA user_version", operation: "读取账本版本")
-        guard version == Int64(LedgerStorageSchema.targetVersion) else {
-            throw LedgerMetadataStoreError.invalidSchema(Int32(version))
-        }
+        try validateSchemaVersion(database)
         let integrity = try singleText(database, sql: "PRAGMA quick_check(1)", operation: "检查账本完整性")
         guard integrity == "ok" else {
             throw LedgerMetadataStoreError.integrityCheckFailed(integrity)
+        }
+    }
+
+    private func validateSchemaVersion(_ database: OpaquePointer) throws {
+        let version = try singleInt(database, sql: "PRAGMA user_version", operation: "读取账本版本")
+        guard version == Int64(LedgerStorageSchema.targetVersion) else {
+            throw LedgerMetadataStoreError.invalidSchema(Int32(version))
         }
     }
 
@@ -377,7 +459,7 @@ final class LedgerMetadataStore {
         try stepDone(deleteStatement, database: database, operation: "更新图片引用")
 
         let references = item.memoryImageReferences
-        guard references.count == item.memoryImages.count else {
+        guard references.count == item.memoryImageCount else {
             throw LedgerMetadataStoreError.invalidRecord("\(recordID) 的图片引用数量不一致")
         }
 
@@ -424,8 +506,8 @@ final class LedgerMetadataStore {
         reference: String,
         existing: ExistingAsset?
     ) -> Int64 {
-        if item.memoryImages.indices.contains(ordinal), !item.memoryImages[ordinal].isEmpty {
-            return Int64(item.memoryImages[ordinal].count)
+        if let data = item.memoryImageData(at: ordinal) {
+            return Int64(data.count)
         }
         let fileURL = storeRootURL.appendingPathComponent(reference)
         if let attributes = try? fileManager.attributesOfItem(atPath: fileURL.path),
@@ -468,7 +550,7 @@ final class LedgerMetadataStore {
     }
 
     private func readItems(from database: OpaquePointer) throws -> [HomeItem] {
-        let imageReferences = try readImageReferences(from: database)
+        let imageAssets = try readImageAssets(from: database)
         let sql = """
         SELECT id, title, amount_minor_units, amount_value, category, source, created_at, updated_at, emotion_tag,
                merchant_brand_id, draft_batch_id, draft_imported_at, draft_status,
@@ -508,7 +590,9 @@ final class LedgerMetadataStore {
             if anchorSceneText != nil, anchorScene == nil {
                 throw LedgerMetadataStoreError.invalidRecord("\(idText) 的图片场景字段无效")
             }
-            let references = imageReferences[idText] ?? []
+            let assets = imageAssets[idText] ?? []
+            let references = assets.map(\.relativePath)
+            let byteCounts = assets.map { Int(clamping: $0.byteCount) }
             let coverIndex = optionalInt(statement, column: 21).map(Int.init)
 
             items.append(
@@ -529,6 +613,7 @@ final class LedgerMetadataStore {
                     memoryContext: memoryContext,
                     scenePackId: optionalText(statement, column: 20),
                     memoryImageReferences: references,
+                    memoryImageByteCounts: byteCounts,
                     coverMemoryImageIndex: coverIndex,
                     memoryAnchorRole: anchorRole,
                     memoryAnchorSceneHint: anchorScene,
@@ -566,25 +651,30 @@ final class LedgerMetadataStore {
         )
     }
 
-    private func readImageReferences(from database: OpaquePointer) throws -> [String: [String]] {
+    private func readImageAssets(from database: OpaquePointer) throws -> [String: [ExistingAsset]] {
         let statement = try prepare(
             database,
-            sql: "SELECT record_id, ordinal, relative_path FROM image_assets ORDER BY record_id, ordinal",
+            sql: "SELECT record_id, ordinal, relative_path, byte_count, media_type FROM image_assets ORDER BY record_id, ordinal",
             operation: "读取图片引用"
         )
         defer { sqlite3_finalize(statement) }
-        var references: [String: [String]] = [:]
+        var assets: [String: [ExistingAsset]] = [:]
         try forEachRow(statement, database: database, operation: "读取图片引用") {
             let recordID = requiredText(statement, column: 0)
             let ordinal = Int(sqlite3_column_int64(statement, 1))
-            let reference = requiredText(statement, column: 2)
-            let expectedOrdinal = references[recordID]?.count ?? 0
+            let expectedOrdinal = assets[recordID]?.count ?? 0
             guard ordinal == expectedOrdinal else {
                 throw LedgerMetadataStoreError.invalidRecord("\(recordID) 的图片顺序不连续")
             }
-            references[recordID, default: []].append(reference)
+            assets[recordID, default: []].append(
+                ExistingAsset(
+                    relativePath: requiredText(statement, column: 2),
+                    byteCount: sqlite3_column_int64(statement, 3),
+                    mediaType: requiredText(statement, column: 4)
+                )
+            )
         }
-        return references
+        return assets
     }
 
     private func audit(items: [HomeItem], in database: OpaquePointer) throws {
@@ -630,7 +720,7 @@ final class LedgerMetadataStore {
 
     private func validateExternalizedItems(_ items: [HomeItem]) throws {
         for item in items where item.hasMemoryImages {
-            guard item.memoryImageReferences.count == item.memoryImages.count,
+            guard item.memoryImageReferences.count == item.memoryImageCount,
                   item.memoryImageReferences.allSatisfy({ !$0.isEmpty }) else {
                 throw LedgerMetadataStoreError.invalidRecord(
                     "\(item.id.uuidString.lowercased()) 仍包含未文件化的图片"
@@ -651,6 +741,32 @@ final class LedgerMetadataStore {
             result[requiredText(statement, column: 0)] = requiredText(statement, column: 1)
         }
         return result
+    }
+
+    private func readRecordStats(id: String, from database: OpaquePointer) throws -> ExistingRecordStats? {
+        let statement = try prepare(
+            database,
+            sql: """
+            SELECT records.amount_minor_units, COUNT(image_assets.id)
+            FROM records
+            LEFT JOIN image_assets ON image_assets.record_id = records.id
+            WHERE records.id = ?
+            GROUP BY records.id, records.amount_minor_units
+            """,
+            operation: "读取变化账单摘要"
+        )
+        defer { sqlite3_finalize(statement) }
+        var index: Int32 = 1
+        try bind(id, statement: statement, index: &index)
+        let result = sqlite3_step(statement)
+        if result == SQLITE_DONE { return nil }
+        guard result == SQLITE_ROW else {
+            throw sqliteError(database, operation: "读取变化账单摘要")
+        }
+        return ExistingRecordStats(
+            amountMinorUnits: sqlite3_column_int64(statement, 0),
+            imageCount: Int(sqlite3_column_int64(statement, 1))
+        )
     }
 
     private func readRecordVersions(from database: OpaquePointer) throws -> [String: ExistingRecordVersion] {

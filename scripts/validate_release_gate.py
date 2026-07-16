@@ -35,6 +35,8 @@ from generate_release_fixtures import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REAL_PHOTO_RESOURCE_DIR = ROOT / "NativeDemoApp" / "Resources" / "QARealPhotos"
+REAL_PHOTO_MANIFEST_PATH = ROOT / "qa" / "real_photo_fixtures" / "manifest.json"
 
 
 def validate_png(data: bytes) -> None:
@@ -71,6 +73,44 @@ def validate_png(data: bytes) -> None:
     assert position == len(data)
     assert saw_header and saw_end and compressed
     assert len(zlib.decompress(bytes(compressed))) == 4, "unexpected 1x1 RGB PNG payload"
+
+
+def jpeg_dimensions(data: bytes) -> tuple[int, int]:
+    assert data.startswith(b"\xff\xd8"), "image is not a JPEG"
+    position = 2
+    while position + 4 <= len(data):
+        assert data[position] == 0xFF, "invalid JPEG marker"
+        while position < len(data) and data[position] == 0xFF:
+            position += 1
+        marker = data[position]
+        position += 1
+        if marker in {0xD8, 0xD9}:
+            continue
+        length = struct.unpack(">H", data[position : position + 2])[0]
+        assert length >= 2 and position + length <= len(data), "truncated JPEG segment"
+        if marker in {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}:
+            height, width = struct.unpack(">HH", data[position + 3 : position + 7])
+            return width, height
+        position += length
+    raise AssertionError("JPEG dimensions not found")
+
+
+def validate_real_photo_fixtures() -> None:
+    manifest = json.loads(REAL_PHOTO_MANIFEST_PATH.read_text(encoding="utf-8"))
+    assert manifest["schemaVersion"] == 1
+    fixtures = manifest["fixtures"]
+    assert len(fixtures) >= 3
+    for fixture in fixtures:
+        path = REAL_PHOTO_RESOURCE_DIR / fixture["file"]
+        data = path.read_bytes()
+        width, height = jpeg_dimensions(data)
+        assert (width, height) == (fixture["width"], fixture["height"])
+        assert width * height >= 12_000_000, f"{path.name} is below 12 MP"
+        assert len(data) == fixture["byteCount"]
+        assert len(data) >= 2_000_000, f"{path.name} is too small to model a real phone photo"
+        assert sha256_hex(data) == fixture["sha256"]
+        print(f"real photo {path.name}: {width}x{height} bytes={len(data)}")
+    print("real_photo_fixture_set: OK")
 
 
 def exact_minor_units(amount: Any) -> int:
@@ -165,6 +205,7 @@ def validate_fixtures() -> None:
         validate_fixture(count, entry)
     assert manifest == build_manifest(entries)
     print(f"release_fixture_set: OK {manifest['fixtureSetDigestSha256']}")
+    validate_real_photo_fixtures()
 
 
 def run_command(label: str, command: list[str]) -> None:
@@ -207,22 +248,23 @@ def run_xcode_checks(destination: str) -> None:
     print("\nrelease_xcode_gate: OK")
 
 
-def find_device_database(container_root: Path, expected_count: int) -> Path:
+def find_device_database(container_root: Path, expected_count: int, photo_profile: str) -> Path:
     candidates = [
         path
         for path in container_root.rglob("ledger-v2.sqlite")
-        if f"ledger_{expected_count}" in path.parts
+        if f"ledger_{expected_count}_{photo_profile}" in path.parts
     ]
     if len(candidates) != 1:
         formatted = "\n".join(str(path) for path in candidates) or "(none)"
         raise SystemExit(
-            f"expected exactly one ledger_{expected_count} device database, found {len(candidates)}:\n{formatted}"
+            f"expected exactly one ledger_{expected_count}_{photo_profile} device database, "
+            f"found {len(candidates)}:\n{formatted}"
         )
     return candidates[0]
 
 
-def audit_device_container(container_root: Path, expected_count: int) -> None:
-    database_path = find_device_database(container_root.resolve(), expected_count)
+def audit_device_container(container_root: Path, expected_count: int, photo_profile: str) -> None:
+    database_path = find_device_database(container_root.resolve(), expected_count, photo_profile)
     store_root = database_path.parent.resolve()
     expected_records = build_records(expected_count)
     expected_by_id = {record["id"]: record for record in expected_records}
@@ -260,10 +302,19 @@ def audit_device_container(container_root: Path, expected_count: int) -> None:
             """
         ).fetchall()
         expected_images: list[tuple[str, int, str]] = []
-        for record in expected_records:
+        real_photo_data = [
+            (REAL_PHOTO_RESOURCE_DIR / f"qa_real_{index:02d}.jpg").read_bytes()
+            for index in range(1, 4)
+        ]
+        for record_index, record in enumerate(expected_records):
             for ordinal, encoded in enumerate(normalized_images(record)):
+                data = (
+                    real_photo_data[(record_index + ordinal) % len(real_photo_data)]
+                    if photo_profile == "realistic"
+                    else base64.b64decode(encoded, validate=True)
+                )
                 expected_images.append(
-                    (record["id"], ordinal, sha256_hex(base64.b64decode(encoded, validate=True)))
+                    (record["id"], ordinal, sha256_hex(data))
                 )
         assert len(image_rows) == len(expected_images)
         for row, expected in zip(image_rows, expected_images, strict=True):
@@ -274,7 +325,11 @@ def audit_device_container(container_root: Path, expected_count: int) -> None:
             data = image_path.read_bytes()
             assert len(data) == byte_count
             assert sha256_hex(data) == digest
-            validate_png(data)
+            if photo_profile == "realistic":
+                width, height = jpeg_dimensions(data)
+                assert width * height >= 12_000_000
+            else:
+                validate_png(data)
     finally:
         database.close()
 
@@ -305,6 +360,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--device-container", type=Path)
     parser.add_argument("--expected-count", type=int, choices=SUPPORTED_COUNTS)
+    parser.add_argument("--photo-profile", choices=("tiny", "realistic"), default="tiny")
     return parser.parse_args()
 
 
@@ -319,7 +375,7 @@ def main() -> int:
     elif args.phase == "device-audit":
         if args.device_container is None or args.expected_count is None:
             raise SystemExit("device-audit requires --device-container and --expected-count")
-        audit_device_container(args.device_container, args.expected_count)
+        audit_device_container(args.device_container, args.expected_count, args.photo_profile)
     else:
         run_repository_checks()
         run_xcode_checks(args.simulator_destination)

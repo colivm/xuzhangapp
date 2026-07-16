@@ -40,6 +40,8 @@ struct MemberPricingView: View {
     @State private var didRunInitialRefresh = false
     @State private var didApplyHighlight = false
     @State private var lifetimeArchiveSnapshot: LifetimeArchiveSnapshot = .empty
+    @State private var showMemberLoginSheet = false
+    @State private var loginContinuation = MemberLoginContinuationState()
     private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
     private let privacyURL = URL(string: "https://xuzhangapp.com/legal/privacy.html")!
 
@@ -78,6 +80,13 @@ struct MemberPricingView: View {
 
     private var isLifetimeMember: Bool {
         settingsViewModel.memberTier.lowercased() == "lifetime" && isMember
+    }
+
+    private var effectiveHighlightPlanID: String? {
+        if case .purchase(let planID) = loginContinuation.resumedIntent {
+            return planID
+        }
+        return highlightPlanId
     }
 
     private var heroContent: MemberHeroContent {
@@ -229,6 +238,9 @@ struct MemberPricingView: View {
 
                         // ── Pricing ──
                         if !isMember {
+                            if loginContinuation.resumedIntent != nil {
+                                memberLoginContinuationCard
+                            }
                             pricingSection
                             lifetimeTeaserSection
                         } else {
@@ -291,6 +303,18 @@ struct MemberPricingView: View {
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: isPurchasing)
 
         }
+        .sheet(isPresented: $showMemberLoginSheet, onDismiss: {
+            handleMemberLoginSheetDismissed()
+        }) {
+            MemberAccountLoginSheet(intent: loginContinuation.pendingLoginIntent)
+                .environmentObject(settingsViewModel)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .onChange(of: settingsViewModel.hasCloudSession) { _, hasSession in
+            guard hasSession else { return }
+            handleMemberLoginSucceeded()
+        }
     }
 
 
@@ -308,7 +332,7 @@ struct MemberPricingView: View {
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(AppColors.accent.opacity(0.12)))
                     VStack(alignment: .leading, spacing: 7) {
-                        Text("ä¼åè´­ä¹°")
+                        Text("会员购买")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(AppColors.text)
                         Text(message)
@@ -317,7 +341,7 @@ struct MemberPricingView: View {
                             .lineSpacing(4)
                     }
                 }
-                Button("ç¥éäº") { purchaseNotice = nil }
+                Button("知道了") { purchaseNotice = nil }
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 46)
@@ -555,6 +579,80 @@ struct MemberPricingView: View {
     }
 
     // MARK: - Pricing
+
+    private var memberLoginContinuationCard: some View {
+        let content = memberLoginContinuationContent
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "person.crop.circle.badge.checkmark")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppColors.accent)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(AppColors.accent.opacity(0.12)))
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(content.title)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AppColors.text)
+                    Text(content.detail)
+                        .font(.footnote)
+                        .foregroundStyle(AppColors.subtext)
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Button(content.actionTitle) {
+                continueMemberActionAfterLogin()
+            }
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .background(AppColors.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .buttonStyle(PurposefulCardButtonStyle(radius: 14, depth: 0.8))
+            .disabled(isPurchasing)
+
+            Button("暂不继续") {
+                loginContinuation.clearResumedIntent()
+            }
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(AppColors.subtext)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .buttonStyle(.plain)
+        }
+        .padding(15)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(AppColors.accent.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(AppColors.accent.opacity(0.22), lineWidth: 1)
+        )
+        .accessibilityElement(children: .contain)
+    }
+
+    private var memberLoginContinuationContent: (title: String, detail: String, actionTitle: String) {
+        switch loginContinuation.resumedIntent {
+        case .purchase(let planID):
+            let plan = plans.first(where: { $0.id == planID })
+            let name = plan?.name ?? "所选会员"
+            let price = plan.map { displayPrice(for: $0) } ?? "购买页价格"
+            return (
+                "已登录，\(name)还为你保留着",
+                "不会自动购买。请再次确认 \(price) 和套餐周期，再由你明确继续。",
+                "确认并继续购买"
+            )
+        case .restorePurchases:
+            return (
+                "已登录，可以继续恢复购买",
+                "恢复只会查询当前 Apple ID 的历史权益，并绑定到刚登录的手机号账号。",
+                "继续恢复购买"
+            )
+        case nil:
+            return ("已登录", "会员操作需要你再次确认。", "继续")
+        }
+    }
 
     private var pricingSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1108,10 +1206,11 @@ struct MemberPricingView: View {
         }
         .buttonStyle(PurposefulCardButtonStyle(radius: 14, depth: 1.05))
         .disabled(isPurchasing)
+        .id("member-plan-\(plan.id)")
     }
 
     private func regularPlanButton(_ plan: MemberPlan) -> some View {
-        let isHighlighted = highlightPlanId == plan.id
+        let isHighlighted = effectiveHighlightPlanID == plan.id
         return Button {
             handlePurchase(plan)
         } label: {
@@ -1204,10 +1303,49 @@ struct MemberPricingView: View {
 
     // MARK: - Purchase Handler
 
+    private func requestMemberLogin(for intent: MemberLoginContinuationIntent) {
+        guard !isPurchasing else { return }
+        purchaseNotice = nil
+        loginContinuation.beginLogin(for: intent)
+        settingsViewModel.clearAuthMessage()
+        showMemberLoginSheet = true
+    }
+
+    private func handleMemberLoginSucceeded() {
+        guard loginContinuation.pendingLoginIntent != nil else { return }
+        loginContinuation.loginSucceeded()
+        showMemberLoginSheet = false
+        if isMember {
+            loginContinuation.clearResumedIntent()
+            purchaseNotice = "已登录，当前账号的会员权益已经同步，不需要重复购买。"
+            return
+        }
+        if case .purchase(let planID) = loginContinuation.resumedIntent,
+           planID != "yearly" {
+            morePlansExpanded = true
+        }
+    }
+
+    private func handleMemberLoginSheetDismissed() {
+        guard !settingsViewModel.hasCloudSession else { return }
+        loginContinuation.loginCancelled()
+    }
+
+    private func continueMemberActionAfterLogin() {
+        guard let intent = loginContinuation.takeResumedIntent() else { return }
+        switch intent {
+        case .purchase(let planID):
+            guard let plan = plans.first(where: { $0.id == planID }) else { return }
+            handlePurchase(plan)
+        case .restorePurchases:
+            restorePurchases()
+        }
+    }
+
     private func handlePurchase(_ plan: MemberPlan) {
         guard settingsViewModel.hasCloudSession else {
             homeViewModel.markMemberPurchaseCompleted(plan: plan.id, outcome: .blocked)
-            purchaseNotice = "请先在设置页登录账号，再开通会员。这样换机后也能恢复你的会员状态。"
+            requestMemberLogin(for: .purchase(planID: plan.id))
             return
         }
         guard let tier = IAPTier(rawValue: plan.id) else { return }
@@ -1235,7 +1373,7 @@ struct MemberPricingView: View {
     private func restorePurchases() {
         guard settingsViewModel.hasCloudSession else {
             homeViewModel.markMemberRestoreCompleted(outcome: .blocked)
-            purchaseNotice = "请先在设置页登录账号，再恢复购买，这样能确认你的会员权益。"
+            requestMemberLogin(for: .restorePurchases)
             return
         }
         isPurchasing = true
@@ -1298,6 +1436,203 @@ private struct MemberPlan: Identifiable {
     let featured: Bool
     let badge: String?
     let dailyHint: String
+}
+
+private struct MemberAccountLoginSheet: View {
+    @EnvironmentObject private var settingsViewModel: SettingsViewModel
+    @Environment(\.dismiss) private var dismiss
+    let intent: MemberLoginContinuationIntent?
+    @FocusState private var focusedField: LoginField?
+    private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
+    private let privacyURL = URL(string: "https://xuzhangapp.com/legal/privacy.html")!
+
+    private enum LoginField {
+        case phone
+        case code
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("先登录账号", systemImage: "person.crop.circle.badge.checkmark")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(AppColors.text)
+                        Text(loginPurposeText)
+                            .font(.subheadline)
+                            .foregroundStyle(AppColors.subtext)
+                            .lineSpacing(4)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        loginField("手机号") {
+                            TextField("11 位手机号", text: $settingsViewModel.loginPhone)
+                                .keyboardType(.phonePad)
+                                .textContentType(.telephoneNumber)
+                                .focused($focusedField, equals: .phone)
+                        }
+
+                        loginField("验证码") {
+                            HStack(spacing: 10) {
+                                TextField("短信验证码", text: $settingsViewModel.loginCode)
+                                    .keyboardType(.numberPad)
+                                    .textContentType(.oneTimeCode)
+                                    .focused($focusedField, equals: .code)
+
+                                Button(sendCodeTitle) {
+                                    Task { await settingsViewModel.sendSMSLoginCode() }
+                                }
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(sendCodeDisabled ? AppColors.subtext : AppColors.accent)
+                                .frame(minHeight: 44)
+                                .padding(.horizontal, 10)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(AppColors.accent.opacity(sendCodeDisabled ? 0.04 : 0.11))
+                                )
+                                .buttonStyle(.plain)
+                                .disabled(sendCodeDisabled)
+                            }
+                        }
+
+                        Button(settingsViewModel.isAuthBusy ? "正在验证…" : "验证并登录") {
+                            focusedField = nil
+                            Task { await settingsViewModel.verifySMSLogin() }
+                        }
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(
+                            loginButtonDisabled ? AppColors.subtext.opacity(0.32) : AppColors.accent,
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        )
+                        .buttonStyle(.plain)
+                        .disabled(loginButtonDisabled)
+
+                        if let message = settingsViewModel.authMessage, !message.isEmpty {
+                            Text(message)
+                                .font(.footnote)
+                                .foregroundStyle(AppColors.subtext)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityAddTraits(.updatesFrequently)
+                        }
+                    }
+                    .padding(15)
+                    .background(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Color.white.opacity(0.58))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(AppColors.line.opacity(0.56), lineWidth: 1)
+                    )
+
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 4) { loginLegalLinks }
+                        VStack(alignment: .leading, spacing: 5) { loginLegalLinks }
+                    }
+                    .font(.footnote)
+
+                    Text("登录成功只会返回会员页并恢复刚才的选择；购买或恢复仍要由你再次明确点击。")
+                        .font(.footnote)
+                        .foregroundStyle(AppColors.subtext.opacity(0.9))
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(20)
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(AppColors.bg.ignoresSafeArea())
+            .navigationTitle("账号登录")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                        .disabled(settingsViewModel.isAuthBusy)
+                }
+            }
+        }
+        .interactiveDismissDisabled(settingsViewModel.isAuthBusy)
+    }
+
+    private var loginPurposeText: String {
+        switch intent {
+        case .purchase(let planID):
+            let name: String
+            switch planID {
+            case "yearly": name = "年度会员"
+            case "monthly": name = "月度会员"
+            case "lifetime": name = "永久会员"
+            default: name = "所选会员"
+            }
+            return "登录后会回到会员页，并保留刚才选择的\(name)。不会自动购买。"
+        case .restorePurchases:
+            return "登录后会回到会员页，再由你确认是否查询并恢复当前 Apple ID 的历史权益。"
+        case nil:
+            return "登录后会回到会员页，会员操作仍由你确认。"
+        }
+    }
+
+    private var phoneIsValid: Bool {
+        let phone = settingsViewModel.loginPhone.trimmingCharacters(in: .whitespacesAndNewlines)
+        return phone.count == 11 && phone.hasPrefix("1")
+    }
+
+    private var sendCodeDisabled: Bool {
+        settingsViewModel.isAuthBusy
+            || settingsViewModel.smsCooldownRemaining > 0
+            || !phoneIsValid
+    }
+
+    private var loginButtonDisabled: Bool {
+        settingsViewModel.isAuthBusy
+            || !phoneIsValid
+            || settingsViewModel.loginCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var sendCodeTitle: String {
+        let remaining = settingsViewModel.smsCooldownRemaining
+        return remaining > 0 ? "\(remaining)s 后重发" : "发送验证码"
+    }
+
+    private func loginField<Content: View>(
+        _ label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(AppColors.text.opacity(0.82))
+            content()
+                .font(.body)
+                .padding(.horizontal, 13)
+                .frame(minHeight: 48)
+                .background(
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(Color.white.opacity(0.72))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .stroke(AppColors.line.opacity(0.48), lineWidth: 1)
+                )
+        }
+    }
+
+    @ViewBuilder
+    private var loginLegalLinks: some View {
+        Text("登录即表示你同意")
+            .foregroundStyle(AppColors.subtext)
+        Link("用户协议", destination: termsURL)
+            .foregroundStyle(AppColors.accentDark)
+        Text("和")
+            .foregroundStyle(AppColors.subtext)
+        Link("隐私政策", destination: privacyURL)
+            .foregroundStyle(AppColors.accentDark)
+    }
 }
 
 private struct LifetimeArchiveSnapshot {

@@ -1321,8 +1321,8 @@ struct HomeView: View {
     private func billListItem(item: HomeItem, isFirst: Bool, isHighlighted: Bool = false) -> some View {
         let accent = AppColors.categoryColor(item.category)
         return Group {
-            if let imageData = item.coverMemoryImageData {
-                homeMemoryBillCardV2(item: item, imageData: imageData, isHighlighted: isHighlighted)
+            if item.hasMemoryImages {
+                homeMemoryBillCardV2(item: item, isHighlighted: isHighlighted)
             } else {
                 HStack(alignment: .center, spacing: 10) {
                     Image(systemName: MemoryAttachmentVisuals.categorySystemImage(item.category))
@@ -1393,7 +1393,7 @@ struct HomeView: View {
             }
         }
         .overlay(alignment: .top) {
-            if !isFirst && item.coverMemoryImageData == nil {
+            if !isFirst && !item.hasMemoryImages {
                 PaperCreaseDivider()
                     .padding(.top, -6)
             }
@@ -1401,11 +1401,16 @@ struct HomeView: View {
         .animation(.easeInOut(duration: 0.24), value: isHighlighted)
     }
 
-    private func homeMemoryBillCardV2(item: HomeItem, imageData: Data, isHighlighted: Bool) -> some View {
+    private func homeMemoryBillCardV2(item: HomeItem, isHighlighted: Bool) -> some View {
         let accent = AppColors.categoryColor(item.category)
         return VStack(spacing: 0) {
             ZStack(alignment: .topTrailing) {
-                MemoryAttachmentThumbnail(imageData: imageData, height: 96, cornerRadius: 0)
+                MemoryAttachmentThumbnail(
+                    imageData: item.coverMemoryImageData,
+                    imageReference: item.coverMemoryImageReference,
+                    height: 96,
+                    cornerRadius: 0
+                )
                     .overlay(
                         LinearGradient(
                             colors: [
@@ -1429,8 +1434,8 @@ struct HomeView: View {
                         )
                     )
 
-                if item.memoryImages.count > 1 {
-                    Label("\(item.memoryImages.count)", systemImage: "photo.on.rectangle")
+                if item.memoryImageCount > 1 {
+                    Label("\(item.memoryImageCount)", systemImage: "photo.on.rectangle")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 9)
@@ -1526,8 +1531,8 @@ struct HomeView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
                 )
 
-            if item.memoryImages.count > 1 {
-                Text("\(item.memoryImages.count) 张")
+            if item.memoryImageCount > 1 {
+                Text("\(item.memoryImageCount) 张")
                     .font(.system(size: 10, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
@@ -1917,8 +1922,13 @@ struct HomeView: View {
             .opacity(isEditing ? 0 : 1)
             .frame(height: isEditing ? 0 : nil)
 
-            if let imageData = item.coverMemoryImageData {
-                MemoryAttachmentThumbnail(imageData: imageData, height: 82, cornerRadius: 12)
+            if item.hasMemoryImages {
+                MemoryAttachmentThumbnail(
+                    imageData: item.coverMemoryImageData,
+                    imageReference: item.coverMemoryImageReference,
+                    height: 82,
+                    cornerRadius: 12
+                )
                     .padding(.top, 4)
                     .opacity(isEditing ? 0 : 1)
                     .frame(height: isEditing ? 0 : nil)

@@ -138,6 +138,8 @@ SANITIZER_FUNC_NAMES = [
     "sanitizeBrandNote",
 ]
 
+UNICODE_REPLACEMENT_CHARACTER = "\ufffd"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -245,6 +247,10 @@ def scan_file(path: Path, strict_soft: bool) -> tuple[list[str], list[str]]:
         if should_ignore_line(line, index, ignored_ranges):
             continue
         location = f"{display_path(path)}:{index + 1}"
+        if UNICODE_REPLACEMENT_CHARACTER in line or any(
+            0x80 <= ord(character) <= 0x9F for character in line
+        ):
+            failures.append(f"{location}: probable mojibake or replacement character")
         for term in BLOCKED_TERMS:
             if term in line:
                 failures.append(f"{location}: blocked term `{term}`")

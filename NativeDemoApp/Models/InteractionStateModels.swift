@@ -65,6 +65,77 @@ struct LatestRequestGate {
     }
 }
 
+enum PostSavePromptKind: String, Codable, Equatable {
+    case firstPlayback
+    case memoryPhoto
+    case sceneReward
+}
+
+struct PostSavePromptBudgetState: Codable, Equatable {
+    var dayKey: String = ""
+    var strongPromptCount = 0
+    var lastStrongPromptAt: Date?
+}
+
+enum PostSavePromptBudgetPolicy {
+    static let dailyStrongPromptLimit = 2
+    static let strongPromptCooldown: TimeInterval = 20 * 60
+
+    static func reserving(
+        _ kind: PostSavePromptKind,
+        state source: PostSavePromptBudgetState,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> (allowed: Bool, state: PostSavePromptBudgetState) {
+        let key = dayKey(for: now, calendar: calendar)
+        var state = source.dayKey == key
+            ? source
+            : PostSavePromptBudgetState(dayKey: key)
+
+        if kind == .firstPlayback {
+            state.strongPromptCount = min(dailyStrongPromptLimit, state.strongPromptCount + 1)
+            state.lastStrongPromptAt = now
+            return (true, state)
+        }
+
+        guard state.strongPromptCount < dailyStrongPromptLimit else {
+            return (false, state)
+        }
+        if let lastStrongPromptAt = state.lastStrongPromptAt,
+           now.timeIntervalSince(lastStrongPromptAt) < strongPromptCooldown {
+            return (false, state)
+        }
+        state.strongPromptCount += 1
+        state.lastStrongPromptAt = now
+        return (true, state)
+    }
+
+    private static func dayKey(for date: Date, calendar: Calendar) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return "\(components.year ?? 0)-\(components.month ?? 0)-\(components.day ?? 0)"
+    }
+}
+
+final class PostSavePromptBudgetStore {
+    private static let storageKey = "post_save_prompt_budget_v1"
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func reserve(_ kind: PostSavePromptKind, now: Date = .now) -> Bool {
+        let current = defaults.data(forKey: Self.storageKey)
+            .flatMap { try? JSONDecoder().decode(PostSavePromptBudgetState.self, from: $0) }
+            ?? PostSavePromptBudgetState()
+        let result = PostSavePromptBudgetPolicy.reserving(kind, state: current, now: now)
+        if let data = try? JSONEncoder().encode(result.state) {
+            defaults.set(data, forKey: Self.storageKey)
+        }
+        return result.allowed
+    }
+}
+
 enum MembershipQuotaBaseline {
     static let monthlyInsightTrialTotal = 5
 
@@ -93,10 +164,61 @@ enum AccessibilityLayoutPolicy {
     }
 }
 
+enum MemberLoginContinuationIntent: Equatable {
+    case purchase(planID: String)
+    case restorePurchases
+}
+
+struct MemberLoginContinuationState: Equatable {
+    private(set) var pendingLoginIntent: MemberLoginContinuationIntent?
+    private(set) var resumedIntent: MemberLoginContinuationIntent?
+
+    mutating func beginLogin(for intent: MemberLoginContinuationIntent) {
+        pendingLoginIntent = intent
+        resumedIntent = nil
+    }
+
+    mutating func loginSucceeded() {
+        guard let pendingLoginIntent else { return }
+        self.pendingLoginIntent = nil
+        resumedIntent = pendingLoginIntent
+    }
+
+    mutating func loginCancelled() {
+        pendingLoginIntent = nil
+    }
+
+    mutating func takeResumedIntent() -> MemberLoginContinuationIntent? {
+        let intent = resumedIntent
+        resumedIntent = nil
+        return intent
+    }
+
+    mutating func clearResumedIntent() {
+        resumedIntent = nil
+    }
+}
+
 #if DEBUG
+enum ReleaseFixturePhotoProfile: String, Equatable {
+    case tiny
+    case realistic
+}
+
 struct ReleaseFixtureLaunchConfiguration: Equatable {
     let count: Int
     let reset: Bool
+    let photoProfile: ReleaseFixturePhotoProfile
+
+    init(
+        count: Int,
+        reset: Bool,
+        photoProfile: ReleaseFixturePhotoProfile = .tiny
+    ) {
+        self.count = count
+        self.reset = reset
+        self.photoProfile = photoProfile
+    }
 
     static func resolve(
         arguments: [String] = ProcessInfo.processInfo.arguments,
@@ -113,15 +235,29 @@ struct ReleaseFixtureLaunchConfiguration: Equatable {
         let environmentReset = ["1", "true", "yes"].contains(
             environment["QA_RELEASE_FIXTURE_RESET", default: ""].lowercased()
         )
+        let profileArgument: String? = {
+            guard let keyIndex = arguments.firstIndex(of: "-QAReleasePhotoProfile"),
+                  arguments.indices.contains(keyIndex + 1) else { return nil }
+            return arguments[keyIndex + 1]
+        }()
+        let photoProfile = ReleaseFixturePhotoProfile(
+            rawValue: (environment["QA_RELEASE_PHOTO_PROFILE"] ?? profileArgument ?? "tiny").lowercased()
+        ) ?? .tiny
+        guard photoProfile != .realistic
+                || ReleaseFixtureFactory.realisticSupportedCounts.contains(count) else {
+            return nil
+        }
         return ReleaseFixtureLaunchConfiguration(
             count: count,
-            reset: environmentReset || arguments.contains("-QAReleaseFixtureReset")
+            reset: environmentReset || arguments.contains("-QAReleaseFixtureReset"),
+            photoProfile: photoProfile
         )
     }
 }
 
 enum ReleaseFixtureFactory {
     static let supportedCounts: Set<Int> = [100, 1_000, 5_000]
+    static let realisticSupportedCounts: Set<Int> = [1_000]
 
     private static let categories: [HomeItem.Category] = [
         .dining, .transport, .shopping, .daily, .entertainment,
@@ -144,9 +280,18 @@ enum ReleaseFixtureFactory {
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mNw21IBAAK2AXPQ1ccDAAAAAElFTkSuQmCC",
     ].compactMap { Data(base64Encoded: $0) }
 
-    static func makeItems(count: Int) -> [HomeItem] {
+    static func makeItems(
+        count: Int,
+        photoProfile: ReleaseFixturePhotoProfile = .tiny,
+        bundle: Bundle = .main
+    ) -> [HomeItem] {
         precondition(supportedCounts.contains(count), "Unsupported release fixture size")
-        return (0..<count).map(makeItem)
+        precondition(
+            photoProfile != .realistic || realisticSupportedCounts.contains(count),
+            "Realistic photo fixture only supports 1,000 records"
+        )
+        let variants = imageVariants(for: photoProfile, bundle: bundle)
+        return (0..<count).map { makeItem(index: $0, imageVariants: variants) }
     }
 
     static func stableID(index: Int) -> UUID {
@@ -172,7 +317,7 @@ enum ReleaseFixtureFactory {
         return calendar.date(from: components)!
     }
 
-    private static func makeItem(index: Int) -> HomeItem {
+    private static func makeItem(index: Int, imageVariants: [Data]) -> HomeItem {
         let categoryIndex = index % categories.count
         let category = categories[categoryIndex]
         let createdAt = createdAt(index: index)
@@ -229,6 +374,24 @@ enum ReleaseFixtureFactory {
             memoryAnchorCaption: images.isEmpty ? nil : "发布夹具照片顺序 \(photoSlot + 1)。",
             memoryAnchorCreatedAt: images.isEmpty ? nil : createdAt.addingTimeInterval(120)
         )
+    }
+
+    private static func imageVariants(
+        for profile: ReleaseFixturePhotoProfile,
+        bundle: Bundle
+    ) -> [Data] {
+        guard profile == .realistic else { return imageVariants }
+        let loaded = (1...3).compactMap { index -> Data? in
+            let name = String(format: "qa_real_%02d", index)
+            guard let url = bundle.url(
+                forResource: name,
+                withExtension: "jpg",
+                subdirectory: "QARealPhotos"
+            ) else { return nil }
+            return try? Data(contentsOf: url, options: [.mappedIfSafe])
+        }
+        precondition(loaded.count == 3, "PERF-04 realistic photo resources are missing")
+        return loaded
     }
 }
 #endif

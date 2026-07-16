@@ -2,18 +2,38 @@ import SwiftUI
 import UIKit
 
 struct MemoryAttachmentThumbnail: View {
-    let imageData: Data
-    var height: CGFloat = 120
+    let imageData: Data?
+    var imageReference: String? = nil
+    var variant: LedgerImageLoadVariant = .thumbnail
+    var contentMode: ContentMode = .fill
+    var height: CGFloat? = 120
     var cornerRadius: CGFloat = 12
+    @State private var loadedImageData: Data? = nil
+    @State private var loadFailed = false
+
+    private var resolvedImageData: Data? {
+        if let imageData, !imageData.isEmpty { return imageData }
+        return loadedImageData
+    }
+
+    private var normalizedReference: String? {
+        guard let reference = imageReference?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !reference.isEmpty else { return nil }
+        return reference
+    }
+
+    private var loadRequestID: String {
+        "\(variant.rawValue)|\(normalizedReference ?? "inline")"
+    }
 
     var body: some View {
         Group {
-            if let uiImage = UIImage(data: imageData) {
+            if let resolvedImageData, let uiImage = UIImage(data: resolvedImageData) {
                 Image(uiImage: uiImage)
                     .resizable()
-                    .scaledToFill()
+                    .aspectRatio(contentMode: contentMode)
             } else {
-                memoryImageFallback
+                memoryImageFallback(isLoading: normalizedReference != nil && !loadFailed)
             }
         }
         .frame(maxWidth: .infinity)
@@ -24,9 +44,21 @@ struct MemoryAttachmentThumbnail: View {
                 .stroke(Color.white.opacity(0.58), lineWidth: 1)
         )
         .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .task(id: loadRequestID) {
+            loadedImageData = nil
+            loadFailed = false
+            guard resolvedImageData == nil, let reference = normalizedReference else { return }
+            let requestedVariant = variant
+            let data = await Task.detached(priority: .utility) {
+                LocalStore.loadMemoryImageData(reference: reference, variant: requestedVariant)
+            }.value
+            guard !Task.isCancelled else { return }
+            loadedImageData = data
+            loadFailed = data == nil
+        }
     }
 
-    private var memoryImageFallback: some View {
+    private func memoryImageFallback(isLoading: Bool) -> some View {
         ZStack {
             LinearGradient(
                 colors: [AppColors.paperMist, AppColors.paperWarm.opacity(0.72)],
@@ -34,9 +66,14 @@ struct MemoryAttachmentThumbnail: View {
                 endPoint: .bottomTrailing
             )
             VStack(spacing: 6) {
-                Image(systemName: "photo.badge.exclamationmark")
-                    .font(.system(size: 22, weight: .semibold))
-                Text("图片暂时不可用")
+                if isLoading {
+                    ProgressView()
+                        .tint(AppColors.accent.opacity(0.72))
+                } else {
+                    Image(systemName: "photo.badge.exclamationmark")
+                        .font(.system(size: 22, weight: .semibold))
+                }
+                Text(isLoading ? "正在加载图片" : "图片暂时不可用")
                     .font(.system(size: 11, weight: .medium))
             }
             .foregroundStyle(AppColors.accent.opacity(0.68))
@@ -362,12 +399,8 @@ struct MemoryRecordDetailSheet: View {
         _savedDate = State(initialValue: item.createdAt)
     }
 
-    private var memoryImages: [Data] {
-        item.memoryImages
-    }
-
     private var selectedImageDisplayIndex: Int {
-        min(selectedImageIndex + 1, max(memoryImages.count, 1))
+        min(selectedImageIndex + 1, max(item.memoryImageCount, 1))
     }
 
     private var selectedImageIsCover: Bool {
@@ -375,7 +408,7 @@ struct MemoryRecordDetailSheet: View {
     }
 
     private var canAddMoreImages: Bool {
-        memoryImages.count < 9
+        item.memoryImageCount < 9
     }
 
     private var cleanTitle: String {
@@ -472,7 +505,7 @@ struct MemoryRecordDetailSheet: View {
                 saveDraftChanges()
             }
         }
-        .onChange(of: memoryImages.count) { _, count in
+        .onChange(of: item.memoryImageCount) { _, count in
             if selectedImageIndex >= count {
                 selectedImageIndex = max(0, count - 1)
             }
@@ -493,17 +526,17 @@ struct MemoryRecordDetailSheet: View {
 
     @ViewBuilder
     private func memoryImageLayer(height: CGFloat, fitMode: Bool) -> some View {
-        if !memoryImages.isEmpty {
+        if item.hasMemoryImages {
             ZStack(alignment: .topTrailing) {
                 TabView(selection: $selectedImageIndex) {
-                    ForEach(Array(memoryImages.enumerated()), id: \.offset) { pair in
-                        memoryHeroImage(imageData: pair.element, height: height, fitMode: fitMode)
+                    ForEach(0..<item.memoryImageCount, id: \.self) { index in
+                        memoryHeroImage(index: index, height: height, fitMode: fitMode)
                             .padding(.horizontal, 1)
-                            .tag(pair.offset)
+                            .tag(index)
                     }
                 }
                 .frame(height: height)
-                .tabViewStyle(.page(indexDisplayMode: memoryImages.count > 1 ? .automatic : .never))
+                .tabViewStyle(.page(indexDisplayMode: item.memoryImageCount > 1 ? .automatic : .never))
                 .shadow(color: AppColors.subtext.opacity(0.18), radius: 24, x: 0, y: 14)
                 .shadow(color: Color.white.opacity(0.30), radius: 8, x: -2, y: -2)
                 .onTapGesture {
@@ -513,7 +546,7 @@ struct MemoryRecordDetailSheet: View {
                 }
 
                 HStack(spacing: 5) {
-                    Text(selectedImageIsCover ? "封面图 \(selectedImageDisplayIndex)/\(memoryImages.count)" : "\(selectedImageDisplayIndex)/\(memoryImages.count)")
+                    Text(selectedImageIsCover ? "封面图 \(selectedImageDisplayIndex)/\(item.memoryImageCount)" : "\(selectedImageDisplayIndex)/\(item.memoryImageCount)")
                     Image(systemName: imageExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                         .font(.system(size: 9, weight: .bold))
                 }
@@ -530,44 +563,43 @@ struct MemoryRecordDetailSheet: View {
     }
 
     @ViewBuilder
-    private func memoryHeroImage(imageData: Data, height: CGFloat, fitMode: Bool) -> some View {
-        if let uiImage = UIImage(data: imageData) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .aspectRatio(contentMode: fitMode ? .fit : .fill)
-                .frame(maxWidth: .infinity)
-                .frame(height: height)
-                .background(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(Color.white.opacity(0.54))
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(Color.white.opacity(0.62), lineWidth: 1)
-                )
-        } else {
-            MemoryAttachmentThumbnail(imageData: imageData, height: height, cornerRadius: 24)
-        }
+    private func memoryHeroImage(index: Int, height: CGFloat, fitMode: Bool) -> some View {
+        MemoryAttachmentThumbnail(
+            imageData: item.memoryImageData(at: index),
+            imageReference: item.memoryImageReference(at: index),
+            variant: .original,
+            contentMode: fitMode ? .fit : .fill,
+            height: height,
+            cornerRadius: 24
+        )
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.white.opacity(0.54))
+        )
     }
 
     private var memoryImageManager: some View {
         VStack(alignment: .leading, spacing: 12) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    ForEach(Array(memoryImages.enumerated()), id: \.offset) { pair in
+                    ForEach(0..<item.memoryImageCount, id: \.self) { index in
                         Button {
-                            selectedImageIndex = pair.offset
+                            selectedImageIndex = index
                         } label: {
-                            MemoryAttachmentThumbnail(imageData: pair.element, height: 62, cornerRadius: 13)
+                            MemoryAttachmentThumbnail(
+                                imageData: item.memoryImageData(at: index),
+                                imageReference: item.memoryImageReference(at: index),
+                                height: 62,
+                                cornerRadius: 13
+                            )
                                 .frame(width: 62)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                        .stroke(pair.offset == selectedImageIndex ? AppColors.accent : Color.clear, lineWidth: 2)
+                                        .stroke(index == selectedImageIndex ? AppColors.accent : Color.clear, lineWidth: 2)
                                         .padding(1)
                                 )
                                 .overlay(alignment: .topTrailing) {
-                                    if pair.offset == item.normalizedCoverMemoryImageIndex {
+                                    if index == item.normalizedCoverMemoryImageIndex {
                                         Image(systemName: "sparkle")
                                             .font(.system(size: 10, weight: .bold))
                                             .foregroundStyle(.white)
@@ -637,7 +669,7 @@ struct MemoryRecordDetailSheet: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .disabled(memoryImages.isEmpty || selectedImageIsCover)
+                .disabled(!item.hasMemoryImages || selectedImageIsCover)
 
                 Button(role: .destructive) {
                     onRemoveImage(selectedImageIndex)
@@ -653,7 +685,7 @@ struct MemoryRecordDetailSheet: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .disabled(memoryImages.isEmpty)
+                .disabled(!item.hasMemoryImages)
             }
 
             Text(selectedImageIsCover ? "以后回看这笔、做周月复盘时，会优先看到这张。" : "设好以后，回看这笔时会优先看到这张。")

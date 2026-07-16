@@ -173,22 +173,22 @@ struct ScenePackAngleSheet: View {
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(AppColors.accent.opacity(0.12)))
                     VStack(alignment: .leading, spacing: 7) {
-                        Text("æ¿æ¢åºæ¯å")
+                        Text("替换场景包")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(AppColors.text)
-                        Text("ç¡®å®æ¢ä¸ã\(replacement.newPack.label)ãï¼è¿ä¼å¼å¯ 24 å°æ¶è°æ´çªå£ï¼çªå£åè¿å¯ä»¥ç»§ç»­è°æ´å¦å¤ä¸¤ä¸ªåè´¹åºæ¯åã")
+                        Text("确定换上「\(replacement.newPack.label)」？这会开启 24 小时调整窗口，窗口内还可以继续调整另外两个免费场景包。")
                             .font(.system(size: 15))
                             .foregroundStyle(AppColors.text.opacity(0.76))
                             .lineSpacing(4)
                     }
                 }
                 HStack(spacing: 10) {
-                    Button("åæ³æ³") { pendingReplacement = nil }
+                    Button("再想想") { pendingReplacement = nil }
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(AppColors.text.opacity(0.82))
                         .frame(maxWidth: .infinity, minHeight: 46)
                         .background(Color.white.opacity(0.72), in: Capsule(style: .continuous))
-                    Button("ç¡®å®æ¢ä¸") {
+                    Button("确定换上") {
                         let replacement = replacement
                         pendingReplacement = nil
                         confirmReplacement(replacement)
