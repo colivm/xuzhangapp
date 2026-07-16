@@ -242,6 +242,8 @@ struct InsightWebView: View {
     @State private var aiCommandText = ""
     @State private var aiCommandAmountText = ""
     @State private var aiCommandResult: AICommandResult?
+    @State private var aiCommandInputFocusRequest = 0
+    @State private var aiCommandFocusesInputAfterResultDismissal = false
     @State private var aiCommandShowsAllRelatedItems = false
     @State private var aiCommandComparisonEvidenceMode: AICommandComparisonEvidenceMode = .differences
     @State private var aiCommandShowsAllComparisonCategories = false
@@ -389,6 +391,7 @@ struct InsightWebView: View {
         let actionTitle: String
         let actionSystemImage: String
         let tint: Color
+        let focusRequest: Int
         let onRun: (String) -> Void
         let onClear: () -> Void
         @State private var draftText: String
@@ -401,6 +404,7 @@ struct InsightWebView: View {
             actionTitle: String,
             actionSystemImage: String,
             tint: Color,
+            focusRequest: Int,
             onRun: @escaping (String) -> Void,
             onClear: @escaping () -> Void
         ) {
@@ -410,6 +414,7 @@ struct InsightWebView: View {
             self.actionTitle = actionTitle
             self.actionSystemImage = actionSystemImage
             self.tint = tint
+            self.focusRequest = focusRequest
             self.onRun = onRun
             self.onClear = onClear
             _draftText = State(initialValue: commandText.wrappedValue)
@@ -460,6 +465,9 @@ struct InsightWebView: View {
                         isFocused = false
                     }
                 }
+            }
+            .onChange(of: focusRequest) { _, _ in
+                isFocused = true
             }
         }
 
@@ -650,6 +658,7 @@ struct InsightWebView: View {
             aiCommandRunTask = nil
             aiCommandRunGate.invalidate()
             isAICommandRunning = false
+            aiCommandFocusesInputAfterResultDismissal = false
             if aiCommandDismissRoutes.consume() == .memberPricing {
                 onShowMemberPricing?()
             }
@@ -1209,6 +1218,7 @@ struct InsightWebView: View {
         aiCommandShowsAllRelatedItems = false
         aiCommandComparisonEvidenceMode = .differences
         aiCommandShowsAllComparisonCategories = false
+        aiCommandFocusesInputAfterResultDismissal = false
         isAICommandRunning = false
         if opensSheet {
             showAICommandSheet = true
@@ -2189,9 +2199,17 @@ struct InsightWebView: View {
                     .scrollDisabled(aiCommandPreviewItem != nil)
                     .onChange(of: aiCommandResult?.id) { oldID, newID in
                         guard oldID != nil, newID == nil else { return }
+                        let shouldFocusInput = aiCommandFocusesInputAfterResultDismissal
+                        aiCommandFocusesInputAfterResultDismissal = false
                         DispatchQueue.main.async {
-                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.24)) {
+                            let scrollAnimation: Animation? = reduceMotion
+                                ? nil
+                                : (shouldFocusInput ? .easeOut(duration: 0.16) : .easeInOut(duration: 0.24))
+                            withAnimation(scrollAnimation) {
                                 scrollProxy.scrollTo(Self.aiCommandTopAnchorID, anchor: .top)
+                            }
+                            if shouldFocusInput {
+                                aiCommandInputFocusRequest &+= 1
                             }
                         }
                     }
@@ -2335,6 +2353,7 @@ struct InsightWebView: View {
             actionTitle: aiCommandInputActionTitle,
             actionSystemImage: activeReviewTask.systemImage,
             tint: reviewTaskTint(activeReviewTask),
+            focusRequest: aiCommandInputFocusRequest,
             onRun: { runAICommand($0) },
             onClear: clearAICommandInput
         )
@@ -3694,11 +3713,29 @@ struct InsightWebView: View {
             }
         } else {
             Button {
-                    runAICommand(aiCommandText, successMessage: "已按当前指令重新整理一次。")
-                } label: {
-                    aiCommandSecondaryLabel("重新整理一次", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(.plain)
+                continueAICommandQuestion()
+            } label: {
+                aiCommandSecondaryLabel("继续问", systemImage: "text.cursor")
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("返回顶部并保留当前指令，继续修改或提问")
+        }
+    }
+
+    private func continueAICommandQuestion() {
+        guard aiCommandResult != nil else { return }
+        aiCommandRunTask?.cancel()
+        aiCommandRunTask = nil
+        aiCommandRunGate.invalidate()
+        aiCommandMessage = nil
+        aiCommandSavedCount = nil
+        aiCommandShowsAllRelatedItems = false
+        aiCommandComparisonEvidenceMode = .differences
+        aiCommandShowsAllComparisonCategories = false
+        isAICommandRunning = false
+        aiCommandFocusesInputAfterResultDismissal = true
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
+            aiCommandResult = nil
         }
     }
 
@@ -3744,7 +3781,7 @@ struct InsightWebView: View {
         )
     }
 
-    private func runAICommand(_ override: String? = nil, successMessage: String? = nil) {
+    private func runAICommand(_ override: String? = nil) {
         let command = (override ?? aiCommandText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !command.isEmpty else {
             aiCommandMessage = "先写一句你想让它整理什么。"
@@ -3799,7 +3836,7 @@ struct InsightWebView: View {
             withAnimation(.easeInOut(duration: 0.18)) {
                 aiCommandResult = result
                 isAICommandRunning = false
-                aiCommandMessage = successMessage
+                aiCommandMessage = nil
             }
         }
     }
@@ -3913,6 +3950,7 @@ struct InsightWebView: View {
         aiCommandShowsAllRelatedItems = false
         aiCommandComparisonEvidenceMode = .differences
         aiCommandShowsAllComparisonCategories = false
+        aiCommandFocusesInputAfterResultDismissal = false
         aiCommandResult = nil
         aiCommandMessage = nil
         aiCommandSavedCount = nil
