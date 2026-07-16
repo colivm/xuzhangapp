@@ -197,7 +197,7 @@ struct MemoryAnchorSelectionPolicy {
         let normalizedCoverIndex = item.normalizedCoverMemoryImageIndex ?? 0
         return (0..<item.memoryImageCount).map { index in
             let imageData = item.memoryImageData(at: index) ?? Data()
-            Candidate(
+            return Candidate(
                 item: item,
                 imageData: imageData,
                 imageReference: item.memoryImageReference(at: index),

@@ -154,6 +154,7 @@ Assert-NoPattern 'NativeDemoApp/Views/MemberPricingView.swift' '\x{8BF7}\x{5148}
 Assert-Pattern 'NativeDemoApp/Views/HomeView.swift' 'SheetDismissRoute|playbackDismissRoute|todayRecordsDismissRoute|editingDismissRoute|memoryDetailDismissRoute' 'home sheet routes wait for dismissal'
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'SheetDismissRoute|traceDetailDismissRoute|summaryPlaybackDismissRoute|handleSheetDismissRoute' 'trace and playback routes wait for dismissal'
 Assert-Pattern 'NativeDemoApp/Services/InsightComputationService.swift' 'Self\.items\(in: \.week, from: items' 'insight computation avoids items name shadowing'
+Assert-Pattern 'NativeDemoApp/Services/PlaybackService.swift' 'return Candidate\(' 'playback candidate map closure returns explicitly'
 Assert-Pattern 'NativeDemoApp/Views/InsightWebView.swift' 'self\.aiCommandMemoryItemMatches\(item, command: command\)' 'AI memory lazy closure has explicit self capture'
 Assert-Pattern 'NativeDemoApp/Views/StatsTraceFilters.swift' 'customStartDateBinding|customEndDateBinding|selection: customStartDateBinding|selection: customEndDateBinding' 'split trace filters use explicit date bindings'
 Assert-NoPattern 'NativeDemoApp/Views/StatsTraceFilters.swift' '\$custom(Start|End)Date' 'split trace filters do not reference unavailable projected values'

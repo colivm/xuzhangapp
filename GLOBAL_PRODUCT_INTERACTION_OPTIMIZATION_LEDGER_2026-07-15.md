@@ -1128,6 +1128,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 | 0 | ARCH-FIX-01 | 修复拆分后首批编译错误 | `CODE_DONE` | 只修复名称遮蔽、闭包捕获与 Binding，不改变计算结果 |
 | 1 | ARCH-01 | 从痕迹页抽离 `FocusedRecordEditor` | `CODE_DONE` | 只移动完整顶层类型并接线工程，不修改编辑/照片/删除动作 |
 | 2 | ARCH-02 | 拆分 `ContentView` 的编辑与日期组件 | `CODE_DONE` | 根路由、Tab 与保存后队列保持原所有权 |
+| 2.1 | ARCH-FIX-02 | 修复 `PlaybackService` 候选闭包缺少返回 | `CODE_DONE` | 只补齐闭包显式返回，不改变回放候选、评分或照片加载语义 |
 | 3 | ARCH-03 | 拆分设置、首页、记录、复盘与回放页面 | `NOT_STARTED` | 每次只拆一个职责，逐项回归 |
 
 ### 核心页面体积治理执行记录
@@ -1139,3 +1140,5 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 | 2026-07-16 | ARCH-01 痕迹页独立编辑器拆分 | `IN_PROGRESS` → `CODE_DONE` | `StatsWebView.swift`、`FocusedRecordEditor.swift`、Xcode 工程、静态门禁、本文档 | 编辑器 608 行完整迁出；痕迹根文件 7,022 → 6,411 行；唯一类型定义和工程 Sources 接线检查通过；五项基础回归通过 | 编辑、照片、日期、删除闭包与状态保持原样；待 Xcode 编译确认 | ARCH-02 |
 | 2026-07-16 | ARCH-02 `ContentView` 编辑与日期组件拆分 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 确认 `WarmRecordDatePanel` 与 `RecordEditSheet` 均为独立顶层类型并被多页面复用 | 只移动完整类型并更新工程；不改根路由、Tab 或保存后队列 | ARCH-02 |
 | 2026-07-16 | ARCH-02 `ContentView` 编辑与日期组件拆分 | `IN_PROGRESS` → `CODE_DONE` | `ContentView.swift`、`WarmRecordDatePanel.swift`、`RecordEditSheet.swift`、Xcode 工程、静态门禁、本文档 | 两个完整顶层类型共 742 行迁出；`ContentView.swift` 2,401 → 1,653 行；唯一类型定义、跨页面调用和工程 Sources 接线通过；完整 Windows release gate 通过 | 根 Tab、Sheet、保存后提示队列、编辑/日期/照片/删除行为未改；待 Xcode 编译确认 | ARCH-03 |
+| 2026-07-16 | ARCH-FIX-02 回放候选闭包返回 | `NOT_STARTED` → `IN_PROGRESS` | `PlaybackService.swift`、本文档 | Xcode 报告 `Missing return in closure expected to return 'MemoryAnchorSelectionPolicy.Candidate'`，定位为多语句 `map` 闭包缺少显式返回 | 仅补 `return Candidate(...)`；回放候选内容、排序、去重、评分和图片按需加载保持不变 | ARCH-FIX-02 |
+| 2026-07-16 | ARCH-FIX-02 回放候选闭包返回 | `IN_PROGRESS` → `CODE_DONE` | `PlaybackService.swift`、`experience_static_check.ps1`、本文档 | `map` 闭包改为 `return Candidate(...)`；新增显式返回防回流检查；完整 Windows release gate 通过 | 当前 Windows 无 Swift/Xcode，需在 macOS 重新编译确认；未改变候选内容、评分、去重、排序或图片加载语义 | ARCH-03 |
