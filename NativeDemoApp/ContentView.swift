@@ -906,13 +906,13 @@ struct ContentView: View {
                 .foregroundStyle(AppColors.subtext.opacity(0.88))
 
             Text(selectedTab.pageTitle)
-                .font(.system(size: 32, weight: .semibold, design: .default))
+                .font(.system(size: selectedTab == .insight ? 29 : 32, weight: .semibold, design: .default))
                 .foregroundStyle(AppColors.text)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.top, 8)
-        .padding(.bottom, 10)
+        .padding(.bottom, selectedTab == .insight ? 7 : 10)
         .background(
             Rectangle()
                 .fill(AppColors.panelStrong)

@@ -12,6 +12,38 @@ struct MonthlyInsightPreparation: @unchecked Sendable {
     let snapshot: AISnapshot
 }
 
+struct AICommandSuggestionPreparationInput: @unchecked Sendable {
+    let items: [HomeItem]
+    let isMember: Bool
+    let now: Date
+    let weatherKind: String?
+}
+
+struct AICommandSuggestionSnapshot: Equatable, Sendable {
+    let query: [String]
+    let compare: [String]
+    let backfill: [String]
+
+    func suggestions(for task: ReviewTaskIntent) -> [String] {
+        switch task {
+        case .query: return query
+        case .compare: return compare
+        case .backfill: return backfill
+        }
+    }
+
+    static func fallbacks(for task: ReviewTaskIntent) -> [String] {
+        switch task {
+        case .query:
+            return ["过去三天餐饮花了多少？", "看一下这周交通", "找找最近有没有重复账单"]
+        case .compare:
+            return ["对比本周和上周的消费", "这周交通和上周比呢？", "对比本月和上月的消费"]
+        case .backfill:
+            return ["补记今天通勤", "补记过去一周工作日通勤，早晚各一次"]
+        }
+    }
+}
+
 enum InsightComputationService {
     private struct KeywordDraft {
         enum Source {
@@ -129,6 +161,97 @@ enum InsightComputationService {
             topCategories: grouped.prefix(3).map { $0.category.rawValue }
         )
         return MonthlyInsightPreparation(blocks: blocks, monthItems: monthItems, snapshot: snapshot)
+    }
+
+    static func aiCommandSuggestions(
+        _ input: AICommandSuggestionPreparationInput
+    ) -> AICommandSuggestionSnapshot {
+        let calendar = Calendar.current
+        let start = calendar.date(byAdding: .day, value: -6, to: input.now) ?? input.now
+        let recentItems = input.items.filter { $0.createdAt >= start && $0.amount > 0 }
+        let hasRainToday = input.weatherKind == "rain" || recentItems.contains { item in
+            calendar.isDate(item.createdAt, inSameDayAs: input.now)
+                && item.memoryContext?.weatherKind == "rain"
+        }
+
+        var baseSuggestions: [String] = []
+        var lockedPreviewSuggestions: [String] = []
+        if hasRainToday {
+            if input.isMember {
+                baseSuggestions.append("上一次雨天通勤是什么时候？")
+            } else {
+                lockedPreviewSuggestions.append("上一次雨天通勤是什么时候？")
+            }
+        }
+        if recentItems.contains(where: { $0.category == .dining }) {
+            baseSuggestions.append("过去三天餐饮花了多少？")
+            baseSuggestions.append("上次买可乐是哪天？")
+        }
+        if recentItems.contains(where: { $0.category == .transport }) {
+            baseSuggestions.append("看一下这周交通")
+            baseSuggestions.append("这周交通和上周比呢？")
+        }
+        if recentItems.contains(where: { $0.category == .entertainment }) {
+            baseSuggestions.append("上周休闲娱乐花了多少钱？")
+        }
+        let recentMarks = LifeMarkService.aggregates(
+            for: recentItems,
+            allItems: input.items,
+            isMember: input.isMember,
+            now: input.now,
+            limit: 3
+        )
+        baseSuggestions.append(contentsOf: recentMarks.map(\.queryHint))
+        if recentItems.contains(where: { $0.source == .ocr || $0.draftMeta != nil }) {
+            baseSuggestions.append("找找最近有没有重复账单")
+        }
+        if shouldSuggestCommuteDraft(recentItems: recentItems, now: input.now, calendar: calendar) {
+            baseSuggestions.append("补记过去一周工作日通勤，早晚各一次")
+        }
+
+        let candidates = baseSuggestions + lockedPreviewSuggestions
+        return AICommandSuggestionSnapshot(
+            query: suggestions(candidates, for: .query),
+            compare: suggestions(candidates, for: .compare),
+            backfill: suggestions(candidates, for: .backfill)
+        )
+    }
+
+    private static func suggestions(
+        _ candidates: [String],
+        for task: ReviewTaskIntent
+    ) -> [String] {
+        let filtered = candidates.filter { suggestion in
+            switch task {
+            case .query:
+                return !containsAny(suggestion, ["对比", "比呢", "补记", "生成"])
+            case .compare:
+                return containsAny(suggestion, ["对比", "比呢", "相比", "变化"])
+            case .backfill:
+                return containsAny(suggestion, ["补记", "补上", "生成"])
+            }
+        }
+        var seen = Set<String>()
+        let unique = (filtered + AICommandSuggestionSnapshot.fallbacks(for: task)).filter { suggestion in
+            guard seen.insert(suggestion).inserted else { return false }
+            return true
+        }
+        return Array(unique.prefix(5))
+    }
+
+    private static func shouldSuggestCommuteDraft(
+        recentItems: [HomeItem],
+        now: Date,
+        calendar: Calendar
+    ) -> Bool {
+        let weekday = calendar.component(.weekday, from: now)
+        guard weekday >= 2 && weekday <= 6 else { return false }
+        let commuteCount = recentItems.filter { item in
+            guard item.category == .transport else { return false }
+            let text = "\(item.title) \(item.displayEmotionTag)"
+            return containsAny(text, ["通勤", "上班", "下班", "地铁", "公交"]) || item.amount <= 20
+        }.count
+        return commuteCount >= 2
     }
 
     private static func weeklyBlocks(
@@ -569,6 +692,10 @@ enum InsightComputationService {
 
     private static func isFillerKeyword(_ text: String) -> Bool {
         Set(["一笔", "几笔", "这笔", "小记", "今天", "昨天", "本周", "本月", "生活", "日常", "花了", "花钱", "补一下", "临时", "简单"]).contains(text)
+    }
+
+    private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.contains($0) }
     }
 
     private static func monthKey(for date: Date) -> String {

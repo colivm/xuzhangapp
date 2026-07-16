@@ -288,6 +288,8 @@ struct InsightTabState {
     var preparedSnapshot: InsightPageSnapshot?
     var snapshotNeedsRefresh = true
     var sourceRevision: Int?
+    var aiCommandSuggestionSnapshot: AICommandSuggestionSnapshot?
+    var aiCommandSuggestionKey: String?
 }
 
 struct InsightWebView: View {
@@ -357,17 +359,15 @@ struct InsightWebView: View {
     @State private var isAICommandRunning = false
     @State private var aiCommandRunTask: Task<Void, Never>?
     @State private var aiCommandRunGate = LatestRequestGate()
+    @State private var aiCommandSuggestionPreparationTask: Task<Void, Never>?
+    @State private var aiCommandSuggestionPreparationGate = LatestRequestGate()
+    @State private var pendingAICommandSuggestionKey: String?
     @State private var isPreparingInsightPage = false
     @State private var insightPreparationTask: Task<Void, Never>?
     @State private var insightPreparationGate = LatestRequestGate()
     @State private var showsInsightUpdatePill = false
     @State private var insightUpdatePillTask: Task<Void, Never>?
     private let trialTotal = MembershipQuotaBaseline.monthlyInsightTrialTotal
-    private static var aiCommandSuggestionsCache: [String: [String]] = [:]
-    private static var aiCommandItemsCache: [String: [HomeItem]] = [:]
-    private static var aiCommandLifeMarkItemsCache: [String: [HomeItem]] = [:]
-    private static var aiCommandCacheOrder: [String] = []
-    private static let aiCommandCacheLimit = 48
     private static let aiCommandTopAnchorID = "ai-command-top"
 
     private struct AIStatusPill: Equatable {
@@ -498,7 +498,6 @@ struct InsightWebView: View {
         let focusRequest: Int
         let onRun: (String) -> Void
         let onClear: () -> Void
-        @State private var draftText: String
         @FocusState private var isFocused: Bool
 
         init(
@@ -521,7 +520,6 @@ struct InsightWebView: View {
             self.focusRequest = focusRequest
             self.onRun = onRun
             self.onClear = onClear
-            _draftText = State(initialValue: commandText.wrappedValue)
         }
 
         var body: some View {
@@ -530,7 +528,7 @@ struct InsightWebView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppColors.text.opacity(0.86))
 
-                TextField(placeholder, text: $draftText, axis: .vertical)
+                TextField(placeholder, text: $commandText, axis: .vertical)
                     .font(.body.weight(.medium))
                     .foregroundStyle(AppColors.text)
                     .lineLimit(2...4)
@@ -541,10 +539,6 @@ struct InsightWebView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 13)
                     .aiCommandSurface(.input, radius: 16, tint: tint)
-                    .onChange(of: commandText) { _, value in
-                        guard value != draftText else { return }
-                        draftText = value
-                    }
                     .onSubmit {
                         isFocused = false
                     }
@@ -577,7 +571,7 @@ struct InsightWebView: View {
 
         private var runButton: some View {
             Button {
-                let trimmed = draftText.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmed = commandText.trimmingCharacters(in: .whitespacesAndNewlines)
                 commandText = trimmed
                 isFocused = false
                 onRun(trimmed)
@@ -590,7 +584,6 @@ struct InsightWebView: View {
 
         private var clearButton: some View {
             Button {
-                draftText = ""
                 commandText = ""
                 isFocused = false
                 onClear()
@@ -776,11 +769,16 @@ struct InsightWebView: View {
                 insightSnapshotNeedsRefresh = true
             }
             prepareInsightIfNeeded()
+            prepareAICommandSuggestionsIfNeeded()
         }
         .onDisappear {
             aiCommandRunTask?.cancel()
             aiCommandRunTask = nil
             aiCommandRunGate.invalidate()
+            aiCommandSuggestionPreparationTask?.cancel()
+            aiCommandSuggestionPreparationTask = nil
+            aiCommandSuggestionPreparationGate.invalidate()
+            pendingAICommandSuggestionKey = nil
             insightPreparationTask?.cancel()
             insightPreparationTask = nil
             insightPreparationGate.invalidate()
@@ -793,6 +791,10 @@ struct InsightWebView: View {
             tabState.sourceRevision = insightSourceRevision
             insightSnapshotNeedsRefresh = true
             scheduleInsightPreparation()
+            prepareAICommandSuggestionsIfNeeded()
+        }
+        .onChange(of: hasMemberAccess) { _, _ in
+            prepareAICommandSuggestionsIfNeeded()
         }
     }
 
@@ -928,7 +930,7 @@ struct InsightWebView: View {
 
     private func insightContinueQuestionCard(snapshot: InsightPageSnapshot) -> some View {
         let overview = snapshot.reviewOverview
-        return VStack(alignment: .leading, spacing: 18) {
+        return VStack(alignment: .leading, spacing: 14) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: 12) {
                     reviewLandingHeaderCopy
@@ -943,9 +945,9 @@ struct InsightWebView: View {
 
             reviewOverviewHero(overview)
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text("现在要完成哪件事？")
-                    .font(.headline.weight(.bold))
+            VStack(alignment: .leading, spacing: 8) {
+                Text("选择一个任务")
+                    .font(.subheadline.weight(.bold))
                     .foregroundStyle(AppColors.text)
 
                 ForEach(ReviewTaskIntent.allCases, id: \.self) { intent in
@@ -953,18 +955,15 @@ struct InsightWebView: View {
                 }
             }
         }
-        .aiCommandSurface(.panel, radius: 26, padding: 18, tint: AppColors.accent)
+        .aiCommandSurface(.panel, radius: 24, padding: 16, tint: AppColors.accent)
     }
 
     private var reviewLandingHeaderCopy: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("生活复盘")
-                .font(.footnote.weight(.bold))
-                .foregroundStyle(AppColors.accentDark)
+        VStack(alignment: .leading, spacing: 3) {
             Text("先看清，再完成一件事")
-                .font(.title2.weight(.bold))
+                .font(.title3.weight(.bold))
                 .foregroundStyle(AppColors.text)
-            Text("数据只来自账本；完整周记和月章仍在「痕迹」。")
+            Text("近 7 天数据来自账本；完整周记和月章仍在「痕迹」。")
                 .font(.footnote)
                 .foregroundStyle(AppColors.subtext)
                 .fixedSize(horizontal: false, vertical: true)
@@ -982,7 +981,7 @@ struct InsightWebView: View {
 
     private func reviewOverviewHero(_ overview: ReviewOverviewSnapshot) -> some View {
         let maxAmount = max(overview.days.map(\.amount).max() ?? 0, 1)
-        return VStack(alignment: .leading, spacing: 14) {
+        return VStack(alignment: .leading, spacing: 11) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: 12) {
                     reviewOverviewAmount(overview)
@@ -995,27 +994,7 @@ struct InsightWebView: View {
                 }
             }
 
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: 8) {
-                    reviewOverviewMetric(title: "记录", value: "\(overview.currentCount) 笔", systemImage: "list.bullet")
-                    reviewOverviewMetric(title: "有记录", value: "\(overview.activeDayCount) 天", systemImage: "calendar")
-                    reviewOverviewMetric(
-                        title: "最高分类",
-                        value: reviewOverviewTopCategoryText(overview),
-                        systemImage: "chart.pie.fill"
-                    )
-                }
-            } else {
-                HStack(spacing: 8) {
-                    reviewOverviewMetric(title: "记录", value: "\(overview.currentCount) 笔", systemImage: "list.bullet")
-                    reviewOverviewMetric(title: "有记录", value: "\(overview.activeDayCount) 天", systemImage: "calendar")
-                    reviewOverviewMetric(
-                        title: "最高分类",
-                        value: reviewOverviewTopCategoryText(overview),
-                        systemImage: "chart.pie.fill"
-                    )
-                }
-            }
+            reviewOverviewMetrics(overview)
 
             HStack(alignment: .bottom, spacing: 7) {
                 ForEach(overview.days) { day in
@@ -1031,7 +1010,7 @@ struct InsightWebView: View {
                             )
                             .frame(
                                 height: day.amount > 0
-                                    ? max(6, 46 * CGFloat(day.amount / maxAmount))
+                                    ? max(6, 38 * CGFloat(day.amount / maxAmount))
                                     : 3
                             )
                             .opacity(day.amount > 0 ? 1 : 0.34)
@@ -1046,9 +1025,53 @@ struct InsightWebView: View {
                     .accessibilityLabel("\(day.label)，\(day.count) 笔，\(day.amount.formatted(.cny))")
                 }
             }
-            .frame(height: 76)
+            .frame(height: 64)
         }
-        .aiCommandSurface(.metric, radius: 22, padding: 16, tint: AppColors.accent)
+        .aiCommandSurface(.metric, radius: 20, padding: 14, tint: AppColors.accent)
+    }
+
+    @ViewBuilder
+    private func reviewOverviewMetrics(_ overview: ReviewOverviewSnapshot) -> some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 3) {
+                    reviewOverviewMetric(title: "记录", value: "\(overview.currentCount) 笔", systemImage: "list.bullet")
+                    Divider().overlay(AppColors.stroke.opacity(0.36))
+                    reviewOverviewMetric(title: "有记录", value: "\(overview.activeDayCount) 天", systemImage: "calendar")
+                    Divider().overlay(AppColors.stroke.opacity(0.36))
+                    reviewOverviewMetric(
+                        title: "最高分类",
+                        value: reviewOverviewTopCategoryText(overview),
+                        systemImage: "chart.pie.fill"
+                    )
+                }
+            } else {
+                HStack(spacing: 0) {
+                    reviewOverviewMetric(title: "记录", value: "\(overview.currentCount) 笔", systemImage: "list.bullet")
+                    reviewOverviewMetricDivider
+                    reviewOverviewMetric(title: "有记录", value: "\(overview.activeDayCount) 天", systemImage: "calendar")
+                    reviewOverviewMetricDivider
+                    reviewOverviewMetric(
+                        title: "最高分类",
+                        value: reviewOverviewTopCategoryText(overview),
+                        systemImage: "chart.pie.fill"
+                    )
+                }
+            }
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 3)
+        .background(AppColors.surfaceMuted.opacity(0.62), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(AppColors.stroke.opacity(0.34), lineWidth: 1)
+        )
+    }
+
+    private var reviewOverviewMetricDivider: some View {
+        Rectangle()
+            .fill(AppColors.stroke.opacity(0.36))
+            .frame(width: 1, height: 28)
     }
 
     private func reviewOverviewAmount(_ overview: ReviewOverviewSnapshot) -> some View {
@@ -1057,7 +1080,7 @@ struct InsightWebView: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(AppColors.subtext)
             Text(overview.currentTotal.formatted(.cny))
-                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(AppColors.text)
                 .minimumScaleFactor(0.72)
                 .lineLimit(1)
@@ -1083,7 +1106,7 @@ struct InsightWebView: View {
         }
         .foregroundStyle(color)
         .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.vertical, 6)
         .background(color.opacity(0.09), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("比前七天\(amountText)，\(countText)")
@@ -1105,13 +1128,8 @@ struct InsightWebView: View {
                     .minimumScaleFactor(0.72)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-        .padding(.horizontal, 9)
-        .background(AppColors.surfaceMuted.opacity(0.78), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(AppColors.stroke.opacity(0.42), lineWidth: 1)
-        )
+        .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
+        .padding(.horizontal, 7)
     }
 
     private func reviewOverviewTopCategoryText(_ overview: ReviewOverviewSnapshot) -> String {
@@ -1176,10 +1194,10 @@ struct InsightWebView: View {
             openReviewTask(intent)
         } label: {
             reviewTaskButtonLabel(intent, overview: overview, tint: tint)
-            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-            .padding(.horizontal, 13)
-            .padding(.vertical, 9)
-            .aiCommandSurface(.interactive, radius: 18, tint: tint)
+            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .aiCommandSurface(.interactive, radius: 17, tint: tint)
         }
         .buttonStyle(AICommandPressStyle())
         .minimumTapTarget()
@@ -1226,14 +1244,11 @@ struct InsightWebView: View {
                         .lineLimit(2)
                 }
                 Spacer(minLength: 6)
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(reviewTaskActionTitle(intent))
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(tint)
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(tint.opacity(0.76))
-                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(tint.opacity(0.78))
+                    .frame(width: 28, height: 28)
+                    .background(tint.opacity(0.08), in: Circle())
             }
         }
     }
@@ -1246,7 +1261,7 @@ struct InsightWebView: View {
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(tint)
         }
-        .frame(width: 44, height: 44)
+        .frame(width: 40, height: 40)
     }
 
     private func reviewTaskTint(_ intent: ReviewTaskIntent) -> Color {
@@ -1324,6 +1339,7 @@ struct InsightWebView: View {
         aiCommandShowsAllComparisonCategories = false
         aiCommandFocusesInputAfterResultDismissal = false
         isAICommandRunning = false
+        prepareAICommandSuggestionsIfNeeded()
         if opensSheet {
             showAICommandSheet = true
         }
@@ -2516,121 +2532,80 @@ struct InsightWebView: View {
     }
 
     private func aiCommandPresetSuggestions() -> [String] {
-        let cacheKey = aiCommandSuggestionsCacheKey()
-        if let cached = Self.aiCommandSuggestionsCache[cacheKey] {
-            return cached
+        let key = aiCommandSuggestionPreparationKey()
+        guard tabState.aiCommandSuggestionKey == key,
+              let snapshot = tabState.aiCommandSuggestionSnapshot else {
+            return AICommandSuggestionSnapshot.fallbacks(for: activeReviewTask)
         }
+        return snapshot.suggestions(for: activeReviewTask)
+    }
 
-        var suggestions: [String] = []
-        var lockedPreviewSuggestions: [String] = []
-        let recentItems = recentPositiveItems(days: 7)
-        let todayWeatherKind = RecordMemoryContextService.weatherKindCode(
+    private func prepareAICommandSuggestionsIfNeeded() {
+        let key = aiCommandSuggestionPreparationKey()
+        if tabState.aiCommandSuggestionKey == key,
+           tabState.aiCommandSuggestionSnapshot != nil {
+            return
+        }
+        guard pendingAICommandSuggestionKey != key else { return }
+
+        aiCommandSuggestionPreparationTask?.cancel()
+        let requestID = aiCommandSuggestionPreparationGate.begin()
+        pendingAICommandSuggestionKey = key
+        let weatherKind = RecordMemoryContextService.weatherKindCode(
             from: WeatherCompanionService.shared.cachedSnapshot
         )
-        let hasRainToday = todayWeatherKind == "rain" || recentItems.contains { item in
-            Calendar.current.isDateInToday(item.createdAt) && item.memoryContext?.weatherKind == "rain"
-        }
-
-        if hasRainToday {
-            if hasMemberAccess {
-                suggestions.append("上一次雨天通勤是什么时候？")
-            } else {
-                lockedPreviewSuggestions.append("上一次雨天通勤是什么时候？")
-            }
-        }
-        if recentItems.contains(where: { $0.category == .dining }) {
-            suggestions.append("过去三天餐饮花了多少？")
-            suggestions.append("上次买可乐是哪天？")
-        }
-        if recentItems.contains(where: { $0.category == .transport }) {
-            suggestions.append("看一下这周交通")
-            suggestions.append("这周交通和上周比呢？")
-        }
-        if recentItems.contains(where: { $0.category == .entertainment }) {
-            suggestions.append("上周休闲娱乐花了多少钱？")
-        }
-        let recentMarks = LifeMarkService.aggregates(
-            for: recentItems,
-            allItems: homeViewModel.items,
+        let input = AICommandSuggestionPreparationInput(
+            items: homeViewModel.items,
             isMember: hasMemberAccess,
-            limit: 3
+            now: Date(),
+            weatherKind: weatherKind
         )
-        suggestions.append(contentsOf: recentMarks.map(\.queryHint))
-        if recentItems.contains(where: { $0.source == .ocr || $0.draftMeta != nil }) {
-            suggestions.append("找找最近有没有重复账单")
-        }
-        if shouldSuggestCommuteDraft(recentItems: recentItems) {
-            suggestions.append("补记过去一周工作日通勤，早晚各一次")
-        }
 
-        let fallback: [String]
-        switch activeReviewTask {
-        case .query:
-            fallback = ["过去三天餐饮花了多少？", "看一下这周交通", "找找最近有没有重复账单"]
-        case .compare:
-            fallback = ["对比本周和上周的消费", "这周交通和上周比呢？", "对比本月和上月的消费"]
-        case .backfill:
-            fallback = ["补记今天通勤", "补记过去一周工作日通勤，早晚各一次"]
-        }
-        let taskSuggestions = (suggestions + lockedPreviewSuggestions).filter {
-            aiCommandSuggestion($0, matches: activeReviewTask)
-        }
-        let result = Array(uniqueAICommandSuggestions(taskSuggestions + fallback).prefix(5))
-        storeAICommandSuggestions(result, for: cacheKey)
-        return result
-    }
+        aiCommandSuggestionPreparationTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled,
+                  aiCommandSuggestionPreparationGate.accepts(requestID) else {
+                if pendingAICommandSuggestionKey == key {
+                    pendingAICommandSuggestionKey = nil
+                }
+                return
+            }
+            let snapshot = await withTaskGroup(
+                of: AICommandSuggestionSnapshot?.self,
+                returning: AICommandSuggestionSnapshot?.self
+            ) { group in
+                group.addTask(priority: .utility) {
+                    guard !Task.isCancelled else { return nil }
+                    return InsightComputationService.aiCommandSuggestions(input)
+                }
+                return await group.next() ?? nil
+            }
 
-    private func aiCommandSuggestion(_ suggestion: String, matches task: ReviewTaskIntent) -> Bool {
-        switch task {
-        case .query:
-            return !containsAny(suggestion, ["对比", "比呢", "补记", "生成"])
-        case .compare:
-            return containsAny(suggestion, ["对比", "比呢", "相比", "变化"])
-        case .backfill:
-            return containsAny(suggestion, ["补记", "补上", "生成"])
-        }
-    }
-
-    private func uniqueAICommandSuggestions(_ suggestions: [String]) -> [String] {
-        var seen = Set<String>()
-        return suggestions.filter { suggestion in
-            if seen.contains(suggestion) { return false }
-            seen.insert(suggestion)
-            return true
+            guard let snapshot,
+                  !Task.isCancelled,
+                  aiCommandSuggestionPreparationGate.accepts(requestID) else {
+                if pendingAICommandSuggestionKey == key {
+                    pendingAICommandSuggestionKey = nil
+                }
+                return
+            }
+            tabState.aiCommandSuggestionSnapshot = snapshot
+            tabState.aiCommandSuggestionKey = key
+            pendingAICommandSuggestionKey = nil
+            aiCommandSuggestionPreparationTask = nil
         }
     }
 
-    private func aiCommandSuggestionsCacheKey() -> String {
+    private func aiCommandSuggestionPreparationKey() -> String {
         let weatherKind = RecordMemoryContextService.weatherKindCode(
             from: WeatherCompanionService.shared.cachedSnapshot
         ) ?? "none"
         return [
             "suggestions",
-            activeReviewTask.rawValue,
             hasMemberAccess ? "member" : "free",
             weatherKind,
             String(tabState.sourceRevision ?? 0)
         ].joined(separator: "|")
-    }
-
-    private func storeAICommandSuggestions(_ suggestions: [String], for key: String) {
-        guard Self.aiCommandSuggestionsCache[key] == nil else {
-            return
-        }
-        Self.aiCommandSuggestionsCache[key] = suggestions
-        rememberAICommandCacheKey("suggestions|\(key)")
-    }
-
-    private func shouldSuggestCommuteDraft(recentItems: [HomeItem]) -> Bool {
-        let calendar = Calendar.current
-        let weekday = calendar.component(.weekday, from: Date())
-        guard weekday >= 2 && weekday <= 6 else { return false }
-        let commuteCount = recentItems.filter { item in
-            guard item.category == .transport else { return false }
-            let text = "\(item.title) \(item.displayEmotionTag)"
-            return containsAny(text, ["通勤", "上班", "下班", "地铁", "公交"]) || item.amount <= 20
-        }.count
-        return commuteCount >= 2
     }
 
     private func aiCommandPresetChip(_ title: String) -> some View {
@@ -6188,29 +6163,6 @@ struct InsightWebView: View {
         let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !tag.isEmpty else { return false }
         return tag != HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
-    }
-
-    private func rememberAICommandCacheKey(_ typedKey: String) {
-        Self.aiCommandCacheOrder.append(typedKey)
-        while Self.aiCommandCacheOrder.count > Self.aiCommandCacheLimit {
-            let staleTypedKey = Self.aiCommandCacheOrder.removeFirst()
-            removeAICommandCacheValue(for: staleTypedKey)
-        }
-    }
-
-    private func removeAICommandCacheValue(for typedKey: String) {
-        let parts = typedKey.split(separator: "|", maxSplits: 1).map(String.init)
-        guard parts.count == 2 else { return }
-        switch parts[0] {
-        case "suggestions":
-            Self.aiCommandSuggestionsCache.removeValue(forKey: parts[1])
-        case "items":
-            Self.aiCommandItemsCache.removeValue(forKey: parts[1])
-        case "lifeMark":
-            Self.aiCommandLifeMarkItemsCache.removeValue(forKey: parts[1])
-        default:
-            break
-        }
     }
 
     private func containsAny(_ text: String, _ keywords: [String]) -> Bool {

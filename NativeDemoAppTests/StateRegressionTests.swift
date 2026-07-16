@@ -602,6 +602,41 @@ final class InsightBackgroundComputationTests: XCTestCase {
         XCTAssertEqual(overview.days.last?.count, 1)
     }
 
+    func testAICommandSuggestionsPrepareAllTasksFromOneImmutableSnapshot() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 16,
+            hour: 19
+        ))!
+        let items = [
+            HomeItem(title: "午餐", amount: 28, category: .dining, createdAt: now.addingTimeInterval(-3_600)),
+            HomeItem(title: "早高峰地铁", amount: 6, category: .transport, createdAt: now.addingTimeInterval(-7_200)),
+            HomeItem(title: "晚高峰公交", amount: 4, category: .transport, createdAt: now.addingTimeInterval(-10_800)),
+            HomeItem(title: "电影", amount: 45, category: .entertainment, createdAt: now.addingTimeInterval(-14_400)),
+        ]
+        let input = AICommandSuggestionPreparationInput(
+            items: items,
+            isMember: true,
+            now: now,
+            weatherKind: "rain"
+        )
+
+        let first = InsightComputationService.aiCommandSuggestions(input)
+        let second = InsightComputationService.aiCommandSuggestions(input)
+
+        XCTAssertEqual(first, second)
+        XCTAssertTrue(first.query.contains("上一次雨天通勤是什么时候？"))
+        XCTAssertTrue(first.compare.contains("这周交通和上周比呢？"))
+        XCTAssertTrue(first.backfill.contains("补记过去一周工作日通勤，早晚各一次"))
+        XCTAssertLessThanOrEqual(first.query.count, 5)
+        XCTAssertLessThanOrEqual(first.compare.count, 5)
+        XCTAssertLessThanOrEqual(first.backfill.count, 5)
+    }
+
     func testAICommandComparisonKeepsBothPeriodsAndCategoryChanges() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .current

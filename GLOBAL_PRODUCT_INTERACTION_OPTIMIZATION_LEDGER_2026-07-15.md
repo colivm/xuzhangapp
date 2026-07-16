@@ -1424,3 +1424,42 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 条形仍使用方案 C 原最大金额尺度，上一周期保持中性色；没有修改金额、笔数、分类集合、排序、占比或证据。
 - “继续问”只把 `text.cursor` 替换为 `arrow.up`，LOGIC-12 的回顶、保留指令、聚焦、零重算和零写入边界保持不变。
 - 完整 Windows release gate 已通过；`ARCH-03` 保持 `NOT_STARTED`，当前无 `IN_PROGRESS`。
+
+---
+
+## 20. 复盘入口稳定性、任务切换性能与首屏视觉收敛（2026-07-16）
+
+用户真机反馈复盘首屏仍可压缩；从“查记录 / 做对比”打开 AI 指令台时预设指令偶尔未显示，任务内切换仍有卡顿。本队列按状态一致性、切换性能、视觉密度依次执行，三项不得混改；`ARCH-03` 继续保持 `NOT_STARTED`。
+
+| 顺序 | ID | 任务 | 状态 | 冻结边界 |
+|---:|---|---|---|---|
+| 1 | FIX-003 | AI 指令台默认输入单一状态源 | `CODE_DONE` | 只修输入显示与父状态同步；不改预设文案、识别、执行、结果或保存 |
+| 2 | PERF-07 | AI 指令台任务切换零主线程聚合 | `CODE_DONE` | 只移动推荐指令准备时机；不改推荐内容、任务分类、账本口径或缓存失效语义 |
+| 3 | UI-01 | 复盘首屏视觉密度收敛 | `CODE_DONE` | 保持现有主题、数据、任务顺序和入口；只调整首屏层级、间距与重复视觉 |
+
+### 统一边界
+
+- 查记录与做对比继续只读；补遗漏确认前零写入。
+- 三类默认指令文案、自然语言识别、时间/分类/金额口径、对比证据和补记时点保持不变。
+- 不修改全局主题 Token、其他页面视觉、会员、额度、图片、存储、路由或 `web-preview`。
+- 不使用材质、实时模糊、大阴影或布局读取换取视觉效果；Dynamic Type、VoiceOver、44pt 触控与 Reduce Motion 边界继续保持。
+- 每项达到 `CODE_DONE` 并回填验证后才进入下一项；Windows 不冒充 Xcode/iPhone 签收。
+
+### 执行记录
+
+| 日期 | 任务 | 状态变化 | 修改文件 | 验证 | 结果/残留风险 | 下一项 |
+|---|---|---|---|---|---|---|
+| 2026-07-16 | FIX-003 AI 默认输入一致性 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 代码审计确认父级 `aiCommandText` 与输入组件局部 `draftText` 为双状态源，Sheet 复用时存在预设已写入但输入框仍为空的生命周期风险 | 先收敛为单一文本状态源，不改执行与预设文案 | FIX-003 |
+| 2026-07-16 | FIX-003 AI 默认输入一致性 | `IN_PROGRESS` → `CODE_DONE` | `InsightWebView.swift`、`experience_static_check.ps1`、本文档 | 输入框直接绑定父级 `aiCommandText`，移除局部 `draftText` 初始化和同步；`git diff --check` 与完整体验静态门禁通过 | 预设、用户编辑、清空和执行共享单一状态源；Windows 无 Xcode，Sheet 复用与键盘路径仍待真机签收 | PERF-07 |
+| 2026-07-16 | PERF-07 AI 任务切换性能 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 审计确认推荐指令在 SwiftUI `body` 中冷缓存同步扫描最近记录、完整历史和生活线索；缓存按任务与 `sourceRevision` 分裂 | 只移动准备时机并复用一次不可变输入，不改推荐结果 | PERF-07 |
+| 2026-07-16 | PERF-07 AI 任务切换性能 | `IN_PROGRESS` → `CODE_DONE` | `InsightComputationService.swift`、`InsightWebView.swift`、`StateRegressionTests.swift`、`experience_static_check.ps1`、本文档 | 查/比/补推荐基于一个不可变账本快照在后台一次生成；页面出现、账本/会员变化和打开任务时按账本修订准备；`body` 只读取已准备数组或固定回退；`git diff --check` 与完整体验静态门禁通过 | 任务切换不再触发账本扫描或生活线索聚合；推荐内容、每类最多 5 条和修订失效语义保持；待 Xcode/XCTest 与 1,000 条真机切换签收 | UI-01 |
+| 2026-07-16 | UI-01 复盘首屏视觉密度 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 截图与代码审计确认顶部标题留白、看板卡中套卡和三张任务入口共同占满首屏，分类快捷入口露出不足 | 保持当前柔和主题与三任务信息架构，只压缩层级和重复动作表达 | UI-01 |
+| 2026-07-16 | UI-01 复盘首屏视觉密度 | `IN_PROGRESS` → `CODE_DONE` | `ContentView.swift`、`InsightWebView.swift`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、`experience_static_check.ps1`、本文档 | 复盘页标题定向缩小；首卡标题、间距和内边距收敛；三指标从三张独立子卡合并为一个轻量数据条；柱图和任务卡降高，默认字号下移除重复动作文字只保留明确箭头；新增 FLOW-22；`python scripts/validate_release_gate.py --phase windows` 完整通过 | 主题 Token、三任务顺序、真实数据、入口、Dynamic Type/VoiceOver/44pt 边界保持；Xcode 编译、默认/深色/大字和 1,000 条真机视觉与 hitch 仍待签收 | 统一 Xcode/真机签收 |
+
+### 本项收口结论
+
+- `FIX-003`、`PERF-07`、`UI-01` 均已达到 `CODE_DONE`，当前无 `IN_PROGRESS`；`ARCH-03` 继续保持 `NOT_STARTED`。
+- AI 指令输入不再维护父子两份文本；首屏预设、任务切换、用户编辑、清空和继续问都读取同一个 `aiCommandText`。
+- 推荐指令按账本修订、会员和天气生成一个查/比/补共享快照，后台一次准备；SwiftUI `body` 与任务切换只读数组，不再扫描账本或执行生活线索聚合。
+- 复盘首屏保留现有柔和主题、近 7 天数据和三个任务，只减少重复层级与高度，让分类快捷入口更早进入视野。
+- 完整 Windows repository gate 通过；当前环境不能执行 Xcode、XCTest、iPhone Core Animation、Dynamic Type、VoiceOver 或真机 Sheet 复用签收，FLOW-22 保持 `NOT_RUN`。
