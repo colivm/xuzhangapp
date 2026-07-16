@@ -109,6 +109,98 @@ private struct AICommandRatioBar: View {
     }
 }
 
+private struct AICommandComparisonSourceRatioBar: View {
+    enum GhostStyle {
+        case none
+        case solid
+        case dashed
+    }
+
+    let progress: Double
+    let ghostProgress: Double
+    let fill: Color
+    let track: Color
+    let ghostStyle: GhostStyle
+    let showsZeroMarker: Bool
+
+    var body: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            guard size.width > 0, size.height > 0 else { return }
+            let bounds = CGRect(origin: .zero, size: size)
+            context.fill(
+                Capsule(style: .continuous).path(in: bounds),
+                with: .color(track)
+            )
+
+            let boundedProgress = min(max(progress, 0), 1)
+            let boundedGhostProgress = min(max(ghostProgress, 0), 1)
+            let minimumFill = min(size.height, CGFloat(5))
+            let ghostWidth = min(
+                size.width,
+                max(minimumFill, size.width * CGFloat(boundedGhostProgress))
+            )
+
+            if boundedGhostProgress > boundedProgress {
+                switch ghostStyle {
+                case .none:
+                    break
+                case .solid:
+                    let ghostBounds = CGRect(x: 0, y: 0, width: ghostWidth, height: size.height)
+                    context.fill(
+                        Capsule(style: .continuous).path(in: ghostBounds),
+                        with: .color(fill.opacity(0.18))
+                    )
+                case .dashed:
+                    var path = Path()
+                    path.move(to: CGPoint(x: size.height * 0.5, y: size.height * 0.5))
+                    path.addLine(to: CGPoint(x: ghostWidth, y: size.height * 0.5))
+                    context.stroke(
+                        path,
+                        with: .color(fill.opacity(0.34)),
+                        style: StrokeStyle(
+                            lineWidth: max(CGFloat(2), size.height * 0.62),
+                            lineCap: .round,
+                            dash: [size.height * 1.45, size.height * 0.92]
+                        )
+                    )
+                }
+            }
+
+            if boundedProgress > 0 {
+                let width = min(
+                    size.width,
+                    max(minimumFill, size.width * CGFloat(boundedProgress))
+                )
+                let fillBounds = CGRect(x: 0, y: 0, width: width, height: size.height)
+                context.fill(
+                    Capsule(style: .continuous).path(in: fillBounds),
+                    with: .color(fill)
+                )
+            }
+
+            if showsZeroMarker {
+                let diameter = min(size.height, CGFloat(8))
+                let markerBounds = CGRect(
+                    x: 0,
+                    y: (size.height - diameter) * 0.5,
+                    width: diameter,
+                    height: diameter
+                )
+                context.fill(
+                    Circle().path(in: markerBounds),
+                    with: .color(AppColors.panelStrong)
+                )
+                context.stroke(
+                    Circle().path(in: markerBounds),
+                    with: .color(fill),
+                    lineWidth: 1.8
+                )
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
 private extension View {
     func aiCommandSurface(
         _ role: AICommandSurfaceRole,
@@ -213,6 +305,18 @@ struct InsightWebView: View {
             case .records: return "原始记录"
             }
         }
+    }
+
+    private struct AICommandComparisonSourceSummary: Identifiable {
+        let kind: AICommandComparisonChangeKind
+        let count: Int
+
+        var id: String { kind.rawValue }
+    }
+
+    private struct AICommandComparisonSourceVisualStyle {
+        let systemImage: String
+        let color: Color
     }
 
     @EnvironmentObject private var homeViewModel: HomeViewModel
@@ -3022,8 +3126,9 @@ struct InsightWebView: View {
             1
         )
         let categoryDeltas = comparison.categories.map(\.deltaAmount)
+        let sourceSummaries = aiCommandComparisonSourceSummaries(comparison)
         return LazyVStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("差异来源")
                         .font(.headline.weight(.bold))
@@ -3033,6 +3138,19 @@ struct InsightWebView: View {
                         .font(.caption.weight(.medium))
                         .foregroundStyle(AppColors.subtext)
                 }
+
+                if !sourceSummaries.isEmpty {
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 7) {
+                            ForEach(sourceSummaries) { summary in
+                                aiCommandComparisonSourceSummaryChip(summary)
+                            }
+                        }
+                    }
+                    .scrollIndicators(.hidden)
+                    .accessibilityLabel("分类变化状态概览")
+                }
+
                 Text(aiCommandComparisonDifferenceSummary(comparison))
                     .font(.footnote)
                     .foregroundStyle(AppColors.subtext)
@@ -3090,6 +3208,54 @@ struct InsightWebView: View {
         return "最大变化来自「\(leading.category.rawValue)」，占分类金额变化的 \(share)%。"
     }
 
+    private func aiCommandComparisonSourceSummaries(
+        _ comparison: AICommandComparison
+    ) -> [AICommandComparisonSourceSummary] {
+        let kinds: [AICommandComparisonChangeKind] = [
+            .appeared,
+            .disappeared,
+            .increased,
+            .decreased,
+            .steady
+        ]
+        return kinds.compactMap { kind in
+            let count = comparison.categories.reduce(into: 0) { partialResult, category in
+                let categoryKind = AICommandComparisonPresentationPolicy.changeKind(
+                    currentAmount: category.currentAmount,
+                    previousAmount: category.previousAmount,
+                    currentCount: category.currentCount,
+                    previousCount: category.previousCount
+                )
+                if categoryKind == kind {
+                    partialResult += 1
+                }
+            }
+            guard count > 0 else { return nil }
+            return AICommandComparisonSourceSummary(kind: kind, count: count)
+        }
+    }
+
+    private func aiCommandComparisonSourceSummaryChip(
+        _ summary: AICommandComparisonSourceSummary
+    ) -> some View {
+        let style = aiCommandComparisonSourceVisualStyle(summary.kind)
+        return Label(
+            "\(aiCommandComparisonSourceKindText(summary.kind)) \(summary.count)",
+            systemImage: style.systemImage
+        )
+        .font(.caption2.weight(.bold))
+        .foregroundStyle(style.color)
+        .padding(.horizontal, 9)
+        .frame(minHeight: 28)
+        .background(style.color.opacity(0.11), in: Capsule(style: .continuous))
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(style.color.opacity(0.18), lineWidth: 1)
+        )
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityLabel("\(aiCommandComparisonSourceKindText(summary.kind))，\(summary.count) 个分类")
+    }
+
     private func aiCommandComparisonSourceRow(
         _ comparison: AICommandCategoryComparison,
         currentLabel: String,
@@ -3107,23 +3273,32 @@ struct InsightWebView: View {
             delta: comparison.deltaAmount,
             categoryDeltas: categoryDeltas
         )
-        let deltaText = aiCommandComparisonSourceDeltaText(comparison.deltaAmount)
-        let color = aiCommandComparisonSourceColor(kind)
-        return VStack(alignment: .leading, spacing: 9) {
+        let deltaText = aiCommandComparisonSourceDeltaText(comparison, kind: kind)
+        let style = aiCommandComparisonSourceVisualStyle(kind)
+        let detailText = aiCommandComparisonSourceDetailText(kind)
+        let shareText = aiCommandComparisonSourceSupportText(
+            comparison,
+            kind: kind,
+            share: share
+        )
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
                 Text(comparison.category.emoji)
                     .font(.system(size: 15))
                     .frame(width: 26, height: 26)
-                    .background(AppColors.accent.opacity(0.08), in: Circle())
+                    .background(style.color.opacity(0.10), in: Circle())
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 7) {
-                        Text(aiCommandComparisonSourceKindText(kind))
+                        Label(
+                            aiCommandComparisonSourceKindText(kind),
+                            systemImage: style.systemImage
+                        )
                             .font(.caption2.weight(.bold))
-                            .foregroundStyle(color)
-                            .padding(.horizontal, 7)
+                            .foregroundStyle(style.color)
+                            .padding(.horizontal, 8)
                             .frame(minHeight: 24)
-                            .background(color.opacity(0.10), in: Capsule(style: .continuous))
+                            .background(style.color.opacity(0.11), in: Capsule(style: .continuous))
                         Text(comparison.category.rawValue)
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(AppColors.text)
@@ -3138,39 +3313,67 @@ struct InsightWebView: View {
 
                 VStack(alignment: .trailing, spacing: 3) {
                     Text(deltaText)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(color)
-                    Text(share > 0 ? "变化占比 \(share)%" : "金额持平")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(style.color)
+                    Text(detailText)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppColors.subtext)
+                    Text(shareText)
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(AppColors.subtext)
                 }
             }
 
-            VStack(spacing: 4) {
+            Divider()
+                .overlay(AppColors.line.opacity(0.32))
+
+            VStack(spacing: 5) {
                 aiCommandCategoryComparisonBar(
                     label: currentLabel,
                     amount: comparison.currentAmount,
                     maxAmount: maxAmount,
-                    color: AppColors.accent
+                    color: style.color,
+                    ghostAmount: kind == .disappeared || kind == .decreased
+                        ? comparison.previousAmount
+                        : nil,
+                    ghostStyle: kind == .disappeared ? .dashed : .solid,
+                    showsZeroMarker: kind == .disappeared
                 )
                 aiCommandCategoryComparisonBar(
                     label: previousLabel,
                     amount: comparison.previousAmount,
                     maxAmount: maxAmount,
-                    color: AppColors.subtext.opacity(0.36)
+                    color: kind == .appeared ? style.color : AppColors.subtext.opacity(0.36),
+                    ghostAmount: kind == .appeared ? comparison.currentAmount : nil,
+                    ghostStyle: kind == .appeared ? .dashed : .none,
+                    showsZeroMarker: kind == .appeared
                 )
             }
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 12)
-        .background(AppColors.surfaceMuted.opacity(0.54), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .background {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(AppColors.surfaceMuted.opacity(0.54))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .fill(style.color.opacity(0.045))
+                }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .stroke(AppColors.stroke.opacity(0.34), lineWidth: 1)
+                .stroke(style.color.opacity(0.22), lineWidth: 1)
         )
+        .overlay(alignment: .leading) {
+            Capsule(style: .continuous)
+                .fill(style.color.opacity(0.94))
+                .frame(width: 3)
+                .padding(.vertical, 10)
+                .padding(.leading, 2)
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(comparison.category.rawValue)，\(aiCommandComparisonSourceKindText(kind))")
-        .accessibilityValue("\(currentLabel)\(comparison.currentCount)笔，\(comparison.currentAmount.formatted(.cny))；\(previousLabel)\(comparison.previousCount)笔，\(comparison.previousAmount.formatted(.cny))；\(deltaText)；变化占比\(share)%")
+        .accessibilityValue("\(currentLabel)\(comparison.currentCount)笔，\(comparison.currentAmount.formatted(.cny))；\(previousLabel)\(comparison.previousCount)笔，\(comparison.previousAmount.formatted(.cny))；\(deltaText)；\(detailText)；\(shareText)")
     }
 
     private func aiCommandComparisonSourceKindText(_ kind: AICommandComparisonChangeKind) -> String {
@@ -3183,20 +3386,71 @@ struct InsightWebView: View {
         }
     }
 
-    private func aiCommandComparisonSourceDeltaText(_ delta: Double) -> String {
+    private func aiCommandComparisonSourceDeltaText(
+        _ comparison: AICommandCategoryComparison,
+        kind: AICommandComparisonChangeKind
+    ) -> String {
+        if kind == .steady {
+            return "= \(comparison.currentAmount.formatted(.cny))"
+        }
+        let delta = comparison.deltaAmount
         if delta > 0.005 { return "+\(abs(delta).formatted(.cny))" }
         if delta < -0.005 { return "−\(abs(delta).formatted(.cny))" }
         return "持平"
     }
 
-    private func aiCommandComparisonSourceColor(_ kind: AICommandComparisonChangeKind) -> Color {
+    private func aiCommandComparisonSourceDetailText(
+        _ kind: AICommandComparisonChangeKind
+    ) -> String {
         switch kind {
-        case .appeared, .increased:
-            return Color.orange.opacity(0.88)
-        case .disappeared, .decreased:
-            return AppColors.accentDark
+        case .appeared: return "本期新增"
+        case .disappeared: return "本期归零"
+        case .increased: return "较上期增加"
+        case .decreased: return "较上期减少"
+        case .steady: return "金额持平"
+        }
+    }
+
+    private func aiCommandComparisonSourceSupportText(
+        _ comparison: AICommandCategoryComparison,
+        kind: AICommandComparisonChangeKind,
+        share: Int
+    ) -> String {
+        if kind == .steady {
+            return comparison.currentCount == comparison.previousCount ? "两段一致" : "笔数不同"
+        }
+        return share > 0 ? "差异占比 \(share)%" : "金额变化很小"
+    }
+
+    private func aiCommandComparisonSourceVisualStyle(
+        _ kind: AICommandComparisonChangeKind
+    ) -> AICommandComparisonSourceVisualStyle {
+        switch kind {
+        case .appeared:
+            return AICommandComparisonSourceVisualStyle(
+                systemImage: "plus",
+                color: Color(red: 0.34, green: 0.58, blue: 0.90)
+            )
+        case .disappeared:
+            return AICommandComparisonSourceVisualStyle(
+                systemImage: "minus",
+                color: Color(red: 0.52, green: 0.48, blue: 0.72)
+            )
+        case .increased:
+            return AICommandComparisonSourceVisualStyle(
+                systemImage: "arrow.up.right",
+                color: Color(red: 0.94, green: 0.55, blue: 0.23)
+            )
+        case .decreased:
+            return AICommandComparisonSourceVisualStyle(
+                systemImage: "arrow.down.right",
+                color: Color(red: 0.28, green: 0.65, blue: 0.50)
+            )
         case .steady:
-            return AppColors.subtext
+            return AICommandComparisonSourceVisualStyle(
+                systemImage: "equal",
+                color: Color(red: 0.43, green: 0.53, blue: 0.67)
+            )
         }
     }
 
@@ -3204,7 +3458,10 @@ struct InsightWebView: View {
         label: String,
         amount: Double,
         maxAmount: Double,
-        color: Color
+        color: Color,
+        ghostAmount: Double? = nil,
+        ghostStyle: AICommandComparisonSourceRatioBar.GhostStyle = .none,
+        showsZeroMarker: Bool = false
     ) -> some View {
         HStack(spacing: 7) {
             Text(label)
@@ -3213,12 +3470,15 @@ struct InsightWebView: View {
                 .lineLimit(1)
                 .frame(width: 52, alignment: .leading)
 
-            AICommandRatioBar(
+            AICommandComparisonSourceRatioBar(
                 progress: amount / maxAmount,
+                ghostProgress: (ghostAmount ?? amount) / maxAmount,
                 fill: color,
-                track: AppColors.surfaceMuted.opacity(0.54)
+                track: AppColors.stroke.opacity(0.14),
+                ghostStyle: ghostStyle,
+                showsZeroMarker: showsZeroMarker
             )
-            .frame(height: 5)
+            .frame(height: 7)
 
             Text(amount.formatted(.cny))
                 .font(.caption2.weight(.semibold))
@@ -3715,7 +3975,7 @@ struct InsightWebView: View {
             Button {
                 continueAICommandQuestion()
             } label: {
-                aiCommandSecondaryLabel("继续问", systemImage: "text.cursor")
+                aiCommandSecondaryLabel("继续问", systemImage: "arrow.up")
             }
             .buttonStyle(.plain)
             .accessibilityHint("返回顶部并保留当前指令，继续修改或提问")
