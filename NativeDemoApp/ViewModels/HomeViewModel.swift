@@ -66,7 +66,6 @@ struct RecordPrefillPreparationKey: Equatable {
     let historyKey: RecordInputHistoryKey
     let amount: Double
     let referenceDate: Date
-    let now: Date
     let noteDraft: String
     let selectedCategory: HomeItem.Category
     let context: RecordContextSignal?
@@ -77,6 +76,7 @@ struct RecordPrefillPreparationInput: @unchecked Sendable {
     let history: RecordInputHistorySnapshot
     let amount: Double
     let referenceDate: Date
+    let now: Date
     let noteDraft: String
     let selectedCategory: HomeItem.Category
     let context: RecordContextSignal?

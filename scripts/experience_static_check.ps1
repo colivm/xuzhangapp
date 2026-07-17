@@ -328,6 +328,13 @@ Assert-NoMultilinePattern 'NativeDemoApp/Views/InsightWebView.swift' 'private fu
 Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'testAICommandSuggestionsPrepareAllTasksFromOneImmutableSnapshot' 'AI command query compare and backfill suggestions share deterministic snapshot coverage'
 Assert-Pattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'RecordInputHistorySnapshot|recordInputAssistanceRevision|prepareRecordInputHistorySnapshot|prepareRecordPrefillSnapshot|RecordInputAssistanceComputation\.historySnapshot|RecordInputAssistanceComputation\.prefillSnapshot' 'record input assistance uses ledger and draft driven snapshots'
 Assert-Pattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'withTaskGroup|group\.addTask\(priority: \.utility\)|group\.addTask\(priority: \.userInitiated\)' 'record input history and prefill computation leave the main actor'
+$recordInputSource = Get-Content -Raw -LiteralPath 'NativeDemoApp/ViewModels/HomeViewModel.swift'
+$prefillKeyBlock = [regex]::Match($recordInputSource, 'struct RecordPrefillPreparationKey: Equatable \{(?<body>[\s\S]*?)\r?\n\}').Groups['body'].Value
+$prefillInputBlock = [regex]::Match($recordInputSource, 'struct RecordPrefillPreparationInput: @unchecked Sendable \{(?<body>[\s\S]*?)\r?\n\}').Groups['body'].Value
+if ($prefillKeyBlock -match '\blet now:\s*Date\b' -or $prefillInputBlock -notmatch '\blet now:\s*Date\b') {
+    throw 'Record prefill now must belong to RecordPrefillPreparationInput, not its cache key'
+}
+Write-Output 'OK  record prefill now belongs to computation input instead of the cache key'
 Assert-Pattern 'NativeDemoApp/Views/RecordView.swift' 'homeViewModel\.recordWarmupSuggestions|homeViewModel\.recordRecommendedCategory|task\(id: previewLifeMarkPreparationKey\)|RecordInputAssistanceComputation\.previewLifeMarkText' 'record view renders prepared input assistance and preview life mark snapshots'
 Assert-NoPattern 'NativeDemoApp/Views/RecordView.swift' 'LifeMarkService\.aggregates|frequentRecordAmountSuggestions\(at:|recommendCategory\(for:' 'record view body does not aggregate or scan ledger assistance'
 Assert-NoMultilinePattern 'NativeDemoApp/Views/RecordView.swift' 'private var previewLifeMarkText:[\s\S]{0,800}(homeViewModel\.items|LifeMarkService\.aggregates)' 'record preview life mark getter only reads a prepared snapshot'

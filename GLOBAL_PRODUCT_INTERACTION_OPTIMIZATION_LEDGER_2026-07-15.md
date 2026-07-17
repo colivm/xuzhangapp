@@ -1654,7 +1654,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 |---:|---|---|---|---|
 | 1 | PET-01 | 首页宠物透明帧动画替换 emoji | `CODE_DONE` | 独立像素帧组件、正式资源、首页替换、策略测试与 FLOW-30 已完成；等待 Xcode/iPhone 签收 |
 | 2 | LOGIC-14 | AI 查询总览按显式查询范围切换指标 | `CODE_DONE` | 显式单分类与跨分类指标已分流；测试、静态门禁和 FLOW-31 完成，等待 Xcode/iPhone 签收 |
-| 3 | COPY-02 | 周记/月章播放文案活人感收敛 | `IN_PROGRESS` | 当前仅准备并提交可评审方案；用户确认前不得修改文案池或播放文案代码 |
+| 3 | COPY-02 | 周记/月章播放文案活人感收敛 | `NOT_STARTED` | v2 可评审方案已完成并保留；先处理用户真机 Xcode 暴露的预填编译错误，用户确认方案后再启动文案代码 |
 
 用户于 2026-07-17 在三组像素帧与透明拆帧完成后明确调整执行顺序：先完成 `PET-01`，再修复 `LOGIC-14`，最后处理 `COPY-02`；其中 `COPY-02` 必须先给方案确认，不能根据已有方向直接改文案代码。该顺序覆盖本节首次建档时的原顺序。`ARCH-03` 继续保持 `NOT_STARTED`；三项仍须一次只启动一项，前一项完成代码、边界复核和当前环境回归后才能进入下一项。
 
@@ -1986,3 +1986,35 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
   - `SummaryPlaybackSheet.swift`：只调整章节标题与辅助证据文案，保留现有布局、动画和播放控制。
   - 增加空/弱/密集、重复通勤、照片、明确备注、自动情绪、跨月增减和无变化夹具，以及文案 lint、XCTest、copy snapshot 和真机矩阵。
 - 待用户确认点：是否采用上述单一方案及章节标题方向；确认前代码保持冻结。
+
+### COPY-02 可评审方案 v2（2026-07-17，待用户确认）
+
+- 方案登记时状态：`COPY-02` 为唯一 `IN_PROGRESS` 且只处于方案评审；随后因用户 Xcode 编译错误被 `PERF-FIX-01` 定向插队并退回 `NOT_STARTED`。本段未修改 `PlaybackCopyPool.swift`、`PlaybackService.swift`、`SummaryPlaybackSheet.swift`、文案夹具、测试或播放 UI。
+- 新增方案文档：`PLAYBACK_COPY_LIVING_VOICE_PLAN_v2.md`，将 v1 方向落成证据等级、周记 0/1/2/3+ 分支、月章 6 章分工、主辅去重、跨章节去重、内部标签隔离、敏感记录边界、长度预算、24 类场景矩阵、完整模拟文案和实施/验收顺序。
+- 核心决策：`displayEmotionTag`、生活线索标题、场景包与里程碑在缺少用户来源证明时只帮助选材，不原样进入主文；`warm` 与 `plain` 必须共享同一事实，证据不足时允许完全相同。
+- 周记边界：0 笔不生成章节；1～2 笔保持 3 章，只说日期、记录和收尾；3 笔以上保持 5 章，概况、集中日、代表记录、可靠重复和收尾各自分工。
+- 月章边界：固定 6 章；月初无记录、后段无记录或前后候选为同一笔时必须显式降级，不得拿同一记录冒充两个阶段。
+- 建议事实口径例外：当前月未结束时，“变化章”比较本月 1 日至今天与上个月相同日序，避免残月对完整月；完整历史月仍做完整月环比。该例外只影响变化章对照记录，必须随用户对 v2 的确认一并获得授权；若未授权则降级为“不对未结束月份做完整月环比”。
+- UI 与结构边界：只允许调整章节标题和已有辅助文案；章节数量、顺序、时长、照片、进度、额度、会员、分享、主题、播放控制和完成动作继续冻结。
+- 工作区保护：继续保留 `StatCardView.swift`、`web-preview/app.js`、用户提示文档、`brand-assets/`、`tmp/` 与 `scripts/__pycache__/` 的既有修改或未跟踪内容；本次只新增方案文档并更新本文档。
+- 下一步：向用户提交 v2 方案评审；确认前不得开始播放文案代码，`ARCH-03` 继续保持 `NOT_STARTED`。
+
+### PERF-FIX-01 记录预填 `now` 字段归属编译修复（2026-07-17）
+
+- 用户优先级例外：用户在 Xcode 报告 `HomeViewModel.swift` 四处编译错误，要求先恢复编译；`COPY-02` 从方案评审 `IN_PROGRESS` 退回 `NOT_STARTED`，已完成的 v2 文档保留，播放文案代码继续冻结。
+- 当前状态：`PERF-FIX-01` 为唯一 `IN_PROGRESS`。
+- 错误：`RecordPrefillPreparationKey` 初始化缺少 `now` 两处、`RecordPrefillPreparationInput` 初始化多余 `now` 一处、计算访问不存在的 `input.now` 一处。
+- 根因：`now` 属性误放到预填缓存键；现有计算和确定性 XCTest 均按 `RecordPrefillPreparationInput.now` 使用。若把精确 `Date()` 留在缓存键，还会导致相同账本与草稿在普通重绘时无法命中缓存。
+- 允许修改：只修正 `RecordPrefillPreparationKey` / `RecordPrefillPreparationInput` 的字段归属，并增加对应静态防回流；必要时更新同一测试夹具，但不得改变预填结果。
+- 冻结边界：不改变 180/90 天历史口径、标题/分类推荐优先级、用户锁定、日期语义、后台计算、账本修订缓存、记录保存、UI、播放文案或 `ARCH-03`。
+- 工作区保护：继续保留 `StatCardView.swift`、`web-preview/app.js`、用户提示文档、`PLAYBACK_COPY_LIVING_VOICE_PLAN_v2.md`、`brand-assets/`、`tmp/` 与 `scripts/__pycache__/` 的既有修改或未跟踪内容。
+
+#### PERF-FIX-01 收口
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`，`COPY-02` 保持 `NOT_STARTED` 且 v2 方案完整保留待用户确认。
+- 修复：从 `RecordPrefillPreparationKey` 移除 `now`，并恢复 `RecordPrefillPreparationInput.now`；`prefillSnapshot`、生产初始化和既有 XCTest 重新使用同一签名，四处缺少 / 多余参数及不存在成员错误由同一字段归位修复。
+- 行为边界：精确 `Date()` 不再进入缓存键，避免普通重绘导致相同账本 / 金额 / 日期 / 备注 / 分类上下文的预填缓存失效；90 天分类推荐仍使用计算发起时的 `now`，180 天历史快照、推荐优先级和用户锁定均未改变。
+- 修改文件：`NativeDemoApp/ViewModels/HomeViewModel.swift`、`scripts/experience_static_check.ps1`、本文档。
+- 验证：`git diff --check` 通过；体验静态门禁通过并新增 `now` 字段归属防回流；`python scripts/validate_release_gate.py --phase windows` 完整通过，生活语义、交互、文案、迁移样本、SQLite schema、100/1,000/5,000 条夹具和真实照片夹具均无新增失败，仍只有既有 7 条文案 soft warning。
+- 剩余风险：当前 Windows 无 Xcode / Swift，必须由用户在原 Xcode 环境重新编译确认这四处错误清零；不得在未复编译前标记为 `VERIFIED`。
+- 下一步：先由 Xcode 重新编译；若无新增编译错误，再等待用户确认 `COPY-02` v2 后启动播放文案代码。`ARCH-03` 继续保持 `NOT_STARTED`。
