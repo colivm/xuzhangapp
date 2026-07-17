@@ -194,11 +194,9 @@ final class InteractionStateRegressionTests: XCTestCase {
         )
     }
 
-    func testRecordFlowKeepsOCRAndOptionalDetailsOutOfThePrimarySavePath() {
+    func testRecordFlowShowsOCRUntilAnAmountDraftExists() {
         XCTAssertTrue(RecordFlowVisibilityPolicy.showsOCRSideDoor(hasAmountDraft: false))
         XCTAssertFalse(RecordFlowVisibilityPolicy.showsOCRSideDoor(hasAmountDraft: true))
-        XCTAssertFalse(RecordFlowVisibilityPolicy.showsOptionalDetails(hasValidAmount: false))
-        XCTAssertTrue(RecordFlowVisibilityPolicy.showsOptionalDetails(hasValidAmount: true))
     }
 
     func testTraceRangeContextUsesOneWeekMonthSource() {
@@ -310,8 +308,8 @@ final class InteractionStateRegressionTests: XCTestCase {
     func testRecordSessionPersistsDraftUIUntilCommittedReset() {
         let session = RecordTabSession()
         session.selectedEntryMode = .ocr
-        session.recordDetailsExpanded = true
         session.noteEditorExpanded = true
+        session.datePanelExpanded = true
         session.previewLineWasRotated = true
         session.userNoteAnchorTitle = "晚饭"
 
@@ -321,8 +319,8 @@ final class InteractionStateRegressionTests: XCTestCase {
         session.resetAfterCommittedDraft()
 
         XCTAssertEqual(session.selectedEntryMode, .manual)
-        XCTAssertFalse(session.recordDetailsExpanded)
         XCTAssertFalse(session.noteEditorExpanded)
+        XCTAssertFalse(session.datePanelExpanded)
         XCTAssertFalse(session.previewLineWasRotated)
         XCTAssertNil(session.userNoteAnchorTitle)
     }

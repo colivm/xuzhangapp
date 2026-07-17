@@ -89,7 +89,8 @@ def main() -> None:
             "@Environment(\\.accessibilityReduceMotion) private var reduceMotion",
             ".accessibilityValue(isSelected ? \"已选中\" : \"\")",
             ".accessibilityLabel(\"账单识别\")",
-            "recordDetailToggleActions",
+            "recordDateQuietActions",
+            ".accessibilityLabel(\"修改时间，当前",
             ".animation(reduceMotion ? nil : .spring",
         ],
     )

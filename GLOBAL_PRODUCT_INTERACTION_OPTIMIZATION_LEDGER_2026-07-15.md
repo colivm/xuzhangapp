@@ -2018,3 +2018,38 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证：`git diff --check` 通过；体验静态门禁通过并新增 `now` 字段归属防回流；`python scripts/validate_release_gate.py --phase windows` 完整通过，生活语义、交互、文案、迁移样本、SQLite schema、100/1,000/5,000 条夹具和真实照片夹具均无新增失败，仍只有既有 7 条文案 soft warning。
 - 剩余风险：当前 Windows 无 Xcode / Swift，必须由用户在原 Xcode 环境重新编译确认这四处错误清零；不得在未复编译前标记为 `VERIFIED`。
 - 下一步：先由 Xcode 重新编译；若无新增编译错误，再等待用户确认 `COPY-02` v2 后启动播放文案代码。`ARCH-03` 继续保持 `NOT_STARTED`。
+
+### UI-FIX-02 记账页重复“补充细节”移除与时间入口恢复（2026-07-17）
+
+- 用户真机反馈：金额预览卡已经提供“自己写一句”和“改分类”，下方仍出现“补充细节 / 改分类 / 写点细节 / 改时间”，形成重复；原先直接可见的时间修改入口被收进折叠层后，用户认为功能消失。
+- 历史归因：`048cdd4`（2026-06-08）首次加入“补充细节”折叠；`c1cd8e4`（2026-07-16，`LOGIC-02`）移除独立 `recordDateQuietActions`，把 `WarmRecordDatePanel` 与“改时间”一起迁入折叠层，导致上方已有动作和下方折叠动作重复。
+- 状态：`UI-FIX-02` 为当前唯一 `IN_PROGRESS`；`COPY-02` 保持 `NOT_STARTED`，播放文案方案和代码均不受本项影响。
+- 用户指定 UI 冻结基线：以用户提供的旧版真机截图和 `c1cd8e4^` 的记账主表单顺序为准，不重新设计。顺序固定为金额 → 预览卡 → 放进账本 → 截图导入 → 居中日期时间入口 → 按需展开日期 / 分类 / 备注面板。
+- 允许修改：移除记账主表单的“补充细节”折叠及其重复按钮；恢复原独立 `recordDateQuietActions` 与原位置；恢复金额已填写时仍可见的截图导入入口；分类、备注和日期面板继续由原状态打开。
+- 冻结边界：不改变金额、标题、分类、日期的保存含义，不改变预填 / 用户锁定 / OCR / 场景包 / 会员 / 保存按钮 / 草稿跨 Tab 保留，不调整记账页其他卡片、颜色、主题或路由。
+- 边界处理：无有效金额时不展示预览与时间入口；截图导入入口按截图基线始终可见；时间面板关闭 / 切 Tab / 保存成功后的状态复位保持；分类、备注、时间只能各自展开原面板，不新增第二套编辑状态；不得把“改时间”改放进预览卡。
+- 工作区保护：保留现有 `StatCardView.swift`、`web-preview/app.js`、用户提示文档、`brand-assets/`、`tmp/` 和 `scripts/__pycache__/`，不提交或覆盖。
+
+#### UI-FIX-02 收口
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`，`COPY-02` 保持 `NOT_STARTED`，`ARCH-03` 保持 `NOT_STARTED`。
+- UI 恢复：记账主表单重新使用截图基线顺序：金额 → 原预览卡 → 放进账本 → 截图导入 → 居中日期时间入口 → 按需编辑面板；恢复 `recordDateQuietActions` 和原 `WarmRecordDatePanel` 展开位置。
+- 去重复：删除“补充细节”折叠、`改分类 / 写点细节 / 改时间` 三个重复按钮及只为该折叠服务的 `recordDetailsExpanded` 状态；分类和备注仍由原预览卡动作打开原 `categorySection` / `noteSection`。
+- 用户指定冻结复核：`LifeEntryPreviewCard.swift` 零差异；“换说法 / 换个角度 / 自己写一句 / 改分类”的会员、预览层级、免费场景包与轮换显示条件完全未改。
+- OCR 边界：按用户截图恢复金额已填写时仍显示“有账单截图？从截图导入”；仅撤销 `c1cd8e4` 对该入口的隐藏策略，不改 OCR 模式、草稿、额度、识别或确认导入。
+- 日期边界：独立日期时间文字继续调用原 `recordDateBinding`，更新仍走 `updateSelectedDate(..., userInitiated: true)`；只补无视觉变化的 VoiceOver“修改时间，当前……”标签。
+- 修改文件：`RecordView.swift`、`InteractionStateModels.swift`、`StateRegressionTests.swift`、`accessibility_lint.py`、`experience_static_check.ps1`、本文档。
+- 验证：`git diff --check`、生活语义回归、体验静态门禁、无障碍 lint 均通过；`LifeEntryPreviewCard.swift` 差异为空；`python scripts/validate_release_gate.py --phase windows` 完整通过，仍只有既有 7 条文案 soft warning。
+- 剩余风险：Windows 无 Xcode / iPhone，需真机确认默认 / 会员 / 非会员、预览弱态 / 确认态、日期展开、分类 / 备注展开和截图导入位置与用户基线截图一致；未真机前不得标记 `VERIFIED`。
+- 下一步：提交推送后由用户真机签收本页；签收前不继续改记账页 UI。
+
+#### UI-FIX-02 用户确认的 OCR 入口例外
+
+- 用户复核后确认 `c1cd8e4` 中一项逻辑合理：未输入金额时显示截图导入；金额框仅获得焦点但仍为空时继续显示；一旦存在金额草稿则隐藏截图导入，避免 OCR 与手动记账同时争主路径。
+- 状态：`UI-FIX-02` 从 `CODE_DONE` 回到唯一 `IN_PROGRESS`，仅恢复 `showsOCRSideDoor(hasAmountDraft:)` 这一条策略及对应测试 / 静态门禁；“补充细节”删除、独立日期入口和预览卡按钮冻结结论不变。
+- 禁止扩张：不得恢复 `showsOptionalDetails`、`recordDetailsFold` 或重复的分类 / 备注 / 时间按钮；不得修改 `LifeEntryPreviewCard` 的动作显示条件。
+
+- 收口状态：`IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。
+- 最终规则：`RecordFlowVisibilityPolicy` 只保留 `showsOCRSideDoor(hasAmountDraft:)`；金额为空（包括只有焦点、未输入）显示截图导入，存在任何金额草稿后隐藏。没有恢复可选细节策略或折叠层。
+- 验证补充：新增两态 XCTest 和静态门禁；`LifeEntryPreviewCard.swift` 继续零差异；完整 Windows release gate 再次通过，仍只有既有 7 条文案 soft warning。
+- 真机待签：金额框未点、仅聚焦未输入、输入金额、清空金额四个状态下核对截图导入显隐；其余 UI 按用户基线截图核对。

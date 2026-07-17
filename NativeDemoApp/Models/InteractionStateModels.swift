@@ -248,10 +248,6 @@ enum RecordFlowVisibilityPolicy {
     static func showsOCRSideDoor(hasAmountDraft: Bool) -> Bool {
         !hasAmountDraft
     }
-
-    static func showsOptionalDetails(hasValidAmount: Bool) -> Bool {
-        hasValidAmount
-    }
 }
 
 enum TraceRangeContextPolicy {

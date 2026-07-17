@@ -20,7 +20,6 @@ final class RecordTabSession: ObservableObject {
     @Published var scenePackExpanded = false
     @Published var scenePackVariants: [String: Int] = [:]
     @Published var amountPadActive = false
-    @Published var recordDetailsExpanded = false
     @Published var categoryGridExpanded = false
     @Published var noteEditorExpanded = false
     @Published var datePanelExpanded = false
@@ -37,7 +36,6 @@ final class RecordTabSession: ObservableObject {
         scenePackExpanded = false
         scenePackVariants = [:]
         amountPadActive = false
-        recordDetailsExpanded = false
         categoryGridExpanded = false
         noteEditorExpanded = false
         datePanelExpanded = false
@@ -126,11 +124,6 @@ struct RecordView: View {
     private var amountPadActive: Bool {
         get { tabSession.amountPadActive }
         nonmutating set { tabSession.amountPadActive = newValue }
-    }
-
-    private var recordDetailsExpanded: Bool {
-        get { tabSession.recordDetailsExpanded }
-        nonmutating set { tabSession.recordDetailsExpanded = newValue }
     }
 
     private var categoryGridExpanded: Bool {
@@ -1018,7 +1011,6 @@ struct RecordView: View {
     private func openNoteEditor() {
         dismissKeyboard()
         withAnimation(.easeInOut(duration: 0.2)) {
-            recordDetailsExpanded = true
             noteEditorExpanded = true
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
@@ -1037,7 +1029,6 @@ struct RecordView: View {
         )
         guard didSave else {
             withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
-                recordDetailsExpanded = true
                 noteEditorExpanded = true
             }
             return
@@ -1243,7 +1234,6 @@ struct RecordView: View {
         guard hasValidAmount else { return }
         guard isMember else {
             withAnimation(.easeInOut(duration: 0.2)) {
-                recordDetailsExpanded = true
                 noteEditorExpanded = true
             }
             return
@@ -2083,8 +2073,17 @@ struct RecordView: View {
             if RecordFlowVisibilityPolicy.showsOCRSideDoor(hasAmountDraft: hasAmountDraft) {
                 ocrSideDoor
             }
-            if RecordFlowVisibilityPolicy.showsOptionalDetails(hasValidAmount: hasValidAmount) {
-                recordDetailsFold
+            if hasValidAmount {
+                recordDateQuietActions
+                if datePanelExpanded {
+                    WarmRecordDatePanel(selection: recordDateBinding) {
+                        dismissKeyboard()
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+            if hasValidAmount {
+                expandedDetails
             }
         }
     }
@@ -2115,7 +2114,6 @@ struct RecordView: View {
             onChangeCategory: {
                 dismissKeyboard()
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    recordDetailsExpanded = true
                     categoryGridExpanded = true
                 }
             },
@@ -2179,119 +2177,6 @@ struct RecordView: View {
             if categoryGridExpanded { categorySection }
             if noteEditorExpanded { noteSection }
         }
-    }
-
-    private var recordDetailsFold: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Button {
-                dismissKeyboard()
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    recordDetailsExpanded.toggle()
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("补充细节")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(recordInk.opacity(0.88))
-                        Text("不急，想补再补。")
-                            .font(.footnote)
-                            .foregroundStyle(AppColors.subtext)
-                    }
-                    Spacer()
-                    Image(systemName: recordDetailsExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(AppColors.subtext.opacity(0.72))
-                }
-                .frame(minHeight: 44)
-                .padding(14)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(0.54))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.white.opacity(0.46), lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-
-            if recordDetailsExpanded {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        recordDetailToggleActions
-                    }
-
-                    VStack(spacing: 8) {
-                        recordDetailToggleActions
-                    }
-                }
-
-                if categoryGridExpanded { categorySection }
-                if noteEditorExpanded { noteSection }
-                if datePanelExpanded {
-                    WarmRecordDatePanel(selection: recordDateBinding) {
-                        dismissKeyboard()
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var recordDetailToggleActions: some View {
-        detailToggleButton("改分类", isActive: categoryGridExpanded) {
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) { categoryGridExpanded.toggle() }
-        }
-        detailToggleButton("写点细节", isActive: noteEditorExpanded) {
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
-                noteEditorExpanded.toggle()
-                if noteEditorExpanded {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
-                        focusedField = .note
-                    }
-                }
-            }
-        }
-        detailToggleButton("改时间", isActive: datePanelExpanded) {
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
-                datePanelExpanded.toggle()
-            }
-        }
-    }
-
-    private func detailToggleButton(_ title: String, isActive: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: {
-            dismissKeyboard()
-            action()
-        }) {
-            detailToggleLabel(title, isActive: isActive)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func detailToggleLabel(_ title: String, isActive: Bool) -> some View {
-        let foreground = isActive ? AppColors.accent.opacity(0.9) : recordInk.opacity(0.78)
-        return Text(title)
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(foreground)
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .padding(.horizontal, 10)
-            .background(detailToggleBackground(isActive: isActive))
-            .overlay(detailToggleBorder(isActive: isActive))
-    }
-
-    private func detailToggleBackground(isActive: Bool) -> some View {
-        let fill = isActive ? AppColors.accent.opacity(0.12) : Color.white.opacity(0.58)
-        return Capsule(style: .continuous)
-            .fill(fill)
-    }
-
-    private func detailToggleBorder(isActive: Bool) -> some View {
-        let stroke = isActive ? AppColors.accent.opacity(0.25) : Color.white.opacity(0.48)
-        return Capsule(style: .continuous)
-            .stroke(stroke, lineWidth: 1)
     }
 
     // MARK: - Amount Field
@@ -2942,6 +2827,7 @@ struct RecordView: View {
                     .foregroundStyle(recordAccent.opacity(0.9))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("修改时间，当前 \(homeViewModel.selectedDate.zhBillDateTime)")
             Spacer()
         }
         .padding(.top, -4)
