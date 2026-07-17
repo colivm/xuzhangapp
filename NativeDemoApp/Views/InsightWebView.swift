@@ -439,9 +439,17 @@ struct InsightWebView: View {
     }
 
     private struct AICommandResultMetrics: Equatable {
+        enum Scope: Equatable {
+            case crossCategory
+            case singleCategory(HomeItem.Category)
+        }
+
+        var scope: Scope
         var total: Double
         var count: Int
         var activeDayCount: Int
+        var averageRecordAmount: Double?
+        var highestRecordAmount: Double?
         var topCategoryLabel: String?
         var topCategoryAmount: Double
     }
@@ -2794,11 +2802,23 @@ struct InsightWebView: View {
     @ViewBuilder
     private func aiCommandMetricChips(_ metrics: AICommandResultMetrics) -> some View {
         aiCommandMetricChip(title: "有记录", value: "\(metrics.activeDayCount) 天")
-        aiCommandMetricChip(title: "金额最高", value: metrics.topCategoryLabel ?? "暂无")
-        aiCommandMetricChip(
-            title: "该类金额",
-            value: metrics.topCategoryLabel == nil ? "—" : metrics.topCategoryAmount.formatted(.cny)
-        )
+        switch metrics.scope {
+        case .singleCategory(_):
+            aiCommandMetricChip(
+                title: "平均每笔",
+                value: metrics.averageRecordAmount?.formatted(.cny) ?? "—"
+            )
+            aiCommandMetricChip(
+                title: "最高单笔",
+                value: metrics.highestRecordAmount?.formatted(.cny) ?? "—"
+            )
+        case .crossCategory:
+            aiCommandMetricChip(title: "最高分类", value: metrics.topCategoryLabel ?? "暂无")
+            aiCommandMetricChip(
+                title: "该类金额",
+                value: metrics.topCategoryLabel == nil ? "—" : metrics.topCategoryAmount.formatted(.cny)
+            )
+        }
     }
 
     private func aiCommandMetricChip(title: String, value: String) -> some View {
@@ -4177,6 +4197,35 @@ struct InsightWebView: View {
         ].joined(separator: "#")
     }
 
+    static func aiCommandQueryMetricDigestForTesting(
+        command: String,
+        items: [HomeItem],
+        now: Date
+    ) -> String {
+        let result = AICommandEngine(
+            items: items,
+            hasMemberAccess: true,
+            amountText: "",
+            now: now
+        ).buildAICommandResult(for: command)
+        guard let metrics = result.metrics else { return "none" }
+        let scope: String
+        switch metrics.scope {
+        case .crossCategory:
+            scope = "cross"
+        case .singleCategory(let category):
+            scope = "single:\(category.rawValue)"
+        }
+        return [
+            scope,
+            String(metrics.activeDayCount),
+            metrics.averageRecordAmount.map { String($0) } ?? "none",
+            metrics.highestRecordAmount.map { String($0) } ?? "none",
+            metrics.topCategoryLabel ?? "none",
+            String(metrics.topCategoryAmount)
+        ].joined(separator: "#")
+    }
+
     private func clearAICommandInput() {
         aiCommandRunTask?.cancel()
         aiCommandRunTask = nil
@@ -4640,6 +4689,11 @@ struct InsightWebView: View {
                 ?? filteredAICommandItems(range: range, intent: categoryIntent)
             let total = items.reduce(0) { $0 + $1.amount }
             let categoryText = aiCommandLifeMarkLabel(lifeMarkIntent, command: command) ?? categoryIntent?.label ?? "全部"
+            let metricScope = aiCommandQueryMetricScope(
+                categoryIntent: categoryIntent,
+                lifeMarkIntent: lifeMarkIntent,
+                command: command
+            )
             if categoryIntent == nil, lifeMarkIntent == nil, aiCommandAsksCategoryBreakdown(command) {
                 let summary: String
                 if items.isEmpty {
@@ -4655,7 +4709,7 @@ struct InsightWebView: View {
                     summary: summary,
                     detail: aiCommandCategoryBreakdownDetail(items: items, total: total, fallback: ""),
                     items: cappedAICommandEvidenceItems(items),
-                    metrics: aiCommandResultMetrics(items),
+                    metrics: aiCommandResultMetrics(items, scope: .crossCategory),
                     bars: dailyBars(range: range, items: items),
                     drafts: [],
                     amountSource: nil,
@@ -4678,7 +4732,7 @@ struct InsightWebView: View {
                 summary: summary,
                 detail: detail,
                 items: cappedAICommandEvidenceItems(items),
-                metrics: aiCommandResultMetrics(items),
+                metrics: aiCommandResultMetrics(items, scope: metricScope),
                 bars: dailyBars(range: range, items: items),
                 drafts: [],
                 amountSource: nil,
@@ -4810,8 +4864,27 @@ struct InsightWebView: View {
                 .first
         }
 
-        private func aiCommandResultMetrics(_ items: [HomeItem]) -> AICommandResultMetrics {
+        private func aiCommandQueryMetricScope(
+            categoryIntent: AICommandCategoryIntent?,
+            lifeMarkIntent: LifeMarkQueryIntent?,
+            command: String
+        ) -> AICommandResultMetrics.Scope {
+            guard lifeMarkIntent == nil,
+                  !aiCommandAsksCategoryBreakdown(command),
+                  let categories = categoryIntent?.categories,
+                  categories.count == 1,
+                  let category = categories.first else {
+                return .crossCategory
+            }
+            return .singleCategory(category)
+        }
+
+        private func aiCommandResultMetrics(
+            _ items: [HomeItem],
+            scope: AICommandResultMetrics.Scope = .crossCategory
+        ) -> AICommandResultMetrics {
             let calendar = aiCommandCalendar
+            let total = items.reduce(0) { $0 + $1.amount }
             let topCategory = Dictionary(grouping: items, by: \.category)
                 .map { category, rows in
                     (
@@ -4827,9 +4900,12 @@ struct InsightWebView: View {
                 }
                 .first
             return AICommandResultMetrics(
-                total: items.reduce(0) { $0 + $1.amount },
+                scope: scope,
+                total: total,
                 count: items.count,
                 activeDayCount: Set(items.map { calendar.startOfDay(for: $0.createdAt) }).count,
+                averageRecordAmount: items.isEmpty ? nil : total / Double(items.count),
+                highestRecordAmount: items.map(\.amount).max(),
                 topCategoryLabel: topCategory?.category.rawValue,
                 topCategoryAmount: topCategory?.amount ?? 0
             )

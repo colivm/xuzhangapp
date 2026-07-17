@@ -499,6 +499,728 @@ final class TraceLifePreparationPolicyTests: XCTestCase {
     }
 }
 
+final class RecordInputAssistanceSnapshotTests: XCTestCase {
+    func testHistoryKeyChangesOnlyForLedgerOrMeaningfulDateContext() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let base = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 17,
+            hour: 10,
+            minute: 15
+        ))!
+
+        let first = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: 7,
+            referenceDate: base,
+            referenceDateEditedByUser: false,
+            calendar: calendar
+        )
+        let redrawOnly = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: 7,
+            referenceDate: base.addingTimeInterval(30),
+            referenceDateEditedByUser: false,
+            calendar: calendar
+        )
+        let nextHabitBucket = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: 7,
+            referenceDate: base.addingTimeInterval(3 * 60 * 60),
+            referenceDateEditedByUser: false,
+            calendar: calendar
+        )
+        let changedLedger = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: 8,
+            referenceDate: base,
+            referenceDateEditedByUser: false,
+            calendar: calendar
+        )
+        let editedMinute = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: 7,
+            referenceDate: base.addingTimeInterval(60),
+            referenceDateEditedByUser: true,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(first, redrawOnly)
+        XCTAssertNotEqual(first, nextHabitBucket)
+        XCTAssertNotEqual(first, changedLedger)
+        XCTAssertNotEqual(
+            RecordInputAssistanceComputation.historyKey(
+                ledgerRevision: 7,
+                referenceDate: base,
+                referenceDateEditedByUser: true,
+                calendar: calendar
+            ),
+            editedMinute
+        )
+    }
+
+    func testHistorySnapshotFeedsWarmupAndPrefillWithoutRescanningViewBody() {
+        let calendar = Calendar.current
+        let now = Date()
+        let referenceDate = calendar.date(
+            bySettingHour: 10,
+            minute: 30,
+            second: 0,
+            of: now
+        ) ?? now
+        let amounts = [12.5, 12.5, 12.5, 21, 32, 43]
+        let items = amounts.enumerated().map { index, amount in
+            HomeItem(
+                title: index < 3 ? "工作日早餐" : "日常记录 \(index)",
+                amount: amount,
+                category: index < 3 ? .dining : .other,
+                createdAt: referenceDate.addingTimeInterval(TimeInterval(-3_600 - index * 60)),
+                userEditedTitle: index < 3
+            )
+        }
+        let historyKey = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: 3,
+            referenceDate: referenceDate,
+            referenceDateEditedByUser: false
+        )
+        let history = RecordInputAssistanceComputation.historySnapshot(
+            RecordInputHistoryPreparationInput(
+                key: historyKey,
+                items: items,
+                referenceDate: referenceDate,
+                now: now
+            )
+        )
+
+        XCTAssertEqual(history.frequentSuggestions.first?.amount, 12.5)
+        XCTAssertEqual(history.frequentSuggestions.first?.category, .dining)
+
+        let context = RecordContextSignal(referenceDate: referenceDate, weather: nil)
+        let prefillKey = RecordPrefillPreparationKey(
+            historyKey: historyKey,
+            amount: 12.5,
+            referenceDate: referenceDate,
+            noteDraft: "",
+            selectedCategory: .other,
+            context: context
+        )
+        let snapshot = RecordInputAssistanceComputation.prefillSnapshot(
+            RecordPrefillPreparationInput(
+                key: prefillKey,
+                history: history,
+                amount: 12.5,
+                referenceDate: referenceDate,
+                now: now,
+                noteDraft: "",
+                selectedCategory: .other,
+                context: context
+            )
+        )
+
+        XCTAssertEqual(snapshot.appliedCategory, .dining)
+        XCTAssertEqual(snapshot.categoryGridRecommendation, .dining)
+        XCTAssertEqual(snapshot.result?.category, .dining)
+    }
+
+    func testPreviewLifeMarkSnapshotIsDeterministicForTheSameDraftAndLedgerRevision() {
+        let date = Date(timeIntervalSince1970: 1_784_240_000)
+        let draft = HomeItem(
+            title: "牛肉面",
+            amount: 18,
+            category: .dining,
+            createdAt: date,
+            userEditedTitle: true
+        )
+        let key = RecordPreviewLifeMarkKey(
+            ledgerRevision: 4,
+            title: draft.title,
+            amount: draft.amount,
+            category: draft.category,
+            createdAt: draft.createdAt,
+            emotionTag: draft.emotionTag,
+            merchantBrandID: nil,
+            scenePackID: nil,
+            isMember: true
+        )
+        let input = RecordPreviewLifeMarkPreparationInput(
+            key: key,
+            draft: draft,
+            allItems: [draft],
+            isMember: true
+        )
+
+        let first = RecordInputAssistanceComputation.previewLifeMarkText(input)
+        let second = RecordInputAssistanceComputation.previewLifeMarkText(input)
+        XCTAssertNotNil(first)
+        XCTAssertEqual(first, second)
+    }
+}
+
+final class HomeDashboardSnapshotTests: XCTestCase {
+    func testJourneyLedgerFactsReuseOneCommittedRecordSnapshot() {
+        let now = Date(timeIntervalSince1970: 1_784_240_000)
+        let week = DateInterval(
+            start: now.addingTimeInterval(-3 * 24 * 60 * 60),
+            end: now.addingTimeInterval(4 * 24 * 60 * 60)
+        )
+        let month = DateInterval(
+            start: now.addingTimeInterval(-15 * 24 * 60 * 60),
+            end: now.addingTimeInterval(16 * 24 * 60 * 60)
+        )
+        let committed = HomeItem(
+            title: "牛肉面",
+            amount: 28,
+            category: .dining,
+            createdAt: now
+        )
+        let olderCommitted = HomeItem(
+            title: "地铁",
+            amount: 3,
+            category: .transport,
+            createdAt: now.addingTimeInterval(-10 * 24 * 60 * 60)
+        )
+        let draft = HomeItem(
+            title: "待整理",
+            amount: 20,
+            category: .other,
+            createdAt: now,
+            draftMeta: .init(batchId: "qa", importedAt: now, status: .pending)
+        )
+        let zero = HomeItem(
+            title: "零金额",
+            amount: 0,
+            category: .other,
+            createdAt: now
+        )
+
+        let facts = HomeJourneyLedgerFacts.build(
+            from: [committed, olderCommitted, draft, zero],
+            currentWeekInterval: week,
+            currentMonthInterval: month
+        )
+
+        XCTAssertEqual(facts.totalCommittedRecordCount, 2)
+        XCTAssertEqual(facts.currentWeekCommittedRecordCount, 1)
+        XCTAssertEqual(facts.currentMonthCommittedRecordCount, 2)
+    }
+
+    func testVisibleLifeMarksPrepareOnceForOnlyVisibleRecordIDs() {
+        let date = Date(timeIntervalSince1970: 1_784_240_000)
+        let visible = HomeItem(
+            title: "牛肉面",
+            amount: 28,
+            category: .dining,
+            createdAt: date
+        )
+        let hidden = HomeItem(
+            title: "上班地铁",
+            amount: 3,
+            category: .transport,
+            createdAt: date.addingTimeInterval(-60)
+        )
+        let key = HomeLifeMarkSnapshotKey(
+            ledgerRevision: 2,
+            dayKey: "2026-07-17",
+            isMember: true
+        )
+        let first = HomeDashboardSnapshotComputation.lifeMarkSnapshot(
+            HomeLifeMarkPreparationInput(
+                key: key,
+                visibleItems: [visible],
+                allItems: [visible, hidden],
+                isMember: true
+            )
+        )
+        let second = HomeDashboardSnapshotComputation.lifeMarkSnapshot(
+            HomeLifeMarkPreparationInput(
+                key: key,
+                visibleItems: [visible],
+                allItems: [visible, hidden],
+                isMember: true
+            )
+        )
+
+        XCTAssertNotNil(first.textsByItemID[visible.id])
+        XCTAssertNil(first.textsByItemID[hidden.id])
+        XCTAssertEqual(first.textsByItemID, second.textsByItemID)
+    }
+
+    func testQuickRecordSnapshotKeyChangesOnlyWithLedgerOrMinuteBucket() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let base = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 17,
+            hour: 8,
+            minute: 30
+        ))!
+        let first = HomeQuickRecordSnapshotKey(
+            ledgerRevision: 3,
+            minuteKey: HomeDashboardSnapshotComputation.minuteKey(for: base, calendar: calendar)
+        )
+        let redrawOnly = HomeQuickRecordSnapshotKey(
+            ledgerRevision: 3,
+            minuteKey: HomeDashboardSnapshotComputation.minuteKey(
+                for: base.addingTimeInterval(20),
+                calendar: calendar
+            )
+        )
+        let nextMinute = HomeQuickRecordSnapshotKey(
+            ledgerRevision: 3,
+            minuteKey: HomeDashboardSnapshotComputation.minuteKey(
+                for: base.addingTimeInterval(60),
+                calendar: calendar
+            )
+        )
+
+        XCTAssertEqual(first, redrawOnly)
+        XCTAssertNotEqual(first, nextMinute)
+        XCTAssertNotEqual(first, HomeQuickRecordSnapshotKey(ledgerRevision: 4, minuteKey: first.minuteKey))
+    }
+
+    func testCommuteSuggestionKeepsExistingRulesOnImmutableLedgerInput() {
+        let calendar = Calendar.current
+        let now = calendar.date(from: DateComponents(
+            year: 2026,
+            month: 7,
+            day: 13,
+            hour: 8,
+            minute: 30
+        ))!
+        var items: [HomeItem] = (1...4).map { weekOffset in
+            HomeItem(
+                title: "上班地铁",
+                amount: 3,
+                category: .transport,
+                createdAt: calendar.date(
+                    byAdding: .day,
+                    value: -7 * weekOffset,
+                    to: now.addingTimeInterval(-15 * 60)
+                )!,
+                userEditedTitle: true
+            )
+        }
+        items += (1...4).map { index in
+            HomeItem(
+                title: "日常记录 \(index)",
+                amount: Double(10 + index),
+                category: .other,
+                createdAt: now.addingTimeInterval(TimeInterval(-index * 24 * 60 * 60))
+            )
+        }
+
+        let first = HomeViewModel.highConfidenceQuickRecordSuggestionForSnapshot(
+            items: items,
+            at: now
+        )
+        let second = HomeViewModel.highConfidenceQuickRecordSuggestionForSnapshot(
+            items: items,
+            at: now
+        )
+
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(first?.amount, 3)
+        XCTAssertEqual(first?.category, .transport)
+        XCTAssertEqual(first?.supportCount, 4)
+    }
+}
+
+@MainActor
+final class TodayPlaybackContentSnapshotTests: XCTestCase {
+    func testSnapshotFreezesTodayItemsMomentsAndDurationForPlayback() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 17,
+            hour: 21
+        ))!
+        var items = [
+            HomeItem(
+                title: "早餐",
+                amount: 12,
+                category: .dining,
+                createdAt: calendar.date(bySettingHour: 8, minute: 10, second: 0, of: now)!
+            ),
+            HomeItem(
+                title: "午餐",
+                amount: 28,
+                category: .dining,
+                createdAt: calendar.date(bySettingHour: 12, minute: 20, second: 0, of: now)!
+            ),
+            HomeItem(
+                title: "下班地铁",
+                amount: 3,
+                category: .transport,
+                createdAt: calendar.date(bySettingHour: 18, minute: 30, second: 0, of: now)!
+            ),
+            HomeItem(
+                title: "昨天",
+                amount: 20,
+                category: .other,
+                createdAt: calendar.date(byAdding: .day, value: -1, to: now)!
+            )
+        ]
+
+        let first = BillPlaybackSheet.makeContentSnapshot(
+            allItems: items,
+            sourceRevision: 7,
+            now: now,
+            calendar: calendar
+        )
+        let second = BillPlaybackSheet.makeContentSnapshot(
+            allItems: items,
+            sourceRevision: 7,
+            now: now,
+            calendar: calendar
+        )
+        items.append(
+            HomeItem(
+                title: "夜宵",
+                amount: 16,
+                category: .dining,
+                createdAt: calendar.date(bySettingHour: 22, minute: 0, second: 0, of: now)!
+            )
+        )
+
+        XCTAssertEqual(first.sourceRevision, 7)
+        XCTAssertEqual(first.todayItems.map(\.title), ["早餐", "午餐", "下班地铁"])
+        XCTAssertEqual(first.playbackMoments, second.playbackMoments)
+        XCTAssertEqual(first.playbackMoments.count, 4)
+        XCTAssertEqual(first.playbackDuration, 10.4, accuracy: 0.001)
+        XCTAssertEqual(first.todayItems.count, 3)
+    }
+
+    func testDenseSnapshotBuildsTimeBlocksOnceFromImmutableInput() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 17,
+            hour: 22
+        ))!
+        let hours = [8, 9, 10, 12, 13, 14, 18, 19, 20]
+        let items = hours.enumerated().map { index, hour in
+            HomeItem(
+                title: "记录 \(index)",
+                amount: Double(index + 1),
+                category: index.isMultiple(of: 2) ? .dining : .transport,
+                createdAt: calendar.date(bySettingHour: hour, minute: index, second: 0, of: now)!
+            )
+        }
+
+        let snapshot = BillPlaybackSheet.makeContentSnapshot(
+            allItems: items,
+            sourceRevision: 9,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(snapshot.todayItems.count, 9)
+        XCTAssertEqual(snapshot.playbackMoments.map(\.id), [
+            "summary-opening",
+            "time-morning",
+            "time-afternoon",
+            "time-evening",
+            "summary-close"
+        ])
+        XCTAssertEqual(snapshot.playbackDuration, 13, accuracy: 0.001)
+    }
+}
+
+final class LifetimeArchiveSnapshotComputationTests: XCTestCase {
+    func testArchiveSnapshotUsesCommittedRecordsAndPreservesExistingCopyRules() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 17,
+            hour: 12
+        ))!
+        let items = [
+            HomeItem(
+                title: "今天午餐",
+                amount: 28,
+                category: .dining,
+                createdAt: now
+            ),
+            HomeItem(
+                title: "昨天午餐",
+                amount: 26,
+                category: .dining,
+                createdAt: calendar.date(byAdding: .day, value: -1, to: now)!
+            ),
+            HomeItem(
+                title: "上月地铁",
+                amount: 3,
+                category: .transport,
+                createdAt: calendar.date(byAdding: .month, value: -1, to: now)!
+            ),
+            HomeItem(
+                title: "待整理草稿",
+                amount: 88,
+                category: .other,
+                createdAt: now,
+                draftMeta: .init(batchId: "archive-qa", importedAt: now, status: .pending)
+            )
+        ]
+        let input = LifetimeArchivePreparationInput(
+            revision: 12,
+            items: items,
+            now: now,
+            calendar: calendar
+        )
+
+        let first = LifetimeArchiveSnapshotComputation.make(input)
+        let second = LifetimeArchiveSnapshotComputation.make(input)
+
+        XCTAssertEqual(first.sourceRevision, 12)
+        XCTAssertTrue(first.proofLine.contains("3 笔记录"))
+        XCTAssertTrue(first.proofLine.contains("2 个月"))
+        XCTAssertEqual(first.metrics[1].value, "3条")
+        XCTAssertEqual(first.metrics[3].value, "2个月")
+        XCTAssertEqual(first.title, second.title)
+        XCTAssertEqual(first.subtitle, second.subtitle)
+        XCTAssertEqual(first.metrics.map(\.value), second.metrics.map(\.value))
+        XCTAssertEqual(first.stages.map(\.value), second.stages.map(\.value))
+        XCTAssertEqual(first.primaryLine, second.primaryLine)
+        XCTAssertEqual(first.closingLine, second.closingLine)
+    }
+
+    func testArchiveEmptySnapshotDoesNotRequireLedgerScanningInViewBody() {
+        let snapshot = LifetimeArchiveSnapshotComputation.make(
+            LifetimeArchivePreparationInput(
+                revision: 2,
+                items: [],
+                now: Date(timeIntervalSince1970: 1_784_240_000),
+                calendar: Calendar(identifier: .gregorian)
+            )
+        )
+
+        XCTAssertEqual(snapshot.sourceRevision, -1)
+        XCTAssertEqual(snapshot.metrics[1].value, "0条")
+        XCTAssertEqual(snapshot.proofLine, "先从第一笔开始，后面会自动整理出周记和月章。")
+    }
+}
+
+final class AccountMemoryStatsComputationTests: XCTestCase {
+    func testAccountStatsReuseOneLedgerRevisionSnapshot() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let base = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 1,
+            hour: 12
+        ))!
+        var items = [0, 1, 2, 9].map { dayOffset in
+            HomeItem(
+                title: "记录 \(dayOffset)",
+                amount: Double(dayOffset + 1),
+                category: .other,
+                createdAt: calendar.date(byAdding: .day, value: dayOffset, to: base)!
+            )
+        }
+        items.append(
+            HomeItem(
+                title: "上月记录",
+                amount: 20,
+                category: .dining,
+                createdAt: calendar.date(byAdding: .month, value: -1, to: base)!
+            )
+        )
+        items.append(
+            HomeItem(
+                title: "零金额",
+                amount: 0,
+                category: .other,
+                createdAt: base
+            )
+        )
+
+        let input = AccountMemoryStatsPreparationInput(
+            items: items,
+            sourceRevision: 18,
+            calendar: calendar
+        )
+        let first = AccountMemoryStatsComputation.make(input)
+        let second = AccountMemoryStatsComputation.make(input)
+
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(first.sourceRevision, 18)
+        XCTAssertEqual(first.traceCount, 5)
+        XCTAssertEqual(first.recordStreakDays, 3)
+        XCTAssertEqual(first.weeklyStoryCount, 3)
+        XCTAssertEqual(first.monthlyStoryCount, 2)
+    }
+
+    func testAccountStatsEmptySnapshotKeepsZeroValues() {
+        let stats = AccountMemoryStatsComputation.make(
+            items: [],
+            sourceRevision: 3,
+            calendar: Calendar(identifier: .gregorian)
+        )
+
+        XCTAssertEqual(stats.sourceRevision, 3)
+        XCTAssertEqual(stats.traceCount, 0)
+        XCTAssertEqual(stats.recordStreakDays, 0)
+        XCTAssertEqual(stats.weeklyStoryCount, 0)
+        XCTAssertEqual(stats.monthlyStoryCount, 0)
+    }
+}
+
+final class TraceDetailListSnapshotComputationTests: XCTestCase {
+    func testDetailSnapshotSharesItemsIDsTotalAndDayGroupsFromOneFilterPass() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let start = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 1
+        ))!
+        let end = calendar.date(byAdding: .day, value: 3, to: start)!
+        let diningMorning = HomeItem(
+            title: "早餐",
+            amount: 12,
+            category: .dining,
+            createdAt: calendar.date(byAdding: .hour, value: 8, to: start)!
+        )
+        let diningNextDay = HomeItem(
+            title: "午餐",
+            amount: 28,
+            category: .dining,
+            createdAt: calendar.date(byAdding: .hour, value: 36, to: start)!
+        )
+        let zeroDining = HomeItem(
+            title: "零金额",
+            amount: 0,
+            category: .dining,
+            createdAt: calendar.date(byAdding: .hour, value: 37, to: start)!
+        )
+        let transport = HomeItem(
+            title: "地铁",
+            amount: 3,
+            category: .transport,
+            createdAt: calendar.date(byAdding: .hour, value: 12, to: start)!
+        )
+        let outside = HomeItem(
+            title: "范围外",
+            amount: 50,
+            category: .dining,
+            createdAt: calendar.date(byAdding: .day, value: 5, to: start)!
+        )
+        let key = TraceDetailListSnapshotKey(
+            ledgerRevision: 4,
+            periodKey: "本月",
+            categoryKey: HomeItem.Category.dining.rawValue,
+            usesCustomRange: true,
+            customStartDate: start,
+            customEndDate: calendar.date(byAdding: .day, value: 2, to: start)!
+        )
+        let input = TraceDetailListPreparationInput(
+            key: key,
+            sourceItems: [outside, diningMorning, transport, zeroDining, diningNextDay],
+            dateInterval: DateInterval(start: start, end: end),
+            category: .dining,
+            calendar: calendar
+        )
+
+        let first = TraceDetailListSnapshotComputation.make(input)
+        let second = TraceDetailListSnapshotComputation.make(input)
+
+        XCTAssertEqual(first.key, key)
+        XCTAssertEqual(first.items.map(\.title), ["零金额", "午餐", "早餐"])
+        XCTAssertEqual(first.itemIDs, first.items.map(\.id))
+        XCTAssertEqual(first.totalExpense, 40, accuracy: 0.001)
+        XCTAssertEqual(first.dayGroups.count, 2)
+        XCTAssertEqual(first.dayGroups.first?.items.map(\.title) ?? [], ["零金额", "午餐"])
+        XCTAssertEqual(first.items.map(\.id), second.items.map(\.id))
+        XCTAssertEqual(first.dayGroups.map(\.id), second.dayGroups.map(\.id))
+    }
+
+    func testDetailSnapshotKeyChangesOnlyForLedgerOrFilterInput() {
+        let date = Date(timeIntervalSince1970: 1_784_240_000)
+        let first = TraceDetailListSnapshotKey(
+            ledgerRevision: 2,
+            periodKey: "本周",
+            categoryKey: nil,
+            usesCustomRange: false,
+            customStartDate: date,
+            customEndDate: date
+        )
+
+        XCTAssertEqual(first, first)
+        XCTAssertNotEqual(first, TraceDetailListSnapshotKey(
+            ledgerRevision: 3,
+            periodKey: first.periodKey,
+            categoryKey: first.categoryKey,
+            usesCustomRange: first.usesCustomRange,
+            customStartDate: first.customStartDate,
+            customEndDate: first.customEndDate
+        ))
+        XCTAssertNotEqual(first, TraceDetailListSnapshotKey(
+            ledgerRevision: first.ledgerRevision,
+            periodKey: first.periodKey,
+            categoryKey: HomeItem.Category.dining.rawValue,
+            usesCustomRange: first.usesCustomRange,
+            customStartDate: first.customStartDate,
+            customEndDate: first.customEndDate
+        ))
+    }
+}
+
+#if canImport(UIKit)
+final class ShareBackgroundDecodedImageTests: XCTestCase {
+    func testNormalizedShareBackgroundReturnsDataAndReusableDecodedImage() {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 80, height: 40), format: format)
+        let source = renderer.image { context in
+            UIColor.systemTeal.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 80, height: 40))
+        }
+        let sourceData = source.pngData()!
+
+        guard let normalized = normalizedShareBackground(sourceData) else {
+            XCTFail("Expected normalized background")
+            return
+        }
+
+        XCTAssertFalse(normalized.data.isEmpty)
+        XCTAssertEqual(normalized.image.size.width, 80, accuracy: 0.5)
+        XCTAssertEqual(normalized.image.size.height, 40, accuracy: 0.5)
+    }
+
+    func testNormalizedShareBackgroundDownsamplesLargeImageOnce() {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 2000, height: 1000), format: format)
+        let source = renderer.image { context in
+            UIColor.systemOrange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 2000, height: 1000))
+        }
+        let sourceData = source.jpegData(compressionQuality: 0.9)!
+
+        guard let normalized = normalizedShareBackground(sourceData) else {
+            XCTFail("Expected downsampled background")
+            return
+        }
+
+        XCTAssertEqual(normalized.image.size.width, 1600, accuracy: 1)
+        XCTAssertEqual(normalized.image.size.height, 800, accuracy: 1)
+        XCTAssertNotNil(UIImage(data: normalized.data))
+    }
+}
+#endif
+
 final class InsightBackgroundComputationTests: XCTestCase {
     private func makeItems(count: Int, now: Date) -> [HomeItem] {
         let categories = HomeItem.Category.allCases
@@ -815,6 +1537,83 @@ final class AICommandRecognitionPolicyTests: XCTestCase {
     }
 }
 
+final class AICommandQueryMetricScopeTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return calendar
+    }
+
+    private var now: Date {
+        calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 17,
+            hour: 23
+        ))!
+    }
+
+    private func date(day: Int, hour: Int) -> Date {
+        calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: day,
+            hour: hour
+        ))!
+    }
+
+    func testExplicitSingleCategoryUsesAverageAndHighestRecordMetrics() {
+        let items = [
+            HomeItem(title: "午餐", amount: 12, category: .dining, createdAt: date(day: 16, hour: 12)),
+            HomeItem(title: "晚餐", amount: 30, category: .dining, createdAt: date(day: 17, hour: 19)),
+            HomeItem(title: "地铁", amount: 8, category: .transport, createdAt: date(day: 17, hour: 8)),
+        ]
+
+        let digest = InsightWebView.aiCommandQueryMetricDigestForTesting(
+            command: "最近 7 天餐饮记录",
+            items: items,
+            now: now
+        )
+
+        XCTAssertEqual(digest, "single:餐饮#2#21.0#30.0#餐饮#42.0")
+    }
+
+    func testUnfilteredQueryKeepsCrossCategoryMetricsEvenWhenResultsContainOneCategory() {
+        let items = [
+            HomeItem(title: "午餐", amount: 12, category: .dining, createdAt: date(day: 16, hour: 12)),
+            HomeItem(title: "晚餐", amount: 30, category: .dining, createdAt: date(day: 17, hour: 19)),
+        ]
+
+        let digest = InsightWebView.aiCommandQueryMetricDigestForTesting(
+            command: "最近 7 天记录",
+            items: items,
+            now: now
+        )
+
+        XCTAssertEqual(digest, "cross#2#21.0#30.0#餐饮#42.0")
+    }
+
+    func testSingleCategoryEmptyAndOneRecordBoundariesStayExplicit() {
+        let empty = InsightWebView.aiCommandQueryMetricDigestForTesting(
+            command: "最近 7 天餐饮记录",
+            items: [],
+            now: now
+        )
+        let one = InsightWebView.aiCommandQueryMetricDigestForTesting(
+            command: "最近 7 天餐饮记录",
+            items: [
+                HomeItem(title: "午餐", amount: 18, category: .dining, createdAt: date(day: 17, hour: 12))
+            ],
+            now: now
+        )
+
+        XCTAssertEqual(empty, "single:餐饮#0#none#none#none#0.0")
+        XCTAssertEqual(one, "single:餐饮#1#18.0#18.0#餐饮#18.0")
+    }
+}
+
 final class AICommandComparisonPresentationPolicyTests: XCTestCase {
     func testChangeKindsUseExistingAmountsAndCountsWithoutFuzzyPairing() {
         XCTAssertEqual(
@@ -936,6 +1735,78 @@ final class AccessibilityLayoutPolicyTests: XCTestCase {
 
     func testReadableTextOpacityFloorRemainsLegible() {
         XCTAssertGreaterThanOrEqual(AccessibilityLayoutPolicy.minimumReadableTextOpacity, 0.72)
+    }
+}
+
+final class PixelPetAnimationPolicyTests: XCTestCase {
+    func testEachSequenceKeepsEightValidatedFrameDurations() {
+        XCTAssertEqual(
+            PixelPetAnimationPolicy.durationsMilliseconds(for: .idle),
+            [800, 120, 90, 90, 100, 120, 180, 800]
+        )
+        XCTAssertEqual(
+            PixelPetAnimationPolicy.durationsMilliseconds(for: .tap),
+            [120, 80, 80, 80, 140, 100, 80, 180]
+        )
+        XCTAssertEqual(
+            PixelPetAnimationPolicy.durationsMilliseconds(for: .speak),
+            [160, 90, 90, 90, 110, 90, 100, 240]
+        )
+    }
+
+    func testNewTapTakesPriorityOverVisibleSpeakingBubble() {
+        let plan = PixelPetAnimationPolicy.plan(
+            tapPending: true,
+            bubbleVisible: true,
+            sceneIsActive: true,
+            reduceMotion: false,
+            lowPowerMode: false
+        )
+
+        XCTAssertEqual(plan.sequence, .tap)
+        XCTAssertTrue(plan.animates)
+    }
+
+    func testConsumedTapFollowsBubbleState() {
+        XCTAssertEqual(
+            PixelPetAnimationPolicy.followUpSequence(bubbleVisible: true),
+            .speak
+        )
+        XCTAssertEqual(
+            PixelPetAnimationPolicy.followUpSequence(bubbleVisible: false),
+            .idle
+        )
+    }
+
+    func testMotionPowerAndSceneBoundariesReturnStaticPlans() {
+        let reducedMotion = PixelPetAnimationPolicy.plan(
+            tapPending: true,
+            bubbleVisible: true,
+            sceneIsActive: true,
+            reduceMotion: true,
+            lowPowerMode: false
+        )
+        let lowPower = PixelPetAnimationPolicy.plan(
+            tapPending: true,
+            bubbleVisible: false,
+            sceneIsActive: true,
+            reduceMotion: false,
+            lowPowerMode: true
+        )
+        let inactive = PixelPetAnimationPolicy.plan(
+            tapPending: true,
+            bubbleVisible: true,
+            sceneIsActive: false,
+            reduceMotion: false,
+            lowPowerMode: false
+        )
+
+        XCTAssertFalse(reducedMotion.animates)
+        XCTAssertEqual(reducedMotion.sequence, .speak)
+        XCTAssertFalse(lowPower.animates)
+        XCTAssertEqual(lowPower.sequence, .idle)
+        XCTAssertFalse(inactive.animates)
+        XCTAssertEqual(inactive.stableFrameIndex, 0)
     }
 }
 

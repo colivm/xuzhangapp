@@ -69,6 +69,8 @@ struct RecordView: View {
     @State private var showScenePackAngleSheet = false
     @State private var opensMemberPricingAfterScenePackDismiss = false
     @State private var recommendedCategoryRefreshTask: Task<Void, Never>?
+    @State private var preparedPreviewLifeMarkKey: RecordPreviewLifeMarkKey?
+    @State private var previewLifeMarkTextSnapshot: String?
     @State private var scenePackFeedback: String?
     @State private var freeScenePackRefreshToken = 0
     @State private var freeLockedSceneHint: ScenePackAngleSheet.LockedSceneHint?
@@ -777,34 +779,65 @@ struct RecordView: View {
     }
 
     private var previewLifeMarkText: String? {
-        guard previewTier == .confirm, hasValidAmount else { return nil }
-        guard focusedField != .note else { return nil }
+        guard let key = previewLifeMarkPreparationKey,
+              preparedPreviewLifeMarkKey == key else {
+            return nil
+        }
+        return previewLifeMarkTextSnapshot
+    }
+
+    private var previewLifeMarkPreparationKey: RecordPreviewLifeMarkKey? {
+        guard previewTier == .confirm, hasValidAmount, focusedField != .note else { return nil }
         let category = previewDraftResolution?.category ?? homeViewModel.selectedCategory
         let rawTitle = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = previewSemanticTitle(rawTitle.isEmpty ? previewHeadline : rawTitle)
-        let draft = HomeItem(
+        return RecordPreviewLifeMarkKey(
+            ledgerRevision: homeViewModel.recordInputAssistanceRevision,
             title: title,
             amount: inputAmountValue,
             category: category,
             createdAt: homeViewModel.selectedDate,
             emotionTag: previewEmotion,
-            merchantBrandId: previewBrand?.id,
-            scenePackId: activeScenePackIdForCurrentRecord
+            merchantBrandID: previewBrand?.id,
+            scenePackID: activeScenePackIdForCurrentRecord,
+            isMember: isMember
         )
-        guard let mark = LifeMarkService.aggregates(
-            for: [draft],
+    }
+
+    private func preparePreviewLifeMark(for key: RecordPreviewLifeMarkKey?) async {
+        guard let key else { return }
+        guard preparedPreviewLifeMarkKey != key else { return }
+        let draft = HomeItem(
+            title: key.title,
+            amount: key.amount,
+            category: key.category,
+            createdAt: key.createdAt,
+            emotionTag: key.emotionTag,
+            merchantBrandId: key.merchantBrandID,
+            scenePackId: key.scenePackID
+        )
+        let input = RecordPreviewLifeMarkPreparationInput(
+            key: key,
+            draft: draft,
             allItems: homeViewModel.items + [draft],
-            isMember: isMember,
-            limit: 1
-        ).first else {
-            return nil
+            isMember: key.isMember
+        )
+        let text = await withTaskGroup(
+            of: String?.self,
+            returning: String?.self
+        ) { group in
+            group.addTask(priority: .utility) {
+                guard !Task.isCancelled else { return nil }
+                return RecordInputAssistanceComputation.previewLifeMarkText(input)
+            }
+            return await group.next() ?? nil
         }
-        switch mark.kind {
-        case .milestone, .context, .streak:
-            return "生活线索 · \(mark.title)"
-        case .scene:
-            return "会进入「\(mark.label)」印记"
+        guard !Task.isCancelled,
+              previewLifeMarkPreparationKey == key else {
+            return
         }
+        preparedPreviewLifeMarkKey = key
+        previewLifeMarkTextSnapshot = text
     }
 
     private var previewLearningHint: String? {
@@ -1715,6 +1748,7 @@ struct RecordView: View {
 
     private func refreshRecommendedCategoryNow() {
         guard selectedEntryMode == .manual else { return }
+        homeViewModel.refreshRecordWarmupSuggestions()
         guard !homeViewModel.categoryLockedByUser else { return }
         guard !(previewLineWasRotated && lastDraftIntent == .category) else { return }
         homeViewModel.refreshRecordPrefill()
@@ -1751,6 +1785,9 @@ struct RecordView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.18), value: shouldShowAmountQuickKeys)
+            .task(id: previewLifeMarkPreparationKey) {
+                await preparePreviewLifeMark(for: previewLifeMarkPreparationKey)
+            }
             .onChange(of: selectedPhoto) { _, newValue in
                 guard let newValue else { return }
                 Task {
@@ -1828,6 +1865,9 @@ struct RecordView: View {
             .onChange(of: homeViewModel.selectedDate) { _, _ in
                 refreshRecommendedCategory()
             }
+            .onChange(of: homeViewModel.recordInputAssistanceRevision) { _, _ in
+                refreshRecommendedCategory()
+            }
             .onChange(of: selectedEntryMode) { _, newValue in
                 if newValue == .manual {
                     focusAmountPad(delay: 0.08)
@@ -1853,6 +1893,7 @@ struct RecordView: View {
                 if !hasUncommittedManualDraft {
                     homeViewModel.refreshDraftSelectedDate(force: true)
                 }
+                refreshRecommendedCategory()
                 guard !didAutoFocusAmountPad else { return }
                 didAutoFocusAmountPad = true
                 focusAmountPad()
@@ -1860,6 +1901,7 @@ struct RecordView: View {
             .onDisappear {
                 recommendedCategoryRefreshTask?.cancel()
                 recommendedCategoryRefreshTask = nil
+                homeViewModel.cancelRecordInputAssistancePreparation()
             }
             .sheet(isPresented: $showOCRConfirmSheet) {
                 OCRConfirmSheet(drafts: ocrConfirmDrafts) { selectedDrafts, sendToDrafts in
@@ -2048,7 +2090,7 @@ struct RecordView: View {
     }
 
     private var recordWarmupSuggestions: [HomeViewModel.FrequentRecordAmountSuggestion] {
-        homeViewModel.frequentRecordAmountSuggestions(at: homeViewModel.selectedDate)
+        homeViewModel.recordWarmupSuggestions
     }
 
     private var lifeEntryPreview: some View {
@@ -2701,7 +2743,7 @@ struct RecordView: View {
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(recordInk.opacity(0.82))
 
-            let recommended = homeViewModel.recommendCategory(for: homeViewModel.inputAmount)
+            let recommended = homeViewModel.recordRecommendedCategory
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: 100, maximum: 180), spacing: 10)],
                 alignment: .leading,

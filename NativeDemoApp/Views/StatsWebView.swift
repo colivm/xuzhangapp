@@ -70,6 +70,66 @@ private struct TraceLifeCardLayout {
     var playButtonHeight: CGFloat { 44 + compactness * 4 }
 }
 
+struct TraceDetailListSnapshotKey: Equatable {
+    let ledgerRevision: Int
+    let periodKey: String
+    let categoryKey: String?
+    let usesCustomRange: Bool
+    let customStartDate: Date
+    let customEndDate: Date
+}
+
+struct TraceDetailListPreparationInput: @unchecked Sendable {
+    let key: TraceDetailListSnapshotKey
+    let sourceItems: [HomeItem]
+    let dateInterval: DateInterval?
+    let category: HomeItem.Category?
+    let calendar: Calendar
+}
+
+struct TraceDetailListSnapshot: @unchecked Sendable {
+    let key: TraceDetailListSnapshotKey
+    let items: [HomeItem]
+    let itemIDs: [UUID]
+    let totalExpense: Double
+    let dayGroups: [TraceDayGroup]
+}
+
+enum TraceDetailListSnapshotComputation {
+    static func make(_ input: TraceDetailListPreparationInput) -> TraceDetailListSnapshot {
+        var items: [HomeItem]
+        if let dateInterval = input.dateInterval {
+            items = input.sourceItems
+                .filter { $0.createdAt >= dateInterval.start && $0.createdAt < dateInterval.end }
+                .sorted { $0.createdAt > $1.createdAt }
+        } else {
+            items = input.sourceItems
+        }
+        if let category = input.category {
+            items = items.filter { $0.category == category }
+        }
+        let groups = Dictionary(grouping: items) { item in
+            input.calendar.startOfDay(for: item.createdAt)
+        }
+        let dayGroups = groups
+            .map { day, dayItems in
+                TraceDayGroup(
+                    id: String(Int(day.timeIntervalSince1970)),
+                    date: day,
+                    items: dayItems.sorted { $0.createdAt > $1.createdAt }
+                )
+            }
+            .sorted { $0.date > $1.date }
+        return TraceDetailListSnapshot(
+            key: input.key,
+            items: items,
+            itemIDs: items.map(\.id),
+            totalExpense: items.filter { $0.amount > 0 }.reduce(0) { $0 + $1.amount },
+            dayGroups: dayGroups
+        )
+    }
+}
+
 private enum TracePreparedPiece {
     case week(TraceChapterSnapshot, cacheKey: String)
     case month(TraceChapterSnapshot, cacheKey: String)
@@ -114,6 +174,7 @@ struct StatsWebView: View {
     @State private var traceDeletingItemID: UUID?
     @State private var tracePendingDeleteItem: HomeItem?
     @State private var showTraceDeleteConfirmation = false
+    @State private var traceDetailListSnapshot: TraceDetailListSnapshot?
     @State private var traceAutoCommitRequestID: UUID?
     @GestureState private var traceSwipeDragState: TraceSwipeDragState?
     @State private var lifeInsightRefreshID = UUID()
@@ -229,15 +290,19 @@ struct StatsWebView: View {
 
     private var traceInlineEditingItem: HomeItem? {
         guard let traceInlineEditingItemID else { return nil }
-        return filteredItems.first { $0.id == traceInlineEditingItemID }
+        return traceDetailListSnapshot?.items.first { $0.id == traceInlineEditingItemID }
     }
 
     private var traceFilteredItemIDs: [UUID] {
-        filteredItems.map(\.id)
+        traceDetailListSnapshot?.itemIDs ?? []
+    }
+
+    private var traceDetailItems: [HomeItem] {
+        traceDetailListSnapshot?.items ?? []
     }
 
     private var totalExpense: Double {
-        filteredItems.filter { $0.amount > 0 }.reduce(0) { $0 + $1.amount }
+        traceDetailListSnapshot?.totalExpense ?? 0
     }
 
     private var emptyRecordListText: String {
@@ -255,6 +320,60 @@ struct StatsWebView: View {
         let periodText = useCustomRange ? "自定义时间" : selectedPeriod.rawValue
         let categoryText = selectedCategory?.rawValue ?? "全部分类"
         return "\(periodText) · \(categoryText)"
+    }
+
+    private var traceDetailListSnapshotKey: TraceDetailListSnapshotKey {
+        TraceDetailListSnapshotKey(
+            ledgerRevision: homeViewModel.homeDashboardRevision,
+            periodKey: selectedPeriod.rawValue,
+            categoryKey: selectedCategory?.rawValue,
+            usesCustomRange: useCustomRange,
+            customStartDate: customStartDate,
+            customEndDate: customEndDate
+        )
+    }
+
+    private func prepareTraceDetailListSnapshot() {
+        let key = traceDetailListSnapshotKey
+        guard traceDetailListSnapshot?.key != key else { return }
+
+        let sourceItems: [HomeItem]
+        let dateInterval: DateInterval?
+        if useCustomRange {
+            let calendar = Calendar.current
+            let start = calendar.startOfDay(for: customStartDate)
+            let end = calendar.date(
+                byAdding: .day,
+                value: 1,
+                to: calendar.startOfDay(for: customEndDate)
+            ) ?? customEndDate
+            if start < end {
+                sourceItems = homeViewModel.items
+                dateInterval = DateInterval(start: start, end: end)
+            } else {
+                sourceItems = []
+                dateInterval = nil
+            }
+        } else {
+            dateInterval = nil
+            switch selectedPeriod {
+            case .week:
+                sourceItems = homeViewModel.filteredItems(in: .week)
+            case .month:
+                sourceItems = homeViewModel.filteredItems(in: .month)
+            case .year:
+                sourceItems = homeViewModel.currentYearItems
+            }
+        }
+        traceDetailListSnapshot = TraceDetailListSnapshotComputation.make(
+            TraceDetailListPreparationInput(
+                key: key,
+                sourceItems: sourceItems,
+                dateInterval: dateInterval,
+                category: selectedCategory,
+                calendar: .current
+            )
+        )
     }
 
     @State var showPeriodSheet = false
@@ -320,6 +439,9 @@ struct StatsWebView: View {
                 monthTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
                 scheduleTracePreparation()
+                if showTraceDetailSheet {
+                    prepareTraceDetailListSnapshot()
+                }
             }
             .onChange(of: selectedPeriod) { _, _ in
                 if let range = TraceRangeContextPolicy.lifeRange(for: selectedPeriod),
@@ -333,12 +455,18 @@ struct StatsWebView: View {
                 } else {
                     prepareTraceIfNeeded()
                 }
+                if showTraceDetailSheet {
+                    prepareTraceDetailListSnapshot()
+                }
             }
             .onChange(of: useCustomRange) { _, _ in
                 traceSnapshotStore.invalidateClueCache()
                 clueTraceNeedsRefresh = true
                 if traceViewMode == .clues {
                     scheduleTracePreparation()
+                }
+                if showTraceDetailSheet {
+                    prepareTraceDetailListSnapshot()
                 }
             }
             .onChange(of: customStartDate) { _, _ in
@@ -347,6 +475,9 @@ struct StatsWebView: View {
                 if traceViewMode == .clues, useCustomRange {
                     scheduleTracePreparation()
                 }
+                if showTraceDetailSheet, useCustomRange {
+                    prepareTraceDetailListSnapshot()
+                }
             }
             .onChange(of: customEndDate) { _, _ in
                 traceSnapshotStore.invalidateClueCache()
@@ -354,12 +485,18 @@ struct StatsWebView: View {
                 if traceViewMode == .clues, useCustomRange {
                     scheduleTracePreparation()
                 }
+                if showTraceDetailSheet, useCustomRange {
+                    prepareTraceDetailListSnapshot()
+                }
             }
             .onChange(of: selectedCategory) { _, _ in
                 traceSnapshotStore.invalidateClueCache()
                 clueTraceNeedsRefresh = true
                 if traceViewMode == .clues {
                     scheduleTracePreparation()
+                }
+                if showTraceDetailSheet {
+                    prepareTraceDetailListSnapshot()
                 }
             }
             .onChange(of: hasMemberAccess) { _, _ in
@@ -4979,6 +5116,7 @@ struct StatsWebView: View {
 
     private func openTraceDetail() {
         traceInlineEditingItemID = nil
+        prepareTraceDetailListSnapshot()
         showTraceDetailSheet = true
     }
 
@@ -4989,6 +5127,7 @@ struct StatsWebView: View {
         selectedCategory = nil
         traceInlineEditingItemID = nil
         traceSwipedItemID = nil
+        prepareTraceDetailListSnapshot()
         showTraceDetailSheet = true
     }
 
@@ -5157,7 +5296,7 @@ struct StatsWebView: View {
     }
 
     private var traceDetailMetaText: String {
-        "\(currentFilterSummary) · \(filteredItems.count) 笔 · 合计 \(totalExpense.formatted(.cny))"
+        "\(currentFilterSummary) · \(traceDetailItems.count) 笔 · 合计 \(totalExpense.formatted(.cny))"
     }
 
     private var traceDetailListBackground: some View {
@@ -5183,12 +5322,12 @@ struct StatsWebView: View {
 
     @ViewBuilder
     private func recordListContent(fromTraceDetail: Bool = false) -> some View {
-        if filteredItems.isEmpty {
+        if traceDetailItems.isEmpty {
             Text(emptyRecordListText)
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
         } else {
-            let groups = traceDayGroups
+            let groups = traceDetailListSnapshot?.dayGroups ?? []
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                 ForEach(groups) { group in
                     Section {
@@ -5213,22 +5352,6 @@ struct StatsWebView: View {
                 }
             }
         }
-    }
-
-    private var traceDayGroups: [TraceDayGroup] {
-        let calendar = Calendar.current
-        let groups = Dictionary(grouping: filteredItems) { item in
-            calendar.startOfDay(for: item.createdAt)
-        }
-        return groups
-            .map { day, items in
-                TraceDayGroup(
-                    id: String(Int(day.timeIntervalSince1970)),
-                    date: day,
-                    items: items.sorted { $0.createdAt > $1.createdAt }
-                )
-            }
-            .sorted { $0.date > $1.date }
     }
 
     private func traceDayHeader(_ group: TraceDayGroup) -> some View {

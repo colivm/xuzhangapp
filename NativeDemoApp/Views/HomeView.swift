@@ -367,6 +367,7 @@ struct HomeView: View {
     var onFirstRecordPromptCompleted: ((Bool) -> Void)? = nil
     @State private var showPlayback = false
     @State private var playbackSheetID = UUID()
+    @State private var playbackContentSnapshot = BillPlaybackSheet.ContentSnapshot.empty
     @State private var firstRecordPromptFlowIsActive = false
     @State private var completeFirstRecordPromptAfterPlayback = false
     @State private var showTodayRecordsSheet = false
@@ -384,6 +385,7 @@ struct HomeView: View {
     @State private var todayPlaybackPrompt: TodayPlaybackPrompt?
     @State private var petHint: String = "有一笔就记一笔，晚点也能补。"
     @State private var petBubbleVisible = false
+    @State private var petTapAnimationTrigger = 0
     @State private var todayBillsFocusPulse = false
     @State private var todayBillsFocusTick = 0
     @State private var highlightedSavedItemID: UUID?
@@ -391,7 +393,6 @@ struct HomeView: View {
     @State private var quickRecordCardAutoCloseID: String?
     @State private var quickRecordCardPulse = false
     @State private var quickRecordSaveMessage: String?
-    @State private var quickRecordRefreshTick = 0
     @State private var quickRecordWeatherRefreshTick = 0
     @GestureState private var todaySwipeDragState: TodaySwipeDragState?
     private let dailyQuotaStore = DailyFeatureQuotaStore()
@@ -443,6 +444,9 @@ struct HomeView: View {
         .onAppear {
             presentFirstRecordPromptIfNeeded()
             scheduleRecentSaveHighlight()
+            homeViewModel.prepareHomeDashboardSnapshots(
+                isMember: settingsViewModel.settings.hasMemberAccess
+            )
         }
         .onChange(of: homeViewModel.activeRouteGuidance) { _, guidance in
             handleRouteGuidance(guidance)
@@ -458,8 +462,19 @@ struct HomeView: View {
         .onChange(of: homeViewModel.recentThreeItems.first?.id) { _, _ in
             scheduleRecentSaveHighlight()
         }
-        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in
-            quickRecordRefreshTick += 1
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now in
+            homeViewModel.prepareHomeDashboardSnapshots(
+                isMember: settingsViewModel.settings.hasMemberAccess,
+                now: now
+            )
+        }
+        .onChange(of: homeViewModel.homeDashboardRevision) { _, _ in
+            homeViewModel.prepareHomeDashboardSnapshots(
+                isMember: settingsViewModel.settings.hasMemberAccess
+            )
+        }
+        .onChange(of: settingsViewModel.settings.hasMemberAccess) { _, isMember in
+            homeViewModel.prepareHomeDashboardSnapshots(isMember: isMember)
         }
         .onChange(of: settingsViewModel.petCompanionEnabled) { _, enabled in
             if !enabled {
@@ -493,8 +508,10 @@ struct HomeView: View {
                 completeFirstRecordPromptAfterPlayback = false
                 finishFirstRecordPromptFlow(continuesRecording: false)
             }
+            playbackContentSnapshot = .empty
         }) {
             BillPlaybackSheet(
+                contentSnapshot: playbackContentSnapshot,
                 onNavigateToSettings: { onNavigateSettings?() },
                 onShowMemberPricing: {
                     playbackDismissRoute = .memberPricing
@@ -566,18 +583,16 @@ struct HomeView: View {
 
     private var homeJourneyPrimaryAction: HomeJourneyAction {
         let now = Date()
-        let totalRecordCount = homeViewModel.items.lazy.filter { $0.amount > 0 && $0.draftMeta == nil }.count
-        let weekItems = homeViewModel.filteredItems(in: .week).filter { $0.amount > 0 && $0.draftMeta == nil }
-        let monthItems = homeViewModel.filteredItems(in: .month).filter { $0.amount > 0 && $0.draftMeta == nil }
+        let ledgerFacts = homeViewModel.homeJourneyLedgerFacts
         let hasUnplayedTodayRecords = dailyQuotaStore.hasUnplayedTodayItems(homeViewModel.todayItems, now: now)
         let isMember = settingsViewModel.settings.hasMemberAccess
         let day = Calendar.current.component(.day, from: now)
         let progressionStage = NewUserProgressionPolicy.stage(
             for: NewUserProgressionSnapshot(
-                totalRecordCount: totalRecordCount,
+                totalRecordCount: ledgerFacts.totalCommittedRecordCount,
                 hasUnplayedTodayRecords: hasUnplayedTodayRecords,
-                weekRecordCount: weekItems.count,
-                monthRecordCount: monthItems.count,
+                weekRecordCount: ledgerFacts.currentWeekCommittedRecordCount,
+                monthRecordCount: ledgerFacts.currentMonthCommittedRecordCount,
                 dayOfMonth: day,
                 canPlayWeek: summaryQuotaStore.canPlay(.week, isMember: isMember, now: now),
                 canPlayMonth: summaryQuotaStore.canPlay(.month, isMember: isMember, now: now),
@@ -686,7 +701,6 @@ struct HomeView: View {
 
     @ViewBuilder
     private var highConfidenceQuickRecordOverlay: some View {
-        let _ = quickRecordRefreshTick
         if let suggestion = homeViewModel.highConfidenceQuickRecordSuggestion,
            quickRecordCardDismissedID != suggestion.id {
             VStack(spacing: 8) {
@@ -1200,6 +1214,10 @@ struct HomeView: View {
     }
 
     private func presentTodayPlaybackSheet() {
+        playbackContentSnapshot = BillPlaybackSheet.makeContentSnapshot(
+            allItems: homeViewModel.items,
+            sourceRevision: homeViewModel.homeDashboardRevision
+        )
         playbackSheetID = UUID()
         showPlayback = true
     }
@@ -1378,10 +1396,12 @@ struct HomeView: View {
             }
 
             Button {
+                let willShowBubble = !petBubbleVisible
                 withAnimation(.easeInOut(duration: 0.24)) {
                     petBubbleVisible.toggle()
                 }
-                if petBubbleVisible {
+                if willShowBubble {
+                    petTapAnimationTrigger &+= 1
                     Task {
                         if let message = await PetCompanionService.shared.petClickMessage(
                             settings: settingsViewModel.settings,
@@ -1395,8 +1415,11 @@ struct HomeView: View {
                     }
                 }
             } label: {
-                Text("🐱")
-                    .font(.system(size: 26))
+                PixelPetAnimationView(
+                    isSpeaking: petBubbleVisible,
+                    tapTrigger: petTapAnimationTrigger
+                )
+                    .frame(width: 48, height: 48)
                     .frame(width: 52, height: 52)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -1409,6 +1432,8 @@ struct HomeView: View {
             }
             .buttonStyle(.plain)
             .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+            .accessibilityLabel("宠物助手")
+            .accessibilityHint(petBubbleVisible ? "点按收起消息" : "点按听一句")
         }
     }
 
@@ -2071,21 +2096,7 @@ struct HomeView: View {
     }
 
     private func homeLifeMarkText(for item: HomeItem) -> String? {
-        guard item.amount > 0 else { return nil }
-        guard let mark = LifeMarkService.aggregates(
-            for: [item],
-            allItems: homeViewModel.items,
-            isMember: settingsViewModel.settings.hasMemberAccess,
-            limit: 1
-        ).first else {
-            return nil
-        }
-        switch mark.kind {
-        case .scene:
-            return "生活线索 · \(mark.label)"
-        case .context, .milestone, .streak:
-            return "生活线索 · \(mark.title)"
-        }
+        homeViewModel.homeLifeMarkTextsByItemID[item.id]
     }
 
     private func homeLifeMarkChip(_ text: String) -> some View {
@@ -2649,6 +2660,32 @@ struct HomeView: View {
 // MARK: - Bill Playback Sheet
 
 struct BillPlaybackSheet: View {
+    struct PlaybackMoment: Equatable, Identifiable {
+        let id: String
+        let eyebrow: String
+        let title: String
+        let body: String
+        let amountText: String?
+    }
+
+    struct ContentSnapshot {
+        let sourceRevision: Int
+        let dayKey: String
+        let todayItems: [HomeItem]
+        let playbackMoments: [PlaybackMoment]
+        let playbackDuration: TimeInterval
+
+        static var empty: ContentSnapshot {
+            ContentSnapshot(
+                sourceRevision: -1,
+                dayKey: "",
+                todayItems: [],
+                playbackMoments: [],
+                playbackDuration: 10
+            )
+        }
+    }
+
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @State private var activeIndex = -1
@@ -2657,19 +2694,42 @@ struct BillPlaybackSheet: View {
     @State private var showMemberNudge = false
     @State private var playbackTask: Task<Void, Never>?
     @Environment(\.dismiss) private var dismiss
+    let contentSnapshot: ContentSnapshot
     var onNavigateToSettings: (() -> Void)? = nil
     var onShowMemberPricing: (() -> Void)? = nil
     private let nudgeService = MemberNudgePolicyService()
     private let dailyQuotaStore = DailyFeatureQuotaStore()
 
+    static func makeContentSnapshot(
+        allItems: [HomeItem],
+        sourceRevision: Int,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> ContentSnapshot {
+        let todayItems = allItems
+            .filter { calendar.isDate($0.createdAt, inSameDayAs: now) }
+            .sorted { $0.createdAt < $1.createdAt }
+        let playbackMoments = buildPlaybackMoments(
+            todayItems: todayItems,
+            allItems: allItems,
+            calendar: calendar
+        )
+        let playbackDuration = max(10, min(34, Double(max(1, playbackMoments.count)) * 2.6))
+        return ContentSnapshot(
+            sourceRevision: sourceRevision,
+            dayKey: HomeDashboardSnapshotComputation.dayKey(for: now, calendar: calendar),
+            todayItems: todayItems,
+            playbackMoments: playbackMoments,
+            playbackDuration: playbackDuration
+        )
+    }
+
     private var todayItems: [HomeItem] {
-        homeViewModel.items.filter {
-            Calendar.current.isDateInToday($0.createdAt)
-        }.sorted { $0.createdAt < $1.createdAt }
+        contentSnapshot.todayItems
     }
 
     private var playbackMoments: [PlaybackMoment] {
-        buildPlaybackMoments()
+        contentSnapshot.playbackMoments
     }
 
     private var currentPlaybackMoment: PlaybackMoment? {
@@ -2679,7 +2739,7 @@ struct BillPlaybackSheet: View {
     }
 
     private var playbackDuration: TimeInterval {
-        max(10, min(34, Double(max(1, playbackMoments.count)) * 2.6))
+        contentSnapshot.playbackDuration
     }
 
     private var playbackProgressFraction: Double {
@@ -3292,32 +3352,31 @@ struct BillPlaybackSheet: View {
         isPlaying = true
     }
 
-    private func formatClockTime(_ date: Date) -> String {
+    private static func formatClockTime(_ date: Date, calendar: Calendar) -> String {
         let f = DateFormatter()
+        f.calendar = calendar
         f.dateFormat = "HH:mm"
         return f.string(from: date)
     }
 
-    private struct PlaybackMoment: Identifiable {
-        let id: String
-        let eyebrow: String
-        let title: String
-        let body: String
-        let amountText: String?
-    }
-
-    private func buildPlaybackMoments() -> [PlaybackMoment] {
+    private static func buildPlaybackMoments(
+        todayItems: [HomeItem],
+        allItems: [HomeItem],
+        calendar: Calendar
+    ) -> [PlaybackMoment] {
         guard !todayItems.isEmpty else { return [] }
-        let topCategory = topCategoryText()
+        let topCategory = topCategoryText(todayItems: todayItems)
         let dominantScene = LifeSceneSemanticService.dominantScene(in: todayItems)
         let lifeMark = LifeMarkService
-            .aggregates(for: todayItems, allItems: homeViewModel.items, isMember: true, limit: 1)
+            .aggregates(for: todayItems, allItems: allItems, isMember: true, limit: 1)
             .first
         if todayItems.count > 8 {
             return densePlaybackMoments(
+                todayItems: todayItems,
                 topCategory: topCategory,
                 dominantScene: dominantScene,
-                lifeMark: lifeMark
+                lifeMark: lifeMark,
+                calendar: calendar
             )
         }
 
@@ -3329,7 +3388,11 @@ struct BillPlaybackSheet: View {
                     id: "summary-opening",
                     eyebrow: "先看一眼",
                     title: "今天记了 \(todayItems.count) 笔",
-                    body: openingBody(dominantScene: dominantScene, lifeMark: lifeMark),
+                    body: openingBody(
+                        todayItems: todayItems,
+                        dominantScene: dominantScene,
+                        lifeMark: lifeMark
+                    ),
                     amountText: todayItems.reduce(0) { $0 + $1.amount }.formatted(.cny)
                 )
             )
@@ -3338,9 +3401,9 @@ struct BillPlaybackSheet: View {
         moments += todayItems.prefix(12).map { item in
             PlaybackMoment(
                 id: "item-\(item.id)",
-                eyebrow: momentEyebrow(for: item),
-                title: playbackTitle(for: item),
-                body: itemMomentBody(for: item),
+                eyebrow: momentEyebrow(for: item, calendar: calendar),
+                title: playbackTitle(for: item, calendar: calendar),
+                body: itemMomentBody(for: item, calendar: calendar),
                 amountText: item.amount.formatted(.cny)
             )
         }
@@ -3360,7 +3423,7 @@ struct BillPlaybackSheet: View {
         return moments
     }
 
-    private func topCategoryText() -> String {
+    private static func topCategoryText(todayItems: [HomeItem]) -> String {
         Dictionary(grouping: todayItems, by: \.category)
             .map { (category: $0.key, count: $0.value.count, amount: $0.value.reduce(0) { $0 + $1.amount }) }
             .sorted {
@@ -3370,29 +3433,35 @@ struct BillPlaybackSheet: View {
             .first?.category.rawValue ?? "日常"
     }
 
-    private func densePlaybackMoments(
+    private static func densePlaybackMoments(
+        todayItems: [HomeItem],
         topCategory: String,
         dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?,
-        lifeMark: LifeMarkAggregate?
+        lifeMark: LifeMarkAggregate?,
+        calendar: Calendar
     ) -> [PlaybackMoment] {
         var moments: [PlaybackMoment] = [
             PlaybackMoment(
                 id: "summary-opening",
                 eyebrow: "先看一眼",
                 title: "今天记了 \(todayItems.count) 笔",
-                body: openingBody(dominantScene: dominantScene, lifeMark: lifeMark),
+                body: openingBody(
+                    todayItems: todayItems,
+                    dominantScene: dominantScene,
+                    lifeMark: lifeMark
+                ),
                 amountText: todayItems.reduce(0) { $0 + $1.amount }.formatted(.cny)
             )
         ]
 
-        moments += todayTimeBlocks().compactMap { block in
+        moments += todayTimeBlocks(todayItems: todayItems, calendar: calendar).compactMap { block in
             guard !block.items.isEmpty else { return nil }
             let total = block.items.reduce(0) { $0 + $1.amount }
             return PlaybackMoment(
                 id: "time-\(block.id)",
                 eyebrow: block.label,
                 title: "\(block.label)有 \(block.items.count) 笔",
-                body: timeBlockBody(label: block.label, items: block.items),
+                body: timeBlockBody(label: block.label, items: block.items, calendar: calendar),
                 amountText: total.formatted(.cny)
             )
         }
@@ -3410,11 +3479,12 @@ struct BillPlaybackSheet: View {
         return moments
     }
 
-    private func openingBody(
+    private static func openingBody(
+        todayItems: [HomeItem],
         dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?,
         lifeMark: LifeMarkAggregate?
     ) -> String {
-        let categories = categoryMixText()
+        let categories = categoryMixText(todayItems: todayItems)
         if let lifeMark {
             let detail = LifeMarkService.primaryLine(for: lifeMark)
             if !detail.isEmpty {
@@ -3442,7 +3512,7 @@ struct BillPlaybackSheet: View {
         return "\(categories)这些记录都在今天。先照着发生的顺序听一遍。"
     }
 
-    private func categoryMixText() -> String {
+    private static func categoryMixText(todayItems: [HomeItem]) -> String {
         let ranked = Dictionary(grouping: todayItems, by: \.category)
             .map { (category: $0.key, count: $0.value.count, amount: $0.value.reduce(0) { $0 + $1.amount }) }
             .sorted {
@@ -3455,18 +3525,25 @@ struct BillPlaybackSheet: View {
         return ranked.joined(separator: "、")
     }
 
-    private func todayTimeBlocks() -> [(id: String, label: String, items: [HomeItem])] {
+    private static func todayTimeBlocks(
+        todayItems: [HomeItem],
+        calendar: Calendar
+    ) -> [(id: String, label: String, items: [HomeItem])] {
         [
-            ("morning", "上午", todayItems.filter { Calendar.current.component(.hour, from: $0.createdAt) < 12 }),
+            ("morning", "上午", todayItems.filter { calendar.component(.hour, from: $0.createdAt) < 12 }),
             ("afternoon", "下午", todayItems.filter {
-                let hour = Calendar.current.component(.hour, from: $0.createdAt)
+                let hour = calendar.component(.hour, from: $0.createdAt)
                 return hour >= 12 && hour < 18
             }),
-            ("evening", "晚上", todayItems.filter { Calendar.current.component(.hour, from: $0.createdAt) >= 18 })
+            ("evening", "晚上", todayItems.filter { calendar.component(.hour, from: $0.createdAt) >= 18 })
         ]
     }
 
-    private func timeBlockBody(label: String, items: [HomeItem]) -> String {
+    private static func timeBlockBody(
+        label: String,
+        items: [HomeItem],
+        calendar: Calendar
+    ) -> String {
         let categories = Dictionary(grouping: items, by: \.category)
             .map { (category: $0.key, count: $0.value.count, amount: $0.value.reduce(0) { $0 + $1.amount }) }
             .sorted {
@@ -3476,7 +3553,7 @@ struct BillPlaybackSheet: View {
             .prefix(2)
             .map { $0.category.rawValue }
             .joined(separator: "、")
-        let first = items.first.map { playbackTitle(for: $0) } ?? "一笔记录"
+        let first = items.first.map { playbackTitle(for: $0, calendar: calendar) } ?? "一笔记录"
         if items.count == 1 {
             return "\(label)主要是「\(first)」。这笔放在今天的位置很清楚。"
         }
@@ -3486,13 +3563,13 @@ struct BillPlaybackSheet: View {
         return "\(label)留下 \(items.count) 笔，主要和\(categories)有关。先看发生了什么。"
     }
 
-    private func playbackTitle(for item: HomeItem) -> String {
+    private static func playbackTitle(for item: HomeItem, calendar: Calendar) -> String {
         let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         if let lateTitle = HomeItem.lateWorkCommutePlaybackTitle(for: item),
            ["下班", "通勤", "通勤路上", "日常出行", "公共交通一段", "下班路上这一程"].contains(title) {
             return lateTitle
         }
-        let hour = Calendar.current.component(.hour, from: item.createdAt)
+        let hour = calendar.component(.hour, from: item.createdAt)
         let replacements: [String: String] = [
             "上班路上的一段车程": hour < 12 ? "早上路上这一程" : "路上这一程",
             "下班路上的一段车程": "下班路上这一程",
@@ -3503,11 +3580,11 @@ struct BillPlaybackSheet: View {
         return replacements[title] ?? title
     }
 
-    private func momentEyebrow(for item: HomeItem) -> String {
-        "\(formatClockTime(item.createdAt)) · \(item.category.label)"
+    private static func momentEyebrow(for item: HomeItem, calendar: Calendar) -> String {
+        "\(formatClockTime(item.createdAt, calendar: calendar)) · \(item.category.label)"
     }
 
-    private func itemMomentBody(for item: HomeItem) -> String {
+    private static func itemMomentBody(for item: HomeItem, calendar: Calendar) -> String {
         if let lateCommuteLine = HomeItem.lateWorkCommutePlaybackLine(for: item) {
             return lateCommuteLine
         }
@@ -3541,7 +3618,7 @@ struct BillPlaybackSheet: View {
                 break
             }
         }
-        let hour = Calendar.current.component(.hour, from: item.createdAt)
+        let hour = calendar.component(.hour, from: item.createdAt)
         let itemText = "\(item.title) \(item.displayTitle) \(item.displayEmotionTag)"
         if playbackContainsNightMarketCue(itemText) {
             if hour >= 21 || hour < 5 {
@@ -3611,31 +3688,31 @@ struct BillPlaybackSheet: View {
         }
     }
 
-    private func playbackContainsDrinkCue(_ text: String) -> Bool {
+    private static func playbackContainsDrinkCue(_ text: String) -> Bool {
         ["咖啡", "拿铁", "美式", "奶茶", "饮品", "饮料", "喝的", "茶饮", "可乐", "雪碧", "汽水", "果汁", "柠檬茶", "水溶", "c100", "维c", "维C", "维他"].contains {
             text.localizedCaseInsensitiveContains($0)
         }
     }
 
-    private func playbackContainsLuweiCue(_ text: String) -> Bool {
+    private static func playbackContainsLuweiCue(_ text: String) -> Bool {
         ["绝味", "鸭脖", "鸭货", "卤味", "周黑鸭", "煌上煌"].contains {
             text.localizedCaseInsensitiveContains($0)
         }
     }
 
-    private func playbackContainsNightMarketCue(_ text: String) -> Bool {
+    private static func playbackContainsNightMarketCue(_ text: String) -> Bool {
         ["夜市", "夜摊", "大排档", "生蚝", "烤生蚝", "鱿鱼", "铁板鱿鱼", "烧烤", "烤串", "串串"].contains {
             text.localizedCaseInsensitiveContains($0)
         }
     }
 
-    private func playbackContainsRoastDuckCue(_ text: String) -> Bool {
+    private static func playbackContainsRoastDuckCue(_ text: String) -> Bool {
         ["烤鸭", "烧鸭", "卤鸭", "鸭肉"].contains {
             text.localizedCaseInsensitiveContains($0)
         }
     }
 
-    private func themeTitle(
+    private static func themeTitle(
         topCategory: String,
         dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?
     ) -> String {
@@ -3666,7 +3743,7 @@ struct BillPlaybackSheet: View {
         }
     }
 
-    private func themeBody(
+    private static func themeBody(
         topCategory: String,
         dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?
     ) -> String {
@@ -3697,7 +3774,7 @@ struct BillPlaybackSheet: View {
         }
     }
 
-    private func weatherPlaybackLine(for item: HomeItem) -> String? {
+    private static func weatherPlaybackLine(for item: HomeItem) -> String? {
         let weather = item.memoryContext?.weatherKind?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let rainy = weather.contains("雨") || weather.lowercased().contains("rain")
         guard rainy else { return nil }

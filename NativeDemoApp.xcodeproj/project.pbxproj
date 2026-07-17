@@ -95,6 +95,7 @@
 		U50000020000000000000001 /* LedgerLocalBackupDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = U50000120000000000000001 /* LedgerLocalBackupDocumentTests.swift */; };
 		U60000010000000000000001 /* InsightComputationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = U60000110000000000000001 /* InsightComputationService.swift */; };
 		V10000010000000000000001 /* QARealPhotos in Resources */ = {isa = PBXBuildFile; fileRef = V10000110000000000000001 /* QARealPhotos */; };
+		W10000010000000000000001 /* PixelPetAnimationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = W10000110000000000000001 /* PixelPetAnimationView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -200,6 +201,7 @@
 		U50000120000000000000001 /* LedgerLocalBackupDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerLocalBackupDocumentTests.swift; sourceTree = "<group>"; };
 		U60000110000000000000001 /* InsightComputationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightComputationService.swift; sourceTree = "<group>"; };
 		V10000110000000000000001 /* QARealPhotos */ = {isa = PBXFileReference; lastKnownFileType = folder; path = QARealPhotos; sourceTree = "<group>"; };
+		W10000110000000000000001 /* PixelPetAnimationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelPetAnimationView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -376,6 +378,7 @@
 			isa = PBXGroup;
 			children = (
 				F27000020000000000000001 /* ComputationLoadingView.swift */,
+				W10000110000000000000001 /* PixelPetAnimationView.swift */,
 				A100001A0000000000000001 /* StatCardView.swift */,
 				E10000020000000000000001 /* LifeEntryPreviewCard.swift */,
 				E10000040000000000000001 /* MemoryAttachmentViews.swift */,
@@ -587,6 +590,7 @@
 				U40000020000000000000001 /* LedgerHomeItemsRepository.swift in Sources */,
 				U50000010000000000000001 /* LedgerLocalBackupDocument.swift in Sources */,
 				U60000010000000000000001 /* InsightComputationService.swift in Sources */,
+				W10000010000000000000001 /* PixelPetAnimationView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

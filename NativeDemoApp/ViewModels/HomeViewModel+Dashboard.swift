@@ -1,45 +1,277 @@
 import Foundation
 
-@MainActor
-extension HomeViewModel {
-    struct HighConfidenceQuickRecordSuggestion: Equatable, Identifiable {
-        enum Kind: String, Equatable {
-            case commute
+struct HomeHighConfidenceQuickRecordSuggestion: Equatable, Identifiable {
+    enum Kind: String, Equatable {
+        case commute
+    }
+
+    let id: String
+    let kind: Kind
+    let title: String
+    let amount: Double
+    let category: HomeItem.Category
+    let recordDate: Date
+    let secondaryTitle: String?
+    let secondaryAmount: Double?
+    let secondaryCategory: HomeItem.Category?
+    let secondaryRecordDate: Date?
+    let headline: String
+    let detail: String
+    let buttonTitle: String
+    let backgroundImageName: String
+    let supportCount: Int
+    let confidence: Double
+    let isBackfill: Bool
+
+    var amountSummaryText: String {
+        guard let secondaryTitle,
+              let secondaryAmount else {
+            return "\(title) 路 \(amount.formatted(.cny))"
         }
+        return "\(title) \(amount.formatted(.cny)) + \(secondaryTitle) \(secondaryAmount.formatted(.cny))"
+    }
+}
 
-        let id: String
-        let kind: Kind
-        let title: String
-        let amount: Double
-        let category: HomeItem.Category
-        let recordDate: Date
-        let secondaryTitle: String?
-        let secondaryAmount: Double?
-        let secondaryCategory: HomeItem.Category?
-        let secondaryRecordDate: Date?
-        let headline: String
-        let detail: String
-        let buttonTitle: String
-        let backgroundImageName: String
-        let supportCount: Int
-        let confidence: Double
-        let isBackfill: Bool
+private enum HomeCommuteHabitDirection: String {
+    case morning
+    case evening
 
-        var amountSummaryText: String {
-            guard let secondaryTitle,
-                  let secondaryAmount else {
-                return "\(title) 路 \(amount.formatted(.cny))"
-            }
-            return "\(title) \(amount.formatted(.cny)) + \(secondaryTitle) \(secondaryAmount.formatted(.cny))"
+    var fallbackTitle: String {
+        switch self {
+        case .morning: return "上班通勤"
+        case .evening: return "下班通勤"
         }
     }
+
+    var headline: String {
+        switch self {
+        case .morning: return "这趟上班路，可以记下"
+        case .evening: return "这趟回家路，可以一键记下"
+        }
+    }
+
+    var backfillHeadline: String {
+        switch self {
+        case .morning: return "早上的通勤，可能还没补"
+        case .evening: return "回家这趟，可能还没补"
+        }
+    }
+}
+
+private struct HomeCommuteHabitCandidate {
+    let direction: HomeCommuteHabitDirection
+    let amount: Double
+    let title: String
+    let recordDate: Date
+    let supportCount: Int
+    let distinctDays: Int
+    let confidence: Double
+    let medianMinute: Int
+    let isBackfill: Bool
+}
+
+struct HomeLifeMarkSnapshotKey: Equatable {
+    let ledgerRevision: Int
+    let dayKey: String
+    let isMember: Bool
+}
+
+struct HomeLifeMarkPreparationInput: @unchecked Sendable {
+    let key: HomeLifeMarkSnapshotKey
+    let visibleItems: [HomeItem]
+    let allItems: [HomeItem]
+    let isMember: Bool
+}
+
+struct HomeLifeMarkSnapshot: @unchecked Sendable {
+    let key: HomeLifeMarkSnapshotKey
+    let textsByItemID: [UUID: String]
+}
+
+struct HomeQuickRecordSnapshotKey: Equatable {
+    let ledgerRevision: Int
+    let minuteKey: String
+}
+
+struct HomeQuickRecordPreparationInput: @unchecked Sendable {
+    let key: HomeQuickRecordSnapshotKey
+    let items: [HomeItem]
+    let now: Date
+}
+
+struct HomeQuickRecordSnapshot: @unchecked Sendable {
+    let key: HomeQuickRecordSnapshotKey
+    let suggestion: HomeHighConfidenceQuickRecordSuggestion?
+}
+
+enum HomeDashboardSnapshotComputation {
+    static func dayKey(for date: Date, calendar: Calendar = .current) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
+    }
+
+    static func minuteKey(for date: Date, calendar: Calendar = .current) -> String {
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        return String(
+            format: "%04d-%02d-%02d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0,
+            components.hour ?? 0,
+            components.minute ?? 0
+        )
+    }
+
+    static func lifeMarkSnapshot(_ input: HomeLifeMarkPreparationInput) -> HomeLifeMarkSnapshot {
+        let texts = input.visibleItems.reduce(into: [UUID: String]()) { result, item in
+            guard item.amount > 0,
+                  let mark = LifeMarkService.aggregates(
+                    for: [item],
+                    allItems: input.allItems,
+                    isMember: input.isMember,
+                    limit: 1
+                  ).first else {
+                return
+            }
+            switch mark.kind {
+            case .scene:
+                result[item.id] = "生活线索 · \(mark.label)"
+            case .context, .milestone, .streak:
+                result[item.id] = "生活线索 · \(mark.title)"
+            }
+        }
+        return HomeLifeMarkSnapshot(key: input.key, textsByItemID: texts)
+    }
+}
+
+@MainActor
+extension HomeViewModel {
+    typealias HighConfidenceQuickRecordSuggestion = HomeHighConfidenceQuickRecordSuggestion
 
     var hasMemberAccess: Bool {
         LocalStore.loadSettings().hasMemberAccess
     }
 
     var highConfidenceQuickRecordSuggestion: HighConfidenceQuickRecordSuggestion? {
-        highConfidenceCommuteSuggestion(at: Date())
+        highConfidenceQuickRecordSuggestionSnapshot
+    }
+
+    func prepareHomeDashboardSnapshots(isMember: Bool, now: Date = Date()) {
+        prepareHomeLifeMarkSnapshot(isMember: isMember, now: now)
+        prepareHighConfidenceQuickRecordSnapshot(now: now)
+    }
+
+    func cancelHomeDashboardSnapshotPreparation() {
+        homeLifeMarkPreparationTask?.cancel()
+        homeLifeMarkPreparationTask = nil
+        homeLifeMarkRequestID = UUID()
+        homeQuickRecordPreparationTask?.cancel()
+        homeQuickRecordPreparationTask = nil
+        homeQuickRecordRequestID = UUID()
+    }
+
+    func invalidateHomeDashboardSnapshots() {
+        cancelHomeDashboardSnapshotPreparation()
+        homeLifeMarkSnapshotKey = nil
+        homeLifeMarkTextsByItemID = [:]
+        homeQuickRecordSnapshotKey = nil
+        highConfidenceQuickRecordSuggestionSnapshot = nil
+    }
+
+    private func prepareHomeLifeMarkSnapshot(isMember: Bool, now: Date) {
+        let key = HomeLifeMarkSnapshotKey(
+            ledgerRevision: homeDashboardRevision,
+            dayKey: HomeDashboardSnapshotComputation.dayKey(for: now),
+            isMember: isMember
+        )
+        guard homeLifeMarkSnapshotKey != key else { return }
+
+        homeLifeMarkPreparationTask?.cancel()
+        homeLifeMarkRequestID = UUID()
+        let requestID = homeLifeMarkRequestID
+        homeLifeMarkSnapshotKey = key
+        homeLifeMarkTextsByItemID = [:]
+        let input = HomeLifeMarkPreparationInput(
+            key: key,
+            visibleItems: todayItems,
+            allItems: items,
+            isMember: isMember
+        )
+        homeLifeMarkPreparationTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled, homeLifeMarkRequestID == requestID else { return }
+            let snapshot = await withTaskGroup(
+                of: HomeLifeMarkSnapshot?.self,
+                returning: HomeLifeMarkSnapshot?.self
+            ) { group in
+                group.addTask(priority: .utility) {
+                    guard !Task.isCancelled else { return nil }
+                    return HomeDashboardSnapshotComputation.lifeMarkSnapshot(input)
+                }
+                return await group.next() ?? nil
+            }
+            guard let snapshot,
+                  !Task.isCancelled,
+                  homeLifeMarkRequestID == requestID,
+                  homeLifeMarkSnapshotKey == key else {
+                return
+            }
+            if homeLifeMarkTextsByItemID != snapshot.textsByItemID {
+                homeLifeMarkTextsByItemID = snapshot.textsByItemID
+            }
+            homeLifeMarkPreparationTask = nil
+        }
+    }
+
+    private func prepareHighConfidenceQuickRecordSnapshot(now: Date) {
+        let key = HomeQuickRecordSnapshotKey(
+            ledgerRevision: homeDashboardRevision,
+            minuteKey: HomeDashboardSnapshotComputation.minuteKey(for: now)
+        )
+        guard homeQuickRecordSnapshotKey != key else { return }
+
+        homeQuickRecordPreparationTask?.cancel()
+        homeQuickRecordRequestID = UUID()
+        let requestID = homeQuickRecordRequestID
+        homeQuickRecordSnapshotKey = key
+        let input = HomeQuickRecordPreparationInput(
+            key: key,
+            items: items,
+            now: now
+        )
+        homeQuickRecordPreparationTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled, homeQuickRecordRequestID == requestID else { return }
+            let snapshot = await withTaskGroup(
+                of: HomeQuickRecordSnapshot?.self,
+                returning: HomeQuickRecordSnapshot?.self
+            ) { group in
+                group.addTask(priority: .utility) {
+                    guard !Task.isCancelled else { return nil }
+                    let suggestion = Self.highConfidenceQuickRecordSuggestionForSnapshot(
+                        items: input.items,
+                        at: input.now
+                    )
+                    return HomeQuickRecordSnapshot(key: input.key, suggestion: suggestion)
+                }
+                return await group.next() ?? nil
+            }
+            guard let snapshot,
+                  !Task.isCancelled,
+                  homeQuickRecordRequestID == requestID,
+                  homeQuickRecordSnapshotKey == key else {
+                return
+            }
+            if highConfidenceQuickRecordSuggestionSnapshot != snapshot.suggestion {
+                highConfidenceQuickRecordSuggestionSnapshot = snapshot.suggestion
+            }
+            homeQuickRecordPreparationTask = nil
+        }
     }
 
     @discardableResult
@@ -114,54 +346,20 @@ extension HomeViewModel {
         title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
-    private enum CommuteHabitDirection: String {
-        case morning
-        case evening
-
-        var fallbackTitle: String {
-            switch self {
-            case .morning: return "上班通勤"
-            case .evening: return "下班通勤"
-            }
-        }
-
-        var headline: String {
-            switch self {
-            case .morning: return "这趟上班路，可以记下"
-            case .evening: return "这趟回家路，可以一键记下"
-            }
-        }
-
-        var backfillHeadline: String {
-            switch self {
-            case .morning: return "早上的通勤，可能还没补"
-            case .evening: return "回家这趟，可能还没补"
-            }
-        }
-    }
-
-    private struct CommuteHabitCandidate {
-        let direction: CommuteHabitDirection
-        let amount: Double
-        let title: String
-        let recordDate: Date
-        let supportCount: Int
-        let distinctDays: Int
-        let confidence: Double
-        let medianMinute: Int
-        let isBackfill: Bool
-    }
-
-    private func highConfidenceCommuteSuggestion(at now: Date) -> HighConfidenceQuickRecordSuggestion? {
+    nonisolated static func highConfidenceQuickRecordSuggestionForSnapshot(
+        items: [HomeItem],
+        at now: Date
+    ) -> HomeHighConfidenceQuickRecordSuggestion? {
         let calendar = Calendar.current
         guard isWorkday(now, calendar: calendar) else { return nil }
         guard items.filter({ $0.amount > 0 }).count >= 8 else { return nil }
 
         if isMorningCommutePromptTime(now, calendar: calendar) {
-            guard !hasTodayCommuteRecord(direction: .morning, now: now, calendar: calendar) else {
+            guard !hasTodayCommuteRecord(items: items, direction: .morning, now: now, calendar: calendar) else {
                 return nil
             }
             if let candidate = commuteHabitCandidate(
+                    items: items,
                     direction: .morning,
                     now: now,
                     isBackfill: false,
@@ -171,6 +369,7 @@ extension HomeViewModel {
             }
             if isNoonCommuteBackfillTime(now, calendar: calendar),
                let backfillCandidate = commuteHabitCandidate(
+                    items: items,
                     direction: .morning,
                     now: now,
                     isBackfill: true,
@@ -180,8 +379,9 @@ extension HomeViewModel {
             }
             return nil
         } else if isNoonCommuteBackfillTime(now, calendar: calendar) {
-            guard !hasTodayCommuteRecord(direction: .morning, now: now, calendar: calendar),
+            guard !hasTodayCommuteRecord(items: items, direction: .morning, now: now, calendar: calendar),
                   let candidate = commuteHabitCandidate(
+                    items: items,
                     direction: .morning,
                     now: now,
                     isBackfill: true,
@@ -192,11 +392,12 @@ extension HomeViewModel {
             return quickRecordSuggestion(from: candidate, now: now)
         } else if isEveningCommutePromptTime(now, calendar: calendar) ||
                     isEveningCommuteBackfillTime(now, calendar: calendar) {
-            let morningBackfill: CommuteHabitCandidate?
-            if hasTodayCommuteRecord(direction: .morning, now: now, calendar: calendar) {
+            let morningBackfill: HomeCommuteHabitCandidate?
+            if hasTodayCommuteRecord(items: items, direction: .morning, now: now, calendar: calendar) {
                 morningBackfill = nil
             } else {
                 morningBackfill = commuteHabitCandidate(
+                    items: items,
                     direction: .morning,
                     now: now,
                     isBackfill: true,
@@ -204,23 +405,25 @@ extension HomeViewModel {
                 )
             }
 
-            let eveningPromptCandidate: CommuteHabitCandidate?
-            if hasTodayCommuteRecord(direction: .evening, now: now, calendar: calendar) {
+            let eveningPromptCandidate: HomeCommuteHabitCandidate?
+            if hasTodayCommuteRecord(items: items, direction: .evening, now: now, calendar: calendar) {
                 eveningPromptCandidate = nil
             } else {
                 eveningPromptCandidate = commuteHabitCandidate(
+                    items: items,
                     direction: .evening,
                     now: now,
                     isBackfill: false,
                     calendar: calendar
                 )
             }
-            let eveningBackfillCandidate: CommuteHabitCandidate?
-            if hasTodayCommuteRecord(direction: .evening, now: now, calendar: calendar) ||
+            let eveningBackfillCandidate: HomeCommuteHabitCandidate?
+            if hasTodayCommuteRecord(items: items, direction: .evening, now: now, calendar: calendar) ||
                 eveningPromptCandidate != nil {
                 eveningBackfillCandidate = nil
             } else {
                 eveningBackfillCandidate = commuteHabitCandidate(
+                    items: items,
                     direction: .evening,
                     now: now,
                     isBackfill: true,
@@ -248,10 +451,10 @@ extension HomeViewModel {
         }
     }
 
-    private func quickRecordSuggestion(
-        from candidate: CommuteHabitCandidate,
+    private nonisolated static func quickRecordSuggestion(
+        from candidate: HomeCommuteHabitCandidate,
         now: Date
-    ) -> HighConfidenceQuickRecordSuggestion {
+    ) -> HomeHighConfidenceQuickRecordSuggestion {
         let headline = candidate.isBackfill
             ? candidate.direction.backfillHeadline
             : candidate.direction.headline
@@ -267,7 +470,7 @@ extension HomeViewModel {
             String(candidate.medianMinute)
         ].joined(separator: ":")
 
-        return HighConfidenceQuickRecordSuggestion(
+        return HomeHighConfidenceQuickRecordSuggestion(
             id: id,
             kind: .commute,
             title: candidate.title,
@@ -290,18 +493,18 @@ extension HomeViewModel {
         )
     }
 
-    private func commuteBackfillButtonTitle(for direction: CommuteHabitDirection) -> String {
+    private nonisolated static func commuteBackfillButtonTitle(for direction: HomeCommuteHabitDirection) -> String {
         switch direction {
         case .morning: return "补记上班"
         case .evening: return "补记下班"
         }
     }
 
-    private func combinedCommuteSuggestion(
-        morningBackfill: CommuteHabitCandidate,
-        evening: CommuteHabitCandidate,
+    private nonisolated static func combinedCommuteSuggestion(
+        morningBackfill: HomeCommuteHabitCandidate,
+        evening: HomeCommuteHabitCandidate,
         now: Date
-    ) -> HighConfidenceQuickRecordSuggestion {
+    ) -> HomeHighConfidenceQuickRecordSuggestion {
         let morningTime = commuteTimeText(minutesFromMidnight: morningBackfill.medianMinute)
         let eveningTime = commuteTimeText(minutesFromMidnight: evening.medianMinute)
         let id = [
@@ -314,7 +517,7 @@ extension HomeViewModel {
             String(evening.medianMinute)
         ].joined(separator: ":")
 
-        return HighConfidenceQuickRecordSuggestion(
+        return HomeHighConfidenceQuickRecordSuggestion(
             id: id,
             kind: .commute,
             title: morningBackfill.title,
@@ -335,12 +538,13 @@ extension HomeViewModel {
         )
     }
 
-    private func commuteHabitCandidate(
-        direction: CommuteHabitDirection,
+    private nonisolated static func commuteHabitCandidate(
+        items: [HomeItem],
+        direction: HomeCommuteHabitDirection,
         now: Date,
         isBackfill: Bool,
         calendar: Calendar
-    ) -> CommuteHabitCandidate? {
+    ) -> HomeCommuteHabitCandidate? {
         let recentStart = calendar.date(byAdding: .day, value: -120, to: now) ?? .distantPast
         let weekdayGroup = commuteWeekdayGroup(for: now, direction: direction, calendar: calendar)
         let candidates = items.filter { item in
@@ -390,7 +594,7 @@ extension HomeViewModel {
         let recordDate = isBackfill
             ? date(onSameDayAs: now, minutesFromMidnight: medianMinute, calendar: calendar)
             : now
-        return CommuteHabitCandidate(
+        return HomeCommuteHabitCandidate(
             direction: direction,
             amount: amount,
             title: title,
@@ -403,7 +607,7 @@ extension HomeViewModel {
         )
     }
 
-    private func minimumCommuteSupport(isBackfill: Bool) -> (
+    private nonisolated static func minimumCommuteSupport(isBackfill: Bool) -> (
         totalSamples: Int,
         distinctDays: Int,
         amountCluster: Int,
@@ -416,7 +620,7 @@ extension HomeViewModel {
         return (totalSamples: 4, distinctDays: 3, amountCluster: 3, amountRatio: 0.58, confidence: 0.82)
     }
 
-    private func stableAmountCluster(in items: [HomeItem]) -> (cents: Int, count: Int)? {
+    private nonisolated static func stableAmountCluster(in items: [HomeItem]) -> (cents: Int, count: Int)? {
         let grouped = Dictionary(grouping: items) { item in
             Int((item.amount * 100).rounded())
         }
@@ -429,9 +633,9 @@ extension HomeViewModel {
             .first
     }
 
-    private func stableCommuteTitle(
+    private nonisolated static func stableCommuteTitle(
         in items: [HomeItem],
-        direction: CommuteHabitDirection
+        direction: HomeCommuteHabitDirection
     ) -> String {
         let counts = items.reduce(into: [String: Int]()) { result, item in
             let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -455,10 +659,10 @@ extension HomeViewModel {
         return direction.fallbackTitle
     }
 
-    private func isNearPersonalCommutePromptTime(
+    private nonisolated static func isNearPersonalCommutePromptTime(
         currentMinute: Int,
         medianMinute: Int,
-        direction: CommuteHabitDirection,
+        direction: HomeCommuteHabitDirection,
         weekdayGroup: String
     ) -> Bool {
         let window: (before: Int, after: Int)
@@ -476,10 +680,10 @@ extension HomeViewModel {
         return ((medianMinute - window.before)...(medianMinute + window.after)).contains(currentMinute)
     }
 
-    private func isPastPersonalCommuteBackfillTime(
+    private nonisolated static func isPastPersonalCommuteBackfillTime(
         currentMinute: Int,
         medianMinute: Int,
-        direction: CommuteHabitDirection,
+        direction: HomeCommuteHabitDirection,
         weekdayGroup: String
     ) -> Bool {
         let graceMinutes: Int
@@ -492,8 +696,9 @@ extension HomeViewModel {
         return currentMinute >= medianMinute + graceMinutes
     }
 
-    private func hasTodayCommuteRecord(
-        direction: CommuteHabitDirection,
+    private nonisolated static func hasTodayCommuteRecord(
+        items: [HomeItem],
+        direction: HomeCommuteHabitDirection,
         now: Date,
         calendar: Calendar
     ) -> Bool {
@@ -505,7 +710,7 @@ extension HomeViewModel {
         }
     }
 
-    private func isCommuteRecord(_ item: HomeItem) -> Bool {
+    private nonisolated static func isCommuteRecord(_ item: HomeItem) -> Bool {
         guard item.category == .transport else { return false }
         if item.scenePackId == "commute" { return true }
         let text = "\(item.title) \(item.displayEmotionTag) \(item.memoryContext?.semanticPlace ?? "")".lowercased()
@@ -519,15 +724,15 @@ extension HomeViewModel {
         )
     }
 
-    private func isMorningCommutePromptTime(_ date: Date, calendar: Calendar) -> Bool {
+    private nonisolated static func isMorningCommutePromptTime(_ date: Date, calendar: Calendar) -> Bool {
         (360...630).contains(minutesFromMidnight(date, calendar: calendar))
     }
 
-    private func isNoonCommuteBackfillTime(_ date: Date, calendar: Calendar) -> Bool {
+    private nonisolated static func isNoonCommuteBackfillTime(_ date: Date, calendar: Calendar) -> Bool {
         (570...840).contains(minutesFromMidnight(date, calendar: calendar))
     }
 
-    private func isEveningCommutePromptTime(_ date: Date, calendar: Calendar) -> Bool {
+    private nonisolated static func isEveningCommutePromptTime(_ date: Date, calendar: Calendar) -> Bool {
         let minute = minutesFromMidnight(date, calendar: calendar)
         let weekday = calendar.component(.weekday, from: date)
         if weekday == 6 {
@@ -536,46 +741,46 @@ extension HomeViewModel {
         return (1050...1350).contains(minute)
     }
 
-    private func isEveningCommuteBackfillTime(_ date: Date, calendar: Calendar) -> Bool {
+    private nonisolated static func isEveningCommuteBackfillTime(_ date: Date, calendar: Calendar) -> Bool {
         let minute = minutesFromMidnight(date, calendar: calendar)
         return (1140...1439).contains(minute)
     }
 
-    private func isWorkday(_ date: Date, calendar: Calendar) -> Bool {
+    private nonisolated static func isWorkday(_ date: Date, calendar: Calendar) -> Bool {
         let weekday = calendar.component(.weekday, from: date)
         return (2...6).contains(weekday)
     }
 
-    private func commuteDirection(
+    private nonisolated static func commuteDirection(
         for date: Date,
         calendar: Calendar
-    ) -> CommuteHabitDirection? {
+    ) -> HomeCommuteHabitDirection? {
         let minute = minutesFromMidnight(date, calendar: calendar)
         if (330...660).contains(minute) { return .morning }
         if (900...1440).contains(minute) { return .evening }
         return nil
     }
 
-    private func commuteWeekdayGroup(
+    private nonisolated static func commuteWeekdayGroup(
         for date: Date,
-        direction: CommuteHabitDirection,
+        direction: HomeCommuteHabitDirection,
         calendar: Calendar
     ) -> String {
         guard direction == .evening else { return "weekday_morning" }
         return calendar.component(.weekday, from: date) == 6 ? "fri" : "mon_thu"
     }
 
-    private func minutesFromMidnight(_ date: Date, calendar: Calendar) -> Int {
+    private nonisolated static func minutesFromMidnight(_ date: Date, calendar: Calendar) -> Int {
         let components = calendar.dateComponents([.hour, .minute], from: date)
         return (components.hour ?? 0) * 60 + (components.minute ?? 0)
     }
 
-    private func medianMinute(in minutes: [Int]) -> Int? {
+    private nonisolated static func medianMinute(in minutes: [Int]) -> Int? {
         guard !minutes.isEmpty else { return nil }
         return minutes[minutes.count / 2]
     }
 
-    private func date(
+    private nonisolated static func date(
         onSameDayAs date: Date,
         minutesFromMidnight minute: Int,
         calendar: Calendar
@@ -584,11 +789,11 @@ extension HomeViewModel {
         return calendar.date(byAdding: .minute, value: minute, to: start) ?? date
     }
 
-    private func commuteTimeText(minutesFromMidnight minute: Int) -> String {
+    private nonisolated static func commuteTimeText(minutesFromMidnight minute: Int) -> String {
         String(format: "%02d:%02d", minute / 60, minute % 60)
     }
 
-    private func quickRecordDayKey(for date: Date) -> String {
+    private nonisolated static func quickRecordDayKey(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "zh_CN")
@@ -596,7 +801,7 @@ extension HomeViewModel {
         return formatter.string(from: date)
     }
 
-    private func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+    private nonisolated static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
         keywords.contains { text.contains($0.lowercased()) }
     }
 

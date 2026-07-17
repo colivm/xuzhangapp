@@ -31,12 +31,552 @@ struct AICommandRecordDraft: Identifiable, Equatable {
     }
 }
 
+struct RecordFrequentAmountSuggestion: Identifiable, Equatable {
+    let amount: Double
+    let category: HomeItem.Category
+    let count: Int
+    let confidence: Double
+    let latest: Date
+
+    var id: String {
+        "\(Int((amount * 100).rounded()))-\(category.rawValue)"
+    }
+}
+
+struct RecordInputHistoryKey: Equatable {
+    let ledgerRevision: Int
+    let referenceContext: String
+}
+
+struct RecordInputHistoryPreparationInput: @unchecked Sendable {
+    let key: RecordInputHistoryKey
+    let items: [HomeItem]
+    let referenceDate: Date
+    let now: Date
+}
+
+struct RecordInputHistorySnapshot: @unchecked Sendable {
+    let key: RecordInputHistoryKey
+    let prefillItems: [HomeItem]
+    let frequentSuggestions: [RecordFrequentAmountSuggestion]
+    let frequentTitlesBySuggestionID: [String: String]
+}
+
+struct RecordPrefillPreparationKey: Equatable {
+    let historyKey: RecordInputHistoryKey
+    let amount: Double
+    let referenceDate: Date
+    let now: Date
+    let noteDraft: String
+    let selectedCategory: HomeItem.Category
+    let context: RecordContextSignal?
+}
+
+struct RecordPrefillPreparationInput: @unchecked Sendable {
+    let key: RecordPrefillPreparationKey
+    let history: RecordInputHistorySnapshot
+    let amount: Double
+    let referenceDate: Date
+    let noteDraft: String
+    let selectedCategory: HomeItem.Category
+    let context: RecordContextSignal?
+}
+
+struct RecordPrefillSnapshot: @unchecked Sendable {
+    let key: RecordPrefillPreparationKey
+    let amount: Double
+    let result: RecordPrefillResult?
+    let appliedCategory: HomeItem.Category?
+    let categoryGridRecommendation: HomeItem.Category?
+}
+
+struct RecordPreviewLifeMarkKey: Equatable {
+    let ledgerRevision: Int
+    let title: String
+    let amount: Double
+    let category: HomeItem.Category
+    let createdAt: Date
+    let emotionTag: String
+    let merchantBrandID: String?
+    let scenePackID: String?
+    let isMember: Bool
+}
+
+struct RecordPreviewLifeMarkPreparationInput: @unchecked Sendable {
+    let key: RecordPreviewLifeMarkKey
+    let draft: HomeItem
+    let allItems: [HomeItem]
+    let isMember: Bool
+}
+
+enum RecordInputAssistanceComputation {
+    static func historyKey(
+        ledgerRevision: Int,
+        referenceDate: Date,
+        referenceDateEditedByUser: Bool,
+        calendar: Calendar = .current
+    ) -> RecordInputHistoryKey {
+        let components = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute],
+            from: referenceDate
+        )
+        let day = String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
+        let timeContext: String
+        if referenceDateEditedByUser {
+            timeContext = String(format: "%02d:%02d", components.hour ?? 0, components.minute ?? 0)
+        } else {
+            timeContext = "bucket:\((components.hour ?? 0) / 3)"
+        }
+        return RecordInputHistoryKey(
+            ledgerRevision: ledgerRevision,
+            referenceContext: "\(day)|\(timeContext)"
+        )
+    }
+
+    static func historySnapshot(
+        _ input: RecordInputHistoryPreparationInput
+    ) -> RecordInputHistorySnapshot {
+        let calendar = Calendar.current
+        let prefillStart = calendar.date(byAdding: .day, value: -180, to: input.now) ?? .distantPast
+        let prefillItems = input.items.filter { item in
+            item.amount > 0 && item.createdAt >= prefillStart
+        }
+        let suggestions = frequentRecordAmountSuggestions(
+            items: input.items,
+            at: input.referenceDate,
+            calendar: calendar
+        )
+        let titles = suggestions.reduce(into: [String: String]()) { result, suggestion in
+            if let title = frequentHabitTitle(
+                items: input.items,
+                suggestion: suggestion,
+                amount: suggestion.amount,
+                at: input.referenceDate,
+                calendar: calendar
+            ) {
+                result[suggestion.id] = title
+            }
+        }
+        return RecordInputHistorySnapshot(
+            key: input.key,
+            prefillItems: prefillItems,
+            frequentSuggestions: suggestions,
+            frequentTitlesBySuggestionID: titles
+        )
+    }
+
+    static func prefillSnapshot(
+        _ input: RecordPrefillPreparationInput
+    ) -> RecordPrefillSnapshot {
+        let brand = MerchantBrandCatalog.matchBrand(in: input.noteDraft)
+        let semanticCategory = RecordSemanticLexicon.semanticCategory(of: input.noteDraft)
+        let frequentSuggestion = input.history.frequentSuggestions.first { suggestion in
+            abs(suggestion.amount - input.amount) < 0.005
+        }
+        let shouldUseBrandPrefill = brand.map { brand in
+            !MerchantBrandCatalog.isConvenienceStoreBrand(brand)
+                || semanticCategory == nil
+                || semanticCategory == brand.category
+        } ?? false
+        let habitResult = RecordPrefillService().prefill(
+            input: RecordPrefillInput(
+                amount: input.amount,
+                referenceDate: input.referenceDate,
+                items: input.history.prefillItems,
+                noteDraft: input.noteDraft,
+                categoryLocked: false,
+                merchantBrandId: shouldUseBrandPrefill ? brand?.id : nil,
+                context: input.context
+            )
+        )
+
+        var result = habitResult
+        if habitResult == nil,
+           brand == nil,
+           semanticCategory == nil,
+           let frequentSuggestion,
+           frequentSuggestionCanOverrideNote(frequentSuggestion, note: input.noteDraft) {
+            let title = input.history.frequentTitlesBySuggestionID[frequentSuggestion.id]
+            result = RecordPrefillResult(
+                category: frequentSuggestion.category,
+                title: title,
+                emotionTag: habitEmotionTag(
+                    title: title,
+                    category: frequentSuggestion.category,
+                    amount: input.amount,
+                    date: input.referenceDate
+                ),
+                confidence: frequentSuggestion.confidence,
+                source: "frequent"
+            )
+        }
+
+        let appliedCategory = resolvePrefillCategory(
+            brand: brand,
+            frequent: frequentSuggestion,
+            semanticCategory: semanticCategory,
+            habitResult: habitResult
+        )
+        let displayCategory = appliedCategory ?? input.selectedCategory
+        let sanitizedResult = sanitizedPrefillResult(result, for: displayCategory)
+        let categoryRecommendationStart = Calendar.current.date(
+            byAdding: .day,
+            value: -90,
+            to: input.now
+        ) ?? .distantPast
+        let categoryGridRecommendation = categoryGridRecommendation(
+            amount: input.amount,
+            referenceDate: input.referenceDate,
+            noteDraft: input.noteDraft,
+            brand: brand,
+            semanticCategory: semanticCategory,
+            prefillResult: sanitizedResult,
+            frequentSuggestion: frequentSuggestion,
+            items: input.history.prefillItems.filter { item in
+                item.createdAt >= categoryRecommendationStart
+            },
+            context: input.context
+        )
+        return RecordPrefillSnapshot(
+            key: input.key,
+            amount: input.amount,
+            result: sanitizedResult,
+            appliedCategory: appliedCategory,
+            categoryGridRecommendation: categoryGridRecommendation
+        )
+    }
+
+    static func previewLifeMarkText(
+        _ input: RecordPreviewLifeMarkPreparationInput
+    ) -> String? {
+        guard let mark = LifeMarkService.aggregates(
+            for: [input.draft],
+            allItems: input.allItems,
+            isMember: input.isMember,
+            limit: 1
+        ).first else {
+            return nil
+        }
+        switch mark.kind {
+        case .milestone, .context, .streak:
+            return "生活线索 · \(mark.title)"
+        case .scene:
+            return "会进入「\(mark.label)」印记"
+        }
+    }
+
+    static func prefillResultsEqual(
+        _ lhs: RecordPrefillResult?,
+        _ rhs: RecordPrefillResult?
+    ) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil):
+            return true
+        case let (lhs?, rhs?):
+            return lhs.category == rhs.category
+                && lhs.title == rhs.title
+                && lhs.emotionTag == rhs.emotionTag
+                && lhs.confidence == rhs.confidence
+                && lhs.source == rhs.source
+        default:
+            return false
+        }
+    }
+
+    private static func frequentRecordAmountSuggestions(
+        items: [HomeItem],
+        at date: Date,
+        calendar: Calendar
+    ) -> [RecordFrequentAmountSuggestion] {
+        let start = calendar.date(byAdding: .day, value: -180, to: date) ?? .distantPast
+        let recentItems = items.filter { item in
+            item.amount > 0 && item.createdAt >= start && item.createdAt <= date
+        }
+        guard recentItems.count >= 6 else { return [] }
+
+        let targetBucket = hourHabitBucket(for: date, calendar: calendar)
+        let targetDayKind = RecordCalendarContext.dayKind(for: date)
+        let contextItems = recentItems.filter { item in
+            hourHabitBucket(for: item.createdAt, calendar: calendar) == targetBucket
+                && RecordCalendarContext.dayKind(for: item.createdAt) == targetDayKind
+        }
+        guard contextItems.count >= 3 else { return [] }
+
+        let grouped = Dictionary(grouping: contextItems) { item in
+            Int((item.amount * 100).rounded())
+        }
+        let candidates: [RecordFrequentAmountSuggestion] = grouped.compactMap { entry in
+            let group = entry.value
+            let latestDate = group.map(\.createdAt).max() ?? .distantPast
+            guard let category = frequentCategory(in: group) else { return nil }
+            return RecordFrequentAmountSuggestion(
+                amount: Double(entry.key) / 100,
+                category: category.category,
+                count: category.count,
+                confidence: category.confidence,
+                latest: latestDate
+            )
+        }
+        return Array(
+            candidates
+                .filter { candidate in
+                    candidate.count >= 2
+                        && candidate.confidence >= 0.75
+                        && candidate.amount > 0
+                        && candidate.amount <= 9999
+                }
+                .sorted { lhs, rhs in
+                    lhs.count == rhs.count ? lhs.latest > rhs.latest : lhs.count > rhs.count
+                }
+                .prefix(3)
+        )
+    }
+
+    private static func frequentHabitTitle(
+        items: [HomeItem],
+        suggestion: RecordFrequentAmountSuggestion,
+        amount: Double,
+        at date: Date,
+        calendar: Calendar
+    ) -> String? {
+        let start = calendar.date(byAdding: .day, value: -180, to: date) ?? .distantPast
+        let amountCents = Int((amount * 100).rounded())
+        let supportItems = items.filter { item in
+            item.amount > 0
+                && item.createdAt >= start
+                && item.createdAt <= date
+                && item.category == suggestion.category
+                && Int((item.amount * 100).rounded()) == amountCents
+                && hourHabitBucket(for: item.createdAt, calendar: calendar) == hourHabitBucket(for: date, calendar: calendar)
+                && RecordCalendarContext.dayKind(for: item.createdAt) == RecordCalendarContext.dayKind(for: date)
+        }
+        guard supportItems.count >= 2 else { return nil }
+
+        let ranked = supportItems.reduce(into: [String: Int]()) { result, item in
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard RecordPrefillService.isHabitTitle(title, category: suggestion.category),
+                  RecordSemanticLexicon.canReuseHabitTitle(
+                    title,
+                    category: suggestion.category,
+                    userEditedTitle: item.userEditedTitle == true
+                  ) else {
+                return
+            }
+            result[title, default: 0] += item.userEditedTitle == true ? 2 : 1
+        }
+        .sorted { lhs, rhs in
+            lhs.value == rhs.value ? lhs.key < rhs.key : lhs.value > rhs.value
+        }
+        guard let best = ranked.first, best.value >= 2 else { return nil }
+        return best.key
+    }
+
+    private static func frequentCategory(
+        in items: [HomeItem]
+    ) -> (category: HomeItem.Category, count: Int, confidence: Double)? {
+        if let scene = LifeSceneSemanticService.dominantScene(in: items),
+           scene.signal.confidenceTier >= .medium,
+           scene.count >= 2 {
+            let confidence = Double(scene.count) / Double(max(items.count, 1))
+            if confidence >= 0.67 {
+                return (scene.signal.category, scene.count, confidence)
+            }
+        }
+
+        struct CategoryCandidate {
+            let category: HomeItem.Category
+            let count: Int
+            let latest: Date
+        }
+        let ranked = Dictionary(grouping: items, by: \.category)
+            .map { entry in
+                CategoryCandidate(
+                    category: entry.key,
+                    count: entry.value.count,
+                    latest: entry.value.map(\.createdAt).max() ?? .distantPast
+                )
+            }
+            .sorted { lhs, rhs in
+                lhs.count == rhs.count ? lhs.latest > rhs.latest : lhs.count > rhs.count
+            }
+        guard let top = ranked.first else { return nil }
+        let secondCount = ranked.dropFirst().first?.count ?? 0
+        let confidence = Double(top.count) / Double(max(items.count, 1))
+        guard top.count >= 2, confidence >= 0.75, top.count >= secondCount + 2 else {
+            return nil
+        }
+        return (top.category, top.count, confidence)
+    }
+
+    private static func resolvePrefillCategory(
+        brand: MerchantBrandDefinition?,
+        frequent: RecordFrequentAmountSuggestion?,
+        semanticCategory: HomeItem.Category?,
+        habitResult: RecordPrefillResult?
+    ) -> HomeItem.Category? {
+        if let brand { return brand.category }
+        if let semanticCategory { return semanticCategory }
+        if let frequent { return frequent.category }
+        if let category = habitResult?.category,
+           habitResult?.source == "generic" {
+            return category
+        }
+        if let category = habitResult?.category,
+           habitResult?.source != "generic",
+           (habitResult?.confidence ?? 0) >= 0.55 {
+            return category
+        }
+        return nil
+    }
+
+    private static func categoryGridRecommendation(
+        amount: Double,
+        referenceDate: Date,
+        noteDraft: String,
+        brand: MerchantBrandDefinition?,
+        semanticCategory: HomeItem.Category?,
+        prefillResult: RecordPrefillResult?,
+        frequentSuggestion: RecordFrequentAmountSuggestion?,
+        items: [HomeItem],
+        context: RecordContextSignal?
+    ) -> HomeItem.Category? {
+        if let brand {
+            if MerchantBrandCatalog.isConvenienceStoreBrand(brand),
+               let semanticCategory,
+               semanticCategory != brand.category {
+                return semanticCategory
+            }
+            return brand.category
+        }
+        if let semanticCategory {
+            return semanticCategory
+        }
+        if let category = prefillResult?.category,
+           prefillResult?.source != "generic",
+           (prefillResult?.confidence ?? 0) >= 0.55 {
+            return category
+        }
+        if let frequentSuggestion,
+           frequentSuggestionCanOverrideNote(frequentSuggestion, note: noteDraft) {
+            return frequentSuggestion.category
+        }
+        if let category = prefillResult?.category,
+           prefillResult?.source == "generic" {
+            return category
+        }
+        guard !noteDraft.isEmpty else { return nil }
+        return CategoryRecommendService().recommend(
+            input: CategoryRecommendInput(
+                amount: amount,
+                referenceDate: referenceDate,
+                items: items,
+                noteDraft: noteDraft,
+                locked: false,
+                context: context
+            )
+        )?.recommended
+    }
+
+    private static func frequentSuggestionCanOverrideNote(
+        _ suggestion: RecordFrequentAmountSuggestion,
+        note: String
+    ) -> Bool {
+        guard suggestion.confidence >= 0.67 else { return false }
+        let semanticCategories = RecordSemanticLexicon.matchingCategories(in: note)
+        return semanticCategories.isEmpty || semanticCategories.contains(suggestion.category)
+    }
+
+    private static func sanitizedPrefillResult(
+        _ result: RecordPrefillResult?,
+        for category: HomeItem.Category
+    ) -> RecordPrefillResult? {
+        guard let result else { return nil }
+        guard let title = result.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty else {
+            return result
+        }
+        guard RecordSemanticLexicon.canDisplayPrefillTitle(
+            title,
+            category: category,
+            source: result.source
+        ) else {
+            return RecordPrefillResult(
+                category: result.category,
+                title: nil,
+                emotionTag: nil,
+                confidence: result.confidence,
+                source: result.source
+            )
+        }
+        return result
+    }
+
+    private static func habitEmotionTag(
+        title: String?,
+        category: HomeItem.Category,
+        amount: Double,
+        date: Date
+    ) -> String? {
+        guard let title,
+              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return NarrativeCopyResolver.resolveEmotionTag(
+            context: NarrativeCopyResolver.Context(
+                brandId: nil,
+                category: category,
+                amount: amount,
+                date: date,
+                seed: title,
+                note: title
+            )
+        )
+    }
+
+    private static func hourHabitBucket(for date: Date, calendar: Calendar) -> Int {
+        calendar.component(.hour, from: date) / 3
+    }
+}
+
 private struct ItemDerivedCache {
     var todayPositiveItems: [HomeItem] = []
     var recentThreeTodayItems: [HomeItem] = []
     var currentWeekItems: [HomeItem] = []
     var currentMonthItems: [HomeItem] = []
     var currentYearItems: [HomeItem] = []
+    var homeJourneyLedgerFacts = HomeJourneyLedgerFacts()
+}
+
+struct HomeJourneyLedgerFacts: Equatable {
+    var totalCommittedRecordCount = 0
+    var currentWeekCommittedRecordCount = 0
+    var currentMonthCommittedRecordCount = 0
+
+    static func build(
+        from items: [HomeItem],
+        currentWeekInterval: DateInterval?,
+        currentMonthInterval: DateInterval?
+    ) -> HomeJourneyLedgerFacts {
+        items.reduce(into: HomeJourneyLedgerFacts()) { facts, item in
+            guard item.amount > 0, item.draftMeta == nil else { return }
+            facts.totalCommittedRecordCount += 1
+            if let currentWeekInterval,
+               item.createdAt >= currentWeekInterval.start,
+               item.createdAt < currentWeekInterval.end {
+                facts.currentWeekCommittedRecordCount += 1
+            }
+            if let currentMonthInterval,
+               item.createdAt >= currentMonthInterval.start,
+               item.createdAt < currentMonthInterval.end {
+                facts.currentMonthCommittedRecordCount += 1
+            }
+        }
+    }
 }
 
 @MainActor
@@ -48,17 +588,7 @@ final class HomeViewModel: ObservableObject {
         var id: String { rawValue }
     }
 
-    struct FrequentRecordAmountSuggestion: Identifiable {
-        let amount: Double
-        let category: HomeItem.Category
-        let count: Int
-        let confidence: Double
-        let latest: Date
-
-        var id: String {
-            "\(Int((amount * 100).rounded()))-\(category.rawValue)"
-        }
-    }
+    typealias FrequentRecordAmountSuggestion = RecordFrequentAmountSuggestion
 
     @Published var inputTitle: String = ""
     @Published var inputAmount: String = ""
@@ -75,6 +605,10 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var items: [HomeItem] = [] {
         didSet {
             itemDerivedCacheNeedsRebuild = true
+            recordInputAssistanceRevision &+= 1
+            homeDashboardRevision &+= 1
+            invalidateRecordInputHistorySnapshot()
+            invalidateHomeDashboardSnapshots()
         }
     }
     @Published private(set) var syncStatusMessage: String?
@@ -84,6 +618,12 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var latestActionCard: ActionCardData?
     @Published private(set) var activeRouteGuidance: PlaybackRouteGuidance?
     @Published private(set) var recordPrefillResult: RecordPrefillResult?
+    @Published private(set) var recordWarmupSuggestions: [FrequentRecordAmountSuggestion] = []
+    @Published private(set) var recordRecommendedCategory: HomeItem.Category?
+    @Published private(set) var recordInputAssistanceRevision: Int = 0
+    @Published private(set) var homeDashboardRevision: Int = 0
+    @Published var homeLifeMarkTextsByItemID: [UUID: String] = [:]
+    @Published var highConfidenceQuickRecordSuggestionSnapshot: HomeHighConfidenceQuickRecordSuggestion?
     @Published private(set) var recordInputMessage: String?
     @Published var petMessage: String? = nil
 
@@ -155,7 +695,6 @@ final class HomeViewModel: ObservableObject {
     private let aiReportService = AIReportService()
     private let analyticsService = AnalyticsService()
     private let categoryRecommendService = CategoryRecommendService()
-    private let recordPrefillService = RecordPrefillService()
     private let petCompanionService = PetCompanionService.shared
     private let playbackService = PlaybackService()
     private let routeQuotaStore = SummaryPlaybackQuotaStore()
@@ -163,6 +702,19 @@ final class HomeViewModel: ObservableObject {
     private static let routeGuidanceHandledDefaultsKey = "route_guidance_handled_v1"
     private var emittedRouteGuidanceKeys: Set<String> = []
     private var recordPrefillAmount: Double?
+    private var recordInputHistorySnapshot: RecordInputHistorySnapshot?
+    private var recordInputHistoryPreparationKey: RecordInputHistoryKey?
+    private var recordInputHistoryPreparationTask: Task<Void, Never>?
+    private var recordInputHistoryRequestID = UUID()
+    private var recordPrefillPreparationKey: RecordPrefillPreparationKey?
+    private var recordPrefillPreparationTask: Task<Void, Never>?
+    private var recordPrefillRequestID = UUID()
+    var homeLifeMarkSnapshotKey: HomeLifeMarkSnapshotKey?
+    var homeLifeMarkPreparationTask: Task<Void, Never>?
+    var homeLifeMarkRequestID = UUID()
+    var homeQuickRecordSnapshotKey: HomeQuickRecordSnapshotKey?
+    var homeQuickRecordPreparationTask: Task<Void, Never>?
+    var homeQuickRecordRequestID = UUID()
     private var lastAutoRecommendedCategory: HomeItem.Category?
     private var pendingCategoryCorrectionFrom: HomeItem.Category?
     private var itemDerivedCache = ItemDerivedCache()
@@ -316,6 +868,9 @@ final class HomeViewModel: ObservableObject {
 
     private func compatiblePrefillTitleForSave(category: HomeItem.Category) -> String? {
         guard let result = recordPrefillResult,
+              let recordPrefillAmount,
+              let currentAmount = Double(inputAmount.replacingOccurrences(of: ",", with: "")),
+              abs(recordPrefillAmount - currentAmount) < 0.005,
               result.category == nil || result.category == category,
               let title = result.title?.trimmingCharacters(in: .whitespacesAndNewlines),
               !title.isEmpty,
@@ -1344,130 +1899,262 @@ final class HomeViewModel: ObservableObject {
     }
 
     func refreshRecordPrefill() {
+        let now = Date()
+        let historyKey = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: recordInputAssistanceRevision,
+            referenceDate: selectedDate,
+            referenceDateEditedByUser: selectedDateEditedByUser
+        )
+
+        if recordInputHistorySnapshot?.key != historyKey {
+            prepareRecordInputHistorySnapshot(key: historyKey, now: now)
+        }
+
         let normalizedAmount = inputAmount.replacingOccurrences(of: ",", with: "")
         guard let amount = Double(normalizedAmount), amount > 0 else {
-            recordPrefillResult = nil
-            recordPrefillAmount = nil
+            invalidateRecordPrefillSnapshot()
+            return
+        }
+        guard !categoryLockedByUser else {
+            invalidateRecordPrefillSnapshot()
+            return
+        }
+        guard let history = recordInputHistorySnapshot,
+              history.key == historyKey else {
+            invalidateRecordPrefillSnapshot()
             return
         }
 
+        prepareRecordPrefillSnapshot(
+            amount: amount,
+            history: history
+        )
+    }
+
+    func refreshRecordWarmupSuggestions() {
+        let key = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: recordInputAssistanceRevision,
+            referenceDate: selectedDate,
+            referenceDateEditedByUser: selectedDateEditedByUser
+        )
+        guard recordInputHistorySnapshot?.key != key else { return }
+        prepareRecordInputHistorySnapshot(key: key, now: Date())
+    }
+
+    func cancelRecordInputAssistancePreparation() {
+        recordInputHistoryPreparationTask?.cancel()
+        recordInputHistoryPreparationTask = nil
+        recordInputHistoryPreparationKey = nil
+        recordInputHistoryRequestID = UUID()
+        let hadPendingPrefill = recordPrefillPreparationTask != nil
+        recordPrefillPreparationTask?.cancel()
+        recordPrefillPreparationTask = nil
+        recordPrefillRequestID = UUID()
+        if hadPendingPrefill {
+            recordPrefillPreparationKey = nil
+        }
+    }
+
+    private func prepareRecordInputHistorySnapshot(
+        key: RecordInputHistoryKey,
+        now: Date
+    ) {
+        guard recordInputHistoryPreparationKey != key else { return }
+
+        recordInputHistoryPreparationTask?.cancel()
+        recordInputHistoryRequestID = UUID()
+        let requestID = recordInputHistoryRequestID
+        recordInputHistoryPreparationKey = key
+        recordWarmupSuggestions = []
+        invalidateRecordPrefillSnapshot()
+
+        let input = RecordInputHistoryPreparationInput(
+            key: key,
+            items: items,
+            referenceDate: selectedDate,
+            now: now
+        )
+        recordInputHistoryPreparationTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled, recordInputHistoryRequestID == requestID else { return }
+            let snapshot = await withTaskGroup(
+                of: RecordInputHistorySnapshot?.self,
+                returning: RecordInputHistorySnapshot?.self
+            ) { group in
+                group.addTask(priority: .utility) {
+                    guard !Task.isCancelled else { return nil }
+                    return RecordInputAssistanceComputation.historySnapshot(input)
+                }
+                return await group.next() ?? nil
+            }
+            guard let snapshot,
+                  !Task.isCancelled,
+                  recordInputHistoryRequestID == requestID,
+                  RecordInputAssistanceComputation.historyKey(
+                    ledgerRevision: recordInputAssistanceRevision,
+                    referenceDate: selectedDate,
+                    referenceDateEditedByUser: selectedDateEditedByUser
+                  ) == key else {
+                return
+            }
+            recordInputHistorySnapshot = snapshot
+            recordInputHistoryPreparationKey = nil
+            recordInputHistoryPreparationTask = nil
+            if recordWarmupSuggestions != snapshot.frequentSuggestions {
+                recordWarmupSuggestions = snapshot.frequentSuggestions
+            }
+            refreshRecordPrefill()
+        }
+    }
+
+    private func prepareRecordPrefillSnapshot(
+        amount: Double,
+        history: RecordInputHistorySnapshot
+    ) {
         let noteResult = UserContentRiskService.shared.validateManualNote(inputTitle, allowEmpty: true)
         let trimmedNote = noteResult.isAllowed ? noteResult.value : ""
-        let brand = MerchantBrandCatalog.matchBrand(in: trimmedNote)
-        let frequentSuggestion = frequentRecordAmountSuggestion(for: amount, at: selectedDate)
-        let noteSemanticCategory = semanticCategory(from: trimmedNote)
-        let shouldUseBrandPrefill = brand.map { brand in
-            !MerchantBrandCatalog.isConvenienceStoreBrand(brand)
-                || noteSemanticCategory == nil
-                || noteSemanticCategory == brand.category
-        } ?? false
-
-        let start = Calendar.current.date(byAdding: .day, value: -180, to: Date()) ?? .distantPast
-        let recentItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
-        let result = recordPrefillService.prefill(
-            input: RecordPrefillInput(
-                amount: amount,
-                referenceDate: selectedDate,
-                items: recentItems,
-                noteDraft: trimmedNote,
-                categoryLocked: categoryLockedByUser,
-                merchantBrandId: categoryLockedByUser || !shouldUseBrandPrefill ? nil : brand?.id,
-                context: currentRecordContextSignal()
-            )
-        )
-        recordPrefillResult = result
-        recordPrefillAmount = amount
-
-        if result == nil,
-           brand == nil,
-           noteSemanticCategory == nil,
-           let frequentSuggestion,
-           frequentSuggestionCanOverrideNote(frequentSuggestion, note: trimmedNote) {
-            let title = frequentHabitTitle(
-                for: frequentSuggestion,
-                amount: amount,
-                at: selectedDate
-            )
-            recordPrefillResult = RecordPrefillResult(
-                category: frequentSuggestion.category,
-                title: title,
-                emotionTag: habitEmotionTag(
-                    title: title,
-                    category: frequentSuggestion.category,
-                    amount: amount,
-                    date: selectedDate
-                ),
-                confidence: frequentSuggestion.confidence,
-                source: "frequent"
-            )
+        let context = currentRecordContextSignal()
+        if let existingKey = recordPrefillPreparationKey,
+           existingKey.historyKey == history.key,
+           existingKey.amount == amount,
+           existingKey.referenceDate == selectedDate,
+           existingKey.noteDraft == trimmedNote,
+           existingKey.context == context {
+            return
         }
+        applyProvisionalRecordCategory(
+            for: trimmedNote,
+            amount: amount,
+            history: history
+        )
+        let key = RecordPrefillPreparationKey(
+            historyKey: history.key,
+            amount: amount,
+            referenceDate: selectedDate,
+            noteDraft: trimmedNote,
+            selectedCategory: selectedCategory,
+            context: context
+        )
+        guard recordPrefillPreparationKey != key else { return }
 
-        if let category = resolvePrefillCategory(
-            brand: brand,
-            frequent: frequentSuggestion,
-            semanticCategory: noteSemanticCategory,
-            habitResult: result
-        ) {
+        recordPrefillPreparationTask?.cancel()
+        recordPrefillRequestID = UUID()
+        let requestID = recordPrefillRequestID
+        recordPrefillPreparationKey = key
+        if recordPrefillResult != nil {
+            recordPrefillResult = nil
+        }
+        recordPrefillAmount = nil
+        if recordRecommendedCategory != nil {
+            recordRecommendedCategory = nil
+        }
+        let input = RecordPrefillPreparationInput(
+            key: key,
+            history: history,
+            amount: amount,
+            referenceDate: selectedDate,
+            now: Date(),
+            noteDraft: trimmedNote,
+            selectedCategory: selectedCategory,
+            context: context
+        )
+        recordPrefillPreparationTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled, recordPrefillRequestID == requestID else { return }
+            let snapshot = await withTaskGroup(
+                of: RecordPrefillSnapshot?.self,
+                returning: RecordPrefillSnapshot?.self
+            ) { group in
+                group.addTask(priority: .userInitiated) {
+                    guard !Task.isCancelled else { return nil }
+                    return RecordInputAssistanceComputation.prefillSnapshot(input)
+                }
+                return await group.next() ?? nil
+            }
+            guard let snapshot,
+                  !Task.isCancelled,
+                  recordPrefillRequestID == requestID,
+                  !categoryLockedByUser,
+                  recordInputHistorySnapshot?.key == history.key else {
+                return
+            }
+            applyRecordPrefillSnapshot(snapshot)
+            recordPrefillPreparationTask = nil
+        }
+    }
+
+    private func applyRecordPrefillSnapshot(_ snapshot: RecordPrefillSnapshot) {
+        guard recordPrefillPreparationKey == snapshot.key else { return }
+        if let category = snapshot.appliedCategory {
             applyRecommendedCategory(category)
         }
-        recordPrefillResult = sanitizedPrefillResult(
-            recordPrefillResult,
-            for: selectedCategory
-        )
-    }
-
-    private func sanitizedPrefillResult(
-        _ result: RecordPrefillResult?,
-        for category: HomeItem.Category
-    ) -> RecordPrefillResult? {
-        guard let result else { return nil }
-        guard let title = result.title?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !title.isEmpty else {
-            return result
+        if !RecordInputAssistanceComputation.prefillResultsEqual(recordPrefillResult, snapshot.result) {
+            recordPrefillResult = snapshot.result
         }
-        guard RecordSemanticLexicon.canDisplayPrefillTitle(
-            title,
-            category: category,
-            source: result.source
-        ) else {
-            return RecordPrefillResult(
-                category: result.category,
-                title: nil,
-                emotionTag: nil,
-                confidence: result.confidence,
-                source: result.source
+        recordPrefillAmount = snapshot.amount
+        if recordRecommendedCategory != snapshot.categoryGridRecommendation {
+            recordRecommendedCategory = snapshot.categoryGridRecommendation
+        }
+        if let category = snapshot.appliedCategory,
+           category != snapshot.key.selectedCategory {
+            recordPrefillPreparationKey = RecordPrefillPreparationKey(
+                historyKey: snapshot.key.historyKey,
+                amount: snapshot.key.amount,
+                referenceDate: snapshot.key.referenceDate,
+                noteDraft: snapshot.key.noteDraft,
+                selectedCategory: category,
+                context: snapshot.key.context
             )
         }
-        return result
     }
 
-    private func resolvePrefillCategory(
-        brand: MerchantBrandDefinition?,
-        frequent: FrequentRecordAmountSuggestion?,
-        semanticCategory: HomeItem.Category?,
-        habitResult: RecordPrefillResult?
-    ) -> HomeItem.Category? {
-        guard !categoryLockedByUser else { return nil }
-        // Cascade order is intentionally single-apply:
-        // brand > explicit note semantics > confident frequent exact amount in the same time context > habit >= 0.55 > generic category fallback.
-        // TODO(next PR): make habit exact-amount grouping share the same source as frequent, replacing the current ±30% loose match.
-        if let brand { return brand.category }
-        if let semanticCategory {
-            return semanticCategory
+    private func applyProvisionalRecordCategory(
+        for note: String,
+        amount: Double,
+        history: RecordInputHistorySnapshot
+    ) {
+        let brand = MerchantBrandCatalog.matchBrand(in: note)
+        let semanticCategory = RecordSemanticLexicon.semanticCategory(of: note)
+        let frequentCategory = history.frequentSuggestions.first { suggestion in
+            abs(suggestion.amount - amount) < 0.005
+        }?.category
+        if let category = brand?.category ?? semanticCategory ?? frequentCategory {
+            applyRecommendedCategory(category)
+            return
         }
-        if let frequent {
-            return frequent.category
+        guard !categoryLockedByUser,
+              let lastAutoRecommendedCategory,
+              selectedCategory == lastAutoRecommendedCategory else {
+            return
         }
-        if let category = habitResult?.category,
-           habitResult?.source == "generic" {
-            return category
+        selectedCategory = .other
+        self.lastAutoRecommendedCategory = nil
+    }
+
+    private func invalidateRecordPrefillSnapshot() {
+        recordPrefillPreparationTask?.cancel()
+        recordPrefillPreparationTask = nil
+        recordPrefillPreparationKey = nil
+        recordPrefillRequestID = UUID()
+        if recordPrefillResult != nil {
+            recordPrefillResult = nil
         }
-        if let category = habitResult?.category,
-           habitResult?.source != "generic",
-           (habitResult?.confidence ?? 0) >= 0.55 {
-            return category
+        recordPrefillAmount = nil
+        if recordRecommendedCategory != nil {
+            recordRecommendedCategory = nil
         }
-        return nil
+    }
+
+    private func invalidateRecordInputHistorySnapshot() {
+        recordInputHistoryPreparationTask?.cancel()
+        recordInputHistoryPreparationTask = nil
+        recordInputHistoryPreparationKey = nil
+        recordInputHistoryRequestID = UUID()
+        recordInputHistorySnapshot = nil
+        if !recordWarmupSuggestions.isEmpty {
+            recordWarmupSuggestions = []
+        }
+        invalidateRecordPrefillSnapshot()
     }
 
     private func semanticCategory(from note: String) -> HomeItem.Category? {
@@ -1498,8 +2185,7 @@ final class HomeViewModel: ObservableObject {
         latestPlayback = nil
         latestActionCard = nil
         activeRouteGuidance = nil
-        recordPrefillResult = nil
-        recordPrefillAmount = nil
+        invalidateRecordPrefillSnapshot()
         petMessage = nil
         LocalStore.saveDailyInsights([])
         UserDefaults.standard.removeObject(forKey: "latest_action_card_v1")
@@ -1509,6 +2195,7 @@ final class HomeViewModel: ObservableObject {
         rememberCategoryCorrectionIfNeeded(to: category)
         selectedCategory = category
         categoryLockedByUser = true
+        invalidateRecordPrefillSnapshot()
     }
 
     func preferNoteSemanticsForCurrentDraft() {
@@ -1522,8 +2209,7 @@ final class HomeViewModel: ObservableObject {
         inputTitle = title
         selectedCategory = category
         categoryLockedByUser = true
-        recordPrefillResult = nil
-        recordPrefillAmount = nil
+        invalidateRecordPrefillSnapshot()
         recordInputMessage = nil
     }
 
@@ -1531,8 +2217,7 @@ final class HomeViewModel: ObservableObject {
         rememberCategoryCorrectionIfNeeded(to: category)
         selectedCategory = category
         categoryLockedByUser = true
-        recordPrefillResult = nil
-        recordPrefillAmount = nil
+        invalidateRecordPrefillSnapshot()
         recordInputMessage = nil
     }
 
@@ -1648,54 +2333,16 @@ final class HomeViewModel: ObservableObject {
     }
 
     func frequentRecordAmountSuggestions(at date: Date = .now) -> [FrequentRecordAmountSuggestion] {
-        let calendar = Calendar.current
-        let start = calendar.date(byAdding: .day, value: -180, to: date) ?? .distantPast
-        let recentItems = items.filter { item in
-            item.amount > 0 && item.createdAt >= start && item.createdAt <= date
+        let key = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: recordInputAssistanceRevision,
+            referenceDate: date,
+            referenceDateEditedByUser: selectedDateEditedByUser
+        )
+        guard let snapshot = recordInputHistorySnapshot,
+              snapshot.key == key else {
+            return []
         }
-        guard recentItems.count >= 6 else { return [] }
-
-        let targetBucket = hourHabitBucket(for: date)
-        let targetDayKind = habitDayKind(for: date)
-        let contextItems = recentItems.filter { item in
-            hourHabitBucket(for: item.createdAt) == targetBucket &&
-            habitDayKind(for: item.createdAt) == targetDayKind
-        }
-        guard contextItems.count >= 3 else { return [] }
-
-        let grouped = Dictionary(grouping: contextItems) { item in
-            Int((item.amount * 100).rounded())
-        }
-
-        let candidates: [FrequentRecordAmountSuggestion] = grouped.compactMap { entry in
-            let cents = entry.key
-            let group = entry.value
-            let latestDate = group.map { $0.createdAt }.max() ?? .distantPast
-            guard let category = frequentCategory(in: group) else { return nil }
-            return FrequentRecordAmountSuggestion(
-                amount: Double(cents) / 100,
-                category: category.category,
-                count: category.count,
-                confidence: category.confidence,
-                latest: latestDate
-            )
-        }
-
-        let validCandidates = candidates.filter { candidate in
-            candidate.count >= 2 &&
-            candidate.confidence >= 0.75 &&
-            candidate.amount > 0 &&
-            candidate.amount <= 9999
-        }
-
-        let sortedCandidates = validCandidates.sorted { lhs, rhs in
-            if lhs.count == rhs.count {
-                return lhs.latest > rhs.latest
-            }
-            return lhs.count > rhs.count
-        }
-
-        return Array(sortedCandidates.prefix(3))
+        return snapshot.frequentSuggestions
     }
 
     private func frequentRecordAmountSuggestion(for amount: Double, at date: Date) -> FrequentRecordAmountSuggestion? {
@@ -1704,120 +2351,14 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    private func frequentHabitTitle(
-        for suggestion: FrequentRecordAmountSuggestion,
-        amount: Double,
-        at date: Date
-    ) -> String? {
-        let calendar = Calendar.current
-        let start = calendar.date(byAdding: .day, value: -180, to: date) ?? .distantPast
-        let amountCents = Int((amount * 100).rounded())
-        let supportItems = items.filter { item in
-            item.amount > 0
-                && item.createdAt >= start
-                && item.createdAt <= date
-                && item.category == suggestion.category
-                && Int((item.amount * 100).rounded()) == amountCents
-                && hourHabitBucket(for: item.createdAt) == hourHabitBucket(for: date)
-                && habitDayKind(for: item.createdAt) == habitDayKind(for: date)
-        }
-        guard supportItems.count >= 2 else { return nil }
-
-        let ranked = supportItems.reduce(into: [String: Int]()) { result, item in
-            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard RecordPrefillService.isHabitTitle(title, category: suggestion.category),
-                  RecordSemanticLexicon.canReuseHabitTitle(
-                    title,
-                    category: suggestion.category,
-                    userEditedTitle: item.userEditedTitle == true
-                  ) else {
-                return
-            }
-            result[title, default: 0] += item.userEditedTitle == true ? 2 : 1
-        }
-        .sorted { lhs, rhs in
-            if lhs.value == rhs.value {
-                return lhs.key < rhs.key
-            }
-            return lhs.value > rhs.value
-        }
-
-        guard let best = ranked.first, best.value >= 2 else { return nil }
-        return best.key
-    }
-
-    private func habitEmotionTag(
-        title: String?,
-        category: HomeItem.Category,
-        amount: Double,
-        date: Date
-    ) -> String? {
-        guard let title = title,
-              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
-        }
-        return NarrativeCopyResolver.resolveEmotionTag(
-            context: NarrativeCopyResolver.Context(
-                brandId: nil,
-                category: category,
-                amount: amount,
-                date: date,
-                seed: title,
-                note: title
-            )
-        )
-    }
-
-    private func frequentCategory(in items: [HomeItem]) -> (category: HomeItem.Category, count: Int, confidence: Double)? {
-        if let scene = LifeSceneSemanticService.dominantScene(in: items),
-           scene.signal.confidenceTier >= .medium,
-           scene.count >= 2 {
-            let confidence = Double(scene.count) / Double(max(items.count, 1))
-            if confidence >= 0.67 {
-                return (scene.signal.category, scene.count, confidence)
-            }
-        }
-
-        struct CategoryCandidate {
-            let category: HomeItem.Category
-            let count: Int
-            let latest: Date
-        }
-
-        let ranked = Dictionary(grouping: items, by: \.category)
-            .map { entry in
-                CategoryCandidate(
-                    category: entry.key,
-                    count: entry.value.count,
-                    latest: entry.value.map(\.createdAt).max() ?? .distantPast
-                )
-            }
-            .sorted { lhs, rhs in
-                if lhs.count == rhs.count {
-                    return lhs.latest > rhs.latest
-                }
-                return lhs.count > rhs.count
-            }
-        guard let top = ranked.first else { return nil }
-        let secondCount = ranked.dropFirst().first?.count ?? 0
-        let confidence = Double(top.count) / Double(max(items.count, 1))
-        guard top.count >= 2, confidence >= 0.75, top.count >= secondCount + 2 else {
-            return nil
-        }
-        return (top.category, top.count, confidence)
-    }
-
-    private func hourHabitBucket(for date: Date) -> Int {
-        Calendar.current.component(.hour, from: date) / 3
-    }
-
-    private func habitDayKind(for date: Date) -> RecordCalendarContext.DayKind {
-        RecordCalendarContext.dayKind(for: date)
-    }
-
     var todayItems: [HomeItem] {
         ensureItemDerivedCacheFresh()
         return itemDerivedCache.todayPositiveItems
+    }
+
+    var homeJourneyLedgerFacts: HomeJourneyLedgerFacts {
+        ensureItemDerivedCacheFresh()
+        return itemDerivedCache.homeJourneyLedgerFacts
     }
 
     var recentThreeItems: [HomeItem] {
@@ -2211,6 +2752,11 @@ final class HomeViewModel: ObservableObject {
             guard let currentMonthInterval else { return false }
             return item.createdAt >= currentMonthInterval.start && item.createdAt < currentMonthInterval.end
         }
+        let homeJourneyLedgerFacts = HomeJourneyLedgerFacts.build(
+            from: sortedItems,
+            currentWeekInterval: currentWeekInterval,
+            currentMonthInterval: currentMonthInterval
+        )
         let currentYearItems = sortedItems.filter {
             calendar.isDate($0.createdAt, equalTo: now, toGranularity: .year)
         }
@@ -2219,7 +2765,8 @@ final class HomeViewModel: ObservableObject {
             recentThreeTodayItems: Array(todayPositiveItems.prefix(3)),
             currentWeekItems: currentWeekItems,
             currentMonthItems: currentMonthItems,
-            currentYearItems: currentYearItems
+            currentYearItems: currentYearItems,
+            homeJourneyLedgerFacts: homeJourneyLedgerFacts
         )
         itemDerivedCacheDayKey = Self.dayKey(for: now)
         itemDerivedCacheNeedsRebuild = false
@@ -2244,8 +2791,7 @@ final class HomeViewModel: ObservableObject {
         selectedDateEditedByUser = false
         selectedCategory = .other
         categoryLockedByUser = false
-        recordPrefillResult = nil
-        recordPrefillAmount = nil
+        invalidateRecordPrefillSnapshot()
         lastAutoRecommendedCategory = nil
         pendingCategoryCorrectionFrom = nil
     }

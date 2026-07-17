@@ -40,6 +40,9 @@ struct MemberPricingView: View {
     @State private var didRunInitialRefresh = false
     @State private var didApplyHighlight = false
     @State private var lifetimeArchiveSnapshot: LifetimeArchiveSnapshot = .empty
+    @State private var lifetimeArchiveSnapshotRevision: Int?
+    @State private var lifetimeArchiveRequestID = UUID()
+    @State private var lifetimeArchivePreparationTask: Task<Void, Never>?
     @State private var showMemberLoginSheet = false
     @State private var loginContinuation = MemberLoginContinuationState()
     private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
@@ -191,38 +194,7 @@ struct MemberPricingView: View {
     }
 
     private var memberProofLine: String {
-        let items = homeViewModel.items.filter { $0.amount > 0 && $0.draftMeta == nil }
-        guard !items.isEmpty else {
-            return "先从第一笔开始，后面会自动整理出周记和月章。"
-        }
-        let calendar = Calendar.current
-        let activeDays = Set(items.map { calendar.startOfDay(for: $0.createdAt) }).count
-        let monthCount = Set(items.map { monthKey(for: $0.createdAt, calendar: calendar) }).count
-        if monthCount >= 2 {
-            return "你的账本已有 \(items.count) 笔记录，跨过 \(monthCount) 个月，适合继续长期保存和回看。"
-        }
-        return "你的账本已有 \(items.count) 笔记录，分布在 \(activeDays) 天里，可以继续整理成周记和月章。"
-    }
-
-    private var lifetimeArchiveItemsSignature: String {
-        var hasher = Hasher()
-        hasher.combine(homeViewModel.items.count)
-        for item in homeViewModel.items {
-            hasher.combine(item.id)
-            hasher.combine(item.createdAt.timeIntervalSince1970)
-            hasher.combine(item.updatedAt.timeIntervalSince1970)
-            hasher.combine(item.amount)
-            hasher.combine(item.category.rawValue)
-            hasher.combine(item.title)
-            hasher.combine(item.emotionTag)
-            hasher.combine(item.source.rawValue)
-            hasher.combine(item.draftMeta?.status.rawValue)
-            hasher.combine(item.memoryContext?.weatherKind)
-            hasher.combine(item.memoryContext?.cityName)
-            hasher.combine(item.memoryContext?.semanticPlace)
-            hasher.combine(item.scenePackId)
-        }
-        return "\(hasher.finalize())"
+        lifetimeArchiveSnapshot.proofLine
     }
 
     var body: some View {
@@ -275,8 +247,14 @@ struct MemberPricingView: View {
             .task {
                 await runInitialRefreshIfNeeded()
             }
-            .onChange(of: lifetimeArchiveItemsSignature) { _, _ in
+            .onChange(of: homeViewModel.homeDashboardRevision) { _, _ in
                 scheduleLifetimeArchiveSnapshotRefresh()
+            }
+            .onDisappear {
+                lifetimeArchivePreparationTask?.cancel()
+                lifetimeArchivePreparationTask = nil
+                lifetimeArchiveRequestID = UUID()
+                lifetimeArchiveSnapshotRevision = nil
             }
             .overlay {
                 if isPurchasing {
@@ -918,194 +896,42 @@ struct MemberPricingView: View {
             .foregroundStyle(AppColors.lockGold.opacity(0.72))
     }
 
-    private func makeLifetimeArchiveSnapshot() -> LifetimeArchiveSnapshot {
-        let positiveItems = homeViewModel.items
-            .filter { $0.amount > 0 && $0.draftMeta == nil }
-        let calendar = Calendar.current
-        guard !positiveItems.isEmpty else {
-            return .empty
-        }
-
-        let days = Set(positiveItems.map { calendar.startOfDay(for: $0.createdAt) })
-        let continuousDays = continuousRecordDays(from: days, calendar: calendar)
-        let weekKeys = Set(positiveItems.map { weekKey(for: $0.createdAt, calendar: calendar) })
-        let monthKeys = Set(positiveItems.map { monthKey(for: $0.createdAt, calendar: calendar) })
-        let activeDays = days.count
-        let traceCount = positiveItems.count
-        let firstDate = positiveItems.map(\.createdAt).min() ?? Date()
-        let latestDate = positiveItems.map(\.createdAt).max() ?? Date()
-        let spanDays = max(1, (calendar.dateComponents([.day], from: calendar.startOfDay(for: firstDate), to: calendar.startOfDay(for: latestDate)).day ?? 0) + 1)
-        let marks = LifeMarkService.aggregates(
-            for: positiveItems,
-            allItems: positiveItems,
-            isMember: true,
-            limit: 6
-        )
-        let primaryMark = marks.first
-        let title = lifetimeArchiveTitle(
-            traceCount: traceCount,
-            monthCount: monthKeys.count,
-            primaryMark: primaryMark
-        )
-        let subtitle = lifetimeArchiveSubtitle(
-            traceCount: traceCount,
-            activeDays: activeDays,
-            spanDays: spanDays,
-            primaryMark: primaryMark
-        )
-        let thirdMetric = lifetimeArchiveSceneMetric(
-            primaryMark: primaryMark,
-            activeDays: activeDays
-        )
-        let fourthMetric = monthKeys.count > 1
-            ? LifetimeArchiveMetric(value: "\(monthKeys.count)个月", label: "月份跨度")
-            : LifetimeArchiveMetric(value: "\(weekKeys.count)篇", label: "周记素材")
-        return LifetimeArchiveSnapshot(
-            title: title,
-            subtitle: subtitle,
-            metrics: [
-                LifetimeArchiveMetric(value: "\(max(1, continuousDays))天", label: "连续记录"),
-                LifetimeArchiveMetric(value: "\(traceCount)条", label: "记录条数"),
-                thirdMetric,
-                fourthMetric
-            ],
-            stages: lifetimeArchiveStages(activeDays: activeDays),
-            primaryLine: lifetimeArchivePrimaryLine(
-                primaryMark: primaryMark,
-                traceCount: traceCount,
-                spanDays: spanDays
-            ),
-            closingLine: lifetimeArchiveClosingLine(
-                primaryMark: primaryMark,
-                activeDays: activeDays,
-                monthCount: monthKeys.count
-            )
-        )
-    }
-
-    private func refreshLifetimeArchiveSnapshot() {
-        lifetimeArchiveSnapshot = makeLifetimeArchiveSnapshot()
-    }
-
     private func scheduleLifetimeArchiveSnapshotRefresh() {
-        DispatchQueue.main.async {
-            refreshLifetimeArchiveSnapshot()
-        }
-    }
+        let revision = homeViewModel.homeDashboardRevision
+        guard lifetimeArchiveSnapshotRevision != revision else { return }
 
-    private func lifetimeArchiveTitle(
-        traceCount: Int,
-        monthCount: Int,
-        primaryMark: LifeMarkAggregate?
-    ) -> String {
-        if let primaryMark {
-            switch primaryMark.kind {
-            case .context:
-                return "你的\(primaryMark.label)已经被记住"
-            case .milestone:
-                return primaryMark.title
-            case .streak:
-                return "\(primaryMark.label)正在形成节奏"
-            case .scene:
-                return "\(primaryMark.label)已经有连续记录"
-            }
-        }
-        if monthCount >= 2 {
-            return "你的记录已经跨过 \(monthCount) 个月"
-        }
-        return traceCount >= 10 ? "你的长期记录正在形成" : "这些记录已经有了开头"
-    }
-
-    private func lifetimeArchiveSubtitle(
-        traceCount: Int,
-        activeDays: Int,
-        spanDays: Int,
-        primaryMark: LifeMarkAggregate?
-    ) -> String {
-        if let primaryMark {
-            return primaryMark.detail
-        }
-        if spanDays > activeDays {
-            return "\(traceCount) 条记录分布在 \(activeDays) 个日子里，时间跨度已经有 \(spanDays) 天。"
-        }
-        return "\(traceCount) 条记录来自真实账本，后面会继续整理成周记、月章和回放。"
-    }
-
-    private func lifetimeArchiveSceneMetric(
-        primaryMark: LifeMarkAggregate?,
-        activeDays: Int
-    ) -> LifetimeArchiveMetric {
-        guard let primaryMark, primaryMark.count > 0 else {
-            return LifetimeArchiveMetric(value: "\(activeDays)天", label: "有记录的日子")
-        }
-        return LifetimeArchiveMetric(
-            value: "\(primaryMark.count)次",
-            label: primaryMark.label
+        lifetimeArchivePreparationTask?.cancel()
+        lifetimeArchiveRequestID = UUID()
+        let requestID = lifetimeArchiveRequestID
+        lifetimeArchiveSnapshotRevision = revision
+        let input = LifetimeArchivePreparationInput(
+            revision: revision,
+            items: homeViewModel.items,
+            now: Date(),
+            calendar: .current
         )
-    }
-
-    private func lifetimeArchiveStages(activeDays: Int) -> [LifetimeArchiveStage] {
-        let currentDays = max(1, activeDays)
-        let nextTarget = [7, 17, 30, 60, 100, 170, 365, 700, 1000, 1700]
-            .first { $0 > currentDays } ?? (currentDays + 365)
-        let longTarget = max(1700, nextTarget * 3)
-        return [
-            LifetimeArchiveStage(value: "\(currentDays)天", label: "已记录"),
-            LifetimeArchiveStage(value: "\(nextTarget)天", label: "下一站"),
-            LifetimeArchiveStage(value: "\(longTarget)天", label: "长期记录")
-        ]
-    }
-
-    private func lifetimeArchivePrimaryLine(
-        primaryMark: LifeMarkAggregate?,
-        traceCount: Int,
-        spanDays: Int
-    ) -> String {
-        if let primaryMark {
-            return "最近最清楚的是「\(primaryMark.label)」：\(primaryMark.count) 次、合计 \(primaryMark.total.formatted(.cny))，以后能继续和天气、地点、周记和月章连起来。"
+        lifetimeArchivePreparationTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled, lifetimeArchiveRequestID == requestID else { return }
+            let snapshot = await withTaskGroup(
+                of: LifetimeArchiveSnapshot?.self,
+                returning: LifetimeArchiveSnapshot?.self
+            ) { group in
+                group.addTask(priority: .utility) {
+                    guard !Task.isCancelled else { return nil }
+                    return LifetimeArchiveSnapshotComputation.make(input)
+                }
+                return await group.next() ?? nil
+            }
+            guard let snapshot,
+                  !Task.isCancelled,
+                  lifetimeArchiveRequestID == requestID,
+                  lifetimeArchiveSnapshotRevision == input.revision else {
+                return
+            }
+            lifetimeArchiveSnapshot = snapshot
+            lifetimeArchivePreparationTask = nil
         }
-        return "\(traceCount) 条账单已经覆盖 \(spanDays) 天。记录越多，本机规则能整理出的日期、分类和场景就越完整。"
-    }
-
-    private func lifetimeArchiveClosingLine(
-        primaryMark: LifeMarkAggregate?,
-        activeDays: Int,
-        monthCount: Int
-    ) -> String {
-        if let primaryMark {
-            return "这不是固定文案，会按你账本里的「\(primaryMark.label)」更新。"
-        }
-        if monthCount >= 2 {
-            return "它会从单笔账单，接成跨月份的生活回望。"
-        }
-        return activeDays >= 7 ? "这些日子已经连起来了，后面会有更多可回看的记录。" : "先把今天记下来，后面会有可回看的记录。"
-    }
-
-    private func continuousRecordDays(from days: Set<Date>, calendar: Calendar) -> Int {
-        guard !days.isEmpty else { return 0 }
-        var cursor = calendar.startOfDay(for: Date())
-        if !days.contains(cursor), let latest = days.max() {
-            cursor = latest
-        }
-        var count = 0
-        while days.contains(cursor) {
-            count += 1
-            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
-            cursor = previous
-        }
-        return count
-    }
-
-    private func weekKey(for date: Date, calendar: Calendar) -> String {
-        let year = calendar.component(.yearForWeekOfYear, from: date)
-        let week = calendar.component(.weekOfYear, from: date)
-        return "\(year)-\(week)"
-    }
-
-    private func monthKey(for date: Date, calendar: Calendar) -> String {
-        let year = calendar.component(.year, from: date)
-        let month = calendar.component(.month, from: date)
-        return "\(year)-\(month)"
     }
 
     // MARK: - Privacy
@@ -1635,7 +1461,227 @@ private struct MemberAccountLoginSheet: View {
     }
 }
 
-private struct LifetimeArchiveSnapshot {
+struct LifetimeArchivePreparationInput: @unchecked Sendable {
+    let revision: Int
+    let items: [HomeItem]
+    let now: Date
+    let calendar: Calendar
+}
+
+enum LifetimeArchiveSnapshotComputation {
+    static func make(_ input: LifetimeArchivePreparationInput) -> LifetimeArchiveSnapshot {
+        let positiveItems = input.items.filter { $0.amount > 0 && $0.draftMeta == nil }
+        let calendar = input.calendar
+        guard !positiveItems.isEmpty else {
+            return .empty
+        }
+
+        let days = Set(positiveItems.map { calendar.startOfDay(for: $0.createdAt) })
+        let continuousDays = continuousRecordDays(
+            from: days,
+            now: input.now,
+            calendar: calendar
+        )
+        let weekKeys = Set(positiveItems.map { weekKey(for: $0.createdAt, calendar: calendar) })
+        let monthKeys = Set(positiveItems.map { monthKey(for: $0.createdAt, calendar: calendar) })
+        let activeDays = days.count
+        let traceCount = positiveItems.count
+        let firstDate = positiveItems.map(\.createdAt).min() ?? input.now
+        let latestDate = positiveItems.map(\.createdAt).max() ?? input.now
+        let spanDays = max(
+            1,
+            (calendar.dateComponents(
+                [.day],
+                from: calendar.startOfDay(for: firstDate),
+                to: calendar.startOfDay(for: latestDate)
+            ).day ?? 0) + 1
+        )
+        let marks = LifeMarkService.aggregates(
+            for: positiveItems,
+            allItems: positiveItems,
+            isMember: true,
+            limit: 6
+        )
+        let primaryMark = marks.first
+        let thirdMetric = lifetimeArchiveSceneMetric(
+            primaryMark: primaryMark,
+            activeDays: activeDays
+        )
+        let fourthMetric = monthKeys.count > 1
+            ? LifetimeArchiveMetric(value: "\(monthKeys.count)个月", label: "月份跨度")
+            : LifetimeArchiveMetric(value: "\(weekKeys.count)篇", label: "周记素材")
+        return LifetimeArchiveSnapshot(
+            sourceRevision: input.revision,
+            proofLine: memberProofLine(
+                traceCount: traceCount,
+                activeDays: activeDays,
+                monthCount: monthKeys.count
+            ),
+            title: lifetimeArchiveTitle(
+                traceCount: traceCount,
+                monthCount: monthKeys.count,
+                primaryMark: primaryMark
+            ),
+            subtitle: lifetimeArchiveSubtitle(
+                traceCount: traceCount,
+                activeDays: activeDays,
+                spanDays: spanDays,
+                primaryMark: primaryMark
+            ),
+            metrics: [
+                LifetimeArchiveMetric(value: "\(max(1, continuousDays))天", label: "连续记录"),
+                LifetimeArchiveMetric(value: "\(traceCount)条", label: "记录条数"),
+                thirdMetric,
+                fourthMetric
+            ],
+            stages: lifetimeArchiveStages(activeDays: activeDays),
+            primaryLine: lifetimeArchivePrimaryLine(
+                primaryMark: primaryMark,
+                traceCount: traceCount,
+                spanDays: spanDays
+            ),
+            closingLine: lifetimeArchiveClosingLine(
+                primaryMark: primaryMark,
+                activeDays: activeDays,
+                monthCount: monthKeys.count
+            )
+        )
+    }
+
+    private static func memberProofLine(
+        traceCount: Int,
+        activeDays: Int,
+        monthCount: Int
+    ) -> String {
+        if monthCount >= 2 {
+            return "你的账本已有 \(traceCount) 笔记录，跨过 \(monthCount) 个月，适合继续长期保存和回看。"
+        }
+        return "你的账本已有 \(traceCount) 笔记录，分布在 \(activeDays) 天里，可以继续整理成周记和月章。"
+    }
+
+    private static func lifetimeArchiveTitle(
+        traceCount: Int,
+        monthCount: Int,
+        primaryMark: LifeMarkAggregate?
+    ) -> String {
+        if let primaryMark {
+            switch primaryMark.kind {
+            case .context:
+                return "你的\(primaryMark.label)已经被记住"
+            case .milestone:
+                return primaryMark.title
+            case .streak:
+                return "\(primaryMark.label)正在形成节奏"
+            case .scene:
+                return "\(primaryMark.label)已经有连续记录"
+            }
+        }
+        if monthCount >= 2 {
+            return "你的记录已经跨过 \(monthCount) 个月"
+        }
+        return traceCount >= 10 ? "你的长期记录正在形成" : "这些记录已经有了开头"
+    }
+
+    private static func lifetimeArchiveSubtitle(
+        traceCount: Int,
+        activeDays: Int,
+        spanDays: Int,
+        primaryMark: LifeMarkAggregate?
+    ) -> String {
+        if let primaryMark {
+            return primaryMark.detail
+        }
+        if spanDays > activeDays {
+            return "\(traceCount) 条记录分布在 \(activeDays) 个日子里，时间跨度已经有 \(spanDays) 天。"
+        }
+        return "\(traceCount) 条记录来自真实账本，后面会继续整理成周记、月章和回放。"
+    }
+
+    private static func lifetimeArchiveSceneMetric(
+        primaryMark: LifeMarkAggregate?,
+        activeDays: Int
+    ) -> LifetimeArchiveMetric {
+        guard let primaryMark, primaryMark.count > 0 else {
+            return LifetimeArchiveMetric(value: "\(activeDays)天", label: "有记录的日子")
+        }
+        return LifetimeArchiveMetric(
+            value: "\(primaryMark.count)次",
+            label: primaryMark.label
+        )
+    }
+
+    private static func lifetimeArchiveStages(activeDays: Int) -> [LifetimeArchiveStage] {
+        let currentDays = max(1, activeDays)
+        let nextTarget = [7, 17, 30, 60, 100, 170, 365, 700, 1000, 1700]
+            .first { $0 > currentDays } ?? (currentDays + 365)
+        let longTarget = max(1700, nextTarget * 3)
+        return [
+            LifetimeArchiveStage(value: "\(currentDays)天", label: "已记录"),
+            LifetimeArchiveStage(value: "\(nextTarget)天", label: "下一站"),
+            LifetimeArchiveStage(value: "\(longTarget)天", label: "长期记录")
+        ]
+    }
+
+    private static func lifetimeArchivePrimaryLine(
+        primaryMark: LifeMarkAggregate?,
+        traceCount: Int,
+        spanDays: Int
+    ) -> String {
+        if let primaryMark {
+            return "最近最清楚的是「\(primaryMark.label)」：\(primaryMark.count) 次、合计 \(primaryMark.total.formatted(.cny))，以后能继续和天气、地点、周记和月章连起来。"
+        }
+        return "\(traceCount) 条账单已经覆盖 \(spanDays) 天。记录越多，本机规则能整理出的日期、分类和场景就越完整。"
+    }
+
+    private static func lifetimeArchiveClosingLine(
+        primaryMark: LifeMarkAggregate?,
+        activeDays: Int,
+        monthCount: Int
+    ) -> String {
+        if let primaryMark {
+            return "这不是固定文案，会按你账本里的「\(primaryMark.label)」更新。"
+        }
+        if monthCount >= 2 {
+            return "它会从单笔账单，接成跨月份的生活回望。"
+        }
+        return activeDays >= 7 ? "这些日子已经连起来了，后面会有更多可回看的记录。" : "先把今天记下来，后面会有可回看的记录。"
+    }
+
+    private static func continuousRecordDays(
+        from days: Set<Date>,
+        now: Date,
+        calendar: Calendar
+    ) -> Int {
+        guard !days.isEmpty else { return 0 }
+        var cursor = calendar.startOfDay(for: now)
+        if !days.contains(cursor), let latest = days.max() {
+            cursor = latest
+        }
+        var count = 0
+        while days.contains(cursor) {
+            count += 1
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = previous
+        }
+        return count
+    }
+
+    private static func weekKey(for date: Date, calendar: Calendar) -> String {
+        let year = calendar.component(.yearForWeekOfYear, from: date)
+        let week = calendar.component(.weekOfYear, from: date)
+        return "\(year)-\(week)"
+    }
+
+    private static func monthKey(for date: Date, calendar: Calendar) -> String {
+        let year = calendar.component(.year, from: date)
+        let month = calendar.component(.month, from: date)
+        return "\(year)-\(month)"
+    }
+}
+
+struct LifetimeArchiveSnapshot: @unchecked Sendable {
+    let sourceRevision: Int
+    let proofLine: String
     let title: String
     let subtitle: String
     let metrics: [LifetimeArchiveMetric]
@@ -1644,6 +1690,8 @@ private struct LifetimeArchiveSnapshot {
     let closingLine: String
 
     static let empty = LifetimeArchiveSnapshot(
+        sourceRevision: -1,
+        proofLine: "先从第一笔开始，后面会自动整理出周记和月章。",
         title: "从第一笔开始，长期记录会逐步形成",
         subtitle: "永久会员不是一段固定说明，而是把以后每一天的记录都长期保存。",
         metrics: [
@@ -1662,13 +1710,13 @@ private struct LifetimeArchiveSnapshot {
     )
 }
 
-private struct LifetimeArchiveMetric: Identifiable {
+struct LifetimeArchiveMetric: Identifiable {
     let id = UUID()
     let value: String
     let label: String
 }
 
-private struct LifetimeArchiveStage {
+struct LifetimeArchiveStage {
     let value: String
     let label: String
 }

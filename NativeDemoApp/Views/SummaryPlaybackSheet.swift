@@ -553,6 +553,7 @@ struct SummaryPlaybackSheet: View {
     @State private var selectedShareCardStyle: LifeSliceShareCardStyle?
     @State private var customShareBackgroundItem: PhotosPickerItem?
     @State private var customShareBackgroundData: Data?
+    @State private var customShareBackgroundImage: UIImage?
 
     private var currentChapter: SummaryChapter? {
         guard !playback.chapters.isEmpty else { return nil }
@@ -1809,7 +1810,7 @@ struct SummaryPlaybackSheet: View {
                         nickname: shareNickname.isEmpty ? "叙账用户" : shareNickname,
                         theme: shareCardTheme,
                         style: currentShareCardStyle,
-                        customBackgroundData: customShareBackgroundData
+                        customBackgroundImage: customShareBackgroundImage
                     )
                     .scaleEffect(0.18, anchor: .topLeading)
                     .frame(width: 97, height: 173, alignment: .topLeading)
@@ -2003,8 +2004,7 @@ struct SummaryPlaybackSheet: View {
                 photoLibrary: .shared()
             ) {
                 ZStack(alignment: .leading) {
-                    if let customShareBackgroundData,
-                       let image = UIImage(data: customShareBackgroundData) {
+                    if let image = customShareBackgroundImage {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
@@ -2073,6 +2073,7 @@ struct SummaryPlaybackSheet: View {
                     withAnimation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.88)) {
                         customShareBackgroundItem = nil
                         customShareBackgroundData = nil
+                        customShareBackgroundImage = nil
                         if currentShareCardStyle == .customBackground {
                             selectedShareCardStyle = nil
                         }
@@ -2092,13 +2093,12 @@ struct SummaryPlaybackSheet: View {
         .buttonStyle(.plain)
         .onChange(of: customShareBackgroundItem) { _, newValue in
             guard let newValue else { return }
-            Task {
+            Task { @MainActor in
                 if let data = try? await newValue.loadTransferable(type: Data.self),
-                   let normalized = normalizedShareBackgroundData(data) {
-                    await MainActor.run {
-                        customShareBackgroundData = normalized
-                        selectedShareCardStyle = .customBackground
-                    }
+                   let normalized = normalizedShareBackground(data) {
+                    customShareBackgroundData = normalized.data
+                    customShareBackgroundImage = normalized.image
+                    selectedShareCardStyle = .customBackground
                 }
             }
         }
@@ -2281,7 +2281,7 @@ struct SummaryPlaybackSheet: View {
         let anchors = playback.memoryAnchors
         let theme = shareCardTheme
         let style = currentShareCardStyle
-        let backgroundData = customShareBackgroundData
+        let backgroundImage = customShareBackgroundImage
 
         Task { @MainActor in
             await Task.yield()
@@ -2296,7 +2296,7 @@ struct SummaryPlaybackSheet: View {
                 nickname: nickname,
                 theme: theme,
                 style: style,
-                customBackgroundData: backgroundData
+                customBackgroundImage: backgroundImage
             )
             guard let image = card.snapshot() else {
                 shareSaveMessage = "分享图暂时没有生成成功，请稍后再试。"
@@ -2489,12 +2489,21 @@ private func lifeSliceContainsAny(_ text: String, _ keywords: [String]) -> Bool 
     keywords.contains { text.localizedCaseInsensitiveContains($0) }
 }
 
-private func normalizedShareBackgroundData(_ data: Data) -> Data? {
+struct NormalizedShareBackground {
+    let data: Data
+    let image: UIImage
+}
+
+func normalizedShareBackground(_ data: Data) -> NormalizedShareBackground? {
     guard let image = UIImage(data: data) else { return nil }
     let maxSide: CGFloat = 1600
     let longest = max(image.size.width, image.size.height)
     guard longest > maxSide else {
-        return image.jpegData(compressionQuality: 0.84) ?? data
+        let normalizedData = image.jpegData(compressionQuality: 0.84) ?? data
+        return NormalizedShareBackground(
+            data: normalizedData,
+            image: UIImage(data: normalizedData) ?? image
+        )
     }
     let scale = maxSide / longest
     let targetSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
@@ -2505,7 +2514,11 @@ private func normalizedShareBackgroundData(_ data: Data) -> Data? {
     let resized = renderer.image { _ in
         image.draw(in: CGRect(origin: .zero, size: targetSize))
     }
-    return resized.jpegData(compressionQuality: 0.84)
+    guard let normalizedData = resized.jpegData(compressionQuality: 0.84) else { return nil }
+    return NormalizedShareBackground(
+        data: normalizedData,
+        image: UIImage(data: normalizedData) ?? resized
+    )
 }
 
 private struct WeeklyStoryShareCardView: View {
@@ -2515,7 +2528,7 @@ private struct WeeklyStoryShareCardView: View {
     var nickname: String = "叙账用户"
     var theme: WeeklyStoryShareCardTheme = .journal
     var style: LifeSliceShareCardStyle = .warmLight
-    var customBackgroundData: Data?
+    var customBackgroundImage: UIImage?
 
     private let cardSize = CGSize(width: 540, height: 960)
     private var paper: Color { theme.paper }
@@ -3374,8 +3387,7 @@ private struct WeeklyStoryShareCardView: View {
             case .fullPhoto:
                 Color(hex: "1c241f")
             case .customBackground:
-                if let customBackgroundData,
-                   let uiImage = UIImage(data: customBackgroundData) {
+                if let uiImage = customBackgroundImage {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()

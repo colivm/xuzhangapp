@@ -1,6 +1,87 @@
 import SwiftUI
 import UIKit
 
+struct AccountMemoryStats: Equatable, @unchecked Sendable {
+    let sourceRevision: Int
+    let recordStreakDays: Int
+    let traceCount: Int
+    let weeklyStoryCount: Int
+    let monthlyStoryCount: Int
+
+    static var empty: AccountMemoryStats {
+        AccountMemoryStats(
+            sourceRevision: -1,
+            recordStreakDays: 0,
+            traceCount: 0,
+            weeklyStoryCount: 0,
+            monthlyStoryCount: 0
+        )
+    }
+}
+
+struct AccountMemoryStatsPreparationInput: @unchecked Sendable {
+    let items: [HomeItem]
+    let sourceRevision: Int
+    let calendar: Calendar
+}
+
+enum AccountMemoryStatsComputation {
+    static func make(_ input: AccountMemoryStatsPreparationInput) -> AccountMemoryStats {
+        make(
+            items: input.items,
+            sourceRevision: input.sourceRevision,
+            calendar: input.calendar
+        )
+    }
+
+    static func make(
+        items: [HomeItem],
+        sourceRevision: Int,
+        calendar: Calendar = .current
+    ) -> AccountMemoryStats {
+        let positiveItems = items.filter { $0.amount > 0 }
+        let dayStarts = Set(positiveItems.map { calendar.startOfDay(for: $0.createdAt) })
+        let monthKeys = Set(positiveItems.map { monthKey(for: $0.createdAt, calendar: calendar) })
+        let weekKeys = Set(positiveItems.map { weekKey(for: $0.createdAt, calendar: calendar) })
+        return AccountMemoryStats(
+            sourceRevision: sourceRevision,
+            recordStreakDays: longestRecordStreak(from: dayStarts, calendar: calendar),
+            traceCount: positiveItems.count,
+            weeklyStoryCount: weekKeys.count,
+            monthlyStoryCount: monthKeys.count
+        )
+    }
+
+    private static func longestRecordStreak(from dayStarts: Set<Date>, calendar: Calendar) -> Int {
+        guard !dayStarts.isEmpty else { return 0 }
+        let sortedDays = dayStarts.sorted()
+        var longest = 1
+        var current = 1
+        for index in sortedDays.indices.dropFirst() {
+            let previous = sortedDays[sortedDays.index(before: index)]
+            let day = sortedDays[index]
+            let gap = calendar.dateComponents([.day], from: previous, to: day).day ?? 0
+            if gap == 1 {
+                current += 1
+            } else if gap > 1 {
+                current = 1
+            }
+            longest = max(longest, current)
+        }
+        return longest
+    }
+
+    private static func monthKey(for date: Date, calendar: Calendar) -> String {
+        let components = calendar.dateComponents([.year, .month], from: date)
+        return "\(components.year ?? 0)-\(components.month ?? 0)"
+    }
+
+    private static func weekKey(for date: Date, calendar: Calendar) -> String {
+        let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+        return "\(components.yearForWeekOfYear ?? 0)-\(components.weekOfYear ?? 0)"
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @EnvironmentObject private var homeViewModel: HomeViewModel
@@ -39,6 +120,10 @@ struct SettingsView: View {
     @State private var isRestoringLocalBackup = false
     @State private var preparedLocalBackupImport: LedgerLocalBackupPreparedImport?
     @State private var localBackupImportMessage: String?
+    @State private var accountMemoryStats = AccountMemoryStats.empty
+    @State private var accountMemoryStatsRevision: Int?
+    @State private var accountMemoryStatsRequestID = UUID()
+    @State private var accountMemoryStatsPreparationTask: Task<Void, Never>?
     @FocusState private var focusedField: SettingsField?
     private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
     private let privacyURL = URL(string: "https://xuzhangapp.com/legal/privacy.html")!
@@ -102,13 +187,6 @@ struct SettingsView: View {
         case destructive
     }
 
-    private struct AccountMemoryStats {
-        let recordStreakDays: Int
-        let traceCount: Int
-        let weeklyStoryCount: Int
-        let monthlyStoryCount: Int
-    }
-
     private struct SettingsConfirmationAction: Identifiable {
         let id: String
         let title: String
@@ -159,6 +237,7 @@ struct SettingsView: View {
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
         .onAppear {
+            scheduleAccountMemoryStatsRefresh()
             draftDisplayName = settingsViewModel.displayName
             draftPetNickname = settingsViewModel.petNickname
             settingsViewModel.refreshThemeAccess(showsMessage: true)
@@ -240,8 +319,17 @@ struct SettingsView: View {
                     handleLocalBackupImportSelection(result)
                 }
         }
+        .onChange(of: homeViewModel.homeDashboardRevision) { _, _ in
+            scheduleAccountMemoryStatsRefresh()
+        }
         .onChange(of: openAppearanceRequestID) { _, requestID in
             openAppearanceSheetIfNeeded(requestID)
+        }
+        .onDisappear {
+            accountMemoryStatsPreparationTask?.cancel()
+            accountMemoryStatsPreparationTask = nil
+            accountMemoryStatsRequestID = UUID()
+            accountMemoryStatsRevision = nil
         }
         .overlay {
             ZStack {
@@ -662,17 +750,41 @@ struct SettingsView: View {
         return "已登录 · 免费版"
     }
 
-    private var accountMemoryStats: AccountMemoryStats {
-        let items = homeViewModel.items.filter { $0.amount > 0 }
-        let dayStarts = Set(items.map { Calendar.current.startOfDay(for: $0.createdAt) })
-        let monthKeys = Set(items.map { accountMonthKey(for: $0.createdAt) })
-        let weekKeys = Set(items.map { accountWeekKey(for: $0.createdAt) })
-        return AccountMemoryStats(
-            recordStreakDays: accountLongestRecordStreak(from: dayStarts),
-            traceCount: items.count,
-            weeklyStoryCount: weekKeys.count,
-            monthlyStoryCount: monthKeys.count
+    private func scheduleAccountMemoryStatsRefresh() {
+        let revision = homeViewModel.homeDashboardRevision
+        guard accountMemoryStatsRevision != revision else { return }
+
+        accountMemoryStatsPreparationTask?.cancel()
+        accountMemoryStatsRequestID = UUID()
+        let requestID = accountMemoryStatsRequestID
+        accountMemoryStatsRevision = revision
+        let input = AccountMemoryStatsPreparationInput(
+            items: homeViewModel.items,
+            sourceRevision: revision,
+            calendar: .current
         )
+        accountMemoryStatsPreparationTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled, accountMemoryStatsRequestID == requestID else { return }
+            let snapshot = await withTaskGroup(
+                of: AccountMemoryStats?.self,
+                returning: AccountMemoryStats?.self
+            ) { group in
+                group.addTask(priority: .utility) {
+                    guard !Task.isCancelled else { return nil }
+                    return AccountMemoryStatsComputation.make(input)
+                }
+                return await group.next() ?? nil
+            }
+            guard let snapshot,
+                  !Task.isCancelled,
+                  accountMemoryStatsRequestID == requestID,
+                  accountMemoryStatsRevision == snapshot.sourceRevision else {
+                return
+            }
+            accountMemoryStats = snapshot
+            accountMemoryStatsPreparationTask = nil
+        }
     }
 
     private var backupRowSummary: String {
@@ -3096,35 +3208,6 @@ struct SettingsView: View {
             RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .stroke(Color.white.opacity(0.44), lineWidth: 1)
         )
-    }
-
-    private func accountLongestRecordStreak(from dayStarts: Set<Date>) -> Int {
-        guard !dayStarts.isEmpty else { return 0 }
-        let sortedDays = dayStarts.sorted()
-        var longest = 1
-        var current = 1
-        for index in sortedDays.indices.dropFirst() {
-            let previous = sortedDays[sortedDays.index(before: index)]
-            let day = sortedDays[index]
-            let gap = Calendar.current.dateComponents([.day], from: previous, to: day).day ?? 0
-            if gap == 1 {
-                current += 1
-            } else if gap > 1 {
-                current = 1
-            }
-            longest = max(longest, current)
-        }
-        return longest
-    }
-
-    private func accountMonthKey(for date: Date) -> String {
-        let components = Calendar.current.dateComponents([.year, .month], from: date)
-        return "\(components.year ?? 0)-\(components.month ?? 0)"
-    }
-
-    private func accountWeekKey(for date: Date) -> String {
-        let components = Calendar.current.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
-        return "\(components.yearForWeekOfYear ?? 0)-\(components.weekOfYear ?? 0)"
     }
 
     private func memberBenefitRow(_ text: String) -> some View {
