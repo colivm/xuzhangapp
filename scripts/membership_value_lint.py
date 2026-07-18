@@ -15,10 +15,12 @@ REQUIRED = {
         "共享“长期回望体验”额度池（未实施）",
     ),
     "NativeDemoApp/Views/MemberPricingView.swift": (
-        '("省力记"',
-        '("长期回望"',
-        'Text("会员核心价值")',
-        'Text("免费与会员的差别")',
+        'title: "省力记"',
+        'title: "长期回望"',
+        'Text("免费与会员")',
+        'Text("已解锁")',
+        "MembershipDetailPresentationPolicy",
+        "memberDataBoundarySection",
         "具体体验次数只在对应入口显示",
     ),
     "NativeDemoApp/Views/SettingsView.swift": (
@@ -40,6 +42,10 @@ def main() -> int:
     if "benefitsExpanded" in pricing:
         print("MemberPricingView.swift: legacy expandable benefit list remains")
         return 1
+    for duplicate_surface in ("benefitsSection", "memberBoundarySection", 'Text("会员核心价值")'):
+        if duplicate_surface in pricing:
+            print(f"MemberPricingView.swift: duplicate member value surface remains `{duplicate_surface}`")
+            return 1
     print("membership_value_lint: OK")
     return 0
 

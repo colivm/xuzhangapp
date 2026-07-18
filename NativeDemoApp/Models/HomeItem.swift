@@ -343,7 +343,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if let lateCommute = lateWorkCommuteEmotionTag(title: title, category: category, date: date) {
                 return lateCommute
             }
-            if containsAny(text, ["停车", "停车费", "车位"]) { return "车停稳了" }
+            if containsAny(text, ["停车", "停车费", "车位"]) { return "停车费记下" }
             if containsAny(text, ["加油", "油费", "充车", "充电桩", "电车充电", "汽车充电", "车辆充电", "新能源充电", "补能"]) { return "给车补点能量" }
             if containsAny(text, ["洗车"]) { return "车洗干净了" }
             if containsAny(text, ["汽车保养", "车辆保养", "保养车"]) { return "车保养一回" }
@@ -544,6 +544,28 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
     private static func correctedStoredEmotionTag(for item: HomeItem, current: String) -> String? {
         let evidence = "\(item.title) \(item.merchantBrandId ?? "") \(item.category.rawValue)"
+        if item.category == .transport,
+           current == "车停稳了",
+           containsAny(evidence, ["停车", "停车费", "车位", "停车场"]) {
+            return "停车费记下"
+        }
+
+        let weakWeekendDiningTags = [
+            "周末路上和饭点都有了", "假期路上和饭点都有了",
+            "周末出门玩了一趟", "假期出门玩了一趟"
+        ]
+        if item.category == .dining, weakWeekendDiningTags.contains(current) {
+            return weekendDiningTag(for: item.createdAt, amount: item.amount)
+        }
+
+        let weakWeekendRouteTags = [
+            "周末出门玩了一趟", "假期出门玩了一趟",
+            "周末出门的路线", "假期出门的路线"
+        ]
+        if item.category == .transport, weakWeekendRouteTags.contains(current) {
+            return weekendRouteTag(for: item.createdAt)
+        }
+
         if containsTelecomBillKeyword(evidence) {
             return refinedEmotionTag(
                 title: evidence,

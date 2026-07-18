@@ -1,10 +1,143 @@
 import Foundation
 import SwiftUI
 
+enum RecordTimeSelectionPolicy {
+    static func applyingTime(
+        hour: Int,
+        minute: Int,
+        to source: Date,
+        calendar: Calendar = .current
+    ) -> Date {
+        let normalizedHour = min(max(hour, 0), 23)
+        let normalizedMinute = min(max(minute, 0), 59)
+        let startOfDay = calendar.startOfDay(for: source)
+        if let matched = calendar.date(
+            bySettingHour: normalizedHour,
+            minute: normalizedMinute,
+            second: 0,
+            of: startOfDay,
+            matchingPolicy: .nextTimePreservingSmallerComponents,
+            repeatedTimePolicy: .first,
+            direction: .forward
+        ), calendar.isDate(matched, inSameDayAs: source) {
+            return matched
+        }
+
+        var components = calendar.dateComponents([.era, .year, .month, .day], from: source)
+        components.hour = normalizedHour
+        components.minute = normalizedMinute
+        components.second = 0
+        return calendar.date(from: components) ?? source
+    }
+}
+
+private struct RecordTimePickerPresentation: Identifiable, Equatable {
+    let id = UUID()
+    let sourceSelection: Date
+}
+
+private struct WarmRecordTimePickerSheet: View {
+    let sourceSelection: Date
+    let calendar: Calendar
+    let onCancel: () -> Void
+    let onCommit: (Date) -> Void
+    @State private var draftHour: Int
+    @State private var draftMinute: Int
+
+    init(
+        sourceSelection: Date,
+        calendar: Calendar,
+        onCancel: @escaping () -> Void,
+        onCommit: @escaping (Date) -> Void
+    ) {
+        self.sourceSelection = sourceSelection
+        self.calendar = calendar
+        self.onCancel = onCancel
+        self.onCommit = onCommit
+        self._draftHour = State(initialValue: calendar.component(.hour, from: sourceSelection))
+        self._draftMinute = State(initialValue: calendar.component(.minute, from: sourceSelection))
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Button("取消", action: onCancel)
+                    .frame(minWidth: 44, minHeight: 44)
+
+                Spacer()
+
+                Text("选择时间")
+                    .font(.headline)
+                    .foregroundStyle(AppColors.text)
+
+                Spacer()
+
+                Button("完成") {
+                    onCommit(RecordTimeSelectionPolicy.applyingTime(
+                        hour: draftHour,
+                        minute: draftMinute,
+                        to: sourceSelection,
+                        calendar: calendar
+                    ))
+                }
+                .fontWeight(.semibold)
+                .frame(minWidth: 44, minHeight: 44)
+            }
+            .foregroundStyle(AppColors.accent)
+
+            HStack(spacing: 6) {
+                Picker("小时", selection: $draftHour) {
+                    ForEach(0..<24, id: \.self) { hour in
+                        Text(String(format: "%02d", hour)).tag(hour)
+                    }
+                }
+                .pickerStyle(.wheel)
+                .accessibilityLabel("小时")
+
+                Text(":")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(AppColors.subtext)
+
+                Picker("分钟", selection: $draftMinute) {
+                    ForEach(0..<60, id: \.self) { minute in
+                        Text(String(format: "%02d", minute)).tag(minute)
+                    }
+                }
+                .pickerStyle(.wheel)
+                .accessibilityLabel("分钟")
+            }
+            .frame(height: 176)
+
+            if calendar.isDateInToday(sourceSelection) {
+                Button {
+                    let now = Date()
+                    draftHour = calendar.component(.hour, from: now)
+                    draftMinute = calendar.component(.minute, from: now)
+                } label: {
+                    Label("现在", systemImage: "clock.arrow.circlepath")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AppColors.accent)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(AppColors.accent.opacity(0.09))
+                )
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 18)
+        .background(AppColors.panel.ignoresSafeArea())
+    }
+}
+
 struct WarmRecordDatePanel: View {
     @Binding var selection: Date
     var onSelectionChanged: () -> Void = {}
+    let showsTimeSelection: Bool
     @State private var calendarMonth: Date
+    @State private var timePickerPresentation: RecordTimePickerPresentation?
 
     private var calendar: Calendar {
         var value = Calendar(identifier: .gregorian)
@@ -13,8 +146,13 @@ struct WarmRecordDatePanel: View {
         return value
     }
 
-    init(selection: Binding<Date>, onSelectionChanged: @escaping () -> Void = {}) {
+    init(
+        selection: Binding<Date>,
+        showsTimeSelection: Bool = true,
+        onSelectionChanged: @escaping () -> Void = {}
+    ) {
         self._selection = selection
+        self.showsTimeSelection = showsTimeSelection
         self.onSelectionChanged = onSelectionChanged
         self._calendarMonth = State(initialValue: Self.monthStart(for: selection.wrappedValue))
     }
@@ -97,9 +235,8 @@ struct WarmRecordDatePanel: View {
                 }
             }
 
-            HStack(spacing: 10) {
-                timeStepper(title: "时", value: calendar.component(.hour, from: selection), range: 0...23) { setHour($0) }
-                timeStepper(title: "分", value: calendar.component(.minute, from: selection), range: 0...59) { setMinute($0) }
+            if showsTimeSelection {
+                timeSelectionButton
             }
         }
         .padding(12)
@@ -111,6 +248,30 @@ struct WarmRecordDatePanel: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(AppColors.accent.opacity(0.14), lineWidth: 1)
         )
+        .sheet(item: $timePickerPresentation) { presentation in
+            WarmRecordTimePickerSheet(
+                sourceSelection: presentation.sourceSelection,
+                calendar: calendar,
+                onCancel: {
+                    timePickerPresentation = nil
+                },
+                onCommit: { committedSelection in
+                    timePickerPresentation = nil
+                    commitTime(committedSelection)
+                }
+            )
+            .presentationDetents([.height(340)])
+            .presentationDragIndicator(.visible)
+        }
+        .onChange(of: selection) { _, newSelection in
+            if let presentation = timePickerPresentation,
+               presentation.sourceSelection != newSelection {
+                timePickerPresentation = nil
+            }
+            if !calendar.isDate(newSelection, equalTo: calendarMonth, toGranularity: .month) {
+                calendarMonth = Self.monthStart(for: newSelection)
+            }
+        }
     }
 
     private func dayButton(_ date: Date) -> some View {
@@ -146,37 +307,33 @@ struct WarmRecordDatePanel: View {
         return Circle().stroke(stroke, lineWidth: 1)
     }
 
-    private func timeStepper(title: String, value: Int, range: ClosedRange<Int>, onSet: @escaping (Int) -> Void) -> some View {
-        HStack(spacing: 8) {
-            Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppColors.subtext)
-            Button {
-                onSet(value == range.lowerBound ? range.upperBound : value - 1)
-            } label: {
-                Image(systemName: "minus")
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(AppColors.accent)
+    private var timeSelectionButton: some View {
+        Button {
+            timePickerPresentation = RecordTimePickerPresentation(sourceSelection: selection)
+        } label: {
+            HStack(spacing: 10) {
+                Label("时间", systemImage: "clock")
+                    .font(.system(size: 13, weight: .medium))
 
-            Text(String(format: "%02d", value))
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppColors.text)
-                .frame(width: 30)
+                Spacer(minLength: 8)
 
-            Button {
-                onSet(value == range.upperBound ? range.lowerBound : value + 1)
-            } label: {
-                Image(systemName: "plus")
+                Text(String(format: "%02d:%02d", calendar.component(.hour, from: selection), calendar.component(.minute, from: selection)))
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(AppColors.accent)
+            .foregroundStyle(AppColors.text)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.56))
+            )
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.56))
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            "修改时间，当前 \(calendar.component(.hour, from: selection)) 点 \(calendar.component(.minute, from: selection)) 分"
         )
     }
 
@@ -194,17 +351,9 @@ struct WarmRecordDatePanel: View {
         onSelectionChanged()
     }
 
-    private func setHour(_ hour: Int) {
-        var components = calendar.dateComponents([.year, .month, .day, .minute], from: selection)
-        components.hour = hour
-        selection = calendar.date(from: components) ?? selection
-        onSelectionChanged()
-    }
-
-    private func setMinute(_ minute: Int) {
-        var components = calendar.dateComponents([.year, .month, .day, .hour], from: selection)
-        components.minute = minute
-        selection = calendar.date(from: components) ?? selection
+    private func commitTime(_ committedSelection: Date) {
+        guard committedSelection != selection else { return }
+        selection = committedSelection
         onSelectionChanged()
     }
 }

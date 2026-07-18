@@ -859,8 +859,7 @@ extension HomeViewModel {
             subtitle = emptyCopy.subtitle
         case 1:
             title = "今天的第一笔记录"
-            let emotion = records.first?.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            subtitle = todayLateCommuteLine ?? todayLifeMarkLine ?? "\(!emotion.isEmpty ? emotion : "今天已经有一笔记录")，这一天刚翻开第一页。"
+            subtitle = todayLateCommuteLine ?? Self.singleRecordTodayStoryLine(for: records[0])
         case 2:
             title = "今天已记下 2 笔"
             subtitle = todayLateCommuteLine ?? todayLifeMarkLine ?? todaySceneLine ?? "主要在「\(topCategory)」上，记录变得具体。"
@@ -878,6 +877,21 @@ extension HomeViewModel {
             todayTotalText: count == 0 ? "今日还没记录" : "今日合计 \(totalText)",
             weekTotalText: "本周累计 \(weekText)"
         )
+    }
+
+    static func singleRecordTodayStoryLine(for item: HomeItem, calendar: Calendar = .current) -> String {
+        let hour = calendar.component(.hour, from: item.createdAt)
+        let period: String
+        switch hour {
+        case 5..<11: period = "早上"
+        case 11..<14: period = "中午"
+        case 14..<18: period = "下午"
+        case 18..<24: period = "晚上"
+        default: period = "夜里"
+        }
+        let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let subject = title.isEmpty ? "一笔\(item.category.rawValue)记录" : "一笔「\(title)」"
+        return "\(period) \(item.createdAt.zhBillTime)，先记下了\(subject)。"
     }
 
     private func emptyTodayStoryCopy(now: Date = Date()) -> (title: String, subtitle: String) {

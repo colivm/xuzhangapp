@@ -418,6 +418,7 @@ struct AICommandRecognitionContext: Equatable, Sendable {
     var hasLifeMark: Bool
     var hasExplicitTimeRange: Bool
     var asksCategoryBreakdown: Bool
+    var allowsHighConfidenceNounQuery: Bool
 }
 
 struct AICommandRecognitionDecision: Equatable, Sendable {
@@ -530,6 +531,7 @@ enum AICommandRecognitionPolicy {
             || hasMemoryAction
             || hasSummary
             || hasQueryAction
+            || context.allowsHighConfidenceNounQuery
         let hasLedgerScope = context.hasCategory
             || context.hasLifeMark
             || context.asksCategoryBreakdown
@@ -598,6 +600,15 @@ enum AICommandRecognitionPolicy {
                 && !context.hasLifeMark
                 && hasLedgerScope) {
             return decision(.lifestyleSummary, normalized, 84, ["action:summary"] + slots)
+        }
+
+        if context.allowsHighConfidenceNounQuery, context.hasLifeMark, hasLedgerScope {
+            return decision(
+                .query,
+                normalized,
+                88,
+                ["action:nounQuery", "score:trustedFacet"] + slots
+            )
         }
 
         var queryScore = 0

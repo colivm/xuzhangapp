@@ -65,15 +65,6 @@ enum RecordMemoryContextService {
             return weatherLine
         }
 
-        if let weekendLine = weekendOutingLine(
-            itemCategory: input.category,
-            title: title,
-            date: input.date,
-            existingItems: input.existingItems
-        ) {
-            return weekendLine
-        }
-
         return input.baseEmotionTag
     }
 
@@ -214,31 +205,6 @@ enum RecordMemoryContextService {
             if temp <= 5 { return .cold }
         }
         return .normal
-    }
-
-    private static func weekendOutingLine(
-        itemCategory: HomeItem.Category,
-        title: String,
-        date: Date,
-        existingItems: [HomeItem]
-    ) -> String? {
-        let calendar = Calendar.current
-        guard RecordCalendarContext.isNonWorkday(date, calendar: calendar) else { return nil }
-        let prefix = RecordCalendarContext.dayKind(for: date, calendar: calendar) == .holiday ? "假期" : "周末"
-
-        let dayItems = existingItems.filter { calendar.isDate($0.createdAt, inSameDayAs: date) }
-        let dayText = (dayItems.map { "\($0.title) \($0.displayEmotionTag) \($0.category.rawValue)" } + [title]).joined(separator: " ")
-        let hasTransport = dayItems.contains { $0.category == .transport } || itemCategory == .transport
-        let hasDining = dayItems.contains { $0.category == .dining } || itemCategory == .dining
-        let hasLeisureCue = containsAny(dayText, ["景区", "景点", "电影", "展", "公园", "旅行", "酒店", "民宿", "朋友", "聚"])
-
-        if hasTransport, hasDining, dayItems.count >= 1 {
-            return hasLeisureCue ? "\(prefix)出门玩了一趟" : "\(prefix)路上和饭点都有了"
-        }
-        if hasTransport, hasLeisureCue {
-            return "\(prefix)出门的路线"
-        }
-        return nil
     }
 
     private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {

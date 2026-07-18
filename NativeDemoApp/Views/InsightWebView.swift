@@ -256,13 +256,72 @@ struct AICommuteDraftSlot: Equatable {
     let title: String
     let hour: Int
     let minute: Int
+    let direction: AICommuteDirection
     let duplicateWindow: ClosedRange<Int>
+}
+
+enum AICommuteDirection: Equatable {
+    case morning
+    case evening
+}
+
+enum AICommuteDuplicatePolicy {
+    private static let morningCues = ["上班", "早高峰", "到岗", "早班", "去公司", "去单位"]
+    private static let eveningCues = ["下班", "晚高峰", "回家", "到家", "返程", "晚归"]
+    private static let commuteCues = ["通勤", "地铁", "公交", "轨道交通", "上班", "下班", "早高峰", "晚高峰", "到岗", "回家"]
+    private static let nonCommuteTravelCues = ["高铁", "火车", "机票", "机场", "旅行", "旅游", "出差", "返乡", "长途", "酒店"]
+
+    static func matches(
+        _ item: HomeItem,
+        slot: AICommuteDraftSlot,
+        day: Date,
+        proposedAmount: Double,
+        calendar: Calendar = .current
+    ) -> Bool {
+        guard item.amount > 0,
+              item.category == .transport,
+              calendar.isDate(item.createdAt, inSameDayAs: day),
+              amountMatches(existing: item.amount, proposed: proposedAmount) else {
+            return false
+        }
+
+        let text = "\(item.title) \(item.displayEmotionTag)".lowercased()
+        let hasMorningCue = containsAny(text, morningCues)
+        let hasEveningCue = containsAny(text, eveningCues)
+        let explicitlyCommute = item.scenePackId == "commute" || containsAny(text, commuteCues)
+        guard explicitlyCommute else { return false }
+        if containsAny(text, nonCommuteTravelCues), !hasMorningCue, !hasEveningCue, item.scenePackId != "commute" {
+            return false
+        }
+
+        if hasMorningCue != hasEveningCue {
+            return (hasMorningCue ? AICommuteDirection.morning : .evening) == slot.direction
+        }
+
+        let hour = calendar.component(.hour, from: item.createdAt)
+        if slot.duplicateWindow.contains(hour) {
+            return true
+        }
+        let fallbackDirection: AICommuteDirection = hour < 15 ? .morning : .evening
+        return fallbackDirection == slot.direction
+    }
+
+    static func amountMatches(existing: Double, proposed: Double) -> Bool {
+        let centsDelta = abs(existing - proposed)
+        if centsDelta < 0.01 { return true }
+        let tolerance = max(1.0, min(6.0, proposed * 0.22))
+        return centsDelta <= tolerance
+    }
+
+    private static func containsAny(_ text: String, _ candidates: [String]) -> Bool {
+        candidates.contains { text.localizedCaseInsensitiveContains($0) }
+    }
 }
 
 enum AICommuteDraftSchedule {
     static let slots = [
-        AICommuteDraftSlot(title: "早高峰通勤", hour: 8, minute: 30, duplicateWindow: 6...10),
-        AICommuteDraftSlot(title: "晚高峰通勤", hour: 18, minute: 30, duplicateWindow: 16...21)
+        AICommuteDraftSlot(title: "早高峰通勤", hour: 8, minute: 30, direction: .morning, duplicateWindow: 6...10),
+        AICommuteDraftSlot(title: "晚高峰通勤", hour: 18, minute: 30, direction: .evening, duplicateWindow: 16...21)
     ]
 
     static func eligibleSlots(for day: Date, now: Date, calendar: Calendar = .current) -> [AICommuteDraftSlot] {
@@ -4054,7 +4113,8 @@ struct InsightWebView: View {
             items: homeViewModel.items,
             hasMemberAccess: hasMemberAccess,
             amountText: aiCommandAmountText,
-            now: Date()
+            now: Date(),
+            reviewTaskIntent: activeReviewTask
         )
         aiCommandSavedCount = nil
         aiCommandMessage = "正在按本机规则整理..."
@@ -4123,13 +4183,15 @@ struct InsightWebView: View {
 
     static func aiCommandRecognitionDigestForTesting(
         command: String,
-        now: Date
+        now: Date,
+        reviewTaskIntent: ReviewTaskIntent = .query
     ) -> String {
         AICommandEngine(
             items: [],
             hasMemberAccess: true,
             amountText: "",
-            now: now
+            now: now,
+            reviewTaskIntent: reviewTaskIntent
         ).recognitionDigest(for: command)
     }
 
@@ -4138,13 +4200,15 @@ struct InsightWebView: View {
         items: [HomeItem],
         hasMemberAccess: Bool,
         amountText: String = "",
-        now: Date
+        now: Date,
+        reviewTaskIntent: ReviewTaskIntent = .query
     ) -> String {
         let result = AICommandEngine(
             items: items,
             hasMemberAccess: hasMemberAccess,
             amountText: amountText,
-            now: now
+            now: now,
+            reviewTaskIntent: reviewTaskIntent
         ).buildAICommandResult(for: command)
         let kind: String
         switch result.kind {
@@ -4206,7 +4270,8 @@ struct InsightWebView: View {
             items: items,
             hasMemberAccess: true,
             amountText: "",
-            now: now
+            now: now,
+            reviewTaskIntent: .query
         ).buildAICommandResult(for: command)
         guard let metrics = result.metrics else { return "none" }
         let scope: String
@@ -4246,17 +4311,25 @@ struct InsightWebView: View {
         private let hasMemberAccess: Bool
         private let amountText: String
         private let now: Date
+        private let reviewTaskIntent: ReviewTaskIntent
         private var aiCommandSuggestionsCache: [String: [String]] = [:]
         private var aiCommandItemsCache: [String: [HomeItem]] = [:]
         private var aiCommandLifeMarkItemsCache: [String: [HomeItem]] = [:]
         private var aiCommandCacheOrder: [String] = []
         private let aiCommandCacheLimit = 48
 
-        init(items: [HomeItem], hasMemberAccess: Bool, amountText: String, now: Date) {
+        init(
+            items: [HomeItem],
+            hasMemberAccess: Bool,
+            amountText: String,
+            now: Date,
+            reviewTaskIntent: ReviewTaskIntent = .query
+        ) {
             self.items = items
             self.hasMemberAccess = hasMemberAccess
             self.amountText = amountText
             self.now = now
+            self.reviewTaskIntent = reviewTaskIntent
         }
 
         func buildAICommandResult(for command: String) -> AICommandResult {
@@ -4269,6 +4342,7 @@ struct InsightWebView: View {
 
             if let lifeMarkIntent,
                decision.intent != .unsupported,
+               decision.intent != .commuteDraft,
                !hasMemberAccess,
                shouldRequireMemberForLifeMark(intent: lifeMarkIntent, command: normalized) {
                 return buildLifeMarkLockedResult(intent: lifeMarkIntent, command: normalized)
@@ -4348,7 +4422,9 @@ struct InsightWebView: View {
                 hasCategory: categoryIntent != nil,
                 hasLifeMark: candidateLifeMarkIntent != nil,
                 hasExplicitTimeRange: aiCommandHasExplicitTimeRange(normalized),
-                asksCategoryBreakdown: aiCommandAsksCategoryBreakdown(normalized)
+                asksCategoryBreakdown: aiCommandAsksCategoryBreakdown(normalized),
+                allowsHighConfidenceNounQuery: reviewTaskIntent == .query
+                    && candidateLifeMarkIntent?.supportsNounPhraseQuery == true
             )
             let decision = AICommandRecognitionPolicy.interpret(normalized, context: context)
             let lifeMarkIntent = resolvedLifeMarkIntent(
@@ -4375,7 +4451,9 @@ struct InsightWebView: View {
             default:
                 break
             }
-            if categoryIntent == nil || candidate.id == "rainy_commute" {
+            if categoryIntent == nil
+                || !candidate.semanticFacets.isEmpty
+                || candidate.supportsNounPhraseQuery {
                 return candidate
             }
             return decision.normalizedText.contains(candidate.label.lowercased()) ? candidate : nil
@@ -4722,7 +4800,10 @@ struct InsightWebView: View {
                 : "\(range.label)找到 \(items.count) 笔\(categoryText)记录，合计 \(total.formatted(.cny))。"
             let detail: String
             if let top = items.max(by: { $0.amount < $1.amount }) {
-                detail = "金额最高的是「\(top.displayTitle)」，\(top.amount.formatted(.cny))，时间在 \(top.createdAt.zhBillDateTime)。"
+                let evidencePrefix = lifeMarkIntent?.evidenceLabel.map { "匹配维度：\($0)。" } ?? ""
+                detail = "\(evidencePrefix)金额最高的是「\(top.displayTitle)」，\(top.amount.formatted(.cny))，时间在 \(top.createdAt.zhBillDateTime)。"
+            } else if let evidenceLabel = lifeMarkIntent?.evidenceLabel {
+                detail = "已识别为\(evidenceLabel)，但这个范围没有匹配记录；不会用当前天气或暖文案补写历史事实。"
             } else {
                 detail = "换个范围或分类再问一次，结果会更明确。"
             }
@@ -4869,11 +4950,16 @@ struct InsightWebView: View {
             lifeMarkIntent: LifeMarkQueryIntent?,
             command: String
         ) -> AICommandResultMetrics.Scope {
-            guard lifeMarkIntent == nil,
-                  !aiCommandAsksCategoryBreakdown(command),
-                  let categories = categoryIntent?.categories,
-                  categories.count == 1,
-                  let category = categories.first else {
+            guard !aiCommandAsksCategoryBreakdown(command) else {
+                return .crossCategory
+            }
+            let recognizedCategories = lifeMarkIntent?.categories ?? categoryIntent?.categories ?? []
+            let uniqueCategories = recognizedCategories.reduce(into: [HomeItem.Category]()) { result, category in
+                if !result.contains(category) {
+                    result.append(category)
+                }
+            }
+            guard uniqueCategories.count == 1, let category = uniqueCategories.first else {
                 return .crossCategory
             }
             return .singleCategory(category)
@@ -5281,6 +5367,9 @@ struct InsightWebView: View {
                 intent.categories.map(\.rawValue).joined(separator: ","),
                 intent.keywords.joined(separator: ","),
                 intent.requiresKeywordMatch ? "strict" : "loose",
+                intent.semanticFacets.map(\.rawValue).joined(separator: ","),
+                intent.supportsNounPhraseQuery ? "noun" : "action",
+                intent.evidenceLabel ?? "none",
                 command,
                 aiCommandItemsSignature(items)
             ].joined(separator: "|")
@@ -5483,7 +5572,7 @@ struct InsightWebView: View {
                     title: slot.title,
                     date: draftDate,
                     amount: amount,
-                    window: slot.duplicateWindow,
+                    slot: slot,
                     candidates: candidates
                 )
             }
@@ -5493,10 +5582,10 @@ struct InsightWebView: View {
             title: String,
             date: Date,
             amount: Double,
-            window: ClosedRange<Int>,
+            slot: AICommuteDraftSlot,
             candidates: [HomeItem]
         ) -> AICommandRecordDraft {
-            if let existing = existingCommuteLikeItem(on: date, amount: amount, window: window, candidates: candidates) {
+            if let existing = existingCommuteLikeItem(on: date, amount: amount, slot: slot, candidates: candidates) {
                 return AICommandRecordDraft(
                     title: title,
                     amount: amount,
@@ -5516,35 +5605,16 @@ struct InsightWebView: View {
         private func existingCommuteLikeItem(
             on date: Date,
             amount: Double,
-            window: ClosedRange<Int>,
+            slot: AICommuteDraftSlot,
             candidates: [HomeItem]
         ) -> HomeItem? {
-            let calendar = Calendar.current
             guard isCommuteWorkday(date) else { return nil }
             return candidates
-                .filter { item in
-                    guard item.amount > 0,
-                          item.category == .transport,
-                          calendar.isDate(item.createdAt, inSameDayAs: date),
-                          window.contains(calendar.component(.hour, from: item.createdAt)),
-                          commuteAmountMatchesHabit(existing: item.amount, proposed: amount) else {
-                        return false
-                    }
-                    let text = "\(item.title) \(item.displayEmotionTag)"
-                    return containsAny(text, ["通勤", "地铁", "公交", "早高峰", "晚高峰", "上班", "下班"])
-                        || item.amount <= max(20, amount * 1.5)
-                }
+                .filter { AICommuteDuplicatePolicy.matches($0, slot: slot, day: date, proposedAmount: amount) }
                 .sorted { lhs, rhs in
                     abs(lhs.amount - amount) < abs(rhs.amount - amount)
                 }
                 .first
-        }
-
-        private func commuteAmountMatchesHabit(existing: Double, proposed: Double) -> Bool {
-            let centsDelta = abs(existing - proposed)
-            if centsDelta < 0.01 { return true }
-            let tolerance = max(1.0, min(6.0, proposed * 0.22))
-            return centsDelta <= tolerance
         }
 
         private func inferredCommuteAmount() -> (amount: Double, count: Int)? {

@@ -371,6 +371,77 @@ final class OCRImportSubmissionGateTests: XCTestCase {
     }
 }
 
+final class SingleRecordEmotionBoundaryTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "zh_CN")
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        return calendar
+    }
+
+    private func date(_ hour: Int, _ minute: Int) -> Date {
+        calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 18,
+            hour: hour,
+            minute: minute
+        ))!
+    }
+
+    func testParkingTagUsesFactCopyForNewAndStoredRecords() {
+        let fresh = HomeItem(title: "停车费", amount: 69.8, category: .transport, createdAt: date(7, 47))
+        let stored = HomeItem(
+            title: "停车费",
+            amount: 69.8,
+            category: .transport,
+            createdAt: date(7, 47),
+            emotionTag: "车停稳了"
+        )
+
+        XCTAssertEqual(fresh.displayEmotionTag, "停车费记下")
+        XCTAssertEqual(stored.displayEmotionTag, "停车费记下")
+    }
+
+    func testWeekendDiningDoesNotPersistCrossRecordTransportStory() {
+        let parking = HomeItem(title: "停车费", amount: 12, category: .transport, createdAt: date(7, 47))
+        let result = RecordMemoryContextService.enhancedEmotionTag(input: RecordMemoryContextInput(
+            title: "巧婆红汤馄饨",
+            category: .dining,
+            amount: 16,
+            date: date(8, 22),
+            baseEmotionTag: "周末早餐",
+            existingItems: [parking],
+            weather: nil
+        ))
+
+        XCTAssertEqual(result, "周末早餐")
+    }
+
+    func testStoredWeekendCombinationTagFallsBackToThisRecordOnly() {
+        let breakfast = HomeItem(
+            title: "巧婆红汤馄饨",
+            amount: 16,
+            category: .dining,
+            createdAt: date(8, 22),
+            emotionTag: "周末路上和饭点都有了"
+        )
+
+        XCTAssertEqual(breakfast.displayEmotionTag, "周末早餐")
+    }
+
+    func testFirstRecordStoryUsesTimeAndRecordInsteadOfEmotionTemplate() {
+        let parking = HomeItem(title: "停车费", amount: 69.8, category: .transport, createdAt: date(7, 47))
+        let line = HomeViewModel.singleRecordTodayStoryLine(for: parking, calendar: calendar)
+
+        XCTAssertTrue(line.contains("早上"))
+        XCTAssertTrue(line.contains("停车费"))
+        XCTAssertFalse(line.contains("车停稳了"))
+        XCTAssertFalse(line.contains("刚翻开第一页"))
+    }
+}
+
 final class AICommuteBoundaryTests: XCTestCase {
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -419,6 +490,44 @@ final class AICommuteBoundaryTests: XCTestCase {
             AICommuteDraftSchedule.eligibleSlots(for: historicalDay, now: now, calendar: calendar).map(\.title),
             ["早高峰通勤", "晚高峰通勤"]
         )
+    }
+
+    func testStrongDirectionCuesOverrideNonstandardHours() {
+        let day = date(2026, 7, 17, 0, 0)
+        let morningSlot = AICommuteDraftSchedule.slots[0]
+        let eveningSlot = AICommuteDraftSchedule.slots[1]
+        let work = HomeItem(title: "上班", amount: 4.75, category: .transport, createdAt: date(2026, 7, 17, 13, 48))
+
+        XCTAssertTrue(AICommuteDuplicatePolicy.matches(work, slot: morningSlot, day: day, proposedAmount: 4.75, calendar: calendar))
+        XCTAssertFalse(AICommuteDuplicatePolicy.matches(work, slot: eveningSlot, day: day, proposedAmount: 4.75, calendar: calendar))
+    }
+
+    func testDirectionlessLateCommuteOnlyBlocksEveningSlot() {
+        let day = date(2026, 7, 17, 0, 0)
+        let morningSlot = AICommuteDraftSchedule.slots[0]
+        let eveningSlot = AICommuteDraftSchedule.slots[1]
+        let commute = HomeItem(title: "通勤路上记一笔", amount: 4.75, category: .transport, createdAt: date(2026, 7, 17, 22, 55))
+
+        XCTAssertFalse(AICommuteDuplicatePolicy.matches(commute, slot: morningSlot, day: day, proposedAmount: 4.75, calendar: calendar))
+        XCTAssertTrue(AICommuteDuplicatePolicy.matches(commute, slot: eveningSlot, day: day, proposedAmount: 4.75, calendar: calendar))
+    }
+
+    func testOrdinaryTransportAndTravelDoNotBlockCommuteSlots() {
+        let day = date(2026, 7, 17, 0, 0)
+        let morningSlot = AICommuteDraftSchedule.slots[0]
+        let taxi = HomeItem(title: "临时打车", amount: 4.75, category: .transport, createdAt: date(2026, 7, 17, 8, 10))
+        let train = HomeItem(title: "高铁出差", amount: 4.75, category: .transport, createdAt: date(2026, 7, 17, 8, 20))
+
+        XCTAssertFalse(AICommuteDuplicatePolicy.matches(taxi, slot: morningSlot, day: day, proposedAmount: 4.75, calendar: calendar))
+        XCTAssertFalse(AICommuteDuplicatePolicy.matches(train, slot: morningSlot, day: day, proposedAmount: 4.75, calendar: calendar))
+    }
+
+    func testAmountMismatchDoesNotBlockMatchingDirection() {
+        let day = date(2026, 7, 17, 0, 0)
+        let morningSlot = AICommuteDraftSchedule.slots[0]
+        let work = HomeItem(title: "上班", amount: 42, category: .transport, createdAt: date(2026, 7, 17, 13, 48))
+
+        XCTAssertFalse(AICommuteDuplicatePolicy.matches(work, slot: morningSlot, day: day, proposedAmount: 4.75, calendar: calendar))
     }
 }
 
@@ -928,6 +1037,54 @@ final class TodayPlaybackContentSnapshotTests: XCTestCase {
         ])
         XCTAssertEqual(snapshot.playbackDuration, 13, accuracy: 0.001)
     }
+
+    func testPresentationRequiresPreparedSnapshotAndOnlyAcceptsOneActivePayload() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 17,
+            hour: 22
+        ))!
+        let item = HomeItem(title: "晚餐", amount: 28, category: .dining, createdAt: now)
+        let prepared = TodayPlaybackPresentationPayload(contentSnapshot: BillPlaybackSheet.makeContentSnapshot(
+            allItems: [item],
+            sourceRevision: 11,
+            now: now,
+            calendar: calendar
+        ))
+        let unprepared = TodayPlaybackPresentationPayload(contentSnapshot: .empty)
+
+        XCTAssertTrue(TodayPlaybackPresentationPolicy.accepts(prepared, while: nil))
+        XCTAssertFalse(TodayPlaybackPresentationPolicy.accepts(prepared, while: prepared))
+        XCTAssertFalse(TodayPlaybackPresentationPolicy.accepts(unprepared, while: nil))
+        XCTAssertTrue(TodayPlaybackPresentationPolicy.consumesQuota(prepared))
+        XCTAssertFalse(TodayPlaybackPresentationPolicy.consumesQuota(unprepared))
+    }
+
+    func testValidEmptyDayCanPresentWithoutConsumingQuota() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 17,
+            hour: 8
+        ))!
+        let payload = TodayPlaybackPresentationPayload(contentSnapshot: BillPlaybackSheet.makeContentSnapshot(
+            allItems: [],
+            sourceRevision: 12,
+            now: now,
+            calendar: calendar
+        ))
+
+        XCTAssertTrue(payload.contentSnapshot.isPrepared)
+        XCTAssertTrue(TodayPlaybackPresentationPolicy.accepts(payload, while: nil))
+        XCTAssertFalse(TodayPlaybackPresentationPolicy.consumesQuota(payload))
+    }
 }
 
 final class LifetimeArchiveSnapshotComputationTests: XCTestCase {
@@ -1172,6 +1329,32 @@ final class TraceDetailListSnapshotComputationTests: XCTestCase {
             customStartDate: first.customStartDate,
             customEndDate: first.customEndDate
         ))
+    }
+
+    func testPresentationCarriesInitialSnapshotAndRejectsDuplicateSheetRequest() {
+        let date = Date(timeIntervalSince1970: 1_784_240_000)
+        let key = TraceDetailListSnapshotKey(
+            ledgerRevision: 2,
+            periodKey: "本周",
+            categoryKey: nil,
+            usesCustomRange: false,
+            customStartDate: date,
+            customEndDate: date
+        )
+        let item = HomeItem(title: "午餐", amount: 28, category: .dining, createdAt: date)
+        let snapshot = TraceDetailListSnapshot(
+            key: key,
+            items: [item],
+            itemIDs: [item.id],
+            totalExpense: 28,
+            dayGroups: [TraceDayGroup(id: "day", date: date, items: [item])]
+        )
+        let payload = TraceDetailPresentationPayload(initialSnapshot: snapshot)
+
+        XCTAssertTrue(TraceDetailPresentationPolicy.accepts(payload, while: nil))
+        XCTAssertFalse(TraceDetailPresentationPolicy.accepts(payload, while: payload))
+        XCTAssertEqual(payload.initialSnapshot.items.map(\.id), [item.id])
+        XCTAssertEqual(payload.initialSnapshot.totalExpense, 28, accuracy: 0.001)
     }
 }
 
@@ -1535,6 +1718,173 @@ final class AICommandRecognitionPolicyTests: XCTestCase {
     }
 }
 
+final class AICommandTrustedSemanticFacetTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        return calendar
+    }
+
+    private var now: Date {
+        calendar.date(from: DateComponents(
+            year: 2026,
+            month: 7,
+            day: 18,
+            hour: 20
+        ))!
+    }
+
+    private func date(_ hour: Int) -> Date {
+        calendar.date(from: DateComponents(
+            year: 2026,
+            month: 7,
+            day: 18,
+            hour: hour
+        ))!
+    }
+
+    private func recognition(_ command: String, task: ReviewTaskIntent = .query) -> String {
+        InsightWebView.aiCommandRecognitionDigestForTesting(
+            command: command,
+            now: now,
+            reviewTaskIntent: task
+        )
+    }
+
+    func testQueryTaskAcceptsTrustedWeatherCommuteNounPhrases() {
+        for command in ["高温通勤", "热天通勤", "酷热天上班"] {
+            let digest = recognition(command)
+            XCTAssertTrue(digest.hasPrefix("query#"), command)
+            XCTAssertTrue(digest.contains("#hot_commute#"), command)
+            XCTAssertTrue(digest.contains("action:nounQuery"), command)
+        }
+
+        XCTAssertTrue(recognition("冷天通勤").contains("#cold_commute#"))
+        XCTAssertTrue(recognition("雨天通勤").contains("#rainy_commute#"))
+        XCTAssertTrue(recognition("雪天通勤").contains("#snowy_commute#"))
+    }
+
+    func testBackfillTaskDoesNotTurnTheSameNounPhraseIntoAWrite() {
+        XCTAssertTrue(recognition("高温通勤", task: .backfill).hasPrefix("unsupported#"))
+        XCTAssertTrue(recognition("爱好类消费", task: .backfill).hasPrefix("unsupported#"))
+        XCTAssertTrue(recognition("补记高温通勤", task: .backfill).hasPrefix("commuteDraft#"))
+    }
+
+    func testHotCommuteRequiresBothStructuredWeatherAndCommuteEvidence() {
+        let hotCommute = HomeItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000401")!,
+            title: "上班",
+            amount: 4.75,
+            category: .transport,
+            createdAt: date(13),
+            memoryContext: .init(weatherKind: "hot", temperatureCelsius: 34, cityName: nil, semanticPlace: nil),
+            scenePackId: "commute"
+        )
+        let hotDining = HomeItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000402")!,
+            title: "午饭",
+            amount: 28,
+            category: .dining,
+            createdAt: date(12),
+            memoryContext: .init(weatherKind: "hot", temperatureCelsius: 34, cityName: nil, semanticPlace: nil)
+        )
+        let normalCommute = HomeItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000403")!,
+            title: "下班",
+            amount: 4.75,
+            category: .transport,
+            createdAt: date(18),
+            memoryContext: .init(weatherKind: "clear", temperatureCelsius: 25, cityName: nil, semanticPlace: nil),
+            scenePackId: "commute"
+        )
+        let hotTaxi = HomeItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000404")!,
+            title: "机场打车",
+            amount: 58,
+            category: .transport,
+            createdAt: date(15),
+            memoryContext: .init(weatherKind: "hot", temperatureCelsius: 34, cityName: nil, semanticPlace: nil)
+        )
+
+        let digest = InsightWebView.aiCommandComputationDigestForTesting(
+            command: "高温通勤",
+            items: [hotCommute, hotDining, normalCommute, hotTaxi],
+            hasMemberAccess: true,
+            now: now
+        )
+
+        XCTAssertTrue(digest.hasPrefix("query#"))
+        XCTAssertTrue(digest.contains(hotCommute.id.uuidString))
+        XCTAssertFalse(digest.contains(hotDining.id.uuidString))
+        XCTAssertFalse(digest.contains(normalCommute.id.uuidString))
+        XCTAssertFalse(digest.contains(hotTaxi.id.uuidString))
+        XCTAssertTrue(digest.contains("匹配维度：高温天气 · 通勤"))
+    }
+
+    func testInterestConsumptionRequiresAConcreteInterestObjectOrActivity() {
+        let fishing = HomeItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000411")!,
+            title: "路亚鱼竿",
+            amount: 268,
+            category: .shopping,
+            createdAt: date(10)
+        )
+        let ordinaryShopping = HomeItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000412")!,
+            title: "日常外套",
+            amount: 268,
+            category: .shopping,
+            createdAt: date(11),
+            emotionTag: "爱好里的小投入"
+        )
+
+        let digest = InsightWebView.aiCommandComputationDigestForTesting(
+            command: "爱好类消费",
+            items: [fishing, ordinaryShopping],
+            hasMemberAccess: true,
+            now: now
+        )
+
+        XCTAssertTrue(digest.hasPrefix("query#"))
+        XCTAssertTrue(digest.contains(fishing.id.uuidString))
+        XCTAssertFalse(digest.contains(ordinaryShopping.id.uuidString))
+        XCTAssertTrue(digest.contains("明确兴趣物件或活动"))
+    }
+
+    func testWeakEmotionAndValuePhrasesRemainOutsideLedgerFactQueries() {
+        for command in ["辛苦了", "热天辛苦", "今天很热吗", "小投入", "爱好值得吗", "买这个划算吗"] {
+            XCTAssertTrue(recognition(command).hasPrefix("unsupported#"), command)
+        }
+    }
+
+    func testRecognizedFacetWithoutRowsIsNotReportedAsUnrecognized() {
+        let digest = InsightWebView.aiCommandComputationDigestForTesting(
+            command: "高温通勤",
+            items: [],
+            hasMemberAccess: true,
+            now: now
+        )
+
+        XCTAssertTrue(digest.hasPrefix("query#"))
+        XCTAssertTrue(digest.contains("已识别为高温天气 · 通勤"))
+        XCTAssertTrue(digest.contains("不会用当前天气或暖文案补写历史事实"))
+    }
+
+    func testWeatherAndAwayFacetsKeepTheExistingMemberBoundary() {
+        let locked = InsightWebView.aiCommandComputationDigestForTesting(
+            command: "高温通勤",
+            items: [],
+            hasMemberAccess: false,
+            now: now
+        )
+        let away = recognition("外地消费")
+
+        XCTAssertTrue(locked.hasPrefix("unsupported#会员可看「高温通勤」"))
+        XCTAssertTrue(away.hasPrefix("query#"))
+        XCTAssertTrue(away.contains("#away_spending#"))
+    }
+}
+
 final class AICommandQueryMetricScopeTests: XCTestCase {
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -1609,6 +1959,44 @@ final class AICommandQueryMetricScopeTests: XCTestCase {
 
         XCTAssertEqual(empty, "single:餐饮#0#none#none#none#0.0")
         XCTAssertEqual(one, "single:餐饮#1#18.0#18.0#餐饮#18.0")
+    }
+
+    func testSingleCategoryLifeMarkUsesFocusedMetricsWithoutRepeatingBaseCategory() {
+        let items = [
+            HomeItem(title: "瑞幸咖啡", amount: 9.9, category: .dining, createdAt: date(day: 16, hour: 17)),
+            HomeItem(title: "冰美式", amount: 9.9, category: .dining, createdAt: date(day: 17, hour: 9)),
+            HomeItem(title: "午餐", amount: 28, category: .dining, createdAt: date(day: 17, hour: 12)),
+        ]
+
+        let digest = InsightWebView.aiCommandQueryMetricDigestForTesting(
+            command: "这周咖啡饮品几次？",
+            items: items,
+            now: now
+        )
+
+        XCTAssertEqual(digest, "single:餐饮#2#9.9#9.9#餐饮#19.8")
+    }
+
+    func testMultiCategoryLifeMarkAndExplicitBreakdownKeepCrossCategoryMetrics() {
+        let items = [
+            HomeItem(title: "运动鞋", amount: 399, category: .shopping, createdAt: date(day: 16, hour: 17)),
+            HomeItem(title: "健身房月卡", amount: 299, category: .health, createdAt: date(day: 17, hour: 9)),
+            HomeItem(title: "瑞幸咖啡", amount: 9.9, category: .dining, createdAt: date(day: 17, hour: 12)),
+        ]
+
+        let multi = InsightWebView.aiCommandQueryMetricDigestForTesting(
+            command: "这周健身恢复花了多少？",
+            items: items,
+            now: now
+        )
+        let breakdown = InsightWebView.aiCommandQueryMetricDigestForTesting(
+            command: "这周咖啡饮品按分类看",
+            items: items,
+            now: now
+        )
+
+        XCTAssertTrue(multi.hasPrefix("cross#"))
+        XCTAssertTrue(breakdown.hasPrefix("cross#"))
     }
 }
 
@@ -1805,6 +2193,300 @@ final class PixelPetAnimationPolicyTests: XCTestCase {
         XCTAssertEqual(lowPower.sequence, .idle)
         XCTAssertFalse(inactive.animates)
         XCTAssertEqual(inactive.stableFrameIndex, 0)
+    }
+}
+
+final class PetCompanionMessagePolicyTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        return calendar
+    }
+
+    private func date(_ hour: Int, _ minute: Int = 0) -> Date {
+        calendar.date(from: DateComponents(
+            year: 2026,
+            month: 7,
+            day: 18,
+            hour: hour,
+            minute: minute
+        ))!
+    }
+
+    func testClickUsesCommuteAndCoffeeFactsBeforeCurrentRain() {
+        let commute = HomeItem(
+            title: "上班",
+            amount: 4.75,
+            category: .transport,
+            createdAt: date(13, 48),
+            memoryContext: .init(weatherKind: "hot", temperatureCelsius: 34, cityName: nil, semanticPlace: nil),
+            scenePackId: "commute"
+        )
+        let coffee = HomeItem(
+            title: "冰美式",
+            amount: 9.9,
+            category: .dining,
+            createdAt: date(17, 32)
+        )
+
+        let messages = PetCompanionMessagePolicy.candidates(
+            focusRecord: nil,
+            todayItems: [commute, coffee],
+            currentWeather: WeatherSnapshot(temp: 24, weatherCode: 61, ts: date(20)),
+            now: date(20),
+            calendar: calendar
+        )
+
+        XCTAssertTrue(messages.allSatisfy { $0.text.contains("通勤") })
+        XCTAssertTrue(messages.allSatisfy { $0.text.contains("现在外面在下雨") })
+        XCTAssertFalse(messages.contains { $0.text.contains("家里") || $0.text.contains("居家") })
+    }
+
+    func testSavedRecordUsesItsOwnWeatherInsteadOfCurrentWeather() {
+        let commute = HomeItem(
+            title: "上班",
+            amount: 4.75,
+            category: .transport,
+            createdAt: date(15),
+            memoryContext: .init(weatherKind: "hot", temperatureCelsius: 34, cityName: nil, semanticPlace: nil),
+            scenePackId: "commute"
+        )
+
+        let messages = PetCompanionMessagePolicy.candidates(
+            focusRecord: commute,
+            todayItems: [commute],
+            currentWeather: WeatherSnapshot(temp: 24, weatherCode: 61, ts: date(20)),
+            now: date(20),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(messages.map(\.text), ["下午这趟通勤是在热天里记下的。"])
+    }
+
+    func testSystemWarmTagDoesNotBecomeAClaimAboutTheUser() {
+        let item = HomeItem(
+            title: "普通记录",
+            amount: 12,
+            category: .other,
+            createdAt: date(12),
+            emotionTag: "辛苦了，今天很治愈"
+        )
+
+        let messages = PetCompanionMessagePolicy.candidates(
+            focusRecord: item,
+            todayItems: [item],
+            currentWeather: nil,
+            now: date(20),
+            calendar: calendar
+        )
+
+        XCTAssertFalse(messages.contains { $0.text.contains("辛苦") || $0.text.contains("治愈") })
+    }
+
+    func testExplicitSafeUserLineRequiresUserEditedTitleAndSensitiveRecordsStayNeutral() {
+        let safe = HomeItem(
+            title: "终于到家",
+            amount: 8,
+            category: .transport,
+            createdAt: date(22),
+            userEditedTitle: true
+        )
+        let sensitive = HomeItem(
+            title: "今天好累",
+            amount: 50,
+            category: .health,
+            createdAt: date(22),
+            userEditedTitle: true
+        )
+
+        let safeMessage = PetCompanionMessagePolicy.candidates(
+            focusRecord: safe,
+            todayItems: [safe],
+            currentWeather: nil,
+            now: date(22),
+            calendar: calendar
+        )
+        let sensitiveMessages = PetCompanionMessagePolicy.candidates(
+            focusRecord: sensitive,
+            todayItems: [sensitive],
+            currentWeather: nil,
+            now: date(22),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(safeMessage.first?.id, "saved.user.arrived_home")
+        XCTAssertFalse(sensitiveMessages.contains { $0.text.contains("今天好累") })
+    }
+
+    func testZeroOneAndSeveralRecordFallbacksAreDeterministic() {
+        let first = HomeItem(title: "午饭", amount: 20, category: .dining, createdAt: date(12))
+        let second = HomeItem(title: "纸巾", amount: 12, category: .daily, createdAt: date(18))
+
+        let empty = PetCompanionMessagePolicy.candidates(
+            focusRecord: nil,
+            todayItems: [],
+            currentWeather: nil,
+            now: date(12),
+            calendar: calendar
+        )
+        let one = PetCompanionMessagePolicy.candidates(
+            focusRecord: nil,
+            todayItems: [first],
+            currentWeather: nil,
+            now: date(12),
+            calendar: calendar
+        )
+        let several = PetCompanionMessagePolicy.candidates(
+            focusRecord: nil,
+            todayItems: [first, second],
+            currentWeather: nil,
+            now: date(18),
+            calendar: calendar
+        )
+
+        XCTAssertTrue(empty.allSatisfy { $0.id.hasPrefix("day.empty") })
+        XCTAssertTrue(one.allSatisfy { $0.id.hasPrefix("day.one") })
+        XCTAssertTrue(several.allSatisfy { $0.id.hasPrefix("day.several") })
+    }
+}
+
+final class RecordTimeSelectionPolicyTests: XCTestCase {
+    private func calendar(timeZone: TimeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!) -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar
+    }
+
+    private func date(
+        year: Int = 2026,
+        month: Int = 7,
+        day: Int = 18,
+        hour: Int,
+        minute: Int,
+        calendar: Calendar
+    ) -> Date {
+        calendar.date(from: DateComponents(
+            year: year,
+            month: month,
+            day: day,
+            hour: hour,
+            minute: minute,
+            second: 37
+        ))!
+    }
+
+    func testLargeTimeChangeCommitsOneNormalizedDateWithoutChangingDay() {
+        let calendar = calendar()
+        let source = date(hour: 22, minute: 55, calendar: calendar)
+        let result = RecordTimeSelectionPolicy.applyingTime(
+            hour: 8,
+            minute: 5,
+            to: source,
+            calendar: calendar
+        )
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: result)
+
+        XCTAssertEqual(components.year, 2026)
+        XCTAssertEqual(components.month, 7)
+        XCTAssertEqual(components.day, 18)
+        XCTAssertEqual(components.hour, 8)
+        XCTAssertEqual(components.minute, 5)
+        XCTAssertEqual(components.second, 0)
+    }
+
+    func testMidnightAndEndOfDayRemainOnTheSelectedDate() {
+        let calendar = calendar()
+        let source = date(year: 2028, month: 2, day: 29, hour: 12, minute: 30, calendar: calendar)
+        let midnight = RecordTimeSelectionPolicy.applyingTime(hour: 0, minute: 0, to: source, calendar: calendar)
+        let endOfDay = RecordTimeSelectionPolicy.applyingTime(hour: 23, minute: 59, to: source, calendar: calendar)
+
+        XCTAssertTrue(calendar.isDate(midnight, inSameDayAs: source))
+        XCTAssertTrue(calendar.isDate(endOfDay, inSameDayAs: source))
+        XCTAssertEqual(calendar.component(.hour, from: midnight), 0)
+        XCTAssertEqual(calendar.component(.minute, from: midnight), 0)
+        XCTAssertEqual(calendar.component(.hour, from: endOfDay), 23)
+        XCTAssertEqual(calendar.component(.minute, from: endOfDay), 59)
+    }
+
+    func testOutOfRangeValuesAreClampedInsteadOfRollingTheDate() {
+        let calendar = calendar()
+        let source = date(hour: 12, minute: 30, calendar: calendar)
+        let result = RecordTimeSelectionPolicy.applyingTime(
+            hour: 99,
+            minute: -8,
+            to: source,
+            calendar: calendar
+        )
+
+        XCTAssertTrue(calendar.isDate(result, inSameDayAs: source))
+        XCTAssertEqual(calendar.component(.hour, from: result), 23)
+        XCTAssertEqual(calendar.component(.minute, from: result), 0)
+    }
+
+    func testDSTGapUsesAValidTimeOnTheSameLocalDay() {
+        let losAngeles = TimeZone(identifier: "America/Los_Angeles")!
+        let calendar = calendar(timeZone: losAngeles)
+        let source = date(year: 2026, month: 3, day: 8, hour: 1, minute: 30, calendar: calendar)
+        let result = RecordTimeSelectionPolicy.applyingTime(
+            hour: 2,
+            minute: 30,
+            to: source,
+            calendar: calendar
+        )
+
+        XCTAssertTrue(calendar.isDate(result, inSameDayAs: source))
+        XCTAssertEqual(calendar.component(.minute, from: result), 30)
+        XCTAssertGreaterThanOrEqual(calendar.component(.hour, from: result), 3)
+    }
+}
+
+final class MembershipDetailPresentationPolicyTests: XCTestCase {
+    func testProspectSeesOneSalesComparisonAndPricing() {
+        let policy = MembershipDetailPresentationPolicy.resolve(
+            isMember: false,
+            isLifetimeMember: false
+        )
+
+        XCTAssertEqual(policy.state, .prospect)
+        XCTAssertTrue(policy.showsSalesHero)
+        XCTAssertTrue(policy.showsPricing)
+        XCTAssertTrue(policy.showsValueComparison)
+        XCTAssertFalse(policy.showsMemberStatus)
+        XCTAssertFalse(policy.showsUnlockedSummary)
+        XCTAssertFalse(policy.showsSubscriptionActions)
+        XCTAssertFalse(policy.showsMemberDataBoundary)
+    }
+
+    func testSubscriptionSeesStatusUnlockedSummaryAndManagementWithoutSalesComparison() {
+        let policy = MembershipDetailPresentationPolicy.resolve(
+            isMember: true,
+            isLifetimeMember: false
+        )
+
+        XCTAssertEqual(policy.state, .subscription)
+        XCTAssertFalse(policy.showsSalesHero)
+        XCTAssertFalse(policy.showsPricing)
+        XCTAssertFalse(policy.showsValueComparison)
+        XCTAssertTrue(policy.showsMemberStatus)
+        XCTAssertTrue(policy.showsUnlockedSummary)
+        XCTAssertTrue(policy.showsSubscriptionActions)
+        XCTAssertTrue(policy.showsMemberDataBoundary)
+    }
+
+    func testLifetimeMemberGoesFromStatusToArchiveWithoutRepeatedValueCards() {
+        let policy = MembershipDetailPresentationPolicy.resolve(
+            isMember: true,
+            isLifetimeMember: true
+        )
+
+        XCTAssertEqual(policy.state, .lifetime)
+        XCTAssertFalse(policy.showsSalesHero)
+        XCTAssertFalse(policy.showsPricing)
+        XCTAssertFalse(policy.showsValueComparison)
+        XCTAssertTrue(policy.showsMemberStatus)
+        XCTAssertFalse(policy.showsUnlockedSummary)
+        XCTAssertFalse(policy.showsSubscriptionActions)
+        XCTAssertTrue(policy.showsMemberDataBoundary)
     }
 }
 

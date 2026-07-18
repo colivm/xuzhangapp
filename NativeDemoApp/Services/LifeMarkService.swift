@@ -12,12 +12,45 @@ enum LifeMarkKind: String, Equatable {
     case streak
 }
 
+enum AICommandSemanticFacet: String, Equatable, Hashable {
+    case weatherHot
+    case weatherCold
+    case weatherRain
+    case weatherSnow
+    case commute
+    case interestGear
+    case awayFromHome
+}
+
 struct LifeMarkQueryIntent: Equatable {
     let id: String
     let label: String
     let categories: [HomeItem.Category]
     let keywords: [String]
     let requiresKeywordMatch: Bool
+    let semanticFacets: [AICommandSemanticFacet]
+    let supportsNounPhraseQuery: Bool
+    let evidenceLabel: String?
+
+    init(
+        id: String,
+        label: String,
+        categories: [HomeItem.Category],
+        keywords: [String],
+        requiresKeywordMatch: Bool,
+        semanticFacets: [AICommandSemanticFacet] = [],
+        supportsNounPhraseQuery: Bool = false,
+        evidenceLabel: String? = nil
+    ) {
+        self.id = id
+        self.label = label
+        self.categories = categories
+        self.keywords = keywords
+        self.requiresKeywordMatch = requiresKeywordMatch
+        self.semanticFacets = semanticFacets
+        self.supportsNounPhraseQuery = supportsNounPhraseQuery
+        self.evidenceLabel = evidenceLabel
+    }
 }
 
 struct LifeMarkAggregate: Identifiable, Equatable {
@@ -441,13 +474,27 @@ enum LifeMarkService {
     static func queryIntent(from text: String) -> LifeMarkQueryIntent? {
         let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return nil }
-        if containsAny(normalized, ["雨天通勤", "下雨通勤", "雨天上班", "下雨上班"]) {
+        if let weatherCommuteIntent = weatherCommuteQueryIntent(from: normalized) {
+            return weatherCommuteIntent
+        }
+        if containsAny(normalized, ["爱好类消费", "爱好消费", "兴趣消费", "兴趣类消费", "爱好装备"]) {
+            return definitionQueryIntent(
+                id: "interest_gear",
+                supportsNounPhraseQuery: true,
+                semanticFacets: [.interestGear],
+                evidenceLabel: "明确兴趣物件或活动"
+            )
+        }
+        if containsAny(normalized, ["外地消费", "异地消费", "外地花费", "异地花费", "外地记录", "异地记录"]) {
             return LifeMarkQueryIntent(
-                id: "rainy_commute",
-                label: "雨天通勤",
-                categories: [.transport],
-                keywords: ["雨天", "下雨", "雨", "通勤", "上班", "下班", "地铁", "公交"],
-                requiresKeywordMatch: false
+                id: "away_spending",
+                label: "外地消费",
+                categories: HomeItem.Category.allCases,
+                keywords: ["外地", "异地"],
+                requiresKeywordMatch: false,
+                semanticFacets: [.awayFromHome],
+                supportsNounPhraseQuery: true,
+                evidenceLabel: "记录中的外地上下文"
             )
         }
         return definitions.first { definition in
@@ -465,26 +512,32 @@ enum LifeMarkService {
                 label: definition.label,
                 categories: definition.categories,
                 keywords: definition.keywords,
-                requiresKeywordMatch: definition.requiresKeywordMatch
+                requiresKeywordMatch: definition.requiresKeywordMatch,
+                semanticFacets: definition.id == "interest_gear" ? [.interestGear] : [],
+                supportsNounPhraseQuery: supportsTrustedNounPhraseQuery(
+                    normalized,
+                    definition: definition
+                ),
+                evidenceLabel: definition.id == "interest_gear" ? "明确兴趣物件或活动" : nil
             )
         }
     }
 
     static func access(for intent: LifeMarkQueryIntent) -> LifeMarkAccess {
-        if intent.id == "rainy_commute" {
+        if intent.semanticFacets.contains(where: {
+            [.weatherHot, .weatherCold, .weatherRain, .weatherSnow, .awayFromHome].contains($0)
+        }) {
             return .member
         }
         return definitions.first(where: { $0.id == intent.id })?.access ?? .free
     }
 
     static func matches(_ item: HomeItem, intent: LifeMarkQueryIntent) -> Bool {
-        if intent.id == "rainy_commute" {
-            return item.category == .transport
-                && isRainy(item)
-                && (containsAny(semanticText(for: item), ["通勤", "上班", "下班", "地铁", "公交"]) || item.amount <= 80)
+        if !intent.semanticFacets.isEmpty {
+            return intent.semanticFacets.allSatisfy { facetMatches(item, facet: $0) }
         }
         let categoryMatched = intent.categories.contains(item.category)
-        let text = semanticText(for: item)
+        let text = querySemanticText(for: item)
         if intent.id == "baby_supply" {
             return categoryMatched && SemanticBoundaryGuard.matchesBabySupply(text)
         }
@@ -495,6 +548,146 @@ enum LifeMarkService {
         return intent.requiresKeywordMatch
             ? categoryMatched && keywordMatched
             : categoryMatched || keywordMatched
+    }
+
+    private static func weatherCommuteQueryIntent(from normalized: String) -> LifeMarkQueryIntent? {
+        let commuteCues = ["通勤", "上班", "下班", "上下班", "早高峰", "晚高峰", "到岗", "地铁通勤", "公交通勤"]
+        guard containsAny(normalized, commuteCues) else { return nil }
+
+        let descriptor: (
+            id: String,
+            label: String,
+            facet: AICommandSemanticFacet,
+            evidence: String,
+            keywords: [String]
+        )?
+        if containsAny(normalized, ["高温", "热天", "酷热", "炎热", "闷热"]) {
+            descriptor = ("hot_commute", "高温通勤", .weatherHot, "高温天气 · 通勤", ["高温", "热天", "酷热", "炎热", "闷热"])
+        } else if containsAny(normalized, ["低温", "冷天", "寒冷", "降温", "很冷"]) {
+            descriptor = ("cold_commute", "冷天通勤", .weatherCold, "低温天气 · 通勤", ["低温", "冷天", "寒冷", "降温"])
+        } else if containsAny(normalized, ["雨天", "下雨", "降雨", "淋雨"]) {
+            descriptor = ("rainy_commute", "雨天通勤", .weatherRain, "降雨天气 · 通勤", ["雨天", "下雨", "降雨"])
+        } else if containsAny(normalized, ["雪天", "下雪", "降雪"]) {
+            descriptor = ("snowy_commute", "雪天通勤", .weatherSnow, "降雪天气 · 通勤", ["雪天", "下雪", "降雪"])
+        } else {
+            descriptor = nil
+        }
+
+        guard let descriptor else { return nil }
+        return LifeMarkQueryIntent(
+            id: descriptor.id,
+            label: descriptor.label,
+            categories: [.transport],
+            keywords: descriptor.keywords + commuteCues,
+            requiresKeywordMatch: false,
+            semanticFacets: [descriptor.facet, .commute],
+            supportsNounPhraseQuery: true,
+            evidenceLabel: descriptor.evidence
+        )
+    }
+
+    private static func definitionQueryIntent(
+        id: String,
+        supportsNounPhraseQuery: Bool,
+        semanticFacets: [AICommandSemanticFacet] = [],
+        evidenceLabel: String? = nil
+    ) -> LifeMarkQueryIntent? {
+        guard let definition = definitions.first(where: { $0.id == id }) else { return nil }
+        return LifeMarkQueryIntent(
+            id: definition.id,
+            label: definition.label,
+            categories: definition.categories,
+            keywords: definition.keywords,
+            requiresKeywordMatch: definition.requiresKeywordMatch,
+            semanticFacets: semanticFacets,
+            supportsNounPhraseQuery: supportsNounPhraseQuery,
+            evidenceLabel: evidenceLabel
+        )
+    }
+
+    private static func supportsTrustedNounPhraseQuery(
+        _ normalized: String,
+        definition: LifeMarkDefinition
+    ) -> Bool {
+        if normalized.contains(definition.label.lowercased()) {
+            return true
+        }
+        let trustedIDs: Set<String> = [
+            "fitness", "coffee_drink", "commute", "home_utilities", "telecom_bill",
+            "household_service", "car_care", "digital_subscription", "baby_supply",
+            "medical_care", "movie_ticket", "travel", "groceries", "interest_gear",
+            "learning_growth", "pet_supply",
+        ]
+        return trustedIDs.contains(definition.id)
+            && containsAny(normalized, definition.keywords)
+    }
+
+    private static func facetMatches(_ item: HomeItem, facet: AICommandSemanticFacet) -> Bool {
+        switch facet {
+        case .weatherHot:
+            return weatherMatches(
+                item,
+                structuredKinds: ["hot", "heat", "high_temperature"],
+                legacyFactPhrases: ["热天路上", "高温通勤", "热天通勤"]
+            )
+        case .weatherCold:
+            return weatherMatches(
+                item,
+                structuredKinds: ["cold", "low_temperature"],
+                legacyFactPhrases: ["冷天出门", "低温通勤", "冷天通勤"]
+            )
+        case .weatherRain:
+            return weatherMatches(
+                item,
+                structuredKinds: ["rain", "rainy"],
+                legacyFactPhrases: ["雨天通勤", "下雨通勤"]
+            )
+        case .weatherSnow:
+            return weatherMatches(
+                item,
+                structuredKinds: ["snow", "snowy"],
+                legacyFactPhrases: ["雪天通勤", "下雪通勤"]
+            )
+        case .commute:
+            guard item.category == .transport else { return false }
+            if item.scenePackId == "commute" { return true }
+            if containsAny(querySemanticText(for: item), ["通勤", "上班", "下班", "早高峰", "晚高峰", "到岗", "地铁", "公交"]) {
+                return true
+            }
+            return containsAny(item.displayEmotionTag, ["通勤路上", "雨天通勤", "雪天通勤", "冷天出门", "热天路上"])
+        case .interestGear:
+            guard let definition = definitions.first(where: { $0.id == "interest_gear" }),
+                  definition.categories.contains(item.category) else { return false }
+            return containsAny(querySemanticText(for: item), definition.keywords)
+        case .awayFromHome:
+            if item.memoryContext?.semanticPlace == "外地" { return true }
+            guard item.memoryContext?.semanticPlace == nil else { return false }
+            return containsAny(item.displayEmotionTag, ["外地记录", "异地记录", "外地停留", "异地停留"])
+        }
+    }
+
+    private static func weatherMatches(
+        _ item: HomeItem,
+        structuredKinds: Set<String>,
+        legacyFactPhrases: [String]
+    ) -> Bool {
+        if let kind = item.memoryContext?.weatherKind?.lowercased() {
+            return structuredKinds.contains(kind)
+        }
+        return containsAny(item.displayEmotionTag, legacyFactPhrases)
+    }
+
+    private static func querySemanticText(for item: HomeItem) -> String {
+        [
+            item.title,
+            item.category.rawValue,
+            item.category.label,
+            item.memoryContext?.cityName ?? "",
+            item.memoryContext?.semanticPlace ?? "",
+            item.scenePackId ?? ""
+        ]
+        .joined(separator: " ")
+        .lowercased()
     }
 
     static func milestoneTarget(from text: String) -> Int? {

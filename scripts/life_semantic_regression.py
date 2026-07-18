@@ -152,6 +152,7 @@ EXPECTED_SWIFT_SNIPPETS = {
         "供暖费", "热力费", "腾讯视频会员", "Office 365", "谷子", "潮玩", "泡泡玛特", "POP MART", "搬家",
         "托育费", "直播打赏", "网吧", "医美", "白事随礼", "驾校", "telecom_bill", "手机话费",
         "casualDrinkKeywords", "isCasualDrinkOnly", "definition.id == \"groceries\"", "isHouseholdCleaningSupply",
+        "AICommandSemanticFacet", "weatherCommuteQueryIntent", "爱好类消费", "querySemanticText",
     ],
     "free_scene_pack": [
         "健身训练", "运动装备",
@@ -166,7 +167,7 @@ EXPECTED_SWIFT_SNIPPETS = {
     ],
     "memory_context": [
         "充电桩", "电车充电", "汽车充电", "补能",
-        "SemanticBoundaryGuard.isHouseholdCleaningSupply(text)", "displayEmotionTag",
+        "SemanticBoundaryGuard.isHouseholdCleaningSupply(text)",
     ],
     "home_view": [
         "haidilao", "laoxiangji", "tastien", "cotti", "juewei", "yuanjiyunjiao",
@@ -233,7 +234,6 @@ DISPLAY_EMOTION_ONLY_SCOPES = [
     ("scene_pack", "shouldUseWorkdayMealCopy(date: Date, historyItems: [HomeItem])", ["item.emotionTag"]),
     ("scene_pack", "shouldUseWorkdayCopy(date: Date, historyItems: [HomeItem])", ["item.emotionTag"]),
     ("scene_pack", "containsTravelIntent(in items: [HomeItem], near date: Date)", ["item.emotionTag"]),
-    ("memory_context", "private static func weekendOutingLine", ["item.emotionTag"]),
 ]
 
 SCENE_PACK_BLOCKED_TERMS = [
@@ -504,6 +504,18 @@ def scan_life_mark_boundaries(failures: list[str], text: str) -> None:
     if '"花小猪"' in commute:
         failures.append("LifeMarkService: commute must not treat ride-hailing brand alone as high-confidence commute")
 
+    query_match_scope = extract_swift_scope(text, "static func matches(_ item: HomeItem, intent: LifeMarkQueryIntent)")
+    if not query_match_scope:
+        failures.append("LifeMarkService: missing AI query intent matcher")
+    elif "item.amount <=" in query_match_scope:
+        failures.append("LifeMarkService: weather commute query must not infer commute from a low amount")
+
+    query_text_scope = extract_swift_scope(text, "private static func querySemanticText(for item: HomeItem)")
+    if not query_text_scope:
+        failures.append("LifeMarkService: missing trusted AI query semantic text")
+    elif "displayEmotionTag" in query_text_scope or "emotionTag" in query_text_scope:
+        failures.append("LifeMarkService: trusted AI query semantic text must not index warm emotion copy")
+
     daily_exclusions = extract_swift_string_set(text, "broadDailySupplySpecificDefinitionIDs")
     missing_daily = [intent_id for intent_id in DAILY_SUPPLY_EXCLUSION_IDS if intent_id not in daily_exclusions]
     if missing_daily:
@@ -564,6 +576,18 @@ def scan_ai_command_boundaries(failures: list[str], text: str) -> None:
     if "now: Date = Date()" not in text or not uses_schedule or not excludes_future:
         failures.append(
             f"{SWIFT_FILES['insight_web_view']}: commute backfill must exclude future commute slots"
+        )
+
+    duplicate_scope = extract_swift_scope(text, "enum AICommuteDuplicatePolicy")
+    if (
+        'morningCues = ["上班", "早高峰", "到岗"' not in duplicate_scope
+        or 'eveningCues = ["下班", "晚高峰", "回家"' not in duplicate_scope
+        or "let fallbackDirection: AICommuteDirection = hour < 15 ? .morning : .evening" not in duplicate_scope
+        or 'item.scenePackId == "commute"' not in duplicate_scope
+        or "guard explicitlyCommute else { return false }" not in duplicate_scope
+    ):
+        failures.append(
+            f"{SWIFT_FILES['insight_web_view']}: commute duplicate checks must prefer direction cues and reject ordinary transport"
         )
 
 

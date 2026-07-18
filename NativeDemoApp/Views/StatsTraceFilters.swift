@@ -400,10 +400,10 @@ extension StatsWebView {
             }
 
             if customDateFocus == .start {
-                WarmRecordDatePanel(selection: customStartDateBinding)
+                WarmRecordDatePanel(selection: customStartDateBinding, showsTimeSelection: false)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             } else {
-                WarmRecordDatePanel(selection: customEndDateBinding)
+                WarmRecordDatePanel(selection: customEndDateBinding, showsTimeSelection: false)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
 

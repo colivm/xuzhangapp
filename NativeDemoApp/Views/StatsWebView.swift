@@ -95,6 +95,25 @@ struct TraceDetailListSnapshot: @unchecked Sendable {
     let dayGroups: [TraceDayGroup]
 }
 
+struct TraceDetailPresentationPayload: Identifiable {
+    let id: UUID
+    let initialSnapshot: TraceDetailListSnapshot
+
+    init(id: UUID = UUID(), initialSnapshot: TraceDetailListSnapshot) {
+        self.id = id
+        self.initialSnapshot = initialSnapshot
+    }
+}
+
+enum TraceDetailPresentationPolicy {
+    static func accepts(
+        _ candidate: TraceDetailPresentationPayload,
+        while current: TraceDetailPresentationPayload?
+    ) -> Bool {
+        current == nil
+    }
+}
+
 enum TraceDetailListSnapshotComputation {
     static func make(_ input: TraceDetailListPreparationInput) -> TraceDetailListSnapshot {
         var items: [HomeItem]
@@ -162,7 +181,7 @@ struct StatsWebView: View {
     @State private var preparingSummaryRange: SummaryPlaybackRange?
     @State private var summaryQuotaPrompt: SummaryQuotaPrompt?
     @State private var quotaRefreshID = UUID()
-    @State private var showTraceDetailSheet = false
+    @State private var traceDetailPresentation: TraceDetailPresentationPayload?
     @State private var traceDetailDismissRoute: SheetDismissRoute?
     @State private var editingDismissRoute: SheetDismissRoute?
     @State private var memoryDetailDismissRoute: SheetDismissRoute?
@@ -293,18 +312,6 @@ struct StatsWebView: View {
         return traceDetailListSnapshot?.items.first { $0.id == traceInlineEditingItemID }
     }
 
-    private var traceFilteredItemIDs: [UUID] {
-        traceDetailListSnapshot?.itemIDs ?? []
-    }
-
-    private var traceDetailItems: [HomeItem] {
-        traceDetailListSnapshot?.items ?? []
-    }
-
-    private var totalExpense: Double {
-        traceDetailListSnapshot?.totalExpense ?? 0
-    }
-
     private var emptyRecordListText: String {
         if homeViewModel.items.isEmpty {
             return "这一段还没有痕迹，先去记下一笔。"
@@ -333,9 +340,12 @@ struct StatsWebView: View {
         )
     }
 
-    private func prepareTraceDetailListSnapshot() {
+    @discardableResult
+    private func prepareTraceDetailListSnapshot() -> TraceDetailListSnapshot {
         let key = traceDetailListSnapshotKey
-        guard traceDetailListSnapshot?.key != key else { return }
+        if let traceDetailListSnapshot, traceDetailListSnapshot.key == key {
+            return traceDetailListSnapshot
+        }
 
         let sourceItems: [HomeItem]
         let dateInterval: DateInterval?
@@ -365,7 +375,7 @@ struct StatsWebView: View {
                 sourceItems = homeViewModel.currentYearItems
             }
         }
-        traceDetailListSnapshot = TraceDetailListSnapshotComputation.make(
+        let snapshot = TraceDetailListSnapshotComputation.make(
             TraceDetailListPreparationInput(
                 key: key,
                 sourceItems: sourceItems,
@@ -374,6 +384,8 @@ struct StatsWebView: View {
                 calendar: .current
             )
         )
+        traceDetailListSnapshot = snapshot
+        return snapshot
     }
 
     @State var showPeriodSheet = false
@@ -386,12 +398,12 @@ struct StatsWebView: View {
             .sheet(isPresented: $showCategoryFilterSheet) {
                 categoryFilterSheet
             }
-            .sheet(isPresented: $showTraceDetailSheet, onDismiss: {
+            .sheet(item: $traceDetailPresentation, onDismiss: {
                 let route = traceDetailDismissRoute
                 traceDetailDismissRoute = nil
                 handleSheetDismissRoute(route)
-            }) {
-                traceDetailSheet
+            }) { presentation in
+                traceDetailSheet(initialSnapshot: presentation.initialSnapshot)
             }
             .sheet(item: $editingItem, onDismiss: {
                 let route = editingDismissRoute
@@ -439,7 +451,7 @@ struct StatsWebView: View {
                 monthTraceNeedsRefresh = true
                 clueTraceNeedsRefresh = true
                 scheduleTracePreparation()
-                if showTraceDetailSheet {
+                if traceDetailPresentation != nil {
                     prepareTraceDetailListSnapshot()
                 }
             }
@@ -455,7 +467,7 @@ struct StatsWebView: View {
                 } else {
                     prepareTraceIfNeeded()
                 }
-                if showTraceDetailSheet {
+                if traceDetailPresentation != nil {
                     prepareTraceDetailListSnapshot()
                 }
             }
@@ -465,7 +477,7 @@ struct StatsWebView: View {
                 if traceViewMode == .clues {
                     scheduleTracePreparation()
                 }
-                if showTraceDetailSheet {
+                if traceDetailPresentation != nil {
                     prepareTraceDetailListSnapshot()
                 }
             }
@@ -475,7 +487,7 @@ struct StatsWebView: View {
                 if traceViewMode == .clues, useCustomRange {
                     scheduleTracePreparation()
                 }
-                if showTraceDetailSheet, useCustomRange {
+                if traceDetailPresentation != nil, useCustomRange {
                     prepareTraceDetailListSnapshot()
                 }
             }
@@ -485,7 +497,7 @@ struct StatsWebView: View {
                 if traceViewMode == .clues, useCustomRange {
                     scheduleTracePreparation()
                 }
-                if showTraceDetailSheet, useCustomRange {
+                if traceDetailPresentation != nil, useCustomRange {
                     prepareTraceDetailListSnapshot()
                 }
             }
@@ -495,7 +507,7 @@ struct StatsWebView: View {
                 if traceViewMode == .clues {
                     scheduleTracePreparation()
                 }
-                if showTraceDetailSheet {
+                if traceDetailPresentation != nil {
                     prepareTraceDetailListSnapshot()
                 }
             }
@@ -5116,8 +5128,9 @@ struct StatsWebView: View {
 
     private func openTraceDetail() {
         traceInlineEditingItemID = nil
-        prepareTraceDetailListSnapshot()
-        showTraceDetailSheet = true
+        let candidate = TraceDetailPresentationPayload(initialSnapshot: prepareTraceDetailListSnapshot())
+        guard TraceDetailPresentationPolicy.accepts(candidate, while: traceDetailPresentation) else { return }
+        traceDetailPresentation = candidate
     }
 
     private func openTraceDetail(for range: SummaryPlaybackRange) {
@@ -5127,8 +5140,9 @@ struct StatsWebView: View {
         selectedCategory = nil
         traceInlineEditingItemID = nil
         traceSwipedItemID = nil
-        prepareTraceDetailListSnapshot()
-        showTraceDetailSheet = true
+        let candidate = TraceDetailPresentationPayload(initialSnapshot: prepareTraceDetailListSnapshot())
+        guard TraceDetailPresentationPolicy.accepts(candidate, while: traceDetailPresentation) else { return }
+        traceDetailPresentation = candidate
     }
 
     private func handleOpenTraceRequestIfNeeded() {
@@ -5146,8 +5160,19 @@ struct StatsWebView: View {
         tabState.scrollAnchorID = "trace-mode-picker"
     }
 
-    private var traceDetailSheet: some View {
-        NavigationStack {
+    private func resolvedTraceDetailSnapshot(
+        initialSnapshot: TraceDetailListSnapshot
+    ) -> TraceDetailListSnapshot {
+        if let traceDetailListSnapshot,
+           traceDetailListSnapshot.key == traceDetailListSnapshotKey {
+            return traceDetailListSnapshot
+        }
+        return initialSnapshot
+    }
+
+    private func traceDetailSheet(initialSnapshot: TraceDetailListSnapshot) -> some View {
+        let snapshot = resolvedTraceDetailSnapshot(initialSnapshot: initialSnapshot)
+        return NavigationStack {
             ZStack {
                 AppColors.bg.ignoresSafeArea()
                 ScrollView {
@@ -5156,7 +5181,7 @@ struct StatsWebView: View {
                             .font(.system(size: 22, weight: .bold))
                             .foregroundStyle(AppColors.text)
 
-                        Text(traceDetailMetaText)
+                        Text(traceDetailMetaText(snapshot: snapshot))
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(AppColors.subtext)
                             .fixedSize(horizontal: false, vertical: true)
@@ -5173,14 +5198,14 @@ struct StatsWebView: View {
                             }
                         }
 
-                        traceDetailFocusedList
+                        traceDetailFocusedList(snapshot: snapshot)
                         }
                         .padding(18)
                         .padding(.bottom, 28)
                 }
                 .scrollIndicators(.hidden)
                 .scrollDisabled(traceSwipeDragState != nil || traceInlineEditingItemID != nil)
-                .onChange(of: traceFilteredItemIDs) { _, itemIDs in
+                .onChange(of: snapshot.itemIDs) { _, itemIDs in
                     guard let editingID = traceInlineEditingItemID,
                           !itemIDs.contains(editingID)
                     else { return }
@@ -5194,7 +5219,7 @@ struct StatsWebView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { showTraceDetailSheet = false }
+                    Button("关闭") { traceDetailPresentation = nil }
                 }
             }
         }
@@ -5239,10 +5264,10 @@ struct StatsWebView: View {
         .animation(traceEditSpring, value: traceInlineEditingItemID)
     }
 
-    private var traceDetailFocusedList: some View {
+    private func traceDetailFocusedList(snapshot: TraceDetailListSnapshot) -> some View {
         let isFocusing = traceInlineEditingItem != nil
         return VStack(alignment: .leading, spacing: 12) {
-            recordListContent(fromTraceDetail: true)
+            recordListContent(snapshot: snapshot, fromTraceDetail: true)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -5295,8 +5320,8 @@ struct StatsWebView: View {
         )
     }
 
-    private var traceDetailMetaText: String {
-        "\(currentFilterSummary) · \(traceDetailItems.count) 笔 · 合计 \(totalExpense.formatted(.cny))"
+    private func traceDetailMetaText(snapshot: TraceDetailListSnapshot) -> String {
+        "\(currentFilterSummary) · \(snapshot.items.count) 笔 · 合计 \(snapshot.totalExpense.formatted(.cny))"
     }
 
     private var traceDetailListBackground: some View {
@@ -5321,13 +5346,16 @@ struct StatsWebView: View {
     }
 
     @ViewBuilder
-    private func recordListContent(fromTraceDetail: Bool = false) -> some View {
-        if traceDetailItems.isEmpty {
+    private func recordListContent(
+        snapshot: TraceDetailListSnapshot,
+        fromTraceDetail: Bool = false
+    ) -> some View {
+        if snapshot.items.isEmpty {
             Text(emptyRecordListText)
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.subtext)
         } else {
-            let groups = traceDetailListSnapshot?.dayGroups ?? []
+            let groups = snapshot.dayGroups
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                 ForEach(groups) { group in
                     Section {
@@ -5454,9 +5482,9 @@ struct StatsWebView: View {
         if item.hasMemoryImages {
             traceSwipedItemID = nil
             traceInlineEditingItemID = nil
-            if showTraceDetailSheet || fromTraceDetail {
+            if traceDetailPresentation != nil || fromTraceDetail {
                 traceDetailDismissRoute = .memoryDetail(latestItem(matching: item))
-                showTraceDetailSheet = false
+                traceDetailPresentation = nil
             } else {
                 memoryDetailItem = latestItem(matching: item)
             }
@@ -5490,9 +5518,9 @@ struct StatsWebView: View {
             }
         }
         let target = latestItem(matching: item)
-        if showTraceDetailSheet {
+        if traceDetailPresentation != nil {
             traceDetailDismissRoute = .memoryDetail(target)
-            showTraceDetailSheet = false
+            traceDetailPresentation = nil
         } else if editingItem != nil {
             editingDismissRoute = .memoryDetail(target)
             editingItem = nil

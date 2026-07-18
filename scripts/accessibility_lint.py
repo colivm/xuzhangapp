@@ -76,11 +76,11 @@ def main() -> None:
     require(
         "NativeDemoApp/Views/MemberPricingView.swift",
         [
-            "memberBoundaryVerticalRow",
+            "membershipValueVerticalRow",
             "legalPurchaseLinks",
             "withAnimation(reduceMotion ? nil",
             ".font(.footnote)",
-            ".accessibilityLabel(\"\\(row.0)，免费：",
+            ".accessibilityLabel(\"\\(value.title)，免费：",
         ],
     )
     require(

@@ -5,6 +5,17 @@ private struct TodaySwipeDragState: Equatable {
     let translation: CGFloat
 }
 
+private enum PetBubbleSource: Equatable {
+    case savedRecord
+    case tap
+}
+
+private struct PetBubblePresentation: Identifiable, Equatable {
+    let id: UUID
+    let message: String
+    let source: PetBubbleSource
+}
+
 private enum TodayPlaybackPrompt: Equatable {
     case firstRecord
     case firstUse
@@ -352,6 +363,8 @@ struct HomeView: View {
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     var onQuickRecord: (RecordEntryMode) -> Void = { _ in }
@@ -365,9 +378,7 @@ struct HomeView: View {
     var firstRecordPromptRequestID: UUID? = nil
     var isExternalPostSavePresentationActive = false
     var onFirstRecordPromptCompleted: ((Bool) -> Void)? = nil
-    @State private var showPlayback = false
-    @State private var playbackSheetID = UUID()
-    @State private var playbackContentSnapshot = BillPlaybackSheet.ContentSnapshot.empty
+    @State private var playbackPresentation: TodayPlaybackPresentationPayload?
     @State private var firstRecordPromptFlowIsActive = false
     @State private var completeFirstRecordPromptAfterPlayback = false
     @State private var showTodayRecordsSheet = false
@@ -383,8 +394,10 @@ struct HomeView: View {
     @State private var todayPendingDeleteItem: HomeItem?
     @State private var showTodayDeleteConfirmation = false
     @State private var todayPlaybackPrompt: TodayPlaybackPrompt?
-    @State private var petHint: String = "有一笔就记一笔，晚点也能补。"
-    @State private var petBubbleVisible = false
+    @State private var petBubblePresentation: PetBubblePresentation?
+    @State private var petBubbleDismissTask: Task<Void, Never>?
+    @State private var petMessageRequestTask: Task<Void, Never>?
+    @State private var petMessageRequestID: UUID?
     @State private var petTapAnimationTrigger = 0
     @State private var todayBillsFocusPulse = false
     @State private var todayBillsFocusTick = 0
@@ -455,7 +468,9 @@ struct HomeView: View {
             presentFirstRecordPromptIfNeeded()
         }
         .onChange(of: isExternalPostSavePresentationActive) { _, isActive in
-            if !isActive {
+            if isActive {
+                dismissPetBubble()
+            } else {
                 presentFirstRecordPromptIfNeeded()
             }
         }
@@ -478,29 +493,32 @@ struct HomeView: View {
         }
         .onChange(of: settingsViewModel.petCompanionEnabled) { _, enabled in
             if !enabled {
-                petBubbleVisible = false
+                dismissPetBubble()
+            }
+        }
+        .onChange(of: todayPlaybackPrompt) { _, prompt in
+            if prompt != nil {
+                dismissPetBubble()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                dismissPetBubble()
             }
         }
         .onChange(of: homeViewModel.petMessage) { _, message in
             guard let message, settingsViewModel.petCompanionEnabled else { return }
-            guard !isExternalPostSavePresentationActive,
-                  todayPlaybackPrompt == nil,
-                  !firstRecordPromptFlowIsActive else {
+            guard canPresentPetBubble else {
                 homeViewModel.petMessage = nil
                 return
             }
-            petHint = message
-            withAnimation(.easeInOut(duration: 0.24)) {
-                petBubbleVisible = true
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    petBubbleVisible = false
-                }
-            }
+            presentPetBubble(message, source: .savedRecord)
             homeViewModel.petMessage = nil
         }
-        .sheet(isPresented: $showPlayback, onDismiss: {
+        .onDisappear {
+            dismissPetBubble(animated: false)
+        }
+        .sheet(item: $playbackPresentation, onDismiss: {
             let route = playbackDismissRoute
             playbackDismissRoute = nil
             handleSheetDismissRoute(route)
@@ -508,17 +526,15 @@ struct HomeView: View {
                 completeFirstRecordPromptAfterPlayback = false
                 finishFirstRecordPromptFlow(continuesRecording: false)
             }
-            playbackContentSnapshot = .empty
-        }) {
+        }) { presentation in
             BillPlaybackSheet(
-                contentSnapshot: playbackContentSnapshot,
+                contentSnapshot: presentation.contentSnapshot,
                 onNavigateToSettings: { onNavigateSettings?() },
                 onShowMemberPricing: {
                     playbackDismissRoute = .memberPricing
-                    showPlayback = false
+                    playbackPresentation = nil
                 }
             )
-                .id(playbackSheetID)
                 .environmentObject(homeViewModel)
         }
         .sheet(isPresented: $showTodayRecordsSheet, onDismiss: {
@@ -1208,18 +1224,21 @@ struct HomeView: View {
     }
 
     private func startTodayPlayback(isMember: Bool) {
-        dailyQuotaStore.markTodayPlaybackStarted(isMember: isMember)
-        homeViewModel.markTodayPlaybackStarted()
-        presentTodayPlaybackSheet()
+        presentTodayPlaybackSheet(markStarted: true, isMember: isMember)
     }
 
-    private func presentTodayPlaybackSheet() {
-        playbackContentSnapshot = BillPlaybackSheet.makeContentSnapshot(
+    private func presentTodayPlaybackSheet(markStarted: Bool = false, isMember: Bool = false) {
+        let snapshot = BillPlaybackSheet.makeContentSnapshot(
             allItems: homeViewModel.items,
             sourceRevision: homeViewModel.homeDashboardRevision
         )
-        playbackSheetID = UUID()
-        showPlayback = true
+        let candidate = TodayPlaybackPresentationPayload(contentSnapshot: snapshot)
+        guard TodayPlaybackPresentationPolicy.accepts(candidate, while: playbackPresentation) else { return }
+
+        playbackPresentation = candidate
+        guard markStarted, TodayPlaybackPresentationPolicy.consumesQuota(candidate) else { return }
+        dailyQuotaStore.markTodayPlaybackStarted(isMember: isMember)
+        homeViewModel.markTodayPlaybackStarted()
     }
 
     private func todayPlaybackRemaining(isMember: Bool? = nil) -> Int {
@@ -1375,10 +1394,103 @@ struct HomeView: View {
         }
     }
 
+    private var petBubbleVisible: Bool {
+        petBubblePresentation != nil
+    }
+
+    private var canPresentPetBubble: Bool {
+        settingsViewModel.petCompanionEnabled
+            && !isExternalPostSavePresentationActive
+            && todayPlaybackPrompt == nil
+            && !firstRecordPromptFlowIsActive
+            && scenePhase == .active
+    }
+
+    private func presentPetBubble(_ message: String, source: PetBubbleSource) {
+        guard canPresentPetBubble else { return }
+        petMessageRequestTask?.cancel()
+        petMessageRequestTask = nil
+        petMessageRequestID = nil
+        petBubbleDismissTask?.cancel()
+
+        let presentation = PetBubblePresentation(
+            id: UUID(),
+            message: message,
+            source: source
+        )
+        withAnimation(.easeInOut(duration: 0.24)) {
+            petBubblePresentation = presentation
+        }
+
+        let visibleDuration: UInt64 = voiceOverEnabled ? 7_000_000_000 : 4_000_000_000
+        petBubbleDismissTask = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: visibleDuration)
+            } catch {
+                return
+            }
+            guard petBubblePresentation?.id == presentation.id else { return }
+            dismissPetBubble(cancelRequest: false)
+        }
+    }
+
+    private func dismissPetBubble(
+        cancelRequest: Bool = true,
+        animated: Bool = true
+    ) {
+        if cancelRequest {
+            petMessageRequestTask?.cancel()
+            petMessageRequestTask = nil
+            petMessageRequestID = nil
+        }
+        petBubbleDismissTask?.cancel()
+        petBubbleDismissTask = nil
+        if animated {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                petBubblePresentation = nil
+            }
+        } else {
+            petBubblePresentation = nil
+        }
+    }
+
+    private func handlePetTap() {
+        if petBubblePresentation != nil || petMessageRequestTask != nil {
+            dismissPetBubble()
+            return
+        }
+        guard canPresentPetBubble else { return }
+
+        petTapAnimationTrigger &+= 1
+        let requestID = UUID()
+        petMessageRequestID = requestID
+        let settings = settingsViewModel.settings
+        let items = homeViewModel.items
+        petMessageRequestTask = Task { @MainActor in
+            let message = await PetCompanionService.shared.petClickMessage(
+                settings: settings,
+                todayItems: items
+            )
+            guard !Task.isCancelled,
+                  petMessageRequestID == requestID,
+                  canPresentPetBubble,
+                  let message else {
+                if petMessageRequestID == requestID {
+                    petMessageRequestTask = nil
+                    petMessageRequestID = nil
+                }
+                return
+            }
+            petMessageRequestTask = nil
+            petMessageRequestID = nil
+            presentPetBubble(message, source: .tap)
+        }
+    }
+
     private var todayPetStamp: some View {
         VStack(alignment: .trailing, spacing: 8) {
-            if petBubbleVisible {
-                Text(petHint)
+            if let petBubblePresentation {
+                Text(petBubblePresentation.message)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.text.opacity(0.9))
                     .padding(.horizontal, 11)
@@ -1396,24 +1508,7 @@ struct HomeView: View {
             }
 
             Button {
-                let willShowBubble = !petBubbleVisible
-                withAnimation(.easeInOut(duration: 0.24)) {
-                    petBubbleVisible.toggle()
-                }
-                if willShowBubble {
-                    petTapAnimationTrigger &+= 1
-                    Task {
-                        if let message = await PetCompanionService.shared.petClickMessage(
-                            settings: settingsViewModel.settings,
-                            todayItems: homeViewModel.items
-                        ) {
-                            await MainActor.run {
-                                petHint = message
-                                petBubbleVisible = true
-                            }
-                        }
-                    }
-                }
+                handlePetTap()
             } label: {
                 PixelPetAnimationView(
                     isSpeaking: petBubbleVisible,
@@ -2659,6 +2754,33 @@ struct HomeView: View {
 
 // MARK: - Bill Playback Sheet
 
+struct TodayPlaybackPresentationPayload: Identifiable {
+    let id: UUID
+    let contentSnapshot: BillPlaybackSheet.ContentSnapshot
+
+    init(id: UUID = UUID(), contentSnapshot: BillPlaybackSheet.ContentSnapshot) {
+        self.id = id
+        self.contentSnapshot = contentSnapshot
+    }
+
+    var hasPlayableContent: Bool {
+        contentSnapshot.isPrepared && !contentSnapshot.todayItems.isEmpty
+    }
+}
+
+enum TodayPlaybackPresentationPolicy {
+    static func accepts(
+        _ candidate: TodayPlaybackPresentationPayload,
+        while current: TodayPlaybackPresentationPayload?
+    ) -> Bool {
+        current == nil && candidate.contentSnapshot.isPrepared
+    }
+
+    static func consumesQuota(_ presentation: TodayPlaybackPresentationPayload) -> Bool {
+        presentation.hasPlayableContent
+    }
+}
+
 struct BillPlaybackSheet: View {
     struct PlaybackMoment: Equatable, Identifiable {
         let id: String
@@ -2683,6 +2805,10 @@ struct BillPlaybackSheet: View {
                 playbackMoments: [],
                 playbackDuration: 10
             )
+        }
+
+        var isPrepared: Bool {
+            sourceRevision >= 0 && !dayKey.isEmpty
         }
     }
 
