@@ -2698,6 +2698,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 - 最终状态：`FIX-004 / FIX-007 / FIX-005 / FIX-006 / COPY-03 / PET-02 / INT-03 / MEMBER-03 / AI-03` 全部 `CODE_DONE`；当前无 `IN_PROGRESS`。
 - 最终 Windows 证据：完成新增 Swift 接线人工复核，修正 `HomeView` 的 VoiceOver 与前后台环境值误挂到通勤浮卡的问题；随后 `git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 全部通过。门禁覆盖 100/1,000/5,000 条确定性夹具、真实尺寸照片夹具、迁移/元数据、生活语义、体验、文案、会员、AI 能力、无障碍、可观测性与主题检查；仅保留基线已有 7 条 soft copy warning。
+- 真机编译补充修正（2026-07-18）：Xcode 报告 `lifetimeArchiveSectionTitle` 与 `membershipPresentationPolicy` 作用域不可见。根因是标题计算属性误放入 `LifetimeArchiveSnapshotComputation`；现已移回 `MemberPricingView`，快照计算层继续保持纯数据。`membership_value_lint.py` 新增作用域守卫，会员专项、体验静态检查与完整 Windows 发布门禁重新通过；会员三态、价格、Product ID、购买验证、恢复和登录续购均未改变。
 - 边界总复核：首页状态驱动主动作及一个主入口＋安全次入口冻结；`PERF-09/10/13` 的变化驱动、不可变快照和单次派生未回退；`COPY-02` 周/月播放文案与 `ARCH-03` 页面拆分仍为 `NOT_STARTED`；未触碰用户既有 `StatCardView.swift`、`web-preview/app.js`、提示文档、`brand-assets/`、`tmp/` 和 `scripts/__pycache__/` 内容。
 - 统一真机验收入口：按 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 的 `FLOW-30`～`FLOW-34` 及原发版矩阵执行；未完成前九项不得标记 `VERIFIED`。
 

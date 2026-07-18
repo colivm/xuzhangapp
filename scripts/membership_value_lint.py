@@ -46,6 +46,20 @@ def main() -> int:
         if duplicate_surface in pricing:
             print(f"MemberPricingView.swift: duplicate member value surface remains `{duplicate_surface}`")
             return 1
+    view_start = pricing.find("struct MemberPricingView: View {")
+    view_end = pricing.find("// MARK: - Member Plan Model", view_start)
+    if view_start < 0 or view_end < 0:
+        print("MemberPricingView.swift: cannot locate member pricing view scope")
+        return 1
+    view_scope = pricing[view_start:view_end]
+    if "private var lifetimeArchiveSectionTitle: String" not in view_scope:
+        print("MemberPricingView.swift: lifetime archive title escaped MemberPricingView scope")
+        return 1
+    computation_start = pricing.find("enum LifetimeArchiveSnapshotComputation")
+    computation_scope = pricing[computation_start:] if computation_start >= 0 else ""
+    if "membershipPresentationPolicy" in computation_scope:
+        print("MemberPricingView.swift: view presentation state leaked into archive computation scope")
+        return 1
     print("membership_value_lint: OK")
     return 0
 

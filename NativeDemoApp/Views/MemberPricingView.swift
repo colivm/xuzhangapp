@@ -1395,6 +1395,17 @@ struct MemberPricingView: View {
         return iapService.displayPrice(for: tier, fallback: plan.price)
     }
 
+    private var lifetimeArchiveSectionTitle: String {
+        switch membershipPresentationPolicy.state {
+        case .prospect:
+            return "永久会员预览"
+        case .subscription:
+            return "你的长期档案"
+        case .lifetime:
+            return "永久会员档案"
+        }
+    }
+
 }
 
 // MARK: - Member Plan Model
@@ -1691,17 +1702,6 @@ enum LifetimeArchiveSnapshotComputation {
                 monthCount: monthKeys.count
             )
         )
-    }
-
-    private var lifetimeArchiveSectionTitle: String {
-        switch membershipPresentationPolicy.state {
-        case .prospect:
-            return "永久会员预览"
-        case .subscription:
-            return "你的长期档案"
-        case .lifetime:
-            return "永久会员档案"
-        }
     }
 
     private static func memberProofLine(
