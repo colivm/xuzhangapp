@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 $root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
 Set-Location $root
@@ -175,10 +175,15 @@ Assert-Pattern 'NativeDemoApp/ContentView.swift' 'selectedTab == \.insight \? 29
 Assert-Pattern 'NativeDemoApp/Views/InsightWebView.swift' 'aiCommandTaskPicker|aiCommandTaskHeaderTitle|aiCommandInputActionTitle|selectReviewTask' 'review tasks have distinct in-sheet navigation and instructions'
 Assert-Pattern 'NativeDemoApp/Views/InsightWebView.swift' 'aiCommandQueryOverview|aiCommandComparisonOverview|aiCommandDraftMetric|\u6309\u5929\u5206\u5E03' 'review query compare and backfill results use dedicated visual summaries'
 Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'testReviewOverviewMakesCurrentAndPreviousSevenDaysDirectlyComparable' 'review overview window and trend XCTest coverage'
-Assert-Pattern 'NativeDemoApp/Models/InteractionStateModels.swift' 'PlaybackMaturityPolicy|minimumWeekRecordCount = 3|minimumMonthRecordCount = 3|monthSurfaceStartDay = 25' 'playback recommendations require mature week or month data'
-Assert-Pattern 'NativeDemoApp/Models/InteractionStateModels.swift' 'PlaybackCompletionPolicy|showMemberPricing|primaryTitle' 'playback completion has one testable primary action'
+Assert-Pattern 'NativeDemoApp/Models/InteractionStateModels.swift' 'minimumWeekRecordCount = 3|minimumWeekActiveDayCount = 2|minimumMonthRecordCount = 5|minimumMonthActiveDayCount = 3|monthSurfaceStartDay = 25' 'playback recommendations require enough records active days and period progress'
+Assert-Pattern 'NativeDemoApp/Models/InteractionStateModels.swift' 'homeRecommendationExplanation|接近月底时主动出现|周记会更完整' 'playback recommendation readiness has a user-facing explanation'
+Assert-Pattern 'NativeDemoApp/Models/InteractionStateModels.swift' 'PlaybackCompletionPolicy|showsMemberContinuation|return "完成"' 'playback completion keeps one natural primary action'
 Assert-Pattern 'NativeDemoApp/Models/InteractionStateModels.swift' 'PlaybackMaturityPolicy\.weekIsReady|PlaybackMaturityPolicy\.monthIsReady' 'home recommendations use the shared playback maturity policy'
-Assert-Pattern 'NativeDemoApp/Views/SummaryPlaybackSheet.swift' 'handlePrimaryDoneAction|PlaybackCompletionPolicy\.primaryAction|PlaybackCompletionPolicy\.primaryTitle' 'week and month playback completion use the shared exit policy'
+Assert-Pattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'currentWeekActiveDayCount|currentMonthActiveDayCount|weekDays\.insert|monthDays\.insert' 'home journey snapshot prepares active-day maturity facts once'
+Assert-Pattern 'NativeDemoApp/Views/HomeView.swift' 'homeRecommendationExplanation|currentWeekActiveDayCount|currentMonthActiveDayCount' 'home explains recommendation readiness without a new blocking surface'
+Assert-Pattern 'NativeDemoApp/Views/SummaryPlaybackSheet.swift' 'reviewContinuationButton|memberContinuationButton|继续问' 'week and month completion keep review and membership as secondary actions'
+Assert-NoMultilinePattern 'NativeDemoApp/Views/SummaryPlaybackSheet.swift' 'private func handlePrimaryDoneAction\(\)[\s\S]{0,400}onShowMemberPricing' 'playback primary completion action never opens membership'
+Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'guard quotaStore\.weekRemaining\(isMember: false\) <= 1 else \{ return nil \}|guard quotaStore\.monthRemaining\(isMember: false\) <= 1 else \{ return nil \}' 'playback membership continuation only appears near quota exhaustion'
 Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'testPlaybackMaturityAndCompletionUseOnePrimaryRule' 'playback maturity and completion XCTest coverage'
 Assert-Pattern 'NativeDemoApp/Services/MemberNudgePolicyService.swift' 'MemberNudgePresentationSource|MemberNudgeEligibilityPolicy|automaticCooldownUntil|explicitUserAction' 'automatic and explicit member entries use separate eligibility rules'
 Assert-Pattern 'NativeDemoApp/Services/MemberNudgePolicyService.swift' 'state\.automaticCooldownUntil = cooldownUntil|state\.sceneCooldownUntil\[scene\] = cooldownUntil' 'dismissing an automatic member nudge applies cross-scene and scene cooldowns'
@@ -383,6 +388,18 @@ Assert-NoMultilinePattern 'NativeDemoApp/Views/SummaryPlaybackSheet.swift' 'priv
 Assert-NoMultilinePattern 'NativeDemoApp/Views/SummaryPlaybackSheet.swift' 'private var lifeSlicePosterBackground:[\s\S]{0,6500}UIImage\(data: customBackground' 'share poster background does not decode data during redraw'
 Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'ShareBackgroundDecodedImageTests|testNormalizedShareBackgroundReturnsDataAndReusableDecodedImage|testNormalizedShareBackgroundDownsamplesLargeImageOnce' 'share background decoded image XCTest coverage'
 Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-29|\u6837\u5F0F\u5207\u6362\u4E0D\u91CD\u590D\u89E3\u7801|\u5BFC\u51FA\u7ED3\u679C\u4E0D\u53D8' 'share background decoded image device regression matrix'
+Assert-Pattern 'NativeDemoApp/Views/SummaryPlaybackSheet.swift' 'PreparedWeeklyShareCardRenderInput|WeeklyShareCardImagePreparer|preparedImagesByAnchorID|isShareCardReadyToSave' 'weekly share export uses one prepared immutable render input'
+Assert-Pattern 'NativeDemoApp/Views/SummaryPlaybackSheet.swift' 'variant: \.original|exportMaxPixelSize = 2_880|Task\.detached\(priority: \.userInitiated\)' 'weekly share photos load and downsample off the main actor for export'
+Assert-NoMultilinePattern 'NativeDemoApp/Views/SummaryPlaybackSheet.swift' 'private func saveWeeklyStoryCard\([\s\S]{0,1800}Task\.yield' 'weekly share save never guesses photo readiness with a render delay'
+Assert-NoMultilinePattern 'NativeDemoApp/Views/SummaryPlaybackSheet.swift' 'private func posterImage\([\s\S]{0,1200}MemoryAttachmentThumbnail' 'weekly share export tree contains no asynchronous thumbnail loader'
+Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'WeeklyShareCardPhotoPreparationPolicyTests|testResolutionKeepsSourceOrderAndCountsOnlyDecodedPhotos|testResolutionDowngradesAllMissingPhotosWithoutInventingAvailability|testResolutionIgnoresLoadedIDsOutsideTheLockedRequest' 'weekly share missing-photo downgrade XCTest coverage'
+Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-37|\u6B63\u5728\u52A0\u8F7D\u56FE\u7247|12MP|\u8FDE\u7EED\u70B9\u51FB\u4FDD\u5B58' 'weekly share atomic photo preparation device regression matrix'
+Assert-Pattern 'NativeDemoApp/Views/SummaryPlaybackSheet.swift' 'WeeklyShareCardTemplateCapabilityPolicy|case 0: return \.recordSummary|case 1: return \.singleMemory|default: return \.weeklyCollage' 'weekly share automatic templates follow actual photo capability'
+Assert-Pattern 'NativeDemoApp/Views/SummaryPlaybackSheet.swift' 'posterPeriodTitle|singlePhotoCaptionBadge|posterSummaryMetricText|\u4E2A\u8BB0\u5F55\u65E5' 'weekly share template uses factual period photo caption and useful metrics'
+Assert-NoPattern 'NativeDemoApp/Views/SummaryPlaybackSheet.swift' 'appStoreQRCodePlaceholder|posterQRCodePattern|\u4E8C\u7EF4\u7801\u9884\u7559\u4F4D' 'weekly share output contains no fake QR code'
+Assert-NoPattern 'NativeDemoApp/Views/SummaryPlaybackSheet.swift' '\u8FD9\u4E00\u5468\uFF0C\u4E00\u5F20\u7167\u7247' 'weekly share title no longer repeats photo quantity as the story'
+Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'WeeklyShareCardTemplateCapabilityPolicyTests|testAutomaticTemplateFollowsTheNumberOfActuallyAvailablePhotos|testManualTemplateChoicesNeverOfferAPhotoHeavyStyleWithoutPhotos|testSensitivePhotoCaptionsStayCategoryNeutralInTheShareCard' 'weekly share template capability and privacy XCTest coverage'
+Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-38|0/1/2/3|\u4EFF\u4E8C\u7EF4\u7801|\u8BB0\u5F55\u65E5' 'weekly share consolidated template device regression matrix'
 Assert-NoPattern 'NativeDemoApp/Views/HomeView.swift' 'Text\("🐱"\)' 'home pet no longer renders a system emoji'
 Assert-Pattern 'NativeDemoApp/Views/HomeView.swift' 'PixelPetAnimationView|petTapAnimationTrigger|accessibilityLabel\("\u5BA0\u7269\u52A9\u624B"\)' 'home pet uses the isolated pixel animation component'
 Assert-Pattern 'NativeDemoApp/Views/Components/PixelPetAnimationView.swift' 'PetIdleFrames|PetTapFrames|PetSpeakFrames|interpolation\(\.none\)|scenePhase|accessibilityReduceMotion|isLowPowerModeEnabled|\.task\(id: animationRequest\)' 'pixel pet animation keeps assets crisp and lifecycle bounded'
@@ -410,6 +427,17 @@ Assert-Pattern 'NativeDemoApp/Views/InsightWebView.swift' 'reviewTaskIntent: act
 Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'AICommandTrustedSemanticFacetTests|testQueryTaskAcceptsTrustedWeatherCommuteNounPhrases|testBackfillTaskDoesNotTurnTheSameNounPhraseIntoAWrite|testHotCommuteRequiresBothStructuredWeatherAndCommuteEvidence|testInterestConsumptionRequiresAConcreteInterestObjectOrActivity|testWeakEmotionAndValuePhrasesRemainOutsideLedgerFactQueries' 'AI trusted facet XCTest coverage'
 Assert-Pattern 'AI_CAPABILITY_CONTRACT_v1.md' '\u9AD8\u6E29\u901A\u52E4|\u7231\u597D\u7C7B\u6D88\u8D39|\u6696\u8BED\u6C14|\u5DF2\u8BC6\u522B\u4F46\u6CA1\u6709\u8BB0\u5F55' 'AI trusted facet capability contract'
 Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-34|hot/cold/rain/snow|\u96F6\u5019\u9009\u96F6\u5199\u5165' 'AI trusted facet device regression matrix'
+Assert-Pattern 'backend/src/auth.js' 'ACCESS_TOKEN_TTL_SECONDS = 90 \* 24 \* 60 \* 60|expiresIn: ACCESS_TOKEN_TTL_SECONDS' 'backend access tokens use the reviewed 90-day lifetime'
+$authTokenTTLOutput = node backend/scripts/verify-auth-token-ttl.mjs
+if ($LASTEXITCODE -ne 0) {
+    throw "Auth token TTL verification failed`n$authTokenTTLOutput"
+}
+Write-Output $authTokenTTLOutput
+Assert-Pattern 'NativeDemoApp/Services/AuthService.swift' 'CloudSessionFailurePolicy|statusCode == 401|CloudSessionInvalidationPolicy|cloudSessionDidExpire|CloudSessionInvalidationService' '401 invalidates the stale cloud session without changing sync DTOs'
+Assert-Pattern 'NativeDemoApp/ViewModels/SettingsViewModel.swift' 'publisher\(for: \.cloudSessionDidExpire\)|invalidateCloudSessionIfUnauthorized|applyExpiredCloudSessionState' 'settings reflects server-rejected sessions as logged out'
+Assert-Pattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'CloudSessionFailurePolicy\.shouldInvalidateSession|CloudSessionInvalidationService\.invalidate\(\)|CloudSessionInvalidationService\.userMessage' 'manual and automatic ledger sync surface expired sessions'
+Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'CloudSessionExpirationPolicyTests|testOnlyUnauthorizedHTTPResponsesInvalidateTheCloudSession|testSessionInvalidationPreservesLocalPreferencesAndClearsOnlyAccountState' 'cloud session expiration XCTest coverage'
+Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-36|90 \u5929|401|JWT_SECRET' 'cloud session expiration device regression matrix'
 $petImageSets = @('PetIdleFrames', 'PetTapFrames', 'PetSpeakFrames')
 foreach ($petImageSet in $petImageSets) {
     $imageSetPath = "NativeDemoApp/Assets.xcassets/$petImageSet.imageset"

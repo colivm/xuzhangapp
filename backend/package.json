@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test:auth-token": "node scripts/verify-auth-token-ttl.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

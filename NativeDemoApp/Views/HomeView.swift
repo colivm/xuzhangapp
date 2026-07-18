@@ -608,7 +608,9 @@ struct HomeView: View {
                 totalRecordCount: ledgerFacts.totalCommittedRecordCount,
                 hasUnplayedTodayRecords: hasUnplayedTodayRecords,
                 weekRecordCount: ledgerFacts.currentWeekCommittedRecordCount,
+                weekActiveDayCount: ledgerFacts.currentWeekActiveDayCount,
                 monthRecordCount: ledgerFacts.currentMonthCommittedRecordCount,
+                monthActiveDayCount: ledgerFacts.currentMonthActiveDayCount,
                 dayOfMonth: day,
                 canPlayWeek: summaryQuotaStore.canPlay(.week, isMember: isMember, now: now),
                 canPlayMonth: summaryQuotaStore.canPlay(.month, isMember: isMember, now: now),
@@ -673,14 +675,21 @@ struct HomeView: View {
         case .todayPlayback:
             return todayPlaybackActionSubtitle
         case .weekTrace:
-            let count = homeViewModel.filteredItems(in: .week).filter { $0.amount > 0 }.count
+            let count = homeViewModel.homeJourneyLedgerFacts.currentWeekCommittedRecordCount
             return "本周已有 \(count) 笔可回看"
         case .monthTrace:
             return "把这个月整理成一章"
         case .review:
             return "查记录、做对比，或补上遗漏"
         case .continueRecording:
-            return "有一笔就记一笔，晚点再回看"
+            let facts = homeViewModel.homeJourneyLedgerFacts
+            return PlaybackMaturityPolicy.homeRecommendationExplanation(
+                weekRecordCount: facts.currentWeekCommittedRecordCount,
+                weekActiveDayCount: facts.currentWeekActiveDayCount,
+                monthRecordCount: facts.currentMonthCommittedRecordCount,
+                monthActiveDayCount: facts.currentMonthActiveDayCount,
+                dayOfMonth: Calendar.current.component(.day, from: Date())
+            )
         }
     }
 

@@ -555,27 +555,38 @@ private struct ItemDerivedCache {
 struct HomeJourneyLedgerFacts: Equatable {
     var totalCommittedRecordCount = 0
     var currentWeekCommittedRecordCount = 0
+    var currentWeekActiveDayCount = 0
     var currentMonthCommittedRecordCount = 0
+    var currentMonthActiveDayCount = 0
 
     static func build(
         from items: [HomeItem],
         currentWeekInterval: DateInterval?,
-        currentMonthInterval: DateInterval?
+        currentMonthInterval: DateInterval?,
+        calendar: Calendar = .current
     ) -> HomeJourneyLedgerFacts {
-        items.reduce(into: HomeJourneyLedgerFacts()) { facts, item in
-            guard item.amount > 0, item.draftMeta == nil else { return }
+        var facts = HomeJourneyLedgerFacts()
+        var weekDays = Set<Date>()
+        var monthDays = Set<Date>()
+        for item in items {
+            guard item.amount > 0, item.draftMeta == nil else { continue }
             facts.totalCommittedRecordCount += 1
             if let currentWeekInterval,
                item.createdAt >= currentWeekInterval.start,
                item.createdAt < currentWeekInterval.end {
                 facts.currentWeekCommittedRecordCount += 1
+                weekDays.insert(calendar.startOfDay(for: item.createdAt))
             }
             if let currentMonthInterval,
                item.createdAt >= currentMonthInterval.start,
                item.createdAt < currentMonthInterval.end {
                 facts.currentMonthCommittedRecordCount += 1
+                monthDays.insert(calendar.startOfDay(for: item.createdAt))
             }
         }
+        facts.currentWeekActiveDayCount = weekDays.count
+        facts.currentMonthActiveDayCount = monthDays.count
+        return facts
     }
 }
 
@@ -1530,11 +1541,25 @@ final class HomeViewModel: ObservableObject {
             }
             // Re-upload merged result to converge both sides (idempotent upsert).
             for item in merged {
-                try? await service.upload(item)
+                do {
+                    try await service.upload(item)
+                } catch {
+                    guard CloudSessionFailurePolicy.shouldInvalidateSession(for: error) else {
+                        continue
+                    }
+                    CloudSessionInvalidationService.invalidate()
+                    syncStatusMessage = CloudSessionInvalidationService.userMessage
+                    return
+                }
             }
             syncStatusMessage = "账单字段已同步；记忆照片仍只在本机。重复记录已保留最新版本。"
         } catch {
-            syncStatusMessage = "同步没有完成，请稍后再试。你的本机记录已保留。"
+            if CloudSessionFailurePolicy.shouldInvalidateSession(for: error) {
+                CloudSessionInvalidationService.invalidate()
+                syncStatusMessage = CloudSessionInvalidationService.userMessage
+            } else {
+                syncStatusMessage = "同步没有完成，请稍后再试。你的本机记录已保留。"
+            }
         }
     }
 
@@ -2755,7 +2780,8 @@ final class HomeViewModel: ObservableObject {
         let homeJourneyLedgerFacts = HomeJourneyLedgerFacts.build(
             from: sortedItems,
             currentWeekInterval: currentWeekInterval,
-            currentMonthInterval: currentMonthInterval
+            currentMonthInterval: currentMonthInterval,
+            calendar: calendar
         )
         let currentYearItems = sortedItems.filter {
             calendar.isDate($0.createdAt, equalTo: now, toGranularity: .year)
@@ -2863,7 +2889,12 @@ final class HomeViewModel: ObservableObject {
             try await service.upload(item)
             syncStatusMessage = "账单字段已同步；照片仍只在本机。"
         } catch {
-            syncStatusMessage = "这笔记录已保存在本机，云端暂时没同步成功。"
+            if CloudSessionFailurePolicy.shouldInvalidateSession(for: error) {
+                CloudSessionInvalidationService.invalidate()
+                syncStatusMessage = CloudSessionInvalidationService.userMessage
+            } else {
+                syncStatusMessage = "这笔记录已保存在本机，云端暂时没同步成功。"
+            }
         }
     }
 
@@ -2875,7 +2906,12 @@ final class HomeViewModel: ObservableObject {
             try await service.delete(id: id)
             syncStatusMessage = "云端账单字段已删除；本机照片不受影响。"
         } catch {
-            syncStatusMessage = "本机已更新，云端暂时没同步删除。"
+            if CloudSessionFailurePolicy.shouldInvalidateSession(for: error) {
+                CloudSessionInvalidationService.invalidate()
+                syncStatusMessage = CloudSessionInvalidationService.userMessage
+            } else {
+                syncStatusMessage = "本机已更新，云端暂时没同步删除。"
+            }
         }
     }
 

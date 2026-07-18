@@ -160,7 +160,9 @@ struct NewUserProgressionSnapshot: Equatable {
     var totalRecordCount: Int
     var hasUnplayedTodayRecords: Bool
     var weekRecordCount: Int
+    var weekActiveDayCount: Int
     var monthRecordCount: Int
+    var monthActiveDayCount: Int
     var dayOfMonth: Int
     var canPlayWeek: Bool
     var canPlayMonth: Bool
@@ -172,13 +174,17 @@ enum NewUserProgressionPolicy {
     static func stage(for snapshot: NewUserProgressionSnapshot) -> NewUserProgressionStage {
         if snapshot.totalRecordCount == 0 { return .recordFirstEntry }
         if snapshot.hasUnplayedTodayRecords { return .todayPlayback }
-        if PlaybackMaturityPolicy.weekIsReady(recordCount: snapshot.weekRecordCount),
+        if PlaybackMaturityPolicy.weekIsReady(
+            recordCount: snapshot.weekRecordCount,
+            activeDayCount: snapshot.weekActiveDayCount
+        ),
            snapshot.canPlayWeek,
            !snapshot.hasCompletedCurrentWeekPlayback {
             return .weekTrace
         }
         if PlaybackMaturityPolicy.monthIsReady(
             recordCount: snapshot.monthRecordCount,
+            activeDayCount: snapshot.monthActiveDayCount,
             dayOfMonth: snapshot.dayOfMonth
         ), snapshot.canPlayMonth, !snapshot.hasCompletedCurrentMonthPlayback {
             return .monthChapter
@@ -304,30 +310,67 @@ enum ReviewTaskIntent: String, CaseIterable, Hashable {
 
 enum PlaybackMaturityPolicy {
     static let minimumWeekRecordCount = 3
-    static let minimumMonthRecordCount = 3
+    static let minimumWeekActiveDayCount = 2
+    static let minimumMonthRecordCount = 5
+    static let minimumMonthActiveDayCount = 3
     static let monthSurfaceStartDay = 25
 
-    static func weekIsReady(recordCount: Int) -> Bool {
+    static func weekIsReady(recordCount: Int, activeDayCount: Int) -> Bool {
         recordCount >= minimumWeekRecordCount
+            && activeDayCount >= minimumWeekActiveDayCount
     }
 
-    static func monthIsReady(recordCount: Int, dayOfMonth: Int) -> Bool {
-        recordCount >= minimumMonthRecordCount && dayOfMonth >= monthSurfaceStartDay
+    static func monthIsReady(
+        recordCount: Int,
+        activeDayCount: Int,
+        dayOfMonth: Int
+    ) -> Bool {
+        recordCount >= minimumMonthRecordCount
+            && activeDayCount >= minimumMonthActiveDayCount
+            && dayOfMonth >= monthSurfaceStartDay
+    }
+
+    static func homeRecommendationExplanation(
+        weekRecordCount: Int,
+        weekActiveDayCount: Int,
+        monthRecordCount: Int,
+        monthActiveDayCount: Int,
+        dayOfMonth: Int
+    ) -> String {
+        let monthHasEnoughContent = monthRecordCount >= minimumMonthRecordCount
+            && monthActiveDayCount >= minimumMonthActiveDayCount
+        if monthHasEnoughContent, dayOfMonth < monthSurfaceStartDay {
+            return "月章会在接近月底时主动出现，也可以随时去痕迹查看"
+        }
+        if weekRecordCount < minimumWeekRecordCount {
+            return "这周再多留几笔，周记会更完整"
+        }
+        if weekActiveDayCount < minimumWeekActiveDayCount {
+            return "多留几个有记录的日子，周记会更完整"
+        }
+        if monthRecordCount < minimumMonthRecordCount
+            || monthActiveDayCount < minimumMonthActiveDayCount {
+            return "继续记录，月章会在内容更完整时主动出现"
+        }
+        return "有一笔就记一笔，晚点再回看"
     }
 }
 
 enum PlaybackCompletionPrimaryAction: Equatable {
     case dismiss
-    case showMemberPricing
 }
 
 enum PlaybackCompletionPolicy {
     static func primaryAction(isMember: Bool) -> PlaybackCompletionPrimaryAction {
-        isMember ? .dismiss : .showMemberPricing
+        .dismiss
     }
 
     static func primaryTitle(isMember: Bool, memberTitle: String?) -> String {
-        isMember ? "完成" : (memberTitle ?? "了解会员")
+        "完成"
+    }
+
+    static func showsMemberContinuation(isMember: Bool, hasMemberPitch: Bool) -> Bool {
+        !isMember && hasMemberPitch
     }
 }
 

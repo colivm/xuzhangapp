@@ -151,7 +151,9 @@ final class InteractionStateRegressionTests: XCTestCase {
             totalRecordCount: 0,
             hasUnplayedTodayRecords: false,
             weekRecordCount: 0,
+            weekActiveDayCount: 0,
             monthRecordCount: 0,
+            monthActiveDayCount: 0,
             dayOfMonth: 16,
             canPlayWeek: true,
             canPlayMonth: true,
@@ -168,14 +170,18 @@ final class InteractionStateRegressionTests: XCTestCase {
         snapshot.hasUnplayedTodayRecords = false
         snapshot.totalRecordCount = 3
         snapshot.weekRecordCount = 3
+        snapshot.weekActiveDayCount = 2
         XCTAssertEqual(NewUserProgressionPolicy.stage(for: snapshot), .weekTrace)
 
         snapshot.weekRecordCount = 0
-        snapshot.monthRecordCount = 3
+        snapshot.weekActiveDayCount = 0
+        snapshot.monthRecordCount = 5
+        snapshot.monthActiveDayCount = 3
         snapshot.dayOfMonth = 25
         XCTAssertEqual(NewUserProgressionPolicy.stage(for: snapshot), .monthChapter)
 
         snapshot.monthRecordCount = 0
+        snapshot.monthActiveDayCount = 0
         snapshot.hasCompletedCurrentWeekPlayback = true
         XCTAssertEqual(NewUserProgressionPolicy.stage(for: snapshot), .reviewTasks)
         XCTAssertEqual(
@@ -215,13 +221,27 @@ final class InteractionStateRegressionTests: XCTestCase {
     }
 
     func testPlaybackMaturityAndCompletionUseOnePrimaryRule() {
-        XCTAssertFalse(PlaybackMaturityPolicy.weekIsReady(recordCount: 2))
-        XCTAssertTrue(PlaybackMaturityPolicy.weekIsReady(recordCount: 3))
-        XCTAssertFalse(PlaybackMaturityPolicy.monthIsReady(recordCount: 8, dayOfMonth: 24))
-        XCTAssertTrue(PlaybackMaturityPolicy.monthIsReady(recordCount: 3, dayOfMonth: 25))
+        XCTAssertFalse(PlaybackMaturityPolicy.weekIsReady(recordCount: 3, activeDayCount: 1))
+        XCTAssertTrue(PlaybackMaturityPolicy.weekIsReady(recordCount: 3, activeDayCount: 2))
+        XCTAssertFalse(PlaybackMaturityPolicy.monthIsReady(recordCount: 5, activeDayCount: 3, dayOfMonth: 24))
+        XCTAssertFalse(PlaybackMaturityPolicy.monthIsReady(recordCount: 5, activeDayCount: 2, dayOfMonth: 25))
+        XCTAssertTrue(PlaybackMaturityPolicy.monthIsReady(recordCount: 5, activeDayCount: 3, dayOfMonth: 25))
         XCTAssertEqual(PlaybackCompletionPolicy.primaryAction(isMember: true), .dismiss)
-        XCTAssertEqual(PlaybackCompletionPolicy.primaryAction(isMember: false), .showMemberPricing)
+        XCTAssertEqual(PlaybackCompletionPolicy.primaryAction(isMember: false), .dismiss)
         XCTAssertEqual(PlaybackCompletionPolicy.primaryTitle(isMember: true, memberTitle: nil), "完成")
+        XCTAssertEqual(PlaybackCompletionPolicy.primaryTitle(isMember: false, memberTitle: "了解会员"), "完成")
+        XCTAssertTrue(PlaybackCompletionPolicy.showsMemberContinuation(isMember: false, hasMemberPitch: true))
+        XCTAssertFalse(PlaybackCompletionPolicy.showsMemberContinuation(isMember: false, hasMemberPitch: false))
+        XCTAssertFalse(PlaybackCompletionPolicy.showsMemberContinuation(isMember: true, hasMemberPitch: true))
+        XCTAssertTrue(
+            PlaybackMaturityPolicy.homeRecommendationExplanation(
+                weekRecordCount: 3,
+                weekActiveDayCount: 1,
+                monthRecordCount: 5,
+                monthActiveDayCount: 3,
+                dayOfMonth: 20
+            ).contains("接近月底")
+        )
     }
 
     func testAutomaticMemberNudgesRespectBudgetWhileExplicitEntriesStayImmediate() throws {
@@ -763,6 +783,7 @@ final class RecordInputAssistanceSnapshotTests: XCTestCase {
 
 final class HomeDashboardSnapshotTests: XCTestCase {
     func testJourneyLedgerFactsReuseOneCommittedRecordSnapshot() {
+        let calendar = Calendar(identifier: .gregorian)
         let now = Date(timeIntervalSince1970: 1_784_240_000)
         let week = DateInterval(
             start: now.addingTimeInterval(-3 * 24 * 60 * 60),
@@ -801,12 +822,15 @@ final class HomeDashboardSnapshotTests: XCTestCase {
         let facts = HomeJourneyLedgerFacts.build(
             from: [committed, olderCommitted, draft, zero],
             currentWeekInterval: week,
-            currentMonthInterval: month
+            currentMonthInterval: month,
+            calendar: calendar
         )
 
         XCTAssertEqual(facts.totalCommittedRecordCount, 2)
         XCTAssertEqual(facts.currentWeekCommittedRecordCount, 1)
+        XCTAssertEqual(facts.currentWeekActiveDayCount, 1)
         XCTAssertEqual(facts.currentMonthCommittedRecordCount, 2)
+        XCTAssertEqual(facts.currentMonthActiveDayCount, 2)
     }
 
     func testVisibleLifeMarksPrepareOnceForOnlyVisibleRecordIDs() {
@@ -1355,6 +1379,123 @@ final class TraceDetailListSnapshotComputationTests: XCTestCase {
         XCTAssertFalse(TraceDetailPresentationPolicy.accepts(payload, while: payload))
         XCTAssertEqual(payload.initialSnapshot.items.map(\.id), [item.id])
         XCTAssertEqual(payload.initialSnapshot.totalExpense, 28, accuracy: 0.001)
+    }
+}
+
+final class WeeklyShareCardPhotoPreparationPolicyTests: XCTestCase {
+    func testResolutionKeepsSourceOrderAndCountsOnlyDecodedPhotos() {
+        let first = UUID()
+        let missing = UUID()
+        let third = UUID()
+        let ignoredFourth = UUID()
+
+        let resolution = WeeklyShareCardPhotoPreparationPolicy.resolve(
+            requestedAnchorIDs: [first, missing, third, ignoredFourth],
+            loadedAnchorIDs: [third, first, ignoredFourth]
+        )
+
+        XCTAssertEqual(resolution.availableAnchorIDs, [first, third])
+        XCTAssertEqual(resolution.unavailablePhotoCount, 1)
+    }
+
+    func testResolutionDowngradesAllMissingPhotosWithoutInventingAvailability() {
+        let requested = [UUID(), UUID(), UUID()]
+
+        let resolution = WeeklyShareCardPhotoPreparationPolicy.resolve(
+            requestedAnchorIDs: requested,
+            loadedAnchorIDs: []
+        )
+
+        XCTAssertTrue(resolution.availableAnchorIDs.isEmpty)
+        XCTAssertEqual(resolution.unavailablePhotoCount, 3)
+    }
+
+    func testResolutionIgnoresLoadedIDsOutsideTheLockedRequest() {
+        let requested = UUID()
+
+        let resolution = WeeklyShareCardPhotoPreparationPolicy.resolve(
+            requestedAnchorIDs: [requested],
+            loadedAnchorIDs: [UUID()]
+        )
+
+        XCTAssertTrue(resolution.availableAnchorIDs.isEmpty)
+        XCTAssertEqual(resolution.unavailablePhotoCount, 1)
+    }
+}
+
+final class WeeklyShareCardTemplateCapabilityPolicyTests: XCTestCase {
+    func testAutomaticTemplateFollowsTheNumberOfActuallyAvailablePhotos() {
+        XCTAssertEqual(
+            WeeklyShareCardTemplateCapabilityPolicy.recommended(photoCount: 0),
+            .recordSummary
+        )
+        XCTAssertEqual(
+            WeeklyShareCardTemplateCapabilityPolicy.recommended(photoCount: 1),
+            .singleMemory
+        )
+        XCTAssertEqual(
+            WeeklyShareCardTemplateCapabilityPolicy.recommended(photoCount: 2),
+            .weeklyCollage
+        )
+        XCTAssertEqual(
+            WeeklyShareCardTemplateCapabilityPolicy.recommended(photoCount: 8),
+            .weeklyCollage
+        )
+    }
+
+    func testManualTemplateChoicesNeverOfferAPhotoHeavyStyleWithoutPhotos() {
+        XCTAssertEqual(
+            WeeklyShareCardTemplateCapabilityPolicy.allowed(photoCount: 0),
+            [.recordSummary]
+        )
+        XCTAssertEqual(
+            WeeklyShareCardTemplateCapabilityPolicy.allowed(photoCount: 1),
+            [.singleMemory, .recordSummary]
+        )
+        XCTAssertEqual(
+            WeeklyShareCardTemplateCapabilityPolicy.allowed(photoCount: 3),
+            [.weeklyCollage, .singleMemory, .recordSummary]
+        )
+    }
+
+    func testSensitivePhotoCaptionsStayCategoryNeutralInTheShareCard() {
+        let healthAnchor = SummaryMemoryAnchor(
+            id: UUID(),
+            itemID: UUID(),
+            title: "某医院复诊",
+            amount: 100,
+            createdAt: Date(),
+            imageData: Data(),
+            imageReference: nil,
+            imageByteCount: nil,
+            role: .careRecord,
+            sceneHint: .healthRecord,
+            label: "健康",
+            caption: "具体检查结果"
+        )
+        let careAnchor = SummaryMemoryAnchor(
+            id: UUID(),
+            itemID: UUID(),
+            title: "家人用药",
+            amount: 30,
+            createdAt: Date(),
+            imageData: Data(),
+            imageReference: nil,
+            imageByteCount: nil,
+            role: .careRecord,
+            sceneHint: .careRecord,
+            label: "照护",
+            caption: "具体用药内容"
+        )
+
+        XCTAssertEqual(
+            lifeSliceSafeSharePhotoCaption(for: healthAnchor, fallback: "记录"),
+            "一条健康记录"
+        )
+        XCTAssertEqual(
+            lifeSliceSafeSharePhotoCaption(for: careAnchor, fallback: "记录"),
+            "一条照护记录"
+        )
     }
 }
 
@@ -2786,6 +2927,58 @@ final class ReleaseScaleFixtureTests: XCTestCase {
             XCTAssertFalse(firstDigest.isEmpty)
             XCTAssertEqual(firstDigest, secondDigest)
         }
+    }
+}
+
+final class CloudSessionExpirationPolicyTests: XCTestCase {
+    func testOnlyUnauthorizedHTTPResponsesInvalidateTheCloudSession() {
+        XCTAssertTrue(
+            CloudSessionFailurePolicy.shouldInvalidateSession(
+                for: AuthServiceError.badStatus(401, #"{"ok":false,"error":"INVALID_TOKEN"}"#)
+            )
+        )
+        XCTAssertTrue(
+            CloudSessionFailurePolicy.shouldInvalidateSession(
+                for: LedgerSyncError.badStatus(401, #"{"ok":false,"error":"INVALID_TOKEN"}"#)
+            )
+        )
+        XCTAssertFalse(
+            CloudSessionFailurePolicy.shouldInvalidateSession(
+                for: AuthServiceError.badStatus(400, #"{"ok":false,"error":"INVALID_LEDGER_ITEM"}"#)
+            )
+        )
+        XCTAssertFalse(
+            CloudSessionFailurePolicy.shouldInvalidateSession(
+                for: LedgerSyncError.badStatus(500, "database unavailable")
+            )
+        )
+        XCTAssertFalse(
+            CloudSessionFailurePolicy.shouldInvalidateSession(for: URLError(.notConnectedToInternet))
+        )
+    }
+
+    func testSessionInvalidationPreservesLocalPreferencesAndClearsOnlyAccountState() {
+        var current = AppSettings.default
+        current.displayName = "保留的昵称"
+        current.syncEnabled = true
+        current.cloudUserId = "cloud-user-1"
+        current.memberTier = "yearly"
+        current.memberExpiresAt = "2026-12-31T00:00:00Z"
+        current.petCompanionEnabled = false
+        current.weatherCompanionEnabled = false
+        current.colorThemeId = "xuzhang_default"
+
+        let invalidated = CloudSessionInvalidationPolicy.invalidatedSettings(from: current)
+
+        XCTAssertFalse(invalidated.syncEnabled)
+        XCTAssertEqual(invalidated.cloudUserId, "")
+        XCTAssertEqual(invalidated.memberTier, "free")
+        XCTAssertNil(invalidated.memberExpiresAt)
+        XCTAssertEqual(invalidated.displayName, current.displayName)
+        XCTAssertEqual(invalidated.petCompanionEnabled, current.petCompanionEnabled)
+        XCTAssertEqual(invalidated.weatherCompanionEnabled, current.weatherCompanionEnabled)
+        XCTAssertEqual(invalidated.colorThemeId, current.colorThemeId)
+        XCTAssertEqual(invalidated.backendBaseURL, AppSettings.productionBackendBaseURL)
     }
 }
 #endif

@@ -64,6 +64,63 @@ enum AuthServiceError: LocalizedError {
     }
 }
 
+enum CloudSessionFailurePolicy {
+    static func shouldInvalidateSession(for error: Error) -> Bool {
+        if let authError = error as? AuthServiceError,
+           case .badStatus(let statusCode, _) = authError {
+            return statusCode == 401
+        }
+        if let syncError = error as? LedgerSyncError,
+           case .badStatus(let statusCode, _) = syncError {
+            return statusCode == 401
+        }
+        return false
+    }
+}
+
+enum CloudSessionInvalidationPolicy {
+    static func invalidatedSettings(from current: AppSettings) -> AppSettings {
+        var next = current
+        next.syncEnabled = false
+        next.cloudUserId = ""
+        next.memberTier = "free"
+        next.memberExpiresAt = nil
+        return next
+    }
+}
+
+extension Notification.Name {
+    static let cloudSessionDidExpire = Notification.Name("cloudSessionDidExpire")
+}
+
+@MainActor
+enum CloudSessionInvalidationService {
+    static let userMessage = "登录已过期，请重新登录。你的本机账本和照片都已保留。"
+
+    static func invalidate() {
+        let currentToken = KeychainService.loadAccessToken()
+        let currentSettings = LocalStore.loadSettings()
+        let hadSession = !currentToken.isEmpty
+            || !currentSettings.cloudUserId.isEmpty
+            || currentSettings.syncEnabled
+
+        if !currentSettings.cloudUserId.isEmpty {
+            LocalStore.saveCloudSyncPreference(
+                currentSettings.syncEnabled,
+                for: currentSettings.cloudUserId
+            )
+        }
+
+        KeychainService.clearAccessToken()
+        LocalStore.saveSettings(
+            CloudSessionInvalidationPolicy.invalidatedSettings(from: currentSettings)
+        )
+
+        guard hadSession else { return }
+        NotificationCenter.default.post(name: .cloudSessionDidExpire, object: nil)
+    }
+}
+
 private struct SendSMSBody: Encodable {
     let phone: String
 }

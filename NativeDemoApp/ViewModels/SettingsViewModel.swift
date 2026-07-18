@@ -33,6 +33,7 @@ final class SettingsViewModel: ObservableObject {
     /// 是否已保存访问令牌（与 Keychain 同步，用于界面展示）。
     @Published private(set) var hasCloudSession: Bool = false
     private var smsCooldownTask: Task<Void, Never>?
+    private var cloudSessionInvalidationCancellable: AnyCancellable?
     private enum ThemeTrialKeys {
         static let usedAt = "lifetimeThemeTrialUsedAt"
         static let themeId = "lifetimeThemeTrialThemeId"
@@ -57,6 +58,13 @@ final class SettingsViewModel: ObservableObject {
         settings.colorThemeId = validThemeId(settings.colorThemeId)
         enforceCurrentThemeAccess(showsMessage: false)
         persist()
+        cloudSessionInvalidationCancellable = NotificationCenter.default
+            .publisher(for: .cloudSessionDidExpire)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.applyExpiredCloudSessionState()
+                }
+            }
     }
 
     var displayName: String {
@@ -474,6 +482,7 @@ final class SettingsViewModel: ObservableObject {
             authMessage = "云端账单字段已删除，本机记录和照片仍保留。"
             return true
         } catch {
+            if invalidateCloudSessionIfUnauthorized(error) { return false }
             authMessage = "云端账单字段暂时没删除成功，请稍后再试。"
             return false
         }
@@ -510,6 +519,7 @@ final class SettingsViewModel: ObservableObject {
             persist()
             return true
         } catch {
+            if invalidateCloudSessionIfUnauthorized(error) { return false }
             authMessage = "账号暂时没注销成功，请稍后再试。"
             return false
         }
@@ -599,6 +609,7 @@ final class SettingsViewModel: ObservableObject {
             let account = try await client.fetchAccountMe(accessToken: token)
             applyCloudAccount(account, allowsPendingCloudSyncDecision: false)
         } catch {
+            if invalidateCloudSessionIfUnauthorized(error) { return }
             authMessage = "账号信息暂时没刷新成功，请稍后再试。"
         }
     }
@@ -715,6 +726,7 @@ final class SettingsViewModel: ObservableObject {
                     allowsPendingCloudSyncDecision: false
                 )
             } catch {
+                if invalidateCloudSessionIfUnauthorized(error) { return }
                 authMessage = enabled
                     ? "账单字段云端备份已在本机开启，账号开关稍后会再同步；照片不会上传。"
                     : "账单字段云端备份已在本机关闭，账号开关稍后会再同步。"
@@ -731,8 +743,33 @@ final class SettingsViewModel: ObservableObject {
             applyCloudAccount(account, shouldApplyCloudSyncPreference: false)
             authMessage = "昵称已同步。"
         } catch {
+            if invalidateCloudSessionIfUnauthorized(error) { return }
             authMessage = "昵称已保存在本机。云端暂时没同步成功，稍后会再试。"
         }
+    }
+
+    @discardableResult
+    private func invalidateCloudSessionIfUnauthorized(_ error: Error) -> Bool {
+        guard CloudSessionFailurePolicy.shouldInvalidateSession(for: error) else {
+            return false
+        }
+        CloudSessionInvalidationService.invalidate()
+        applyExpiredCloudSessionState()
+        return true
+    }
+
+    private func applyExpiredCloudSessionState() {
+        settings = LocalStore.loadSettings()
+        hasCloudSession = false
+        hasPendingLoginCloudSyncDecision = false
+        if Self.isBackendDefaultDisplayName(settings.displayName) {
+            settings.displayName = Self.localDefaultDisplayName
+        }
+        settings.displayName = sanitizedDisplayName(settings.displayName)
+        settings.petNickname = sanitizedPetNickname(settings.petNickname)
+        enforceCurrentThemeAccess(showsMessage: true)
+        authMessage = CloudSessionInvalidationService.userMessage
+        persist()
     }
 
     private func hasActiveLocalEntitlement(_ payload: IAPPurchaseVerification, now: Date = Date()) -> Bool {

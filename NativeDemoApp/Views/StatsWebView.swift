@@ -5650,37 +5650,18 @@ struct StatsWebView: View {
         guard !hasMemberAccess else { return nil }
         switch playback.range {
         case .week:
-            if !quotaStore.hasCompletedWeekPlaybackEver() {
-                return SummaryPlaybackMemberPitch(
-                    headline: "这是周记的首听。",
-                    detail: "这次免费已经能看到本周的基本记录。之后会员会继续整理情绪标签、生活线索和反复出现的场景。",
-                    cta: "持续保留周记"
-                )
-            }
-            if quotaStore.weekRemaining(isMember: false) <= 1 {
-                return SummaryPlaybackMemberPitch(
-                    headline: "周记本周免费次数快用完了。",
-                    detail: "这次免费已经生成本周回看。会员可以继续整理周记、月章和生活线索。",
-                    cta: "让回放继续留下来"
-                )
-            }
+            guard quotaStore.weekRemaining(isMember: false) <= 1 else { return nil }
             return SummaryPlaybackMemberPitch(
-                headline: "周记已完成",
+                headline: "周记本周免费次数快用完了。",
                 detail: "这次免费会先保留基础回看。会员可以继续整理情绪标签、生活线索和反复出现的场景。",
-                cta: "继续整理周记和月章"
+                cta: "了解持续回看"
             )
         case .month:
-            if quotaStore.monthRemaining(isMember: false) <= 1 {
-                return SummaryPlaybackMemberPitch(
-                    headline: "月章体验快用完了。",
-                    detail: "这次免费已经生成月章开头。月章是新用户体验额度，不是每月刷新；会员可以继续整理更多月份。",
-                    cta: "继续留住月章"
-                )
-            }
+            guard quotaStore.monthRemaining(isMember: false) <= 1 else { return nil }
             return SummaryPlaybackMemberPitch(
-                headline: "月章已完成",
-                detail: "这次免费会先保留这一段月章。会员可以继续整理更多月份里的天气、路线、情绪标签和生活线索。",
-                cta: "继续整理月章"
+                headline: "月章体验快用完了。",
+                detail: "这次免费已经生成月章；会员可以继续整理更多月份里的天气、路线和生活线索。",
+                cta: "了解持续回看"
             )
         }
     }

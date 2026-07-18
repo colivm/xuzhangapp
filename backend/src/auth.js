@@ -1,6 +1,8 @@
 import jwt from "jsonwebtoken";
 import { config } from "./config.js";
 
+export const ACCESS_TOKEN_TTL_SECONDS = 90 * 24 * 60 * 60;
+
 export function signAccessToken(user) {
   return jwt.sign(
     {
@@ -9,7 +11,7 @@ export function signAccessToken(user) {
       phone: user.phone || "",
     },
     config.jwtSecret,
-    { expiresIn: "7d" }
+    { expiresIn: ACCESS_TOKEN_TTL_SECONDS }
   );
 }
 
