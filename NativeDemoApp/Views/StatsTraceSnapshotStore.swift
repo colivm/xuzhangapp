@@ -60,12 +60,19 @@ enum TraceSnapshotComputation {
             now: input.now,
             echoAnchor: echoAnchor
         ).primary?.text
+        let coverFacts = TraceChapterCoverPolicy.make(
+            range: input.range,
+            items: input.items,
+            anchors: anchors,
+            now: input.now
+        )
 
         return TraceChapterSnapshot(
             range: input.range,
             items: input.items,
             marks: marks,
             memoryAnchors: anchors,
+            coverFacts: coverFacts,
             narrative: chapterNarrative(range: input.range, items: input.items, marks: marks, voice: voice),
             chapterSummary: marks.first.map { LifeMarkService.primaryLine(for: $0) },
             evidenceGroups: evidenceGroups(from: input.items, marks: marks, maxItems: 3),

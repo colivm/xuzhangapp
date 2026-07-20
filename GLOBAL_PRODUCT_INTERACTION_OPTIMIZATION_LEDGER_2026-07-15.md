@@ -2976,3 +2976,28 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：已在本地打开成图核对三台手机完整边界、周/月选中态、主卡差异、写实馄饨照片、无照片月历热力与节奏曲线、关键词/日记下段和五栏底部导航；文件可读取且尺寸检查通过。
 - 剩余风险：当前会话没有收到用户所述的原始馄饨参考图，仓库内 `QARealPhotos` 为压力测试夹具而非可用生活照片，因此成图使用生成式写实馄饨照片；图片模型生成的中文在最终实施前仍需由设计稿或 SwiftUI 组件逐字复核，不能直接视为代码验收证据。
 - 下一步：由产品/设计评审三态信息层级；若方向确认，再单独建立并启动对应 iOS 实施任务，继续遵守一次仅一个 `IN_PROGRESS` 和既有冻结边界。
+
+---
+
+## 28. UI-03：痕迹周记/月章首屏价值与三态封面实施（2026-07-18）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。
+- 用户反馈：现有周记与月章首页虽然视觉完整，但主标题和说明仍偏抽象、像模板；月章顶部使用抽象房间插画，忽略下方已经存在的真实照片和记录节奏，用户需要先读很多文字才能理解这一页的价值。
+- 产品分工：周记回答“这周发生了哪一幕”，以一条具体日期/记录和代表照片为主；月章回答“这个月形成了什么”，以记录分布、活跃天数、最高频分类和最长连续记录等确定事实为主。月章照片只作为编辑式封面证据，不放大成第二张周记大图。
+- 三态边界：
+  1. 周记有照片：主标题使用代表照片对应的日期与安全记录事实，辅助句只补本周笔数、活跃天数和最高频分类，不使用“被留下”“有画面”等空泛句。
+  2. 月章有照片：顶部采用文字/数据为主、右侧小封面照片为辅的编辑式结构；封面照片从下方“本月日记”首屏排除，避免同一张图连续重复。
+  3. 月章无照片：顶部使用本月记录热力/节奏与确定性事实，不显示空图片区，不使用抽象房间插画。
+- 允许修改：`StatsTraceModels.swift` 中只读事实与文案策略；`StatsTraceSnapshotStore.swift` 的章节快照事实准备；`StatsWebView.swift` 的周记标题/说明、月章顶部三态结构和本月日记封面去重；对应 XCTest、体验静态门禁、真机矩阵和本文档。
+- 冻结边界：不修改周记/月章播放章节和正文、额度、扣次、完成动作、会员、AI 指令台、复盘、首页动态主动作、痕迹筛选/细查、照片选择/顺序/引用/按需加载、主题 Token、存储同步或 `ARCH-03`。不根据情绪标签、照片内容或模板猜测人物、地点、原因和感受。
+- 性能边界：所有标题与辅助事实只消费已经准备好的 `TraceChapterSnapshot`；不得在 SwiftUI `body` 中重新扫描完整账本、解码图片或同步计算生活线索。普通周/月切换、照片横滑和主题变化不得触发额外账本聚合。
+- 验收：空数据、弱数据、周记有/无照片、月章有/无照片、封面图片缺失、同分类并列、0/1/多活跃日均有确定结果；周/月职责一眼可区分；文案明确“笔数占比”而非含糊百分比；Dynamic Type、VoiceOver、多主题和真实 12MP 照片矩阵完成前只能标记 `CODE_DONE`。
+- 工作区保护：继续保留并不提交 `StatCardView.swift`、`web-preview/app.js`、用户提示文档、`brand-assets/`、`tmp/` 与 `scripts/__pycache__/` 的既有修改或未跟踪内容。
+- 实现：新增 `TraceChapterCoverFacts` 与 `TraceChapterCoverPolicy`，随现有后台 `TraceChapterSnapshot` 一次准备代表记录、活跃天数、最高频分类、分类笔数占比、最长连续记录、月历日计数和封面 ID。周记标题改为代表记录的真实日期与安全短标题，辅助句明确本周记录数、记录日和最高频分类；健康标题降级为类别中性说明，商户括号后缀只用于封面短标题收敛，不改原账本。
+- 月章三态：有照片时采用文字/数据为主、右侧 112pt 小封面为辅的编辑式结构；无照片时直接展示本月记录日热力，不制造空图片区；旧抽象房间插画和“生活有了轮廓/拼出完整生活”等模板句从渲染路径移除。顶部指标统一为记录、记录日和最长连续；`按记录笔数整理` 明确最高频与百分比口径。
+- 去重边界：新增 `TraceMonthDiaryPolicy`，按封面记录 ID 排除该记录的全部照片锚点和记录卡，避免封面在下方“本月日记”首屏重复；当本月只有封面记录时显示明确承接说明，不伪装为空数据。
+- 修改文件：`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：新增周记代表照片事实、月章最高频分类/笔数占比/活跃日/最长连续、无照片空热力、分类并列和封面日记去重 XCTest；静态门禁锁定章节快照准备、周/月三态渲染、抽象房间/被动模板禁用和 `FLOW-39`。`git diff --check`、生活语义、体验静态、文案、会员、AI、无障碍、可观测性、主题、迁移、SQLite、100/1,000/5,000 条夹具、真实 12MP 夹具及 `python scripts/validate_release_gate.py --phase windows` 全部通过；当前仅有既有 5 条 soft copy warning。
+- 冻结边界复核：未修改周记/月章播放章节或正文、额度/扣次/完成动作、会员、AI 指令台、复盘、首页动态主动作、痕迹筛选与细查、照片选择/顺序/引用/按需加载、主题 Token、存储同步、`COPY-02` 或 `ARCH-03`；未覆盖 `StatCardView.swift`、`web-preview/app.js`、用户提示文档、素材和 `tmp/`。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone；`TraceChapterCoverFacts` 新字段的 Swift 编译、SwiftUI 固定/自适应布局、真实缺图占位、默认/深色/高对比主题、特大字号、VoiceOver、Reduce Motion、真实 12MP 滚动和封面去重需按 `FLOW-39` 真机签收，因此不得标记 `VERIFIED`。
+- 下一步：在 Xcode Debug/Release 与 iPhone 执行 `FLOW-39`；签收发现问题时只定向修复本项，不启动 `ARCH-03` 或顺带修改播放文案。

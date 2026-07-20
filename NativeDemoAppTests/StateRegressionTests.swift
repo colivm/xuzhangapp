@@ -1382,6 +1382,162 @@ final class TraceDetailListSnapshotComputationTests: XCTestCase {
     }
 }
 
+final class TraceChapterCoverPolicyTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        return calendar
+    }
+
+    private func date(day: Int, hour: Int = 12) -> Date {
+        calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: day,
+            hour: hour
+        ))!
+    }
+
+    private func anchor(for item: HomeItem, id: UUID = UUID()) -> SummaryMemoryAnchor {
+        SummaryMemoryAnchor(
+            id: id,
+            itemID: item.id,
+            title: item.title,
+            amount: item.amount,
+            createdAt: item.createdAt,
+            imageData: Data([1, 2, 3]),
+            imageReference: "images/\(item.id.uuidString).jpg",
+            imageByteCount: 3,
+            role: .moment,
+            sceneHint: .experience,
+            label: "现场",
+            caption: "这条记录的照片。"
+        )
+    }
+
+    func testWeekCoverUsesRepresentativePhotoRecordAndFactualSupport() {
+        let dining = HomeItem(
+            title: "巧婆红汤馄饨（云密城店）",
+            amount: 18,
+            category: .dining,
+            createdAt: date(day: 15, hour: 19)
+        )
+        let morningCommute = HomeItem(
+            title: "上班地铁",
+            amount: 4.75,
+            category: .transport,
+            createdAt: date(day: 16, hour: 8)
+        )
+        let eveningCommute = HomeItem(
+            title: "下班地铁",
+            amount: 4.75,
+            category: .transport,
+            createdAt: date(day: 16, hour: 19)
+        )
+        let photoAnchor = anchor(for: dining)
+
+        let facts = TraceChapterCoverPolicy.make(
+            range: .week,
+            items: [eveningCommute, morningCommute, dining],
+            anchors: [photoAnchor],
+            now: date(day: 18),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(facts.title, "7月15日，巧婆红汤馄饨")
+        XCTAssertEqual(facts.supportLine, "3笔记录分布在2天，交通最多，共2笔。")
+        XCTAssertEqual(facts.representativeItemID, dining.id)
+        XCTAssertEqual(facts.coverCaption, "7/15 · 巧婆红汤馄饨")
+        XCTAssertNil(facts.coverAnchorID)
+        XCTAssertFalse(facts.title.contains("被留下"))
+    }
+
+    func testMonthCoverExplainsCountShareAndBuildsRecordRhythm() {
+        let commute1 = HomeItem(title: "上班地铁", amount: 4, category: .transport, createdAt: date(day: 1, hour: 8))
+        let commute2 = HomeItem(title: "下班地铁", amount: 4, category: .transport, createdAt: date(day: 2, hour: 18))
+        let commute3 = HomeItem(title: "上班公交", amount: 3, category: .transport, createdAt: date(day: 3, hour: 8))
+        let breakfast = HomeItem(title: "早餐", amount: 12, category: .dining, createdAt: date(day: 10, hour: 8))
+        let dinner = HomeItem(title: "晚饭", amount: 28, category: .dining, createdAt: date(day: 10, hour: 19))
+        let coverAnchor = anchor(for: breakfast)
+
+        let facts = TraceChapterCoverPolicy.make(
+            range: .month,
+            items: [dinner, breakfast, commute3, commute2, commute1],
+            anchors: [coverAnchor],
+            now: date(day: 18),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(facts.title, "7月，交通出现得最多")
+        XCTAssertEqual(facts.supportLine, "5笔记录分布在4天，交通共3笔，占本月记录60%。")
+        XCTAssertEqual(facts.activeDays, 4)
+        XCTAssertEqual(facts.longestStreak, 3)
+        XCTAssertEqual(facts.topCategory, .transport)
+        XCTAssertEqual(facts.topCategoryRecordSharePercent, 60)
+        XCTAssertEqual(facts.coverAnchorID, coverAnchor.id)
+        XCTAssertEqual(facts.coverItemID, breakfast.id)
+        XCTAssertEqual(facts.monthDayCounts.count, 31)
+        XCTAssertEqual(facts.monthDayCounts[9], 2)
+        XCTAssertEqual(facts.currentMonthDay, 18)
+    }
+
+    func testMonthWithoutPhotoUsesValidEmptyRhythmInsteadOfPhotoPlaceholder() {
+        let facts = TraceChapterCoverPolicy.make(
+            range: .month,
+            items: [],
+            anchors: [],
+            now: date(day: 18),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(facts.title, "7月还没有记录")
+        XCTAssertEqual(facts.supportLine, "记下第一笔后，这里会按日期和分类整理。")
+        XCTAssertNil(facts.coverAnchorID)
+        XCTAssertNil(facts.coverCaption)
+        XCTAssertEqual(facts.monthDayCounts, Array(repeating: 0, count: 31))
+        XCTAssertEqual(facts.activeDays, 0)
+        XCTAssertEqual(facts.longestStreak, 0)
+    }
+
+    func testTopCategoryTieUsesAmountThenStableCategoryOrder() {
+        let items = [
+            HomeItem(title: "早餐", amount: 8, category: .dining, createdAt: date(day: 1, hour: 8)),
+            HomeItem(title: "晚饭", amount: 12, category: .dining, createdAt: date(day: 2, hour: 19)),
+            HomeItem(title: "上班地铁", amount: 18, category: .transport, createdAt: date(day: 3, hour: 8)),
+            HomeItem(title: "下班地铁", amount: 18, category: .transport, createdAt: date(day: 4, hour: 19))
+        ]
+
+        let facts = TraceChapterCoverPolicy.make(
+            range: .month,
+            items: items,
+            anchors: [],
+            now: date(day: 18),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(facts.topCategory, .transport)
+        XCTAssertEqual(facts.title, "7月，交通出现得最多")
+        XCTAssertEqual(facts.topCategoryCount, 2)
+        XCTAssertEqual(facts.topCategoryRecordSharePercent, 50)
+    }
+
+    func testMonthDiaryExcludesEveryAnchorFromTheCoverRecord() {
+        let coverItem = HomeItem(title: "早餐", amount: 12, category: .dining, createdAt: date(day: 10))
+        let otherItem = HomeItem(title: "地铁", amount: 4, category: .transport, createdAt: date(day: 11))
+        let cover = anchor(for: coverItem)
+        let duplicateCover = anchor(for: coverItem)
+        let other = anchor(for: otherItem)
+
+        let diaryAnchors = TraceMonthDiaryPolicy.anchors(
+            from: [cover, duplicateCover, other],
+            excludingCoverItemID: coverItem.id
+        )
+
+        XCTAssertEqual(diaryAnchors.map(\.id), [other.id])
+    }
+}
+
 final class WeeklyShareCardPhotoPreparationPolicyTests: XCTestCase {
     func testResolutionKeepsSourceOrderAndCountsOnlyDecodedPhotos() {
         let first = UUID()
