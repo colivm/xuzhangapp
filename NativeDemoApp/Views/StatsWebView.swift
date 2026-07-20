@@ -203,8 +203,8 @@ struct StatsWebView: View {
     @State private var weekTraceNeedsRefresh = true
     @State private var monthTraceNeedsRefresh = true
     @State private var clueTraceNeedsRefresh = true
-    @State private var showsTraceUpdatePill = false
-    @State private var traceUpdatePillTask: Task<Void, Never>?
+    @State private var visibleTraceLoadingPresentation: TraceLoadingPresentation?
+    @State private var traceLoadingPresentationTask: Task<Void, Never>?
     private let playbackService = PlaybackService()
     private let momentSelector = PlaybackMomentSelector()
     private let quotaStore = SummaryPlaybackQuotaStore()
@@ -437,9 +437,9 @@ struct StatsWebView: View {
                 summaryPlaybackTask?.cancel()
                 summaryPlaybackTask = nil
                 preparingSummaryRange = nil
-                traceUpdatePillTask?.cancel()
-                traceUpdatePillTask = nil
-                showsTraceUpdatePill = false
+                traceLoadingPresentationTask?.cancel()
+                traceLoadingPresentationTask = nil
+                updateTraceLoadingPresentation(nil, animated: false)
                 isPreparingTrace = false
             }
             .onChange(of: openTraceRequestID) { _, _ in
@@ -539,71 +539,72 @@ struct StatsWebView: View {
 
     private var statsScrollView: some View {
         GeometryReader { proxy in
-            ScrollView {
-                statsContent(availableHeight: proxy.size.height)
+            ZStack {
+                ScrollView {
+                    statsContent(availableHeight: proxy.size.height)
+                }
+                .scrollIndicators(.hidden)
+                .scrollDisabled(traceSwipeDragState != nil || visibleTraceLoadingPresentation != nil)
+                .scrollPosition(id: $tabState.scrollAnchorID, anchor: .top)
+                .accessibilityHidden(visibleTraceLoadingPresentation != nil)
+
+                if let presentation = visibleTraceLoadingPresentation {
+                    traceLoadingOverlay(presentation)
+                        .transition(.opacity)
+                        .zIndex(20)
+                }
             }
-            .scrollIndicators(.hidden)
-            .scrollDisabled(traceSwipeDragState != nil)
-            .scrollPosition(id: $tabState.scrollAnchorID, anchor: .top)
         }
+    }
+
+    private func traceLoadingOverlay(_ presentation: TraceLoadingPresentation) -> some View {
+        ZStack {
+            AppColors.bg
+                .opacity(0.82)
+                .contentShape(Rectangle())
+
+            ComputationLoadingView(
+                message: presentation.message,
+                detail: presentation.detail,
+                presentation: .card
+            )
+            .frame(maxWidth: 310)
+            .padding(.horizontal, 24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .allowsHitTesting(true)
     }
 
     private func statsContent(availableHeight: CGFloat) -> some View {
         let layout = TraceLifeCardLayout(screenHeight: max(availableHeight, UIScreen.main.bounds.height))
-        let hasVisibleSnapshot = traceViewMode == .life
-            ? TraceLifePreparationPolicy.hasVisibleSnapshot(
-                selectedRange: traceLifeCardRange,
-                hasWeek: preparedWeekSnapshot != nil,
-                hasMonth: preparedMonthSnapshot != nil
-            )
-            : preparedClueSnapshot != nil
-
-        return ZStack(alignment: .top) {
-            VStack(spacing: 16) {
-                traceViewModeKicker
-                    .id("trace-mode-picker")
-                if traceViewMode == .life {
-                    traceLifeRangeKicker
-                }
-                if traceViewMode == .life,
-                   preparedWeekSnapshot != nil || preparedMonthSnapshot != nil {
-                    traceChapterCard(
-                        layout: layout,
-                        weekSnapshot: preparedWeekSnapshot,
-                        monthSnapshot: preparedMonthSnapshot
-                    )
-                    .id("trace-life-card")
+        return VStack(spacing: 16) {
+            traceViewModeKicker
+                .id("trace-mode-picker")
+            if traceViewMode == .life {
+                traceLifeRangeKicker
+            }
+            if traceViewMode == .life,
+               preparedWeekSnapshot != nil || preparedMonthSnapshot != nil {
+                traceChapterCard(
+                    layout: layout,
+                    weekSnapshot: preparedWeekSnapshot,
+                    monthSnapshot: preparedMonthSnapshot
+                )
+                .id("trace-life-card")
+                .transition(.opacity)
+            } else if traceViewMode == .clues,
+                      let preparedClueSnapshot {
+                traceClueBoard(snapshot: preparedClueSnapshot)
+                    .id("trace-clue-board")
                     .transition(.opacity)
-                } else if traceViewMode == .clues,
-                          let preparedClueSnapshot {
-                    traceClueBoard(snapshot: preparedClueSnapshot)
-                        .id("trace-clue-board")
-                        .transition(.opacity)
-                } else {
-                    ComputationLoadingView(
-                        message: traceViewMode == .life
-                            ? "正在把这一段整理成章…"
-                            : "正在从记录里寻找线索…",
-                        detail: "整理好后会一次完整呈现",
-                        presentation: .page
-                    )
+            } else {
+                Color.clear
                     .id(traceViewMode == .life ? "trace-life-card" : "trace-clue-board")
                     .frame(minHeight: max(360, availableHeight - 120))
-                }
-            }
-            .scrollTargetLayout()
-
-            if showsTraceUpdatePill && hasVisibleSnapshot {
-                ComputationUpdatePill(
-                    message: traceViewMode == .life
-                        ? "正在更新这一段痕迹…"
-                        : "正在更新这些线索…"
-                )
-                .padding(.horizontal, 18)
-                .padding(.top, 46)
-                .zIndex(20)
+                    .accessibilityHidden(true)
             }
         }
+        .scrollTargetLayout()
         .padding(.horizontal, traceViewMode == .life ? 6 : 12)
         .padding(.top, 6)
         .padding(.bottom, 120)
@@ -639,13 +640,28 @@ struct StatsWebView: View {
         guard currentTraceNeedsRefresh else {
             tracePreparationTask?.cancel()
             tracePreparationTask = nil
-            traceUpdatePillTask?.cancel()
-            traceUpdatePillTask = nil
-            showsTraceUpdatePill = false
+            traceLoadingPresentationTask?.cancel()
+            traceLoadingPresentationTask = nil
+            updateTraceLoadingPresentation(nil, animated: true)
             isPreparingTrace = false
+            markVisibleCurrentWeekTraceSeenIfEligible()
             return
         }
         scheduleTracePreparation()
+    }
+
+    private func markVisibleCurrentWeekTraceSeenIfEligible(now: Date = Date()) {
+        guard traceViewMode == .life,
+              traceLifeCardRange == .week,
+              !useCustomRange,
+              !weekTraceNeedsRefresh,
+              let snapshot = preparedWeekSnapshot else { return }
+        homeViewModel.markCurrentWeekTraceSeenIfEligible(
+            recordCount: snapshot.coverFacts.recordCount,
+            activeDayCount: snapshot.coverFacts.activeDays,
+            hasVisibleCurrentWeekSnapshot: true,
+            now: now
+        )
     }
 
     private func traceChapterPreparation(
@@ -684,8 +700,8 @@ struct StatsWebView: View {
         tracePreparationTask?.cancel()
         let requestID = tracePreparationGate.begin()
         let performanceStartedAt = ProcessInfo.processInfo.systemUptime
-        traceUpdatePillTask?.cancel()
-        showsTraceUpdatePill = false
+        traceLoadingPresentationTask?.cancel()
+        traceLoadingPresentationTask = nil
         let needsLife = traceViewMode == .life
         let needsClues = traceViewMode == .clues
         let lacksVisibleSnapshot = needsLife
@@ -696,20 +712,24 @@ struct StatsWebView: View {
             )
             : preparedClueSnapshot == nil
 
-        if lacksVisibleSnapshot {
-            isPreparingTrace = true
+        let loadingPresentation = TraceLoadingPresentationPolicy.make(
+            viewMode: traceViewMode,
+            selectedPeriod: selectedPeriod,
+            lifeRange: traceLifeCardRange,
+            usesCustomRange: useCustomRange,
+            hasVisibleSnapshot: !lacksVisibleSnapshot
+        )
+        isPreparingTrace = true
+
+        if loadingPresentation.delayNanoseconds == 0 || visibleTraceLoadingPresentation != nil {
+            updateTraceLoadingPresentation(loadingPresentation, animated: true)
         } else {
-            withAnimation(.easeInOut(duration: 0.16)) {
-                isPreparingTrace = true
-            }
-            traceUpdatePillTask = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 150_000_000)
+            traceLoadingPresentationTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: loadingPresentation.delayNanoseconds)
                 guard !Task.isCancelled,
                       isPreparingTrace,
                       tracePreparationGate.accepts(requestID) else { return }
-                withAnimation(.easeInOut(duration: 0.16)) {
-                    showsTraceUpdatePill = true
-                }
+                updateTraceLoadingPresentation(loadingPresentation, animated: true)
             }
         }
 
@@ -822,9 +842,11 @@ struct StatsWebView: View {
             }
 
             guard !Task.isCancelled, tracePreparationGate.accepts(requestID) else { return }
-            traceUpdatePillTask?.cancel()
-            traceUpdatePillTask = nil
-            withAnimation(.easeInOut(duration: 0.18)) {
+            traceLoadingPresentationTask?.cancel()
+            traceLoadingPresentationTask = nil
+            var snapshotTransaction = Transaction(animation: nil)
+            snapshotTransaction.disablesAnimations = true
+            withTransaction(snapshotTransaction) {
                 if let weekSnapshot {
                     preparedWeekSnapshot = weekSnapshot
                     weekTraceNeedsRefresh = false
@@ -841,9 +863,10 @@ struct StatsWebView: View {
                         traceInsightFocusedQuestion = clueSnapshot.insight.questionChips.first
                     }
                 }
-                showsTraceUpdatePill = false
                 isPreparingTrace = false
             }
+            updateTraceLoadingPresentation(nil, animated: true)
+            markVisibleCurrentWeekTraceSeenIfEligible(now: now)
             homeViewModel.markPerformance(
                 operation: needsLife ? .traceLifePreparation : .traceCluePreparation,
                 startedAtUptime: performanceStartedAt,
@@ -861,6 +884,23 @@ struct StatsWebView: View {
             }
             guard tracePreparationGate.accepts(requestID) else { return }
             tracePreparationTask = nil
+        }
+    }
+
+    private func updateTraceLoadingPresentation(
+        _ presentation: TraceLoadingPresentation?,
+        animated: Bool
+    ) {
+        if animated && !reduceMotion {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                visibleTraceLoadingPresentation = presentation
+            }
+        } else {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                visibleTraceLoadingPresentation = presentation
+            }
         }
     }
 
@@ -1028,9 +1068,7 @@ struct StatsWebView: View {
         let displayedSnapshot = desiredSnapshot ?? fallbackSnapshot
         let displayedRange = displayedSnapshot?.range ?? traceLifeCardRange
         let showsMonth = displayedRange == .month
-        let waitsForDesiredRange = desiredSnapshot == nil && fallbackSnapshot != nil
-
-        return ZStack(alignment: .topTrailing) {
+        return ZStack {
             if let displayedSnapshot {
                 Group {
                     if showsMonth {
@@ -1041,20 +1079,6 @@ struct StatsWebView: View {
                             .transition(.opacity)
                     }
                 }
-            }
-
-            if waitsForDesiredRange {
-                HStack(spacing: 7) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(traceLifeCardRange == .month ? "正在整理本月" : "正在整理本周")
-                }
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(AppColors.accentDark.opacity(0.78))
-                .padding(.horizontal, 10)
-                .frame(minHeight: 32)
-                .background(.ultraThinMaterial, in: Capsule(style: .continuous))
-                .padding(12)
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))

@@ -368,7 +368,6 @@ struct HomeView: View {
     @EnvironmentObject private var homeViewModel: HomeViewModel
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     var onQuickRecord: (RecordEntryMode) -> Void = { _ in }
-    var onNavigateStats: (() -> Void)? = nil
     var onNavigateWeeklyTrace: (() -> Void)? = nil
     var onNavigateMonthlyTrace: (() -> Void)? = nil
     var onNavigateInsight: (() -> Void)? = nil
@@ -458,7 +457,8 @@ struct HomeView: View {
             presentFirstRecordPromptIfNeeded()
             scheduleRecentSaveHighlight()
             homeViewModel.prepareHomeDashboardSnapshots(
-                isMember: settingsViewModel.settings.hasMemberAccess
+                isMember: settingsViewModel.settings.hasMemberAccess,
+                clearsStaleQuickRecord: true
             )
         }
         .onChange(of: homeViewModel.activeRouteGuidance) { _, guidance in
@@ -502,9 +502,7 @@ struct HomeView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active {
-                dismissPetBubble()
-            }
+            handleHomeScenePhaseChange(phase)
         }
         .onChange(of: homeViewModel.petMessage) { _, message in
             guard let message, settingsViewModel.petCompanionEnabled else { return }
@@ -714,8 +712,6 @@ struct HomeView: View {
         case .todayPlayback:
             requestTodayPlayback()
         case .weekTrace:
-            homeViewModel.consumeRouteGuidance(.weekSliceReady)
-            homeViewModel.consumeRouteGuidance(.fiveRecordsNeverPlayed)
             onNavigateWeeklyTrace?()
         case .monthTrace:
             onNavigateMonthlyTrace?()
@@ -842,14 +838,6 @@ struct HomeView: View {
         guard !homeViewModel.todayItems.isEmpty else { return "有记录后可播放" }
         guard !settingsViewModel.settings.hasMemberAccess else { return "十几秒叙完今天" }
         return ExperienceRuleCopy.todayPlaybackActionSubtitle(remaining: todayPlaybackRemaining(isMember: false))
-    }
-
-    @ViewBuilder
-    private var routeGuidanceContent: some View {
-        if let guidance = homeViewModel.activeRouteGuidance,
-           guidance != .firstRecordTodayPlayback {
-            routeGuidanceBar(guidance)
-        }
     }
 
     private var todayBillsPanel: some View {
@@ -1129,45 +1117,6 @@ struct HomeView: View {
         }
     }
 
-    private func routeGuidanceBar(_ guidance: HomeViewModel.PlaybackRouteGuidance) -> some View {
-        Button {
-            homeViewModel.consumeRouteGuidance(guidance)
-            onNavigateStats?()
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(AppColors.readableAccent)
-                    .frame(width: 30, height: 30)
-                    .background(AppColors.accent.opacity(0.12), in: Circle())
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(guidance.title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppColors.text)
-                    Text(guidance.message)
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppColors.readableSubtext)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(AppColors.readableSubtext)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color.white.opacity(0.68))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(AppColors.accent.opacity(0.22), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .minimumTapTarget()
-    }
-
     private func handleRouteGuidance(_ guidance: HomeViewModel.PlaybackRouteGuidance?) {
         guard guidance == .firstRecordTodayPlayback else { return }
         presentFirstRecordPromptIfNeeded()
@@ -1193,6 +1142,18 @@ struct HomeView: View {
         withAnimation(.easeInOut(duration: 0.18)) {
             todayPlaybackPrompt = .firstRecord
         }
+    }
+
+    private func handleHomeScenePhaseChange(_ phase: ScenePhase) {
+        guard phase == .active else {
+            dismissPetBubble()
+            return
+        }
+        homeViewModel.prepareHomeDashboardSnapshots(
+            isMember: settingsViewModel.settings.hasMemberAccess,
+            now: Date(),
+            clearsStaleQuickRecord: true
+        )
     }
 
     private func finishFirstRecordPromptFlow(continuesRecording: Bool) {

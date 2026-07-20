@@ -5,6 +5,167 @@ import UIKit
 #endif
 @testable import NativeDemoApp
 
+final class PlaybackLivingVoiceCopyTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return calendar
+    }
+
+    private func date(
+        _ month: Int,
+        _ day: Int,
+        _ hour: Int = 12,
+        _ minute: Int = 0,
+        year: Int = 2026
+    ) -> Date {
+        calendar.date(from: DateComponents(
+            year: year,
+            month: month,
+            day: day,
+            hour: hour,
+            minute: minute
+        ))!
+    }
+
+    private func item(
+        _ title: String,
+        amount: Double,
+        category: HomeItem.Category,
+        at createdAt: Date,
+        emotion: String = "系统暖标签"
+    ) -> HomeItem {
+        HomeItem(
+            title: title,
+            amount: amount,
+            category: category,
+            createdAt: createdAt,
+            emotionTag: emotion,
+            userEditedTitle: true
+        )
+    }
+
+    private func allNarration(_ playback: SummaryPlayback) -> String {
+        playback.chapters
+            .flatMap { [$0.narration.warm, $0.narration.plain] }
+            .joined(separator: "\n")
+    }
+
+    func testWeekKeepsZeroOneTwoAndMatureChapterCounts() {
+        let now = date(7, 15, 20)
+        let service = PlaybackService()
+        let first = item(
+            "下班地铁",
+            amount: 4.75,
+            category: .transport,
+            at: date(7, 14, 19, 20),
+            emotion: "热天路上辛苦了"
+        )
+        let second = item("早餐", amount: 12, category: .dining, at: date(7, 15, 8, 10))
+        let third = item("午饭", amount: 28, category: .dining, at: date(7, 15, 12, 20))
+
+        XCTAssertEqual(service.buildWeekSummary(from: [], now: now).chapters.count, 0)
+        XCTAssertEqual(service.buildWeekSummary(from: [first], now: now).chapters.count, 3)
+        XCTAssertEqual(service.buildWeekSummary(from: [first, second], now: now).chapters.count, 3)
+        XCTAssertEqual(service.buildWeekSummary(from: [first, second, third], now: now).chapters.count, 5)
+
+        let weak = service.buildWeekSummary(from: [first], now: now)
+        XCTAssertEqual(weak.chapters.map(\.title), ["这一周", "这一笔", "这周先到这里"])
+        XCTAssertTrue(weak.chapters[0].narration.plain.contains("1 笔"))
+        XCTAssertTrue(weak.chapters[1].narration.plain.contains("下班地铁"))
+        XCTAssertTrue(weak.chapters[1].metrics["supportLine", default: ""].contains("4.75"))
+        XCTAssertFalse(allNarration(weak).contains("热天路上辛苦了"))
+    }
+
+    func testMatureWeekSeparatesDistributionRecordAndReliableRepeat() {
+        let now = date(7, 16, 20)
+        let rows = [
+            item("上班地铁", amount: 4, category: .transport, at: date(7, 13, 8, 20)),
+            item("下班地铁", amount: 4, category: .transport, at: date(7, 13, 18, 40)),
+            item("早餐", amount: 10, category: .dining, at: date(7, 14, 8, 0)),
+            item("午饭", amount: 26, category: .dining, at: date(7, 14, 12, 10)),
+            item("买纸巾", amount: 18, category: .daily, at: date(7, 16, 19, 0))
+        ]
+
+        let summary = PlaybackService().buildWeekSummary(from: rows, now: now)
+        XCTAssertEqual(summary.chapters.count, 5)
+        XCTAssertEqual(summary.chapters[0].title, "这一周")
+        XCTAssertEqual(summary.chapters[1].title, "记录较多的日子")
+        XCTAssertEqual(summary.chapters[2].title, "这一笔")
+        XCTAssertEqual(summary.chapters[3].title, "这周反复出现")
+        XCTAssertEqual(summary.chapters[4].title, "这周先到这里")
+        XCTAssertTrue(summary.chapters[0].narration.plain.contains("5 笔"))
+        XCTAssertTrue(summary.chapters[1].narration.plain.contains("各记了 2 笔"))
+        XCTAssertTrue(summary.chapters[3].narration.plain.contains("各出现了 2 次"))
+        XCTAssertEqual(summary.chapters.map(\.durationSec), [6, 7, 7, 7, 7])
+    }
+
+    func testPlaybackNarrationDoesNotExposeAbstractOrInternalCopy() {
+        let now = date(7, 18, 20)
+        let rows = [
+            item("晚高峰通勤", amount: 4, category: .transport, at: date(7, 13, 18), emotion: "公共交通一段"),
+            item("一杯咖啡", amount: 16, category: .dining, at: date(7, 15, 14), emotion: "咖啡饮品第 30 次"),
+            item("停车费", amount: 8, category: .transport, at: date(7, 18, 9), emotion: "车停稳了")
+        ]
+        let copy = allNarration(PlaybackService().buildWeekSummary(from: rows, now: now))
+        let blocked = [
+            "胶片", "气味", "有画面", "生活的开头", "这次它又回来了",
+            "公共交通一段", "咖啡饮品第 30 次", "车停稳了", "小獭看到"
+        ]
+
+        for term in blocked {
+            XCTAssertFalse(copy.contains(term), "unexpected playback copy: \(term)")
+        }
+        XCTAssertFalse(copy.contains("{"))
+        XCTAssertFalse(copy.contains("}"))
+    }
+
+    func testMonthKeepsSixRolesAndUsesSameDayComparison() {
+        let now = date(7, 20, 20)
+        let current = [
+            item("上班地铁", amount: 100, category: .transport, at: date(7, 4, 8)),
+            item("和朋友吃饭", amount: 100, category: .dining, at: date(7, 15, 19)),
+            item("午饭", amount: 80, category: .dining, at: date(7, 16, 12)),
+            item("买纸巾", amount: 60, category: .daily, at: date(7, 18, 18))
+        ]
+        let previous = [
+            item("交通", amount: 200, category: .transport, at: date(6, 4, 8)),
+            item("早餐", amount: 50, category: .dining, at: date(6, 10, 8)),
+            item("午饭", amount: 50, category: .dining, at: date(6, 18, 12)),
+            item("月末大额", amount: 1_000, category: .shopping, at: date(6, 25, 12))
+        ]
+
+        let summary = PlaybackService().buildMonthSummary(from: current + previous, now: now)
+        XCTAssertEqual(summary.chapters.count, 6)
+        XCTAssertEqual(
+            summary.chapters.map(\.title),
+            ["7月回看", "月初留下的", "后来留下的", "和上月同期相比", "这个月反复出现", "这个月先到这里"]
+        )
+        XCTAssertEqual(summary.chapters.map(\.durationSec), [8, 8, 8, 8, 8, 7])
+        XCTAssertTrue(summary.chapters[1].narration.plain.contains("7月4日"))
+        XCTAssertTrue(summary.chapters[2].narration.plain.contains("7月"))
+        XCTAssertTrue(summary.chapters[3].metrics["supportLine", default: ""].contains("1 日—20 日"))
+        XCTAssertFalse(summary.chapters[3].narration.plain.contains("1000"))
+        XCTAssertNotEqual(summary.chapters[1].narration.plain, summary.chapters[2].narration.plain)
+    }
+
+    func testMonthExplicitlyHandlesMissingEarlyLateAndComparisonEvidence() {
+        let now = date(7, 20, 20)
+        let rows = [
+            item("晚饭", amount: 38, category: .dining, at: date(7, 14, 19)),
+            item("下班地铁", amount: 4, category: .transport, at: date(7, 15, 21))
+        ]
+        let summary = PlaybackService().buildMonthSummary(from: rows, now: now)
+
+        XCTAssertTrue(summary.chapters[1].narration.plain.contains("月初十天没有记录"))
+        XCTAssertTrue(summary.chapters[1].narration.plain.contains("7月14日"))
+        XCTAssertFalse(summary.chapters[2].narration.plain.contains("月初十天"))
+        XCTAssertTrue(summary.chapters[3].narration.plain.contains("暂时不做环比"))
+        XCTAssertTrue(summary.chapters[4].narration.plain.contains("没有哪一类反复出现"))
+        XCTAssertEqual(summary.chapters[5].narration.warm, summary.chapters[5].narration.plain)
+    }
+}
+
 final class InteractionStateRegressionTests: XCTestCase {
     private struct QueueItem: Identifiable, Equatable {
         let id: Int
@@ -241,6 +402,81 @@ final class InteractionStateRegressionTests: XCTestCase {
                 monthActiveDayCount: 3,
                 dayOfMonth: 20
             ).contains("接近月底")
+        )
+    }
+
+    func testWeekTraceDiscoveryUsesSharedMaturityAndSeparateSeenState() {
+        var snapshot = WeekTraceDiscoverySnapshot(
+            recordCount: 3,
+            activeDayCount: 1,
+            canPlay: true,
+            hasCompletedPlayback: false,
+            hasSeenTrace: false
+        )
+        XCTAssertFalse(WeekTraceDiscoveryPolicy.shouldShowBadge(for: snapshot))
+        XCTAssertFalse(
+            WeekTraceDiscoveryPolicy.shouldMarkSeen(
+                recordCount: 3,
+                activeDayCount: 1,
+                hasVisibleCurrentWeekSnapshot: true,
+                hasSeenTrace: false
+            )
+        )
+
+        snapshot.activeDayCount = 2
+        XCTAssertTrue(WeekTraceDiscoveryPolicy.shouldShowBadge(for: snapshot))
+        XCTAssertFalse(
+            WeekTraceDiscoveryPolicy.shouldMarkSeen(
+                recordCount: 3,
+                activeDayCount: 2,
+                hasVisibleCurrentWeekSnapshot: false,
+                hasSeenTrace: false
+            )
+        )
+        XCTAssertTrue(
+            WeekTraceDiscoveryPolicy.shouldMarkSeen(
+                recordCount: 3,
+                activeDayCount: 2,
+                hasVisibleCurrentWeekSnapshot: true,
+                hasSeenTrace: false
+            )
+        )
+
+        snapshot.hasSeenTrace = true
+        XCTAssertFalse(WeekTraceDiscoveryPolicy.shouldShowBadge(for: snapshot))
+        snapshot.hasSeenTrace = false
+        snapshot.hasCompletedPlayback = true
+        XCTAssertFalse(WeekTraceDiscoveryPolicy.shouldShowBadge(for: snapshot))
+        snapshot.hasCompletedPlayback = false
+        snapshot.canPlay = false
+        XCTAssertFalse(WeekTraceDiscoveryPolicy.shouldShowBadge(for: snapshot))
+    }
+
+    func testTodayPlaybackStillPrecedesAReadyWeekTrace() {
+        let snapshot = NewUserProgressionSnapshot(
+            totalRecordCount: 3,
+            hasUnplayedTodayRecords: true,
+            weekRecordCount: 3,
+            weekActiveDayCount: 2,
+            monthRecordCount: 3,
+            monthActiveDayCount: 2,
+            dayOfMonth: 20,
+            canPlayWeek: true,
+            canPlayMonth: true,
+            hasCompletedCurrentWeekPlayback: false,
+            hasCompletedCurrentMonthPlayback: false
+        )
+        XCTAssertEqual(NewUserProgressionPolicy.stage(for: snapshot), .todayPlayback)
+        XCTAssertTrue(
+            WeekTraceDiscoveryPolicy.shouldShowBadge(
+                for: WeekTraceDiscoverySnapshot(
+                    recordCount: 3,
+                    activeDayCount: 2,
+                    canPlay: true,
+                    hasCompletedPlayback: false,
+                    hasSeenTrace: false
+                )
+            )
         )
     }
 
@@ -626,6 +862,58 @@ final class TraceLifePreparationPolicyTests: XCTestCase {
     }
 }
 
+final class TraceLoadingPresentationPolicyTests: XCTestCase {
+    func testInitialMonthTraceShowsOneImmediateAccuratePresentation() {
+        let presentation = TraceLoadingPresentationPolicy.make(
+            viewMode: .life,
+            selectedPeriod: .month,
+            lifeRange: .month,
+            usesCustomRange: false,
+            hasVisibleSnapshot: false
+        )
+
+        XCTAssertEqual(presentation.message, "正在整理本月痕迹…")
+        XCTAssertEqual(presentation.delayNanoseconds, 0)
+        XCTAssertEqual(presentation.detail, "整理好后会一次完整呈现")
+    }
+
+    func testRefreshWithExistingSnapshotDelaysTheSingleOverlay() {
+        let presentation = TraceLoadingPresentationPolicy.make(
+            viewMode: .life,
+            selectedPeriod: .week,
+            lifeRange: .week,
+            usesCustomRange: false,
+            hasVisibleSnapshot: true
+        )
+
+        XCTAssertEqual(
+            presentation.delayNanoseconds,
+            TraceLoadingPresentationPolicy.refreshDelayNanoseconds
+        )
+        XCTAssertEqual(presentation.detail, "整理完成前会暂时保留当前内容")
+    }
+
+    func testClueCopyDistinguishesMonthAndCustomRange() {
+        let month = TraceLoadingPresentationPolicy.make(
+            viewMode: .clues,
+            selectedPeriod: .month,
+            lifeRange: .week,
+            usesCustomRange: false,
+            hasVisibleSnapshot: false
+        )
+        let custom = TraceLoadingPresentationPolicy.make(
+            viewMode: .clues,
+            selectedPeriod: .month,
+            lifeRange: .week,
+            usesCustomRange: true,
+            hasVisibleSnapshot: false
+        )
+
+        XCTAssertEqual(month.message, "正在整理本月线索…")
+        XCTAssertEqual(custom.message, "正在整理这段线索…")
+    }
+}
+
 final class RecordInputAssistanceSnapshotTests: XCTestCase {
     func testHistoryKeyChangesOnlyForLedgerOrMeaningfulDateContext() {
         var calendar = Calendar(identifier: .gregorian)
@@ -909,6 +1197,77 @@ final class HomeDashboardSnapshotTests: XCTestCase {
         XCTAssertNotEqual(first, HomeQuickRecordSnapshotKey(ledgerRevision: 4, minuteKey: first.minuteKey))
     }
 
+    func testForegroundResumeAdvancesTheQuickRecordKeyAcrossAnOvernightBoundary() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let beforeBackground = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 19,
+            hour: 23,
+            minute: 48
+        ))!
+        let afterForeground = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 20,
+            hour: 8,
+            minute: 12
+        ))!
+
+        let stale = HomeQuickRecordSnapshotKey(
+            ledgerRevision: 9,
+            minuteKey: HomeDashboardSnapshotComputation.minuteKey(
+                for: beforeBackground,
+                calendar: calendar
+            )
+        )
+        let refreshed = HomeQuickRecordSnapshotKey(
+            ledgerRevision: 9,
+            minuteKey: HomeDashboardSnapshotComputation.minuteKey(
+                for: afterForeground,
+                calendar: calendar
+            )
+        )
+
+        XCTAssertNotEqual(stale, refreshed)
+    }
+
+    func testLifecycleRefreshClearsOnlyAStaleQuickRecordPresentation() {
+        let current = HomeQuickRecordSnapshotKey(
+            ledgerRevision: 9,
+            minuteKey: "2026-07-20-08-12"
+        )
+        let nextMinute = HomeQuickRecordSnapshotKey(
+            ledgerRevision: 9,
+            minuteKey: "2026-07-20-08-13"
+        )
+
+        XCTAssertFalse(
+            HomeQuickRecordRefreshPolicy.shouldClearVisibleSuggestion(
+                previousKey: current,
+                nextKey: current,
+                isLifecycleRefresh: true
+            )
+        )
+        XCTAssertTrue(
+            HomeQuickRecordRefreshPolicy.shouldClearVisibleSuggestion(
+                previousKey: current,
+                nextKey: nextMinute,
+                isLifecycleRefresh: true
+            )
+        )
+        XCTAssertFalse(
+            HomeQuickRecordRefreshPolicy.shouldClearVisibleSuggestion(
+                previousKey: current,
+                nextKey: nextMinute,
+                isLifecycleRefresh: false
+            )
+        )
+    }
+
     func testCommuteSuggestionKeepsExistingRulesOnImmutableLedgerInput() {
         let calendar = Calendar.current
         let now = calendar.date(from: DateComponents(
@@ -953,6 +1312,77 @@ final class HomeDashboardSnapshotTests: XCTestCase {
         XCTAssertEqual(first?.amount, 3)
         XCTAssertEqual(first?.category, .transport)
         XCTAssertEqual(first?.supportCount, 4)
+    }
+
+    func testForegroundRefreshDoesNotRelaxCommuteWindowOrTodayDuplicateRules() {
+        let calendar = Calendar.current
+        let now = calendar.date(from: DateComponents(
+            year: 2026,
+            month: 7,
+            day: 20,
+            hour: 8,
+            minute: 30
+        ))!
+        var history: [HomeItem] = (1...4).map { weekOffset in
+            HomeItem(
+                title: "上班地铁",
+                amount: 3,
+                category: .transport,
+                createdAt: calendar.date(
+                    byAdding: .day,
+                    value: -7 * weekOffset,
+                    to: now.addingTimeInterval(-15 * 60)
+                )!,
+                userEditedTitle: true
+            )
+        }
+        history += (1...4).map { index in
+            HomeItem(
+                title: "普通记录 \(index)",
+                amount: Double(20 + index),
+                category: .other,
+                createdAt: now.addingTimeInterval(TimeInterval(-index * 24 * 60 * 60))
+            )
+        }
+
+        XCTAssertNotNil(
+            HomeViewModel.highConfidenceQuickRecordSuggestionForSnapshot(
+                items: history,
+                at: now
+            )
+        )
+
+        let beforePersonalWindow = calendar.date(
+            bySettingHour: 7,
+            minute: 0,
+            second: 0,
+            of: now
+        )!
+        XCTAssertNil(
+            HomeViewModel.highConfidenceQuickRecordSuggestionForSnapshot(
+                items: history,
+                at: beforePersonalWindow
+            )
+        )
+
+        let todayCommute = HomeItem(
+            title: "上班地铁",
+            amount: 3,
+            category: .transport,
+            createdAt: calendar.date(
+                bySettingHour: 8,
+                minute: 5,
+                second: 0,
+                of: now
+            )!,
+            scenePackId: "commute"
+        )
+        XCTAssertNil(
+            HomeViewModel.highConfidenceQuickRecordSuggestionForSnapshot(
+                items: history + [todayCommute],
+                at: now
+            )
+        )
     }
 }
 

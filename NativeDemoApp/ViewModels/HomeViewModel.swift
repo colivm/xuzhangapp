@@ -628,6 +628,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var latestPlayback: PlaybackSnapshot?
     @Published private(set) var latestActionCard: ActionCardData?
     @Published private(set) var activeRouteGuidance: PlaybackRouteGuidance?
+    @Published private(set) var currentWeekTraceSeenKey: String?
     @Published private(set) var recordPrefillResult: RecordPrefillResult?
     @Published private(set) var recordWarmupSuggestions: [FrequentRecordAmountSuggestion] = []
     @Published private(set) var recordRecommendedCategory: HomeItem.Category?
@@ -640,31 +641,15 @@ final class HomeViewModel: ObservableObject {
 
     enum PlaybackRouteGuidance: String, Identifiable, Hashable {
         case firstRecordTodayPlayback
-        case weekSliceReady
-        case fiveRecordsNeverPlayed
 
         var id: String { rawValue }
 
         var title: String {
-            switch self {
-            case .firstRecordTodayPlayback:
-                return "用十几秒叙一下今天"
-            case .weekSliceReady:
-                return "周记可以播放"
-            case .fiveRecordsNeverPlayed:
-                return "可以讲这周的故事了"
-            }
+            "用十几秒叙一下今天"
         }
 
         var message: String {
-            switch self {
-            case .firstRecordTodayPlayback:
-                return "第一笔已经记好，听一遍今日回放。"
-            case .weekSliceReady:
-                return "本周已经有 3 笔以上记录，去看看花听一遍。"
-            case .fiveRecordsNeverPlayed:
-                return "已记 5 笔以上，还没完整听过周记。"
-            }
+            "第一笔已经记好，听一遍今日回放。"
         }
     }
 
@@ -711,6 +696,7 @@ final class HomeViewModel: ObservableObject {
     private let routeQuotaStore = SummaryPlaybackQuotaStore()
     private let dailyQuotaStore = DailyFeatureQuotaStore()
     private static let routeGuidanceHandledDefaultsKey = "route_guidance_handled_v1"
+    private static let currentWeekTraceSeenDefaultsKey = "current_week_trace_seen_key_v1"
     private var emittedRouteGuidanceKeys: Set<String> = []
     private var recordPrefillAmount: Double?
     private var recordInputHistorySnapshot: RecordInputHistorySnapshot?
@@ -734,6 +720,9 @@ final class HomeViewModel: ObservableObject {
     private var localLedgerWritesBlocked = false
 
     init() {
+        currentWeekTraceSeenKey = UserDefaults.standard.string(
+            forKey: Self.currentWeekTraceSeenDefaultsKey
+        )
         let ledgerLoadStartedAt = ProcessInfo.processInfo.systemUptime
         let ledgerLoadResult = LocalStore.loadHomeItemsResult()
         items = ledgerLoadResult.items.sorted { $0.createdAt > $1.createdAt }
@@ -778,7 +767,6 @@ final class HomeViewModel: ObservableObject {
             props: [.ledgerSizeBucket: AnalyticsService.countBucket(for: items.count)]
         )
         refreshTodayPlayback()
-        refreshRouteGuidanceIfNeeded()
     }
 
     @discardableResult
@@ -869,8 +857,6 @@ final class HomeViewModel: ObservableObject {
             refreshTodayPlayback()
             if wasEmpty {
                 emitRouteGuidance(.firstRecordTodayPlayback)
-            } else {
-                refreshRouteGuidanceIfNeeded()
             }
             enqueuePetMessage(for: newItem)
             Task { await syncUpsertToCloud(newItem) }
@@ -1024,7 +1010,6 @@ final class HomeViewModel: ObservableObject {
             analyticsService.track(.firstRecordSaved, props: [.source: "ocr"])
         }
         refreshTodayPlayback()
-        refreshRouteGuidanceIfNeeded()
         updateOCRSuccessStatus(
             prefix: sendToDrafts ? "已导入 \(importedItems.count) 条，进入待整理" : "已直接导入 \(importedItems.count) 条",
             isMember: isMember
@@ -1105,8 +1090,6 @@ final class HomeViewModel: ObservableObject {
         refreshTodayPlayback()
         if wasEmpty {
             emitRouteGuidance(.firstRecordTodayPlayback)
-        } else {
-            refreshRouteGuidanceIfNeeded()
         }
         if let firstItem = importedItems.first {
             enqueuePetMessage(for: firstItem)
@@ -1608,7 +1591,6 @@ final class HomeViewModel: ObservableObject {
         items = plan.mergedItems
         rebuildItemDerivedCache()
         refreshTodayPlayback()
-        refreshRouteGuidanceIfNeeded()
         return plan.summary
     }
 
@@ -2210,10 +2192,12 @@ final class HomeViewModel: ObservableObject {
         latestPlayback = nil
         latestActionCard = nil
         activeRouteGuidance = nil
+        currentWeekTraceSeenKey = nil
         invalidateRecordPrefillSnapshot()
         petMessage = nil
         LocalStore.saveDailyInsights([])
         UserDefaults.standard.removeObject(forKey: "latest_action_card_v1")
+        UserDefaults.standard.removeObject(forKey: Self.currentWeekTraceSeenDefaultsKey)
     }
 
     func selectCategory(_ category: HomeItem.Category) {
@@ -2647,6 +2631,46 @@ final class HomeViewModel: ObservableObject {
         self.activeRouteGuidance = nil
     }
 
+    func shouldShowCurrentWeekTraceBadge(
+        isMember: Bool,
+        now: Date = Date()
+    ) -> Bool {
+        let facts = homeJourneyLedgerFacts
+        let currentWeekKey = routeQuotaStore.currentWeekKey(now: now)
+        return WeekTraceDiscoveryPolicy.shouldShowBadge(
+            for: WeekTraceDiscoverySnapshot(
+                recordCount: facts.currentWeekCommittedRecordCount,
+                activeDayCount: facts.currentWeekActiveDayCount,
+                canPlay: routeQuotaStore.canPlay(.week, isMember: isMember, now: now),
+                hasCompletedPlayback: routeQuotaStore.hasCompletedCurrentWeekPlayback(now: now),
+                hasSeenTrace: currentWeekTraceSeenKey == currentWeekKey
+            )
+        )
+    }
+
+    func markCurrentWeekTraceSeenIfEligible(
+        recordCount: Int,
+        activeDayCount: Int,
+        hasVisibleCurrentWeekSnapshot: Bool,
+        now: Date = Date()
+    ) {
+        let currentWeekKey = routeQuotaStore.currentWeekKey(now: now)
+        guard WeekTraceDiscoveryPolicy.shouldMarkSeen(
+            recordCount: recordCount,
+            activeDayCount: activeDayCount,
+            hasVisibleCurrentWeekSnapshot: hasVisibleCurrentWeekSnapshot,
+            hasSeenTrace: currentWeekTraceSeenKey == currentWeekKey
+        ) else { return }
+        markCurrentWeekTraceSeen(now: now)
+    }
+
+    private func markCurrentWeekTraceSeen(now: Date) {
+        let key = routeQuotaStore.currentWeekKey(now: now)
+        guard currentWeekTraceSeenKey != key else { return }
+        currentWeekTraceSeenKey = key
+        UserDefaults.standard.set(key, forKey: Self.currentWeekTraceSeenDefaultsKey)
+    }
+
     func markSummaryPlaybackCompleted(_ range: SummaryPlaybackRange, progress: Double) {
         analyticsService.track(
             .summaryPlaybackCompleted,
@@ -2656,28 +2680,12 @@ final class HomeViewModel: ObservableObject {
             ]
         )
         if range == .week, progress >= 0.8 {
-            consumeRouteGuidance(.weekSliceReady)
-            consumeRouteGuidance(.fiveRecordsNeverPlayed)
+            markCurrentWeekTraceSeen(now: Date())
         }
     }
 
     private func refreshTodayPlayback() {
         latestPlayback = playbackService.buildTodayPlayback(from: items)
-    }
-
-    private func refreshRouteGuidanceIfNeeded() {
-        guard activeRouteGuidance == nil else { return }
-        let weekCount: Int
-        if let interval = PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: .now) {
-            weekCount = items.filter { $0.createdAt >= interval.start && $0.createdAt < interval.end }.count
-        } else {
-            weekCount = 0
-        }
-        if weekCount >= 3 && routeQuotaStore.weekRemaining(isMember: false) > 0 {
-            emitRouteGuidance(.weekSliceReady)
-        } else if items.count >= 5 && !routeQuotaStore.hasCompletedWeekPlaybackEver() {
-            emitRouteGuidance(.fiveRecordsNeverPlayed)
-        }
     }
 
     private func emitRouteGuidance(_ guidance: PlaybackRouteGuidance) {
@@ -2702,16 +2710,8 @@ final class HomeViewModel: ObservableObject {
         UserDefaults.standard.set(Array(handled), forKey: Self.routeGuidanceHandledDefaultsKey)
     }
 
-    private func routeGuidanceHandledKey(for guidance: PlaybackRouteGuidance, date: Date = .now) -> String {
-        switch guidance {
-        case .firstRecordTodayPlayback:
-            return "\(guidance.rawValue):once"
-        case .weekSliceReady, .fiveRecordsNeverPlayed:
-            let components = PlaybackService.isoCalendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
-            let year = components.yearForWeekOfYear ?? 0
-            let week = components.weekOfYear ?? 0
-            return "\(guidance.rawValue):isoWeek:\(year)-\(week)"
-        }
+    private func routeGuidanceHandledKey(for guidance: PlaybackRouteGuidance) -> String {
+        "\(guidance.rawValue):once"
     }
 
     func regenerateTodayInsight(userName: String, settings: AppSettings) async {

@@ -934,7 +934,6 @@ struct ContentView: View {
                              recordTabSession.selectedEntryMode = mode
                              selectTab(.record)
                          },
-                         onNavigateStats: { selectTab(.stats) },
                          onNavigateWeeklyTrace: {
                              statsTraceOpenRequestID = UUID()
                              selectTab(.stats)
@@ -1391,12 +1390,10 @@ struct ContentView: View {
     }
 
     private var shouldShowStatsGuidanceBadge: Bool {
-        switch homeViewModel.activeRouteGuidance {
-        case .weekSliceReady, .fiveRecordsNeverPlayed:
-            return selectedTab != .stats
-        default:
-            return false
-        }
+        selectedTab != .stats
+            && homeViewModel.shouldShowCurrentWeekTraceBadge(
+                isMember: settingsViewModel.settings.hasMemberAccess
+            )
     }
 
     // MARK: - Tab Icons (custom shapes matching web SVG)

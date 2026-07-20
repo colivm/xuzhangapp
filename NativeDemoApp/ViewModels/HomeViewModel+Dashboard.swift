@@ -104,6 +104,17 @@ struct HomeQuickRecordSnapshot: @unchecked Sendable {
     let suggestion: HomeHighConfidenceQuickRecordSuggestion?
 }
 
+enum HomeQuickRecordRefreshPolicy {
+    static func shouldClearVisibleSuggestion(
+        previousKey: HomeQuickRecordSnapshotKey?,
+        nextKey: HomeQuickRecordSnapshotKey,
+        isLifecycleRefresh: Bool
+    ) -> Bool {
+        guard isLifecycleRefresh, let previousKey else { return false }
+        return previousKey != nextKey
+    }
+}
+
 enum HomeDashboardSnapshotComputation {
     static func dayKey(for date: Date, calendar: Calendar = .current) -> String {
         let components = calendar.dateComponents([.year, .month, .day], from: date)
@@ -161,9 +172,16 @@ extension HomeViewModel {
         highConfidenceQuickRecordSuggestionSnapshot
     }
 
-    func prepareHomeDashboardSnapshots(isMember: Bool, now: Date = Date()) {
+    func prepareHomeDashboardSnapshots(
+        isMember: Bool,
+        now: Date = Date(),
+        clearsStaleQuickRecord: Bool = false
+    ) {
         prepareHomeLifeMarkSnapshot(isMember: isMember, now: now)
-        prepareHighConfidenceQuickRecordSnapshot(now: now)
+        prepareHighConfidenceQuickRecordSnapshot(
+            now: now,
+            clearsStaleQuickRecord: clearsStaleQuickRecord
+        )
     }
 
     func cancelHomeDashboardSnapshotPreparation() {
@@ -228,13 +246,23 @@ extension HomeViewModel {
         }
     }
 
-    private func prepareHighConfidenceQuickRecordSnapshot(now: Date) {
+    private func prepareHighConfidenceQuickRecordSnapshot(
+        now: Date,
+        clearsStaleQuickRecord: Bool
+    ) {
         let key = HomeQuickRecordSnapshotKey(
             ledgerRevision: homeDashboardRevision,
             minuteKey: HomeDashboardSnapshotComputation.minuteKey(for: now)
         )
         guard homeQuickRecordSnapshotKey != key else { return }
 
+        if HomeQuickRecordRefreshPolicy.shouldClearVisibleSuggestion(
+            previousKey: homeQuickRecordSnapshotKey,
+            nextKey: key,
+            isLifecycleRefresh: clearsStaleQuickRecord
+        ) {
+            highConfidenceQuickRecordSuggestionSnapshot = nil
+        }
         homeQuickRecordPreparationTask?.cancel()
         homeQuickRecordRequestID = UUID()
         let requestID = homeQuickRecordRequestID

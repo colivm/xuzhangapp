@@ -356,6 +356,44 @@ enum PlaybackMaturityPolicy {
     }
 }
 
+struct WeekTraceDiscoverySnapshot: Equatable {
+    var recordCount: Int
+    var activeDayCount: Int
+    var canPlay: Bool
+    var hasCompletedPlayback: Bool
+    var hasSeenTrace: Bool
+}
+
+enum WeekTraceDiscoveryPolicy {
+    static func isMature(recordCount: Int, activeDayCount: Int) -> Bool {
+        PlaybackMaturityPolicy.weekIsReady(
+            recordCount: recordCount,
+            activeDayCount: activeDayCount
+        )
+    }
+
+    static func shouldShowBadge(for snapshot: WeekTraceDiscoverySnapshot) -> Bool {
+        isMature(
+            recordCount: snapshot.recordCount,
+            activeDayCount: snapshot.activeDayCount
+        )
+            && snapshot.canPlay
+            && !snapshot.hasCompletedPlayback
+            && !snapshot.hasSeenTrace
+    }
+
+    static func shouldMarkSeen(
+        recordCount: Int,
+        activeDayCount: Int,
+        hasVisibleCurrentWeekSnapshot: Bool,
+        hasSeenTrace: Bool
+    ) -> Bool {
+        hasVisibleCurrentWeekSnapshot
+            && !hasSeenTrace
+            && isMature(recordCount: recordCount, activeDayCount: activeDayCount)
+    }
+}
+
 enum PlaybackCompletionPrimaryAction: Equatable {
     case dismiss
 }

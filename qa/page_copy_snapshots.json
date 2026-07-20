@@ -34,18 +34,18 @@
   {
     "id": "week_playback_scent_plain",
     "surface": "summary_playback",
-    "source_paths": ["NativeDemoApp/Services/PlaybackCopyPool.swift"],
-    "evidence_required": ["scentWords"],
-    "expected_copy": ["这一周反复出现的是：{scentWords}。"],
-    "forbidden_copy": ["生活道具", "冷冰冰", "不是关键词列表"]
+    "source_paths": ["NativeDemoApp/Services/PlaybackCopyPool.swift", "NativeDemoApp/Services/PlaybackService.swift"],
+    "evidence_required": ["repeated clean title or category count >= 2"],
+    "expected_copy": ["这周反复出现", "没有哪一类反复出现。"],
+    "forbidden_copy": ["常冒头的词", "这次它又回来了", "这一周的气味"]
   },
   {
     "id": "month_playback_outro_plain",
     "surface": "summary_playback",
-    "source_paths": ["NativeDemoApp/Services/PlaybackCopyPool.swift"],
+    "source_paths": ["NativeDemoApp/Services/PlaybackCopyPool.swift", "NativeDemoApp/Services/PlaybackService.swift"],
     "evidence_required": ["month range"],
-    "expected_copy": ["这一个月已经记录下来，下个月会有新的记录。"],
-    "forbidden_copy": ["会自己长出新的生活", "不只是金额", "生活自己"]
+    "expected_copy": ["这个月先到这里", "先记到这里。"],
+    "forbidden_copy": ["下月再叙", "下个月会有新的天气", "这个月的气味"]
   },
   {
     "id": "share_picture_scene_plain",

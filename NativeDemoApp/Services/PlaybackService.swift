@@ -551,9 +551,6 @@ final class PlaybackService {
         let top = topCategoryStats(rows).first
         let ratio = total > 0 ? Int(round(((top?.amount ?? 0) / total) * 100)) : 0
         let active = dailyActivity(rows, start: start, days: 7)
-        let busiest = active.max { lhs, rhs in
-            lhs.count == rhs.count ? lhs.amount < rhs.amount : lhs.count < rhs.count
-        }
         let title = "周记"
         let weekKey = SummaryPlaybackQuotaStore().currentWeekKey(now: now)
         let weekSeed = playbackCopySeed(base: "week-\(weekKey)", suffix: copySeed)
@@ -564,7 +561,7 @@ final class PlaybackService {
                 range: .week,
                 title: title,
                 rangeLabel: rangeLabel,
-                teaserLine: "这周还没有记录，先记几笔再回来听。",
+                teaserLine: "这周还没有记录，先记一笔再回来。",
                 count: 0,
                 total: 0,
                 topCategory: nil,
@@ -576,75 +573,18 @@ final class PlaybackService {
 
         let echoAnchor = EchoAnchorService.shared.pickEchoAnchor(items: rows, periodKey: weekKey, now: now)
         let selection = momentSelector.select(from: rows, periodKey: weekKey, range: .week, now: now, echoAnchor: echoAnchor)
-        let primaryVoice = selection.primary
-        let primaryVoiceID = primaryVoice?.item.id
-        let primaryVoiceIDs = Set([primaryVoiceID].compactMap { $0 })
-        let secondaryVoice = selection.first(excluding: primaryVoiceIDs)
-        let busiestRows = busiest.map { day in rows.filter { calendar.isDate($0.createdAt, inSameDayAs: day.date) } } ?? []
-        let busiestSelection = momentSelector.select(from: busiestRows, periodKey: weekKey, range: .week, now: now)
-        let busiestMaterial = busiestSelection.first(excluding: primaryVoiceIDs)
-        let recurringLine = recurringTraceLine(
-            current: rows,
-            previous: previousWeekItems(from: items, now: now),
-            rangeName: "上周"
+        let representative = selection.primary?.item ?? rows.last!
+        let recordCopy = playbackRecordCopy(for: representative, range: .week)
+        let presenceLine = weeklyPresenceLine(rows: rows, activity: active)
+        let rhythmCopy = weeklyRhythmCopy(rows: rows, activity: active, calendar: calendar)
+        let repeatedCopy = repeatedTraceCopy(
+            rows: rows,
+            range: .week,
+            excludingTitles: Set([recordCopy.safeTitle].compactMap { $0 })
         )
-        let scentText = selection.scentText
-        let scentWords = selection.scentWords
-        let voiceTitle1 = selection.voiceText(for: .week)
-        let voiceTitle2 = secondaryVoice?.text ?? voiceTitle1
-        let busiestTitle = busiestMaterial?.text
-            ?? busiestFallbackTitle(from: busiestRows, excluding: primaryVoiceID)
-            ?? "这天的几笔记录"
-        let photoMemorySupportLine = photoMemoryLine(in: rows, range: .week)
-        let sceneMemoryLine = weeklySceneMemoryLine(rows) ?? photoMemorySupportLine
-        let emotionSignal = primaryVoice?.item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let lifeMark = LifeMarkService
-            .aggregates(for: rows, allItems: items, isMember: true, now: now, limit: 1)
-            .first
-        let lifeMarkTitle = lifeMark?.title ?? sceneMemoryTitle(from: sceneMemoryLine, fallback: voiceTitle1)
-        let lifeMarkLine = playbackLifeMarkLine(
-            lifeMark,
-            fallback: sceneMemoryLine ?? "这一周最清楚的一格，是「\(voiceTitle1)」。"
-        )
-        let presenceSupportLine = lifeMark == nil ? (sceneMemoryLine ?? "") : (photoMemorySupportLine ?? "")
-        let rhythmSupportLine = sceneMemoryLineForItem(busiestMaterial?.item)
-            ?? sceneMemoryLineForRows(busiestRows, excluding: primaryVoiceID)
-            ?? photoMemoryLine(in: busiestRows, excluding: primaryVoiceID, range: .week)
-            ?? busiestFallbackSupportLine(from: busiestRows, excluding: primaryVoiceID)
-            ?? ""
-        let voiceSupportLine = sceneMemoryLineForItem(primaryVoice?.item)
-            ?? photoMemoryLine(for: primaryVoice?.item)
-            ?? ""
-        let scentSupportLine = weeklyScentSupportLine(
-            sceneLine: sceneMemoryLine,
-            recurringLine: recurringLine
-        )
-        let echoSentence = echoAnchor
-            .map { EchoAnchorService.shared.formatEchoAnchorSentence($0) }
-            .flatMap { $0.isEmpty ? nil : $0 }
-        let weekValues: [String: String] = [
-            "rangeLabel": rangeLabel,
-            "count": "\(rows.count)",
-            "total": Self.money(total),
-            "busiestDay": busiest?.label ?? "本周",
-            "busiestDayShort": busiest.map { Self.shortWeekdayFormatter.string(from: $0.date) } ?? "本周",
-            "busiestCount": "\(busiest?.count ?? 0)",
-            "busiestTitle": busiestTitle,
-            "voiceTitle1": voiceTitle1,
-            "voiceTitle2": voiceTitle2,
-            "emotionTag": emotionSignal,
-            "scentWord1": scentWords.indices.contains(0) ? scentWords[0] : PlaybackMomentSelector.honestNoScentText,
-            "scentWord2": scentWords.indices.contains(1) ? scentWords[1] : "",
-            "scentWord3": scentWords.indices.contains(2) ? scentWords[2] : "",
-            "scentWords": scentText,
-            "topCategory": top?.category ?? "日常",
-            "ratio": "\(ratio)",
-            "echoLine": echoSentence ?? "",
-            "sceneMemoryLine": sceneMemoryLine ?? lifeMarkLine,
-            "contextLine": sceneMemoryLine ?? "",
-            "lifeMarkTitle": lifeMarkTitle,
-            "lifeMarkLine": lifeMarkLine
-        ]
+        let teaserLine = rows.count < 3
+            ? presenceLine
+            : "这周记了 \(rows.count) 笔，分布在 \(activeDayCount(rows)) 天里。"
 
         var chapters: [SummaryChapter] = [
             SummaryChapter(
@@ -653,15 +593,14 @@ final class PlaybackService {
                 metrics: [
                     "count": "\(rows.count)",
                     "total": Self.money(total),
+                    "activeDays": "\(activeDayCount(rows))",
                     "range": rangeLabel,
-                    "lifeMarkLine": lifeMarkLine,
-                    "sceneMemoryLine": presenceSupportLine,
-                    "emotionTag": emotionSignal
+                    "supportLine": ""
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: rows.count < 3 ? "week-weak-presence" : "week-presence",
                     seed: weekSeed,
-                    values: weekValues
+                    values: ["mainLine": presenceLine]
                 ),
                 durationSec: 6
             )
@@ -671,18 +610,16 @@ final class PlaybackService {
             chapters.append(
                 SummaryChapter(
                     id: "week-rhythm",
-                    title: "哪天最热",
+                    title: rhythmCopy.title,
                     metrics: [
-                        "busiestDay": busiest?.label ?? "本周",
-                        "busiestTitle": busiestTitle,
-                        "count": "\(busiest?.count ?? 0)",
-                        "sceneMemoryLine": rhythmSupportLine,
-                        "emotionTag": emotionSignal
+                        "busiestDay": rhythmCopy.signalLabel,
+                        "count": "\(rhythmCopy.count)",
+                        "supportLine": rhythmCopy.supportLine
                     ],
                     narration: PlaybackCopyPool.narration(
                         chapterId: "week-rhythm",
                         seed: weekSeed,
-                        values: weekValues
+                        values: ["mainLine": rhythmCopy.mainLine]
                     ),
                     durationSec: 7
                 )
@@ -690,40 +627,34 @@ final class PlaybackService {
             chapters.append(
                 SummaryChapter(
                     id: "week-voices",
-                    title: "留下的话",
+                    title: "这一笔",
                     metrics: [
-                        "voiceTitle1": voiceTitle1,
-                        "voiceTitle2": voiceTitle2,
-                        "amount": primaryVoice.map { Self.money($0.item.amount) } ?? "",
-                        "day": primaryVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? "",
-                        "sceneMemoryLine": voiceSupportLine,
-                        "emotionTag": emotionSignal
+                        "voiceTitle1": recordCopy.safeTitle ?? representative.category.rawValue,
+                        "amount": Self.money(representative.amount),
+                        "day": Self.weekdayFormatter.string(from: representative.createdAt),
+                        "supportLine": recordCopy.supportLine
                     ],
-                    narration: echoSentence.map { SummaryNarration(warm: $0, plain: $0) }
-                        ?? PlaybackCopyPool.narration(
-                            chapterId: "week-voices",
-                            seed: weekSeed,
-                            values: weekValues
-                        ),
+                    narration: PlaybackCopyPool.narration(
+                        chapterId: "week-voices",
+                        seed: weekSeed,
+                        values: ["mainLine": recordCopy.mainLine]
+                    ),
                     durationSec: 7
                 )
             )
             chapters.append(
                 SummaryChapter(
                     id: "week-scent",
-                    title: "常冒头的词",
+                    title: "这周反复出现",
                     metrics: [
-                        "scentWords": scentText,
                         "topCategory": top?.category ?? "日常",
                         "ratio": "\(ratio)",
-                        "lifeMarkLine": lifeMarkLine,
-                        "sceneMemoryLine": scentSupportLine,
-                        "emotionTag": emotionSignal
+                        "supportLine": repeatedCopy.supportLine
                     ],
                     narration: PlaybackCopyPool.narration(
                         chapterId: "week-scent",
                         seed: weekSeed,
-                        values: weekValues
+                        values: ["mainLine": repeatedCopy.mainLine]
                     ),
                     durationSec: 7
                 )
@@ -732,18 +663,17 @@ final class PlaybackService {
             chapters.append(
                 SummaryChapter(
                     id: "week-voices",
-                    title: "留下的话",
+                    title: "这一笔",
                     metrics: [
-                        "voiceTitle1": voiceTitle1,
-                        "amount": primaryVoice.map { Self.money($0.item.amount) } ?? "",
-                        "day": primaryVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? "",
-                        "sceneMemoryLine": voiceSupportLine,
-                        "emotionTag": emotionSignal
+                        "voiceTitle1": recordCopy.safeTitle ?? representative.category.rawValue,
+                        "amount": Self.money(representative.amount),
+                        "day": Self.weekdayFormatter.string(from: representative.createdAt),
+                        "supportLine": recordCopy.supportLine
                     ],
                     narration: PlaybackCopyPool.narration(
                         chapterId: "week-weak-voices",
                         seed: weekSeed,
-                        values: weekValues
+                        values: ["mainLine": recordCopy.mainLine]
                     ),
                     durationSec: 6
                 )
@@ -754,19 +684,17 @@ final class PlaybackService {
         chapters.append(
             SummaryChapter(
                 id: "week-outro",
-                title: weak ? "再多一点" : "先记到这里",
+                title: "这周先到这里",
                 metrics: [
                     "count": "\(rows.count)",
                     "total": Self.money(total),
                     "topCategory": top?.category ?? "日常",
-                    "lifeMarkLine": lifeMarkLine,
-                    "sceneMemoryLine": sceneMemoryLine ?? "",
-                    "emotionTag": emotionSignal
+                    "supportLine": ""
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: weak ? "week-weak-outro" : "week-outro",
                     seed: weekSeed,
-                    values: weekValues
+                    values: ["mainLine": "这周先记到这里。"]
                 ),
                 durationSec: weak ? 6 : 7
             )
@@ -777,13 +705,9 @@ final class PlaybackService {
             range: .week,
             title: title,
             rangeLabel: rangeLabel,
-            teaserLine: weekTeaserLine(
-                busiest: busiest,
-                rows: rows,
-                voiceTitle: voiceTitle1,
-                scentWords: scentText,
-                copySeed: weekSeed,
-                lifeMarkLine: lifeMarkLine
+            teaserLine: PlaybackCopyPool.weekTeaser(
+                seed: weekSeed,
+                values: ["teaserLine": teaserLine]
             ),
             count: rows.count,
             total: total,
@@ -1293,7 +1217,7 @@ final class PlaybackService {
                 range: .month,
                 title: title,
                 rangeLabel: rangeLabel,
-                teaserLine: "这个月还没有记录，先记几笔再回来听。",
+                teaserLine: "这个月还没有记录，先记一笔再回来。",
                 count: 0,
                 total: 0,
                 topCategory: nil,
@@ -1304,169 +1228,144 @@ final class PlaybackService {
         }
 
         let activeDays = Set(rows.map { calendar.startOfDay(for: $0.createdAt) }).count
-        let segments = monthSegments(rows, in: start, calendar: calendar)
-        let previousRows = previousMonthItems(from: items, now: now)
-        let previousTotal = previousRows.reduce(0) { $0 + $1.amount }
-        let momPercent = monthOverMonthText(current: total, previous: previousTotal)
-        let recurringLine = recurringTraceLine(current: rows, previous: previousRows, rangeName: "上个月")
-        let changeText = copyWithRecurringLine(
-            monthlyChangeText(current: rows, previous: previousRows, segments: segments),
-            recurringLine
-        )
         let monthKey = Self.monthKeyFormatter.string(from: now)
         let monthSeed = playbackCopySeed(base: "month-\(monthKey)", suffix: copySeed)
-        let echoAnchor = EchoAnchorService.shared.pickEchoAnchor(items: rows, periodKey: monthKey, now: now)
-        let selection = momentSelector.select(from: rows, periodKey: monthKey, range: .month, now: now, echoAnchor: echoAnchor)
-        let primaryVoice = selection.primary
         let earlyRows = rows.filter { calendar.component(.day, from: $0.createdAt) <= 10 }
         let lateRows = rows.filter { calendar.component(.day, from: $0.createdAt) >= 11 }
         let earlySelection = momentSelector.select(from: earlyRows, periodKey: monthKey, range: .month, now: now)
         let lateSelection = momentSelector.select(from: lateRows, periodKey: monthKey, range: .month, now: now)
-        let earlyVoice = earlySelection.primary ?? primaryVoice
-        let earlyVoiceID = earlyVoice?.item.id
-        let lateVoice = lateSelection.first(excluding: earlyVoiceID)
-            ?? selection.first(excluding: earlyVoiceID)
-            ?? primaryVoice
-        let scentText = selection.scentText
-        let voiceTitle1 = selection.voiceText(for: .month)
-        let earlyVoiceTitle = earlyVoice?.text ?? PlaybackMomentSelector.honestNoVoiceText(for: .month)
-        let lateVoiceTitle = lateVoice?.text ?? PlaybackMomentSelector.honestNoVoiceText(for: .month)
-        let photoMemorySupportLine = photoMemoryLine(in: rows, range: .month)
-        let monthContextLine = contextualMemoryLine(in: rows, range: .month) ?? weeklySceneMemoryLine(rows) ?? photoMemorySupportLine
-        let emotionSignal = primaryVoice?.item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let lifeMark = LifeMarkService
-            .aggregates(for: rows, allItems: items, isMember: true, now: now, limit: 1)
-            .first
-        let lifeMarkTitle = lifeMark?.title ?? sceneMemoryTitle(from: nil, fallback: voiceTitle1)
-        let lifeMarkLine = playbackLifeMarkLine(
-            lifeMark,
-            fallback: "这个月先从「\(voiceTitle1)」这一格想起。"
+        let earlyItem = earlySelection.primary?.item ?? earlyRows.first
+        let lateItem = lateSelection.primary?.item ?? lateRows.first
+        let earlyCopy = earlyItem.map { playbackRecordCopy(for: $0, range: .month) }
+        let lateCopy = lateItem.map { playbackRecordCopy(for: $0, range: .month) }
+        let openingLine = "\(rangeLabel)目前记了 \(rows.count) 笔，分布在 \(activeDays) 天里。"
+        let earlyLine: String
+        let earlySupport: String
+        if let earlyCopy {
+            earlyLine = earlyCopy.mainLine
+            earlySupport = earlyCopy.supportLine
+        } else if let first = rows.first {
+            earlyLine = "月初十天没有记录，这个月第一笔出现在 \(Self.shortDateFormatter.string(from: first.createdAt))。"
+            earlySupport = ""
+        } else {
+            earlyLine = "月初十天没有记录。"
+            earlySupport = ""
+        }
+
+        let lateLine: String
+        let lateSupport: String
+        if calendar.component(.day, from: now) < 11 {
+            lateLine = "这个月还没走到后半段，先不替后面的日子下结论。"
+            lateSupport = ""
+        } else if let lateCopy {
+            lateLine = lateCopy.mainLine
+            lateSupport = lateCopy.supportLine
+        } else {
+            lateLine = "11 日以后还没有新的记录。"
+            lateSupport = ""
+        }
+
+        let comparisonCopy = monthlyComparisonCopy(allItems: items, currentRows: rows, now: now)
+        var usedRecordTitles = Set<String>()
+        if let title = earlyCopy?.safeTitle { usedRecordTitles.insert(title) }
+        if let title = lateCopy?.safeTitle { usedRecordTitles.insert(title) }
+        let repeatedCopy = repeatedTraceCopy(
+            rows: rows,
+            range: .month,
+            excludingTitles: usedRecordTitles
         )
-        let monthValues: [String: String] = [
-            "rangeLabel": rangeLabel,
-            "count": "\(rows.count)",
-            "total": Self.money(total),
-            "activeDays": "\(activeDays)",
-            "momPercent": momPercent ?? "",
-            "earlyCount": "\(segments[0].count)",
-            "earlyAmount": Self.money(segments[0].amount),
-            "midAmount": Self.money(segments[1].amount),
-            "lateAmount": Self.money(segments[2].amount),
-            "topCategory": top?.category ?? "日常",
-            "ratio": "\(ratio)",
-            "changeHint": changeText,
-            "voiceTitle1": voiceTitle1,
-            "earlyVoiceTitle": earlyVoiceTitle,
-            "lateVoiceTitle": lateVoiceTitle,
-            "emotionTag": emotionSignal,
-            "contextLine": monthContextLine ?? "",
-            "scentWords": scentText,
-            "lifeMarkTitle": lifeMarkTitle,
-            "lifeMarkLine": lifeMarkLine
-        ]
 
         let chapters: [SummaryChapter] = [
             SummaryChapter(
                 id: "month-opening",
-                title: "\(rangeLabel) 开场",
+                title: "\(rangeLabel)回看",
                 metrics: [
                     "count": "\(rows.count)",
                     "total": Self.money(total),
                     "activeDays": "\(activeDays)",
-                    "momPercent": momPercent ?? "",
                     "range": rangeLabel,
-                    "voiceTitle1": voiceTitle1,
-                    "lifeMarkLine": lifeMarkLine,
-                    "sceneMemoryLine": monthContextLine ?? "",
-                    "emotionTag": emotionSignal
+                    "supportLine": ""
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-opening",
                     seed: monthSeed,
-                    values: monthValues
+                    values: ["mainLine": openingLine]
                 ),
                 durationSec: 8
             ),
             SummaryChapter(
                 id: "month-early-voice",
-                title: "月初的一句",
+                title: "月初留下的",
                 metrics: [
-                    "earlyVoiceTitle": earlyVoiceTitle,
-                    "label": segments[0].label,
-                    "amount": Self.money(segments[0].amount),
-                    "count": "\(segments[0].count)",
-                    "day": earlyVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? "",
-                    "emotionTag": emotionSignal
+                    "earlyVoiceTitle": earlyCopy?.safeTitle ?? earlyItem?.category.rawValue ?? "",
+                    "amount": earlyItem.map { Self.money($0.amount) } ?? "",
+                    "day": earlyItem.map { Self.weekdayFormatter.string(from: $0.createdAt) } ?? "",
+                    "supportLine": earlySupport
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-early-voice",
                     seed: monthSeed,
-                    values: monthValues
+                    values: ["mainLine": earlyLine]
                 ),
                 durationSec: 8
             ),
             SummaryChapter(
                 id: "month-late-voice",
-                title: "后半月的一句",
+                title: "后来留下的",
                 metrics: [
-                    "lateVoiceTitle": lateVoiceTitle,
-                    "middle": Self.money(segments[1].amount),
-                    "late": Self.money(segments[2].amount),
-                    "day": lateVoice.map { Self.weekdayFormatter.string(from: $0.item.createdAt) } ?? "",
-                    "emotionTag": emotionSignal
+                    "lateVoiceTitle": lateCopy?.safeTitle ?? lateItem?.category.rawValue ?? "",
+                    "amount": lateItem.map { Self.money($0.amount) } ?? "",
+                    "day": lateItem.map { Self.weekdayFormatter.string(from: $0.createdAt) } ?? "",
+                    "supportLine": lateSupport
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-late-voice",
                     seed: monthSeed,
-                    values: monthValues
+                    values: ["mainLine": lateLine]
                 ),
                 durationSec: 8
             ),
             SummaryChapter(
                 id: "month-change",
-                title: "变化点",
+                title: comparisonCopy.title,
                 metrics: [
-                    "change": changeText,
-                    "sceneMemoryLine": monthContextLine ?? "",
-                    "emotionTag": emotionSignal
+                    "change": comparisonCopy.mainLine,
+                    "supportLine": comparisonCopy.supportLine
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-change",
                     seed: monthSeed,
-                    values: monthValues
+                    values: ["mainLine": comparisonCopy.mainLine]
                 ),
                 durationSec: 8
             ),
             SummaryChapter(
                 id: "month-scent",
-                title: "常冒头的词",
+                title: "这个月反复出现",
                 metrics: [
-                    "scentWords": scentText,
                     "topCategory": top?.category ?? "日常",
                     "ratio": "\(ratio)",
-                    "emotionTag": emotionSignal
+                    "supportLine": repeatedCopy.supportLine
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-scent",
                     seed: monthSeed,
-                    values: monthValues
+                    values: ["mainLine": repeatedCopy.mainLine]
                 ),
                 durationSec: 8
             ),
             SummaryChapter(
                 id: "month-outro",
-                title: "下月再叙",
+                title: "这个月先到这里",
                 metrics: [
                     "count": "\(rows.count)",
                     "total": Self.money(total),
-                    "lifeMarkLine": lifeMarkLine,
-                    "sceneMemoryLine": monthContextLine ?? "",
-                    "emotionTag": emotionSignal
+                    "supportLine": ""
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-outro",
                     seed: monthSeed,
-                    values: monthValues
+                    values: ["mainLine": "\(rangeLabel)先记到这里。"]
                 ),
                 durationSec: 7
             )
@@ -1477,13 +1376,9 @@ final class PlaybackService {
             range: .month,
             title: title,
             rangeLabel: rangeLabel,
-            teaserLine: monthTeaserLine(
-                voiceTitle: voiceTitle1,
-                scentWords: scentText,
-                changeText: changeText,
-                copySeed: monthSeed,
-                rangeLabel: rangeLabel,
-                lifeMarkLine: lifeMarkLine
+            teaserLine: PlaybackCopyPool.monthTeaser(
+                seed: monthSeed,
+                values: ["teaserLine": openingLine]
             ),
             count: rows.count,
             total: total,
@@ -1505,15 +1400,6 @@ final class PlaybackService {
         let amount: Double
     }
 
-    private struct MonthlyCategoryChange {
-        let category: String
-        let current: CategoryMonthlyStat
-        let previous: CategoryMonthlyStat?
-        let amountDelta: Double
-        let countDelta: Int
-        let score: Double
-    }
-
     private struct DayActivity {
         let date: Date
         let label: String
@@ -1521,10 +1407,344 @@ final class PlaybackService {
         let amount: Double
     }
 
-    private struct MonthSegment {
-        let label: String
+    private struct PlaybackRecordCopy {
+        let safeTitle: String?
+        let mainLine: String
+        let supportLine: String
+    }
+
+    private struct PlaybackRhythmCopy {
+        let title: String
+        let mainLine: String
+        let supportLine: String
+        let signalLabel: String
         let count: Int
-        let amount: Double
+    }
+
+    private struct PlaybackRepeatedCopy {
+        let mainLine: String
+        let supportLine: String
+    }
+
+    private struct PlaybackMonthComparisonCopy {
+        let title: String
+        let mainLine: String
+        let supportLine: String
+    }
+
+    private struct PlaybackMonthComparisonFact {
+        let line: String
+        let score: Double
+    }
+
+    private func playbackRecordCopy(
+        for item: HomeItem,
+        range: SummaryPlaybackRange
+    ) -> PlaybackRecordCopy {
+        let day = range == .week
+            ? Self.shortWeekdayFormatter.string(from: item.createdAt)
+            : Self.shortDateFormatter.string(from: item.createdAt)
+        let time = Self.shortTimeFormatter.string(from: item.createdAt)
+        let prefix = "\(day) \(time)"
+        let safeTitle = safePlaybackTitle(for: item)
+        if let safeTitle {
+            return PlaybackRecordCopy(
+                safeTitle: safeTitle,
+                mainLine: "\(prefix)，账本里记着「\(safeTitle)」。",
+                supportLine: "\(item.category.rawValue) · \(Self.evidenceMoney(item.amount))"
+            )
+        }
+        return PlaybackRecordCopy(
+            safeTitle: nil,
+            mainLine: "\(prefix) 记了一笔\(item.category.rawValue)，\(Self.evidenceMoney(item.amount))。",
+            supportLine: ""
+        )
+    }
+
+    private func safePlaybackTitle(for item: HomeItem) -> String? {
+        let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (2...36).contains(title.count),
+              !EchoAnchorService.shared.isDirtyTraceTitle(title),
+              (item.userEditedTitle == true
+                || EchoAnchorService.shared.isEligibleLifeTraceTitle(title, item: item)) else {
+            return nil
+        }
+        return title
+    }
+
+    private func weeklyPresenceLine(rows: [HomeItem], activity: [DayActivity]) -> String {
+        let recordedDays = activity.filter { $0.count > 0 }
+        guard rows.count > 1 else {
+            let day = recordedDays.first.map { Self.shortWeekdayFormatter.string(from: $0.date) } ?? "这周"
+            return "这周目前记了 1 笔，在\(day)。"
+        }
+        if rows.count == 2 {
+            let labels = recordedDays.map { Self.shortWeekdayFormatter.string(from: $0.date) }
+            if labels.count == 1, let day = labels.first {
+                return "这周记了 2 笔，都在\(day)。"
+            }
+            return "这周记了 2 笔，分别在\(joinedChinese(labels))。"
+        }
+        return "这周记了 \(rows.count) 笔，分布在 \(recordedDays.count) 天里。"
+    }
+
+    private func weeklyRhythmCopy(
+        rows: [HomeItem],
+        activity: [DayActivity],
+        calendar: Calendar
+    ) -> PlaybackRhythmCopy {
+        let recordedDays = activity.filter { $0.count > 0 }
+        let maximum = recordedDays.map(\.count).max() ?? 0
+        let leadingDays = recordedDays.filter { $0.count == maximum }
+        let labels = leadingDays.map { Self.shortWeekdayFormatter.string(from: $0.date) }
+
+        if maximum <= 1 {
+            return PlaybackRhythmCopy(
+                title: "记录怎么分布",
+                mainLine: "这周的 \(rows.count) 笔分在 \(recordedDays.count) 天里，没有特别集中的一天。",
+                supportLine: "",
+                signalLabel: "分布在 \(recordedDays.count) 天",
+                count: maximum
+            )
+        }
+
+        if leadingDays.count == 1, let leading = leadingDays.first {
+            let scopedRows = rows.filter { calendar.isDate($0.createdAt, inSameDayAs: leading.date) }
+            let label = labels.first ?? "这天"
+            return PlaybackRhythmCopy(
+                title: "记录最多的一天",
+                mainLine: "\(label)记了 \(maximum) 笔，是这周记录最多的一天。",
+                supportLine: categoryCountSupport(scopedRows),
+                signalLabel: label,
+                count: maximum
+            )
+        }
+
+        return PlaybackRhythmCopy(
+            title: "记录较多的日子",
+            mainLine: "\(joinedChinese(labels))各记了 \(maximum) 笔，是这周记录较集中的日子。",
+            supportLine: "",
+            signalLabel: joinedChinese(labels),
+            count: maximum
+        )
+    }
+
+    private func repeatedTraceCopy(
+        rows: [HomeItem],
+        range: SummaryPlaybackRange,
+        excludingTitles: Set<String>
+    ) -> PlaybackRepeatedCopy {
+        let period = range == .week ? "这周" : "这个月"
+
+        var titleBuckets: [String: [HomeItem]] = [:]
+        for item in rows {
+            guard let title = safePlaybackTitle(for: item),
+                  !excludingTitles.contains(title) else { continue }
+            titleBuckets[title, default: []].append(item)
+        }
+        if let repeatedTitle = titleBuckets
+            .filter({ $0.value.count >= 2 })
+            .sorted(by: {
+                if $0.value.count == $1.value.count { return $0.key < $1.key }
+                return $0.value.count > $1.value.count
+            })
+            .first {
+            let amount = repeatedTitle.value.reduce(0) { $0 + $1.amount }
+            return PlaybackRepeatedCopy(
+                mainLine: "\(period)「\(repeatedTitle.key)」出现了 \(repeatedTitle.value.count) 次。",
+                supportLine: "合计 \(Self.evidenceMoney(amount))"
+            )
+        }
+
+        let categoryBuckets = Dictionary(grouping: rows, by: \.category)
+        let sortedCategories = categoryBuckets.sorted {
+            if $0.value.count == $1.value.count { return $0.key.rawValue < $1.key.rawValue }
+            return $0.value.count > $1.value.count
+        }
+        guard let top = sortedCategories.first, top.value.count >= 2 else {
+            return PlaybackRepeatedCopy(
+                mainLine: "\(period)几笔记录分得比较开，没有哪一类反复出现。",
+                supportLine: ""
+            )
+        }
+
+        let tied = sortedCategories.filter { $0.value.count == top.value.count }
+        if top.value.count == rows.count {
+            return PlaybackRepeatedCopy(
+                mainLine: "\(period) \(rows.count) 笔都归在\(top.key.rawValue)。",
+                supportLine: "合计 \(Self.evidenceMoney(top.value.reduce(0) { $0 + $1.amount }))"
+            )
+        }
+        if tied.count > 1 {
+            let labels = tied.prefix(3).map { $0.key.rawValue }
+            return PlaybackRepeatedCopy(
+                mainLine: "\(joinedChinese(labels))各出现了 \(top.value.count) 次，是\(period)反复出现的分类。",
+                supportLine: ""
+            )
+        }
+        return PlaybackRepeatedCopy(
+            mainLine: "\(top.key.rawValue)出现了 \(top.value.count) 次，是\(period)重复最多的分类。",
+            supportLine: "合计 \(Self.evidenceMoney(top.value.reduce(0) { $0 + $1.amount }))"
+        )
+    }
+
+    private func categoryCountSupport(_ rows: [HomeItem]) -> String {
+        let groups = Dictionary(grouping: rows, by: \.category)
+            .map {
+                (
+                    category: $0.key.rawValue,
+                    count: $0.value.count,
+                    amount: $0.value.reduce(0) { $0 + $1.amount }
+                )
+            }
+            .sorted {
+                if $0.count == $1.count { return $0.category < $1.category }
+                return $0.count > $1.count
+            }
+        if groups.count == 1, let group = groups.first {
+            return "\(group.category) · 合计 \(Self.evidenceMoney(group.amount))"
+        }
+        return groups.prefix(3)
+            .map { "\($0.category) \($0.count) 笔" }
+            .joined(separator: " · ")
+    }
+
+    private func monthlyComparisonCopy(
+        allItems: [HomeItem],
+        currentRows: [HomeItem],
+        now: Date
+    ) -> PlaybackMonthComparisonCopy {
+        let calendar = Calendar.current
+        guard let currentMonth = calendar.dateInterval(of: .month, for: now),
+              let previousStart = calendar.date(byAdding: .month, value: -1, to: currentMonth.start),
+              let previousMonth = calendar.dateInterval(of: .month, for: previousStart) else {
+            return PlaybackMonthComparisonCopy(
+                title: "和上月同期相比",
+                mainLine: "暂时没有可用的上月同期数据。",
+                supportLine: ""
+            )
+        }
+
+        let day = calendar.component(.day, from: now)
+        let currentEnd = calendar.date(
+            byAdding: .day,
+            value: 1,
+            to: calendar.startOfDay(for: now)
+        ) ?? currentMonth.end
+        let previousEndCandidate = calendar.date(
+            byAdding: .day,
+            value: day,
+            to: previousMonth.start
+        ) ?? previousMonth.end
+        let previousEnd = min(previousEndCandidate, previousMonth.end)
+        let comparableCurrent = currentRows.filter { $0.createdAt < currentEnd }
+        let comparablePrevious = positiveItems(allItems, from: previousMonth.start, to: previousEnd)
+        let previousLabel = Self.monthFormatter.string(from: previousMonth.start)
+        let currentLabel = Self.monthFormatter.string(from: currentMonth.start)
+        let previousTotal = comparablePrevious.reduce(0) { $0 + $1.amount }
+        let currentTotal = comparableCurrent.reduce(0) { $0 + $1.amount }
+
+        guard comparablePrevious.count >= 3, previousTotal > 0 else {
+            return PlaybackMonthComparisonCopy(
+                title: "和上月同期相比",
+                mainLine: "\(previousLabel)同期只有 \(comparablePrevious.count) 笔，暂时不做环比。",
+                supportLine: comparablePrevious.isEmpty
+                    ? "统计范围：1 日—\(day) 日"
+                    : "\(previousLabel)同期 · \(comparablePrevious.count) 笔 · \(Self.evidenceMoney(previousTotal))"
+            )
+        }
+
+        let facts = monthlyComparisonFacts(
+            current: comparableCurrent,
+            previous: comparablePrevious
+        )
+        if !facts.isEmpty {
+            let line = facts.prefix(2).map(\.line).joined(separator: "；")
+            return PlaybackMonthComparisonCopy(
+                title: "和上月同期相比",
+                mainLine: "和 \(previousLabel)同期相比，\(line)。",
+                supportLine: "统计范围：1 日—\(day) 日"
+            )
+        }
+
+        let amountClose = abs(currentTotal - previousTotal) < max(50, previousTotal * 0.25)
+        let countClose = abs(comparableCurrent.count - comparablePrevious.count) < 2
+        let mainLine: String
+        if amountClose && countClose {
+            mainLine = "和 \(previousLabel)同期相比，金额和笔数都接近，没有明显变化。"
+        } else {
+            mainLine = "和 \(previousLabel)同期相比，总额从 \(Self.evidenceMoney(previousTotal)) 变为 \(Self.evidenceMoney(currentTotal))，记录从 \(comparablePrevious.count) 笔变为 \(comparableCurrent.count) 笔。"
+        }
+        return PlaybackMonthComparisonCopy(
+            title: "和上月同期相比",
+            mainLine: mainLine,
+            supportLine: "\(currentLabel)同期 \(Self.evidenceMoney(currentTotal)) · \(comparableCurrent.count) 笔 / \(previousLabel)同期 \(Self.evidenceMoney(previousTotal)) · \(comparablePrevious.count) 笔"
+        )
+    }
+
+    private func monthlyComparisonFacts(
+        current: [HomeItem],
+        previous: [HomeItem]
+    ) -> [PlaybackMonthComparisonFact] {
+        let currentStats = monthlyCategoryStats(current)
+        let previousStats = monthlyCategoryStats(previous)
+        let currentTotal = max(current.reduce(0) { $0 + $1.amount }, 1)
+        let previousTotal = max(previous.reduce(0) { $0 + $1.amount }, 1)
+
+        return Set(currentStats.keys).union(previousStats.keys)
+            .compactMap { category -> PlaybackMonthComparisonFact? in
+                let currentStat = currentStats[category]
+                let previousStat = previousStats[category]
+
+                if let currentStat, previousStat == nil {
+                    guard currentStat.count >= 2
+                            || currentStat.amount >= max(50, currentTotal * 0.08) else { return nil }
+                    return PlaybackMonthComparisonFact(
+                        line: "\(category)新增了 \(currentStat.count) 笔，合计 \(Self.evidenceMoney(currentStat.amount))",
+                        score: currentStat.amount / currentTotal * 100 + Double(currentStat.count)
+                    )
+                }
+
+                if currentStat == nil, let previousStat {
+                    guard previousStat.count >= 2
+                            || previousStat.amount >= max(50, previousTotal * 0.08) else { return nil }
+                    return PlaybackMonthComparisonFact(
+                        line: "\(category)从 \(Self.evidenceMoney(previousStat.amount)) 变为本期没有记录",
+                        score: previousStat.amount / previousTotal * 100 + Double(previousStat.count)
+                    )
+                }
+
+                guard let currentStat, let previousStat else { return nil }
+                let amountDelta = currentStat.amount - previousStat.amount
+                let countDelta = currentStat.count - previousStat.count
+                let shareDelta = currentStat.amount / currentTotal - previousStat.amount / previousTotal
+                let amountSignificant = abs(amountDelta) >= max(50, previousStat.amount * 0.25)
+                let countSignificant = abs(countDelta) >= 2
+                let shareSignificant = abs(shareDelta) >= 0.12
+                guard amountSignificant || countSignificant || shareSignificant else { return nil }
+
+                let direction = amountDelta >= 0 ? "增到" : "降到"
+                let difference = amountDelta >= 0 ? "多了" : "少了"
+                return PlaybackMonthComparisonFact(
+                    line: "\(category)从 \(Self.evidenceMoney(previousStat.amount)) \(direction) \(Self.evidenceMoney(currentStat.amount))，\(difference) \(Self.evidenceMoney(abs(amountDelta)))",
+                    score: abs(shareDelta) * 100
+                        + min(abs(amountDelta) / 50, 8)
+                        + Double(abs(countDelta)) * 0.8
+                )
+            }
+            .sorted {
+                if $0.score == $1.score { return $0.line < $1.line }
+                return $0.score > $1.score
+            }
+    }
+
+    private func joinedChinese(_ values: [String]) -> String {
+        switch values.count {
+        case 0: return ""
+        case 1: return values[0]
+        case 2: return "\(values[0])和\(values[1])"
+        default: return values.dropLast().joined(separator: "、") + "和" + (values.last ?? "")
+        }
     }
 
     private static let moneyFormatter: NumberFormatter = {
@@ -1548,6 +1768,13 @@ final class PlaybackService {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.dateFormat = "M月d日 EEEE"
+        return formatter
+    }()
+
+    private static let shortTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "HH:mm"
         return formatter
     }()
 
@@ -1576,6 +1803,17 @@ final class PlaybackService {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.dateFormat = "E"
+        return formatter
+    }()
+
+    private static let evidenceMoneyFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "CNY"
+        formatter.currencySymbol = "¥"
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        formatter.locale = Locale(identifier: "zh_CN")
         return formatter
     }()
 
@@ -1612,45 +1850,6 @@ final class PlaybackService {
                 amount: dayItems.reduce(0) { $0 + $1.amount }
             )
         }
-    }
-
-    private func monthSegments(_ items: [HomeItem], in start: Date, calendar: Calendar) -> [MonthSegment] {
-        let labels = ["上旬", "中旬", "下旬"]
-        return labels.enumerated().map { index, label in
-            let rows = items.filter { item in
-                let day = calendar.component(.day, from: item.createdAt)
-                switch index {
-                case 0: return day <= 10
-                case 1: return day >= 11 && day <= 20
-                default: return day >= 21
-                }
-            }
-            return MonthSegment(label: label, count: rows.count, amount: rows.reduce(0) { $0 + $1.amount })
-        }
-    }
-
-    private func weekTeaserLine(
-        busiest: DayActivity?,
-        rows: [HomeItem],
-        voiceTitle: String,
-        scentWords: String,
-        copySeed: String,
-        lifeMarkLine: String
-    ) -> String {
-        if rows.count < 3 {
-            return rows.count == 1
-                ? "这周先留下「\(voiceTitle)」这一格。"
-                : "这周先留下这几格，已经能听出一点生活的开头。"
-        }
-        let values = [
-            "busiestDayShort": busiest?.label ?? "本周",
-            "count": "\(rows.count)",
-            "rangeLabel": "这一周",
-            "voiceTitle1": voiceTitle,
-            "scentWords": scentWords,
-            "lifeMarkLine": lifeMarkLine
-        ]
-        return PlaybackCopyPool.weekTeaser(seed: copySeed, values: values)
     }
 
     private func weeklyShareAnchorLine(from summary: SummaryPlayback) -> String? {
@@ -1772,90 +1971,6 @@ final class PlaybackService {
         return "\(day)的「\(cleanTitle)」留了照片，以后回看会更像一段生活。"
     }
 
-    private func sceneMemoryLineForItem(_ item: HomeItem?) -> String? {
-        guard let item else { return nil }
-        if let photoLine = photoMemoryLine(for: item) {
-            return photoLine
-        }
-        if HomeItem.isLateWorkCommute(item),
-           let line = HomeItem.lateWorkCommuteTraceLine(for: item) {
-            return line
-        }
-        let tag = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !tag.isEmpty,
-              !EchoAnchorService.shared.isDirtyTraceTitle(tag) else {
-            return nil
-        }
-        let text = "\(item.title) \(tag)"
-        guard text.contains("雨天")
-            || text.contains("下雨")
-            || text.contains("雪天")
-            || text.contains("第一次")
-            || text.contains("第10次")
-            || text.contains("第 10 次")
-            || text.contains("连续")
-            || text.contains("周末出门")
-            || text.contains("周末路上") else {
-            return nil
-        }
-        let day = Self.shortWeekdayFormatter.string(from: item.createdAt)
-        return "\(day)这笔写着「\(tag)」，以后再看会知道当时发生了什么。"
-    }
-
-    private func sceneMemoryLineForRows(_ rows: [HomeItem], excluding excludedID: UUID?) -> String? {
-        let scoped = rows.filter { item in
-            if let excludedID, item.id == excludedID { return false }
-            return true
-        }
-        return contextualMemoryLine(in: scoped)
-            ?? photoMemoryLine(in: scoped, range: .week)
-    }
-
-    private func busiestFallbackTitle(from rows: [HomeItem], excluding excludedID: UUID?) -> String? {
-        rows
-            .filter { item in
-                if let excludedID, item.id == excludedID { return false }
-                return true
-            }
-            .sorted { lhs, rhs in
-                if abs(lhs.amount - rhs.amount) < 0.001 {
-                    return lhs.createdAt < rhs.createdAt
-                }
-                return lhs.amount > rhs.amount
-            }
-            .first
-            .map { item in
-                let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                return title.isEmpty ? item.category.rawValue : title
-            }
-    }
-
-    private func busiestFallbackSupportLine(from rows: [HomeItem], excluding excludedID: UUID?) -> String? {
-        let scoped = rows.filter { item in
-            if let excludedID, item.id == excludedID { return false }
-            return true
-        }
-        guard scoped.count >= 2 else { return nil }
-        let day = scoped.first.map { Self.shortWeekdayFormatter.string(from: $0.createdAt) } ?? "这天"
-        return "\(day)不只留下一笔，几件小事叠在一起，才让这一天更明显。"
-    }
-
-    private func weeklyScentSupportLine(
-        sceneLine: String?,
-        recurringLine: String?
-    ) -> String {
-        if let recurring = recurringLine?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !recurring.isEmpty {
-            return recurring
-        }
-        let scene = sceneLine?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !scene.isEmpty,
-           !scene.contains("雨天通勤") {
-            return scene
-        }
-        return ""
-    }
-
     private func weeklyEmotionSignalLine(_ rows: [HomeItem]) -> String? {
         let ranked = rows.compactMap { item -> (text: String, score: Int, date: Date)? in
             let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1882,24 +1997,6 @@ final class PlaybackService {
         return "这周也写下了「\(best.text)」"
     }
 
-    private func monthTeaserLine(
-        voiceTitle: String,
-        scentWords: String,
-        changeText: String,
-        copySeed: String,
-        rangeLabel: String,
-        lifeMarkLine: String
-    ) -> String {
-        let values = [
-            "voiceTitle1": voiceTitle,
-            "scentWords": scentWords,
-            "changeHint": changeText,
-            "rangeLabel": rangeLabel,
-            "lifeMarkLine": lifeMarkLine
-        ]
-        return PlaybackCopyPool.monthTeaser(seed: copySeed, values: values)
-    }
-
     private func playbackLifeMarkLine(_ aggregate: LifeMarkAggregate?, fallback: String) -> String {
         guard let aggregate else { return fallback }
         let detail = LifeMarkService.primaryLine(for: aggregate)
@@ -1918,157 +2015,9 @@ final class PlaybackService {
         }
     }
 
-    private func sceneMemoryTitle(from line: String?, fallback: String) -> String {
-        let trimmed = line?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if trimmed.contains("雨") { return "天气里的生活线" }
-        if trimmed.contains("第一次") { return "第一次的开始" }
-        if trimmed.contains("连续") { return "连续出现的节奏" }
-        if trimmed.contains("周末") { return "周末留下的片段" }
-        return fallback
-    }
-
     private func playbackCopySeed(base: String, suffix: String) -> String {
         let trimmed = suffix.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? base : "\(base)|\(trimmed)"
-    }
-
-    private func previousMonthItems(from items: [HomeItem], now: Date) -> [HomeItem] {
-        let calendar = Calendar.current
-        guard let currentMonth = calendar.dateInterval(of: .month, for: now),
-              let previousStart = calendar.date(byAdding: .month, value: -1, to: currentMonth.start),
-              let previous = calendar.dateInterval(of: .month, for: previousStart) else {
-            return []
-        }
-        return positiveItems(items, from: previous.start, to: previous.end)
-    }
-
-    private func previousWeekItems(from items: [HomeItem], now: Date) -> [HomeItem] {
-        let calendar = Self.isoCalendar
-        guard let currentWeek = calendar.dateInterval(of: .weekOfYear, for: now),
-              let previousStart = calendar.date(byAdding: .weekOfYear, value: -1, to: currentWeek.start),
-              let previous = calendar.dateInterval(of: .weekOfYear, for: previousStart) else {
-            return []
-        }
-        return positiveItems(items, from: previous.start, to: previous.end)
-    }
-
-    private func copyWithRecurringLine(_ base: String, _ recurringLine: String?) -> String {
-        guard let recurringLine,
-              !recurringLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return base
-        }
-        return "\(base) \(recurringLine)"
-    }
-
-    private func recurringTraceLine(current: [HomeItem], previous: [HomeItem], rangeName: String) -> String? {
-        guard current.count >= 2, previous.count >= 2 else { return nil }
-
-        let currentTitles = traceTokenCounts(current, source: .title)
-        let previousTitles = traceTokenCounts(previous, source: .title)
-        if let title = strongestSharedToken(current: currentTitles, previous: previousTitles) {
-            return "\(rangeName)也写过「\(title)」，这次它又回来了。"
-        }
-
-        let currentEmotions = traceTokenCounts(current, source: .emotionTag)
-        let previousEmotions = traceTokenCounts(previous, source: .emotionTag)
-        if let emotion = strongestSharedToken(current: currentEmotions, previous: previousEmotions) {
-            return "\(rangeName)也标过「\(emotion)」，这次还能看见。"
-        }
-
-        let currentCategories = categoryCounts(current)
-        let previousCategories = categoryCounts(previous)
-        if let category = strongestSharedToken(current: currentCategories, previous: previousCategories, minimumCount: 2) {
-            return "「\(category)」这条线延续到了这次记录里。"
-        }
-
-        return nil
-    }
-
-    private enum TraceTokenSource {
-        case title
-        case emotionTag
-    }
-
-    private func traceTokenCounts(_ items: [HomeItem], source: TraceTokenSource) -> [String: Int] {
-        var counts: [String: Int] = [:]
-        for item in items {
-            let token: String?
-            switch source {
-            case .title:
-                token = EchoAnchorService.shared.isEligibleLifeTraceTitle(item.title, item: item)
-                    ? item.title.trimmingCharacters(in: .whitespacesAndNewlines)
-                    : nil
-            case .emotionTag:
-                let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
-                token = (2...18).contains(emotion.count)
-                    && emotion != HomeItem.inferEmotionTag(category: item.category, amount: item.amount)
-                    && !EchoAnchorService.shared.isDirtyTraceTitle(emotion)
-                    ? emotion
-                    : nil
-            }
-            if let token, !token.isEmpty {
-                counts[token, default: 0] += 1
-            }
-        }
-        return counts
-    }
-
-    private func categoryCounts(_ items: [HomeItem]) -> [String: Int] {
-        items.reduce(into: [:]) { result, item in
-            result[item.category.rawValue, default: 0] += 1
-        }
-    }
-
-    private func strongestSharedToken(current: [String: Int], previous: [String: Int], minimumCount: Int = 1) -> String? {
-        current.keys
-            .filter { token in
-                (current[token] ?? 0) >= minimumCount && (previous[token] ?? 0) >= minimumCount
-            }
-            .sorted {
-                let leftScore = (current[$0] ?? 0) + (previous[$0] ?? 0)
-                let rightScore = (current[$1] ?? 0) + (previous[$1] ?? 0)
-                if leftScore == rightScore { return $0 < $1 }
-                return leftScore > rightScore
-            }
-            .first
-    }
-
-    private func monthOverMonthText(current: Double, previous: Double) -> String? {
-        guard current > 0, previous > 0 else { return nil }
-        let diff = (current - previous) / previous * 100
-        let sign = diff >= 0 ? "+" : "-"
-        return "\(sign)\(Int(abs(diff).rounded()))%"
-    }
-
-    private func monthlyChangeText(current: [HomeItem], previous: [HomeItem], segments: [MonthSegment]) -> String {
-        if let contextLine = contextualMemoryLine(in: current, range: .month) {
-            return contextLine
-        }
-        if let photoLine = photoMemoryLine(in: current, range: .month) {
-            return photoLine
-        }
-        if let change = meaningfulMonthlyCategoryChange(current: current, previous: previous) {
-            if change.previous == nil {
-                return "这个月「\(change.category)」开始露面，像是新添了一段生活侧面。"
-            }
-            if change.amountDelta >= 0 {
-                return "这个月「\(change.category)」比上月更常回来，像一条更清楚的生活线。"
-            } else {
-                return "这个月「\(change.category)」比上月轻了一些，日子的重心也换了位置。"
-            }
-        }
-        let streak = longestRecordStreak(in: current)
-        if streak >= 3 {
-            return "这个月有一段连续 \(streak) 天都有记录，回看时能看到那几天怎么接上。"
-        }
-        if let leading = segments.max(by: { $0.amount < $1.amount }), leading.amount > 0 {
-            return "\(leading.label) 这一段更具体，是这个月中间更明显的一格。"
-        }
-        if let first = current.first, let last = current.last {
-            let days = max(1, Calendar.current.dateComponents([.day], from: first.createdAt, to: last.createdAt).day ?? 1)
-            return "这段从 \(Self.shortDateFormatter.string(from: first.createdAt)) 留到 \(Self.shortDateFormatter.string(from: last.createdAt))，中间隔着 \(days) 天真实日子。"
-        }
-        return "这个月已经有几格可以回看的生活。"
     }
 
     private func contextualMemoryLine(in rows: [HomeItem], range: SummaryPlaybackRange = .week) -> String? {
@@ -2102,55 +2051,6 @@ final class PlaybackService {
         return photoMemoryLine(in: rows, range: range)
     }
 
-    private func meaningfulMonthlyCategoryChange(current: [HomeItem], previous: [HomeItem]) -> MonthlyCategoryChange? {
-        let previousTotal = previous.reduce(0) { $0 + $1.amount }
-        guard previous.count >= 3, previousTotal > 0 else { return nil }
-
-        let currentStats = monthlyCategoryStats(current)
-        let previousStats = monthlyCategoryStats(previous)
-        let currentTotal = max(current.reduce(0) { $0 + $1.amount }, 1)
-        let categoryNames = Set(currentStats.keys).union(previousStats.keys)
-
-        let candidates = categoryNames.compactMap { category -> MonthlyCategoryChange? in
-            guard let current = currentStats[category], current.count > 0 else { return nil }
-            let previous = previousStats[category]
-            let previousAmount = previous?.amount ?? 0
-            let previousCount = previous?.count ?? 0
-            let amountDelta = current.amount - previousAmount
-            let countDelta = current.count - previousCount
-            let shareDelta = current.amount / currentTotal - previousAmount / previousTotal
-
-            if previous == nil {
-                guard current.count >= 2 || current.amount >= max(50, currentTotal * 0.08) else { return nil }
-            } else {
-                let amountSignificant = abs(amountDelta) >= max(50, previousAmount * 0.25)
-                let countSignificant = abs(countDelta) >= 2
-                let shareSignificant = abs(shareDelta) >= 0.12
-                guard amountSignificant || countSignificant || shareSignificant else { return nil }
-            }
-
-            let score = abs(shareDelta) * 100
-                + min(abs(amountDelta) / 50, 8)
-                + Double(abs(countDelta)) * 0.8
-                + (previous == nil ? 1.5 : 0)
-            return MonthlyCategoryChange(
-                category: category,
-                current: current,
-                previous: previous,
-                amountDelta: amountDelta,
-                countDelta: countDelta,
-                score: score
-            )
-        }
-
-        return candidates.max {
-            if $0.score == $1.score {
-                return $0.current.amount < $1.current.amount
-            }
-            return $0.score < $1.score
-        }
-    }
-
     private func monthlyCategoryStats(_ items: [HomeItem]) -> [String: CategoryMonthlyStat] {
         var buckets: [String: (count: Int, amount: Double)] = [:]
         for item in items {
@@ -2167,25 +2067,12 @@ final class PlaybackService {
         }
     }
 
-    private func longestRecordStreak(in items: [HomeItem]) -> Int {
-        let calendar = Calendar.current
-        let days = Array(Set(items.map { calendar.startOfDay(for: $0.createdAt) })).sorted()
-        guard !days.isEmpty else { return 0 }
-        var best = 1
-        var current = 1
-        for index in 1..<days.count {
-            let delta = calendar.dateComponents([.day], from: days[index - 1], to: days[index]).day ?? 0
-            if delta == 1 {
-                current += 1
-                best = max(best, current)
-            } else {
-                current = 1
-            }
-        }
-        return best
-    }
-
     private static func money(_ value: Double) -> String {
         moneyFormatter.string(from: NSNumber(value: value)) ?? "¥\(Int(value.rounded()))"
+    }
+
+    private static func evidenceMoney(_ value: Double) -> String {
+        evidenceMoneyFormatter.string(from: NSNumber(value: value))
+            ?? String(format: "¥%.2f", value)
     }
 }

@@ -1023,6 +1023,9 @@ struct SummaryPlaybackSheet: View {
     }
 
     private func chapterElementChips(for chapter: SummaryChapter) -> [(symbol: String, text: String)] {
+        if chapter.metrics.keys.contains("supportLine") {
+            return []
+        }
         LifeStorySignalService.chapterSignals(from: chapter)
             .map { (symbol: $0.symbol, text: $0.label) }
     }
@@ -1174,6 +1177,20 @@ struct SummaryPlaybackSheet: View {
         if hasNoSupportLine(chapter) {
             return nil
         }
+        if chapter.metrics.keys.contains("supportLine") {
+            let support = chapter.metrics["supportLine"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !support.isEmpty else { return nil }
+            let narration = petEnabled ? chapter.narration.warm : chapter.narration.plain
+            let normalizedSupport = normalizedPlaybackCopy(support)
+            let normalizedNarration = normalizedPlaybackCopy(narration)
+            guard !normalizedSupport.isEmpty,
+                  normalizedSupport != normalizedNarration,
+                  !normalizedNarration.contains(normalizedSupport) else {
+                return nil
+            }
+            return support
+        }
         if let scene = chapter.metrics["sceneMemoryLine"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !scene.isEmpty {
             return "这一格最具体：\(scene)"
@@ -1215,6 +1232,9 @@ struct SummaryPlaybackSheet: View {
     }
 
     private func softHintText(for chapter: SummaryChapter) -> String? {
+        if chapter.metrics.keys.contains("supportLine") {
+            return nil
+        }
         if isIntroChapter(chapter) {
             return chapter.metrics["range"] ?? playback.rangeLabel
         }
@@ -1228,6 +1248,14 @@ struct SummaryPlaybackSheet: View {
             return "\(leading) 更热闹一点"
         }
         return nil
+    }
+
+    private func normalizedPlaybackCopy(_ text: String) -> String {
+        text
+            .lowercased()
+            .filter { character in
+                !character.isWhitespace && !"，。；：、·/「」『』（）()".contains(character)
+            }
     }
 
     private func shouldShowRangeLabel(for chapter: SummaryChapter) -> Bool {

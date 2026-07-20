@@ -1655,7 +1655,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 |---:|---|---|---|---|
 | 1 | PET-01 | 首页宠物透明帧动画替换 emoji | `CODE_DONE` | 独立像素帧组件、正式资源、首页替换、策略测试与 FLOW-30 已完成；等待 Xcode/iPhone 签收 |
 | 2 | LOGIC-14 | AI 查询总览按显式查询范围切换指标 | `CODE_DONE` | 显式单分类与跨分类指标已分流；测试、静态门禁和 FLOW-31 完成，等待 Xcode/iPhone 签收 |
-| 3 | COPY-02 | 周记/月章播放文案活人感收敛 | `NOT_STARTED` | v2 可评审方案已完成并保留；先处理用户真机 Xcode 暴露的预填编译错误，用户确认方案后再启动文案代码 |
+| 3 | COPY-02 | 周记/月章播放文案活人感收敛 | `CODE_DONE` | v2 事实证据、周/月职责、同期比较、主辅去重、测试与门禁完成；等待 Xcode/XCTest 和 iPhone FLOW-42 签收 |
 
 用户于 2026-07-17 在三组像素帧与透明拆帧完成后明确调整执行顺序：先完成 `PET-01`，再修复 `LOGIC-14`，最后处理 `COPY-02`；其中 `COPY-02` 必须先给方案确认，不能根据已有方向直接改文案代码。该顺序覆盖本节首次建档时的原顺序。`ARCH-03` 继续保持 `NOT_STARTED`；三项仍须一次只启动一项，前一项完成代码、边界复核和当前环境回归后才能进入下一项。
 
@@ -1999,6 +1999,31 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - UI 与结构边界：只允许调整章节标题和已有辅助文案；章节数量、顺序、时长、照片、进度、额度、会员、分享、主题、播放控制和完成动作继续冻结。
 - 工作区保护：继续保留 `StatCardView.swift`、`web-preview/app.js`、用户提示文档、`brand-assets/`、`tmp/` 与 `scripts/__pycache__/` 的既有修改或未跟踪内容；本次只新增方案文档并更新本文档。
 - 下一步：向用户提交 v2 方案评审；确认前不得开始播放文案代码，`ARCH-03` 继续保持 `NOT_STARTED`。
+
+### COPY-02 v2 代码实施启动记录（2026-07-20）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS` 为 `COPY-02`。
+- 用户授权：在确认问题仍存在后，要求“改一下看看效果”；本轮按 `PLAYBACK_COPY_LIVING_VOICE_PLAN_v2.md` 实施，不再停留在方案评审。
+- 允许范围：`PlaybackCopyPool.swift`、`PlaybackService.swift`、`SummaryPlaybackSheet.swift` 中播放主文、章节标题与辅助证据，以及对应确定性测试、文案 lint、真机矩阵和本文档。
+- 冻结边界：周记弱数据 3 章/成熟数据 5 章、月章 6 章及其顺序、播放时长、记录筛选、照片选择、进度、额度、会员、分享、主题、播放控制和完成动作全部保持；不改今日回放、痕迹首屏文案、AI 指令、首页动态主动作或 `ARCH-03`。
+- 工作区保护：保留 `UI-FIX-03`、`FIX-010`、`StatCardView.swift`、`web-preview/app.js`、用户提示文档、素材与 `tmp/` 的现有修改/未跟踪内容，不覆盖、不回退、不纳入本项。
+- 实施顺序：先建立事实证据与安全标题规则，再收敛周/月模板和主辅去重，最后补确定性边界回归与全量 Windows 门禁；当前月变化章采用 v2 的上月同期口径。
+
+#### COPY-02 v2 代码收口（2026-07-20）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`，`ARCH-03` 继续保持 `NOT_STARTED`。
+- 周记结果：0 笔仍不生成章节；1～2 笔仍为 3 章，改为“这一周 / 这一笔 / 这周先到这里”；3 笔以上仍为 5 章，按概况、唯一/并列/分散日期、具体记录、可靠重复和收尾分工。集中日只说聚合事实，不再复述代表标题；重复章优先不与代表章撞标题的安全标题，其次使用分类计数，无可靠重复时明确说明分散。
+- 月章结果：继续固定 6 章和原时长，改为“本月回看 / 月初留下的 / 后来留下的 / 和上月同期相比 / 这个月反复出现 / 这个月先到这里”。月初无记录、当前未到 11 日、11 日后无记录均有明确降级；月初与后来只从各自日期段选择，不再用同一记录补两个章节。
+- 变化口径：本月只统计 1 日至今天，并与上个月相同日序比较；上月同期少于 3 笔或总额为 0 时明确不做环比。样本充足时按既有可靠阈值最多陈述两项分类增减、新增或消失并给原始金额；没有可靠分类变化时才使用同期总额/笔数的持平或整体变化事实。
+- 可信边界：播放正文不再读取或输出 `displayEmotionTag`、生活线索标题、`sceneMemoryLine`、`scentWords`、里程碑或宠物代言；这些 C 级信号仍可在既有选材层帮助确定记录，但正文只使用日期、时间、分类、金额、安全标题和可复算计数。`warm/plain` 共享同一事实，当前无额外证据时完全一致。
+- 主辅去重：每章显式携带 `supportLine`；辅助层只显示独立的分类、金额、组成或同期范围，若与当前正文归一化后相同/被正文包含则隐藏。新章节不再生成重复的词条 chip；收尾和无新增证据章节不填充辅助卡。
+- 模板治理：`PlaybackCopyPool` 收敛为显式 `mainLine/teaserLine` 渲染，删除胶片、气味、画面、生活开头、未来天气/路线、宠物代言等抽象模板；旧周/月重复、环比和情绪拼接的不可达辅助实现一并从播放服务移除，避免后续误接回生产路径。
+- 修改文件：`NativeDemoApp/Services/PlaybackCopyPool.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`qa/page_copy_snapshots.json`、`scripts/playback_copy_lint.py`、`scripts/check_copy_experience.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 自动回归：新增 5 组确定性 XCTest，覆盖周记 0/1/2/3+、同日/并列集中、具体金额小数、自动情绪隔离、周月章节数量/时长、月初空缺、后段记录、上月同期截断和数据不足；新增 `playback_copy_lint.py`、页面 copy snapshot 与 `FLOW-42`。`check_copy_experience.ps1` 现在会在任一子检查失败时返回失败，避免嵌套 PowerShell 掩盖退出码。
+- 验证证据：`python scripts/playback_copy_lint.py`、`scripts/check_copy_experience.ps1`、`scripts/experience_static_check.ps1`、`git diff --check` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过；100/1,000/5,000 条夹具摘要、真实 12MP 照片、生活语义、文案、主题、迁移和 SQLite schema 均通过；只保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改周记弱数据 3 章/成熟数据 5 章、月章 6 章及顺序/时长，未修改记录筛选、照片选择、进度、额度/扣次、会员、分享、主题、播放控制、完成动作、今日回放、痕迹首屏、AI 指令、首页动态主动作、存储同步或 `ARCH-03`；`UI-FIX-03`、`FIX-010` 与用户既有脏工作区保持原样。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，新增 Swift 文案策略、`NumberFormatter`、View 辅助去重与 XCTest 尚未实际编译；主文长度、默认/深色主题、特大字号、VoiceOver、宠物开关、真实账本选材和同期复算需要按 `FLOW-42` 真机签收。完成前不得标记 `VERIFIED`。
+- 下一步：在 Xcode 执行 Debug/Release 与全部 XCTest，然后用 iPhone 对周记 0/1/2/3+、月初/后段空缺、自动标签、同期不足/变化/持平及多主题/大字/VoiceOver 逐章试听；发现问题只修 `COPY-02` 对应规则，不调整播放结构或相邻页面。
 
 ### PERF-FIX-01 记录预填 `now` 字段归属编译修复（2026-07-17）
 
@@ -3001,3 +3026,72 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 冻结边界复核：未修改周记/月章播放章节或正文、额度/扣次/完成动作、会员、AI 指令台、复盘、首页动态主动作、痕迹筛选与细查、照片选择/顺序/引用/按需加载、主题 Token、存储同步、`COPY-02` 或 `ARCH-03`；未覆盖 `StatCardView.swift`、`web-preview/app.js`、用户提示文档、素材和 `tmp/`。
 - 剩余风险：Windows 无 Swift/Xcode/iPhone；`TraceChapterCoverFacts` 新字段的 Swift 编译、SwiftUI 固定/自适应布局、真实缺图占位、默认/深色/高对比主题、特大字号、VoiceOver、Reduce Motion、真实 12MP 滚动和封面去重需按 `FLOW-39` 真机签收，因此不得标记 `VERIFIED`。
 - 下一步：在 Xcode Debug/Release 与 iPhone 执行 `FLOW-39`；签收发现问题时只定向修复本项，不启动 `ARCH-03` 或顺带修改播放文案。
+
+---
+
+## 29. UI-FIX-03：痕迹页统一加载遮罩与稳定快照发布（2026-07-20）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 用户真机反馈：“本月痕迹”和“线索”进入整理状态时，提示位置乱跳、不在可视区域中间，也没有遮罩；旧内容与新范围控件会短暂混在一起，完成替换时有明显布局跳动。
+- 根因：页面同时存在无快照时的滚动内容内 `.page` 加载卡、有旧快照时顶部更新 Pill，以及月章目标快照未完成时卡片右上角进度胶囊三套反馈；加载卡位于 ScrollView 内容并使用不对称上下留白，无法相对 viewport 居中；快照、提示消失和内容高度变化又被包进同一个整页动画事务，叠加滚动锚点修正后放大跳动。
+- 目标：痕迹与线索统一为一个挂在 ScrollView 可视 viewport 上的居中加载层；轻量主题遮罩阻止下层误触；只让遮罩淡入淡出，快照发布不执行布局动画；本月痕迹与本月线索使用准确文案。
+- 允许修改：`StatsTraceModels.swift` 的纯加载呈现策略；`StatsWebView.swift` 的加载状态、viewport 遮罩和快照发布事务；必要的 XCTest、体验静态门禁、统一真机矩阵与本文档。
+- 冻结边界：不修改痕迹数据口径、周/月/线索计算、筛选、快照缓存键、后台任务、请求取消、`LatestRequestGate`、旧快照承接、照片按需加载、周/月封面内容、额度、会员、AI、首页动态主动作、主题 Token、存储同步、`COPY-02` 或 `ARCH-03`；不修改或提交用户既有 `StatCardView.swift`、`web-preview/app.js`、提示文档、素材与 `tmp/`。
+- 边界处理：首次无快照立即遮罩；已有旧快照的快速刷新延迟约 150ms 再显示，避免缓存命中闪烁；同一时刻只能存在一个加载反馈；真实空数据仍由有效快照展示空态；页面离开、请求取消、快速周/月/生活/线索切换时旧任务不得重新显示遮罩或覆盖新请求。
+- 验收：首次进入、本周/本月快速切换、生活/线索快速切换、缓存命中、旧快照刷新、真实空数据与任务取消均无重复提示、错误旧内容误触或整页布局跳动；遮罩在可视区域中央并适配主题、Dynamic Type、VoiceOver 与 Reduce Motion。Windows 只能完成代码与静态门禁，Xcode/iPhone 签收前不得标记 `VERIFIED`。
+- 开始现场：分支 `feature/xuzhangapp-staging`；保留 `StatCardView.swift`、`web-preview/app.js` 及既有未跟踪素材/提示/tmp 现场，本项不覆盖、不回退。
+- 实现：新增 `TraceLoadingPresentationPolicy`，按生活/线索、周/月/年/自定义范围生成准确文案；首次无快照零延迟展示，有旧快照时延迟 150ms，避免缓存命中闪烁。`StatsWebView` 将加载状态收敛为单一可选 presentation，加载层挂在 `GeometryReader` viewport 的顶层 `ZStack`，使用 `AppColors.bg` 轻遮罩与 `.card` 加载卡居中展示，同时禁用下层滚动与辅助功能焦点。
+- 去重复与稳定发布：移除痕迹页滚动内容内 `.page` 加载卡、顶部 `ComputationUpdatePill` 和周/月卡片右上角进度胶囊；无快照时只保留稳定透明占位。快照与刷新标记通过禁用动画的 `Transaction` 一次发布，随后只淡出统一遮罩；快速切换会取消旧延迟任务并继续由 `LatestRequestGate` 阻止旧结果反写。
+- 修改文件：`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：新增首次本月痕迹、旧快照 150ms 延迟、本月线索与自定义线索文案纯策略 XCTest；静态门禁锁定单一 viewport 遮罩、交互阻止、无重复提示和无动画快照发布；新增 `FLOW-40` 覆盖无缓存、缓存命中、旧快照、本月痕迹/线索、快速切换、取消、空数据、1,000 条和无障碍矩阵。`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，包含 `git diff --check`、生活语义、文案、主题、迁移、SQLite、100/1,000/5,000 条和真实 12MP 夹具；仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改痕迹数据口径、筛选、周/月/线索计算、缓存键、后台任务、取消与最新请求保护、旧快照承接、照片、封面内容、额度、会员、AI、首页动态主动作、主题 Token、存储同步、`COPY-02` 或 `ARCH-03`；未覆盖或提交用户既有脏工作区。
+- 状态：`IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，新增 Swift 类型与 SwiftUI viewport 布局仍需 Xcode Debug/Release 和 XCTest；遮罩实际居中、Safe Area、快速切换、默认/深色/高对比主题、特大字号、VoiceOver、Reduce Motion 与 1,000 条切换流畅度需按 `FLOW-40` 真机签收，因此不得标记 `VERIFIED`。
+- 下一步：在 Xcode/iPhone 执行 `FLOW-40`；如有问题只定向修复 UI-FIX-03，不启动 `ARCH-03` 或顺带修改周/月内容和相邻页面。
+
+---
+
+## 30. FIX-010：首页一键通勤前台恢复刷新（2026-07-20）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 用户反馈：工作日早上首页“一键快捷记通勤”没有出现，要求修复后全局复核边界与交互卡顿。
+- 已确认根因：`PERF-09` 将通勤候选从 SwiftUI 重绘时同步计算改为账本修订＋分钟桶驱动的后台快照，方向正确；但当前只在首页 `onAppear`、60 秒 Timer、账本修订和会员变化时准备快照。App 前一晚停留首页、早上从后台直接恢复时，`scenePhase` 变为 active 只处理宠物状态，不立即刷新当前分钟，因而会继续读取旧空快照，直到下一个 Timer 才可能出现。
+- 目标：Home Tab 从 inactive/background 回到 active 时，立即以当前时间请求现有首页快照；同一分钟/同账本继续命中 key 并零重算，跨分钟或跨日才启动后台准备。保持旧请求 ID 与 key 双重保护，禁止旧时间候选反写。
+- 允许修改：`HomeView.swift` 的前后台生命周期接线；对应首页快照 XCTest、体验静态门禁、真机矩阵和本文档。只有发现直接必要的快照失效缺口时才允许定向修改 `HomeViewModel+Dashboard.swift`，不得扩张为首页重构。
+- 冻结边界：首页 OCR 待整理→手动草稿→今日回放→周/月痕迹→复盘→继续记录的动态主动作顺序不变；通勤仍不得覆盖更高优先级任务。工作日、06:00～10:30 总窗口、个人时间窗口、120 天样本、最低 4 笔/3 天、稳定金额、今日重复阻止、按钮文案、保存字段与一键写入规则均不变。
+- 性能边界：前台恢复只调用已有变化驱动准备入口，不在 `body`、`scenePhase` 回调或主线程重新筛选完整账本；同一分钟重复 active、短暂来电/控制中心切换和 `onAppear + active` 连续触发必须由快照 key 去重；后台计算、取消和最新请求保护保持。
+- 边界验收：冷启动、前台过夜恢复、同一分钟重复前后台、跨分钟、跨日、工作日/周末、个人窗口前后、已有早通勤、早餐等非通勤记录、OCR/手动草稿/今日回放主动作、用户主动关闭同一候选、快速切 Tab 和 1,000 条账本均有确定结果；不新增通知、不自动保存、不放宽识别。
+- 开始现场：继续保护 `UI-FIX-03` 未提交修改以及 `StatCardView.swift`、`web-preview/app.js`、提示文档、素材、`tmp/` 和 `scripts/__pycache__/`；本项不覆盖、不回退、不提交相邻文件。
+- 实现：`HomeView` 的 `scenePhase` 进入 active 时立即以 `Date()` 调用现有 `prepareHomeDashboardSnapshots`；inactive/background 仍按原规则关闭宠物气泡。首页首次出现与前台恢复标记为生命周期刷新，若分钟/账本 key 已变化，先移除上一时段可操作的旧通勤卡，再在 `.utility` 后台任务生成当前候选；普通 60 秒 Timer 不清旧卡，避免每分钟周期性闪烁。
+- 去重与取消边界：新增纯 `HomeQuickRecordRefreshPolicy`。同一分钟、同账本的 `onAppear + active` 或多次 inactive→active 直接命中 `HomeQuickRecordSnapshotKey` 并返回，不创建新任务；跨分钟/跨日会取消旧任务、更新 request ID，发布时继续同时核对 request ID 与 key，旧时间结果不能反写。生命周期刷新只有 key 真正变化时才清旧候选，用户关闭的同一候选 ID 不会被强制重开。
+- 修改文件：`NativeDemoApp/Views/HomeView.swift`、`NativeDemoApp/ViewModels/HomeViewModel+Dashboard.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 测试与矩阵：新增后台过夜跨日 key、生命周期刷新只清陈旧候选、个人通勤窗口前不出现、窗口内符合样本可出现、已有今日早通勤继续阻止的 XCTest；`FLOW-41` 覆盖冷启动、后台过夜、同一分钟 20 次前后台、跨分钟/跨日、周末、不满足样本、早餐、OCR/草稿/今日回放高优先级、1,000 条与卡顿观察。
+- 全局边界复核：`highConfidenceQuickRecordSuggestionForSnapshot`、`minimumCommuteSupport`、`isMorningCommutePromptTime`、个人时间窗、稳定金额、`hasTodayCommuteRecord`、一键保存与 `shouldShowHighConfidenceQuickRecord` 均无差异；首页动态主动作顺序、宠物关闭行为、Timer、会员、回放、存储、AI、痕迹和其他 Tab 未改。没有新增通知、自动保存、主线程账本扫描或 SwiftUI `body` 计算。
+- 性能复核：前台入口先比较 day/member/minute/revision key；无变化路径在构造账本输入和后台任务前返回。真正跨日时生活线索和通勤继续复用一次不可变输入、`.utility` 任务与请求 ID，不在主线程执行候选筛选；快速前后台不会堆叠任务，Timer 路径不清卡、不制造每分钟视觉闪烁。
+- 验证证据：`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过；包括 `git diff --check`、生活语义、体验、文案、会员、AI、无障碍、可观测性、主题、迁移、SQLite、100/1,000/5,000 条和三张真实 12MP 夹具，仅保留既有 5 条 soft copy warning。
+- 状态：`IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone；`ScenePhase` 生命周期接线、严格并发/XCTest、真实锁屏过夜、同一分钟 20 次前后台、个人时间窗口与 1,000 条前台恢复 hitch 仍需 `FLOW-41` 真机签收，因此不得标记 `VERIFIED`。
+- 下一步：用 Xcode Debug/Release、XCTest 和 iPhone 执行 `FLOW-41`；如仍不显示，先核对真机当时是否满足个人时间窗口、历史稳定样本、今日重复和首页高优先级动作，不得直接放宽规则或改首页动态主动作。
+
+---
+
+## 31. FIX-011：痕迹热点与首页周记推荐状态统一（2026-07-20）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。
+- 用户真机反馈：本周已有 3 笔记录，痕迹页可手动“回看这一段”，首页没有出现周记跳转提示，但痕迹 Tab 显示黄色热点；进入痕迹页再返回后热点仍存在。
+- 已确认根因：首页动态主动作已经使用 `LOGIC-15` 的周记主动推荐门槛（至少 3 笔且覆盖 2 个记录日），并保持今日回放优先；旧 `PlaybackRouteGuidance` 仍仅按本周 3 笔生成 `.weekSliceReady`，独立驱动 Tab 热点。原首页固定 `routeGuidanceContent` 已从渲染层移除，旧引导却未完整退场；进入痕迹 Tab 也不再消费该状态，导致首页、热点和手动入口三套语义分叉。
+- 目标：手动查看继续随时可达；首页周记推荐和痕迹热点共用同一成熟度、播放资格与完成事实；热点只表达“本周成熟痕迹尚未实际看到”，在生活/本周有效快照显示后消费，但不得把进入页面记作周记播放完成。
+- 允许修改：`InteractionStateModels.swift` 的纯热点策略；`HomeViewModel.swift` 的当前周已查看状态与旧周引导退场；`ContentView.swift` 的热点条件与痕迹回调；`StatsWebView.swift` 在生活/本周有效快照发布后的查看确认；必要的 XCTest、静态门禁、真机矩阵和本文档。
+- 冻结边界：首页 OCR→手动草稿→今日回放→周/月痕迹→复盘→继续记录的动态主动作顺序、`3 笔＋2 个记录日` 与月章门槛不变；手动痕迹入口、周记内容、播放资格、额度/扣次、80% 完成判定、痕迹加载/缓存/预热、主题、会员、AI、宠物、存储同步与 `ARCH-03` 不变。
+- 边界处理：3 笔但仅 1 个记录日不亮热点；今日回放可继续覆盖首页主动作，但成熟周记可以作为低干扰热点存在；只有生活模式、本周范围且有效快照已经发布时才记为已查看，进入本月/线索、加载取消或空的未准备状态不消费；同一 ISO 周只提醒一次，未成熟时提前进入不影响之后成熟提醒；查看只清热点，不写播放完成。
+- 性能边界：复用 `homeJourneyLedgerFacts` 和已准备的 `TraceChapterSnapshot`，不得在 `ContentView`、Tab 点击或 SwiftUI `body` 新增完整账本筛选、分组或签名；已查看状态只进行一次小型持久化写入。
+- 验收：覆盖 3 笔/1 天、3 笔/2 天＋今日未回放、本周有效快照消费、本月/线索不消费、同周不重复、跨周重置、额度不足、已完成播放、加载取消和 80% 完成边界；Windows 只可标记 `CODE_DONE`，Xcode/iPhone 签收前不得标记 `VERIFIED`。
+- 开始现场：继续保护 `COPY-02`、`UI-FIX-03`、`FIX-010` 及 `StatCardView.swift`、`web-preview/app.js`、提示文档、素材与 `tmp/` 的既有修改/未跟踪内容；本项不覆盖、不回退、不提交相邻任务。
+- 实现：新增纯 `WeekTraceDiscoveryPolicy`，热点成熟度直接复用 `PlaybackMaturityPolicy.weekIsReady`；显示条件统一为周记达到 3 笔＋2 个记录日、仍可播放、当前周未完成且当前周未查看。`HomeViewModel` 复用既有 `homeJourneyLedgerFacts` 与 `SummaryPlaybackQuotaStore`，按 ISO 周持久化一个轻量已查看 key；清空本机账本时同步清理该 key，周记达到 80% 完成时也记为已查看，但不改变原完成存储。
+- 有效查看边界：`StatsWebView` 只在生活模式、本周范围、非自定义范围、当前周刷新完成且 `TraceChapterSnapshot` 已发布时消费热点；旧快照刷新中、进入本月/线索、自定义范围、任务取消和未成熟周均不写已查看。后台预热本周时因当前可见范围不是本周，不会误消费。
+- 旧状态退场：移除 `.weekSliceReady`、`.fiveRecordsNeverPlayed` 的生成、首页不可达提示条和 Tab 热点依赖；`PlaybackRouteGuidance` 只保留首笔今日回放承接。首页动态主动作、今日回放优先和周/月动作目的地保持不变；历史分析事件白名单保留旧值以兼容既有本机日志，不再产生新事件。
+- 修改文件：`NativeDemoApp/Models/InteractionStateModels.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/ContentView.swift`、`NativeDemoApp/Views/HomeView.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：新增 3 笔/1 天不成熟、3 笔/2 天显示热点、有效快照才消费、已查看/已完成/无额度不显示，以及“今日回放仍优先但成熟痕迹可亮低干扰热点”的确定性 XCTest；静态门禁锁定统一成熟度、ISO 周已查看状态、有效快照消费和旧周引导清零；新增 `FLOW-43`。`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，包含生活语义、文案、会员、AI、无障碍、可观测性、主题、迁移、SQLite、100/1,000/5,000 条和三张真实 12MP 夹具；仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改首页 OCR→草稿→今日回放→周/月痕迹→复盘→继续记录顺序、`3 笔＋2 天`/月章门槛、手动痕迹入口、周记内容、额度/扣次、80% 完成判定、痕迹缓存/预热/加载遮罩、主题、会员、AI、宠物、通勤、存储同步、`COPY-02` 或 `ARCH-03`；未覆盖用户既有脏工作区。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone；新增 `@Published` 已查看状态、SwiftUI Tab 热点刷新、痕迹快照发布回调、跨 ISO 周、额度 0、80% 完成和快速进入/退出仍需 Xcode Debug/Release、XCTest 与 iPhone 按 `FLOW-43` 签收，因此不得标记 `VERIFIED`。
+- 下一步：在 Xcode/iPhone 执行 `FLOW-43`；如有问题只定向修复热点显示或消费，不降低成熟门槛、不改变首页主动作顺序，也不启动 `ARCH-03`。

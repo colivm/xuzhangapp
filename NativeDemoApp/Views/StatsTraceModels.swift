@@ -63,6 +63,53 @@ enum TraceLifePreparationPolicy {
     }
 }
 
+struct TraceLoadingPresentation: Equatable, Sendable {
+    let message: String
+    let detail: String
+    let delayNanoseconds: UInt64
+}
+
+enum TraceLoadingPresentationPolicy {
+    static let refreshDelayNanoseconds: UInt64 = 150_000_000
+
+    static func make(
+        viewMode: TraceViewMode,
+        selectedPeriod: StatsPeriod,
+        lifeRange: SummaryPlaybackRange,
+        usesCustomRange: Bool,
+        hasVisibleSnapshot: Bool
+    ) -> TraceLoadingPresentation {
+        let message: String
+        switch viewMode {
+        case .life:
+            message = lifeRange == .month
+                ? "正在整理本月痕迹…"
+                : "正在整理本周痕迹…"
+        case .clues:
+            if usesCustomRange {
+                message = "正在整理这段线索…"
+            } else {
+                switch selectedPeriod {
+                case .week:
+                    message = "正在整理本周线索…"
+                case .month:
+                    message = "正在整理本月线索…"
+                case .year:
+                    message = "正在整理本年线索…"
+                }
+            }
+        }
+
+        return TraceLoadingPresentation(
+            message: message,
+            detail: hasVisibleSnapshot
+                ? "整理完成前会暂时保留当前内容"
+                : "整理好后会一次完整呈现",
+            delayNanoseconds: hasVisibleSnapshot ? refreshDelayNanoseconds : 0
+        )
+    }
+}
+
 struct StatsTabState {
     var selectedPeriod: StatsPeriod = .week
     var selectedCategory: HomeItem.Category?
