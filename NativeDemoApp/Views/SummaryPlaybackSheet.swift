@@ -1026,7 +1026,7 @@ struct SummaryPlaybackSheet: View {
         if chapter.metrics.keys.contains("supportLine") {
             return []
         }
-        LifeStorySignalService.chapterSignals(from: chapter)
+        return LifeStorySignalService.chapterSignals(from: chapter)
             .map { (symbol: $0.symbol, text: $0.label) }
     }
 

@@ -3095,3 +3095,20 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 冻结边界复核：未修改首页 OCR→草稿→今日回放→周/月痕迹→复盘→继续记录顺序、`3 笔＋2 天`/月章门槛、手动痕迹入口、周记内容、额度/扣次、80% 完成判定、痕迹缓存/预热/加载遮罩、主题、会员、AI、宠物、通勤、存储同步、`COPY-02` 或 `ARCH-03`；未覆盖用户既有脏工作区。
 - 剩余风险：Windows 无 Swift/Xcode/iPhone；新增 `@Published` 已查看状态、SwiftUI Tab 热点刷新、痕迹快照发布回调、跨 ISO 周、额度 0、80% 完成和快速进入/退出仍需 Xcode Debug/Release、XCTest 与 iPhone 按 `FLOW-43` 签收，因此不得标记 `VERIFIED`。
 - 下一步：在 Xcode/iPhone 执行 `FLOW-43`；如有问题只定向修复热点显示或消费，不降低成熟门槛、不改变首页主动作顺序，也不启动 `ARCH-03`。
+
+---
+
+## 32. COPY-FIX-01：播放章节元素方法缺少显式返回（2026-07-20）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。
+- Xcode 错误：`SummaryPlaybackSheet.swift:1029` 报告 `Missing return in instance method expected to return '[(symbol: String, text: String)]'`。
+- 根因：`chapterElementChips(for:)` 在 `supportLine` 分支之后还有第二条表达式，属于多语句方法；Swift 不会对末尾的 `chapterSignals(...).map(...)` 执行单表达式隐式返回，因此非 `supportLine` 路径缺少显式 `return`。
+- 允许修改：只为该映射结果补显式返回，并增加静态防回流与本文档记录。
+- 冻结边界：不修改章节 signal 集合、顺序、图标、标签、`supportLine` 隐藏规则、播放文案、章节数量/时长、照片、进度、额度、会员、分享、痕迹热点或其他 UI。
+- 开始现场：提交 `00e5ff4` 已推送；继续保护未提交的 `StatCardView.swift`、`web-preview/app.js`、提示稿、素材、`tmp/` 与缓存目录，本项不覆盖、不暂存这些文件。
+- 修复：将非 `supportLine` 路径的 `LifeStorySignalService.chapterSignals(from: chapter).map(...)` 改为显式 `return`；空数组分支与映射内容保持原样。
+- 修改文件：`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`scripts/experience_static_check.ps1`、本文档。
+- 验证证据：新增显式返回静态防回流；`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，覆盖生活语义、文案、会员、AI、无障碍、主题、迁移、SQLite、100/1,000/5,000 条和真实 12MP 照片夹具；仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改 signal 筛选/顺序、图标、标签、`supportLine` 行为、SwiftUI 布局、播放文案、章节、时长、照片、进度、额度、会员、分享、痕迹热点、通勤或存储同步；用户未提交现场保持原样。
+- 剩余风险：Windows 无 Swift/Xcode，必须在原 Xcode 环境重新编译确认该错误清零；完成编译前不得标记 `VERIFIED`。
+- 下一步：Xcode 重新编译；若仍有错误，只修同一编译链，不扩张为播放 UI 或文案调整。
