@@ -699,6 +699,7 @@ final class HomeViewModel: ObservableObject {
             invalidateRecordInputHistorySnapshot()
             invalidateHomeDashboardSnapshots()
             prepareItemDerivedCacheIfNeeded(now: Date())
+            scheduleNarrativeAIPrecompute(now: Date())
         }
     }
     @Published private(set) var syncStatusMessage: String?
@@ -801,6 +802,8 @@ final class HomeViewModel: ObservableObject {
     private var itemDerivedCachePreparationTask: Task<Void, Never>?
     private var itemDerivedCacheRequestID = UUID()
     private(set) var itemDerivedCacheRevision = -1
+    private var narrativeAIPreparationTask: Task<Void, Never>?
+    private var narrativeAIPreparationRevision = -1
     private var localLedgerWritesBlocked = false
 
     init() {
@@ -862,6 +865,7 @@ final class HomeViewModel: ObservableObject {
             .appOpened,
             props: [.ledgerSizeBucket: AnalyticsService.countBucket(for: items.count)]
         )
+        scheduleNarrativeAIPrecompute(now: initialDerivedNow)
     }
 
     @discardableResult
@@ -2794,7 +2798,31 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func refreshTodayPlayback() {
-        prepareItemDerivedCacheIfNeeded(now: Date())
+        let now = Date()
+        prepareItemDerivedCacheIfNeeded(now: now)
+        scheduleNarrativeAIPrecompute(now: now)
+    }
+
+    private func scheduleNarrativeAIPrecompute(now: Date) {
+        let settings = LocalStore.loadSettings()
+        guard settings.useRemoteAI,
+              !items.isEmpty,
+              !LocalStore.isReleaseFixtureMode,
+              narrativeAIPreparationRevision != homeDashboardRevision else { return }
+        narrativeAIPreparationRevision = homeDashboardRevision
+        narrativeAIPreparationTask?.cancel()
+        let snapshotItems = items
+        let sourceRevision = homeDashboardRevision
+        narrativeAIPreparationTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            await LifeNarrativeAIPrecomputeCoordinator.shared.prepare(
+                items: snapshotItems,
+                sourceRevision: sourceRevision,
+                now: now,
+                settings: settings
+            )
+        }
     }
 
     private func emitRouteGuidance(_ guidance: PlaybackRouteGuidance) {

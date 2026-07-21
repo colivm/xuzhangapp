@@ -3284,3 +3284,136 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 冻结边界复核：未修改周/月日期口径、金额/笔数/分类/证据/排序、对比结果 UI、推荐与缓存、查询和补记写入边界、会员、主题、首页、痕迹、宠物、存储同步或 `ARCH-03`；未覆盖用户既有 `StatCardView.swift`、`web-preview/app.js`、提示稿、素材、`tmp/` 与缓存目录，也未回退未提交的 `PET-FIX-01`。
 - 剩余风险：Windows 无 Swift/Xcode/iPhone，新增 Swift 分支与 XCTest 尚未实际编译；繁体省略表达、真实金额周期命中和 VoiceOver 标题仍需按 `FLOW-52` 在 Xcode/iPhone 签收，因此不得标记 `VERIFIED`。
 - 下一步：在 Xcode Debug/Release 编译并执行对应 XCTest，再用 iPhone 按 `FLOW-52` 核对真实周期金额；发现问题时只调整本项短语消歧，不改对比日期计算和结果层级。`PET-FIX-01` 的 `FLOW-51` 可在同一轮真机矩阵一起签收。
+
+---
+
+## 38. PET-FIX-02：宠物拖动坐标稳定与跟手性修复（2026-07-21）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。
+- 真机现象：`PET-FIX-01` 修复点击时位置跳变后，拖动宠物仍持续抖动，视觉位置在手指附近来回摆动且明显不跟手。
+- 根因：拖动手势使用 `.local` 坐标，而同一个宠物控件又按该手势的 translation 实时 `.offset`；控件移动后局部坐标原点也跟着移动，下一帧 translation 被反向抵消，形成“位移—归零—再位移”的反馈振荡。首次越过阈值时 `onChanged` 还会写入 `tapSuppressionID`，使活跃手势中途触发视图重建；450ms 后再次清除状态，长拖期间又增加一次无关更新。
+- 目标：拖动全程以不随宠物移动的 viewport 坐标采样；拖动过程中只更新轻量手势位移，不写持久状态、不启用隐式动画；结束时一次原子提交吸附位置并抑制误点。横向、纵向和斜向拖动都连续跟手，父级首页滚动不抢手势。
+- 允许修改：`PixelPetAnimationView.swift` 的拖动坐标空间、手势内状态时点和无动画提交；对应 XCTest、静态门禁、真机矩阵和本文档。
+- 冻结边界：不修改默认右下角、边缘吸附、上下安全区、位置存储 key、气泡布局/文案/生命周期、像素帧、点击说话、0.6 秒长按隐藏、VoiceOver 动作、首页滚动结构/账本/主动作、主题、会员、AI、回放、同步或 `ARCH-03`。
+- 验收：慢速与快速拖动均不出现往返振荡，宠物中心与手指位移连续一致；越过 8pt 后由宠物接管且首页不滚动；拖动过程中不反复写 `@State` 或启动延迟任务；松手只提交一次并吸附，1～7pt 抖动仍按点击、不保存位置；气泡显隐、左右侧、顶部/底部边界和长按保持原行为。
+- 实现：为宠物外层 viewport 建立固定命名坐标空间，`DragGesture` 从移动中的 `.local` 改为 `.named(Self.dragCoordinateSpaceName)`；实时位移仍只进入 `@GestureState`，并在其 transaction 中禁用动画。删除活跃拖动中的 `onChanged → suppressTapTemporarily()`，450ms 抑制任务只在有效拖动结束后启动；吸附位置在无动画 transaction 中一次提交，再保存和反馈。
+- 边界处理：8pt 启动阈值、高优先级手势、左右吸附、上下夹取和持久化格式不变；轻微抖动仍留给点击，长按仍复用原抑制逻辑。没有向 `HomeView` 暴露新的拖动态，也没有让首页滚动、账本或主动作跟随拖动重算。
+- 修改文件：`NativeDemoApp/Views/Components/PixelPetAnimationView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：新增固定 viewport 采样的连续/单调位移 XCTest；静态门禁锁定命名坐标、禁动画 transaction、零 `.local`、活跃拖动零 `onChanged` 普通状态写入及 `FLOW-53`。`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过；100/1,000/5,000 条、真实 12MP、AI、生活语义、文案、主题、迁移和 SQLite 均通过，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改默认位置、气泡、像素帧、消息策略、点击/长按含义、VoiceOver、首页结构与数据、主题、会员、AI、回放、同步或 `ARCH-03`；用户既有 `StatCardView.swift`、`web-preview/app.js`、提示稿、素材、`tmp/` 与缓存目录未覆盖。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，命名坐标空间、`highPriorityGesture` 与系统 ScrollView/长按的真实组合仍需真机验证；拖动跟手性属于设备采样结果，当前只能标记 `CODE_DONE`，不能标记 `VERIFIED`。
+- 下一步：Xcode 编译后优先在 iPhone 执行 `FLOW-53`，慢拖、快拖、停顿后继续和超过 450ms 长拖各 20 次；若仍有手势竞争，只在宠物局部组合手势层定向修复，不改首页 ScrollView 或回退固定坐标策略。
+
+---
+
+## 39. COPY-FIX-02：周记/月章播放辅助语义层恢复（2026-07-21）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 用户反馈：`COPY-02 v2` 优化播放文案后，原先生活卡播放中的情绪标签和生活印记（现术语“生活线索”）一起消失；要求恢复其产品价值，但不能把已清理的机器拼接文案重新塞回正文。
+- 已确认根因：`00e5ff4` 在收敛周记/月章正文时，从章节 metrics 移除了 `emotionTag`、`lifeMarkLine`、`sceneMemoryLine` 与 `scentWords`；同时所有新章节都携带 `supportLine`，而 `chapterElementChips(for:)` 对存在该 key 的章节无条件返回空数组，导致辅助标签层整体退场。账单 `displayEmotionTag`、`LifeMarkService` 与周记分享 payload 的 `lifeMarkLine/emotionLine` 仍存在，属于播放展示回归而非数据丢失。
+- 目标：保留 `COPY-02 v2` 当前自然主文和独立数字依据，在周记/月章播放中恢复最多一个高置信生活线索和最多一个高置信情绪标签；三层去重、跨章节去重，证据不足时不占位。
+- 允许修改：`PlaybackService.swift` 的播放辅助语义资格、快照准备和章节归属；`PlaybackSupportServices.swift` 的结构化播放信号与去重；`SummaryPlaybackSheet.swift` 的轻量主题标签展示；对应 XCTest、文案/体验静态门禁、真机矩阵和本文档。
+- 冻结边界：不修改 `COPY-02 v2` 主文、章节标题、周记弱数据 3 章/成熟数据 5 章、月章 6 章及顺序/时长；不修改记录筛选、照片、进度、额度/扣次、会员、分享模板、主题体系、播放控制、完成动作、首页动态主动作、AI、痕迹、宠物、存储同步或 `ARCH-03`。
+- 可信边界：用户明确文字与结构化天气/场景优先；自动标签只能原样作为辅助标签，不能扩写用户感受。排除默认分类推断、弱暖语气、跨记录固化、敏感记录、脏标题、里程碑/内部词条和与主文或 supportLine 重复的内容。医疗、债务、成人、账号、地址等敏感内容不得暴露标题或情绪原文。
+- 性能边界：辅助语义随 `PlaybackService` 构建不可变周/月快照时一次准备；播放索引、动画、滚动、主题、宠物开关和 SwiftUI 重绘只读已有结果，不重新扫描完整账本或调用 `LifeMarkService.aggregates`。
+- 工作区保护：保留未提交 `PET-FIX-02`、`StatCardView.swift`、`web-preview/app.js`、提示文档、素材、`tmp/` 与缓存目录；本项不覆盖、不回退、不提交相邻现场。
+- 计划验收：覆盖周记 0/1/2/3+、月章、用户明确标签、结构化天气通勤、默认/弱/跨记录/敏感标签、生活线索存在/缺失、主辅包含关系和跨章节重复；补 Xcode/iPhone 多主题、Dynamic Type、VoiceOver、Reduce Motion 与 1,000 条播放滚动矩阵。Windows 完成前只能从 `IN_PROGRESS` 到 `CODE_DONE`，不得冒充真机 `VERIFIED`。
+- 实现：新增 `PlaybackAuxiliarySignalPolicy`，仅在 `PlaybackService` 构建周记/月章不可变快照时一次准备辅助语义。生活线索只从 `LifeMarkService` 已验证的场景聚合中选择，排除里程碑、连续内部词条、脏标题和敏感标签；情绪标签只接受记录自身结构化热/冷/雨/雪、可信晚间通勤或真实周末/假期餐饮日期能够证明的标签。自动标签只原样展示，不进入主文，也不扩写用户感受。
+- 章节归属与去重：周记“这一周”和月章首个“本月回看”最多携带一个生活线索与一个情绪标签，其他章节不重复。`LifeStorySignalService.playbackAuxiliarySignals` 会同时与 warm/plain 主文、`supportLine` 和已接受标签做归一化包含关系去重；无合格信号时返回空数组且 UI 不占位。旧无 `supportLine` 章节继续兼容原 signal 映射，新 `COPY-02 v2` 章节不恢复分类/备注/词条 chip。
+- UI：`SummaryPlaybackSheet` 保留原轻量胶囊、章节强调色、间距和视觉风格；仅恢复“生活线索 · … / 情绪标签 · …”两个明确标签。使用 `ViewThatFits` 在窄屏或大字下从横排切为纵排，并补独立 VoiceOver 标签；没有新增材质、模糊、阴影或布局读取。
+- 性能边界：`SummaryPlaybackSheet` 零 `LifeMarkService.aggregates` 与零辅助语义准备调用；播放索引、暂停/继续、动画、滚动、主题和宠物开关只读章节 metrics。完整账本聚合仍由现有后台周/月快照任务承接，不进入 SwiftUI `body`。
+- 修改文件：`NativeDemoApp/Services/PlaybackSupportServices.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/playback_copy_lint.py`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：新增周记同时恢复“咖啡饮品＋热天路上辛苦了”、弱暖/医疗敏感过滤、主文/supportLine 去重、月章仅首章发布四组确定性 XCTest 接线；新增文案 lint、体验静态守卫和 `FLOW-54`。`git diff --check`、`python scripts/playback_copy_lint.py`、`python scripts/life_semantic_regression.py`、`scripts/check_copy_experience.ps1`、`scripts/experience_static_check.ps1` 与最终 `python scripts/validate_release_gate.py --phase windows` 全部通过；100/1,000/5,000 条、三张真实 12MP、生活语义、文案、会员、AI、无障碍、主题、迁移和 SQLite 均通过，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改 `COPY-02 v2` 主文、章节标题、周记 3/5 章、月章 6 章及顺序/时长，未修改记录筛选、照片、进度、额度/扣次、会员、分享、主题、播放控制、完成动作、首页动态主动作、AI、痕迹、宠物、存储同步或 `ARCH-03`；未覆盖 `PET-FIX-02` 与用户既有脏工作区。
+- 状态：`IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，新增 Swift 策略、`ViewThatFits` 布局与 XCTest 尚未实际编译；真实旧账本的标签命中率、两个长标签的小屏/特大字号、VoiceOver、默认/深色/高对比主题及 1,000 条播放滚动需要按 `FLOW-54` 真机签收，因此不得标记 `VERIFIED`。
+- 下一步：在 Xcode 执行 Debug/Release 与全部 XCTest，再用 iPhone 按 `FLOW-54` 核对周记/月章；若出现问题，只调整辅助标签资格、去重或局部布局，不回退 `COPY-02 v2` 主文，不修改章节结构和相邻产品逻辑。
+
+---
+
+## 40. 证据优先的分层叙事系统（2026-07-21）
+
+用户确认将分享图照片模板、重复咖啡主叙事、今日回放、周记/月章活人感、“过去的回声”和可选提前 AI 润色收敛为同一条产品路线。目标不是增加随机文案，而是把“长期代表用户的生活印记”与“本次最值得说的主线”分开：咖啡等高频事实继续作为稳定生活印记，但只有发生新增、回归、明显变化、具体照片或用户明确表达时才重新成为主叙事。
+
+### 固定执行顺序
+
+| 顺序 | ID | 任务 | 状态 | 冻结边界 |
+|---:|---|---|---|---|
+| 1 | NARRATIVE-CORE | 事实快照、信号角色、重复冷却与本地保底 | `CODE_DONE` | 只建立纯叙事模型和确定性测试；不改 UI、账单、额度、会员、主题或播放结构 |
+| 2 | SHARE-03 | 分享图安全模板矩阵与轻总结 | `CODE_DONE` | 保留 FIX-009 照片先准备后渲染；不改照片顺序、引用、权限或原账本 |
+| 3 | PLAYBACK-COPY-03 | 今日/周/月播放接入分层叙事 | `CODE_DONE` | 不改今日回放、周记 3/5 章、月章 6 章的数量、顺序、时长、扣次和完成动作 |
+| 4 | ECHO-01 | 高置信过去回声 | `CODE_DONE` | 只做重复节奏、再次出现和同期变化；证据不足不显示，不做开放式相似记忆猜测 |
+| 5 | NARRATIVE-AI-01 | 提前 AI 润色、证据校验与缓存 | `CODE_DONE` | 可选联网；生成/播放/分享保存时不等待；失败必须回退本地，不上传照片或敏感原文 |
+
+### 全局冻结边界
+
+1. 不修改账单字段、金额、日期、标题、分类、OCR、AI 补记、存储、同步 DTO 与冲突规则。
+2. 不修改首页 OCR→草稿→今日回放→周/月痕迹→复盘→继续记录的动态主动作顺序、成熟门槛和主次入口。
+3. 不修改免费额度、扣次、会员 Product ID、价格、StoreKit、登录续购或共享额度池结论。
+4. 不修改主题 Token、宠物、天气权限、痕迹筛选、页面路由、`web-preview` 或 `ARCH-03`。
+5. 保留 `FIX-009` 的不可变分享渲染输入：照片必须先读取、降采样和预解码；导出树不得出现异步缩略图、加载文案或固定延迟。
+6. 保留 `COPY-FIX-02` 已恢复的生活线索/情绪辅助标签及可信过滤；新叙事主文不得再次吞并或复述辅助标签。
+7. 基础自然文案不是会员特权；未来会员价值可来自更长历史的高置信回声，但本队列不改变权益和额度。
+
+### NARRATIVE-CORE 完成记录
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；未做 Xcode/iPhone 签收，不标记 `VERIFIED`。
+- 目标：建立不可变事实快照与纯角色规划器，把候选信号分为主线、辅助观察、生活印记和事实依据；同一稳定信号可以继续作为生活印记，但连续日/周没有信息增量时不得反复成为主线。
+- 角色资格：用户明确文字或代表照片优先；新增、消失、显著增减和隔期回归其次；结构化天气/场景与具体日期再次；稳定生活印记只在无更具体事实时承接主线。敏感、弱暖标签、跨记录固化和无证据情绪不得进入主线。
+- 冷却边界：冷却按规范化 signal ID 与日/周/月周期记录，不依赖随机数；只降低叙事主线资格，不改变生活印记事实、查询结果、账单或页面数据。
+- 性能边界：事实快照由明确输入一次生成；SwiftUI `body`、播放索引、滚动、主题、宠物和模板切换只读结果。相同范围、账本修订和规则版本必须复用；旧请求不得覆盖新修订。
+- 工作区保护：保留未提交的 `PET-FIX-02`、`COPY-FIX-02`、`StatCardView.swift`、`web-preview/app.js`、提示稿、素材、`tmp/` 与缓存目录；本队列不覆盖、不回退、不提交相邻现场。
+- 计划验收：覆盖 0/1/2/多笔、咖啡连续日/周、咖啡发生明显变化、有/无照片、用户明确文字、敏感记录、同额并列、跨日/周/月、确定性与旧修订拒绝；Windows 完成前只能标记 `CODE_DONE`，Xcode/XCTest/iPhone 签收前不得标记 `VERIFIED`。
+- 实际范围：新增 `LifeNarrativePlanningService.swift`，建立日/周/月不可变输入、`lead/support/mark/evidence` 四角色、稳定信号主线冷却、照片/用户文字/真实变化优先、节奏保底和 `empty/factual/contextual/echoEligible` 成熟度。逐条过滤医疗与高风险词条后再分组，避免普通与敏感记录同组时把敏感标题、照片或证据 ID 带入输出；只有敏感记录时使用不展开的私密保底，不谎称无记录。
+- 文件：`NativeDemoApp/Services/LifeNarrativePlanningService.swift`、`NativeDemoApp.xcodeproj/project.pbxproj`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`。
+- 验证证据：新增稳定咖啡保留生活线索但不重复领衔、真实增量可重新领衔、照片/用户原话优先、敏感记录单独及混组零泄漏、成熟度边界 XCTest 接线；静态门禁锁定角色、冷却、净化和工程接线，新增 `FLOW-55`。`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 全部通过；100/1,000/5,000 条、三张真实 12MP、语义、文案、主题、迁移与 SQLite 全通过，仅保留既有 5 条 soft copy warning。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，新增 Swift 文件与 XCTest 尚未实际编译；`Calendar.current` 的设备时区、真实旧账本语义命中率、1,000 条生成耗时和 `FLOW-55` 仍需统一真机矩阵签收。发现问题只定向修复纯规划器，不改 UI、账本、播放、额度、会员、主题或宠物。
+- 下一步：仅执行 `SHARE-03`；复用计划输出和 `FIX-009` 不可变已准备照片，先解决安全模板数量与重复文案，不提前修改播放、回声或 AI。
+
+### SHARE-03 完成记录
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；未做 Xcode/iPhone 签收，不标记 `VERIFIED`。
+- 目标：0/1/2～3 张真实可用照片均提供 3 个安全内置模板；模板差异来自信息层级和构图，不用未验证的满屏裁切冒充数量。分享图只呈现一条本次主线、一条必要辅助和最多两个生活线索，不再左右复述同一故事、关键词或系统布局说明。
+- 冻结：保留 `FIX-009` 照片后台读取、降采样、预解码、不可变 prepared input 与预览/导出同源；不改变照片顺序、缺图降级、原图引用、相册权限、保存去重、周记播放结构、额度和完成动作。
+- 计划验收：0/1/2/3 张、全部缺损降为 0 张、自定义背景、普通/敏感标题、深浅/高对比主题、特大字号、VoiceOver、连续保存和真实 12MP；模板切换不得重扫账本或重新读取照片。
+- 实际范围：按“实际成功准备的照片数”提供安全矩阵：0 图为记录摘要/手账留白/杂志版面，1 图为单图记忆/手账留白/记录摘要，2～3 图为周记拼页/杂志版面/记录摘要；自定义背景继续独立显式选择。周分享 payload 一次携带 `LifeNarrativePlan`，稳定咖啡无变化时只保留在线索层。记录摘要左侧改为纯视觉符号、右侧只写一次事实；移除“这张卡片怎么来的/系统如何排版”，底部仅在有不重复的辅助观察或生活线索时显示。新计划存在时不再回退旧最高分类、旧洞察或敏感语义。
+- 文件：`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`。
+- 验证证据：新增 0/1/2/3 图均三个安全模板、周分享提前携带叙事计划、重复咖啡不领衔、旧敏感字段零回退 XCTest/静态守卫及 `FLOW-56`。`git diff --check`、体验静态检查和 `python scripts/validate_release_gate.py --phase windows` 全部通过；100/1,000/5,000 条、三张真实 12MP、语义、文案、主题、迁移与 SQLite 全通过，仅保留既有 5 条 soft copy warning。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，新增 payload 参数、SwiftUI `@ViewBuilder` 分支、三个构图在特大字号/真实照片下的裁切和真实 12MP 模板切换仍需 `FLOW-56` 签收；若有问题只修分享卡局部布局/接线，不回退 `FIX-009`，不改照片、账本、额度、主题或播放结构。
+- 下一步：仅执行 `PLAYBACK-COPY-03`，把同一角色计划接入今日/周/月播放正文；不启动回声或 AI，不改章节数量、顺序、时长、扣次与完成动作。
+
+### PLAYBACK-COPY-03 完成记录
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；未做 Xcode/iPhone 签收，不标记 `VERIFIED`。
+- 目标：今日回放、周记、月章共用“主线一次、辅助一次、生活线索不抢标题”的文案边界；弱数据只说可验证事实，成熟数据有轻总结但不煽情、不假装理解感受。咖啡等稳定印记继续可见，但没有变化时不得每天/每周重复占据主文。
+- 冻结：今日回放已有卡片结构与免费次数、周记弱数据 3 章/成熟 5 章、月章 6 章、章节顺序/时长、照片、进度、暂停、额度、会员、分享和完成动作全部不变；保留 `COPY-FIX-02` 首章最多一个生活线索和一个情绪标签。
+- 计划验收：0/1/2/多笔、连续咖啡/真实增减、用户原话、照片、通勤/餐食/爱好、敏感记录、同额并列、日周月边界、宠物开关、Reduce Motion、VoiceOver、1,000 条滚动与播放索引零重算。
+- 实际范围：今日 `ContentSnapshot` 一次携带日叙事计划和前一日稳定信号，开场按用户原话/照片/真实新场景优先，稳定咖啡只留在对应单笔卡，不再同时占据开场与收尾；移除今日回放额外 `LifeMarkService` 全量聚合。周记保留概况首章，代表“一笔”按计划优先用户原话/照片/真实变化；月章在月初/后来各自时间段内优先高信息记录；日/周/月收尾统一为平静轻总结。周记 3/5 章、月章 6 章及全部时长、辅助标签和控制未改。
+- 文件：`NativeDemoApp/Views/HomeView.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/Services/LifeNarrativePlanningService.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`qa/page_copy_snapshots.json`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`。
+- 验证证据：新增今日快照叙事计划、连续咖啡只在单笔卡/周记反复层出现、开场收尾不重复、章节时长冻结 XCTest 接线；静态门禁锁定今日零二次生活线索聚合、周/月一次计划和 `FLOW-57`。`git diff --check`、体验静态检查、页面文案快照和 `python scripts/validate_release_gate.py --phase windows` 全部通过；100/1,000/5,000 条、真实 12MP、语义、文案、主题、迁移与 SQLite 全通过，仅保留既有 5 条 soft copy warning。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，`ContentSnapshot` 新字段、日/周/月 Swift 分支和 XCTest 尚未实际编译；真实生活场景命中、VoiceOver、播放切章与 1,000 条性能仍需 `FLOW-57` 签收。若有问题只修文案选择/快照接线，不改章节结构、时长、额度、会员、分享或完成动作。
+- 下一步：仅执行 `ECHO-01`；只允许重复节奏、隔期回归和有可复算基线的变化，证据不足主动不显示，每次最多一条，不提前接 AI。
+
+### ECHO-01 完成记录
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；未做 Xcode/iPhone 签收，不标记 `VERIFIED`。
+- 目标：实现“过去的回声”但严格克制：只在同一规范化信号跨足够时间重复、消失后再次出现、或和可比同期发生明显变化时生成；每个输出最多一条，具体日期/次数/差值都必须能从证据 ID 复算。
+- 冻结：不做标题向量相似、开放式回忆、情绪猜测或“你一直/你终于”等人格结论；稳定咖啡连续出现本身不构成每周新回声；不改账本、同步、痕迹筛选、播放章节、额度、会员和 UI 结构。
+- 计划验收：repeat/return/change 三类、仅一次重复、连续每周咖啡、间隔回归、同期显著增减、阈值边缘、敏感混组、同额并列、最多一条、确定性、旧修订拒绝及 1,000 条预生成性能。
+- 实际范围：新增纯 `LifeNarrativeEchoPolicy`，日/周/月统一输出 `repeatRhythm/returnAfterGap/comparableChange` 三类之一或主动不显示；当前期至少 2 笔，return 要求前一期缺席，change 要求绝对差 ≥2 且相对差 ≥50%，周/月比较只取相同已过日序，repeat 只允许周节奏且至少两个历史周命中同一星期。普通咖啡禁用 repeat，但允许真实 change/return。所有结果携带当前/历史 evidence IDs、修订、次数、基线和间隔，排序确定且每次最多一条；今日收尾、周/月末章和分享观察只读已准备结果。
+- 文件：`NativeDemoApp/Services/LifeNarrativeEchoService.swift`、`NativeDemoApp/Services/LifeNarrativePlanningService.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/Views/HomeView.swift`、`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoApp.xcodeproj/project.pbxproj`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`。
+- 验证证据：新增连续咖啡不触发、咖啡真实增量、隔周回归和 echo ID 冷却、三周同星期节奏、月同期已过日序、敏感证据排除、双候选唯一确定及旧修订拒绝 XCTest 接线；静态门禁锁定阈值、同期、冷却、接线和 `FLOW-58`。`git diff --check`、体验静态检查及 `python scripts/validate_release_gate.py --phase windows` 全部通过；100/1,000/5,000 条、真实 12MP、语义、文案、主题、迁移与 SQLite 全通过，仅保留既有 5 条 soft copy warning。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，新增 Swift 文件、日期边界、可比日序和真实 UI 行高尚未编译/签收；1,000 条历史扫描、跨时区/跨年周、VoiceOver 和 `FLOW-58` 需真机完成。若有问题只修 echo 阈值/日期/局部呈现，不扩张到相似记忆或情绪推断。
+- 下一步：仅执行 `NARRATIVE-AI-01`；AI 只能润色已经选定并脱敏的事实，必须提前、可选、可校验、可缓存，任何失败立即使用本地文案。
+
+### NARRATIVE-AI-01 完成记录
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；本队列当前无 `IN_PROGRESS`。未做 Xcode/iPhone/真实远端签收，不标记 `VERIFIED`。
+- 目标：在真实账本修订完成后，以结构化脱敏 fact pack 可选请求远端轻润色；AI 不选择事实，不看照片，不接收敏感原文，不生成金额/日期/分类之外的新事实。返回必须引用允许的 evidence IDs 并通过长度、禁词、数字和事实覆盖校验。
+- 性能与失败边界：预生成与缓存不发生在播放、保存分享图、模板切换或 SwiftUI `body`；相同 scope/修订/规则版本只请求一次，旧请求不能覆盖新修订。无网络、未登录、服务不可用、超时、校验失败或用户未启用时直接保留本地计划，不能出现加载态、白屏或阻断。
+- 冻结：不上传照片/图片引用/医疗债务等敏感标题，不改 AI 指令台识别、额度、会员、登录、同步 DTO、播放章节、分享保存、主题和 UI 结构；设置与能力说明必须如实区分“本地整理”和“可选联网润色”。
+- 实际范围：新增日/周/月合并 fact pack、返回校验、内存缓存和可取消预生成协调器。账本修订稳定 1.5 秒后才准备一次，连续编辑只保留最后 request ID；远程关闭、无凭据、未登录生产代理、额度不足和 release fixture 零请求。上传仅含 `F1...` 临时编号、受控角色/场景、事实句、证据数量与周期键；用户原句、照片/引用、账本 UUID 和敏感记录不进入请求。返回必须 scope/period 一致、引用 lead、证据为允许子集、数字来自 fact pack、长度合规且无推断/理财/隐私词，旧修订不得写缓存。今日/周/月/分享只同步读取已验证缓存；echo 优先，远端无结果或失败时本地计划完整保留。
+- 文件：`NativeDemoApp/Services/LifeNarrativeAIRewriteService.swift`、`NativeDemoApp/Services/AIReportService.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/Views/HomeView.swift`、`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoApp/Views/SettingsView.swift`、`NativeDemoApp/Views/MemberPricingView.swift`、`NativeDemoApp.xcodeproj/project.pbxproj`、`NativeDemoAppTests/StateRegressionTests.swift`、`AI_CAPABILITY_CONTRACT_v1.md`、`scripts/ai_capability_lint.py`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`。
+- 验证证据：新增 fact pack 不含用户原句/敏感标题/照片字段/UUID、合法返回、未知证据、新数字、推断词和旧修订 XCTest 接线；静态门禁锁定 1.5 秒修订合并、播放/保存零远程调用、缓存只读、能力说明和 `FLOW-59`。`git diff --check`、`scripts/check_copy_experience.ps1`、体验静态检查及最终 `python scripts/validate_release_gate.py --phase windows` 全部通过；扫描 81 个 Swift 文件，100/1,000/5,000 条、真实 12MP、生活语义、文案、AI 能力、主题、迁移与 SQLite 全通过，仅保留既有 5 条 soft copy warning。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，新增 actor/NSLock 缓存、Swift 并发捕获、URLSession 批次解析、XCTest 和真实代理 `/v1/ai/insight/daily` 的 `narrative_rewrite_batch` 兼容性尚未实际编译/联调；代理不支持该 feature 时会安静回退本地，不影响功能，但只有真实合法返回签收后才可确认远端润色生效。需用登录测试账号按 `FLOW-59` 抓包并验证日/周/月缓存、超时、旧请求、额度一次扣取、VoiceOver 和 1,000 条流畅度。
+- 下一步：统一执行 Xcode Debug/Release、全部 XCTest 和 iPhone `FLOW-55～59`；若出现编译或真机问题，只定向修复对应叙事/分享/播放/回声/AI 接线，不修改账本、同步、动态主动作、额度、会员、主题、宠物或 `ARCH-03`。

@@ -2770,6 +2770,9 @@ struct BillPlaybackSheet: View {
         let todayItems: [HomeItem]
         let playbackMoments: [PlaybackMoment]
         let playbackDuration: TimeInterval
+        let narrativePlan: LifeNarrativePlan?
+        let narrativeEcho: LifeNarrativeEcho?
+        let narrativeRewrite: LifeNarrativeAIRewrite?
 
         static var empty: ContentSnapshot {
             ContentSnapshot(
@@ -2777,7 +2780,10 @@ struct BillPlaybackSheet: View {
                 dayKey: "",
                 todayItems: [],
                 playbackMoments: [],
-                playbackDuration: 10
+                playbackDuration: 10,
+                narrativePlan: nil,
+                narrativeEcho: nil,
+                narrativeRewrite: nil
             )
         }
 
@@ -2809,9 +2815,44 @@ struct BillPlaybackSheet: View {
         let todayItems = allItems
             .filter { calendar.isDate($0.createdAt, inSameDayAs: now) }
             .sorted { $0.createdAt < $1.createdAt }
+        let dayStart = calendar.startOfDay(for: now)
+        let previousDayStart = calendar.date(byAdding: .day, value: -1, to: dayStart) ?? dayStart
+        let previousDayItems = allItems.filter {
+            $0.createdAt >= previousDayStart && $0.createdAt < dayStart
+        }
+        let narrativePlan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .day,
+                sourceRevision: sourceRevision,
+                items: todayItems,
+                previousItems: previousDayItems,
+                now: now,
+                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousDayItems)
+            )
+        )
+        let narrativeEcho = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .day,
+                sourceRevision: sourceRevision,
+                items: allItems,
+                now: now,
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+        let narrativeRewrite = LifeNarrativeAIRewriteStore.shared.rewrite(
+            for: LifeNarrativeAIPreparationPolicy.key(
+                scope: .day,
+                sourceRevision: sourceRevision,
+                now: now,
+                calendar: calendar
+            )
+        )
         let playbackMoments = buildPlaybackMoments(
             todayItems: todayItems,
-            allItems: allItems,
+            narrativePlan: narrativePlan,
+            narrativeEcho: narrativeEcho,
+            narrativeRewrite: narrativeRewrite,
             calendar: calendar
         )
         let playbackDuration = max(10, min(34, Double(max(1, playbackMoments.count)) * 2.6))
@@ -2820,7 +2861,10 @@ struct BillPlaybackSheet: View {
             dayKey: HomeDashboardSnapshotComputation.dayKey(for: now, calendar: calendar),
             todayItems: todayItems,
             playbackMoments: playbackMoments,
-            playbackDuration: playbackDuration
+            playbackDuration: playbackDuration,
+            narrativePlan: narrativePlan,
+            narrativeEcho: narrativeEcho,
+            narrativeRewrite: narrativeRewrite
         )
     }
 
@@ -3461,21 +3505,18 @@ struct BillPlaybackSheet: View {
 
     private static func buildPlaybackMoments(
         todayItems: [HomeItem],
-        allItems: [HomeItem],
+        narrativePlan: LifeNarrativePlan,
+        narrativeEcho: LifeNarrativeEcho?,
+        narrativeRewrite: LifeNarrativeAIRewrite?,
         calendar: Calendar
     ) -> [PlaybackMoment] {
         guard !todayItems.isEmpty else { return [] }
-        let topCategory = topCategoryText(todayItems: todayItems)
-        let dominantScene = LifeSceneSemanticService.dominantScene(in: todayItems)
-        let lifeMark = LifeMarkService
-            .aggregates(for: todayItems, allItems: allItems, isMember: true, limit: 1)
-            .first
         if todayItems.count > 8 {
             return densePlaybackMoments(
                 todayItems: todayItems,
-                topCategory: topCategory,
-                dominantScene: dominantScene,
-                lifeMark: lifeMark,
+                narrativePlan: narrativePlan,
+                narrativeEcho: narrativeEcho,
+                narrativeRewrite: narrativeRewrite,
                 calendar: calendar
             )
         }
@@ -3490,8 +3531,7 @@ struct BillPlaybackSheet: View {
                     title: "今天记了 \(todayItems.count) 笔",
                     body: openingBody(
                         todayItems: todayItems,
-                        dominantScene: dominantScene,
-                        lifeMark: lifeMark
+                        narrativePlan: narrativePlan
                     ),
                     amountText: todayItems.reduce(0) { $0 + $1.amount }.formatted(.cny)
                 )
@@ -3513,8 +3553,12 @@ struct BillPlaybackSheet: View {
                 PlaybackMoment(
                     id: "summary-close",
                     eyebrow: "看完今天",
-                    title: themeTitle(topCategory: topCategory, dominantScene: dominantScene),
-                    body: themeBody(topCategory: topCategory, dominantScene: dominantScene),
+                    title: closingTitle(from: narrativePlan),
+                    body: closingBody(
+                        recordCount: todayItems.count,
+                        echo: narrativeEcho,
+                        rewrite: narrativeRewrite
+                    ),
                     amountText: nil
                 )
             )
@@ -3523,21 +3567,11 @@ struct BillPlaybackSheet: View {
         return moments
     }
 
-    private static func topCategoryText(todayItems: [HomeItem]) -> String {
-        Dictionary(grouping: todayItems, by: \.category)
-            .map { (category: $0.key, count: $0.value.count, amount: $0.value.reduce(0) { $0 + $1.amount }) }
-            .sorted {
-                if $0.count == $1.count { return $0.amount > $1.amount }
-                return $0.count > $1.count
-            }
-            .first?.category.rawValue ?? "日常"
-    }
-
     private static func densePlaybackMoments(
         todayItems: [HomeItem],
-        topCategory: String,
-        dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?,
-        lifeMark: LifeMarkAggregate?,
+        narrativePlan: LifeNarrativePlan,
+        narrativeEcho: LifeNarrativeEcho?,
+        narrativeRewrite: LifeNarrativeAIRewrite?,
         calendar: Calendar
     ) -> [PlaybackMoment] {
         var moments: [PlaybackMoment] = [
@@ -3547,8 +3581,7 @@ struct BillPlaybackSheet: View {
                 title: "今天记了 \(todayItems.count) 笔",
                 body: openingBody(
                     todayItems: todayItems,
-                    dominantScene: dominantScene,
-                    lifeMark: lifeMark
+                    narrativePlan: narrativePlan
                 ),
                 amountText: todayItems.reduce(0) { $0 + $1.amount }.formatted(.cny)
             )
@@ -3570,8 +3603,12 @@ struct BillPlaybackSheet: View {
             PlaybackMoment(
                 id: "summary-close",
                 eyebrow: "看完今天",
-                title: themeTitle(topCategory: topCategory, dominantScene: dominantScene),
-                body: themeBody(topCategory: topCategory, dominantScene: dominantScene),
+                title: closingTitle(from: narrativePlan),
+                body: closingBody(
+                    recordCount: todayItems.count,
+                    echo: narrativeEcho,
+                    rewrite: narrativeRewrite
+                ),
                 amountText: nil
             )
         )
@@ -3581,48 +3618,67 @@ struct BillPlaybackSheet: View {
 
     private static func openingBody(
         todayItems: [HomeItem],
-        dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?,
-        lifeMark: LifeMarkAggregate?
+        narrativePlan: LifeNarrativePlan
     ) -> String {
-        let categories = categoryMixText(todayItems: todayItems)
-        if let lifeMark {
-            let detail = LifeMarkService.primaryLine(for: lifeMark)
-            if !detail.isEmpty {
-                return "\(detail) 今天照着发生的顺序听一遍，会更贴近当天。"
+        if let lead = narrativePlan.signalsByRole[.lead]?.first {
+            if lead.kind == .userText || lead.kind == .photo {
+                return narrativePlan.summary
+            }
+            if let sceneLine = plannedDailySceneLine(for: lead) {
+                return sceneLine
+            }
+            if lead.kind == .change {
+                return narrativePlan.summary
             }
         }
-        if let dominantScene = dominantScene, dominantScene.count >= 2 {
-            switch dominantScene.signal.kind {
-            case .commute:
-                return "今天路上的记录比较多。出门、等待、到达，都算在今天里。"
-            case .cityRoute:
-                return "今天在城市里换过几个位置，路上的时间也算今天的一部分。"
-            case .breakfast, .quickMeal, .workMeal:
-                return "今天几次吃饭都在记录里，饭点串起来，今天就清楚了。"
-            case .coffee:
-                return "今天有几杯喝的，可能是提神，也可能只是解渴。"
-            case .convenienceSupply, .groceries, .homeSupply:
-                return "今天补了一些日用或家里会用到的东西，都是会派上用场的。"
-            case .medicalVisit, .medicineCare, .fitness, .bodyCare:
-                return "今天有几笔健康或身体相关记录，先把安排记清楚。"
-            default:
-                break
-            }
+        if leadIsRoutine(narrativePlan) {
+            return "从早到晚，这些记录按发生顺序排在一起。"
         }
-        return "\(categories)这些记录都在今天。先照着发生的顺序听一遍。"
+        return "今天的 \(todayItems.count) 笔，按发生顺序排在这里。"
     }
 
-    private static func categoryMixText(todayItems: [HomeItem]) -> String {
-        let ranked = Dictionary(grouping: todayItems, by: \.category)
-            .map { (category: $0.key, count: $0.value.count, amount: $0.value.reduce(0) { $0 + $1.amount }) }
-            .sorted {
-                if $0.count == $1.count { return $0.amount > $1.amount }
-                return $0.count > $1.count
-            }
-            .prefix(2)
-            .map { $0.category.rawValue }
-        guard !ranked.isEmpty else { return "日常" }
-        return ranked.joined(separator: "、")
+    private static func plannedDailySceneLine(for signal: LifeNarrativeSignal) -> String? {
+        guard signal.kind == .change || signal.kind == .structuredScene else { return nil }
+        let label = signal.label
+        if label.contains("咖啡") || label.contains("饮品") || label.contains("饮料") {
+            return "今天有几笔喝的，按时间排在记录里。"
+        }
+        if label.contains("餐") || label.contains("早餐") || label.contains("饭") {
+            return "今天几次吃饭都在记录里，饭点串起来，今天就清楚了。"
+        }
+        if label.contains("日用") || label.contains("居家") || label.contains("买菜") || label.contains("采购") {
+            return "今天补了一些日用或家里会用到的东西，都是会派上用场的。"
+        }
+        if label.contains("通勤") || label.contains("路线") || label.contains("出行") {
+            return "今天路上的记录比较多，来回按时间排在一起。"
+        }
+        return nil
+    }
+
+    private static func leadIsRoutine(_ plan: LifeNarrativePlan) -> Bool {
+        guard let kind = plan.signalsByRole[.lead]?.first?.kind else { return true }
+        return kind == .rhythm || kind == .stableMark || kind == .structuredScene
+    }
+
+    private static func closingTitle(from plan: LifeNarrativePlan) -> String {
+        guard let kind = plan.signalsByRole[.lead]?.first?.kind else { return "今天先记到这里" }
+        switch kind {
+        case .userText: return "今天有一句自己的话"
+        case .photo: return "今天有一张具体照片"
+        case .change: return "今天有一处变化"
+        default: return "今天先记到这里"
+        }
+    }
+
+    private static func closingBody(
+        recordCount: Int,
+        echo: LifeNarrativeEcho?,
+        rewrite: LifeNarrativeAIRewrite?
+    ) -> String {
+        let closing = "今天的 \(recordCount) 笔都看过了，先停在这里。"
+        if let echo { return "\(closing)\n\(echo.line)" }
+        if let rewrite { return "\(closing)\n\(rewrite.summary)" }
+        return closing
     }
 
     private static func todayTimeBlocks(
@@ -3809,68 +3865,6 @@ struct BillPlaybackSheet: View {
     private static func playbackContainsRoastDuckCue(_ text: String) -> Bool {
         ["烤鸭", "烧鸭", "卤鸭", "鸭肉"].contains {
             text.localizedCaseInsensitiveContains($0)
-        }
-    }
-
-    private static func themeTitle(
-        topCategory: String,
-        dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?
-    ) -> String {
-        guard let dominantScene = dominantScene, dominantScene.count >= 2 else {
-            return "\(topCategory)多一些"
-        }
-        switch dominantScene.signal.kind {
-        case .commute:
-            return "今天路上有几格"
-        case .cityRoute:
-            return "今天在城市里移动过"
-        case .breakfast, .quickMeal, .workMeal:
-            return "今天吃饭这条线清楚"
-        case .coffee:
-            return "今天买了几次喝的"
-        case .convenienceSupply, .groceries, .homeSupply:
-            return "今天补了些需要的"
-        case .shopping:
-            return "今天买到几样需要的"
-        case .medicalVisit, .medicineCare:
-            return "今天身体这边没落下"
-        case .fitness, .bodyCare:
-            return "今天有身体相关记录"
-        case .social:
-            return "今天有一点人情往来"
-        default:
-            return "\(topCategory)多一点"
-        }
-    }
-
-    private static func themeBody(
-        topCategory: String,
-        dominantScene: (signal: LifeSceneSignal, count: Int, latest: Date)?
-    ) -> String {
-        guard let dominantScene = dominantScene, dominantScene.count >= 2 else {
-            return "今天「\(topCategory)」出现得多一些。记到这里就够了。"
-        }
-        switch dominantScene.signal.kind {
-        case .commute:
-            return "今天有 \(dominantScene.count) 段通勤，来回路上的时间都记下了。"
-        case .cityRoute:
-            return "今天出门跑了 \(dominantScene.count) 趟，位置变化挺明显。"
-        case .breakfast, .quickMeal, .workMeal:
-            return "今天吃饭记了 \(dominantScene.count) 次，饭点基本都留住了。"
-        case .coffee:
-            return "今天买了 \(dominantScene.count) 次喝的，忙的时候也有小补给。"
-        case .convenienceSupply, .groceries, .homeSupply:
-            return "今天补了 \(dominantScene.count) 笔日用，家里缺的已经补上不少。"
-        case .shopping:
-            return "今天买了 \(dominantScene.count) 样东西，都是账本里能回看的具体物件。"
-        case .medicalVisit, .medicineCare:
-            return "今天有 \(dominantScene.count) 笔健康相关记录，看诊用药先记清楚。"
-        case .fitness, .bodyCare:
-            return "今天有 \(dominantScene.count) 笔身体相关记录，训练或护理没漏掉。"
-        case .social:
-            return "今天有 \(dominantScene.count) 笔人情往来，见面和心意都记下了。"
-        default:
-            return "\(dominantScene.signal.label)记了 \(dominantScene.count) 次，今天这条线更清楚。"
         }
     }
 

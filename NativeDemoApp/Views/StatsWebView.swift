@@ -5591,7 +5591,11 @@ struct StatsWebView: View {
 
     private func weeklySharePayload(for playback: SummaryPlayback) -> WeeklyShareCardPayload? {
         guard playback.range == .week else { return nil }
-        return playbackService.buildWeeklyShareCardPayload(from: homeViewModel.items, summary: playback)
+        return playbackService.buildWeeklyShareCardPayload(
+            from: homeViewModel.items,
+            summary: playback,
+            sourceRevision: homeViewModel.homeDashboardRevision
+        )
     }
 
     private func summaryQuotaOverlay(_ prompt: SummaryQuotaPrompt) -> some View {
@@ -5703,6 +5707,7 @@ struct StatsWebView: View {
         }
         let copySeed = nextSummaryCopySeed(for: range)
         let items = homeViewModel.items
+        let sourceRevision = homeViewModel.homeDashboardRevision
         let performanceStartedAt = ProcessInfo.processInfo.systemUptime
         homeViewModel.markSummaryPlaybackStarted(range)
         summaryPlaybackTask?.cancel()
@@ -5714,9 +5719,17 @@ struct StatsWebView: View {
                     let service = PlaybackService()
                     switch range {
                     case .week:
-                        return service.buildWeekSummary(from: items, copySeed: copySeed)
+                        return service.buildWeekSummary(
+                            from: items,
+                            copySeed: copySeed,
+                            sourceRevision: sourceRevision
+                        )
                     case .month:
-                        return service.buildMonthSummary(from: items, copySeed: copySeed)
+                        return service.buildMonthSummary(
+                            from: items,
+                            copySeed: copySeed,
+                            sourceRevision: sourceRevision
+                        )
                     }
                 }
                 return await group.next()

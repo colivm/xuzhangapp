@@ -357,6 +357,8 @@ struct WeeklyStoryShareCardTheme {
 
 enum WeeklyShareCardTemplateCapability: Equatable {
     case recordSummary
+    case recordJournal
+    case recordMagazine
     case singleMemory
     case weeklyCollage
 }
@@ -373,11 +375,11 @@ enum WeeklyShareCardTemplateCapabilityPolicy {
     static func allowed(photoCount: Int) -> [WeeklyShareCardTemplateCapability] {
         switch max(0, photoCount) {
         case 0:
-            return [.recordSummary]
+            return [.recordSummary, .recordJournal, .recordMagazine]
         case 1:
-            return [.singleMemory, .recordSummary]
+            return [.singleMemory, .recordJournal, .recordSummary]
         default:
-            return [.weeklyCollage, .singleMemory, .recordSummary]
+            return [.weeklyCollage, .recordMagazine, .recordSummary]
         }
     }
 }
@@ -456,6 +458,8 @@ private enum LifeSliceShareCardStyle: String, CaseIterable, Identifiable {
     ) -> LifeSliceShareCardStyle {
         switch capability {
         case .recordSummary: return .cleanTexture
+        case .recordJournal: return .journal
+        case .recordMagazine: return .magazine
         case .singleMemory: return .warmLight
         case .weeklyCollage: return .collageStory
         }
@@ -995,34 +999,55 @@ struct SummaryPlaybackSheet: View {
     private func chapterElementStrip(for chapter: SummaryChapter) -> some View {
         let chips = chapterElementChips(for: chapter)
         if !chips.isEmpty {
-            HStack(spacing: 7) {
-                ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
-                    HStack(spacing: 5) {
-                        Image(systemName: chip.symbol)
-                            .font(.system(size: 10, weight: .bold))
-                        Text(chip.text)
-                            .font(.system(size: 11, weight: .semibold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.78)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 7) {
+                    ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
+                        chapterElementChip(chip, chapter: chapter)
                     }
-                    .foregroundStyle(chapterAccent(for: chapter).opacity(0.86))
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 7)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color.white.opacity(0.44))
-                    )
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(chapterAccent(for: chapter).opacity(0.10), lineWidth: 0.8)
-                    )
+                }
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
+                        chapterElementChip(chip, chapter: chapter)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
+    private func chapterElementChip(
+        _ chip: (symbol: String, text: String),
+        chapter: SummaryChapter
+    ) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: chip.symbol)
+                .font(.system(size: 10, weight: .bold))
+            Text(chip.text)
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+        .foregroundStyle(chapterAccent(for: chapter).opacity(0.86))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.44))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(chapterAccent(for: chapter).opacity(0.10), lineWidth: 0.8)
+        )
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(chip.text.replacingOccurrences(of: "·", with: "，"))
+    }
+
     private func chapterElementChips(for chapter: SummaryChapter) -> [(symbol: String, text: String)] {
+        let auxiliarySignals = LifeStorySignalService.playbackAuxiliarySignals(from: chapter)
+        if !auxiliarySignals.isEmpty {
+            return auxiliarySignals.map { (symbol: $0.symbol, text: $0.label) }
+        }
         if chapter.metrics.keys.contains("supportLine") {
             return []
         }
@@ -2838,18 +2863,39 @@ private struct WeeklyStoryShareCardView: View {
                 payload.recordCount > 0 ? 1 : 0,
                 payload.dailyCountTrend.filter { $0.1 > 0 }.count
             )
-            let firstScene = sceneLabels.first(where: { !Self.isWeakLabel($0) }) ?? Self.normalizedLabel(payload.topCategory)
+            let legacyScene = payload.narrativePlan == nil ? Self.normalizedLabel(payload.topCategory) : ""
+            let firstScene = sceneLabels.first(where: { !Self.isWeakLabel($0) }) ?? legacyScene
             let safeScene = Self.isWeakLabel(firstScene) ? "" : firstScene
             let photoLine = memoryAnchors.first.flatMap(Self.safeAnchorLine)
             let factualHeadline = Self.safeLine(payload.headline)
             let recordHeadline = "\(period)，\(payload.recordCount)笔记录"
-            if imageCount == 1, let firstAnchor = memoryAnchors.first {
+            let narrativeLeadKind = payload.narrativePlan?.signalsByRole[.lead]?.first?.kind
+            let narrativeHeadline = Self.trustedLine(payload.narrativeRewrite?.headline)
+                ?? Self.trustedLine(payload.narrativePlan?.headline)
+            let narrativeSummary = Self.trustedLine(payload.narrativeRewrite?.summary)
+                ?? Self.trustedLine(payload.narrativePlan?.summary)
+            let narrativeSupport = Self.trustedLine(payload.narrativeRewrite?.supportingLine)
+                ?? Self.trustedLine(payload.narrativePlan?.supportingLine)
+            let narrativeMarkLine = payload.narrativePlan.flatMap { plan -> String? in
+                let labels = plan.markLabels.prefix(2).joined(separator: "、")
+                return labels.isEmpty ? nil : "反复出现的生活线索：\(labels)。"
+            }
+            if let narrativeLeadKind,
+               [.userText, .photo, .change].contains(narrativeLeadKind),
+               let narrativeSummary {
+                title = narrativeSummary
+            } else if let narrativeHeadline {
+                title = narrativeHeadline
+            } else if imageCount == 1, let firstAnchor = memoryAnchors.first {
                 title = Self.singlePhotoTitle(firstAnchor) ?? factualHeadline ?? recordHeadline
             } else {
                 title = factualHeadline ?? recordHeadline
             }
+            let subtitleCandidates: [String?] = payload.narrativePlan == nil
+                ? [payload.insight.fact, payload.subtitle, payload.contextLine, payload.anchorLine]
+                : [narrativeSummary, narrativeSupport]
             subtitle = Self.firstDistinctLine(
-                [payload.insight.fact, payload.subtitle, payload.contextLine, payload.anchorLine],
+                subtitleCandidates,
                 excluding: [title, photoLine]
             ) ?? "\(shortPeriod)共有 \(payload.recordCount) 笔记录，分布在 \(activeDayCount) 个记录日。"
 
@@ -2861,14 +2907,17 @@ private struct WeeklyStoryShareCardView: View {
                 tagline = imageCount > 0 ? "\(payload.recordCount)笔记录 · \(imageText)" : "\(payload.recordCount)笔记录"
             }
 
-            let bodyLines = Self.distinctLines([
-                Self.safeLine(payload.anchorLine),
-                Self.safeLine(payload.contextLine),
-                Self.safeLine(payload.insight.care),
-                photoLine
-            ], excluding: [title, subtitle])
+            let bodyCandidates: [String?] = payload.narrativePlan == nil
+                ? [
+                    Self.safeLine(payload.anchorLine),
+                    Self.safeLine(payload.contextLine),
+                    Self.safeLine(payload.insight.care),
+                    photoLine
+                ]
+                : [narrativeSupport, narrativeMarkLine]
+            let bodyLines = Self.distinctLines(bodyCandidates, excluding: [title, subtitle])
             if bodyLines.isEmpty {
-                body = "\(shortPeriod)有 \(payload.recordCount) 笔记录。\n\(imageCount > 0 ? imageText : "这些记录")按时间整理在一起。"
+                body = "\(shortPeriod)共有 \(payload.recordCount) 笔记录，分布在 \(activeDayCount) 个记录日。"
             } else {
                 body = bodyLines.prefix(2).joined(separator: "\n")
             }
@@ -2878,12 +2927,8 @@ private struct WeeklyStoryShareCardView: View {
             switch style {
             case .filmStory:
                 return "\(period)，\(imageText)入卷"
-            case .magazine:
-                return "\(period)的记录版面"
             case .fullPhoto:
                 return title
-            case .journal:
-                return "\(period)，\(recordCount)笔记录"
             default:
                 return title
             }
@@ -2896,11 +2941,6 @@ private struct WeeklyStoryShareCardView: View {
                     return "\(shortPeriod)有 \(recordCount) 笔记录，\(imageText)排进胶片。"
                 }
                 return "\(shortPeriod)有 \(recordCount) 笔记录，按时间排进胶片。"
-            case .magazine:
-                if imageCount > 0 {
-                    return "\(shortPeriod)有 \(recordCount) 笔记录，按照片、分类和时间排成这一页。"
-                }
-                return "\(shortPeriod)有 \(recordCount) 笔记录，按分类和时间排成这一页。"
             case .fullPhoto:
                 return subtitle
             case .journal:
@@ -2943,11 +2983,31 @@ private struct WeeklyStoryShareCardView: View {
             _ candidates: [String?],
             excluding excludedLines: [String?]
         ) -> [String] {
-            let excluded = Set(excludedLines.compactMap { safeLine($0) })
+            let excluded = excludedLines.compactMap { safeLine($0) }.map(copyKey)
             var seen = Set<String>()
             return candidates.compactMap { safeLine($0) }.filter { line in
-                guard !excluded.contains(line), seen.insert(line).inserted else { return false }
+                let key = copyKey(line)
+                let overlapsExcluded = excluded.contains { excludedKey in
+                    key == excludedKey
+                        || (min(key.count, excludedKey.count) >= 8
+                            && (key.contains(excludedKey) || excludedKey.contains(key)))
+                }
+                guard !overlapsExcluded, seen.insert(key).inserted else { return false }
                 return true
+            }
+        }
+
+        private static func trustedLine(_ raw: String?) -> String? {
+            let text = raw?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "\n", with: " ") ?? ""
+            guard !text.isEmpty else { return nil }
+            return text.count > 42 ? String(text.prefix(42)) : text
+        }
+
+        private static func copyKey(_ text: String) -> String {
+            text.lowercased().filter {
+                !$0.isWhitespace && !"，。！？；：,.!?;:·「」『』（）()".contains($0)
             }
         }
 
@@ -3495,8 +3555,10 @@ private struct WeeklyStoryShareCardView: View {
             }
             .padding(.top, 18)
 
-            lifeSlicePosterReasonCard
-                .padding(.top, 16)
+            if posterObservationText != nil {
+                lifeSlicePosterReasonCard
+                    .padding(.top, 16)
+            }
 
             Spacer(minLength: 10)
 
@@ -3540,8 +3602,10 @@ private struct WeeklyStoryShareCardView: View {
             }
             .padding(.top, 18)
 
-            lifeSlicePosterReasonCard
-                .padding(.top, 16)
+            if posterObservationText != nil {
+                lifeSlicePosterReasonCard
+                    .padding(.top, 16)
+            }
 
             Spacer(minLength: 10)
 
@@ -4107,7 +4171,7 @@ private struct WeeklyStoryShareCardView: View {
     private func cleanPhotoRow(index: Int, fallback: String) -> some View {
         let item = posterVisualItem(at: index)
         return HStack(spacing: 12) {
-            posterVisualImage(item, index: index)
+            cleanRowVisual(item, index: index)
                 .frame(width: 178, height: 116)
                 .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -4134,6 +4198,19 @@ private struct WeeklyStoryShareCardView: View {
                 .stroke(Color.white.opacity(0.68), lineWidth: 1)
         )
         .shadow(color: deepGreen.opacity(0.05), radius: 12, x: 0, y: 7)
+    }
+
+    @ViewBuilder
+    private func cleanRowVisual(_ item: PosterVisualItem, index: Int) -> some View {
+        switch item {
+        case .photo:
+            posterVisualImage(item, index: index)
+        default:
+            ZStack {
+                posterVisualTileBackground(index: index)
+                posterVisualIcon(item, size: 50)
+            }
+        }
     }
 
     private func posterCleanRowTitle(_ item: PosterVisualItem, fallback: String) -> String {
@@ -4345,10 +4422,10 @@ private struct WeeklyStoryShareCardView: View {
                 .frame(width: 52)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text("这张卡片怎么来的")
+                Text("这一期还可以看到")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(ink)
-                Text(lifeSlicePosterReasonText)
+                Text(posterObservationText ?? "")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(muted.opacity(0.92))
                     .lineSpacing(3)
@@ -4570,6 +4647,10 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var posterFactStoryText: String {
+        if let summary = payload.narrativePlan?.summary,
+           !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return summary
+        }
         let label = posterSceneLabels.first ?? ""
         if label == "饮料" { return "\(periodLeadShort)买过的一瓶饮料。" }
         if label == "一餐" { return "\(periodLeadShort)吃过的一餐。" }
@@ -4581,9 +4662,15 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var posterRhythmText: String {
-        let activeDays = payload.dailyCountTrend.filter { $0.1 > 0 }.count
+        let activeDayLabels = payload.dailyCountTrend
+            .filter { $0.1 > 0 }
+            .map(\.0)
+        let activeDays = activeDayLabels.count
+        if (1...3).contains(activeDays) {
+            return "\(activeDayLabels.joined(separator: "、"))有记录，共 \(payload.recordCount) 笔。"
+        }
         if activeDays > 0 {
-            return "\(periodLeadShort)有 \(activeDays) 天，留下了记录。"
+            return "\(periodLeadShort)有 \(activeDays) 天有记录，共 \(payload.recordCount) 笔。"
         }
         if payload.recordCount > 0 {
             return "\(periodLeadShort)有 \(payload.recordCount) 笔记录。"
@@ -4592,7 +4679,12 @@ private struct WeeklyStoryShareCardView: View {
     }
 
     private var posterSceneLabels: [String] {
-        let labels = memoryAnchors.map(\.label).filter { !$0.isEmpty } + payload.categorySlices.map(\.label)
+        let labels: [String]
+        if let narrativePlan = payload.narrativePlan {
+            labels = narrativePlan.markLabels
+        } else {
+            labels = memoryAnchors.map(\.label).filter { !$0.isEmpty } + payload.categorySlices.map(\.label)
+        }
         var seen = Set<String>()
         return labels.compactMap { raw in
             let label = posterNormalizedSceneLabel(raw)
@@ -4614,9 +4706,11 @@ private struct WeeklyStoryShareCardView: View {
         if activeDays > 0 {
             labels.append("\(activeDays)天有记录")
         }
-        let top = posterNormalizedSceneLabel(payload.topCategory)
-        if !top.isEmpty && !posterIsWeakSceneLabel(top) {
-            labels.append(top)
+        if payload.narrativePlan == nil {
+            let top = posterNormalizedSceneLabel(payload.topCategory)
+            if !top.isEmpty && !posterIsWeakSceneLabel(top) {
+                labels.append(top)
+            }
         }
         return Array(labels.prefix(3))
     }
@@ -4658,12 +4752,43 @@ private struct WeeklyStoryShareCardView: View {
         }
     }
 
-    private var lifeSlicePosterReasonText: String {
-        let scenes = posterSceneLabels.prefix(3).joined(separator: "、")
-        guard !scenes.isEmpty else {
-            return "这张卡片来自\(periodLeadShort)的 \(payload.recordCount) 笔记录。\n系统按类别、日期和画面自动排版。"
+    private var posterObservationText: String? {
+        guard let narrativePlan = payload.narrativePlan else { return nil }
+        let excluded = [lifeSlicePosterHeadline, lifeSlicePosterSubtitle]
+        var lines: [String] = []
+        if let echoLine = payload.narrativeEcho?.line,
+           !posterCopyOverlaps(echoLine, excluded) {
+            lines.append(echoLine)
         }
-        return "这张卡片来自\(periodLeadShort)的记录：\(scenes)。\n系统按照片、类别和记录时间自动排版。"
+        if let support = narrativePlan.supportingLine,
+           !posterCopyOverlaps(support, excluded + lines) {
+            lines.append(support)
+        }
+        let visibleMarks = narrativePlan.markLabels.filter { label in
+            !posterCopyOverlaps(label, excluded + lines)
+        }
+        if !visibleMarks.isEmpty {
+            lines.append("反复出现的生活线索：\(visibleMarks.prefix(2).joined(separator: "、"))。")
+        }
+        guard !lines.isEmpty else { return nil }
+        return lines.prefix(payload.narrativeEcho == nil ? 2 : 1).joined(separator: "\n")
+    }
+
+    private func posterCopyOverlaps(_ text: String, _ others: [String]) -> Bool {
+        let key = posterCopyKey(text)
+        guard !key.isEmpty else { return true }
+        return others.contains { other in
+            let otherKey = posterCopyKey(other)
+            return key == otherKey
+                || (min(key.count, otherKey.count) >= 6
+                    && (key.contains(otherKey) || otherKey.contains(key)))
+        }
+    }
+
+    private func posterCopyKey(_ text: String) -> String {
+        text.lowercased().filter {
+            !$0.isWhitespace && !"，。！？；：,.!?;:·「」『』（）()".contains($0)
+        }
     }
 
     private func posterPhotoIcon(_ anchor: SummaryMemoryAnchor?, size: CGFloat) -> some View {

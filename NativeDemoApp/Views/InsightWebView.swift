@@ -7686,7 +7686,10 @@ struct WeeklyShareCardView: View {
             contextLine: contextLine ?? anchorLine,
             emotionLine: emotionLine,
             periodText: periodText,
-            insight: insight
+            insight: insight,
+            narrativePlan: nil,
+            narrativeEcho: nil,
+            narrativeRewrite: nil
         )
     }
 

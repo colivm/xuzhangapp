@@ -1676,7 +1676,7 @@ struct SettingsView: View {
                 get: { settingsViewModel.useRemoteAI },
                 set: { settingsViewModel.useRemoteAI = $0 }
             ))
-            settingHelper("只影响今日小记和月度整理：开启后会尝试远程模型，失败自动回退；AI 指令台、周记、月章和生活线索始终在本机处理。")
+            settingHelper("本机规则始终先生成；开启后，今日小记、月度整理及日/周/月轻总结会在账本变化后尝试提前润色，失败直接保留本地结果。AI 指令台和生活线索仍不联网。")
         case .appearance:
             appearanceSheetContent(proxy: proxy)
         case .companion:
@@ -1804,7 +1804,7 @@ struct SettingsView: View {
                 get: { settingsViewModel.useRemoteAI },
                 set: { settingsViewModel.useRemoteAI = $0 }
             ))
-            settingHelper("只影响今日小记和月度整理：开启后会尝试远程模型，失败自动回退；AI 指令台、周记、月章和生活线索始终在本机处理。")
+            settingHelper("本机规则始终先生成；开启后，今日小记、月度整理及日/周/月轻总结会在账本变化后尝试提前润色，失败直接保留本地结果。AI 指令台和生活线索仍不联网。")
 
             // Pet companion
             settingToggle("开启宠物陪伴", isOn: Binding(

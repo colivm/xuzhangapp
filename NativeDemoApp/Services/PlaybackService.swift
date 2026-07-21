@@ -125,6 +125,9 @@ struct WeeklyShareCardPayload {
     let emotionLine: String?
     let periodText: String
     let insight: ShareInsight
+    let narrativePlan: LifeNarrativePlan?
+    let narrativeEcho: LifeNarrativeEcho?
+    let narrativeRewrite: LifeNarrativeAIRewrite?
 }
 
 struct MemoryAnchorSelectionPolicy {
@@ -540,7 +543,12 @@ final class PlaybackService {
         return PlaybackSnapshot(durationMs: 10_000, entries: Array(rows))
     }
 
-    func buildWeekSummary(from items: [HomeItem], now: Date = Date(), copySeed: String = "") -> SummaryPlayback {
+    func buildWeekSummary(
+        from items: [HomeItem],
+        now: Date = Date(),
+        copySeed: String = "",
+        sourceRevision: Int? = nil
+    ) -> SummaryPlayback {
         let calendar = Self.isoCalendar
         let interval = calendar.dateInterval(of: .weekOfYear, for: now)
         let start = interval?.start ?? calendar.startOfDay(for: now)
@@ -554,6 +562,7 @@ final class PlaybackService {
         let title = "周记"
         let weekKey = SummaryPlaybackQuotaStore().currentWeekKey(now: now)
         let weekSeed = playbackCopySeed(base: "week-\(weekKey)", suffix: copySeed)
+        let resolvedSourceRevision = sourceRevision ?? items.count
 
         guard !rows.isEmpty else {
             return SummaryPlayback(
@@ -571,9 +580,45 @@ final class PlaybackService {
             )
         }
 
+        let previousWeekStart = calendar.date(byAdding: .weekOfYear, value: -1, to: start) ?? start
+        let previousWeekRows = positiveItems(items, from: previousWeekStart, to: start)
+        let narrativePlan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .week,
+                sourceRevision: resolvedSourceRevision,
+                items: rows,
+                previousItems: previousWeekRows,
+                now: now,
+                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousWeekRows)
+            )
+        )
+        let narrativeEcho = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .week,
+                sourceRevision: resolvedSourceRevision,
+                items: items,
+                now: now,
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+        let narrativeRewrite = LifeNarrativeAIRewriteStore.shared.rewrite(
+            for: LifeNarrativeAIPreparationPolicy.key(
+                scope: .week,
+                sourceRevision: resolvedSourceRevision,
+                now: now,
+                calendar: calendar
+            )
+        )
+
         let echoAnchor = EchoAnchorService.shared.pickEchoAnchor(items: rows, periodKey: weekKey, now: now)
         let selection = momentSelector.select(from: rows, periodKey: weekKey, range: .week, now: now, echoAnchor: echoAnchor)
-        let representative = selection.primary?.item ?? rows.last!
+        let narrativeRepresentative = narrativeLeadItem(
+            from: narrativePlan,
+            rows: rows,
+            allowedKinds: [.userText, .photo, .change]
+        )
+        let representative = narrativeRepresentative ?? selection.primary?.item ?? rows.last!
         let recordCopy = playbackRecordCopy(for: representative, range: .week)
         let presenceLine = weeklyPresenceLine(rows: rows, activity: active)
         let rhythmCopy = weeklyRhythmCopy(rows: rows, activity: active, calendar: calendar)
@@ -582,21 +627,29 @@ final class PlaybackService {
             range: .week,
             excludingTitles: Set([recordCopy.safeTitle].compactMap { $0 })
         )
+        let auxiliaryMetrics = PlaybackAuxiliarySignalPolicy.preparedMetrics(
+            periodItems: rows,
+            allItems: items,
+            now: now
+        )
         let teaserLine = rows.count < 3
             ? presenceLine
             : "这周记了 \(rows.count) 笔，分布在 \(activeDayCount(rows)) 天里。"
+
+        var presenceMetrics: [String: String] = [
+            "count": "\(rows.count)",
+            "total": Self.money(total),
+            "activeDays": "\(activeDayCount(rows))",
+            "range": rangeLabel,
+            "supportLine": ""
+        ]
+        presenceMetrics.merge(auxiliaryMetrics) { current, _ in current }
 
         var chapters: [SummaryChapter] = [
             SummaryChapter(
                 id: "week-presence",
                 title: "这一周",
-                metrics: [
-                    "count": "\(rows.count)",
-                    "total": Self.money(total),
-                    "activeDays": "\(activeDayCount(rows))",
-                    "range": rangeLabel,
-                    "supportLine": ""
-                ],
+                metrics: presenceMetrics,
                 narration: PlaybackCopyPool.narration(
                     chapterId: rows.count < 3 ? "week-weak-presence" : "week-presence",
                     seed: weekSeed,
@@ -689,12 +742,17 @@ final class PlaybackService {
                     "count": "\(rows.count)",
                     "total": Self.money(total),
                     "topCategory": top?.category ?? "日常",
-                    "supportLine": ""
+                    "supportLine": narrativeEcho?.line ?? narrativeRewrite?.summary ?? ""
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: weak ? "week-weak-outro" : "week-outro",
                     seed: weekSeed,
-                    values: ["mainLine": "这周先记到这里。"]
+                    values: [
+                        "mainLine": rolePlannedClosingLine(
+                            scope: .week,
+                            recordCount: rows.count
+                        )
+                    ]
                 ),
                 durationSec: weak ? 6 : 7
             )
@@ -718,17 +776,61 @@ final class PlaybackService {
         )
     }
 
-    func buildWeeklyShareCardPayload(from items: [HomeItem], summary: SummaryPlayback? = nil, now: Date = Date()) -> WeeklyShareCardPayload? {
+    func buildWeeklyShareCardPayload(
+        from items: [HomeItem],
+        summary: SummaryPlayback? = nil,
+        now: Date = Date(),
+        sourceRevision: Int? = nil
+    ) -> WeeklyShareCardPayload? {
         let calendar = Self.isoCalendar
         guard let interval = calendar.dateInterval(of: .weekOfYear, for: now) else { return nil }
         let rows = positiveItems(items, from: interval.start, to: interval.end)
         guard !rows.isEmpty else { return nil }
+        let previousStart = calendar.date(
+            byAdding: .weekOfYear,
+            value: -1,
+            to: interval.start
+        ) ?? interval.start
+        let previousRows = positiveItems(items, from: previousStart, to: interval.start)
+        let previousStableSignalIDs = LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousRows)
+        let narrativePlan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .week,
+                sourceRevision: sourceRevision ?? items.count,
+                items: rows,
+                previousItems: previousRows,
+                now: now,
+                recentLeadSignalIDs: previousStableSignalIDs
+            )
+        )
+        let narrativeEcho = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .week,
+                sourceRevision: sourceRevision ?? items.count,
+                items: items,
+                now: now,
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+        let narrativeRewrite = LifeNarrativeAIRewriteStore.shared.rewrite(
+            for: LifeNarrativeAIPreparationPolicy.key(
+                scope: .week,
+                sourceRevision: sourceRevision ?? items.count,
+                now: now,
+                calendar: calendar
+            )
+        )
 
         let total = rows.reduce(0) { $0 + $1.amount }
         let top = topCategoryStats(rows).first
         let topAmount = top?.amount ?? 0
         let ratio = total > 0 ? topAmount / total : 0
-        let builtSummary = summary ?? buildWeekSummary(from: items, now: now)
+        let builtSummary = summary ?? buildWeekSummary(
+            from: items,
+            now: now,
+            sourceRevision: sourceRevision
+        )
         let activity = dailyActivity(rows, start: interval.start, days: 7)
         let trend = activity.map { activity in
             (Self.shortWeekdayFormatter.string(from: activity.date), activity.amount)
@@ -773,7 +875,10 @@ final class PlaybackService {
             contextLine: contextLine,
             emotionLine: emotionLine,
             periodText: period,
-            insight: insight
+            insight: insight,
+            narrativePlan: narrativePlan,
+            narrativeEcho: narrativeEcho,
+            narrativeRewrite: narrativeRewrite
         )
     }
 
@@ -1199,7 +1304,37 @@ final class PlaybackService {
         }).count
     }
 
-    func buildMonthSummary(from items: [HomeItem], now: Date = Date(), copySeed: String = "") -> SummaryPlayback {
+    private func narrativeLeadItem(
+        from plan: LifeNarrativePlan,
+        rows: [HomeItem],
+        allowedKinds: [LifeNarrativeSignalKind]
+    ) -> HomeItem? {
+        guard let lead = plan.signalsByRole[.lead]?.first,
+              allowedKinds.contains(lead.kind) else { return nil }
+        let evidenceIDs = Set(lead.evidenceItemIDs)
+        return rows.reversed().first { evidenceIDs.contains($0.id) }
+    }
+
+    private func rolePlannedClosingLine(
+        scope: LifeNarrativeScope,
+        recordCount: Int
+    ) -> String {
+        switch scope {
+        case .day:
+            return "今天的 \(recordCount) 笔都看过了，先停在这里。"
+        case .week:
+            return "这周的 \(recordCount) 笔都看过了，先停在这里。"
+        case .month:
+            return "这个月的 \(recordCount) 笔都看过了，先停在这里。"
+        }
+    }
+
+    func buildMonthSummary(
+        from items: [HomeItem],
+        now: Date = Date(),
+        copySeed: String = "",
+        sourceRevision: Int? = nil
+    ) -> SummaryPlayback {
         let calendar = Calendar.current
         let interval = calendar.dateInterval(of: .month, for: now)
         let start = interval?.start ?? calendar.startOfDay(for: now)
@@ -1210,6 +1345,7 @@ final class PlaybackService {
         let rangeLabel = Self.monthFormatter.string(from: now)
         let top = topCategoryStats(rows).first
         let ratio = total > 0 ? Int(round(((top?.amount ?? 0) / total) * 100)) : 0
+        let resolvedSourceRevision = sourceRevision ?? items.count
 
         guard !rows.isEmpty else {
             return SummaryPlayback(
@@ -1227,6 +1363,37 @@ final class PlaybackService {
             )
         }
 
+        let previousMonthStart = calendar.date(byAdding: .month, value: -1, to: start) ?? start
+        let previousMonthRows = positiveItems(items, from: previousMonthStart, to: start)
+        let narrativePlan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .month,
+                sourceRevision: resolvedSourceRevision,
+                items: rows,
+                previousItems: previousMonthRows,
+                now: now,
+                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousMonthRows)
+            )
+        )
+        let narrativeEcho = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .month,
+                sourceRevision: resolvedSourceRevision,
+                items: items,
+                now: now,
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+        let narrativeRewrite = LifeNarrativeAIRewriteStore.shared.rewrite(
+            for: LifeNarrativeAIPreparationPolicy.key(
+                scope: .month,
+                sourceRevision: resolvedSourceRevision,
+                now: now,
+                calendar: calendar
+            )
+        )
+
         let activeDays = Set(rows.map { calendar.startOfDay(for: $0.createdAt) }).count
         let monthKey = Self.monthKeyFormatter.string(from: now)
         let monthSeed = playbackCopySeed(base: "month-\(monthKey)", suffix: copySeed)
@@ -1234,8 +1401,19 @@ final class PlaybackService {
         let lateRows = rows.filter { calendar.component(.day, from: $0.createdAt) >= 11 }
         let earlySelection = momentSelector.select(from: earlyRows, periodKey: monthKey, range: .month, now: now)
         let lateSelection = momentSelector.select(from: lateRows, periodKey: monthKey, range: .month, now: now)
-        let earlyItem = earlySelection.primary?.item ?? earlyRows.first
-        let lateItem = lateSelection.primary?.item ?? lateRows.first
+        let narrativeRepresentative = narrativeLeadItem(
+            from: narrativePlan,
+            rows: rows,
+            allowedKinds: [.userText, .photo]
+        )
+        let earlyNarrativeItem = narrativeRepresentative.flatMap { item in
+            calendar.component(.day, from: item.createdAt) <= 10 ? item : nil
+        }
+        let lateNarrativeItem = narrativeRepresentative.flatMap { item in
+            calendar.component(.day, from: item.createdAt) >= 11 ? item : nil
+        }
+        let earlyItem = earlyNarrativeItem ?? earlySelection.primary?.item ?? earlyRows.first
+        let lateItem = lateNarrativeItem ?? lateSelection.primary?.item ?? lateRows.first
         let earlyCopy = earlyItem.map { playbackRecordCopy(for: $0, range: .month) }
         let lateCopy = lateItem.map { playbackRecordCopy(for: $0, range: .month) }
         let openingLine = "\(rangeLabel)目前记了 \(rows.count) 笔，分布在 \(activeDays) 天里。"
@@ -1274,18 +1452,25 @@ final class PlaybackService {
             range: .month,
             excludingTitles: usedRecordTitles
         )
+        let auxiliaryMetrics = PlaybackAuxiliarySignalPolicy.preparedMetrics(
+            periodItems: rows,
+            allItems: items,
+            now: now
+        )
+        var openingMetrics: [String: String] = [
+            "count": "\(rows.count)",
+            "total": Self.money(total),
+            "activeDays": "\(activeDays)",
+            "range": rangeLabel,
+            "supportLine": ""
+        ]
+        openingMetrics.merge(auxiliaryMetrics) { current, _ in current }
 
         let chapters: [SummaryChapter] = [
             SummaryChapter(
                 id: "month-opening",
                 title: "\(rangeLabel)回看",
-                metrics: [
-                    "count": "\(rows.count)",
-                    "total": Self.money(total),
-                    "activeDays": "\(activeDays)",
-                    "range": rangeLabel,
-                    "supportLine": ""
-                ],
+                metrics: openingMetrics,
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-opening",
                     seed: monthSeed,
@@ -1360,12 +1545,17 @@ final class PlaybackService {
                 metrics: [
                     "count": "\(rows.count)",
                     "total": Self.money(total),
-                    "supportLine": ""
+                    "supportLine": narrativeEcho?.line ?? narrativeRewrite?.summary ?? ""
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-outro",
                     seed: monthSeed,
-                    values: ["mainLine": "\(rangeLabel)先记到这里。"]
+                    values: [
+                        "mainLine": rolePlannedClosingLine(
+                            scope: .month,
+                            recordCount: rows.count
+                        )
+                    ]
                 ),
                 durationSec: 7
             )

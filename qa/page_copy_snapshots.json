@@ -44,7 +44,7 @@
     "surface": "summary_playback",
     "source_paths": ["NativeDemoApp/Services/PlaybackCopyPool.swift", "NativeDemoApp/Services/PlaybackService.swift"],
     "evidence_required": ["month range"],
-    "expected_copy": ["这个月先到这里", "先记到这里。"],
+    "expected_copy": ["这个月先到这里", "这个月的 \\(recordCount) 笔都看过了，先停在这里。"],
     "forbidden_copy": ["下月再叙", "下个月会有新的天气", "这个月的气味"]
   },
   {

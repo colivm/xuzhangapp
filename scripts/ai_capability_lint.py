@@ -24,12 +24,13 @@ REQUIRED = {
         "远程模型未接通，已用本地规则",
     ),
     "NativeDemoApp/Views/SettingsView.swift": (
-        "只影响今日小记和月度整理",
-        "AI 指令台、周记、月章和生活线索始终在本机处理",
+        "本机规则始终先生成",
+        "日/周/月轻总结会在账本变化后尝试提前润色",
+        "AI 指令台和生活线索仍不联网",
     ),
     "NativeDemoApp/Views/MemberPricingView.swift": (
         "AI 指令台不联网",
-        "本机规则会按日期、分类、备注和上下文整理",
+        "本机规则会先按日期、分类、备注和上下文整理",
     ),
     "NativeDemoApp/Models/HomeItem.swift": ('case .ocr: return "账单识别"',),
     "NativeDemoApp/Views/RecordView.swift": ('case ocr = "账单识别"',),

@@ -37,6 +37,78 @@ enum AIReportServiceError: LocalizedError {
 final class AIReportService {
     private let zhipuDefaultEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 
+    func generateNarrativeRewrites(
+        factPacks: [LifeNarrativeAIFactPackRequest],
+        endpoint: String,
+        apiKey: String,
+        tone: AppSettings.AITone,
+        model: String
+    ) async throws -> LifeNarrativeAIRewriteBatchResponse {
+        guard !factPacks.isEmpty else { return LifeNarrativeAIRewriteBatchResponse(rewrites: []) }
+        let finalEndpoint = normalizedEndpoint(endpoint)
+        guard let url = URL(string: finalEndpoint) else {
+            throw AIReportServiceError.invalidEndpoint(finalEndpoint)
+        }
+        let encodedPacks = try JSONEncoder().encode(factPacks)
+        guard let factPackText = String(data: encodedPacks, encoding: .utf8) else {
+            throw AIReportServiceError.invalidResponse
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let isDirectZhipu = finalEndpoint.contains("open.bigmodel.cn")
+        if isDirectZhipu && !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        } else if !isDirectZhipu && !apiKey.isEmpty {
+            request.setValue(apiKey, forHTTPHeaderField: "x-proxy-token")
+        }
+        if finalEndpoint.contains("/v1/ai/"), !KeychainService.loadAccessToken().isEmpty {
+            request.setValue("Bearer \(KeychainService.loadAccessToken())", forHTTPHeaderField: "Authorization")
+        }
+
+        let systemContent = """
+        你是“叙账”的轻量文案改写器，不是事实选择器。
+        输入只包含本地规则已经选定的脱敏事实。只能改写这些事实，不得添加商户、地点、人物、原因、情绪、动机、建议或预测。
+        每个结果必须原样返回 scope、periodKey，并用 evidenceIDs 引用输入里的 F 编号；至少引用 lead 事实。
+        不得补充输入中没有的数字。语气为\(tone.rawValue)，自然、克制、像人话，不煽情、不说教。
+        headline 4-32 字，summary 6-64 字，supportingLine 可空且最多 48 字。
+        只输出 JSON：{"rewrites":[{"scope":"day","periodKey":"...","headline":"...","summary":"...","supportingLine":null,"evidenceIDs":["F1"]}]}
+        """
+        let userContent = "脱敏事实包：\(factPackText)"
+        let body: [String: Any] = [
+            "model": model.isEmpty ? "doubao-seed-1-6-flash-250828" : model,
+            "feature": "narrative_rewrite_batch",
+            "messages": [
+                ["role": "system", "content": systemContent],
+                ["role": "user", "content": userContent]
+            ],
+            "temperature": 0.25
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.timeoutInterval = 30
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw AIReportServiceError.invalidResponse
+        }
+        guard 200..<300 ~= http.statusCode else {
+            let bodyText = String(data: data, encoding: .utf8) ?? ""
+            throw AIReportServiceError.badStatus(http.statusCode, String(bodyText.prefix(300)))
+        }
+        if let decoded = try? JSONDecoder().decode(LifeNarrativeAIRewriteBatchResponse.self, from: data) {
+            return decoded
+        }
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let choices = object["choices"] as? [[String: Any]],
+           let message = choices.first?["message"] as? [String: Any],
+           let content = message["content"] as? String,
+           let decoded = decodeNarrativeRewriteBatch(from: content) {
+            return decoded
+        }
+        throw AIReportServiceError.invalidResponse
+    }
+
     func generateInsight(
         snapshot: AISnapshot,
         endpoint: String,
@@ -157,6 +229,17 @@ final class AIReportService {
         }
 
         return nil
+    }
+
+    private func decodeNarrativeRewriteBatch(
+        from content: String
+    ) -> LifeNarrativeAIRewriteBatchResponse? {
+        let trimmed = content
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = trimmed.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(LifeNarrativeAIRewriteBatchResponse.self, from: data)
     }
 
     private func safeDateText(for feature: String) -> String {

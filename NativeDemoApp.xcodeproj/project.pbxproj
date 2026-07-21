@@ -31,6 +31,9 @@
 		A100002B0000000000000001 /* PlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100002C0000000000000001 /* PlaybackService.swift */; };
 		F21000010000000000000001 /* ShareInsightCopyPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21000020000000000000001 /* ShareInsightCopyPool.swift */; };
 		F21000030000000000000001 /* PlaybackSupportServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21000040000000000000001 /* PlaybackSupportServices.swift */; };
+		F31000010000000000000001 /* LifeNarrativePlanningService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31000020000000000000001 /* LifeNarrativePlanningService.swift */; };
+		F32000010000000000000001 /* LifeNarrativeEchoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32000020000000000000001 /* LifeNarrativeEchoService.swift */; };
+		F33000010000000000000001 /* LifeNarrativeAIRewriteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F33000020000000000000001 /* LifeNarrativeAIRewriteService.swift */; };
 		A100002D0000000000000001 /* MemberFlowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100002E0000000000000001 /* MemberFlowService.swift */; };
 		F21000050000000000000001 /* HomeViewModel+Dashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21000060000000000000001 /* HomeViewModel+Dashboard.swift */; };
 		A100002F0000000000000001 /* MemberPricingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000390000000000000001 /* MemberPricingView.swift */; };
@@ -136,6 +139,9 @@
 		A100002C0000000000000001 /* PlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackService.swift; sourceTree = "<group>"; };
 		F21000020000000000000001 /* ShareInsightCopyPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInsightCopyPool.swift; sourceTree = "<group>"; };
 		F21000040000000000000001 /* PlaybackSupportServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSupportServices.swift; sourceTree = "<group>"; };
+		F31000020000000000000001 /* LifeNarrativePlanningService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeNarrativePlanningService.swift; sourceTree = "<group>"; };
+		F32000020000000000000001 /* LifeNarrativeEchoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeNarrativeEchoService.swift; sourceTree = "<group>"; };
+		F33000020000000000000001 /* LifeNarrativeAIRewriteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeNarrativeAIRewriteService.swift; sourceTree = "<group>"; };
 		A100002E0000000000000001 /* MemberFlowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberFlowService.swift; sourceTree = "<group>"; };
 		F21000060000000000000001 /* HomeViewModel+Dashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeViewModel+Dashboard.swift"; sourceTree = "<group>"; };
 		A10000390000000000000001 /* MemberPricingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberPricingView.swift; sourceTree = "<group>"; };
@@ -291,6 +297,9 @@
 				A100002C0000000000000001 /* PlaybackService.swift */,
 				F21000020000000000000001 /* ShareInsightCopyPool.swift */,
 				F21000040000000000000001 /* PlaybackSupportServices.swift */,
+				F31000020000000000000001 /* LifeNarrativePlanningService.swift */,
+				F32000020000000000000001 /* LifeNarrativeEchoService.swift */,
+				F33000020000000000000001 /* LifeNarrativeAIRewriteService.swift */,
 				A100008A0000000000000001 /* CategoryRecommendService.swift */,
 				D21300020000000000000001 /* RecordPrefillService.swift */,
 				D21400020000000000000001 /* RecordDraftResolutionService.swift */,
@@ -534,6 +543,9 @@
 				A100002B0000000000000001 /* PlaybackService.swift in Sources */,
 				F21000010000000000000001 /* ShareInsightCopyPool.swift in Sources */,
 				F21000030000000000000001 /* PlaybackSupportServices.swift in Sources */,
+				F31000010000000000000001 /* LifeNarrativePlanningService.swift in Sources */,
+				F32000010000000000000001 /* LifeNarrativeEchoService.swift in Sources */,
+				F33000010000000000000001 /* LifeNarrativeAIRewriteService.swift in Sources */,
 				A100002D0000000000000001 /* MemberFlowService.swift in Sources */,
 				F21000050000000000000001 /* HomeViewModel+Dashboard.swift in Sources */,
 				A100002F0000000000000001 /* MemberPricingView.swift in Sources */,
