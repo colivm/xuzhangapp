@@ -3246,3 +3246,41 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 冻结边界复核：未修改账本字段/排序结果、分类/OCR/AI 识别、查询/对比/补记结论、周记/月章/回放文案、会员/额度/StoreKit、云端 DTO/冲突规则、主题/UI/路由、首页动态主动作与成熟门槛、痕迹筛选/证据、宠物、照片按需加载、持久化语义或 `ARCH-03`；未覆盖用户既有脏工作区和未提交 `AI-04`。
 - 剩余风险：Windows 无 Swift/Xcode/iPhone，新增并发快照类型、`@MainActor` 请求接力、严格 Sendable 诊断与 XCTest 尚未实际编译；100/1,000/5,000 条保存后 2 秒 Main Thread Hitches、SwiftUI 更新次数、快速 20 次编辑的任务回落、首页同日/跨日/会员切换、复盘替换和痕迹预热仍需按 `FLOW-50` 完成 Xcode Debug/Release、XCTest 与 iPhone Instruments 签收，因此不得标记 `VERIFIED`。
 - 下一步：只执行 `FLOW-50` 与既有统一 Xcode/iPhone 矩阵；签收若出现编译、并发或真机闪动，仅定向修复 `PERF-15`，不回退后台快照和单次提交，也不启动 `ARCH-03` 或相邻产品任务。
+
+---
+
+## 36. PET-FIX-01：宠物固定锚点、拖动手势与默认位置修复（2026-07-21）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。
+- 真机现象：宠物无法可靠拖动；普通点击打开/关闭气泡时，宠物会在页面中部与右侧两个位置之间跳；用户要求默认恢复到帧动画改造前的右下角。
+- 根因：`MovablePixelPetOverlay` 的 `ZStack` 先按宠物栈自身尺寸布局，再扩展为全屏；无气泡时栈宽 52pt、出现气泡后栈宽最多 210pt，扩展后的栈整体保持居中，导致右对齐的宠物本体随气泡宽度横向移动。拖动又以 `simultaneousGesture` 挂在首页纵向 `ScrollView` 内，真机上会与页面滚动竞争。
+- 目标：宠物本体始终锚定同一屏幕坐标，气泡只向屏幕内侧展开；拖动优先于父级滚动并只在超过阈值后提交；点击、长按和拖动互不误触；首次默认位置精确复用旧版 `.bottomTrailing + trailing 16 + bottom 102`。
+- 允许修改：`PixelPetAnimationView.swift` 的浮层布局、纯位置/交互策略与手势组合；对应 XCTest、静态门禁、真机矩阵和本文档。
+- 冻结边界：不修改像素资源、帧率、气泡文案/生命周期、天气与账单上下文、长按隐藏含义、宠物开关、首页动态主动作/卡片/滚动内容、提示预算、主题、会员、AI、回放、账本、存储同步或 `ARCH-03`；保留已经持久化的有效用户位置，不用修复强制重置用户选择。
+- 验收：默认与气泡显隐时宠物中心均保持旧版右下角；点击 20 次位置不变；从宠物本体向四向拖动可跟手、松手吸附左右边缘并保存，页面不抢滚；小于阈值的手指抖动不提交位置；长按只隐藏不点击。Windows 完成策略/静态门禁，Xcode/iPhone 复合手势签收前只能标记 `CODE_DONE`。
+- 实现：移除“内容尺寸 `ZStack` 先布局、再扩展到全屏”的错误层级，改为先给宠物栈保留旧版右 16pt/底 102pt 内边距，再由全屏 frame 按左右边缘对齐；气泡出现只向屏幕内侧增加宽度，宠物本体中心不再移动。拖动从与父滚动平级的 `simultaneousGesture` 改为宠物本体的 `highPriorityGesture`；统一 8pt 欧氏距离门槛，未超过门槛不更新临时位置、不持久化、不触发选中反馈，超过后才抑制点击并在结束时吸附/保存。
+- 默认与存储边界：`HomePetOverlayPlacement.defaultPlacement` 继续为 `.right + verticalFraction 0`，实际对应帧动画改造前 `.bottomTrailing + trailing 16 + bottom 102`；没有改 UserDefaults key，也没有清空已经保存的有效位置。左右吸附、上下夹取、尺寸变化与 VoiceOver 移位动作继续复用原策略。
+- 修改文件：`NativeDemoApp/Views/Components/PixelPetAnimationView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：新增旧版右下角默认锚点、零位移提交稳定和 1～7pt 抖动/8pt 拖动门槛 XCTest；静态门禁锁定 viewport 边缘对齐、旧内容尺寸 ZStack 退场、高优先级拖动、零 `simultaneousGesture(dragGesture)` 和 `FLOW-51`。`git diff --check`、体验静态检查及 `python scripts/validate_release_gate.py --phase windows` 全部通过；100/1,000/5,000 条、真实 12MP、AI、生活语义、文案、主题、迁移与 SQLite 均通过，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改宠物帧资源/帧率、气泡文字/生命周期、天气/账单消息策略、长按隐藏和设置恢复、首页内容/动态主动作/滚动数据、提示预算、主题、会员、AI、回放、账本、存储同步或 `ARCH-03`；用户既有 `StatCardView.swift`、`web-preview/app.js`、提示稿、素材、`tmp/` 与缓存目录未覆盖。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，`highPriorityGesture` 与 `ScrollView`、点击和 0.6 秒长按的真实识别优先级，气泡过渡中的像素坐标、小屏 Safe Area、既有四类持久化位置和 VoiceOver 自定义动作仍需按 `FLOW-51` 真机签收，因此不得标记 `VERIFIED`。
+- 下一步：在 Xcode Debug/Release 编译并用 iPhone 执行 `FLOW-51`；发现问题时只调整宠物局部手势组合和锚点，不改首页滚动结构、气泡文案或相邻产品逻辑。
+
+---
+
+## 37. AI-FIX-05：省略主语的上周期对比语义修复（2026-07-21）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。
+- 真机现象：输入“对比上周”会得到“上周 对比 前一周”；只有输入“这周对比上周”才得到用户日常语义预期的“本周 对比 上周同期”。同类“对比上月”也存在把上月当主体继续向前推一个月的风险。
+- 根因：对比识别已经正确命中只读 `compare`，但通用时间解析把指令中唯一出现的“上周/上月”直接当成当前段；随后上一周期策略再减一周/一月。解析没有区分“省略主体后的参照对象”和“明确历史主体”。
+- 目标：对比指令只有上周/上月、没有本周/本月且没有前一周/前一个月等历史参照时，按生活化省略语义补全为“本周对比上周同期 / 本月对比上月同期”；明确“上周对比前一周 / 上月对比前一个月”继续按历史双周期执行。
+- 允许修改：`InteractionStateModels.swift` 中仅限“和/跟/与上周期比、比比上周期”的受控自然表达识别，`InsightWebView.swift` 中仅供 `compare` 使用的基准周期消歧；对应 XCTest、静态门禁、真机矩阵和本文档。
+- 冻结边界：不修改普通“查上周/查上月”与生活总结的时间范围；不修改“这周对比上周”“本月对比上月”、明确历史双周期、周同星期日序/月同月日序、金额/笔数/分类/证据/排序、结果 UI、推荐缓存、查询与补记识别、确认前零写入、主题、会员、首页、痕迹、宠物、存储同步或 `ARCH-03`。
+- 验收：`对比上周 / 和上周比 / 比比上周` 均为本周对比上周同期；`对比上月` 为本月对比上月同期；显式当前周期保持；`上周对比前一周 / 比较上周和前一周 / 上月对比前一个月` 保持历史比较；`查上周记录 / 查上月记录` 仍只查指定历史周期且不进入对比。
+- 实现：AI 引擎只在识别结果为 `compare` 时进入专用基准周期消歧。只有上周/上月参照、没有本周/本月且没有前一周/前一个月、上上周/上上月等明确历史参照时，才复用既有“本周/本月”范围生成器；因此周同期、月同期的日期计算仍由原 `aiCommandPreviousRange` 唯一负责。普通查询、生活总结和最近周期范围继续走原解析器。
+- 自然表达边界：在既有“对比/比较/相比”之外，仅增加带明确上周期参照的“和/跟/与上周（上月）比”和“比比上周（上月）”；没有时间/分类/账本范围的泛化“比”仍不会被当成查账对比。明确写出历史双周期时不补当前周期。
+- 修改文件：`NativeDemoApp/Models/InteractionStateModels.swift`、`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：新增端到端确定性 XCTest，覆盖“对比上周 / 和上周比 / 比比上周 / 这周对比上周”“对比上月 / 本月对比上月”、明确“上周对比前一周 / 比较上周和前一周 / 上月对比前一个月”，以及普通“查上周/上月”不进入对比；新增静态门禁和 `FLOW-52`。`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 全部通过；100/1,000/5,000 条、真实 12MP、生活语义、文案、主题、迁移和 SQLite 均通过，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改周/月日期口径、金额/笔数/分类/证据/排序、对比结果 UI、推荐与缓存、查询和补记写入边界、会员、主题、首页、痕迹、宠物、存储同步或 `ARCH-03`；未覆盖用户既有 `StatCardView.swift`、`web-preview/app.js`、提示稿、素材、`tmp/` 与缓存目录，也未回退未提交的 `PET-FIX-01`。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，新增 Swift 分支与 XCTest 尚未实际编译；繁体省略表达、真实金额周期命中和 VoiceOver 标题仍需按 `FLOW-52` 在 Xcode/iPhone 签收，因此不得标记 `VERIFIED`。
+- 下一步：在 Xcode Debug/Release 编译并执行对应 XCTest，再用 iPhone 按 `FLOW-52` 核对真实周期金额；发现问题时只调整本项短语消歧，不改对比日期计算和结果层级。`PET-FIX-01` 的 `FLOW-51` 可在同一轮真机矩阵一起签收。

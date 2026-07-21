@@ -591,7 +591,10 @@ enum AICommandRecognitionPolicy {
         let hasPairedPeriods = containsPairedPeriods(normalized)
         let hasQuantifiedChange = containsAny(normalized, ["增加", "减少"])
             && containsAny(normalized, ["多少", "几成", "幅度", "比例", "了吗", "没有", "情况", "变化"])
-        let hasCompareLanguage = containsAny(normalized, compareConcepts) || hasPairedPeriods || hasQuantifiedChange
+        let hasCompareLanguage = containsAny(normalized, compareConcepts)
+            || containsOmittedSubjectPeriodComparison(normalized)
+            || hasPairedPeriods
+            || hasQuantifiedChange
         let hasLargest = containsAny(normalized, largestConcepts)
         let hasMemoryAction = containsAny(normalized, memoryActions) || containsMilestone(normalized)
         let hasLastRecordAction = containsAny(normalized, lastRecordActions)
@@ -766,6 +769,19 @@ enum AICommandRecognitionPolicy {
         let hasPreviousMonth = containsAny(text, ["上个月", "上月"])
         let hasConnector = containsAny(text, ["和", "跟", "与", "比", "较", "相比", "对比", "差"])
         return hasConnector && ((hasCurrentWeek && hasPreviousWeek) || (hasCurrentMonth && hasPreviousMonth))
+    }
+
+    private static func containsOmittedSubjectPeriodComparison(_ text: String) -> Bool {
+        let previousPeriods = [
+            "上周", "上一周", "上星期", "上个星期", "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜",
+            "上月", "上个月", "上一个月", "上一月"
+        ]
+        return previousPeriods.contains { period in
+            text.contains("和\(period)比")
+                || text.contains("跟\(period)比")
+                || text.contains("与\(period)比")
+                || text.contains("比比\(period)")
+        }
     }
 
     private static func containsMilestone(_ text: String) -> Bool {

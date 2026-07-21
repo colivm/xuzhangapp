@@ -2654,6 +2654,64 @@ final class InsightBackgroundComputationTests: XCTestCase {
         XCTAssertTrue(digest.contains("00000000-0000-0000-0000-000000000201"))
     }
 
+    func testOmittedComparisonSubjectDefaultsToTheCurrentWeekOrMonth() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        calendar.firstWeekday = 2
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 16,
+            hour: 12
+        ))!
+
+        func digest(_ command: String) -> String {
+            InsightWebView.aiCommandComputationDigestForTesting(
+                command: command,
+                items: [],
+                hasMemberAccess: true,
+                now: now,
+                reviewTaskIntent: .compare
+            )
+        }
+
+        for command in ["对比上周", "和上周比", "比比上周", "这周对比上周"] {
+            XCTAssertTrue(digest(command).hasPrefix("compare#本周 对比 上周同期#"), command)
+        }
+        XCTAssertTrue(digest("对比上月").hasPrefix("compare#本月 对比 上月同期#"))
+        XCTAssertTrue(digest("本月对比上月").hasPrefix("compare#本月 对比 上月同期#"))
+    }
+
+    func testExplicitHistoricalComparisonAndHistoricalQueryKeepTheirLiteralPeriods() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        calendar.firstWeekday = 2
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 16,
+            hour: 12
+        ))!
+
+        func digest(_ command: String, task: ReviewTaskIntent = .compare) -> String {
+            InsightWebView.aiCommandComputationDigestForTesting(
+                command: command,
+                items: [],
+                hasMemberAccess: true,
+                now: now,
+                reviewTaskIntent: task
+            )
+        }
+
+        XCTAssertTrue(digest("上周对比前一周").hasPrefix("compare#上周 对比 前一周#"))
+        XCTAssertTrue(digest("比较上周和前一周").hasPrefix("compare#上周 对比 前一周#"))
+        XCTAssertTrue(digest("上月对比前一个月").hasPrefix("compare#上个月 对比 前一个月#"))
+        XCTAssertTrue(digest("查上周记录", task: .query).hasPrefix("query#"))
+        XCTAssertTrue(digest("查上月记录", task: .query).hasPrefix("query#"))
+    }
+
     func testRollingSevenDayComparisonCommandUsesThePreviousSevenDays() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .current

@@ -4349,7 +4349,9 @@ struct InsightWebView: View {
             let recognition = recognizeAICommand(command)
             let decision = recognition.decision
             let normalized = decision.normalizedText
-            let range = aiCommandTimeRange(from: normalized)
+            let range = decision.intent == .compare
+                ? aiCommandComparisonTimeRange(from: normalized)
+                : aiCommandTimeRange(from: normalized)
             let categoryIntent = recognition.categoryIntent
             let lifeMarkIntent = recognition.lifeMarkIntent
 
@@ -5657,6 +5659,45 @@ struct InsightWebView: View {
 
         private func dateBySetting(hour: Int, minute: Int, on day: Date) -> Date {
             Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day
+        }
+
+        private func aiCommandComparisonTimeRange(from text: String) -> AICommandTimeRange {
+            if aiCommandComparisonUsesImplicitCurrentWeek(text) {
+                return aiCommandTimeRange(from: "本周")
+            }
+            if aiCommandComparisonUsesImplicitCurrentMonth(text) {
+                return aiCommandTimeRange(from: "本月")
+            }
+            return aiCommandTimeRange(from: text)
+        }
+
+        private func aiCommandComparisonUsesImplicitCurrentWeek(_ text: String) -> Bool {
+            let hasCurrentWeek = containsAny(text, [
+                "本周", "这周", "这一周", "本自然周", "这个自然周", "本星期", "这个星期",
+                "这星期", "这一星期", "本礼拜", "这个礼拜", "这礼拜", "这一礼拜"
+            ])
+            let hasPreviousWeek = containsAny(text, [
+                "上周", "上一周", "上个自然周", "上一个自然周", "上星期", "上个星期",
+                "上一个星期", "上礼拜", "上个礼拜", "上一个礼拜"
+            ])
+            let hasEarlierWeek = containsAny(text, [
+                "前一周", "前一个星期", "前一星期", "前一个礼拜", "前一礼拜", "之前一周",
+                "上上周", "上上星期", "上上个星期", "上上礼拜", "上上个礼拜", "再上一周", "再上周"
+            ])
+            return hasPreviousWeek && !hasCurrentWeek && !hasEarlierWeek
+        }
+
+        private func aiCommandComparisonUsesImplicitCurrentMonth(_ text: String) -> Bool {
+            let hasCurrentMonth = containsAny(text, [
+                "本月", "这个月", "这月", "本月份", "这个月份", "这月份", "当月"
+            ])
+            let hasPreviousMonth = containsAny(text, [
+                "上个月", "上月", "上一个月", "上一月", "上月份", "上个自然月"
+            ])
+            let hasEarlierMonth = containsAny(text, [
+                "前一个月", "前一月", "前月", "之前一个月", "上上个月", "上上月", "再上一个月", "再上月"
+            ])
+            return hasPreviousMonth && !hasCurrentMonth && !hasEarlierMonth
         }
 
         private func aiCommandTimeRange(from text: String, defaultRecentDays: Int = 3) -> AICommandTimeRange {
