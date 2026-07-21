@@ -3281,6 +3281,38 @@ final class PixelPetAnimationPolicyTests: XCTestCase {
 }
 
 final class HomePetOverlayPositionPolicyTests: XCTestCase {
+    func testDefaultPlacementMatchesTheLegacyLowerRightAnchor() {
+        let viewport = CGSize(width: 390, height: 700)
+
+        XCTAssertEqual(HomePetOverlayPlacement.defaultPlacement.side, .right)
+        XCTAssertEqual(HomePetOverlayPlacement.defaultPlacement.verticalFraction, 0)
+        XCTAssertEqual(
+            HomePetOverlayPositionPolicy.bottomInset(
+                for: .defaultPlacement,
+                viewportHeight: viewport.height
+            ),
+            102,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            HomePetOverlayPositionPolicy.committedPlacement(
+                from: .defaultPlacement,
+                translation: .zero,
+                viewport: viewport
+            ),
+            .defaultPlacement
+        )
+    }
+
+    func testTapJitterDoesNotQualifyAsADrag() {
+        XCTAssertFalse(
+            HomePetOverlayPositionPolicy.isMeaningfulDrag(CGSize(width: 5, height: 5))
+        )
+        XCTAssertTrue(
+            HomePetOverlayPositionPolicy.isMeaningfulDrag(CGSize(width: 8, height: 1))
+        )
+    }
+
     func testDragCommitsToNearestEdgeAndKeepsVerticalPositionInBounds() {
         let viewport = CGSize(width: 390, height: 700)
         let movedLeft = HomePetOverlayPositionPolicy.committedPlacement(

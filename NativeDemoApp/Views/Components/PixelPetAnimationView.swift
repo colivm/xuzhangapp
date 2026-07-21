@@ -25,6 +25,11 @@ enum HomePetOverlayPositionPolicy {
     static let edgeCenterInset: CGFloat = 42
     static let minimumBottomInset: CGFloat = 102
     static let minimumTopClearance: CGFloat = 170
+    static let dragActivationDistance: CGFloat = 8
+
+    static func isMeaningfulDrag(_ translation: CGSize) -> Bool {
+        hypot(translation.width, translation.height) >= dragActivationDistance
+    }
 
     static func normalized(_ placement: HomePetOverlayPlacement) -> HomePetOverlayPlacement {
         HomePetOverlayPlacement(
@@ -392,19 +397,21 @@ struct MovablePixelPetOverlay: View {
                 proposed: proposedDragTranslation,
                 viewport: viewport
             )
-            ZStack(alignment: placement.side.alignment) {
-                petStack(viewport: viewport)
-                    .padding(.horizontal, 16)
-                    .padding(
-                        .bottom,
-                        HomePetOverlayPositionPolicy.bottomInset(
-                            for: placement,
-                            viewportHeight: viewport.height
-                        )
+            petStack(viewport: viewport)
+                .padding(.horizontal, 16)
+                .padding(
+                    .bottom,
+                    HomePetOverlayPositionPolicy.bottomInset(
+                        for: placement,
+                        viewportHeight: viewport.height
                     )
-                    .offset(clampedTranslation)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                )
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: .infinity,
+                    alignment: placement.side.alignment
+                )
+                .offset(clampedTranslation)
         }
     }
 
@@ -458,7 +465,7 @@ struct MovablePixelPetOverlay: View {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 onHide()
             }
-            .simultaneousGesture(dragGesture(viewport: viewport))
+            .highPriorityGesture(dragGesture(viewport: viewport))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("宠物助手")
             .accessibilityHint(isSpeaking ? "点按收起消息，长按隐藏宠物" : "点按听一句，长按隐藏宠物")
@@ -475,17 +482,23 @@ struct MovablePixelPetOverlay: View {
     }
 
     private func dragGesture(viewport: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 10, coordinateSpace: .local)
+        DragGesture(
+            minimumDistance: HomePetOverlayPositionPolicy.dragActivationDistance,
+            coordinateSpace: .local
+        )
             .updating($proposedDragTranslation) { value, state, _ in
                 state = value.translation
             }
             .onChanged { value in
-                if abs(value.translation.width) + abs(value.translation.height) >= 10,
+                if HomePetOverlayPositionPolicy.isMeaningfulDrag(value.translation),
                    tapSuppressionID == nil {
                     suppressTapTemporarily()
                 }
             }
             .onEnded { value in
+                guard HomePetOverlayPositionPolicy.isMeaningfulDrag(value.translation) else {
+                    return
+                }
                 let committed = HomePetOverlayPositionPolicy.committedPlacement(
                     from: placement,
                     translation: value.translation,
