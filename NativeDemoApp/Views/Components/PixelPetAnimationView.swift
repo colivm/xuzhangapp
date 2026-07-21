@@ -1,5 +1,125 @@
+import Foundation
 import SwiftUI
 import UIKit
+
+enum HomePetOverlaySide: String, Codable, CaseIterable, Equatable, Sendable {
+    case left
+    case right
+
+    var alignment: Alignment {
+        switch self {
+        case .left: return .bottomLeading
+        case .right: return .bottomTrailing
+        }
+    }
+}
+
+struct HomePetOverlayPlacement: Codable, Equatable, Sendable {
+    var side: HomePetOverlaySide
+    var verticalFraction: Double
+
+    static let defaultPlacement = HomePetOverlayPlacement(side: .right, verticalFraction: 0)
+}
+
+enum HomePetOverlayPositionPolicy {
+    static let edgeCenterInset: CGFloat = 42
+    static let minimumBottomInset: CGFloat = 102
+    static let minimumTopClearance: CGFloat = 170
+
+    static func normalized(_ placement: HomePetOverlayPlacement) -> HomePetOverlayPlacement {
+        HomePetOverlayPlacement(
+            side: placement.side,
+            verticalFraction: min(1, max(0, placement.verticalFraction))
+        )
+    }
+
+    static func bottomInset(
+        for placement: HomePetOverlayPlacement,
+        viewportHeight: CGFloat
+    ) -> CGFloat {
+        let normalizedPlacement = normalized(placement)
+        let maximum = max(minimumBottomInset, viewportHeight - minimumTopClearance)
+        return minimumBottomInset
+            + CGFloat(normalizedPlacement.verticalFraction) * (maximum - minimumBottomInset)
+    }
+
+    static func clampedDragTranslation(
+        placement: HomePetOverlayPlacement,
+        proposed: CGSize,
+        viewport: CGSize
+    ) -> CGSize {
+        guard viewport.width > edgeCenterInset * 2, viewport.height > 0 else { return .zero }
+        let normalizedPlacement = normalized(placement)
+        let baseX = normalizedPlacement.side == .left
+            ? edgeCenterInset
+            : viewport.width - edgeCenterInset
+        let desiredX = min(
+            viewport.width - edgeCenterInset,
+            max(edgeCenterInset, baseX + proposed.width)
+        )
+        let baseBottom = bottomInset(for: normalizedPlacement, viewportHeight: viewport.height)
+        let maximumBottom = max(minimumBottomInset, viewport.height - minimumTopClearance)
+        let desiredBottom = min(
+            maximumBottom,
+            max(minimumBottomInset, baseBottom - proposed.height)
+        )
+        return CGSize(
+            width: desiredX - baseX,
+            height: baseBottom - desiredBottom
+        )
+    }
+
+    static func committedPlacement(
+        from placement: HomePetOverlayPlacement,
+        translation: CGSize,
+        viewport: CGSize
+    ) -> HomePetOverlayPlacement {
+        guard viewport.width > edgeCenterInset * 2, viewport.height > 0 else {
+            return normalized(placement)
+        }
+        let normalizedPlacement = normalized(placement)
+        let clamped = clampedDragTranslation(
+            placement: normalizedPlacement,
+            proposed: translation,
+            viewport: viewport
+        )
+        let baseX = normalizedPlacement.side == .left
+            ? edgeCenterInset
+            : viewport.width - edgeCenterInset
+        let side: HomePetOverlaySide = baseX + clamped.width < viewport.width / 2 ? .left : .right
+        let baseBottom = bottomInset(for: normalizedPlacement, viewportHeight: viewport.height)
+        let committedBottom = baseBottom - clamped.height
+        let maximumBottom = max(minimumBottomInset, viewport.height - minimumTopClearance)
+        let travel = maximumBottom - minimumBottomInset
+        let fraction = travel > 0
+            ? Double((committedBottom - minimumBottomInset) / travel)
+            : 0
+        return normalized(
+            HomePetOverlayPlacement(side: side, verticalFraction: fraction)
+        )
+    }
+}
+
+enum HomePetOverlayPositionStore {
+    private static let key = "home_pet_overlay_placement_v1"
+
+    static func load(defaults: UserDefaults = .standard) -> HomePetOverlayPlacement {
+        guard let data = defaults.data(forKey: key),
+              let placement = try? JSONDecoder().decode(HomePetOverlayPlacement.self, from: data) else {
+            return .defaultPlacement
+        }
+        return HomePetOverlayPositionPolicy.normalized(placement)
+    }
+
+    static func save(
+        _ placement: HomePetOverlayPlacement,
+        defaults: UserDefaults = .standard
+    ) {
+        let normalized = HomePetOverlayPositionPolicy.normalized(placement)
+        guard let data = try? JSONEncoder().encode(normalized) else { return }
+        defaults.set(data, forKey: key)
+    }
+}
 
 enum PixelPetAnimationSequence: String, CaseIterable, Equatable, Sendable {
     case idle
@@ -143,6 +263,7 @@ struct PixelPetAnimationView: View {
     init(isSpeaking: Bool, tapTrigger: Int) {
         self.isSpeaking = isSpeaking
         self.tapTrigger = tapTrigger
+        _currentFrame = State(initialValue: PixelPetSpriteSheet.fallbackFrame())
         _handledTapTrigger = State(initialValue: tapTrigger)
     }
 
@@ -249,5 +370,149 @@ struct PixelPetAnimationView: View {
         } else {
             currentFrame = PixelPetSpriteSheet.fallbackFrame()
         }
+    }
+}
+
+struct MovablePixelPetOverlay: View {
+    @GestureState private var proposedDragTranslation: CGSize = .zero
+    @State private var placement = HomePetOverlayPositionStore.load()
+    @State private var tapSuppressionID: UUID?
+
+    let message: String?
+    let isSpeaking: Bool
+    let tapTrigger: Int
+    let onTap: () -> Void
+    let onHide: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            let viewport = proxy.size
+            let clampedTranslation = HomePetOverlayPositionPolicy.clampedDragTranslation(
+                placement: placement,
+                proposed: proposedDragTranslation,
+                viewport: viewport
+            )
+            ZStack(alignment: placement.side.alignment) {
+                petStack(viewport: viewport)
+                    .padding(.horizontal, 16)
+                    .padding(
+                        .bottom,
+                        HomePetOverlayPositionPolicy.bottomInset(
+                            for: placement,
+                            viewportHeight: viewport.height
+                        )
+                    )
+                    .offset(clampedTranslation)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func petStack(viewport: CGSize) -> some View {
+        VStack(
+            alignment: placement.side == .left ? .leading : .trailing,
+            spacing: 8
+        ) {
+            if let message {
+                Text(message)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.text.opacity(0.9))
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.white.opacity(0.48), lineWidth: 1)
+                    )
+                    .frame(maxWidth: 210, alignment: placement.side == .left ? .leading : .trailing)
+                    .transition(.scale(scale: 0.96, anchor: placement.side == .left ? .bottomLeading : .bottomTrailing).combined(with: .opacity))
+            }
+
+            petControl(viewport: viewport)
+        }
+    }
+
+    private func petControl(viewport: CGSize) -> some View {
+        PixelPetAnimationView(isSpeaking: isSpeaking, tapTrigger: tapTrigger)
+            .frame(width: 48, height: 48)
+            .frame(width: 52, height: 52)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(AppColors.floatingPetPanel)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(0.45), lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+            .onTapGesture {
+                guard tapSuppressionID == nil else { return }
+                onTap()
+            }
+            .onLongPressGesture(minimumDuration: 0.6, maximumDistance: 14) {
+                suppressTapTemporarily()
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                onHide()
+            }
+            .simultaneousGesture(dragGesture(viewport: viewport))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("宠物助手")
+            .accessibilityHint(isSpeaking ? "点按收起消息，长按隐藏宠物" : "点按听一句，长按隐藏宠物")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(named: "隐藏宠物") {
+                onHide()
+            }
+            .accessibilityAction(named: "移到左侧") {
+                commitAccessibilityPlacement(side: .left)
+            }
+            .accessibilityAction(named: "移到右侧") {
+                commitAccessibilityPlacement(side: .right)
+            }
+    }
+
+    private func dragGesture(viewport: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 10, coordinateSpace: .local)
+            .updating($proposedDragTranslation) { value, state, _ in
+                state = value.translation
+            }
+            .onChanged { value in
+                if abs(value.translation.width) + abs(value.translation.height) >= 10,
+                   tapSuppressionID == nil {
+                    suppressTapTemporarily()
+                }
+            }
+            .onEnded { value in
+                let committed = HomePetOverlayPositionPolicy.committedPlacement(
+                    from: placement,
+                    translation: value.translation,
+                    viewport: viewport
+                )
+                placement = committed
+                HomePetOverlayPositionStore.save(committed)
+                UISelectionFeedbackGenerator().selectionChanged()
+            }
+    }
+
+    private func suppressTapTemporarily() {
+        let requestID = UUID()
+        tapSuppressionID = requestID
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            guard tapSuppressionID == requestID else { return }
+            tapSuppressionID = nil
+        }
+    }
+
+    private func commitAccessibilityPlacement(side: HomePetOverlaySide) {
+        let committed = HomePetOverlayPlacement(
+            side: side,
+            verticalFraction: placement.verticalFraction
+        )
+        placement = committed
+        HomePetOverlayPositionStore.save(committed)
     }
 }

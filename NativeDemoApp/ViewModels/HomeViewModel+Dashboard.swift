@@ -86,6 +86,37 @@ struct HomeLifeMarkPreparationInput: @unchecked Sendable {
 struct HomeLifeMarkSnapshot: @unchecked Sendable {
     let key: HomeLifeMarkSnapshotKey
     let textsByItemID: [UUID: String]
+    let todayPrimaryLine: String?
+}
+
+struct HomeEmptyTodayCopy: Equatable {
+    let title: String
+    let subtitle: String
+}
+
+enum HomeEmptyTodayCopyPolicy {
+    static func copy(
+        frequentSuggestionLine: String?,
+        dominantSceneLine: String?
+    ) -> HomeEmptyTodayCopy {
+        HomeEmptyTodayCopy(
+            title: "今天还没有记录",
+            subtitle: frequentSuggestionLine
+                ?? dominantSceneLine
+                ?? "今天这一页暂时还是空的。"
+        )
+    }
+}
+
+enum HomeLifeMarkRefreshPolicy {
+    static func preservesVisibleLines(
+        previousKey: HomeLifeMarkSnapshotKey?,
+        nextKey: HomeLifeMarkSnapshotKey
+    ) -> Bool {
+        guard let previousKey else { return false }
+        return previousKey.dayKey == nextKey.dayKey
+            && previousKey.isMember == nextKey.isMember
+    }
 }
 
 struct HomeQuickRecordSnapshotKey: Equatable {
@@ -156,7 +187,18 @@ enum HomeDashboardSnapshotComputation {
                 result[item.id] = "生活线索 · \(mark.title)"
             }
         }
-        return HomeLifeMarkSnapshot(key: input.key, textsByItemID: texts)
+        let positiveVisibleItems = input.visibleItems.filter { $0.amount > 0 }
+        let todayPrimaryLine = LifeMarkService.aggregates(
+            for: positiveVisibleItems,
+            allItems: input.allItems,
+            isMember: input.isMember,
+            limit: 1
+        ).first.map { LifeMarkService.primaryLine(for: $0) }
+        return HomeLifeMarkSnapshot(
+            key: input.key,
+            textsByItemID: texts,
+            todayPrimaryLine: todayPrimaryLine
+        )
     }
 }
 
@@ -195,8 +237,7 @@ extension HomeViewModel {
 
     func invalidateHomeDashboardSnapshots() {
         cancelHomeDashboardSnapshotPreparation()
-        homeLifeMarkSnapshotKey = nil
-        homeLifeMarkTextsByItemID = [:]
+        homeTodayLifeMarkLine = nil
         homeQuickRecordSnapshotKey = nil
         highConfidenceQuickRecordSuggestionSnapshot = nil
     }
@@ -209,11 +250,16 @@ extension HomeViewModel {
         )
         guard homeLifeMarkSnapshotKey != key else { return }
 
+        if !HomeLifeMarkRefreshPolicy.preservesVisibleLines(
+            previousKey: homeLifeMarkSnapshotKey,
+            nextKey: key
+        ) {
+            homeLifeMarkTextsByItemID = [:]
+        }
         homeLifeMarkPreparationTask?.cancel()
         homeLifeMarkRequestID = UUID()
         let requestID = homeLifeMarkRequestID
         homeLifeMarkSnapshotKey = key
-        homeLifeMarkTextsByItemID = [:]
         let input = HomeLifeMarkPreparationInput(
             key: key,
             visibleItems: todayItems,
@@ -241,6 +287,9 @@ extension HomeViewModel {
             }
             if homeLifeMarkTextsByItemID != snapshot.textsByItemID {
                 homeLifeMarkTextsByItemID = snapshot.textsByItemID
+            }
+            if homeTodayLifeMarkLine != snapshot.todayPrimaryLine {
+                homeTodayLifeMarkLine = snapshot.todayPrimaryLine
             }
             homeLifeMarkPreparationTask = nil
         }
@@ -851,7 +900,7 @@ extension HomeViewModel {
             }
             .max(by: { $0.value < $1.value })?.key.rawValue ?? "无"
         guard total > 0 else {
-            return "今天还没记支出，先从一笔小额开始就很好。"
+            return "今天还没有支出记录。"
         }
         return "今天的记录里，「\(topCategory)」最常出现，日子又多了一点细节。"
     }
@@ -872,7 +921,7 @@ extension HomeViewModel {
         let weekText = weekTotal.formatted(.cny)
         let topCategory = topCategoryLabel(from: records)
         let todaySceneLine = lifeSceneMemoryLine(from: records, minimumCount: 2)
-        let todayLifeMarkLine = lifeMarkMemoryLine(from: records, minimumCount: 1)
+        let todayLifeMarkLine = homeTodayLifeMarkLine
         let todayLateCommuteLine = records
             .sorted { $0.createdAt > $1.createdAt }
             .first(where: { HomeItem.isLateWorkCommute($0) })
@@ -922,36 +971,22 @@ extension HomeViewModel {
         return "\(period) \(item.createdAt.zhBillTime)，先记下了\(subject)。"
     }
 
-    private func emptyTodayStoryCopy(now: Date = Date()) -> (title: String, subtitle: String) {
-        if let suggestion = frequentRecordAmountSuggestions(at: now).first {
-            return (
-                "今天可以从这里开始",
-                "这个时间你常记 \(shortAmountText(suggestion.amount)) · \(suggestion.category.label)，不确定也可以只输金额。"
-            )
+    private func emptyTodayStoryCopy(now: Date = Date()) -> HomeEmptyTodayCopy {
+        let frequentSuggestionLine = frequentRecordAmountSuggestions(at: now).first.map { suggestion in
+            "往常这个时间，你常记的是 \(shortAmountText(suggestion.amount)) · \(suggestion.category.label)。"
         }
-
         let weekItems = filteredItems(in: .week).filter { $0.amount > 0 }
+        let dominantSceneLine: String?
         if let scene = LifeSceneSemanticService.dominantScene(in: weekItems),
            scene.count >= 2 {
-            return (
-                "今天也先留一笔",
-                "这周「\(LifeSceneSemanticService.displayTheme(for: scene.signal))」出现得多，今天想到哪笔就先放进来。"
-            )
+            dominantSceneLine = "这周「\(LifeSceneSemanticService.displayTheme(for: scene.signal))」出现得比较多。"
+        } else {
+            dominantSceneLine = nil
         }
-
-        let hour = Calendar.current.component(.hour, from: now)
-        switch hour {
-        case 5..<10:
-            return ("早上先留个开头", "早餐、通勤、路上的小花费，有一笔就先记一笔。")
-        case 10..<14:
-            return ("午间先记一下", "饭点和路上的小支出最容易忘，先放一笔也好。")
-        case 17..<21:
-            return ("晚上回头补一笔", "晚饭、回家路上、临时买的东西，都可以先记下来。")
-        case 21...23, 0..<5:
-            return ("今天还有哪笔没放进来？", "睡前补一笔，明天再看今天会清楚一点。")
-        default:
-            return ("今天先记下来", "不用整理得很完整，有一笔就先放进账本。")
-        }
+        return HomeEmptyTodayCopyPolicy.copy(
+            frequentSuggestionLine: frequentSuggestionLine,
+            dominantSceneLine: dominantSceneLine
+        )
     }
 
     var monthTopCategoryText: String {

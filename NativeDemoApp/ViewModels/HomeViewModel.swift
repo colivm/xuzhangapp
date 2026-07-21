@@ -635,6 +635,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var recordInputAssistanceRevision: Int = 0
     @Published private(set) var homeDashboardRevision: Int = 0
     @Published var homeLifeMarkTextsByItemID: [UUID: String] = [:]
+    @Published var homeTodayLifeMarkLine: String?
     @Published var highConfidenceQuickRecordSuggestionSnapshot: HomeHighConfidenceQuickRecordSuggestion?
     @Published private(set) var recordInputMessage: String?
     @Published var petMessage: String? = nil

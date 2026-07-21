@@ -1160,6 +1160,46 @@ final class HomeDashboardSnapshotTests: XCTestCase {
         XCTAssertNotNil(first.textsByItemID[visible.id])
         XCTAssertNil(first.textsByItemID[hidden.id])
         XCTAssertEqual(first.textsByItemID, second.textsByItemID)
+        XCTAssertNotNil(first.todayPrimaryLine)
+        XCTAssertEqual(first.todayPrimaryLine, second.todayPrimaryLine)
+    }
+
+    func testLifeMarkRefreshPreservesRowsOnlyForTheSameDayAndMembership() {
+        let previous = HomeLifeMarkSnapshotKey(
+            ledgerRevision: 2,
+            dayKey: "2026-07-21",
+            isMember: true
+        )
+        XCTAssertTrue(
+            HomeLifeMarkRefreshPolicy.preservesVisibleLines(
+                previousKey: previous,
+                nextKey: HomeLifeMarkSnapshotKey(
+                    ledgerRevision: 3,
+                    dayKey: "2026-07-21",
+                    isMember: true
+                )
+            )
+        )
+        XCTAssertFalse(
+            HomeLifeMarkRefreshPolicy.preservesVisibleLines(
+                previousKey: previous,
+                nextKey: HomeLifeMarkSnapshotKey(
+                    ledgerRevision: 3,
+                    dayKey: "2026-07-22",
+                    isMember: true
+                )
+            )
+        )
+        XCTAssertFalse(
+            HomeLifeMarkRefreshPolicy.preservesVisibleLines(
+                previousKey: previous,
+                nextKey: HomeLifeMarkSnapshotKey(
+                    ledgerRevision: 3,
+                    dayKey: "2026-07-21",
+                    isMember: false
+                )
+            )
+        )
     }
 
     func testQuickRecordSnapshotKeyChangesOnlyWithLedgerOrMinuteBucket() {
@@ -2923,6 +2963,52 @@ final class PixelPetAnimationPolicyTests: XCTestCase {
     }
 }
 
+final class HomePetOverlayPositionPolicyTests: XCTestCase {
+    func testDragCommitsToNearestEdgeAndKeepsVerticalPositionInBounds() {
+        let viewport = CGSize(width: 390, height: 700)
+        let movedLeft = HomePetOverlayPositionPolicy.committedPlacement(
+            from: .defaultPlacement,
+            translation: CGSize(width: -330, height: -220),
+            viewport: viewport
+        )
+        XCTAssertEqual(movedLeft.side, .left)
+        XCTAssertGreaterThan(movedLeft.verticalFraction, 0)
+        XCTAssertLessThanOrEqual(movedLeft.verticalFraction, 1)
+
+        let movedRight = HomePetOverlayPositionPolicy.committedPlacement(
+            from: movedLeft,
+            translation: CGSize(width: 500, height: 900),
+            viewport: viewport
+        )
+        XCTAssertEqual(movedRight.side, .right)
+        XCTAssertEqual(movedRight.verticalFraction, 0, accuracy: 0.0001)
+    }
+
+    func testStoredPlacementNormalizesCorruptFractionsAndRestoresTheSide() {
+        let suiteName = "HomePetOverlayPositionPolicyTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        HomePetOverlayPositionStore.save(
+            HomePetOverlayPlacement(side: .left, verticalFraction: 4.2),
+            defaults: defaults
+        )
+        let restored = HomePetOverlayPositionStore.load(defaults: defaults)
+        XCTAssertEqual(restored.side, .left)
+        XCTAssertEqual(restored.verticalFraction, 1, accuracy: 0.0001)
+    }
+
+    func testSmallViewportFallsBackWithoutProducingAnInvalidPlacement() {
+        let original = HomePetOverlayPlacement(side: .right, verticalFraction: 0.4)
+        let result = HomePetOverlayPositionPolicy.committedPlacement(
+            from: original,
+            translation: CGSize(width: -500, height: -500),
+            viewport: CGSize(width: 60, height: 100)
+        )
+        XCTAssertEqual(result, original)
+    }
+}
+
 final class PetCompanionMessagePolicyTests: XCTestCase {
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -3074,6 +3160,156 @@ final class PetCompanionMessagePolicyTests: XCTestCase {
         XCTAssertTrue(empty.allSatisfy { $0.id.hasPrefix("day.empty") })
         XCTAssertTrue(one.allSatisfy { $0.id.hasPrefix("day.one") })
         XCTAssertTrue(several.allSatisfy { $0.id.hasPrefix("day.several") })
+    }
+
+    func testHotWeatherCoffeeAddsCareWithoutCallingCoffeeAColdDrink() {
+        let coffee = HomeItem(
+            title: "拿铁",
+            amount: 18,
+            category: .dining,
+            createdAt: date(15)
+        )
+
+        let messages = PetCompanionMessagePolicy.candidates(
+            focusRecord: nil,
+            todayItems: [coffee],
+            currentWeather: WeatherSnapshot(temp: 34, weatherCode: 1, ts: date(16)),
+            now: date(16),
+            calendar: calendar
+        )
+
+        XCTAssertTrue(messages.allSatisfy { $0.text.contains("咖啡") })
+        XCTAssertTrue(messages.allSatisfy { $0.text.contains("防晒") && $0.text.contains("补水") })
+        XCTAssertFalse(messages.contains { $0.text.contains("冷饮") || $0.text.contains("清凉") })
+    }
+
+    func testHotWeatherOnlyUsesColdDrinkCopyForExplicitDiningEvidence() {
+        let coldDrink = HomeItem(
+            title: "冰美式",
+            amount: 12,
+            category: .dining,
+            createdAt: date(15)
+        )
+        let merchandise = HomeItem(
+            title: "冰美式随行杯",
+            amount: 68,
+            category: .shopping,
+            createdAt: date(15)
+        )
+        let weather = WeatherSnapshot(temp: 35, weatherCode: 1, ts: date(16))
+
+        let coldDrinkMessages = PetCompanionMessagePolicy.candidates(
+            focusRecord: nil,
+            todayItems: [coldDrink],
+            currentWeather: weather,
+            now: date(16),
+            calendar: calendar
+        )
+        let merchandiseMessages = PetCompanionMessagePolicy.candidates(
+            focusRecord: nil,
+            todayItems: [merchandise],
+            currentWeather: weather,
+            now: date(16),
+            calendar: calendar
+        )
+
+        XCTAssertTrue(coldDrinkMessages.allSatisfy { $0.text.contains("冷饮") })
+        XCTAssertFalse(merchandiseMessages.contains { $0.text.contains("冷饮") || $0.text.contains("咖啡") })
+    }
+
+    func testSavedSameDayCoffeeCanAddCurrentCareButHistoricalRecordCannot() {
+        let todayCoffee = HomeItem(
+            title: "咖啡",
+            amount: 16,
+            category: .dining,
+            createdAt: date(15)
+        )
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: todayCoffee.createdAt)!
+        let historicalCoffee = HomeItem(
+            title: "咖啡",
+            amount: 16,
+            category: .dining,
+            createdAt: yesterday
+        )
+        let weather = WeatherSnapshot(temp: 34, weatherCode: 1, ts: date(16))
+
+        let todayMessages = PetCompanionMessagePolicy.candidates(
+            focusRecord: todayCoffee,
+            todayItems: [todayCoffee],
+            currentWeather: weather,
+            now: date(16),
+            calendar: calendar
+        )
+        let historicalMessages = PetCompanionMessagePolicy.candidates(
+            focusRecord: historicalCoffee,
+            todayItems: [],
+            currentWeather: weather,
+            now: date(16),
+            calendar: calendar
+        )
+
+        XCTAssertTrue(todayMessages.allSatisfy { $0.text.contains("防晒") && $0.text.contains("补水") })
+        XCTAssertTrue(historicalMessages.allSatisfy { !$0.text.contains("防晒") && !$0.text.contains("补水") })
+    }
+
+    func testStaleWeatherDoesNotBecomeCurrentCare() {
+        let coffee = HomeItem(
+            title: "咖啡",
+            amount: 16,
+            category: .dining,
+            createdAt: date(15)
+        )
+        let staleTimestamp = calendar.date(byAdding: .hour, value: -2, to: date(16))!
+
+        let messages = PetCompanionMessagePolicy.candidates(
+            focusRecord: nil,
+            todayItems: [coffee],
+            currentWeather: WeatherSnapshot(temp: 34, weatherCode: 1, ts: staleTimestamp),
+            now: date(16),
+            calendar: calendar
+        )
+
+        XCTAssertTrue(messages.allSatisfy { $0.id.hasPrefix("day.one") })
+        XCTAssertFalse(messages.contains { $0.text.contains("防晒") || $0.text.contains("补水") })
+    }
+
+    func testInteractionHintOnlyPresentsBeforeItHasBeenSeen() {
+        XCTAssertTrue(PetCompanionInteractionHintPolicy.shouldPresent(hasPresented: false))
+        XCTAssertFalse(PetCompanionInteractionHintPolicy.shouldPresent(hasPresented: true))
+    }
+
+    func testEmptyPetCopyOffersCompanyWithoutRepeatingRecordingInstructions() {
+        XCTAssertTrue(PetCompanionCopy.noRecords.allSatisfy { $0.text.contains("我") })
+        XCTAssertFalse(PetCompanionCopy.noRecords.contains {
+            $0.text.contains("硬凑") || $0.text.contains("先记") || $0.text.contains("想起一笔")
+        })
+    }
+}
+
+final class HomeEmptyTodayCopyPolicyTests: XCTestCase {
+    func testSuggestionAndSceneRemainObservationsInsteadOfRecordingCommands() {
+        let suggestion = HomeEmptyTodayCopyPolicy.copy(
+            frequentSuggestionLine: "往常这个时间，你常记的是 ¥12 · 餐饮。",
+            dominantSceneLine: "这周「通勤」出现得比较多。"
+        )
+        let scene = HomeEmptyTodayCopyPolicy.copy(
+            frequentSuggestionLine: nil,
+            dominantSceneLine: "这周「通勤」出现得比较多。"
+        )
+        let plain = HomeEmptyTodayCopyPolicy.copy(
+            frequentSuggestionLine: nil,
+            dominantSceneLine: nil
+        )
+
+        XCTAssertEqual(suggestion.title, "今天还没有记录")
+        XCTAssertEqual(suggestion.subtitle, "往常这个时间，你常记的是 ¥12 · 餐饮。")
+        XCTAssertEqual(scene.subtitle, "这周「通勤」出现得比较多。")
+        XCTAssertEqual(plain.subtitle, "今天这一页暂时还是空的。")
+        for copy in [suggestion, scene, plain] {
+            XCTAssertFalse(copy.title.contains("从这里开始"))
+            XCTAssertFalse(copy.subtitle.contains("只输金额"))
+            XCTAssertFalse(copy.subtitle.contains("先放进账本"))
+        }
     }
 }
 

@@ -3112,3 +3112,92 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 冻结边界复核：未修改 signal 筛选/顺序、图标、标签、`supportLine` 行为、SwiftUI 布局、播放文案、章节、时长、照片、进度、额度、会员、分享、痕迹热点、通勤或存储同步；用户未提交现场保持原样。
 - 剩余风险：Windows 无 Swift/Xcode，必须在原 Xcode 环境重新编译确认该错误清零；完成编译前不得标记 `VERIFIED`。
 - 下一步：Xcode 重新编译；若仍有错误，只修同一编译链，不扩张为播放 UI 或文案调整。
+
+---
+
+## 33. 首页首帧、宠物陪伴与今日列表定向收口（2026-07-21）
+
+用户真机反馈并确认连续修复以下问题：保存一笔返回首页时宠物偶发只剩外框、账单发生闪动；宠物需要支持拖动换位与长按隐藏，并恢复基于真实天气和当天账单的自然关怀；“今天留下的痕迹”全量列表密度过松；首页无记录时今日小记与宠物语气生硬。本轮按下列顺序执行，一次只允许一个任务为 `IN_PROGRESS`。
+
+| 顺序 | ID | 任务 | 状态 | 冻结边界 |
+|---:|---|---|---|---|
+| 1 | UI-FIX-04 | 保存后首页首帧与账单稳定发布 | `CODE_DONE` | 只修宠物首帧、今日小记计算时机、账单元数据发布与保存高亮；不改账单数据、宠物形象或首页动作 |
+| 2 | PET-03 | 宠物拖动定位与长按隐藏 | `CODE_DONE` | 只新增宠物局部交互、位置持久化和恢复说明；不改首页布局、设置含义或提示优先级 |
+| 3 | PET-04 | 天气＋真实账单可信关怀文案 | `CODE_DONE` | 只扩展可解释宠物消息策略；不把暖标签当事实，不推断消费原因、感受或历史天气 |
+| 4 | UI-04 | “今天留下的痕迹”列表密度收敛 | `CODE_DONE` | 保留点击编辑、左滑删除、照片、主题与记录信息；只调整层级、间距和重复汇总 |
+| 5 | COPY-04 | 首页与宠物空态语气收敛 | `CODE_DONE` | 只改无记录文案；不改变首页动态主动作优先级、目的地或成熟门槛 |
+
+### UI-FIX-04：保存后首页首帧与账单稳定发布
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 现象与根因：`ContentView` 只构建当前 Tab，保存后返回会重新创建 `HomeView`；`PixelPetAnimationView.currentFrame` 初始为 `nil`，外框先出现而首帧等待 `.task` 加载裁切。`todayStoryNarrative` 仍在 SwiftUI 视图计算中调用完整生活线索聚合，延后宠物任务。账本变化又会立即清空 `homeLifeMarkTextsByItemID`，后台完成后重新插入标签并改变行高；最新手工记录同时播放约 1.45 秒高亮，且存在多个安排入口，共同形成非必现闪动。
+- 目标：宠物承载出现时立即有稳定产品首帧；今日小记只在账本修订、日期或会员真正变化时准备；旧账单元数据在新快照发布前保持稳定，新记录不因晚到标签改变首帧高度；每个保存 ID 最多安排一次不改变布局的轻量反馈。
+- 允许修改：`PixelPetAnimationView.swift` 的同步稳定帧承接；`HomeViewModel+Dashboard.swift` 的今日小记/生活线索首页快照；`HomeView.swift` 的只读消费与保存反馈；必要的纯策略 XCTest、静态门禁、真机矩阵和本文档。
+- 冻结边界：首页 OCR→草稿→今日回放→周/月痕迹→复盘→继续记录的状态顺序、主次入口、账单保存字段、今日列表排序、生活线索结论、宠物像素资源/帧率/开关、提示预算、主题、会员、AI、痕迹、回放、存储同步与 `ARCH-03` 均不改变。
+- 性能边界：不得在 SwiftUI `body`、宠物帧推进、拖动或高亮动画中重新扫描完整账本、生成生活线索签名或解码全部 sprite；保持账本修订驱动、后台计算、取消和最新请求保护。
+- 验收：冷缓存与热缓存返回首页都不出现空宠物框；手工保存、快捷通勤和编辑后三条路径账单不发生行高二次跳动或重复高亮；0/1/多笔、带/不带生活线索、1,000 条账本和低电量/Reduce Motion 均保持稳定。
+- 开始现场：分支 `feature/xuzhangapp-staging`，提交 `18caea8`；保护用户既有 `StatCardView.swift`、`web-preview/app.js`、提示文档、`brand-assets/`、`tmp/` 与缓存目录，本轮不覆盖、不回退、不提交相邻现场。
+- 实现：`PixelPetAnimationView` 在初始化时同步取得已缓存/可裁切的产品待机首帧，动画 `.task` 只负责后续帧推进；首页今日小记改为读取随 `HomeLifeMarkSnapshot` 后台准备的 `todayPrimaryLine`，SwiftUI 渲染不再调用完整账本生活线索聚合。账本修订时，同一天且会员身份不变会保留旧行线索直到新快照一次替换；跨日或会员身份变化仍立即清空，避免权限边界穿透。移除首页出现、最近记录 ID 变化和快捷通勤保存后的自动发光安排；行内明确编辑仍保留原一次反馈。
+- 修改文件：`PixelPetAnimationView.swift`、`HomeViewModel+Dashboard.swift`、`HomeViewModel.swift`、`HomeView.swift`、`StateRegressionTests.swift`、`experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：新增生活线索主文确定性、同日/跨日/会员变化保留策略测试和 `FLOW-44`；静态门禁锁定同步首帧、渲染路径零聚合、自动发光退场与会员边界。`git diff --check`、体验静态检查及 `python scripts/validate_release_gate.py --phase windows` 全部通过，100/1,000/5,000 条、真实 12MP、生活语义、主题、迁移、SQLite 均通过，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：首页动态主动作、账单字段/排序、生活线索结论、宠物像素资源/帧率/开关、提示预算、主题、会员、AI、痕迹、回放、存储同步和 `ARCH-03` 未改；用户既有脏工作区未覆盖。
+- 状态：`IN_PROGRESS` → `CODE_DONE`；Windows 无 Xcode/iPhone，Swift 编译、冷/热缓存首帧、1,000 条首页返回、低电量与 Reduce Motion 仍需按 `FLOW-44` 真机签收，因此不得标记 `VERIFIED`。
+- 下一步：启动 `PET-03`，只实现宠物拖动、位置安全边界、持久化与长按隐藏/恢复，不提前修改天气文案。
+
+### PET-03：宠物拖动定位与长按隐藏
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 历史归因：提交 `5fb76d2` 曾出现“长按我就能把我藏起来”文案，但历史视图只有普通点击按钮，没有宠物拖动位置、长按手势或持久化实现；本项补齐真实交互，不恢复虚假承诺。
+- 目标：用户可拖动宠物在首页安全区域内换位，松手吸附最近左右边缘并保存相对位置；长按约 0.6 秒后明确隐藏，继续复用现有宠物开关，可从“我的”恢复；拖动、点击、长按互不误触。
+- 允许修改：新增独立宠物浮层位置策略/本机 Store/交互 View；`HomeView` 只接入局部浮层；必要时使用现有 `SettingsViewModel` 宠物开关方法；对应 XCTest、静态门禁、真机矩阵和本文档。
+- 冻结边界：不改变像素帧资源、帧率、点击消息生命周期、天气/定位权限、首页主动作、强提示遮挡、提示预算、底部 Tab、主题、账单、会员、AI、回放、存储同步或其他页面布局。隐藏只改变宠物开关，不删除账本或宠物素材。
+- 性能与手势边界：拖动临时位移由独立组件局部持有，只在结束时持久化；首页不得随每个拖动帧重算账本。位置需按可用 viewport 夹取，避开顶部、底部 Tab 与 Safe Area；尺寸变化后旧位置必须重新夹取。长按成功不能再触发点击消息，拖动结束不能误触点击。
+- 实现：新增 `MovablePixelPetOverlay`、`HomePetOverlayPositionPolicy` 与本机位置 Store。拖动使用组件内 `@GestureState`，只在结束时按 viewport 夹取垂直位置、吸附最近左右边缘并持久化；气泡按左右位置朝屏幕内侧展开。点击、10pt 短拖与 0.6 秒长按通过临时点击抑制隔离；长按复用 `SettingsViewModel.petCompanionEnabled = false`，页面显示“可在我的重新开启”。VoiceOver 增加隐藏、移到左侧和移到右侧动作。
+- 修改文件：`PixelPetAnimationView.swift`、`HomeView.swift`、`StateRegressionTests.swift`、`experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：新增左右吸附、上下边界、小 viewport 与 UserDefaults 归一化测试，新增 `FLOW-45`；静态门禁锁定局部拖动、位置持久化、长按真实开关和恢复路径。`git diff --check`、体验静态检查及完整 Windows release gate 全部通过，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改像素资源/帧率、点击消息生命周期、天气权限、首页主动作、强提示遮挡、提示预算、底部 Tab、主题、账单、会员、AI、回放、存储同步或其他页面布局。
+- 状态：`IN_PROGRESS` → `CODE_DONE`；Windows 无 Xcode/iPhone，复合手势优先级、真实 Safe Area、尺寸变化、VoiceOver 自定义动作、20 次连续点击/拖动/长按仍需 `FLOW-45` 真机签收，不得标记 `VERIFIED`。
+- 下一步：启动 `PET-04`，只补可信关怀文案与交互提示，不改变刚完成的移动/隐藏实现。
+
+### PET-04：天气＋真实账单可信关怀文案
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 历史归因：`5fb76d2` 曾包含高温、冷饮、咖啡、雨天等大池，但会鼓励消费、推断居家/治愈/值得，并把当前天气套到历史记录；`e3979e5` 为修复可信边界移除这些池，保留真实账单事实和简单天气后缀，却同时丢失自然关怀与饮品组合。
+- 目标：建立可解释消息角色：低频交互提示、当前天气关怀、当前天气＋当天真实账单组合、记录发生时天气事实、无上下文陪伴。高温、降温、雨雪可以给克制行动提醒；咖啡、普通饮料和明确冷饮必须分级，不能把咖啡自动说成冷饮或声称用户已经饮用。
+- 允许修改：`PetCompanionCopy.swift` 的带 ID 短句池；`PetCompanionService.swift` 的纯候选策略、受控关键词与频率；必要的轻量本机提示状态、XCTest、文案/体验门禁、真机矩阵和本文档。
+- 冻结边界：不读取 `displayEmotionTag` 作为事实，不根据金额推断奖励/冲动/价值，不推断消费原因、用户感受、人物关系、居家状态或历史天气；不新增网络调用，不改变天气权限、宠物交互、账单、首页主动作、提示预算和其他页面文案。
+- 事实边界：当前天气只用于“现在”的提醒；记录自身 `memoryContext.weatherKind` 才能描述该笔发生时天气。咖啡可与高温并列并独立提醒补水，只有标题明确含冰/冷饮/雪糕等才能说“清凉”；购买记录只能说“记下”，不能声称已经喝完或使用。
+- 实现：新增一次性可执行交互提示，首次点击说明“拖动换位、长按休息”，后续恢复真实上下文消息。当前高温、降温、雨雪分别提供克制的防晒补水、添衣、带伞和脚下提醒；当前天气只在快照不晚于 1 小时时使用，并始终以“现在”表达。当天通勤、咖啡、饮品、明确冷饮和热饮可与当前天气组合；普通咖啡不会被称为冷饮，只有餐饮分类且标题明确含冰饮/冷饮/雪糕等证据才使用冷饮表达，购物类同词不误判。
+- 保存边界：当天刚保存的记录可在原记录事实后追加当前关怀；历史补记只使用该记录自身 `memoryContext`，不继承当前天气。咖啡、饮品和冷饮只说“记下”，不声称已经饮用；系统暖标签、金额、消费原因、居家状态、关系和感受均未进入判断。
+- 修改文件：`NativeDemoApp/Services/PetCompanionCopy.swift`、`NativeDemoApp/Services/PetCompanionService.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：新增普通咖啡＋高温、明确冷饮、购物同词反例、当天保存＋当前关怀、历史补记、过期天气和首次提示一次性 XCTest；静态门禁锁定天气新鲜度、同日边界、餐饮证据和 `FLOW-46`。`git diff --check`、体验静态检查及 `python scripts/validate_release_gate.py --phase windows` 全部通过；100/1,000/5,000 条、真实 12MP、生活语义、主题、迁移与 SQLite 均通过，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改宠物气泡生命周期、拖动/长按、像素帧、天气/定位权限、账单字段、首页动态主动作、提示预算、主题、会员、AI、回放、存储同步或其他页面文案；用户既有脏工作区未覆盖。
+- 状态：`IN_PROGRESS` → `CODE_DONE`；Windows 无 Swift/Xcode/iPhone，真实天气切换、首次提示持久化、多主题/VoiceOver 和当天/历史记录组合仍需按 `FLOW-46` 真机签收，不得标记 `VERIFIED`。
+- 下一步：启动 `UI-04`，只收敛“今天留下的痕迹”全量列表密度、层级和重复汇总，不修改首页摘要卡、记录操作、主题或宠物。
+
+### UI-04：“今天留下的痕迹”列表密度收敛
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 目标：全量列表在保留标题、金额、分类、时刻、情绪/生活线索和照片的前提下减少无意义留白；一屏可多看到记录，同时不牺牲点击编辑、左滑删除和图片入口。
+- 允许修改：`HomeView.swift` 中 `todayRecordsSheet`、`todayRecordInlineRow`、`todayRecordSummary` 与底部汇总的间距、字号层级和重复信息；对应静态门禁、真机矩阵和本文档。
+- 冻结边界：首页摘要卡和动态主动作、今天记录顺序、记录字段、点击有图进入详情/无图进入编辑、左滑删除、照片缩略图、情绪与生活线索资格、主题 Token、会员、宠物、回放、存储同步和 `ARCH-03` 均不改变。
+- 边界处理：顶部不再重复底部的笔数/合计，但保留“点任一条可调整”的操作提示；情绪与生活线索可同排承接，空间不足时仍可纵向显示；照片保持原 82pt 可辨识高度，不以压缩图片换取密度；大字、VoiceOver 和空/单/多记录仍需稳定。
+- 实现：页面外层间距、行间距、行内垂直留白和标题/金额字号做定向收敛；顶部只保留操作提示，笔数与合计仅在底部出现一次。情绪标签与生活线索使用 `ViewThatFits`，宽度足够时同排、空间不足时纵向承接；照片缩略图继续保持 82pt。
+- 修改文件：`NativeDemoApp/Views/HomeView.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：静态门禁锁定紧凑间距、单一汇总、适应式标签和照片高度；新增 `FLOW-47` 覆盖 0/1/8 笔、有图/无图、编辑删除、小屏/大字与无障碍。`git diff --check`、体验静态检查及 `python scripts/validate_release_gate.py --phase windows` 全部通过，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：点击有图进入详情、无图进入编辑、左滑删除、记录顺序/字段、照片加载、情绪/生活线索资格、首页摘要与动态主动作、主题、会员、宠物、回放和存储同步均未修改；没有新增账本扫描或页面拆分。
+- 状态：`IN_PROGRESS` → `CODE_DONE`；Windows 无 Xcode/iPhone，`ViewThatFits` 实际换行、特大字号、VoiceOver、滑动删除和长列表滚动仍需按 `FLOW-47` 真机签收，不得标记 `VERIFIED`。
+- 下一步：启动 `COPY-04`，只把首页与宠物无记录状态从催促式记账指令收敛为平静事实和陪伴语气。
+
+### COPY-04：首页与宠物空态语气收敛
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 目标：首页今日小记在 0 笔时平静说明当前事实，已有可信历史节奏时只呈现一层观察；宠物只做陪伴，不再重复“硬凑、先记、只输金额”等记账指令。
+- 允许修改：`HomeViewModel+Dashboard.swift` 的 0 笔标题/副文案；`PetCompanionCopy.swift` 的 0 笔短句；必要的纯文案策略测试、静态门禁、真机矩阵和本文档。
+- 冻结边界：首页动态主动作优先级、按钮标题、目的地、成熟门槛、常用金额/场景计算、1 笔以上今日小记、宠物天气/账单候选、交互提示、气泡生命周期、主题、会员、账单与存储同步均不改变。
+- 实现：新增纯 `HomeEmptyTodayCopyPolicy`。0 笔标题统一为“今天还没有记录”；有稳定常用金额时只陈述往常该时段常见金额/分类，有本周主场景时只陈述该事实，无可靠历史时说明“今天这一页暂时还是空的”。移除“从这里开始、只输金额、先放进账本”等催促式语气。宠物 0 笔短句改为“我在这儿陪你 / 我就在旁边”，不再说“硬凑、先记、想起一笔再写”。
+- 修改文件：`NativeDemoApp/ViewModels/HomeViewModel+Dashboard.swift`、`NativeDemoApp/Services/PetCompanionCopy.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：新增首页无记录建议/场景/纯空态与宠物陪伴语气 XCTest；静态门禁禁止旧催促式短句回流，新增 `FLOW-48` 覆盖无历史/常用金额/主场景、天气开关、多主题、大字与 VoiceOver。`git diff --check`、体验静态检查及 `python scripts/validate_release_gate.py --phase windows` 全部通过，100/1,000/5,000 条、真实 12MP、生活语义、文案、主题、迁移与 SQLite 均通过，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：首页动态主动作顺序、按钮标题/目的地、周/月成熟门槛、常用金额与场景计算口径、1 笔以上今日小记、宠物天气/真实账单候选、首次交互提示、气泡生命周期、主题、会员、存储同步和 `ARCH-03` 均未修改。
+- 状态：`IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。Windows 无 Xcode/iPhone，真实字体排版、VoiceOver 朗读、历史建议命中与天气优先级仍需按 `FLOW-48` 真机签收，因此不得标记 `VERIFIED`。
+- 本轮收口：`UI-FIX-04`、`PET-03`、`PET-04`、`UI-04`、`COPY-04` 均达到 `CODE_DONE`；后续只按 `FLOW-44`～`FLOW-48` 做 Xcode/iPhone 定向签收，不启动 `ARCH-03` 或相邻产品改造。

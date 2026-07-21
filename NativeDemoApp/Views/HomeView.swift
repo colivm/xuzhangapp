@@ -398,6 +398,8 @@ struct HomeView: View {
     @State private var petMessageRequestTask: Task<Void, Never>?
     @State private var petMessageRequestID: UUID?
     @State private var petTapAnimationTrigger = 0
+    @State private var petHiddenNotice: String?
+    @State private var petHiddenNoticeID: UUID?
     @State private var todayBillsFocusPulse = false
     @State private var todayBillsFocusTick = 0
     @State private var highlightedSavedItemID: UUID?
@@ -444,10 +446,28 @@ struct HomeView: View {
             if settingsViewModel.petCompanionEnabled,
                !isExternalPostSavePresentationActive,
                todayPlaybackPrompt == nil {
-                todayPetStamp
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 102)
+                MovablePixelPetOverlay(
+                    message: petBubblePresentation?.message,
+                    isSpeaking: petBubbleVisible,
+                    tapTrigger: petTapAnimationTrigger,
+                    onTap: handlePetTap,
+                    onHide: hidePetCompanion
+                )
+                    .zIndex(16)
+            }
+
+            if let petHiddenNotice {
+                Text(petHiddenNotice)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColors.text.opacity(0.9))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(Capsule(style: .continuous).fill(.ultraThinMaterial))
+                    .overlay(Capsule(style: .continuous).stroke(AppColors.line.opacity(0.62), lineWidth: 1))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 106)
+                    .transition(.opacity)
+                    .zIndex(17)
             }
 
         }
@@ -455,7 +475,6 @@ struct HomeView: View {
         .background(Color.clear)
         .onAppear {
             presentFirstRecordPromptIfNeeded()
-            scheduleRecentSaveHighlight()
             homeViewModel.prepareHomeDashboardSnapshots(
                 isMember: settingsViewModel.settings.hasMemberAccess,
                 clearsStaleQuickRecord: true
@@ -473,9 +492,6 @@ struct HomeView: View {
             } else {
                 presentFirstRecordPromptIfNeeded()
             }
-        }
-        .onChange(of: homeViewModel.recentThreeItems.first?.id) { _, _ in
-            scheduleRecentSaveHighlight()
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now in
             homeViewModel.prepareHomeDashboardSnapshots(
@@ -735,9 +751,6 @@ struct HomeView: View {
                             quickRecordSaveMessage = "已补到今天的记录里"
                             dismissQuickRecordCard(suggestion.id)
                             todayBillsFocusTick += 1
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                                scheduleRecentSaveHighlight()
-                            }
                         } else {
                             quickRecordSaveMessage = homeViewModel.recordInputMessage ?? "这笔暂时没保存成功"
                             scheduleQuickRecordMessageClear(for: suggestion.id)
@@ -1096,15 +1109,6 @@ struct HomeView: View {
         }
     }
 
-    private func scheduleRecentSaveHighlight() {
-        guard let item = homeViewModel.recentThreeItems.first,
-              item.source == .manual,
-              abs(item.updatedAt.timeIntervalSinceNow) <= 4 else {
-            return
-        }
-        highlightSavedItem(item.id)
-    }
-
     private func highlightSavedItem(_ itemID: UUID) {
         withAnimation(.easeInOut(duration: 0.22)) {
             highlightedSavedItemID = itemID
@@ -1457,48 +1461,21 @@ struct HomeView: View {
         }
     }
 
-    private var todayPetStamp: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            if let petBubblePresentation {
-                Text(petBubblePresentation.message)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.text.opacity(0.9))
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color.white.opacity(0.48), lineWidth: 1)
-                    )
-                    .frame(maxWidth: 210, alignment: .trailing)
-                    .transition(.scale(scale: 0.96, anchor: .bottomTrailing).combined(with: .opacity))
+    private func hidePetCompanion() {
+        dismissPetBubble()
+        settingsViewModel.petCompanionEnabled = false
+        let noticeID = UUID()
+        petHiddenNoticeID = noticeID
+        withAnimation(.easeInOut(duration: 0.18)) {
+            petHiddenNotice = "宠物已休息，可在“我的”里重新开启"
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_600_000_000)
+            guard petHiddenNoticeID == noticeID else { return }
+            withAnimation(.easeInOut(duration: 0.18)) {
+                petHiddenNotice = nil
             }
-
-            Button {
-                handlePetTap()
-            } label: {
-                PixelPetAnimationView(
-                    isSpeaking: petBubbleVisible,
-                    tapTrigger: petTapAnimationTrigger
-                )
-                    .frame(width: 48, height: 48)
-                    .frame(width: 52, height: 52)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(AppColors.floatingPetPanel)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(Color.white.opacity(0.45), lineWidth: 1)
-                    )
-            }
-            .buttonStyle(.plain)
-            .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
-            .accessibilityLabel("宠物助手")
-            .accessibilityHint(petBubbleVisible ? "点按收起消息" : "点按听一句")
+            petHiddenNoticeID = nil
         }
     }
 
@@ -1828,7 +1805,7 @@ struct HomeView: View {
                     .ignoresSafeArea()
 
                 ScrollView {
-                        VStack(alignment: .leading, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 Button {
                                     todayInlineEditingItemID = nil
@@ -1838,8 +1815,8 @@ struct HomeView: View {
                                     Text("关闭")
                                         .font(.system(size: 15, weight: .semibold))
                                         .foregroundStyle(AppColors.text.opacity(0.86))
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 10)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 8)
                                         .background(
                                             Capsule(style: .continuous)
                                                 .fill(Color.white.opacity(0.78))
@@ -1855,15 +1832,14 @@ struct HomeView: View {
                             }
 
                             Text("今天留下的痕迹")
-                                .font(.system(size: 27, weight: .bold))
+                                .font(.system(size: 26, weight: .bold))
                                 .foregroundStyle(AppColors.text)
-                                .padding(.top, 8)
 
-                            Text(todayRecordsMetaText)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(AppColors.text.opacity(0.86))
+                            Text("点任一条可调整")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(AppColors.readableSubtext)
 
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 8) {
                                 ForEach(Array(homeViewModel.todayItems.enumerated()), id: \.element.id) { index, item in
                                     todayRecordInlineRow(item: item, isFirst: index == 0)
                                 }
@@ -1873,9 +1849,9 @@ struct HomeView: View {
                             .allowsHitTesting(todayInlineEditingItemID == nil)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .padding(.horizontal, 18)
-                        .padding(.top, 18)
-                        .padding(.bottom, 92)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 14)
+                        .padding(.bottom, 78)
                         .contentShape(Rectangle())
                         .onTapGesture {
                             if todaySwipedItemID != nil {
@@ -1932,7 +1908,7 @@ struct HomeView: View {
 
     private var todayRecordsMetaText: String {
         let total = homeViewModel.todayItems.reduce(0) { $0 + $1.amount }
-        return "\(homeViewModel.todayItems.count) 笔 · 合计 \(total.formatted(.cny)) · 点任一条可调整"
+        return "\(homeViewModel.todayItems.count) 笔 · 合计 \(total.formatted(.cny))"
     }
 
     private var todayFocusedRecordOverlay: some View {
@@ -2027,11 +2003,11 @@ struct HomeView: View {
                     .zIndex(2)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 todayRecordSummary(item, isEditing: isEditing, isFirst: isFirst)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 16)
+            .padding(.vertical, 11)
             .background(todayRecordRowBackground(item: item, isEditing: isEditing))
             .overlay(todayRecordRowBorder(item: item, isEditing: isEditing))
             .overlay(alignment: .trailing) {
@@ -2079,10 +2055,10 @@ struct HomeView: View {
     }
 
     private func todayRecordSummary(_ item: HomeItem, isEditing: Bool, isFirst: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(item.displayTitle)
-                    .font(.system(size: 19, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(todayRecordPrimaryInk)
                     .lineLimit(2)
                     .minimumScaleFactor(0.84)
@@ -2092,28 +2068,14 @@ struct HomeView: View {
                 Spacer(minLength: 8)
 
                 Text(item.amount.formatted(.cny))
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(todayRecordAmountInk)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
                     .opacity(isEditing ? 0.46 : 1)
             }
 
-            if shouldShowHomeEmotion(for: item) {
-                let emotionTag = item.displayEmotionTag
-                Text(emotionTag)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(todayRecordEmotionInk)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.13)))
-                    .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.28), lineWidth: 0.7))
-                    .opacity(isEditing ? 0.52 : 1)
-            }
-            if let lifeMarkText = homeLifeMarkText(for: item) {
-                homeLifeMarkChip(lifeMarkText)
-                    .opacity(isEditing ? 0.52 : 1)
-            }
+            todayRecordContextBadges(for: item, isEditing: isEditing)
 
             HStack(spacing: 6) {
                 Text(item.category.rawValue)
@@ -2162,6 +2124,48 @@ struct HomeView: View {
 
     private func homeLifeMarkText(for item: HomeItem) -> String? {
         homeViewModel.homeLifeMarkTextsByItemID[item.id]
+    }
+
+    @ViewBuilder
+    private func todayRecordContextBadges(for item: HomeItem, isEditing: Bool) -> some View {
+        let emotionText = shouldShowHomeEmotion(for: item) ? item.displayEmotionTag : nil
+        let lifeMarkText = homeLifeMarkText(for: item)
+        if emotionText != nil || lifeMarkText != nil {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    if let emotionText {
+                        todayRecordEmotionChip(emotionText)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    if let lifeMarkText {
+                        homeLifeMarkChip(lifeMarkText)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    if let emotionText {
+                        todayRecordEmotionChip(emotionText)
+                    }
+                    if let lifeMarkText {
+                        homeLifeMarkChip(lifeMarkText)
+                    }
+                }
+            }
+            .opacity(isEditing ? 0.52 : 1)
+        }
+    }
+
+    private func todayRecordEmotionChip(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(todayRecordEmotionInk)
+            .lineLimit(1)
+            .minimumScaleFactor(0.84)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.13)))
+            .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.28), lineWidth: 0.7))
     }
 
     private func homeLifeMarkChip(_ text: String) -> some View {
@@ -2412,14 +2416,14 @@ struct HomeView: View {
 
     private var todayRecordsFooterSummary: some View {
         Text(todayRecordsMetaText)
-            .font(.system(size: 17, weight: .bold))
+            .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(AppColors.text.opacity(0.94))
             .lineLimit(1)
             .minimumScaleFactor(0.75)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 18)
-            .padding(.top, 12)
-            .padding(.bottom, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 10)
             .background(
                 Rectangle()
                     .fill(.ultraThinMaterial)
