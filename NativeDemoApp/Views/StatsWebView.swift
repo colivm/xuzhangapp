@@ -874,6 +874,11 @@ struct StatsWebView: View {
             )
 
             if needsLife {
+                try? await Task.sleep(
+                    nanoseconds: TraceLifePreparationPolicy.prewarmDelayNanoseconds
+                )
+                guard !Task.isCancelled,
+                      tracePreparationGate.accepts(requestID) else { return }
                 await prewarmTraceChapter(
                     range: TraceLifePreparationPolicy.prewarmRange(after: primaryLifeRange),
                     requestID: requestID,

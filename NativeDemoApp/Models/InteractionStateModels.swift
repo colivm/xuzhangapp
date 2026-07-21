@@ -301,9 +301,9 @@ enum ReviewTaskIntent: String, CaseIterable, Hashable {
 
     var presetCommand: String {
         switch self {
-        case .query: return "帮我看一下过去三天餐饮类的消费"
-        case .compare: return "对比本周和上周的消费"
-        case .backfill: return "补记今天通勤"
+        case .query: return "看看最近 7 天的记录"
+        case .compare: return "对比最近 7 天和前 7 天的消费"
+        case .backfill: return ""
         }
     }
 }

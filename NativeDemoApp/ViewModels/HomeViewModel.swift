@@ -543,13 +543,92 @@ enum RecordInputAssistanceComputation {
     }
 }
 
-private struct ItemDerivedCache {
+struct ItemDerivedCachePreparationKey: Equatable {
+    let ledgerRevision: Int
+    let dayKey: String
+}
+
+struct ItemDerivedCachePreparationInput: @unchecked Sendable {
+    let key: ItemDerivedCachePreparationKey
+    let items: [HomeItem]
+    let now: Date
+    let itemsAreSortedDescending: Bool
+}
+
+struct ItemDerivedCacheSnapshot: Equatable, @unchecked Sendable {
+    let key: ItemDerivedCachePreparationKey
     var todayPositiveItems: [HomeItem] = []
     var recentThreeTodayItems: [HomeItem] = []
     var currentWeekItems: [HomeItem] = []
     var currentMonthItems: [HomeItem] = []
     var currentYearItems: [HomeItem] = []
     var homeJourneyLedgerFacts = HomeJourneyLedgerFacts()
+    var todayPlayback = PlaybackSnapshot(durationMs: 10_000, entries: [])
+
+    static func empty(for key: ItemDerivedCachePreparationKey) -> ItemDerivedCacheSnapshot {
+        ItemDerivedCacheSnapshot(key: key)
+    }
+}
+
+enum ItemDerivedCacheComputation {
+    static func build(_ input: ItemDerivedCachePreparationInput) -> ItemDerivedCacheSnapshot {
+        let calendar = Calendar.current
+        let sortedItems = input.itemsAreSortedDescending
+            ? input.items
+            : input.items.sorted { $0.createdAt > $1.createdAt }
+        let currentWeekInterval = PlaybackService.isoCalendar.dateInterval(
+            of: .weekOfYear,
+            for: input.now
+        )
+        let currentMonthInterval = calendar.dateInterval(of: .month, for: input.now)
+        let todayPositiveItems = sortedItems.filter {
+            calendar.isDate($0.createdAt, inSameDayAs: input.now) && $0.amount > 0
+        }
+        let currentWeekItems = sortedItems.filter { item in
+            guard let currentWeekInterval else { return false }
+            return item.createdAt >= currentWeekInterval.start
+                && item.createdAt < currentWeekInterval.end
+        }
+        let currentMonthItems = sortedItems.filter { item in
+            guard let currentMonthInterval else { return false }
+            return item.createdAt >= currentMonthInterval.start
+                && item.createdAt < currentMonthInterval.end
+        }
+        let currentYearItems = sortedItems.filter {
+            calendar.isDate($0.createdAt, equalTo: input.now, toGranularity: .year)
+        }
+        return ItemDerivedCacheSnapshot(
+            key: input.key,
+            todayPositiveItems: todayPositiveItems,
+            recentThreeTodayItems: Array(todayPositiveItems.prefix(3)),
+            currentWeekItems: currentWeekItems,
+            currentMonthItems: currentMonthItems,
+            currentYearItems: currentYearItems,
+            homeJourneyLedgerFacts: HomeJourneyLedgerFacts.build(
+                from: sortedItems,
+                currentWeekInterval: currentWeekInterval,
+                currentMonthInterval: currentMonthInterval,
+                calendar: calendar
+            ),
+            todayPlayback: PlaybackService().buildTodayPlayback(
+                from: sortedItems,
+                now: input.now
+            )
+        )
+    }
+}
+
+enum ItemDerivedCachePublicationPolicy {
+    static let coalescingDelayNanoseconds: UInt64 = 40_000_000
+
+    static func accepts(
+        snapshotKey: ItemDerivedCachePreparationKey,
+        pendingKey: ItemDerivedCachePreparationKey?,
+        currentKey: ItemDerivedCachePreparationKey,
+        requestMatches: Bool
+    ) -> Bool {
+        requestMatches && snapshotKey == pendingKey && snapshotKey == currentKey
+    }
 }
 
 struct HomeJourneyLedgerFacts: Equatable {
@@ -615,28 +694,28 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var insights: [DailyInsight] = []
     @Published private(set) var items: [HomeItem] = [] {
         didSet {
-            itemDerivedCacheNeedsRebuild = true
             recordInputAssistanceRevision &+= 1
             homeDashboardRevision &+= 1
             invalidateRecordInputHistorySnapshot()
             invalidateHomeDashboardSnapshots()
+            prepareItemDerivedCacheIfNeeded(now: Date())
         }
     }
     @Published private(set) var syncStatusMessage: String?
     @Published private(set) var isSyncingCloudLedger: Bool = false
     @Published private(set) var isRestoringLocalBackup: Bool = false
-    @Published private(set) var latestPlayback: PlaybackSnapshot?
+    private(set) var latestPlayback: PlaybackSnapshot?
     @Published private(set) var latestActionCard: ActionCardData?
     @Published private(set) var activeRouteGuidance: PlaybackRouteGuidance?
     @Published private(set) var currentWeekTraceSeenKey: String?
     @Published private(set) var recordPrefillResult: RecordPrefillResult?
     @Published private(set) var recordWarmupSuggestions: [FrequentRecordAmountSuggestion] = []
     @Published private(set) var recordRecommendedCategory: HomeItem.Category?
-    @Published private(set) var recordInputAssistanceRevision: Int = 0
-    @Published private(set) var homeDashboardRevision: Int = 0
-    @Published var homeLifeMarkTextsByItemID: [UUID: String] = [:]
-    @Published var homeTodayLifeMarkLine: String?
-    @Published var highConfidenceQuickRecordSuggestionSnapshot: HomeHighConfidenceQuickRecordSuggestion?
+    private(set) var recordInputAssistanceRevision: Int = 0
+    private(set) var homeDashboardRevision: Int = 0
+    var homeLifeMarkTextsByItemID: [UUID: String] = [:]
+    var homeTodayLifeMarkLine: String?
+    var highConfidenceQuickRecordSuggestionSnapshot: HomeHighConfidenceQuickRecordSuggestion?
     @Published private(set) var recordInputMessage: String?
     @Published var petMessage: String? = nil
 
@@ -693,7 +772,6 @@ final class HomeViewModel: ObservableObject {
     private let analyticsService = AnalyticsService()
     private let categoryRecommendService = CategoryRecommendService()
     private let petCompanionService = PetCompanionService.shared
-    private let playbackService = PlaybackService()
     private let routeQuotaStore = SummaryPlaybackQuotaStore()
     private let dailyQuotaStore = DailyFeatureQuotaStore()
     private static let routeGuidanceHandledDefaultsKey = "route_guidance_handled_v1"
@@ -713,11 +791,16 @@ final class HomeViewModel: ObservableObject {
     var homeQuickRecordSnapshotKey: HomeQuickRecordSnapshotKey?
     var homeQuickRecordPreparationTask: Task<Void, Never>?
     var homeQuickRecordRequestID = UUID()
+    var pendingHomeDashboardPreparationRequest: HomeDashboardPreparationRequest?
     private var lastAutoRecommendedCategory: HomeItem.Category?
     private var pendingCategoryCorrectionFrom: HomeItem.Category?
-    private var itemDerivedCache = ItemDerivedCache()
-    private var itemDerivedCacheDayKey: String?
-    private var itemDerivedCacheNeedsRebuild = true
+    private var itemDerivedCache = ItemDerivedCacheSnapshot.empty(
+        for: ItemDerivedCachePreparationKey(ledgerRevision: -1, dayKey: "")
+    )
+    private var itemDerivedCachePreparationKey: ItemDerivedCachePreparationKey?
+    private var itemDerivedCachePreparationTask: Task<Void, Never>?
+    private var itemDerivedCacheRequestID = UUID()
+    private(set) var itemDerivedCacheRevision = -1
     private var localLedgerWritesBlocked = false
 
     init() {
@@ -747,7 +830,19 @@ final class HomeViewModel: ObservableObject {
                 recordInputMessage = issueMessage
             }
         }
-        rebuildItemDerivedCache()
+        let initialDerivedNow = Date()
+        let initialDerivedInput = ItemDerivedCachePreparationInput(
+            key: ItemDerivedCachePreparationKey(
+                ledgerRevision: homeDashboardRevision,
+                dayKey: Self.dayKey(for: initialDerivedNow)
+            ),
+            items: items,
+            now: initialDerivedNow,
+            itemsAreSortedDescending: true
+        )
+        itemDerivedCache = ItemDerivedCacheComputation.build(initialDerivedInput)
+        itemDerivedCacheRevision = initialDerivedInput.key.ledgerRevision
+        latestPlayback = itemDerivedCache.todayPlayback
         insights = LocalStore.loadDailyInsights().sorted { $0.createdAt > $1.createdAt }
         if let data = UserDefaults.standard.data(forKey: "latest_action_card_v1"),
            let card = try? JSONDecoder().decode(ActionCardData.self, from: data) {
@@ -767,7 +862,6 @@ final class HomeViewModel: ObservableObject {
             .appOpened,
             props: [.ledgerSizeBucket: AnalyticsService.countBucket(for: items.count)]
         )
-        refreshTodayPlayback()
     }
 
     @discardableResult
@@ -1115,11 +1209,13 @@ final class HomeViewModel: ObservableObject {
     func updateOCRDraftStatus(id: UUID, isResolved: Bool) {
         guard ensureLedgerWritesAllowed() else { return }
         guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
-        items[idx].draftMeta?.status = isResolved ? .resolved : .pending
-        items[idx].updatedAt = Date()
-        guard persistItems(upserting: [items[idx]]) else { return }
+        var updated = items[idx]
+        updated.draftMeta?.status = isResolved ? .resolved : .pending
+        updated.updatedAt = Date()
+        items[idx] = updated
+        guard persistItems(upserting: [updated]) else { return }
         clearOCRStatusIfNoPendingDrafts()
-        Task { await syncUpsertToCloud(items[idx]) }
+        Task { await syncUpsertToCloud(updated) }
     }
 
     private func clearOCRStatusIfNoPendingDrafts() {
@@ -1180,27 +1276,29 @@ final class HomeViewModel: ObservableObject {
                 source: "ocrCategory"
             )
         )
-        items[idx].title = resolution.title
-        items[idx].category = resolution.category
-        items[idx].emotionTag = memoryEnhancedEmotionTag(
+        var updated = items[idx]
+        updated.title = resolution.title
+        updated.category = resolution.category
+        updated.emotionTag = memoryEnhancedEmotionTag(
             title: resolution.title,
             category: resolution.category,
-            amount: items[idx].amount,
-            date: items[idx].createdAt,
+            amount: updated.amount,
+            date: updated.createdAt,
             baseEmotionTag: resolution.emotionTag,
-            excluding: items[idx].id
+            excluding: updated.id
         )
-        items[idx].merchantBrandId = resolution.merchantBrandId
-        items[idx].userEditedCategory = true
-        if items[idx].memoryContext == nil {
-            items[idx].memoryContext = memoryContextForRecord(date: items[idx].createdAt)
+        updated.merchantBrandId = resolution.merchantBrandId
+        updated.userEditedCategory = true
+        if updated.memoryContext == nil {
+            updated.memoryContext = memoryContextForRecord(date: updated.createdAt)
         }
         if originalCategory != resolution.category {
-            items[idx].categoryCorrectionFrom = originalCategory
+            updated.categoryCorrectionFrom = originalCategory
         }
-        items[idx].updatedAt = Date()
-        guard persistItems(upserting: [items[idx]]) else { return }
-        Task { await syncUpsertToCloud(items[idx]) }
+        updated.updatedAt = Date()
+        items[idx] = updated
+        guard persistItems(upserting: [updated]) else { return }
+        Task { await syncUpsertToCloud(updated) }
     }
 
     func updateOCRDraftAmount(id: UUID, amount: Double) {
@@ -1208,37 +1306,39 @@ final class HomeViewModel: ObservableObject {
         guard amount > 0,
               let idx = items.firstIndex(where: { $0.id == id }),
               items[idx].draftMeta != nil else { return }
-        items[idx].amount = amount
+        var updated = items[idx]
+        updated.amount = amount
         let resolution = RecordDraftResolutionService.resolve(
             RecordDraftResolutionInput(
-                rawTitle: items[idx].title,
-                fallbackCategory: items[idx].category,
+                rawTitle: updated.title,
+                fallbackCategory: updated.category,
                 amount: amount,
-                date: items[idx].createdAt,
-                merchantBrandId: items[idx].merchantBrandId,
+                date: updated.createdAt,
+                merchantBrandId: updated.merchantBrandId,
                 categoryLockedByUser: true,
-                userEditedTitle: items[idx].userEditedTitle == true,
+                userEditedTitle: updated.userEditedTitle == true,
                 source: "ocrAmount"
             )
         )
-        items[idx].title = resolution.title
-        items[idx].category = resolution.category
-        items[idx].emotionTag = memoryEnhancedEmotionTag(
+        updated.title = resolution.title
+        updated.category = resolution.category
+        updated.emotionTag = memoryEnhancedEmotionTag(
             title: resolution.title,
             category: resolution.category,
             amount: amount,
-            date: items[idx].createdAt,
+            date: updated.createdAt,
             baseEmotionTag: resolution.emotionTag,
-            excluding: items[idx].id
+            excluding: updated.id
         )
-        items[idx].merchantBrandId = resolution.merchantBrandId
-        items[idx].userEditedCategory = items[idx].userEditedCategory == true ? true : nil
-        if items[idx].memoryContext == nil {
-            items[idx].memoryContext = memoryContextForRecord(date: items[idx].createdAt)
+        updated.merchantBrandId = resolution.merchantBrandId
+        updated.userEditedCategory = updated.userEditedCategory == true ? true : nil
+        if updated.memoryContext == nil {
+            updated.memoryContext = memoryContextForRecord(date: updated.createdAt)
         }
-        items[idx].updatedAt = Date()
-        guard persistItems(upserting: [items[idx]]) else { return }
-        Task { await syncUpsertToCloud(items[idx]) }
+        updated.updatedAt = Date()
+        items[idx] = updated
+        guard persistItems(upserting: [updated]) else { return }
+        Task { await syncUpsertToCloud(updated) }
     }
 
     func updateOCRDraftTitle(id: UUID, title: String) {
@@ -1267,14 +1367,19 @@ final class HomeViewModel: ObservableObject {
 
     func clearResolvedOCRDrafts() {
         guard ensureLedgerWritesAllowed() else { return }
+        var nextItems = items
         var changedItems: [HomeItem] = []
-        for idx in items.indices where items[idx].draftMeta?.status == .resolved {
-            items[idx].draftMeta = nil
-            items[idx].updatedAt = Date()
-            changedItems.append(items[idx])
+        let updatedAt = Date()
+        for idx in nextItems.indices where nextItems[idx].draftMeta?.status == .resolved {
+            var updated = nextItems[idx]
+            updated.draftMeta = nil
+            updated.updatedAt = updatedAt
+            nextItems[idx] = updated
+            changedItems.append(updated)
         }
-        clearOCRStatusIfNoPendingDrafts()
         guard !changedItems.isEmpty else { return }
+        items = nextItems
+        clearOCRStatusIfNoPendingDrafts()
         guard persistItems(upserting: changedItems) else { return }
         analyticsService.track(
             .ocrDraftsResolved,
@@ -1289,13 +1394,18 @@ final class HomeViewModel: ObservableObject {
 
     func resolveAllPendingOCRDrafts() {
         guard ensureLedgerWritesAllowed() else { return }
+        var nextItems = items
         var changedItems: [HomeItem] = []
-        for idx in items.indices where items[idx].draftMeta?.status == .pending {
-            items[idx].draftMeta?.status = .resolved
-            items[idx].updatedAt = Date()
-            changedItems.append(items[idx])
+        let updatedAt = Date()
+        for idx in nextItems.indices where nextItems[idx].draftMeta?.status == .pending {
+            var updated = nextItems[idx]
+            updated.draftMeta?.status = .resolved
+            updated.updatedAt = updatedAt
+            nextItems[idx] = updated
+            changedItems.append(updated)
         }
         guard !changedItems.isEmpty else { return }
+        items = nextItems
         guard persistItems(upserting: changedItems) else { return }
         clearOCRStatusIfNoPendingDrafts()
         analyticsService.track(
@@ -1415,18 +1525,19 @@ final class HomeViewModel: ObservableObject {
         let availableSlots = max(0, 9 - originalCount)
         let cleanImages = Array(imageDatas.filter { !$0.isEmpty }.prefix(availableSlots))
         guard !cleanImages.isEmpty else { return false }
-        items[idx].appendMemoryImages(cleanImages)
+        var updated = items[idx]
+        updated.appendMemoryImages(cleanImages)
         let selectedNewIndex = min(max(coverImageIndex ?? 0, 0), cleanImages.count - 1)
-        if originalCount == 0 || items[idx].coverMemoryImageIndex == nil {
-            items[idx].coverMemoryImageIndex = originalCount + selectedNewIndex
+        if originalCount == 0 || updated.coverMemoryImageIndex == nil {
+            updated.coverMemoryImageIndex = originalCount + selectedNewIndex
         }
-        let reason = anchorReason ?? PhotoMemoryPromptPolicy.anchorReason(for: items[idx])
-        items[idx].memoryAnchorRole = reason.assetRole
-        items[idx].memoryAnchorSceneHint = reason.sceneHint
-        items[idx].memoryAnchorCaption = reason.memoryAnchorCaption
-        items[idx].memoryAnchorCreatedAt = items[idx].memoryAnchorCreatedAt ?? Date()
-        items[idx].updatedAt = Date()
-        let updated = items[idx]
+        let reason = anchorReason ?? PhotoMemoryPromptPolicy.anchorReason(for: updated)
+        updated.memoryAnchorRole = reason.assetRole
+        updated.memoryAnchorSceneHint = reason.sceneHint
+        updated.memoryAnchorCaption = reason.memoryAnchorCaption
+        updated.memoryAnchorCreatedAt = updated.memoryAnchorCreatedAt ?? Date()
+        updated.updatedAt = Date()
+        items[idx] = updated
         guard persistItems(upserting: [updated]) else { return false }
         analyticsService.track(
             .recordMemoryImageAttached,
@@ -1447,24 +1558,25 @@ final class HomeViewModel: ObservableObject {
         guard ensureLedgerWritesAllowed() else { return false }
         guard let idx = items.firstIndex(where: { $0.id == itemID }) else { return false }
         guard (0..<items[idx].memoryImageCount).contains(imageIndex) else { return false }
-        items[idx].removeMemoryImage(at: imageIndex)
-        let remainingImageCount = items[idx].memoryImageCount
+        var updated = items[idx]
+        updated.removeMemoryImage(at: imageIndex)
+        let remainingImageCount = updated.memoryImageCount
         if remainingImageCount == 0 {
-            items[idx].coverMemoryImageIndex = nil
-            items[idx].memoryAnchorRole = nil
-            items[idx].memoryAnchorSceneHint = nil
-            items[idx].memoryAnchorCaption = nil
-            items[idx].memoryAnchorCreatedAt = nil
+            updated.coverMemoryImageIndex = nil
+            updated.memoryAnchorRole = nil
+            updated.memoryAnchorSceneHint = nil
+            updated.memoryAnchorCaption = nil
+            updated.memoryAnchorCreatedAt = nil
         } else {
-            let currentCover = items[idx].coverMemoryImageIndex ?? 0
+            let currentCover = updated.coverMemoryImageIndex ?? 0
             if imageIndex < currentCover {
-                items[idx].coverMemoryImageIndex = currentCover - 1
+                updated.coverMemoryImageIndex = currentCover - 1
             } else if imageIndex == currentCover {
-                items[idx].coverMemoryImageIndex = min(currentCover, remainingImageCount - 1)
+                updated.coverMemoryImageIndex = min(currentCover, remainingImageCount - 1)
             }
         }
-        items[idx].updatedAt = Date()
-        let updated = items[idx]
+        updated.updatedAt = Date()
+        items[idx] = updated
         guard persistItems(upserting: [updated]) else { return false }
         analyticsService.track(
             .recordMemoryImageRemoved,
@@ -1480,16 +1592,17 @@ final class HomeViewModel: ObservableObject {
         guard ensureLedgerWritesAllowed() else { return false }
         guard let idx = items.firstIndex(where: { $0.id == itemID }),
               (0..<items[idx].memoryImageCount).contains(imageIndex) else { return false }
-        items[idx].coverMemoryImageIndex = imageIndex
-        if items[idx].memoryAnchorRole == nil || items[idx].memoryAnchorSceneHint == nil {
-            let reason = PhotoMemoryPromptPolicy.anchorReason(for: items[idx])
-            items[idx].memoryAnchorRole = reason.assetRole
-            items[idx].memoryAnchorSceneHint = reason.sceneHint
-            items[idx].memoryAnchorCaption = items[idx].memoryAnchorCaption ?? reason.memoryAnchorCaption
-            items[idx].memoryAnchorCreatedAt = items[idx].memoryAnchorCreatedAt ?? Date()
+        var updated = items[idx]
+        updated.coverMemoryImageIndex = imageIndex
+        if updated.memoryAnchorRole == nil || updated.memoryAnchorSceneHint == nil {
+            let reason = PhotoMemoryPromptPolicy.anchorReason(for: updated)
+            updated.memoryAnchorRole = reason.assetRole
+            updated.memoryAnchorSceneHint = reason.sceneHint
+            updated.memoryAnchorCaption = updated.memoryAnchorCaption ?? reason.memoryAnchorCaption
+            updated.memoryAnchorCreatedAt = updated.memoryAnchorCreatedAt ?? Date()
         }
-        items[idx].updatedAt = Date()
-        let updated = items[idx]
+        updated.updatedAt = Date()
+        items[idx] = updated
         guard persistItems(upserting: [updated]) else { return false }
         analyticsService.track(.recordMemoryCoverSelected)
         refreshTodayPlayback()
@@ -1590,7 +1703,6 @@ final class HomeViewModel: ObservableObject {
         }
 
         items = plan.mergedItems
-        rebuildItemDerivedCache()
         refreshTodayPlayback()
         return plan.summary
     }
@@ -2362,23 +2474,19 @@ final class HomeViewModel: ObservableObject {
     }
 
     var todayItems: [HomeItem] {
-        ensureItemDerivedCacheFresh()
-        return itemDerivedCache.todayPositiveItems
+        itemDerivedCacheForRead().todayPositiveItems
     }
 
     var homeJourneyLedgerFacts: HomeJourneyLedgerFacts {
-        ensureItemDerivedCacheFresh()
-        return itemDerivedCache.homeJourneyLedgerFacts
+        itemDerivedCacheForRead().homeJourneyLedgerFacts
     }
 
     var recentThreeItems: [HomeItem] {
-        ensureItemDerivedCacheFresh()
-        return itemDerivedCache.recentThreeTodayItems
+        itemDerivedCacheForRead().recentThreeTodayItems
     }
 
     var currentYearItems: [HomeItem] {
-        ensureItemDerivedCacheFresh()
-        return itemDerivedCache.currentYearItems
+        itemDerivedCacheForRead().currentYearItems
     }
 
     var periodItems: [HomeItem] {
@@ -2686,7 +2794,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func refreshTodayPlayback() {
-        latestPlayback = playbackService.buildTodayPlayback(from: items)
+        prepareItemDerivedCacheIfNeeded(now: Date())
     }
 
     private func emitRouteGuidance(_ guidance: PlaybackRouteGuidance) {
@@ -2747,12 +2855,12 @@ final class HomeViewModel: ObservableObject {
     }
 
     func filteredItems(in period: Period) -> [HomeItem] {
-        ensureItemDerivedCacheFresh()
+        let cache = itemDerivedCacheForRead()
         switch period {
         case .week:
-            return itemDerivedCache.currentWeekItems
+            return cache.currentWeekItems
         case .month:
-            return itemDerivedCache.currentMonthItems
+            return cache.currentMonthItems
         }
     }
 
@@ -2762,46 +2870,75 @@ final class HomeViewModel: ObservableObject {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
-    private func rebuildItemDerivedCache(now: Date = Date()) {
-        let calendar = Calendar.current
-        let sortedItems = items.sorted { $0.createdAt > $1.createdAt }
-        let currentWeekInterval = PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: now)
-        let currentMonthInterval = calendar.dateInterval(of: .month, for: now)
-        let todayPositiveItems = sortedItems.filter {
-            calendar.isDate($0.createdAt, inSameDayAs: now) && $0.amount > 0
-        }
-        let currentWeekItems = sortedItems.filter { item in
-            guard let currentWeekInterval else { return false }
-            return item.createdAt >= currentWeekInterval.start && item.createdAt < currentWeekInterval.end
-        }
-        let currentMonthItems = sortedItems.filter { item in
-            guard let currentMonthInterval else { return false }
-            return item.createdAt >= currentMonthInterval.start && item.createdAt < currentMonthInterval.end
-        }
-        let homeJourneyLedgerFacts = HomeJourneyLedgerFacts.build(
-            from: sortedItems,
-            currentWeekInterval: currentWeekInterval,
-            currentMonthInterval: currentMonthInterval,
-            calendar: calendar
-        )
-        let currentYearItems = sortedItems.filter {
-            calendar.isDate($0.createdAt, equalTo: now, toGranularity: .year)
-        }
-        itemDerivedCache = ItemDerivedCache(
-            todayPositiveItems: todayPositiveItems,
-            recentThreeTodayItems: Array(todayPositiveItems.prefix(3)),
-            currentWeekItems: currentWeekItems,
-            currentMonthItems: currentMonthItems,
-            currentYearItems: currentYearItems,
-            homeJourneyLedgerFacts: homeJourneyLedgerFacts
-        )
-        itemDerivedCacheDayKey = Self.dayKey(for: now)
-        itemDerivedCacheNeedsRebuild = false
+    func isItemDerivedCacheCurrent(now: Date) -> Bool {
+        itemDerivedCache.key == itemDerivedCacheKey(now: now)
     }
 
-    private func ensureItemDerivedCacheFresh(now: Date = Date()) {
-        guard itemDerivedCacheNeedsRebuild || itemDerivedCacheDayKey != Self.dayKey(for: now) else { return }
-        rebuildItemDerivedCache(now: now)
+    func prepareItemDerivedCacheIfNeeded(now: Date) {
+        let key = itemDerivedCacheKey(now: now)
+        guard itemDerivedCache.key != key else { return }
+        guard itemDerivedCachePreparationKey != key else { return }
+
+        itemDerivedCachePreparationTask?.cancel()
+        itemDerivedCacheRequestID = UUID()
+        let requestID = itemDerivedCacheRequestID
+        itemDerivedCachePreparationKey = key
+        let input = ItemDerivedCachePreparationInput(
+            key: key,
+            items: items,
+            now: now,
+            itemsAreSortedDescending: false
+        )
+        itemDerivedCachePreparationTask = Task { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: ItemDerivedCachePublicationPolicy.coalescingDelayNanoseconds
+            )
+            guard !Task.isCancelled, itemDerivedCacheRequestID == requestID else { return }
+            let snapshot = await withTaskGroup(
+                of: ItemDerivedCacheSnapshot?.self,
+                returning: ItemDerivedCacheSnapshot?.self
+            ) { group in
+                group.addTask(priority: .utility) {
+                    guard !Task.isCancelled else { return nil }
+                    return ItemDerivedCacheComputation.build(input)
+                }
+                return await group.next() ?? nil
+            }
+            guard let snapshot,
+                  !Task.isCancelled,
+                  ItemDerivedCachePublicationPolicy.accepts(
+                    snapshotKey: snapshot.key,
+                    pendingKey: itemDerivedCachePreparationKey,
+                    currentKey: itemDerivedCacheKey(now: now),
+                    requestMatches: itemDerivedCacheRequestID == requestID
+                  ) else {
+                return
+            }
+            objectWillChange.send()
+            itemDerivedCache = snapshot
+            latestPlayback = snapshot.todayPlayback
+            itemDerivedCacheRevision = key.ledgerRevision
+            itemDerivedCachePreparationKey = nil
+            itemDerivedCachePreparationTask = nil
+            resumePendingHomeDashboardPreparationIfNeeded()
+        }
+    }
+
+    private func itemDerivedCacheForRead(now: Date = Date()) -> ItemDerivedCacheSnapshot {
+        let key = itemDerivedCacheKey(now: now)
+        guard itemDerivedCache.key != key else { return itemDerivedCache }
+        prepareItemDerivedCacheIfNeeded(now: now)
+        guard itemDerivedCache.key.dayKey == key.dayKey else {
+            return .empty(for: key)
+        }
+        return itemDerivedCache
+    }
+
+    private func itemDerivedCacheKey(now: Date) -> ItemDerivedCachePreparationKey {
+        ItemDerivedCachePreparationKey(
+            ledgerRevision: homeDashboardRevision,
+            dayKey: Self.dayKey(for: now)
+        )
     }
 
     private func weeklyAverageExpense() -> Double {

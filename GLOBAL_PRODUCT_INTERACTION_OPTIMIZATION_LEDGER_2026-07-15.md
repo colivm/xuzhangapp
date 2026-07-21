@@ -3201,3 +3201,48 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 冻结边界复核：首页动态主动作顺序、按钮标题/目的地、周/月成熟门槛、常用金额与场景计算口径、1 笔以上今日小记、宠物天气/真实账单候选、首次交互提示、气泡生命周期、主题、会员、存储同步和 `ARCH-03` 均未修改。
 - 状态：`IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。Windows 无 Xcode/iPhone，真实字体排版、VoiceOver 朗读、历史建议命中与天气优先级仍需按 `FLOW-48` 真机签收，因此不得标记 `VERIFIED`。
 - 本轮收口：`UI-FIX-04`、`PET-03`、`PET-04`、`UI-04`、`COPY-04` 均达到 `CODE_DONE`；后续只按 `FLOW-44`～`FLOW-48` 做 Xcode/iPhone 定向签收，不启动 `ARCH-03` 或相邻产品改造。
+
+---
+
+## 34. AI-04：复盘推荐指令证据化与通用兜底（2026-07-21）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。
+- 用户确认：复盘首页“近 7 天 / 前 7 天”与指令台“本周 / 上周同期”可保留不同用途；“同期”继续按相同日序，不要求精确到同一时刻。需要修复的是推荐指令动态程度不足，以及交通/通勤作为固定兜底会对非上班用户形成错误假设。
+- 目标：具体分类、天气和补记推荐必须由真实账本证据产生；固定兜底只保留不假设生活方式的通用查账/对比动作。复盘首页点击“做对比”继续承接首页已经展示的“近 7 天 / 前 7 天”口径；用户主动输入“本周”时仍使用现有自然周同期规则。
+- 允许修改：`InsightComputationService.swift` 的推荐候选、证据门槛、排序和通用兜底；`InteractionStateModels.swift` 的安全默认指令；`InsightWebView.swift` 的任务入口承接、动态默认指令和空推荐行；对应 XCTest、体验静态门禁、真机矩阵和本文档。
+- 冻结边界：不修改 AI 自然语言识别、时间范围解析、本周/上周同期与本月/上月同期计算、查询/对比结果、证据集合、补记确认前零写入、通勤候选时点/金额/重复判断、会员/额度、主题、首页动态主动作、痕迹、宠物、存储同步或 `ARCH-03`。
+- 推荐边界：交通、餐饮、兴趣、雨天通勤等具体主题不得出现在固定兜底；分类对比需满足跨两段的记录数、记录日或明显新增/消失证据；通勤补记需有明确通勤语义且跨多个日期，不再以低金额交通代替通勤；当前下雨不能单独推出“上一次雨天通勤”。没有可靠补记候选时允许不展示推荐词，不为凑满数量制造生活假设。
+- 性能边界：继续按账本修订、会员和有效天气上下文在后台一次准备查/比/补三组快照；普通任务切换、输入、滚动和 SwiftUI 重绘只读缓存，不恢复主线程账本扫描或随机推荐。
+- 开始现场：分支 `feature/xuzhangapp-staging`，基线提交 `ddb8216`；继续保护未提交的 `StatCardView.swift`、`web-preview/app.js`、提示文档、素材、`tmp/` 与缓存目录，本项不覆盖、不回退、不提交相邻现场。
+- 实现：固定查账兜底收敛为“最近 7 天 / 最高单笔 / 重复账单”，固定对比兜底只保留最近 7 天、本周和本月三种通用时间段，补遗漏在无可靠证据时不展示推荐；每类最终最多 3 条，避免为了填满横滑区制造生活假设。分类查询必须在最近 7 天至少出现 2 笔且覆盖 2 个日期；分类对比必须具备跨两段的重复证据，或某一段至少 2 笔且覆盖多个日期的新增/消失证据，并按金额变化、笔数与稳定分类顺序排序。
+- 通勤与天气边界：通勤只接受 `scenePackId == commute` 或标题中的通勤、上班、下班、早/晚高峰、到岗等强语义；低金额交通、地铁/公交单词、停车费和普通旅行不再代替通勤。补记推荐要求最近 7 天至少 2 条明确通勤且覆盖 2 个日期；当前下雨不能单独生成“上一次雨天通勤”，必须存在记录自身带雨天上下文的真实通勤。
+- 入口与口径：复盘首页“做对比”默认承接“最近 7 天和前 7 天”，对应引擎继续使用现有上一等长区间；用户主动输入本周或本月时，原上周/上月同期日序规则保持。查记录可优先承接当前快照中证据最强的动态建议；补遗漏没有证据时保持空输入和既有示例占位，不伪造默认通勤。
+- 缓存与流畅度：推荐在复盘首屏 `onAppear` 及账本修订/会员变化时，基于一次不可变输入在 utility 后台任务同时生成查/比/补三组快照；缓存键继续由账本修订、会员和有效天气组成。已移除 `selectReviewTask` 中的准备调用，点击任务和任务内切换只读缓存，未准备完成时使用通用兜底，不扫描全局账本；补遗漏推荐为空时不渲染空横滑容器。
+- 修改文件：`NativeDemoApp/Services/InsightComputationService.swift`、`NativeDemoApp/Models/InteractionStateModels.swift`、`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：更新并新增确定性 XCTest，覆盖安全默认指令、空账本/非通勤、单笔停车费、真实餐饮跨期证据、同日与跨 2 日明确通勤、当前雨但无历史雨天通勤、真实雨天通勤、最近 7 天/前 7 天范围，以及每组最多 3 条。静态门禁锁定固定兜底零分类假设、低金额交通不可推通勤、任务点击零准备/零账本扫描、复盘首屏预生成和 `FLOW-49`。`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过；100/1,000/5,000 条、真实 12MP 照片、生活语义、文案、主题、迁移和 SQLite 均通过，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改自然语言识别、时间范围解析、本周/上周同期与本月/上月同期计算、查询/对比结果、原始证据、补记候选时点/金额/重复判断、确认前零写入、会员/额度、主题、首页动态主动作、痕迹、宠物、存储同步或 `ARCH-03`；用户既有脏工作区未覆盖。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，新增 Swift 推荐策略、`@ViewBuilder` 空推荐分支、XCTest、真实 1,000 条首屏预生成耗时、20 次任务切换、Dynamic Type 和 VoiceOver 仍需按 `FLOW-49` 完成 Xcode Debug/Release 与 iPhone 签收，因此不得标记 `VERIFIED`。
+- 下一步：只执行 `FLOW-49` 与既有统一 Xcode/真机矩阵；签收发现问题时定向修复 `AI-04`，不放宽证据门槛、不恢复点击时全账本计算，也不启动 `ARCH-03` 或相邻产品改造。
+
+---
+
+## 35. PERF-15：账本变动后的缓存失效与稳定发布（2026-07-21）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。
+- 用户目标：账本新增、编辑、删除、OCR/AI 批量导入、照片变化和云端合并后，首页、痕迹与复盘不得因为多份缓存各自失效而连续闪现、卡顿或堆积后台任务；普通滚动、任务切换和页面动画继续只读已经准备好的快照。
+- 已确认主因：首页 `ItemDerivedCache` 在 `items.didSet` 后只标记过期，下一次 SwiftUI getter 会在 `@MainActor` 同步排序、筛选今天/周/月/年并统计旅程事实；同一次账本变动还立即清空首页主文和通勤建议。复盘页面快照与推荐快照分别发布，页面快照整体使用布局动画；痕迹虽已有旧快照承接和无动画发布，随后仍会预热另一范围，快速连续修订时存在后台竞争余量。
+- 允许修改：`HomeViewModel` 的派生缓存后台准备、账本修订与最新请求保护；首页相关快照的同日/同会员稳定承接和无动画原子发布；AI 复盘快照的无布局动画发布；痕迹预热的新修订取消/让步；直接必要的逻辑提交合并；对应 XCTest、静态门禁、真机矩阵和本文档。
+- 冻结边界：不修改账本字段、排序结果、分类/OCR/AI 识别、周记/月章/回放文案、会员/额度/StoreKit、云端 DTO 与冲突规则、主题/UI 布局、路由、首页动态主动作顺序与成熟门槛、痕迹筛选/证据、宠物、照片按需加载和持久化语义；`ARCH-03` 保持 `NOT_STARTED`。
+- 稳定性边界：同日且同会员身份时保留上一份可见首页主文，直到新修订完整快照一次替换；跨日或会员身份变化立即清除不安全旧内容。旧修订不得覆盖新修订；快速连续修改必须取消或合并旧任务，不因等待新快照把真实空数据和“尚未准备”混为一谈。
+- 性能边界：完整账本排序/筛选/统计不得由 SwiftUI getter 或主线程缓存未命中触发；一个逻辑账本提交尽量只产生一次修订。复盘与痕迹保留旧内容刷新，发布时禁用布局动画；痕迹可见范围始终优先，预热只能在当前结果稳定且修订仍有效时执行。
+- 开始现场：分支 `feature/xuzhangapp-staging`，基线提交 `ddb8216`；保留未提交 `AI-04`、`StatCardView.swift`、`web-preview/app.js`、提示文档、素材、`tmp/` 与缓存目录，本项不覆盖、不回退、不提交相邻现场。
+- 计划验证：覆盖 1 次账本变动只接受 1 次最新派生发布、旧修订不能反写、同日/同会员内容稳定、跨日/会员清理、快速 20 次修改任务收敛、100/1,000/5,000 条边界、首页/复盘发布零布局动画及痕迹预热取消；Windows 完成静态与确定性门禁，Xcode/iPhone Instruments 前只能标记 `CODE_DONE`。
+- 实现：首页派生缓存收敛为 `ItemDerivedCacheSnapshot`，一次包含今天/最近三笔/周/月/年、旅程事实与今日回放输入；账本变动后先经过 40ms 可取消合并窗口，再在 utility 子任务排序、筛选和统计。SwiftUI getter 只读取当前或同日上一份快照，不再同步重建；跨日未准备时返回安全空快照。发布同时核对请求 ID、待发布 key 与当前账本修订/日期，旧任务不能覆盖新修订。
+- 首页稳定发布：账本变化先使旧可操作通勤候选失效，但同日同会员继续保留上一份今日主文和行级生活线索；新快照完成后一次发送可见更新。跨日或会员身份变化立即清空旧主文与线索。首页生活线索与通勤准备会等待对应派生修订，不会用“新 revision＋旧 todayItems”生成错误缓存。
+- 逻辑提交合并：OCR 草稿状态、分类、金额、批量 resolved/pending，以及照片新增、删除和换封面均改为先修改局部 `HomeItem`/数组副本，最后一次赋回 `items`；正常编辑、手动/AI/OCR 批量、删除、备份恢复和云端合并继续沿用原变化集与同步入口。修复后生产 `HomeViewModel` 不再存在 `items[idx].field = ...` 的逐字段发布。
+- 复盘与痕迹：复盘页面快照仍保留旧内容与独立推荐缓存，但最终替换使用禁用动画事务，不再对整页布局做 0.18 秒交叉动画；痕迹可见范围发布后先让出 250ms，再以 utility 优先级预热另一范围，期间新修订、切换或离页均可取消，原缓存键、旧快照承接与 `LatestRequestGate` 保持。
+- 修改文件：`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/ViewModels/HomeViewModel+Dashboard.swift`、`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：新增 5,000 条原子派生快照、旧修订/旧请求拒绝、首页同日/跨日/会员保留策略和痕迹延迟预热 XCTest 接线；静态门禁锁定后台 utility 计算、40ms 合并、getter 零同步重建、逻辑提交单次赋值、首页稳定发布、复盘零布局动画、痕迹可取消预热及 `FLOW-50`。`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过；100/1,000/5,000 条、三张真实 12MP、AI-04、生活语义、文案、主题、迁移和 SQLite 均通过，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改账本字段/排序结果、分类/OCR/AI 识别、查询/对比/补记结论、周记/月章/回放文案、会员/额度/StoreKit、云端 DTO/冲突规则、主题/UI/路由、首页动态主动作与成熟门槛、痕迹筛选/证据、宠物、照片按需加载、持久化语义或 `ARCH-03`；未覆盖用户既有脏工作区和未提交 `AI-04`。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，新增并发快照类型、`@MainActor` 请求接力、严格 Sendable 诊断与 XCTest 尚未实际编译；100/1,000/5,000 条保存后 2 秒 Main Thread Hitches、SwiftUI 更新次数、快速 20 次编辑的任务回落、首页同日/跨日/会员切换、复盘替换和痕迹预热仍需按 `FLOW-50` 完成 Xcode Debug/Release、XCTest 与 iPhone Instruments 签收，因此不得标记 `VERIFIED`。
+- 下一步：只执行 `FLOW-50` 与既有统一 Xcode/iPhone 矩阵；签收若出现编译、并发或真机闪动，仅定向修复 `PERF-15`，不回退后台快照和单次提交，也不启动 `ARCH-03` 或相邻产品任务。

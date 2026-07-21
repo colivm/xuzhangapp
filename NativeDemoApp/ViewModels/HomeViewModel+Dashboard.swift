@@ -1,4 +1,11 @@
 import Foundation
+import Combine
+
+struct HomeDashboardPreparationRequest {
+    let isMember: Bool
+    let now: Date
+    let clearsStaleQuickRecord: Bool
+}
 
 struct HomeHighConfidenceQuickRecordSuggestion: Equatable, Identifiable {
     enum Kind: String, Equatable {
@@ -219,6 +226,16 @@ extension HomeViewModel {
         now: Date = Date(),
         clearsStaleQuickRecord: Bool = false
     ) {
+        prepareItemDerivedCacheIfNeeded(now: now)
+        guard isItemDerivedCacheCurrent(now: now) else {
+            pendingHomeDashboardPreparationRequest = HomeDashboardPreparationRequest(
+                isMember: isMember,
+                now: now,
+                clearsStaleQuickRecord: clearsStaleQuickRecord
+            )
+            return
+        }
+        pendingHomeDashboardPreparationRequest = nil
         prepareHomeLifeMarkSnapshot(isMember: isMember, now: now)
         prepareHighConfidenceQuickRecordSnapshot(
             now: now,
@@ -226,7 +243,18 @@ extension HomeViewModel {
         )
     }
 
+    func resumePendingHomeDashboardPreparationIfNeeded() {
+        guard let request = pendingHomeDashboardPreparationRequest else { return }
+        pendingHomeDashboardPreparationRequest = nil
+        prepareHomeDashboardSnapshots(
+            isMember: request.isMember,
+            now: request.now,
+            clearsStaleQuickRecord: request.clearsStaleQuickRecord
+        )
+    }
+
     func cancelHomeDashboardSnapshotPreparation() {
+        pendingHomeDashboardPreparationRequest = nil
         homeLifeMarkPreparationTask?.cancel()
         homeLifeMarkPreparationTask = nil
         homeLifeMarkRequestID = UUID()
@@ -237,7 +265,6 @@ extension HomeViewModel {
 
     func invalidateHomeDashboardSnapshots() {
         cancelHomeDashboardSnapshotPreparation()
-        homeTodayLifeMarkLine = nil
         homeQuickRecordSnapshotKey = nil
         highConfidenceQuickRecordSuggestionSnapshot = nil
     }
@@ -254,7 +281,13 @@ extension HomeViewModel {
             previousKey: homeLifeMarkSnapshotKey,
             nextKey: key
         ) {
+            let needsVisibleClear = !homeLifeMarkTextsByItemID.isEmpty
+                || homeTodayLifeMarkLine != nil
+            if needsVisibleClear {
+                objectWillChange.send()
+            }
             homeLifeMarkTextsByItemID = [:]
+            homeTodayLifeMarkLine = nil
         }
         homeLifeMarkPreparationTask?.cancel()
         homeLifeMarkRequestID = UUID()
@@ -285,10 +318,11 @@ extension HomeViewModel {
                   homeLifeMarkSnapshotKey == key else {
                 return
             }
-            if homeLifeMarkTextsByItemID != snapshot.textsByItemID {
+            let visibleSnapshotChanged = homeLifeMarkTextsByItemID != snapshot.textsByItemID
+                || homeTodayLifeMarkLine != snapshot.todayPrimaryLine
+            if visibleSnapshotChanged {
+                objectWillChange.send()
                 homeLifeMarkTextsByItemID = snapshot.textsByItemID
-            }
-            if homeTodayLifeMarkLine != snapshot.todayPrimaryLine {
                 homeTodayLifeMarkLine = snapshot.todayPrimaryLine
             }
             homeLifeMarkPreparationTask = nil
@@ -309,7 +343,8 @@ extension HomeViewModel {
             previousKey: homeQuickRecordSnapshotKey,
             nextKey: key,
             isLifecycleRefresh: clearsStaleQuickRecord
-        ) {
+        ), highConfidenceQuickRecordSuggestionSnapshot != nil {
+            objectWillChange.send()
             highConfidenceQuickRecordSuggestionSnapshot = nil
         }
         homeQuickRecordPreparationTask?.cancel()
@@ -345,6 +380,7 @@ extension HomeViewModel {
                 return
             }
             if highConfidenceQuickRecordSuggestionSnapshot != snapshot.suggestion {
+                objectWillChange.send()
                 highConfidenceQuickRecordSuggestionSnapshot = snapshot.suggestion
             }
             homeQuickRecordPreparationTask = nil

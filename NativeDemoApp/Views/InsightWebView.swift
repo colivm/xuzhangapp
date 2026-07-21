@@ -954,7 +954,9 @@ struct InsightWebView: View {
             insightUpdatePillTask?.cancel()
             insightUpdatePillTask = nil
             insightPreparationTask = nil
-            withAnimation(.easeInOut(duration: 0.18)) {
+            var snapshotTransaction = Transaction(animation: nil)
+            snapshotTransaction.disablesAnimations = true
+            withTransaction(snapshotTransaction) {
                 preparedInsightSnapshot = snapshot
                 insightSnapshotNeedsRefresh = false
                 showsInsightUpdatePill = false
@@ -1384,7 +1386,10 @@ struct InsightWebView: View {
     }
 
     private func openReviewTask(_ intent: ReviewTaskIntent) {
-        selectReviewTask(intent, command: intent.presetCommand, opensSheet: true)
+        let command = intent == .compare
+            ? intent.presetCommand
+            : preferredAICommand(for: intent)
+        selectReviewTask(intent, command: command, opensSheet: true)
     }
 
     private func selectReviewTask(
@@ -1396,7 +1401,7 @@ struct InsightWebView: View {
         aiCommandRunTask = nil
         aiCommandRunGate.invalidate()
         activeReviewTask = intent
-        aiCommandText = command ?? intent.presetCommand
+        aiCommandText = command ?? preferredAICommand(for: intent)
         aiCommandAmountText = ""
         aiCommandResult = nil
         aiCommandMessage = nil
@@ -1406,7 +1411,6 @@ struct InsightWebView: View {
         aiCommandShowsAllComparisonCategories = false
         aiCommandFocusesInputAfterResultDismissal = false
         isAICommandRunning = false
-        prepareAICommandSuggestionsIfNeeded()
         if opensSheet {
             showAICommandSheet = true
         }
@@ -2586,25 +2590,34 @@ struct InsightWebView: View {
         }
     }
 
+    @ViewBuilder
     private var aiCommandSuggestionRow: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 8) {
-                ForEach(aiCommandPresetSuggestions(), id: \.self) { suggestion in
-                    aiCommandPresetChip(suggestion)
+        let suggestions = aiCommandPresetSuggestions()
+        if !suggestions.isEmpty {
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(suggestions, id: \.self) { suggestion in
+                        aiCommandPresetChip(suggestion)
+                    }
                 }
+                .padding(.horizontal, 2)
             }
-            .padding(.horizontal, 2)
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
     }
 
-    private func aiCommandPresetSuggestions() -> [String] {
+    private func aiCommandPresetSuggestions(for task: ReviewTaskIntent? = nil) -> [String] {
+        let task = task ?? activeReviewTask
         let key = aiCommandSuggestionPreparationKey()
         guard tabState.aiCommandSuggestionKey == key,
               let snapshot = tabState.aiCommandSuggestionSnapshot else {
-            return AICommandSuggestionSnapshot.fallbacks(for: activeReviewTask)
+            return AICommandSuggestionSnapshot.fallbacks(for: task)
         }
-        return snapshot.suggestions(for: activeReviewTask)
+        return snapshot.suggestions(for: task)
+    }
+
+    private func preferredAICommand(for task: ReviewTaskIntent) -> String {
+        aiCommandPresetSuggestions(for: task).first ?? task.presetCommand
     }
 
     private func prepareAICommandSuggestionsIfNeeded() {

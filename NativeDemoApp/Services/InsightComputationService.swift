@@ -35,11 +35,11 @@ struct AICommandSuggestionSnapshot: Equatable, Sendable {
     static func fallbacks(for task: ReviewTaskIntent) -> [String] {
         switch task {
         case .query:
-            return ["过去三天餐饮花了多少？", "看一下这周交通", "找找最近有没有重复账单"]
+            return ["看看最近 7 天的记录", "找最近金额最高的一笔", "找找最近有没有重复账单"]
         case .compare:
-            return ["对比本周和上周的消费", "这周交通和上周比呢？", "对比本月和上月的消费"]
+            return ["对比最近 7 天和前 7 天的消费", "对比本周和上周的消费", "对比本月和上月的消费"]
         case .backfill:
-            return ["补记今天通勤", "补记过去一周工作日通勤，早晚各一次"]
+            return []
         }
     }
 }
@@ -166,34 +166,44 @@ enum InsightComputationService {
     static func aiCommandSuggestions(
         _ input: AICommandSuggestionPreparationInput
     ) -> AICommandSuggestionSnapshot {
-        let calendar = Calendar.current
-        let start = calendar.date(byAdding: .day, value: -6, to: input.now) ?? input.now
-        let recentItems = input.items.filter { $0.createdAt >= start && $0.amount > 0 }
-        let hasRainToday = input.weatherKind == "rain" || recentItems.contains { item in
-            calendar.isDate(item.createdAt, inSameDayAs: input.now)
-                && item.memoryContext?.weatherKind == "rain"
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = Calendar.current.timeZone
+        calendar.locale = Locale(identifier: "zh_CN")
+        calendar.firstWeekday = 2
+        calendar.minimumDaysInFirstWeek = 1
+        let todayStart = calendar.startOfDay(for: input.now)
+        let recentStart = calendar.date(byAdding: .day, value: -6, to: todayStart) ?? todayStart
+        let recentEnd = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? input.now
+        let previousEnd = recentStart
+        let previousStart = calendar.date(byAdding: .day, value: -7, to: previousEnd) ?? previousEnd
+        let positiveItems = input.items.filter { $0.amount > 0 }
+        let recentItems = positiveItems.filter { $0.createdAt >= recentStart && $0.createdAt < recentEnd }
+        let previousItems = positiveItems.filter { $0.createdAt >= previousStart && $0.createdAt < previousEnd }
+        let rainyCommuteItems = positiveItems.filter {
+            normalizedSuggestionWeatherKind($0.memoryContext?.weatherKind) == "rain"
+                && isStrongCommuteItem($0)
         }
 
         var baseSuggestions: [String] = []
         var lockedPreviewSuggestions: [String] = []
-        if hasRainToday {
+        if !rainyCommuteItems.isEmpty,
+           normalizedSuggestionWeatherKind(input.weatherKind) == "rain"
+            || rainyCommuteItems.contains(where: { $0.createdAt >= recentStart }) {
             if input.isMember {
                 baseSuggestions.append("上一次雨天通勤是什么时候？")
             } else {
                 lockedPreviewSuggestions.append("上一次雨天通勤是什么时候？")
             }
         }
-        if recentItems.contains(where: { $0.category == .dining }) {
-            baseSuggestions.append("过去三天餐饮花了多少？")
-            baseSuggestions.append("上次买可乐是哪天？")
-        }
-        if recentItems.contains(where: { $0.category == .transport }) {
-            baseSuggestions.append("看一下这周交通")
-            baseSuggestions.append("这周交通和上周比呢？")
-        }
-        if recentItems.contains(where: { $0.category == .entertainment }) {
-            baseSuggestions.append("上周休闲娱乐花了多少钱？")
-        }
+        baseSuggestions.append(contentsOf: categoryQuerySuggestions(
+            recentItems: recentItems,
+            calendar: calendar
+        ))
+        baseSuggestions.append(contentsOf: categoryCompareSuggestions(
+            currentItems: recentItems,
+            previousItems: previousItems,
+            calendar: calendar
+        ))
         let recentMarks = LifeMarkService.aggregates(
             for: recentItems,
             allItems: input.items,
@@ -236,7 +246,7 @@ enum InsightComputationService {
             guard seen.insert(suggestion).inserted else { return false }
             return true
         }
-        return Array(unique.prefix(5))
+        return Array(unique.prefix(3))
     }
 
     private static func shouldSuggestCommuteDraft(
@@ -246,12 +256,98 @@ enum InsightComputationService {
     ) -> Bool {
         let weekday = calendar.component(.weekday, from: now)
         guard weekday >= 2 && weekday <= 6 else { return false }
-        let commuteCount = recentItems.filter { item in
-            guard item.category == .transport else { return false }
-            let text = "\(item.title) \(item.displayEmotionTag)"
-            return containsAny(text, ["通勤", "上班", "下班", "地铁", "公交"]) || item.amount <= 20
-        }.count
-        return commuteCount >= 2
+        let commuteItems = recentItems.filter(isStrongCommuteItem)
+        let activeDays = Set(commuteItems.map { calendar.startOfDay(for: $0.createdAt) })
+        return commuteItems.count >= 2 && activeDays.count >= 2
+    }
+
+    private struct SuggestionCategoryEvidence {
+        let category: HomeItem.Category
+        let currentItems: [HomeItem]
+        let previousItems: [HomeItem]
+
+        var currentAmount: Double { currentItems.reduce(0) { $0 + $1.amount } }
+        var previousAmount: Double { previousItems.reduce(0) { $0 + $1.amount } }
+        var amountDelta: Double { currentAmount - previousAmount }
+        var combinedCount: Int { currentItems.count + previousItems.count }
+    }
+
+    private static func categoryQuerySuggestions(
+        recentItems: [HomeItem],
+        calendar: Calendar
+    ) -> [String] {
+        let grouped = Dictionary(grouping: recentItems) { item in
+            item.category
+        }
+            .map { category, records in
+                (
+                    category: category,
+                    records: records,
+                    activeDays: Set(records.map { calendar.startOfDay(for: $0.createdAt) }).count,
+                    amount: records.reduce(0) { $0 + $1.amount }
+                )
+            }
+            .filter { $0.category != .other && $0.records.count >= 2 && $0.activeDays >= 2 }
+            .sorted { lhs, rhs in
+                if lhs.records.count != rhs.records.count { return lhs.records.count > rhs.records.count }
+                if abs(lhs.amount - rhs.amount) > 0.005 { return lhs.amount > rhs.amount }
+                return lhs.category.rawValue < rhs.category.rawValue
+            }
+        return grouped.prefix(2).map { "看看最近 7 天\($0.category.rawValue)记录" }
+    }
+
+    private static func categoryCompareSuggestions(
+        currentItems: [HomeItem],
+        previousItems: [HomeItem],
+        calendar: Calendar
+    ) -> [String] {
+        let currentByCategory = Dictionary(grouping: currentItems) { item in
+            item.category
+        }
+        let previousByCategory = Dictionary(grouping: previousItems) { item in
+            item.category
+        }
+        let categories = Set(currentByCategory.keys).union(previousByCategory.keys)
+        let evidence = categories.compactMap { category -> SuggestionCategoryEvidence? in
+            guard category != .other else { return nil }
+            let item = SuggestionCategoryEvidence(
+                category: category,
+                currentItems: currentByCategory[category] ?? [],
+                previousItems: previousByCategory[category] ?? []
+            )
+            let distinctDays = Set((item.currentItems + item.previousItems).map {
+                calendar.startOfDay(for: $0.createdAt)
+            }).count
+            let appearsInBoth = !item.currentItems.isEmpty && !item.previousItems.isEmpty
+            let hasRepeatedOneSidedEvidence = min(item.currentItems.count, item.previousItems.count) == 0
+                && max(item.currentItems.count, item.previousItems.count) >= 2
+            guard distinctDays >= 2,
+                  (appearsInBoth && item.combinedCount >= 3 || hasRepeatedOneSidedEvidence) else {
+                return nil
+            }
+            return item
+        }
+        .sorted { lhs, rhs in
+            if abs(abs(lhs.amountDelta) - abs(rhs.amountDelta)) > 0.005 {
+                return abs(lhs.amountDelta) > abs(rhs.amountDelta)
+            }
+            if lhs.combinedCount != rhs.combinedCount { return lhs.combinedCount > rhs.combinedCount }
+            return lhs.category.rawValue < rhs.category.rawValue
+        }
+        return evidence.prefix(2).map { "最近 7 天\($0.category.rawValue)和前 7 天比呢？" }
+    }
+
+    private static func isStrongCommuteItem(_ item: HomeItem) -> Bool {
+        guard item.category == .transport else { return false }
+        if item.scenePackId == "commute" { return true }
+        return containsAny(item.title, ["通勤", "上班", "下班", "早高峰", "晚高峰", "到岗"])
+    }
+
+    private static func normalizedSuggestionWeatherKind(_ rawValue: String?) -> String? {
+        guard let rawValue else { return nil }
+        let normalized = rawValue.lowercased()
+        if ["rain", "rainy"].contains(normalized) { return "rain" }
+        return nil
     }
 
     private static func weeklyBlocks(

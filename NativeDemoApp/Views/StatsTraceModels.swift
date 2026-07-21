@@ -30,6 +30,8 @@ enum TraceViewMode: String, CaseIterable, Identifiable {
 }
 
 enum TraceLifePreparationPolicy {
+    static let prewarmDelayNanoseconds: UInt64 = 250_000_000
+
     static func prewarmRange(after visibleRange: SummaryPlaybackRange) -> SummaryPlaybackRange {
         visibleRange == .week ? .month : .week
     }

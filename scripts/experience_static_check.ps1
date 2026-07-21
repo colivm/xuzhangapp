@@ -355,9 +355,34 @@ Assert-NoMultilinePattern 'NativeDemoApp/Views/InsightWebView.swift' 'private fu
 Assert-NoMultilinePattern 'NativeDemoApp/Views/InsightWebView.swift' 'private func aiCommandComparisonScaleRow[\s\S]{0,1800}GeometryReader' 'AI command total comparison bar avoids layout readers'
 Assert-NoMultilinePattern 'NativeDemoApp/Views/InsightWebView.swift' 'private func aiCommandCategoryComparisonBar[\s\S]{0,1800}GeometryReader' 'AI command category comparison bar avoids layout readers'
 Assert-Pattern 'NativeDemoApp/Services/InsightComputationService.swift' 'AICommandSuggestionSnapshot|static func aiCommandSuggestions|LifeMarkService\.aggregates' 'AI command suggestions are prepared as one immutable background snapshot'
-Assert-NoMultilinePattern 'NativeDemoApp/Views/InsightWebView.swift' 'private func aiCommandPresetSuggestions\(\)[\s\S]{0,900}(homeViewModel\.items|LifeMarkService\.aggregates|recentPositiveItems)' 'AI command suggestion rendering does not scan or aggregate the ledger'
+Assert-NoMultilinePattern 'NativeDemoApp/Views/InsightWebView.swift' 'private func aiCommandPresetSuggestions\(for task: ReviewTaskIntent\? = nil\)[\s\S]{0,900}(homeViewModel\.items|LifeMarkService\.aggregates|recentPositiveItems)' 'AI command suggestion rendering does not scan or aggregate the ledger'
 Assert-NoMultilinePattern 'NativeDemoApp/Views/InsightWebView.swift' 'private func aiCommandSuggestionPreparationKey\(\)[\s\S]{0,500}activeReviewTask' 'AI command suggestion preparation is shared by all review tasks'
 Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'testAICommandSuggestionsPrepareAllTasksFromOneImmutableSnapshot' 'AI command query compare and backfill suggestions share deterministic snapshot coverage'
+Assert-Pattern 'NativeDemoApp/Services/InsightComputationService.swift' '\x{770B}\x{770B}\x{6700}\x{8FD1} 7 \x{5929}\x{7684}\x{8BB0}\x{5F55}|\x{627E}\x{6700}\x{8FD1}\x{91D1}\x{989D}\x{6700}\x{9AD8}\x{7684}\x{4E00}\x{7B14}|\x{627E}\x{627E}\x{6700}\x{8FD1}\x{6709}\x{6CA1}\x{6709}\x{91CD}\x{590D}\x{8D26}\x{5355}' 'AI query fallbacks stay lifestyle neutral'
+Assert-Pattern 'NativeDemoApp/Services/InsightComputationService.swift' '\x{5BF9}\x{6BD4}\x{6700}\x{8FD1} 7 \x{5929}\x{548C}\x{524D} 7 \x{5929}\x{7684}\x{6D88}\x{8D39}|\x{5BF9}\x{6BD4}\x{672C}\x{5468}\x{548C}\x{4E0A}\x{5468}\x{7684}\x{6D88}\x{8D39}|\x{5BF9}\x{6BD4}\x{672C}\x{6708}\x{548C}\x{4E0A}\x{6708}\x{7684}\x{6D88}\x{8D39}' 'AI compare fallbacks stay period based instead of category based'
+Assert-NoMultilinePattern 'NativeDemoApp/Services/InsightComputationService.swift' 'static func fallbacks\(for task: ReviewTaskIntent\)[\s\S]{0,900}(\x{4EA4}\x{901A}|\x{901A}\x{52E4}|\x{9910}\x{996E}|\x{5174}\x{8DA3}|\x{7231}\x{597D})' 'AI fixed fallbacks do not assume a category or lifestyle'
+$aiSuggestionSource = Get-Content -Raw -LiteralPath 'NativeDemoApp/Services/InsightComputationService.swift'
+$aiFallbackBlock = [regex]::Match(
+    $aiSuggestionSource,
+    'static func fallbacks\(for task: ReviewTaskIntent\) -> \[String\] \{(?<body>[\s\S]*?)\r?\n    \}\r?\n\}'
+).Groups['body'].Value
+if ($aiFallbackBlock -notmatch 'case \.backfill:[\s\S]*?return \[\]') {
+    throw 'AI backfill must allow no recommendation when there is no evidence'
+}
+Write-Output 'OK  AI backfill may intentionally have no recommendation without evidence'
+Assert-Pattern 'NativeDemoApp/Services/InsightComputationService.swift' 'categoryQuerySuggestions|records\.count >= 2 && \$0\.activeDays >= 2|categoryCompareSuggestions|distinctDays >= 2' 'AI category recommendations require repeated multi-day evidence'
+Assert-Pattern 'NativeDemoApp/Services/InsightComputationService.swift' 'isStrongCommuteItem|scenePackId == \x22commute\x22|activeDays\.count >= 2' 'AI commute backfill requires strong evidence across multiple dates'
+Assert-NoMultilinePattern 'NativeDemoApp/Services/InsightComputationService.swift' 'private static func shouldSuggestCommuteDraft[\s\S]{0,1400}amount <= 20' 'AI commute recommendations do not infer commuting from low-value transport'
+Assert-Pattern 'NativeDemoApp/Services/InsightComputationService.swift' 'normalizedSuggestionWeatherKind|!rainyCommuteItems\.isEmpty' 'AI rainy commute lookup requires an actual rainy commute record'
+Assert-NoMultilinePattern 'NativeDemoApp/Views/InsightWebView.swift' 'private func selectReviewTask\([\s\S]{0,1200}prepareAICommandSuggestionsIfNeeded\(\)' 'opening or switching an AI command task only reads the prepared suggestion cache'
+$aiSuggestionViewSource = Get-Content -Raw -LiteralPath 'NativeDemoApp/Views/InsightWebView.swift'
+if ($aiSuggestionViewSource -notmatch '\.onAppear[\s\S]{0,500}prepareAICommandSuggestionsIfNeeded\(\)' -or
+    $aiSuggestionViewSource -notmatch '\.onChange\(of: homeViewModel\.items\)[\s\S]{0,500}prepareAICommandSuggestionsIfNeeded\(\)') {
+    throw 'AI recommendation cache must be prepared before task entry and refreshed for ledger revisions'
+}
+Write-Output 'OK  AI recommendation cache is prepared before task entry and refreshed only for real inputs'
+Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'testAICommandSuggestionFallbacksStayNeutralAndAllowNoBackfill|testEmptyAndParkingOnlyLedgersDoNotInventCommuteRecommendations|testRepeatedRealCategoryEvidenceProducesFocusedSuggestionsOnly|testStrongCommuteEvidenceNeedsTwoDatesBeforeSuggestingBackfill|testCurrentRainNeedsAnActualHistoricalRainyCommuteForLookup|testRollingSevenDayComparisonCommandUsesThePreviousSevenDays' 'AI evidence recommendation and rolling comparison XCTest coverage'
+Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-49|\x{505C}\x{8F66}\x{8D39}|\x{975E}\x{901A}\x{52E4}|\x{96E8}\x{5929}\x{901A}\x{52E4}|\x{53EA}\x{8BFB}\x{7F13}\x{5B58}' 'AI evidence recommendation and cache device matrix'
 Assert-Pattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'RecordInputHistorySnapshot|recordInputAssistanceRevision|prepareRecordInputHistorySnapshot|prepareRecordPrefillSnapshot|RecordInputAssistanceComputation\.historySnapshot|RecordInputAssistanceComputation\.prefillSnapshot' 'record input assistance uses ledger and draft driven snapshots'
 Assert-Pattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'withTaskGroup|group\.addTask\(priority: \.utility\)|group\.addTask\(priority: \.userInitiated\)' 'record input history and prefill computation leave the main actor'
 $recordInputSource = Get-Content -Raw -LiteralPath 'NativeDemoApp/ViewModels/HomeViewModel.swift'
@@ -610,6 +635,15 @@ Assert-Pattern 'NativeDemoApp/Models/InteractionStateModels.swift' 'ReleaseFixtu
 Assert-Pattern 'NativeDemoApp/Services/LocalStore.swift' 'QAReleaseFixtures|prepareReleaseFixtureStore|releaseFixtureSeededKey|isReleaseFixtureMode' 'isolated debug fixture storage and migration seed'
 Assert-Pattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'guard !LocalStore\.isReleaseFixtureMode else \{ return \}' 'release fixture blocks accidental cloud writes'
 Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'testGeneratedReleaseFixturesMatchSwiftFactoryAndDecodeValidImages|testReleaseScaleMigrationPreservesCountAmountImagesOrderAndCover|testReviewAndAIStayDeterministicAtAllReleaseScales' '100 1000 5000 XCTest release coverage'
+Assert-Pattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'ItemDerivedCacheComputation|ItemDerivedCachePublicationPolicy|coalescingDelayNanoseconds: UInt64 = 40_000_000|prepareItemDerivedCacheIfNeeded|group\.addTask\(priority: \.utility\)|itemDerivedCacheForRead' 'ledger-derived home cache coalesces rapid changes off the main actor and publishes only the latest revision'
+Assert-NoPattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'rebuildItemDerivedCache|itemDerivedCacheNeedsRebuild|ensureItemDerivedCacheFresh' 'SwiftUI cache reads never synchronously rebuild the full ledger'
+Assert-NoPattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' '@Published private\(set\) var (recordInputAssistanceRevision|homeDashboardRevision)' 'one ledger assignment does not emit extra revision-only publications'
+Assert-NoPattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'items\[[^]]+\]\.[A-Za-z_][A-Za-z0-9_?]*\s=\s' 'logical record edits commit one updated value instead of publishing every field mutation'
+Assert-Pattern 'NativeDemoApp/ViewModels/HomeViewModel+Dashboard.swift' 'pendingHomeDashboardPreparationRequest|isItemDerivedCacheCurrent|resumePendingHomeDashboardPreparationIfNeeded|preservesVisibleLines|objectWillChange\.send\(\)' 'home dashboard waits for one derived revision and publishes stable visible snapshots'
+Assert-Pattern 'NativeDemoApp/Views/InsightWebView.swift' 'snapshotTransaction = Transaction\(animation: nil\)|snapshotTransaction\.disablesAnimations = true|withTransaction\(snapshotTransaction\)' 'insight snapshot replacement does not animate the whole layout'
+Assert-Pattern 'NativeDemoApp/Views/StatsTraceModels.swift' 'prewarmDelayNanoseconds: UInt64 = 250_000_000' 'trace secondary range prewarm yields to the visible snapshot'
+Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'prewarmDelayNanoseconds|tracePreparationGate\.accepts\(requestID\)' 'trace prewarm is cancellable when a newer ledger revision arrives'
+Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'testItemDerivedCacheBuildsOneAtomicSnapshotAtReleaseScale|testItemDerivedCachePublicationRejectsOldRevisionAndRequest|testTracePrewarmWaitsUntilVisibleSnapshotHasSettled' 'PERF-15 cache, stale request and prewarm boundaries have XCTest coverage'
 $releaseFixtureOutput = python scripts/validate_release_gate.py --phase fixtures
 if ($LASTEXITCODE -ne 0) {
     throw "Release fixture validation failed`n$releaseFixtureOutput"

@@ -376,9 +376,10 @@ final class InteractionStateRegressionTests: XCTestCase {
 
     func testReviewTaskIntentsMapToSupportedExplicitCommands() {
         XCTAssertEqual(ReviewTaskIntent.allCases.count, 3)
-        XCTAssertTrue(ReviewTaskIntent.query.presetCommand.contains("过去三天"))
-        XCTAssertTrue(ReviewTaskIntent.compare.presetCommand.contains("本周和上周"))
-        XCTAssertTrue(ReviewTaskIntent.backfill.presetCommand.contains("补记"))
+        XCTAssertTrue(ReviewTaskIntent.query.presetCommand.contains("最近 7 天"))
+        XCTAssertTrue(ReviewTaskIntent.compare.presetCommand.contains("最近 7 天"))
+        XCTAssertTrue(ReviewTaskIntent.compare.presetCommand.contains("前 7 天"))
+        XCTAssertTrue(ReviewTaskIntent.backfill.presetCommand.isEmpty)
     }
 
     func testPlaybackMaturityAndCompletionUseOnePrimaryRule() {
@@ -1162,6 +1163,94 @@ final class HomeDashboardSnapshotTests: XCTestCase {
         XCTAssertEqual(first.textsByItemID, second.textsByItemID)
         XCTAssertNotNil(first.todayPrimaryLine)
         XCTAssertEqual(first.todayPrimaryLine, second.todayPrimaryLine)
+    }
+
+    func testItemDerivedCacheBuildsOneAtomicSnapshotAtReleaseScale() {
+        let calendar = Calendar.current
+        let now = calendar.date(from: DateComponents(
+            year: 2026,
+            month: 7,
+            day: 21,
+            hour: 18,
+            minute: 30
+        ))!
+        let items = Array((0..<5_000).map { index in
+            HomeItem(
+                title: "记录 \(index)",
+                amount: Double((index % 200) + 1),
+                category: HomeItem.Category.allCases[index % HomeItem.Category.allCases.count],
+                createdAt: now.addingTimeInterval(TimeInterval(-index * 1_800))
+            )
+        }.reversed())
+        let key = ItemDerivedCachePreparationKey(
+            ledgerRevision: 42,
+            dayKey: "2026-07-21"
+        )
+
+        let snapshot = ItemDerivedCacheComputation.build(
+            ItemDerivedCachePreparationInput(
+                key: key,
+                items: items,
+                now: now,
+                itemsAreSortedDescending: false
+            )
+        )
+
+        let expectedToday = items.filter {
+            calendar.isDate($0.createdAt, inSameDayAs: now) && $0.amount > 0
+        }
+        XCTAssertEqual(snapshot.key, key)
+        XCTAssertEqual(snapshot.todayPositiveItems.count, expectedToday.count)
+        XCTAssertEqual(snapshot.recentThreeTodayItems, Array(snapshot.todayPositiveItems.prefix(3)))
+        XCTAssertEqual(snapshot.todayPositiveItems, snapshot.todayPositiveItems.sorted { $0.createdAt > $1.createdAt })
+        XCTAssertEqual(
+            snapshot.todayPlayback,
+            PlaybackService().buildTodayPlayback(from: items, now: now)
+        )
+        XCTAssertEqual(snapshot.homeJourneyLedgerFacts.totalCommittedRecordCount, items.count)
+    }
+
+    func testItemDerivedCachePublicationRejectsOldRevisionAndRequest() {
+        let old = ItemDerivedCachePreparationKey(ledgerRevision: 8, dayKey: "2026-07-21")
+        let latest = ItemDerivedCachePreparationKey(ledgerRevision: 9, dayKey: "2026-07-21")
+
+        XCTAssertFalse(
+            ItemDerivedCachePublicationPolicy.accepts(
+                snapshotKey: old,
+                pendingKey: latest,
+                currentKey: latest,
+                requestMatches: true
+            )
+        )
+        XCTAssertFalse(
+            ItemDerivedCachePublicationPolicy.accepts(
+                snapshotKey: latest,
+                pendingKey: latest,
+                currentKey: latest,
+                requestMatches: false
+            )
+        )
+        XCTAssertTrue(
+            ItemDerivedCachePublicationPolicy.accepts(
+                snapshotKey: latest,
+                pendingKey: latest,
+                currentKey: latest,
+                requestMatches: true
+            )
+        )
+        XCTAssertLessThanOrEqual(
+            ItemDerivedCachePublicationPolicy.coalescingDelayNanoseconds,
+            50_000_000
+        )
+    }
+
+    func testTracePrewarmWaitsUntilVisibleSnapshotHasSettled() {
+        XCTAssertGreaterThanOrEqual(
+            TraceLifePreparationPolicy.prewarmDelayNanoseconds,
+            200_000_000
+        )
+        XCTAssertEqual(TraceLifePreparationPolicy.prewarmRange(after: .week), .month)
+        XCTAssertEqual(TraceLifePreparationPolicy.prewarmRange(after: .month), .week)
     }
 
     func testLifeMarkRefreshPreservesRowsOnlyForTheSameDayAndMembership() {
@@ -2282,11 +2371,32 @@ final class InsightBackgroundComputationTests: XCTestCase {
             day: 16,
             hour: 19
         ))!
+        func date(_ day: Int, _ hour: Int) -> Date {
+            calendar.date(from: DateComponents(
+                timeZone: calendar.timeZone,
+                year: 2026,
+                month: 7,
+                day: day,
+                hour: hour
+            ))!
+        }
         let items = [
-            HomeItem(title: "午餐", amount: 28, category: .dining, createdAt: now.addingTimeInterval(-3_600)),
-            HomeItem(title: "早高峰地铁", amount: 6, category: .transport, createdAt: now.addingTimeInterval(-7_200)),
-            HomeItem(title: "晚高峰公交", amount: 4, category: .transport, createdAt: now.addingTimeInterval(-10_800)),
-            HomeItem(title: "电影", amount: 45, category: .entertainment, createdAt: now.addingTimeInterval(-14_400)),
+            HomeItem(title: "今天午餐", amount: 28, category: .dining, createdAt: date(16, 12)),
+            HomeItem(title: "昨天晚餐", amount: 32, category: .dining, createdAt: date(15, 18)),
+            HomeItem(title: "前七天早餐", amount: 18, category: .dining, createdAt: date(9, 8)),
+            HomeItem(
+                title: "早高峰地铁",
+                amount: 6,
+                category: .transport,
+                createdAt: date(15, 8),
+                memoryContext: HomeItem.MemoryContext(
+                    weatherKind: "rain",
+                    temperatureCelsius: 25,
+                    cityName: nil,
+                    semanticPlace: nil
+                )
+            ),
+            HomeItem(title: "晚高峰公交", amount: 4, category: .transport, createdAt: date(14, 18)),
         ]
         let input = AICommandSuggestionPreparationInput(
             items: items,
@@ -2300,11 +2410,183 @@ final class InsightBackgroundComputationTests: XCTestCase {
 
         XCTAssertEqual(first, second)
         XCTAssertTrue(first.query.contains("上一次雨天通勤是什么时候？"))
-        XCTAssertTrue(first.compare.contains("这周交通和上周比呢？"))
+        XCTAssertTrue(first.compare.contains("最近 7 天餐饮和前 7 天比呢？"))
         XCTAssertTrue(first.backfill.contains("补记过去一周工作日通勤，早晚各一次"))
-        XCTAssertLessThanOrEqual(first.query.count, 5)
-        XCTAssertLessThanOrEqual(first.compare.count, 5)
-        XCTAssertLessThanOrEqual(first.backfill.count, 5)
+        XCTAssertLessThanOrEqual(first.query.count, 3)
+        XCTAssertLessThanOrEqual(first.compare.count, 3)
+        XCTAssertLessThanOrEqual(first.backfill.count, 3)
+    }
+
+    func testAICommandSuggestionFallbacksStayNeutralAndAllowNoBackfill() {
+        let forbiddenAssumptions = ["通勤", "上班", "交通", "餐饮", "兴趣", "爱好"]
+        for task in [ReviewTaskIntent.query, ReviewTaskIntent.compare] {
+            let fallbacks = AICommandSuggestionSnapshot.fallbacks(for: task)
+            XCTAssertFalse(fallbacks.isEmpty)
+            XCTAssertLessThanOrEqual(fallbacks.count, 3)
+            for fallback in fallbacks {
+                XCTAssertFalse(
+                    forbiddenAssumptions.contains(where: { fallback.contains($0) }),
+                    "Unexpected lifestyle assumption in fallback: \(fallback)"
+                )
+            }
+        }
+        XCTAssertTrue(AICommandSuggestionSnapshot.fallbacks(for: .backfill).isEmpty)
+    }
+
+    func testEmptyAndParkingOnlyLedgersDoNotInventCommuteRecommendations() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 16,
+            hour: 19
+        ))!
+        let inputs = [
+            AICommandSuggestionPreparationInput(
+                items: [],
+                isMember: true,
+                now: now,
+                weatherKind: "rain"
+            ),
+            AICommandSuggestionPreparationInput(
+                items: [
+                    HomeItem(
+                        title: "停车费",
+                        amount: 6,
+                        category: .transport,
+                        createdAt: now.addingTimeInterval(-3_600)
+                    )
+                ],
+                isMember: true,
+                now: now,
+                weatherKind: "rain"
+            )
+        ]
+
+        for input in inputs {
+            let snapshot = InsightComputationService.aiCommandSuggestions(input)
+            XCTAssertTrue(snapshot.backfill.isEmpty)
+            XCTAssertFalse(snapshot.query.contains(where: { $0.contains("雨天通勤") }))
+            XCTAssertFalse(snapshot.compare.contains(where: {
+                $0.contains("交通") || $0.contains("通勤")
+            }))
+        }
+    }
+
+    func testRepeatedRealCategoryEvidenceProducesFocusedSuggestionsOnly() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 16,
+            hour: 19
+        ))!
+        func date(_ day: Int, _ hour: Int) -> Date {
+            calendar.date(from: DateComponents(
+                timeZone: calendar.timeZone,
+                year: 2026,
+                month: 7,
+                day: day,
+                hour: hour
+            ))!
+        }
+        let snapshot = InsightComputationService.aiCommandSuggestions(
+            AICommandSuggestionPreparationInput(
+                items: [
+                    HomeItem(title: "午餐", amount: 30, category: .dining, createdAt: date(16, 12)),
+                    HomeItem(title: "晚餐", amount: 24, category: .dining, createdAt: date(15, 18)),
+                    HomeItem(title: "前七天早餐", amount: 16, category: .dining, createdAt: date(9, 8)),
+                ],
+                isMember: true,
+                now: now,
+                weatherKind: nil
+            )
+        )
+
+        XCTAssertTrue(snapshot.query.contains("看看最近 7 天餐饮记录"))
+        XCTAssertTrue(snapshot.compare.contains("最近 7 天餐饮和前 7 天比呢？"))
+        XCTAssertFalse(snapshot.compare.contains(where: {
+            $0.contains("交通") || $0.contains("通勤")
+        }))
+        XCTAssertTrue(snapshot.backfill.isEmpty)
+    }
+
+    func testStrongCommuteEvidenceNeedsTwoDatesBeforeSuggestingBackfill() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 16,
+            hour: 19
+        ))!
+        func date(_ day: Int, _ hour: Int) -> Date {
+            calendar.date(from: DateComponents(
+                timeZone: calendar.timeZone,
+                year: 2026,
+                month: 7,
+                day: day,
+                hour: hour
+            ))!
+        }
+        let sameDay = InsightComputationService.aiCommandSuggestions(
+            AICommandSuggestionPreparationInput(
+                items: [
+                    HomeItem(title: "上班地铁", amount: 6, category: .transport, createdAt: date(15, 8)),
+                    HomeItem(title: "下班公交", amount: 5, category: .transport, createdAt: date(15, 18)),
+                ],
+                isMember: true,
+                now: now,
+                weatherKind: nil
+            )
+        )
+        let twoDates = InsightComputationService.aiCommandSuggestions(
+            AICommandSuggestionPreparationInput(
+                items: [
+                    HomeItem(title: "上班地铁", amount: 6, category: .transport, createdAt: date(15, 8)),
+                    HomeItem(title: "晚高峰公交", amount: 5, category: .transport, createdAt: date(14, 18)),
+                ],
+                isMember: true,
+                now: now,
+                weatherKind: nil
+            )
+        )
+
+        XCTAssertTrue(sameDay.backfill.isEmpty)
+        XCTAssertEqual(twoDates.backfill, ["补记过去一周工作日通勤，早晚各一次"])
+    }
+
+    func testCurrentRainNeedsAnActualHistoricalRainyCommuteForLookup() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 16,
+            hour: 19
+        ))!
+        let dryCommute = HomeItem(
+            title: "上班地铁",
+            amount: 6,
+            category: .transport,
+            createdAt: now.addingTimeInterval(-86_400)
+        )
+        let snapshot = InsightComputationService.aiCommandSuggestions(
+            AICommandSuggestionPreparationInput(
+                items: [dryCommute],
+                isMember: true,
+                now: now,
+                weatherKind: "rain"
+            )
+        )
+
+        XCTAssertFalse(snapshot.query.contains("上一次雨天通勤是什么时候？"))
     }
 
     func testAICommandComparisonKeepsBothPeriodsAndCategoryChanges() {
@@ -2370,6 +2652,41 @@ final class InsightBackgroundComputationTests: XCTestCase {
         XCTAssertTrue(digest.contains("上周同期:50.0:2"))
         XCTAssertTrue(digest.contains("餐饮:10.0:30.0:1:1"))
         XCTAssertTrue(digest.contains("00000000-0000-0000-0000-000000000201"))
+    }
+
+    func testRollingSevenDayComparisonCommandUsesThePreviousSevenDays() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 16,
+            hour: 12
+        ))!
+        func date(_ day: Int, _ hour: Int) -> Date {
+            calendar.date(from: DateComponents(
+                timeZone: calendar.timeZone,
+                year: 2026,
+                month: 7,
+                day: day,
+                hour: hour
+            ))!
+        }
+        let digest = InsightWebView.aiCommandComputationDigestForTesting(
+            command: "对比最近 7 天和前 7 天的消费",
+            items: [
+                HomeItem(title: "最近午餐", amount: 20, category: .dining, createdAt: date(16, 12)),
+                HomeItem(title: "前段午餐", amount: 10, category: .dining, createdAt: date(9, 12)),
+            ],
+            hasMemberAccess: true,
+            now: now,
+            reviewTaskIntent: .compare
+        )
+
+        XCTAssertTrue(digest.hasPrefix("compare#最近 7 天 对比 前 7 天#"))
+        XCTAssertTrue(digest.contains("最近 7 天:20.0:1"))
+        XCTAssertTrue(digest.contains("前 7 天:10.0:1"))
     }
 
     func testUnsupportedAICommandDoesNotInventFactsOutsideTheLedger() {
