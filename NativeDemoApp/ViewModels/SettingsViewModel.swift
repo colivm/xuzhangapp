@@ -192,16 +192,20 @@ final class SettingsViewModel: ObservableObject {
     var aiTone: AppSettings.AITone {
         get { settings.aiTone }
         set {
+            guard settings.aiTone != newValue else { return }
             settings.aiTone = newValue
             persist()
+            notifyNarrativeAIConfigurationChanged()
         }
     }
 
     var useRemoteAI: Bool {
         get { settings.useRemoteAI }
         set {
+            guard settings.useRemoteAI != newValue else { return }
             settings.useRemoteAI = newValue
             persist()
+            notifyNarrativeAIConfigurationChanged()
         }
     }
 
@@ -429,6 +433,7 @@ final class SettingsViewModel: ObservableObject {
             enforceCurrentThemeAccess(showsMessage: true)
             persist()
             hasCloudSession = true
+            notifyNarrativeAIConfigurationChanged()
             authMessage = "登录成功。"
             loginCode = ""
         } catch {
@@ -451,6 +456,7 @@ final class SettingsViewModel: ObservableObject {
         hasCloudSession = false
         authMessage = "已退出登录。"
         persist()
+        notifyNarrativeAIConfigurationChanged()
     }
 
     func enableCloudSyncForCurrentAccount() {
@@ -517,6 +523,7 @@ final class SettingsViewModel: ObservableObject {
             hasCloudSession = false
             authMessage = "账号已注销，云端数据和会员关联已删除。"
             persist()
+            notifyNarrativeAIConfigurationChanged()
             return true
         } catch {
             if invalidateCloudSessionIfUnauthorized(error) { return false }
@@ -770,6 +777,12 @@ final class SettingsViewModel: ObservableObject {
         enforceCurrentThemeAccess(showsMessage: true)
         authMessage = CloudSessionInvalidationService.userMessage
         persist()
+        notifyNarrativeAIConfigurationChanged()
+    }
+
+    private func notifyNarrativeAIConfigurationChanged() {
+        LifeNarrativeAIRewriteStore.shared.removeAll()
+        NotificationCenter.default.post(name: .narrativeAIConfigurationDidChange, object: nil)
     }
 
     private func hasActiveLocalEntitlement(_ payload: IAPPurchaseVerification, now: Date = Date()) -> Bool {

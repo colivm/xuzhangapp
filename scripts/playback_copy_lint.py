@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 POOL = ROOT / "NativeDemoApp/Services/PlaybackCopyPool.swift"
 SERVICE = ROOT / "NativeDemoApp/Services/PlaybackService.swift"
+SUPPORT = ROOT / "NativeDemoApp/Services/PlaybackSupportServices.swift"
 SHEET = ROOT / "NativeDemoApp/Views/SummaryPlaybackSheet.swift"
 TESTS = ROOT / "NativeDemoAppTests/StateRegressionTests.swift"
 MATRIX = ROOT / "RELEASE_GATE_AND_DEVICE_MATRIX_v1.md"
@@ -25,6 +26,7 @@ def main() -> int:
     failures: list[str] = []
     pool = POOL.read_text(encoding="utf-8")
     service = SERVICE.read_text(encoding="utf-8")
+    support = SUPPORT.read_text(encoding="utf-8")
     sheet = SHEET.read_text(encoding="utf-8")
     tests = TESTS.read_text(encoding="utf-8")
     matrix = MATRIX.read_text(encoding="utf-8")
@@ -118,16 +120,36 @@ def main() -> int:
         "normalizedNarration.contains(normalizedSupport)",
         'private func chapterElementChips(for chapter: SummaryChapter)',
         'if chapter.metrics.keys.contains("supportLine") {\n            return []',
+        "LifeStorySignalService.playbackAuxiliarySignals(from: chapter)",
+        "ViewThatFits(in: .horizontal)",
     ]
     for token in required_sheet_boundaries:
         if token not in sheet:
             failures.append(f"missing playback support de-dup boundary `{token}`")
+
+    required_auxiliary_boundaries = [
+        "enum PlaybackAuxiliarySignalPolicy",
+        "PlaybackAuxiliarySignalPolicy.preparedMetrics",
+        "aggregate.kind == .scene",
+        "evidenceScore(for: emotion, item: item)",
+        "containsSensitiveText",
+        "static func playbackAuxiliarySignals(from chapter: SummaryChapter)",
+        "isDistinctAuxiliaryText",
+    ]
+    combined_auxiliary_source = service + support
+    for token in required_auxiliary_boundaries:
+        if token not in combined_auxiliary_source:
+            failures.append(f"missing playback auxiliary signal boundary `{token}`")
 
     required_tests = [
         "final class PlaybackLivingVoiceCopyTests",
         "testWeekKeepsZeroOneTwoAndMatureChapterCounts",
         "testMatureWeekSeparatesDistributionRecordAndReliableRepeat",
         "testPlaybackNarrationDoesNotExposeAbstractOrInternalCopy",
+        "testPlaybackRestoresHighConfidenceAuxiliarySignalsWithoutPuttingThemBackIntoNarration",
+        "testPlaybackAuxiliarySignalsRejectWeakAndSensitiveLabels",
+        "testPlaybackAuxiliarySignalsDeduplicateMainAndSupportCopy",
+        "testMonthPublishesAuxiliarySignalsOnlyOnOpeningChapter",
         "testMonthKeepsSixRolesAndUsesSameDayComparison",
         "testMonthExplicitlyHandlesMissingEarlyLateAndComparisonEvidence",
     ]
@@ -137,6 +159,8 @@ def main() -> int:
 
     if "FLOW-42" not in matrix or "上月同期" not in matrix:
         failures.append("missing playback living-voice Xcode/iPhone verification matrix")
+    if "FLOW-54" not in matrix or "生活线索" not in matrix or "情绪标签" not in matrix:
+        failures.append("missing playback auxiliary signal Xcode/iPhone verification matrix")
 
     for failure in failures:
         print(f"error: {failure}", file=sys.stderr)

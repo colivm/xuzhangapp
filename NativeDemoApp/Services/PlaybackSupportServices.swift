@@ -152,6 +152,131 @@ struct LifeStorySignal: Equatable {
     let profile: LifeStoryVisualProfile
 }
 
+enum PlaybackAuxiliarySignalPolicy {
+    static let lifeMarkMetricKey = "playbackLifeMarkLabel"
+    static let emotionMetricKey = "playbackEmotionLabel"
+
+    static func preparedMetrics(
+        periodItems: [HomeItem],
+        allItems: [HomeItem],
+        now: Date
+    ) -> [String: String] {
+        guard !periodItems.isEmpty else { return [:] }
+
+        var metrics: [String: String] = [:]
+        if let lifeMark = preferredLifeMark(
+            periodItems: periodItems,
+            allItems: allItems,
+            now: now
+        ) {
+            metrics[lifeMarkMetricKey] = lifeMark
+        }
+        if let emotion = preferredEmotionTag(in: periodItems) {
+            metrics[emotionMetricKey] = emotion
+        }
+        return metrics
+    }
+
+    private static func preferredLifeMark(
+        periodItems: [HomeItem],
+        allItems: [HomeItem],
+        now: Date
+    ) -> String? {
+        let aggregates = LifeMarkService.aggregates(
+            for: periodItems,
+            allItems: allItems,
+            isMember: true,
+            now: now,
+            limit: 24
+        )
+        guard let selected = aggregates.first(where: { aggregate in
+            guard aggregate.kind == .scene else { return false }
+            let label = aggregate.label.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard (2...18).contains(label.count),
+                  !EchoAnchorService.shared.isDirtyTraceTitle(label),
+                  !containsSensitiveText(label) else {
+                return false
+            }
+            return true
+        }) else {
+            return nil
+        }
+        return selected.label.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func preferredEmotionTag(in items: [HomeItem]) -> String? {
+        let candidates = items
+            .compactMap { item -> (text: String, score: Int, date: Date, id: String)? in
+                let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard (2...22).contains(emotion.count),
+                      emotion != HomeItem.inferEmotionTag(category: item.category, amount: item.amount),
+                      !EchoAnchorService.shared.isDirtyTraceTitle(emotion),
+                      !containsSensitiveText("\(item.title) \(emotion)") else {
+                    return nil
+                }
+
+                let score = evidenceScore(for: emotion, item: item)
+                guard score >= 6 else { return nil }
+                return (emotion, score, item.createdAt, item.id.uuidString)
+            }
+            .sorted { lhs, rhs in
+                if lhs.score == rhs.score {
+                    if lhs.date == rhs.date { return lhs.id < rhs.id }
+                    return lhs.date > rhs.date
+                }
+                return lhs.score > rhs.score
+            }
+        return candidates.first?.text
+    }
+
+    private static func evidenceScore(for emotion: String, item: HomeItem) -> Int {
+        let text = emotion.lowercased()
+        let weatherKind = item.memoryContext?.weatherKind?.lowercased() ?? ""
+        var score = 0
+
+        switch weatherKind {
+        case "hot" where containsAny(text, ["热天", "高温", "炎热", "酷热"]):
+            score += 8
+        case "cold" where containsAny(text, ["冷天", "降温", "低温", "天冷"]):
+            score += 8
+        case "rain" where containsAny(text, ["雨天", "下雨", "遇上雨", "有雨"]):
+            score += 8
+        case "snow" where containsAny(text, ["雪天", "下雪", "有雪"]):
+            score += 8
+        default:
+            break
+        }
+
+        if HomeItem.isLateWorkCommute(item),
+           containsAny(text, ["晚下班", "晚归", "晚上", "夜里", "凌晨", "通勤", "到家"]) {
+            score += 7
+        }
+
+        if item.category == .dining,
+           RecordCalendarContext.isNonWorkday(item.createdAt),
+           containsAny(text, ["周末早餐", "周末午餐", "周末晚饭", "假期早餐", "假期午餐", "假期晚饭"]) {
+            score += 6
+        }
+
+        return score
+    }
+
+    private static func containsSensitiveText(_ text: String) -> Bool {
+        containsAny(
+            text.lowercased(),
+            [
+                "医院", "门诊", "诊所", "看病", "买药", "药品", "体检", "检查", "补牙", "医美",
+                "借款", "还款", "欠款", "负债", "成人", "私密", "密码", "账号", "地址", "身份证",
+                "银行卡", "验证码"
+            ]
+        )
+    }
+
+    private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.localizedCaseInsensitiveContains($0) }
+    }
+}
+
 struct SignalSelectionScorecard: Equatable {
     let distinctiveness: Int
     let imagery: Int
@@ -187,6 +312,47 @@ enum ShareCopyRole: String, Equatable {
 }
 
 enum LifeStorySignalService {
+    static func playbackAuxiliarySignals(from chapter: SummaryChapter) -> [LifeStorySignal] {
+        let existingCopy = [
+            chapter.narration.warm,
+            chapter.narration.plain,
+            chapter.metrics["supportLine"] ?? ""
+        ]
+        var acceptedRaw: [String] = []
+        var signals: [LifeStorySignal] = []
+
+        if let lifeMark = clean(chapter.metrics[PlaybackAuxiliarySignalPolicy.lifeMarkMetricKey]),
+           isDistinctAuxiliaryText(lifeMark, from: existingCopy, accepted: acceptedRaw) {
+            acceptedRaw.append(lifeMark)
+            signals.append(
+                LifeStorySignal(
+                    kind: .lifeMark,
+                    symbol: "sparkles",
+                    rawText: lifeMark,
+                    label: "生活线索 · \(lifeMark)",
+                    priority: 0,
+                    profile: LifeStoryVisualProfile.detect(from: [lifeMark])
+                )
+            )
+        }
+
+        if let emotion = clean(chapter.metrics[PlaybackAuxiliarySignalPolicy.emotionMetricKey]),
+           isDistinctAuxiliaryText(emotion, from: existingCopy, accepted: acceptedRaw) {
+            signals.append(
+                LifeStorySignal(
+                    kind: .emotion,
+                    symbol: "heart.text.square",
+                    rawText: emotion,
+                    label: "情绪标签 · \(emotion)",
+                    priority: 1,
+                    profile: LifeStoryVisualProfile.detect(from: [emotion])
+                )
+            )
+        }
+
+        return signals
+    }
+
     static func chapterSignals(from chapter: SummaryChapter, limit: Int = 3) -> [LifeStorySignal] {
         var signals: [LifeStorySignal] = []
 
@@ -487,6 +653,29 @@ enum LifeStorySignalService {
             return nil
         }
         return emotion
+    }
+
+    private static func isDistinctAuxiliaryText(
+        _ candidate: String,
+        from existing: [String],
+        accepted: [String]
+    ) -> Bool {
+        let normalizedCandidate = normalizedAuxiliaryText(candidate)
+        guard normalizedCandidate.count >= 2 else { return false }
+        let comparisonPool = existing + accepted
+        return !comparisonPool.contains { value in
+            let normalizedValue = normalizedAuxiliaryText(value)
+            guard normalizedValue.count >= 2 else { return false }
+            return normalizedValue.contains(normalizedCandidate)
+                || normalizedCandidate.contains(normalizedValue)
+        }
+    }
+
+    private static func normalizedAuxiliaryText(_ text: String) -> String {
+        let punctuation = [" ", "\n", "\t", "，", "。", "、", "！", "？", "：", ":", "；", ";", "·", "「", "」", "『", "』", "（", "）", "(", ")", "—", "-", "_", "¥", "￥"]
+        return punctuation.reduce(text.lowercased()) { partial, token in
+            partial.replacingOccurrences(of: token, with: "")
+        }
     }
 
     private static func deduplicated(_ signals: [LifeStorySignal], limit: Int) -> [LifeStorySignal] {

@@ -1,5 +1,11 @@
 import Foundation
 
+extension Notification.Name {
+    static let narrativeAIConfigurationDidChange = Notification.Name(
+        "narrativeAIConfigurationDidChange"
+    )
+}
+
 struct LifeNarrativeAIRewriteKey: Hashable {
     let scope: String
     let sourceRevision: Int
@@ -361,10 +367,14 @@ final class LifeNarrativeAIRewriteStore: @unchecked Sendable {
         }
     }
 
-    func removeAllForTesting() {
+    func removeAll() {
         lock.lock()
         rewrites.removeAll()
         lock.unlock()
+    }
+
+    func removeAllForTesting() {
+        removeAll()
     }
 }
 
@@ -373,6 +383,11 @@ actor LifeNarrativeAIPrecomputeCoordinator {
 
     private let reportService = AIReportService()
     private var latestRequestID = UUID()
+
+    func invalidatePendingRewrites() {
+        latestRequestID = UUID()
+        LifeNarrativeAIRewriteStore.shared.removeAll()
+    }
 
     func prepare(
         items: [HomeItem],
@@ -409,7 +424,7 @@ actor LifeNarrativeAIPrecomputeCoordinator {
             guard !Task.isCancelled, latestRequestID == requestID else { return }
             let packsByScope = Dictionary(uniqueKeysWithValues: packs.map { ($0.key.scope, $0) })
             var acceptedScopes = Set<String>()
-            let accepted = response.rewrites.compactMap { candidate in
+            let accepted: [LifeNarrativeAIRewrite] = response.rewrites.compactMap { candidate -> LifeNarrativeAIRewrite? in
                 guard acceptedScopes.insert(candidate.scope).inserted,
                       let pack = packsByScope[candidate.scope] else { return nil }
                 return LifeNarrativeAIRewriteValidationPolicy.validate(candidate, against: pack)

@@ -4,6 +4,13 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 const { redactForLog, validateAIOutputText, validateAIRequestBody } = require("./contentSafety");
+const { normalizeInsightPayload } = require("./legacyInsightContract");
+const { normalizedSupportedFeature } = require("./aiFeaturePolicy");
+const {
+  buildNarrativeRewriteMessages,
+  normalizeNarrativeRewriteBatch,
+  validateNarrativeFactPacks,
+} = require("./narrativeRewriteContract");
 
 const app = express();
 app.use(cors());
@@ -83,7 +90,13 @@ app.post("/v1/insight/daily", async (req, res) => {
       return res.status(auth.status).json({ code: auth.code, message: auth.message });
     }
     const user = auth.user;
-    const feature = String(req.body?.feature || "daily").toLowerCase();
+    const feature = normalizedSupportedFeature(req.body?.feature);
+    if (!feature) {
+      return res.status(400).json({
+        code: "UNSUPPORTED_FEATURE",
+        message: "unsupported AI feature",
+      });
+    }
     const safety = validateAIRequestBody(req.body || {});
     if (!safety.ok) {
       auditRisk("ai_input_rejected", req, user, {
@@ -92,6 +105,17 @@ app.post("/v1/insight/daily", async (req, res) => {
         sample: redactForLog(JSON.stringify(req.body || {})),
       });
       return res.status(400).json({ code: safety.error, message: safety.message, reason: safety.reason });
+    }
+    if (feature === "narrative_rewrite_batch") {
+      const contract = validateNarrativeFactPacks(req.body?.factPacks);
+      if (!contract.ok) {
+        auditRisk("narrative_contract_rejected", req, user, { feature, reason: contract.reason });
+        return res.status(400).json({
+          code: contract.error,
+          message: "narrative fact pack contract rejected",
+          reason: contract.reason,
+        });
+      }
     }
 
     if (PREMIUM_FEATURES.has(feature) && !user.isMember) {
@@ -110,8 +134,12 @@ app.post("/v1/insight/daily", async (req, res) => {
     }
 
     const model = (AI_UPSTREAM_MODEL || req.body?.model || "glm-4-flash").toString();
-    const messages = req.body?.messages;
-    const temperature = Number(req.body?.temperature ?? 0.6);
+    const messages = feature === "narrative_rewrite_batch"
+      ? buildNarrativeRewriteMessages(req.body?.factPacks, req.body?.tone)
+      : req.body?.messages;
+    const temperature = feature === "narrative_rewrite_batch"
+      ? 0.25
+      : Number(req.body?.temperature ?? 0.6);
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ code: "INVALID_ARGUMENT", message: "messages is required" });
     }
@@ -148,7 +176,9 @@ app.post("/v1/insight/daily", async (req, res) => {
       });
       return res.status(502).json({ code: outputSafety.error, message: "AI 输出未通过内容安全检查", reason: outputSafety.reason });
     }
-    const payload = normalizeInsightPayload(content);
+    const payload = feature === "narrative_rewrite_batch"
+      ? normalizeNarrativeRewriteBatch(content, req.body?.factPacks)
+      : normalizeInsightPayload(content);
     if (!payload) {
       auditRisk("parse_error", req, user, { feature });
       return res.status(502).json({ code: "PARSE_ERROR", message: "invalid model output" });
@@ -189,9 +219,11 @@ app.post("/v1/category/recommend", (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`ai-proxy running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`ai-proxy running on http://localhost:${PORT}`);
+  });
+}
 
 function authenticateRequest(req) {
   if (APP_PROXY_TOKEN) {
@@ -329,38 +361,6 @@ function safeJSONParse(text) {
   }
 }
 
-function normalizeInsightPayload(content) {
-  if (typeof content !== "string") return null;
-  const trimmed = content.replace(/```json/g, "").replace(/```/g, "").trim();
-  const object = safeJSONParse(trimmed) || tryExtractJSONObject(trimmed);
-  if (object) {
-    const summary = typeof object.summary === "string" ? object.summary.trim() : "";
-    const action = typeof object.action === "string" ? object.action.trim() : "";
-    const encourage = typeof object.encourage === "string" ? object.encourage.trim() : "";
-    if (summary) {
-      return {
-        summary,
-        action: action || "继续按你的节奏记录，慢慢就会更清晰。",
-        encourage: encourage || "你已经在认真照顾自己的生活啦。",
-      };
-    }
-  }
-  // 容错：上游若返回普通文本，仍回传给前端展示，避免整条链路失败
-  return {
-    summary: trimmed.slice(0, 180),
-    action: "继续按你的节奏记录，慢慢就会更清晰。",
-    encourage: "你已经在认真照顾自己的生活啦。",
-  };
-}
-
-function tryExtractJSONObject(text) {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  const candidate = text.slice(start, end + 1);
-  return safeJSONParse(candidate);
-}
-
 function monthIdentifier() {
   const now = new Date();
   const year = now.getFullYear();
@@ -394,3 +394,7 @@ function resetMonthlyUsageIfNeeded() {
     usage = { monthKey: currentMonth, count: 0 };
   }
 }
+
+module.exports = {
+  app,
+};

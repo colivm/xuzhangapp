@@ -487,6 +487,8 @@ final class LifeNarrativeAIRewritePolicyTests: XCTestCase {
         XCTAssertNil(store.rewrite(for: pack.key))
         store.publish([rewrite], expectedSourceRevision: 20)
         XCTAssertEqual(store.rewrite(for: pack.key), rewrite)
+        store.removeAll()
+        XCTAssertNil(store.rewrite(for: pack.key))
     }
 }
 

@@ -92,7 +92,7 @@ enum LifeNarrativeSignalPolicy {
             $0.amount > 0 && $0.draftMeta?.status != .pending && !isSensitive($0)
         }
         let activeDays = Set(rows.map { Calendar.current.startOfDay(for: $0.createdAt) }).count
-        let maturity = maturity(recordCount: rows.count, activeDays: activeDays, hasPhoto: rows.contains(where: \.hasMemoryPhoto))
+        let maturity = maturity(recordCount: rows.count, activeDays: activeDays, hasPhoto: rows.contains(where: \.hasMemoryImages))
 
         guard !rows.isEmpty else {
             let hasPrivateRows = !sourceRows.isEmpty
@@ -237,7 +237,7 @@ enum LifeNarrativeSignalPolicy {
     }
 
     private static func photoSignal(from rows: [HomeItem]) -> LifeNarrativeSignal? {
-        rows.reversed().first(where: { $0.hasMemoryPhoto && !isSensitive($0) }).map { item in
+        rows.reversed().first(where: { $0.hasMemoryImages && !isSensitive($0) }).map { item in
             let safeTitle = EchoAnchorService.shared.isEligibleLifeTraceTitle(item.title, item: item)
                 ? compact(item.title, limit: 18)
                 : item.category.label
@@ -260,7 +260,7 @@ enum LifeNarrativeSignalPolicy {
         previous: [LifeSceneKind: [HomeItem]],
         scope: LifeNarrativeScope
     ) -> [LifeNarrativeSignal] {
-        current.compactMap { kind, rows in
+        current.compactMap { kind, rows -> LifeNarrativeSignal? in
             guard let sample = rows.last, !isSensitive(sample) else { return nil }
             let previousRows = previous[kind, default: []]
             let delta = rows.count - previousRows.count
@@ -292,14 +292,14 @@ enum LifeNarrativeSignalPolicy {
     private static func structuredSceneSignals(
         from groups: [LifeSceneKind: [HomeItem]]
     ) -> [LifeNarrativeSignal] {
-        groups.compactMap { kind, rows in
+        groups.compactMap { kind, rows -> LifeNarrativeSignal? in
             guard let sample = rows.last,
                   !isSensitive(sample) else { return nil }
             let scene = LifeSceneSemanticService.classify(sample)
             guard scene.confidenceTier != .weak,
                   kind != .general else { return nil }
             let contextual = rows.contains { item in
-                item.memoryContext?.weatherKind != nil || item.scenePackId != nil || item.hasMemoryPhoto
+                item.memoryContext?.weatherKind != nil || item.scenePackId != nil || item.hasMemoryImages
             }
             guard contextual || rows.count >= 2 else { return nil }
             return LifeNarrativeSignal(

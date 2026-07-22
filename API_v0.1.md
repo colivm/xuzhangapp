@@ -315,6 +315,7 @@ ai-proxy 直连接口（仅服务端内部）使用 `{ "code": "...", "message":
 |----|------|
 | `daily` | 日复盘 |
 | `monthly` | 月复盘 |
+| `narrative_rewrite_batch` | 日/周/月脱敏事实轻润色；服务端重建提示词并校验证据 |
 | `quarterly` | 季度复盘（会员，ai-proxy 校验） |
 | `yearly` | 年度复盘（会员，ai-proxy 校验） |
 
@@ -325,8 +326,52 @@ ai-proxy 直连接口（仅服务端内部）使用 `{ "code": "...", "message":
 ```json
 {
   "summary": "今天总支出较平稳，主要集中在餐饮。",
-  "action": "明天把咖啡消费减少一次，预算会更轻松。",
-  "encourage": "你已经在认真管理消费了。"
+  "action": "今天的记录先停在这里。",
+  "encourage": "这些具体片段已经留在账本里。"
+}
+```
+
+`narrative_rewrite_batch` 不接受客户端自定义 messages，backend 会完整转发结构化 `factPacks`，ai-proxy 校验后自行生成模型提示词：
+
+```json
+{
+  "model": "deepseek-chat",
+  "feature": "narrative_rewrite_batch",
+  "tone": "gentle",
+  "factPacks": [
+    {
+      "scope": "week",
+      "periodKey": "2026-W30",
+      "facts": [
+        {
+          "id": "F1",
+          "role": "lead",
+          "kind": "rhythm",
+          "label": "记录节奏",
+          "statement": "这周有 5 笔记录，分布在 3 个记录日。",
+          "evidenceCount": 5
+        }
+      ]
+    }
+  ],
+  "temperature": 0.25
+}
+```
+
+成功返回：
+
+```json
+{
+  "rewrites": [
+    {
+      "scope": "week",
+      "periodKey": "2026-W30",
+      "headline": "这周留下几段记录",
+      "summary": "5 笔记录分布在 3 个记录日。",
+      "supportingLine": null,
+      "evidenceIDs": ["F1"]
+    }
+  ]
 }
 ```
 
@@ -365,16 +410,16 @@ curl -X POST https://api.xuzhangapp.com/v1/ai/insight/daily \
 
 ---
 
-### 6.3 iOS 客户端配置
+### 6.3 iOS 内置生产配置
 
 | 设置项 | 生产值 |
 |--------|--------|
 | 后端根地址 | `https://api.xuzhangapp.com` |
 | AI 接口地址 | `https://api.xuzhangapp.com/v1/ai/insight/daily` |
 | 开启远程 AI | ✅ |
-| AI API Key | 留空（走 backend JWT，无需客户端 Key） |
+| 上游 AI API Key | 仅服务器环境变量保存，App 不存储也不展示 |
 
-登录后 `AIReportService` 会自动在 `Authorization` 头附加 `Bearer <accessToken>`。
+上述地址不是用户设置项。正式 App 只展示联网整理开关；登录后 `AIReportService` 会自动在 `Authorization` 头附加 `Bearer <accessToken>`，上游 API Key 只存在于 ai-proxy 环境变量。
 
 ---
 

@@ -1,11 +1,12 @@
 {
   "name": "ai-proxy",
   "version": "1.0.0",
-  "description": "Minimal proxy for Zhipu AI daily insights",
+  "description": "Evidence-validated AI proxy for Xuzhang insights and narrative rewrites",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node --test *.test.js"
   },
   "keywords": [],
   "author": "",

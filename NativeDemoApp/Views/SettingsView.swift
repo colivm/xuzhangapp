@@ -1711,6 +1711,7 @@ struct SettingsView: View {
                     }
                 }
             }
+            settingHelper("影响今日小记的本地收束；开启联网整理后，也影响今日小记、月度整理和日/周/月轻润色。不影响 AI 指令台、宠物或生活线索。")
         case .privacy:
             sectionBody("默认本地存储，无需登录即可完整使用。开启云端备份后，仅同步金额、分类、备注、日期等账单字段与会员状态；记忆照片仍只保存在本机。")
             destructiveSettingsButton("清空所有记录") {
@@ -3260,6 +3261,8 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            settingHelper("影响今日小记的本地收束；开启联网整理后，也影响今日小记、月度整理和日/周/月轻润色。不影响 AI 指令台、宠物或生活线索。")
 
         }
         .webCardPadding()

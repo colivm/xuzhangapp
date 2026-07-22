@@ -80,6 +80,69 @@ def main() -> int:
             print(f"AICommandEngine unexpectedly depends on `{forbidden_dependency}`")
             return 1
 
+    report_source = (ROOT / "NativeDemoApp/Services/AIReportService.swift").read_text(encoding="utf-8")
+    proxy_source = (ROOT / "ai-proxy/server.js").read_text(encoding="utf-8")
+    contract_source = (ROOT / "ai-proxy/narrativeRewriteContract.js").read_text(encoding="utf-8")
+    legacy_contract_source = (ROOT / "ai-proxy/legacyInsightContract.js").read_text(encoding="utf-8")
+    feature_policy_source = (ROOT / "ai-proxy/aiFeaturePolicy.js").read_text(encoding="utf-8")
+    contract_test_source = (ROOT / "ai-proxy/narrativeRewriteContract.test.js").read_text(encoding="utf-8")
+    backend_source = (ROOT / "backend/src/server.js").read_text(encoding="utf-8")
+    narrative_contract_checks = {
+        "client sends structured fact packs only through a proxy": (
+            'body["factPacks"] = factPackPayload' in report_source
+            and "if !isDirectZhipu" in report_source
+            and 'body["feature"] = "narrative_rewrite_batch"' in report_source
+            and 'if isDirectZhipu' in report_source
+            and 'body["messages"]' in report_source
+        ),
+        "proxy validates narrative input before model use": (
+            'feature === "narrative_rewrite_batch"' in proxy_source
+            and "validateNarrativeFactPacks(req.body?.factPacks)" in proxy_source
+        ),
+        "proxy preserves the legacy insight response branch": (
+            ": normalizeInsightPayload(content)" in proxy_source
+            and "function normalizeInsightPayload" in legacy_contract_source
+        ),
+        "proxy owns the narrative prompt and fixed temperature": (
+            "buildNarrativeRewriteMessages(req.body?.factPacks, req.body?.tone)" in proxy_source
+            and '? 0.25' in proxy_source
+            and "function buildNarrativeRewriteMessages" in contract_source
+        ),
+        "proxy rejects unknown feature names before rate limiting": (
+            "normalizedSupportedFeature(req.body?.feature)" in proxy_source
+            and "UNSUPPORTED_FEATURE" in proxy_source
+            and "narrative_rewrite_batch" in feature_policy_source
+            and "return SUPPORTED_FEATURES.has(feature) ? feature : null" in feature_policy_source
+        ),
+        "proxy validates evidence scope period and numbers": all(
+            token in contract_source
+            for token in (
+                "ALLOWED_SCOPES",
+                "periodKey !== pack.periodKey",
+                "evidenceIDs.includes(leadFactID)",
+                "numbersIn(combined)",
+                "user text must remain redacted",
+                "photo fact must remain redacted",
+            )
+        ),
+        "proxy contract has executable legacy and narrative coverage": all(
+            token in contract_test_source
+            for token in (
+                "accepts a valid evidence-backed narrative rewrite batch",
+                "rejects unknown evidence, mismatched periods, and invented numbers",
+                "keeps the legacy daily insight response contract unchanged",
+            )
+        ),
+        "backend continues to forward the complete protected request body": (
+            'app.post("/v1/ai/insight/daily", requireAuth' in backend_source
+            and "body: JSON.stringify(req.body || {})" in backend_source
+        ),
+    }
+    for description, passed in narrative_contract_checks.items():
+        if not passed:
+            print(f"narrative AI proxy contract missing: {description}")
+            return 1
+
     print("ai_capability_lint: OK")
     return 0
 

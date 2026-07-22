@@ -53,6 +53,7 @@ final class AIReportService {
         guard let factPackText = String(data: encodedPacks, encoding: .utf8) else {
             throw AIReportServiceError.invalidResponse
         }
+        let factPackPayload = try JSONSerialization.jsonObject(with: encodedPacks)
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -76,15 +77,20 @@ final class AIReportService {
         只输出 JSON：{"rewrites":[{"scope":"day","periodKey":"...","headline":"...","summary":"...","supportingLine":null,"evidenceIDs":["F1"]}]}
         """
         let userContent = "脱敏事实包：\(factPackText)"
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model.isEmpty ? "doubao-seed-1-6-flash-250828" : model,
-            "feature": "narrative_rewrite_batch",
-            "messages": [
-                ["role": "system", "content": systemContent],
-                ["role": "user", "content": userContent]
-            ],
             "temperature": 0.25
         ]
+        if isDirectZhipu {
+            body["messages"] = [
+                ["role": "system", "content": systemContent],
+                ["role": "user", "content": userContent]
+            ]
+        } else {
+            body["feature"] = "narrative_rewrite_batch"
+            body["factPacks"] = factPackPayload
+            body["tone"] = tone.rawValue
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         request.timeoutInterval = 30
 

@@ -610,6 +610,27 @@ if ($LASTEXITCODE -ne 0) {
     throw "AI capability lint failed`n$aiCapabilityOutput"
 }
 Write-Output $aiCapabilityOutput
+$aiProxyLocation = Join-Path $PSScriptRoot '..\ai-proxy'
+Push-Location $aiProxyLocation
+try {
+    $aiProxyContractOutput = npm test --silent
+    $aiProxyContractExitCode = $LASTEXITCODE
+} finally {
+    Pop-Location
+}
+if ($aiProxyContractExitCode -ne 0) {
+    throw "Narrative AI proxy contract tests failed`n$aiProxyContractOutput"
+}
+Write-Output $aiProxyContractOutput
+Assert-Pattern 'NativeDemoApp/Services/LifeNarrativeAIRewriteService.swift' 'narrativeAIConfigurationDidChange|func removeAll\(\)|rewrites\.removeAll\(\)|func invalidatePendingRewrites\(\)|latestRequestID = UUID\(\)' 'narrative AI cache and in-flight request can be invalidated on configuration and account boundaries'
+Assert-Pattern 'NativeDemoApp/ViewModels/SettingsViewModel.swift' 'notifyNarrativeAIConfigurationChanged\(\)|var aiTone:|var useRemoteAI:|hasCloudSession = true|func logoutCloud\(\)|applyExpiredCloudSessionState' 'narrative AI settings and account changes invalidate cached remote copy'
+Assert-Pattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'publisher\(for: \.narrativeAIConfigurationDidChange\)|refreshNarrativeAIConfiguration\(\)|invalidatePendingRewrites\(\)|narrativeAIPreparationRevision = -1|scheduleNarrativeAIPrecompute\(now: Date\(\)\)' 'narrative AI configuration changes cancel stale work and reschedule once'
+Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'testRewriteStoreRejectsOldRevisionAndPublishesCurrentResult|store\.removeAll\(\)|XCTAssertNil\(store\.rewrite\(for: pack\.key\)\)' 'narrative AI cache invalidation XCTest coverage'
+Assert-Pattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'dailyInsightSnapshotSignature\([\s\S]{0,500}settings: AppSettings|tone=\\\(settings\.aiTone\.rawValue\)|proxy-signed-out|proxy-ready|direct-unavailable|direct-ready' 'daily insight cache identity follows tone remote switch and credential state'
+Assert-Pattern 'NativeDemoApp/Views/SettingsView.swift' '影响今日小记的本地收束；开启联网整理后，也影响今日小记、月度整理和日/周/月轻润色。不影响 AI 指令台、宠物或生活线索。' 'review tone setting explains its real product scope'
+Assert-NoPattern 'NativeDemoApp/Services/LifeNarrativePlanningService.swift' 'hasMemoryPhoto' 'narrative planner uses the real multi-photo capability property'
+Assert-Pattern 'NativeDemoApp/Services/LifeNarrativePlanningService.swift' 'contains\(where: \\.hasMemoryImages\)|compactMap \{ kind, rows -> LifeNarrativeSignal\? in' 'narrative planner photo capability and compactMap result types are compiler explicit'
+Assert-Pattern 'NativeDemoApp/Services/LifeNarrativeAIRewriteService.swift' 'let accepted: \[LifeNarrativeAIRewrite\] = response\.rewrites\.compactMap \{ candidate -> LifeNarrativeAIRewrite\? in' 'narrative rewrite compactMap result type is compiler explicit'
 $accessibilityOutput = python scripts/accessibility_lint.py
 if ($LASTEXITCODE -ne 0) {
     throw "Accessibility lint failed`n$accessibilityOutput"

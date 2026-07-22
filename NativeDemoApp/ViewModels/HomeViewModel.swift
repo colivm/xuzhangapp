@@ -804,6 +804,7 @@ final class HomeViewModel: ObservableObject {
     private(set) var itemDerivedCacheRevision = -1
     private var narrativeAIPreparationTask: Task<Void, Never>?
     private var narrativeAIPreparationRevision = -1
+    private var narrativeAIConfigurationCancellable: AnyCancellable?
     private var localLedgerWritesBlocked = false
 
     init() {
@@ -865,6 +866,13 @@ final class HomeViewModel: ObservableObject {
             .appOpened,
             props: [.ledgerSizeBucket: AnalyticsService.countBucket(for: items.count)]
         )
+        narrativeAIConfigurationCancellable = NotificationCenter.default
+            .publisher(for: .narrativeAIConfigurationDidChange)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.refreshNarrativeAIConfiguration()
+                }
+            }
         scheduleNarrativeAIPrecompute(now: initialDerivedNow)
     }
 
@@ -2519,7 +2527,11 @@ final class HomeViewModel: ObservableObject {
     func generateDailyInsight(userName: String, settings: AppSettings) async {
         let key = Self.dayKey(for: .now)
         let todayItems = items.filter { Calendar.current.isDateInToday($0.createdAt) }
-        let snapshotSignature = dailyInsightSnapshotSignature(for: todayItems, dayKey: key)
+        let snapshotSignature = dailyInsightSnapshotSignature(
+            for: todayItems,
+            dayKey: key,
+            settings: settings
+        )
         if let existing = insights.first(where: { $0.dayKey == key }),
            existing.snapshotSignature == snapshotSignature {
             return
@@ -2825,6 +2837,17 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
+    private func refreshNarrativeAIConfiguration() {
+        narrativeAIPreparationTask?.cancel()
+        narrativeAIPreparationRevision = -1
+        narrativeAIPreparationTask = Task { @MainActor [weak self] in
+            await LifeNarrativeAIPrecomputeCoordinator.shared.invalidatePendingRewrites()
+            guard let self, !Task.isCancelled else { return }
+            self.narrativeAIPreparationTask = nil
+            self.scheduleNarrativeAIPrecompute(now: Date())
+        }
+    }
+
     private func emitRouteGuidance(_ guidance: PlaybackRouteGuidance) {
         let key = routeGuidanceHandledKey(for: guidance)
         guard !emittedRouteGuidanceKeys.contains(key) else { return }
@@ -3113,7 +3136,11 @@ final class HomeViewModel: ObservableObject {
         return formatter.string(from: date)
     }
 
-    private func dailyInsightSnapshotSignature(for todayItems: [HomeItem], dayKey: String) -> String {
+    private func dailyInsightSnapshotSignature(
+        for todayItems: [HomeItem],
+        dayKey: String,
+        settings: AppSettings
+    ) -> String {
         let rows = todayItems
             .filter { $0.amount > 0 }
             .sorted { $0.id.uuidString < $1.id.uuidString }
@@ -3126,7 +3153,21 @@ final class HomeViewModel: ObservableObject {
                     String(Int(item.updatedAt.timeIntervalSince1970))
                 ].joined(separator: "#")
             }
-        return ([dayKey, "\(rows.count)"] + rows).joined(separator: "|")
+        let endpoint = settings.aiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isInternalDirectMode = endpoint.isEmpty || endpoint.contains("open.bigmodel.cn")
+        let remoteState: String
+        if !settings.useRemoteAI {
+            remoteState = "disabled"
+        } else if isInternalDirectMode {
+            remoteState = KeychainService.loadAIAPIKey().isEmpty ? "direct-unavailable" : "direct-ready"
+        } else {
+            remoteState = KeychainService.loadAccessToken().isEmpty ? "proxy-signed-out" : "proxy-ready"
+        }
+        let presentationIdentity = [
+            "tone=\(settings.aiTone.rawValue)",
+            "remote=\(remoteState)"
+        ]
+        return ([dayKey, "\(rows.count)"] + presentationIdentity + rows).joined(separator: "|")
     }
 
     private nonisolated static func monthKey(for date: Date) -> String {
