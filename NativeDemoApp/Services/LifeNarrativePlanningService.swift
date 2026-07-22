@@ -65,6 +65,10 @@ struct LifeNarrativePlan: Equatable {
     var markLabels: [String] {
         signalsByRole[.mark, default: []].map(\.label)
     }
+
+    var hasNarrativeLead: Bool {
+        leadSignalID != nil && !(signalsByRole[.lead]?.isEmpty ?? true)
+    }
 }
 
 struct LifeNarrativePlanningInput {
@@ -74,6 +78,25 @@ struct LifeNarrativePlanningInput {
     let previousItems: [HomeItem]
     let now: Date
     let recentLeadSignalIDs: Set<String>
+    let relationshipEcho: LifeNarrativeEcho?
+
+    init(
+        scope: LifeNarrativeScope,
+        sourceRevision: Int,
+        items: [HomeItem],
+        previousItems: [HomeItem],
+        now: Date,
+        recentLeadSignalIDs: Set<String>,
+        relationshipEcho: LifeNarrativeEcho? = nil
+    ) {
+        self.scope = scope
+        self.sourceRevision = sourceRevision
+        self.items = items
+        self.previousItems = previousItems
+        self.now = now
+        self.recentLeadSignalIDs = recentLeadSignalIDs
+        self.relationshipEcho = relationshipEcho
+    }
 }
 
 enum LifeNarrativeSignalPolicy {
@@ -86,6 +109,11 @@ enum LifeNarrativeSignalPolicy {
         "话费", "流量包", "手机充值", "宽带", "水费", "电费", "燃气费", "物业费",
         "房租", "充值", "停车", "过路费", "高速费", "会员续费", "自动续费", "订阅",
         "缴费", "账单还款"
+    ]
+    private static let specificExpressionTerms = [
+        "第一次", "终于", "好久没", "重新", "恢复", "回到", "回家", "到家", "出发", "到达",
+        "见面", "聚餐", "生日", "纪念", "演出", "展览", "比赛", "旅行", "毕业", "搬家",
+        "晚归", "加班", "陪", "带着", "想念", "喜欢", "开心", "难过", "好累"
     ]
 
     static func makePlan(_ input: LifeNarrativePlanningInput) -> LifeNarrativePlan {
@@ -100,7 +128,7 @@ enum LifeNarrativeSignalPolicy {
             $0.amount > 0 && $0.draftMeta?.status != .pending && !isSensitive($0)
         }
         let activeDays = Set(rows.map { Calendar.current.startOfDay(for: $0.createdAt) }).count
-        let maturity = maturity(
+        let baseMaturity = maturity(
             recordCount: rows.count,
             activeDays: activeDays,
             hasPhoto: rows.contains { photoNarrativeValue(for: $0) >= 65 }
@@ -122,21 +150,40 @@ enum LifeNarrativeSignalPolicy {
 
         let narrativeRows = rows.filter { !isAdministrativeRecord($0) }
         let previousNarrativeRows = previousRows.filter { !isAdministrativeRecord($0) }
+        let comparablePreviousNarrativeRows = comparablePreviousRows(
+            previousNarrativeRows,
+            scope: input.scope,
+            now: input.now
+        )
         let administrativeRows = rows.filter { isAdministrativeRecord($0) }
         let previousAdministrativeRows = previousRows.filter { isAdministrativeRecord($0) }
         let sceneGroups = Dictionary(grouping: narrativeRows) { LifeSceneSemanticService.classify($0).kind }
         let previousSceneGroups = Dictionary(grouping: previousNarrativeRows) {
             LifeSceneSemanticService.classify($0).kind
         }
+        let comparablePreviousSceneGroups = Dictionary(grouping: comparablePreviousNarrativeRows) {
+            LifeSceneSemanticService.classify($0).kind
+        }
         var candidates: [LifeNarrativeSignal] = []
 
+        if let relationship = relationshipSignal(
+            from: input.relationshipEcho,
+            sourceRevision: input.sourceRevision,
+            currentRows: rows
+        ) {
+            candidates.append(relationship)
+        }
         if let userSignal = userTextSignal(from: narrativeRows) {
             candidates.append(userSignal)
         }
         if let photoSignal = photoSignal(from: narrativeRows) {
             candidates.append(photoSignal)
         }
-        candidates.append(contentsOf: changeSignals(current: sceneGroups, previous: previousSceneGroups, scope: input.scope))
+        candidates.append(contentsOf: changeSignals(
+            current: sceneGroups,
+            previous: comparablePreviousSceneGroups,
+            scope: input.scope
+        ))
         if let administrativeEvidence = administrativeEvidenceSignal(
             current: administrativeRows,
             previous: previousAdministrativeRows,
@@ -181,7 +228,6 @@ enum LifeNarrativeSignalPolicy {
             }
 
         let lead = ranked.first(where: isEligibleLead)
-            ?? ranked.first(where: { $0.kind == .rhythm })
         let support = ranked.first { signal in
             guard let lead,
                   signal.id != lead.id,
@@ -189,6 +235,10 @@ enum LifeNarrativeSignalPolicy {
                   signal.narrativeValue >= 55,
                   !signal.isAdministrative,
                   normalized(signal.fact) != normalized(lead.fact) else {
+                return false
+            }
+            if lead.id.hasPrefix("echo:"),
+               signal.kind == .structuredScene || signal.kind == .rhythm {
                 return false
             }
             return signalsAreCoherent(lead, signal)
@@ -199,8 +249,7 @@ enum LifeNarrativeSignalPolicy {
             scope: input.scope,
             rows: rows,
             activeDays: activeDays,
-            lead: lead,
-            marks: marks
+            lead: lead
         )
 
         var roles: [LifeNarrativeSignalRole: [LifeNarrativeSignal]] = [:]
@@ -222,7 +271,7 @@ enum LifeNarrativeSignalPolicy {
         return LifeNarrativePlan(
             scope: input.scope,
             sourceRevision: input.sourceRevision,
-            maturity: maturity,
+            maturity: lead?.id.hasPrefix("echo:") == true ? .echoEligible : baseMaturity,
             headline: headline,
             summary: summary,
             supportingLine: support?.fact,
@@ -256,15 +305,15 @@ enum LifeNarrativeSignalPolicy {
         }
         switch signal.kind {
         case .userText:
-            return signal.narrativeValue >= 70
+            return signal.informationGain >= 82 && signal.narrativeValue >= 82
         case .photo:
             return signal.narrativeValue >= 65
         case .change:
             return signal.informationGain >= 70 && signal.narrativeValue >= 55
         case .structuredScene:
-            return signal.narrativeValue >= 58
+            return false
         case .rhythm:
-            return true
+            return false
         case .stableMark:
             return false
         }
@@ -302,8 +351,8 @@ enum LifeNarrativeSignalPolicy {
     }
 
     private static func userTextSignal(from rows: [HomeItem]) -> LifeNarrativeSignal? {
-        rows.reversed().compactMap { item -> LifeNarrativeSignal? in
-            guard item.userEditedTitle == true,
+        rows.compactMap { item -> (signal: LifeNarrativeSignal, value: Int, date: Date)? in
+            guard isHighConfidenceManualExpressionSource(item),
                   !isSensitive(item),
                   !isAdministrative(
                       item,
@@ -314,21 +363,84 @@ enum LifeNarrativeSignalPolicy {
                 return nil
             }
             let title = compact(item.title, limit: 20)
-            return LifeNarrativeSignal(
-                id: "user:\(item.id.uuidString)",
-                kind: .userText,
-                label: title,
-                fact: "\(item.createdAt.zhBillDateOnly)记下了「\(title)」。",
-                evidenceItemIDs: [item.id],
-                confidence: 100,
-                informationGain: 100,
-                narrativeValue: 100,
-                representativeness: 24,
-                isAdministrative: false,
-                isSensitive: false,
-                isStable: false
+            let value = userExpressionValue(for: item)
+            return (
+                LifeNarrativeSignal(
+                    id: "user:\(item.id.uuidString)",
+                    kind: .userText,
+                    label: title,
+                    fact: "\(item.createdAt.zhBillDateOnly)记下了「\(title)」。",
+                    evidenceItemIDs: [item.id],
+                    confidence: 100,
+                    informationGain: value,
+                    narrativeValue: value,
+                    representativeness: 24,
+                    isAdministrative: false,
+                    isSensitive: false,
+                    isStable: false
+                ),
+                value,
+                item.createdAt
             )
-        }.first
+        }
+        .sorted { lhs, rhs in
+            if lhs.value == rhs.value { return lhs.date > rhs.date }
+            return lhs.value > rhs.value
+        }
+        .first?.signal
+    }
+
+    private static func relationshipSignal(
+        from echo: LifeNarrativeEcho?,
+        sourceRevision: Int,
+        currentRows: [HomeItem]
+    ) -> LifeNarrativeSignal? {
+        guard let echo,
+              echo.sourceRevision == sourceRevision,
+              echo.currentDistinctDayCount >= 1 else {
+            return nil
+        }
+        let currentIDs = Set(currentRows.map(\.id))
+        let currentEvidenceIDs = echo.currentEvidenceItemIDs.filter { currentIDs.contains($0) }
+        guard currentEvidenceIDs.count >= 1 else { return nil }
+
+        let strength: (informationGain: Int, narrativeValue: Int)
+        switch echo.kind {
+        case .newContextPair:
+            guard echo.currentDistinctDayCount >= 2,
+                  (echo.baselinePeriodCount ?? 0) >= 4 else { return nil }
+            strength = (100, 96)
+        case .contextReturn:
+            guard echo.currentDistinctDayCount >= 2,
+                  (echo.historicalDistinctDayCount ?? 0) >= 2,
+                  (echo.periodGap ?? 0) >= 2 else { return nil }
+            strength = (98, 94)
+        case .returnAfterGap:
+            guard echo.currentDistinctDayCount >= 2,
+                  (echo.historicalDistinctDayCount ?? 0) >= 2 else { return nil }
+            strength = (92, 86)
+        case .repeatRhythm:
+            guard (echo.baselinePeriodCount ?? 0) >= 2 else { return nil }
+            strength = (88, 78)
+        case .comparableChange:
+            guard echo.baselineCount != nil else { return nil }
+            strength = (84, 70)
+        }
+
+        return LifeNarrativeSignal(
+            id: echo.id,
+            kind: .change,
+            label: echo.label,
+            fact: echo.line,
+            evidenceItemIDs: currentEvidenceIDs + echo.historicalEvidenceItemIDs,
+            confidence: 100,
+            informationGain: strength.informationGain,
+            narrativeValue: strength.narrativeValue,
+            representativeness: min(96, 52 + echo.currentDistinctDayCount * 10),
+            isAdministrative: false,
+            isSensitive: false,
+            isStable: false
+        )
     }
 
     private static func photoSignal(from rows: [HomeItem]) -> LifeNarrativeSignal? {
@@ -373,13 +485,14 @@ enum LifeNarrativeSignalPolicy {
             guard let sample = rows.last, !isSensitive(sample) else { return nil }
             let previousRows = previous[kind, default: []]
             let delta = rows.count - previousRows.count
+            let relativeChange = Double(abs(delta)) / Double(max(previousRows.count, 1))
             guard rows.count >= 2,
-                  previousRows.isEmpty || abs(delta) >= 2 else { return nil }
+                  !previousRows.isEmpty,
+                  abs(delta) >= 2,
+                  relativeChange >= 0.5 else { return nil }
             let signal = LifeSceneSemanticService.classify(sample)
             let fact: String
-            if previousRows.isEmpty {
-                fact = "\(signal.label)在\(scope.periodLead)新出现了 \(rows.count) 笔。"
-            } else if delta > 0 {
+            if delta > 0 {
                 fact = "\(signal.label)比上一段多了 \(delta) 笔。"
             } else {
                 fact = "\(signal.label)比上一段少了 \(-delta) 笔。"
@@ -398,6 +511,41 @@ enum LifeNarrativeSignalPolicy {
                 isSensitive: false,
                 isStable: false
             )
+        }
+    }
+
+    private static func comparablePreviousRows(
+        _ rows: [HomeItem],
+        scope: LifeNarrativeScope,
+        now: Date
+    ) -> [HomeItem] {
+        guard scope != .day else { return rows }
+        let calendar: Calendar = {
+            guard scope == .week else { return Calendar.current }
+            var value = Calendar(identifier: .iso8601)
+            value.timeZone = Calendar.current.timeZone
+            value.firstWeekday = 2
+            return value
+        }()
+        let component: Calendar.Component = scope == .week ? .weekOfYear : .month
+        guard let currentStart = calendar.dateInterval(of: component, for: now)?.start else {
+            return rows
+        }
+        let elapsedDays = calendar.dateComponents(
+            [.day],
+            from: currentStart,
+            to: calendar.startOfDay(for: now)
+        ).day ?? 0
+        return rows.filter { row in
+            guard let rowStart = calendar.dateInterval(of: component, for: row.createdAt)?.start else {
+                return false
+            }
+            let rowOffset = calendar.dateComponents(
+                [.day],
+                from: rowStart,
+                to: calendar.startOfDay(for: row.createdAt)
+            ).day ?? Int.max
+            return rowOffset <= elapsedDays
         }
     }
 
@@ -520,18 +668,29 @@ enum LifeNarrativeSignalPolicy {
         activeDays: Int,
         lead: LifeNarrativeSignal?
     ) -> String {
-        if rows.count == 1 {
-            return "\(scope.periodLead)只留下一笔记录"
+        guard let lead else { return periodRecordTitle(scope) }
+        if lead.id.hasPrefix("echo:") {
+            if lead.id.contains(":context-return:") {
+                return "\(scope.periodLead)晚间通勤重新出现了"
+            }
+            if lead.id.contains(":new-pair:") {
+                return "\(scope.periodLead)，咖啡和晚间通勤有了新组合"
+            }
+            if lead.id.contains(":return:") {
+                return "\(scope.periodLead)，\(lead.label)隔了一段时间再次出现"
+            }
+            if lead.id.contains(":change:") {
+                return "\(scope.periodLead)，\(lead.label)和上一段有了可比变化"
+            }
+            if lead.id.contains(":repeat:") {
+                return "\(scope.periodLead)，\(lead.label)留下了重复节奏"
+            }
         }
-        switch lead?.kind {
-        case .userText:
-            return "\(scope.periodLead)有一句具体的话"
-        case .photo:
-            return "\(scope.periodLead)留下了一张具体的照片"
-        case .change:
-            return "\(scope.periodLead)有一处明显变化"
-        default:
-            return "\(scope.periodLead)有 \(max(activeDays, 1)) 个记录日"
+        switch lead.kind {
+        case .userText, .photo, .change:
+            return withoutTerminalPunctuation(lead.fact)
+        case .structuredScene, .rhythm, .stableMark:
+            return periodRecordTitle(scope)
         }
     }
 
@@ -539,19 +698,12 @@ enum LifeNarrativeSignalPolicy {
         scope: LifeNarrativeScope,
         rows: [HomeItem],
         activeDays: Int,
-        lead: LifeNarrativeSignal?,
-        marks: [LifeNarrativeSignal]
+        lead: LifeNarrativeSignal?
     ) -> String {
-        guard let lead else {
-            return rhythmFact(scope: scope, recordCount: rows.count, activeDays: activeDays)
+        if let lead, lead.id.hasPrefix("echo:") {
+            return lead.fact
         }
-        if lead.kind == .rhythm || lead.kind == .stableMark {
-            let rhythm = rhythmFact(scope: scope, recordCount: rows.count, activeDays: activeDays)
-            let markText = marks.prefix(2).map(\.label).joined(separator: "、")
-            guard rows.count > 1, !markText.isEmpty else { return rhythm }
-            return "\(rhythm)\(markText)留在生活线索里。"
-        }
-        return lead.fact
+        return rhythmFact(scope: scope, recordCount: rows.count, activeDays: activeDays)
     }
 
     private static func signalsAreCoherent(
@@ -575,14 +727,55 @@ enum LifeNarrativeSignalPolicy {
         switch item.memoryAnchorRole {
         case .moment: return 96
         case .place: return 90
-        case .object: return item.userEditedTitle == true ? 82 : 70
+        case .object: return userExpressionValue(for: item) >= 82 ? 82 : 70
         case .careRecord: return 68
         case .receipt: return 18
         case nil:
             let scene = LifeSceneSemanticService.classify(item)
             let base = sceneNarrativeValue(scene.kind, administrative: false)
-            return item.userEditedTitle == true ? max(base, 82) : 18
+            return userExpressionValue(for: item) >= 82 ? max(base, 82) : 18
         }
+    }
+
+    private static func userExpressionValue(for item: HomeItem) -> Int {
+        guard isHighConfidenceManualExpressionSource(item) else { return 0 }
+        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard EchoAnchorService.shared.isEligibleLifeTraceTitle(title, item: item),
+              UserContentRiskService.shared.isAllowedManualNote(title, allowEmpty: false) else {
+            return 0
+        }
+        var value = 58
+        if specificExpressionTerms.contains(where: { title.localizedCaseInsensitiveContains($0) }) {
+            value += 30
+        }
+        if let caption = item.memoryAnchorCaption?.trimmingCharacters(in: .whitespacesAndNewlines),
+           caption.count >= 4,
+           UserContentRiskService.shared.isAllowedManualNote(caption, allowEmpty: false) {
+            value += 14
+        }
+        if item.memoryAnchorRole == .moment || item.memoryAnchorRole == .place {
+            value += 12
+        }
+        if item.merchantBrandId != nil { value -= 8 }
+        return min(max(value, 0), 96)
+    }
+
+    private static func isHighConfidenceManualExpressionSource(_ item: HomeItem) -> Bool {
+        item.source == .manual
+            && item.userEditedTitle == true
+            && item.userEditedCategory != true
+    }
+
+    private static func periodRecordTitle(_ scope: LifeNarrativeScope) -> String {
+        switch scope {
+        case .day: return "今天的记录"
+        case .week: return "本周记录"
+        case .month: return "本月记录"
+        }
+    }
+
+    private static func withoutTerminalPunctuation(_ text: String) -> String {
+        text.trimmingCharacters(in: CharacterSet(charactersIn: "。！？!?"))
     }
 
     private static func sceneNarrativeValue(

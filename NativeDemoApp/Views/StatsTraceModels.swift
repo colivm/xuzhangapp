@@ -409,13 +409,13 @@ struct TraceClueSnapshot {
     let freeInsightRemaining: Int
 
     var narrativeHeadline: String? {
-        guard let narrativePlan else { return nil }
-        return narrativeRewrite?.headline ?? narrativePlan.headline
+        guard narrativePlan != nil else { return nil }
+        return insight.leadQuestion
     }
 
     var narrativeSummary: String? {
-        guard let narrativePlan else { return nil }
-        return narrativeRewrite?.summary ?? narrativePlan.summary
+        guard narrativePlan != nil else { return nil }
+        return insight.previewLine
     }
 }
 

@@ -2870,6 +2870,7 @@ private struct WeeklyStoryShareCardView: View {
             let factualHeadline = Self.safeLine(payload.headline)
             let recordHeadline = "\(period)，\(payload.recordCount)笔记录"
             let narrativeLeadKind = payload.narrativePlan?.signalsByRole[.lead]?.first?.kind
+            let isRelationshipLead = payload.narrativePlan?.leadSignalID?.hasPrefix("echo:") == true
             let narrativeHeadline = Self.trustedLine(payload.narrativeRewrite?.headline)
                 ?? Self.trustedLine(payload.narrativePlan?.headline)
             let narrativeSummary = Self.trustedLine(payload.narrativeRewrite?.summary)
@@ -2880,7 +2881,9 @@ private struct WeeklyStoryShareCardView: View {
                 let labels = plan.markLabels.prefix(2).joined(separator: "、")
                 return labels.isEmpty ? nil : "反复出现的生活线索：\(labels)。"
             }
-            if let narrativeLeadKind,
+            if isRelationshipLead, let narrativeHeadline {
+                title = narrativeHeadline
+            } else if let narrativeLeadKind,
                [.userText, .photo, .change].contains(narrativeLeadKind),
                let narrativeSummary {
                 title = narrativeSummary

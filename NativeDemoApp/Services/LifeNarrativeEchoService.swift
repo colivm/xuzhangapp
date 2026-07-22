@@ -4,6 +4,8 @@ enum LifeNarrativeEchoKind: String, Equatable {
     case repeatRhythm
     case returnAfterGap
     case comparableChange
+    case contextReturn
+    case newContextPair
 }
 
 struct LifeNarrativeEcho: Equatable {
@@ -18,6 +20,9 @@ struct LifeNarrativeEcho: Equatable {
     let currentCount: Int
     let baselineCount: Int?
     let periodGap: Int?
+    let currentDistinctDayCount: Int
+    let historicalDistinctDayCount: Int?
+    let baselinePeriodCount: Int?
 }
 
 struct LifeNarrativeEchoInput {
@@ -40,12 +45,25 @@ enum LifeNarrativeEchoPolicy {
         let score: Int
     }
 
+    private struct PairDayEvidence {
+        let day: Date
+        let lateCommutes: [HomeItem]
+        let coffees: [HomeItem]
+    }
+
+    private enum PairOrder {
+        case coffeeAfterCommute
+        case commuteAfterCoffee
+        case mixed
+    }
+
     static func makeEcho(
         _ input: LifeNarrativeEchoInput,
         calendar baseCalendar: Calendar = .current
     ) -> LifeNarrativeEcho? {
         let calendar = periodCalendar(scope: input.scope, base: baseCalendar)
         let safeItems = LifeNarrativeSignalPolicy.publishableItems(from: input.items)
+            .filter { !LifeNarrativeSignalPolicy.isAdministrativeRecord($0) }
             .filter { $0.createdAt <= input.now }
             .sorted { lhs, rhs in
                 if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
@@ -67,6 +85,25 @@ enum LifeNarrativeEchoPolicy {
         }
         var candidates: [Candidate] = []
 
+        if let candidate = contextReturnCandidate(
+            scope: input.scope,
+            sourceRevision: input.sourceRevision,
+            currentRows: currentRows,
+            bucketed: bucketed,
+            calendar: calendar
+        ) {
+            candidates.append(candidate)
+        }
+        if let candidate = newContextPairCandidate(
+            scope: input.scope,
+            sourceRevision: input.sourceRevision,
+            currentRows: currentRows,
+            bucketed: bucketed,
+            calendar: calendar
+        ) {
+            candidates.append(candidate)
+        }
+
         for (kind, rows) in currentGroups where kind != .general {
             let scene = LifeSceneSemanticService.classify(rows.last!)
             let signalID = "scene:\(kind.rawValue)"
@@ -80,10 +117,12 @@ enum LifeNarrativeEchoPolicy {
             if let candidate = returnCandidate(
                 scope: input.scope,
                 sourceRevision: input.sourceRevision,
+                signalKind: kind,
                 signalID: signalID,
                 label: scene.label,
                 currentRows: rows,
-                historyByDistance: historyByDistance
+                historyByDistance: historyByDistance,
+                calendar: calendar
             ) {
                 candidates.append(candidate)
             }
@@ -98,7 +137,8 @@ enum LifeNarrativeEchoPolicy {
                     scope: input.scope,
                     now: input.now,
                     calendar: calendar
-                )
+                ),
+                calendar: calendar
             ) {
                 candidates.append(candidate)
             }
@@ -129,16 +169,21 @@ enum LifeNarrativeEchoPolicy {
     private static func returnCandidate(
         scope: LifeNarrativeScope,
         sourceRevision: Int,
+        signalKind: LifeSceneKind,
         signalID: String,
         label: String,
         currentRows: [HomeItem],
-        historyByDistance: [Int: [HomeItem]]
+        historyByDistance: [Int: [HomeItem]],
+        calendar: Calendar
     ) -> Candidate? {
-        guard historyByDistance[1, default: []].isEmpty,
+        guard signalKind != .coffee,
+              distinctDayCount(currentRows, calendar: calendar) >= 2,
+              historyByDistance[1, default: []].isEmpty,
               let distance = (2...12).first(where: { !historyByDistance[$0, default: []].isEmpty }) else {
             return nil
         }
         let historicalRows = historyByDistance[distance, default: []]
+        guard distinctDayCount(historicalRows, calendar: calendar) >= 2 else { return nil }
         let gap = distance - 1
         let unit = periodUnit(scope, count: gap)
         let line = "\(label)隔了 \(gap) \(unit)再次出现：这次 \(currentRows.count) 笔，上一次在 \(historicalRows.last?.createdAt.zhBillDateOnly ?? "更早以前")。"
@@ -154,7 +199,10 @@ enum LifeNarrativeEchoPolicy {
                 historicalEvidenceItemIDs: historicalRows.map(\.id),
                 currentCount: currentRows.count,
                 baselineCount: historicalRows.count,
-                periodGap: gap
+                periodGap: gap,
+                currentDistinctDayCount: distinctDayCount(currentRows, calendar: calendar),
+                historicalDistinctDayCount: distinctDayCount(historicalRows, calendar: calendar),
+                baselinePeriodCount: nil
             ),
             score: 320 + min(gap, 8) * 4 + min(currentRows.count, 6)
         )
@@ -166,7 +214,8 @@ enum LifeNarrativeEchoPolicy {
         signalID: String,
         label: String,
         currentRows: [HomeItem],
-        previousRows: [HomeItem]
+        previousRows: [HomeItem],
+        calendar: Calendar
     ) -> Candidate? {
         guard !previousRows.isEmpty else { return nil }
         let delta = currentRows.count - previousRows.count
@@ -186,7 +235,10 @@ enum LifeNarrativeEchoPolicy {
                 historicalEvidenceItemIDs: previousRows.map(\.id),
                 currentCount: currentRows.count,
                 baselineCount: previousRows.count,
-                periodGap: 0
+                periodGap: 0,
+                currentDistinctDayCount: distinctDayCount(currentRows, calendar: calendar),
+                historicalDistinctDayCount: distinctDayCount(previousRows, calendar: calendar),
+                baselinePeriodCount: 1
             ),
             score: 270 + min(abs(delta), 10) * 3
         )
@@ -238,10 +290,224 @@ enum LifeNarrativeEchoPolicy {
                 historicalEvidenceItemIDs: historicalRows.map(\.id),
                 currentCount: currentRows.count,
                 baselineCount: historicalRows.count,
-                periodGap: nil
+                periodGap: nil,
+                currentDistinctDayCount: distinctDayCount(currentRows, calendar: calendar),
+                historicalDistinctDayCount: distinctDayCount(historicalRows, calendar: calendar),
+                baselinePeriodCount: rhythm.distances.count
             ),
             score: 220 + min(periodCount, 8) * 3
         )
+    }
+
+    private static func contextReturnCandidate(
+        scope: LifeNarrativeScope,
+        sourceRevision: Int,
+        currentRows: [HomeItem],
+        bucketed: [Int: [HomeItem]],
+        calendar: Calendar
+    ) -> Candidate? {
+        guard scope == .week else { return nil }
+        let currentCommutes = currentRows.filter { isHighConfidenceLateCommute($0, calendar: calendar) }
+        let currentDays = narrativeDays(for: currentCommutes, calendar: calendar)
+        guard currentDays.count >= 2 else { return nil }
+
+        let previousCommutes = bucketed[1, default: []].filter {
+            isHighConfidenceLateCommute($0, calendar: calendar)
+        }
+        guard previousCommutes.isEmpty else { return nil }
+
+        let historicalMatch = (2...12).compactMap { distance -> (Int, [HomeItem])? in
+            let rows = bucketed[distance, default: []].filter {
+                isHighConfidenceLateCommute($0, calendar: calendar)
+            }
+            return narrativeDays(for: rows, calendar: calendar).count >= 2
+                ? (distance, rows)
+                : nil
+        }.first
+        guard let (distance, historicalRows) = historicalMatch else { return nil }
+
+        let historicalDays = narrativeDays(for: historicalRows, calendar: calendar)
+        let historicalRun = longestConsecutiveDayRun(historicalDays, calendar: calendar)
+        let historicalLine = historicalRun >= 2
+            ? "上一次连续 \(historicalRun) 天记下晚归，是 \(distance) 周前。"
+            : "上一次一周里有 \(historicalDays.count) 天留下晚间通勤，是 \(distance) 周前。"
+        let line = "这周晚间通勤重新出现了。\(historicalLine)"
+
+        return Candidate(
+            echo: LifeNarrativeEcho(
+                sourceRevision: sourceRevision,
+                id: "echo:week:context-return:late-commute",
+                kind: .contextReturn,
+                signalID: "context:late-commute",
+                label: "晚间通勤",
+                line: line,
+                currentEvidenceItemIDs: currentCommutes.map(\.id),
+                historicalEvidenceItemIDs: historicalRows.map(\.id),
+                currentCount: currentCommutes.count,
+                baselineCount: historicalRows.count,
+                periodGap: distance,
+                currentDistinctDayCount: currentDays.count,
+                historicalDistinctDayCount: historicalDays.count,
+                baselinePeriodCount: distance
+            ),
+            score: 480 + min(distance, 8) * 4 + min(currentDays.count, 4) * 5
+        )
+    }
+
+    private static func newContextPairCandidate(
+        scope: LifeNarrativeScope,
+        sourceRevision: Int,
+        currentRows: [HomeItem],
+        bucketed: [Int: [HomeItem]],
+        calendar: Calendar
+    ) -> Candidate? {
+        guard scope == .week else { return nil }
+        let currentPairs = pairDayEvidence(in: currentRows, calendar: calendar)
+        guard currentPairs.count >= 2 else { return nil }
+
+        let activeHistory = (1...8).compactMap { distance -> (distance: Int, rows: [HomeItem])? in
+            let rows = bucketed[distance, default: []]
+            return rows.isEmpty ? nil : (distance, rows)
+        }
+        guard activeHistory.count >= 4,
+              !activeHistory.contains(where: {
+                  !pairDayEvidence(in: $0.rows, calendar: calendar).isEmpty
+              }) else {
+            return nil
+        }
+
+        let order = pairOrder(for: currentPairs)
+        let days = currentPairs.map(\.day).sorted()
+        let consecutiveCount = longestConsecutiveDayRun(days, calendar: calendar)
+        let dayPhrase = consecutiveCount == days.count
+            ? "连续 \(days.count) 天"
+            : "\(days.count) 天"
+        let relationLine: String
+        switch order {
+        case .coffeeAfterCommute:
+            relationLine = "它在\(dayPhrase)的晚间通勤之后又出现了"
+        case .commuteAfterCoffee:
+            relationLine = "有咖啡的\(dayPhrase)都留下了晚间通勤"
+        case .mixed:
+            relationLine = "它和晚间通勤在\(dayPhrase)里一起出现"
+        }
+        let line = "咖啡还是生活线索，但这周真正不同的是，\(relationLine)。这种组合在近 \(activeHistory.count) 个有记录的周里首次出现。"
+        let currentEvidence = currentPairs.flatMap { $0.lateCommutes + $0.coffees }
+        let baselineEvidence = activeHistory.compactMap { $0.rows.last }
+        let orderID: String
+        switch order {
+        case .coffeeAfterCommute: orderID = "coffee-after-commute"
+        case .commuteAfterCoffee: orderID = "commute-after-coffee"
+        case .mixed: orderID = "same-day"
+        }
+
+        return Candidate(
+            echo: LifeNarrativeEcho(
+                sourceRevision: sourceRevision,
+                id: "echo:week:new-pair:late-commute+coffee:\(orderID)",
+                kind: .newContextPair,
+                signalID: "pair:late-commute+coffee",
+                label: "咖啡与晚间通勤",
+                line: line,
+                currentEvidenceItemIDs: currentEvidence.map(\.id),
+                historicalEvidenceItemIDs: baselineEvidence.map(\.id),
+                currentCount: currentEvidence.count,
+                baselineCount: 0,
+                periodGap: nil,
+                currentDistinctDayCount: days.count,
+                historicalDistinctDayCount: nil,
+                baselinePeriodCount: activeHistory.count
+            ),
+            score: 520 + min(days.count, 4) * 8 + min(activeHistory.count, 8) * 3
+        )
+    }
+
+    private static func pairDayEvidence(
+        in rows: [HomeItem],
+        calendar: Calendar
+    ) -> [PairDayEvidence] {
+        let grouped = Dictionary(grouping: rows) { narrativeDay(for: $0.createdAt, calendar: calendar) }
+        return grouped.compactMap { day, dayRows -> PairDayEvidence? in
+            let lateCommutes = dayRows.filter { isHighConfidenceLateCommute($0, calendar: calendar) }
+            let coffees = dayRows.filter { LifeSceneSemanticService.classify($0).kind == .coffee }
+            guard !lateCommutes.isEmpty, !coffees.isEmpty else { return nil }
+            return PairDayEvidence(
+                day: day,
+                lateCommutes: lateCommutes.sorted { $0.createdAt < $1.createdAt },
+                coffees: coffees.sorted { $0.createdAt < $1.createdAt }
+            )
+        }
+        .sorted { $0.day < $1.day }
+    }
+
+    private static func pairOrder(for pairs: [PairDayEvidence]) -> PairOrder {
+        let coffeeAlwaysAfter = pairs.allSatisfy { pair in
+            guard let firstCoffee = pair.coffees.first?.createdAt,
+                  let lastCommute = pair.lateCommutes.last?.createdAt else { return false }
+            return firstCoffee > lastCommute
+        }
+        if coffeeAlwaysAfter { return .coffeeAfterCommute }
+
+        let commuteAlwaysAfter = pairs.allSatisfy { pair in
+            guard let firstCommute = pair.lateCommutes.first?.createdAt,
+                  let lastCoffee = pair.coffees.last?.createdAt else { return false }
+            return firstCommute > lastCoffee
+        }
+        return commuteAlwaysAfter ? .commuteAfterCoffee : .mixed
+    }
+
+    private static func isHighConfidenceLateCommute(
+        _ item: HomeItem,
+        calendar: Calendar
+    ) -> Bool {
+        guard item.category == .transport else { return false }
+        let hour = calendar.component(.hour, from: item.createdAt)
+        guard (21...23).contains(hour) || (0..<5).contains(hour) else { return false }
+        let kind = LifeSceneSemanticService.classify(item).kind
+        if kind == .commute { return true }
+        let text = "\(item.title) \(item.emotionTag)".lowercased()
+        let strongCues = ["通勤", "上班", "下班", "晚高峰", "加班", "晚归", "公司", "单位", "工位"]
+        return strongCues.contains { text.localizedCaseInsensitiveContains($0) }
+    }
+
+    private static func narrativeDays(
+        for rows: [HomeItem],
+        calendar: Calendar
+    ) -> [Date] {
+        Array(Set(rows.map { narrativeDay(for: $0.createdAt, calendar: calendar) })).sorted()
+    }
+
+    private static func narrativeDay(for date: Date, calendar: Calendar) -> Date {
+        let shifted = calendar.date(byAdding: .hour, value: -5, to: date) ?? date
+        return calendar.startOfDay(for: shifted)
+    }
+
+    private static func longestConsecutiveDayRun(
+        _ days: [Date],
+        calendar: Calendar
+    ) -> Int {
+        let sortedDays = Array(Set(days)).sorted()
+        guard !sortedDays.isEmpty else { return 0 }
+        var longest = 1
+        var current = 1
+        for index in 1..<sortedDays.count {
+            let distance = calendar.dateComponents(
+                [.day],
+                from: sortedDays[index - 1],
+                to: sortedDays[index]
+            ).day
+            if distance == 1 {
+                current += 1
+                longest = max(longest, current)
+            } else {
+                current = 1
+            }
+        }
+        return longest
+    }
+
+    private static func distinctDayCount(_ rows: [HomeItem], calendar: Calendar) -> Int {
+        Set(rows.map { calendar.startOfDay(for: $0.createdAt) }).count
     }
 
     private static func periodCalendar(scope: LifeNarrativeScope, base: Calendar) -> Calendar {

@@ -137,10 +137,9 @@ def main() -> int:
                 "periodKey !== pack.periodKey",
                 "evidenceIDs.includes(leadFactID)",
                 "numbersIn(combined)",
-                "user text must remain redacted",
                 "photo fact must remain redacted",
             )
-        ),
+        ) and '"userText"' not in contract_source,
         "proxy contract has executable legacy and narrative coverage": all(
             token in contract_test_source
             for token in (

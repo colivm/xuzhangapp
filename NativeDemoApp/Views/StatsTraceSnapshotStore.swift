@@ -45,10 +45,22 @@ enum TraceSnapshotComputation {
             items: input.items,
             prioritizeRecurring: input.prioritizeRecurringMarks
         )
+        let narrativeScope: LifeNarrativeScope = input.range == .week ? .week : .month
+        let narrativePlan = makeNarrativePlan(
+            scope: narrativeScope,
+            sourceRevision: input.sourceRevision,
+            items: input.items,
+            allItems: input.allItems,
+            now: input.now
+        )
         let anchors = MemoryAnchorSelectionPolicy.selectAnchors(
             from: input.items,
             range: input.range,
             limit: 3,
+            preferredItemID: preferredNarrativeAnchorItemID(
+                plan: narrativePlan,
+                items: input.items
+            ),
             label: memoryAnchorLabel(role:sceneHint:),
             caption: memoryAnchorCaption(role:sceneHint:)
         )
@@ -56,14 +68,6 @@ enum TraceSnapshotComputation {
             range: input.range,
             items: input.items,
             anchors: anchors,
-            now: input.now
-        )
-        let narrativeScope: LifeNarrativeScope = input.range == .week ? .week : .month
-        let narrativePlan = makeNarrativePlan(
-            scope: narrativeScope,
-            sourceRevision: input.sourceRevision,
-            items: input.items,
-            allItems: input.allItems,
             now: input.now
         )
         let narrativeRewrite = LifeNarrativeAIRewriteStore.shared.rewrite(
@@ -122,7 +126,12 @@ enum TraceSnapshotComputation {
             }
             : nil
         let insight = narrativePlan.map {
-            narrativeInsight(plan: $0, rewrite: narrativeRewrite, items: input.items)
+            narrativeInsight(
+                plan: $0,
+                rewrite: narrativeRewrite,
+                items: input.items,
+                allItems: input.allItems
+            )
         } ?? LifeInsightService().buildTraceInsight(
             items: input.items,
             historyItems: input.allItems,
@@ -184,7 +193,18 @@ enum TraceSnapshotComputation {
         allItems: [HomeItem],
         now: Date
     ) -> LifeNarrativePlan {
+        let calendar = scope == .week ? PlaybackService.isoCalendar : Calendar.current
         let previousItems = previousPeriodItems(scope: scope, allItems: allItems, now: now)
+        let relationshipEcho = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: scope,
+                sourceRevision: sourceRevision,
+                items: allItems,
+                now: now,
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
         return LifeNarrativeSignalPolicy.makePlan(
             LifeNarrativePlanningInput(
                 scope: scope,
@@ -192,9 +212,24 @@ enum TraceSnapshotComputation {
                 items: items,
                 previousItems: previousItems,
                 now: now,
-                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousItems)
+                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousItems),
+                relationshipEcho: relationshipEcho
             )
         )
+    }
+
+    private static func preferredNarrativeAnchorItemID(
+        plan: LifeNarrativePlan,
+        items: [HomeItem]
+    ) -> UUID? {
+        guard let lead = plan.signalsByRole[.lead]?.first,
+              lead.kind == .photo || lead.kind == .userText || lead.kind == .change else {
+            return nil
+        }
+        let evidenceIDs = Set(lead.evidenceItemIDs)
+        return items.first { item in
+            evidenceIDs.contains(item.id) && item.hasMemoryImages
+        }?.id
     }
 
     private static func previousPeriodItems(
@@ -216,36 +251,50 @@ enum TraceSnapshotComputation {
     private static func narrativeInsight(
         plan: LifeNarrativePlan,
         rewrite: LifeNarrativeAIRewrite?,
-        items: [HomeItem]
+        items: [HomeItem],
+        allItems: [HomeItem]
     ) -> LifeInsightResult {
         let lead = plan.signalsByRole[.lead]?.first
         let support = plan.signalsByRole[.support]?.first
         let displayedSummary = rewrite?.summary ?? plan.summary
         var fullLines: [String] = []
-        if let supportingLine = rewrite?.supportingLine, !supportingLine.isEmpty {
-            fullLines.append(supportingLine)
-        } else if let support, support.fact != displayedSummary {
-            fullLines.append(support.fact)
+        let isRelationshipLead = lead?.id.hasPrefix("echo:") == true
+        if !isRelationshipLead {
+            if let supportingLine = rewrite?.supportingLine, !supportingLine.isEmpty {
+                fullLines.append(supportingLine)
+            } else if let support, support.fact != displayedSummary {
+                fullLines.append(support.fact)
+            }
         }
-        if let lead,
+        if let lead, isRelationshipLead {
+            fullLines.append(contentsOf: relationshipEvidenceLines(
+                lead: lead,
+                currentItems: items,
+                allItems: allItems
+            ))
+        } else if let lead,
            let item = items.first(where: { lead.evidenceItemIDs.contains($0.id) }),
            lead.kind == .userText || lead.kind == .photo {
             if lead.kind == .photo {
                 fullLines.append("\(item.createdAt.zhBillDateOnly)的照片，是这条线索的直接依据。")
             } else {
-                fullLines.append("\(item.createdAt.zhBillDateOnly)主动写下的内容，是这条线索的直接依据。")
+                fullLines.append("\(item.createdAt.zhBillDateOnly)的「\(lead.label)」，是这条线索的直接依据。")
             }
         }
         if fullLines.isEmpty {
             fullLines.append(narrativeEvidenceLine(lead: lead, items: items))
         }
         let theme: LifeInsightTheme
-        switch lead?.kind {
-        case .userText, .photo: theme = .memory
-        case .change: theme = .change
-        case .structuredScene: theme = .relation
-        case .rhythm, .stableMark, nil:
-            theme = plan.maturity == .factual ? .forming : .steady
+        if lead?.id.hasPrefix("echo:") == true {
+            theme = .relation
+        } else {
+            switch lead?.kind {
+            case .userText, .photo: theme = .memory
+            case .change: theme = .change
+            case .structuredScene: theme = .relation
+            case .rhythm, .stableMark, nil:
+                theme = plan.maturity == .factual ? .forming : .steady
+            }
         }
         let highlightedDate = lead?.evidenceItemIDs.compactMap { id in
             items.first(where: { $0.id == id })?.createdAt
@@ -278,15 +327,59 @@ enum TraceSnapshotComputation {
         lead: LifeNarrativeSignal?,
         maturity: LifeNarrativeMaturity
     ) -> String {
+        if lead?.id.contains(":context-return:") == true {
+            return "晚间通勤上一次出现在哪一周"
+        }
+        if lead?.id.contains(":new-pair:") == true {
+            return "咖啡和晚间通勤这次有什么不同"
+        }
         switch lead?.kind {
-        case .userText: return "先看你主动写下的这一笔"
-        case .photo: return "先看这张具体记录"
-        case .change: return "变化落在这些记录里"
-        case .structuredScene: return "这条生活线有记录可以核对"
+        case .userText: return "先看「\(lead?.label ?? "这笔记录")」"
+        case .photo: return "这张照片对应哪一笔"
+        case .change: return "\(lead?.label ?? "这处")的变化来自哪些记录"
+        case .structuredScene: return "\(lead?.label ?? "这条生活线")出现在哪些日子"
         case .rhythm, .stableMark, nil:
             if maturity == .empty { return "这段还没有记录" }
             return maturity == .factual ? "这段线索还在形成" : "记录主要落在这些日子"
         }
+    }
+
+    private static func relationshipEvidenceLines(
+        lead: LifeNarrativeSignal,
+        currentItems: [HomeItem],
+        allItems: [HomeItem]
+    ) -> [String] {
+        let evidenceIDs = Set(lead.evidenceItemIDs)
+        let currentIDs = Set(currentItems.map(\.id))
+        let currentEvidence = currentItems.filter { evidenceIDs.contains($0.id) }
+        let historicalEvidence = allItems.filter {
+            evidenceIDs.contains($0.id) && !currentIDs.contains($0.id)
+        }
+        let currentDays = distinctEvidenceDays(currentEvidence)
+        let historicalDays = distinctEvidenceDays(historicalEvidence)
+
+        if lead.id.contains(":new-pair:") {
+            var lines = ["本周有 \(currentDays.count) 个记录日同时留下了这两个场景。"]
+            if !historicalEvidence.isEmpty {
+                lines.append("历史基线覆盖 \(historicalEvidence.count) 个有记录的周，没有发现同类组合。")
+            }
+            return lines
+        }
+        if lead.id.contains(":context-return:") {
+            var lines = ["本周依据来自 \(currentDays.count) 个不同日期的晚间通勤。"]
+            if let first = historicalDays.first, let last = historicalDays.last {
+                let range = first == last
+                    ? first.zhBillDateOnly
+                    : "\(first.zhBillDateOnly)至\(last.zhBillDateOnly)"
+                lines.append("上一组可核对记录在 \(range)。")
+            }
+            return lines
+        }
+        return [narrativeEvidenceLine(lead: lead, items: currentItems)]
+    }
+
+    private static func distinctEvidenceDays(_ items: [HomeItem]) -> [Date] {
+        Array(Set(items.map { Calendar.current.startOfDay(for: $0.createdAt) })).sorted()
     }
 
     private static func narrativeEvidenceLine(

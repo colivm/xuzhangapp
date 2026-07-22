@@ -28,6 +28,7 @@ struct LifeNarrativeAIFact: Codable, Equatable {
 struct LifeNarrativeAIFactPackRequest: Codable, Equatable {
     let scope: String
     let periodKey: String
+    let mode: String
     let facts: [LifeNarrativeAIFact]
 }
 
@@ -62,7 +63,7 @@ struct PreparedLifeNarrativeAIFactPack {
 }
 
 enum LifeNarrativeAIPreparationPolicy {
-    static let ruleVersion = 2
+    static let ruleVersion = 4
 
     static func prepareFactPacks(
         items: [HomeItem],
@@ -113,16 +114,6 @@ enum LifeNarrativeAIPreparationPolicy {
         }
         guard !currentItems.isEmpty else { return nil }
         let previousItems = items.filter { $0.createdAt >= previousStart && $0.createdAt < current.start }
-        let plan = LifeNarrativeSignalPolicy.makePlan(
-            LifeNarrativePlanningInput(
-                scope: scope,
-                sourceRevision: sourceRevision,
-                items: currentItems,
-                previousItems: previousItems,
-                now: now,
-                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousItems)
-            )
-        )
         let echo = LifeNarrativeEchoPolicy.makeEcho(
             LifeNarrativeEchoInput(
                 scope: scope,
@@ -133,21 +124,39 @@ enum LifeNarrativeAIPreparationPolicy {
             ),
             calendar: calendar
         )
+        let plan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: scope,
+                sourceRevision: sourceRevision,
+                items: currentItems,
+                previousItems: previousItems,
+                now: now,
+                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousItems),
+                relationshipEcho: echo
+            )
+        )
         let roleOrder: [LifeNarrativeSignalRole] = [.lead, .support, .mark, .evidence]
+        let relationshipMode = echo.map { plan.leadSignalID == $0.id } ?? false
         var seenSignalIDs = Set<String>()
         var facts: [LifeNarrativeAIFact] = []
         var itemIDsByFactID: [String: [UUID]] = [:]
 
         for role in roleOrder {
-            for signal in plan.signalsByRole[role, default: []] where seenSignalIDs.insert(signal.id).inserted {
+            for signal in plan.signalsByRole[role, default: []] {
+                guard signal.kind != .userText,
+                      (!relationshipMode || signal.id == echo?.id),
+                      seenSignalIDs.insert(signal.id).inserted else {
+                    continue
+                }
                 let factID = "F\(facts.count + 1)"
+                let isRelationshipFact = signal.id == echo?.id
                 facts.append(
                     LifeNarrativeAIFact(
                         id: factID,
                         role: role.rawValue,
-                        kind: signal.kind.rawValue,
+                        kind: isRelationshipFact ? (echo?.kind.rawValue ?? signal.kind.rawValue) : signal.kind.rawValue,
                         label: redactedLabel(for: signal),
-                        statement: redactedStatement(for: signal, scope: scope),
+                        statement: isRelationshipFact ? (echo?.line ?? signal.fact) : redactedStatement(for: signal, scope: scope),
                         evidenceCount: signal.evidenceItemIDs.count
                     )
                 )
@@ -157,7 +166,9 @@ enum LifeNarrativeAIPreparationPolicy {
             if facts.count >= 6 { break }
         }
 
-        if let echo, facts.count < 6 {
+        if let echo,
+           !seenSignalIDs.contains(echo.id),
+           facts.count < 6 {
             let factID = "F\(facts.count + 1)"
             facts.append(
                 LifeNarrativeAIFact(
@@ -183,6 +194,7 @@ enum LifeNarrativeAIPreparationPolicy {
             request: LifeNarrativeAIFactPackRequest(
                 scope: scope.rawValue,
                 periodKey: rewriteKey.periodKey,
+                mode: relationshipMode ? "relationship" : "factual",
                 facts: facts
             ),
             localPlan: plan,
@@ -193,7 +205,7 @@ enum LifeNarrativeAIPreparationPolicy {
 
     private static func redactedLabel(for signal: LifeNarrativeSignal) -> String {
         switch signal.kind {
-        case .userText: return "用户自写记录"
+        case .userText: return "本机原文"
         case .photo: return "有真实照片的记录"
         default: return signal.label
         }
@@ -205,7 +217,7 @@ enum LifeNarrativeAIPreparationPolicy {
     ) -> String {
         switch signal.kind {
         case .userText:
-            return "\(scope.periodLead)有 1 条用户主动写下的记录。"
+            return "\(scope.periodLead)的具体原文只在本机展示。"
         case .photo:
             return "\(scope.periodLead)有 1 条记录带真实照片。"
         default:
@@ -272,7 +284,15 @@ enum LifeNarrativeAIRewriteValidationPolicy {
     private static let forbiddenTerms = [
         "治" + "愈", "焦虑", "压力", "辛" + "苦", "努力", "终于", "一定", "因为", "说明你",
         "建议", "应该", "需要减少", "预算", "省钱", "控制消费", "健康诊断", "财务风险",
-        "投资", "收益", "联系方式", "手机号", "身份证", "银行卡", "密码", "验证码"
+        "投资", "收益", "联系方式", "手机号", "身份证", "银行卡", "密码", "验证码",
+        "主要日常", "构成了你的生活", "生活重心", "最能代表你"
+    ]
+    private static let relationshipKinds: Set<String> = [
+        LifeNarrativeEchoKind.repeatRhythm.rawValue,
+        LifeNarrativeEchoKind.returnAfterGap.rawValue,
+        LifeNarrativeEchoKind.comparableChange.rawValue,
+        LifeNarrativeEchoKind.contextReturn.rawValue,
+        LifeNarrativeEchoKind.newContextPair.rawValue,
     ]
 
     static func validate(
@@ -299,9 +319,20 @@ enum LifeNarrativeAIRewriteValidationPolicy {
               citedFactIDs.isSubset(of: allowedFactIDs),
               let leadFactID = pack.request.facts.first(where: { $0.role == "lead" })?.id,
               citedFactIDs.contains(leadFactID) else { return nil }
+        let leadFactKind = pack.request.facts.first(where: { $0.role == "lead" })?.kind
+        let leadIsRelationship = leadFactKind.map { relationshipKinds.contains($0) } ?? false
+        guard (pack.request.mode == "relationship" && leadIsRelationship)
+                || (pack.request.mode == "factual" && !leadIsRelationship) else {
+            return nil
+        }
 
         let allowedNumbers = Set(pack.request.facts.flatMap { numbers(in: $0.statement) + [$0.evidenceCount] })
         guard Set(numbers(in: combined)).isSubset(of: allowedNumbers) else { return nil }
+        let citedStatements = pack.request.facts
+            .filter { citedFactIDs.contains($0.id) }
+            .map(\.statement)
+            .joined(separator: " ")
+        guard relationshipClaimsAreSupported(output: combined, sources: citedStatements) else { return nil }
         let evidenceItemIDs = candidate.evidenceIDs.flatMap { pack.itemIDsByFactID[$0, default: []] }
         guard !evidenceItemIDs.isEmpty else { return nil }
 
@@ -338,6 +369,34 @@ enum LifeNarrativeAIRewriteValidationPolicy {
             guard let swiftRange = Range(match.range, in: text) else { return nil }
             return Int(text[swiftRange])
         }
+    }
+
+    private static func relationshipClaimsAreSupported(
+        output: String,
+        sources: String
+    ) -> Bool {
+        let claimGroups = [
+            ["第一次", "首次"],
+            ["重新出现", "再次出现"],
+            ["连续"],
+            ["上一次"],
+            ["周前", "个月前", "天前"],
+            ["之后"],
+            ["一起出现", "同时出现"],
+        ]
+        for aliases in claimGroups where aliases.contains(where: { output.contains($0) }) {
+            guard aliases.contains(where: { sources.contains($0) }) else { return false }
+        }
+        let outputClaimsFirst = output.contains("第一次") || output.contains("首次")
+        let sourceHasBoundedFirst = (sources.contains("第一次") || sources.contains("首次"))
+            && sources.contains("近")
+        if outputClaimsFirst,
+           sourceHasBoundedFirst,
+           !output.contains("近"),
+           !output.contains("有记录的周里") {
+            return false
+        }
+        return true
     }
 }
 

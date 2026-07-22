@@ -21,6 +21,8 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
         category: HomeItem.Category,
         day: Int,
         userEdited: Bool = false,
+        source: HomeItem.Source = .manual,
+        userEditedCategory: Bool = false,
         hasPhoto: Bool = false,
         photoRole: PhotoMemoryAssetRole? = nil
     ) -> HomeItem {
@@ -28,8 +30,10 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
             title: title,
             amount: 12,
             category: category,
+            source: source,
             createdAt: date(day),
             userEditedTitle: userEdited,
+            userEditedCategory: userEditedCategory,
             memoryImageData: hasPhoto ? Data([0x01]) : nil,
             memoryAnchorRole: photoRole
         )
@@ -37,10 +41,16 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
 
     func testStableCoffeeRemainsAMarkWithoutRepeatingAsLead() {
         let rows = [
-            item("午后咖啡", category: .dining, day: 17),
-            item("一杯拿铁", category: .dining, day: 18),
-            item("美式咖啡", category: .dining, day: 19),
-            item("咖啡饮品", category: .dining, day: 20),
+            item("午后咖啡", category: .dining, day: 20),
+            item("一杯拿铁", category: .dining, day: 20),
+            item("美式咖啡", category: .dining, day: 21),
+            item("咖啡饮品", category: .dining, day: 21),
+        ]
+        let previous = [
+            item("上周午后咖啡", category: .dining, day: 13),
+            item("上周拿铁", category: .dining, day: 13),
+            item("上周美式", category: .dining, day: 14),
+            item("上周咖啡饮品", category: .dining, day: 14),
         ]
 
         let plan = LifeNarrativeSignalPolicy.makePlan(
@@ -48,26 +58,27 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
                 scope: .week,
                 sourceRevision: 4,
                 items: rows,
-                previousItems: rows,
+                previousItems: previous,
                 now: date(21),
                 recentLeadSignalIDs: ["scene:coffee"]
             )
         )
 
         XCTAssertNotEqual(plan.leadSignalID, "scene:coffee")
+        XCTAssertFalse(plan.hasNarrativeLead)
         XCTAssertTrue(plan.markLabels.contains("咖啡饮品"))
         XCTAssertTrue(plan.summary.contains("4 笔记录"))
-        XCTAssertTrue(plan.summary.contains("咖啡饮品留在生活线索里"))
+        XCTAssertEqual(plan.headline, "本周记录")
     }
 
     func testCoffeeCanLeadAgainWhenTheCountReallyChanges() {
         let current = [
-            item("咖啡 1", category: .dining, day: 17),
-            item("咖啡 2", category: .dining, day: 18),
-            item("咖啡 3", category: .dining, day: 19),
-            item("咖啡 4", category: .dining, day: 20),
+            item("咖啡 1", category: .dining, day: 20),
+            item("咖啡 2", category: .dining, day: 20),
+            item("咖啡 3", category: .dining, day: 21),
+            item("咖啡 4", category: .dining, day: 21),
         ]
-        let previous = [item("上周咖啡", category: .dining, day: 10)]
+        let previous = [item("上周咖啡", category: .dining, day: 14)]
 
         let plan = LifeNarrativeSignalPolicy.makePlan(
             LifeNarrativePlanningInput(
@@ -81,14 +92,22 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.leadSignalID, "change:coffee:up")
-        XCTAssertTrue(plan.summary.contains("多了 3 笔"))
+        XCTAssertTrue(plan.headline.contains("多了 3 笔"))
+        XCTAssertTrue(plan.summary.contains("4 笔记录"))
         XCTAssertTrue(plan.markLabels.contains("咖啡饮品"))
     }
 
     func testPhotoBecomesConcreteLeadWhileCoffeeStaysInTheMarkLayer() {
         let rows = [
             item("午后咖啡", category: .dining, day: 20),
-            item("红汤馄饨", category: .dining, day: 21, userEdited: true, hasPhoto: true),
+            item(
+                "红汤馄饨",
+                category: .dining,
+                day: 21,
+                userEdited: true,
+                hasPhoto: true,
+                photoRole: .moment
+            ),
         ]
 
         let plan = LifeNarrativeSignalPolicy.makePlan(
@@ -102,8 +121,8 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(plan.leadSignalID, "user:\(rows[1].id.uuidString)")
-        XCTAssertTrue(plan.summary.contains("红汤馄饨"))
+        XCTAssertEqual(plan.leadSignalID, "photo:\(rows[1].id.uuidString)")
+        XCTAssertTrue(plan.headline.contains("红汤馄饨"))
         XCTAssertTrue(plan.markLabels.contains("咖啡饮品"))
     }
 
@@ -150,7 +169,8 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(plan.leadSignalID?.hasPrefix("rhythm:") == true)
+        XCTAssertNil(plan.leadSignalID)
+        XCTAssertFalse(plan.hasNarrativeLead)
         XCTAssertFalse(plan.headline.contains("明显变化"))
         let observation = plan.signalsByRole[.evidence, default: []].first {
             $0.id == "administrative:change:up"
@@ -203,8 +223,9 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.leadSignalID, "photo:\(moment.id.uuidString)")
-        XCTAssertTrue(plan.summary.contains("红汤馄饨"))
-        XCTAssertTrue(plan.summary.contains("还留着一张照片"))
+        XCTAssertTrue(plan.headline.contains("红汤馄饨"))
+        XCTAssertTrue(plan.headline.contains("还留着一张照片"))
+        XCTAssertTrue(plan.summary.contains("只记下一笔"))
     }
 
     func testPhotoWithoutAQualifiedRoleStaysOutOfTheLead() {
@@ -227,6 +248,113 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
 
         XCTAssertFalse(plan.leadSignalID?.hasPrefix("photo:") == true)
         XCTAssertEqual(plan.maturity, .factual)
+    }
+
+    func testEditedTitleMetadataDoesNotBecomeAVisibleNarrativeCount() {
+        let rows = [
+            item("上班通勤", category: .transport, day: 20, userEdited: true),
+            item("巧婆红汤馄饨", category: .dining, day: 21, userEdited: true),
+        ]
+        let plan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .week,
+                sourceRevision: 2,
+                items: rows,
+                previousItems: [],
+                now: date(21),
+                recentLeadSignalIDs: []
+            )
+        )
+
+        XCTAssertNil(plan.leadSignalID)
+        XCTAssertFalse(plan.hasNarrativeLead)
+        XCTAssertEqual(plan.headline, "本周记录")
+        XCTAssertFalse("\(plan.headline) \(plan.summary)".contains("主动记录"))
+        XCTAssertFalse("\(plan.headline) \(plan.summary)".contains("用户主动写下"))
+    }
+
+    func testImportedTitlesCannotBecomeUserExpressionLeads() {
+        let rows = [
+            item(
+                "终于到家",
+                category: .transport,
+                day: 20,
+                userEdited: true,
+                source: .ocr
+            ),
+            item(
+                "终于回家",
+                category: .transport,
+                day: 21,
+                userEdited: true,
+                userEditedCategory: true
+            ),
+        ]
+        let plan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .week,
+                sourceRevision: 21,
+                items: rows,
+                previousItems: [],
+                now: date(21),
+                recentLeadSignalIDs: []
+            )
+        )
+
+        XCTAssertNil(plan.leadSignalID)
+        XCTAssertFalse(plan.hasNarrativeLead)
+        XCTAssertEqual(plan.headline, "本周记录")
+    }
+
+    func testSpecificUserExpressionCanLeadWithoutTurningIntoMetadataCopy() {
+        let expression = item("终于到家", category: .transport, day: 21, userEdited: true)
+        let plan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .week,
+                sourceRevision: 3,
+                items: [item("普通餐饮", category: .dining, day: 20), expression],
+                previousItems: [],
+                now: date(21),
+                recentLeadSignalIDs: []
+            )
+        )
+
+        XCTAssertEqual(plan.leadSignalID, "user:\(expression.id.uuidString)")
+        XCTAssertTrue(plan.headline.contains("终于到家"))
+        XCTAssertTrue(plan.summary.contains("2 笔记录"))
+        XCTAssertFalse("\(plan.headline) \(plan.summary)".contains("主动记录"))
+    }
+
+    func testNestedWeekAndMonthUseTheSameUniqueExpressionEvidence() {
+        let expression = item("终于到家", category: .transport, day: 21, userEdited: true)
+        let monthRows = [
+            item("月初日用", category: .daily, day: 2),
+            expression,
+        ]
+        let weekPlan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .week,
+                sourceRevision: 4,
+                items: [expression],
+                previousItems: [],
+                now: date(21),
+                recentLeadSignalIDs: []
+            )
+        )
+        let monthPlan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .month,
+                sourceRevision: 4,
+                items: monthRows,
+                previousItems: [],
+                now: date(21),
+                recentLeadSignalIDs: []
+            )
+        )
+
+        XCTAssertEqual(weekPlan.leadSignalID, monthPlan.leadSignalID)
+        XCTAssertEqual(weekPlan.signalsByRole[.lead]?.first?.evidenceItemIDs, [expression.id])
+        XCTAssertEqual(monthPlan.signalsByRole[.lead]?.first?.evidenceItemIDs, [expression.id])
     }
 
     func testWeekLifeCardClueAndPlaybackShareTheSameLeadIdentity() {
@@ -284,6 +412,44 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
         XCTAssertEqual(chapter.narrativePlan.sourceRevision, 42)
         XCTAssertTrue(chapter.narrativePlan.markLabels.contains("咖啡饮品"))
         XCTAssertTrue(clue.narrativePlan?.markLabels.contains("咖啡饮品") == true)
+    }
+
+    func testNarrativePhotoLeadIsAlsoThePrimaryVisibleAnchor() {
+        let earlier = HomeItem(
+            title: "月初聚餐",
+            amount: 80,
+            category: .dining,
+            createdAt: date(2),
+            memoryImageData: Data([0x01]),
+            memoryAnchorRole: .moment,
+            memoryAnchorSceneHint: .gathering
+        )
+        let later = HomeItem(
+            title: "红汤馄饨",
+            amount: 20,
+            category: .dining,
+            createdAt: date(21),
+            memoryImageData: Data([0x02]),
+            memoryAnchorRole: .moment,
+            memoryAnchorSceneHint: .experience
+        )
+        let snapshot = TraceSnapshotComputation.buildChapter(
+            TraceChapterComputationInput(
+                range: .month,
+                items: [earlier, later],
+                allItems: [earlier, later],
+                isMember: true,
+                prioritizeRecurringMarks: true,
+                periodKey: "2026-07",
+                usesEchoAnchor: false,
+                sourceRevision: 43,
+                now: date(21)
+            )
+        )
+
+        XCTAssertEqual(snapshot.narrativePlan.leadSignalID, "photo:\(later.id.uuidString)")
+        XCTAssertEqual(snapshot.memoryAnchors.first?.itemID, later.id)
+        XCTAssertEqual(snapshot.coverFacts.coverItemID, later.id)
     }
 
     func testWeekClueKeepsAdministrativeBillsOutOfTheLifeMarkList() {
@@ -382,9 +548,10 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
         XCTAssertEqual(chapter.chapterSummary, rewrite.summary)
         XCTAssertEqual(chapter.narrativePlan.leadSignalID, "photo:\(rows[1].id.uuidString)")
         XCTAssertEqual(snapshot.narrativeRewrite, rewrite)
-        XCTAssertEqual(snapshot.narrativeHeadline, rewrite.headline)
-        XCTAssertEqual(snapshot.narrativeSummary, rewrite.summary)
-        XCTAssertNotEqual(snapshot.insight.leadQuestion, rewrite.headline)
+        XCTAssertEqual(snapshot.narrativeHeadline, snapshot.insight.leadQuestion)
+        XCTAssertEqual(snapshot.narrativeSummary, snapshot.insight.previewLine)
+        XCTAssertNotEqual(snapshot.narrativeHeadline, rewrite.headline)
+        XCTAssertNotEqual(snapshot.narrativeSummary, rewrite.summary)
         XCTAssertTrue(snapshot.insight.fullLines.contains { $0.contains("直接依据") })
         XCTAssertEqual(snapshot.narrativePlan?.leadSignalID, "photo:\(rows[1].id.uuidString)")
         XCTAssertEqual(snapshot.narrativeRewrite?.evidenceItemIDs, [rows[1].id])
@@ -561,8 +728,8 @@ final class LifeNarrativeEchoPolicyTests: XCTestCase {
     }
 
     func testReturnRequiresARealGapAndCanBeCooledByStableEchoID() {
-        let historical = [6, 7].map { item("咖啡", category: .dining, day: $0, hour: 14) }
-        let current = [20, 21].map { item("咖啡", category: .dining, day: $0, hour: 14) }
+        let historical = [6, 7].map { item("看电影", category: .entertainment, day: $0, hour: 19) }
+        let current = [20, 21].map { item("看电影", category: .entertainment, day: $0, hour: 19) }
         let echo = LifeNarrativeEchoPolicy.makeEcho(
             LifeNarrativeEchoInput(
                 scope: .week,
@@ -667,6 +834,258 @@ final class LifeNarrativeEchoPolicyTests: XCTestCase {
         XCTAssertFalse(first?.currentEvidenceItemIDs.contains(sensitive.id) == true)
         XCTAssertFalse(first?.historicalEvidenceItemIDs.contains(sensitive.id) == true)
     }
+
+    func testLateCommuteReturnsOnlyWithTwoCurrentAndHistoricalDays() {
+        let historical = [1, 2].map {
+            item("下班地铁", category: .transport, day: $0, hour: 22)
+        }
+        let current = [20, 21].map {
+            item("晚高峰通勤", category: .transport, day: $0, hour: 22)
+        }
+        let echo = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .week,
+                sourceRevision: 51,
+                items: historical + current,
+                now: date(21, 23),
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(echo?.kind, .contextReturn)
+        XCTAssertEqual(echo?.periodGap, 3)
+        XCTAssertEqual(echo?.currentDistinctDayCount, 2)
+        XCTAssertEqual(echo?.historicalDistinctDayCount, 2)
+        XCTAssertTrue(echo?.line.contains("重新出现") == true)
+        XCTAssertTrue(echo?.line.contains("3 周前") == true)
+    }
+
+    func testLateCommuteReturnAbstainsWhenEitherSideHasOnlyOneDay() {
+        let historicalTwoDays = [1, 2].map {
+            item("下班地铁", category: .transport, day: $0, hour: 22)
+        }
+        let currentOneDay = [
+            item("晚高峰通勤", category: .transport, day: 20, hour: 22),
+            item("普通午餐", category: .dining, day: 21, hour: 12),
+        ]
+        let currentSparse = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .week,
+                sourceRevision: 52,
+                items: historicalTwoDays + currentOneDay,
+                now: date(21, 23),
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+        XCTAssertNotEqual(currentSparse?.kind, .contextReturn)
+
+        let historicalOneDay = [item("下班地铁", category: .transport, day: 1, hour: 22)]
+        let currentTwoDays = [20, 21].map {
+            item("晚高峰通勤", category: .transport, day: $0, hour: 22)
+        }
+        let historySparse = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .week,
+                sourceRevision: 53,
+                items: historicalOneDay + currentTwoDays,
+                now: date(21, 23),
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+        XCTAssertNotEqual(historySparse?.kind, .contextReturn)
+    }
+
+    func testParkingAndTravelDoNotBecomeLateCommuteContext() {
+        let historical = [1, 2].flatMap { day in
+            [
+                item("停车费", category: .transport, day: day, hour: 22),
+                item("机场打车", category: .transport, day: day, hour: 23),
+            ]
+        }
+        let current = [20, 21].flatMap { day in
+            [
+                item("停车费", category: .transport, day: day, hour: 22),
+                item("旅行返程打车", category: .transport, day: day, hour: 23),
+            ]
+        }
+        let echo = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .week,
+                sourceRevision: 54,
+                items: historical + current,
+                now: date(21, 23),
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+
+        XCTAssertNotEqual(echo?.kind, .contextReturn)
+        XCTAssertFalse(echo?.label.contains("晚间通勤") == true)
+    }
+
+    func testNewCoffeeLateCommutePairNeedsTwoDaysAndFourActiveHistoryWeeks() {
+        let baseline = [22, 29].map {
+            item("普通午餐", category: .dining, month: 6, day: $0, hour: 12)
+        } + [6, 13].map {
+            item("普通午餐", category: .dining, day: $0, hour: 12)
+        }
+        let current = [20, 21].flatMap { day in
+            [
+                item("下班通勤", category: .transport, day: day, hour: 22),
+                item("夜间咖啡", category: .dining, day: day, hour: 23),
+            ]
+        }
+        let echo = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .week,
+                sourceRevision: 55,
+                items: baseline + current,
+                now: date(21, 23),
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(echo?.kind, .newContextPair)
+        XCTAssertEqual(echo?.currentDistinctDayCount, 2)
+        XCTAssertEqual(echo?.baselinePeriodCount, 4)
+        XCTAssertTrue(echo?.line.contains("晚间通勤之后") == true)
+        XCTAssertTrue(echo?.line.contains("近 4 个有记录的周里") == true)
+    }
+
+    func testNewPairAbstainsForOneDayOrWhenHistoryAlreadyContainsThePair() {
+        let baseline = [22, 29].map {
+            item("普通午餐", category: .dining, month: 6, day: $0, hour: 12)
+        } + [6, 13].map {
+            item("普通午餐", category: .dining, day: $0, hour: 12)
+        }
+        let oneDayPair = [
+            item("下班通勤", category: .transport, day: 20, hour: 22),
+            item("夜间咖啡", category: .dining, day: 20, hour: 23),
+            item("普通午餐", category: .dining, day: 21, hour: 12),
+        ]
+        let sparse = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .week,
+                sourceRevision: 56,
+                items: baseline + oneDayPair,
+                now: date(21, 23),
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+        XCTAssertNotEqual(sparse?.kind, .newContextPair)
+
+        let historicalPair = [
+            item("下班通勤", category: .transport, day: 13, hour: 22),
+            item("夜间咖啡", category: .dining, day: 13, hour: 23),
+        ]
+        let currentTwoDays = [20, 21].flatMap { day in
+            [
+                item("下班通勤", category: .transport, day: day, hour: 22),
+                item("夜间咖啡", category: .dining, day: day, hour: 23),
+            ]
+        }
+        let repeated = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .week,
+                sourceRevision: 57,
+                items: baseline + historicalPair + currentTwoDays,
+                now: date(21, 23),
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+        XCTAssertNotEqual(repeated?.kind, .newContextPair)
+        XCTAssertFalse(repeated?.line.contains("首次") == true)
+    }
+
+    func testMixedPairOrderNeverClaimsAfter() {
+        let baseline = [22, 29].map {
+            item("普通午餐", category: .dining, month: 6, day: $0, hour: 12)
+        } + [6, 13].map {
+            item("普通午餐", category: .dining, day: $0, hour: 12)
+        }
+        let current = [
+            item("下班通勤", category: .transport, day: 20, hour: 22),
+            item("夜间咖啡", category: .dining, day: 20, hour: 23),
+            item("夜间咖啡", category: .dining, day: 21, hour: 21),
+            item("下班通勤", category: .transport, day: 21, hour: 22),
+        ]
+        let echo = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .week,
+                sourceRevision: 58,
+                items: baseline + current,
+                now: date(21, 23),
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(echo?.kind, .newContextPair)
+        XCTAssertTrue(echo?.line.contains("一起出现") == true)
+        XCTAssertFalse(echo?.line.contains("之后") == true)
+    }
+
+    func testRelationshipIdentityIsSharedByLifeCardClueAndShareProjection() {
+        let baseline = [22, 29].map {
+            item("普通午餐", category: .dining, month: 6, day: $0, hour: 12)
+        } + [6, 13].map {
+            item("普通午餐", category: .dining, day: $0, hour: 12)
+        }
+        let current = [20, 21].flatMap { day in
+            [
+                item("下班通勤", category: .transport, day: day, hour: 22),
+                item("夜间咖啡", category: .dining, day: day, hour: 23),
+            ]
+        }
+        let allItems = baseline + current
+        let chapter = TraceSnapshotComputation.buildChapter(
+            TraceChapterComputationInput(
+                range: .week,
+                items: current,
+                allItems: allItems,
+                isMember: true,
+                prioritizeRecurringMarks: false,
+                periodKey: "2026-W30",
+                usesEchoAnchor: false,
+                sourceRevision: 59,
+                now: date(21, 23)
+            )
+        )
+        let clue = TraceSnapshotComputation.buildClue(
+            TraceClueComputationInput(
+                items: current,
+                allItems: allItems,
+                period: .week,
+                periodLabel: "这一周",
+                isMember: true,
+                freeRemaining: 5,
+                storedUnlock: true,
+                sourceRevision: 59,
+                narrativeScope: .week,
+                allowsNarrativeRewrite: false,
+                now: date(21, 23)
+            )
+        )
+        let sharePlan = PlaybackService().buildWeeklyShareCardPayload(
+            from: allItems,
+            now: date(21, 23),
+            sourceRevision: 59
+        )?.narrativePlan
+
+        XCTAssertEqual(chapter.narrativePlan.leadSignalID, clue.narrativePlan?.leadSignalID)
+        XCTAssertEqual(chapter.narrativePlan.leadSignalID, sharePlan?.leadSignalID)
+        XCTAssertTrue(chapter.narrativePlan.leadSignalID?.contains(":new-pair:") == true)
+        XCTAssertTrue(chapter.narrativePlan.hasNarrativeLead)
+        XCTAssertTrue(chapter.narrativePlan.markLabels.contains("咖啡饮品"))
+        XCTAssertTrue(chapter.chapterSummary?.contains("近 4 个有记录的周里") == true)
+        XCTAssertTrue(clue.insight.fullLines.contains { $0.contains("历史基线覆盖 4 个有记录的周") })
+    }
 }
 
 final class LifeNarrativeAIRewritePolicyTests: XCTestCase {
@@ -688,7 +1107,8 @@ final class LifeNarrativeAIRewritePolicyTests: XCTestCase {
                 category: .dining,
                 createdAt: calendar.date(from: DateComponents(year: 2026, month: 7, day: 20, hour: 18))!,
                 userEditedTitle: true,
-                memoryImageData: Data([0x01])
+                memoryImageData: Data([0x01]),
+                memoryAnchorRole: .moment
             ),
             HomeItem(
                 title: "下班地铁",
@@ -713,18 +1133,128 @@ final class LifeNarrativeAIRewritePolicyTests: XCTestCase {
         ).first { $0.key.scope == LifeNarrativeScope.week.rawValue }!
     }
 
+    private func preparedRelationshipPack(sourceRevision: Int = 72) -> PreparedLifeNarrativeAIFactPack {
+        func row(_ title: String, category: HomeItem.Category, month: Int = 7, day: Int, hour: Int) -> HomeItem {
+            HomeItem(
+                title: title,
+                amount: 12,
+                category: category,
+                createdAt: calendar.date(
+                    from: DateComponents(year: 2026, month: month, day: day, hour: hour)
+                )!
+            )
+        }
+        let baseline = [22, 29].map {
+            row("普通午餐", category: .dining, month: 6, day: $0, hour: 12)
+        } + [6, 13].map {
+            row("普通午餐", category: .dining, day: $0, hour: 12)
+        }
+        let current = [20, 21].flatMap { day in
+            [
+                row("下班通勤", category: .transport, day: day, hour: 22),
+                row("夜间咖啡", category: .dining, day: day, hour: 23),
+            ]
+        }
+        return LifeNarrativeAIPreparationPolicy.prepareFactPacks(
+            items: baseline + current,
+            sourceRevision: sourceRevision,
+            now: calendar.date(from: DateComponents(year: 2026, month: 7, day: 21, hour: 23))!,
+            calendar: calendar
+        ).first { $0.key.scope == LifeNarrativeScope.week.rawValue }!
+    }
+
     func testFactPackRedactsUserTextSensitiveRowsPhotosAndLedgerIDs() throws {
         let pack = preparedWeekPack()
         let data = try JSONEncoder().encode(pack.request)
         let text = String(data: data, encoding: .utf8) ?? ""
 
-        XCTAssertTrue(text.contains("用户自写记录"))
+        XCTAssertFalse(text.contains("用户自写记录"))
+        XCTAssertFalse(text.contains("主动记录"))
+        XCTAssertFalse(text.contains("用户主动写下"))
         XCTAssertTrue(text.contains("有真实照片的记录"))
         XCTAssertFalse(text.contains("小王"))
         XCTAssertFalse(text.contains("红汤馄饨"))
         XCTAssertFalse(text.contains("医院"))
         XCTAssertFalse(text.contains("memoryImage"))
         XCTAssertFalse(pack.itemIDsByFactID.values.flatMap { $0 }.contains { text.contains($0.uuidString) })
+    }
+
+    func testUserExpressionLeadStaysLocalInsteadOfBecomingAnAICountFact() {
+        let expression = HomeItem(
+            title: "终于到家",
+            amount: 4,
+            category: .transport,
+            createdAt: calendar.date(from: DateComponents(year: 2026, month: 7, day: 21, hour: 19))!,
+            userEditedTitle: true
+        )
+        let packs = LifeNarrativeAIPreparationPolicy.prepareFactPacks(
+            items: [expression],
+            sourceRevision: 18,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertNil(packs.first { $0.key.scope == LifeNarrativeScope.week.rawValue })
+        XCTAssertNil(packs.first { $0.key.scope == LifeNarrativeScope.month.rawValue })
+    }
+
+    func testWeakCompositionAndRhythmDoNotStartRemoteNarrativeRewrite() {
+        let rows = [
+            HomeItem(title: "普通午餐", amount: 18, category: .dining, createdAt: now),
+            HomeItem(
+                title: "普通日用",
+                amount: 12,
+                category: .daily,
+                createdAt: calendar.date(byAdding: .hour, value: -2, to: now)!
+            ),
+        ]
+        let packs = LifeNarrativeAIPreparationPolicy.prepareFactPacks(
+            items: rows,
+            sourceRevision: 70,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertNil(packs.first { $0.key.scope == LifeNarrativeScope.week.rawValue })
+        XCTAssertNil(packs.first { $0.key.scope == LifeNarrativeScope.month.rawValue })
+    }
+
+    func testRelationshipFactPackUsesCertifiedModeAndKeepsBoundedClaims() {
+        let pack = preparedRelationshipPack()
+        XCTAssertEqual(pack.request.mode, "relationship")
+        XCTAssertEqual(pack.request.facts.first?.role, "lead")
+        XCTAssertEqual(pack.request.facts.first?.kind, LifeNarrativeEchoKind.newContextPair.rawValue)
+        XCTAssertEqual(pack.localPlan.leadSignalID, pack.echo?.id)
+
+        let valid = LifeNarrativeAIRewriteCandidate(
+            scope: pack.key.scope,
+            periodKey: pack.key.periodKey,
+            headline: "这周有一组新关联",
+            summary: "咖啡连续 2 天出现在晚间通勤之后，是近 4 个有记录周里的首次。",
+            supportingLine: nil,
+            evidenceIDs: ["F1"]
+        )
+        XCTAssertNotNil(LifeNarrativeAIRewriteValidationPolicy.validate(valid, against: pack))
+
+        let unbounded = LifeNarrativeAIRewriteCandidate(
+            scope: valid.scope,
+            periodKey: valid.periodKey,
+            headline: valid.headline,
+            summary: "咖啡连续 2 天出现在晚间通勤之后，这是第一次。",
+            supportingLine: nil,
+            evidenceIDs: ["F1"]
+        )
+        XCTAssertNil(LifeNarrativeAIRewriteValidationPolicy.validate(unbounded, against: pack))
+
+        let inventedReturn = LifeNarrativeAIRewriteCandidate(
+            scope: valid.scope,
+            periodKey: valid.periodKey,
+            headline: valid.headline,
+            summary: "咖啡和晚间通勤重新出现，是近 4 个有记录周里的首次。",
+            supportingLine: nil,
+            evidenceIDs: ["F1"]
+        )
+        XCTAssertNil(LifeNarrativeAIRewriteValidationPolicy.validate(inventedReturn, against: pack))
     }
 
     func testRewriteValidationRequiresLeadEvidenceAndRejectsNewFacts() {
@@ -5228,6 +5758,52 @@ final class ReleaseScaleFixtureTests: XCTestCase {
             )
             XCTAssertFalse(firstDigest.isEmpty)
             XCTAssertEqual(firstDigest, secondDigest)
+        }
+    }
+
+    func testRelationshipDiscoveryStaysDeterministicAtAllReleaseScales() {
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 3_600)!
+        let anchor = calendar.date(from: DateComponents(year: 2030, month: 7, day: 23, hour: 12))!
+        let weekStart = calendar.dateInterval(of: .weekOfYear, for: anchor)!.start
+        let now = calendar.date(byAdding: .hour, value: 71, to: weekStart)!
+
+        func row(_ title: String, category: HomeItem.Category, week: Int, day: Int, hour: Int) -> HomeItem {
+            let periodStart = calendar.date(byAdding: .weekOfYear, value: -week, to: weekStart)!
+            let date = calendar.date(byAdding: .day, value: day, to: periodStart)!
+            return HomeItem(
+                title: title,
+                amount: 12,
+                category: category,
+                createdAt: calendar.date(bySettingHour: hour, minute: 0, second: 0, of: date)!
+            )
+        }
+
+        let baseline = (1...4).map {
+            row("普通午餐", category: .dining, week: $0, day: 1, hour: 12)
+        }
+        let current = [0, 1].flatMap { day in
+            [
+                row("下班通勤", category: .transport, week: 0, day: day, hour: 22),
+                row("夜间咖啡", category: .dining, week: 0, day: day, hour: 23),
+            ]
+        }
+
+        for count in [100, 1_000, 5_000] {
+            let items = ReleaseFixtureFactory.makeItems(count: count) + baseline + current
+            let input = LifeNarrativeEchoInput(
+                scope: .week,
+                sourceRevision: count,
+                items: items,
+                now: now,
+                recentEchoIDs: []
+            )
+            let first = LifeNarrativeEchoPolicy.makeEcho(input, calendar: calendar)
+            let second = LifeNarrativeEchoPolicy.makeEcho(input, calendar: calendar)
+
+            XCTAssertEqual(first, second)
+            XCTAssertEqual(first?.kind, .newContextPair)
+            XCTAssertEqual(first?.baselinePeriodCount, 4)
         }
     }
 }

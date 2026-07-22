@@ -1778,7 +1778,12 @@ struct StatsWebView: View {
                 HStack(alignment: .top, spacing: 14) {
                     traceLifeMonthEditorialCopy(snapshot: snapshot)
                     Spacer(minLength: 0)
-                    traceLifeMonthCoverPhoto(anchor: coverAnchor, facts: facts, layout: layout)
+                    traceLifeMonthCoverPhoto(
+                        anchor: coverAnchor,
+                        facts: facts,
+                        narrativePlan: snapshot.narrativePlan,
+                        layout: layout
+                    )
                 }
             } else {
                 traceLifeMonthEditorialCopy(snapshot: snapshot)
@@ -1842,6 +1847,7 @@ struct StatsWebView: View {
     private func traceLifeMonthCoverPhoto(
         anchor: SummaryMemoryAnchor,
         facts: TraceChapterCoverFacts,
+        narrativePlan: LifeNarrativePlan,
         layout: TraceLifeCardLayout
     ) -> some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -1853,7 +1859,14 @@ struct StatsWebView: View {
                         .stroke(Color.white.opacity(0.82), lineWidth: 1)
                 )
 
-            Text(facts.coverCaption ?? "本月的一条记录")
+            Text(
+                traceLifeVisualCaption(
+                    anchor: anchor,
+                    base: facts.coverCaption ?? "本月的一条记录",
+                    range: .month,
+                    narrativePlan: narrativePlan
+                )
+            )
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(AppColors.text.opacity(0.82))
                 .lineLimit(2)
@@ -2906,21 +2919,38 @@ struct StatsWebView: View {
     }
 
     private func traceLifeSlicePrimaryCaption(snapshot: TraceChapterSnapshot) -> String {
-        if let coverCaption = snapshot.coverFacts.coverCaption {
-            return coverCaption
-        }
         if let firstAnchor = snapshot.memoryAnchors.first {
             let item = snapshot.items.first { $0.id == firstAnchor.itemID }
-            return traceLifeResolvedAnchorCaption(
+            let base = snapshot.coverFacts.coverCaption ?? traceLifeResolvedAnchorCaption(
                 anchor: firstAnchor,
                 item: item,
                 fallback: "这周的一条记录"
+            )
+            return traceLifeVisualCaption(
+                anchor: firstAnchor,
+                base: base,
+                range: snapshot.range,
+                narrativePlan: snapshot.narrativePlan
             )
         }
         if let first = snapshot.items.first {
             return traceLifeSliceCaption(for: first)
         }
         return "这周的一条记录"
+    }
+
+    private func traceLifeVisualCaption(
+        anchor: SummaryMemoryAnchor,
+        base: String,
+        range: SummaryPlaybackRange,
+        narrativePlan: LifeNarrativePlan
+    ) -> String {
+        guard let lead = narrativePlan.signalsByRole[.lead]?.first,
+              lead.kind == .photo || lead.kind == .userText || lead.kind == .change,
+              lead.evidenceItemIDs.contains(anchor.itemID) else {
+            return "\(range == .week ? "本周画面" : "本月画面") · \(base)"
+        }
+        return base
     }
 
     private func traceLifeSliceSmallCaption(

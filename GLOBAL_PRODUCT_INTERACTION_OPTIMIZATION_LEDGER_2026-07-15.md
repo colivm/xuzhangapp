@@ -3527,7 +3527,10 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ## 46. NARRATIVE-CORE-02：真实账单、信息增量与叙事价值统一内核（2026-07-22）
 
-- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。统一叙事内核、痕迹只读投影、播放复用、提前 AI 润色和回归门禁已完成；缺 Xcode/iPhone `FLOW-62` 签收，不标记 `VERIFIED`。
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE` → `IN_PROGRESS` → `CODE_DONE`；真机发现的“主动记录”伪计数、分类构成伪主线及图文证据分叉已完成定向修复，当前无 `IN_PROGRESS`。缺 Xcode/iPhone `FLOW-62` 签收，不标记 `VERIFIED`。
+- 真机回归（2026-07-22）：本周生活、本月生活及对应线索页均显示“有 1 条主动记录”。该数字来自 AI 脱敏事实的固定 `1`，不是周期真实统计；`userEditedTitle` 还可能来自 AI 指令导入、OCR 标题修改或普通编辑，不能代表用户主动写下了一段值得回看的内容。周/月封面照片又由独立锚点选择，与文字主角证据未绑定，截图中本周 7/21 与本月 7/2 的照片被放在同一类单数结论旁，形成事实矛盾。
+- 本次修复边界：从生活卡、线索页、周/月播放和分享主线中移除“主动记录数量”这一内部元数据；标题编辑只可帮助保留安全原话，不能凭标记直接获得最高叙事权重。主线必须来自可复算变化、合格具体时刻/照片或确有信息增量的周期事实；没有足够信号时允许只展示事实指标，不强行生成伪总结。生活卡、线索页和播放继续共享主角证据 ID，但分别投影概览、依据与展开文案，不再逐字复用同一 headline/summary；任何主视觉照片必须属于主角证据，否则明确降级为独立“本周/本月留下的画面”，不能冒充主线证据。
+- 新增硬验收：用户可见文案不得出现“主动记录/用户主动写下的记录”的数量结论；周/月嵌套范围若都声称唯一证据，证据 ID 必须一致；生活页和线索页主角 ID 一致但主标题/副文不得成对逐字相同；展示为主角照片时其记录 ID 必须包含在 `lead.evidenceItemIDs`；AI fact-pack 不再用选中一条候选冒充周期计数。修复后重新执行完整 Windows 门禁并追加 `FLOW-62` 真机回归，Xcode/iPhone 签收前仍不得标记 `VERIFIED`。
 - 用户确认：咖啡等稳定事实继续作为生活印记，但“真实账单、信息增量、叙事价值”必须成为统一算法，生活卡主页、周/月播放和线索页都接入；话费、水电、充值等低现场感记录不能因为当天笔数多就进入情绪叙事，AI 不能替错误主角润色。
 - 已确认缺口：`NARRATIVE-CORE` 已让今日/周/月播放和分享区分主线与稳定印记，但只有 `confidence / informationGain / isStable`，没有独立叙事价值与代表性；痕迹生活卡仍以 `LifeMarkService` 固定优先级的第一项为主文，咖啡 priority 18 可压过 4 次、priority 20 的通勤；月度还主动把重复印记置前。线索顶部同样直接读取第一生活印记，下半部分由独立 `LifeInsightService` 固定模板和分数选择，普通附件即可成为“被留下的现场”，密集日还会混入无关次级信号。现有 AI 虽提前生成 day/week/month 润色，但只被首页与 `PlaybackService` 读取，痕迹页未消费。
 - 目标：建立同一不可变周期叙事计划，以真实账单为硬证据，分别计算信息增量、叙事价值和长期代表性，再分配 `lead / support / mark / evidence`；生活卡主页给短预告，播放按既有章节展开，线索页展示主角、稳定印记及同一主角的依据。各表面措辞可不同，但不得各自重新选主角。
@@ -3547,3 +3550,37 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 冻结边界复核：未修改账单字段、金额/日期、分类/OCR、存储/同步 DTO、AI 指令台、首页动态主动作、痕迹筛选/日期口径、播放章节数量/顺序/时长、额度/会员/StoreKit、分享模板/照片准备、主题/UI 风格、宠物、页面拆分或 `ARCH-03`；未覆盖、回退、暂存或提交 `UI-PET-01` 与未跟踪素材、`tmp/`、缓存目录。
 - 剩余风险：Windows 没有 Swift/Xcode，新增模型字段、后台快照发布与通知的严格并发编译，以及痕迹/播放真实布局和 5,000 条真机 hitch/内存仍未完成运行验证；策略 XCTest 已接线但未在本环境执行。真实服务端润色还需在有效账号、联网/离线和旧修订交错条件下确认无错误反写。
 - 下一步：在 macOS/Xcode 执行 Debug、Release 与全部 XCTest，再按 `FLOW-62` 逐项签收生活卡、线索页、周/月播放和分享的主角一致性、行政账单/照片/敏感边界、AI 成功/失败/旧修订、主题/无障碍及 5,000 条滚动内存。发现问题只修本项计划评分、快照投影、缓存失效或受控措辞，不改章节/UI/额度/会员/存储，也不启动 `ARCH-03`；通过后再将本项标为 `VERIFIED`。
+
+### 2026-07-22 真机回归定向修复收口
+
+- 根因收口：删除“选中一条候选＝周期有 1 条主动记录”的远端事实；普通改标题不再自动获得叙事权重，OCR 来源和 AI 导入使用的分类锁定元数据均不能冒充用户原话。只有来源可信、未被导入锁定且包含真实信息增量的安全表达才可作为本机主线；分类构成信号明确禁止领衔。没有合格主线时只展示“本周记录 / 本月记录”和真实笔数、记录日，不强行输出“吃饭和通勤构成日常”等图表复述。
+- 图文与跨表面边界：痕迹生活卡、线索页、周/月播放继续共享同一计划与证据 ID；生活卡讲概览，线索页改用问题与直接依据，播放负责展开。痕迹与播放的首张照片优先绑定主线证据中的有图记录；不属于主线的照片明确标为独立“本周画面 / 本月画面”，不再冒充文字结论证据。
+- AI 与缓存边界：规则版本升级为 v3，旧“主动记录”润色缓存无法命中；客户端不再把用户原文信号加入远端 fact pack，代理也拒绝 `userText` 类型，旧客户端请求会安全失败并回退本地。代理提示同步禁止把标题来源、分类构成或内部元数据写成生活主线。
+- 修改文件：`LifeNarrativePlanningService.swift`、`LifeNarrativeAIRewriteService.swift`、`PlaybackService.swift`、`StatsTraceModels.swift`、`StatsTraceSnapshotStore.swift`、`StatsWebView.swift`、`StateRegressionTests.swift`、`ai-proxy/narrativeRewriteContract.js`、`ai-proxy/narrativeRewriteContract.test.js`、`ai_capability_lint.py`、`experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 回归证据：新增普通改标题、OCR/AI 导入标题、具体用户表达、周/月嵌套证据、照片主线/首图一致、线索/生活卡不逐字复制和用户原文不外发测试接线。`node --test ai-proxy/narrativeRewriteContract.test.js` 8/8、`python scripts/ai_capability_lint.py`、`scripts/experience_static_check.ps1`、`scripts/check_copy_experience.ps1`、`git diff --check` 与最终 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`；81 个 Swift 文件、100/1,000/5,000 条、三张真实 12MP、生活语义、文案、AI、主题、迁移和 SQLite 全通过，仅保留基线既有 5 条 soft warning。
+- 冻结边界复核：未修改账单字段、分类/OCR/AI 指令保存、存储/同步 DTO、首页动态主动作、痕迹筛选/日期口径、周记 3/5 章、月章 6 章及顺序/时长、额度/会员/StoreKit、分享模板/照片准备、主题/UI 风格、宠物或 `ARCH-03`；未暂存、提交、推送或纳入未跟踪素材、`tmp/` 与缓存目录。
+- 剩余风险与下一步：Windows 无 Swift/Xcode/iPhone，新增 Swift 门槛、默认参数接线、SwiftUI 照片标题、XCTest 和严格并发尚未真实编译；必须先在 Xcode 执行 Debug/Release 与全部 XCTest，再按 `FLOW-62` 用真机核对本周/本月生活卡、线索、播放、分享的文案与主视觉。通过前保持 `CODE_DONE`；不得启动 `ARCH-03`，签收问题只能定向修本项。
+
+---
+
+## 47. NARRATIVE-VALUE-03：证据关系、主动弃权与 AI 表达层（2026-07-22）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 代码、契约、静态与完整发布门禁已通过，当前无 `IN_PROGRESS`。缺 Xcode/iPhone `FLOW-63` 签收，不标记 `VERIFIED`。用户确认生活卡、痕迹、复盘和“过去的回声”是核心付费价值承载，不能用分类构成或空泛总结填满版面。
+- 用户确认的目标效果：只有证据成立时才允许表达“这周晚间通勤重新出现，上一次连续晚归还是三周前”或“咖啡仍是生活印记，但这周第一次连续出现在两次晚间通勤之后”。这些句子是关系发现的表达目标，不得写成固定模板；“重新、上一次、连续、第一次、三周前”都必须由本机事实引擎先认证。
+- 三道硬门槛：任何主叙事必须同时满足：①不是看分类图即可得到的文字复述；②可回到具体日期、记录、照片或可复算周期证据；③能解释为什么本次值得出现。任一不满足则主动弃权，只显示笔数、记录日、照片数等事实指标和独立生活印记，不生成主叙事。
+- 目标：在现有不可变周期计划中增加受控关系发现与价值资格，至少覆盖隔期回归、节奏改变、可比同期变化和有历史基线的新组合；生活卡给一句高价值发现，痕迹展示对应证据，播放展开同一关系，复盘继续查证。AI 只能润色已认证关系或事实指标，不能选择主角、创造关系或把事实指标升级成故事。
+- 允许修改：`LifeNarrativePlanningService.swift` 的关系/价值模型与弃权策略；`LifeNarrativeEchoService.swift` 的证据关系输出；`LifeNarrativeAIRewriteService.swift` 与 `ai-proxy` 的受控关系 fact-pack/校验；痕迹、播放和分享对同一计划的只读投影；对应 XCTest、静态门禁、设备矩阵和本文档。
+- 冻结边界：不修改账单字段、金额/日期/标题/分类、OCR/AI 指令保存、存储/同步 DTO、首页动态主动作、痕迹筛选/日期口径、复盘查询/对比事实、周记 3/5 章、月章 6 章及顺序/时长、额度/会员/Product ID/StoreKit、分享照片准备、主题/UI 风格、宠物、页面拆分或 `ARCH-03`。不把自然基础文案改成会员专属，不在本任务调整付费墙。
+- 可信边界：`首次` 需要检查受控历史窗口内确无同类关系；`重新出现` 需要真实缺席期；`连续` 需要明确连续日期/周期规则；相隔时间必须可复算；组合关系必须在当前期至少有两个独立证据且历史基线足够。证据不足时禁止近似表达，不允许 AI 补原因、感受、人物、地点、消费评价或生活方式判断。
+- 性能边界：关系发现只在已有后台周期快照阶段按账本修订计算一次；SwiftUI 绘制、滚动、切章、主题、模板切换和播放索引只读结果。远程 AI 仍提前、可取消、可缓存；页面进入、播放和分享保存不发请求、不等待。旧修订不得覆盖新结果。
+- 计划验收：覆盖晚间通勤隔期回归、连续晚归、咖啡与晚间通勤新组合、组合历史已存在、稳定咖啡无变化、分类构成、弱数据、行政账单、照片/用户原话、敏感混组、历史不足、相同日序边界、AI 合法/编造首次/新数字/未知证据/旧修订，以及 100/1,000/5,000 条性能。Windows 完成前只能到 `CODE_DONE`；Xcode/iPhone `FLOW-63` 签收前不得标记 `VERIFIED`。
+- 实现（受控关系）：`LifeNarrativeEchoPolicy` 新增 `contextReturn` 与 `newContextPair`。首期晚间通勤只接受交通记录中 21:00～04:59 的强通勤语义，当前周与历史周都至少两个独立“夜间日期”、上一周完全缺席且 2～12 周内存在合格历史，才允许说“重新出现/上一次/几周前”；停车费、普通打车和旅行不进入该上下文。咖啡＋晚间通勤新组合要求当前至少两个独立日期、此前 1～8 周内至少四个有记录周且任一周都未出现同类组合；只有每天顺序一致才说“之后”，顺序不一致只说“一起出现”，并始终保留“近 N 个有记录周”的首次边界。凌晨 0～4 点按前一夜归组，避免跨零点把同一晚误判为两个证据日。
+- 实现（主动弃权）：固定账单与敏感记录在关系分组前移除；泛化回归不再让稳定咖啡领衔，并要求当前/历史各至少两个日期。周期计划新增 `hasNarrativeLead` 和可选关系输入；经认证关系可成为 lead，稳定咖啡继续留在 `mark`。分类构成、普通结构化场景和记录节奏不再作为兜底 lead；没有合格关系、具体原话、合格照片或可比变化时，`leadSignalID=nil`，只显示“本周/本月记录”、笔数和记录日等事实，不远程生成主叙事。周/月变化继续按相同已过日序比较，避免未结束周期拿完整上一周期制造变化。
+- 实现（同一计划投影）：痕迹周/月后台快照、周/月播放与分享先准备同一个 echo，再注入不可变 `LifeNarrativePlan`。生活卡显示简短关系标题与完整事实；线索页不复制主文，分别列当前日期证据和历史日期/有记录周基线；播放末章优先使用已验证润色，失败回退同一关系本地表达；分享用短标题承接关系、摘要承接证据，不改变任何模板、照片准备或章节结构。复盘仍走既有只读查账/对比入口，没有改变查询事实。
+- 实现（AI 事实边界）：叙事规则版本升至 v4，fact pack 新增 `factual/relationship` mode。关系模式只发送一个已认证 lead 事实，不附带分类构成或节奏让模型二次选主角；代理只接受五种受控关系 kind，并拒绝把 rhythm、structured scene 或 stable mark 升成 factual lead。客户端与代理双重校验“首次/重新出现/连续/上一次/几周前/之后/一起出现”，相关词只能来自引用事实；受控首次必须保留“近 N 个有记录周”限定，未知 evidence、新数字、推断词和旧修订继续拒绝。证据不足时 fact pack 为空，零远程请求、零额度消耗。
+- 性能与缓存复核：关系发现仍只发生在账本稳定后的 AI 预生成或既有后台周期/播放快照构建；SwiftUI body、滚动、切章、主题、模板切换与保存分享只读结果，不增加渲染期扫描或页面进入请求。相同修订和输入关系 ID、证据 ID 与排序确定；新增 100/1,000/5,000 条关系扫描确定性 XCTest 接线。旧 v3 润色因 key 版本变化不能覆盖新计划。
+- 修改文件：`NativeDemoApp/Services/LifeNarrativeEchoService.swift`、`NativeDemoApp/Services/LifeNarrativePlanningService.swift`、`NativeDemoApp/Services/LifeNarrativeAIRewriteService.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`ai-proxy/narrativeRewriteContract.js`、`ai-proxy/narrativeRewriteContract.test.js`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 自动回归：新增晚间通勤双侧两日门槛、当前/历史单日弃权、停车/旅行排除、新组合两日＋四个活跃周、历史已存在、混合顺序、稳定咖啡只留 mark、弱分类零 lead/零远程请求、生活卡/线索/分享同 relation ID、AI 合法关系与无边界首次/编造回归拒绝，以及三档发布规模确定性测试接线；设备矩阵新增 `FLOW-63`，并将 `FLOW-58` 明确为基础三类回声，避免与受控上下文关系冲突。
+- Windows 验证证据：`node --test ai-proxy/narrativeRewriteContract.test.js` 9/9、`python scripts/ai_capability_lint.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`git diff --check` 与最终 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`。完整门禁包含生活语义、AI 契约/生产路由、主题、迁移、SQLite、100/1,000/5,000 条和三张真实 12MP 夹具；文案扫描 81 个 Swift 文件，仅保留基线既有 5 条 soft warning，本轮新增为 0。
+- 冻结边界复核：未修改账单字段、金额/日期/标题/分类、OCR/AI 指令保存、存储/同步 DTO、首页动态主动作、痕迹筛选/日期口径、复盘查询/对比事实、周记 3/5 章、月章 6 章及顺序/时长、额度/会员/Product ID/StoreKit、分享照片准备/模板、主题/UI 风格、宠物或 `ARCH-03`；未暂存、提交、推送或纳入未跟踪素材、`tmp/` 与缓存目录。
+- 剩余风险与下一步：Windows 无 Swift/Xcode/iPhone，新增关系模型字段、默认参数、Swift 闭包推断、XCTest 与严格并发尚未真实编译；关系长短文在小屏/大字、周记末章和分享三模板的换行，以及 5,000 条真机后台扫描、滚动 hitch/内存、真实账号合法/越界 AI 返回仍需签收。下一步只在 macOS 执行 Debug/Release 与全部 XCTest，再按 `FLOW-63` 真机核对关系、弃权、同 ID、AI 成功/失败/旧修订、主题/无障碍和三档性能；发现问题只定向修本任务，不启动 `ARCH-03` 或相邻产品改造。

@@ -14,13 +14,14 @@ function dayPack() {
   return {
     scope: "day",
     periodKey: "2026-07-22",
+    mode: "factual",
     facts: [
       {
         id: "F1",
         role: "lead",
-        kind: "rhythm",
-        label: "记录节奏",
-        statement: "今天有 3 笔记录。",
+        kind: "change",
+        label: "记录变化",
+        statement: "今天比昨天多了 3 笔记录。",
         evidenceCount: 3,
       },
       {
@@ -39,6 +40,7 @@ function monthPack() {
   return {
     scope: "month",
     periodKey: "2026-07",
+    mode: "factual",
     facts: [
       {
         id: "F1",
@@ -47,6 +49,24 @@ function monthPack() {
         label: "通勤",
         statement: "通勤比上一段多了 2 笔。",
         evidenceCount: 4,
+      },
+    ],
+  };
+}
+
+function relationshipPack() {
+  return {
+    scope: "week",
+    periodKey: "2026-W30",
+    mode: "relationship",
+    facts: [
+      {
+        id: "F1",
+        role: "lead",
+        kind: "newContextPair",
+        label: "咖啡与晚间通勤",
+        statement: "咖啡和晚间通勤连续 2 天一起出现。近 4 个有记录的周里，这种组合是第一次。",
+        evidenceCount: 8,
       },
     ],
   };
@@ -123,14 +143,60 @@ test("rejects malformed, unredacted, and identifier-bearing fact packs", () => {
     role: "lead",
     kind: "userText",
     label: "我今天见了某个人",
-    statement: "今天有 1 条用户主动写下的记录。",
+    statement: "具体原文只在本机展示。",
     evidenceCount: 1,
   };
   assert.equal(validateNarrativeFactPacks([unredactedUserText]).ok, false);
 
+  const redactedUserText = dayPack();
+  redactedUserText.facts[0] = {
+    id: "F1",
+    role: "lead",
+    kind: "userText",
+    label: "本机原文",
+    statement: "具体原文只在本机展示。",
+    evidenceCount: 1,
+  };
+  assert.equal(validateNarrativeFactPacks([redactedUserText]).ok, false);
+
   const identifier = dayPack();
   identifier.facts[0].statement = "记录 550e8400-e29b-41d4-a716-446655440000";
   assert.equal(validateNarrativeFactPacks([identifier]).ok, false);
+
+  const noMode = dayPack();
+  delete noMode.mode;
+  assert.equal(validateNarrativeFactPacks([noMode]).ok, false);
+
+  const promotedRhythm = dayPack();
+  promotedRhythm.facts[0].kind = "rhythm";
+  assert.equal(validateNarrativeFactPacks([promotedRhythm]).ok, false);
+});
+
+test("requires certified relationship claims and keeps bounded first-use wording", () => {
+  const pack = relationshipPack();
+  assert.equal(validateNarrativeFactPacks([pack]).ok, true);
+
+  const bounded = {
+    rewrites: [
+      {
+        scope: "week",
+        periodKey: "2026-W30",
+        headline: "这周出现了一组新关联",
+        summary: "咖啡和晚间通勤连续 2 天一起出现，是近 4 个有记录周里的首次。",
+        supportingLine: null,
+        evidenceIDs: ["F1"],
+      },
+    ],
+  };
+  assert.notEqual(normalizeNarrativeRewriteBatch(JSON.stringify(bounded), [pack]), null);
+
+  const unbounded = structuredClone(bounded);
+  unbounded.rewrites[0].summary = "咖啡和晚间通勤连续 2 天一起出现，这是第一次。";
+  assert.equal(normalizeNarrativeRewriteBatch(JSON.stringify(unbounded), [pack]), null);
+
+  const inventedReturn = structuredClone(bounded);
+  inventedReturn.rewrites[0].summary = "咖啡和晚间通勤重新出现，是近 4 个有记录周里的首次。";
+  assert.equal(normalizeNarrativeRewriteBatch(JSON.stringify(inventedReturn), [pack]), null);
 });
 
 test("builds the narrative prompt on the server from validated facts", () => {

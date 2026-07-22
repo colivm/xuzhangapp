@@ -150,6 +150,7 @@ struct MemoryAnchorSelectionPolicy {
         from rows: [HomeItem],
         range: SummaryPlaybackRange,
         limit: Int,
+        preferredItemID: UUID? = nil,
         label: (PhotoMemoryAssetRole, PhotoMemorySceneHint) -> String,
         caption: (PhotoMemoryAssetRole, PhotoMemorySceneHint) -> String
     ) -> [SummaryMemoryAnchor] {
@@ -161,6 +162,9 @@ struct MemoryAnchorSelectionPolicy {
             Self.candidates(for: item, range: range, label: label, caption: caption)
         }
         let sortedCandidates: [Candidate] = anchorCandidates.sorted(by: { (lhs: Candidate, rhs: Candidate) -> Bool in
+            let leftPreferred = lhs.item.id == preferredItemID
+            let rightPreferred = rhs.item.id == preferredItemID
+            if leftPreferred != rightPreferred { return leftPreferred }
             if lhs.score == rhs.score {
                 return lhs.item.createdAt > rhs.item.createdAt
             }
@@ -391,12 +395,14 @@ private final class MemoryAnchorSelectionService {
     func selectAnchors(
         from rows: [HomeItem],
         range: SummaryPlaybackRange,
-        limit: Int
+        limit: Int,
+        preferredItemID: UUID? = nil
     ) -> [SummaryMemoryAnchor] {
         MemoryAnchorSelectionPolicy.selectAnchors(
             from: rows,
             range: range,
             limit: limit,
+            preferredItemID: preferredItemID,
             label: label(for:sceneHint:),
             caption: playbackCaption(for:sceneHint:)
         )
@@ -582,16 +588,6 @@ final class PlaybackService {
 
         let previousWeekStart = calendar.date(byAdding: .weekOfYear, value: -1, to: start) ?? start
         let previousWeekRows = positiveItems(items, from: previousWeekStart, to: start)
-        let narrativePlan = LifeNarrativeSignalPolicy.makePlan(
-            LifeNarrativePlanningInput(
-                scope: .week,
-                sourceRevision: resolvedSourceRevision,
-                items: rows,
-                previousItems: previousWeekRows,
-                now: now,
-                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousWeekRows)
-            )
-        )
         let narrativeEcho = LifeNarrativeEchoPolicy.makeEcho(
             LifeNarrativeEchoInput(
                 scope: .week,
@@ -601,6 +597,17 @@ final class PlaybackService {
                 recentEchoIDs: []
             ),
             calendar: calendar
+        )
+        let narrativePlan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .week,
+                sourceRevision: resolvedSourceRevision,
+                items: rows,
+                previousItems: previousWeekRows,
+                now: now,
+                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousWeekRows),
+                relationshipEcho: narrativeEcho
+            )
         )
         let narrativeRewrite = LifeNarrativeAIRewriteStore.shared.rewrite(
             for: LifeNarrativeAIPreparationPolicy.key(
@@ -616,7 +623,7 @@ final class PlaybackService {
         let narrativeRepresentative = narrativeLeadItem(
             from: narrativePlan,
             rows: rows,
-            allowedKinds: [.userText, .photo, .change, .structuredScene]
+            allowedKinds: [.userText, .photo, .change]
         )
         let representative = narrativeRepresentative ?? selection.primary?.item ?? rows.last!
         let recordCopy = playbackRecordCopy(for: representative, range: .week)
@@ -742,7 +749,7 @@ final class PlaybackService {
                     "count": "\(rows.count)",
                     "total": Self.money(total),
                     "topCategory": top?.category ?? "日常",
-                    "supportLine": narrativeEcho?.line ?? narrativeRewrite?.summary ?? ""
+                    "supportLine": narrativeRewrite?.summary ?? narrativeEcho?.line ?? ""
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: weak ? "week-weak-outro" : "week-outro",
@@ -772,7 +779,12 @@ final class PlaybackService {
             topCategory: top?.category,
             topCategoryRatio: ratio,
             chapters: chapters,
-            memoryAnchors: memoryAnchorSelector.selectAnchors(from: rows, range: .week, limit: 3)
+            memoryAnchors: memoryAnchorSelector.selectAnchors(
+                from: rows,
+                range: .week,
+                limit: 3,
+                preferredItemID: narrativeRepresentative?.id
+            )
         )
     }
 
@@ -793,16 +805,6 @@ final class PlaybackService {
         ) ?? interval.start
         let previousRows = positiveItems(items, from: previousStart, to: interval.start)
         let previousStableSignalIDs = LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousRows)
-        let narrativePlan = LifeNarrativeSignalPolicy.makePlan(
-            LifeNarrativePlanningInput(
-                scope: .week,
-                sourceRevision: sourceRevision ?? items.count,
-                items: rows,
-                previousItems: previousRows,
-                now: now,
-                recentLeadSignalIDs: previousStableSignalIDs
-            )
-        )
         let narrativeEcho = LifeNarrativeEchoPolicy.makeEcho(
             LifeNarrativeEchoInput(
                 scope: .week,
@@ -812,6 +814,17 @@ final class PlaybackService {
                 recentEchoIDs: []
             ),
             calendar: calendar
+        )
+        let narrativePlan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .week,
+                sourceRevision: sourceRevision ?? items.count,
+                items: rows,
+                previousItems: previousRows,
+                now: now,
+                recentLeadSignalIDs: previousStableSignalIDs,
+                relationshipEcho: narrativeEcho
+            )
         )
         let narrativeRewrite = LifeNarrativeAIRewriteStore.shared.rewrite(
             for: LifeNarrativeAIPreparationPolicy.key(
@@ -1365,16 +1378,6 @@ final class PlaybackService {
 
         let previousMonthStart = calendar.date(byAdding: .month, value: -1, to: start) ?? start
         let previousMonthRows = positiveItems(items, from: previousMonthStart, to: start)
-        let narrativePlan = LifeNarrativeSignalPolicy.makePlan(
-            LifeNarrativePlanningInput(
-                scope: .month,
-                sourceRevision: resolvedSourceRevision,
-                items: rows,
-                previousItems: previousMonthRows,
-                now: now,
-                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousMonthRows)
-            )
-        )
         let narrativeEcho = LifeNarrativeEchoPolicy.makeEcho(
             LifeNarrativeEchoInput(
                 scope: .month,
@@ -1384,6 +1387,17 @@ final class PlaybackService {
                 recentEchoIDs: []
             ),
             calendar: calendar
+        )
+        let narrativePlan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .month,
+                sourceRevision: resolvedSourceRevision,
+                items: rows,
+                previousItems: previousMonthRows,
+                now: now,
+                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousMonthRows),
+                relationshipEcho: narrativeEcho
+            )
         )
         let narrativeRewrite = LifeNarrativeAIRewriteStore.shared.rewrite(
             for: LifeNarrativeAIPreparationPolicy.key(
@@ -1404,7 +1418,7 @@ final class PlaybackService {
         let narrativeRepresentative = narrativeLeadItem(
             from: narrativePlan,
             rows: rows,
-            allowedKinds: [.userText, .photo, .change, .structuredScene]
+            allowedKinds: [.userText, .photo, .change]
         )
         let earlyNarrativeItem = narrativeRepresentative.flatMap { item in
             calendar.component(.day, from: item.createdAt) <= 10 ? item : nil
@@ -1545,7 +1559,7 @@ final class PlaybackService {
                 metrics: [
                     "count": "\(rows.count)",
                     "total": Self.money(total),
-                    "supportLine": narrativeEcho?.line ?? narrativeRewrite?.summary ?? ""
+                    "supportLine": narrativeRewrite?.summary ?? narrativeEcho?.line ?? ""
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-outro",
@@ -1575,7 +1589,12 @@ final class PlaybackService {
             topCategory: top?.category,
             topCategoryRatio: ratio,
             chapters: chapters,
-            memoryAnchors: memoryAnchorSelector.selectAnchors(from: rows, range: .month, limit: 6)
+            memoryAnchors: memoryAnchorSelector.selectAnchors(
+                from: rows,
+                range: .month,
+                limit: 6,
+                preferredItemID: narrativeRepresentative?.id
+            )
         )
     }
 
