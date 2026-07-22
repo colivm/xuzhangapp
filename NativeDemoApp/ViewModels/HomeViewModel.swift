@@ -632,6 +632,7 @@ enum ItemDerivedCachePublicationPolicy {
 }
 
 struct HomeJourneyLedgerFacts: Equatable {
+    var allRecordDayCount = 0
     var totalCommittedRecordCount = 0
     var currentWeekCommittedRecordCount = 0
     var currentWeekActiveDayCount = 0
@@ -645,9 +646,11 @@ struct HomeJourneyLedgerFacts: Equatable {
         calendar: Calendar = .current
     ) -> HomeJourneyLedgerFacts {
         var facts = HomeJourneyLedgerFacts()
+        var allRecordDays = Set<Date>()
         var weekDays = Set<Date>()
         var monthDays = Set<Date>()
         for item in items {
+            allRecordDays.insert(calendar.startOfDay(for: item.createdAt))
             guard item.amount > 0, item.draftMeta == nil else { continue }
             facts.totalCommittedRecordCount += 1
             if let currentWeekInterval,
@@ -663,6 +666,7 @@ struct HomeJourneyLedgerFacts: Equatable {
                 monthDays.insert(calendar.startOfDay(for: item.createdAt))
             }
         }
+        facts.allRecordDayCount = allRecordDays.count
         facts.currentWeekActiveDayCount = weekDays.count
         facts.currentMonthActiveDayCount = monthDays.count
         return facts
@@ -716,6 +720,9 @@ final class HomeViewModel: ObservableObject {
     private(set) var homeDashboardRevision: Int = 0
     var homeLifeMarkTextsByItemID: [UUID: String] = [:]
     var homeTodayLifeMarkLine: String?
+    var homeWeekLifeThemeText = ""
+    var homeQuickRecordNudgeText: String?
+    var homeWeekTopCategoryText = "暂无"
     var highConfidenceQuickRecordSuggestionSnapshot: HomeHighConfidenceQuickRecordSuggestion?
     @Published private(set) var recordInputMessage: String?
     @Published var petMessage: String? = nil

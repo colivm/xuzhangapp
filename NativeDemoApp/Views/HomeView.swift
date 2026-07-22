@@ -975,7 +975,7 @@ struct HomeView: View {
 
     private var lifeRhythmFallback: some View {
         VStack(alignment: .leading, spacing: 8) {
-            let daysWithRecords = countDaysWithRecords()
+            let daysWithRecords = homeViewModel.homeJourneyLedgerFacts.allRecordDayCount
             if daysWithRecords > 0 {
                 Text("已记录 \(daysWithRecords) 天")
                     .font(.system(size: 12))
@@ -1965,12 +1965,6 @@ struct HomeView: View {
                     )
             }
         }
-    }
-
-    private func countDaysWithRecords() -> Int {
-        let calendar = Calendar.current
-        let days = Set(homeViewModel.items.map { calendar.startOfDay(for: $0.createdAt) })
-        return days.count
     }
 
     private var todayRecordsSheet: some View {

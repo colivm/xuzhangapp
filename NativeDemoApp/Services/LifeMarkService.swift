@@ -82,6 +82,12 @@ private struct LifeMarkDefinition {
 }
 
 enum LifeMarkService {
+    struct PreparedAggregationContext: @unchecked Sendable {
+        fileprivate let historyItems: [HomeItem]
+        fileprivate let definitionIDsByItemID: [UUID: Set<String>]
+        fileprivate let historyItemsByDefinitionID: [String: [HomeItem]]
+    }
+
     private static var aggregateCache: [String: [LifeMarkAggregate]] = [:]
     private static var aggregateCacheOrder: [String] = []
     private static let aggregateCacheLimit = 48
@@ -399,6 +405,73 @@ enum LifeMarkService {
         return result
     }
 
+    static func prepareAggregationContext(
+        allItems: [HomeItem],
+        periodItems: [HomeItem]? = nil
+    ) -> PreparedAggregationContext {
+        let historyItems = allItems.filter { $0.amount > 0 && $0.draftMeta == nil }
+        let candidatePeriodItems = (periodItems ?? allItems).filter {
+            $0.amount > 0 && $0.draftMeta == nil
+        }
+        let relevantDefinitions = definitions.filter { definition in
+            candidatePeriodItems.contains { matches($0, definition: definition) }
+        }
+        var definitionIDsByItemID: [UUID: Set<String>] = [:]
+        var historyItemsByDefinitionID: [String: [HomeItem]] = [:]
+        definitionIDsByItemID.reserveCapacity(historyItems.count)
+        historyItemsByDefinitionID.reserveCapacity(relevantDefinitions.count)
+
+        for item in historyItems {
+            var matchedDefinitionIDs = Set<String>()
+            for definition in relevantDefinitions where matches(item, definition: definition) {
+                matchedDefinitionIDs.insert(definition.id)
+                historyItemsByDefinitionID[definition.id, default: []].append(item)
+            }
+            definitionIDsByItemID[item.id] = matchedDefinitionIDs
+        }
+
+        return PreparedAggregationContext(
+            historyItems: historyItems,
+            definitionIDsByItemID: definitionIDsByItemID,
+            historyItemsByDefinitionID: historyItemsByDefinitionID
+        )
+    }
+
+    static func aggregates(
+        for items: [HomeItem],
+        preparedContext: PreparedAggregationContext,
+        isMember: Bool,
+        limit: Int = 8
+    ) -> [LifeMarkAggregate] {
+        let periodItems = items.filter { $0.amount > 0 && $0.draftMeta == nil }
+        guard !periodItems.isEmpty else { return [] }
+
+        var rows = sceneAggregates(
+            for: periodItems,
+            historyItems: preparedContext.historyItems,
+            preparedContext: preparedContext
+        )
+        rows += contextAggregates(for: periodItems)
+        rows += milestoneAggregates(
+            periodItems: periodItems,
+            historyItems: preparedContext.historyItems,
+            preparedContext: preparedContext
+        )
+        rows += streakAggregates(for: periodItems, preparedContext: preparedContext)
+
+        return rows
+            .filter { isMember || $0.access == .free }
+            .sorted { lhs, rhs in
+                if lhs.priority == rhs.priority {
+                    if lhs.count == rhs.count { return lhs.latestDate > rhs.latestDate }
+                    return lhs.count > rhs.count
+                }
+                return lhs.priority < rhs.priority
+            }
+            .prefix(limit)
+            .map { $0 }
+    }
+
     static func lockedPreview(
         for items: [HomeItem],
         allItems: [HomeItem]? = nil
@@ -698,12 +771,20 @@ enum LifeMarkService {
         return nil
     }
 
-    private static func sceneAggregates(for items: [HomeItem], historyItems: [HomeItem]) -> [LifeMarkAggregate] {
+    private static func sceneAggregates(
+        for items: [HomeItem],
+        historyItems: [HomeItem],
+        preparedContext: PreparedAggregationContext? = nil
+    ) -> [LifeMarkAggregate] {
         definitions.compactMap { definition in
             if ["weekend_gathering", "travel"].contains(definition.id) {
                 return nil
             }
-            let matched = items.filter { matches($0, definition: definition) }
+            let matched = matchedItems(
+                in: items,
+                definition: definition,
+                preparedContext: preparedContext
+            )
             guard matched.count >= definition.minimumCount else { return nil }
             if definition.id == "coffee_drink",
                matched.count < 2,
@@ -711,7 +792,8 @@ enum LifeMarkService {
                isCasualDrinkOnly(only) {
                 return nil
             }
-            let historyMatched = historyItems.filter { matches($0, definition: definition) }
+            let historyMatched = preparedContext?.historyItemsByDefinitionID[definition.id]
+                ?? historyItems.filter { matches($0, definition: definition) }
             return aggregate(
                 id: definition.id,
                 kind: .scene,
@@ -798,7 +880,8 @@ enum LifeMarkService {
 
     private static func milestoneAggregates(
         periodItems: [HomeItem],
-        historyItems: [HomeItem]
+        historyItems: [HomeItem],
+        preparedContext: PreparedAggregationContext? = nil
     ) -> [LifeMarkAggregate] {
         let periodIDs = Set(periodItems.map(\.id))
         let trackedDefinitionIDs = [
@@ -813,11 +896,15 @@ enum LifeMarkService {
         var rows: [LifeMarkAggregate] = []
         for id in trackedDefinitionIDs {
             guard let definition = definitions.first(where: { $0.id == id }) else { continue }
-            let periodMatched = periodItems.filter { matches($0, definition: definition) }
+            let periodMatched = matchedItems(
+                in: periodItems,
+                definition: definition,
+                preparedContext: preparedContext
+            )
             guard !periodMatched.isEmpty else { continue }
             let periodMatchedIDs = Set(periodMatched.map(\.id))
-            let sorted = historyItems
-                .filter { matches($0, definition: definition) }
+            let sorted = (preparedContext?.historyItemsByDefinitionID[definition.id]
+                ?? historyItems.filter { matches($0, definition: definition) })
                 .sorted { $0.createdAt < $1.createdAt }
             let grouped = Dictionary(grouping: sorted) { item in
                 milestoneLabel(for: definition, item: item)
@@ -847,10 +934,17 @@ enum LifeMarkService {
         return rows
     }
 
-    private static func streakAggregates(for items: [HomeItem]) -> [LifeMarkAggregate] {
+    private static func streakAggregates(
+        for items: [HomeItem],
+        preparedContext: PreparedAggregationContext? = nil
+    ) -> [LifeMarkAggregate] {
         let calendar = Calendar.current
         return definitions.compactMap { definition in
-            let matched = items.filter { matches($0, definition: definition) }
+            let matched = matchedItems(
+                in: items,
+                definition: definition,
+                preparedContext: preparedContext
+            )
             let days = Set(matched.map { calendar.startOfDay(for: $0.createdAt) }).sorted()
             guard let streak = longestStreak(in: days), streak.count >= 3 else { return nil }
             let streakItems = matched.filter { item in
@@ -943,6 +1037,20 @@ enum LifeMarkService {
         return definition.requiresKeywordMatch
             ? categoryMatched && keywordMatched
             : categoryMatched || keywordMatched
+    }
+
+    private static func matchedItems(
+        in items: [HomeItem],
+        definition: LifeMarkDefinition,
+        preparedContext: PreparedAggregationContext?
+    ) -> [HomeItem] {
+        items.filter { item in
+            guard let preparedContext,
+                  let matchedDefinitionIDs = preparedContext.definitionIDsByItemID[item.id] else {
+                return matches(item, definition: definition)
+            }
+            return matchedDefinitionIDs.contains(definition.id)
+        }
     }
 
     private static func matchesAnySpecificDefinition(_ item: HomeItem, ids specificIDs: Set<String>) -> Bool {

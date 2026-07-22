@@ -2555,6 +2555,7 @@ final class HomeDashboardSnapshotTests: XCTestCase {
         )
 
         XCTAssertEqual(facts.totalCommittedRecordCount, 2)
+        XCTAssertEqual(facts.allRecordDayCount, 2)
         XCTAssertEqual(facts.currentWeekCommittedRecordCount, 1)
         XCTAssertEqual(facts.currentWeekActiveDayCount, 1)
         XCTAssertEqual(facts.currentMonthCommittedRecordCount, 2)
@@ -2584,16 +2585,20 @@ final class HomeDashboardSnapshotTests: XCTestCase {
             HomeLifeMarkPreparationInput(
                 key: key,
                 visibleItems: [visible],
+                weekItems: [visible, hidden],
                 allItems: [visible, hidden],
-                isMember: true
+                isMember: true,
+                frequentSuggestionLine: nil
             )
         )
         let second = HomeDashboardSnapshotComputation.lifeMarkSnapshot(
             HomeLifeMarkPreparationInput(
                 key: key,
                 visibleItems: [visible],
+                weekItems: [visible, hidden],
                 allItems: [visible, hidden],
-                isMember: true
+                isMember: true,
+                frequentSuggestionLine: nil
             )
         )
 
@@ -2602,6 +2607,113 @@ final class HomeDashboardSnapshotTests: XCTestCase {
         XCTAssertEqual(first.textsByItemID, second.textsByItemID)
         XCTAssertNotNil(first.todayPrimaryLine)
         XCTAssertEqual(first.todayPrimaryLine, second.todayPrimaryLine)
+        XCTAssertEqual(first.weekLifeThemeText, second.weekLifeThemeText)
+        XCTAssertEqual(first.quickRecordNudgeText, second.quickRecordNudgeText)
+        XCTAssertEqual(first.weekTopCategoryText, second.weekTopCategoryText)
+    }
+
+    func testPreparedLifeMarkContextMatchesLegacyCombinedAndPerItemResults() {
+        let now = Date(timeIntervalSince1970: 1_784_240_000)
+        let items = [
+            HomeItem(title: "咖啡", amount: 18, category: .dining, createdAt: now),
+            HomeItem(
+                title: "咖啡",
+                amount: 16,
+                category: .dining,
+                createdAt: now.addingTimeInterval(-24 * 60 * 60)
+            ),
+            HomeItem(
+                title: "上班地铁",
+                amount: 4,
+                category: .transport,
+                createdAt: now.addingTimeInterval(-2 * 24 * 60 * 60),
+                scenePackId: "commute"
+            ),
+            HomeItem(
+                title: "普通午餐",
+                amount: 28,
+                category: .dining,
+                createdAt: now.addingTimeInterval(-3 * 24 * 60 * 60)
+            )
+        ]
+        let context = LifeMarkService.prepareAggregationContext(
+            allItems: items,
+            periodItems: items
+        )
+        let periods = [items, [items[0]], [items[2]]]
+
+        for period in periods {
+            XCTAssertEqual(
+                LifeMarkService.aggregates(
+                    for: period,
+                    preparedContext: context,
+                    isMember: true,
+                    limit: 8
+                ),
+                LifeMarkService.aggregates(
+                    for: period,
+                    allItems: items,
+                    isMember: true,
+                    limit: 8
+                )
+            )
+        }
+    }
+
+    func testSceneRewardColdStartPreparedAggregationPreservesLegacyDecision() {
+        let suiteName = "LifeMarkSceneRewardServiceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let service = LifeMarkSceneRewardService(defaults: defaults)
+        let now = Date(timeIntervalSince1970: 1_784_240_000)
+        let commute = HomeItem(
+            title: "上班地铁",
+            amount: 4,
+            category: .transport,
+            createdAt: now,
+            scenePackId: "commute"
+        )
+        let earlierCoffee = HomeItem(
+            title: "拿铁咖啡",
+            amount: 18,
+            category: .dining,
+            createdAt: now.addingTimeInterval(-24 * 60 * 60)
+        )
+        let ordinary = HomeItem(
+            title: "普通午餐",
+            amount: 28,
+            category: .dining,
+            createdAt: now.addingTimeInterval(60)
+        )
+        let scenarios = [
+            (item: commute, allItems: [commute]),
+            (item: commute, allItems: [commute, earlierCoffee]),
+            (item: ordinary, allItems: [ordinary])
+        ]
+
+        for scenario in scenarios {
+            let previousItems = scenario.allItems.filter { $0.id != scenario.item.id }
+            let expected = !LifeMarkService.aggregates(
+                for: [scenario.item],
+                allItems: scenario.allItems,
+                isMember: true,
+                limit: 1
+            ).isEmpty && LifeMarkService.aggregates(
+                for: previousItems,
+                allItems: previousItems,
+                isMember: true,
+                limit: 1
+            ).isEmpty
+
+            XCTAssertEqual(
+                service.shouldShowColdStartGuide(
+                    after: scenario.item,
+                    allItems: scenario.allItems,
+                    isMember: false
+                ),
+                expected
+            )
+        }
     }
 
     func testItemDerivedCacheBuildsOneAtomicSnapshotAtReleaseScale() {

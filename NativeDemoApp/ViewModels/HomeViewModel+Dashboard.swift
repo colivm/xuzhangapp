@@ -86,14 +86,19 @@ struct HomeLifeMarkSnapshotKey: Equatable {
 struct HomeLifeMarkPreparationInput: @unchecked Sendable {
     let key: HomeLifeMarkSnapshotKey
     let visibleItems: [HomeItem]
+    let weekItems: [HomeItem]
     let allItems: [HomeItem]
     let isMember: Bool
+    let frequentSuggestionLine: String?
 }
 
 struct HomeLifeMarkSnapshot: @unchecked Sendable {
     let key: HomeLifeMarkSnapshotKey
     let textsByItemID: [UUID: String]
     let todayPrimaryLine: String?
+    let weekLifeThemeText: String
+    let quickRecordNudgeText: String
+    let weekTopCategoryText: String
 }
 
 struct HomeEmptyTodayCopy: Equatable {
@@ -177,11 +182,15 @@ enum HomeDashboardSnapshotComputation {
     }
 
     static func lifeMarkSnapshot(_ input: HomeLifeMarkPreparationInput) -> HomeLifeMarkSnapshot {
+        let preparedContext = LifeMarkService.prepareAggregationContext(
+            allItems: input.allItems,
+            periodItems: input.weekItems + input.visibleItems
+        )
         let texts = input.visibleItems.reduce(into: [UUID: String]()) { result, item in
             guard item.amount > 0,
                   let mark = LifeMarkService.aggregates(
                     for: [item],
-                    allItems: input.allItems,
+                    preparedContext: preparedContext,
                     isMember: input.isMember,
                     limit: 1
                   ).first else {
@@ -195,17 +204,69 @@ enum HomeDashboardSnapshotComputation {
             }
         }
         let positiveVisibleItems = input.visibleItems.filter { $0.amount > 0 }
-        let todayPrimaryLine = LifeMarkService.aggregates(
+        let todayAggregates = LifeMarkService.aggregates(
             for: positiveVisibleItems,
-            allItems: input.allItems,
+            preparedContext: preparedContext,
             isMember: input.isMember,
             limit: 1
-        ).first.map { LifeMarkService.primaryLine(for: $0) }
+        )
+        let positiveWeekItems = input.weekItems.filter { $0.amount > 0 }
+        let weekAggregates = LifeMarkService.aggregates(
+            for: positiveWeekItems,
+            preparedContext: preparedContext,
+            isMember: input.isMember,
+            limit: 1
+        )
+        let todayPrimaryLine = todayAggregates.first.map { LifeMarkService.primaryLine(for: $0) }
+        let qualifyingTodayMark = todayAggregates.first.flatMap { mark in
+            mark.count >= 2 || mark.kind != .scene ? mark : nil
+        }
+        let qualifyingWeekMark = weekAggregates.first.flatMap { mark in
+            mark.count >= 2 || mark.kind != .scene ? mark : nil
+        }
+        let weekScene = LifeSceneSemanticService.dominantScene(in: positiveWeekItems)
+        let todayScene = LifeSceneSemanticService.dominantScene(in: positiveVisibleItems)
+        let weekLifeThemeText = qualifyingWeekMark.map { LifeMarkService.primaryLine(for: $0) }
+            ?? weekScene.flatMap { scene in
+                scene.count >= 2
+                    ? LifeSceneSemanticService.memoryLine(for: scene.signal, count: scene.count)
+                    : nil
+            }
+            ?? ""
+        let quickRecordNudgeText: String
+        if positiveVisibleItems.isEmpty {
+            quickRecordNudgeText = input.frequentSuggestionLine
+                ?? qualifyingWeekMark.map { "接着留下「\($0.label)」" }
+                ?? weekScene.flatMap { scene in
+                    scene.count >= 2
+                        ? "接着留下「\(LifeSceneSemanticService.displayTheme(for: scene.signal))」"
+                        : nil
+                }
+                ?? "只输金额也可以"
+        } else {
+            quickRecordNudgeText = qualifyingTodayMark.map {
+                "今天已有 \(positiveVisibleItems.count) 笔 · \($0.label)"
+            }
+                ?? todayScene.flatMap { scene in
+                    scene.count >= 2
+                        ? "今天已有 \(positiveVisibleItems.count) 笔 · \(LifeSceneSemanticService.displayTheme(for: scene.signal))"
+                        : nil
+                }
+                ?? "今天已记 \(positiveVisibleItems.count) 笔"
+        }
         return HomeLifeMarkSnapshot(
             key: input.key,
             textsByItemID: texts,
-            todayPrimaryLine: todayPrimaryLine
+            todayPrimaryLine: todayPrimaryLine,
+            weekLifeThemeText: weekLifeThemeText,
+            quickRecordNudgeText: quickRecordNudgeText,
+            weekTopCategoryText: topCategoryCountLabel(from: input.weekItems)
         )
+    }
+
+    private static func topCategoryCountLabel(from items: [HomeItem]) -> String {
+        let grouped = Dictionary(grouping: items, by: \.category)
+        return grouped.max(by: { $0.value.count < $1.value.count })?.key.rawValue ?? "暂无"
     }
 }
 
@@ -283,11 +344,17 @@ extension HomeViewModel {
         ) {
             let needsVisibleClear = !homeLifeMarkTextsByItemID.isEmpty
                 || homeTodayLifeMarkLine != nil
+                || !homeWeekLifeThemeText.isEmpty
+                || homeQuickRecordNudgeText != nil
+                || homeWeekTopCategoryText != "暂无"
             if needsVisibleClear {
                 objectWillChange.send()
             }
             homeLifeMarkTextsByItemID = [:]
             homeTodayLifeMarkLine = nil
+            homeWeekLifeThemeText = ""
+            homeQuickRecordNudgeText = nil
+            homeWeekTopCategoryText = "暂无"
         }
         homeLifeMarkPreparationTask?.cancel()
         homeLifeMarkRequestID = UUID()
@@ -296,8 +363,12 @@ extension HomeViewModel {
         let input = HomeLifeMarkPreparationInput(
             key: key,
             visibleItems: todayItems,
+            weekItems: filteredItems(in: .week),
             allItems: items,
-            isMember: isMember
+            isMember: isMember,
+            frequentSuggestionLine: frequentRecordAmountSuggestions(at: now).first.map { suggestion in
+                "常记 \(shortAmountText(suggestion.amount)) · \(suggestion.category.label)"
+            }
         )
         homeLifeMarkPreparationTask = Task { @MainActor in
             await Task.yield()
@@ -320,10 +391,16 @@ extension HomeViewModel {
             }
             let visibleSnapshotChanged = homeLifeMarkTextsByItemID != snapshot.textsByItemID
                 || homeTodayLifeMarkLine != snapshot.todayPrimaryLine
+                || homeWeekLifeThemeText != snapshot.weekLifeThemeText
+                || homeQuickRecordNudgeText != snapshot.quickRecordNudgeText
+                || homeWeekTopCategoryText != snapshot.weekTopCategoryText
             if visibleSnapshotChanged {
                 objectWillChange.send()
                 homeLifeMarkTextsByItemID = snapshot.textsByItemID
                 homeTodayLifeMarkLine = snapshot.todayPrimaryLine
+                homeWeekLifeThemeText = snapshot.weekLifeThemeText
+                homeQuickRecordNudgeText = snapshot.quickRecordNudgeText
+                homeWeekTopCategoryText = snapshot.weekTopCategoryText
             }
             homeLifeMarkPreparationTask = nil
         }
@@ -1030,50 +1107,16 @@ extension HomeViewModel {
     }
 
     var weekTopCategoryText: String {
-        topCategoryLabel(in: .week)
+        homeWeekTopCategoryText
     }
 
     var weekLifeThemeText: String {
-        lifeMarkMemoryLine(from: filteredItems(in: .week), minimumCount: 2)
-            ?? lifeSceneMemoryLine(from: filteredItems(in: .week), minimumCount: 2)
-            ?? ""
+        homeWeekLifeThemeText
     }
 
     var quickRecordNudgeText: String {
-        let records = todayItems
-        if records.isEmpty {
-            if let suggestion = frequentRecordAmountSuggestions(at: Date()).first {
-                return "常记 \(shortAmountText(suggestion.amount)) · \(suggestion.category.label)"
-            }
-            if let mark = LifeMarkService.aggregates(
-                for: filteredItems(in: .week),
-                allItems: items,
-                isMember: hasMemberAccess,
-                limit: 1
-            ).first,
-               mark.count >= 2 || mark.kind != .scene {
-                return "接着留下「\(mark.label)」"
-            }
-            if let scene = LifeSceneSemanticService.dominantScene(in: filteredItems(in: .week).filter({ $0.amount > 0 })),
-               scene.count >= 2 {
-                return "接着留下「\(LifeSceneSemanticService.displayTheme(for: scene.signal))」"
-            }
-            return "只输金额也可以"
-        }
-        if let mark = LifeMarkService.aggregates(
-            for: records,
-            allItems: items,
-            isMember: hasMemberAccess,
-            limit: 1
-        ).first,
-           mark.count >= 2 || mark.kind != .scene {
-            return "今天已有 \(records.count) 笔 · \(mark.label)"
-        }
-        if let scene = LifeSceneSemanticService.dominantScene(in: records),
-           scene.count >= 2 {
-            return "今天已有 \(records.count) 笔 · \(LifeSceneSemanticService.displayTheme(for: scene.signal))"
-        }
-        return "今天已记 \(records.count) 笔"
+        homeQuickRecordNudgeText
+            ?? (todayItems.isEmpty ? "只输金额也可以" : "今天已记 \(todayItems.count) 笔")
     }
 
     /// 近 7 日内生成的复盘记录（按时间新到旧）。

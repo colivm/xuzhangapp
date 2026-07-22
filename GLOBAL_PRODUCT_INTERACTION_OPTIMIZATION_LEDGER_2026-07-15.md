@@ -3584,3 +3584,40 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - Windows 验证证据：`node --test ai-proxy/narrativeRewriteContract.test.js` 9/9、`python scripts/ai_capability_lint.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`git diff --check` 与最终 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`。完整门禁包含生活语义、AI 契约/生产路由、主题、迁移、SQLite、100/1,000/5,000 条和三张真实 12MP 夹具；文案扫描 81 个 Swift 文件，仅保留基线既有 5 条 soft warning，本轮新增为 0。
 - 冻结边界复核：未修改账单字段、金额/日期/标题/分类、OCR/AI 指令保存、存储/同步 DTO、首页动态主动作、痕迹筛选/日期口径、复盘查询/对比事实、周记 3/5 章、月章 6 章及顺序/时长、额度/会员/Product ID/StoreKit、分享照片准备/模板、主题/UI 风格、宠物或 `ARCH-03`；未暂存、提交、推送或纳入未跟踪素材、`tmp/` 与缓存目录。
 - 剩余风险与下一步：Windows 无 Swift/Xcode/iPhone，新增关系模型字段、默认参数、Swift 闭包推断、XCTest 与严格并发尚未真实编译；关系长短文在小屏/大字、周记末章和分享三模板的换行，以及 5,000 条真机后台扫描、滚动 hitch/内存、真实账号合法/越界 AI 返回仍需签收。下一步只在 macOS 执行 Debug/Release 与全部 XCTest，再按 `FLOW-63` 真机核对关系、弃权、同 ID、AI 成功/失败/旧修订、主题/无障碍和三档性能；发现问题只定向修本任务，不启动 `ARCH-03` 或相邻产品改造。
+
+---
+
+## 48. PERF-FIX-03：首页生活印记非阻塞快照与保存后滚动（2026-07-22）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。Windows 静态、策略、发布规模夹具与完整发布门禁已通过；缺 Xcode/iPhone `FLOW-64` 签收，不标记 `VERIFIED`。
+- 用户真机反馈：记完一笔返回首页后暂时无法上下滚动；生活印记加载完成后才恢复。该现象说明既有 `PERF-09`、`UI-FIX-04` 与 `PERF-15` 虽已把部分首页数据改为变化驱动快照，当前路径仍存在保存后主线程同步生活印记聚合或逐条完整历史扫描的缺口。
+- 已确认方向：首页 `ScrollView` 的显式禁用只与今日横滑手势状态有关，生活印记加载没有主动锁滚动。实际风险来自账本修订触发 SwiftUI 重绘后，首页展示属性仍可能调用 `LifeMarkService.aggregates`、完整账本签名或重复记录统计；生活印记后台任务又对今日各记录分别聚合，主线程事件处理与后台 CPU 同时受压，形成“印记完成后才能滚动”的表象。
+- 目标：账本真正变化时只构建一次首页生活印记历史上下文和不可变展示快照；SwiftUI `body`、计算属性、滚动、宠物帧、气泡、提示层与普通页面状态只读取已发布结果。保存后账单立即稳定出现、首页始终可滚动，生活印记完成后只局部补齐且不造成整页跳动。
+- 允许修改：`HomeViewModel+Dashboard.swift` 的首页生活印记准备、单次批处理与修订发布；`HomeViewModel.swift` 直接必要的快照状态/失效接线；`HomeView.swift` 中残留的同步聚合或完整账本展示读取；`LifeMarkService.swift` 只允许增加复用同一历史索引/已知修订的批处理入口，不改变聚合结论；保存返回首页的直接链路 `RecordView.swift` 与 `FreeScenePackService.swift` 只允许把场景奖励/首次引导判断移出主线程，不改资格或提示；对应 XCTest、静态门禁、真机矩阵和本文档。
+- 冻结边界：不修改生活印记文案、资格、排序、会员边界、叙事价值/回声算法、账单字段/排序/保存、首页 UI/卡片/主题/动态主动作/提示预算、宠物、通勤、今日回放、痕迹、复盘、AI 指令、额度/会员/StoreKit、存储同步、页面路由或 `ARCH-03`。相同账本、日期、会员与天气输入必须得到相同展示结论。
+- 稳定发布边界：同日同会员时保留上一份已有记录的生活印记；新记录先以无生活印记的稳定行进入，后台完成后只补齐对应字段。跨日或会员身份变化立即丢弃不安全旧文本。快速连续保存、编辑、删除只允许最新账本修订发布，旧任务不得反写；删除记录不得保留旧标签。
+- 性能边界：SwiftUI `body` 和首页计算属性零 `LifeMarkService.aggregates`、零完整账本签名、零按可见行重复聚合；一次修订最多建立一次历史上下文并批量派生今日总体与各行结果。缓存命中不得先遍历完整账本生成内容签名，优先使用已有账本修订号。不得使用加载遮罩、固定延迟或禁用滚动掩盖问题。
+- 工作区保护：开始前分支为 `feature/xuzhangapp-staging`；工作树仅有用户未跟踪的 `brand-assets/`、`tmp/` 与 `scripts/__pycache__/` 现场。本项不覆盖、不删除、不暂存这些内容。
+- 计划验收：保存后立即连续拖动 20 次仍可滚动；0/1/多笔、同日连续保存/编辑/删除、跨日、会员切换、生活印记有/无结果、100/1,000/5,000 条均保持展示结果与改前一致；旧标签稳定承接且不串到新记录；主线程无渲染期完整账本聚合；完整 Windows 门禁通过。Xcode Debug/Release、XCTest、iPhone Instruments 与真实 5,000 条签收前只能标记 `CODE_DONE`，不得标记 `VERIFIED`。
+- 实现（单次历史上下文）：`LifeMarkService` 新增不可变 `PreparedAggregationContext`，一次过滤有效历史、匹配相关定义并建立“记录 → 定义”和“定义 → 历史记录”索引；同一首页修订内逐行生活印记、今日主线、周主题和主动作副文案共用该上下文，不再为每行重新生成完整账本签名或扫描历史。保留旧入口并增加等价性测试，生活印记资格、优先级、会员过滤和文案未改。
+- 实现（稳定发布）：首页生活印记快照同时携带周主题、主动作副文案和周最高分类；对应 SwiftUI getter 只读取已发布值。账本变化时同日同会员只承接仍存在记录的旧行标签，新记录先稳定显示为无标签，后台完成后局部补齐；跨日或会员变化清空，快速连续修订通过 request ID 与 key 拒绝旧结果反写。首页“已记录天数”并入一次生成的 `HomeJourneyLedgerFacts`，移除 `body` 侧完整账本日期集合。
+- 实现（保存后遗漏链路）：真机返回首页后 0.28 秒还会触发免费场景包奖励和首次生活线索判断；旧实现位于主队列，首次判断连续两次调用带完整签名的聚合。现改为保存成功时冻结最小输入，延迟后在 utility 子任务准备决定，主线程只接收最终 prompt；奖励决定使用锁串行，避免快速连续保存重复发奖。首次判断改用无签名 prepared context，结论由新旧实现等价测试锁定；奖励/冷启动资格、UserDefaults key、提示文案和 0.28 秒展示节奏不变。
+- 修改文件：`NativeDemoApp/Services/LifeMarkService.swift`、`NativeDemoApp/Services/FreeScenePackService.swift`、`NativeDemoApp/ViewModels/HomeViewModel+Dashboard.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/Views/HomeView.swift`、`NativeDemoApp/Views/RecordView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 自动回归：新增 prepared context 与旧逐次聚合在整体/单条输入下的等价性测试、首次生活线索新旧资格等价测试、全部记录日事实测试，以及首页渲染零同步聚合、零逐行完整签名、保存后提示不在主队列聚合的静态防回流门禁；真机矩阵新增 `FLOW-64`，覆盖连续保存/编辑/删除、跨日、会员切换、旧任务反写、100/1,000/5,000 条和立即连续拖动。
+- Windows 验证证据：`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`git diff --check` 与最终 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`。完整门禁包含生活语义、AI 契约、主题、迁移、SQLite、100/1,000/5,000 条与三张真实 12MP 夹具；扫描 81 个 Swift 文件，仅保留基线既有 5 条 soft copy warning，本轮新增为 0。
+- 冻结边界复核：未修改生活印记结论、文案、资格、排序、会员边界、账单保存字段/顺序、首页 UI/动态主动作状态机、宠物、通勤、回放、痕迹、复盘、AI 指令、额度/会员/StoreKit、同步、主题或 `ARCH-03`；未覆盖、删除、暂存、提交或推送未跟踪素材、`tmp/` 与缓存目录。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，`@unchecked Sendable` 输入、Swift 任务组闭包、XCTest 和 UserDefaults 后台读写仍需真实编译；虽然 `UserDefaults` 支持并发访问且奖励决定已串行，仍须用快速连续保存确认 prompt 不迟到、不重复。5,000 条真机下要用 Main Thread Hitches 确认保存返回后无 >100ms 停顿，并核对旧标签承接没有整页闪动。
+- 下一步：先在 macOS 执行 Debug/Release 与全部 XCTest，再按 `FLOW-64` 真机签收保存后立即滚动、连续变更、跨日/会员和 5,000 条；发现问题只修本项快照、任务取消/发布或提示后台决定，不改产品结论。全局只读审计发现的其他同类路径已单列 `PERF-AUDIT-04`，不得混回本项或与 `ARCH-03` 合并。
+
+---
+
+## 49. PERF-AUDIT-04：全局变化驱动快照收尾（2026-07-22）
+
+- 状态：`NOT_STARTED`；`PERF-FIX-03` 的全局只读审计已完成，尚未修改本项代码。必须在 `FLOW-64` 编译/真机签收或其定向修复收口后再启动，启动时才可标记唯一 `IN_PROGRESS`。
+- 审计目标：检查首页之外是否仍把“已算好的周期结果”在 SwiftUI 绘制、弹层重绘或明确交互时重新扫完整账本；只处理真实可达路径，不因看到旧函数就重写产品逻辑。
+- P0 发现（播放分享弹层）：`StatsWebView.summaryPlaybackSheet` 在每次 SwiftUI 重绘时调用 `weeklySharePayload(for:)`，它同步执行 `PlaybackService.buildWeeklyShareCardPayload`；该构建会重新筛本周/上周、生成回声与叙事计划、构建生活印记，弹层内进度、播放索引或其他状态变化都可能重复触发。应让周记后台生成阶段一并发布同修订的 share payload，弹层只读快照；不得改变播放章节、分享模板、照片或文案。
+- P1 发现（复盘保存分享）：`InsightWebView.generateAndShareWeeklyCard` 虽包在 `Task { @MainActor in }`，但 `buildWeeklyShareCardPayload` 仍同步跑在主 actor；点击保存时可能先冻结 UI，再开始图片快照。应先在后台取得同修订 payload，再回主线程只做 SwiftUI/UIKit 快照与相册保存；旧修订不得覆盖新账本。
+- P1 发现（痕迹继续提问）：`StatsWebView.focusNextTraceInsightQuestion` 读取 `traceLifeInsight`，会在点击时重新调用 `LifeInsightService.buildTraceInsight` 扫周期和历史；当前 `preparedClueSnapshot` 已含同一批问题，应该直接循环已发布 questions，保持问题顺序和额度/解锁逻辑不变。
+- P2 发现（复盘修订键）：`InsightWebView.insightSourceRevision` 在出现和每次账本变化时再次遍历全部记录生成 hash；不是滚动期热点，但已有 `homeDashboardRevision` 可作为单一变化键。`allowsReviewTasks` 也可读取已准备账本事实。迁移前必须验证 revision 对新增、编辑、删除、导入、恢复和同步全部递增。
+- 已正确的路径：会员终身档案、痕迹周/月/线索快照、周/月播放主体、记账输入生活印记预览和 AI 指令台页面快照均已在后台任务构建并按修订发布；AI 指令查询缓存签名发生在用户明确执行查询时，不属于滚动重绘热点。`StatsWebView` 的旧 `traceLifeMarks`/同步 build helper、`InsightWebView` 的旧 `weeklyKeywordBubbles`/`weeklyInsightSection` 当前没有渲染根引用，属于不可达遗留代码，不能据此宣称线上仍计算，也不得在性能修复中顺手大拆文件。
+- 冻结边界：只移动计算契机、复用不可变结果和删除经编译证明不可达的旧实现；不修改生活印记/回声/叙事算法、文案、问题顺序、痕迹/复盘 UI、播放章节、分享模板、照片准备、AI/额度/会员/StoreKit、账本/同步或 `ARCH-03`。本项需单独补 XCTest、静态门禁和真机矩阵后才能执行。

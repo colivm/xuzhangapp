@@ -1035,35 +1035,45 @@ struct RecordView: View {
         }
         tabSession.resetAfterCommittedDraft()
         let savedItem = homeViewModel.items.first
+        let rewardPreparationInput = savedItem.map {
+            LifeMarkSceneRewardPreparationInput(
+                item: $0,
+                allItems: homeViewModel.items,
+                currentPackIds: Set(freeScenePacks.map(\.id)),
+                definitions: visibleScenePacks,
+                isMember: isMember
+            )
+        }
         onSaved?(nil)
-        if let savedItem {
+        if let rewardPreparationInput {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-                guard let rewardPrompt = prepareLifeMarkSceneRewardPromptIfNeeded(
-                    for: savedItem,
-                    refreshScenePackState: false
-                ) else {
-                    return
+                Task { @MainActor in
+                    let rewardService = lifeMarkSceneRewardService
+                    let decision = await withTaskGroup(
+                        of: LifeMarkSceneRewardPreparationResult?.self,
+                        returning: LifeMarkSceneRewardPreparationResult?.self
+                    ) { group in
+                        group.addTask(priority: .utility) {
+                            guard !Task.isCancelled else { return nil }
+                            return rewardService.prepareRewardDecision(rewardPreparationInput)
+                        }
+                        return await group.next() ?? nil
+                    }
+                    guard let decision,
+                          let rewardPrompt = lifeMarkSceneRewardPrompt(for: decision) else {
+                        return
+                    }
+                    onSaved?(rewardPrompt)
                 }
-                onSaved?(rewardPrompt)
             }
         }
     }
 
-    private func prepareLifeMarkSceneRewardPromptIfNeeded(
-        for item: HomeItem,
-        refreshScenePackState: Bool = true
+    private func lifeMarkSceneRewardPrompt(
+        for decision: LifeMarkSceneRewardPreparationResult
     ) -> LifeMarkSceneRewardPrompt? {
-        guard !isMember else { return nil }
-        if let reward = lifeMarkSceneRewardService.registerRewardIfNeeded(
-            for: item,
-            allItems: homeViewModel.items,
-            currentPackIds: Set(freeScenePacks.map(\.id)),
-            definitions: visibleScenePacks,
-            isMember: isMember
-        ) {
-            if refreshScenePackState {
-                freeScenePackRefreshToken += 1
-            }
+        switch decision {
+        case let .reward(reward):
             return LifeMarkSceneRewardPrompt(
                 id: reward.id,
                 title: "新的生活线索诞生",
@@ -1073,22 +1083,19 @@ struct RecordView: View {
                 secondaryTitle: "稍后再说",
                 kind: .reward(reward)
             )
+        case .coldStart:
+            return LifeMarkSceneRewardPrompt(
+                id: "cold_start_scene_pack_guide",
+                title: "新的生活线索诞生",
+                badge: "先选 3 个常用场景包",
+                detail: "这条记录已经长成生活线索了。可以先把最常用的 3 个场景包选好，之后记账会更贴近你的日常。",
+                primaryTitle: "去看看",
+                secondaryTitle: "知道了",
+                kind: .coldStart
+            )
+        case .none:
+            return nil
         }
-
-        guard lifeMarkSceneRewardService.shouldShowColdStartGuide(
-            after: item,
-            allItems: homeViewModel.items,
-            isMember: isMember
-        ) else { return nil }
-        return LifeMarkSceneRewardPrompt(
-            id: "cold_start_scene_pack_guide",
-            title: "新的生活线索诞生",
-            badge: "先选 3 个常用场景包",
-            detail: "这条记录已经长成生活线索了。可以先把最常用的 3 个场景包选好，之后记账会更贴近你的日常。",
-            primaryTitle: "去看看",
-            secondaryTitle: "知道了",
-            kind: .coldStart
-        )
     }
 
     private func previewFallbackTitle(for category: HomeItem.Category) -> String {

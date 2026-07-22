@@ -25,7 +25,21 @@ struct LifeMarkSceneRewardPrompt: Identifiable, Equatable {
     let kind: Kind
 }
 
-final class LifeMarkSceneRewardService {
+struct LifeMarkSceneRewardPreparationInput: @unchecked Sendable {
+    let item: HomeItem
+    let allItems: [HomeItem]
+    let currentPackIds: Set<String>
+    let definitions: [ScenePackDefinition]
+    let isMember: Bool
+}
+
+enum LifeMarkSceneRewardPreparationResult: @unchecked Sendable {
+    case reward(LifeMarkSceneReward)
+    case coldStart
+    case none
+}
+
+final class LifeMarkSceneRewardService: @unchecked Sendable {
     static let shared = LifeMarkSceneRewardService()
 
     private struct RewardCandidate {
@@ -38,6 +52,7 @@ final class LifeMarkSceneRewardService {
 
     private let defaults: UserDefaults
     private let now: () -> Date
+    private let rewardDecisionLock = NSLock()
 
     private let pendingKey = "life_mark_scene_reward_pending_v1"
     private let activeKey = "life_mark_scene_reward_active_v1"
@@ -68,6 +83,31 @@ final class LifeMarkSceneRewardService {
             return nil
         }
         return reward
+    }
+
+    func prepareRewardDecision(
+        _ input: LifeMarkSceneRewardPreparationInput
+    ) -> LifeMarkSceneRewardPreparationResult {
+        rewardDecisionLock.lock()
+        defer { rewardDecisionLock.unlock() }
+        guard !input.isMember else { return .none }
+        if let reward = registerRewardIfNeeded(
+            for: input.item,
+            allItems: input.allItems,
+            currentPackIds: input.currentPackIds,
+            definitions: input.definitions,
+            isMember: input.isMember
+        ) {
+            return .reward(reward)
+        }
+        if shouldShowColdStartGuide(
+            after: input.item,
+            allItems: input.allItems,
+            isMember: input.isMember
+        ) {
+            return .coldStart
+        }
+        return .none
     }
 
     @discardableResult
@@ -134,10 +174,28 @@ final class LifeMarkSceneRewardService {
         isMember: Bool
     ) -> Bool {
         guard !isMember, !defaults.bool(forKey: coldStartGuideSeenKey) else { return false }
-        let currentMarks = LifeMarkService.aggregates(for: [item], allItems: allItems, isMember: true, limit: 1)
+        let currentContext = LifeMarkService.prepareAggregationContext(
+            allItems: allItems,
+            periodItems: [item]
+        )
+        let currentMarks = LifeMarkService.aggregates(
+            for: [item],
+            preparedContext: currentContext,
+            isMember: true,
+            limit: 1
+        )
         guard !currentMarks.isEmpty else { return false }
         let previousItems = allItems.filter { $0.id != item.id }
-        let previousMarks = LifeMarkService.aggregates(for: previousItems, allItems: previousItems, isMember: true, limit: 1)
+        let previousContext = LifeMarkService.prepareAggregationContext(
+            allItems: previousItems,
+            periodItems: previousItems
+        )
+        let previousMarks = LifeMarkService.aggregates(
+            for: previousItems,
+            preparedContext: previousContext,
+            isMember: true,
+            limit: 1
+        )
         return previousMarks.isEmpty
     }
 
