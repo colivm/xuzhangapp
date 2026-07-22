@@ -6,6 +6,7 @@ require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 const { redactForLog, validateAIOutputText, validateAIRequestBody } = require("./contentSafety");
 const { normalizeInsightPayload } = require("./legacyInsightContract");
 const { normalizedSupportedFeature } = require("./aiFeaturePolicy");
+const { allowsDevelopmentRoutes, isProductionEnvironment } = require("./runtimeEnvironmentPolicy");
 const {
   buildNarrativeRewriteMessages,
   normalizeNarrativeRewriteBatch,
@@ -32,7 +33,8 @@ const RISK_LOG_ENABLED = String(process.env.RISK_LOG_ENABLED || "1") === "1";
 const AI_UPSTREAM_TIMEOUT_MS = Number(process.env.AI_UPSTREAM_TIMEOUT_MS || 30000);
 const AI_UPSTREAM_TIMEOUT_MS_MONTHLY = Number(process.env.AI_UPSTREAM_TIMEOUT_MS_MONTHLY || 45000);
 const PREMIUM_FEATURES = new Set(["quarterly", "yearly"]);
-const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const IS_PRODUCTION = isProductionEnvironment(process.env.NODE_ENV);
+const DEVELOPMENT_ROUTES_ENABLED = allowsDevelopmentRoutes(process.env.NODE_ENV);
 
 validateProductionConfig();
 
@@ -54,24 +56,26 @@ app.get("/health", (_req, res) => {
   });
 });
 
-app.post("/v1/auth/dev-token", (req, res) => {
-  if (!JWT_SECRET) {
-    return res.status(400).json({ code: "CONFIG_ERROR", message: "missing JWT_SECRET" });
-  }
-  if (APP_PROXY_TOKEN) {
-    const incomingToken = (req.headers["x-proxy-token"] || "").toString();
-    if (!incomingToken || incomingToken !== APP_PROXY_TOKEN) {
-      return res.status(401).json({ code: "UNAUTHORIZED", message: "invalid proxy token" });
+if (DEVELOPMENT_ROUTES_ENABLED) {
+  app.post("/v1/auth/dev-token", (req, res) => {
+    if (!JWT_SECRET) {
+      return res.status(400).json({ code: "CONFIG_ERROR", message: "missing JWT_SECRET" });
     }
-  }
-  const userId = String(req.body?.userId || "demo-user");
-  const isMember = Boolean(req.body?.isMember);
-  const expiresIn = String(req.body?.expiresIn || "12h");
-  const token = jwt.sign({ sub: userId, userId, isMember, role: isMember ? "member" : "free" }, JWT_SECRET, {
-    expiresIn,
+    if (APP_PROXY_TOKEN) {
+      const incomingToken = (req.headers["x-proxy-token"] || "").toString();
+      if (!incomingToken || incomingToken !== APP_PROXY_TOKEN) {
+        return res.status(401).json({ code: "UNAUTHORIZED", message: "invalid proxy token" });
+      }
+    }
+    const userId = String(req.body?.userId || "demo-user");
+    const isMember = Boolean(req.body?.isMember);
+    const expiresIn = String(req.body?.expiresIn || "12h");
+    const token = jwt.sign({ sub: userId, userId, isMember, role: isMember ? "member" : "free" }, JWT_SECRET, {
+      expiresIn,
+    });
+    return res.json({ token, userId, isMember, expiresIn });
   });
-  return res.json({ token, userId, isMember, expiresIn });
-});
+}
 
 app.post("/v1/insight/daily", async (req, res) => {
   try {
@@ -133,7 +137,7 @@ app.post("/v1/insight/daily", async (req, res) => {
       return res.status(429).json({ code: "RATE_LIMIT", message: "monthly proxy limit reached" });
     }
 
-    const model = (AI_UPSTREAM_MODEL || req.body?.model || "glm-4-flash").toString();
+    const model = (AI_UPSTREAM_MODEL || "glm-4-flash").toString();
     const messages = feature === "narrative_rewrite_batch"
       ? buildNarrativeRewriteMessages(req.body?.factPacks, req.body?.tone)
       : req.body?.messages;
@@ -190,30 +194,6 @@ app.post("/v1/insight/daily", async (req, res) => {
     return res.status(500).json({
       code: "INTERNAL_ERROR",
       message: "proxy failed",
-      detail: error instanceof Error ? error.message : "unknown",
-    });
-  }
-});
-
-app.post("/v1/category/recommend", (req, res) => {
-  try {
-    const safety = validateAIRequestBody(req.body || {});
-    if (!safety.ok) {
-      auditRisk("category_input_rejected", req, guestUser(), {
-        reason: safety.reason,
-        sample: redactForLog(JSON.stringify(req.body || {})),
-      });
-      return res.status(400).json({ code: safety.error, message: safety.message, reason: safety.reason });
-    }
-    const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
-    const lastMessage = [...messages].reverse().find((x) => x && x.role === "user");
-    const text = String(lastMessage?.content || req.body?.prompt || "");
-    const category = recommendCategoryFromText(text);
-    return res.json({ category });
-  } catch (error) {
-    return res.status(500).json({
-      code: "INTERNAL_ERROR",
-      message: "category recommendation failed",
       detail: error instanceof Error ? error.message : "unknown",
     });
   }
@@ -366,26 +346,6 @@ function monthIdentifier() {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   return `${year}-${month}`;
-}
-
-function recommendCategoryFromText(text) {
-  const normalized = String(text || "");
-  const amountMatched = normalized.match(/金额[：:]\s*([0-9]+(?:\.[0-9]+)?)/);
-  const amount = Number(amountMatched?.[1] || 0);
-  const lowered = normalized.toLowerCase();
-
-  const matchByKeywords = (keywords) => keywords.some((k) => normalized.includes(k) || lowered.includes(k));
-  if (matchByKeywords(["地铁", "打车", "公交", "滴滴", "停车", "高铁", "火车", "机票", "通勤"])) return "交通";
-  if (matchByKeywords(["奶茶", "咖啡", "午餐", "晚餐", "早餐", "外卖", "餐厅", "小吃", "饮料"])) return "餐饮";
-  if (matchByKeywords(["电影", "游戏", "演出", "ktv", "酒吧", "旅游", "景点"])) return "娱乐";
-  if (matchByKeywords(["纸巾", "洗发水", "牙膏", "日用品", "超市", "杂货"])) return "日用";
-  if (matchByKeywords(["衣服", "鞋", "包", "数码", "手机", "耳机", "购物", "淘宝", "京东", "拼多多"])) return "购物";
-
-  if (amount >= 100) return "购物";
-  if (amount > 0 && amount <= 20) return "餐饮";
-  if (amount > 20 && amount < 50) return "交通";
-  if (amount >= 50 && amount < 100) return "日用";
-  return "其他";
 }
 
 function resetMonthlyUsageIfNeeded() {

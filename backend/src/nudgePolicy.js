@@ -1,5 +1,4 @@
-const DEFAULT_POLICY = Object.freeze({
-  mode: "debug", // debug | prod
+const POLICY_LIMITS = Object.freeze({
   debugCooldownMs: 90 * 1000,
   prodDailyLimit: 1,
   prodSceneCooldownDays: 7,
@@ -8,13 +7,22 @@ const DEFAULT_POLICY = Object.freeze({
 const policyByUser = new Map();
 const stateByUser = new Map();
 
-function normalizePolicy(input = {}) {
-  const mode = input.mode === "prod" ? "prod" : "debug";
+export function defaultPolicyForEnvironment(nodeEnv = process.env.NODE_ENV) {
+  const mode = String(nodeEnv || "").trim().toLowerCase() === "production" ? "prod" : "debug";
   return {
     mode,
-    debugCooldownMs: Math.max(1000, Number(input.debugCooldownMs || DEFAULT_POLICY.debugCooldownMs)),
-    prodDailyLimit: Math.max(1, Number(input.prodDailyLimit || DEFAULT_POLICY.prodDailyLimit)),
-    prodSceneCooldownDays: Math.max(1, Number(input.prodSceneCooldownDays || DEFAULT_POLICY.prodSceneCooldownDays)),
+    ...POLICY_LIMITS,
+  };
+}
+
+export function normalizePolicy(input = {}, nodeEnv = process.env.NODE_ENV) {
+  const defaults = defaultPolicyForEnvironment(nodeEnv);
+  const mode = defaults.mode === "prod" || input.mode === "prod" ? "prod" : "debug";
+  return {
+    mode,
+    debugCooldownMs: Math.max(1000, Number(input.debugCooldownMs || defaults.debugCooldownMs)),
+    prodDailyLimit: Math.max(1, Number(input.prodDailyLimit || defaults.prodDailyLimit)),
+    prodSceneCooldownDays: Math.max(1, Number(input.prodSceneCooldownDays || defaults.prodSceneCooldownDays)),
   };
 }
 
@@ -34,7 +42,8 @@ function todayKey() {
 }
 
 export function getPolicy(userId) {
-  return policyByUser.get(userId) || { ...DEFAULT_POLICY };
+  const stored = policyByUser.get(userId);
+  return stored ? normalizePolicy(stored) : defaultPolicyForEnvironment();
 }
 
 export function setPolicy(userId, input = {}) {
@@ -52,7 +61,7 @@ export function canShowNudge(userId, scene = "default") {
   const state = ensureState(userId);
   const now = Date.now();
   if (policy.mode === "debug") {
-    return now - Number(state.lastShownAt || 0) >= Number(policy.debugCooldownMs || DEFAULT_POLICY.debugCooldownMs);
+    return now - Number(state.lastShownAt || 0) >= Number(policy.debugCooldownMs || POLICY_LIMITS.debugCooldownMs);
   }
   if (state.dailyDayKey === todayKey() && state.dailyCount >= policy.prodDailyLimit) return false;
   const until = Number(state.sceneCooldownUntil?.[scene] || 0);

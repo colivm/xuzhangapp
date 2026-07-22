@@ -3067,21 +3067,6 @@ struct RecordView: View {
                 )
             }
 
-            #if DEBUG
-            Button("使用演示 OCR 结果") {
-                ocrConfirmDrafts = homeViewModel.makeDemoOCRDrafts()
-                showOCRConfirmSheet = true
-            }
-            .font(.system(size: 14))
-            .foregroundStyle(recordAccent)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 11)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(recordAccent.opacity(0.5), lineWidth: 1)
-            )
-            #endif
-
             if !homeViewModel.ocrStatus.isEmpty {
                 Text(homeViewModel.ocrStatus)
                     .font(.system(

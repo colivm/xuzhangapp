@@ -1,6 +1,6 @@
 # 叙账 · 项目搭建说明
 
-> 更新时间：2026-06-04  
+> 更新时间：2026-07-22
 > 产品版本：叙账 v0.1  
 > 适用阶段：**主域 `xuzhangapp.com` HTTPS 已通**（Let's Encrypt，续期至 **2026-09-02**，certbot 自动续期）；API 子域见 §4.4
 
@@ -14,9 +14,10 @@
 xuzhangapp/
 ├── NativeDemoApp/          # iOS 主工程（SwiftUI，iOS 17+）
 ├── NativeDemoApp.xcodeproj/
-├── web-preview/            # Web 演示版（Windows 可跑，无需 Mac）
 ├── backend/                # 业务 API（默认 8790）
 ├── ai-proxy/               # AI 代理（默认 8787）
+├── site/                   # 正式官网静态页
+├── legal/                  # 隐私政策与用户协议
 └── 文档/                   # PRD、API、TODO、本文件等
 ```
 
@@ -25,7 +26,7 @@ xuzhangapp/
 | `backend` | Node.js + Express | 8790 | 登录、会员、账单同步、AI 转发 |
 | `ai-proxy` | Node.js + Express | 8787 | 隐藏上游 Key、限流、JWT |
 | `NativeDemoApp` | SwiftUI + MVVM | — | 主产品客户端 |
-| `web-preview` | HTML/CSS/JS | 静态 | 本地打开或任意静态服务器 |
+| `site` / `legal` | HTML/CSS/JS | 静态 | 正式官网、隐私政策与用户协议 |
 
 **运行时依赖**：Node.js 18+、npm；生产可选 PostgreSQL；iOS 需 macOS + Xcode 15+。
 
@@ -90,26 +91,13 @@ npm run dev
 curl -s http://127.0.0.1:8790/health
 ```
 
-### 2.4 Web 演示版（Windows / 任意 OS）
-
-```bash
-cd web-preview
-# 直接用浏览器打开 index.html，或：
-npx serve .
-```
-
-默认 AI 端点在 `app.js` 中为 `http://127.0.0.1:8787`；连远程 API 需改设置或常量。
-
-### 2.5 iOS（Mac + Xcode）
+### 2.4 iOS（Mac + Xcode）
 
 1. 打开 `NativeDemoApp.xcodeproj`
 2. 选择 iOS 17+ 模拟器，`Cmd + R` 运行
-3. **设置 → 云端账号** 配置：
+3. 正式客户端固定使用 `https://api.xuzhangapp.com`，不向用户开放后端、模型或上游密钥配置。需要本地/staging 联调时使用测试注入或对应环境构建，不在正式设置页改地址。
 
-| 设置项 | 本机模拟器 | 真机（局域网） |
-|--------|------------|----------------|
-| 后端根地址 | `http://127.0.0.1:8790` | `http://<电脑局域网IP>:8790` |
-| AI 接口地址 | `http://127.0.0.1:8790/v1/ai/insight/daily` | 同上 |
+> 历史 `web-preview` 已于 2026-07-22 退役。Windows 侧使用静态门禁、确定性夹具与文档评审；真实 UI/交互以 Xcode、iPhone 和 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 为准。
 | 验证码 | `123456` | `123456` |
 
 生产 / Staging 配置见 **§5**。

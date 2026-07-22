@@ -353,14 +353,16 @@ app.get("/v1/member/cta-copy", requireAuth, (req, res) => {
   res.json({ ok: true, scene, ...getMemberCtaCopy(scene) });
 });
 
-app.get("/v1/member/nudge/policy", requireAuth, (req, res) => {
-  res.json({ ok: true, policy: getNudgePolicy(req.user.userId), state: getNudgeState(req.user.userId) });
-});
+if (!isProduction) {
+  app.get("/v1/member/nudge/policy", requireAuth, (req, res) => {
+    res.json({ ok: true, policy: getNudgePolicy(req.user.userId), state: getNudgeState(req.user.userId) });
+  });
 
-app.post("/v1/member/nudge/policy", requireAuth, (req, res) => {
-  const next = setNudgePolicy(req.user.userId, req.body || {});
-  res.json({ ok: true, policy: next });
-});
+  app.post("/v1/member/nudge/policy", requireAuth, (req, res) => {
+    const next = setNudgePolicy(req.user.userId, req.body || {});
+    res.json({ ok: true, policy: next });
+  });
+}
 
 app.post("/v1/member/nudge/evaluate", requireAuth, (req, res) => {
   const scene = String(req.body?.scene || "default");

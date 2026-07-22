@@ -42,6 +42,7 @@ final class SettingsViewModel: ObservableObject {
 
     init() {
         settings = LocalStore.loadSettings()
+        KeychainService.removeLegacyDirectModelCredential()
         hasCloudSession = !KeychainService.loadAccessToken().isEmpty
         if !hasCloudSession {
             settings.syncEnabled = false
@@ -209,43 +210,8 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
-    var aiEndpoint: String {
-        get { settings.aiEndpoint }
-        set {
-            settings.aiEndpoint = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            persist()
-        }
-    }
-
-    var aiAPIKey: String {
-        get { KeychainService.loadAIAPIKey() }
-        set {
-            KeychainService.saveAIAPIKey(newValue)
-        }
-    }
-
-    var aiModel: String {
-        get { settings.aiModel }
-        set {
-            settings.aiModel = newValue
-            persist()
-        }
-    }
-
-    var remoteAIMonthlyLimit: Int {
-        get { settings.remoteAIMonthlyLimit }
-        set {
-            settings.remoteAIMonthlyLimit = max(0, newValue)
-            persist()
-        }
-    }
-
     var backendBaseURL: String {
-        get { settings.backendBaseURL }
-        set {
-            settings.backendBaseURL = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            persist()
-        }
+        settings.backendBaseURL
     }
 
     var cloudUserId: String {

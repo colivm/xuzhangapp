@@ -1,8 +1,10 @@
 # 叙账 · 进度清单
 
-> 更新时间：**2026-06-08**（记账链路愿景 + F1.3 品牌池 + B2.13 习惯预填立项）  
+> 更新时间：**2026-07-22**（历史 v0.1 清单；Web Demo 已退役）
 > 分支：`feature/生活切片和会员权益`  
 > API：`https://api.xuzhangapp.com` · 登录：手机号验证码（v0.1）
+
+> 本文件保留早期里程碑记录，不再决定当前执行顺序。当前状态与下一任务以 [`GLOBAL_PRODUCT_INTERACTION_OPTIMIZATION_LEDGER_2026-07-15.md`](GLOBAL_PRODUCT_INTERACTION_OPTIMIZATION_LEDGER_2026-07-15.md) 为唯一来源；`web-preview/` 已于 2026-07-22 退役，不再安排对齐或维护任务。
 
 ---
 
@@ -75,7 +77,7 @@
 - [x] TestFlight **首测闭环**（记、回放、切片、沙盒购、杀进程）
 - [x] **Release 门禁（iOS）**：移除设置/会员页 Debug 写 tier；`MemberNudgePolicyService` 统一 prod 频控
 - [x] **Task D1 播完分享图**（周章播完分享）
-- [x] **Task D1.1 周分享海报 polish** — 叙事主视觉、删报表 KPI/环图、`anchorLine`、极淡 rhythm；播完 + AI Tab 同源（[`AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md`](AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md)）
+- [x] **Task D1.1 周分享海报 polish** — 叙事主视觉、删报表 KPI/环图、`anchorLine`、极淡 rhythm；播完 + AI Tab 同源
 - [x] **Task B2.8 智能分类**：`CategoryRecommendService`（历史 10% + 时段 20% + 金额 45% + 备注 35%，避免历史餐饮污染独裁）
 - [x] **Task B2.9 天气宠物**：Open-Meteo + `PET_SCENE_RULES` + 记完账/点击宠物；删管控式硬编码
 - [x] **Task B2.11 心意往来包**：social 包、映射、chips；人情一键备注不再走 food
@@ -99,9 +101,8 @@
 | - [x] 记 ≥3 笔 → 看看花角标/卡片提示 | - [ ] 生产 API 全链路再验 |
 | - [x] B2.7 分类锁定（真机再验） | |
 | - [x] **B2.8 智能分类** — `CategoryRecommendService` | |
-| - [x] **B2.13 个人习惯预填**（代码）— [`AGENT_PROMPT_B2.13`](AGENT_PROMPT_B2.13_HABIT_PREFILL.md)；待 TF 验 | |
-| - [ ] **UI-P1 记账页叙事化（iOS）** — [`RECORD_PAGE_DESIGN`](RECORD_PAGE_DESIGN_v0.1.md) · [`AGENT_PROMPT_UI-P1`](AGENT_PROMPT_UI-P1_INPUT_LAYER_VISUAL.md) | |
-| - [ ] **UI-P1-WEB 记账页 Web 预览原型** — 先浏览器看效果 · [`AGENT_PROMPT_UI-P1_WEB_PREVIEW.md`](AGENT_PROMPT_UI-P1_WEB_PREVIEW.md) | |
+| - [x] **B2.13 个人习惯预填**（代码）— `RecordPrefillService.swift`；待 TF 验 | |
+| - [ ] **UI-P1 记账页叙事化（iOS）** — [`RECORD_PAGE_DESIGN`](RECORD_PAGE_DESIGN_v0.1.md) | |
 | - [x] **B2.9 天气宠物** — `WeatherCompanionService` / `PetCompanionService` | |
 | - [x] **B2.10** 场景备注池 | |
 | - [x] A4 场景包哲学 + tagline | |
@@ -110,15 +111,15 @@
 | - [x] B2.5 叙事/UI P0（旁白为主、少报表感；待真机观感验收）— §10.8 | - [ ] ICP 备案 |
 | - [x] B2.6 PlaybackCopyPool 接入（MVP；对照 md 可补全条数） | - [x] 隐私 / 协议 URL 上线 |
 | - [x] D1 播完分享图 — §10.9（周章；月章 v0.2） | - [ ] ASC 隐私问卷 + [`APP_STORE_LISTING.md`](APP_STORE_LISTING.md) |
-| - [x] **D1.1** 分享海报叙事化（代码）— [`AGENT_PROMPT_D1.1`](AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md) | |
-| - [x] **心意往来包** B2.11 — [`AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md`](AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md) | |
-| - [x] **情绪标签 polish** B2.12（7 类；health/home/social 不动）— [`AGENT_PROMPT_B2.12_EMOTION_TAGS.md`](AGENT_PROMPT_B2.12_EMOTION_TAGS.md) | |
+| - [x] **D1.1** 分享海报叙事化（代码）— `WeeklyShareCardView` | |
+| - [x] **心意往来包** B2.11 — `ScenePackCopyPool.swift` | |
+| - [x] **情绪标签 polish** B2.12（7 类；health/home/social 不动） | |
 | - [ ] 免费次数话术与 App 内 enforce 再走一遍 | |
 | | |
 | **路径 3 · 智能导入 · 记账链路** | **生产安全** |
 | - [x] F1：OCR 四步主链路（`OCRConfirmSheet` + 草稿区） | - [ ] Spug 短信 / 收紧 dev 码 |
-| - [ ] **F1.2** OCR 真机回归 — [`AGENT_PROMPT_F1.2`](AGENT_PROMPT_F1.2_OCR_STATS_REGRESSION.md) | - [ ] `APP_PROXY_TOKEN`、防火墙 |
-| - [x] **F1.3** 品牌叙事池（代码）— [`AGENT_PROMPT_F1.3`](AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md)；待 TF 验 | - [ ] pm2/systemd |
+| - [ ] **F1.2** OCR 真机回归 — 以统一发布矩阵为准 | - [ ] `APP_PROXY_TOKEN`、防火墙 |
+| - [x] **F1.3** 品牌叙事池（代码）— `MerchantBrandCatalog.swift` / `NarrativeCopyResolver.swift`；待 TF 验 | - [ ] pm2/systemd |
 | - [ ] F1.3b Logo 识别（可选二期） | - [x] 主域 HTTPS |
 | - [ ] F1 可选：删 `#if DEBUG`「演示 OCR」（Release 已不可见） | - [ ] API 子域 SSL 续期（2026-08-29 前） |
 | - [x] 识别失败 / 取消不扣次（逻辑已有，真机再验） | |
@@ -136,7 +137,7 @@
 | | - [x] 生产 backend 禁 `POST /v1/member/dev/set-tier`（`NODE_ENV=production` 不注册） |
 | | |
 | **可选 · 工程** | **v0.2+** |
-| - [x] Logo / 图标；Tab 级 `ContentView` 拆分（含 Insight） | Web 预览与 iOS 对齐（A3/A4/copy） |
+| - [x] Logo / 图标；Tab 级 `ContentView` 拆分（含 Insight） | — |
 | - [ ] `WeeklyShareCardView` → `Views/Components/`（D1.1 已 polish；迁文件为小改） | 微信登录、长图 OCR 多条 |
 | - [ ] `HomeViewModel` 按域瘦身（分类/OCR/Insight 可抽 Service） | |
 | - [ ] `AppColors` / `GlassPanel` → `Theme.swift`；`RecordEditSheet` 迁 Record | |
@@ -156,7 +157,6 @@
 | 🟡 中等 | `InsightWebView` | ~840 | D1.1 后仍含 `WeeklyShareCardView`；可选迁 Components |
 | 🟡 低 | `WeeklyShareCardView` 位置 | `InsightWebView` 末尾 | 独立 `Views/Components/`（小改） |
 | 🟡 低 | 主题/编辑 sheet | `ContentView` 内 | v0.2 整理 |
-| 🟡 非结构 | Web 漂移 | web-preview | 上架前（iOS/backend tier 门禁 ✅） |
 
 
 ## 进度一览
@@ -177,18 +177,10 @@
 | [`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) | §0 哲学、§0.5 议边界 |
 | [`PRODUCT_STAGE_REVIEW_AND_STORE_COPY_v0.1.md`](PRODUCT_STAGE_REVIEW_AND_STORE_COPY_v0.1.md) | 阶段总结、商店文案、§7 polish |
 | [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) | B2.5 / welcome / ASC |
-| [`AGENT_PROMPT_AI_ADVICE_BOUNDARY.md`](AGENT_PROMPT_AI_ADVICE_BOUNDARY.md) | Task A3（✅） |
-| [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md) | Task B2.8（✅ 已完成） |
-| [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md) | Task B2.9（✅ 已完成） |
-| [`AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md`](AGENT_PROMPT_D1.1_WEEKLY_SHARE_POSTER.md) | Task D1.1 分享海报（✅ 代码；真机验 ⏳） |
-| [`AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md`](AGENT_PROMPT_B2.11_SOCIAL_SCENE_PACK.md) | Task B2.11 心意往来包（✅） |
-| [`AGENT_PROMPT_B2.12_EMOTION_TAGS.md`](AGENT_PROMPT_B2.12_EMOTION_TAGS.md) | Task B2.12 情绪标签 7 类（✅） |
 | [`RECORDING_CHAIN_VISION_v0.1.md`](RECORDING_CHAIN_VISION_v0.1.md) | **缩短记账链路、叙事自动长出来** — 双引擎 + cascade |
-| [`AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md`](AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md) | Task F1.3 品牌叙事池（⏳） |
-| [`AGENT_PROMPT_B2.13_HABIT_PREFILL.md`](AGENT_PROMPT_B2.13_HABIT_PREFILL.md) | Task B2.13 个人习惯预填（✅ 代码 · ⏳ TF 验） |
 | [`PROJECT_SUMMARY_v0.1.md`](PROJECT_SUMMARY_v0.1.md) | **项目总结**（哲学、能力、完成度、下一步） |
 | [`PROJECT_ANALYSIS.md`](PROJECT_ANALYSIS.md) | 早期架构分析（部分已旧，以 SUMMARY 为准） |
-| [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md) | Task A4（已完成；≠ B2.10） |
+| [`GLOBAL_PRODUCT_INTERACTION_OPTIMIZATION_LEDGER_2026-07-15.md`](GLOBAL_PRODUCT_INTERACTION_OPTIMIZATION_LEDGER_2026-07-15.md) | 全部已执行任务、边界和验证证据 |
 | [`TEST_CASES_v0.1.md`](TEST_CASES_v0.1.md) | 全量测试用例 |
 | [`APP_STORE_LISTING.md`](APP_STORE_LISTING.md) | 上架截图与自检 |
 
@@ -204,8 +196,9 @@
 | 2026-06-06 | iOS Release 门禁 ✅：删 Debug 写 tier；Nudge 统一 prod |
 | 2026-06-06 | Task D1 播完分享图 ✅ |
 | 2026-06-06 | 代码核查：C1/F1 ✅；**B2.8 未做** |
-| 2026-06-06 | 新增 AGENT_PROMPT_B2.8；§10.15 任务编号对照 |
-| 2026-06-06 | 新增 AGENT_PROMPT_B2.9 天气宠物 + B2.8 合并说明 |
+| 2026-06-06 | 新增 B2.8 执行说明；§10.15 任务编号对照 |
+| 2026-06-06 | 新增 B2.9 天气宠物 + B2.8 合并说明 |
 | 2026-06-06 | 核查：B2.8/B2.9/backend dev 路由 ✅；回归 13 条 |
 | 2026-06-07 | **D1.1** 周分享海报 polish ✅；回归扩 **14** 条；体验 ~80% |
 | 2026-06-08 | 记账链路愿景 + **F1.3** 品牌叙事池 + **B2.13** 习惯预填 Agent prompt；北极星 §5.2 |
+| 2026-07-22 | 历史 Web Demo 退役；删除 Web 预览与漂移待办，当前顺序统一交由全局台账。 |

@@ -2,7 +2,7 @@
 
 > 更新时间：2026-06-07  
 > 状态：**审计结论 + 代码同步复核**（B2.11/B2.12 与夜宵时段备注已补）  
-> 依据：[`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) §0～§0.5、[`SCENE_PACK_COPY_POOL_v0.2.md`](SCENE_PACK_COPY_POOL_v0.2.md) §2.3 禁止词、[`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md)  
+> 依据：[`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) §0～§0.5、[`SCENE_PACK_COPY_POOL_v0.2.md`](SCENE_PACK_COPY_POOL_v0.2.md) §2.3 禁止词
 > 审计范围：新增 **3 分类**（健康 / 居家 / 人情）+ **情绪化标签** + **备注快捷 chips** + **智能分类关键词** + **4 个新场景包**（照顾自己包 / 居家安顿包 / 心意往来包 / 顺手添置包；代码中另有铲屎官包与 8 包并存）
 
 ---

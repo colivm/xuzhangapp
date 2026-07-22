@@ -51,8 +51,6 @@ struct AppSettings: Codable, Equatable {
     var weatherCompanionEnabled: Bool
     var aiTone: AITone
     var useRemoteAI: Bool
-    var aiEndpoint: String
-    var aiModel: String
     var remoteAIMonthlyLimit: Int
     /// 叙账后端根地址。生产环境固定走 `productionBackendBaseURL`。
     var backendBaseURL: String
@@ -67,9 +65,8 @@ struct AppSettings: Codable, Equatable {
     /// 分享图是否跟随 App 当前主题。
     var shareCardUsesAppTheme: Bool
 
-    mutating func applyProductionEndpoints() {
+    mutating func applyProductionBackendEndpoint() {
         backendBaseURL = Self.productionBackendBaseURL
-        aiEndpoint = Self.productionAIEndpoint
     }
 
     static let `default` = AppSettings(
@@ -83,8 +80,6 @@ struct AppSettings: Codable, Equatable {
         weatherCompanionEnabled: true,
         aiTone: .gentle,
         useRemoteAI: false,
-        aiEndpoint: productionAIEndpoint,
-        aiModel: "doubao-seed-1-6-flash-250828",
         remoteAIMonthlyLimit: 120,
         backendBaseURL: productionBackendBaseURL,
         cloudUserId: "",
@@ -107,8 +102,6 @@ extension AppSettings {
         case weatherCompanionEnabled
         case aiTone
         case useRemoteAI
-        case aiEndpoint
-        case aiModel
         case remoteAIMonthlyLimit
         case backendBaseURL
         case cloudUserId
@@ -130,8 +123,6 @@ extension AppSettings {
         weatherCompanionEnabled = try container.decodeIfPresent(Bool.self, forKey: .weatherCompanionEnabled) ?? true
         aiTone = try container.decodeIfPresent(AITone.self, forKey: .aiTone) ?? .gentle
         useRemoteAI = try container.decodeIfPresent(Bool.self, forKey: .useRemoteAI) ?? false
-        aiEndpoint = try container.decodeIfPresent(String.self, forKey: .aiEndpoint) ?? Self.productionAIEndpoint
-        aiModel = try container.decodeIfPresent(String.self, forKey: .aiModel) ?? "doubao-seed-1-6-flash-250828"
         remoteAIMonthlyLimit = try container.decodeIfPresent(Int.self, forKey: .remoteAIMonthlyLimit) ?? 120
         backendBaseURL = try container.decodeIfPresent(String.self, forKey: .backendBaseURL) ?? Self.productionBackendBaseURL
         cloudUserId = try container.decodeIfPresent(String.self, forKey: .cloudUserId) ?? ""
@@ -139,7 +130,7 @@ extension AppSettings {
         memberExpiresAt = try container.decodeIfPresent(String.self, forKey: .memberExpiresAt)
         colorThemeId = try container.decodeIfPresent(String.self, forKey: .colorThemeId) ?? Self.defaultColorThemeId
         shareCardUsesAppTheme = try container.decodeIfPresent(Bool.self, forKey: .shareCardUsesAppTheme) ?? false
-        applyProductionEndpoints()
+        applyProductionBackendEndpoint()
     }
 }
 

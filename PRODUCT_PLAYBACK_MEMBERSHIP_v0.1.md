@@ -4,6 +4,8 @@
 > 状态：产品定稿（部分能力已在代码中，**免费/会员划界与统计页生活切片待开发**）  
 > 关联：**[`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md)**（战略北极星）、`PRD_v0.1.md`（页面与字段）、`MemberPricingView`（定价展示）、`TODO.md`（排期）
 
+> **2026-07-22 维护说明**：历史 `web-preview/` 已退役。本文涉及 Web 的实现锚点只代表早期设计来源，不再可执行；现行代码与验收分别以 `NativeDemoApp` 和 [`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`](RELEASE_GATE_AND_DEVICE_MATRIX_v1.md) 为准。
+
 ---
 
 ## 1. 文档目的
@@ -134,9 +136,9 @@
 | 宠物结语 | 依 **宠物开关**：暖心版 / 简洁版两套模板 |
 | 行动 | 跳转「月度 AI 复盘」 |
 
-#### 5.4.1 Web「生活配方」概念（复用说明）
+#### 5.4.1 「生活配方」概念（复用说明）
 
-**「生活配方」** 是产品侧命名，指：把一段时间内的支出按 **分类占比** 呈现成「你这阵子生活由什么构成」—— 像配方比例，温柔呈现、生活化描述。代码里 **没有** 名为 `生活配方` 的变量；Web 已有等价实现，iOS 月度生活章 **「生活构成」** 幕应对齐同一套数据与视觉语言。
+**「生活配方」** 是产品侧命名，指：把一段时间内的支出按 **分类占比** 呈现成「你这阵子生活由什么构成」——像配方比例，温柔呈现、生活化描述。代码里 **没有** 名为 `生活配方` 的变量；iOS 月度生活章 **「生活构成」** 幕使用同一套数据与视觉语言。
 
 | 维度 | 说明 |
 |------|------|
@@ -145,16 +147,16 @@
 | 旁白 | 暖心：`团子看到，这个月大约 {ratio}% 花在「{category}」上，像日常的主料。` 简洁：`{category} 约占 {ratio}%。` |
 | 与 AI 复盘 | 生活配方 = **看见结构**；AI `action` 里可写「饮食占比、通勤稳定」等，但切片幕内 **不展开长文建议** |
 
-**Web 现有实现对照**
+**现行 iOS 实现锚点**
 
-| 能力 | 文件 / 函数 | 与「生活配方」的关系 |
+| 能力 | 文件 / 类型 | 与「生活配方」的关系 |
 |------|-------------|----------------------|
-| 分类聚合 TOP3 | `web-preview/app.js` → `topCategoryStats(items)` | 供 AI Prompt、`buildInsightFacts` 的 `topRatio`、`categories` |
-| **环形占比 UI** | `downloadWeeklyShareCardImage()` → Canvas 绘制 | 标签 **「TOP类目占比」**：圆环弧长 = TOP1 金额 / 周期总支出，`ratioText` 为百分比 |
-| 周度分享卡入口 | `index.html` → `#weeklyShareBtn`「生成周度分享卡」 | 近 7 天数据 + 同屏 **近7天小趋势** 柱条（与配方并列，非配方本身） |
-| 月度结构文案（非环形） | `buildLocalMonthlyInsightFallback` 等 → `structure` 字段 | 文本占比句，可作月章旁白 fallback |
+| 周/月聚合 | `NativeDemoApp/Services/PlaybackService.swift` | 生成分类、占比与回放所需的稳定快照 |
+| 周/月播放 UI | `NativeDemoApp/Views/SummaryPlaybackSheet.swift` | 在回放章节中呈现分类构成与生活化旁白 |
+| 分享图 | `NativeDemoApp/Views/InsightWebView.swift` → `WeeklyShareCardView` | 使用同源周快照生成故事图，不依赖已退役 Web Canvas |
+| 痕迹入口 | `NativeDemoApp/Views/StatsWebView.swift` | 承接周/月内容与分享图所需的已计算快照 |
 
-**周度分享卡右侧环图（即生活配方 v0.1 视觉原型）**
+**周度分享卡构成示意（生活配方 v0.1）**
 
 ```text
 ┌─────────────────────┐
@@ -170,9 +172,9 @@
 
 | 场景 | 配方粒度 |
 |------|----------|
-| 周切片 · 第 3 幕「主角分类」 | 仅 TOP1 + 占比（与 Web 环图一致，可简化为单环 SwiftUI） |
+| 周切片 · 第 3 幕「主角分类」 | 仅 TOP1 + 占比（可简化为单环 SwiftUI） |
 | 月章 · 「生活构成」 | TOP1 环图 + TOP2～3 横向条（占比条），总时长仍控制在 1 幕内 |
-| 分享图（Phase D） | 直接复用 Web Canvas 布局或导出同结构 PNG |
+| 分享图（Phase D） | 复用 iOS 同源快照与 `WeeklyShareCardView` 导出 PNG |
 
 **扩展 v0.2（可选，非 v0.1 必须）**
 
@@ -458,12 +460,11 @@ SummaryPlaybackSheet（ZStack）
 
 1. **一键生成备注**：按金额猜测默认包，生成备注（iOS：尽量不改已选分类）。  
 2. **展开更多场景**：点选四包之一，应用对应分类 + 备注。  
-3. Web：宠物包支持 `{petName}`；iOS 待对齐昵称。
+3. 宠物包的 `{petName}` 昵称替换以 iOS 当前实现为准。
 
 ### 7.4 代码参考
 
 - iOS：`ContentView.swift` → `scenePacks`、`memberScenePackSection`  
-- Web：`web-preview/app.js` → `memberScenePacks`
 
 ---
 

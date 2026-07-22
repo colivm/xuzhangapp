@@ -273,14 +273,14 @@ C1 首记引导、看看花默认本周      B2.5 幕 UI polish
 ### 4.1 架构：对小团队合适
 
 ```text
-iOS (SwiftUI) ──┬── backend :8790 (Express + PostgreSQL)
-web-preview  ───┤       └── ai-proxy :8787 → DeepSeek
-官网 site/    ──┘
+iOS (SwiftUI) ── backend :8790 (Express + PostgreSQL)
+                         └── ai-proxy :8787 → 配置的大模型服务
+官网 site/ 与法律页 legal/ 为独立静态站点，不参与 App 运行链路
 ```
 
 - 本地优先 + 可选同步：与产品一致  
 - backend / ai-proxy 分离：密钥与限流隔离合理  
-- web-preview：Windows 快速验交互；需防与 iOS 行为漂移  
+- `web-preview/` 已于 2026-07-22 退役；当前交互只以 `NativeDemoApp`、Xcode/iPhone 和统一发布矩阵为准
 
 生产已上 ECS、HTTPS、PG——**非 demo 级部署**。
 

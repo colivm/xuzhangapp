@@ -3,7 +3,7 @@
 > 创建日期：2026-07-15
 > 当前基线提交：`d425389`（`fix trace snapshot type checking`）
 > 状态：第二轮全局收口进行中；本文档仍是唯一顺序与状态来源
-> 适用范围：`NativeDemoApp` iOS 主产品；除非任务明确写入，默认不修改 `web-preview`
+> 适用范围：`NativeDemoApp` iOS 主产品；历史 `web-preview` 已于 2026-07-22 退役，正式官网与法律页面分别位于 `site/`、`legal/`
 
 ---
 
@@ -64,7 +64,7 @@
 | 文件 | 创建台账时状态 | 归属说明 |
 |---|---|---|
 | `NativeDemoApp/Views/Components/StatCardView.swift` | 已修改 | 既有修改，当前任务不处理 |
-| `web-preview/app.js` | 已修改 | 既有修改，iOS 优化默认不处理 |
+| `web-preview/app.js` | 已修改 | 创建台账时的历史现场；经确认仅换行差异，已按 WEB-RETIRE-01 明确退役 |
 | `PROMPT_UI-痕迹月度月历热力与复盘微调-iOS.md` | 未跟踪 | 用户既有文件，保留 |
 | `NativeDemoApp/Views/InsightWebView.swift` | 已修改 | 包含 AI 指令台白屏与通勤未来时段修复 |
 | `scripts/life_semantic_regression.py` | 已修改 | 包含上述两项修复的静态边界检查 |
@@ -84,7 +84,7 @@
 5. 会员 Product ID、价格、购买与恢复逻辑。
 6. 本地 JSON 编码字段和云端 DTO 字段。
 7. 生活回放、周章、月章的文案选择规则。
-8. `web-preview` 行为和视觉。
+8. `site/` 正式官网行为和视觉；法律文本只在独立合规任务中修改。
 9. 用户现有主题、宠物、天气和同步偏好。
 10. 首页“状态驱动主动作”长期框架：根据未完成草稿、当日回放、周/月内容成熟度和已完成回看状态选择一个主动作，并始终保留合理的次入口；不得在局部修复、文案优化、宠物调整、性能治理或页面拆分中退回固定按钮集合，也不得未经独立产品任务调整状态优先级、成熟门槛或主次入口关系。
 
@@ -3031,7 +3031,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ## 29. UI-FIX-03：痕迹页统一加载遮罩与稳定快照发布（2026-07-20）
 
-- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。
 - 用户真机反馈：“本月痕迹”和“线索”进入整理状态时，提示位置乱跳、不在可视区域中间，也没有遮罩；旧内容与新范围控件会短暂混在一起，完成替换时有明显布局跳动。
 - 根因：页面同时存在无快照时的滚动内容内 `.page` 加载卡、有旧快照时顶部更新 Pill，以及月章目标快照未完成时卡片右上角进度胶囊三套反馈；加载卡位于 ScrollView 内容并使用不对称上下留白，无法相对 viewport 居中；快照、提示消失和内容高度变化又被包进同一个整页动画事务，叠加滚动锚点修正后放大跳动。
 - 目标：痕迹与线索统一为一个挂在 ScrollView 可视 viewport 上的居中加载层；轻量主题遮罩阻止下层误触；只让遮罩淡入淡出，快照发布不执行布局动画；本月痕迹与本月线索使用准确文案。
@@ -3442,3 +3442,62 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 冻结边界复核：未修改账本/同步 DTO、AI 指令台识别、补记/OCR、首页动态主动作、播放章节/时长/扣次、分享模板、会员/额度、JWT 时长、StoreKit、主题、宠物、痕迹筛选、页面路由、合法 feature 权益或 `ARCH-03`；未覆盖、回退或暂存既有脏工作区。
 - 剩余风险：Windows 无 Swift/Xcode；七处已知编译报错已按真实声明定向修正，但必须由 Xcode 重新构建确认没有下一层诊断。新增通知/actor 取消接线与 XCTest 尚未实际编译；当前未连接生产上游，无法证明线上模型严格按 `{rewrites}` 输出。代码还未部署到 `/opt/xuzhang/xuzhangapp/ai-proxy`，线上在重启前仍会返回旧格式并由客户端安全回退本地。
 - 下一步：部署本次 `ai-proxy` 文件后先在服务器运行 `npm test --silent`，再 `pm2 restart ai-proxy`；用有效登录 JWT 调生产 backend，抓包确认客户端只发 factPacks、代理返回 `{rewrites}`、旧 daily 仍返回三字段，并执行 `FLOW-59` 的开关/语气/登录/超时/旧响应矩阵。随后统一完成 Xcode Debug/Release、全部 XCTest 与 iPhone 签收；出现问题只修代理契约或叙事 AI 接线，不触碰冻结模块。
+
+---
+
+## 42. DEBUG-CLEANUP-01：生产可达调试能力清理（2026-07-22）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。代码、Node 契约、静态门禁和完整 Windows 发布门禁已通过；缺 Xcode、iPhone 和生产部署签收，不标记 `VERIFIED`。
+- 用户要求：全局检查历史遗留调试功能，能安全删除的直接删除；不能因“清理”破坏发布夹具、自动测试、账本数据、会员、同步或当前产品交互。
+- 审计原则：按生产可达性而不是关键词处理。删除正式路径仍携带的直连模型/客户端 Key/可变 AI 地址与模型、生产仍注册的 JWT 调试签发路由、已经被发布夹具替代的演示 OCR 入口；保留 `#if DEBUG` 发布夹具、隔离数据目录、性能日志、XCTest、后端仅非生产注册的开发会员路由和 staging 必需能力。二次全局扫描发现会员引导后端默认仍是 90 秒 `debug` 冷却，且生产仍注册策略读写接口；这是本任务直接范围，不作为会员产品改版。代理还残留未鉴权且零调用方的 `/v1/category/recommend` 演示分类接口，其独立关键词会和正式本机语义规则漂移，本任务直接删除。
+- 允许修改：`AppSettings` 旧 AI 调试字段及兼容解码、`AIReportService`/调用方生产代理接线、`KeychainService` 旧 AI Key 清理、`ai-proxy` dev-token 路由生产隔离与零调用方分类演示接口、OCR 演示入口、后端会员引导调试策略的生产隔离、对应测试/静态门禁/能力与部署文档、本文档。
+- 冻结边界：不修改联网整理开关/语气、生产 endpoint、fact-pack/rewrites 契约、登录 JWT 正常签发与 90 天时长、会员 Product ID/价格/权益、StoreKit、账本/同步 DTO、OCR 正式导入、发布夹具启动参数、首页动态主动作、播放章节、主题、宠物、痕迹、AI 指令台或 `ARCH-03`。会员引导只把生产默认恢复为既有 `prodDailyLimit = 1`、`prodSceneCooldownDays = 7` 并隐藏策略读写调试接口，不改变客户端已经验证的本地引导资格、显式入口和文案。
+- 工作区保护：不修改、不暂存 `PixelPetAnimationView.swift`、`StatCardView.swift`、`web-preview/app.js`、提示文档、素材、`tmp/` 与缓存目录。
+- 计划验证：iOS 生产代码零 `open.bigmodel.cn`、零 AI API Key 读写、零可变 AI endpoint/model 消费；生产环境不注册 ai-proxy dev-token，非生产仍可用于本地/staging；ai-proxy 零 `/v1/category/recommend` 演示路由；记录页零演示 OCR 按钮且正式 OCR 流程不变；生产会员引导默认正式频控且不能读写调试策略。运行 Node 测试、Swift 静态门禁、文案/迁移/SQLite/发布夹具与完整 Windows 发布门禁；缺 Xcode/iPhone 前只能到 `CODE_DONE`。
+- 实现（iOS 生产链路）：删除 `AppSettings` 持久化的 `aiEndpoint/aiModel`、`SettingsViewModel` 对应可变入口和 `KeychainService` 的 AI Key 保存/读取；旧 JSON 多余字段由 Codable 安全忽略并在下次持久化时自然消失。升级启动时只执行 `SecItemDelete` 清除旧 `ai_api_key`，从不读取或上传。`AIReportService` 固定请求 `AppSettings.productionAIEndpoint`，只携带登录 Bearer JWT；客户端不再发送 model、代理口令或直连 prompt，也不再兼容上游 `choices` 响应。今日小记、月度整理和日/周/月轻润色统一以“联网开启 + 有登录令牌 + 既有额度”为远程资格，未登录直接使用本地规则；今日小记缓存身份只保留 `proxy-ready/proxy-signed-out`。
+- 实现（演示与服务端）：删除记录页“使用演示 OCR 结果”和 `makeDemoOCRDrafts`，正式相册 OCR、确认、导入与额度路径未改。ai-proxy 的 `/v1/auth/dev-token` 只在非 production 注册，并新增纯环境策略 2 个 Node 用例；代理不再接受请求体 model，服务端环境独占上游模型选择；删除未鉴权、零调用方且规则漂移的 `/v1/category/recommend` 演示接口。backend 的 nudge 策略在 production 固定 `prod`，保持每天最多 1 次、场景关闭 7 天冷却；GET/POST 策略调试路由只在非 production 注册，evaluate/dismiss 正式能力保留。
+- 保留项：`#if DEBUG` 的 100/1,000/5,000 条发布夹具、真实 12MP 图片夹具、隔离账本目录、性能日志、断言、XCTest、后端非生产会员档位路由和本地/staging 联调能力均保留；这些能力已有正式包隔离和写云端阻断，不属于用户可达遗留。本轮未删除健康检查、正式观测 API 或微信登录预留，因为它们不是调试旁路，且移除会越过当前任务边界。
+- 修改文件：`NativeDemoApp/Models/AppSettings.swift`、`NativeDemoApp/Services/AIReportService.swift`、`NativeDemoApp/Services/KeychainService.swift`、`NativeDemoApp/Services/LifeNarrativeAIRewriteService.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/ViewModels/SettingsViewModel.swift`、`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoApp/Views/RecordView.swift`、`ai-proxy/server.js`、`ai-proxy/runtimeEnvironmentPolicy.js`、`ai-proxy/runtimeEnvironmentPolicy.test.js`、`ai-proxy/README.md`、`backend/src/nudgePolicy.js`、`backend/src/server.js`、`backend/scripts/verify-nudge-policy.mjs`、`backend/package.json`、`backend/README.md`、`API_v0.1.md`、`scripts/ai_capability_lint.py`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：ai-proxy `node --check` 通过且 `npm test --silent` 10/10；backend `node --check` 通过，90 天 JWT 与生产 nudge 策略脚本均通过。`python scripts/ai_capability_lint.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`git diff --check` 和最终 `python scripts/validate_release_gate.py --phase windows` 全部通过；扫描 81 个 Swift 文件，生活语义、播放文案、AI、无障碍、主题、迁移、SQLite、100/1,000/5,000 条及真实 12MP 夹具均通过，仅保留既有 5 条 soft copy warning。新增 `FLOW-60` 覆盖旧版升级、固定代理、OCR、发布夹具与两套服务生产/非生产路由矩阵。
+- 冻结边界复核：未修改账本/同步 DTO、OCR 正式导入、AI 指令台识别、联网开关/语气、远程额度常量、登录 JWT 90 天、会员 Product ID/价格/权益、StoreKit、首页动态主动作、播放/分享结构、主题、宠物、痕迹、页面拆分或 `ARCH-03`；未修改、回退或暂存用户既有 `PixelPetAnimationView.swift`、`StatCardView.swift`、`web-preview/app.js`、素材、提示文档和临时目录。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，删除成员后的 Swift 调用接线、旧 AppSettings 覆盖安装、Keychain 删除时机、正式 OCR 入口和未登录本地回退仍需实际编译/真机签收。服务端代码尚未部署，线上在重启前仍保留旧路由和旧模型选择；当前检查只能证明仓库实现，不能冒充生产已关闭。生产 `NODE_ENV`、两条 404、nudge 正式频控和真实 backend → ai-proxy 请求仍需部署后验证。
+- 下一步：先在 macOS 执行 Debug/Release 与全部 XCTest，再用旧版覆盖安装和全新安装完成 `FLOW-60`；随后按既有部署流程分别更新 backend/ai-proxy，确认 production 环境变量后验证 dev-token、分类演示路由、nudge policy 均为 404，并回归正式 daily/monthly/narrative、OCR 和会员引导。若出现问题只修本任务删除/隔离接线，不改冻结产品逻辑。
+
+---
+
+## 43. WEB-RETIRE-01：历史 Web Demo 退役与公开协议同步（2026-07-22）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。仓库退役、协议同步、静态链接与完整 Windows 发布门禁均已完成；正式站点尚未部署并线上签收，不标记 `VERIFIED`。
+- 用户授权：`web-preview` 只是项目初期 Demo，已经落后多个版本，明确要求直接删除，并同步更新用户协议与隐私政策。
+- 审计结论：正式官网由 `site/` 提供，公开法律页面由 `legal/` 提供；iOS、backend、ai-proxy、CI 和发布门禁均不加载 `web-preview`。目录内 8 个文件约 475 KB；`app.js` 工作区差异经 `--ignore-space-at-eol --ignore-cr-at-eol` 复核为纯换行符噪音，无待保留业务修改。现存 Web Demo 仍直连 localhost、读取本地 proxy/model 配置、调用已删除分类演示接口并展示错误云备份承诺，继续保留会制造产品和合规漂移。
+- 允许修改：删除整个 `web-preview/`；更新仍把它作为现行运行方式、测试入口或实现基准的活跃文档；在历史 Prompt/历史记录保留必要的退役说明；更新 `legal/privacy.html`、`legal/terms.html` 的日期、版本、远程 AI 数据类别、处理链路与本地照片/OCR 边界；必要的静态链接/文案门禁与本文档。
+- 冻结边界：不修改 `NativeDemoApp` 生产 UI/业务、账本/同步 DTO、AI fact-pack/rewrites 契约、会员/额度/JWT/StoreKit、backend/ai-proxy 运行代码、`site/` 官网视觉和下载入口、App Store 商品信息、主题、宠物、痕迹、复盘或 `ARCH-03`。公开协议只能描述已经实现的数据处理，不新增权限、上传字段、第三方或产品承诺。
+- 工作区保护：继续保留并不暂存 `PixelPetAnimationView.swift`、`StatCardView.swift`、提示文档、素材、`tmp/` 与缓存目录；`web-preview/app.js` 的纯换行差异因用户明确授权随目录退役。
+- 计划验证：仓库零运行/部署/测试代码依赖 `web-preview`，活跃文档不再把它当现行基准；`site/` 和 `legal/` 仍完整存在且互链有效；隐私政策准确区分本地规则、云端账单字段、远程 AI 汇总快照/脱敏事实包、照片/OCR 原图与第三方处理；用户协议与 App 内能力/额度边界一致。运行 HTML 链接检查、文案/体验静态检查、完整 Windows 发布门禁和 `git diff --check`。
+- 实现（Demo 退役）：删除 `web-preview/` 全目录及 8 个历史文件；仓库运行代码、backend、ai-proxy、检查脚本中已无 Web Demo 路径或现行基准引用。保留历史 Prompt、专项回归记录中的背景叙述，但活动任务单、测试入口、架构图、产品设计和项目说明均改为“已退役/不可执行”，当前交互真值统一为 `NativeDemoApp`、Xcode/iPhone 与发布矩阵。`HomeViewModel+Dashboard.swift` 仅移除一处“与 Web 预览对齐”的过时注释，未改任何 Swift 声明或行为。
+- 实现（公开协议）：`legal/privacy.html` 更新为 2026-07-22 / v0.7，明确联网整理需登录并由用户主动开启；远程范围包括汇总快照和本机选取的去标识化事实包，事实包仅含周期/范围、受控分类或场景标签、数量、日期区间和临时 F 编号，明确排除照片/照片引用、OCR 原图、账本 UUID、用户原句及医疗/债务敏感标题；链路固定为叙账后端 → AI 代理 → 配置的大模型服务，客户端不保存上游 Key，失败保留本地结果。`legal/terms.html` 更新为 2026-07-22 / v0.6，将增强能力准确表述为今日小记、月度整理和日/周/月轻润色，明确可关闭、非核心，不提供预算、理财或消费控制目标。照片仅本机、OCR 本地处理与云同步字段边界保持不变。
+- 活跃文档同步：更新 `IMPLEMENTATION_FOR_CODEX.md`、`TODO.md`、`TEST_CASES_v0.1.md`、`AI_ADVICE_BOUNDARY_AUDIT_v0.1.md`、`PRODUCT_STAGE_REVIEW_AND_STORE_COPY_v0.1.md`、`PRODUCT_PLAYBACK_MEMBERSHIP_v0.1.md`、`PROJECT_SETUP.md`、`PROJECT_ANALYSIS.md`、`PROJECT_SUMMARY_v0.1.md` 和 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`；早期任务与用例保留历史身份，但不得再恢复或维护 Web Demo。未修改 `site/` 视觉、下载入口和 App Store 商品信息。
+- 修改文件：删除 `web-preview/README.md`、`web-preview/STABILITY_SPRINT_E2E.md`、`web-preview/app.js`、`web-preview/assets/today-empty-illustration.png`、`web-preview/index.html`、`web-preview/styles.css` 及两个零字节历史请求日志；修改 `legal/privacy.html`、`legal/terms.html`、`IMPLEMENTATION_FOR_CODEX.md`、`TODO.md`、`TEST_CASES_v0.1.md`、`AI_ADVICE_BOUNDARY_AUDIT_v0.1.md`、`PRODUCT_STAGE_REVIEW_AND_STORE_COPY_v0.1.md`、`PRODUCT_PLAYBACK_MEMBERSHIP_v0.1.md`、`PROJECT_SETUP.md`、`PROJECT_ANALYSIS.md`、`PROJECT_SUMMARY_v0.1.md`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、`NativeDemoApp/ViewModels/HomeViewModel+Dashboard.swift` 与本文档。
+- 验证证据：本地 HTML 相对链接检查通过，`site/index.html` 到 `/legal/privacy.html`、`/legal/terms.html` 的正式链接保留，`legal` 两页互链有效；`web-preview` 目录不存在，运行代码与检查脚本零 Web Demo 引用。`python scripts/ai_capability_lint.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`git diff --check` 和最终 `python scripts/validate_release_gate.py --phase windows` 全部通过；发布门禁包含 Node 10/10、生活语义、文案、AI、主题、迁移、SQLite、100/1,000/5,000 条和真实 12MP 夹具，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改 iOS UI/产品行为、账本/同步 DTO、AI fact-pack/rewrites 契约、联网资格与额度、会员/JWT/StoreKit、backend/ai-proxy 运行代码、官网视觉/下载、App Store 信息、主题、宠物、痕迹、复盘或 `ARCH-03`。协议只披露已实现链路，不新增采集、权限、第三方或恢复承诺；未覆盖、回退或暂存 `PixelPetAnimationView.swift`、`StatCardView.swift`、提示文档、素材、`tmp/` 与缓存目录。
+- 剩余风险：仓库结果尚未发布到正式静态站，线上 `/legal/privacy.html` 与 `/legal/terms.html` 在部署前仍可能显示旧版本；历史 Prompt/回归文档仍保留已退役路径作为时间线证据，若脱离顶部退役说明单独阅读可能产生误解。此次无 Swift 行为修改，不新增 Xcode 编译风险，但本轮未执行 macOS/Xcode 或 iPhone 检查，也未验证 CDN/浏览器缓存刷新。
+- 下一步：随下一次官网静态部署只发布更新后的 `legal/` 与仓库删除结果，不改 `site/` 视觉；部署后分别打开正式隐私政策和用户协议，确认日期/版本、互链、HTTPS 与移动端排版，并清理 CDN 缓存。出现问题只修链接、静态发布或协议表述，不恢复 `web-preview`，也不触碰冻结产品逻辑。
+
+---
+
+## 44. DOC-CLEANUP-01：已执行 Prompt 文档退役（2026-07-22）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `VERIFIED`；当前无 `IN_PROGRESS`。文档删除、Git 删除记录、活动引用清理和完整 Windows 发布门禁均已通过；本项不涉及可执行代码，无需 Xcode/真机签收。
+- 用户授权：仓库内 Prompt 文档均已执行完成，明确要求直接删除并由 Git 记录删除，不再保留重复执行入口。
+- 审计结论：根目录共有 62 份 `PROMPT_*` / `生活语义关键词落地Prompt_v0.1.md` 执行文档，其中 61 份已被 Git 跟踪，`PROMPT_UI-痕迹月度月历热力与复盘微调-iOS.md` 为既有未跟踪文件；这些内容都是一次性任务说明、复制指令或执行索引，不参与 App、backend、ai-proxy、CI、测试和发布运行。`NativeDemoApp/Services/PhotoMemoryPromptPolicy.swift` 虽含 Prompt 字样但属于正式照片提示资格策略，明确排除，绝不删除或修改。
+- 允许修改：删除上述 62 份根目录 Prompt 文档；移除活动产品/项目/测试文档中指向 Prompt 或已不存在 `AGENT_PROMPT_*` 的执行链接，并改为已落地代码、产品规范或全局台账入口；更新本文档。历史台账中的文件名与执行证据保留，不重写历史。
+- 冻结边界：不修改任何 Swift/资产、Xcode 工程、产品 UI/文案/逻辑、账本/同步、AI、会员、额度、JWT、StoreKit、backend/ai-proxy、官网/协议、发布脚本、产品规范正文或 `ARCH-03`；不删除名称含 Prompt 的生产源码。
+- 工作区保护：保留当前未提交的客户端、服务端、协议、官网退役、素材、`tmp/` 与缓存现场；本项只处理 Prompt 文档、其活动引用和本文档，不暂存、不提交、不推送相邻修改。
+- 计划验证：根目录零 Prompt 执行文档；Git 对原 61 份跟踪文件全部显示删除，未跟踪 Prompt 不再存在；生产源码 `PhotoMemoryPromptPolicy.swift` 仍在且工程引用不变；活动文档零指向已删除 Prompt 的 Markdown 链接；运行 `git diff --check`、体验/文案静态检查和完整 Windows 发布门禁。文档清理不需要 Xcode/真机，检查通过后可标记 `VERIFIED`。
+- 实现：删除根目录全部 62 份一次性 Prompt 执行文档，包括 UI、记账、功能、修复、回归、底栏导航、产品、执行索引和生活语义落地 Prompt；其中 61 份 Git 跟踪文件现在统一显示为 `D`，既有未跟踪 `PROMPT_UI-痕迹月度月历热力与复盘微调-iOS.md` 已从工作区移除。没有删除 `IMPLEMENTATION_FOR_CODEX.md`、产品规范、问题归档或任何生产源码。
+- 活动引用收口：`PRODUCT_NORTH_STAR.md`、`PROJECT_SUMMARY_v0.1.md`、`RECORDING_CHAIN_VISION_v0.1.md`、`RECORD_PAGE_DESIGN_v0.1.md`、`CATEGORY_SCENE_COPY_AUDIT_v0.1.md`、`AI_ADVICE_BOUNDARY_AUDIT_v0.1.md`、`TODO.md` 与历史 `IMPLEMENTATION_FOR_CODEX.md` 不再链接已删除 Prompt，改为现行 Swift 服务、产品规范或全局台账；`ISSUES_CHECKLIST_COPY.txt`、`WALKTHROUGH_ISSUES_QUEUE.md` 明确标记历史归档并移除失效 Agent Prompt 入口。本文档内部既有 Prompt 文件名继续作为历史执行证据保留，不构成活动链接或恢复入口。
+- 修改文件：删除全部 61 份已跟踪根目录 `PROMPT_*` / `生活语义关键词落地Prompt_v0.1.md`，移除 1 份未跟踪 Prompt；修改 `CATEGORY_SCENE_COPY_AUDIT_v0.1.md`、`AI_ADVICE_BOUNDARY_AUDIT_v0.1.md`、`PRODUCT_NORTH_STAR.md`、`PROJECT_SUMMARY_v0.1.md`、`RECORDING_CHAIN_VISION_v0.1.md`、`RECORD_PAGE_DESIGN_v0.1.md`、`IMPLEMENTATION_FOR_CODEX.md`、`TODO.md`、`ISSUES_CHECKLIST_COPY.txt`、`WALKTHROUGH_ISSUES_QUEUE.md` 与本文档。
+- 验证证据：专项检查输出 `PROMPT_CLEANUP_OK trackedDeleted=61 activeRefs=0 photoPolicyProjectRefs=4`；根目录 Prompt 文档计数为 0，非台账活动文档对 `PROMPT_` / `AGENT_PROMPT` 引用为 0，`NativeDemoApp/Services/PhotoMemoryPromptPolicy.swift` 存在且 Xcode 工程仍有 4 处目标引用。`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 全部通过；完整门禁包含 Node 10/10、生活语义、文案、AI、主题、迁移、SQLite、100/1,000/5,000 条及真实 12MP 夹具，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改任何 Swift/资产、Xcode 工程、产品 UI/文案/逻辑、账本/同步、AI、会员、额度、JWT、StoreKit、backend/ai-proxy、官网/协议、发布脚本、产品规则或 `ARCH-03`；`PhotoMemoryPromptPolicy.swift` 及其工程接线完整保留。未覆盖、回退、暂存、提交或推送相邻脏工作区。
+- 剩余风险：Prompt 原文不再出现在当前工作树，只能通过 Git 历史查看；这是用户明确授权的预期结果。61 份删除尚未暂存或提交，但已作为工作树删除被 Git 正确识别，可随下一次受控提交进入版本历史。
+- 下一步：下一次提交时将这 61 个 `D` 与对应活动引用、本文档一起纳入同一提交；不要单独恢复 Prompt，也不要把生产 `PhotoMemoryPromptPolicy.swift` 误当文档删除。后续任务继续以本文档为唯一顺序与状态来源。

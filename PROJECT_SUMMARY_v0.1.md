@@ -64,11 +64,11 @@
 │  UserDefaults + JSON · Vision OCR · StoreKit 2 · Keychain │
 └────────────────────────────┬─────────────────────────────┘
                              │ 可选
-         ┌───────────────────┼───────────────────┐
-         ▼                   ▼                   ▼
-   backend/            ai-proxy/           web-preview/
-   auth · member       LLM 转发 · 限流      早期原型（与 iOS 有漂移）
-   ledger · iap
+                 ┌───────────┴───────────┐
+                 ▼                       ▼
+            backend/                ai-proxy/
+            auth · member           LLM 转发 · 限流
+            ledger · iap
 ```
 
 | 组件 | 说明 |
@@ -76,7 +76,7 @@
 | **iOS** | 主产品；真机/TestFlight/上架均以此为准 |
 | **backend** | 登录、会员 tier、账本同步、IAP verify；生产禁 `dev/set-tier` |
 | **ai-proxy** | 小 AI 说远程调用；不可用时不阻断切片闭环 |
-| **web-preview** | 历史预览；上架前不与 iOS 强行对齐 |
+| **site / legal** | 正式官网、隐私政策与用户协议；不承载产品运行逻辑 |
 
 ---
 
@@ -193,7 +193,7 @@ NativeDemoApp/
     └── …（IAP、Sync、Weather、Pet 等）
 ```
 
-**结构债**：Tab 已拆分；`HomeViewModel`、部分 View 仍可瘦身；`web-preview` 与 iOS 漂移。
+**结构债**：Tab 已拆分；`HomeViewModel`、部分 View 仍可瘦身。已删除长期漂移的历史 Web Demo，避免双份产品实现继续累积。
 
 ---
 
@@ -234,7 +234,7 @@ NativeDemoApp/
 | [`TODO.md`](TODO.md) | 进度、回归 16 条、栏 A/B |
 | [`PROJECT_ANALYSIS.md`](PROJECT_ANALYSIS.md) | 早期架构分析（部分信息已旧，以本文为准） |
 | [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) | Agent 分任务实现单 |
-| `AGENT_PROMPT_*.md` | 各 Task 可复制 prompt |
+| [`GLOBAL_PRODUCT_INTERACTION_OPTIMIZATION_LEDGER_2026-07-15.md`](GLOBAL_PRODUCT_INTERACTION_OPTIMIZATION_LEDGER_2026-07-15.md) | 当前任务状态、边界与执行证据 |
 
 ---
 

@@ -15,14 +15,17 @@ struct AIInsightPayload: Codable {
 }
 
 enum AIReportServiceError: LocalizedError {
-    case invalidEndpoint(String)
+    case invalidEndpoint
+    case authenticationRequired
     case badStatus(Int, String)
     case invalidResponse
 
     var errorDescription: String? {
         switch self {
-        case .invalidEndpoint(let endpoint):
-            return "远程模型地址配置异常：\(endpoint)"
+        case .invalidEndpoint:
+            return "远程服务地址异常，将使用本地规则。"
+        case .authenticationRequired:
+            return "登录后才能使用联网整理，已使用本地规则。"
         case .badStatus(let code, let body):
             if body.contains("AI_INPUT_REJECTED") || body.contains("BANK_CARD") {
                 return "远程模型触发内容保护，将使用本地规则。"
@@ -35,64 +38,21 @@ enum AIReportServiceError: LocalizedError {
 }
 
 final class AIReportService {
-    private let zhipuDefaultEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
-
     func generateNarrativeRewrites(
         factPacks: [LifeNarrativeAIFactPackRequest],
-        endpoint: String,
-        apiKey: String,
-        tone: AppSettings.AITone,
-        model: String
+        tone: AppSettings.AITone
     ) async throws -> LifeNarrativeAIRewriteBatchResponse {
         guard !factPacks.isEmpty else { return LifeNarrativeAIRewriteBatchResponse(rewrites: []) }
-        let finalEndpoint = normalizedEndpoint(endpoint)
-        guard let url = URL(string: finalEndpoint) else {
-            throw AIReportServiceError.invalidEndpoint(finalEndpoint)
-        }
         let encodedPacks = try JSONEncoder().encode(factPacks)
-        guard let factPackText = String(data: encodedPacks, encoding: .utf8) else {
-            throw AIReportServiceError.invalidResponse
-        }
         let factPackPayload = try JSONSerialization.jsonObject(with: encodedPacks)
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let isDirectZhipu = finalEndpoint.contains("open.bigmodel.cn")
-        if isDirectZhipu && !apiKey.isEmpty {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        } else if !isDirectZhipu && !apiKey.isEmpty {
-            request.setValue(apiKey, forHTTPHeaderField: "x-proxy-token")
-        }
-        if finalEndpoint.contains("/v1/ai/"), !KeychainService.loadAccessToken().isEmpty {
-            request.setValue("Bearer \(KeychainService.loadAccessToken())", forHTTPHeaderField: "Authorization")
-        }
-
-        let systemContent = """
-        你是“叙账”的轻量文案改写器，不是事实选择器。
-        输入只包含本地规则已经选定的脱敏事实。只能改写这些事实，不得添加商户、地点、人物、原因、情绪、动机、建议或预测。
-        每个结果必须原样返回 scope、periodKey，并用 evidenceIDs 引用输入里的 F 编号；至少引用 lead 事实。
-        不得补充输入中没有的数字。语气为\(tone.rawValue)，自然、克制、像人话，不煽情、不说教。
-        headline 4-32 字，summary 6-64 字，supportingLine 可空且最多 48 字。
-        只输出 JSON：{"rewrites":[{"scope":"day","periodKey":"...","headline":"...","summary":"...","supportingLine":null,"evidenceIDs":["F1"]}]}
-        """
-        let userContent = "脱敏事实包：\(factPackText)"
-        var body: [String: Any] = [
-            "model": model.isEmpty ? "doubao-seed-1-6-flash-250828" : model,
-            "temperature": 0.25
+        var request = try authenticatedRequest(timeoutInterval: 30)
+        let body: [String: Any] = [
+            "feature": "narrative_rewrite_batch",
+            "factPacks": factPackPayload,
+            "tone": tone.rawValue
         ]
-        if isDirectZhipu {
-            body["messages"] = [
-                ["role": "system", "content": systemContent],
-                ["role": "user", "content": userContent]
-            ]
-        } else {
-            body["feature"] = "narrative_rewrite_batch"
-            body["factPacks"] = factPackPayload
-            body["tone"] = tone.rawValue
-        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        request.timeoutInterval = 30
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -105,44 +65,15 @@ final class AIReportService {
         if let decoded = try? JSONDecoder().decode(LifeNarrativeAIRewriteBatchResponse.self, from: data) {
             return decoded
         }
-        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let choices = object["choices"] as? [[String: Any]],
-           let message = choices.first?["message"] as? [String: Any],
-           let content = message["content"] as? String,
-           let decoded = decodeNarrativeRewriteBatch(from: content) {
-            return decoded
-        }
         throw AIReportServiceError.invalidResponse
     }
 
     func generateInsight(
         snapshot: AISnapshot,
-        endpoint: String,
-        apiKey: String,
         tone: AppSettings.AITone,
-        model: String,
         feature: String = "daily"
     ) async throws -> AIInsightPayload {
-        let finalEndpoint = normalizedEndpoint(endpoint)
-        guard let url = URL(string: finalEndpoint) else {
-            throw AIReportServiceError.invalidEndpoint(finalEndpoint)
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let isDirectZhipu = finalEndpoint.contains("open.bigmodel.cn")
-        if isDirectZhipu && !apiKey.isEmpty {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        } else if !isDirectZhipu && !apiKey.isEmpty {
-            request.setValue(apiKey, forHTTPHeaderField: "x-proxy-token")
-        }
-        if finalEndpoint.contains("/v1/ai/") {
-            let accessToken = KeychainService.loadAccessToken()
-            if !accessToken.isEmpty {
-                request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-            }
-        }
+        var request = try authenticatedRequest(timeoutInterval: 45)
 
         let systemContent = """
         你是“叙账”的生活记录整理助手。
@@ -168,7 +99,6 @@ final class AIReportService {
         """
 
         let body: [String: Any] = [
-            "model": model.isEmpty ? "doubao-seed-1-6-flash-250828" : model,
             "feature": feature,
             "messages": [
                 ["role": "system", "content": systemContent],
@@ -177,7 +107,6 @@ final class AIReportService {
             "temperature": 0.6
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        request.timeoutInterval = 45
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -188,64 +117,10 @@ final class AIReportService {
             throw AIReportServiceError.badStatus(http.statusCode, String(bodyText.prefix(300)))
         }
 
-        if let payload = try? JSONDecoder().decode(AIInsightPayload.self, from: data) {
-            return payload
+        guard let payload = try? JSONDecoder().decode(AIInsightPayload.self, from: data) else {
+            throw AIReportServiceError.invalidResponse
         }
-
-        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            if
-                let summary = object["summary"] as? String,
-                let action = object["action"] as? String,
-                let encourage = object["encourage"] as? String {
-                return AIInsightPayload(summary: summary, action: action, encourage: encourage)
-            }
-
-            if
-                let choices = object["choices"] as? [[String: Any]],
-                let first = choices.first,
-                let message = first["message"] as? [String: Any],
-                let content = message["content"] as? String,
-                let payload = decodePayloadFromText(content) {
-                return payload
-            }
-        }
-
-        throw AIReportServiceError.invalidResponse
-    }
-
-    private func decodePayloadFromText(_ content: String) -> AIInsightPayload? {
-        let trimmed = content
-            .replacingOccurrences(of: "```json", with: "")
-            .replacingOccurrences(of: "```", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if
-            let data = trimmed.data(using: .utf8),
-            let payload = try? JSONDecoder().decode(AIInsightPayload.self, from: data) {
-            return payload
-        }
-
-        if
-            let data = trimmed.data(using: .utf8),
-            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let summary = object["summary"] as? String,
-            let action = object["action"] as? String,
-            let encourage = object["encourage"] as? String {
-            return AIInsightPayload(summary: summary, action: action, encourage: encourage)
-        }
-
-        return nil
-    }
-
-    private func decodeNarrativeRewriteBatch(
-        from content: String
-    ) -> LifeNarrativeAIRewriteBatchResponse? {
-        let trimmed = content
-            .replacingOccurrences(of: "```json", with: "")
-            .replacingOccurrences(of: "```", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let data = trimmed.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(LifeNarrativeAIRewriteBatchResponse.self, from: data)
+        return payload
     }
 
     private func safeDateText(for feature: String) -> String {
@@ -285,23 +160,19 @@ final class AIReportService {
         }
     }
 
-    private func normalizedEndpoint(_ endpoint: String) -> String {
-        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return zhipuDefaultEndpoint }
-
-        let withoutTrailingSlash = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard
-            let components = URLComponents(string: withoutTrailingSlash),
-            components.scheme != nil,
-            components.host != nil
-        else {
-            return trimmed
+    private func authenticatedRequest(timeoutInterval: TimeInterval) throws -> URLRequest {
+        guard let url = URL(string: AppSettings.productionAIEndpoint) else {
+            throw AIReportServiceError.invalidEndpoint
         }
-
-        let path = components.path
-        if path.isEmpty || path == "/" {
-            return withoutTrailingSlash + "/v1/insight/daily"
+        let accessToken = KeychainService.loadAccessToken()
+        guard !accessToken.isEmpty else {
+            throw AIReportServiceError.authenticationRequired
         }
-        return trimmed
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = timeoutInterval
+        return request
     }
 }

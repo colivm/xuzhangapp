@@ -405,21 +405,13 @@ actor LifeNarrativeAIPrecomputeCoordinator {
         ).filter { LifeNarrativeAIRewriteStore.shared.rewrite(for: $0.key) == nil }
         guard !packs.isEmpty, !Task.isCancelled else { return }
 
-        let endpoint = settings.aiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        let apiKey = KeychainService.loadAIAPIKey()
-        let isDirect = endpoint.isEmpty || endpoint.contains("open.bigmodel.cn")
-        let requiresSession = endpoint.contains("/v1/ai/")
-        guard (!isDirect || !apiKey.isEmpty),
-              (!requiresSession || !KeychainService.loadAccessToken().isEmpty),
+        guard !KeychainService.loadAccessToken().isEmpty,
               AIUsageLimiter.canUseRemoteAI(limitPerMonth: settings.remoteAIMonthlyLimit) else { return }
 
         do {
             let response = try await reportService.generateNarrativeRewrites(
                 factPacks: packs.map(\.request),
-                endpoint: endpoint,
-                apiKey: apiKey,
-                tone: settings.aiTone,
-                model: settings.aiModel
+                tone: settings.aiTone
             )
             guard !Task.isCancelled, latestRequestID == requestID else { return }
             let packsByScope = Dictionary(uniqueKeysWithValues: packs.map { ($0.key.scope, $0) })

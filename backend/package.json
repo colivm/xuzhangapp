@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "test:auth-token": "node scripts/verify-auth-token-ttl.mjs"
+    "test": "npm run test:auth-token && npm run test:nudge-policy",
+    "test:auth-token": "node scripts/verify-auth-token-ttl.mjs",
+    "test:nudge-policy": "node scripts/verify-nudge-policy.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

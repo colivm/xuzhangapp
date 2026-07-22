@@ -55,7 +55,7 @@ OCR 截图    ──→ │ 信号 cascade  →  分类 + 备注(title) + 情绪
 - 分类、title、emotionTag 走品牌 catalog
 - 识别不到品牌 → **不硬贴**，交给习惯引擎或通用池
 
-详见 [`AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md`](AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md)
+现行实现见 [`MerchantBrandCatalog.swift`](NativeDemoApp/Services/MerchantBrandCatalog.swift) 与 [`NarrativeCopyResolver.swift`](NativeDemoApp/Services/NarrativeCopyResolver.swift)。
 
 ### 3.2 弱信号 · 个人习惯预填（B2.13）
 
@@ -65,7 +65,7 @@ OCR 截图    ──→ │ 信号 cascade  →  分类 + 备注(title) + 情绪
 - **个人先验为主**，人口学规则仅冷启动兜底
 - 置信度低 → 只预填分类，或只高亮推荐 chip，不全填
 
-详见 [`AGENT_PROMPT_B2.13_HABIT_PREFILL.md`](AGENT_PROMPT_B2.13_HABIT_PREFILL.md)
+现行实现见 [`RecordPrefillService.swift`](NativeDemoApp/Services/RecordPrefillService.swift)。
 
 ### 3.3 统一 cascade
 
@@ -110,8 +110,8 @@ F1.3 与 B2.13 **可分两 PR**；须 **共用** `NarrativeCopyResolver`，避�
 | 文档 | 用途 |
 |------|------|
 | [`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) §5.2 | 能力层级补充 |
-| [`AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md`](AGENT_PROMPT_F1.3_BRAND_NARRATIVE_POOL.md) | 品牌叙事池实现 |
-| [`AGENT_PROMPT_B2.13_HABIT_PREFILL.md`](AGENT_PROMPT_B2.13_HABIT_PREFILL.md) | 个人习惯预填实现 |
+| [`MerchantBrandCatalog.swift`](NativeDemoApp/Services/MerchantBrandCatalog.swift) / [`NarrativeCopyResolver.swift`](NativeDemoApp/Services/NarrativeCopyResolver.swift) | 品牌叙事池实现 |
+| [`RecordPrefillService.swift`](NativeDemoApp/Services/RecordPrefillService.swift) | 个人习惯预填实现 |
 | [`CategoryRecommendService.swift`](NativeDemoApp/Services/CategoryRecommendService.swift) | B2.8 现有基线 |
 | [`ScenePackCopyPool.swift`](NativeDemoApp/Services/ScenePackCopyPool.swift) | 通用叙事池 |
 

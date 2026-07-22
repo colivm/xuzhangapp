@@ -6811,15 +6811,15 @@ struct InsightWebView: View {
 
     private var defaultMonthlyAIStatus: AIStatusPill? {
         if homeViewModel.isGeneratingMonthlyInsight {
-            return settingsViewModel.useRemoteAI
+            let canTryRemote = settingsViewModel.useRemoteAI
+                && !KeychainService.loadAccessToken().isEmpty
+            return canTryRemote
                 ? AIStatusPill(kind: .live, text: "正在尝试远程模型")
                 : AIStatusPill(kind: .fallback, text: "正在用本地规则整理")
         }
         guard settingsViewModel.useRemoteAI else { return nil }
-        let endpoint = settingsViewModel.aiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isDirectModelEndpoint = endpoint.isEmpty || endpoint.contains("open.bigmodel.cn")
-        if isDirectModelEndpoint && KeychainService.loadAIAPIKey().isEmpty {
-            return AIStatusPill(kind: .error, text: "未配置 API Key，将使用本地规则")
+        if KeychainService.loadAccessToken().isEmpty {
+            return AIStatusPill(kind: .error, text: "未登录，将使用本地规则")
         }
         return nil
     }

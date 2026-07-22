@@ -998,29 +998,6 @@ final class HomeViewModel: ObservableObject {
             }
     }
 
-    func makeDemoOCRDrafts() -> [OCRReceiptDraft] {
-        [
-            OCRReceiptDraft(
-                title: "瑞幸咖啡",
-                amount: 18.9,
-                date: .now,
-                category: .dining,
-                confidence: 0.96,
-                rawText: "微信支付\n商户全称 瑞幸咖啡\n金额 -¥18.90\n支付时间 \(Self.dayKey(for: .now)) 09:24:00",
-                provider: .wechat
-            ),
-            OCRReceiptDraft(
-                title: "便利店日用品",
-                amount: 32.5,
-                date: .now,
-                category: .daily,
-                confidence: 0.94,
-                rawText: "支付宝\n商品说明 便利店日用品\n金额 ¥32.50\n付款时间 \(Self.dayKey(for: .now)) 19:06:00",
-                provider: .alipay
-            ),
-        ]
-    }
-
     func recognizeOCRDrafts(imageData: Data, isMember: Bool) async -> [OCRReceiptDraft] {
         guard dailyQuotaStore.canUseOCR(isMember: isMember) else {
             ocrStatus = ExperienceRuleCopy.ocrQuotaExhaustedMessage()
@@ -1750,18 +1727,15 @@ final class HomeViewModel: ObservableObject {
         )
 
         if settings.useRemoteAI {
-            let apiKey = KeychainService.loadAIAPIKey()
-            let endpoint = settings.aiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-            let isDirectModelEndpoint = endpoint.isEmpty || endpoint.contains("open.bigmodel.cn")
-            if AIUsageLimiter.canUseRemoteAI(limitPerMonth: settings.remoteAIMonthlyLimit),
-               !(isDirectModelEndpoint && apiKey.isEmpty) {
+            let canUseRemoteAI = AIUsageLimiter.canUseRemoteAI(
+                limitPerMonth: settings.remoteAIMonthlyLimit
+            )
+            let hasCloudSession = !KeychainService.loadAccessToken().isEmpty
+            if canUseRemoteAI, hasCloudSession {
                 do {
                     let payload = try await aiReportService.generateInsight(
                         snapshot: preparation.snapshot,
-                        endpoint: endpoint,
-                        apiKey: apiKey,
                         tone: settings.aiTone,
-                        model: settings.aiModel,
                         feature: "monthly"
                     )
                     report = MonthlyInsightReport(
@@ -1776,9 +1750,9 @@ final class HomeViewModel: ObservableObject {
                     report.source = .errorFallback
                 }
             } else {
-                insightErrorMessage = !AIUsageLimiter.canUseRemoteAI(limitPerMonth: settings.remoteAIMonthlyLimit)
+                insightErrorMessage = !canUseRemoteAI
                     ? "本月远程模型调用额度已达上限。"
-                    : "直连模型需要 API Key，已使用本地规则。"
+                    : "未登录，已使用本地规则。"
                 report.source = .errorFallback
             }
         }
@@ -2552,52 +2526,47 @@ final class HomeViewModel: ObservableObject {
             .max(by: { $0.value < $1.value })?.key.rawValue ?? "无"
 
         if settings.useRemoteAI {
-            let apiKey = KeychainService.loadAIAPIKey()
-            let isDirectModelEndpoint = settings.aiEndpoint.isEmpty || settings.aiEndpoint.contains("open.bigmodel.cn")
             if !AIUsageLimiter.canUseRemoteAI(limitPerMonth: settings.remoteAIMonthlyLimit) {
                 insightErrorMessage = "本月远程模型调用额度已达上限，已使用本地规则。"
-            } else if isDirectModelEndpoint && apiKey.isEmpty {
-                insightErrorMessage = "直连模型需要 API Key，已使用本地规则。"
+            } else if KeychainService.loadAccessToken().isEmpty {
+                insightErrorMessage = "未登录，已使用本地规则。"
             } else {
-            let snapshot = AISnapshot(
-                date: key,
-                todayTotal: todayTotal,
-                weekAverage: weeklyAverage,
-                monthTotal: monthExpenseTotal,
-                topCategories: categorySummary.prefix(3).map(\.category.rawValue)
-            )
-            do {
-                let payload = try await aiReportService.generateInsight(
-                    snapshot: snapshot,
-                    endpoint: settings.aiEndpoint,
-                    apiKey: apiKey,
-                    tone: settings.aiTone,
-                    model: settings.aiModel,
-                    feature: "daily"
+                let snapshot = AISnapshot(
+                    date: key,
+                    todayTotal: todayTotal,
+                    weekAverage: weeklyAverage,
+                    monthTotal: monthExpenseTotal,
+                    topCategories: categorySummary.prefix(3).map(\.category.rawValue)
                 )
-                let remoteInsight = DailyInsight(
-                    dayKey: key,
-                    summary: payload.summary,
-                    action: payload.action,
-                    encourage: payload.encourage,
-                    snapshotSignature: snapshotSignature
-                )
-                insights.insert(remoteInsight, at: 0)
-                persistInsights()
-                _ = AIUsageLimiter.consumeOnce(limitPerMonth: settings.remoteAIMonthlyLimit)
-                analyticsService.track(
-                    .aiDailyGenerated,
-                    props: [
-                        .mode: "live",
-                        .ledgerSizeBucket: AnalyticsService.countBucket(for: todayItems.count),
-                        .outcome: AnalyticsOutcome.success.rawValue,
-                    ]
-                )
-                isGeneratingInsight = false
-                return
-            } catch {
-                insightErrorMessage = remoteAIInsightFallbackMessage(for: error)
-            }
+                do {
+                    let payload = try await aiReportService.generateInsight(
+                        snapshot: snapshot,
+                        tone: settings.aiTone,
+                        feature: "daily"
+                    )
+                    let remoteInsight = DailyInsight(
+                        dayKey: key,
+                        summary: payload.summary,
+                        action: payload.action,
+                        encourage: payload.encourage,
+                        snapshotSignature: snapshotSignature
+                    )
+                    insights.insert(remoteInsight, at: 0)
+                    persistInsights()
+                    _ = AIUsageLimiter.consumeOnce(limitPerMonth: settings.remoteAIMonthlyLimit)
+                    analyticsService.track(
+                        .aiDailyGenerated,
+                        props: [
+                            .mode: "live",
+                            .ledgerSizeBucket: AnalyticsService.countBucket(for: todayItems.count),
+                            .outcome: AnalyticsOutcome.success.rawValue,
+                        ]
+                    )
+                    isGeneratingInsight = false
+                    return
+                } catch {
+                    insightErrorMessage = remoteAIInsightFallbackMessage(for: error)
+                }
             }
         }
 
@@ -3153,13 +3122,9 @@ final class HomeViewModel: ObservableObject {
                     String(Int(item.updatedAt.timeIntervalSince1970))
                 ].joined(separator: "#")
             }
-        let endpoint = settings.aiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isInternalDirectMode = endpoint.isEmpty || endpoint.contains("open.bigmodel.cn")
         let remoteState: String
         if !settings.useRemoteAI {
             remoteState = "disabled"
-        } else if isInternalDirectMode {
-            remoteState = KeychainService.loadAIAPIKey().isEmpty ? "direct-unavailable" : "direct-ready"
         } else {
             remoteState = KeychainService.loadAccessToken().isEmpty ? "proxy-signed-out" : "proxy-ready"
         }

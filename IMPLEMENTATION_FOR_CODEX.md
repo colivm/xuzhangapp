@@ -4,6 +4,8 @@
 > 用途：把本文件 + 指定章节的产品文档交给 Codex、Cursor Agent 等，**按任务拆分实现**，避免一次「读完所有 md」导致漏项或乱改。  
 > **当前优先**：见 [`TODO.md`](TODO.md) §下一步最先做什么 — **TestFlight 回归 → B2.8 → C1**。
 
+> **2026-07-22 退役说明**：本文件是 v0.1 阶段的历史任务集，不再是当前排期与验收入口。`web-preview/` 已整体删除；下文全部 `web-preview`、`Web 参考`、`@web-preview` 和“与 Web 对齐”仅保留为历史上下文，**不得再执行、恢复或作为 iOS 交互基准**。当前实现以 `NativeDemoApp` 为准，任务顺序以 [`GLOBAL_PRODUCT_INTERACTION_OPTIMIZATION_LEDGER_2026-07-15.md`](GLOBAL_PRODUCT_INTERACTION_OPTIMIZATION_LEDGER_2026-07-15.md) 为准，验收以 [`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`](RELEASE_GATE_AND_DEVICE_MATRIX_v1.md) 为准。
+
 ---
 
 ## 1. 使用方式
@@ -46,7 +48,6 @@
 | 壳与 Tab | `NativeDemoApp/ContentView.swift` | **~702 行** Tab 壳 + `AppColors` / `RecordEditSheet` |
 | 周度分享卡 UI | `InsightWebView.swift` → `WeeklyShareCardView` | D1 ✅；可选迁 `Views/Components/` |
 | ViewModel | `HomeViewModel.swift` | B2.8 已抽 `CategoryRecommendService`；仍偏胖 🟡 |
-| Web 参考（iOS 优先，Web 滞后） | `web-preview/app.js` | 勿默认与 iOS 同步改 |
 | 会员 Nudge | `NativeDemoApp/Services/MemberFlowService.swift` | 播完场景 |
 
 ---
@@ -78,6 +79,8 @@ E1 StoreKit + Release 门禁（iOS + backend dev 路由）   ✅
 ---
 
 ## 4. 分任务说明
+
+> 以下任务说明冻结为 2026-06 阶段档案。其中指向已删除 Web 文件的路径、命令和对齐要求全部失效，只用于理解历史决策，不得作为待办执行。
 
 ### Task B1 — 聚合与模型
 
@@ -1266,16 +1269,16 @@ iOS `HomeViewModel.recommendCategory` 仅按金额硬编码：
 
 ---
 
-### 10.15 任务编号对照 + 合并 Prompt（可选）
+### 10.15 任务编号对照（历史）
 
 **不要混任务**：你跑的 **B2.10**（场景备注池）≠ **B2.8**（智能分类）≠ **B2.9**（天气宠物）。
 
-| ID | 名称 | 改什么 | 独立 Agent 文件 | 典型状态 |
+| ID | 名称 | 改什么 | 执行依据 | 典型状态 |
 |----|------|--------|-----------------|----------|
-| **A4** | 场景包哲学对齐 | tagline、旅行出发包、5 条替词 | [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md) | ✅ iOS |
+| **A4** | 场景包哲学对齐 | tagline、旅行出发包、5 条替词 | 已执行，见全局台账 | ✅ iOS |
 | **B2.7** | 分类锁定 | `categoryLockedByUser` | §10.12 | ✅ |
-| **B2.8** | 智能分类推荐 | `CategoryRecommendService` | [`AGENT_PROMPT_B2.8_SMART_CATEGORY.md`](AGENT_PROMPT_B2.8_SMART_CATEGORY.md) | ✅ |
-| **B2.9** | 天气宠物 | Open-Meteo + `PET_SCENE_RULES` | [`AGENT_PROMPT_B2.9_WEATHER_PET.md`](AGENT_PROMPT_B2.9_WEATHER_PET.md) | ✅ |
+| **B2.8** | 智能分类推荐 | `CategoryRecommendService` | 已执行，见全局台账 | ✅ |
+| **B2.9** | 天气宠物 | Open-Meteo + `PET_SCENE_RULES` | 已执行，见全局台账 | ✅ |
 | **B2.10** | 场景备注池扩展 | 四包×4档×8条 + stable hash | §10.16 | ✅ iOS MVP |
 
 **可选合并（仅 B2.8 + B2.9）**：若希望 Codex **一次 PR** 完成「记账更聪明 + 宠物有温度」，将 §10.13 + §10.14 两段 prompt 合并发送，并注明：**先做 B2.7 依赖检查 → B2.8 → B2.9**，验收分节勾选。**不要**把 B2.10 / A4 写进同一条 prompt。
@@ -1365,4 +1368,4 @@ struct ScenePackDefinition {
 | 2026-06-06 | §2.2：`InsightWebView`、ContentView ~702；结构债 🟡 说明 |
 | 2026-06-06 | E1：iOS Release tier 门禁 ✅；§10.10 删 Debug 模拟开通说明 |
 | 2026-06-06 | D1 ✅：§2.2/§3/§4 Task D1 状态；周播完分享图 |
-| 2026-06-06 | §10.15 任务编号对照表；链至 AGENT_PROMPT_B2.8 / B2.9 |
+| 2026-06-06 | §10.15 任务编号对照表；补充 B2.8 / B2.9 执行说明 |

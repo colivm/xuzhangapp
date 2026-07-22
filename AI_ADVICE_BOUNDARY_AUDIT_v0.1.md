@@ -1,7 +1,7 @@
 # 叙账 · AI「议」边界审计清单 v0.1
 
-> 更新时间：2026-06-06  
-> 状态：**iOS 已改（Task A3 ✅）** · **Web 待对齐**  
+> 更新时间：2026-07-22
+> 状态：**iOS 已改（Task A3 ✅）** · **历史 Web Demo 已退役**
 > 依据：[`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) **§0.5**  
 > 背景：「柔和下月参考」等行为在语气上接近叙账，在结构上仍是 **软性预算**，与「先叙后议」「理解而非审判」冲突。
 
@@ -79,41 +79,9 @@
 
 ---
 
-## 3. Web 待改项 · `web-preview/`（⏳ 本轮不做，后续与 iOS 对齐）
+## 3. 历史 Web 审计项（已退役）
 
-> **2026-06-06**：Task A3 范围收窄为 **仅 iOS**；本节保留清单供后续 Web 任务使用。
-
-### 3.1 UI · `index.html`
-
-| 优先级 | 元素 id | 当前按钮文案 | 问题 |
-|--------|---------|--------------|------|
-| **P0** | `#monthlySoftPlanBtn` | **柔和下月参考** | 同 iOS |
-| **—** | `#monthlySaveSummaryBtn` | 保存月度小结 | 保留 |
-| **—** | `#monthlyToneSwitchBtn` | 切换叙述风格 | 保留 |
-| **⚠️ P1** | `#weeklyRhythmBtn` | 梳理本周节奏 | 改 `buildWeeklyRhythmText` |
-| **—** | `#weeklyShareBtn` | 生成周度分享卡 | 保留 |
-| **—** | `#weeklyTagBtn` | 标记常花类目 | 保留 |
-
-### 3.2 逻辑 · `web-preview/app.js`
-
-| 优先级 | 函数 / 行 | 当前 | 问题 |
-|--------|-----------|------|------|
-| **P0** | `buildMonthlySoftPlanText()` ~L1971-1977 | `total × 0.95` → 下月温柔参考 ¥X | 同 iOS P0 |
-| **P0** | `monthlySoftPlanBtn` handler ~L4529-4535 | Toast「**柔和下月参考**已生成…」 | 同 P0 |
-| **P0** | `monthlyInsightPayload()` advice ~L3125-3128 | 「设置**预算上限**…**波动收敛**」 | 预算教练 |
-| **P0** | `rangeInsightPayload()` advice ~L3150-3153 | 「**分段预算**」「**达成率**」「**优化消费结构**」 | 同 iOS weekly fallback |
-| **P0** | `buildSoftBudgetDraft()` ~L1612-1625 | 下周生活开销约 ¥X（**死代码，未接线**） | 应删除或禁止接入，避免误用 |
-| **⚠️ P1** | `buildWeeklyRhythmText()` ~L1651-1653 | 「下周再慢慢微调」 | 同 iOS |
-| **⚠️ P1** | `buildMonthlySoftPlanText` 空数据 ~L1974 | 「…**下月参考**会更贴近…」 | 用语仍指向预算功能 |
-| **—** | `AI_GLOBAL_STYLE_PROMPT` ~L114-115 | 已禁省钱/控制等词 | **好**，但与 fallback 矛盾，fallback 须改 |
-| **—** | `AI_FORBIDDEN_WORDS` ~L121-134 | 含控制/节约等 | Post 处理有；**fallback 绕过** |
-| **P2** | `ai-proxy/README.md` 示例 action | 「减少一次冲动小额消费」 | 文档示例需改 |
-
-### 3.3 场景包 · `app.js` scenePacks
-
-| 优先级 | 项 | 说明 |
-|--------|-----|------|
-| **—** | `旅行预算包` / 「两晚住宿预算」 | 场景语义，**不误改** |
+`web-preview/` 已于 2026-07-22 整体删除，不再安排与 iOS 对齐，也不得恢复为产品或测试基准。早期 Web 中曾发现的软预算、下月数字目标和 fallback 绕过等问题只保留在 Git 历史中；现行边界以 `NativeDemoApp`、`ai-proxy`、[`AI_CAPABILITY_CONTRACT_v1.md`](AI_CAPABILITY_CONTRACT_v1.md) 和全局优化台账为准。
 
 ---
 
@@ -192,8 +160,8 @@ action 字段应是温柔收束或邀请继续记录/下月再叙，不是理财
 | [`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) | §0.5 议的边界（宪法） |
 | [`PRODUCT_STAGE_REVIEW_AND_STORE_COPY_v0.1.md`](PRODUCT_STAGE_REVIEW_AND_STORE_COPY_v0.1.md) | §3.6～§3.7 内核与哲学 |
 | [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) | 改码时可单开任务引用本文 §6 |
-| [`AGENT_PROMPT_AI_ADVICE_BOUNDARY.md`](AGENT_PROMPT_AI_ADVICE_BOUNDARY.md) | Task A3 · 小 AI 说去预算化 |
-| [`AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md`](AGENT_PROMPT_SCENE_PACK_PHILOSOPHY.md) | Task A4 · 场景包哲学对齐（iOS） |
+| [`AI_CAPABILITY_CONTRACT_v1.md`](AI_CAPABILITY_CONTRACT_v1.md) | 现行 AI 能力与事实边界 |
+| [`GLOBAL_PRODUCT_INTERACTION_OPTIMIZATION_LEDGER_2026-07-15.md`](GLOBAL_PRODUCT_INTERACTION_OPTIMIZATION_LEDGER_2026-07-15.md) | A3/A4 及后续任务的执行证据 |
 
 ---
 

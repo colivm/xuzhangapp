@@ -1143,7 +1143,7 @@ extension HomeViewModel {
         return (summary, structure, advice)
     }
 
-    /// 本地月度小结文案（与 web 预览结构对齐：摘要 / 结构 / 建议）。
+    /// 本地月度小结文案（三段结构：摘要 / 结构 / 建议）。
     func localMonthlyInsightBlocks() -> (summary: String, structure: String, advice: String) {
         let monthItems = filteredItems(in: .month)
         let positiveMonthItems = monthItems.filter { $0.amount > 0 }

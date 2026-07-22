@@ -1,7 +1,7 @@
 # 叙账 · 记账页设计原则 v0.1
 
 > 更新时间：2026-06-08  
-> 状态：定稿（战略层；实现见 `AGENT_PROMPT_UI-P1_INPUT_LAYER_VISUAL.md`）  
+> 状态：定稿（战略层；现行实现见 `NativeDemoApp/Views/RecordView.swift`）
 > 读者：产品、设计、开发
 
 ---
@@ -115,7 +115,7 @@
 
 | 文档 | 用途 |
 |------|------|
-| [`AGENT_PROMPT_UI-P1_INPUT_LAYER_VISUAL.md`](AGENT_PROMPT_UI-P1_INPUT_LAYER_VISUAL.md) | iOS 实现 prompt |
+| [`RecordView.swift`](NativeDemoApp/Views/RecordView.swift) | iOS 现行实现 |
 | [`RECORDING_CHAIN_VISION_v0.1.md`](RECORDING_CHAIN_VISION_v0.1.md) | 双引擎预填 |
 | [`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md) | 先叙后议 |
 

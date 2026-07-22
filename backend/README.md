@@ -30,6 +30,8 @@ npm run dev
 - `POST /v1/auth/wechat/login` (stub)
 - `GET /v1/member/me`
 - `POST /v1/member/dev/set-tier` (dev only; `NODE_ENV=production` 下不注册)
+- `GET/POST /v1/member/nudge/policy` (dev only; `NODE_ENV=production` 下不注册)
+- `POST /v1/member/nudge/evaluate`、`POST /v1/member/nudge/dismiss`（生产固定正式频控）
 - `GET /v1/ledger`
 - `POST /v1/ledger`
 - `DELETE /v1/ledger/:id`

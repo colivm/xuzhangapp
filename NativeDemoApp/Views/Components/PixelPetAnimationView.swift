@@ -379,6 +379,8 @@ struct PixelPetAnimationView: View {
 }
 
 struct MovablePixelPetOverlay: View {
+    private static let dragCoordinateSpaceName = "homePetOverlayViewport"
+
     @GestureState private var proposedDragTranslation: CGSize = .zero
     @State private var placement = HomePetOverlayPositionStore.load()
     @State private var tapSuppressionID: UUID?
@@ -413,6 +415,7 @@ struct MovablePixelPetOverlay: View {
                 )
                 .offset(clampedTranslation)
         }
+        .coordinateSpace(name: Self.dragCoordinateSpaceName)
     }
 
     private func petStack(viewport: CGSize) -> some View {
@@ -484,16 +487,12 @@ struct MovablePixelPetOverlay: View {
     private func dragGesture(viewport: CGSize) -> some Gesture {
         DragGesture(
             minimumDistance: HomePetOverlayPositionPolicy.dragActivationDistance,
-            coordinateSpace: .local
+            coordinateSpace: .named(Self.dragCoordinateSpaceName)
         )
-            .updating($proposedDragTranslation) { value, state, _ in
+            .updating($proposedDragTranslation) { value, state, transaction in
+                transaction.animation = nil
+                transaction.disablesAnimations = true
                 state = value.translation
-            }
-            .onChanged { value in
-                if HomePetOverlayPositionPolicy.isMeaningfulDrag(value.translation),
-                   tapSuppressionID == nil {
-                    suppressTapTemporarily()
-                }
             }
             .onEnded { value in
                 guard HomePetOverlayPositionPolicy.isMeaningfulDrag(value.translation) else {
@@ -504,8 +503,13 @@ struct MovablePixelPetOverlay: View {
                     translation: value.translation,
                     viewport: viewport
                 )
-                placement = committed
+                var transaction = Transaction(animation: nil)
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    placement = committed
+                }
                 HomePetOverlayPositionStore.save(committed)
+                suppressTapTemporarily()
                 UISelectionFeedbackGenerator().selectionChanged()
             }
     }

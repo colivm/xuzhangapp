@@ -86,14 +86,20 @@ def main() -> int:
     legacy_contract_source = (ROOT / "ai-proxy/legacyInsightContract.js").read_text(encoding="utf-8")
     feature_policy_source = (ROOT / "ai-proxy/aiFeaturePolicy.js").read_text(encoding="utf-8")
     contract_test_source = (ROOT / "ai-proxy/narrativeRewriteContract.test.js").read_text(encoding="utf-8")
+    runtime_policy_source = (ROOT / "ai-proxy/runtimeEnvironmentPolicy.js").read_text(encoding="utf-8")
+    runtime_policy_test_source = (ROOT / "ai-proxy/runtimeEnvironmentPolicy.test.js").read_text(encoding="utf-8")
     backend_source = (ROOT / "backend/src/server.js").read_text(encoding="utf-8")
+    narrative_client_start = report_source.index("func generateNarrativeRewrites")
+    narrative_client_end = report_source.index("func generateInsight", narrative_client_start)
+    narrative_client_source = report_source[narrative_client_start:narrative_client_end]
     narrative_contract_checks = {
         "client sends structured fact packs only through a proxy": (
-            'body["factPacks"] = factPackPayload' in report_source
-            and "if !isDirectZhipu" in report_source
-            and 'body["feature"] = "narrative_rewrite_batch"' in report_source
-            and 'if isDirectZhipu' in report_source
-            and 'body["messages"]' in report_source
+            '"factPacks": factPackPayload' in narrative_client_source
+            and '"feature": "narrative_rewrite_batch"' in narrative_client_source
+            and '"messages"' not in narrative_client_source
+            and "AppSettings.productionAIEndpoint" in report_source
+            and "open.bigmodel.cn" not in report_source
+            and "x-proxy-token" not in report_source
         ),
         "proxy validates narrative input before model use": (
             'feature === "narrative_rewrite_batch"' in proxy_source
@@ -107,6 +113,16 @@ def main() -> int:
             "buildNarrativeRewriteMessages(req.body?.factPacks, req.body?.tone)" in proxy_source
             and '? 0.25' in proxy_source
             and "function buildNarrativeRewriteMessages" in contract_source
+        ),
+        "proxy owns the upstream model selection": (
+            'const model = (AI_UPSTREAM_MODEL || "glm-4-flash").toString()' in proxy_source
+            and "req.body?.model" not in proxy_source
+        ),
+        "production does not register the development token route": (
+            "if (DEVELOPMENT_ROUTES_ENABLED)" in proxy_source
+            and "allowsDevelopmentRoutes(process.env.NODE_ENV)" in proxy_source
+            and "function allowsDevelopmentRoutes" in runtime_policy_source
+            and 'allowsDevelopmentRoutes("production"), false' in runtime_policy_test_source
         ),
         "proxy rejects unknown feature names before rate limiting": (
             "normalizedSupportedFeature(req.body?.feature)" in proxy_source

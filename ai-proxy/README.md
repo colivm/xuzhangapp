@@ -25,13 +25,12 @@
 
 - 健康检查：`GET /health`
 - AI 日报：`POST /v1/insight/daily`
-- 本地调试签发 JWT：`POST /v1/auth/dev-token`
+- 本地/staging 调试签发 JWT：`POST /v1/auth/dev-token`（`NODE_ENV=production` 下不注册）
 
 请求示例：
 
 ```json
 {
-  "model": "glm-4-flash",
   "feature": "daily",
   "messages": [
     { "role": "system", "content": "..." },
@@ -62,6 +61,8 @@
 }
 ```
 
+上游模型只由服务器 `AI_UPSTREAM_MODEL` 决定，客户端请求不能切换模型。
+
 `narrative_rewrite_batch` 还必须提供顶层 `factPacks`。代理会在调用模型前校验 scope、periodKey、字段白名单、脱敏的 userText/photo 标签、每组唯一 lead 和 `F1...F6`；返回时再次校验长度、scope/periodKey、lead 引用、证据子集、数字与禁用推断词。合法返回格式：
 
 ```json
@@ -87,7 +88,7 @@
 
 `https://api.xuzhangapp.com/v1/ai/insight/daily`
 
-用户只控制是否开启联网整理；登录 JWT 由客户端自动携带，`backend` 使用服务端 `AI_PROXY_TOKEN` 访问本代理。代码中保留的智谱直连分支仅供内部开发兼容，不属于用户功能，也不得在正式设置页暴露上游密钥。
+用户只控制是否开启联网整理；登录 JWT 由客户端自动携带，`backend` 使用服务端 `AI_PROXY_TOKEN` 访问本代理。iOS 不再保留上游直连、客户端 API Key 或可变模型/地址分支。
 
 ## 4. 安全接入（防黑产）
 
@@ -110,7 +111,7 @@
 - 风险日志只记录拦截原因和脱敏样本，不记录完整账单或完整 prompt。
 
 ### 4.5 本地开发快速拿 token
-请求 `POST /v1/auth/dev-token`，示例 body：
+仅在 `NODE_ENV` 不是 `production` 时请求 `POST /v1/auth/dev-token`；正式环境不会注册该路由。示例 body：
 ```json
 {
   "userId": "dev-user-001",

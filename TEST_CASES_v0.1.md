@@ -1,9 +1,11 @@
 # 叙账 · v0.1 测试用例全集
 
-> 更新时间：2026-06-04  
-> 范围：iOS 17+ / Web 预览 / backend 生产链路  
+> 更新时间：2026-07-22
+> 范围：历史 v0.1 用例归档；当前 iOS 17+ / backend 生产链路验收请使用 [`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`](RELEASE_GATE_AND_DEVICE_MATRIX_v1.md)
 > v0.1 **不含**微信登录（v0.2+）  
 > 依据：[`PRD_v0.1.md`](PRD_v0.1.md)、[`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md)、[`PRODUCT_PLAYBACK_MEMBERSHIP_v0.1.md`](PRODUCT_PLAYBACK_MEMBERSHIP_v0.1.md)
+
+> **Web 退役说明**：`web-preview/` 已于 2026-07-22 删除。本文中仍出现的 Web/All 标签是早期覆盖记录，不再执行，也不代表现行 iOS 行为；不得据此恢复 Web Demo 或把它作为产品基准。
 
 ---
 
@@ -274,16 +276,9 @@ TestFlight 前      → 全文 P0 + P1（按模块勾选）
 
 ---
 
-## 16. Web 专项（与 iOS 对齐）
+## 16. 历史 Web 专项（已退役）
 
-| ID | 优先级 | 步骤 | 期望 |
-|----|--------|------|------|
-| TC-WEB-01 | P1 | 记一笔保存后 | 回今日 Tab |
-| TC-WEB-02 | P1 | 会员开/关 | 弹层权益与 iOS 一致 |
-| TC-WEB-03 | P1 | OCR 四步完整走一遍 | 同 §6 |
-| TC-WEB-04 | P1 | 弹层互斥 | 开 OCR 确认时 body 不滚动 |
-| TC-WEB-05 | P2 | 控制台 `runStabilitySmokeChecks()` | 无 fail |
-| TC-WEB-06 | P2 | 移动端宽度 ~390px | 布局不溢出 |
+原 `TC-WEB-01`～`TC-WEB-06` 随 `web-preview/` 一并退役，不再属于发版回归。对应的现行 iOS 交互、OCR、会员、Sheet 互斥与窄屏适配检查已统一收录在 [`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`](RELEASE_GATE_AND_DEVICE_MATRIX_v1.md)。
 
 ---
 
@@ -349,17 +344,17 @@ TestFlight 前      → 全文 P0 + P1（按模块勾选）
 | §13 设置 | 10 | |
 | §14 同步 | 6 | |
 | §15 API | 9 | |
-| §16 Web | 6 | |
+| §16 历史 Web | 已退役 | 不执行 |
 | §17 边界 | 10 | |
 | §18 文案 | 5 | |
-| **全量约** | **~117** | |
+| **历史用例总量** | **~117（其中 Web 6 条已退役）** | 当前以发布矩阵为准 |
 
 ---
 
 ## 20. 相关文档
 
 - [`TODO.md`](TODO.md) — 栏 A 细调 / 栏 B 上架
-- [`web-preview/STABILITY_SPRINT_E2E.md`](web-preview/STABILITY_SPRINT_E2E.md) — Web 10 条快测
+- [`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`](RELEASE_GATE_AND_DEVICE_MATRIX_v1.md) — 当前统一发版与真机验收矩阵
 - [`IMPLEMENTATION_FOR_CODEX.md`](IMPLEMENTATION_FOR_CODEX.md) — B2.5 / D1 / F1 / E1 验收项
 - [`NativeDemoApp/IOS_REAL_INTEGRATION_CHECKLIST.md`](NativeDemoApp/IOS_REAL_INTEGRATION_CHECKLIST.md) — 生产参数
 
@@ -370,3 +365,4 @@ TestFlight 前      → 全文 P0 + P1（按模块勾选）
 | 日期 | 说明 |
 |------|------|
 | 2026-06-04 | 首版：v0.1 全功能测试用例 ~117 条 + P0 冒烟 + 覆盖矩阵 |
+| 2026-07-22 | 历史 Web Demo 退役；移除 Web 专项执行入口，当前验收统一转入发布矩阵。 |

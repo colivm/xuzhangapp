@@ -48,7 +48,7 @@
 
 
 
-项目由 **4 个子系统** 组成：
+生产链路由 iOS、backend、ai-proxy 三个核心子系统组成；`site/` 与 `legal/` 提供公开静态页面：
 
 
 
@@ -58,7 +58,7 @@
 
 │                        客户端                                │
 
-│  web-preview (HTML/JS)          NativeDemoApp (SwiftUI iOS17+) │
+│                 NativeDemoApp (SwiftUI iOS17+)                 │
 
 └───────────────┬─────────────────────────┬───────────────────┘
 
@@ -96,11 +96,11 @@
 
 | `NativeDemoApp/` | SwiftUI + MVVM | 主产品，iOS 17+ 原生 App |
 
-| `web-preview/` | 纯 HTML/CSS/JS | Windows 下快速预览 UI 与交互 |
-
 | `backend/` | Node.js + Express | 登录、会员、账单同步、分析、AI 转发 |
 
 | `ai-proxy/` | Node.js + Express | 独立 AI 代理，限流、JWT、密钥保护 |
+
+| `site/`、`legal/` | 静态 HTML/CSS/JS | 正式官网、隐私政策与用户协议 |
 
 
 
@@ -227,7 +227,7 @@ NativeDemoApp/
 
 
 
-**5 个 Tab**：今日 / 记账 / 统计 / AI 复盘 / 设置。UI 采用玻璃拟态（Glass Panel），配色与 `web-preview` 保持一致。
+当前信息架构与视觉以 `NativeDemoApp`、真机截图和统一验收矩阵为准，不再维护第二套 Web 产品镜像。
 
 
 
@@ -347,19 +347,11 @@ AI_UPSTREAM_MODEL=deepseek-chat
 
 
 
-## 7. Web 预览版
+## 7. 历史 Web Demo（已退役）
 
 
 
-`web-preview/` 是约 4800 行的单文件 SPA（`app.js`），用于在 Windows 上无需 Mac 即可验证产品逻辑：
-
-
-
-- 本地 `localStorage` 持久化
-
-- 与 iOS 共享同一套分类、会员场景包、AI 端点配置
-
-- 已完成稳定性 Sprint（`safeRender`、状态机、E2E 用例见 `web-preview/STABILITY_SPRINT_E2E.md`）
+该目录曾用于项目初期在 Windows 演示交互，后来与 iOS、云同步、AI 契约和产品术语持续漂移，已于 2026-07-22 删除。历史实现仍可从 Git 历史查看，但不能作为需求、隐私边界、接口或 UI 验收依据。
 
 
 
@@ -509,9 +501,9 @@ ICP 备案进行中。
 
 | AI 日复盘（backend → ai-proxy → DeepSeek） | ✅ 已接通 |
 
-| Web 演示版 | ✅ 功能完整 |
+| 历史 Web Demo | ✅ 已于 2026-07-22 退役并删除 |
 
-| iOS UI 与 Web 对齐 | ✅ 基本完成 |
+| iOS UI 验收基准 | `NativeDemoApp` + Xcode/iPhone + 发布矩阵 |
 
 | 手机号登录 + 云端同步 | ✅ 开发环境可用 |
 
@@ -693,11 +685,13 @@ xuzhangapp/
 
 ├── NativeDemoApp.xcodeproj/
 
-├── web-preview/                # Web 演示版
-
 ├── backend/                    # 业务后端 (8790)
 
 ├── ai-proxy/                   # AI 代理 (8787)
+
+├── site/                       # 正式官网
+
+├── legal/                      # 隐私政策与用户协议
 
 ├── PROJECT_SETUP.md            # 项目搭建说明（最新）
 

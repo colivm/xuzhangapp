@@ -27,6 +27,19 @@ function Assert-NoMultilinePattern($Path, $Pattern, $Label) {
     Write-Output "OK  $Label"
 }
 
+function Assert-MultilinePattern($Path, $Pattern, $Label) {
+    $raw = Get-Content -Raw -Path $Path -Encoding UTF8
+    $matches = [regex]::IsMatch(
+        $raw,
+        $Pattern,
+        [System.Text.RegularExpressions.RegexOptions]::Singleline
+    )
+    if (-not $matches) {
+        throw "Missing: $Label"
+    }
+    Write-Output "OK  $Label"
+}
+
 function Assert-JsonFixtureIds($Path, $Ids, $Label) {
     $raw = Get-Content -Raw -Path $Path -Encoding UTF8
     $items = $raw | ConvertFrom-Json
@@ -561,6 +574,11 @@ if ($LASTEXITCODE -ne 0) {
     throw "Auth token TTL verification failed`n$authTokenTTLOutput"
 }
 Write-Output $authTokenTTLOutput
+$nudgePolicyOutput = node backend/scripts/verify-nudge-policy.mjs
+if ($LASTEXITCODE -ne 0) {
+    throw "Backend nudge policy verification failed`n$nudgePolicyOutput"
+}
+Write-Output $nudgePolicyOutput
 Assert-Pattern 'NativeDemoApp/Services/AuthService.swift' 'CloudSessionFailurePolicy|statusCode == 401|CloudSessionInvalidationPolicy|cloudSessionDidExpire|CloudSessionInvalidationService' '401 invalidates the stale cloud session without changing sync DTOs'
 Assert-Pattern 'NativeDemoApp/ViewModels/SettingsViewModel.swift' 'publisher\(for: \.cloudSessionDidExpire\)|invalidateCloudSessionIfUnauthorized|applyExpiredCloudSessionState' 'settings reflects server-rejected sessions as logged out'
 Assert-Pattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'CloudSessionFailurePolicy\.shouldInvalidateSession|CloudSessionInvalidationService\.invalidate\(\)|CloudSessionInvalidationService\.userMessage' 'manual and automatic ledger sync surface expired sessions'
@@ -723,6 +741,23 @@ Assert-Pattern 'NativeDemoApp/Views/InsightWebView.swift' 'snapshotTransaction =
 Assert-Pattern 'NativeDemoApp/Views/StatsTraceModels.swift' 'prewarmDelayNanoseconds: UInt64 = 250_000_000' 'trace secondary range prewarm yields to the visible snapshot'
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'prewarmDelayNanoseconds|tracePreparationGate\.accepts\(requestID\)' 'trace prewarm is cancellable when a newer ledger revision arrives'
 Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'testItemDerivedCacheBuildsOneAtomicSnapshotAtReleaseScale|testItemDerivedCachePublicationRejectsOldRevisionAndRequest|testTracePrewarmWaitsUntilVisibleSnapshotHasSettled' 'PERF-15 cache, stale request and prewarm boundaries have XCTest coverage'
+Assert-NoPattern 'NativeDemoApp' 'open\.bigmodel\.cn|loadAIAPIKey|saveAIAPIKey' 'iOS production code has no direct-model endpoint or API-key access'
+Assert-NoPattern 'NativeDemoApp/Models/AppSettings.swift' 'var aiEndpoint|var aiModel|case aiEndpoint|case aiModel' 'saved settings no longer expose mutable AI endpoint or model fields'
+Assert-NoPattern 'NativeDemoApp/ViewModels/SettingsViewModel.swift' 'var aiEndpoint|var aiAPIKey|var aiModel' 'settings view model has no legacy direct-model configuration surface'
+Assert-Pattern 'NativeDemoApp/Services/KeychainService.swift' 'removeLegacyDirectModelCredential|SecItemDelete' 'legacy client model credential is deleted without being read'
+Assert-Pattern 'NativeDemoApp/Services/AIReportService.swift' 'AppSettings\.productionAIEndpoint|Authorization|narrative_rewrite_batch' 'remote insight service uses only the fixed authenticated production proxy'
+Assert-NoPattern 'NativeDemoApp/Services/AIReportService.swift' 'x-proxy-token|"model":|choices|normalizedEndpoint' 'iOS cannot select an upstream model or parse direct-model responses'
+Assert-NoPattern 'NativeDemoApp/Views/RecordView.swift' '使用演示 OCR 结果|makeDemoOCRDrafts' 'record page no longer exposes the legacy OCR demo entry'
+Assert-NoPattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'makeDemoOCRDrafts|direct-unavailable|direct-ready|直连模型需要' 'home model has no legacy OCR demo or direct-model states'
+Assert-Pattern 'ai-proxy/runtimeEnvironmentPolicy.test.js' 'production never registers development routes|allowsDevelopmentRoutes\("production"\), false' 'proxy development route policy has executable production coverage'
+Assert-Pattern 'ai-proxy/server.js' 'if \(DEVELOPMENT_ROUTES_ENABLED\) \{|app\.post\("/v1/auth/dev-token"' 'proxy dev-token route is registered only behind the development gate'
+Assert-NoPattern 'ai-proxy/server.js' 'req\.body\?\.model' 'proxy ignores client attempts to select the upstream model'
+Assert-NoPattern 'ai-proxy/server.js' '/v1/category/recommend|recommendCategoryFromText|category_input_rejected' 'unused unauthenticated proxy category demo is removed'
+Assert-Pattern 'backend/src/nudgePolicy.js' 'defaultPolicyForEnvironment|mode.*production.*"prod"|prodDailyLimit: 1|prodSceneCooldownDays: 7' 'backend member nudge defaults to the established production budget'
+Assert-Pattern 'backend/scripts/verify-nudge-policy.mjs' 'attemptedProductionBypass|assert\.equal\(attemptedProductionBypass\.mode, "prod"\)' 'backend member nudge debug bypass has executable coverage'
+Assert-MultilinePattern 'backend/src/server.js' 'if \(!isProduction\) \{\s+app\.get\("/v1/member/nudge/policy"' 'backend nudge strategy diagnostics are unavailable in production'
+Assert-Pattern 'backend/src/server.js' 'nudge/policy' 'backend retains nudge strategy diagnostics for local and staging verification'
+Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-60|旧客户端模型凭据只删除不读取|生产 ai-proxy 的 dev-token' 'legacy debug cleanup upgrade and production device matrix'
 $releaseFixtureOutput = python scripts/validate_release_gate.py --phase fixtures
 if ($LASTEXITCODE -ne 0) {
     throw "Release fixture validation failed`n$releaseFixtureOutput"

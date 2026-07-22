@@ -217,10 +217,12 @@ ai-proxy 直连接口（仅服务端内部）使用 `{ "code": "...", "message":
 
 | Method | Path | 说明 |
 |--------|------|------|
-| `GET` | `/v1/member/nudge/policy` | 读取策略与状态 |
-| `POST` | `/v1/member/nudge/policy` | 更新策略 |
+| `GET` | `/v1/member/nudge/policy` | 读取策略与状态（仅本地/staging；生产不注册） |
+| `POST` | `/v1/member/nudge/policy` | 更新调试策略（仅本地/staging；生产不注册） |
 | `POST` | `/v1/member/nudge/evaluate` | 评估是否展示引导 |
 | `POST` | `/v1/member/nudge/dismiss` | 记录用户关闭 |
+
+生产默认固定为正式频控：每天最多一次，用户关闭同一场景后冷却 7 天；请求体不能切换到 90 秒调试冷却。
 
 ---
 
