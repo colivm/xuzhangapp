@@ -359,7 +359,7 @@ final class PetCompanionService {
 
     private let weatherService = WeatherCompanionService.shared
     private var recentMessageIDs: [String] = []
-    private let interactionHintDefaultsKey = "pet_interaction_hint_seen_v1"
+    private let interactionHintDefaultsKey = "pet_interaction_hint_seen_v2"
 
     private init() {}
 
@@ -393,13 +393,6 @@ final class PetCompanionService {
     func petClickMessage(settings: AppSettings, todayItems: [HomeItem]) async -> String? {
         guard settings.petCompanionEnabled else { return nil }
 
-        if PetCompanionInteractionHintPolicy.shouldPresent(
-            hasPresented: UserDefaults.standard.bool(forKey: interactionHintDefaultsKey)
-        ) {
-            UserDefaults.standard.set(true, forKey: interactionHintDefaultsKey)
-            return selectMessage(from: PetCompanionCopy.interactionHints, settings: settings)
-        }
-
         let snapshot: WeatherSnapshot?
         if settings.weatherCompanionEnabled {
             if !weatherService.hasLocationPermissionReady {
@@ -411,6 +404,35 @@ final class PetCompanionService {
             snapshot = nil
         }
 
+        let candidates = PetCompanionMessagePolicy.candidates(
+            focusRecord: nil,
+            todayItems: todayItems,
+            currentWeather: snapshot
+        )
+        return selectMessage(from: candidates, settings: settings)
+    }
+
+    var hasPresentedInteractionHint: Bool {
+        UserDefaults.standard.bool(forKey: interactionHintDefaultsKey)
+    }
+
+    func interactionHintMessageIfNeeded(settings: AppSettings) -> String? {
+        guard settings.petCompanionEnabled,
+              PetCompanionInteractionHintPolicy.shouldPresent(
+                  hasPresented: hasPresentedInteractionHint
+              ) else {
+            return nil
+        }
+        return selectMessage(from: PetCompanionCopy.interactionHints, settings: settings)
+    }
+
+    func markInteractionHintPresented() {
+        UserDefaults.standard.set(true, forKey: interactionHintDefaultsKey)
+    }
+
+    func idleMessage(settings: AppSettings, todayItems: [HomeItem]) -> String? {
+        guard settings.petCompanionEnabled else { return nil }
+        let snapshot = settings.weatherCompanionEnabled ? weatherService.cachedSnapshot : nil
         let candidates = PetCompanionMessagePolicy.candidates(
             focusRecord: nil,
             todayItems: todayItems,
@@ -447,5 +469,61 @@ final class PetCompanionService {
 enum PetCompanionInteractionHintPolicy {
     static func shouldPresent(hasPresented: Bool) -> Bool {
         !hasPresented
+    }
+}
+
+enum PetCompanionAutomaticSpeechKind: Equatable {
+    case interactionHint
+    case idle
+}
+
+struct PetCompanionAutomaticSpeechStep: Equatable {
+    let kind: PetCompanionAutomaticSpeechKind
+    let delayNanoseconds: UInt64
+}
+
+enum PetCompanionAutomaticSpeechPolicy {
+    static let maximumPresentationsPerSession = 3
+
+    static func shouldSchedule(
+        isHomeVisible: Bool,
+        isSceneActive: Bool,
+        isPetEnabled: Bool,
+        isPresentationBlocked: Bool,
+        hasBubble: Bool,
+        hasMessageRequest: Bool,
+        hasPendingSavedMessage: Bool
+    ) -> Bool {
+        isHomeVisible
+            && isSceneActive
+            && isPetEnabled
+            && !isPresentationBlocked
+            && !hasBubble
+            && !hasMessageRequest
+            && !hasPendingSavedMessage
+    }
+
+    static func nextStep(
+        hasPresentedInteractionHint: Bool,
+        automaticPresentationCount: Int,
+        hasPresentedIdleMessageInSession: Bool,
+        voiceOverEnabled: Bool
+    ) -> PetCompanionAutomaticSpeechStep? {
+        guard automaticPresentationCount < maximumPresentationsPerSession else { return nil }
+
+        if !hasPresentedInteractionHint {
+            return .init(
+                kind: .interactionHint,
+                delayNanoseconds: voiceOverEnabled ? 9_000_000_000 : 5_000_000_000
+            )
+        }
+
+        let delay: UInt64
+        if hasPresentedIdleMessageInSession {
+            delay = voiceOverEnabled ? 240_000_000_000 : 150_000_000_000
+        } else {
+            delay = voiceOverEnabled ? 45_000_000_000 : 25_000_000_000
+        }
+        return .init(kind: .idle, delayNanoseconds: delay)
     }
 }

@@ -352,6 +352,9 @@ struct InsightTabState {
 }
 
 struct InsightWebView: View {
+    private static let pageHorizontalPadding: CGFloat = 8
+    private static let pageMaxWidth: CGFloat = 520
+
     private enum DeferredDismissRoute: Equatable {
         case memberPricing
     }
@@ -877,10 +880,10 @@ struct InsightWebView: View {
                 .id("insight-next-chapter")
         }
         .scrollTargetLayout()
-        .padding(.horizontal, 12)
-        .padding(.top, 4)
+        .padding(.horizontal, Self.pageHorizontalPadding)
+        .padding(.top, 8)
         .padding(.bottom, 120)
-        .frame(maxWidth: 430)
+        .frame(maxWidth: Self.pageMaxWidth)
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
@@ -1251,9 +1254,9 @@ struct InsightWebView: View {
         }
         .padding(24)
         .aiCommandSurface(.panel, radius: 24, padding: 20, tint: AppColors.accent)
-        .padding(.horizontal, 16)
-        .padding(.top, 36)
-        .frame(maxWidth: 430)
+        .padding(.horizontal, Self.pageHorizontalPadding)
+        .padding(.top, 8)
+        .frame(maxWidth: Self.pageMaxWidth)
         .frame(maxWidth: .infinity, alignment: .center)
     }
 

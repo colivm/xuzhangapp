@@ -8,6 +8,12 @@ private struct TodaySwipeDragState: Equatable {
 private enum PetBubbleSource: Equatable {
     case savedRecord
     case tap
+    case interactionHint
+    case idle
+
+    var isAutomatic: Bool {
+        self == .interactionHint || self == .idle
+    }
 }
 
 private struct PetBubblePresentation: Identifiable, Equatable {
@@ -397,6 +403,12 @@ struct HomeView: View {
     @State private var petBubbleDismissTask: Task<Void, Never>?
     @State private var petMessageRequestTask: Task<Void, Never>?
     @State private var petMessageRequestID: UUID?
+    @State private var petAutomaticSpeechTask: Task<Void, Never>?
+    @State private var petAutomaticSpeechRequestID: UUID?
+    @State private var petAutomaticPresentationCount = 0
+    @State private var hasPresentedPetIdleMessageInSession = false
+    @State private var pendingPetSavedMessage: String?
+    @State private var isHomeVisible = false
     @State private var petTapAnimationTrigger = 0
     @State private var petHiddenNotice: String?
     @State private var petHiddenNoticeID: UUID?
@@ -474,11 +486,15 @@ struct HomeView: View {
         .scrollIndicators(.hidden)
         .background(Color.clear)
         .onAppear {
+            isHomeVisible = true
+            petAutomaticPresentationCount = 0
+            hasPresentedPetIdleMessageInSession = false
             presentFirstRecordPromptIfNeeded()
             homeViewModel.prepareHomeDashboardSnapshots(
                 isMember: settingsViewModel.settings.hasMemberAccess,
                 clearsStaleQuickRecord: true
             )
+            resumePetMessageFlowIfPossible()
         }
         .onChange(of: homeViewModel.activeRouteGuidance) { _, guidance in
             handleRouteGuidance(guidance)
@@ -488,9 +504,10 @@ struct HomeView: View {
         }
         .onChange(of: isExternalPostSavePresentationActive) { _, isActive in
             if isActive {
-                dismissPetBubble()
+                pausePetMessageFlow()
             } else {
                 presentFirstRecordPromptIfNeeded()
+                resumePetMessageFlowIfPossible()
             }
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now in
@@ -509,28 +526,51 @@ struct HomeView: View {
         }
         .onChange(of: settingsViewModel.petCompanionEnabled) { _, enabled in
             if !enabled {
-                dismissPetBubble()
+                pendingPetSavedMessage = nil
+                pausePetMessageFlow()
+            } else {
+                resumePetMessageFlowIfPossible()
             }
         }
         .onChange(of: todayPlaybackPrompt) { _, prompt in
             if prompt != nil {
-                dismissPetBubble()
+                pausePetMessageFlow()
+            } else {
+                resumePetMessageFlowIfPossible()
             }
         }
         .onChange(of: scenePhase) { _, phase in
             handleHomeScenePhaseChange(phase)
         }
+        .onChange(of: canPresentPetBubble) { _, canPresent in
+            if canPresent {
+                resumePetMessageFlowIfPossible()
+            } else {
+                pausePetMessageFlow()
+            }
+        }
+        .onChange(of: voiceOverEnabled) { _, _ in
+            restartAutomaticPetSpeechIfNeeded()
+        }
         .onChange(of: homeViewModel.petMessage) { _, message in
-            guard let message, settingsViewModel.petCompanionEnabled else { return }
-            guard canPresentPetBubble else {
-                homeViewModel.petMessage = nil
+            guard let message else { return }
+            homeViewModel.petMessage = nil
+            guard settingsViewModel.petCompanionEnabled else { return }
+
+            if canPresentPetBubble,
+               petBubblePresentation?.source.isAutomatic == true {
+                dismissPetBubble(resumesMessageFlow: false)
+            }
+            guard presentPetBubble(message, source: .savedRecord) else {
+                pendingPetSavedMessage = message
+                cancelAutomaticPetSpeech()
                 return
             }
-            presentPetBubble(message, source: .savedRecord)
-            homeViewModel.petMessage = nil
         }
         .onDisappear {
-            dismissPetBubble(animated: false)
+            isHomeVisible = false
+            pendingPetSavedMessage = nil
+            pausePetMessageFlow(animated: false)
         }
         .sheet(item: $playbackPresentation, onDismiss: {
             let route = playbackDismissRoute
@@ -582,7 +622,7 @@ struct HomeView: View {
             lifeRhythmPanel
         }
         .padding(.horizontal, 12)
-        .padding(.top, 2)
+        .padding(.top, 8)
         .padding(.bottom, 120)
         .frame(maxWidth: 430)
         .frame(maxWidth: .infinity, alignment: .center)
@@ -1150,7 +1190,7 @@ struct HomeView: View {
 
     private func handleHomeScenePhaseChange(_ phase: ScenePhase) {
         guard phase == .active else {
-            dismissPetBubble()
+            pausePetMessageFlow()
             return
         }
         homeViewModel.prepareHomeDashboardSnapshots(
@@ -1158,6 +1198,7 @@ struct HomeView: View {
             now: Date(),
             clearsStaleQuickRecord: true
         )
+        resumePetMessageFlowIfPossible()
     }
 
     private func finishFirstRecordPromptFlow(continuesRecording: Bool) {
@@ -1372,19 +1413,38 @@ struct HomeView: View {
         petBubblePresentation != nil
     }
 
+    private var isPetPresentationBlocked: Bool {
+        isExternalPostSavePresentationActive
+            || todayPlaybackPrompt != nil
+            || firstRecordPromptFlowIsActive
+            || playbackPresentation != nil
+            || showTodayRecordsSheet
+            || editingItem != nil
+            || memoryDetailItem != nil
+            || todayInlineEditingItemID != nil
+            || showTodayDeleteConfirmation
+    }
+
     private var canPresentPetBubble: Bool {
-        settingsViewModel.petCompanionEnabled
-            && !isExternalPostSavePresentationActive
-            && todayPlaybackPrompt == nil
-            && !firstRecordPromptFlowIsActive
+        isHomeVisible
+            && settingsViewModel.petCompanionEnabled
+            && !isPetPresentationBlocked
             && scenePhase == .active
     }
 
-    private func presentPetBubble(_ message: String, source: PetBubbleSource) {
-        guard canPresentPetBubble else { return }
+    private var canStartPetMessageFlow: Bool {
+        canPresentPetBubble
+            && petBubblePresentation == nil
+            && petMessageRequestTask == nil
+    }
+
+    @discardableResult
+    private func presentPetBubble(_ message: String, source: PetBubbleSource) -> Bool {
+        guard canStartPetMessageFlow else { return false }
         petMessageRequestTask?.cancel()
         petMessageRequestTask = nil
         petMessageRequestID = nil
+        cancelAutomaticPetSpeech()
         petBubbleDismissTask?.cancel()
 
         let presentation = PetBubblePresentation(
@@ -1394,6 +1454,15 @@ struct HomeView: View {
         )
         withAnimation(.easeInOut(duration: 0.24)) {
             petBubblePresentation = presentation
+        }
+        if source == .interactionHint {
+            PetCompanionService.shared.markInteractionHintPresented()
+        }
+        if source.isAutomatic {
+            petAutomaticPresentationCount += 1
+            if source == .idle {
+                hasPresentedPetIdleMessageInSession = true
+            }
         }
 
         let visibleDuration: UInt64 = voiceOverEnabled ? 7_000_000_000 : 4_000_000_000
@@ -1406,11 +1475,13 @@ struct HomeView: View {
             guard petBubblePresentation?.id == presentation.id else { return }
             dismissPetBubble(cancelRequest: false)
         }
+        return true
     }
 
     private func dismissPetBubble(
         cancelRequest: Bool = true,
-        animated: Bool = true
+        animated: Bool = true,
+        resumesMessageFlow: Bool = true
     ) {
         if cancelRequest {
             petMessageRequestTask?.cancel()
@@ -1426,6 +1497,98 @@ struct HomeView: View {
         } else {
             petBubblePresentation = nil
         }
+        if resumesMessageFlow {
+            resumePetMessageFlowIfPossible()
+        }
+    }
+
+    private func cancelAutomaticPetSpeech() {
+        petAutomaticSpeechTask?.cancel()
+        petAutomaticSpeechTask = nil
+        petAutomaticSpeechRequestID = nil
+    }
+
+    private func pausePetMessageFlow(animated: Bool = true) {
+        cancelAutomaticPetSpeech()
+        petMessageRequestTask?.cancel()
+        petMessageRequestTask = nil
+        petMessageRequestID = nil
+        dismissPetBubble(cancelRequest: false, animated: animated, resumesMessageFlow: false)
+    }
+
+    private func restartAutomaticPetSpeechIfNeeded() {
+        cancelAutomaticPetSpeech()
+        resumePetMessageFlowIfPossible()
+    }
+
+    private func resumePetMessageFlowIfPossible() {
+        guard canStartPetMessageFlow else { return }
+        if let pendingPetSavedMessage {
+            self.pendingPetSavedMessage = nil
+            if !presentPetBubble(pendingPetSavedMessage, source: .savedRecord) {
+                self.pendingPetSavedMessage = pendingPetSavedMessage
+            }
+            return
+        }
+        scheduleAutomaticPetSpeechIfNeeded()
+    }
+
+    private func scheduleAutomaticPetSpeechIfNeeded() {
+        guard petAutomaticSpeechTask == nil,
+              PetCompanionAutomaticSpeechPolicy.shouldSchedule(
+                  isHomeVisible: isHomeVisible,
+                  isSceneActive: scenePhase == .active,
+                  isPetEnabled: settingsViewModel.petCompanionEnabled,
+                  isPresentationBlocked: isPetPresentationBlocked,
+                  hasBubble: petBubblePresentation != nil,
+                  hasMessageRequest: petMessageRequestTask != nil,
+                  hasPendingSavedMessage: pendingPetSavedMessage != nil
+              ),
+              let step = PetCompanionAutomaticSpeechPolicy.nextStep(
+                  hasPresentedInteractionHint: PetCompanionService.shared.hasPresentedInteractionHint,
+                  automaticPresentationCount: petAutomaticPresentationCount,
+                  hasPresentedIdleMessageInSession: hasPresentedPetIdleMessageInSession,
+                  voiceOverEnabled: voiceOverEnabled
+              ) else {
+            return
+        }
+
+        let requestID = UUID()
+        petAutomaticSpeechRequestID = requestID
+        petAutomaticSpeechTask = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: step.delayNanoseconds)
+            } catch {
+                return
+            }
+            guard petAutomaticSpeechRequestID == requestID else { return }
+            petAutomaticSpeechTask = nil
+            petAutomaticSpeechRequestID = nil
+            guard canStartPetMessageFlow, pendingPetSavedMessage == nil else {
+                resumePetMessageFlowIfPossible()
+                return
+            }
+
+            let service = PetCompanionService.shared
+            let message: String?
+            let source: PetBubbleSource
+            switch step.kind {
+            case .interactionHint:
+                message = service.interactionHintMessageIfNeeded(settings: settingsViewModel.settings)
+                source = .interactionHint
+            case .idle:
+                message = service.idleMessage(
+                    settings: settingsViewModel.settings,
+                    todayItems: homeViewModel.todayItems
+                )
+                source = .idle
+            }
+            guard let message else {
+                resumePetMessageFlowIfPossible()
+                return
+            }
+            _ = presentPetBubble(message, source: source)
+        }
     }
 
     private func handlePetTap() {
@@ -1433,36 +1596,48 @@ struct HomeView: View {
             dismissPetBubble()
             return
         }
-        guard canPresentPetBubble else { return }
+        cancelAutomaticPetSpeech()
+        if pendingPetSavedMessage != nil {
+            resumePetMessageFlowIfPossible()
+            return
+        }
+        guard canStartPetMessageFlow else { return }
 
         petTapAnimationTrigger &+= 1
+        let service = PetCompanionService.shared
+        if let hint = service.interactionHintMessageIfNeeded(settings: settingsViewModel.settings) {
+            _ = presentPetBubble(hint, source: .interactionHint)
+            return
+        }
+
         let requestID = UUID()
         petMessageRequestID = requestID
         let settings = settingsViewModel.settings
-        let items = homeViewModel.items
+        let items = homeViewModel.todayItems
         petMessageRequestTask = Task { @MainActor in
-            let message = await PetCompanionService.shared.petClickMessage(
+            let message = await service.petClickMessage(
                 settings: settings,
                 todayItems: items
             )
-            guard !Task.isCancelled,
-                  petMessageRequestID == requestID,
-                  canPresentPetBubble,
-                  let message else {
-                if petMessageRequestID == requestID {
-                    petMessageRequestTask = nil
-                    petMessageRequestID = nil
-                }
+            guard !Task.isCancelled, petMessageRequestID == requestID else {
                 return
             }
             petMessageRequestTask = nil
             petMessageRequestID = nil
-            presentPetBubble(message, source: .tap)
+            if pendingPetSavedMessage != nil {
+                resumePetMessageFlowIfPossible()
+                return
+            }
+            guard canStartPetMessageFlow, let message else {
+                resumePetMessageFlowIfPossible()
+                return
+            }
+            _ = presentPetBubble(message, source: .tap)
         }
     }
 
     private func hidePetCompanion() {
-        dismissPetBubble()
+        pausePetMessageFlow()
         settingsViewModel.petCompanionEnabled = false
         let noticeID = UUID()
         petHiddenNoticeID = noticeID

@@ -8,6 +8,7 @@ struct TraceChapterComputationInput {
     let prioritizeRecurringMarks: Bool
     let periodKey: String
     let usesEchoAnchor: Bool
+    let sourceRevision: Int
     let now: Date
 }
 
@@ -19,6 +20,9 @@ struct TraceClueComputationInput {
     let isMember: Bool
     let freeRemaining: Int
     let storedUnlock: Bool
+    let sourceRevision: Int
+    let narrativeScope: LifeNarrativeScope?
+    let allowsNarrativeRewrite: Bool
     let now: Date
 }
 
@@ -36,13 +40,11 @@ enum TraceSnapshotComputation {
             isMember: input.isMember,
             limit: 8
         )
-        let marks = prioritizedMarks(
+        let rankedMarks = prioritizedMarks(
             rawMarks,
             items: input.items,
             prioritizeRecurring: input.prioritizeRecurringMarks
         )
-        .prefix(2)
-        .map { $0 }
         let anchors = MemoryAnchorSelectionPolicy.selectAnchors(
             from: input.items,
             range: input.range,
@@ -50,21 +52,34 @@ enum TraceSnapshotComputation {
             label: memoryAnchorLabel(role:sceneHint:),
             caption: memoryAnchorCaption(role:sceneHint:)
         )
-        let echoAnchor = input.usesEchoAnchor
-            ? EchoAnchorService.shared.pickEchoAnchor(items: input.items, periodKey: input.periodKey, now: input.now)
-            : nil
-        let voice = PlaybackMomentSelector().select(
-            from: input.items,
-            periodKey: input.periodKey,
-            range: input.range,
-            now: input.now,
-            echoAnchor: echoAnchor
-        ).primary?.text
         let coverFacts = TraceChapterCoverPolicy.make(
             range: input.range,
             items: input.items,
             anchors: anchors,
             now: input.now
+        )
+        let narrativeScope: LifeNarrativeScope = input.range == .week ? .week : .month
+        let narrativePlan = makeNarrativePlan(
+            scope: narrativeScope,
+            sourceRevision: input.sourceRevision,
+            items: input.items,
+            allItems: input.allItems,
+            now: input.now
+        )
+        let narrativeRewrite = LifeNarrativeAIRewriteStore.shared.rewrite(
+            for: LifeNarrativeAIPreparationPolicy.key(
+                scope: narrativeScope,
+                sourceRevision: input.sourceRevision,
+                now: input.now,
+                calendar: narrativeScope == .week ? PlaybackService.isoCalendar : Calendar.current
+            )
+        )
+        let marks = Array(
+            narrativeMarks(
+                rankedMarks,
+                items: input.allItems,
+                plan: narrativePlan
+            ).prefix(2)
         )
 
         return TraceChapterSnapshot(
@@ -73,8 +88,10 @@ enum TraceSnapshotComputation {
             marks: marks,
             memoryAnchors: anchors,
             coverFacts: coverFacts,
-            narrative: chapterNarrative(range: input.range, items: input.items, marks: marks, voice: voice),
-            chapterSummary: marks.first.map { LifeMarkService.primaryLine(for: $0) },
+            narrativePlan: narrativePlan,
+            narrativeRewrite: narrativeRewrite,
+            narrative: narrativeRewrite?.headline ?? narrativePlan.headline,
+            chapterSummary: narrativeRewrite?.summary ?? narrativePlan.summary,
             evidenceGroups: evidenceGroups(from: input.items, marks: marks, maxItems: 3),
             preview: launchPreview(for: input.range, items: input.items)
         )
@@ -83,7 +100,30 @@ enum TraceSnapshotComputation {
     static func buildClue(_ input: TraceClueComputationInput) -> TraceClueSnapshot {
         let clues = categoryClues(from: input.items)
         let rhythmPoints = rhythmPoints(from: input.items, period: input.period, now: input.now)
-        let insight = LifeInsightService().buildTraceInsight(
+        let narrativePlan = input.narrativeScope.map { scope in
+            makeNarrativePlan(
+                scope: scope,
+                sourceRevision: input.sourceRevision,
+                items: input.items,
+                allItems: input.allItems,
+                now: input.now
+            )
+        }
+        let narrativeRewrite = input.allowsNarrativeRewrite
+            ? input.narrativeScope.flatMap { scope in
+                LifeNarrativeAIRewriteStore.shared.rewrite(
+                    for: LifeNarrativeAIPreparationPolicy.key(
+                        scope: scope,
+                        sourceRevision: input.sourceRevision,
+                        now: input.now,
+                        calendar: scope == .week ? PlaybackService.isoCalendar : Calendar.current
+                    )
+                )
+            }
+            : nil
+        let insight = narrativePlan.map {
+            narrativeInsight(plan: $0, rewrite: narrativeRewrite, items: input.items)
+        } ?? LifeInsightService().buildTraceInsight(
             items: input.items,
             historyItems: input.allItems,
             periodLabel: input.periodLabel,
@@ -95,16 +135,28 @@ enum TraceSnapshotComputation {
             isMember: input.isMember,
             limit: 8
         )
-        let marks = prioritizedMarks(
+        let rankedMarks = prioritizedMarks(
             rawMarks,
             items: input.items,
             prioritizeRecurring: input.period == .month
         )
-        .prefix(6)
-        .map { $0 }
-        let lockedMark = input.isMember
+        let marks = Array(
+            narrativeMarks(
+                rankedMarks,
+                items: input.allItems,
+                plan: narrativePlan
+            ).prefix(6)
+        )
+        let rawLockedMark = input.isMember
             ? nil
             : LifeMarkService.lockedPreview(for: input.items, allItems: input.allItems)
+        let itemByID = Dictionary(
+            input.allItems.map { ($0.id, $0) },
+            uniquingKeysWith: { current, _ in current }
+        )
+        let lockedMark = rawLockedMark.flatMap { mark in
+            isAdministrativeMark(mark, itemByID: itemByID) ? nil : mark
+        }
         let isUnlocked = !insight.isMeaningful || input.storedUnlock
         let canUse = insight.isMeaningful
             && !input.items.isEmpty
@@ -115,12 +167,142 @@ enum TraceSnapshotComputation {
             clues: clues,
             rhythmPoints: rhythmPoints,
             insight: insight,
+            narrativePlan: narrativePlan,
+            narrativeRewrite: narrativeRewrite,
             marks: marks,
             lockedMark: lockedMark,
             isDeepInsightUnlocked: isUnlocked,
             canUseDeepInsight: canUse,
             freeInsightRemaining: input.freeRemaining
         )
+    }
+
+    private static func makeNarrativePlan(
+        scope: LifeNarrativeScope,
+        sourceRevision: Int,
+        items: [HomeItem],
+        allItems: [HomeItem],
+        now: Date
+    ) -> LifeNarrativePlan {
+        let previousItems = previousPeriodItems(scope: scope, allItems: allItems, now: now)
+        return LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: scope,
+                sourceRevision: sourceRevision,
+                items: items,
+                previousItems: previousItems,
+                now: now,
+                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousItems)
+            )
+        )
+    }
+
+    private static func previousPeriodItems(
+        scope: LifeNarrativeScope,
+        allItems: [HomeItem],
+        now: Date
+    ) -> [HomeItem] {
+        let calendar = scope == .week ? PlaybackService.isoCalendar : Calendar.current
+        let component: Calendar.Component = scope == .week ? .weekOfYear : .month
+        guard let current = calendar.dateInterval(of: component, for: now),
+              let previousStart = calendar.date(byAdding: component, value: -1, to: current.start) else {
+            return []
+        }
+        return allItems.filter {
+            $0.createdAt >= previousStart && $0.createdAt < current.start
+        }
+    }
+
+    private static func narrativeInsight(
+        plan: LifeNarrativePlan,
+        rewrite: LifeNarrativeAIRewrite?,
+        items: [HomeItem]
+    ) -> LifeInsightResult {
+        let lead = plan.signalsByRole[.lead]?.first
+        let support = plan.signalsByRole[.support]?.first
+        let displayedSummary = rewrite?.summary ?? plan.summary
+        var fullLines: [String] = []
+        if let supportingLine = rewrite?.supportingLine, !supportingLine.isEmpty {
+            fullLines.append(supportingLine)
+        } else if let support, support.fact != displayedSummary {
+            fullLines.append(support.fact)
+        }
+        if let lead,
+           let item = items.first(where: { lead.evidenceItemIDs.contains($0.id) }),
+           lead.kind == .userText || lead.kind == .photo {
+            if lead.kind == .photo {
+                fullLines.append("\(item.createdAt.zhBillDateOnly)的照片，是这条线索的直接依据。")
+            } else {
+                fullLines.append("\(item.createdAt.zhBillDateOnly)主动写下的内容，是这条线索的直接依据。")
+            }
+        }
+        if fullLines.isEmpty {
+            fullLines.append(narrativeEvidenceLine(lead: lead, items: items))
+        }
+        let theme: LifeInsightTheme
+        switch lead?.kind {
+        case .userText, .photo: theme = .memory
+        case .change: theme = .change
+        case .structuredScene: theme = .relation
+        case .rhythm, .stableMark, nil:
+            theme = plan.maturity == .factual ? .forming : .steady
+        }
+        let highlightedDate = lead?.evidenceItemIDs.compactMap { id in
+            items.first(where: { $0.id == id })?.createdAt
+        }.first
+        let isMeaningful = lead.map {
+            $0.kind != .rhythm && $0.narrativeValue >= 55 && !$0.isAdministrative
+        } ?? false
+        let teaser: String
+        if items.isEmpty {
+            teaser = "这一段暂时没有可以核对的记录。"
+        } else if isMeaningful {
+            teaser = "展开后可以核对这条主线对应的日期和记录。"
+        } else {
+            teaser = "先看记录落在哪些日子，再决定要不要继续问。"
+        }
+        return LifeInsightResult(
+            leadQuestion: narrativeInsightTitle(lead: lead, maturity: plan.maturity),
+            teaser: teaser,
+            previewLine: fullLines[0],
+            fullLines: Array(fullLines.prefix(2)),
+            questionChips: [],
+            periodName: "\(plan.scope.periodLead)的线索依据",
+            theme: theme,
+            highlightedDate: highlightedDate,
+            isMeaningful: isMeaningful
+        )
+    }
+
+    private static func narrativeInsightTitle(
+        lead: LifeNarrativeSignal?,
+        maturity: LifeNarrativeMaturity
+    ) -> String {
+        switch lead?.kind {
+        case .userText: return "先看你主动写下的这一笔"
+        case .photo: return "先看这张具体记录"
+        case .change: return "变化落在这些记录里"
+        case .structuredScene: return "这条生活线有记录可以核对"
+        case .rhythm, .stableMark, nil:
+            if maturity == .empty { return "这段还没有记录" }
+            return maturity == .factual ? "这段线索还在形成" : "记录主要落在这些日子"
+        }
+    }
+
+    private static func narrativeEvidenceLine(
+        lead: LifeNarrativeSignal?,
+        items: [HomeItem]
+    ) -> String {
+        guard !items.isEmpty else { return "这一段暂时没有可以核对的记录。" }
+        let currentEvidenceCount = lead.map { signal in
+            let evidenceIDs = Set(signal.evidenceItemIDs)
+            return items.filter { evidenceIDs.contains($0.id) }.count
+        } ?? 0
+        if currentEvidenceCount > 0 {
+            return "当前页有 \(currentEvidenceCount) 笔记录直接支持这条判断。"
+        }
+        let activeDays = Set(items.map { Calendar.current.startOfDay(for: $0.createdAt) }).count
+        return "当前页有 \(items.count) 笔记录，分布在 \(activeDays) 个记录日。"
     }
 
     private static func prioritizedMarks(
@@ -135,28 +317,60 @@ enum TraceSnapshotComputation {
         return ordered.isEmpty ? marks : ordered
     }
 
-    private static func chapterNarrative(
-        range: SummaryPlaybackRange,
+    private static func narrativeMarks(
+        _ marks: [LifeMarkAggregate],
         items: [HomeItem],
-        marks: [LifeMarkAggregate],
-        voice: String?
-    ) -> String {
-        guard !items.isEmpty else {
-            return range == .week
-                ? "这一周还没有记录。先留下几笔，之后会整理成一段场记。"
-                : "这个月还没有记录。先留下几笔，之后会整理成一段场记。"
+        plan: LifeNarrativePlan?
+    ) -> [LifeMarkAggregate] {
+        let itemByID = Dictionary(
+            items.map { ($0.id, $0) },
+            uniquingKeysWith: { current, _ in current }
+        )
+        let safeMarks = marks.filter { !isAdministrativeMark($0, itemByID: itemByID) }
+        guard let plan else { return safeMarks }
+        let planMarks = plan.signalsByRole[.mark, default: []]
+        let preferredLabels = Set(planMarks.map { normalizedMarkLabel($0.label) })
+        let preferredItemIDs = Set(planMarks.flatMap(\.evidenceItemIDs))
+        return safeMarks.enumerated()
+            .sorted { lhs, rhs in
+                let leftPreferred = isPreferredMark(
+                    lhs.element,
+                    labels: preferredLabels,
+                    itemIDs: preferredItemIDs
+                )
+                let rightPreferred = isPreferredMark(
+                    rhs.element,
+                    labels: preferredLabels,
+                    itemIDs: preferredItemIDs
+                )
+                if leftPreferred != rightPreferred { return leftPreferred }
+                return lhs.offset < rhs.offset
+            }
+            .map { $0.element }
+    }
+
+    private static func isPreferredMark(
+        _ mark: LifeMarkAggregate,
+        labels: Set<String>,
+        itemIDs: Set<UUID>
+    ) -> Bool {
+        if labels.contains(normalizedMarkLabel(markDisplayLabel(mark))) { return true }
+        guard mark.kind == .scene else { return false }
+        return !itemIDs.isDisjoint(with: Set(mark.itemIDs))
+    }
+
+    private static func isAdministrativeMark(
+        _ mark: LifeMarkAggregate,
+        itemByID: [UUID: HomeItem]
+    ) -> Bool {
+        let evidence = mark.itemIDs.compactMap { itemByID[$0] }
+        return !evidence.isEmpty && evidence.allSatisfy {
+            LifeNarrativeSignalPolicy.isAdministrativeRecord($0)
         }
-        if let primary = marks.first {
-            return range == .week
-                ? "\(markDisplayLabel(primary))，是这周的主线"
-                : "这个月 · \(markDisplayLabel(primary))"
-        }
-        if let voice, !voice.isEmpty {
-            return range == .week
-                ? "这一周先记住「\(voice)」"
-                : "这个月先记住「\(voice)」"
-        }
-        return "这一段还散，多记几笔会收成一章。"
+    }
+
+    private static func normalizedMarkLabel(_ text: String) -> String {
+        text.lowercased().filter { !$0.isWhitespace && !"，。！？；：,.!?;:·".contains($0) }
     }
 
     private static func markDisplayLabel(_ mark: LifeMarkAggregate) -> String {

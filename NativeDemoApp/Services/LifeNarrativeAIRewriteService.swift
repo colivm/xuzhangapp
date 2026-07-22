@@ -4,6 +4,9 @@ extension Notification.Name {
     static let narrativeAIConfigurationDidChange = Notification.Name(
         "narrativeAIConfigurationDidChange"
     )
+    static let narrativeAIRewriteDidChange = Notification.Name(
+        "narrativeAIRewriteDidChange"
+    )
 }
 
 struct LifeNarrativeAIRewriteKey: Hashable {
@@ -59,7 +62,7 @@ struct PreparedLifeNarrativeAIFactPack {
 }
 
 enum LifeNarrativeAIPreparationPolicy {
-    static let ruleVersion = 1
+    static let ruleVersion = 2
 
     static func prepareFactPacks(
         items: [HomeItem],
@@ -354,8 +357,14 @@ final class LifeNarrativeAIRewriteStore: @unchecked Sendable {
 
     func publish(_ accepted: [LifeNarrativeAIRewrite], expectedSourceRevision: Int) {
         lock.lock()
-        defer { lock.unlock() }
+        var didChangeTraceRewrite = false
         for rewrite in accepted where rewrite.key.sourceRevision == expectedSourceRevision {
+            let affectsTrace = rewrite.key.scope == LifeNarrativeScope.week.rawValue
+                || rewrite.key.scope == LifeNarrativeScope.month.rawValue
+            if rewrites[rewrite.key] != rewrite,
+               affectsTrace {
+                didChangeTraceRewrite = true
+            }
             rewrites[rewrite.key] = rewrite
         }
         if rewrites.count > 24 {
@@ -364,6 +373,12 @@ final class LifeNarrativeAIRewriteStore: @unchecked Sendable {
                 return lhs.sourceRevision > rhs.sourceRevision
             }.prefix(24)
             rewrites = Dictionary(uniqueKeysWithValues: keep.compactMap { key in rewrites[key].map { (key, $0) } })
+        }
+        lock.unlock()
+        if didChangeTraceRewrite {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .narrativeAIRewriteDidChange, object: nil)
+            }
         }
     }
 

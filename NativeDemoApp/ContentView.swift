@@ -698,9 +698,6 @@ struct ContentView: View {
             bgGradient.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // ── Top Bar ──
-                topBar
-
                 // ── Content ──
                 contentArea
 
@@ -895,33 +892,6 @@ struct ContentView: View {
                 endPoint: .bottom
             )
         }
-    }
-
-    // MARK: - Top Bar
-
-    private var topBar: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(selectedTab.title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppColors.subtext.opacity(0.88))
-
-            Text(selectedTab.pageTitle)
-                .font(.system(size: selectedTab == .insight ? 29 : 32, weight: .semibold, design: .default))
-                .foregroundStyle(AppColors.text)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, selectedTab == .insight ? 7 : 10)
-        .background(
-            Rectangle()
-                .fill(AppColors.panelStrong)
-                .overlay(alignment: .bottom) {
-                    Rectangle()
-                        .fill(Color.white.opacity(0.43))
-                        .frame(height: 1)
-                }
-        )
     }
 
     // MARK: - Content Area

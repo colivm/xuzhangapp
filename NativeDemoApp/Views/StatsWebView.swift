@@ -455,6 +455,13 @@ struct StatsWebView: View {
                     prepareTraceDetailListSnapshot()
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .narrativeAIRewriteDidChange)) { _ in
+                traceSnapshotStore.invalidateAll()
+                weekTraceNeedsRefresh = true
+                monthTraceNeedsRefresh = true
+                clueTraceNeedsRefresh = true
+                scheduleTracePreparation()
+            }
             .onChange(of: selectedPeriod) { _, _ in
                 if let range = TraceRangeContextPolicy.lifeRange(for: selectedPeriod),
                    !useCustomRange {
@@ -689,6 +696,7 @@ struct StatsWebView: View {
                     prioritizeRecurringMarks: range == .month && !useCustomRange && selectedPeriod == .month,
                     periodKey: periodKey,
                     usesEchoAnchor: !useCustomRange && selectedPeriod != .year,
+                    sourceRevision: homeViewModel.homeDashboardRevision,
                     now: now
                 ),
                 cacheKey
@@ -774,6 +782,9 @@ struct StatsWebView: View {
             if cachedClue == nil {
                 let unlockKey = traceInsightUnlockKey(from: items)
                 let freeRemaining = lifeInsightService.freeRemaining(isMember: memberAccess, now: now)
+                let narrativeScope: LifeNarrativeScope? = useCustomRange
+                    ? nil
+                    : (selectedPeriod == .week ? .week : (selectedPeriod == .month ? .month : nil))
                 clueInput = (
                     TraceClueComputationInput(
                         items: items,
@@ -783,6 +794,9 @@ struct StatsWebView: View {
                         isMember: memberAccess,
                         freeRemaining: freeRemaining,
                         storedUnlock: lifeInsightService.hasUnlockedTrace(unlockKey, isMember: memberAccess, now: now),
+                        sourceRevision: homeViewModel.homeDashboardRevision,
+                        narrativeScope: narrativeScope,
+                        allowsNarrativeRewrite: narrativeScope != nil,
                         now: now
                     ),
                     clueKey
@@ -1762,12 +1776,12 @@ struct StatsWebView: View {
 
             if let coverAnchor {
                 HStack(alignment: .top, spacing: 14) {
-                    traceLifeMonthEditorialCopy(facts: facts)
+                    traceLifeMonthEditorialCopy(snapshot: snapshot)
                     Spacer(minLength: 0)
                     traceLifeMonthCoverPhoto(anchor: coverAnchor, facts: facts, layout: layout)
                 }
             } else {
-                traceLifeMonthEditorialCopy(facts: facts)
+                traceLifeMonthEditorialCopy(snapshot: snapshot)
                 traceLifeMonthCoverHeatmap(facts: facts)
             }
 
@@ -1797,16 +1811,16 @@ struct StatsWebView: View {
         .shadow(color: AppColors.subtext.opacity(0.075), radius: 16, x: 0, y: 9)
     }
 
-    private func traceLifeMonthEditorialCopy(facts: TraceChapterCoverFacts) -> some View {
+    private func traceLifeMonthEditorialCopy(snapshot: TraceChapterSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text(facts.title)
+            Text(snapshot.narrative)
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(AppColors.text)
                 .lineLimit(2)
                 .minimumScaleFactor(0.78)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(facts.supportLine)
+            Text(snapshot.chapterSummary ?? snapshot.narrativePlan.summary)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppColors.subtext.opacity(0.86))
                 .lineSpacing(3)
@@ -2233,7 +2247,7 @@ struct StatsWebView: View {
             .foregroundStyle(AppColors.subtext.opacity(0.74))
 
             HStack(alignment: .center, spacing: 8) {
-                Text(snapshot.coverFacts.title)
+                Text(snapshot.narrative)
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(AppColors.text)
                     .lineLimit(2)
@@ -2245,7 +2259,7 @@ struct StatsWebView: View {
                     .offset(y: 3)
             }
 
-            Text(snapshot.coverFacts.supportLine)
+            Text(snapshot.chapterSummary ?? snapshot.narrativePlan.summary)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppColors.subtext.opacity(0.88))
                 .multilineTextAlignment(.center)
@@ -2849,7 +2863,7 @@ struct StatsWebView: View {
 
     private func traceLifeSliceLabels(snapshot: TraceChapterSnapshot) -> [String] {
         let anchorLabels = snapshot.memoryAnchors.map(\.label)
-        let markLabels = snapshot.marks.map { traceMarkDisplayLabel($0) }
+        let markLabels = snapshot.narrativePlan.markLabels
         let categoryLabels = snapshot.items.map(\.category.rawValue)
         let labels = anchorLabels + markLabels + categoryLabels + ["添置", "生活"]
         var seen = Set<String>()
@@ -3238,24 +3252,21 @@ struct StatsWebView: View {
             return cached
         }
 
-        let marks = traceLifeMarks(from: items, limit: 2)
-        let memoryAnchors = traceLifeSliceMemoryAnchors(for: range, items: items)
-        let coverFacts = TraceChapterCoverPolicy.make(
-            range: range,
-            items: items,
-            anchors: memoryAnchors,
-            now: Date()
-        )
-        let snapshot = TraceChapterSnapshot(
-            range: range,
-            items: items,
-            marks: marks,
-            memoryAnchors: memoryAnchors,
-            coverFacts: coverFacts,
-            narrative: heroNarrativeText(from: items, marks: marks),
-            chapterSummary: traceChapterSummary(from: items, marks: marks),
-            evidenceGroups: traceMarkEvidenceGroups(from: items, marks: marks, maxItems: 3),
-            preview: buildSummaryLaunchPreview(for: range, items: items)
+        let now = Date()
+        let snapshot = TraceSnapshotComputation.buildChapter(
+            TraceChapterComputationInput(
+                range: range,
+                items: items,
+                allItems: homeViewModel.items,
+                isMember: hasMemberAccess,
+                prioritizeRecurringMarks: range == .month,
+                periodKey: range == .week
+                    ? quotaStore.currentWeekKey()
+                    : EchoAnchorService.shared.periodKeyForMonth(),
+                usesEchoAnchor: true,
+                sourceRevision: homeViewModel.homeDashboardRevision,
+                now: now
+            )
         )
         traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
         return snapshot
@@ -3997,7 +4008,9 @@ struct StatsWebView: View {
                 items: snapshot.items,
                 clues: snapshot.clues,
                 rhythmPoints: snapshot.rhythmPoints,
-                marks: snapshot.marks
+                marks: snapshot.marks,
+                narrativeHeadline: snapshot.narrativeHeadline,
+                narrativeSummary: snapshot.narrativeSummary
             )
             traceClueCompositionCard(items: snapshot.items, clues: snapshot.clues)
             traceLifeMarkCard(marks: snapshot.marks, lockedPreview: snapshot.lockedMark)
@@ -4021,26 +4034,26 @@ struct StatsWebView: View {
             return cached
         }
 
-        let clues = traceCategoryClues(from: items)
-        let rhythmPoints = traceRhythmPoints(from: items)
-        let insight = traceLifeInsight(from: items)
-        let marks = traceLifeMarks(from: items, limit: 6)
-        let lockedMark = hasMemberAccess ? nil : LifeMarkService.lockedPreview(for: items, allItems: homeViewModel.items)
         let unlockKey = traceInsightUnlockKey(from: items)
         let freeRemaining = lifeInsightService.freeRemaining(isMember: hasMemberAccess)
         let storedUnlock = lifeInsightService.hasUnlockedTrace(unlockKey, isMember: hasMemberAccess)
-        let isUnlocked = !insight.isMeaningful || storedUnlock
-        let canUse = insight.isMeaningful && !items.isEmpty && (storedUnlock || freeRemaining > 0)
-        let snapshot = TraceClueSnapshot(
-            items: items,
-            clues: clues,
-            rhythmPoints: rhythmPoints,
-            insight: insight,
-            marks: marks,
-            lockedMark: lockedMark,
-            isDeepInsightUnlocked: isUnlocked,
-            canUseDeepInsight: canUse,
-            freeInsightRemaining: freeRemaining
+        let narrativeScope: LifeNarrativeScope? = useCustomRange
+            ? nil
+            : (selectedPeriod == .week ? .week : (selectedPeriod == .month ? .month : nil))
+        let snapshot = TraceSnapshotComputation.buildClue(
+            TraceClueComputationInput(
+                items: items,
+                allItems: homeViewModel.items,
+                period: selectedPeriod,
+                periodLabel: traceInsightPeriodLabel,
+                isMember: hasMemberAccess,
+                freeRemaining: freeRemaining,
+                storedUnlock: storedUnlock,
+                sourceRevision: homeViewModel.homeDashboardRevision,
+                narrativeScope: narrativeScope,
+                allowsNarrativeRewrite: narrativeScope != nil,
+                now: Date()
+            )
         )
         traceSnapshotStore.storeClueSnapshot(snapshot, for: cacheKey)
         return snapshot
@@ -4084,19 +4097,21 @@ struct StatsWebView: View {
         items: [HomeItem],
         clues: [TraceCategoryClue],
         rhythmPoints: [TraceRhythmPoint],
-        marks: [LifeMarkAggregate]
+        marks: [LifeMarkAggregate],
+        narrativeHeadline: String?,
+        narrativeSummary: String?
     ) -> some View {
         return VStack(alignment: .leading, spacing: 16) {
             traceRangeKicker
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(traceClueHeadline(items: items, clues: clues, marks: marks))
+                Text(narrativeHeadline ?? traceClueHeadline(items: items, clues: clues, marks: marks))
                     .font(.system(size: 25, weight: .bold))
                     .foregroundStyle(TraceColors.primaryText)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(traceClueSubline(items: items, clues: clues, rhythmPoints: rhythmPoints, marks: marks))
+                Text(narrativeSummary ?? traceClueSubline(items: items, clues: clues, rhythmPoints: rhythmPoints, marks: marks))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(TraceColors.secondaryText)
                     .lineSpacing(3)
@@ -4495,7 +4510,7 @@ struct StatsWebView: View {
         case .change: return "有一处变化"
         case .effort: return "你付出的这些时间"
         case .day: return "被记完整的一天"
-        case .memory: return "被留下的现场"
+        case .memory: return "一条具体记录"
         case .relation: return "两条生活线"
         }
     }

@@ -3501,3 +3501,49 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 冻结边界复核：未修改任何 Swift/资产、Xcode 工程、产品 UI/文案/逻辑、账本/同步、AI、会员、额度、JWT、StoreKit、backend/ai-proxy、官网/协议、发布脚本、产品规则或 `ARCH-03`；`PhotoMemoryPromptPolicy.swift` 及其工程接线完整保留。未覆盖、回退、暂存、提交或推送相邻脏工作区。
 - 剩余风险：Prompt 原文不再出现在当前工作树，只能通过 Git 历史查看；这是用户明确授权的预期结果。61 份删除尚未暂存或提交，但已作为工作树删除被 Git 正确识别，可随下一次受控提交进入版本历史。
 - 下一步：下一次提交时将这 61 个 `D` 与对应活动引用、本文档一起纳入同一提交；不要单独恢复 Prompt，也不要把生产 `PhotoMemoryPromptPolicy.swift` 误当文档删除。后续任务继续以本文档为唯一顺序与状态来源。
+
+---
+
+## 45. UI-PET-01：全局顶部空间收口、复盘宽度统一与宠物主动说话（2026-07-22）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。Windows 策略、静态、文案和完整发布门禁已通过；缺 Xcode/iPhone 视觉、手势和计时签收，不标记 `VERIFIED`。
+- 用户反馈：五个 Tab 顶部存在一整块无内容的白色标题区域，占用首屏；复盘页视觉上比痕迹页更窄。首页宠物虽然已有拖动/长按能力和提示文案，但不会主动告知，停留首页也不会自然说话。
+- 已确认根因：`ContentView` 仍固定渲染独立 `topBar`，它源于早期 Web Demo 视觉对齐，后续改为不透明背景后形成明显白色块，并非防误触层；系统安全区在移除后仍然生效。痕迹生活模式已放宽至 6pt/560pt，而复盘主内容仍为 12pt/430pt，空态还是 16pt/430pt；标题字号也曾被单独缩小。宠物只有保存和点击触发，无首页驻留调度；交互提示只在首次点击内触发且在气泡真正显示前就写入已读，遇到弹层阻塞会永久丢失。保存消息在不可展示时也会被直接清空。
+- 目标：移除五个 Tab 的固定标题块，仅保留系统状态栏/灵动岛安全区和轻量页内上间距；复盘主态与空态使用同一受控宽度，接近痕迹但不让 iPad 文本无限拉宽；宠物首次主动说明“拖动换位置、长按休息”，随后在用户停留首页时低频说一条基于已准备今日账单和缓存天气的自然消息，阻塞后可续接，离开/后台立即取消。
+- 允许修改：`ContentView.swift` 的全局固定标题容器；`HomeView.swift` 的顶部间距、宠物展示生命周期与单条待显示队列；`InsightWebView.swift` 的复盘根/空态宽度；`PetCompanionService.swift` 的一次性提示确认、只读缓存的驻留消息与纯调度策略；必要的 XCTest、静态门禁、真机矩阵和本文档。
+- 冻结边界：不修改页面内容顺序、Tab 顺序/名称、首页动态主动作状态机、账本/保存/OCR/AI、痕迹数据与筛选、复盘查询/对比语义、会员/额度/StoreKit、同步、主题 Token、宠物事实文案资格、拖拽/吸附/位置存储、长按隐藏含义、像素资源或 `ARCH-03`。顶部只改变视口利用率；宠物只改变触发、取消、优先级和排队，不增加完整账本扫描、渲染期计算或主动网络请求。
+- 交互预算：首次操作提示约 5 秒；已提示用户首次驻留消息约 25 秒，后续约 150 秒；每个首页可见会话最多 3 条自动气泡（含提示），保存消息优先于驻留消息。VoiceOver 下延后并降低频率；任何弹层、编辑器、首笔引导、保存后覆盖层、已有气泡、离开首页或场景非 active 时均不打断用户。
+- 计划验收：五个 Tab 去除固定白色块且不侵入状态栏/灵动岛；复盘主态/空态左右边距一致并接近痕迹；提示只在真正可见后标记已读，阻塞关闭后重试；首页停留可低频出现上下文消息，离开/后台/关闭宠物立即取消；保存时被阻塞的单条消息恢复后优先显示；拖动、长按、点击、VoiceOver 和首页滚动保持原行为。Windows 仅可完成静态/策略/XCTest 接线，Xcode/iPhone 签收前不得标记 `VERIFIED`。
+- 实现（视口）：删除 `ContentView` 的固定 `topBar` 调用与不透明标题块，保留系统 safe area、底栏和 `AppTab.pageTitle` 无障碍提示；首页仅保留 8pt 页内上距。复盘主态与空态统一为 8pt 横向页距、520pt 最大宽度和 8pt 顶距，修复与痕迹相比过窄及主/空态跳宽，同时限制 iPad 长行宽度。未改五个 Tab 内容顺序、名称、底栏或主题色。
+- 实现（宠物）：新增纯 `PetCompanionAutomaticSpeechPolicy`，确定性限定首次提示 5 秒、首次驻留 25 秒、后续 150 秒、单会话最多 3 条；VoiceOver 分别延长到 9/45/240 秒。交互提示迁移到 `pet_interaction_hint_seen_v2`，服务只返回候选，必须由首页成功放入可见气泡后才落已读；点击仍可补显示未成功出现的提示。驻留消息只读 `homeViewModel.todayItems` 与 `WeatherCompanionService.cachedSnapshot`，不扫描完整账本、不索权、不刷新网络。
+- 生命周期与竞态：首页只维护一个可取消自动任务、一个点击请求和一个待显示保存消息；首笔引导、保存后覆盖层、今日列表、编辑、详情、删除确认、回放、后台、切 Tab 与宠物关闭均取消展示任务，条件恢复后重新按完整延迟调度。被阻塞的保存消息保留一条并优先于驻留气泡和迟到的点击结果；离开首页清理，避免旧消息跨页面反写。现有拖动、吸附、默认右下角、位置持久化和长按隐藏代码未修改。
+- 修改文件：`NativeDemoApp/ContentView.swift`、`NativeDemoApp/Views/HomeView.swift`、`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoApp/Services/PetCompanionService.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 验证证据：新增自动提示资格、阻塞/关闭边界、5/25/150 秒节奏、三条上限和 VoiceOver 9/45/240 秒 XCTest 接线；静态门禁锁定固定标题块退场、复盘统一宽度、提示显示后才标记、保存消息优先、驻留零天气刷新与零全账本扫描，并新增 `FLOW-61`。`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过；扫描 81 个 Swift 文件，生活语义、AI、会员、主题、迁移、SQLite、100/1,000/5,000 条和真实 12MP 夹具均通过，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改首页动态主动作、账本/保存/OCR/AI、痕迹数据与筛选、复盘查询/对比结果、会员/额度/StoreKit、同步、主题 Token、宠物事实资格/文案池、拖拽/吸附/存储、像素资源或 `ARCH-03`；未暂存或改动用户未跟踪素材、`tmp/` 与缓存目录。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，`@State` 可取消任务的 Swift 严格并发编译、移除标题后在灵动岛/刘海/横屏的真实 safe area、复盘 520pt 在小屏与特大字号的排版、5/25/150 秒实际前后台计时、弹层恢复、VoiceOver 自动朗读打断程度和保存/点击竞态仍需 `FLOW-61` 真机签收；策略 XCTest 已接线但未在本环境执行，当前只能标记 `CODE_DONE`。
+- 下一步：在 Xcode 执行 Debug/Release 与全部 XCTest，再按 `FLOW-61` 完成五 Tab safe area、复盘/痕迹边距、首次提示、弹层重试、驻留节奏、后台/切 Tab 取消、保存优先及拖动/长按回归；若出现问题只修本项视口常量或宠物触发生命周期，不恢复固定标题块、不改拖拽算法和相邻产品逻辑。
+
+---
+
+## 46. NARRATIVE-CORE-02：真实账单、信息增量与叙事价值统一内核（2026-07-22）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。统一叙事内核、痕迹只读投影、播放复用、提前 AI 润色和回归门禁已完成；缺 Xcode/iPhone `FLOW-62` 签收，不标记 `VERIFIED`。
+- 用户确认：咖啡等稳定事实继续作为生活印记，但“真实账单、信息增量、叙事价值”必须成为统一算法，生活卡主页、周/月播放和线索页都接入；话费、水电、充值等低现场感记录不能因为当天笔数多就进入情绪叙事，AI 不能替错误主角润色。
+- 已确认缺口：`NARRATIVE-CORE` 已让今日/周/月播放和分享区分主线与稳定印记，但只有 `confidence / informationGain / isStable`，没有独立叙事价值与代表性；痕迹生活卡仍以 `LifeMarkService` 固定优先级的第一项为主文，咖啡 priority 18 可压过 4 次、priority 20 的通勤；月度还主动把重复印记置前。线索顶部同样直接读取第一生活印记，下半部分由独立 `LifeInsightService` 固定模板和分数选择，普通附件即可成为“被留下的现场”，密集日还会混入无关次级信号。现有 AI 虽提前生成 day/week/month 润色，但只被首页与 `PlaybackService` 读取，痕迹页未消费。
+- 目标：建立同一不可变周期叙事计划，以真实账单为硬证据，分别计算信息增量、叙事价值和长期代表性，再分配 `lead / support / mark / evidence`；生活卡主页给短预告，播放按既有章节展开，线索页展示主角、稳定印记及同一主角的依据。各表面措辞可不同，但不得各自重新选主角。
+- 叙事边界：高信息增量＋高叙事价值可做主角；低增量＋高代表性只能做生活印记；高增量＋低叙事价值只能做数据观察；低增量＋低叙事价值只作数字依据。话费、水电、充值、订阅、普通缴费默认不得成为生活情绪主角，只有可验证的明显变化时进入中性数据观察；普通票据不得称为“现场”。照片必须有合格生活角色或具体用户文字，才可进入主叙事。
+- 允许修改：`LifeNarrativePlanningService.swift` 的纯信号模型/评分/角色分配；痕迹不可变快照模型与后台构建、生活卡/线索页的只读投影；`PlaybackService.swift` 只允许改为读取升级后的同一计划，不改章节结构；现有叙事 AI fact-pack/store/proxy 契约只允许增加受控 surface 身份与线索预生成；对应 XCTest、静态门禁、设备矩阵和本文档。
+- 冻结边界：不修改账单字段、金额、日期、分类/OCR、存储/同步 DTO、AI 指令台、首页动态主动作、痕迹筛选/日期口径、周记弱数据 3 章/成熟数据 5 章、月章 6 章及顺序/时长、播放额度/会员/StoreKit、分享模板/照片准备、主题/UI 风格、宠物、页面拆分或 `ARCH-03`。不得把医疗、债务、地址、账号等敏感内容升级为叙事；不得让 AI 选择事实、增加数字、人物、地点、原因、情绪或建议。
+- 性能边界：同一账本修订与周期只在既有后台快照阶段计算一次；生活卡绘制、线索滚动、播放索引、模板切换和主题变化只读快照。远程润色随账本稳定后提前生成，进入页面与点播放不发请求、不等待、不扫描完整账本；旧修订不得覆盖新结果，失败无感回退本地文案。
+- 工作区保护：保留未提交 `UI-PET-01` 八个跟踪文件及未跟踪素材、`tmp/`、缓存目录；本项只叠加明确允许文件，不覆盖、不回退、不暂存、不提交前项现场。
+- 计划验收：覆盖稳定咖啡、咖啡增减/回归、通勤与咖啡并列、普通话费/话费明显变化、生活照片/票据、密集日混入低价值账单、用户原话、弱数据、敏感混组、同期边界、AI 开关/未登录/超时/旧修订和 1,000/5,000 条性能；生活卡主页、播放、线索页主角身份一致且不逐字重复。Windows 只能完成策略、静态与发布门禁，Xcode/iPhone 签收前不得标记 `VERIFIED`。
+- 实现（统一角色）：`LifeNarrativeSignal` 新增独立 `narrativeValue`、`representativeness` 与 `isAdministrative`，在同一周期计划中按信息增量、叙事价值、长期代表性和置信度分配 `lead / support / mark / evidence`。稳定咖啡等重复事实只保留为生活印记，只有真实增减或隔期回归才可重新竞争主线；用户原话仍优先，敏感事实仍在分组前剔除。
+- 实现（固定账单与照片）：话费、水电、充值、订阅、停车费等从生活场景组和稳定印记中隔离，普通情况只保留为数字依据，出现可复算变化时也只生成中性观察。照片资格改为读取真实记忆角色：票据、无明确角色的旧照片和敏感照片不能领衔，`moment / place / object / careRecord` 等合格生活照片或带安全用户文字的照片才可进入主叙事。
+- 实现（跨页面一致性）：周/月生活卡和线索快照携带同一不可变 `LifeNarrativePlan`、`leadSignalID` 与已验证缓存润色；生活线索列表过滤固定账单，并优先展示计划选中的代表性印记；深层线索改为同一主角的证据解释，避免复制顶部主文。周/月播放继续通过升级后的同一计划选代表记录，不自行另选主角。
+- 实现（AI 与性能）：痕迹周/月表面消费账本稳定后提前生成的 AI 润色，AI 只改表达，不改事实、证据和主角；页面进入、滚动、切章、主题及模板切换均不触发请求或完整账本扫描。仅当同周期同修订的润色内容真实变化时使痕迹快照失效，通知在释放缓存锁后发送；相同润色不重复刷新，旧修订不能覆盖新结果，失败继续使用本地文案。
+- 修改文件：`NativeDemoApp/Services/LifeNarrativePlanningService.swift`、`NativeDemoApp/Services/LifeNarrativeAIRewriteService.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 自动回归：新增固定账单中性观察、合格/不合格照片、周生活卡/线索/播放主角 ID 一致、生活线索过滤固定账单、痕迹只读缓存润色，以及既有周 3/5 章、月 6 章冻结边界 XCTest 接线；设备矩阵新增 `FLOW-62`，覆盖稳定咖啡、真实变化/回归、行政账单、照片角色、用户原话、敏感混组、AI 开关/失败/旧修订、主题/无障碍和 100/1,000/5,000 条性能。
+- Windows 验证证据：`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`。完整门禁包含生活语义、AI 契约 Node 10/10、主题、迁移、SQLite、100/1,000/5,000 条夹具与三张真实 12MP 图片；文案扫描 81 个 Swift 文件，仅保留基线既有 5 条 soft warning，本轮新增警告为 0。
+- 冻结边界复核：未修改账单字段、金额/日期、分类/OCR、存储/同步 DTO、AI 指令台、首页动态主动作、痕迹筛选/日期口径、播放章节数量/顺序/时长、额度/会员/StoreKit、分享模板/照片准备、主题/UI 风格、宠物、页面拆分或 `ARCH-03`；未覆盖、回退、暂存或提交 `UI-PET-01` 与未跟踪素材、`tmp/`、缓存目录。
+- 剩余风险：Windows 没有 Swift/Xcode，新增模型字段、后台快照发布与通知的严格并发编译，以及痕迹/播放真实布局和 5,000 条真机 hitch/内存仍未完成运行验证；策略 XCTest 已接线但未在本环境执行。真实服务端润色还需在有效账号、联网/离线和旧修订交错条件下确认无错误反写。
+- 下一步：在 macOS/Xcode 执行 Debug、Release 与全部 XCTest，再按 `FLOW-62` 逐项签收生活卡、线索页、周/月播放和分享的主角一致性、行政账单/照片/敏感边界、AI 成功/失败/旧修订、主题/无障碍及 5,000 条滚动内存。发现问题只修本项计划评分、快照投影、缓存失效或受控措辞，不改章节/UI/额度/会员/存储，也不启动 `ARCH-03`；通过后再将本项标为 `VERIFIED`。

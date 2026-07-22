@@ -21,7 +21,8 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
         category: HomeItem.Category,
         day: Int,
         userEdited: Bool = false,
-        hasPhoto: Bool = false
+        hasPhoto: Bool = false,
+        photoRole: PhotoMemoryAssetRole? = nil
     ) -> HomeItem {
         HomeItem(
             title: title,
@@ -29,7 +30,8 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
             category: category,
             createdAt: date(day),
             userEditedTitle: userEdited,
-            memoryImageData: hasPhoto ? Data([0x01]) : nil
+            memoryImageData: hasPhoto ? Data([0x01]) : nil,
+            memoryAnchorRole: photoRole
         )
     }
 
@@ -55,6 +57,7 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
         XCTAssertNotEqual(plan.leadSignalID, "scene:coffee")
         XCTAssertTrue(plan.markLabels.contains("咖啡饮品"))
         XCTAssertTrue(plan.summary.contains("4 笔记录"))
+        XCTAssertTrue(plan.summary.contains("咖啡饮品留在生活线索里"))
     }
 
     func testCoffeeCanLeadAgainWhenTheCountReallyChanges() {
@@ -93,7 +96,7 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
                 scope: .week,
                 sourceRevision: 2,
                 items: rows,
-                previousItems: [],
+                previousItems: [item("上周咖啡", category: .dining, day: 14)],
                 now: date(21),
                 recentLeadSignalIDs: []
             )
@@ -102,6 +105,305 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
         XCTAssertEqual(plan.leadSignalID, "user:\(rows[1].id.uuidString)")
         XCTAssertTrue(plan.summary.contains("红汤馄饨"))
         XCTAssertTrue(plan.markLabels.contains("咖啡饮品"))
+    }
+
+    func testAdministrativeBillsStayInEvidenceWithoutBecomingLeadOrMark() {
+        let rows = [
+            item("手机话费", category: .daily, day: 18),
+            item("手机话费充值", category: .daily, day: 19),
+            item("下班通勤", category: .transport, day: 20),
+        ]
+        let plan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .week,
+                sourceRevision: 3,
+                items: rows,
+                previousItems: [],
+                now: date(21),
+                recentLeadSignalIDs: []
+            )
+        )
+
+        XCTAssertFalse(plan.leadSignalID?.contains("telecomBill") == true)
+        XCTAssertFalse(plan.markLabels.contains("话费账单"))
+        let administrativeEvidence = plan.signalsByRole[.evidence, default: []]
+            .filter(\.isAdministrative)
+        XCTAssertFalse(administrativeEvidence.isEmpty)
+        XCTAssertTrue(administrativeEvidence.allSatisfy { $0.narrativeValue < 55 })
+    }
+
+    func testAdministrativeChangeRemainsANeutralDataObservation() {
+        let current = [
+            item("手机话费", category: .daily, day: 18),
+            item("电费缴费", category: .home, day: 19),
+            item("停车费", category: .transport, day: 20),
+        ]
+        let previous = [item("上周手机话费", category: .daily, day: 10)]
+        let plan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .week,
+                sourceRevision: 4,
+                items: current,
+                previousItems: previous,
+                now: date(21),
+                recentLeadSignalIDs: []
+            )
+        )
+
+        XCTAssertTrue(plan.leadSignalID?.hasPrefix("rhythm:") == true)
+        XCTAssertFalse(plan.headline.contains("明显变化"))
+        let observation = plan.signalsByRole[.evidence, default: []].first {
+            $0.id == "administrative:change:up"
+        }
+        XCTAssertEqual(observation?.kind, .change)
+        XCTAssertEqual(observation?.isAdministrative, true)
+        XCTAssertLessThan(observation?.narrativeValue ?? Int.max, 55)
+    }
+
+    func testReceiptPhotoCannotBecomeAStoryLead() {
+        let receipt = item(
+            "超市小票",
+            category: .daily,
+            day: 21,
+            hasPhoto: true,
+            photoRole: .receipt
+        )
+        let plan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .week,
+                sourceRevision: 1,
+                items: [receipt],
+                previousItems: [],
+                now: date(21),
+                recentLeadSignalIDs: []
+            )
+        )
+
+        XCTAssertFalse(plan.leadSignalID?.hasPrefix("photo:") == true)
+        XCTAssertFalse(plan.signalsByRole[.lead, default: []].contains { $0.kind == .photo })
+    }
+
+    func testQualifiedMomentPhotoCanBecomeAConcreteLead() {
+        let moment = item(
+            "红汤馄饨",
+            category: .dining,
+            day: 21,
+            hasPhoto: true,
+            photoRole: .moment
+        )
+        let plan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .week,
+                sourceRevision: 1,
+                items: [moment],
+                previousItems: [],
+                now: date(21),
+                recentLeadSignalIDs: []
+            )
+        )
+
+        XCTAssertEqual(plan.leadSignalID, "photo:\(moment.id.uuidString)")
+        XCTAssertTrue(plan.summary.contains("红汤馄饨"))
+        XCTAssertTrue(plan.summary.contains("还留着一张照片"))
+    }
+
+    func testPhotoWithoutAQualifiedRoleStaysOutOfTheLead() {
+        let attachment = item(
+            "普通附件",
+            category: .other,
+            day: 21,
+            hasPhoto: true
+        )
+        let plan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .week,
+                sourceRevision: 1,
+                items: [attachment],
+                previousItems: [],
+                now: date(21),
+                recentLeadSignalIDs: []
+            )
+        )
+
+        XCTAssertFalse(plan.leadSignalID?.hasPrefix("photo:") == true)
+        XCTAssertEqual(plan.maturity, .factual)
+    }
+
+    func testWeekLifeCardClueAndPlaybackShareTheSameLeadIdentity() {
+        let previous = [
+            item("上周咖啡 1", category: .dining, day: 13),
+            item("上周咖啡 2", category: .dining, day: 14),
+        ]
+        let current = [
+            item("本周咖啡", category: .dining, day: 20),
+            item(
+                "红汤馄饨",
+                category: .dining,
+                day: 21,
+                hasPhoto: true,
+                photoRole: .moment
+            ),
+        ]
+        let allItems = previous + current
+        let chapter = TraceSnapshotComputation.buildChapter(
+            TraceChapterComputationInput(
+                range: .week,
+                items: current,
+                allItems: allItems,
+                isMember: true,
+                prioritizeRecurringMarks: false,
+                periodKey: "2026-W30",
+                usesEchoAnchor: false,
+                sourceRevision: 42,
+                now: date(21)
+            )
+        )
+        let clue = TraceSnapshotComputation.buildClue(
+            TraceClueComputationInput(
+                items: current,
+                allItems: allItems,
+                period: .week,
+                periodLabel: "这一周",
+                isMember: true,
+                freeRemaining: 5,
+                storedUnlock: true,
+                sourceRevision: 42,
+                narrativeScope: .week,
+                allowsNarrativeRewrite: true,
+                now: date(21)
+            )
+        )
+        let playbackPlan = PlaybackService().buildWeeklyShareCardPayload(
+            from: allItems,
+            now: date(21),
+            sourceRevision: 42
+        )?.narrativePlan
+
+        XCTAssertEqual(chapter.narrativePlan.leadSignalID, clue.narrativePlan?.leadSignalID)
+        XCTAssertEqual(chapter.narrativePlan.leadSignalID, playbackPlan?.leadSignalID)
+        XCTAssertEqual(chapter.narrativePlan.sourceRevision, 42)
+        XCTAssertTrue(chapter.narrativePlan.markLabels.contains("咖啡饮品"))
+        XCTAssertTrue(clue.narrativePlan?.markLabels.contains("咖啡饮品") == true)
+    }
+
+    func testWeekClueKeepsAdministrativeBillsOutOfTheLifeMarkList() {
+        let rows = [
+            item("手机话费", category: .daily, day: 18),
+            item("电费缴费", category: .home, day: 19),
+            item("上午咖啡", category: .dining, day: 20),
+            item("下午拿铁", category: .dining, day: 21),
+        ]
+        let snapshot = TraceSnapshotComputation.buildClue(
+            TraceClueComputationInput(
+                items: rows,
+                allItems: rows,
+                period: .week,
+                periodLabel: "这一周",
+                isMember: true,
+                freeRemaining: 5,
+                storedUnlock: true,
+                sourceRevision: 5,
+                narrativeScope: .week,
+                allowsNarrativeRewrite: false,
+                now: date(21)
+            )
+        )
+
+        XCTAssertTrue(snapshot.narrativePlan?.markLabels.contains("咖啡饮品") == true)
+        XCTAssertFalse(snapshot.marks.contains { mark in
+            let evidence = rows.filter { mark.itemIDs.contains($0.id) }
+            return !evidence.isEmpty && evidence.allSatisfy {
+                LifeNarrativeSignalPolicy.isAdministrativeRecord($0)
+            }
+        })
+    }
+
+    func testTraceSurfacesConsumeCachedRewriteWithoutChangingTheSelectedFacts() {
+        LifeNarrativeAIRewriteStore.shared.removeAllForTesting()
+        defer { LifeNarrativeAIRewriteStore.shared.removeAllForTesting() }
+
+        let rows = [
+            item("一杯咖啡", category: .dining, day: 20),
+            item(
+                "红汤馄饨",
+                category: .dining,
+                day: 21,
+                hasPhoto: true,
+                photoRole: .moment
+            ),
+        ]
+        let key = LifeNarrativeAIPreparationPolicy.key(
+            scope: .week,
+            sourceRevision: 77,
+            now: date(21),
+            calendar: PlaybackService.isoCalendar
+        )
+        let rewrite = LifeNarrativeAIRewrite(
+            key: key,
+            headline: "这周先说一件具体的事",
+            summary: "7月21日那笔记录，还留着一张照片。",
+            supportingLine: nil,
+            evidenceIDs: ["F1"],
+            evidenceItemIDs: [rows[1].id]
+        )
+        LifeNarrativeAIRewriteStore.shared.publish([rewrite], expectedSourceRevision: 77)
+
+        let chapter = TraceSnapshotComputation.buildChapter(
+            TraceChapterComputationInput(
+                range: .week,
+                items: rows,
+                allItems: rows,
+                isMember: true,
+                prioritizeRecurringMarks: false,
+                periodKey: "2026-W30",
+                usesEchoAnchor: false,
+                sourceRevision: 77,
+                now: date(21)
+            )
+        )
+        let snapshot = TraceSnapshotComputation.buildClue(
+            TraceClueComputationInput(
+                items: rows,
+                allItems: rows,
+                period: .week,
+                periodLabel: "这一周",
+                isMember: true,
+                freeRemaining: 5,
+                storedUnlock: true,
+                sourceRevision: 77,
+                narrativeScope: .week,
+                allowsNarrativeRewrite: true,
+                now: date(21)
+            )
+        )
+
+        XCTAssertEqual(chapter.narrativeRewrite, rewrite)
+        XCTAssertEqual(chapter.narrative, rewrite.headline)
+        XCTAssertEqual(chapter.chapterSummary, rewrite.summary)
+        XCTAssertEqual(chapter.narrativePlan.leadSignalID, "photo:\(rows[1].id.uuidString)")
+        XCTAssertEqual(snapshot.narrativeRewrite, rewrite)
+        XCTAssertEqual(snapshot.narrativeHeadline, rewrite.headline)
+        XCTAssertEqual(snapshot.narrativeSummary, rewrite.summary)
+        XCTAssertNotEqual(snapshot.insight.leadQuestion, rewrite.headline)
+        XCTAssertTrue(snapshot.insight.fullLines.contains { $0.contains("直接依据") })
+        XCTAssertEqual(snapshot.narrativePlan?.leadSignalID, "photo:\(rows[1].id.uuidString)")
+        XCTAssertEqual(snapshot.narrativeRewrite?.evidenceItemIDs, [rows[1].id])
+
+        let newerRevision = TraceSnapshotComputation.buildChapter(
+            TraceChapterComputationInput(
+                range: .week,
+                items: rows,
+                allItems: rows,
+                isMember: true,
+                prioritizeRecurringMarks: false,
+                periodKey: "2026-W30",
+                usesEchoAnchor: false,
+                sourceRevision: 78,
+                now: date(21)
+            )
+        )
+        XCTAssertNil(newerRevision.narrativeRewrite)
+        XCTAssertNotEqual(newerRevision.narrative, rewrite.headline)
     }
 
     func testSensitiveRecordNeverBecomesNarrativeLeadOrMark() {
@@ -4360,6 +4662,100 @@ final class PetCompanionMessagePolicyTests: XCTestCase {
     func testInteractionHintOnlyPresentsBeforeItHasBeenSeen() {
         XCTAssertTrue(PetCompanionInteractionHintPolicy.shouldPresent(hasPresented: false))
         XCTAssertFalse(PetCompanionInteractionHintPolicy.shouldPresent(hasPresented: true))
+    }
+
+    func testAutomaticSpeechRequiresAnUnblockedVisibleActiveHome() {
+        XCTAssertTrue(PetCompanionAutomaticSpeechPolicy.shouldSchedule(
+            isHomeVisible: true,
+            isSceneActive: true,
+            isPetEnabled: true,
+            isPresentationBlocked: false,
+            hasBubble: false,
+            hasMessageRequest: false,
+            hasPendingSavedMessage: false
+        ))
+
+        let blockedStates: [(Bool, Bool, Bool, Bool, Bool, Bool, Bool)] = [
+            (false, true, true, false, false, false, false),
+            (true, false, true, false, false, false, false),
+            (true, true, false, false, false, false, false),
+            (true, true, true, true, false, false, false),
+            (true, true, true, false, true, false, false),
+            (true, true, true, false, false, true, false),
+            (true, true, true, false, false, false, true),
+        ]
+        for state in blockedStates {
+            XCTAssertFalse(PetCompanionAutomaticSpeechPolicy.shouldSchedule(
+                isHomeVisible: state.0,
+                isSceneActive: state.1,
+                isPetEnabled: state.2,
+                isPresentationBlocked: state.3,
+                hasBubble: state.4,
+                hasMessageRequest: state.5,
+                hasPendingSavedMessage: state.6
+            ))
+        }
+    }
+
+    func testAutomaticSpeechStartsWithTheInteractionHintThenUsesBoundedIdleCadence() {
+        XCTAssertEqual(
+            PetCompanionAutomaticSpeechPolicy.nextStep(
+                hasPresentedInteractionHint: false,
+                automaticPresentationCount: 0,
+                hasPresentedIdleMessageInSession: false,
+                voiceOverEnabled: false
+            ),
+            .init(kind: .interactionHint, delayNanoseconds: 5_000_000_000)
+        )
+        XCTAssertEqual(
+            PetCompanionAutomaticSpeechPolicy.nextStep(
+                hasPresentedInteractionHint: true,
+                automaticPresentationCount: 1,
+                hasPresentedIdleMessageInSession: false,
+                voiceOverEnabled: false
+            ),
+            .init(kind: .idle, delayNanoseconds: 25_000_000_000)
+        )
+        XCTAssertEqual(
+            PetCompanionAutomaticSpeechPolicy.nextStep(
+                hasPresentedInteractionHint: true,
+                automaticPresentationCount: 2,
+                hasPresentedIdleMessageInSession: true,
+                voiceOverEnabled: false
+            ),
+            .init(kind: .idle, delayNanoseconds: 150_000_000_000)
+        )
+        XCTAssertNil(PetCompanionAutomaticSpeechPolicy.nextStep(
+            hasPresentedInteractionHint: true,
+            automaticPresentationCount: PetCompanionAutomaticSpeechPolicy.maximumPresentationsPerSession,
+            hasPresentedIdleMessageInSession: true,
+            voiceOverEnabled: false
+        ))
+    }
+
+    func testVoiceOverAutomaticSpeechUsesLongerDelays() {
+        let hint = PetCompanionAutomaticSpeechPolicy.nextStep(
+            hasPresentedInteractionHint: false,
+            automaticPresentationCount: 0,
+            hasPresentedIdleMessageInSession: false,
+            voiceOverEnabled: true
+        )
+        let firstIdle = PetCompanionAutomaticSpeechPolicy.nextStep(
+            hasPresentedInteractionHint: true,
+            automaticPresentationCount: 1,
+            hasPresentedIdleMessageInSession: false,
+            voiceOverEnabled: true
+        )
+        let repeatedIdle = PetCompanionAutomaticSpeechPolicy.nextStep(
+            hasPresentedInteractionHint: true,
+            automaticPresentationCount: 2,
+            hasPresentedIdleMessageInSession: true,
+            voiceOverEnabled: true
+        )
+
+        XCTAssertEqual(hint?.delayNanoseconds, 9_000_000_000)
+        XCTAssertEqual(firstIdle?.delayNanoseconds, 45_000_000_000)
+        XCTAssertEqual(repeatedIdle?.delayNanoseconds, 240_000_000_000)
     }
 
     func testEmptyPetCopyOffersCompanyWithoutRepeatingRecordingInstructions() {

@@ -370,6 +370,8 @@ struct TraceChapterSnapshot {
     let marks: [LifeMarkAggregate]
     let memoryAnchors: [SummaryMemoryAnchor]
     let coverFacts: TraceChapterCoverFacts
+    let narrativePlan: LifeNarrativePlan
+    let narrativeRewrite: LifeNarrativeAIRewrite?
     let narrative: String
     let chapterSummary: String?
     let evidenceGroups: [TraceMarkEvidenceGroup]
@@ -398,11 +400,23 @@ struct TraceClueSnapshot {
     let clues: [TraceCategoryClue]
     let rhythmPoints: [TraceRhythmPoint]
     let insight: LifeInsightResult
+    let narrativePlan: LifeNarrativePlan?
+    let narrativeRewrite: LifeNarrativeAIRewrite?
     let marks: [LifeMarkAggregate]
     let lockedMark: LifeMarkAggregate?
     let isDeepInsightUnlocked: Bool
     let canUseDeepInsight: Bool
     let freeInsightRemaining: Int
+
+    var narrativeHeadline: String? {
+        guard let narrativePlan else { return nil }
+        return narrativeRewrite?.headline ?? narrativePlan.headline
+    }
+
+    var narrativeSummary: String? {
+        guard let narrativePlan else { return nil }
+        return narrativeRewrite?.summary ?? narrativePlan.summary
+    }
 }
 
 struct SummaryLaunchPreview {

@@ -616,7 +616,7 @@ final class PlaybackService {
         let narrativeRepresentative = narrativeLeadItem(
             from: narrativePlan,
             rows: rows,
-            allowedKinds: [.userText, .photo, .change]
+            allowedKinds: [.userText, .photo, .change, .structuredScene]
         )
         let representative = narrativeRepresentative ?? selection.primary?.item ?? rows.last!
         let recordCopy = playbackRecordCopy(for: representative, range: .week)
@@ -1404,7 +1404,7 @@ final class PlaybackService {
         let narrativeRepresentative = narrativeLeadItem(
             from: narrativePlan,
             rows: rows,
-            allowedKinds: [.userText, .photo]
+            allowedKinds: [.userText, .photo, .change, .structuredScene]
         )
         let earlyNarrativeItem = narrativeRepresentative.flatMap { item in
             calendar.component(.day, from: item.createdAt) <= 10 ? item : nil
