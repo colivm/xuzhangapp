@@ -494,6 +494,24 @@ enum AICommandRecognitionIntent: String, Equatable, Sendable {
     case unsupported
 }
 
+enum ReviewTaskResolutionPolicy {
+    static func resolvedIntent(
+        for recognitionIntent: AICommandRecognitionIntent
+    ) -> ReviewTaskIntent? {
+        switch recognitionIntent {
+        case .compare:
+            return .compare
+        case .commuteDraft:
+            return .backfill
+        case .duplicateCheck, .memoryLookup, .lifeMarkLookup, .lastRecordLookup,
+             .lifestyleSummary, .largestRecord, .query:
+            return .query
+        case .unsupported:
+            return nil
+        }
+    }
+}
+
 struct AICommandRecognitionContext: Equatable, Sendable {
     var hasCategory: Bool
     var hasLifeMark: Bool
@@ -768,7 +786,60 @@ enum AICommandRecognitionPolicy {
         let hasCurrentMonth = containsAny(text, ["本月", "这个月", "这月"])
         let hasPreviousMonth = containsAny(text, ["上个月", "上月"])
         let hasConnector = containsAny(text, ["和", "跟", "与", "比", "较", "相比", "对比", "差"])
-        return hasConnector && ((hasCurrentWeek && hasPreviousWeek) || (hasCurrentMonth && hasPreviousMonth))
+        let hasMatchedRollingDays = containsMatchedRollingDayPeriods(text)
+        return hasConnector
+            && ((hasCurrentWeek && hasPreviousWeek)
+                || (hasCurrentMonth && hasPreviousMonth)
+                || hasMatchedRollingDays)
+    }
+
+    private static func containsMatchedRollingDayPeriods(_ text: String) -> Bool {
+        let currentCounts = rollingDayCounts(
+            in: text,
+            prefixes: ["最近", "过去", "近"]
+        )
+        let previousCounts = rollingDayCounts(in: text, prefixes: ["前"])
+        return !currentCounts.intersection(previousCounts).isEmpty
+    }
+
+    private static func rollingDayCounts(
+        in text: String,
+        prefixes: [String]
+    ) -> Set<Int> {
+        var result = Set<Int>()
+        for prefix in prefixes {
+            let escaped = NSRegularExpression.escapedPattern(for: prefix)
+            let pattern = escaped + #"\s*(\d{1,3}|[一二两三四五六七八九十]{1,3})\s*(?:天|日)"#
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            for match in regex.matches(in: text, range: range) where match.numberOfRanges >= 2 {
+                guard let tokenRange = Range(match.range(at: 1), in: text),
+                      let value = rollingDayNumber(from: String(text[tokenRange])),
+                      (1...366).contains(value) else {
+                    continue
+                }
+                result.insert(value)
+            }
+        }
+        return result
+    }
+
+    private static func rollingDayNumber(from token: String) -> Int? {
+        if let value = Int(token) { return value }
+        let digits: [Character: Int] = [
+            "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
+            "五": 5, "六": 6, "七": 7, "八": 8, "九": 9
+        ]
+        if token == "十" { return 10 }
+        if let tenIndex = token.firstIndex(of: "十") {
+            let leading = token[..<tenIndex]
+            let trailing = token[token.index(after: tenIndex)...]
+            let tens = leading.first.flatMap { digits[$0] } ?? 1
+            let ones = trailing.first.flatMap { digits[$0] } ?? 0
+            return tens * 10 + ones
+        }
+        guard token.count == 1, let character = token.first else { return nil }
+        return digits[character]
     }
 
     private static func containsOmittedSubjectPeriodComparison(_ text: String) -> Bool {

@@ -95,6 +95,9 @@ enum LifeMarkService {
     private static let telecomBillKeywords = ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国移动通信集团", "中国联通", "中国电信", "移动通信", "运营商缴费"]
     private static let casualDrinkKeywords = ["可乐", "雪碧", "汽水", "水溶", "c100", "维c", "维他", "果汁", "饮料"]
     private static let intentionalDrinkKeywords = ["咖啡", "拿铁", "美式", "奶茶", "茶饮", "柠檬茶", "瑞幸", "星巴克", "manner", "蜜雪", "喜茶", "奈雪"]
+    private static let strongCommuteFactCues = [
+        "通勤", "上班", "下班", "上下班", "到岗", "早高峰", "晚高峰", "地铁通勤", "公交通勤"
+    ]
     private static let broadDailySupplySpecificDefinitionIDs: Set<String> = [
         "fitness",
         "home_utilities",
@@ -1003,6 +1006,9 @@ enum LifeMarkService {
         if definition.id == "travel", item.memoryContext?.semanticPlace == "外地" {
             return true
         }
+        if definition.id == "commute" {
+            return commuteFactMatches(item)
+        }
         let text = semanticText(for: item)
         let categoryMatched = definition.categories.contains(item.category)
         let keywordMatched = containsAny(text, definition.keywords)
@@ -1329,20 +1335,53 @@ enum LifeMarkService {
     }
 
     private static func semanticText(for item: HomeItem) -> String {
-        [
-            item.title,
-            item.displayEmotionTag,
+        let brand = MerchantBrandCatalog.definition(for: item.merchantBrandId)
+            ?? MerchantBrandCatalog.matchBrand(in: item.title)
+        return [
+            factualTitle(for: item),
             item.category.rawValue,
             item.category.label,
+            brand?.displayName ?? "",
+            brand?.id ?? "",
             item.memoryContext?.cityName ?? "",
-            item.memoryContext?.semanticPlace ?? ""
+            item.memoryContext?.semanticPlace ?? "",
+            item.scenePackId ?? ""
         ]
         .joined(separator: " ")
         .lowercased()
     }
 
+    private static func commuteFactMatches(_ item: HomeItem) -> Bool {
+        guard item.category == .transport else { return false }
+        if item.scenePackId == "commute" { return true }
+        let explicitText = [
+            factualTitle(for: item),
+            item.memoryContext?.semanticPlace ?? ""
+        ]
+        .joined(separator: " ")
+        .lowercased()
+        return containsAny(explicitText, strongCommuteFactCues)
+    }
+
+    private static func factualTitle(for item: HomeItem) -> String {
+        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty,
+              title != item.category.defaultRecordTitle else {
+            return ""
+        }
+        if item.userEditedTitle != true,
+           RecordSemanticLexicon.isSystemGeneratedTitle(title) {
+            return ""
+        }
+        return title
+    }
+
     private static func isRainy(_ item: HomeItem) -> Bool {
-        item.memoryContext?.weatherKind == "rain" || containsAny(semanticText(for: item), ["雨天", "下雨"])
+        if item.memoryContext?.weatherKind == "rain"
+            || containsAny(item.title, ["雨天", "下雨", "降雨", "淋雨"]) {
+            return true
+        }
+        return containsAny(item.displayEmotionTag, ["雨天通勤", "下雨通勤", "雨天路上"])
     }
 
     private static func isWeekend(_ date: Date) -> Bool {

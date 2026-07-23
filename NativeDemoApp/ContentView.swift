@@ -611,6 +611,7 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedTab: AppTab = .today
     @StateObject private var recordTabSession = RecordTabSession()
+    @StateObject private var lifetimeArchiveStore = LifetimeArchiveSnapshotStore()
     @State private var statsTabState = StatsTabState()
     @State private var insightTabState = InsightTabState()
     @State private var showMemberPricing = false
@@ -764,6 +765,7 @@ struct ContentView: View {
             )
                 .environmentObject(settingsViewModel)
                 .environmentObject(homeViewModel)
+                .environmentObject(lifetimeArchiveStore)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(AppColors.bg)
@@ -777,9 +779,19 @@ struct ContentView: View {
                 presentNextPostSavePromptIfPossible()
             }
         }
+        .task(id: homeViewModel.homeDashboardRevision) {
+            lifetimeArchiveStore.prepareIfNeeded(
+                revision: homeViewModel.homeDashboardRevision,
+                items: homeViewModel.items
+            )
+        }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             settingsViewModel.refreshThemeAccess(showsMessage: true)
+            lifetimeArchiveStore.prepareIfNeeded(
+                revision: homeViewModel.homeDashboardRevision,
+                items: homeViewModel.items
+            )
             Task {
                 await refreshAccountAndMemberStatusIfNeeded(force: true)
             }

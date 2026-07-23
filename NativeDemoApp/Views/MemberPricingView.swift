@@ -62,6 +62,7 @@ private struct MemberValuePoint: Identifiable {
 struct MemberPricingView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @EnvironmentObject private var homeViewModel: HomeViewModel
+    @EnvironmentObject private var lifetimeArchiveStore: LifetimeArchiveSnapshotStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var iapService = IAPService.shared
@@ -72,10 +73,6 @@ struct MemberPricingView: View {
     @State private var isPurchasing = false
     @State private var didRunInitialRefresh = false
     @State private var didApplyHighlight = false
-    @State private var lifetimeArchiveSnapshot: LifetimeArchiveSnapshot = .empty
-    @State private var lifetimeArchiveSnapshotRevision: Int?
-    @State private var lifetimeArchiveRequestID = UUID()
-    @State private var lifetimeArchivePreparationTask: Task<Void, Never>?
     @State private var showMemberLoginSheet = false
     @State private var loginContinuation = MemberLoginContinuationState()
     private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
@@ -239,7 +236,7 @@ struct MemberPricingView: View {
     }
 
     private var memberProofLine: String {
-        lifetimeArchiveSnapshot.proofLine
+        lifetimeArchiveStore.snapshot?.proofLine ?? "长期档案正在后台整理，页面其他内容可以直接查看。"
     }
 
     var body: some View {
@@ -275,7 +272,11 @@ struct MemberPricingView: View {
                             membershipValueComparisonSection
                         }
 
-                        lifetimeArchiveSection
+                        if let lifetimeArchiveSnapshot = lifetimeArchiveStore.snapshot {
+                            lifetimeArchiveSection(snapshot: lifetimeArchiveSnapshot)
+                        } else {
+                            lifetimeArchivePreparingSection
+                        }
 
                         if membershipPresentationPolicy.showsMemberDataBoundary {
                             memberDataBoundarySection
@@ -291,7 +292,10 @@ struct MemberPricingView: View {
                 .scrollIndicators(.hidden)
                 .background(AppColors.bg.ignoresSafeArea())
                 .onAppear {
-                    scheduleLifetimeArchiveSnapshotRefresh()
+                    lifetimeArchiveStore.prepareIfNeeded(
+                        revision: homeViewModel.homeDashboardRevision,
+                        items: homeViewModel.items
+                    )
                     applyHighlightIfNeeded(proxy)
                 }
             }
@@ -306,13 +310,10 @@ struct MemberPricingView: View {
                 await runInitialRefreshIfNeeded()
             }
             .onChange(of: homeViewModel.homeDashboardRevision) { _, _ in
-                scheduleLifetimeArchiveSnapshotRefresh()
-            }
-            .onDisappear {
-                lifetimeArchivePreparationTask?.cancel()
-                lifetimeArchivePreparationTask = nil
-                lifetimeArchiveRequestID = UUID()
-                lifetimeArchiveSnapshotRevision = nil
+                lifetimeArchiveStore.prepareIfNeeded(
+                    revision: homeViewModel.homeDashboardRevision,
+                    items: homeViewModel.items
+                )
             }
             .overlay {
                 if isPurchasing {
@@ -860,9 +861,8 @@ struct MemberPricingView: View {
         )
     }
 
-    private var lifetimeArchiveSection: some View {
-        let snapshot = lifetimeArchiveSnapshot
-        return VStack(alignment: .leading, spacing: 14) {
+    private func lifetimeArchiveSection(snapshot: LifetimeArchiveSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
                 Image(systemName: "crown.fill")
                     .font(.system(size: 13, weight: .semibold))
@@ -932,6 +932,36 @@ struct MemberPricingView: View {
         )
     }
 
+    private var lifetimeArchivePreparingSection: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ProgressView()
+                .tint(AppColors.lockGold)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("正在整理长期档案")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                Text("这是首次准备，完成前不会用 0 条或 0 天冒充你的真实账本。")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.58))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppColors.lockGold.opacity(0.22), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("正在后台整理长期档案")
+    }
+
     private func lifetimeArchiveMetric(_ value: String, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(value)
@@ -976,44 +1006,6 @@ struct MemberPricingView: View {
         Image(systemName: "chevron.right")
             .font(.system(size: 10, weight: .bold))
             .foregroundStyle(AppColors.lockGold.opacity(0.72))
-    }
-
-    private func scheduleLifetimeArchiveSnapshotRefresh() {
-        let revision = homeViewModel.homeDashboardRevision
-        guard lifetimeArchiveSnapshotRevision != revision else { return }
-
-        lifetimeArchivePreparationTask?.cancel()
-        lifetimeArchiveRequestID = UUID()
-        let requestID = lifetimeArchiveRequestID
-        lifetimeArchiveSnapshotRevision = revision
-        let input = LifetimeArchivePreparationInput(
-            revision: revision,
-            items: homeViewModel.items,
-            now: Date(),
-            calendar: .current
-        )
-        lifetimeArchivePreparationTask = Task { @MainActor in
-            await Task.yield()
-            guard !Task.isCancelled, lifetimeArchiveRequestID == requestID else { return }
-            let snapshot = await withTaskGroup(
-                of: LifetimeArchiveSnapshot?.self,
-                returning: LifetimeArchiveSnapshot?.self
-            ) { group in
-                group.addTask(priority: .utility) {
-                    guard !Task.isCancelled else { return nil }
-                    return LifetimeArchiveSnapshotComputation.make(input)
-                }
-                return await group.next() ?? nil
-            }
-            guard let snapshot,
-                  !Task.isCancelled,
-                  lifetimeArchiveRequestID == requestID,
-                  lifetimeArchiveSnapshotRevision == input.revision else {
-                return
-            }
-            lifetimeArchiveSnapshot = snapshot
-            lifetimeArchivePreparationTask = nil
-        }
     }
 
     // MARK: - Privacy
@@ -1629,7 +1621,7 @@ enum LifetimeArchiveSnapshotComputation {
         let positiveItems = input.items.filter { $0.amount > 0 && $0.draftMeta == nil }
         let calendar = input.calendar
         guard !positiveItems.isEmpty else {
-            return .empty
+            return .preparedEmpty(sourceRevision: input.revision)
         }
 
         let days = Set(positiveItems.map { calendar.startOfDay(for: $0.createdAt) })
@@ -1835,7 +1827,7 @@ enum LifetimeArchiveSnapshotComputation {
     }
 }
 
-struct LifetimeArchiveSnapshot: @unchecked Sendable {
+struct LifetimeArchiveSnapshot: Codable, Equatable, @unchecked Sendable {
     let sourceRevision: Int
     let proofLine: String
     let title: String
@@ -1845,8 +1837,9 @@ struct LifetimeArchiveSnapshot: @unchecked Sendable {
     let primaryLine: String
     let closingLine: String
 
-    static let empty = LifetimeArchiveSnapshot(
-        sourceRevision: -1,
+    static func preparedEmpty(sourceRevision: Int) -> LifetimeArchiveSnapshot {
+        LifetimeArchiveSnapshot(
+        sourceRevision: sourceRevision,
         proofLine: "先从第一笔开始，后面会自动整理出周记和月章。",
         title: "从第一笔开始，长期记录会逐步形成",
         subtitle: "永久会员不是一段固定说明，而是把以后每一天的记录都长期保存。",
@@ -1863,18 +1856,176 @@ struct LifetimeArchiveSnapshot: @unchecked Sendable {
         ],
         primaryLine: "有了真实记录后，这里会自动换成你的连续天数、同类记录、周记和月章素材。",
         closingLine: "它会跟着你的账本长，不是一张固定权益图。"
-    )
+        )
+    }
+
+    func replacingSourceRevision(_ revision: Int) -> LifetimeArchiveSnapshot {
+        LifetimeArchiveSnapshot(
+            sourceRevision: revision,
+            proofLine: proofLine,
+            title: title,
+            subtitle: subtitle,
+            metrics: metrics,
+            stages: stages,
+            primaryLine: primaryLine,
+            closingLine: closingLine
+        )
+    }
 }
 
-struct LifetimeArchiveMetric: Identifiable {
-    let id = UUID()
+struct LifetimeArchiveMetric: Identifiable, Codable, Equatable {
+    let value: String
+    let label: String
+
+    var id: String { "\(label)|\(value)" }
+}
+
+struct LifetimeArchiveStage: Codable, Equatable {
     let value: String
     let label: String
 }
 
-struct LifetimeArchiveStage {
-    let value: String
-    let label: String
+struct LifetimeArchiveCacheContext: Codable, Equatable {
+    let ledgerFingerprint: String
+    let dayKey: String
+}
+
+private struct LifetimeArchiveCacheEnvelope: Codable {
+    static let schemaVersion = 1
+
+    let schemaVersion: Int
+    let context: LifetimeArchiveCacheContext
+    let snapshot: LifetimeArchiveSnapshot
+}
+
+final class LifetimeArchiveCacheStore {
+    static let shared = LifetimeArchiveCacheStore()
+
+    private let defaults: UserDefaults
+    private let storageKey: String
+
+    init(
+        defaults: UserDefaults = .standard,
+        storageKey: String = "member.lifetime-archive.snapshot.v1"
+    ) {
+        self.defaults = defaults
+        self.storageKey = storageKey
+    }
+
+    func snapshot(for context: LifetimeArchiveCacheContext) -> LifetimeArchiveSnapshot? {
+        guard let data = defaults.data(forKey: storageKey) else { return nil }
+        guard let envelope = try? JSONDecoder().decode(LifetimeArchiveCacheEnvelope.self, from: data) else {
+            defaults.removeObject(forKey: storageKey)
+            return nil
+        }
+        guard envelope.schemaVersion == LifetimeArchiveCacheEnvelope.schemaVersion,
+              envelope.context == context else {
+            return nil
+        }
+        return envelope.snapshot
+    }
+
+    func store(_ snapshot: LifetimeArchiveSnapshot, context: LifetimeArchiveCacheContext) {
+        let envelope = LifetimeArchiveCacheEnvelope(
+            schemaVersion: LifetimeArchiveCacheEnvelope.schemaVersion,
+            context: context,
+            snapshot: snapshot
+        )
+        guard let data = try? JSONEncoder().encode(envelope) else { return }
+        defaults.set(data, forKey: storageKey)
+    }
+
+    func removeAllForTesting() {
+        defaults.removeObject(forKey: storageKey)
+    }
+}
+
+@MainActor
+final class LifetimeArchiveSnapshotStore: ObservableObject {
+    @Published private(set) var snapshot: LifetimeArchiveSnapshot?
+    @Published private(set) var isPreparing = false
+
+    private let cacheStore: LifetimeArchiveCacheStore
+    private var preparationTask: Task<Void, Never>?
+    private var requestID = UUID()
+    private var targetRevision: Int?
+    private var targetDayKey: String?
+    private var fingerprintRevision: Int?
+    private var fingerprintDayKey: String?
+    private var ledgerFingerprint: String?
+
+    init(cacheStore: LifetimeArchiveCacheStore = .shared) {
+        self.cacheStore = cacheStore
+    }
+
+    func prepareIfNeeded(
+        revision: Int,
+        items: [HomeItem],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) {
+        let dayKey = LedgerDisplayFingerprintPolicy.dayKey(for: now, calendar: calendar)
+        if targetRevision == revision, targetDayKey == dayKey {
+            return
+        }
+
+        let fingerprint: String
+        if fingerprintRevision == revision,
+           fingerprintDayKey == dayKey,
+           let ledgerFingerprint {
+            fingerprint = ledgerFingerprint
+        } else {
+            fingerprint = LedgerDisplayFingerprintPolicy.make(items: items)
+            fingerprintRevision = revision
+            fingerprintDayKey = dayKey
+            ledgerFingerprint = fingerprint
+        }
+        let context = LifetimeArchiveCacheContext(
+            ledgerFingerprint: fingerprint,
+            dayKey: dayKey
+        )
+        if let cached = cacheStore.snapshot(for: context) {
+            snapshot = cached.replacingSourceRevision(revision)
+        }
+
+        preparationTask?.cancel()
+        requestID = UUID()
+        let activeRequestID = requestID
+        targetRevision = revision
+        targetDayKey = dayKey
+        isPreparing = true
+        let input = LifetimeArchivePreparationInput(
+            revision: revision,
+            items: items,
+            now: now,
+            calendar: calendar
+        )
+        preparationTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled, requestID == activeRequestID else { return }
+            let prepared = await withTaskGroup(
+                of: LifetimeArchiveSnapshot?.self,
+                returning: LifetimeArchiveSnapshot?.self
+            ) { group in
+                group.addTask(priority: .utility) {
+                    guard !Task.isCancelled else { return nil }
+                    return LifetimeArchiveSnapshotComputation.make(input)
+                }
+                return await group.next() ?? nil
+            }
+            guard let prepared,
+                  !Task.isCancelled,
+                  requestID == activeRequestID,
+                  targetRevision == revision,
+                  targetDayKey == dayKey else {
+                return
+            }
+            snapshot = prepared
+            isPreparing = false
+            preparationTask = nil
+            cacheStore.store(prepared, context: context)
+        }
+    }
 }
 
 // MARK: - Preview
@@ -1884,5 +2035,6 @@ struct MemberPricingView_Previews: PreviewProvider {
         MemberPricingView()
             .environmentObject(SettingsViewModel())
             .environmentObject(HomeViewModel())
+            .environmentObject(LifetimeArchiveSnapshotStore())
     }
 }

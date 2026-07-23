@@ -1,5 +1,110 @@
 import Foundation
 
+struct TrustedUserMomentNarrative: Equatable {
+    let itemID: UUID
+    let line: String
+    let emotionTag: String
+    let score: Int
+}
+
+enum TrustedUserMomentNarrativePolicy {
+    static func narrative(for item: HomeItem) -> TrustedUserMomentNarrative? {
+        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard item.amount > 0,
+              item.hasMemoryImages,
+              item.source == .manual,
+              item.userEditedTitle == true,
+              !title.isEmpty,
+              title != item.category.defaultRecordTitle,
+              !RecordSemanticLexicon.isSystemGeneratedTitle(title),
+              UserContentRiskService.shared.isAllowedManualNote(title, allowEmpty: false) else {
+            return nil
+        }
+
+        let normalized = title.lowercased()
+        let hasPhotoAction = containsAny(normalized, photoActionCues)
+        let hasRouteMoment = containsAny(normalized, routeCues)
+        guard hasPhotoAction || hasRouteMoment else { return nil }
+
+        let line: String
+        let emotionTag: String
+        let cueScore: Int
+        if normalized.contains("下班") {
+            line = "下班路上，也把这一刻留了下来。"
+            emotionTag = "下班路上，留住这一刻"
+            cueScore = 48
+        } else if normalized.contains("回家路上") || normalized.contains("回程") {
+            line = "回去的路上，也把这一刻留了下来。"
+            emotionTag = "回去路上，留住这一刻"
+            cueScore = 42
+        } else if normalized.contains("上班") {
+            line = "上班路上，也把当时的画面留了下来。"
+            emotionTag = "上班路上，留下一刻"
+            cueScore = 40
+        } else if normalized.contains("路上") {
+            line = "路上，也把这一刻留了下来。"
+            emotionTag = "路上，留住这一刻"
+            cueScore = 34
+        } else if hasPhotoAction {
+            let period = dayPeriod(for: item.createdAt)
+            line = "\(period)，也把这一刻留了下来。"
+            emotionTag = "\(period)，留住这一刻"
+            cueScore = 28
+        } else {
+            return nil
+        }
+
+        return TrustedUserMomentNarrative(
+            itemID: item.id,
+            line: line,
+            emotionTag: emotionTag,
+            score: 100 + cueScore + min(title.count, 24)
+        )
+    }
+
+    static func line(for item: HomeItem) -> String? {
+        narrative(for: item)?.line
+    }
+
+    static func emotionTag(for item: HomeItem) -> String? {
+        narrative(for: item)?.emotionTag
+    }
+
+    static func preferredNarrative(in items: [HomeItem]) -> TrustedUserMomentNarrative? {
+        items.compactMap { item -> (TrustedUserMomentNarrative, Date)? in
+            narrative(for: item).map { ($0, item.createdAt) }
+        }
+        .sorted { lhs, rhs in
+            if lhs.0.score == rhs.0.score { return lhs.1 > rhs.1 }
+            return lhs.0.score > rhs.0.score
+        }
+        .first?.0
+    }
+
+    private static func dayPeriod(for date: Date, calendar: Calendar = .current) -> String {
+        switch calendar.component(.hour, from: date) {
+        case 5..<11: return "早上"
+        case 11..<14: return "中午"
+        case 14..<18: return "下午"
+        case 18..<24: return "晚上"
+        default: return "夜里"
+        }
+    }
+
+    private static func containsAny(_ text: String, _ cues: [String]) -> Bool {
+        cues.contains { text.localizedCaseInsensitiveContains($0) }
+    }
+
+    private static let photoActionCues = [
+        "拍了张照片", "拍了一张照片", "拍了照片", "拍张照片", "拍照片", "拍照",
+        "拍下", "留了张照片", "留下一张照片", "留了个影"
+    ]
+
+    private static let routeCues = [
+        "下班路上", "回家路上", "上班路上", "回程路上"
+    ]
+}
+
 enum NarrativeCopyResolver {
     struct Context {
         let brandId: String?

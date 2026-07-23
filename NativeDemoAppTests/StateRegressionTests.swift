@@ -2354,6 +2354,194 @@ final class TraceLoadingPresentationPolicyTests: XCTestCase {
     }
 }
 
+final class TraceSnapshotLifecycleTests: XCTestCase {
+    func testChapterAndClueKeysReuseOnlyTheSameRealSourceState() {
+        let start = Date(timeIntervalSince1970: 1_790_000_000)
+        let end = start.addingTimeInterval(6 * 24 * 60 * 60)
+        let chapter = TraceSnapshotLifecycleKeyPolicy.chapterKey(
+            range: .week,
+            ledgerRevision: 9,
+            periodKey: "2026-W30|2026-07-23",
+            isMember: false,
+            selectedPeriod: .week,
+            usesCustomRange: false,
+            contentRevision: 2
+        )
+        XCTAssertEqual(
+            chapter,
+            TraceSnapshotLifecycleKeyPolicy.chapterKey(
+                range: .week,
+                ledgerRevision: 9,
+                periodKey: "2026-W30|2026-07-23",
+                isMember: false,
+                selectedPeriod: .week,
+                usesCustomRange: false,
+                contentRevision: 2
+            )
+        )
+        XCTAssertNotEqual(
+            chapter,
+            TraceSnapshotLifecycleKeyPolicy.chapterKey(
+                range: .week,
+                ledgerRevision: 10,
+                periodKey: "2026-W30|2026-07-23",
+                isMember: false,
+                selectedPeriod: .week,
+                usesCustomRange: false,
+                contentRevision: 2
+            )
+        )
+
+        let preset = TraceSnapshotLifecycleKeyPolicy.clueKey(
+            period: .month,
+            ledgerRevision: 9,
+            isMember: true,
+            usesCustomRange: false,
+            customStartDate: start,
+            customEndDate: end,
+            category: .dining,
+            freeRemaining: 5,
+            isUnlocked: false,
+            dayKey: "2026-07-23",
+            contentRevision: 3
+        )
+        let presetWithIrrelevantDatesChanged = TraceSnapshotLifecycleKeyPolicy.clueKey(
+            period: .month,
+            ledgerRevision: 9,
+            isMember: true,
+            usesCustomRange: false,
+            customStartDate: start.addingTimeInterval(-90_000),
+            customEndDate: end.addingTimeInterval(90_000),
+            category: .dining,
+            freeRemaining: 5,
+            isUnlocked: false,
+            dayKey: "2026-07-23",
+            contentRevision: 3
+        )
+        let custom = TraceSnapshotLifecycleKeyPolicy.clueKey(
+            period: .month,
+            ledgerRevision: 9,
+            isMember: true,
+            usesCustomRange: true,
+            customStartDate: start,
+            customEndDate: end,
+            category: .dining,
+            freeRemaining: 5,
+            isUnlocked: false,
+            dayKey: "2026-07-23",
+            contentRevision: 3
+        )
+
+        XCTAssertEqual(preset, presetWithIrrelevantDatesChanged)
+        XCTAssertNotEqual(preset, custom)
+        XCTAssertNotEqual(
+            custom,
+            TraceSnapshotLifecycleKeyPolicy.clueKey(
+                period: .month,
+                ledgerRevision: 9,
+                isMember: true,
+                usesCustomRange: true,
+                customStartDate: start.addingTimeInterval(-90_000),
+                customEndDate: end,
+                category: .dining,
+                freeRemaining: 5,
+                isUnlocked: false,
+                dayKey: "2026-07-23",
+                contentRevision: 3
+            )
+        )
+    }
+
+    func testColdStartFingerprintIsStableAcrossOrderingAndChangesWithLedgerContent() {
+        let first = HomeItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000081")!,
+            title: "午餐",
+            amount: 28,
+            category: .dining,
+            createdAt: Date(timeIntervalSince1970: 1_790_000_000)
+        )
+        var second = HomeItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000082")!,
+            title: "地铁",
+            amount: 6,
+            category: .transport,
+            createdAt: Date(timeIntervalSince1970: 1_790_003_600)
+        )
+        let original = LedgerDisplayFingerprintPolicy.make(items: [first, second])
+
+        XCTAssertEqual(
+            original,
+            LedgerDisplayFingerprintPolicy.make(items: [second, first])
+        )
+
+        second.amount = 8
+        XCTAssertNotEqual(
+            original,
+            LedgerDisplayFingerprintPolicy.make(items: [first, second])
+        )
+    }
+
+    func testColdStartDisplaySurvivesStoreRecreationButRejectsAnotherContext() {
+        let suiteName = "TraceSnapshotLifecycleTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let storageKey = "trace-test"
+        let context = TraceColdStartDisplayContext(
+            ledgerFingerprint: "ledger-a",
+            dayKey: "2026-07-23",
+            isMember: false
+        )
+        let entry = TraceColdStartDisplayEntry(
+            scopeKey: "life|week",
+            savedAt: Date(timeIntervalSince1970: 1_790_000_000),
+            title: "这一周留下了几段生活",
+            summary: "原内容先承接，最新快照在后台准备。",
+            periodLabel: "本周痕迹",
+            recordCount: 8,
+            activeDayCount: 4,
+            total: 188,
+            topCategory: "餐饮"
+        )
+
+        TraceColdStartDisplayStore(defaults: defaults, storageKey: storageKey).store(
+            entry,
+            context: context
+        )
+        let relaunchedStore = TraceColdStartDisplayStore(
+            defaults: defaults,
+            storageKey: storageKey
+        )
+
+        XCTAssertEqual(
+            relaunchedStore.entry(for: context, scopeKey: entry.scopeKey),
+            entry
+        )
+        XCTAssertNil(
+            relaunchedStore.entry(
+                for: TraceColdStartDisplayContext(
+                    ledgerFingerprint: "ledger-b",
+                    dayKey: context.dayKey,
+                    isMember: context.isMember
+                ),
+                scopeKey: entry.scopeKey
+            )
+        )
+        XCTAssertNil(
+            relaunchedStore.entry(
+                for: TraceColdStartDisplayContext(
+                    ledgerFingerprint: context.ledgerFingerprint,
+                    dayKey: "2026-07-24",
+                    isMember: context.isMember
+                ),
+                scopeKey: entry.scopeKey
+            )
+        )
+        defaults.set(Data([0xFF, 0x00]), forKey: storageKey)
+        XCTAssertNil(relaunchedStore.entry(for: context, scopeKey: entry.scopeKey))
+        XCTAssertNil(defaults.data(forKey: storageKey))
+    }
+}
+
 final class RecordInputAssistanceSnapshotTests: XCTestCase {
     func testHistoryKeyChangesOnlyForLedgerOrMeaningfulDateContext() {
         var calendar = Calendar(identifier: .gregorian)
@@ -3066,6 +3254,473 @@ final class HomeDashboardSnapshotTests: XCTestCase {
     }
 }
 
+final class LifeMarkFactAuthorityTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        return calendar
+    }
+
+    private func date(_ day: Int, hour: Int = 20, minute: Int = 43) -> Date {
+        calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: day,
+            hour: hour,
+            minute: minute
+        ))!
+    }
+
+    func testGeneratedDisplayCopyDoesNotCreateGroceryOrSocialFacts() {
+        let generatedSupply = HomeItem(
+            title: "日用记录",
+            amount: 72.95,
+            category: .daily,
+            createdAt: date(20, hour: 12),
+            emotionTag: "超市买菜和家用"
+        )
+        let generatedGathering = HomeItem(
+            title: "餐饮记录",
+            amount: 29,
+            category: .dining,
+            createdAt: date(21, hour: 12),
+            emotionTag: "朋友小聚聚餐"
+        )
+
+        let marks = LifeMarkService.aggregates(
+            for: [generatedSupply, generatedGathering],
+            allItems: [generatedSupply, generatedGathering],
+            isMember: true,
+            limit: 12
+        )
+
+        XCTAssertFalse(marks.contains { $0.id == "daily_supply" || $0.id == "groceries" })
+        XCTAssertFalse(marks.contains { $0.id == "social_care" || $0.id == "weekend_gathering" })
+        XCTAssertNotEqual(LifeSceneSemanticService.classify(generatedSupply).kind, .groceries)
+        XCTAssertNotEqual(LifeSceneSemanticService.classify(generatedGathering).kind, .social)
+    }
+
+    func testTrustedTitleBrandAndScenePackStillCreateFacts() {
+        let groceries = HomeItem(
+            title: "今天这一单",
+            amount: 68,
+            category: .daily,
+            createdAt: date(20, hour: 18),
+            merchantBrandId: "freshippo"
+        )
+        let social = HomeItem(
+            title: "给朋友随礼",
+            amount: 200,
+            category: .social,
+            createdAt: date(21, hour: 18)
+        )
+        let commute = HomeItem(
+            title: "下班路上拍了张照片",
+            amount: 5.70,
+            category: .transport,
+            createdAt: date(22)
+        )
+
+        let marks = LifeMarkService.aggregates(
+            for: [groceries, social, commute],
+            allItems: [groceries, social, commute],
+            isMember: true,
+            limit: 12
+        )
+
+        XCTAssertTrue(marks.contains { $0.id == "groceries" })
+        XCTAssertTrue(marks.contains { $0.id == "social_care" })
+        XCTAssertTrue(marks.contains { $0.id == "commute" })
+        XCTAssertEqual(LifeSceneSemanticService.classify(commute).kind, .commute)
+    }
+
+    func testOCRTransitRouteUsesWorkdayHistoryInsteadOfExactAmount() {
+        let history = [20, 21].map { day in
+            HomeItem(
+                title: "天隆寺1号口 > 雨山路",
+                amount: day == 20 ? 4.75 : 5.20,
+                category: .transport,
+                createdAt: date(day),
+                merchantBrandId: "metro_transit"
+            )
+        }
+
+        XCTAssertEqual(
+            OCRCommuteScenePolicy.inferredScenePackID(
+                title: "天隆寺2号口 > 雨山路",
+                rawText: "支付方式：金陵通交通卡\n地铁",
+                merchantBrandID: "metro_transit",
+                category: .transport,
+                date: date(22),
+                historyItems: history,
+                calendar: calendar
+            ),
+            "commute"
+        )
+        XCTAssertNil(
+            OCRCommuteScenePolicy.inferredScenePackID(
+                title: "天隆寺2号口 > 雨山路",
+                rawText: "地铁",
+                merchantBrandID: "metro_transit",
+                category: .transport,
+                date: date(22),
+                historyItems: Array(history.prefix(1)),
+                calendar: calendar
+            )
+        )
+    }
+
+    func testExplicitCommuteWinsButSingleNonWorkdayTransitDoesNot() {
+        XCTAssertEqual(
+            OCRCommuteScenePolicy.inferredScenePackID(
+                title: "下班路上坐地铁",
+                rawText: "地铁",
+                merchantBrandID: "metro_transit",
+                category: .transport,
+                date: date(22),
+                historyItems: [],
+                calendar: calendar
+            ),
+            "commute"
+        )
+        XCTAssertNil(
+            OCRCommuteScenePolicy.inferredScenePackID(
+                title: "天隆寺 > 雨山路",
+                rawText: "地铁",
+                merchantBrandID: "metro_transit",
+                category: .transport,
+                date: date(19),
+                historyItems: [],
+                calendar: calendar
+            )
+        )
+    }
+}
+
+final class PhotoMemoryFactBindingTests: XCTestCase {
+    private var date: Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        return calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 22,
+            hour: 20,
+            minute: 43
+        ))!
+    }
+
+    func testUnknownCoffeeAndRoutineTransitPhotosStayUnclassified() {
+        let coffee = HomeItem(
+            title: "可乐喝咖啡",
+            amount: 18,
+            category: .dining,
+            createdAt: date,
+            emotionTag: "体验现场",
+            memoryImageData: Data([0x01])
+        )
+        let legacyTransit = HomeItem(
+            title: "地铁刷卡",
+            amount: 5.7,
+            category: .transport,
+            createdAt: date,
+            emotionTag: "刷卡进站",
+            memoryImageData: Data([0x02]),
+            memoryAnchorRole: .receipt,
+            memoryAnchorSceneHint: .vehicleCare,
+            memoryAnchorCaption: "这张图以后查起来更清楚。",
+            memoryAnchorCreatedAt: date
+        )
+
+        XCTAssertNil(PhotoMemoryPromptPolicy.anchorReason(for: coffee))
+        XCTAssertFalse(PhotoMemoryPromptPolicy.resolvedAnchorRole(for: coffee).isQualified)
+        XCTAssertNil(PhotoMemoryPromptPolicy.anchorReason(for: legacyTransit))
+        XCTAssertFalse(PhotoMemoryPromptPolicy.resolvedAnchorRole(for: legacyTransit).isQualified)
+    }
+
+    func testReceiptAndExperienceRolesRequireMatchingEvidence() {
+        let vehiclePhoto = HomeItem(
+            title: "停车费",
+            amount: 20,
+            category: .transport,
+            createdAt: date,
+            memoryImageData: Data([0x01])
+        )
+        let receiptPhoto = HomeItem(
+            title: "停车费小票",
+            amount: 20,
+            category: .transport,
+            createdAt: date,
+            memoryImageData: Data([0x02])
+        )
+        let experiencePhoto = HomeItem(
+            title: "看电影和展览",
+            amount: 88,
+            category: .entertainment,
+            createdAt: date,
+            memoryImageData: Data([0x03])
+        )
+
+        XCTAssertEqual(PhotoMemoryPromptPolicy.anchorReason(for: vehiclePhoto)?.assetRole, .object)
+        XCTAssertEqual(PhotoMemoryPromptPolicy.anchorReason(for: vehiclePhoto)?.sceneHint, .vehicleCare)
+        XCTAssertEqual(PhotoMemoryPromptPolicy.anchorReason(for: receiptPhoto)?.assetRole, .receipt)
+        XCTAssertEqual(PhotoMemoryPromptPolicy.anchorReason(for: experiencePhoto)?.assetRole, .moment)
+        XCTAssertEqual(PhotoMemoryPromptPolicy.anchorReason(for: experiencePhoto)?.sceneHint, .experience)
+    }
+
+    func testEditingReevaluatesAutomaticRoleButPreservesExplicitMetadata() {
+        let automatic = HomeItem(
+            title: "地铁刷卡",
+            amount: 5.7,
+            category: .transport,
+            createdAt: date,
+            memoryImageData: Data([0x01]),
+            memoryAnchorRole: .receipt,
+            memoryAnchorSceneHint: .vehicleCare,
+            memoryAnchorCaption: "这张图以后查起来更清楚。",
+            memoryAnchorCreatedAt: date
+        )
+        var ordinary = automatic
+        ordinary.title = "可乐喝咖啡"
+        ordinary.category = .dining
+        let cleared = PhotoMemoryPromptPolicy.refreshedAutomaticAnchorMetadata(
+            original: automatic,
+            updated: ordinary
+        )
+        XCTAssertNil(cleared.memoryAnchorRole)
+        XCTAssertNil(cleared.memoryAnchorSceneHint)
+        XCTAssertNil(cleared.memoryAnchorCaption)
+
+        var movie = automatic
+        movie.title = "下班后看电影"
+        movie.category = .entertainment
+        let reassigned = PhotoMemoryPromptPolicy.refreshedAutomaticAnchorMetadata(
+            original: automatic,
+            updated: movie
+        )
+        XCTAssertEqual(reassigned.memoryAnchorRole, .moment)
+        XCTAssertEqual(reassigned.memoryAnchorSceneHint, .experience)
+
+        let explicit = HomeItem(
+            title: "旅行记录",
+            amount: 120,
+            category: .lodging,
+            createdAt: date,
+            memoryImageData: Data([0x02]),
+            memoryAnchorRole: .place,
+            memoryAnchorSceneHint: .travel,
+            memoryAnchorCaption: "我自己选的路上照片",
+            memoryAnchorCreatedAt: date
+        )
+        var changed = explicit
+        changed.title = "普通记录"
+        changed.category = .other
+        let preserved = PhotoMemoryPromptPolicy.refreshedAutomaticAnchorMetadata(
+            original: explicit,
+            updated: changed
+        )
+        XCTAssertEqual(preserved.memoryAnchorRole, .place)
+        XCTAssertEqual(preserved.memoryAnchorSceneHint, .travel)
+        XCTAssertEqual(preserved.memoryAnchorCaption, "我自己选的路上照片")
+    }
+
+    func testPrimaryPhotoCategoryAndClueEvidenceUseTheExactItemID() {
+        let transport = HomeItem(
+            title: "地铁",
+            amount: 5,
+            category: .transport,
+            createdAt: date
+        )
+        let meal = HomeItem(
+            title: "周记主图里的晚饭",
+            amount: 36,
+            category: .dining,
+            createdAt: date,
+            memoryImageData: Data([0x01])
+        )
+        let anchor = SummaryMemoryAnchor(
+            id: meal.id,
+            itemID: meal.id,
+            title: meal.displayTitle,
+            amount: meal.amount,
+            createdAt: meal.createdAt,
+            imageData: Data([0x01]),
+            imageReference: nil,
+            imageByteCount: 1,
+            role: .moment,
+            sceneHint: .gathering,
+            label: "见面",
+            caption: "和朋友的一次聚会。"
+        )
+
+        XCTAssertEqual(
+            TracePhotoEvidenceBindingPolicy.primaryCategory(
+                anchor: anchor,
+                items: [transport, meal]
+            ),
+            .dining
+        )
+        XCTAssertEqual(
+            TracePhotoEvidenceBindingPolicy.item(for: meal.id, in: [transport, meal])?.id,
+            meal.id
+        )
+    }
+
+    func testUnclassifiedPhotoInsightNamesTheRecordWithoutInventingAScene() {
+        let item = HomeItem(
+            title: "可乐喝咖啡",
+            amount: 18,
+            category: .dining,
+            createdAt: date,
+            emotionTag: "体验现场",
+            memoryImageData: Data([0x01])
+        )
+
+        let insight = LifeInsightService().buildTraceInsight(
+            items: [item],
+            historyItems: [item],
+            periodLabel: "本周",
+            now: date
+        )
+
+        XCTAssertEqual(insight.highlightedItemID, item.id)
+        XCTAssertTrue(insight.leadQuestion.contains(item.displayTitle))
+        XCTAssertFalse(insight.leadQuestion.contains("现场"))
+        XCTAssertTrue(insight.previewLine.contains(item.displayTitle))
+    }
+}
+
+final class TrustedUserMomentNarrativeTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        return calendar
+    }
+
+    private var now: Date {
+        calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 22,
+            hour: 20,
+            minute: 43
+        ))!
+    }
+
+    private func commutePhoto() -> HomeItem {
+        HomeItem(
+            title: "下班路上拍了张照片",
+            amount: 5.7,
+            category: .transport,
+            source: .manual,
+            createdAt: now,
+            emotionTag: "晚间一段路",
+            userEditedTitle: true,
+            scenePackId: "commute",
+            memoryImageData: Data(repeating: 0x01, count: 800_000)
+        )
+    }
+
+    func testDownWorkPhotoUsesTheRealMomentBeforeTheLateNightThreshold() {
+        let narrative = TrustedUserMomentNarrativePolicy.narrative(for: commutePhoto())
+
+        XCTAssertEqual(narrative?.line, "下班路上，也把这一刻留了下来。")
+        XCTAssertEqual(narrative?.emotionTag, "下班路上，留住这一刻")
+    }
+
+    func testMomentProjectionRequiresManualUserTextAndAnActualPhoto() {
+        var noPhoto = commutePhoto()
+        noPhoto.memoryImageData = nil
+        noPhoto.memoryImageDatas = []
+        noPhoto.memoryImageReferences = []
+        XCTAssertNil(TrustedUserMomentNarrativePolicy.line(for: noPhoto))
+
+        var imported = commutePhoto()
+        imported.source = .ocr
+        imported.userEditedTitle = nil
+        XCTAssertNil(TrustedUserMomentNarrativePolicy.line(for: imported))
+
+        var defaultTitle = commutePhoto()
+        defaultTitle.title = defaultTitle.category.defaultRecordTitle
+        XCTAssertNil(TrustedUserMomentNarrativePolicy.line(for: defaultTitle))
+    }
+
+    func testTodayMomentOutranksStableCoffeeWithoutChangingLifeMarkPriority() {
+        let moment = commutePhoto()
+        let coffee = HomeItem(
+            title: "瑞幸咖啡",
+            amount: 18,
+            category: .dining,
+            createdAt: calendar.date(byAdding: .minute, value: -20, to: now)!,
+            merchantBrandId: "luckin"
+        )
+        let key = HomeLifeMarkSnapshotKey(
+            ledgerRevision: 12,
+            dayKey: HomeDashboardSnapshotComputation.dayKey(for: now, calendar: calendar),
+            isMember: true
+        )
+
+        let snapshot = HomeDashboardSnapshotComputation.lifeMarkSnapshot(
+            HomeLifeMarkPreparationInput(
+                key: key,
+                visibleItems: [coffee, moment],
+                weekItems: [coffee, moment],
+                allItems: [coffee, moment],
+                isMember: true,
+                frequentSuggestionLine: nil
+            )
+        )
+
+        XCTAssertEqual(snapshot.todayPrimaryLine, "下班路上，也把这一刻留了下来。")
+        XCTAssertEqual(
+            TrustedUserMomentNarrativePolicy.preferredNarrative(in: [coffee, moment])?.itemID,
+            moment.id
+        )
+    }
+
+    func testTrustedMomentBecomesTheNarrativeLeadInsteadOfRoutineCoffee() {
+        let moment = commutePhoto()
+        let coffee = HomeItem(
+            title: "瑞幸咖啡",
+            amount: 18,
+            category: .dining,
+            createdAt: calendar.date(byAdding: .minute, value: -20, to: now)!,
+            merchantBrandId: "luckin"
+        )
+        let plan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: .week,
+                sourceRevision: 13,
+                items: [coffee, moment],
+                previousItems: [coffee],
+                now: now,
+                recentLeadSignalIDs: ["scene:coffee"]
+            )
+        )
+
+        XCTAssertEqual(plan.leadSignalID, "user:\(moment.id.uuidString)")
+        XCTAssertEqual(plan.headline, "下班路上，也把这一刻留了下来")
+    }
+
+    func testPhotoAnchorUsesMomentCopyInsteadOfGenericUtilityCaption() {
+        let moment = commutePhoto()
+        let anchors = MemoryAnchorSelectionPolicy.selectAnchors(
+            from: [moment],
+            range: .week,
+            limit: 1,
+            label: { _, _ in "旧标签" },
+            caption: { _, _ in "这张图以后查起来更清楚。" }
+        )
+
+        XCTAssertEqual(anchors.first?.itemID, moment.id)
+        XCTAssertEqual(anchors.first?.label, "照片")
+        XCTAssertEqual(anchors.first?.caption, "下班路上，也把这一刻留了下来。")
+    }
+}
+
 @MainActor
 final class TodayPlaybackContentSnapshotTests: XCTestCase {
     func testSnapshotFreezesTodayItemsMomentsAndDurationForPlayback() {
@@ -3337,9 +3992,77 @@ final class LifetimeArchiveSnapshotComputationTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(snapshot.sourceRevision, -1)
+        XCTAssertEqual(snapshot.sourceRevision, 2)
         XCTAssertEqual(snapshot.metrics[1].value, "0条")
         XCTAssertEqual(snapshot.proofLine, "先从第一笔开始，后面会自动整理出周记和月章。")
+    }
+
+    func testArchiveDiskCacheSurvivesRecreationAndRejectsAnotherLedgerOrDay() {
+        let suiteName = "LifetimeArchiveSnapshotComputationTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let storageKey = "archive-test"
+        let context = LifetimeArchiveCacheContext(
+            ledgerFingerprint: "ledger-a",
+            dayKey: "2026-07-23"
+        )
+        let snapshot = LifetimeArchiveSnapshot.preparedEmpty(sourceRevision: 3)
+        LifetimeArchiveCacheStore(defaults: defaults, storageKey: storageKey).store(
+            snapshot,
+            context: context
+        )
+
+        let relaunched = LifetimeArchiveCacheStore(
+            defaults: defaults,
+            storageKey: storageKey
+        )
+        XCTAssertEqual(relaunched.snapshot(for: context), snapshot)
+        XCTAssertNil(
+            relaunched.snapshot(
+                for: LifetimeArchiveCacheContext(
+                    ledgerFingerprint: "ledger-b",
+                    dayKey: context.dayKey
+                )
+            )
+        )
+        XCTAssertNil(
+            relaunched.snapshot(
+                for: LifetimeArchiveCacheContext(
+                    ledgerFingerprint: context.ledgerFingerprint,
+                    dayKey: "2026-07-24"
+                )
+            )
+        )
+
+        defaults.set(Data([0xFF]), forKey: storageKey)
+        XCTAssertNil(relaunched.snapshot(for: context))
+        XCTAssertNil(defaults.data(forKey: storageKey))
+    }
+
+    @MainActor
+    func testSharedArchiveStorePublishesARealPreparedEmptySnapshot() async {
+        let suiteName = "LifetimeArchiveSnapshotStoreTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = LifetimeArchiveSnapshotStore(
+            cacheStore: LifetimeArchiveCacheStore(
+                defaults: defaults,
+                storageKey: "archive-store-test"
+            )
+        )
+        store.prepareIfNeeded(
+            revision: 7,
+            items: [],
+            now: Date(timeIntervalSince1970: 1_790_000_000),
+            calendar: Calendar(identifier: .gregorian)
+        )
+        for _ in 0..<50 where store.snapshot == nil {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+
+        XCTAssertEqual(store.snapshot?.sourceRevision, 7)
+        XCTAssertEqual(store.snapshot?.metrics[1].value, "0条")
+        XCTAssertFalse(store.isPreparing)
     }
 }
 
@@ -4405,6 +5128,161 @@ final class AICommandRecognitionPolicyTests: XCTestCase {
         XCTAssertTrue(digest("本月比上月多多少").hasPrefix("compare#"))
         XCTAssertTrue(digest("这个月跟上个月差在哪").hasPrefix("compare#"))
         XCTAssertTrue(digest("今天怎么样").hasPrefix("unsupported#"))
+    }
+
+    func testMatchedRollingDayPeriodsResolveCompareFromAQueryTask() {
+        let arabic = digest("最近 7 天餐饮和前 7 天比呢")
+        let chinese = digest("最近七天餐饮跟前七天相比")
+
+        XCTAssertTrue(arabic.hasPrefix("compare#"))
+        XCTAssertTrue(arabic.contains("action:compare"))
+        XCTAssertTrue(chinese.hasPrefix("compare#"))
+        XCTAssertEqual(
+            InsightWebView.aiCommandResolvedReviewTaskForTesting(
+                command: "最近 7 天餐饮和前 7 天比呢",
+                now: now,
+                reviewTaskIntent: .query
+            ),
+            .compare
+        )
+    }
+
+    func testFinalRecognitionOwnsTaskStateInsteadOfThePreviousSelection() {
+        XCTAssertEqual(
+            InsightWebView.aiCommandResolvedReviewTaskForTesting(
+                command: "最近 7 天餐饮和前 7 天比呢",
+                now: now,
+                reviewTaskIntent: .query
+            ),
+            .compare
+        )
+        XCTAssertEqual(
+            InsightWebView.aiCommandResolvedReviewTaskForTesting(
+                command: "查一下最近 7 天餐饮记录",
+                now: now,
+                reviewTaskIntent: .compare
+            ),
+            .query
+        )
+        XCTAssertNil(
+            InsightWebView.aiCommandResolvedReviewTaskForTesting(
+                command: "老板今天心情怎么样",
+                now: now,
+                reviewTaskIntent: .compare
+            )
+        )
+        XCTAssertEqual(ReviewTaskIntent.compare.presetCommand, "对比最近 7 天和前 7 天的消费")
+    }
+
+    func testRollingDayComparisonUsesCurrentAndImmediatelyPreviousWindows() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        let current = HomeItem(
+            title: "午餐",
+            amount: 20,
+            category: .dining,
+            createdAt: calendar.date(byAdding: .day, value: -1, to: today)!
+        )
+        let previous = HomeItem(
+            title: "晚餐",
+            amount: 10,
+            category: .dining,
+            createdAt: calendar.date(byAdding: .day, value: -8, to: today)!
+        )
+
+        let computation = InsightWebView.aiCommandComputationDigestForTesting(
+            command: "最近 7 天餐饮和前 7 天比呢",
+            items: [current, previous],
+            hasMemberAccess: true,
+            now: now,
+            reviewTaskIntent: .query
+        )
+
+        XCTAssertTrue(computation.hasPrefix("compare#"))
+        XCTAssertTrue(computation.contains("最近 7 天"))
+        XCTAssertTrue(computation.contains("前 7 天"))
+    }
+
+    func testYearPhrasesResolveAsExplicitQueryRanges() {
+        XCTAssertTrue(digest("过去一年餐饮花了多少").hasPrefix("query#"))
+        XCTAssertTrue(digest("近一年交通记录").hasPrefix("query#"))
+        XCTAssertTrue(digest("最近一年购物记录").hasPrefix("query#"))
+        XCTAssertTrue(digest("今年餐饮花了多少").hasPrefix("query#"))
+        XCTAssertTrue(digest("去年交通花了多少").hasPrefix("query#"))
+    }
+
+    func testRollingAndNaturalYearRangesUseTheirOwnCalendarBoundaries() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = Calendar.current.timeZone
+        func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int = 12) -> Date {
+            calendar.date(from: DateComponents(
+                timeZone: calendar.timeZone,
+                year: year,
+                month: month,
+                day: day,
+                hour: hour
+            ))!
+        }
+
+        let now = date(2026, 7, 23)
+        let rollingBoundary = HomeItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000071")!,
+            title: "滚动年边界内",
+            amount: 71,
+            category: .dining,
+            createdAt: date(2025, 7, 24, 0)
+        )
+        let beforeRollingBoundary = HomeItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000072")!,
+            title: "滚动年边界外",
+            amount: 72,
+            category: .dining,
+            createdAt: date(2025, 7, 23, 23)
+        )
+        let currentYear = HomeItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000073")!,
+            title: "今年第一天",
+            amount: 73,
+            category: .dining,
+            createdAt: date(2026, 1, 1, 0)
+        )
+        let previousYear = HomeItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000074")!,
+            title: "去年最后一天",
+            amount: 74,
+            category: .dining,
+            createdAt: date(2025, 12, 31, 23)
+        )
+
+        let items = [rollingBoundary, beforeRollingBoundary, currentYear, previousYear]
+        let rolling = InsightWebView.aiCommandComputationDigestForTesting(
+            command: "过去一年餐饮记录",
+            items: items,
+            hasMemberAccess: true,
+            now: now
+        )
+        let thisYear = InsightWebView.aiCommandComputationDigestForTesting(
+            command: "今年餐饮记录",
+            items: items,
+            hasMemberAccess: true,
+            now: now
+        )
+        let lastYear = InsightWebView.aiCommandComputationDigestForTesting(
+            command: "去年餐饮记录",
+            items: items,
+            hasMemberAccess: true,
+            now: now
+        )
+
+        XCTAssertTrue(rolling.hasPrefix("query#最近一年的餐饮记录#"))
+        XCTAssertTrue(rolling.contains(rollingBoundary.id.uuidString))
+        XCTAssertFalse(rolling.contains(beforeRollingBoundary.id.uuidString))
+        XCTAssertTrue(thisYear.hasPrefix("query#今年的餐饮记录#"))
+        XCTAssertTrue(thisYear.contains(currentYear.id.uuidString))
+        XCTAssertFalse(thisYear.contains(previousYear.id.uuidString))
+        XCTAssertTrue(lastYear.hasPrefix("query#去年的餐饮记录#"))
+        XCTAssertTrue(lastYear.contains(previousYear.id.uuidString))
+        XCTAssertFalse(lastYear.contains(currentYear.id.uuidString))
     }
 
     func testBackfillRequiresStrongAffirmativeWriteLanguage() {

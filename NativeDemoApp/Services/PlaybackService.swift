@@ -197,10 +197,13 @@ struct MemoryAnchorSelectionPolicy {
         caption: (PhotoMemoryAssetRole, PhotoMemorySceneHint) -> String
     ) -> [Candidate] {
         guard item.hasMemoryImages else { return [] }
-        let reason = PhotoMemoryPromptPolicy.anchorReason(for: item)
-        let role = item.memoryAnchorRole ?? reason.assetRole
-        let sceneHint = item.memoryAnchorSceneHint ?? reason.sceneHint
-        let anchorCaption = item.memoryAnchorCaption?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolution = PhotoMemoryPromptPolicy.resolvedAnchorRole(for: item)
+        let role = resolution.role
+        let sceneHint = resolution.sceneHint
+        let anchorCaption = PhotoMemoryPromptPolicy.isAutomaticallyAssignedAnchor(item)
+            ? nil
+            : item.memoryAnchorCaption?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trustedMomentCaption = TrustedUserMomentNarrativePolicy.line(for: item)
         let normalizedCoverIndex = item.normalizedCoverMemoryImageIndex ?? 0
         return (0..<item.memoryImageCount).map { index in
             let imageData = item.memoryImageData(at: index) ?? Data()
@@ -212,8 +215,11 @@ struct MemoryAnchorSelectionPolicy {
                 imageIndex: index,
                 role: role,
                 sceneHint: sceneHint,
-                label: label(role, sceneHint),
-                caption: anchorCaption?.isEmpty == false ? anchorCaption! : caption(role, sceneHint),
+                label: resolution.isQualified ? label(role, sceneHint) : "照片",
+                caption: anchorCaption?.isEmpty == false
+                    ? anchorCaption!
+                    : (trustedMomentCaption
+                        ?? (resolution.isQualified ? caption(role, sceneHint) : "这笔的一张照片。")),
                 score: score(
                     item: item,
                     imageByteCount: item.memoryImageByteCount(at: index),
@@ -221,6 +227,7 @@ struct MemoryAnchorSelectionPolicy {
                     coverIndex: normalizedCoverIndex,
                     role: role,
                     sceneHint: sceneHint,
+                    isQualified: resolution.isQualified,
                     range: range
                 ),
                 sceneDayKey: sceneDayKey(item: item, sceneHint: sceneHint),
@@ -253,6 +260,7 @@ struct MemoryAnchorSelectionPolicy {
         coverIndex: Int,
         role: PhotoMemoryAssetRole,
         sceneHint: PhotoMemorySceneHint,
+        isQualified: Bool,
         range: SummaryPlaybackRange
     ) -> Int {
         var value = 24
@@ -284,8 +292,9 @@ struct MemoryAnchorSelectionPolicy {
         if item.userEditedTitle == true { value += 10 }
         if item.memoryContext?.weatherKind != nil { value += 5 }
         if item.memoryContext?.semanticPlace != nil { value += 7 }
-        if isHighValueExperience(item: item, sceneHint: sceneHint) { value += 8 }
+        if isQualified && isHighValueExperience(item: item, sceneHint: sceneHint) { value += 8 }
         value -= routineVisualPenalty(item: item, role: role, sceneHint: sceneHint)
+        if !isQualified { value -= 22 }
         if RecordSemanticLexicon.isSystemGeneratedTitle(item.title) { value -= 8 }
         if Calendar.current.isDateInToday(item.createdAt) { value += 2 }
         return value
@@ -421,11 +430,14 @@ private final class MemoryAnchorSelectionService {
         guard item.hasMemoryImages else { return nil }
         let coverIndex = item.normalizedCoverMemoryImageIndex ?? 0
         let imageData = item.memoryImageData(at: coverIndex) ?? Data()
-        let reason = PhotoMemoryPromptPolicy.anchorReason(for: item)
-        let role = item.memoryAnchorRole ?? reason.assetRole
-        let sceneHint = item.memoryAnchorSceneHint ?? reason.sceneHint
-        let caption = item.memoryAnchorCaption?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let label = label(for: role, sceneHint: sceneHint)
+        let resolution = PhotoMemoryPromptPolicy.resolvedAnchorRole(for: item)
+        let role = resolution.role
+        let sceneHint = resolution.sceneHint
+        let caption = PhotoMemoryPromptPolicy.isAutomaticallyAssignedAnchor(item)
+            ? nil
+            : item.memoryAnchorCaption?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trustedMomentCaption = TrustedUserMomentNarrativePolicy.line(for: item)
+        let label = resolution.isQualified ? label(for: role, sceneHint: sceneHint) : "照片"
         let anchor = SummaryMemoryAnchor(
             id: item.id,
             itemID: item.id,
@@ -438,12 +450,23 @@ private final class MemoryAnchorSelectionService {
             role: role,
             sceneHint: sceneHint,
             label: label,
-            caption: caption?.isEmpty == false ? caption! : playbackCaption(for: role, sceneHint: sceneHint)
+            caption: caption?.isEmpty == false
+                ? caption!
+                : (trustedMomentCaption
+                    ?? (resolution.isQualified
+                        ? playbackCaption(for: role, sceneHint: sceneHint)
+                        : "这笔的一张照片。"))
         )
         return ScoredAnchor(
             item: item,
             anchor: anchor,
-            score: score(item: item, role: role, sceneHint: sceneHint, range: range),
+            score: score(
+                item: item,
+                role: role,
+                sceneHint: sceneHint,
+                isQualified: resolution.isQualified,
+                range: range
+            ),
             sceneDayKey: sceneDayKey(item: item, sceneHint: sceneHint),
             merchantKey: merchantKey(item: item),
             role: role
@@ -454,6 +477,7 @@ private final class MemoryAnchorSelectionService {
         item: HomeItem,
         role: PhotoMemoryAssetRole,
         sceneHint: PhotoMemorySceneHint,
+        isQualified: Bool,
         range: SummaryPlaybackRange
     ) -> Int {
         var value = item.coverMemoryImageIndex == nil ? 18 : 30
@@ -472,6 +496,7 @@ private final class MemoryAnchorSelectionService {
         if role == .receipt { value -= range == .week ? 10 : 6 }
         if item.amount >= 300, role != .receipt { value += 4 }
         if Calendar.current.isDateInToday(item.createdAt) { value += 2 }
+        if !isQualified { value -= 22 }
         return value
     }
 
@@ -496,7 +521,7 @@ private final class MemoryAnchorSelectionService {
         case .vehicleCare, .healthRecord: return role == .receipt ? "票据" : "记录"
         case .homeLife: return "家里"
         case .careRecord: return "照护"
-        case .experience: return "现场"
+        case .experience: return role == .receipt ? "票据" : "现场"
         case .giftMoment: return "心意"
         case .importantPurchase: return "添置"
         }
@@ -1656,6 +1681,13 @@ final class PlaybackService {
         let time = Self.shortTimeFormatter.string(from: item.createdAt)
         let prefix = "\(day) \(time)"
         let safeTitle = safePlaybackTitle(for: item)
+        if let trustedMomentLine = TrustedUserMomentNarrativePolicy.line(for: item) {
+            return PlaybackRecordCopy(
+                safeTitle: safeTitle,
+                mainLine: trustedMomentLine,
+                supportLine: "\(prefix) · \(item.category.rawValue) · \(Self.evidenceMoney(item.amount))"
+            )
+        }
         if let safeTitle {
             return PlaybackRecordCopy(
                 safeTitle: safeTitle,

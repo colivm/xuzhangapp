@@ -31,6 +31,126 @@ struct AICommandRecordDraft: Identifiable, Equatable {
     }
 }
 
+enum OCRCommuteScenePolicy {
+    static func inferredScenePackID(
+        title: String,
+        rawText: String,
+        merchantBrandID: String?,
+        category: HomeItem.Category,
+        date: Date,
+        historyItems: [HomeItem],
+        calendar: Calendar = .current
+    ) -> String? {
+        guard category == .transport else { return nil }
+
+        let explicitText = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if containsAny(explicitText, strongCommuteCues) {
+            return "commute"
+        }
+
+        let sourceText = "\(title) \(rawText) \(merchantBrandID ?? "")".lowercased()
+        guard merchantBrandID == "metro_transit"
+                || containsAny(sourceText, publicTransitCues),
+              RecordCalendarContext.isWorkday(date, calendar: calendar),
+              let direction = commuteDirection(for: date, calendar: calendar),
+              let route = routeEndpoints(from: title) else {
+            return nil
+        }
+
+        let oldestAcceptedDate = calendar.date(byAdding: .day, value: -120, to: date) ?? .distantPast
+        var matchingDays = Set<Date>()
+        for item in historyItems where item.amount > 0 && item.category == .transport {
+            guard item.createdAt < date,
+                  item.createdAt >= oldestAcceptedDate,
+                  RecordCalendarContext.isWorkday(item.createdAt, calendar: calendar),
+                  commuteDirection(for: item.createdAt, calendar: calendar) == direction,
+                  isPublicTransit(item),
+                  let historicalRoute = routeEndpoints(from: item.title),
+                  routesShareCommuteDestination(route, historicalRoute) else {
+                continue
+            }
+            matchingDays.insert(calendar.startOfDay(for: item.createdAt))
+        }
+        return matchingDays.count >= 2 ? "commute" : nil
+    }
+
+    private enum Direction: Equatable {
+        case morning
+        case evening
+    }
+
+    private struct RouteEndpoints {
+        let origin: String
+        let destination: String
+    }
+
+    private static func commuteDirection(for date: Date, calendar: Calendar) -> Direction? {
+        let hour = calendar.component(.hour, from: date)
+        if (5..<12).contains(hour) { return .morning }
+        if (16..<24).contains(hour) { return .evening }
+        return nil
+    }
+
+    private static func isPublicTransit(_ item: HomeItem) -> Bool {
+        if item.merchantBrandId == "metro_transit" { return true }
+        let text = "\(item.title) \(item.scenePackId ?? "")".lowercased()
+        return containsAny(text, publicTransitCues)
+    }
+
+    private static func routesShareCommuteDestination(
+        _ lhs: RouteEndpoints,
+        _ rhs: RouteEndpoints
+    ) -> Bool {
+        (lhs.origin == rhs.origin && lhs.destination == rhs.destination)
+            || lhs.destination == rhs.destination
+    }
+
+    private static func routeEndpoints(from title: String) -> RouteEndpoints? {
+        let normalized = title
+            .replacingOccurrences(of: "→", with: ">")
+            .replacingOccurrences(of: "->", with: ">")
+            .replacingOccurrences(of: "—", with: ">")
+            .replacingOccurrences(of: "–", with: ">")
+        let components = normalized
+            .split(separator: ">", omittingEmptySubsequences: true)
+            .map { normalizeStation(String($0)) }
+            .filter { !$0.isEmpty }
+        guard components.count >= 2 else { return nil }
+        return RouteEndpoints(origin: components[0], destination: components[1])
+    }
+
+    private static func normalizeStation(_ raw: String) -> String {
+        var value = raw
+            .folding(options: [.widthInsensitive, .caseInsensitive], locale: Locale(identifier: "zh_CN"))
+            .lowercased()
+            .replacingOccurrences(of: "地铁站", with: "")
+            .replacingOccurrences(of: "轨道交通站", with: "")
+            .replacingOccurrences(of: "进站口", with: "")
+            .replacingOccurrences(of: "出站口", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        if let regex = try? NSRegularExpression(pattern: #"\d+\s*号?\s*[进出]?口"#) {
+            let range = NSRange(value.startIndex..<value.endIndex, in: value)
+            value = regex.stringByReplacingMatches(in: value, range: range, withTemplate: "")
+        }
+        if value.hasSuffix("站") {
+            value.removeLast()
+        }
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.localizedCaseInsensitiveContains($0) }
+    }
+
+    private static let strongCommuteCues = [
+        "通勤", "上班", "下班", "上下班", "到岗", "早高峰", "晚高峰", "公司", "单位", "工位"
+    ]
+
+    private static let publicTransitCues = [
+        "metro_transit", "地铁", "公交", "轨道交通", "交通卡", "市民卡", "刷卡进站"
+    ]
+}
+
 struct RecordFrequentAmountSuggestion: Identifiable, Equatable {
     let amount: Double
     let category: HomeItem.Category
@@ -1064,6 +1184,14 @@ final class HomeViewModel: ObservableObject {
                 existingItems: memorySeedItems
             )
             let memoryContext = memoryContextForRecord(date: draft.date)
+            let scenePackId = OCRCommuteScenePolicy.inferredScenePackID(
+                title: resolution.title,
+                rawText: draft.rawText,
+                merchantBrandID: resolution.merchantBrandId,
+                category: resolution.category,
+                date: draft.date,
+                historyItems: memorySeedItems
+            )
             let item = HomeItem(
                 title: resolution.title,
                 amount: draft.amount,
@@ -1082,7 +1210,8 @@ final class HomeViewModel: ObservableObject {
                     : nil,
                 userEditedCategory: draft.userEditedCategory == true ? true : nil,
                 categoryCorrectionFrom: draft.categoryCorrectionFrom,
-                memoryContext: memoryContext
+                memoryContext: memoryContext,
+                scenePackId: scenePackId
             )
             memorySeedItems.insert(item, at: 0)
             return item
@@ -1494,6 +1623,13 @@ final class HomeViewModel: ObservableObject {
         } else if original.categoryCorrectionFrom != nil {
             resolved.categoryCorrectionFrom = original.categoryCorrectionFrom
         }
+        resolved = PhotoMemoryPromptPolicy.refreshedAutomaticAnchorMetadata(
+            original: original,
+            updated: resolved
+        )
+        if let trustedMomentTag = TrustedUserMomentNarrativePolicy.emotionTag(for: resolved) {
+            resolved.emotionTag = trustedMomentTag
+        }
         resolved.updatedAt = Date()
         items[idx] = resolved
         guard persistItems(upserting: [resolved]) else { return false }
@@ -1528,10 +1664,20 @@ final class HomeViewModel: ObservableObject {
             updated.coverMemoryImageIndex = originalCount + selectedNewIndex
         }
         let reason = anchorReason ?? PhotoMemoryPromptPolicy.anchorReason(for: updated)
-        updated.memoryAnchorRole = reason.assetRole
-        updated.memoryAnchorSceneHint = reason.sceneHint
-        updated.memoryAnchorCaption = reason.memoryAnchorCaption
-        updated.memoryAnchorCreatedAt = updated.memoryAnchorCreatedAt ?? Date()
+        if let reason {
+            updated.memoryAnchorRole = reason.assetRole
+            updated.memoryAnchorSceneHint = reason.sceneHint
+            updated.memoryAnchorCaption = reason.memoryAnchorCaption
+            updated.memoryAnchorCreatedAt = updated.memoryAnchorCreatedAt ?? Date()
+        } else if originalCount == 0 || PhotoMemoryPromptPolicy.isAutomaticallyAssignedAnchor(updated) {
+            updated.memoryAnchorRole = nil
+            updated.memoryAnchorSceneHint = nil
+            updated.memoryAnchorCaption = nil
+            updated.memoryAnchorCreatedAt = nil
+        }
+        if let trustedMomentTag = TrustedUserMomentNarrativePolicy.emotionTag(for: updated) {
+            updated.emotionTag = trustedMomentTag
+        }
         updated.updatedAt = Date()
         items[idx] = updated
         guard persistItems(upserting: [updated]) else { return false }
@@ -1555,6 +1701,7 @@ final class HomeViewModel: ObservableObject {
         guard let idx = items.firstIndex(where: { $0.id == itemID }) else { return false }
         guard (0..<items[idx].memoryImageCount).contains(imageIndex) else { return false }
         var updated = items[idx]
+        let trustedMomentTagBeforeRemoval = TrustedUserMomentNarrativePolicy.emotionTag(for: updated)
         updated.removeMemoryImage(at: imageIndex)
         let remainingImageCount = updated.memoryImageCount
         if remainingImageCount == 0 {
@@ -1563,6 +1710,31 @@ final class HomeViewModel: ObservableObject {
             updated.memoryAnchorSceneHint = nil
             updated.memoryAnchorCaption = nil
             updated.memoryAnchorCreatedAt = nil
+            if let trustedMomentTagBeforeRemoval,
+               updated.emotionTag == trustedMomentTagBeforeRemoval {
+                let baseEmotionTag = NarrativeCopyResolver.resolveEmotionTag(
+                    context: NarrativeCopyResolver.Context(
+                        brandId: updated.merchantBrandId,
+                        category: updated.category,
+                        amount: updated.amount,
+                        date: updated.createdAt,
+                        seed: "memory-remove|\(updated.id.uuidString)",
+                        note: updated.title,
+                        scenePackId: updated.scenePackId
+                    )
+                )
+                updated.emotionTag = memoryEnhancedEmotionTag(
+                    title: updated.title,
+                    category: updated.category,
+                    amount: updated.amount,
+                    date: updated.createdAt,
+                    baseEmotionTag: baseEmotionTag,
+                    existingItems: items,
+                    excluding: updated.id,
+                    weatherOverride: storedWeatherSnapshot(from: updated.memoryContext),
+                    allowLiveWeather: false
+                )
+            }
         } else {
             let currentCover = updated.coverMemoryImageIndex ?? 0
             if imageIndex < currentCover {
@@ -1591,11 +1763,12 @@ final class HomeViewModel: ObservableObject {
         var updated = items[idx]
         updated.coverMemoryImageIndex = imageIndex
         if updated.memoryAnchorRole == nil || updated.memoryAnchorSceneHint == nil {
-            let reason = PhotoMemoryPromptPolicy.anchorReason(for: updated)
-            updated.memoryAnchorRole = reason.assetRole
-            updated.memoryAnchorSceneHint = reason.sceneHint
-            updated.memoryAnchorCaption = updated.memoryAnchorCaption ?? reason.memoryAnchorCaption
-            updated.memoryAnchorCreatedAt = updated.memoryAnchorCreatedAt ?? Date()
+            if let reason = PhotoMemoryPromptPolicy.anchorReason(for: updated) {
+                updated.memoryAnchorRole = reason.assetRole
+                updated.memoryAnchorSceneHint = reason.sceneHint
+                updated.memoryAnchorCaption = updated.memoryAnchorCaption ?? reason.memoryAnchorCaption
+                updated.memoryAnchorCreatedAt = updated.memoryAnchorCreatedAt ?? Date()
+            }
         }
         updated.updatedAt = Date()
         items[idx] = updated

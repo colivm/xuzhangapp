@@ -1170,18 +1170,26 @@ struct InsightWebView: View {
         let countText = overview.countDelta > 0
             ? "多 \(overview.countDelta) 笔"
             : (overview.countDelta < 0 ? "少 \(abs(overview.countDelta)) 笔" : "笔数持平")
-        return VStack(alignment: .trailing, spacing: 3) {
-            Label(amountText, systemImage: delta > 0.005 ? "arrow.up.right" : (delta < -0.005 ? "arrow.down.right" : "equal"))
-                .font(.caption.weight(.bold))
-            Text("比前 7 天 · \(countText)")
-                .font(.caption2.weight(.medium))
+        return Button {
+            openReviewTask(.compare)
+        } label: {
+            VStack(alignment: .trailing, spacing: 3) {
+                Label(amountText, systemImage: delta > 0.005 ? "arrow.up.right" : (delta < -0.005 ? "arrow.down.right" : "equal"))
+                    .font(.caption.weight(.bold))
+                Text("比前 7 天 · \(countText)")
+                    .font(.caption2.weight(.medium))
+            }
+            .foregroundStyle(color)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(color.opacity(0.09), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
-        .foregroundStyle(color)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(color.opacity(0.09), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .buttonStyle(.plain)
+        .minimumTapTarget()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("比前七天\(amountText)，\(countText)")
+        .accessibilityLabel("比前七天\(amountText)，\(countText)，打开做对比")
+        .accessibilityHint("打开做对比并填入最近七天与前七天")
     }
 
     private func reviewOverviewMetric(title: String, value: String, systemImage: String) -> some View {
@@ -4132,6 +4140,10 @@ struct InsightWebView: View {
             now: Date(),
             reviewTaskIntent: activeReviewTask
         )
+        let resolvedTaskIntent = engine.resolvedReviewTaskIntent(for: command)
+        if let resolvedTaskIntent {
+            activeReviewTask = resolvedTaskIntent
+        }
         aiCommandSavedCount = nil
         aiCommandMessage = "正在按本机规则整理..."
         aiCommandShowsAllRelatedItems = false
@@ -4161,9 +4173,6 @@ struct InsightWebView: View {
                 startedAtUptime: performanceStartedAt,
                 itemCount: itemCount
             )
-            if let resolvedTask = aiCommandTask(for: result.kind) {
-                activeReviewTask = resolvedTask
-            }
             withAnimation(.easeInOut(duration: 0.18)) {
                 aiCommandResult = result
                 isAICommandRunning = false
@@ -4184,19 +4193,6 @@ struct InsightWebView: View {
         }
     }
 
-    private func aiCommandTask(for kind: AICommandKind) -> ReviewTaskIntent? {
-        switch kind {
-        case .query, .memoryLookup, .duplicateCheck:
-            return .query
-        case .compare:
-            return .compare
-        case .batchCreate, .needsAmount:
-            return .backfill
-        case .unsupported:
-            return nil
-        }
-    }
-
     static func aiCommandRecognitionDigestForTesting(
         command: String,
         now: Date,
@@ -4209,6 +4205,20 @@ struct InsightWebView: View {
             now: now,
             reviewTaskIntent: reviewTaskIntent
         ).recognitionDigest(for: command)
+    }
+
+    static func aiCommandResolvedReviewTaskForTesting(
+        command: String,
+        now: Date,
+        reviewTaskIntent: ReviewTaskIntent = .query
+    ) -> ReviewTaskIntent? {
+        AICommandEngine(
+            items: [],
+            hasMemberAccess: true,
+            amountText: "",
+            now: now,
+            reviewTaskIntent: reviewTaskIntent
+        ).resolvedReviewTaskIntent(for: command)
     }
 
     static func aiCommandComputationDigestForTesting(
@@ -4424,6 +4434,12 @@ struct InsightWebView: View {
                 recognition.lifeMarkIntent?.id ?? "none",
                 recognition.decision.evidence.joined(separator: ",")
             ].joined(separator: "#")
+        }
+
+        func resolvedReviewTaskIntent(for command: String) -> ReviewTaskIntent? {
+            ReviewTaskResolutionPolicy.resolvedIntent(
+                for: recognizeAICommand(command).decision.intent
+            )
         }
 
         private struct RecognizedAICommand {
@@ -5537,6 +5553,9 @@ struct InsightWebView: View {
             if containsAny(text, ["本月", "这个月", "这月", "本月份", "这个月份", "这月份", "当月", "上个月", "上月", "上一个月", "上一月", "上月份", "上个自然月"]) {
                 return true
             }
+            if containsAny(text, ["过去一年", "近一年", "最近一年", "今年", "本年", "这一年", "本年度", "去年", "上一年", "上年度"]) {
+                return true
+            }
             return aiCommandExplicitRecentDays(from: text) != nil
                 || aiCommandExplicitRecentWeeks(from: text) != nil
                 || aiCommandExplicitRecentMonths(from: text) != nil
@@ -5708,6 +5727,9 @@ struct InsightWebView: View {
             let now = self.now
             let todayStart = calendar.startOfDay(for: now)
 
+            if containsAny(text, ["过去一年", "近一年", "最近一年"]) {
+                return aiCommandRecentMonthRange(months: 12, label: "最近一年")
+            }
             if let explicitDays = aiCommandExplicitRecentDays(from: text) {
                 return aiCommandRecentRange(days: explicitDays, label: "最近 \(explicitDays) 天")
             }
@@ -5758,6 +5780,18 @@ struct InsightWebView: View {
                 let end = calendar.dateInterval(of: .month, for: now)?.start ?? todayStart
                 let start = calendar.date(byAdding: .month, value: -1, to: end) ?? end
                 return AICommandTimeRange(label: "上个月", start: start, end: end, barDays: daysBetween(start, end))
+            }
+            if containsAny(text, ["今年", "本年", "这一年", "本年度"]) {
+                let start = calendar.dateInterval(of: .year, for: now)?.start ?? todayStart
+                let tomorrow = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? now
+                let naturalEnd = calendar.date(byAdding: .year, value: 1, to: start) ?? tomorrow
+                let end = min(tomorrow, naturalEnd)
+                return AICommandTimeRange(label: "今年", start: start, end: end, barDays: daysBetween(start, end))
+            }
+            if containsAny(text, ["去年", "上一年", "上年度"]) {
+                let end = calendar.dateInterval(of: .year, for: now)?.start ?? todayStart
+                let start = calendar.date(byAdding: .year, value: -1, to: end) ?? end
+                return AICommandTimeRange(label: "去年", start: start, end: end, barDays: daysBetween(start, end))
             }
             if containsAny(text, ["这阵子", "最近", "近来", "这段时间"]) {
                 var range = aiCommandRecentRange(days: 7, label: "最近 7 天")

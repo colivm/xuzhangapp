@@ -112,6 +112,114 @@ enum TraceLoadingPresentationPolicy {
     }
 }
 
+enum TraceSnapshotLifecycleKeyPolicy {
+    static func chapterKey(
+        range: SummaryPlaybackRange,
+        ledgerRevision: Int,
+        periodKey: String,
+        isMember: Bool,
+        selectedPeriod: StatsPeriod,
+        usesCustomRange: Bool,
+        contentRevision: Int
+    ) -> String {
+        [
+            "chapter-v2",
+            range.rawValue,
+            String(ledgerRevision),
+            periodKey,
+            isMember ? "member" : "free",
+            selectedPeriod.rawValue,
+            usesCustomRange ? "custom" : "preset",
+            String(contentRevision)
+        ].joined(separator: "|")
+    }
+
+    static func clueKey(
+        period: StatsPeriod,
+        ledgerRevision: Int,
+        isMember: Bool,
+        usesCustomRange: Bool,
+        customStartDate: Date,
+        customEndDate: Date,
+        category: HomeItem.Category?,
+        freeRemaining: Int,
+        isUnlocked: Bool,
+        dayKey: String,
+        contentRevision: Int,
+        calendar: Calendar = .current
+    ) -> String {
+        var parts = [
+            "clue-v2",
+            period.rawValue,
+            String(ledgerRevision),
+            isMember ? "member" : "free",
+            usesCustomRange ? "custom" : "preset",
+            category?.rawValue ?? "all",
+            String(freeRemaining),
+            isUnlocked ? "unlocked" : "locked",
+            dayKey,
+            String(contentRevision)
+        ]
+        if usesCustomRange {
+            parts.append(String(Int(calendar.startOfDay(for: customStartDate).timeIntervalSince1970)))
+            parts.append(String(Int(calendar.startOfDay(for: customEndDate).timeIntervalSince1970)))
+        }
+        return parts.joined(separator: "|")
+    }
+
+    static func coldStartScopeKey(
+        viewMode: TraceViewMode,
+        lifeRange: SummaryPlaybackRange,
+        period: StatsPeriod,
+        usesCustomRange: Bool,
+        customStartDate: Date,
+        customEndDate: Date,
+        category: HomeItem.Category?,
+        calendar: Calendar = .current
+    ) -> String {
+        if viewMode == .life {
+            return "life|\(lifeRange.rawValue)"
+        }
+        var parts = [
+            "clue",
+            period.rawValue,
+            usesCustomRange ? "custom" : "preset",
+            category?.rawValue ?? "all"
+        ]
+        if usesCustomRange {
+            parts.append(String(Int(calendar.startOfDay(for: customStartDate).timeIntervalSince1970)))
+            parts.append(String(Int(calendar.startOfDay(for: customEndDate).timeIntervalSince1970)))
+        }
+        return parts.joined(separator: "|")
+    }
+}
+
+struct TraceColdStartDisplayEntry: Codable, Equatable {
+    let scopeKey: String
+    let savedAt: Date
+    let title: String
+    let summary: String
+    let periodLabel: String
+    let recordCount: Int
+    let activeDayCount: Int
+    let total: Double
+    let topCategory: String?
+}
+
+struct TraceColdStartDisplayContext: Codable, Equatable {
+    let ledgerFingerprint: String
+    let dayKey: String
+    let isMember: Bool
+}
+
+struct TraceColdStartDisplayCache: Codable, Equatable {
+    static let schemaVersion = 1
+
+    let schemaVersion: Int
+    let context: TraceColdStartDisplayContext
+    var entries: [String: TraceColdStartDisplayEntry]
+}
+
 struct StatsTabState {
     var selectedPeriod: StatsPeriod = .week
     var selectedCategory: HomeItem.Category?
@@ -129,6 +237,15 @@ struct StatsTabState {
     var preparedWeekSnapshot: TraceChapterSnapshot?
     var preparedMonthSnapshot: TraceChapterSnapshot?
     var preparedClueSnapshot: TraceClueSnapshot?
+    var preparedWeekSnapshotKey: String?
+    var preparedMonthSnapshotKey: String?
+    var preparedClueSnapshotKey: String?
+    var chapterContentRevision = 0
+    var clueContentRevision = 0
+    var coldStartLedgerRevision: Int?
+    var coldStartDayKey: String?
+    var coldStartLedgerFingerprint: String?
+    var coldStartDisplay: TraceColdStartDisplayEntry?
 
     mutating func openLifeChapter(_ range: SummaryPlaybackRange) {
         viewMode = .life
@@ -364,6 +481,30 @@ enum TraceMonthDiaryPolicy {
     }
 }
 
+enum TracePhotoEvidenceBindingPolicy {
+    static func item(
+        for itemID: UUID?,
+        in items: [HomeItem]
+    ) -> HomeItem? {
+        guard let itemID else { return nil }
+        return items.first { $0.id == itemID }
+    }
+
+    static func item(
+        for anchor: SummaryMemoryAnchor?,
+        in items: [HomeItem]
+    ) -> HomeItem? {
+        item(for: anchor?.itemID, in: items)
+    }
+
+    static func primaryCategory(
+        anchor: SummaryMemoryAnchor?,
+        items: [HomeItem]
+    ) -> HomeItem.Category {
+        item(for: anchor, in: items)?.category ?? items.first?.category ?? .other
+    }
+}
+
 struct TraceChapterSnapshot {
     let range: SummaryPlaybackRange
     let items: [HomeItem]
@@ -416,6 +557,18 @@ struct TraceClueSnapshot {
     var narrativeSummary: String? {
         guard narrativePlan != nil else { return nil }
         return insight.previewLine
+    }
+
+    var photoEvidenceItem: HomeItem? {
+        guard let itemID = insight.highlightedItemID,
+              let item = TracePhotoEvidenceBindingPolicy.item(for: itemID, in: items),
+              item.hasMemoryImages else {
+            return nil
+        }
+        if let lead = narrativePlan?.signalsByRole[.lead]?.first {
+            return lead.kind == .photo && lead.evidenceItemIDs.contains(itemID) ? item : nil
+        }
+        return insight.theme == .memory ? item : nil
     }
 }
 

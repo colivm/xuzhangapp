@@ -19,6 +19,7 @@ struct LifeInsightResult {
     let periodName: String
     let theme: LifeInsightTheme
     let highlightedDate: Date?
+    let highlightedItemID: UUID?
     let isMeaningful: Bool
 
     init(
@@ -30,6 +31,7 @@ struct LifeInsightResult {
         periodName: String,
         theme: LifeInsightTheme = .change,
         highlightedDate: Date? = nil,
+        highlightedItemID: UUID? = nil,
         isMeaningful: Bool = true
     ) {
         self.leadQuestion = leadQuestion
@@ -40,6 +42,7 @@ struct LifeInsightResult {
         self.periodName = periodName
         self.theme = theme
         self.highlightedDate = highlightedDate
+        self.highlightedItemID = highlightedItemID
         self.isMeaningful = isMeaningful
     }
 }
@@ -60,6 +63,7 @@ final class LifeInsightService {
         let periodName: String
         let score: Double
         let anchorDate: Date?
+        let anchorItemID: UUID?
         let theme: LifeInsightTheme
 
         init(
@@ -73,6 +77,7 @@ final class LifeInsightService {
             periodName: String,
             score: Double,
             anchorDate: Date?,
+            anchorItemID: UUID? = nil,
             theme: LifeInsightTheme = .change
         ) {
             self.kind = kind
@@ -85,6 +90,7 @@ final class LifeInsightService {
             self.periodName = periodName
             self.score = score
             self.anchorDate = anchorDate
+            self.anchorItemID = anchorItemID
             self.theme = theme
         }
     }
@@ -199,6 +205,7 @@ final class LifeInsightService {
                 periodName: primary.periodName,
                 theme: primary.theme,
                 highlightedDate: primary.anchorDate,
+                highlightedItemID: primary.anchorItemID,
                 isMeaningful: true
             )
         }
@@ -484,20 +491,29 @@ final class LifeInsightService {
         let item = row.item
         let dayLabel = calendarDayLabel(for: item.createdAt)
         let label = readableSceneLabel(for: row.signal, items: [item])
-        let title = candidates.count == 1
-            ? "你留下的这张照片，成了\(periodLabel)最清楚的现场"
-            : "被你拍下来的那一刻，比分类更容易被记住"
+        let anchor = PhotoMemoryPromptPolicy.resolvedAnchorRole(for: item)
+        let trustedMomentLine = TrustedUserMomentNarrativePolicy.line(for: item)
+        let title = trustedMomentLine
+            ?? (anchor.isQualified
+                ? "你留下的这张照片，和「\(item.displayTitle)」对应在一起"
+                : "有一张照片，和「\(item.displayTitle)」留在了一起")
+        let teaser = trustedMomentLine != nil
+            ? "\(dayLabel)的原话和照片对应在同一笔记录里。"
+            : (anchor.isQualified
+                ? "\(dayLabel)的\(label)留有照片，也能回到同一笔记录。"
+                : "\(dayLabel)的这张照片只确认属于「\(item.displayTitle)」，不会猜它拍了什么。")
         return TraceInsightSignal(
             kind: row.signal.kind,
             category: item.category,
             title: title,
-            teaser: "\(dayLabel)的\(label)被你留成了画面。它不需要代表某种规律，本身就是这段时间的一部分。",
-            detail: "照片和具体记录落在同一天，之后再看时，你更可能先想起当时发生了什么，而不是花了多少。",
+            teaser: teaser,
+            detail: "照片对应的是\(dayLabel) \(item.createdAt.zhBillTime)的「\(item.displayTitle)」，金额为 \(item.amount.formatted(.cny))。",
             supportLine: "\(dayLabel) \(item.createdAt.zhBillTime)，\(item.displayTitle)，\(item.amount.formatted(.cny))。",
-            question: "找回这个现场",
+            question: "看看这张照片对应的记录",
             periodName: "照片留在账本里的\(periodLabel)",
             score: 66 + personalSignalScore(item) * 0.45,
             anchorDate: item.createdAt,
+            anchorItemID: item.id,
             theme: .memory
         )
     }

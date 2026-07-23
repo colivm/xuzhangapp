@@ -364,12 +364,14 @@ enum LifeNarrativeSignalPolicy {
             }
             let title = compact(item.title, limit: 20)
             let value = userExpressionValue(for: item)
+            let fact = TrustedUserMomentNarrativePolicy.line(for: item)
+                ?? "\(item.createdAt.zhBillDateOnly)记下了「\(title)」。"
             return (
                 LifeNarrativeSignal(
                     id: "user:\(item.id.uuidString)",
                     kind: .userText,
                     label: title,
-                    fact: "\(item.createdAt.zhBillDateOnly)记下了「\(title)」。",
+                    fact: fact,
                     evidenceItemIDs: [item.id],
                     confidence: 100,
                     informationGain: value,
@@ -724,16 +726,18 @@ enum LifeNarrativeSignalPolicy {
         ) else {
             return 18
         }
-        switch item.memoryAnchorRole {
+        let anchor = PhotoMemoryPromptPolicy.resolvedAnchorRole(for: item)
+        guard anchor.isQualified else {
+            let scene = LifeSceneSemanticService.classify(item)
+            let base = sceneNarrativeValue(scene.kind, administrative: false)
+            return userExpressionValue(for: item) >= 82 ? max(base, 82) : 18
+        }
+        switch anchor.role {
         case .moment: return 96
         case .place: return 90
         case .object: return userExpressionValue(for: item) >= 82 ? 82 : 70
         case .careRecord: return 68
         case .receipt: return 18
-        case nil:
-            let scene = LifeSceneSemanticService.classify(item)
-            let base = sceneNarrativeValue(scene.kind, administrative: false)
-            return userExpressionValue(for: item) >= 82 ? max(base, 82) : 18
         }
     }
 
@@ -748,12 +752,17 @@ enum LifeNarrativeSignalPolicy {
         if specificExpressionTerms.contains(where: { title.localizedCaseInsensitiveContains($0) }) {
             value += 30
         }
-        if let caption = item.memoryAnchorCaption?.trimmingCharacters(in: .whitespacesAndNewlines),
+        if TrustedUserMomentNarrativePolicy.line(for: item) != nil {
+            value += 34
+        }
+        if !PhotoMemoryPromptPolicy.isAutomaticallyAssignedAnchor(item),
+           let caption = item.memoryAnchorCaption?.trimmingCharacters(in: .whitespacesAndNewlines),
            caption.count >= 4,
            UserContentRiskService.shared.isAllowedManualNote(caption, allowEmpty: false) {
             value += 14
         }
-        if item.memoryAnchorRole == .moment || item.memoryAnchorRole == .place {
+        let anchor = PhotoMemoryPromptPolicy.resolvedAnchorRole(for: item)
+        if anchor.isQualified && (anchor.role == .moment || anchor.role == .place) {
             value += 12
         }
         if item.merchantBrandId != nil { value -= 8 }

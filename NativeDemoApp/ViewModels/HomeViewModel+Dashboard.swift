@@ -217,7 +217,11 @@ enum HomeDashboardSnapshotComputation {
             isMember: input.isMember,
             limit: 1
         )
-        let todayPrimaryLine = todayAggregates.first.map { LifeMarkService.primaryLine(for: $0) }
+        let trustedUserMoment = TrustedUserMomentNarrativePolicy.preferredNarrative(
+            in: positiveVisibleItems
+        )
+        let todayPrimaryLine = trustedUserMoment?.line
+            ?? todayAggregates.first.map { LifeMarkService.primaryLine(for: $0) }
         let qualifyingTodayMark = todayAggregates.first.flatMap { mark in
             mark.count >= 2 || mark.kind != .scene ? mark : nil
         }
@@ -1035,6 +1039,9 @@ extension HomeViewModel {
         let topCategory = topCategoryLabel(from: records)
         let todaySceneLine = lifeSceneMemoryLine(from: records, minimumCount: 2)
         let todayLifeMarkLine = homeTodayLifeMarkLine
+        let todayUserMomentLine = TrustedUserMomentNarrativePolicy.preferredNarrative(
+            in: records
+        )?.line
         let todayLateCommuteLine = records
             .sorted { $0.createdAt > $1.createdAt }
             .first(where: { HomeItem.isLateWorkCommute($0) })
@@ -1049,16 +1056,30 @@ extension HomeViewModel {
             subtitle = emptyCopy.subtitle
         case 1:
             title = "今天的第一笔记录"
-            subtitle = todayLateCommuteLine ?? Self.singleRecordTodayStoryLine(for: records[0])
+            subtitle = todayUserMomentLine
+                ?? todayLateCommuteLine
+                ?? Self.singleRecordTodayStoryLine(for: records[0])
         case 2:
             title = "今天已记下 2 笔"
-            subtitle = todayLateCommuteLine ?? todayLifeMarkLine ?? todaySceneLine ?? "主要在「\(topCategory)」上，记录变得具体。"
+            subtitle = todayUserMomentLine
+                ?? todayLateCommuteLine
+                ?? todayLifeMarkLine
+                ?? todaySceneLine
+                ?? "主要在「\(topCategory)」上，记录变得具体。"
         case 3:
             title = "今天记下了 3 笔"
-            subtitle = todayLateCommuteLine ?? todayLifeMarkLine ?? todaySceneLine ?? "合计 \(totalText)，今天的记录已经成形。"
+            subtitle = todayUserMomentLine
+                ?? todayLateCommuteLine
+                ?? todayLifeMarkLine
+                ?? todaySceneLine
+                ?? "合计 \(totalText)，今天的记录已经成形。"
         default:
             title = "今天记下了 \(count) 笔"
-            subtitle = todayLateCommuteLine ?? todayLifeMarkLine ?? todaySceneLine ?? "「\(topCategory)」居多，今天的记录已经清楚。"
+            subtitle = todayUserMomentLine
+                ?? todayLateCommuteLine
+                ?? todayLifeMarkLine
+                ?? todaySceneLine
+                ?? "「\(topCategory)」居多，今天的记录已经清楚。"
         }
 
         return TodayStoryNarrative(

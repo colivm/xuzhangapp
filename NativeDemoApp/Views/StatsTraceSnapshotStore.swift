@@ -299,6 +299,10 @@ enum TraceSnapshotComputation {
         let highlightedDate = lead?.evidenceItemIDs.compactMap { id in
             items.first(where: { $0.id == id })?.createdAt
         }.first
+        let highlightedItemID = lead?.evidenceItemIDs.first { id in
+            guard let item = items.first(where: { $0.id == id }) else { return false }
+            return lead?.kind == .photo ? item.hasMemoryImages : true
+        }
         let isMeaningful = lead.map {
             $0.kind != .rhythm && $0.narrativeValue >= 55 && !$0.isAdministrative
         } ?? false
@@ -311,7 +315,11 @@ enum TraceSnapshotComputation {
             teaser = "先看记录落在哪些日子，再决定要不要继续问。"
         }
         return LifeInsightResult(
-            leadQuestion: narrativeInsightTitle(lead: lead, maturity: plan.maturity),
+            leadQuestion: narrativeInsightTitle(
+                lead: lead,
+                maturity: plan.maturity,
+                items: items
+            ),
             teaser: teaser,
             previewLine: fullLines[0],
             fullLines: Array(fullLines.prefix(2)),
@@ -319,19 +327,27 @@ enum TraceSnapshotComputation {
             periodName: "\(plan.scope.periodLead)的线索依据",
             theme: theme,
             highlightedDate: highlightedDate,
+            highlightedItemID: highlightedItemID,
             isMeaningful: isMeaningful
         )
     }
 
     private static func narrativeInsightTitle(
         lead: LifeNarrativeSignal?,
-        maturity: LifeNarrativeMaturity
+        maturity: LifeNarrativeMaturity,
+        items: [HomeItem]
     ) -> String {
         if lead?.id.contains(":context-return:") == true {
             return "晚间通勤上一次出现在哪一周"
         }
         if lead?.id.contains(":new-pair:") == true {
             return "咖啡和晚间通勤这次有什么不同"
+        }
+        if let lead,
+           lead.kind == .userText || lead.kind == .photo,
+           let item = items.first(where: { lead.evidenceItemIDs.contains($0.id) }),
+           let trustedMomentLine = TrustedUserMomentNarrativePolicy.line(for: item) {
+            return trustedMomentLine
         }
         switch lead?.kind {
         case .userText: return "先看「\(lead?.label ?? "这笔记录")」"
@@ -645,7 +661,7 @@ enum TraceSnapshotComputation {
         case .vehicleCare, .healthRecord: return role == .receipt ? "票据" : "记录"
         case .homeLife: return "家里"
         case .careRecord: return "照护"
-        case .experience: return "现场"
+        case .experience: return role == .receipt ? "票据" : "现场"
         case .giftMoment: return "心意"
         case .importantPurchase: return "添置"
         }
@@ -712,5 +728,117 @@ final class TraceSnapshotStore {
     func invalidateClueCache() {
         clueCache.removeAll()
         clueCacheOrder.removeAll()
+    }
+}
+
+enum LedgerDisplayFingerprintPolicy {
+    static func make(items: [HomeItem]) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        let prime: UInt64 = 1_099_511_628_211
+
+        func combine(_ value: String) {
+            for byte in value.utf8 {
+                hash ^= UInt64(byte)
+                hash &*= prime
+            }
+            hash ^= 0xFF
+            hash &*= prime
+        }
+
+        combine("trace-cold-start-v1")
+        combine(String(items.count))
+        for item in items.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
+            combine(item.id.uuidString)
+            combine(String(Int64((item.createdAt.timeIntervalSince1970 * 1_000).rounded())))
+            combine(String(Int64((item.updatedAt.timeIntervalSince1970 * 1_000).rounded())))
+            combine(String(Int64((item.amount * 100).rounded())))
+            combine(item.category.rawValue)
+            combine(item.title)
+            combine(item.emotionTag)
+            combine(item.source.rawValue)
+            combine(item.merchantBrandId ?? "")
+            combine(item.draftMeta?.status.rawValue ?? "")
+            combine(item.userEditedTitle == true ? "1" : "0")
+            combine(item.userEditedCategory == true ? "1" : "0")
+            combine(item.memoryContext?.weatherKind ?? "")
+            combine(item.memoryContext?.cityName ?? "")
+            combine(item.memoryContext?.semanticPlace ?? "")
+            combine(item.scenePackId ?? "")
+            combine(String(item.memoryImageCount))
+            combine(item.memoryImageReferences.joined(separator: "|"))
+            combine(String(item.coverMemoryImageIndex ?? -1))
+            combine(item.memoryAnchorRole?.rawValue ?? "")
+            combine(item.memoryAnchorSceneHint?.rawValue ?? "")
+            combine(item.memoryAnchorCaption ?? "")
+        }
+        return String(hash, radix: 16)
+    }
+
+    static func dayKey(for date: Date, calendar: Calendar = .current) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
+    }
+}
+
+final class TraceColdStartDisplayStore {
+    static let shared = TraceColdStartDisplayStore()
+
+    private let defaults: UserDefaults
+    private let storageKey: String
+    private let entryLimit = 12
+
+    init(
+        defaults: UserDefaults = .standard,
+        storageKey: String = "trace.cold-start-display.v1"
+    ) {
+        self.defaults = defaults
+        self.storageKey = storageKey
+    }
+
+    func entry(
+        for context: TraceColdStartDisplayContext,
+        scopeKey: String
+    ) -> TraceColdStartDisplayEntry? {
+        guard let cache = loadCache(),
+              cache.schemaVersion == TraceColdStartDisplayCache.schemaVersion,
+              cache.context == context else {
+            return nil
+        }
+        return cache.entries[scopeKey]
+    }
+
+    func store(
+        _ entry: TraceColdStartDisplayEntry,
+        context: TraceColdStartDisplayContext
+    ) {
+        var cache = loadCache()
+        if cache?.schemaVersion != TraceColdStartDisplayCache.schemaVersion || cache?.context != context {
+            cache = TraceColdStartDisplayCache(
+                schemaVersion: TraceColdStartDisplayCache.schemaVersion,
+                context: context,
+                entries: [:]
+            )
+        }
+        guard var cache else { return }
+        cache.entries[entry.scopeKey] = entry
+        while cache.entries.count > entryLimit,
+              let staleKey = cache.entries.min(by: { $0.value.savedAt < $1.value.savedAt })?.key {
+            cache.entries.removeValue(forKey: staleKey)
+        }
+        guard let data = try? JSONEncoder().encode(cache) else { return }
+        defaults.set(data, forKey: storageKey)
+    }
+
+    func removeAllForTesting() {
+        defaults.removeObject(forKey: storageKey)
+    }
+
+    private func loadCache() -> TraceColdStartDisplayCache? {
+        guard let data = defaults.data(forKey: storageKey) else { return nil }
+        guard let cache = try? JSONDecoder().decode(TraceColdStartDisplayCache.self, from: data) else {
+            defaults.removeObject(forKey: storageKey)
+            return nil
+        }
+        return cache
     }
 }

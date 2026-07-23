@@ -43,15 +43,27 @@ struct PhotoMemoryPromptReason: Equatable {
                 return "当时拍下的一张图。"
             }
         case .receipt:
-            return "这张图以后查起来更清楚。"
+            return "这笔票据以后查起来更清楚。"
         case .place:
             return "路上拍下的一张图。"
         case .object:
+            if sceneHint == .vehicleCare {
+                return "这笔车辆记录的一张照片。"
+            }
             return "这次买的东西。"
         case .careRecord:
+            if sceneHint == .healthRecord {
+                return "这笔健康记录的一张照片。"
+            }
             return "照护相关的一张记录。"
         }
     }
+}
+
+struct ResolvedPhotoMemoryAnchorRole: Equatable {
+    let role: PhotoMemoryAssetRole
+    let sceneHint: PhotoMemorySceneHint
+    let isQualified: Bool
 }
 
 enum PhotoMemoryPromptPolicy {
@@ -70,6 +82,14 @@ enum PhotoMemoryPromptPolicy {
             return nil
         }
 
+        return evidenceBasedReason(for: item, signal: signal, text: text)
+    }
+
+    private static func evidenceBasedReason(
+        for item: HomeItem,
+        signal: LifeSceneSignal,
+        text: String
+    ) -> PhotoMemoryPromptReason? {
         if containsAny(text, travelKeywords) || item.category == .lodging || signal.kind == .lodging {
             return PhotoMemoryPromptReason(
                 sceneHint: .travel,
@@ -82,13 +102,16 @@ enum PhotoMemoryPromptPolicy {
         }
 
         if containsAny(text, vehicleEvidenceKeywords) {
+            let isReceipt = containsAny(text, explicitReceiptKeywords)
             return PhotoMemoryPromptReason(
                 sceneHint: .vehicleCare,
-                assetRole: .receipt,
+                assetRole: isReceipt ? .receipt : .object,
                 sceneLabel: "车辆补能",
-                title: "要补一张凭证吗",
-                detail: "加油、充电、停车和过路费留图，后面查车相关支出会更清楚。",
-                actionTitle: "补张凭证图"
+                title: isReceipt ? "要补一张票据吗" : "要留一张车辆记录吗",
+                detail: isReceipt
+                    ? "明确的小票、发票或支付截图，可以和这笔车辆支出放在一起。"
+                    : "加油、充电、停车或保养时拍下的照片，可以和这笔记录放在一起。",
+                actionTitle: isReceipt ? "补张票据图" : "留张车辆图"
             )
         }
 
@@ -137,13 +160,27 @@ enum PhotoMemoryPromptPolicy {
         }
 
         if containsAny(text, healthRecordKeywords) {
+            let isReceipt = containsAny(text, explicitReceiptKeywords)
             return PhotoMemoryPromptReason(
                 sceneHint: .healthRecord,
-                assetRole: .receipt,
+                assetRole: isReceipt ? .receipt : .careRecord,
                 sceneLabel: "健康事项",
-                title: "要补一张健康凭证吗",
-                detail: "检查、问诊、药房票据留一张，后面整理身体相关支出会更省心。",
-                actionTitle: "补张凭证图"
+                title: isReceipt ? "要补一张健康票据吗" : "要留一张健康记录吗",
+                detail: isReceipt
+                    ? "明确的药房小票、发票或支付截图，可以和这笔健康支出放在一起。"
+                    : "检查、问诊或用药相关的照片，可以和这笔记录放在一起。",
+                actionTitle: isReceipt ? "补张票据图" : "留张健康图"
+            )
+        }
+
+        if containsAny(text, explicitReceiptKeywords) {
+            return PhotoMemoryPromptReason(
+                sceneHint: .experience,
+                assetRole: .receipt,
+                sceneLabel: "票据",
+                title: "要补上这张票据吗",
+                detail: "标题已经明确是小票、发票、收据或支付截图，可以和这笔记录放在一起。",
+                actionTitle: "补张票据图"
             )
         }
 
@@ -172,10 +209,10 @@ enum PhotoMemoryPromptPolicy {
         if isHighValueNonCommuteTransport(item: item, text: text) {
             return PhotoMemoryPromptReason(
                 sceneHint: .travelTransport,
-                assetRole: .receipt,
+                assetRole: .place,
                 sceneLabel: "非通勤出行",
-                title: "这段路可以留个凭证",
-                detail: "金额偏高的非通勤出行，留一张票据或路上的图，后面会更好查。",
+                title: "这段路可以留个画面",
+                detail: "金额偏高的非通勤出行，有路上或到达后的照片可以放进这笔。",
                 actionTitle: "补张出行图"
             )
         }
@@ -183,98 +220,80 @@ enum PhotoMemoryPromptPolicy {
         return nil
     }
 
-    static func anchorReason(for item: HomeItem) -> PhotoMemoryPromptReason {
-        if let reason = reason(for: item) {
-            return reason
-        }
-
+    static func anchorReason(for item: HomeItem) -> PhotoMemoryPromptReason? {
         let signal = LifeSceneSemanticService.classify(item)
         let text = semanticText(for: item)
-        if containsAny(text, travelKeywords) || item.category == .lodging || signal.kind == .lodging {
-            return PhotoMemoryPromptReason(
-                sceneHint: .travel,
-                assetRole: .place,
-                sceneLabel: "出门",
-                title: "留下一张路上的图",
-                detail: "这张图以后会帮你想起那段出门。",
-                actionTitle: "留下这张"
+        let hasExplicitReceiptEvidence = containsAny(text, explicitReceiptKeywords)
+        guard !containsAny(text, transferLikeKeywords),
+              (!containsAny(text, fixedBillKeywords) || hasExplicitReceiptEvidence),
+              (!isRoutineCommute(item: item, signal: signal, text: text) || hasExplicitReceiptEvidence) else {
+            return nil
+        }
+        return evidenceBasedReason(for: item, signal: signal, text: text)
+    }
+
+    static func resolvedAnchorRole(for item: HomeItem) -> ResolvedPhotoMemoryAnchorRole {
+        let inferred = anchorReason(for: item)
+        if let storedRole = item.memoryAnchorRole,
+           let storedSceneHint = item.memoryAnchorSceneHint,
+           !isAutomaticallyAssignedAnchor(item) {
+            return ResolvedPhotoMemoryAnchorRole(
+                role: storedRole,
+                sceneHint: storedSceneHint,
+                isQualified: true
             )
         }
-        if containsAny(text, vehicleEvidenceKeywords) || item.category == .transport {
-            return PhotoMemoryPromptReason(
-                sceneHint: .vehicleCare,
-                assetRole: .receipt,
-                sceneLabel: "票据",
-                title: "留下一张票据图",
-                detail: "这张图以后查起来更清楚。",
-                actionTitle: "保存这张"
+        if let inferred {
+            return ResolvedPhotoMemoryAnchorRole(
+                role: inferred.assetRole,
+                sceneHint: inferred.sceneHint,
+                isQualified: true
             )
         }
-        if isGathering(item: item, text: text) || item.category == .social {
-            return PhotoMemoryPromptReason(
-                sceneHint: .gathering,
-                assetRole: .moment,
-                sceneLabel: "见面",
-                title: "保存这次聚会的照片",
-                detail: "以后回看这笔，会知道是和谁吃了这一顿。",
-                actionTitle: "留下这张"
-            )
-        }
-        if SemanticBoundaryGuard.familyCareKind(in: text) != nil {
-            return PhotoMemoryPromptReason(
-                sceneHint: .careRecord,
-                assetRole: .careRecord,
-                sceneLabel: "照护",
-                title: "留下一张照护图",
-                detail: "这张图会把当时的照护记录留清楚。",
-                actionTitle: "留下这张"
-            )
-        }
-        if containsAny(text, healthRecordKeywords) || item.category == .health {
-            return PhotoMemoryPromptReason(
-                sceneHint: .healthRecord,
-                assetRole: .receipt,
-                sceneLabel: "健康",
-                title: "留下一张记录图",
-                detail: "这张图以后能帮你回看身体相关的事。",
-                actionTitle: "保存这张"
-            )
-        }
-        if containsAny(text, homeLifeKeywords) || item.category == .home {
-            return PhotoMemoryPromptReason(
-                sceneHint: .homeLife,
-                assetRole: .object,
-                sceneLabel: "家里",
-                title: "设为这笔的照片",
-                detail: "以后回看时，会知道家里买了这一件。",
-                actionTitle: "设为这笔照片"
-            )
-        }
-        if item.category == .shopping || containsAny(text, hobbyOrImportantPurchaseKeywords) {
-            return PhotoMemoryPromptReason(
-                sceneHint: .importantPurchase,
-                assetRole: .object,
-                sceneLabel: "添置",
-                title: "设为这笔的照片",
-                detail: "以后回看时，会知道当时买了什么。",
-                actionTitle: "设为这笔照片"
-            )
-        }
-        return PhotoMemoryPromptReason(
+        return ResolvedPhotoMemoryAnchorRole(
+            role: .moment,
             sceneHint: .experience,
-            assetRole: .moment,
-            sceneLabel: "记忆",
-            title: "留下这张图",
-            detail: "以后回看这笔，会多一点当时的画面。",
-            actionTitle: "留下这张"
+            isQualified: false
         )
+    }
+
+    static func refreshedAutomaticAnchorMetadata(
+        original: HomeItem,
+        updated: HomeItem
+    ) -> HomeItem {
+        guard updated.hasMemoryImages,
+              original.memoryAnchorRole == nil
+                || original.memoryAnchorSceneHint == nil
+                || isAutomaticallyAssignedAnchor(original) else {
+            return updated
+        }
+        var result = updated
+        if let reason = anchorReason(for: result) {
+            result.memoryAnchorRole = reason.assetRole
+            result.memoryAnchorSceneHint = reason.sceneHint
+            result.memoryAnchorCaption = reason.memoryAnchorCaption
+            result.memoryAnchorCreatedAt = original.memoryAnchorCreatedAt ?? Date()
+        } else {
+            result.memoryAnchorRole = nil
+            result.memoryAnchorSceneHint = nil
+            result.memoryAnchorCaption = nil
+            result.memoryAnchorCreatedAt = nil
+        }
+        return result
+    }
+
+    static func isAutomaticallyAssignedAnchor(_ item: HomeItem) -> Bool {
+        guard let caption = item.memoryAnchorCaption?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !caption.isEmpty else {
+            return false
+        }
+        return automaticAnchorCaptions.contains(caption)
     }
 
     private static func semanticText(for item: HomeItem) -> String {
         [
             item.title,
             item.displayTitle,
-            item.displayEmotionTag,
             item.category.rawValue,
             item.category.label,
             item.merchantBrandId ?? "",
@@ -361,6 +380,10 @@ enum PhotoMemoryPromptPolicy {
         "ETC", "etc", "洗车", "汽车保养", "车辆保养", "保养车"
     ]
 
+    private static let explicitReceiptKeywords = [
+        "小票", "发票", "票据", "收据", "账单截图", "支付截图", "付款截图", "电子票"
+    ]
+
     private static let travelKeywords = [
         "旅行", "旅游", "出差", "外地", "机场", "航班", "机票", "高铁", "火车", "动车",
         "车票", "酒店", "宾馆", "民宿", "住宿", "客栈", "景区", "门票", "租车"
@@ -417,5 +440,12 @@ enum PhotoMemoryPromptPolicy {
 
     private static let workMealKeywords = [
         "食堂", "工位", "工作餐", "加班餐", "公司楼下", "单位食堂"
+    ]
+
+    private static let automaticAnchorCaptions: Set<String> = [
+        "和朋友的一次聚会。", "这次带去的心意。", "当时拍下的一张图。",
+        "这张图以后查起来更清楚。", "这笔票据以后查起来更清楚。",
+        "路上拍下的一张图。", "这次买的东西。", "这笔车辆记录的一张照片。",
+        "照护相关的一张记录。", "这笔健康记录的一张照片。"
     ]
 }

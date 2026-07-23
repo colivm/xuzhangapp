@@ -1,4 +1,4 @@
-# 叙账全局产品与交互优化执行台账
+﻿# 叙账全局产品与交互优化执行台账
 
 > 创建日期：2026-07-15
 > 当前基线提交：`d425389`（`fix trace snapshot type checking`）
@@ -3621,3 +3621,116 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - P2 发现（复盘修订键）：`InsightWebView.insightSourceRevision` 在出现和每次账本变化时再次遍历全部记录生成 hash；不是滚动期热点，但已有 `homeDashboardRevision` 可作为单一变化键。`allowsReviewTasks` 也可读取已准备账本事实。迁移前必须验证 revision 对新增、编辑、删除、导入、恢复和同步全部递增。
 - 已正确的路径：会员终身档案、痕迹周/月/线索快照、周/月播放主体、记账输入生活印记预览和 AI 指令台页面快照均已在后台任务构建并按修订发布；AI 指令查询缓存签名发生在用户明确执行查询时，不属于滚动重绘热点。`StatsWebView` 的旧 `traceLifeMarks`/同步 build helper、`InsightWebView` 的旧 `weeklyKeywordBubbles`/`weeklyInsightSection` 当前没有渲染根引用，属于不可达遗留代码，不能据此宣称线上仍计算，也不得在性能修复中顺手大拆文件。
 - 冻结边界：只移动计算契机、复用不可变结果和删除经编译证明不可达的旧实现；不修改生活印记/回声/叙事算法、文案、问题顺序、痕迹/复盘 UI、播放章节、分享模板、照片准备、AI/额度/会员/StoreKit、账本/同步或 `ARCH-03`。本项需单独补 XCTest、静态门禁和真机矩阵后才能执行。
+
+---
+
+## 50. 2026-07-23 真机签收定向修复队列
+
+- 用户确认的执行顺序：`FACT-FIX-01` → `PHOTO-FIX-01` → `NARRATIVE-FIX-02` → `AI-FIX-06` → `AI-FIX-07` → `PERF-FIX-04` → `PERF-FIX-05`。必须逐项完成、逐项验证、逐项更新本台账；任何时刻仅允许一个任务为 `IN_PROGRESS`。
+- 当前状态：`FACT-FIX-01`、`PHOTO-FIX-01`、`NARRATIVE-FIX-02`、`AI-FIX-06`、`AI-FIX-07`、`PERF-FIX-04`、`PERF-FIX-05` 已全部达到 `CODE_DONE`，本队列当前无 `IN_PROGRESS`。`PERF-AUDIT-04` 与 `ARCH-03` 继续保持 `NOT_STARTED`。
+- 工作区保护：开始前分支为 `feature/xuzhangapp-staging`；仅存在用户未跟踪的 `brand-assets/mockups/`、`brand-assets/source/pet-concepts/`、`brand-assets/source/pet-sprites/`、`scripts/__pycache__/` 与 `tmp/`，全部保留，不删除、不覆盖、不暂存。
+
+### FACT-FIX-01：生活线索事实源与 OCR 通勤识别纠错
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 代码、静态与完整发布门禁已通过，缺 Xcode/iPhone `FLOW-65` 签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
+- 真机现象：OCR 导入“天隆寺 > 雨山路”交通卡记录后，展示文案出现“刷卡进站”，但通勤生活线索少计；金额和进站口变化会使同一路线失去识别。同时本月线索出现真实账本中不存在的“超市买菜和家用”“人情往来”。
+- 已确认根因：OCR 导入丢弃 `rawText` 中已经识别出的公共交通证据且未写现有 `scenePackId`；`LifeMarkService` 与 `LifeSceneSemanticService` 又把系统生成的 `displayEmotionTag` 混入事实匹配，导致展示文案一方面不能成为可靠结构，另一方面反向制造买菜、人情等假事实。
+- 目标：建立“结构化字段/用户原话 > OCR 与可信商户证据 > 受控历史规律 > 系统展示文案”的事实优先级。展示文案不得参与生活线索事实匹配；强用户通勤词直接成立；OCR 公共交通只有在明确通勤词，或工作日同方向站点路线形成可靠历史规律时，才复用现有 `scenePackId = commute`。金额变化不作为否定条件，单次普通公共交通不得无证据升级为通勤。
+- 允许修改：`LifeMarkService.swift`、`LifeSceneSemanticService.swift`、`HomeViewModel.swift` 中 OCR 导入的直接场景接线；对应 `StateRegressionTests.swift`、体验静态门禁、真机矩阵与本文档。
+- 冻结边界：不新增或迁移账本字段，不修改金额/标题/日期/分类、OCR 识别结果与确认 UI、生活线索展示结构/排序/会员边界、首页布局、照片、复盘、AI 指令、额度/StoreKit、同步 DTO、主题、宠物、缓存生命周期、`PERF-AUDIT-04` 或 `ARCH-03`。不把所有地铁/公交单笔记录直接等同通勤。
+- 计划验收：生成文案含“超市买菜和家用”或“朋友小聚聚餐”但标题、品牌和结构字段无事实证据时不得产生对应线索；真实盒马/叮咚/随礼/红包仍正常命中；用户标题含“下班路上”正常命中通勤；OCR 同工作日晚间目的地路线在既有可靠历史下，金额/入口变化仍写入通勤场景；单次非工作日或无历史公共交通不升级。新增确定性 XCTest、静态防回流和真机用例后执行完整 Windows 发布门禁；Xcode/iPhone 签收前最多标记 `CODE_DONE`。
+- 实现（OCR 通勤）：新增 `OCRCommuteScenePolicy` 并接入正式 OCR 导入。明确标题含上班/下班/通勤等强词时直接复用现有 `scenePackId = commute`；普通公共交通必须同时满足工作日、早晚通勤时段、可解析站点路线及最近 120 天同方向同目的地至少两个独立工作日。站点比较会去除地铁站、进/出站口与 N 号口，金额不参与否定；单次普通交通与非工作日交通不升级。
+- 实现（事实权限）：`LifeMarkService` 与 `LifeSceneSemanticService` 的通用事实文本不再读取系统生成的 `displayEmotionTag`，只使用可信标题、分类、受控品牌、地点与结构化场景。默认/系统生成标题不冒充用户事实；公共交通品牌只有结构化通勤场景或强通勤标题时才成为通勤，否则保持普通公共交通。旧版天气兼容只保留受控天气短语，不恢复通用展示文案事实权。
+- 修改文件：`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/Services/LifeMarkService.swift`、`NativeDemoApp/Services/LifeSceneSemanticService.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 自动回归：新增系统展示文案不得制造买菜/人情事实、真实盒马/随礼/下班标题仍命中、OCR 同路线金额与入口变化、历史不足、明确通勤强词及非工作日单次交通的确定性 XCTest；静态门禁锁定两处事实文本不回读 `displayEmotionTag`、OCR 必须写场景及测试接线；真机矩阵新增 `FLOW-65`，覆盖真假事实、增删、证据 ID 与 100/1,000/5,000 条。
+- Windows 验证证据：`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`；完整门禁包含生活语义、AI 契约、文案、主题、迁移、SQLite、三档夹具及三张真实 12MP 图片，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未新增或迁移账本字段，未修改金额/标题/日期/分类、OCR 识别与确认 UI、生活线索布局/排序/会员、首页、照片、复盘、AI 指令、额度/StoreKit、存储同步、缓存生命周期、`PERF-AUDIT-04` 或 `ARCH-03`；未删除、覆盖、暂存或提交用户未跟踪素材、`tmp/` 与缓存目录。
+- 剩余风险与下一项：Windows 无 Swift/Xcode/iPhone，新增 Swift 策略、默认参数、XCTest 与真实 OCR 文本仍需编译和 `FLOW-65` 真机验证，100/1,000/5,000 条下路线历史匹配耗时也需 Instruments 确认。下一项仅启动 `PHOTO-FIX-01`，处理照片证据与角色绑定，不在照片任务回改事实/OCR 结论。
+
+### PHOTO-FIX-01：照片证据绑定与角色事实化
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 代码、静态与完整发布门禁已通过，缺 Xcode/iPhone `FLOW-66` 签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
+- 真机现象：周记主图来自餐饮记录但右下角显示交通；线索文案把可乐/咖啡照片称为“现场”或“票据”；“这张照片对应哪一笔”没有显示所指照片和账单摘要，用户无法确认对象；编辑标题后旧的自动照片角色没有随事实变化。
+- 已确认根因：主图角标读取周期快照首条记录分类，而不是 `anchor.itemID` 对应记录；自动角色策略对交通无条件补 `.vehicleCare + .receipt`、对未知照片补 `.experience + .moment`，并在添加时固化到记录，之后编辑不重判；提问只持有记录 ID，界面未投影同一记录的缩略图、标题和金额。
+- 目标：所有主图、角标、文案与查证入口都以同一 `itemID` 为事实锚点；没有 OCR/用户文字/明确结构证据时不得称“票据”“现场”；编辑影响自动推断依据时重算自动角色，但保留用户明确选择；“对应哪一笔”直接展示该 ID 的照片缩略图和最小账单摘要。
+- 允许修改：照片角色策略、记录照片元数据的自动推断/编辑接线、痕迹快照主图角标与线索查证投影、对应 XCTest、静态门禁、真机矩阵和本文档。
+- 冻结边界：不改账单字段与迁移、图片二进制/顺序/封面选择、OCR 结论、生活事实算法、叙事主角评分、周记/月章章节、筛选日期、UI 主题、额度/会员/StoreKit、同步 DTO、缓存生命周期、`PERF-AUDIT-04` 或 `ARCH-03`；不得把用户未确认的图像内容当作视觉识别结果。
+- 实现（角色事实门槛）：`PhotoMemoryPromptPolicy.anchorReason` 改为可弃权推断，不再把交通分类兜底成车辆票据，也不再把未知照片兜底成体验现场；系统展示情绪标签退出照片角色事实文本。普通车辆事项只标为车辆记录，只有标题/结构明确含小票、发票、收据、票据或支付截图等证据时才标票据；电影、展览、演出等明确体验仍可形成体验角色。无法判断的照片保留中性“照片/这笔的一张照片”，不猜图中内容。
+- 实现（旧值与编辑）：新增自动照片元数据识别与重判。展示和叙事会忽略旧版自动生成但已无事实支持的“票据/现场”；保存编辑时，标题/分类等证据变化会清除或重算自动角色。带非系统说明的明确角色作为用户选择保留，不被自动覆盖；未新增账本字段或迁移。
+- 实现（同 ID 绑定）：周记主图角标改为读取 `memoryAnchors.first.itemID` 对应记录分类，不再读取周期首笔；线索洞察携带 `highlightedItemID`，照片主线在英雄卡中直接展示同一记录的缩略图、标题、金额、时间与分类，继续追问也先按精确 ID 回到该笔，同日多照片不再靠日期猜测。
+- 修改文件：`NativeDemoApp/Services/PhotoMemoryPromptPolicy.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/Services/LifeNarrativePlanningService.swift`、`NativeDemoApp/Services/LifeInsightService.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 自动回归：新增普通咖啡/地铁照片弃权、车辆记录与明确票据分离、体验证据、自动角色编辑重判、用户说明保留、主图分类与照片证据按精确 ID、未知照片洞察不得发明现场等 XCTest；静态门禁锁定角色事实文本、弃权分支、编辑接线、中性播放、同 ID 投影和可见证据；真机矩阵新增 `FLOW-66`，覆盖同日多图、旧自动值、编辑、重启、无障碍及 100/1,000/5,000 条。
+- Windows 验证证据：`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`；完整门禁包含生活语义、AI 契约、文案、主题、迁移、SQLite、三档夹具与三张真实 12MP 图片，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未新增账本字段/迁移或同步 DTO，未改图片数据/顺序/封面选择、OCR 结论、生活事实算法、周记/月章章节、筛选、主题、额度/会员/StoreKit、缓存生命周期、`PERF-AUDIT-04` 或 `ARCH-03`；未删除、覆盖、暂存或提交用户未跟踪素材、`tmp/` 与缓存目录。
+- 剩余风险与下一项：Windows 无 Swift/Xcode/iPhone，新增可选角色、SwiftUI 缩略证据布局、VoiceOver、同日多照片和编辑后持久化仍需编译及 `FLOW-66` 真机签收；三档账本的图片解码和滚动需 Instruments 确认。下一项仅启动 `NARRATIVE-FIX-02`，优化已确认事实的情绪表达，不恢复无证据照片角色或修改事实识别。
+
+### NARRATIVE-FIX-02：用户原话优先的照片与今日情绪表达
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 代码、文案、静态与完整发布门禁已通过，缺 Xcode/iPhone `FLOW-67` 签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
+- 真机现象：用户备注“下班路上拍了张照片”已包含明确时刻、动作与画面，首页/回看却退化成“晚间一段路”“这张图以后查起来更清楚”等空洞说明；咖啡等稳定聚合还可能压过这条当日新鲜表达，最终不像情绪，也不像用户说的话。
+- 已确认根因：今日主线选择把稳定咖啡聚合优先级放在通勤/用户新鲜表达之前；晚归模板只接受 21:00 后，20:43 的下班照片只能进入泛化“晚间路线”；照片说明长期读取自动角色通用 caption，没有把可信用户原话中的“下班路上＋拍照”投影成受控情绪句。
+- 目标：情绪表达必须来自这笔记录已经存在的时刻、动作和安全用户原话；当日新鲜、高信息的用户表达优先于稳定重复聚合，但不得改变生活印记全局定义或虚构心情。对“下班路上拍了张照片”输出自然且有情绪温度的事实表达，例如“下班路上，也把这一刻留了下来。”，而不是工具说明或泛化标签。
+- 允许修改：首页今日主线/主动作副文案的候选选择、照片与播放中对高置信用户表达的本地受控投影、对应 XCTest、静态门禁、真机矩阵和本文档。
+- 冻结边界：不改 `FACT-FIX-01` 事实权限、`PHOTO-FIX-01` 角色门槛与 item ID 绑定，不改账单字段/存储同步、生活印记定义与全局排序、周记/月章章节、AI 远端事实包、照片内容识别、复盘、额度/会员/StoreKit、主题、缓存生命周期、`PERF-AUDIT-04` 或 `ARCH-03`；不得从金额、分类或照片本身推断未知心情。
+- 实现（可信表达通道）：新增 `TrustedUserMomentNarrativePolicy`，只有正金额、真实照片、手工来源、明确用户编辑标题、安全非系统文案同时成立时才生成受控本地表达。对“下班路上拍了张照片”输出“下班路上，也把这一刻留了下来。”和短标签“下班路上，留住这一刻”；20:43 不冒充 21 点后晚归，既有晚归规则保持不变。无照片、OCR/AI 导入、默认标题与不安全文本全部弃权。
+- 实现（当日优先与撤回）：首页生活印记快照和今日故事先选择当日可信新鲜表达，再回退既有晚归、生活印记与场景聚合，因此稳定咖啡不再压过这条原话，但 `LifeMarkService` 全局 priority 未改。编辑和附图会刷新受控短标签；移除最后一张照片时若当前标签来自该策略，会恢复原有普通情绪生成结果，不残留失去依据的文案。
+- 实现（跨表面同源）：同一受控表达进入本地叙事信号事实、周/月代表一笔、照片锚点 caption、播放记录正文、照片洞察与线索标题；用户原话仍不进入远端 fact pack，照片角色资格和同 item ID 证据绑定继续读取 `PHOTO-FIX-01` 的结果。
+- 修改文件：`NativeDemoApp/Services/NarrativeCopyResolver.swift`、`NativeDemoApp/Services/LifeNarrativePlanningService.swift`、`NativeDemoApp/Services/LifeInsightService.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/ViewModels/HomeViewModel+Dashboard.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 自动回归：新增 20:43 下班照片、真实照片/手工原话门槛、稳定咖啡竞争、叙事 lead 身份和照片说明同源 XCTest；静态门禁锁定本地事实条件、首页回退顺序、附图/编辑/移图标签生命周期、叙事与播放接线；真机矩阵新增 `FLOW-67`，覆盖对照场景、编辑/移图/重加、重启、无障碍与 100/1,000/5,000 条。
+- Windows 验证证据：`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`；完整门禁包含生活语义、AI 契约、主题、迁移、SQLite、三档夹具与三张真实 12MP 图片，文案扫描 81 个 Swift 文件，仅保留既有 5 条 soft warning，本项新增为 0。
+- 冻结边界复核：未改生活印记定义/全局排序、21 点后晚归规则、事实权限、照片角色/item ID 绑定、账本字段、存储同步、周记/月章章节、远端 AI fact pack、复盘、额度/会员/StoreKit、主题、缓存生命周期、`PERF-AUDIT-04` 或 `ARCH-03`；未删除、覆盖、暂存或提交用户未跟踪素材、`tmp/` 与缓存目录。
+- 剩余风险与下一项：Windows 无 Swift/Xcode/iPhone，附图/移图后的短标签持久化、首页异步快照时序、周/月播放实际换行、VoiceOver 语序和三档真机性能仍需编译及 `FLOW-67` 签收。下一项仅启动 `AI-FIX-06`，处理复盘对比入口/意图/任务状态，不修改年份范围或本项叙事表达。
+
+### AI-FIX-06：对比入口、相对成对周期与任务状态
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 代码、静态与完整发布门禁已通过，缺 Xcode/iPhone `FLOW-68` 签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
+- 真机现象：复盘首页橙色差额区域看起来可操作却不能直达“做对比”；先点一次“查记录”再输入对比问题，结果会跳回“查记录”，而首次直接进入“做对比”正常；“最近 7 天餐饮和前 7 天比呢”没有稳定识别为成对周期对比。
+- 已确认根因：橙色差额是普通 `VStack`，没有调用现有 `openReviewTask(.compare)`；自然语言识别的 `containsPairedPeriods` 只覆盖本周/上周、本月/上月；执行完成后无条件 `activeReviewTask = resolvedTask`，查询路径的旧任务状态会覆盖用户已解析的对比意图。
+- 目标：橙色差额整区可点击并预填现有“对比最近 7 天和前 7 天的消费”；最近 N 天/前 N 天的同 N 成对表达稳定进入 compare；执行结果只能按本次最终解析意图更新任务状态，不能被上一次“查记录”污染。
+- 允许修改：`InsightWebView` 的差额入口交互、对比意图识别与任务状态提交，必要的纯策略模型、对应 XCTest、静态门禁、真机矩阵和本文档。
+- 冻结边界：不修改 `AI-FIX-07` 年份解析、查询/对比金额口径、账单写入、AI 远端服务、痕迹、叙事、照片、额度/会员/StoreKit、主题、缓存生命周期、`PERF-AUDIT-04` 或 `ARCH-03`。
+- 实现（入口与无障碍）：复盘首页橙色差额整区改为真实按钮，直接调用既有 `openReviewTask(.compare)`，并自动填入“对比最近 7 天和前 7 天的消费”；补齐 VoiceOver 标签与操作提示，不改变首页数字和结果卡布局。
+- 实现（成对周期）：`AICommandRecognitionPolicy` 新增同 N 的滚动日窗口识别，覆盖最近/过去/近 N 天与前 N 天、阿拉伯数字和中文数字；只有当前窗口与前窗口都出现且 N 相同才进入 compare，单段时间和不同 N 保持原意图。
+- 实现（任务归属）：新增 `ReviewTaskResolutionPolicy`，在执行前依据本次最终识别意图将 compare/commuteDraft/query 分别落到做对比/补通勤/查记录；不支持文本不改写当前任务。删除根据返回结果 kind 二次覆盖任务的旧路径，因此上一次“查记录”或“做对比”不再污染本次任务状态。
+- 修改文件：`NativeDemoApp/Models/InteractionStateModels.swift`、`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 自动回归：新增从查记录识别同 N 滚动周期对比、本次最终意图拥有任务状态、当前与紧邻前一窗口边界的确定性 XCTest；静态门禁锁定按钮入口、成对识别、任务提交顺序和旧结果覆盖路径退役；真机矩阵新增 `FLOW-68`，覆盖橙色入口、3/7/30 天、中英文数字、任务反向切换、空结果、快速请求、VoiceOver 与 100/1,000/5,000 条。
+- Windows 验证证据：`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`；完整门禁包含生活语义、AI 契约、文案、主题、迁移、SQLite、三档夹具及三张真实 12MP 图片，文案仅保留既有 5 条 soft warning。
+- 冻结边界复核：未改年份解析、查询/对比金额与证据口径、账单写入、远端 AI、痕迹、叙事、照片、额度/会员/StoreKit、主题、缓存生命周期、`PERF-AUDIT-04` 或 `ARCH-03`；未删除、覆盖、暂存或提交用户未跟踪素材、`tmp/` 与缓存目录。
+- 剩余风险与下一项：Windows 无 Swift/Xcode/iPhone，Swift 正则/中文数字覆盖、按钮实际点击区域、VoiceOver 朗读、快速请求 UI 时序和三档账本响应仍需编译及 `FLOW-68` 真机签收。下一项仅启动 `AI-FIX-07`，补齐一年/今年/去年时间槽，不回改对比状态机或数据口径。
+
+### AI-FIX-07：年份自然时间范围
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 代码、静态与完整发布门禁已通过，缺 Xcode/iPhone `FLOW-69` 签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
+- 真机现象与根因：输入“过去一年”等明确时间后仍显示默认“过去 3 天”，因为查询时间槽只识别日/周/月和模糊最近范围；“今年”“去年”也未被视为显式时间，最终统一落入 `defaultRecentDays = 3`。
+- 实现范围：`AICommandEngine` 将过去一年/近一年/最近一年统一解析为截至今天的滚动 12 个月；“今年/本年/这一年/本年度”解析为当年 1 月 1 日至今天；“去年/上一年/上年度”解析为完整上一自然年。所有范围继续使用既有半开区间过滤、当前时区、金额/分类/证据与最多七天柱形展示逻辑。
+- 修改文件：`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 自动回归：新增年份短语识别测试，以及固定 2026-07-23 验证滚动 12 个月、当年、上一自然年起止边界和证据 ID 的确定性 XCTest；静态门禁锁定显式年份识别、12 个月窗口和自然年日历边界；真机矩阵新增 `FLOW-69`，覆盖同义词、闰年/时区、空结果、任务切换、VoiceOver 与 100/1,000/5,000 条。
+- Windows 验证证据：`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`；文案扫描 81 个 Swift 文件，仅保留既有 5 条 soft warning。
+- 冻结边界复核：未改无时间词查询的既有默认值、对比识别/任务状态机、查询/对比金额和证据口径、账本写入、远端 AI、痕迹、叙事、照片、额度/会员/StoreKit、主题、缓存生命周期、`PERF-AUDIT-04` 或 `ARCH-03`；未删除、覆盖、暂存或提交用户未跟踪素材、`tmp/` 与缓存目录。
+- 剩余风险与下一项：Windows 无 Swift/Xcode/iPhone，Calendar 年边界、闰年、真机时区、空结果显示和三档账本查询耗时仍需编译及 `FLOW-69` 签收。下一项仅启动 `PERF-FIX-04`，处理痕迹/线索快照生命周期，不混入全局 `PERF-AUDIT-04`。
+
+### PERF-FIX-04：痕迹与线索快照生命周期
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 代码、静态与完整发布门禁已通过，缺 Xcode/iPhone `FLOW-70` 签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
+- 真机现象与根因：无账单变化时从其他 Tab 返回痕迹/线索仍显示加载；杀进程重开后也从空白重新整理。根因是周/月/线索快照虽已放在 `StatsTabState`，但三个 `NeedsRefresh` 与线索刷新 UUID 仍是 `StatsWebView` 临时 `@State`，页面重建即恢复“需要刷新”；缓存 key 还依赖每次进程随机的 `Hasher` 和无关自定义日期，无法跨视图或跨进程稳定复用。`TraceSnapshotStore` 本身也只在内存中。
+- 实现（真实生命周期 key）：周、月、线索的已发布 snapshot key、章节/线索内容修订和冷启动上下文全部迁入 `StatsTabState`。key 由账本 `homeDashboardRevision`、自然日/周期、会员、当前范围/筛选、自定义日期、额度/解锁和叙事内容修订组成；预设范围不再被未启用的自定义日期误失效。账本监听改读修订号，不再比较完整 `items` 或为每次进入生成随机内容签名。
+- 实现（零重复与旧内容承接）：`weekTraceNeedsRefresh`、`monthTraceNeedsRefresh`、`clueTraceNeedsRefresh` 改为“已发布 key 是否等于当前 key”的派生结论，同修订 Tab 返回只命中现有快照，不创建准备任务。真实变化时保留安全旧快照并在后台原子替换，不再用阻断滚动的加载遮罩覆盖已有内容；筛选切换不展示上一筛选结果，会员切换会清除旧会员快照，避免降级时短暂泄露。
+- 实现（可丢弃冷启动展示缓存）：新增确定性账本指纹与有界 JSON/UserDefaults 展示缓存，只持久化标题、摘要、周期、笔数、活跃天、金额和主分类，不复制照片或完整账本。账本指纹、自然日、会员和范围完全匹配时，杀进程重开先展示真实旧内容并显示非阻断后台更新；账本变化、跨日、会员变化、范围不匹配、缓存缺失/损坏或 schema 不符时直接弃权并走真实首次准备。指纹按 UUID 排序且每个账本修订最多计算一次。
+- 修改文件：`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 自动回归：新增 key 同输入复用、账本修订/筛选/自定义范围真实失效、预设范围忽略无关日期、指纹顺序稳定且内容变化失效、存储对象重建后命中、指纹/日期不匹配和损坏缓存安全丢弃的 XCTest；静态门禁禁止三个刷新真值与刷新 UUID 回到临时 `@State`、禁止 `items` 比较和随机 `traceItemsSignature` 回流，并锁定旧内容非阻断承接；真机矩阵新增 `FLOW-70`。
+- Windows 验证证据：`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`；100/1,000/5,000 条、真实 12MP、语义、文案、迁移和 SQLite 门禁均通过，仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改生活线索/生活印记/叙事算法、痕迹和线索正式页面结构、播放、分享、复盘、账单字段、存储同步、额度规则、会员价格/购买/StoreKit、主题、`PERF-AUDIT-04` 或 `ARCH-03`；未处理该审计已登记的分享弹层和继续提问扫描，也未删除、覆盖、暂存或提交用户未跟踪内容。
+- 剩余风险与下一项：Windows 无 Swift/Xcode/iPhone，SwiftUI `@Binding` 状态发布、UserDefaults 冷启动读取、会员降级瞬间、跨日、VoiceOver、5,000 条指纹耗时及任务埋点仍需编译与 `FLOW-70` 真机签收。下一项仅启动 `PERF-FIX-05`，把会员长期档案快照移出临时 Sheet 并预热复用，不回改痕迹缓存或启动 `PERF-AUDIT-04`。
+
+### PERF-FIX-05：会员长期档案预热与复用
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 代码、静态与完整发布门禁已通过，缺 Xcode/iPhone `FLOW-71` 签收，不标记 `VERIFIED`。当前无 `IN_PROGRESS`。
+- 真机现象与根因：会员方案页的长期档案每次打开都要等，且先闪“0 条/0 天”。根因是完整快照、修订号和准备任务全部属于临时 `MemberPricingView @State`，Sheet 新建时固定从 `.empty` 开始；`onDisappear` 又取消任务并清空 revision。即使后台计算已发生，下一次打开也无法复用，真实空账本和“尚未准备”共用同一个假 0 对象。
+- 实现（共享预热）：新增 `@MainActor LifetimeArchiveSnapshotStore`，由 `ContentView @StateObject` 持有并通过环境注入会员页。`ContentView` 在首次显示、账本修订变化和 App 回到前台时调用 `prepareIfNeeded`，因此计算在用户打开 Sheet 前已经启动；相同账本修订/自然日只准备一次，Sheet 打开/关闭不再取消任务或清空修订。
+- 实现（旧内容与冷启动）：Store 在真实修订变化时保留上一份已发布档案，后台完成后只接受最新 request ID 并原子替换。新增指纹＋自然日校验的轻量 JSON/UserDefaults 缓存，复用与痕迹相同的确定性账本指纹；杀进程重开时匹配则立即承接真实标题、摘要和指标，并把缓存快照重新绑定当前内存修订后静默重算。指纹/日期不匹配、缓存缺失/损坏或 schema 不符时安全弃权。
+- 实现（禁止假 0）：`MemberPricingView` 只在 `snapshot != nil` 时渲染长期档案指标；无有效快照时显示非阻断的“首次准备”说明，明确不以 0 冒充数据。`LifetimeArchiveSnapshotComputation` 对真实空账本返回带当前 `sourceRevision` 的 `preparedEmpty`，因此只有确定账本确实为空后才展示 0 条/0 天；冷缓存旧 revision 通过不可变复制绑定当前 revision。
+- 修改文件：`NativeDemoApp/ContentView.swift`、`NativeDemoApp/Views/MemberPricingView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档；同时把本轮新增的通用确定性账本指纹策略命名收敛为 `LedgerDisplayFingerprintPolicy`，供痕迹和会员两个可丢弃展示缓存复用，未改变指纹字段或痕迹行为。
+- 自动回归：更新真实空账本 revision 断言；新增长期档案 Codable 缓存跨 Store 重建命中、另一账本/跨日拒绝、损坏数据清除，以及共享 Store 最终发布真实 prepared-empty 的 XCTest；静态门禁锁定 `ContentView` 预热/注入、禁止档案状态回到 Sheet 临时 `@State`、禁止 `.empty` 假 0 和消失时清修订，并锁定冷缓存与缺失态 UI；真机矩阵新增 `FLOW-71`。
+- Windows 验证证据：`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`；100/1,000/5,000 条、真实 12MP、生活语义、文案、主题、迁移和 SQLite 均通过，81 个 Swift 文件仅保留既有 5 条 soft copy warning。
+- 冻结边界复核：未修改会员价格、权益说明、免费次数、登录连续性、购买、恢复、StoreKit、会员状态同步、账单字段/存储同步、长期档案计算与文案规则、痕迹正式 UI、复盘、主题、`PERF-AUDIT-04` 或 `ARCH-03`；未删除、覆盖、暂存、提交或推送用户未跟踪素材、`tmp/` 与缓存目录。
+- 剩余风险与后续签收：Windows 无 Swift/Xcode/iPhone，`@StateObject/@EnvironmentObject` 注入、严格并发、TaskGroup、冷缓存首次读取、真实 StoreKit Sheet 链路、VoiceOver、快速开关十次和 5,000 条预热耗时仍需编译及 `FLOW-71` 真机签收。七项定向修复均已完成 Windows 代码与门禁；下一步只做 Xcode 全量编译/XCTest 和 `FLOW-65`～`FLOW-71` 真机签收，签收前全部保持 `CODE_DONE`，不得启动 `PERF-AUDIT-04` 或 `ARCH-03`。
