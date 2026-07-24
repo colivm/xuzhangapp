@@ -656,7 +656,7 @@ struct StatsWebView: View {
                     layout: layout,
                     snapshot: lifeSnapshot
                 )
-                .id("trace-life-card")
+                .id(TraceDeferredScrollPolicy.lifeChapterAnchorID)
                 .transition(.opacity)
             } else if traceViewMode == .clues,
                       let preparedClueSnapshot {
@@ -992,9 +992,9 @@ struct StatsWebView: View {
                     items: items,
                     allItems: allItems,
                     isMember: memberAccess,
-                    prioritizeRecurringMarks: range == .month && !useCustomRange && selectedPeriod == .month,
+                    prioritizeRecurringMarks: range == .month,
                     periodKey: periodKey,
-                    usesEchoAnchor: !useCustomRange && selectedPeriod != .year,
+                    usesEchoAnchor: true,
                     sourceRevision: homeViewModel.homeDashboardRevision,
                     now: now
                 ),
@@ -3715,8 +3715,6 @@ struct StatsWebView: View {
             ledgerRevision: homeViewModel.homeDashboardRevision,
             periodKey: "\(periodKey)|\(dayKey)",
             isMember: hasMemberAccess,
-            selectedPeriod: selectedPeriod,
-            usesCustomRange: useCustomRange,
             contentRevision: chapterContentRevision
         )
     }
@@ -3983,7 +3981,7 @@ struct StatsWebView: View {
             tabState.pendingLifeChapterScrollRange = nil
             tracePendingScrollTask?.cancel()
             tracePendingScrollTask = nil
-            traceViewMode = mode
+            tabState.selectViewMode(mode)
         } label: {
             Text(mode.rawValue)
                 .font(.system(size: 16, weight: isSelected ? .bold : .semibold))
@@ -5524,6 +5522,7 @@ struct StatsWebView: View {
     }
 
     private func schedulePendingTraceScrollIfPossible() {
+        let targetAnchorID = TraceDeferredScrollPolicy.lifeChapterAnchorID
         guard let pendingRange = tabState.pendingLifeChapterScrollRange,
               traceViewMode == .life,
               traceLifeCardRange == pendingRange,
@@ -5540,11 +5539,29 @@ struct StatsWebView: View {
                   selectedPeriod == TraceRangeContextPolicy.period(for: pendingRange),
                   !useCustomRange,
                   preparedLifeSnapshot(for: pendingRange) != nil else { return }
+            if TraceDeferredScrollPolicy.requiresAnchorReset(
+                currentAnchorID: tabState.scrollAnchorID,
+                targetAnchorID: targetAnchorID
+            ) {
+                var resetTransaction = Transaction(animation: nil)
+                resetTransaction.disablesAnimations = true
+                withTransaction(resetTransaction) {
+                    tabState.scrollAnchorID = nil
+                }
+                await Task.yield()
+                guard !Task.isCancelled,
+                      tabState.pendingLifeChapterScrollRange == pendingRange,
+                      traceViewMode == .life,
+                      traceLifeCardRange == pendingRange,
+                      selectedPeriod == TraceRangeContextPolicy.period(for: pendingRange),
+                      !useCustomRange,
+                      preparedLifeSnapshot(for: pendingRange) != nil else { return }
+            }
             var transaction = Transaction(animation: nil)
             transaction.disablesAnimations = true
             withTransaction(transaction) {
                 tabState.pendingLifeChapterScrollRange = nil
-                tabState.scrollAnchorID = "trace-life-card"
+                tabState.scrollAnchorID = targetAnchorID
             }
             tracePendingScrollTask = nil
         }

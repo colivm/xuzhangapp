@@ -2052,6 +2052,53 @@ final class InteractionStateRegressionTests: XCTestCase {
         XCTAssertTrue(insight.monthlyInsightGenerated)
         XCTAssertEqual(insight.scrollAnchorID, "insight-next-chapter")
     }
+
+    func testSelectingLifeNormalizesClueOnlyRangesToTheRememberedLifeRange() {
+        var customRangeState = StatsTabState()
+        customRangeState.viewMode = .clues
+        customRangeState.lifeCardRange = .month
+        customRangeState.selectedPeriod = .month
+        customRangeState.useCustomRange = true
+        customRangeState.showsCustomDatePanel = true
+        customRangeState.selectedCategory = .dining
+
+        customRangeState.selectViewMode(.life)
+
+        XCTAssertEqual(customRangeState.viewMode, .life)
+        XCTAssertEqual(customRangeState.lifeCardRange, .month)
+        XCTAssertEqual(customRangeState.selectedPeriod, .month)
+        XCTAssertFalse(customRangeState.useCustomRange)
+        XCTAssertFalse(customRangeState.showsCustomDatePanel)
+        XCTAssertEqual(customRangeState.selectedCategory, .dining)
+
+        var yearState = StatsTabState()
+        yearState.viewMode = .clues
+        yearState.lifeCardRange = .week
+        yearState.selectedPeriod = .year
+
+        yearState.selectViewMode(.life)
+
+        XCTAssertEqual(yearState.viewMode, .life)
+        XCTAssertEqual(yearState.lifeCardRange, .week)
+        XCTAssertEqual(yearState.selectedPeriod, .week)
+        XCTAssertFalse(yearState.useCustomRange)
+    }
+
+    func testSelectingCluesDoesNotRewriteTheExistingRangeState() {
+        var stats = StatsTabState()
+        stats.lifeCardRange = .month
+        stats.selectedPeriod = .year
+        stats.useCustomRange = true
+        stats.showsCustomDatePanel = true
+
+        stats.selectViewMode(.clues)
+
+        XCTAssertEqual(stats.viewMode, .clues)
+        XCTAssertEqual(stats.lifeCardRange, .month)
+        XCTAssertEqual(stats.selectedPeriod, .year)
+        XCTAssertTrue(stats.useCustomRange)
+        XCTAssertTrue(stats.showsCustomDatePanel)
+    }
 }
 
 final class OCRImportSubmissionGateTests: XCTestCase {
@@ -2388,6 +2435,32 @@ final class TraceSnapshotVisibilityPolicyTests: XCTestCase {
     }
 }
 
+final class TraceDeferredScrollPolicyTests: XCTestCase {
+    func testRepeatedTargetRequiresResetBeforeReissuingTheAnchor() {
+        XCTAssertTrue(
+            TraceDeferredScrollPolicy.requiresAnchorReset(
+                currentAnchorID: TraceDeferredScrollPolicy.lifeChapterAnchorID,
+                targetAnchorID: TraceDeferredScrollPolicy.lifeChapterAnchorID
+            )
+        )
+    }
+
+    func testMissingOrDifferentTargetDoesNotNeedAnAnchorReset() {
+        XCTAssertFalse(
+            TraceDeferredScrollPolicy.requiresAnchorReset(
+                currentAnchorID: nil,
+                targetAnchorID: TraceDeferredScrollPolicy.lifeChapterAnchorID
+            )
+        )
+        XCTAssertFalse(
+            TraceDeferredScrollPolicy.requiresAnchorReset(
+                currentAnchorID: "trace-clue-board",
+                targetAnchorID: TraceDeferredScrollPolicy.lifeChapterAnchorID
+            )
+        )
+    }
+}
+
 final class TraceLoadingPresentationPolicyTests: XCTestCase {
     func testInitialMonthTraceShowsOneImmediateAccuratePresentation() {
         let presentation = TraceLoadingPresentationPolicy.make(
@@ -2449,10 +2522,9 @@ final class TraceSnapshotLifecycleTests: XCTestCase {
             ledgerRevision: 9,
             periodKey: "2026-W30|2026-07-23",
             isMember: false,
-            selectedPeriod: .week,
-            usesCustomRange: false,
             contentRevision: 2
         )
+        XCTAssertTrue(chapter.hasPrefix("chapter-v3|"))
         XCTAssertEqual(
             chapter,
             TraceSnapshotLifecycleKeyPolicy.chapterKey(
@@ -2460,8 +2532,6 @@ final class TraceSnapshotLifecycleTests: XCTestCase {
                 ledgerRevision: 9,
                 periodKey: "2026-W30|2026-07-23",
                 isMember: false,
-                selectedPeriod: .week,
-                usesCustomRange: false,
                 contentRevision: 2
             )
         )
@@ -2472,9 +2542,37 @@ final class TraceSnapshotLifecycleTests: XCTestCase {
                 ledgerRevision: 10,
                 periodKey: "2026-W30|2026-07-23",
                 isMember: false,
-                selectedPeriod: .week,
-                usesCustomRange: false,
                 contentRevision: 2
+            )
+        )
+        XCTAssertNotEqual(
+            chapter,
+            TraceSnapshotLifecycleKeyPolicy.chapterKey(
+                range: .month,
+                ledgerRevision: 9,
+                periodKey: "2026-07|2026-07-23",
+                isMember: false,
+                contentRevision: 2
+            )
+        )
+        XCTAssertNotEqual(
+            chapter,
+            TraceSnapshotLifecycleKeyPolicy.chapterKey(
+                range: .week,
+                ledgerRevision: 9,
+                periodKey: "2026-W30|2026-07-23",
+                isMember: true,
+                contentRevision: 2
+            )
+        )
+        XCTAssertNotEqual(
+            chapter,
+            TraceSnapshotLifecycleKeyPolicy.chapterKey(
+                range: .week,
+                ledgerRevision: 9,
+                periodKey: "2026-W30|2026-07-23",
+                isMember: false,
+                contentRevision: 3
             )
         )
 

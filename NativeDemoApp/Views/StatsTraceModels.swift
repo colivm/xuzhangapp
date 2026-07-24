@@ -91,6 +91,17 @@ enum TraceSnapshotVisibilityPolicy {
     }
 }
 
+enum TraceDeferredScrollPolicy {
+    static let lifeChapterAnchorID = "trace-life-card"
+
+    static func requiresAnchorReset(
+        currentAnchorID: String?,
+        targetAnchorID: String
+    ) -> Bool {
+        currentAnchorID == targetAnchorID
+    }
+}
+
 struct TraceLoadingPresentation: Equatable, Sendable {
     let message: String
     let detail: String
@@ -144,18 +155,14 @@ enum TraceSnapshotLifecycleKeyPolicy {
         ledgerRevision: Int,
         periodKey: String,
         isMember: Bool,
-        selectedPeriod: StatsPeriod,
-        usesCustomRange: Bool,
         contentRevision: Int
     ) -> String {
         [
-            "chapter-v2",
+            "chapter-v3",
             range.rawValue,
             String(ledgerRevision),
             periodKey,
             isMember ? "member" : "free",
-            selectedPeriod.rawValue,
-            usesCustomRange ? "custom" : "preset",
             String(contentRevision)
         ].joined(separator: "|")
     }
@@ -273,6 +280,14 @@ struct StatsTabState {
     var coldStartDayKey: String?
     var coldStartLedgerFingerprint: String?
     var coldStartDisplay: TraceColdStartDisplayEntry?
+
+    mutating func selectViewMode(_ mode: TraceViewMode) {
+        viewMode = mode
+        guard mode == .life else { return }
+        selectedPeriod = TraceRangeContextPolicy.period(for: lifeCardRange)
+        useCustomRange = false
+        showsCustomDatePanel = false
+    }
 
     mutating func openLifeChapter(_ range: SummaryPlaybackRange) {
         viewMode = .life
