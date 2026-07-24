@@ -3146,7 +3146,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ### PET-03：宠物拖动定位与长按隐藏
 
-- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。Windows 代码与全仓门禁已完成，不冒充 SwiftUI 真机布局签收。
 - 历史归因：提交 `5fb76d2` 曾出现“长按我就能把我藏起来”文案，但历史视图只有普通点击按钮，没有宠物拖动位置、长按手势或持久化实现；本项补齐真实交互，不恢复虚假承诺。
 - 目标：用户可拖动宠物在首页安全区域内换位，松手吸附最近左右边缘并保存相对位置；长按约 0.6 秒后明确隐藏，继续复用现有宠物开关，可从“我的”恢复；拖动、点击、长按互不误触。
 - 允许修改：新增独立宠物浮层位置策略/本机 Store/交互 View；`HomeView` 只接入局部浮层；必要时使用现有 `SettingsViewModel` 宠物开关方法；对应 XCTest、静态门禁、真机矩阵和本文档。
@@ -3955,3 +3955,30 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 修改文件与结果：`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift` 用显式 `if/else` 接纳分支替代需要推断泛型返回值的 Optional `flatMap`，为 AI 决策与媒体 Recipe 数组补充明确类型，通过 `Self.mediaRecipes(...)` 消除局部数组对同名静态函数的遮蔽，把媒体 ID、Hero 角色及内容原子 ID 投影改为有明确参数类型的闭包；`NativeDemoApp/Views/SummaryPlaybackSheet.swift` 把保存结果提示读取从不存在的 `unavailablePhotoCount` 对齐到 `PreparedCoverRenderInput.unavailableMediaCount`。决策校验、媒体顺序与角色、Recipe 内容、Footer 及用户可见文案均未改变。
 - 验证证据：已逐项对照 `CoverAIDirectorDecision`、`MediaPlacementRecipe`、`MediaRole`、`ContentAllocationPlan` 与 `PreparedCoverRenderInput` 声明，并扫描确认报错表达式和 `renderInput.unavailablePhotoCount` 无残留；`git diff --check` 通过，仅有既有 LF→CRLF 提示；`node --test ai-proxy/coverDirectorContract.test.js` 12/12 通过；体验静态门禁通过并执行 Node 23/23；`python scripts/validate_release_gate.py --phase windows` 通过，最终输出 `release_repository_gate: OK`、`Static experience checks passed`、`Copy experience checks passed`，100/1,000/5,000 条确定性夹具和三张 12MP 图片夹具摘要保持一致。
 - 剩余风险与下一项：Windows 无 Swift/Xcode，以上类型修复仍需 TestFlight/Xcode 重新编译确认；编译通过后继续既定 `FLOW-73`～`FLOW-77` 真机签收。不得据此删除旧分享实现，也不启动 `PERF-AUDIT-04` 或 `ARCH-03`。
+
+---
+
+## 62. TRACE-FIX-01：痕迹页固定页签无限高度真机回归（2026-07-24）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无本项 `IN_PROGRESS`。真机截图已定位并完成定向修复，等待新 TestFlight 包复验，不标记 `VERIFIED`。
+- 真机证据与根因：TestFlight 截图显示“生活/线索”固定页签占据接近半屏，范围控件、内容及加载卡整体被下推。`a261f39` 把页签从纵向 ScrollView 移入 GeometryReader 下的固定 VStack 后，`traceViewModeTab` 仍使用 `.frame(maxWidth: .infinity, maxHeight: .infinity)`，父 HStack 又只有 `minHeight: 44`，因此在有界垂直空间内发生无限高度扩张；这是布局回归，不是数据计算耗时造成。
+- 允许范围：只把模式页签及按钮的垂直尺寸收紧为明确的 44pt 触控高度，并增加防回流静态检查；保留固定控件、范围状态、精确快照、加载延迟、旧内容交互阻断、滚动锚点、Dynamic Type、VoiceOver 与 Reduce Motion 语义。
+- 冻结边界：不重构痕迹内容、不修改周/月/线索计算、缓存键、分享、图片加载、账本、会员、额度、AI、同步、`PERF-AUDIT-04` 或 `ARCH-03`。
+- 工作区保护：保留 `brand-assets/`、`output/`、`tmp/`、缓存目录及全部用户未跟踪文件；不清理、不覆盖、不暂存相邻任务或素材。
+- 修改文件与结果：`NativeDemoApp/Views/StatsWebView.swift` 把模式页签 HStack 从无上限的 `minHeight` 收紧为明确 44pt，并移除按钮标签的 `maxHeight: .infinity`、保持 44pt 触控高度；`scripts/experience_static_check.ps1` 新增固定控件高度与禁止无限垂直请求的防回流检查。生活/线索、周/月范围、加载覆盖、内容计算与滚动状态均未改。
+- 验证证据：定向多行扫描确认 `traceViewModeTab` 范围内无 `maxHeight: .infinity`；体验静态门禁通过并新增两项 `OK`；`git diff --check` 通过，仅有既有 LF→CRLF 提示；`python scripts/validate_release_gate.py --phase windows` 通过，最终输出 `release_repository_gate: OK`、`Static experience checks passed`、`Copy experience checks passed`，100/1,000/5,000 条夹具和三张 12MP 图片夹具摘要保持一致。
+- 剩余风险与下一项：Windows 无 SwiftUI/iPhone，44pt 固定页签仍需新 TestFlight 包对生活/线索、本周/本月、连续快速切换、Dynamic Type 和旋转/窄屏复验；重点确认线索模式顶部总高不再超过单行页签加内边距，生活模式只多一行 44pt 范围控件，加载卡始终位于剩余内容区。加载层继续遵循既有“无匹配快照时阻断、已有匹配内容时保留”的冻结规则。本项未修改痕迹数据、快照、滚动或内容卡；复验前保持 `CODE_DONE`。
+
+---
+
+## 63. SHARE-FIX-03：自动导演有安全照片却生成零媒体封面（2026-07-24）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。Windows 代码、代理契约、静态与完整发布门禁已通过；等待 Xcode/XCTest 与新 TestFlight 包真机复验，不标记 `VERIFIED`。
+- 真机证据与根因：TestFlight 分享图 Footer 明确显示“3 张照片”，成品却为零图片的“生活手札”。Footer 数量来自适配器已解码且隐私安全的 `safeMedia`，本地 `LaunchCoverTemplateCatalog.mediaRecipes` 对生活手札本会选择最多两张 secondary；只有已接受 AI Decision 的路径会直接采用 `decision.mediaSelections`。当前闭合契约允许在 `mediaCandidates` 非空时返回空 `mediaRoles`，因此 AI 的零媒体决定覆盖了完整本地配方。照片 `qualityScore` 只用于合格候选排序；Hero 还需证据绑定及清晰度/曝光/分辨率/裁切安全硬门槛，但这些规则不应让所有安全 secondary 照片消失。
+- 允许范围：只新增“自动 AI 请求存在安全媒体候选时，响应至少选择一张已批准媒体”的客户端严格校验、服务端闭合契约校验、适配器最终防线与回归测试；非法零媒体 Decision 必须完整回退到已完成的本地 Recipe。手动模板仍由本地目录规则决定，零照片输入继续合法。
+- 冻结边界：不降低 Hero 隐私/质量/证据门槛，不上传照片、色样或标识，不改变价值分、叙事事实、模板布局、Footer 指标、会员、额度、计费、保存交互、痕迹页、旧分享退役、`PERF-AUDIT-04` 或 `ARCH-03`。
+- 工作区保护：保留前一已完成痕迹修复及 `brand-assets/`、`output/`、`tmp/`、缓存目录和全部用户未跟踪文件；不清理、不覆盖、不暂存相邻任务或素材。
+- 验证计划：Swift XCTest 覆盖有媒体候选时零媒体响应拒绝、适配器本地完整回退及真正零照片继续合法；Node 契约测试覆盖同一边界；静态门禁锁定客户端、服务端和适配器三层防线。运行专项 Node、`git diff --check`、体验静态门禁及完整 Windows 发布门禁；最终由 TestFlight 确认三张安全照片默认至少使用一张。
+- 修改文件与结果：`NativeDemoApp/CoverEngine/Director/AICoverDirector.swift` 在客户端严格 Validator 中拒绝“安全媒体候选非空但 `mediaRoles` 为空”的响应；`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift` 在接受 AI Decision 前增加同一最终防线，非法结果完整回退本地 Recipe；`ai-proxy/coverDirectorContract.js` 在服务端归一化阶段拒绝同类响应，并在固定 prompt 中明确 Hero 不合格时仍须选择 secondary/decoration。`NativeDemoAppTests/CoverAIDirectorTests.swift` 与 `ai-proxy/coverDirectorContract.test.js` 同时覆盖有安全照片时拒绝零媒体及真正无照片仍允许纯文字封面；`scripts/experience_static_check.ps1` 锁定客户端、适配器和代理三层规则。未改变质量分、Hero 证据/隐私门槛、模板布局、Footer 或零照片语义。
+- 验证证据：`node --test ai-proxy/coverDirectorContract.test.js` 13/13 通过；`npm test`（`ai-proxy`）24/24 通过；`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 通过；`python scripts/validate_release_gate.py --phase windows` 完整通过并输出 `release_repository_gate: OK`、`Static experience checks passed`、`Copy experience checks passed`；`git diff --check` 无 whitespace error，仅有工作区既有 LF→CRLF 提示。Windows 没有 Swift/Xcode，新增 Swift XCTest 已完成工程接线与静态复核但未冒充实跑。
+- 剩余风险与下一项：新 TestFlight 包必须用“3 张安全照片”验证自动封面至少使用 1 张；Hero 若未过清晰度、曝光、分辨率、裁切或证据绑定门槛，照片应降为 secondary/decoration，而不是全部消失；真正零照片输入仍应生成纯文字封面。通过前保持 `CODE_DONE`，不得降低 Hero 安全门槛、退役旧分享实现或启动 `PERF-AUDIT-04`、`ARCH-03`。

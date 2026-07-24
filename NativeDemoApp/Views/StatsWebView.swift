@@ -3955,7 +3955,7 @@ struct StatsWebView: View {
                 traceViewModeTab(.life)
                 traceViewModeTab(.clues)
             }
-            .frame(minHeight: 44)
+            .frame(height: 44)
 
             GeometryReader { proxy in
                 let tabWidth = proxy.size.width / 2
@@ -3988,7 +3988,8 @@ struct StatsWebView: View {
             Text(mode.rawValue)
                 .font(.system(size: 16, weight: isSelected ? .bold : .semibold))
                 .foregroundStyle(isSelected ? TraceColors.primaryText : TraceColors.tertiaryText)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

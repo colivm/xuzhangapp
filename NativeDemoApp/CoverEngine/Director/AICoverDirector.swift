@@ -464,6 +464,7 @@ enum CoverAIDirectorValidator {
               !response.reasonCodes.isEmpty,
               Set(response.reasonCodes).count == response.reasonCodes.count,
               response.reasonCodes.allSatisfy(allowedReasonCodes.contains),
+              request.mediaCandidates.isEmpty || !response.mediaRoles.isEmpty,
               response.mediaRoles.count >= template.minimumMediaCount,
               response.mediaRoles.count <= template.maximumMediaCount else {
             return nil

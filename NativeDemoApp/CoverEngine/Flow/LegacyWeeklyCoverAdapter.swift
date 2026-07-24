@@ -102,6 +102,8 @@ enum LegacyWeeklyCoverAdapter {
         if let decision = directorDecision,
            source.backgroundImage == nil,
            let currentDirectorInput,
+           currentDirectorInput.request.mediaCandidates.isEmpty
+                || !decision.mediaSelections.isEmpty,
            CoverAIDirectorValidator.isStillValid(
                 decision,
                 request: currentDirectorInput.request,

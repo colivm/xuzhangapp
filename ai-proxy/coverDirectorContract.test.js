@@ -313,6 +313,22 @@ test("accepts bounded requests and responses for all twenty templates", () => {
   }
 });
 
+test("rejects zero media when safe candidates exist and allows a true no-photo response", () => {
+  const requestWithPhotos = singleTemplateRequest("journal", 2);
+  const emptyResponseWithPhotos = responseForSingleTemplate(requestWithPhotos, []);
+  assert.equal(
+    normalizeCoverDirectorResponse(JSON.stringify(emptyResponseWithPhotos), requestWithPhotos),
+    null
+  );
+
+  const requestWithoutPhotos = singleTemplateRequest("journal", 0);
+  const emptyResponseWithoutPhotos = responseForSingleTemplate(requestWithoutPhotos, []);
+  assert.deepEqual(
+    normalizeCoverDirectorResponse(JSON.stringify(emptyResponseWithoutPhotos), requestWithoutPhotos),
+    emptyResponseWithoutPhotos
+  );
+});
+
 test("memoryWall accepts four through six asymmetric media slots", () => {
   for (const mediaCount of [4, 5, 6]) {
     const request = singleTemplateRequest("memoryWall", mediaCount);

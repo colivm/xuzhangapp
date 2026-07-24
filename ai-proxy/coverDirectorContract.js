@@ -197,6 +197,7 @@ function normalizeCoverDirectorResponse(content, rawRequest) {
   if (!Array.isArray(object.reasonCodes) || object.reasonCodes.length < 1 || object.reasonCodes.length > 4) return null;
   if (new Set(object.reasonCodes).size !== object.reasonCodes.length || object.reasonCodes.some((reason) => !ALLOWED_REASONS.has(reason))) return null;
   if (!Array.isArray(object.mediaRoles) || object.mediaRoles.length < candidate.minimumMediaCount || object.mediaRoles.length > candidate.maximumMediaCount) return null;
+  if (rawRequest.mediaCandidates.length > 0 && object.mediaRoles.length === 0) return null;
 
   const mediaByAlias = new Map(rawRequest.mediaCandidates.map((media) => [media.alias, media]));
   const seenAliases = new Set();
@@ -247,6 +248,7 @@ function buildCoverDirectorMessages(rawRequest) {
     "输入只有脱敏的结构化数量、方向、质量档位、匿名媒体别名和本地已判定合法的候选 token。",
     "只能从 templateCandidates 中选一个模板及其原样 variantID、paletteID、backgroundFamily、animationProfile。",
     "mediaRoles 只能引用输入的 M 编号；Hero 必须同时 isHeroEligible=true 且 isEvidenceBoundToLead=true。",
+    "只要 mediaCandidates 非空，mediaRoles 就必须至少选择一张；Hero 不合格时仍可按模板规则选择 secondary 或 decoration。",
     "bookCover 的 Hero 必须是 portrait；不得把 landscape 或 square 媒体放进书封 Hero。",
     "不得输出正文、图片描述、坐标、字体、二维码、URL、UUID、额外字段或候选之外的 token。",
     "优先让故事主体明确、Hero 与辅助图有主次；证据弱或图片弱时选择 journal、quote 或 minimal。",

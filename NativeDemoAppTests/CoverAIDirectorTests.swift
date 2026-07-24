@@ -135,6 +135,88 @@ final class CoverAIDirectorTests: XCTestCase {
         ))
     }
 
+    func testZeroMediaDecisionFallsBackWhenSafePhotosExistButRemainsValidWithoutPhotos() throws {
+        let sourceWithPhotos = makeSource(mediaCount: 2)
+        let inputWithPhotos = try LegacyWeeklyCoverAdapter.makeDirectorInput(from: sourceWithPhotos)
+        let journalWithPhotos = try XCTUnwrap(
+            inputWithPhotos.request.templateCandidates.first { $0.templateID == .journal }
+        )
+        let emptyResponseWithPhotos = CoverAIDirectorResponse(
+            schemaVersion: CoverAIDirectorRules.currentVersion,
+            sourceRevision: inputWithPhotos.request.sourceRevision,
+            periodKeyHash: inputWithPhotos.request.periodKeyHash,
+            contentFingerprint: inputWithPhotos.request.contentFingerprint,
+            templateID: journalWithPhotos.templateID,
+            variantID: journalWithPhotos.variantID,
+            paletteID: journalWithPhotos.allowedPaletteIDs[0],
+            backgroundFamily: journalWithPhotos.allowedBackgroundFamilies[0],
+            mediaRoles: [],
+            animationProfile: journalWithPhotos.allowedAnimationProfiles[0],
+            seed: 89_121,
+            confidence: 0.88,
+            reasonCodes: [.shortStory]
+        )
+        XCTAssertNil(CoverAIDirectorValidator.validate(
+            emptyResponseWithPhotos,
+            request: inputWithPhotos.request,
+            mediaIDByAlias: inputWithPhotos.mediaIDByAlias
+        ))
+
+        let forgedEmptyDecision = CoverAIDirectorDecision(
+            requestCacheKey: inputWithPhotos.request.cacheKey,
+            sourceRevision: emptyResponseWithPhotos.sourceRevision,
+            periodKeyHash: emptyResponseWithPhotos.periodKeyHash,
+            contentFingerprint: emptyResponseWithPhotos.contentFingerprint,
+            templateID: emptyResponseWithPhotos.templateID,
+            variantID: emptyResponseWithPhotos.variantID,
+            paletteID: emptyResponseWithPhotos.paletteID,
+            backgroundFamily: emptyResponseWithPhotos.backgroundFamily,
+            mediaSelections: [],
+            animationProfile: emptyResponseWithPhotos.animationProfile,
+            seed: emptyResponseWithPhotos.seed,
+            confidence: emptyResponseWithPhotos.confidence,
+            reasonCodes: emptyResponseWithPhotos.reasonCodes
+        )
+        let localFallback = try LegacyWeeklyCoverAdapter.prepareSession(
+            from: sourceWithPhotos,
+            directorDecision: forgedEmptyDecision
+        ).previewRenderInput
+        XCTAssertEqual(localFallback.recipe.source, .local)
+        XCTAssertFalse(localFallback.recipe.media.isEmpty)
+
+        let sourceWithoutPhotos = makeSource(mediaCount: 0)
+        let inputWithoutPhotos = try LegacyWeeklyCoverAdapter.makeDirectorInput(from: sourceWithoutPhotos)
+        let journalWithoutPhotos = try XCTUnwrap(
+            inputWithoutPhotos.request.templateCandidates.first { $0.templateID == .journal }
+        )
+        let emptyResponseWithoutPhotos = CoverAIDirectorResponse(
+            schemaVersion: CoverAIDirectorRules.currentVersion,
+            sourceRevision: inputWithoutPhotos.request.sourceRevision,
+            periodKeyHash: inputWithoutPhotos.request.periodKeyHash,
+            contentFingerprint: inputWithoutPhotos.request.contentFingerprint,
+            templateID: journalWithoutPhotos.templateID,
+            variantID: journalWithoutPhotos.variantID,
+            paletteID: journalWithoutPhotos.allowedPaletteIDs[0],
+            backgroundFamily: journalWithoutPhotos.allowedBackgroundFamilies[0],
+            mediaRoles: [],
+            animationProfile: journalWithoutPhotos.allowedAnimationProfiles[0],
+            seed: 89_121,
+            confidence: 0.88,
+            reasonCodes: [.shortStory]
+        )
+        let noPhotoDecision = try XCTUnwrap(CoverAIDirectorValidator.validate(
+            emptyResponseWithoutPhotos,
+            request: inputWithoutPhotos.request,
+            mediaIDByAlias: inputWithoutPhotos.mediaIDByAlias
+        ))
+        let noPhotoRenderInput = try LegacyWeeklyCoverAdapter.prepareSession(
+            from: sourceWithoutPhotos,
+            directorDecision: noPhotoDecision
+        ).previewRenderInput
+        XCTAssertEqual(noPhotoRenderInput.recipe.source, .ai)
+        XCTAssertTrue(noPhotoRenderInput.recipe.media.isEmpty)
+    }
+
     func testValidAIDecisionStillPassesTheFullLocalRenderContract() throws {
         let source = makeSource(mediaCount: 2)
         let input = try LegacyWeeklyCoverAdapter.makeDirectorInput(from: source)
