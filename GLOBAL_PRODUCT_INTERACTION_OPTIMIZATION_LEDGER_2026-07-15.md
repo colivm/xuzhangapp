@@ -3129,7 +3129,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ### UI-FIX-04：保存后首页首帧与账单稳定发布
 
-- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。Windows 代码与全仓门禁已完成，不冒充 macOS/Xcode 编译通过。
 - 现象与根因：`ContentView` 只构建当前 Tab，保存后返回会重新创建 `HomeView`；`PixelPetAnimationView.currentFrame` 初始为 `nil`，外框先出现而首帧等待 `.task` 加载裁切。`todayStoryNarrative` 仍在 SwiftUI 视图计算中调用完整生活线索聚合，延后宠物任务。账本变化又会立即清空 `homeLifeMarkTextsByItemID`，后台完成后重新插入标签并改变行高；最新手工记录同时播放约 1.45 秒高亮，且存在多个安排入口，共同形成非必现闪动。
 - 目标：宠物承载出现时立即有稳定产品首帧；今日小记只在账本修订、日期或会员真正变化时准备；旧账单元数据在新快照发布前保持稳定，新记录不因晚到标签改变首帧高度；每个保存 ID 最多安排一次不改变布局的轻量反馈。
 - 允许修改：`PixelPetAnimationView.swift` 的同步稳定帧承接；`HomeViewModel+Dashboard.swift` 的今日小记/生活线索首页快照；`HomeView.swift` 的只读消费与保存反馈；必要的纯策略 XCTest、静态门禁、真机矩阵和本文档。
@@ -3944,3 +3944,14 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 修改文件与结果：`NativeDemoApp/CoverEngine/Templates/LaunchCoverTemplates.swift` 新增局部 `layoutFingerprint`，`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift` 新增局部 `recipeFingerprint`；两处原有输入、输入顺序、稳定哈希函数及 `layout.launch.` / `cover.launch.` 前缀均保持不变，最终 ID 语义不变。生产目录已扫描，无 `CoverStableIdentity.fingerprint([` 多行调用继续直接位于字符串插值内。
 - 验证证据：`git diff --check` 通过，仅有既有 LF→CRLF 提示；`node --test ai-proxy/coverDirectorContract.test.js` 12/12 通过；`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 通过并执行 Node 23/23；`python scripts/validate_release_gate.py --phase windows` 通过，最终输出 `release_repository_gate: OK`、`Static experience checks passed`、`Copy experience checks passed`，100/1,000/5,000 条确定性夹具和三张 12MP 图片夹具摘要保持一致。
 - 剩余风险与下一项：当前 Windows 没有 Swift/Xcode，仍需用户重新触发 Xcode/TestFlight 编译，以确认 Apple Swift 编译器已接受两处改写；通过后继续既定 `FLOW-73`～`FLOW-77` 真机签收。不得据此删除旧分享实现，也不启动 `PERF-AUDIT-04` 或 `ARCH-03`。
+
+---
+
+## 61. SHARE-FIX-02：封面适配器类型推断与保存提示字段编译修复（2026-07-24）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 问题与范围：Xcode/TestFlight 继续报告 `LegacyWeeklyCoverAdapter.swift:101/123/129/138/199/200/205` 的 Optional 泛型、同名函数遮蔽、成员和 key path 类型推断错误，以及 `SummaryPlaybackSheet.swift:2941/2942` 读取 `PreparedCoverRenderInput` 不存在的 `unavailablePhotoCount`。本项只补足静态类型、消除 `mediaRecipes` 同名调用歧义、把含糊 key path 改为等价显式闭包，并读取契约中真实存在的 `unavailableMediaCount`；不得改变决策接受条件、模板/媒体选择、Recipe、Footer、保存交互或提示语义。
+- 工作区保护：保留 `brand-assets/`、`output/`、`tmp/`、缓存目录及全部用户未跟踪文件；不清理、不覆盖、不暂存相邻任务或素材。
+- 修改文件与结果：`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift` 用显式 `if/else` 接纳分支替代需要推断泛型返回值的 Optional `flatMap`，为 AI 决策与媒体 Recipe 数组补充明确类型，通过 `Self.mediaRecipes(...)` 消除局部数组对同名静态函数的遮蔽，把媒体 ID、Hero 角色及内容原子 ID 投影改为有明确参数类型的闭包；`NativeDemoApp/Views/SummaryPlaybackSheet.swift` 把保存结果提示读取从不存在的 `unavailablePhotoCount` 对齐到 `PreparedCoverRenderInput.unavailableMediaCount`。决策校验、媒体顺序与角色、Recipe 内容、Footer 及用户可见文案均未改变。
+- 验证证据：已逐项对照 `CoverAIDirectorDecision`、`MediaPlacementRecipe`、`MediaRole`、`ContentAllocationPlan` 与 `PreparedCoverRenderInput` 声明，并扫描确认报错表达式和 `renderInput.unavailablePhotoCount` 无残留；`git diff --check` 通过，仅有既有 LF→CRLF 提示；`node --test ai-proxy/coverDirectorContract.test.js` 12/12 通过；体验静态门禁通过并执行 Node 23/23；`python scripts/validate_release_gate.py --phase windows` 通过，最终输出 `release_repository_gate: OK`、`Static experience checks passed`、`Copy experience checks passed`，100/1,000/5,000 条确定性夹具和三张 12MP 图片夹具摘要保持一致。
+- 剩余风险与下一项：Windows 无 Swift/Xcode，以上类型修复仍需 TestFlight/Xcode 重新编译确认；编译通过后继续既定 `FLOW-73`～`FLOW-77` 真机签收。不得据此删除旧分享实现，也不启动 `PERF-AUDIT-04` 或 `ARCH-03`。

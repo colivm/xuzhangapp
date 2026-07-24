@@ -2938,8 +2938,8 @@ struct SummaryPlaybackSheet: View {
             do {
                 try await PhotoLibrarySaveService.shared.saveImageToLibrary(image)
                 guard !Task.isCancelled else { return }
-                shareSaveMessage = renderInput.unavailablePhotoCount > 0
-                    ? "已保存到相册；有 \(renderInput.unavailablePhotoCount) 张照片暂不可用，本次按可用记录生成。"
+                shareSaveMessage = renderInput.unavailableMediaCount > 0
+                    ? "已保存到相册；有 \(renderInput.unavailableMediaCount) 张照片暂不可用，本次按可用记录生成。"
                     : "已保存到相册。"
                 showShareCardPrivacyConfirm = false
             } catch {

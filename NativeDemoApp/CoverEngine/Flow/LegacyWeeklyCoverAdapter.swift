@@ -98,17 +98,18 @@ enum LegacyWeeklyCoverAdapter {
             )
         )
         let currentDirectorInput = try? directorInput(from: context, source: source)
-        let acceptedDirectorDecision = directorDecision.flatMap { decision in
-            guard source.backgroundImage == nil,
-                  let currentDirectorInput,
-                  CoverAIDirectorValidator.isStillValid(
-                    decision,
-                    request: currentDirectorInput.request,
-                    mediaIDByAlias: currentDirectorInput.mediaIDByAlias
-                  ) else {
-                return nil
-            }
-            return decision
+        let acceptedDirectorDecision: CoverAIDirectorDecision?
+        if let decision = directorDecision,
+           source.backgroundImage == nil,
+           let currentDirectorInput,
+           CoverAIDirectorValidator.isStillValid(
+                decision,
+                request: currentDirectorInput.request,
+                mediaIDByAlias: currentDirectorInput.mediaIDByAlias
+           ) {
+            acceptedDirectorDecision = decision
+        } else {
+            acceptedDirectorDecision = nil
         }
         let templateID = acceptedDirectorDecision?.templateID ?? localTemplateID
         let allocation = try ContentAllocationEngine.allocate(
@@ -119,14 +120,14 @@ enum LegacyWeeklyCoverAdapter {
             ),
             privacyPolicy: factPack.privacy
         )
-        let mediaRecipes = acceptedDirectorDecision.map {
-            mediaRecipes(for: templateID, selections: $0.mediaSelections)
+        let mediaRecipes: [MediaPlacementRecipe] = acceptedDirectorDecision.map { decision in
+            Self.mediaRecipes(for: templateID, selections: decision.mediaSelections)
         } ?? LaunchCoverTemplateCatalog.mediaRecipes(
             for: templateID,
             descriptors: descriptors,
             leadEvidenceItemIDs: story.evidenceItemIDs
         )
-        let selectedMediaIDs = Set(mediaRecipes.map(\.mediaID))
+        let selectedMediaIDs = Set(mediaRecipes.map { recipe in recipe.mediaID })
         let selectedImages = safeMedia.reduce(into: [UUID: UIImage]()) { result, media in
             guard selectedMediaIDs.contains(media.id) else { return }
             result[media.id] = media.image
@@ -135,7 +136,9 @@ enum LegacyWeeklyCoverAdapter {
             guard selectedMediaIDs.contains(media.id), let analysis = media.analysis else { return }
             result[media.id] = analysis
         }
-        let heroMediaID = mediaRecipes.first(where: { $0.role == .hero })?.mediaID
+        let heroMediaID = mediaRecipes.first(where: { recipe in
+            recipe.role == MediaRole.hero
+        })?.mediaID
         let dynamicPalette = source.backgroundImage == nil
             ? heroMediaID
                 .flatMap { selectedAnalyses[$0]?.palette }
@@ -196,13 +199,13 @@ enum LegacyWeeklyCoverAdapter {
             content: ContentRecipe(
                 leadAtomID: allocation.storyLead.id,
                 supportAtomID: allocation.storySupport?.id,
-                markAtomIDs: allocation.marks.map(\.id),
-                timelineAtomIDs: allocation.timeline.map(\.id)
+                markAtomIDs: allocation.marks.map { atom in atom.id },
+                timelineAtomIDs: allocation.timeline.map { atom in atom.id }
             ),
             media: mediaRecipes,
             footer: FooterRecipe(
                 style: .quiet,
-                atomIDs: allocation.footer.map(\.id),
+                atomIDs: allocation.footer.map { atom in atom.id },
                 showsVerifiedQRCode: false
             ),
             animation: CoverAnimationRecipe(
