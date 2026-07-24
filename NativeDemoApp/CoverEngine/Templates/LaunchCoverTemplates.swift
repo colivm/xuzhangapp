@@ -930,13 +930,14 @@ enum LaunchCoverTemplateLayoutResolver {
                 ]
             )
         }
+        let layoutFingerprint = CoverStableIdentity.fingerprint([
+            recipe.recipeID,
+            recipe.template.templateID.rawValue,
+            recipe.template.variantID,
+        ])
         return ResolvedCoverLayout(
             schemaVersion: CoverRenderSchema.currentVersion,
-            layoutID: "layout.launch.\(CoverStableIdentity.fingerprint([
-                recipe.recipeID,
-                recipe.template.templateID.rawValue,
-                recipe.template.variantID,
-            ]))",
+            layoutID: "layout.launch.\(layoutFingerprint)",
             recipeID: recipe.recipeID,
             sourceRevision: recipe.sourceRevision,
             periodKey: recipe.periodKey,

@@ -159,7 +159,7 @@ enum LegacyWeeklyCoverAdapter {
                 hasEvidenceBoundHero: hasEvidenceBoundHero,
                 availablePhotoCount: descriptors.count
             )
-        let recipeID = "cover.launch.\(CoverStableIdentity.fingerprint([
+        let recipeFingerprint = CoverStableIdentity.fingerprint([
             fingerprint,
             acceptedDirectorDecision == nil ? "local" : "ai",
             templateID.rawValue,
@@ -171,7 +171,8 @@ enum LegacyWeeklyCoverAdapter {
             String(seed),
             mediaRecipes.map { "\($0.mediaID.uuidString):\($0.role.rawValue)" }
                 .joined(separator: "|"),
-        ]))"
+        ])
+        let recipeID = "cover.launch.\(recipeFingerprint)"
         let templateDescriptor = LaunchCoverTemplateCatalog.descriptor(for: templateID)
         let recipe = CoverRecipe(
             schemaVersion: CoverContractSchema.currentVersion,

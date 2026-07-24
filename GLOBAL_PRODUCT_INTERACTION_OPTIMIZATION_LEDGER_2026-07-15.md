@@ -3053,7 +3053,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ## 30. FIX-010：首页一键通勤前台恢复刷新（2026-07-20）
 
-- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。Windows 代码与全仓门禁已完成，不冒充 macOS/Xcode 编译通过。
 - 用户反馈：工作日早上首页“一键快捷记通勤”没有出现，要求修复后全局复核边界与交互卡顿。
 - 已确认根因：`PERF-09` 将通勤候选从 SwiftUI 重绘时同步计算改为账本修订＋分钟桶驱动的后台快照，方向正确；但当前只在首页 `onAppear`、60 秒 Timer、账本修订和会员变化时准备快照。App 前一晚停留首页、早上从后台直接恢复时，`scenePhase` 变为 active 只处理宠物状态，不立即刷新当前分钟，因而会继续读取旧空快照，直到下一个 Timer 才可能出现。
 - 目标：Home Tab 从 inactive/background 回到 active 时，立即以当前时间请求现有首页快照；同一分钟/同账本继续命中 key 并零重算，跨分钟或跨日才启动后台准备。保持旧请求 ID 与 key 双重保护，禁止旧时间候选反写。
@@ -3933,3 +3933,14 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - Windows 验证证据：Swift/Node 20 套 `minimumMediaCount`、`maximumMediaCount`、`requiresHero`、`allowsHero`、`allowsDecoration` 一次性逐项对表为 `OK`；`node --test ai-proxy/coverDirectorContract.test.js` 为 12/12 通过；`git diff --check` 通过，仅有既存 LF/CRLF 提示；`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 通过并执行完整 Node 23/23；`python scripts/validate_release_gate.py --phase windows` 通过，`release_repository_gate: OK`、`Static experience checks passed`、`Copy experience checks passed`，100/1,000/5,000 夹具及三张真实照片夹具摘要保持一致。Windows 不具备 UIKit/Xcode，新增 Swift XCTest 仅完成代码与工程静态接线，未声称实跑。
 - 剩余风险与下一项：`FLOW-77` 保持 `NOT_RUN`；仍需在 macOS 对 App/Test Target 全量编译并运行全部 XCTest，再在 iPhone 依次完成 `FLOW-73`～`FLOW-77`，重点签收 20 套像素、0/1/2/3/4/7 图、长文、横竖方图、收据/低质/无 Hero、窄屏、Dynamic Type、VoiceOver、Reduce Motion、20 次快速切换、20 次连续保存、1080×1920 预览/导出一致、零重复 Footer/指标、零切换期 IO/分析/AI及 Instruments hitch/内存。上述全量通过前不得删除旧实现；通过后下一项才是单独建立旧分享实现退役步骤、确认零生产引用并保留可回滚点。`PERF-AUDIT-04` 与 `ARCH-03` 继续保持 `NOT_STARTED`。
 - 交付说明：2026-07-24 用户明确授权在 Windows 全仓门禁与交互边界自检通过、但本机无 `xcodebuild`/Swift/iPhone 的前提下，将本项 `CODE_DONE` 源码提交并推送至 `feature/xuzhangapp-staging`，后续由用户通过 TestFlight 执行真实编译与 `FLOW-73`～`FLOW-77` 签收。此次授权不把状态提升为 `VERIFIED`，也不放宽旧分享实现退役门槛。
+
+---
+
+## 60. SHARE-FIX-01：封面稳定标识字符串插值编译修复（2026-07-24）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 问题与范围：TestFlight/Xcode 编译报告 `LaunchCoverTemplates.swift:935` 与 `LegacyWeeklyCoverAdapter.swift:162` 的多行数组函数调用位于字符串插值内时出现括号匹配、未终止字符串和连续语句解析错误。本项只把两处 `CoverStableIdentity.fingerprint(...)` 提前计算为局部常量，再以单一值完成字符串插值；不得改变 fingerprint 输入顺序、Recipe/Layout ID、模板资格、布局、交互、AI、图片、Footer 或分享路由。
+- 工作区保护：保留 `brand-assets/`、`output/`、`tmp/`、缓存目录及全部用户未跟踪文件；不清理、不覆盖、不暂存相邻任务或素材。
+- 修改文件与结果：`NativeDemoApp/CoverEngine/Templates/LaunchCoverTemplates.swift` 新增局部 `layoutFingerprint`，`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift` 新增局部 `recipeFingerprint`；两处原有输入、输入顺序、稳定哈希函数及 `layout.launch.` / `cover.launch.` 前缀均保持不变，最终 ID 语义不变。生产目录已扫描，无 `CoverStableIdentity.fingerprint([` 多行调用继续直接位于字符串插值内。
+- 验证证据：`git diff --check` 通过，仅有既有 LF→CRLF 提示；`node --test ai-proxy/coverDirectorContract.test.js` 12/12 通过；`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 通过并执行 Node 23/23；`python scripts/validate_release_gate.py --phase windows` 通过，最终输出 `release_repository_gate: OK`、`Static experience checks passed`、`Copy experience checks passed`，100/1,000/5,000 条确定性夹具和三张 12MP 图片夹具摘要保持一致。
+- 剩余风险与下一项：当前 Windows 没有 Swift/Xcode，仍需用户重新触发 Xcode/TestFlight 编译，以确认 Apple Swift 编译器已接受两处改写；通过后继续既定 `FLOW-73`～`FLOW-77` 真机签收。不得据此删除旧分享实现，也不启动 `PERF-AUDIT-04` 或 `ARCH-03`。
