@@ -43,9 +43,9 @@ enum TraceLifePreparationPolicy {
     ) -> Bool {
         switch selectedRange {
         case .week:
-            return hasWeek || hasMonth
+            return hasWeek
         case .month:
-            return hasMonth || hasWeek
+            return hasMonth
         }
     }
 
@@ -62,6 +62,32 @@ enum TraceLifePreparationPolicy {
         case .month:
             return monthNeedsRefresh || !hasMonth
         }
+    }
+}
+
+enum TraceSnapshotVisibilityPolicy {
+    static func representsSelectedLifeRange(
+        range: SummaryPlaybackRange,
+        selectedPeriod: StatsPeriod,
+        usesCustomRange: Bool
+    ) -> Bool {
+        !usesCustomRange && TraceRangeContextPolicy.period(for: range) == selectedPeriod
+    }
+
+    static func canDisplayChapter(
+        selectedRange: SummaryPlaybackRange,
+        snapshotRange: SummaryPlaybackRange?,
+        publishedKey: String?,
+        expectedKey: String
+    ) -> Bool {
+        snapshotRange == selectedRange && publishedKey == expectedKey
+    }
+
+    static func canDisplayColdStart(
+        publishedScopeKey: String?,
+        expectedScopeKey: String
+    ) -> Bool {
+        publishedScopeKey == expectedScopeKey
     }
 }
 
@@ -233,6 +259,7 @@ struct StatsTabState {
     var deepInsightExpanded = false
     var focusedInsightQuestion: String?
     var scrollAnchorID: String?
+    var pendingLifeChapterScrollRange: SummaryPlaybackRange?
     var snapshotStore = TraceSnapshotStore()
     var preparedWeekSnapshot: TraceChapterSnapshot?
     var preparedMonthSnapshot: TraceChapterSnapshot?
@@ -252,7 +279,7 @@ struct StatsTabState {
         lifeCardRange = range
         selectedPeriod = range == .week ? .week : .month
         useCustomRange = false
-        scrollAnchorID = "trace-life-card"
+        pendingLifeChapterScrollRange = range
     }
 }
 

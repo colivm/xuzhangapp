@@ -2040,7 +2040,8 @@ final class InteractionStateRegressionTests: XCTestCase {
         XCTAssertEqual(stats.lifeCardRange, .month)
         XCTAssertEqual(stats.selectedPeriod, .month)
         XCTAssertFalse(stats.useCustomRange)
-        XCTAssertEqual(stats.scrollAnchorID, "trace-life-card")
+        XCTAssertEqual(stats.scrollAnchorID, "trace-clue-board")
+        XCTAssertEqual(stats.pendingLifeChapterScrollRange, .month)
 
         var insight = InsightTabState()
         insight.showsAdvancedInsight = true
@@ -2270,8 +2271,8 @@ final class TraceLifePreparationPolicyTests: XCTestCase {
         XCTAssertEqual(TraceLifePreparationPolicy.prewarmRange(after: .month), .week)
     }
 
-    func testSwitchingToMissingMonthKeepsWeekVisibleDuringPreparation() {
-        XCTAssertTrue(
+    func testSwitchingToMissingMonthDoesNotExposeWeekDuringPreparation() {
+        XCTAssertFalse(
             TraceLifePreparationPolicy.hasVisibleSnapshot(
                 selectedRange: .month,
                 hasWeek: true,
@@ -2289,6 +2290,23 @@ final class TraceLifePreparationPolicyTests: XCTestCase {
         )
     }
 
+    func testSwitchingToMissingWeekDoesNotExposeMonthDuringPreparation() {
+        XCTAssertFalse(
+            TraceLifePreparationPolicy.hasVisibleSnapshot(
+                selectedRange: .week,
+                hasWeek: false,
+                hasMonth: true
+            )
+        )
+        XCTAssertTrue(
+            TraceLifePreparationPolicy.hasVisibleSnapshot(
+                selectedRange: .week,
+                hasWeek: true,
+                hasMonth: false
+            )
+        )
+    }
+
     func testPreparedVisibleRangeDoesNotRebuildWhileOtherRangeWarms() {
         XCTAssertFalse(
             TraceLifePreparationPolicy.needsPrimaryPreparation(
@@ -2297,6 +2315,74 @@ final class TraceLifePreparationPolicyTests: XCTestCase {
                 monthNeedsRefresh: true,
                 hasWeek: true,
                 hasMonth: false
+            )
+        )
+    }
+}
+
+final class TraceSnapshotVisibilityPolicyTests: XCTestCase {
+    func testLifeRangeMustMatchTheSelectedPresetPeriod() {
+        XCTAssertTrue(
+            TraceSnapshotVisibilityPolicy.representsSelectedLifeRange(
+                range: .month,
+                selectedPeriod: .month,
+                usesCustomRange: false
+            )
+        )
+        XCTAssertFalse(
+            TraceSnapshotVisibilityPolicy.representsSelectedLifeRange(
+                range: .month,
+                selectedPeriod: .week,
+                usesCustomRange: false
+            )
+        )
+        XCTAssertFalse(
+            TraceSnapshotVisibilityPolicy.representsSelectedLifeRange(
+                range: .month,
+                selectedPeriod: .month,
+                usesCustomRange: true
+            )
+        )
+    }
+
+    func testChapterRequiresSelectedRangeAndExactPublicationKey() {
+        XCTAssertTrue(
+            TraceSnapshotVisibilityPolicy.canDisplayChapter(
+                selectedRange: .month,
+                snapshotRange: .month,
+                publishedKey: "month-current",
+                expectedKey: "month-current"
+            )
+        )
+        XCTAssertFalse(
+            TraceSnapshotVisibilityPolicy.canDisplayChapter(
+                selectedRange: .month,
+                snapshotRange: .week,
+                publishedKey: "month-current",
+                expectedKey: "month-current"
+            )
+        )
+        XCTAssertFalse(
+            TraceSnapshotVisibilityPolicy.canDisplayChapter(
+                selectedRange: .month,
+                snapshotRange: .month,
+                publishedKey: "month-old",
+                expectedKey: "month-current"
+            )
+        )
+    }
+
+    func testColdStartDisplayRequiresTheExactSelectedScope() {
+        XCTAssertTrue(
+            TraceSnapshotVisibilityPolicy.canDisplayColdStart(
+                publishedScopeKey: "life|month",
+                expectedScopeKey: "life|month"
+            )
+        )
+        XCTAssertFalse(
+            TraceSnapshotVisibilityPolicy.canDisplayColdStart(
+                publishedScopeKey: "life|week",
+                expectedScopeKey: "life|month"
             )
         )
     }
