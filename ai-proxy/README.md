@@ -3,7 +3,7 @@
 用于 `轻账日记` 的最小后端代理层，目标是：
 
 - 隐藏上游模型 API Key（不在 iOS 客户端暴露）
-- 按 `feature` 代理并清洗模型输出：旧洞察保持 `summary/action/encourage`，证据润色返回受校验的 `rewrites`
+- 按 `feature` 代理并清洗模型输出：旧洞察保持 `summary/action/encourage`，证据润色返回受校验的 `rewrites`，封面导演只返回受限 Recipe token
 - 代理前后做基础内容安全检查，避免隐私串或明显违规内容进入/离开模型
 - 支持可选代理口令
 - 支持服务端月度总调用上限
@@ -44,6 +44,7 @@
 - `daily`（普通）
 - `monthly`（普通）
 - `narrative_rewrite_batch`（日/周/月脱敏事实轻润色；每批最多 3 组）
+- `cover_director`（可选封面导演；只接收脱敏结构、匿名媒体别名和合法候选 ID）
 - `quarterly`（会员专属）
 - `yearly`（会员专属）
 
@@ -81,6 +82,8 @@
 ```
 
 该 feature 不改变 `daily/monthly/quarterly/yearly` 的历史响应格式。代理升级后需重启 `ai-proxy`；公开 `backend` 路由无需新增地址，仍由 `/v1/ai/insight/daily` 转发。
+
+`cover_director` 必须提供顶层 `directorRequest`。代理在调用模型前拒绝未知字段、正文、图片字段、UUID、超过 5 个模板候选或非连续 `M1...M7` 媒体别名；服务端自行重建 prompt，并以闭合 JSON Schema 再校验模板、variant、色板、背景、动画、Hero 事实绑定、revision 和 fingerprint。专用上游超时默认为 8 秒；任何失败由客户端静默使用已完成的本地 Recipe。照片、图片引用、脸部矩形和像素色样不得进入请求。
 
 ## 3. iOS 端接入
 

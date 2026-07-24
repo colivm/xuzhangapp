@@ -31,6 +31,20 @@
 		A100002B0000000000000001 /* PlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100002C0000000000000001 /* PlaybackService.swift */; };
 		F21000010000000000000001 /* ShareInsightCopyPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21000020000000000000001 /* ShareInsightCopyPool.swift */; };
 		F21000030000000000000001 /* PlaybackSupportServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21000040000000000000001 /* PlaybackSupportServices.swift */; };
+		C0A000010000000000000001 /* CoverContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000020000000000000001 /* CoverContracts.swift */; };
+		C0A000030000000000000001 /* CoverContractValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000040000000000000001 /* CoverContractValidator.swift */; };
+		C0A000050000000000000001 /* CoverContractEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000060000000000000001 /* CoverContractEngineTests.swift */; };
+		C0A0000B0000000000000001 /* CoverRenderingContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0000A0000000000000001 /* CoverRenderingContracts.swift */; };
+		C0A0000D0000000000000001 /* CoverShareFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0000C0000000000000001 /* CoverShareFlow.swift */; };
+		C0A0000F0000000000000001 /* LegacyWeeklyCoverAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0000E0000000000000001 /* LegacyWeeklyCoverAdapter.swift */; };
+		C0A000110000000000000001 /* CoverCanvasRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000100000000000000001 /* CoverCanvasRoot.swift */; };
+		C0A000130000000000000001 /* CoverShareFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000120000000000000001 /* CoverShareFlowTests.swift */; };
+		C0A000180000000000000001 /* LaunchCoverTemplates.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000170000000000000001 /* LaunchCoverTemplates.swift */; };
+		C0A0001A0000000000000001 /* LaunchCoverTemplateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000190000000000000001 /* LaunchCoverTemplateTests.swift */; };
+		C0A0001B0000000000000001 /* CoverMediaAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0001C0000000000000001 /* CoverMediaAnalysis.swift */; };
+		C0A0001E0000000000000001 /* CoverMediaAnalysisTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0001F0000000000000001 /* CoverMediaAnalysisTests.swift */; };
+		C0A000200000000000000001 /* AICoverDirector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000210000000000000001 /* AICoverDirector.swift */; };
+		C0A000220000000000000001 /* CoverAIDirectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000230000000000000001 /* CoverAIDirectorTests.swift */; };
 		F31000010000000000000001 /* LifeNarrativePlanningService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31000020000000000000001 /* LifeNarrativePlanningService.swift */; };
 		F32000010000000000000001 /* LifeNarrativeEchoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32000020000000000000001 /* LifeNarrativeEchoService.swift */; };
 		F33000010000000000000001 /* LifeNarrativeAIRewriteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F33000020000000000000001 /* LifeNarrativeAIRewriteService.swift */; };
@@ -139,6 +153,20 @@
 		A100002C0000000000000001 /* PlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackService.swift; sourceTree = "<group>"; };
 		F21000020000000000000001 /* ShareInsightCopyPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInsightCopyPool.swift; sourceTree = "<group>"; };
 		F21000040000000000000001 /* PlaybackSupportServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSupportServices.swift; sourceTree = "<group>"; };
+		C0A000020000000000000001 /* CoverContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverContracts.swift; sourceTree = "<group>"; };
+		C0A000040000000000000001 /* CoverContractValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverContractValidator.swift; sourceTree = "<group>"; };
+		C0A000060000000000000001 /* CoverContractEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverContractEngineTests.swift; sourceTree = "<group>"; };
+		C0A0000A0000000000000001 /* CoverRenderingContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverRenderingContracts.swift; sourceTree = "<group>"; };
+		C0A0000C0000000000000001 /* CoverShareFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverShareFlow.swift; sourceTree = "<group>"; };
+		C0A0000E0000000000000001 /* LegacyWeeklyCoverAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyWeeklyCoverAdapter.swift; sourceTree = "<group>"; };
+		C0A000100000000000000001 /* CoverCanvasRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverCanvasRoot.swift; sourceTree = "<group>"; };
+		C0A000120000000000000001 /* CoverShareFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverShareFlowTests.swift; sourceTree = "<group>"; };
+		C0A000170000000000000001 /* LaunchCoverTemplates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchCoverTemplates.swift; sourceTree = "<group>"; };
+		C0A000190000000000000001 /* LaunchCoverTemplateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchCoverTemplateTests.swift; sourceTree = "<group>"; };
+		C0A0001C0000000000000001 /* CoverMediaAnalysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverMediaAnalysis.swift; sourceTree = "<group>"; };
+		C0A0001F0000000000000001 /* CoverMediaAnalysisTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverMediaAnalysisTests.swift; sourceTree = "<group>"; };
+		C0A000210000000000000001 /* AICoverDirector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AICoverDirector.swift; sourceTree = "<group>"; };
+		C0A000230000000000000001 /* CoverAIDirectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverAIDirectorTests.swift; sourceTree = "<group>"; };
 		F31000020000000000000001 /* LifeNarrativePlanningService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeNarrativePlanningService.swift; sourceTree = "<group>"; };
 		F32000020000000000000001 /* LifeNarrativeEchoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeNarrativeEchoService.swift; sourceTree = "<group>"; };
 		F33000020000000000000001 /* LifeNarrativeAIRewriteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeNarrativeAIRewriteService.swift; sourceTree = "<group>"; };
@@ -243,6 +271,7 @@
 			children = (
 				A10000110000000000000001 /* NativeDemoAppApp.swift */,
 				A10000120000000000000001 /* ContentView.swift */,
+				C0A000070000000000000001 /* CoverEngine */,
 				A10000330000000000000001 /* Models */,
 				A10000340000000000000001 /* Services */,
 				A10000350000000000000001 /* ViewModels */,
@@ -375,6 +404,78 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		C0A000070000000000000001 /* CoverEngine */ = {
+			isa = PBXGroup;
+			children = (
+				C0A0001D0000000000000001 /* Analysis */,
+				C0A000240000000000000001 /* Director */,
+				C0A000080000000000000001 /* Models */,
+				C0A000090000000000000001 /* Validation */,
+				C0A000140000000000000001 /* Flow */,
+				C0A000150000000000000001 /* Rendering */,
+				C0A000160000000000000001 /* Templates */,
+			);
+			path = CoverEngine;
+			sourceTree = "<group>";
+		};
+		C0A000240000000000000001 /* Director */ = {
+			isa = PBXGroup;
+			children = (
+				C0A000210000000000000001 /* AICoverDirector.swift */,
+			);
+			path = Director;
+			sourceTree = "<group>";
+		};
+		C0A0001D0000000000000001 /* Analysis */ = {
+			isa = PBXGroup;
+			children = (
+				C0A0001C0000000000000001 /* CoverMediaAnalysis.swift */,
+			);
+			path = Analysis;
+			sourceTree = "<group>";
+		};
+		C0A000080000000000000001 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				C0A000020000000000000001 /* CoverContracts.swift */,
+				C0A0000A0000000000000001 /* CoverRenderingContracts.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		C0A000090000000000000001 /* Validation */ = {
+			isa = PBXGroup;
+			children = (
+				C0A000040000000000000001 /* CoverContractValidator.swift */,
+			);
+			path = Validation;
+			sourceTree = "<group>";
+		};
+		C0A000140000000000000001 /* Flow */ = {
+			isa = PBXGroup;
+			children = (
+				C0A0000C0000000000000001 /* CoverShareFlow.swift */,
+				C0A0000E0000000000000001 /* LegacyWeeklyCoverAdapter.swift */,
+			);
+			path = Flow;
+			sourceTree = "<group>";
+		};
+		C0A000150000000000000001 /* Rendering */ = {
+			isa = PBXGroup;
+			children = (
+				C0A000100000000000000001 /* CoverCanvasRoot.swift */,
+			);
+			path = Rendering;
+			sourceTree = "<group>";
+		};
+		C0A000160000000000000001 /* Templates */ = {
+			isa = PBXGroup;
+			children = (
+				C0A000170000000000000001 /* LaunchCoverTemplates.swift */,
+			);
+			path = Templates;
+			sourceTree = "<group>";
+		};
 		A10000370000000000000001 /* Preview Content */ = {
 			isa = PBXGroup;
 			children = (
@@ -411,6 +512,11 @@
 			isa = PBXGroup;
 			children = (
 				U10000120000000000000001 /* StateRegressionTests.swift */,
+				C0A000060000000000000001 /* CoverContractEngineTests.swift */,
+				C0A000120000000000000001 /* CoverShareFlowTests.swift */,
+				C0A000190000000000000001 /* LaunchCoverTemplateTests.swift */,
+				C0A0001F0000000000000001 /* CoverMediaAnalysisTests.swift */,
+				C0A000230000000000000001 /* CoverAIDirectorTests.swift */,
 				U30000120000000000000001 /* LedgerImageStoreTests.swift */,
 				U40000130000000000000001 /* LedgerMetadataStoreTests.swift */,
 				U50000120000000000000001 /* LedgerLocalBackupDocumentTests.swift */,
@@ -543,6 +649,15 @@
 				A100002B0000000000000001 /* PlaybackService.swift in Sources */,
 				F21000010000000000000001 /* ShareInsightCopyPool.swift in Sources */,
 				F21000030000000000000001 /* PlaybackSupportServices.swift in Sources */,
+				C0A000010000000000000001 /* CoverContracts.swift in Sources */,
+				C0A000030000000000000001 /* CoverContractValidator.swift in Sources */,
+				C0A0000B0000000000000001 /* CoverRenderingContracts.swift in Sources */,
+				C0A0000D0000000000000001 /* CoverShareFlow.swift in Sources */,
+				C0A0000F0000000000000001 /* LegacyWeeklyCoverAdapter.swift in Sources */,
+				C0A000110000000000000001 /* CoverCanvasRoot.swift in Sources */,
+				C0A000180000000000000001 /* LaunchCoverTemplates.swift in Sources */,
+				C0A0001B0000000000000001 /* CoverMediaAnalysis.swift in Sources */,
+				C0A000200000000000000001 /* AICoverDirector.swift in Sources */,
 				F31000010000000000000001 /* LifeNarrativePlanningService.swift in Sources */,
 				F32000010000000000000001 /* LifeNarrativeEchoService.swift in Sources */,
 				F33000010000000000000001 /* LifeNarrativeAIRewriteService.swift in Sources */,
@@ -611,6 +726,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				U10000020000000000000001 /* StateRegressionTests.swift in Sources */,
+				C0A000050000000000000001 /* CoverContractEngineTests.swift in Sources */,
+				C0A000130000000000000001 /* CoverShareFlowTests.swift in Sources */,
+				C0A0001A0000000000000001 /* LaunchCoverTemplateTests.swift in Sources */,
+				C0A0001E0000000000000001 /* CoverMediaAnalysisTests.swift in Sources */,
+				C0A000220000000000000001 /* CoverAIDirectorTests.swift in Sources */,
 				U30000020000000000000001 /* LedgerImageStoreTests.swift in Sources */,
 				U40000030000000000000001 /* LedgerMetadataStoreTests.swift in Sources */,
 				U50000020000000000000001 /* LedgerLocalBackupDocumentTests.swift in Sources */,

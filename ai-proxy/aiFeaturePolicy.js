@@ -4,6 +4,7 @@ const SUPPORTED_FEATURES = new Set([
   "quarterly",
   "yearly",
   "narrative_rewrite_batch",
+  "cover_director",
 ]);
 
 function normalizedSupportedFeature(rawFeature) {

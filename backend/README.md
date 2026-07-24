@@ -5,7 +5,7 @@
 - 手机号验证码登录（阿里云短信；验证码可存 Redis）
 - 会员状态读取与开发态切换
 - 账单同步接口（用户级）
-- AI 复盘与 `narrative_rewrite_batch` 证据润色转发到 `ai-proxy`
+- AI 复盘、`narrative_rewrite_batch` 证据润色与可选 `cover_director` 封面导演转发到 `ai-proxy`
 - IAP 验单接口（App Store Server API，需配置 Apple 密钥）
 - 内容安全检查（昵称/备注/AI 输入输出的基础隐私与违规风险拦截）
 - 短信验证码发送/校验限频
@@ -50,7 +50,7 @@ npm run dev
 - 手机号登录签发的访问令牌有效期为 90 天；用户主动退出、服务端轮换 `JWT_SECRET` 或接口明确返回 401 时仍需重新登录。
 - 账单写入会校验 `title`、`amount` 等基础字段，并拦截手机号、证件号、银行卡号、链接/邮箱、明显不适内容和少量公共安全高风险短语。
 - AI 转发前后会做基础内容安全检查；日志只记录拦截原因和脱敏样本，不应记录完整账单正文。
-- AI 轻润色继续复用 `POST /v1/ai/insight/daily`；backend 只做 JWT、内容安全和内网转发，结构化 fact-pack/rewrites 契约由 `ai-proxy` 严格校验。部署新润色能力时必须同步重启 `ai-proxy`，否则客户端会安全回退本地文案。
+- AI 轻润色与封面导演继续复用 `POST /v1/ai/insight/daily`；backend 只做 JWT、内容安全和内网转发，结构化 fact-pack/rewrites 与 director JSON Schema 由 `ai-proxy` 严格校验。封面导演代理跳转另有 9 秒取消边界；部署新能力时必须同步重启 `ai-proxy`，否则客户端会安全回退本地文案或本地封面 Recipe。
 - 短信验证码有 60 秒冷却、每手机号/IP 小时级发送上限和验证码错误次数上限；生产环境应使用 Redis 存储验证码并接入更强的 IP/设备风控。
 - 短信服务支持 `SMS_PROVIDER=dev` 和 `SMS_PROVIDER=aliyun`。本地/staging 可用 `DEV_ALLOW_SMS_CODE`；生产使用阿里云云通信号码认证服务 `SendSmsVerifyCode`，需配置 AccessKey、签名、模板 Code，可按需配置 `ALIYUN_SMS_SCHEME_NAME`、`ALIYUN_SMS_COUNTRY_CODE` 和模板有效期变量 `ALIYUN_SMS_TEMPLATE_MIN`。
 - 埋点 props 会过滤 token/key/signed 字段，并脱敏手机号、证件号、银行卡号、链接/邮箱。

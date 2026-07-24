@@ -37,7 +37,30 @@ enum AIReportServiceError: LocalizedError {
     }
 }
 
-final class AIReportService {
+final class AIReportService: @unchecked Sendable {
+    func generateCoverDirectorDecision(
+        request directorRequest: CoverAIDirectorRequest
+    ) async throws -> CoverAIDirectorResponse {
+        let encodedRequest = try JSONEncoder().encode(directorRequest)
+        let directorPayload = try JSONSerialization.jsonObject(with: encodedRequest)
+
+        var request = try authenticatedRequest(timeoutInterval: 10)
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "feature": "cover_director",
+            "directorRequest": directorPayload,
+        ])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw AIReportServiceError.invalidResponse
+        }
+        guard 200..<300 ~= http.statusCode else {
+            let bodyText = String(data: data, encoding: .utf8) ?? ""
+            throw AIReportServiceError.badStatus(http.statusCode, String(bodyText.prefix(300)))
+        }
+        return try CoverAIDirectorResponse.decodeStrict(from: data)
+    }
+
     func generateNarrativeRewrites(
         factPacks: [LifeNarrativeAIFactPackRequest],
         tone: AppSettings.AITone

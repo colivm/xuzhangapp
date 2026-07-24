@@ -12,6 +12,11 @@ const {
   normalizeNarrativeRewriteBatch,
   validateNarrativeFactPacks,
 } = require("./narrativeRewriteContract");
+const {
+  buildCoverDirectorMessages,
+  normalizeCoverDirectorResponse,
+  validateCoverDirectorRequest,
+} = require("./coverDirectorContract");
 
 const app = express();
 app.use(cors());
@@ -32,6 +37,9 @@ const GLOBAL_WINDOW_SECONDS = Number(process.env.GLOBAL_WINDOW_SECONDS || 60);
 const RISK_LOG_ENABLED = String(process.env.RISK_LOG_ENABLED || "1") === "1";
 const AI_UPSTREAM_TIMEOUT_MS = Number(process.env.AI_UPSTREAM_TIMEOUT_MS || 30000);
 const AI_UPSTREAM_TIMEOUT_MS_MONTHLY = Number(process.env.AI_UPSTREAM_TIMEOUT_MS_MONTHLY || 45000);
+const AI_UPSTREAM_TIMEOUT_MS_COVER_DIRECTOR = Number(
+  process.env.AI_UPSTREAM_TIMEOUT_MS_COVER_DIRECTOR || 8000
+);
 const PREMIUM_FEATURES = new Set(["quarterly", "yearly"]);
 const IS_PRODUCTION = isProductionEnvironment(process.env.NODE_ENV);
 const DEVELOPMENT_ROUTES_ENABLED = allowsDevelopmentRoutes(process.env.NODE_ENV);
@@ -121,6 +129,17 @@ app.post("/v1/insight/daily", async (req, res) => {
         });
       }
     }
+    if (feature === "cover_director") {
+      const contract = validateCoverDirectorRequest(req.body?.directorRequest);
+      if (!contract.ok) {
+        auditRisk("cover_director_contract_rejected", req, user, { feature, reason: contract.reason });
+        return res.status(400).json({
+          code: contract.error,
+          message: "cover director request contract rejected",
+          reason: contract.reason,
+        });
+      }
+    }
 
     if (PREMIUM_FEATURES.has(feature) && !user.isMember) {
       auditRisk("premium_bypass", req, user, { feature });
@@ -140,10 +159,14 @@ app.post("/v1/insight/daily", async (req, res) => {
     const model = (AI_UPSTREAM_MODEL || "glm-4-flash").toString();
     const messages = feature === "narrative_rewrite_batch"
       ? buildNarrativeRewriteMessages(req.body?.factPacks, req.body?.tone)
-      : req.body?.messages;
+      : feature === "cover_director"
+        ? buildCoverDirectorMessages(req.body?.directorRequest)
+        : req.body?.messages;
     const temperature = feature === "narrative_rewrite_batch"
       ? 0.25
-      : Number(req.body?.temperature ?? 0.6);
+      : feature === "cover_director"
+        ? 0.1
+        : Number(req.body?.temperature ?? 0.6);
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ code: "INVALID_ARGUMENT", message: "messages is required" });
     }
@@ -182,7 +205,9 @@ app.post("/v1/insight/daily", async (req, res) => {
     }
     const payload = feature === "narrative_rewrite_batch"
       ? normalizeNarrativeRewriteBatch(content, req.body?.factPacks)
-      : normalizeInsightPayload(content);
+      : feature === "cover_director"
+        ? normalizeCoverDirectorResponse(content, req.body?.directorRequest)
+        : normalizeInsightPayload(content);
     if (!payload) {
       auditRisk("parse_error", req, user, { feature });
       return res.status(502).json({ code: "PARSE_ERROR", message: "invalid model output" });
@@ -327,6 +352,9 @@ function postJSON(urlString, body, headers, timeoutMs = AI_UPSTREAM_TIMEOUT_MS) 
 }
 
 function getUpstreamTimeoutMs(feature) {
+  if (feature === "cover_director") {
+    return AI_UPSTREAM_TIMEOUT_MS_COVER_DIRECTOR;
+  }
   if (feature === "monthly") {
     return AI_UPSTREAM_TIMEOUT_MS_MONTHLY;
   }

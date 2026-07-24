@@ -6006,10 +6006,15 @@ struct StatsWebView: View {
             isMember: hasMemberAccess,
             memberPitch: summaryMemberPitch(for: playback),
             weeklySharePayload: weeklySharePayload(for: playback),
+            shareSourceRevision: homeViewModel.homeDashboardRevision,
+            shareEvidenceItemIDs: weeklyShareEvidenceItemIDs(),
             shareNickname: settingsViewModel.displayName,
             shareCardTheme: settingsViewModel.shareCardUsesAppTheme && settingsViewModel.settings.hasMemberAccess
                 ? .appTheme(appTheme)
                 : .journal,
+            remoteAIDirectorEnabled: settingsViewModel.useRemoteAI
+                && settingsViewModel.hasCloudSession,
+            remoteAIMonthlyLimit: settingsViewModel.settings.remoteAIMonthlyLimit,
             onCompleted: { progress in
                 quotaStore.markCompleted(playback.range, isMember: hasMemberAccess, progress: progress)
                 homeViewModel.markSummaryPlaybackCompleted(playback.range, progress: progress)
@@ -6062,6 +6067,21 @@ struct StatsWebView: View {
             summary: playback,
             sourceRevision: homeViewModel.homeDashboardRevision
         )
+    }
+
+    private func weeklyShareEvidenceItemIDs(now: Date = Date()) -> [UUID] {
+        let calendar = PlaybackService.isoCalendar
+        guard let interval = calendar.dateInterval(of: .weekOfYear, for: now) else {
+            return []
+        }
+        return homeViewModel.items.compactMap { item in
+            guard item.amount > 0,
+                  item.createdAt >= interval.start,
+                  item.createdAt < interval.end else {
+                return nil
+            }
+            return item.id
+        }
     }
 
     private func summaryQuotaOverlay(_ prompt: SummaryQuotaPrompt) -> some View {

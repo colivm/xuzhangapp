@@ -399,13 +399,13 @@ private enum LifeSliceShareCardStyle: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .warmLight: return "单图记忆"
+        case .warmLight: return "主角故事"
         case .magazine: return "杂志版面"
-        case .appleMemories: return "记忆卡片"
-        case .journal: return "手账留白"
-        case .filmStory: return "胶片故事"
+        case .appleMemories: return "一句话"
+        case .journal: return "生活手札"
+        case .filmStory: return "时间线"
         case .collageStory: return "周记拼页"
-        case .cleanTexture: return "记录摘要"
+        case .cleanTexture: return "留白"
         case .fullPhoto: return "沉浸照片"
         case .customBackground: return "自定义背景"
         }
@@ -413,13 +413,13 @@ private enum LifeSliceShareCardStyle: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
-        case .warmLight: return "一张照片和对应记录"
-        case .magazine: return "杂志排版"
-        case .appleMemories: return "记忆卡片"
-        case .journal: return "手账留白"
-        case .filmStory: return "胶片质感"
+        case .warmLight: return "一张主图带出故事"
+        case .magazine: return "一大两小的编辑排版"
+        case .appleMemories: return "让一句真实记录成为主角"
+        case .journal: return "纸张、短文和生活小记"
+        case .filmStory: return "按真实记录日展开节奏"
         case .collageStory: return "两到三张照片组成一页"
-        case .cleanTexture: return "没有照片也能完整回看"
+        case .cleanTexture: return "没有照片也保留呼吸感"
         case .fullPhoto: return "沉浸照片"
         case .customBackground: return "本地相册"
         }
@@ -439,8 +439,20 @@ private enum LifeSliceShareCardStyle: String, CaseIterable, Identifiable {
         }
     }
 
-    static func presetCases(photoCount: Int) -> [LifeSliceShareCardStyle] {
-        WeeklyShareCardTemplateCapabilityPolicy.allowed(photoCount: photoCount).map { style(for: $0) }
+    static func presetCases(
+        photoCount: Int,
+        recordedDayCount: Int,
+        leadCharacterCount: Int,
+        hasEvidenceBoundHero: Bool = true
+    ) -> [LifeSliceShareCardStyle] {
+        var styles: [LifeSliceShareCardStyle] = []
+        if photoCount >= 1, hasEvidenceBoundHero { styles.append(.warmLight) }
+        if photoCount >= 2, hasEvidenceBoundHero { styles.append(.magazine) }
+        styles.append(.journal)
+        if leadCharacterCount <= 30 { styles.append(.appleMemories) }
+        if recordedDayCount >= 3 { styles.append(.filmStory) }
+        if leadCharacterCount <= 30 { styles.append(.cleanTexture) }
+        return styles
     }
 
     func next(in styles: [LifeSliceShareCardStyle]) -> LifeSliceShareCardStyle {
@@ -450,7 +462,11 @@ private enum LifeSliceShareCardStyle: String, CaseIterable, Identifiable {
     }
 
     static func recommended(memoryAnchors: [SummaryMemoryAnchor]) -> LifeSliceShareCardStyle {
-        style(for: WeeklyShareCardTemplateCapabilityPolicy.recommended(photoCount: memoryAnchors.count))
+        switch memoryAnchors.count {
+        case 0: return .cleanTexture
+        case 1: return .warmLight
+        default: return .magazine
+        }
     }
 
     private static func style(
@@ -474,8 +490,12 @@ struct SummaryPlaybackSheet: View {
     let isMember: Bool
     var memberPitch: SummaryPlaybackMemberPitch?
     var weeklySharePayload: WeeklyShareCardPayload?
+    var shareSourceRevision: Int = 0
+    var shareEvidenceItemIDs: [UUID] = []
     var shareNickname: String = "叙账用户"
     var shareCardTheme: WeeklyStoryShareCardTheme = .journal
+    var remoteAIDirectorEnabled: Bool = false
+    var remoteAIMonthlyLimit: Int = 0
     var onCompleted: (Double) -> Void
     var onShowMemberPricing: (() -> Void)? = nil
     var onOpenWeekly: (() -> Void)? = nil
@@ -484,6 +504,7 @@ struct SummaryPlaybackSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var activeIndex = 0
     @State private var isPlaying = true
     @State private var playbackDone = false
@@ -492,12 +513,17 @@ struct SummaryPlaybackSheet: View {
     @State private var isSavingShareCard = false
     @State private var isPreparingShareCard = false
     @State private var preparedShareCardPhotos: PreparedWeeklyShareCardPhotoSet?
+    @State private var preparedCoverShareSession: CoverShareSession?
+    @State private var preparedCoverShareContextKey: String?
+    @State private var preparedCoverDirectorInput: LegacyWeeklyCoverDirectorInput?
+    @State private var acceptedCoverDirectorDecision: CoverAIDirectorDecision?
     @State private var shareCardSaveTask: Task<Void, Never>?
     @State private var shareSaveMessage: String?
     @State private var memorySaveMessage: String?
     @State private var showShareCardPrivacyConfirm = false
     @State private var isShareStylePickerExpanded = false
-    @State private var selectedShareCardStyle: LifeSliceShareCardStyle?
+    @State private var selectedCoverTemplateID: CoverTemplateID?
+    @State private var isCustomShareBackgroundSelected = false
     @State private var customShareBackgroundItem: PhotosPickerItem?
     @State private var customShareBackgroundData: Data?
     @State private var customShareBackgroundImage: UIImage?
@@ -507,40 +533,179 @@ struct SummaryPlaybackSheet: View {
         return playback.chapters[min(activeIndex, playback.chapters.count - 1)]
     }
 
-    private var currentShareCardStyle: LifeSliceShareCardStyle {
-        guard let selectedShareCardStyle else { return recommendedShareCardStyle }
-        if selectedShareCardStyle == .customBackground, customShareBackgroundImage != nil {
-            return .customBackground
+    private var currentCoverTemplateID: CoverTemplateID {
+        guard let selectedCoverTemplateID,
+              shareCardTemplateIDs.contains(selectedCoverTemplateID) else {
+            return recommendedCoverTemplateID
         }
-        return shareCardPresetStyles.contains(selectedShareCardStyle)
-            ? selectedShareCardStyle
-            : recommendedShareCardStyle
+        return selectedCoverTemplateID
     }
 
-    private var recommendedShareCardStyle: LifeSliceShareCardStyle {
-        LifeSliceShareCardStyle.recommended(memoryAnchors: shareCardStyleAnchors)
+    private var currentCoverTemplateDescriptor: LaunchCoverTemplateDescriptor {
+        LaunchCoverTemplateCatalog.descriptor(for: currentCoverTemplateID)
+            ?? LaunchCoverTemplateCatalog.descriptor(for: .journal)!
+    }
+
+    private var recommendedCoverTemplateID: CoverTemplateID {
+        if let decision = currentCoverDirectorDecision,
+           shareCardTemplateIDs.contains(decision.templateID) {
+            return decision.templateID
+        }
+        return localRecommendedCoverTemplateID
+    }
+
+    private var localRecommendedCoverTemplateID: CoverTemplateID {
+        LaunchCoverTemplateCatalog.selectTemplateID(for: coverTemplateSelectionInput)
+    }
+
+    private var currentCoverDirectorDecision: CoverAIDirectorDecision? {
+        guard remoteAIDirectorEnabled,
+              selectedCoverTemplateID == nil,
+              !isCustomShareBackgroundSelected,
+              let preparedCoverDirectorInput,
+              let acceptedCoverDirectorDecision,
+              acceptedCoverDirectorDecision.requestCacheKey
+                == preparedCoverDirectorInput.request.cacheKey else {
+            return nil
+        }
+        return acceptedCoverDirectorDecision
     }
 
     private var shareCardStyleAnchors: [SummaryMemoryAnchor] {
+        let anchors: [SummaryMemoryAnchor]
         if let preparedShareCardPhotos,
            preparedShareCardPhotos.sourceKey == shareCardPhotoPreparationKey {
-            return preparedShareCardPhotos.availableAnchors
+            anchors = preparedShareCardPhotos.availableAnchors
+        } else {
+            anchors = Array(
+                playback.memoryAnchors.prefix(WeeklyShareCardPhotoPreparationPolicy.maximumPhotoCount)
+            )
         }
-        return Array(playback.memoryAnchors.prefix(WeeklyShareCardPhotoPreparationPolicy.maximumPhotoCount))
+        return anchors.filter { $0.role != .receipt }
     }
 
-    private var shareCardPresetStyles: [LifeSliceShareCardStyle] {
-        LifeSliceShareCardStyle.presetCases(photoCount: shareCardStyleAnchors.count)
+    private var shareCardTemplateIDs: [CoverTemplateID] {
+        LaunchCoverTemplateCatalog.manuallyAvailableTemplateIDs(
+            for: coverTemplateSelectionInput
+        )
     }
 
-    private var nextShareCardStyle: LifeSliceShareCardStyle {
-        currentShareCardStyle.next(in: shareCardPresetStyles)
+    private var coverTemplateSelectionInput: LaunchCoverTemplateSelectionInput {
+        LaunchCoverTemplateSelectionInput(
+            preferredTemplateID: selectedCoverTemplateID,
+            availablePhotoCount: shareCardStyleAnchors.count,
+            hasEvidenceBoundHero: hasEvidenceBoundHero,
+            evidenceBoundHeroOrientations: evidenceBoundHeroOrientations,
+            recordedDayCount: weeklySharePayload?.dailyCountTrend.filter { $0.1 > 0 }.count ?? 0,
+            leadCharacterCount: currentShareLeadText.count,
+            sceneKeys: coverSceneKeys
+        )
+    }
+
+    private var hasEvidenceBoundHero: Bool {
+        guard let preparedShareCardPhotos,
+              preparedShareCardPhotos.sourceKey == shareCardPhotoPreparationKey else {
+            return false
+        }
+        return preparedShareCardPhotos.availableAnchors.contains { anchor in
+            anchor.role != .receipt
+                && coverLeadEvidenceIDs.contains(anchor.itemID)
+                && preparedShareCardPhotos.analysesByAnchorID[anchor.id]?.isHeroEligible == true
+        }
+    }
+
+    private var coverLeadEvidenceIDs: Set<UUID> {
+        let certifiedLeadEvidence = weeklySharePayload?.narrativePlan?.signalsByRole[.lead]?.first(
+            where: { signal in
+                !signal.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && !signal.isSensitive
+                    && !signal.isAdministrative
+                    && !signal.evidenceItemIDs.isEmpty
+            }
+        )?.evidenceItemIDs
+        return Set(certifiedLeadEvidence ?? shareEvidenceItemIDs)
+    }
+
+    private var evidenceBoundHeroOrientations: Set<MediaOrientation> {
+        guard let preparedShareCardPhotos else { return [] }
+        return Set(preparedShareCardPhotos.availableAnchors.compactMap { anchor in
+            guard anchor.role != .receipt,
+                  coverLeadEvidenceIDs.contains(anchor.itemID),
+                  let analysis = preparedShareCardPhotos.analysesByAnchorID[anchor.id],
+                  analysis.isHeroEligible else {
+                return nil
+            }
+            let width = Double(analysis.pixelWidth)
+            let height = Double(analysis.pixelHeight)
+            if abs(width - height) <= max(width, height) * 0.08 { return .square }
+            return height > width ? .portrait : .landscape
+        })
+    }
+
+    private var coverSceneKeys: Set<String> {
+        let signals = weeklySharePayload?.narrativePlan?.signalsByRole.values.flatMap { $0 } ?? []
+        return Set(signals.compactMap { signal -> String? in
+            guard signal.kind == .structuredScene,
+                  !signal.isSensitive,
+                  !signal.isAdministrative,
+                  !signal.evidenceItemIDs.isEmpty,
+                  signal.id.hasPrefix("scene:") else {
+                return nil
+            }
+            return signal.id
+        })
+    }
+
+    private var currentShareLeadText: String {
+        weeklySharePayload?.narrativeRewrite?.headline
+            ?? weeklySharePayload?.narrativePlan?.headline
+            ?? weeklySharePayload?.headline
+            ?? ""
+    }
+
+    private var nextCoverTemplateID: CoverTemplateID {
+        guard !shareCardTemplateIDs.isEmpty else { return .journal }
+        guard let index = shareCardTemplateIDs.firstIndex(of: currentCoverTemplateID) else {
+            return shareCardTemplateIDs[0]
+        }
+        return shareCardTemplateIDs[(index + 1) % shareCardTemplateIDs.count]
+    }
+
+    private var coverPickerAnimation: Animation? {
+        reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.88)
+    }
+
+    private var coverTemplateChipWidth: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 196 : 132
     }
 
     private var progressFraction: Double {
         guard !playback.chapters.isEmpty else { return 0 }
         if playbackDone { return 1 }
         return Double(activeIndex + 1) / Double(playback.chapters.count)
+    }
+
+    private var shouldPrewarmCoverShare: Bool {
+        guard weeklySharePayload != nil, !playback.chapters.isEmpty else { return false }
+        return playbackDone
+            || activeIndex >= playback.chapters.count - 1
+            || showShareCardPrivacyConfirm
+    }
+
+    private var coverSharePrewarmKey: String {
+        shouldPrewarmCoverShare ? shareCardPhotoPreparationKey : "cover-prewarm-deferred"
+    }
+
+    private var coverAIDirectorPrewarmKey: String {
+        guard shouldPrewarmCoverShare,
+              !showShareCardPrivacyConfirm,
+              selectedCoverTemplateID == nil,
+              !isCustomShareBackgroundSelected,
+              remoteAIDirectorEnabled,
+              let preparedCoverDirectorInput else {
+            return "cover-ai-director-deferred"
+        }
+        return "cover-ai-director-v\(CoverAIDirectorRules.currentVersion)|\(preparedCoverDirectorInput.request.cacheKey)"
     }
 
     var body: some View {
@@ -622,13 +787,39 @@ struct SummaryPlaybackSheet: View {
         .onChange(of: isPlaying) { _, newValue in
             newValue ? startPlayback() : playbackTask?.cancel()
         }
+        .task(id: coverSharePrewarmKey) {
+            guard shouldPrewarmCoverShare else { return }
+            await prepareShareCardPhotos(for: shareCardPhotoPreparationKey)
+        }
+        .task(id: coverShareContextKey) {
+            guard shouldPrewarmCoverShare else { return }
+            prepareCoverShareSession(for: coverShareContextKey)
+        }
+        .task(id: coverAIDirectorPrewarmKey) {
+            guard shouldPrewarmCoverShare,
+                  !showShareCardPrivacyConfirm,
+                  selectedCoverTemplateID == nil,
+                  !isCustomShareBackgroundSelected,
+                  remoteAIDirectorEnabled,
+                  let directorInput = preparedCoverDirectorInput else {
+                return
+            }
+            await prepareCoverDirectorDecision(directorInput)
+        }
         .onDisappear {
             reportCompletionIfNeeded(progress: progressFraction)
             playbackTask?.cancel()
             shareCardSaveTask?.cancel()
             shareCardSaveTask = nil
             preparedShareCardPhotos = nil
+            preparedCoverShareSession = nil
+            preparedCoverShareContextKey = nil
+            preparedCoverDirectorInput = nil
+            acceptedCoverDirectorDecision = nil
             isPreparingShareCard = false
+            Task {
+                await CoverAIDirectorCoordinator.shared.cancelAndRejectPendingResult()
+            }
         }
     }
 
@@ -726,9 +917,9 @@ struct SummaryPlaybackSheet: View {
                     .disabled(isSavingShareCard)
 
                     Button {
-                        guard let renderInput = currentPreparedShareCardRenderInput else { return }
+                        guard let session = currentCoverShareSession else { return }
                         isShareStylePickerExpanded = false
-                        saveWeeklyStoryCard(renderInput)
+                        saveWeeklyStoryCard(session)
                     } label: {
                         HStack(spacing: 8) {
                             if isPreparingShareCard || isSavingShareCard {
@@ -764,13 +955,8 @@ struct SummaryPlaybackSheet: View {
             .shadow(color: Color(red: 47/255, green: 67/255, blue: 58/255).opacity(0.18), radius: 24, x: 0, y: 12)
             .padding(.horizontal, 24)
         }
-        .task(id: shareCardPhotoPreparationKey) {
-            await prepareShareCardPhotos(for: shareCardPhotoPreparationKey)
-        }
         .onDisappear {
-            guard !isSavingShareCard else { return }
-            preparedShareCardPhotos = nil
-            isPreparingShareCard = false
+            isShareStylePickerExpanded = false
         }
     }
 
@@ -1516,8 +1702,7 @@ struct SummaryPlaybackSheet: View {
                 memoryLineButton
 
                 Button {
-                    isShareStylePickerExpanded = false
-                    showShareCardPrivacyConfirm = true
+                    presentShareCardPrivacyConfirm()
                 } label: {
                     Label("保存本周故事图", systemImage: "square.and.arrow.down")
                         .font(.headline.weight(.semibold))
@@ -1728,8 +1913,7 @@ struct SummaryPlaybackSheet: View {
                 memoryLineButton
 
                 Button {
-                    isShareStylePickerExpanded = false
-                    showShareCardPrivacyConfirm = true
+                    presentShareCardPrivacyConfirm()
                 } label: {
                     Label("保存本周故事图", systemImage: "square.and.arrow.down")
                         .font(.headline.weight(.semibold))
@@ -1866,7 +2050,7 @@ struct SummaryPlaybackSheet: View {
                 HStack(alignment: .center, spacing: 14) {
                     Group {
                         if let renderInput = currentPreparedShareCardRenderInput {
-                            WeeklyStoryShareCardView(renderInput: renderInput)
+                            CoverCanvasRoot(renderInput: renderInput)
                                 .scaleEffect(0.18, anchor: .topLeading)
                         } else {
                             shareCardPreparationPreview
@@ -1882,9 +2066,15 @@ struct SummaryPlaybackSheet: View {
 
                     VStack(alignment: .leading, spacing: 12) {
                         shareCardPreviewFeature(
-                            icon: currentShareCardStyle == .customBackground ? "photo.on.rectangle.angled" : currentShareCardStyle.icon,
-                            title: selectedShareCardStyle == nil ? "自动生成" : "手动样式",
-                            detail: currentShareCardStyle.title
+                            icon: isCustomShareBackgroundSelected
+                                ? "photo.on.rectangle.angled"
+                                : currentCoverTemplateDescriptor.systemImageName,
+                            title: selectedCoverTemplateID == nil && !isCustomShareBackgroundSelected
+                                ? "自动生成"
+                                : "手动样式",
+                            detail: isCustomShareBackgroundSelected
+                                ? "自定义背景"
+                                : currentCoverTemplateDescriptor.displayName
                         )
                         shareCardPreviewFeature(icon: "shield.checkered", title: "保护隐私", detail: "不展示金额和敏感信息")
                         shareCardPreviewFeature(icon: "square.and.arrow.down", title: "一键保存", detail: "保存后再决定分享")
@@ -1895,8 +2085,8 @@ struct SummaryPlaybackSheet: View {
 
                 HStack(spacing: 8) {
                     Button {
-                        withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
-                            selectedShareCardStyle = nextShareCardStyle
+                        withAnimation(coverPickerAnimation) {
+                            selectCoverTemplate(nextCoverTemplateID)
                             isShareStylePickerExpanded = false
                         }
                     } label: {
@@ -1908,11 +2098,11 @@ struct SummaryPlaybackSheet: View {
                             .background(AppColors.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .disabled(shareCardPresetStyles.count <= 1)
-                    .opacity(shareCardPresetStyles.count <= 1 ? 0.52 : 1)
+                    .disabled(shareCardTemplateIDs.count <= 1)
+                    .opacity(shareCardTemplateIDs.count <= 1 ? 0.52 : 1)
 
                     Button {
-                        withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
+                        withAnimation(coverPickerAnimation) {
                             isShareStylePickerExpanded.toggle()
                         }
                     } label: {
@@ -1980,45 +2170,20 @@ struct SummaryPlaybackSheet: View {
     private var shareCardStylePicker: some View {
         if weeklySharePayload != nil {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("更多样式")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(AppColors.text.opacity(0.86))
-                    Spacer()
-                    if selectedShareCardStyle != nil {
-                        Button {
-                            withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
-                                selectedShareCardStyle = nil
-                            }
-                        } label: {
-                            Label("自动", systemImage: "wand.and.stars")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(AppColors.accentDark.opacity(0.88))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    Button {
-                        withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
-                            selectedShareCardStyle = nextShareCardStyle
-                        }
-                    } label: {
-                        Label("换一换", systemImage: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(AppColors.accentDark.opacity(0.88))
-                    }
-                    .buttonStyle(.plain)
-                }
+                shareCardStylePickerHeader
 
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
-                        ForEach(shareCardPresetStyles) { style in
-                            shareCardStyleChip(style)
-                                .frame(width: 116)
+                        ForEach(shareCardTemplateIDs, id: \.self) { templateID in
+                            shareCardTemplateChip(templateID)
+                                .frame(width: coverTemplateChipWidth)
                         }
                     }
                     .padding(.vertical, 1)
+                    .scrollTargetLayout()
                 }
                 .scrollIndicators(.hidden)
+                .scrollTargetBehavior(.viewAligned)
 
                 customShareBackgroundCard
             }
@@ -2031,34 +2196,88 @@ struct SummaryPlaybackSheet: View {
         }
     }
 
-    private func shareCardStyleChip(_ style: LifeSliceShareCardStyle) -> some View {
-        let isSelected = currentShareCardStyle == style
+    private var shareCardStylePickerHeader: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                shareCardStylePickerTitle
+                Spacer(minLength: 8)
+                shareCardStylePickerActions
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                shareCardStylePickerTitle
+                shareCardStylePickerActions
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+    }
+
+    private var shareCardStylePickerTitle: some View {
+        Text("更多样式")
+            .font(.caption.weight(.bold))
+            .foregroundStyle(AppColors.text.opacity(0.86))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var shareCardStylePickerActions: some View {
+        HStack(spacing: 12) {
+            if selectedCoverTemplateID != nil || isCustomShareBackgroundSelected {
+                Button {
+                    withAnimation(coverPickerAnimation) {
+                        selectCoverTemplate(nil)
+                    }
+                } label: {
+                    Label("自动", systemImage: "wand.and.stars")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.accentDark.opacity(0.88))
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("恢复本地推荐；若联网导演已有安全结果则采用该结果")
+            }
+            Button {
+                withAnimation(coverPickerAnimation) {
+                    selectCoverTemplate(nextCoverTemplateID)
+                }
+            } label: {
+                Label("换一换", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.accentDark.opacity(0.88))
+            }
+            .buttonStyle(.plain)
+            .disabled(shareCardTemplateIDs.count <= 1)
+            .accessibilityHint("切换到下一个当前可用的封面样式")
+        }
+    }
+
+    private func shareCardTemplateChip(_ templateID: CoverTemplateID) -> some View {
+        let descriptor = LaunchCoverTemplateCatalog.descriptor(for: templateID)!
+        let isSelected = currentCoverTemplateID == templateID && !isCustomShareBackgroundSelected
         return Button {
-            withAnimation(.spring(response: 0.24, dampingFraction: 0.88)) {
-                selectedShareCardStyle = style
+            withAnimation(coverPickerAnimation) {
+                selectCoverTemplate(templateID)
             }
         } label: {
             VStack(alignment: .leading, spacing: 7) {
-                Image(systemName: style.icon)
-                    .font(.system(size: 13, weight: .semibold))
+                Image(systemName: descriptor.systemImageName)
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(isSelected ? .white : AppColors.accentDark.opacity(0.86))
-                    .frame(width: 24, height: 24)
+                    .frame(width: 28, height: 28)
                     .background(
                         Circle()
                             .fill(isSelected ? AppColors.accent : AppColors.accent.opacity(0.12))
                     )
-                Text(style.title)
-                    .font(.system(size: 11, weight: .bold))
+                Text(descriptor.displayName)
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(AppColors.text.opacity(0.90))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-                Text(style.subtitle)
-                    .font(.system(size: 9, weight: .medium))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(descriptor.subtitle)
+                    .font(.caption2.weight(.medium))
                     .foregroundStyle(AppColors.subtext)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: dynamicTypeSize.isAccessibilitySize ? 126 : 94, alignment: .topLeading)
             .padding(10)
             .background(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
@@ -2070,6 +2289,11 @@ struct SummaryPlaybackSheet: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(descriptor.displayName)
+        .accessibilityValue("\(descriptor.subtitle)，\(isSelected ? "已选择" : "未选择")")
+        .accessibilityHint("双击选择此封面样式")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private var customShareBackgroundCard: some View {
@@ -2122,7 +2346,7 @@ struct SummaryPlaybackSheet: View {
 
                         Spacer()
 
-                        if currentShareCardStyle == .customBackground, customShareBackgroundData != nil {
+                        if isCustomShareBackgroundSelected, customShareBackgroundData != nil {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundStyle(Color.white)
@@ -2136,7 +2360,7 @@ struct SummaryPlaybackSheet: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(
-                            currentShareCardStyle == .customBackground && customShareBackgroundData != nil
+                            isCustomShareBackgroundSelected && customShareBackgroundData != nil
                                 ? AppColors.accent.opacity(0.82)
                                 : Color.white.opacity(0.54),
                             lineWidth: 1.2
@@ -2147,11 +2371,12 @@ struct SummaryPlaybackSheet: View {
             if customShareBackgroundData != nil {
                 Button {
                     withAnimation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.88)) {
+                        let wasUsingCustomBackground = isCustomShareBackgroundSelected
                         customShareBackgroundItem = nil
                         customShareBackgroundData = nil
                         customShareBackgroundImage = nil
-                        if currentShareCardStyle == .customBackground {
-                            selectedShareCardStyle = nil
+                        if wasUsingCustomBackground {
+                            selectCoverTemplate(nil)
                         }
                     }
                 } label: {
@@ -2174,7 +2399,7 @@ struct SummaryPlaybackSheet: View {
                    let normalized = normalizedShareBackground(data) {
                     customShareBackgroundData = normalized.data
                     customShareBackgroundImage = normalized.image
-                    selectedShareCardStyle = .customBackground
+                    selectCustomShareBackground()
                 }
             }
         }
@@ -2378,7 +2603,7 @@ struct SummaryPlaybackSheet: View {
     }
 
     private var shareCardPhotoPreparationKey: String {
-        playback.memoryAnchors
+        let mediaKey = playback.memoryAnchors
             .prefix(WeeklyShareCardPhotoPreparationPolicy.maximumPhotoCount)
             .map { anchor in
                 [
@@ -2390,32 +2615,263 @@ struct SummaryPlaybackSheet: View {
                 .joined(separator: ":")
             }
             .joined(separator: "|")
+        return "cover-media-analysis-v\(CoverMediaAnalysisRules.currentVersion)|\(mediaKey)"
     }
 
-    private var currentPreparedShareCardRenderInput: PreparedWeeklyShareCardRenderInput? {
+    private var currentCoverShareSession: CoverShareSession? {
+        guard preparedCoverShareContextKey == coverShareContextKey else { return nil }
+        return preparedCoverShareSession
+    }
+
+    private var currentPreparedShareCardRenderInput: PreparedCoverRenderInput? {
+        currentCoverShareSession?.previewRenderInput
+    }
+
+    private var coverShareContextKey: String {
+        let payloadKey = weeklySharePayload.map { payload in
+            [
+                payload.periodText,
+                String(payload.recordCount),
+                String(payload.narrativePlan?.sourceRevision ?? shareSourceRevision),
+                payload.narrativePlan?.leadSignalID ?? "no-lead",
+            ].joined(separator: ":")
+        } ?? "no-payload"
+        let preparedKey = preparedShareCardPhotos?.sourceKey ?? "photos-waiting"
+        let backgroundKey: String
+        if isCustomShareBackgroundSelected, let customShareBackgroundData {
+            backgroundKey = CoverStableIdentity.fingerprint([
+                String(customShareBackgroundData.count),
+                customShareBackgroundData.prefix(64).base64EncodedString(),
+            ])
+        } else {
+            backgroundKey = "no-custom-background"
+        }
+        let directorKey: String
+        if let decision = currentCoverDirectorDecision {
+            directorKey = [
+                decision.requestCacheKey,
+                decision.templateID.rawValue,
+                decision.paletteID.rawValue,
+                decision.backgroundFamily.rawValue,
+                String(decision.seed),
+            ].joined(separator: ":")
+        } else {
+            directorKey = "local-director"
+        }
+        return [
+            payloadKey,
+            preparedKey,
+            currentCoverTemplateID.rawValue,
+            isCustomShareBackgroundSelected ? "custom-background" : "generated-background",
+            backgroundKey,
+            directorKey,
+        ].joined(separator: "|")
+    }
+
+    @MainActor
+    private func prepareCoverShareSession(for contextKey: String) {
+        if preparedCoverShareContextKey == contextKey,
+           preparedCoverShareSession != nil {
+            return
+        }
+        guard let payload = weeklySharePayload,
+              let preparedShareCardPhotos,
+              preparedShareCardPhotos.sourceKey == shareCardPhotoPreparationKey else {
+            preparedCoverShareSession = nil
+            preparedCoverShareContextKey = nil
+            return
+        }
+        guard contextKey == coverShareContextKey else { return }
+
+        guard let source = makeLegacyCoverSource(
+            templateID: currentCoverTemplateID,
+            usesCustomBackground: isCustomShareBackgroundSelected,
+            contextKey: contextKey
+        ) else {
+            return
+        }
+        do {
+            let session = try LegacyWeeklyCoverAdapter.prepareSession(
+                from: source,
+                directorDecision: selectedCoverTemplateID == nil
+                    && !isCustomShareBackgroundSelected
+                    ? currentCoverDirectorDecision
+                    : nil
+            )
+            guard contextKey == coverShareContextKey else { return }
+            preparedCoverShareSession = session
+            preparedCoverShareContextKey = contextKey
+        } catch {
+            preparedCoverShareSession = nil
+            preparedCoverShareContextKey = nil
+            shareSaveMessage = "分享图内容校验没有通过，请稍后再试。"
+        }
+    }
+
+    @MainActor
+    private func prepareCoverDirectorInput() {
+        guard remoteAIDirectorEnabled,
+              let source = makeLegacyCoverSource(
+                templateID: localRecommendedCoverTemplateID,
+                usesCustomBackground: false,
+                contextKey: "cover-ai-director-input"
+              ) else {
+            preparedCoverDirectorInput = nil
+            acceptedCoverDirectorDecision = nil
+            return
+        }
+        do {
+            let input = try LegacyWeeklyCoverAdapter.makeDirectorInput(from: source)
+            if preparedCoverDirectorInput?.request.cacheKey != input.request.cacheKey {
+                acceptedCoverDirectorDecision = nil
+            }
+            preparedCoverDirectorInput = input
+        } catch {
+            preparedCoverDirectorInput = nil
+            acceptedCoverDirectorDecision = nil
+        }
+    }
+
+    @MainActor
+    private func prepareCoverDirectorDecision(
+        _ directorInput: LegacyWeeklyCoverDirectorInput
+    ) async {
+        let decision = await CoverAIDirectorCoordinator.shared.prepare(
+            request: directorInput.request,
+            mediaIDByAlias: directorInput.mediaIDByAlias,
+            isEnabled: remoteAIDirectorEnabled,
+            monthlyLimit: remoteAIMonthlyLimit
+        )
+        guard !Task.isCancelled,
+              remoteAIDirectorEnabled,
+              selectedCoverTemplateID == nil,
+              !isCustomShareBackgroundSelected,
+              !showShareCardPrivacyConfirm,
+              preparedCoverDirectorInput?.request.cacheKey == directorInput.request.cacheKey,
+              let decision else {
+            return
+        }
+        acceptedCoverDirectorDecision = decision
+        prepareCoverShareSession(for: coverShareContextKey)
+    }
+
+    @MainActor
+    private func presentShareCardPrivacyConfirm() {
+        adoptCachedCoverDirectorDecisionIfAvailable()
+        Task {
+            await CoverAIDirectorCoordinator.shared.cancelAndRejectPendingResult()
+        }
+        isShareStylePickerExpanded = false
+        showShareCardPrivacyConfirm = true
+    }
+
+    @MainActor
+    private func adoptCachedCoverDirectorDecisionIfAvailable() {
+        guard remoteAIDirectorEnabled,
+              selectedCoverTemplateID == nil,
+              !isCustomShareBackgroundSelected,
+              let directorInput = preparedCoverDirectorInput,
+              let decision = CoverAIDirectorDecisionStore.shared.decision(
+                for: directorInput.request
+              ),
+              CoverAIDirectorValidator.isStillValid(
+                decision,
+                request: directorInput.request,
+                mediaIDByAlias: directorInput.mediaIDByAlias
+              ) else {
+            return
+        }
+        acceptedCoverDirectorDecision = decision
+        prepareCoverShareSession(for: coverShareContextKey)
+    }
+
+    @MainActor
+    private func makeLegacyCoverSource(
+        templateID: CoverTemplateID,
+        usesCustomBackground: Bool,
+        contextKey: String
+    ) -> LegacyWeeklyCoverSource? {
         guard let payload = weeklySharePayload,
               let preparedShareCardPhotos,
               preparedShareCardPhotos.sourceKey == shareCardPhotoPreparationKey else {
             return nil
         }
-        return PreparedWeeklyShareCardRenderInput(
+        let media = preparedShareCardPhotos.availableAnchors.compactMap { anchor -> LegacyWeeklyCoverMedia? in
+            guard let image = preparedShareCardPhotos.imagesByAnchorID[anchor.id] else { return nil }
+            return LegacyWeeklyCoverMedia(
+                id: anchor.id,
+                evidenceItemIDs: [anchor.itemID],
+                image: image,
+                privacyRisk: anchor.role == .receipt ? .receiptOrScreenshot : .safe,
+                allowsHero: anchor.role != .receipt,
+                requiresAnalysisForHero: anchor.role != .receipt,
+                analysis: preparedShareCardPhotos.analysesByAnchorID[anchor.id]
+            )
+        }
+        guard let descriptor = LaunchCoverTemplateCatalog.descriptor(for: templateID) else {
+            return nil
+        }
+        let backgroundImage = usesCustomBackground ? customShareBackgroundImage : nil
+        let backgroundIdentity = backgroundImage == nil
+            ? "generated:\(templateID.rawValue)"
+            : "custom:\(contextKey)"
+        return LegacyWeeklyCoverSource(
+            sourceRevision: max(
+                shareSourceRevision,
+                payload.narrativePlan?.sourceRevision ?? 0
+            ),
             payload: payload,
-            memoryAnchors: preparedShareCardPhotos.availableAnchors,
-            preparedImagesByAnchorID: preparedShareCardPhotos.imagesByAnchorID,
-            unavailablePhotoCount: preparedShareCardPhotos.unavailablePhotoCount,
-            isPetMode: petEnabled,
-            nickname: shareNickname.isEmpty ? "叙账用户" : shareNickname,
-            theme: shareCardTheme,
-            style: currentShareCardStyle,
-            customBackgroundImage: customShareBackgroundImage
+            fallbackEvidenceItemIDs: shareEvidenceItemIDs
+                + preparedShareCardPhotos.availableAnchors.map(\.itemID),
+            media: media,
+            unavailableMediaCount: preparedShareCardPhotos.unavailablePhotoCount,
+            variantID: usesCustomBackground ? "customBackground" : templateID.rawValue,
+            paletteID: descriptor.defaultPaletteID,
+            backgroundFamily: usesCustomBackground
+                ? .softUtility
+                : descriptor.defaultBackgroundFamily,
+            backgroundImage: backgroundImage,
+            backgroundIdentity: backgroundIdentity
         )
+    }
+
+    @MainActor
+    private func selectCoverTemplate(_ templateID: CoverTemplateID?) {
+        selectedCoverTemplateID = templateID
+        isCustomShareBackgroundSelected = false
+        if templateID != nil {
+            Task {
+                await CoverAIDirectorCoordinator.shared.cancelAndRejectPendingResult()
+            }
+        }
+        prepareCoverShareSession(for: coverShareContextKey)
+    }
+
+    @MainActor
+    private func selectCustomShareBackground() {
+        guard customShareBackgroundImage != nil else { return }
+        selectedCoverTemplateID = nil
+        isCustomShareBackgroundSelected = true
+        Task {
+            await CoverAIDirectorCoordinator.shared.cancelAndRejectPendingResult()
+        }
+        prepareCoverShareSession(for: coverShareContextKey)
     }
 
     @MainActor
     private func prepareShareCardPhotos(for sourceKey: String) async {
         shareSaveMessage = nil
         isPreparingShareCard = true
+        defer {
+            if sourceKey == shareCardPhotoPreparationKey {
+                isPreparingShareCard = false
+            }
+        }
         preparedShareCardPhotos = nil
+        preparedCoverShareSession = nil
+        preparedCoverShareContextKey = nil
+        preparedCoverDirectorInput = nil
+        acceptedCoverDirectorDecision = nil
 
         let requestedAnchors = Array(
             playback.memoryAnchors.prefix(WeeklyShareCardPhotoPreparationPolicy.maximumPhotoCount)
@@ -2428,6 +2884,17 @@ struct SummaryPlaybackSheet: View {
         for preparedPhoto in preparedPhotos where imagesByAnchorID[preparedPhoto.anchorID] == nil {
             imagesByAnchorID[preparedPhoto.anchorID] = preparedPhoto.image
         }
+        let anchorsByID = Dictionary(uniqueKeysWithValues: requestedAnchors.map { ($0.id, $0) })
+        let analysisRequests = preparedPhotos.compactMap { preparedPhoto -> CoverMediaAnalysisRequest? in
+            guard anchorsByID[preparedPhoto.anchorID]?.role != .receipt else { return nil }
+            return CoverMediaAnalysisRequest(
+                mediaID: preparedPhoto.anchorID,
+                stableImageIdentity: preparedPhoto.analysisIdentity,
+                image: preparedPhoto.image
+            )
+        }
+        let analysesByAnchorID = await LocalCoverMediaAnalyzer.shared.analyze(analysisRequests)
+        guard !Task.isCancelled, sourceKey == shareCardPhotoPreparationKey else { return }
         let resolution = WeeklyShareCardPhotoPreparationPolicy.resolve(
             requestedAnchorIDs: requestedAnchors.map(\.id),
             loadedAnchorIDs: Set(imagesByAnchorID.keys)
@@ -2437,18 +2904,21 @@ struct SummaryPlaybackSheet: View {
             sourceKey: sourceKey,
             availableAnchors: requestedAnchors.filter { availableIDSet.contains($0.id) },
             imagesByAnchorID: imagesByAnchorID,
+            analysesByAnchorID: analysesByAnchorID,
             unavailablePhotoCount: resolution.unavailablePhotoCount
         )
-        if let selectedShareCardStyle,
-           selectedShareCardStyle != .customBackground,
-           !LifeSliceShareCardStyle.presetCases(photoCount: resolution.availableAnchorIDs.count)
-            .contains(selectedShareCardStyle) {
-            self.selectedShareCardStyle = nil
+        if let selectedCoverTemplateID,
+           !shareCardTemplateIDs.contains(selectedCoverTemplateID) {
+            self.selectedCoverTemplateID = nil
         }
-        isPreparingShareCard = false
+        if isCustomShareBackgroundSelected, customShareBackgroundImage == nil {
+            isCustomShareBackgroundSelected = false
+        }
+        prepareCoverDirectorInput()
+        prepareCoverShareSession(for: coverShareContextKey)
     }
 
-    private func saveWeeklyStoryCard(_ renderInput: PreparedWeeklyShareCardRenderInput) {
+    private func saveWeeklyStoryCard(_ session: CoverShareSession) {
         guard !isSavingShareCard, shareCardSaveTask == nil else { return }
         isSavingShareCard = true
         shareSaveMessage = nil
@@ -2459,8 +2929,8 @@ struct SummaryPlaybackSheet: View {
                 shareCardSaveTask = nil
             }
             guard !Task.isCancelled else { return }
-            let card = WeeklyStoryShareCardView(renderInput: renderInput)
-            guard let image = card.snapshot() else {
+            let renderInput = session.exportRenderInput
+            guard let image = CoverExportCoordinator.renderImage(from: session) else {
                 shareSaveMessage = "分享图暂时没有生成成功，请稍后再试。"
                 return
             }
@@ -2472,11 +2942,48 @@ struct SummaryPlaybackSheet: View {
                     ? "已保存到相册；有 \(renderInput.unavailablePhotoCount) 张照片暂不可用，本次按可用记录生成。"
                     : "已保存到相册。"
                 showShareCardPrivacyConfirm = false
-                preparedShareCardPhotos = nil
             } catch {
                 guard !Task.isCancelled else { return }
                 shareSaveMessage = (error as? LocalizedError)?.errorDescription ?? "暂时没保存成功。请检查相册权限后再试。"
             }
+        }
+    }
+
+    private func coverPaletteID(
+        for style: LifeSliceShareCardStyle
+    ) -> CoverPaletteID {
+        switch style {
+        case .warmLight, .appleMemories, .fullPhoto:
+            return .creamMorning
+        case .magazine:
+            return .paperGray
+        case .journal, .cleanTexture, .customBackground:
+            return .quietCream
+        case .filmStory:
+            return .fogGreen
+        case .collageStory:
+            return .warmBeige
+        }
+    }
+
+    private func coverBackgroundFamily(
+        for style: LifeSliceShareCardStyle
+    ) -> BackgroundFamily {
+        switch style {
+        case .warmLight, .appleMemories, .fullPhoto:
+            return .morningLight
+        case .magazine:
+            return .editorial
+        case .journal:
+            return .journal
+        case .filmStory:
+            return .quietEditorial
+        case .collageStory:
+            return .creamPaper
+        case .cleanTexture:
+            return .minimal
+        case .customBackground:
+            return .softUtility
         }
     }
 
@@ -2727,17 +3234,23 @@ private struct WeeklyShareCardPhotoPreparationRequest: Sendable {
     let anchorID: UUID
     let imageReference: String?
     let inlineData: Data
+    let analysisIdentity: String
 
     init(anchor: SummaryMemoryAnchor) {
         anchorID = anchor.id
         imageReference = anchor.imageReference
         inlineData = anchor.imageData
+        analysisIdentity = anchor.imageReference ?? CoverStableIdentity.fingerprint([
+            String(anchor.imageData.count),
+            Data(anchor.imageData.prefix(64)).base64EncodedString(),
+        ])
     }
 }
 
 private struct WeeklyShareCardPreparedPhoto: @unchecked Sendable {
     let anchorID: UUID
     let image: UIImage
+    let analysisIdentity: String
 }
 
 private enum WeeklyShareCardImagePreparer {
@@ -2747,7 +3260,7 @@ private enum WeeklyShareCardImagePreparer {
         _ requests: [WeeklyShareCardPhotoPreparationRequest]
     ) async -> [WeeklyShareCardPreparedPhoto] {
         guard !requests.isEmpty else { return [] }
-        return await Task.detached(priority: .userInitiated) {
+        let preparationTask = Task.detached(priority: .userInitiated) {
             var prepared: [WeeklyShareCardPreparedPhoto] = []
             prepared.reserveCapacity(requests.count)
             for request in requests {
@@ -2760,11 +3273,23 @@ private enum WeeklyShareCardImagePreparer {
                 guard let data,
                       let image = decodeForExport(data) else { continue }
                 prepared.append(
-                    WeeklyShareCardPreparedPhoto(anchorID: request.anchorID, image: image)
+                    WeeklyShareCardPreparedPhoto(
+                        anchorID: request.anchorID,
+                        image: image,
+                        analysisIdentity: CoverStableIdentity.fingerprint([
+                            request.analysisIdentity,
+                            dataFingerprint(data),
+                        ])
+                    )
                 )
             }
             return prepared
-        }.value
+        }
+        return await withTaskCancellationHandler {
+            await preparationTask.value
+        } onCancel: {
+            preparationTask.cancel()
+        }
     }
 
     private static func decodeForExport(_ data: Data) -> UIImage? {
@@ -2785,12 +3310,22 @@ private enum WeeklyShareCardImagePreparer {
         guard let image = UIImage(data: data) else { return nil }
         return image.preparingForDisplay() ?? image
     }
+
+    private static func dataFingerprint(_ data: Data) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in data {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return String(format: "%016llx", hash)
+    }
 }
 
 private struct PreparedWeeklyShareCardPhotoSet {
     let sourceKey: String
     let availableAnchors: [SummaryMemoryAnchor]
     let imagesByAnchorID: [UUID: UIImage]
+    let analysesByAnchorID: [UUID: CoverMediaAnalysis]
     let unavailablePhotoCount: Int
 }
 

@@ -299,6 +299,11 @@ app.post("/v1/ai/insight/daily", requireAuth, async (req, res) => {
     return res.status(400).json({ ok: false, error: safety.error, message: safety.message, reason: safety.reason });
   }
   const upstream = `${config.aiProxyBaseUrl}/v1/insight/daily`;
+  const isCoverDirectorRequest = req.body?.feature === "cover_director";
+  const abortController = isCoverDirectorRequest ? new AbortController() : null;
+  const coverDirectorTimeout = abortController
+    ? setTimeout(() => abortController.abort(), 9_000)
+    : null;
   try {
     const response = await fetch(upstream, {
       method: "POST",
@@ -307,6 +312,7 @@ app.post("/v1/ai/insight/daily", requireAuth, async (req, res) => {
         ...(config.aiProxyToken ? { "x-proxy-token": config.aiProxyToken } : {}),
       },
       body: JSON.stringify(req.body || {}),
+      ...(abortController ? { signal: abortController.signal } : {}),
     });
     const text = await response.text();
     const outputSafety = validateAIOutputText(text);
@@ -328,6 +334,8 @@ app.post("/v1/ai/insight/daily", requireAuth, async (req, res) => {
     res.status(response.status).type("application/json").send(text);
   } catch (error) {
     res.status(502).json({ ok: false, error: "UPSTREAM_ERROR", message: String(error?.message || error) });
+  } finally {
+    if (coverDirectorTimeout) clearTimeout(coverDirectorTimeout);
   }
 });
 

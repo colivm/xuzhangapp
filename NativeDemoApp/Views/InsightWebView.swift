@@ -7035,30 +7035,46 @@ struct InsightWebView: View {
         showWeeklyShareThemeNudge = false
 
         let items = homeViewModel.items
-        let petMode = settingsViewModel.petCompanionEnabled
-        let nick = settingsViewModel.displayName.isEmpty ? "叙账用户" : settingsViewModel.displayName
-        let shareTheme: WeeklyShareCardView.ShareCardTheme = settingsViewModel.shareCardUsesAppTheme && settingsViewModel.settings.hasMemberAccess
-            ? .appTheme(ThemeResolver.current)
-            : .journal
+        let sourceRevision = homeViewModel.homeDashboardRevision
+        let usesAppTheme = settingsViewModel.shareCardUsesAppTheme
+            && settingsViewModel.settings.hasMemberAccess
+        let paletteID: CoverPaletteID = usesAppTheme ? .fogGreen : .quietCream
 
         Task { @MainActor in
-            await Task.yield()
             guard !Task.isCancelled else {
                 isSavingWeeklyShareCard = false
                 return
             }
-            guard let payload = PlaybackService().buildWeeklyShareCardPayload(from: items) else {
+            guard let payload = PlaybackService().buildWeeklyShareCardPayload(
+                from: items,
+                sourceRevision: sourceRevision
+            ) else {
                 weeklyShareSaveMessage = "这一周还没有足够内容生成摘页。"
                 isSavingWeeklyShareCard = false
                 return
             }
-            let card = WeeklyShareCardView(
-                payload: payload,
-                isPetMode: petMode,
-                nickname: nick,
-                theme: shareTheme
-            )
-            guard let img = card.snapshot() else {
+            let session: CoverShareSession
+            do {
+                session = try LegacyWeeklyCoverAdapter.prepareSession(
+                    from: LegacyWeeklyCoverSource(
+                        sourceRevision: sourceRevision,
+                        payload: payload,
+                        fallbackEvidenceItemIDs: weeklyCoverEvidenceItemIDs(items),
+                        media: [],
+                        unavailableMediaCount: 0,
+                        variantID: "review-weekly",
+                        paletteID: paletteID,
+                        backgroundFamily: .quietEditorial,
+                        backgroundImage: nil,
+                        backgroundIdentity: "review-weekly:\(paletteID.rawValue)"
+                    )
+                )
+            } catch {
+                weeklyShareSaveMessage = "摘页内容校验没有通过，请稍后再试。"
+                isSavingWeeklyShareCard = false
+                return
+            }
+            guard let img = CoverExportCoordinator.renderImage(from: session) else {
                 weeklyShareSaveMessage = "摘页暂时没有生成成功，请稍后再试。"
                 isSavingWeeklyShareCard = false
                 return
@@ -7072,6 +7088,24 @@ struct InsightWebView: View {
                 showWeeklyShareThemeNudge = false
             }
             isSavingWeeklyShareCard = false
+        }
+    }
+
+    private func weeklyCoverEvidenceItemIDs(
+        _ items: [HomeItem],
+        now: Date = Date()
+    ) -> [UUID] {
+        let calendar = PlaybackService.isoCalendar
+        guard let interval = calendar.dateInterval(of: .weekOfYear, for: now) else {
+            return []
+        }
+        return items.compactMap { item in
+            guard item.amount > 0,
+                  item.createdAt >= interval.start,
+                  item.createdAt < interval.end else {
+                return nil
+            }
+            return item.id
         }
     }
 }

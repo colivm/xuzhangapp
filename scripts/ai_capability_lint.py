@@ -83,15 +83,20 @@ def main() -> int:
     report_source = (ROOT / "NativeDemoApp/Services/AIReportService.swift").read_text(encoding="utf-8")
     proxy_source = (ROOT / "ai-proxy/server.js").read_text(encoding="utf-8")
     contract_source = (ROOT / "ai-proxy/narrativeRewriteContract.js").read_text(encoding="utf-8")
+    cover_contract_source = (ROOT / "ai-proxy/coverDirectorContract.js").read_text(encoding="utf-8")
     legacy_contract_source = (ROOT / "ai-proxy/legacyInsightContract.js").read_text(encoding="utf-8")
     feature_policy_source = (ROOT / "ai-proxy/aiFeaturePolicy.js").read_text(encoding="utf-8")
     contract_test_source = (ROOT / "ai-proxy/narrativeRewriteContract.test.js").read_text(encoding="utf-8")
+    cover_contract_test_source = (ROOT / "ai-proxy/coverDirectorContract.test.js").read_text(encoding="utf-8")
     runtime_policy_source = (ROOT / "ai-proxy/runtimeEnvironmentPolicy.js").read_text(encoding="utf-8")
     runtime_policy_test_source = (ROOT / "ai-proxy/runtimeEnvironmentPolicy.test.js").read_text(encoding="utf-8")
     backend_source = (ROOT / "backend/src/server.js").read_text(encoding="utf-8")
     narrative_client_start = report_source.index("func generateNarrativeRewrites")
     narrative_client_end = report_source.index("func generateInsight", narrative_client_start)
     narrative_client_source = report_source[narrative_client_start:narrative_client_end]
+    cover_client_start = report_source.index("func generateCoverDirectorDecision")
+    cover_client_end = report_source.index("func generateNarrativeRewrites", cover_client_start)
+    cover_client_source = report_source[cover_client_start:cover_client_end]
     narrative_contract_checks = {
         "client sends structured fact packs only through a proxy": (
             '"factPacks": factPackPayload' in narrative_client_source
@@ -151,6 +156,46 @@ def main() -> int:
         "backend continues to forward the complete protected request body": (
             'app.post("/v1/ai/insight/daily", requireAuth' in backend_source
             and "body: JSON.stringify(req.body || {})" in backend_source
+        ),
+        "cover director client sends only the structured request through the fixed proxy": (
+            '"feature": "cover_director"' in cover_client_source
+            and '"directorRequest": directorPayload' in cover_client_source
+            and '"messages"' not in cover_client_source
+            and '"model"' not in cover_client_source
+        ),
+        "cover director proxy owns a closed schema and validates before model use": all(
+            token in cover_contract_source
+            for token in (
+                "COVER_DIRECTOR_RESPONSE_JSON_SCHEMA",
+                'additionalProperties: false',
+                "validateCoverDirectorRequest",
+                "normalizeCoverDirectorResponse",
+                "isEvidenceBoundToLead",
+            )
+        ) and 'validateCoverDirectorRequest(req.body?.directorRequest)' in proxy_source,
+        "cover director request carries no free story or image fields": all(
+            token not in cover_contract_source
+            for token in (
+                "storyText:",
+                "photoData:",
+                "imageData:",
+                "imageReference:",
+                "evidenceItemIDs:",
+            )
+        ),
+        "cover director privacy and stale-result contracts are executable": all(
+            token in cover_contract_test_source
+            for token in (
+                "accepts a redacted bounded cover director request",
+                "rejects free text image fields identifiers and unknown request keys",
+                "rejects stale identities unknown tokens and unsupported media roles",
+            )
+        ),
+        "cover director feature is explicitly allowlisted and backend timed": (
+            "cover_director" in feature_policy_source
+            and "AI_UPSTREAM_TIMEOUT_MS_COVER_DIRECTOR" in proxy_source
+            and "isCoverDirectorRequest" in backend_source
+            and "AbortController" in backend_source
         ),
     }
     for description, passed in narrative_contract_checks.items():
