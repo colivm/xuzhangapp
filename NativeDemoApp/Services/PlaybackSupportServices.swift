@@ -152,6 +152,25 @@ struct LifeStorySignal: Equatable {
     let profile: LifeStoryVisualProfile
 }
 
+enum PlaybackLateWorkCommutePolicy {
+    static func preferredStrongItem(in items: [HomeItem]) -> HomeItem? {
+        items
+            .filter { HomeItem.lateWorkCommutePlaybackTitle(for: $0) == "晚下班路上" }
+            .sorted { lhs, rhs in
+                if lhs.createdAt == rhs.createdAt {
+                    return lhs.id.uuidString < rhs.id.uuidString
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+            .first
+    }
+
+    static func auxiliaryEmotionLabel(in items: [HomeItem]) -> String? {
+        preferredStrongItem(in: items)
+            .flatMap(HomeItem.lateWorkCommuteEmotionTag(for:))
+    }
+}
+
 enum PlaybackAuxiliarySignalPolicy {
     static let lifeMarkMetricKey = "playbackLifeMarkLabel"
     static let emotionMetricKey = "playbackEmotionLabel"
@@ -205,6 +224,9 @@ enum PlaybackAuxiliarySignalPolicy {
     }
 
     private static func preferredEmotionTag(in items: [HomeItem]) -> String? {
+        if let lateWorkCommute = PlaybackLateWorkCommutePolicy.auxiliaryEmotionLabel(in: items) {
+            return lateWorkCommute
+        }
         let candidates = items
             .compactMap { item -> (text: String, score: Int, date: Date, id: String)? in
                 let emotion = item.displayEmotionTag.trimmingCharacters(in: .whitespacesAndNewlines)

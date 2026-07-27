@@ -29,6 +29,7 @@ private struct StoryDynamicBackdrop: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let profile: LifeStoryVisualProfile
+    let isActive: Bool
     var opacity: Double = 1
 
     var body: some View {
@@ -39,7 +40,7 @@ private struct StoryDynamicBackdrop: View {
                 endPoint: .bottomTrailing
             )
 
-            if reduceMotion {
+            if reduceMotion || !isActive {
                 canvasLayer(time: 0)
             } else {
                 TimelineView(.periodic(from: Date(), by: 1.0 / 8.0)) { timeline in
@@ -363,6 +364,36 @@ enum WeeklyShareCardTemplateCapability: Equatable {
     case weeklyCollage
 }
 
+enum SummaryPlaybackSceneLifecyclePolicy {
+    static func shouldResumePlayback(
+        wasPlayingBeforeInterruption: Bool,
+        playbackDone: Bool,
+        chapterCount: Int
+    ) -> Bool {
+        wasPlayingBeforeInterruption && !playbackDone && chapterCount > 0
+    }
+
+    static func shouldPrewarmCover(
+        isSceneActive: Bool,
+        sceneAllowsCoverWork: Bool,
+        hasSharePayload: Bool,
+        chapterCount: Int,
+        playbackDone: Bool,
+        activeIndex: Int,
+        showsSharePrivacy: Bool
+    ) -> Bool {
+        guard isSceneActive,
+              sceneAllowsCoverWork,
+              hasSharePayload,
+              chapterCount > 0 else {
+            return false
+        }
+        return playbackDone
+            || activeIndex >= chapterCount - 1
+            || showsSharePrivacy
+    }
+}
+
 enum WeeklyShareCardTemplateCapabilityPolicy {
     static func recommended(photoCount: Int) -> WeeklyShareCardTemplateCapability {
         switch max(0, photoCount) {
@@ -505,11 +536,17 @@ struct SummaryPlaybackSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scenePhase) private var scenePhase
     @State private var activeIndex = 0
     @State private var isPlaying = true
     @State private var playbackDone = false
     @State private var completionReported = false
     @State private var playbackTask: Task<Void, Never>?
+    @State private var playbackShouldResumeAfterSceneActivation = false
+    @State private var isPlaybackSheetVisible = false
+    @State private var sceneAllowsCoverWork = true
+    @State private var coverSceneTransitionTask: Task<Void, Never>?
+    @State private var coverSceneTransitionID = UUID()
     @State private var isSavingShareCard = false
     @State private var isPreparingShareCard = false
     @State private var preparedShareCardPhotos: PreparedWeeklyShareCardPhotoSet?
@@ -686,10 +723,15 @@ struct SummaryPlaybackSheet: View {
     }
 
     private var shouldPrewarmCoverShare: Bool {
-        guard weeklySharePayload != nil, !playback.chapters.isEmpty else { return false }
-        return playbackDone
-            || activeIndex >= playback.chapters.count - 1
-            || showShareCardPrivacyConfirm
+        SummaryPlaybackSceneLifecyclePolicy.shouldPrewarmCover(
+            isSceneActive: scenePhase == .active,
+            sceneAllowsCoverWork: sceneAllowsCoverWork,
+            hasSharePayload: weeklySharePayload != nil,
+            chapterCount: playback.chapters.count,
+            playbackDone: playbackDone,
+            activeIndex: activeIndex,
+            showsSharePrivacy: showShareCardPrivacyConfirm
+        )
     }
 
     private var coverSharePrewarmKey: String {
@@ -719,7 +761,11 @@ struct SummaryPlaybackSheet: View {
                 .ignoresSafeArea()
                 .transition(.opacity)
 
-            StoryDynamicBackdrop(profile: backdropProfile, opacity: 0.9)
+            StoryDynamicBackdrop(
+                profile: backdropProfile,
+                isActive: scenePhase == .active,
+                opacity: 0.9
+            )
                 .ignoresSafeArea()
                 .transition(.opacity)
 
@@ -782,10 +828,23 @@ struct SummaryPlaybackSheet: View {
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.20), value: memorySaveMessage)
         .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.88), value: showShareCardPrivacyConfirm)
         .onAppear {
-            startPlayback()
+            isPlaybackSheetVisible = true
+            if scenePhase == .active {
+                sceneAllowsCoverWork = true
+                startPlayback()
+            } else {
+                handleScenePhaseChange(scenePhase)
+            }
         }
         .onChange(of: isPlaying) { _, newValue in
-            newValue ? startPlayback() : playbackTask?.cancel()
+            if newValue && scenePhase == .active {
+                startPlayback()
+            } else {
+                playbackTask?.cancel()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            handleScenePhaseChange(phase)
         }
         .task(id: coverSharePrewarmKey) {
             guard shouldPrewarmCoverShare else { return }
@@ -807,6 +866,12 @@ struct SummaryPlaybackSheet: View {
             await prepareCoverDirectorDecision(directorInput)
         }
         .onDisappear {
+            isPlaybackSheetVisible = false
+            sceneAllowsCoverWork = false
+            playbackShouldResumeAfterSceneActivation = false
+            coverSceneTransitionID = UUID()
+            coverSceneTransitionTask?.cancel()
+            coverSceneTransitionTask = nil
             reportCompletionIfNeeded(progress: progressFraction)
             playbackTask?.cancel()
             shareCardSaveTask?.cancel()
@@ -2670,6 +2735,7 @@ struct SummaryPlaybackSheet: View {
 
     @MainActor
     private func prepareCoverShareSession(for contextKey: String) {
+        guard scenePhase == .active, sceneAllowsCoverWork else { return }
         if preparedCoverShareContextKey == contextKey,
            preparedCoverShareSession != nil {
             return
@@ -2710,7 +2776,9 @@ struct SummaryPlaybackSheet: View {
 
     @MainActor
     private func prepareCoverDirectorInput() {
-        guard remoteAIDirectorEnabled,
+        guard scenePhase == .active,
+              sceneAllowsCoverWork,
+              remoteAIDirectorEnabled,
               let source = makeLegacyCoverSource(
                 templateID: localRecommendedCoverTemplateID,
                 usesCustomBackground: false,
@@ -2736,6 +2804,7 @@ struct SummaryPlaybackSheet: View {
     private func prepareCoverDirectorDecision(
         _ directorInput: LegacyWeeklyCoverDirectorInput
     ) async {
+        guard scenePhase == .active, sceneAllowsCoverWork else { return }
         let decision = await CoverAIDirectorCoordinator.shared.prepare(
             request: directorInput.request,
             mediaIDByAlias: directorInput.mediaIDByAlias,
@@ -2743,6 +2812,8 @@ struct SummaryPlaybackSheet: View {
             monthlyLimit: remoteAIMonthlyLimit
         )
         guard !Task.isCancelled,
+              scenePhase == .active,
+              sceneAllowsCoverWork,
               remoteAIDirectorEnabled,
               selectedCoverTemplateID == nil,
               !isCustomShareBackgroundSelected,
@@ -2860,6 +2931,7 @@ struct SummaryPlaybackSheet: View {
 
     @MainActor
     private func prepareShareCardPhotos(for sourceKey: String) async {
+        guard scenePhase == .active, sceneAllowsCoverWork else { return }
         shareSaveMessage = nil
         isPreparingShareCard = true
         defer {
@@ -2878,7 +2950,10 @@ struct SummaryPlaybackSheet: View {
         )
         let requests = requestedAnchors.map { WeeklyShareCardPhotoPreparationRequest(anchor: $0) }
         let preparedPhotos = await WeeklyShareCardImagePreparer.prepare(requests)
-        guard !Task.isCancelled, sourceKey == shareCardPhotoPreparationKey else { return }
+        guard !Task.isCancelled,
+              scenePhase == .active,
+              sceneAllowsCoverWork,
+              sourceKey == shareCardPhotoPreparationKey else { return }
 
         var imagesByAnchorID: [UUID: UIImage] = [:]
         for preparedPhoto in preparedPhotos where imagesByAnchorID[preparedPhoto.anchorID] == nil {
@@ -2894,7 +2969,10 @@ struct SummaryPlaybackSheet: View {
             )
         }
         let analysesByAnchorID = await LocalCoverMediaAnalyzer.shared.analyze(analysisRequests)
-        guard !Task.isCancelled, sourceKey == shareCardPhotoPreparationKey else { return }
+        guard !Task.isCancelled,
+              scenePhase == .active,
+              sceneAllowsCoverWork,
+              sourceKey == shareCardPhotoPreparationKey else { return }
         let resolution = WeeklyShareCardPhotoPreparationPolicy.resolve(
             requestedAnchorIDs: requestedAnchors.map(\.id),
             loadedAnchorIDs: Set(imagesByAnchorID.keys)
@@ -2988,7 +3066,10 @@ struct SummaryPlaybackSheet: View {
     }
 
     private func startPlayback() {
-        guard !playback.chapters.isEmpty, isPlaying else { return }
+        guard scenePhase == .active,
+              !playback.chapters.isEmpty,
+              isPlaying,
+              !playbackDone else { return }
         playbackTask?.cancel()
         playbackTask = Task {
             while !Task.isCancelled && isPlaying && activeIndex < playback.chapters.count {
@@ -3045,6 +3126,72 @@ struct SummaryPlaybackSheet: View {
         guard !completionReported, progress >= 0.8 else { return }
         completionReported = true
         onCompleted(progress)
+    }
+
+    @MainActor
+    private func handleScenePhaseChange(_ phase: ScenePhase) {
+        guard phase == .active else {
+            if isPlaying && !playbackDone {
+                playbackShouldResumeAfterSceneActivation = true
+            }
+            isPlaying = false
+            playbackTask?.cancel()
+            playbackTask = nil
+            suspendCoverWorkForInactiveScene()
+            return
+        }
+
+        let shouldResume = SummaryPlaybackSceneLifecyclePolicy.shouldResumePlayback(
+            wasPlayingBeforeInterruption: playbackShouldResumeAfterSceneActivation,
+            playbackDone: playbackDone,
+            chapterCount: playback.chapters.count
+        )
+        playbackShouldResumeAfterSceneActivation = false
+        if shouldResume {
+            isPlaying = true
+        }
+
+        sceneAllowsCoverWork = false
+        let transitionID = UUID()
+        coverSceneTransitionID = transitionID
+        coverSceneTransitionTask?.cancel()
+        coverSceneTransitionTask = Task { @MainActor in
+            await CoverAIDirectorCoordinator.shared.cancelAndRejectPendingResult()
+            guard !Task.isCancelled,
+                  coverSceneTransitionID == transitionID,
+                  isPlaybackSheetVisible,
+                  scenePhase == .active else {
+                return
+            }
+            sceneAllowsCoverWork = true
+            coverSceneTransitionTask = nil
+        }
+    }
+
+    @MainActor
+    private func suspendCoverWorkForInactiveScene() {
+        sceneAllowsCoverWork = false
+        shareCardSaveTask?.cancel()
+        shareCardSaveTask = nil
+        isSavingShareCard = false
+        isPreparingShareCard = false
+        preparedShareCardPhotos = nil
+        preparedCoverShareSession = nil
+        preparedCoverShareContextKey = nil
+        preparedCoverDirectorInput = nil
+        acceptedCoverDirectorDecision = nil
+
+        let transitionID = UUID()
+        coverSceneTransitionID = transitionID
+        coverSceneTransitionTask?.cancel()
+        coverSceneTransitionTask = Task { @MainActor in
+            await CoverAIDirectorCoordinator.shared.cancelAndRejectPendingResult()
+            guard !Task.isCancelled,
+                  coverSceneTransitionID == transitionID else {
+                return
+            }
+            coverSceneTransitionTask = nil
+        }
     }
 }
 

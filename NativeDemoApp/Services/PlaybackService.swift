@@ -650,7 +650,11 @@ final class PlaybackService {
             rows: rows,
             allowedKinds: [.userText, .photo, .change]
         )
-        let representative = narrativeRepresentative ?? selection.primary?.item ?? rows.last!
+        let lateWorkCommuteItem = PlaybackLateWorkCommutePolicy.preferredStrongItem(in: rows)
+        let representative = narrativeRepresentative
+            ?? lateWorkCommuteItem
+            ?? selection.primary?.item
+            ?? rows.last!
         let recordCopy = playbackRecordCopy(for: representative, range: .week)
         let presenceLine = weeklyPresenceLine(rows: rows, activity: active)
         let rhythmCopy = weeklyRhythmCopy(rows: rows, activity: active, calendar: calendar)
@@ -659,11 +663,18 @@ final class PlaybackService {
             range: .week,
             excludingTitles: Set([recordCopy.safeTitle].compactMap { $0 })
         )
-        let auxiliaryMetrics = PlaybackAuxiliarySignalPolicy.preparedMetrics(
+        var auxiliaryMetrics = PlaybackAuxiliarySignalPolicy.preparedMetrics(
             periodItems: rows,
             allItems: items,
             now: now
         )
+        let representsLateWorkCommute = lateWorkCommuteItem?.id == representative.id
+        let auxiliaryLateWorkCommuteLine = representsLateWorkCommute
+            ? nil
+            : lateWorkCommuteItem.flatMap(HomeItem.lateWorkCommutePlaybackLine(for:))
+        if representsLateWorkCommute {
+            auxiliaryMetrics.removeValue(forKey: PlaybackAuxiliarySignalPolicy.emotionMetricKey)
+        }
         let teaserLine = rows.count < 3
             ? presenceLine
             : "这周记了 \(rows.count) 笔，分布在 \(activeDayCount(rows)) 天里。"
@@ -673,7 +684,7 @@ final class PlaybackService {
             "total": Self.money(total),
             "activeDays": "\(activeDayCount(rows))",
             "range": rangeLabel,
-            "supportLine": ""
+            "supportLine": auxiliaryLateWorkCommuteLine ?? ""
         ]
         presenceMetrics.merge(auxiliaryMetrics) { current, _ in current }
 
@@ -808,7 +819,7 @@ final class PlaybackService {
                 from: rows,
                 range: .week,
                 limit: 3,
-                preferredItemID: narrativeRepresentative?.id
+                preferredItemID: narrativeRepresentative?.id ?? lateWorkCommuteItem?.id
             )
         )
     }
@@ -1445,14 +1456,27 @@ final class PlaybackService {
             rows: rows,
             allowedKinds: [.userText, .photo, .change]
         )
+        let lateWorkCommuteItem = PlaybackLateWorkCommutePolicy.preferredStrongItem(in: rows)
         let earlyNarrativeItem = narrativeRepresentative.flatMap { item in
             calendar.component(.day, from: item.createdAt) <= 10 ? item : nil
         }
         let lateNarrativeItem = narrativeRepresentative.flatMap { item in
             calendar.component(.day, from: item.createdAt) >= 11 ? item : nil
         }
-        let earlyItem = earlyNarrativeItem ?? earlySelection.primary?.item ?? earlyRows.first
-        let lateItem = lateNarrativeItem ?? lateSelection.primary?.item ?? lateRows.first
+        let earlyLateWorkCommuteItem = lateWorkCommuteItem.flatMap { item in
+            calendar.component(.day, from: item.createdAt) <= 10 ? item : nil
+        }
+        let lateLateWorkCommuteItem = lateWorkCommuteItem.flatMap { item in
+            calendar.component(.day, from: item.createdAt) >= 11 ? item : nil
+        }
+        let earlyItem = earlyNarrativeItem
+            ?? earlyLateWorkCommuteItem
+            ?? earlySelection.primary?.item
+            ?? earlyRows.first
+        let lateItem = lateNarrativeItem
+            ?? lateLateWorkCommuteItem
+            ?? lateSelection.primary?.item
+            ?? lateRows.first
         let earlyCopy = earlyItem.map { playbackRecordCopy(for: $0, range: .month) }
         let lateCopy = lateItem.map { playbackRecordCopy(for: $0, range: .month) }
         let openingLine = "\(rangeLabel)目前记了 \(rows.count) 笔，分布在 \(activeDays) 天里。"
@@ -1491,17 +1515,28 @@ final class PlaybackService {
             range: .month,
             excludingTitles: usedRecordTitles
         )
-        let auxiliaryMetrics = PlaybackAuxiliarySignalPolicy.preparedMetrics(
+        var auxiliaryMetrics = PlaybackAuxiliarySignalPolicy.preparedMetrics(
             periodItems: rows,
             allItems: items,
             now: now
         )
+        let representsLateWorkCommute = lateWorkCommuteItem.map { item in
+            [earlyItem?.id, lateItem?.id]
+                .compactMap { $0 }
+                .contains(item.id)
+        } ?? false
+        let auxiliaryLateWorkCommuteLine = representsLateWorkCommute
+            ? nil
+            : lateWorkCommuteItem.flatMap(HomeItem.lateWorkCommutePlaybackLine(for:))
+        if representsLateWorkCommute {
+            auxiliaryMetrics.removeValue(forKey: PlaybackAuxiliarySignalPolicy.emotionMetricKey)
+        }
         var openingMetrics: [String: String] = [
             "count": "\(rows.count)",
             "total": Self.money(total),
             "activeDays": "\(activeDays)",
             "range": rangeLabel,
-            "supportLine": ""
+            "supportLine": auxiliaryLateWorkCommuteLine ?? ""
         ]
         openingMetrics.merge(auxiliaryMetrics) { current, _ in current }
 
@@ -1618,7 +1653,7 @@ final class PlaybackService {
                 from: rows,
                 range: .month,
                 limit: 6,
-                preferredItemID: narrativeRepresentative?.id
+                preferredItemID: narrativeRepresentative?.id ?? lateWorkCommuteItem?.id
             )
         )
     }
@@ -1681,6 +1716,13 @@ final class PlaybackService {
         let time = Self.shortTimeFormatter.string(from: item.createdAt)
         let prefix = "\(day) \(time)"
         let safeTitle = safePlaybackTitle(for: item)
+        if let lateWorkCommuteLine = HomeItem.lateWorkCommutePlaybackLine(for: item) {
+            return PlaybackRecordCopy(
+                safeTitle: HomeItem.lateWorkCommutePlaybackTitle(for: item) ?? safeTitle,
+                mainLine: lateWorkCommuteLine,
+                supportLine: "\(prefix) · \(item.category.rawValue) · \(Self.evidenceMoney(item.amount))"
+            )
+        }
         if let trustedMomentLine = TrustedUserMomentNarrativePolicy.line(for: item) {
             return PlaybackRecordCopy(
                 safeTitle: safeTitle,

@@ -3997,3 +3997,96 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - Windows 验证证据：生产与测试目录已扫描，所有 `chapterKey` 调用均使用新签名，无旧 `selectedPeriod/usesCustomRange` 参数残留；`git diff --check` 通过，仅有工作区既有 LF→CRLF 提示；`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 通过并新增 8 项定向守卫，完整 Node 24/24 同时通过；`python scripts/validate_release_gate.py --phase windows` 通过，最终输出 `release_repository_gate: OK`、`Static experience checks passed`、`Copy experience checks passed`，100/1,000/5,000 条确定性夹具与三张真实 12MP 图片夹具摘要保持一致。当前 Windows 的 `swift`、`swiftc`、`xcodebuild` 均不可用，未冒充执行 Swift 编译或 XCTest。
 - 剩余风险与下一项：新 TestFlight 包先执行 `FLOW-72`：分别从自定义日期和本年线索返回此前本周/本月生活，确认无长期骨架；等待另一周期预热完成后直接切换，确认不重复整理、不闪 Loading；手动滚离生活卡后连续两次触发同一周/月外部入口，确认每次只定位一次；在锚点让帧期间改选范围，确认旧任务不会拉回；连续切换 20 次并覆盖特大字号、VoiceOver、Reduce Motion、灵动岛/刘海屏和 Instruments `>100ms` hitch。Xcode Debug/Release 编译、全部 XCTest 与上述真机检查通过前保持 `CODE_DONE`，下一步只做该 TestFlight 签收或由其证据触发的单问题定向修复，不启动 `PERF-AUDIT-04`、`ARCH-03` 或其他相邻任务。
 - 交付授权：2026-07-24 用户明确要求把本项受控源码提交并推送至当前 `feature/xuzhangapp-staging`，随后通过 TestFlight 执行 `FLOW-72` 真机签收；此次授权不把 Windows 结果冒充 Xcode/iPhone 验证，也不包含工作区未跟踪素材或任何相邻任务。
+
+---
+
+## 65. 2026-07-27 TestFlight 五项定向优化队列
+
+- 用户授权：除“第五个问题：首页动线/两个按钮”外，对本轮其余真机问题按风险优先级开始优化。首页动态主动作、免费每日 3 次/会员不限、播放开始扣次与 80% 完成签名等现有规则全部冻结，用户继续单独测试。
+- 固定顺序：`PLAYBACK-FIX-03` → `SHARE-FIX-04` → `OCR-FIX-01` → `PLAYBACK-FACT-FIX-01` → `COPY-FIX-03`。五项必须独立进入 `IN_PROGRESS`，前一项达到 `CODE_DONE` 并回填验证后才能开始下一项；任何时刻只允许一个 `IN_PROGRESS`。
+
+| 顺序 | ID | 优先级 | 问题 | 状态 |
+|---:|---|---|---|---|
+| 1 | PLAYBACK-FIX-03 | P0 | 周/月播放完成页切后台再回来偶发卡顿或崩溃 | `CODE_DONE` |
+| 2 | SHARE-FIX-04 | P0 | 安全照片已进入封面事实包，但统一根渲染器把图片裁成不可见 | `CODE_DONE` |
+| 3 | OCR-FIX-01 | P1 | 无日期支付截图中的金额 `¥4.20` 被误识别为 4 月 20 日 | `CODE_DONE` |
+| 4 | PLAYBACK-FACT-FIX-01 | P1 | 首页已识别的凌晨下班路未稳定进入周播放，也未消费专用文案 | `CODE_DONE` |
+| 5 | COPY-FIX-03 | P1 | 餐饮标签重复，并在无具体食物证据时声称“热食/热乎” | `CODE_DONE` |
+
+### PLAYBACK-FIX-03 启动记录
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 真机现象：周/月播放停留在完成页时切出 App，再切回前台有概率卡顿或崩溃；当前尚无 crash/Jetsam 日志，先按代码中可证实的资源生命周期风险定向修复，不把推测冒充最终崩溃结论。
+- 已确认风险链：`SummaryPlaybackSheet` 没有消费 `scenePhase`；完成页仍运行 8fps `TimelineView + Canvas`，并同时预热最长边 2880px 的分享图片、Vision/Core Image 分析与可选 AI 导演。进入后台不会触发 `onDisappear`，上述任务与大图可能继续存在；回前台时动态 Canvas、分析和远端结果同时恢复，形成 CPU/内存峰值。
+- 允许范围：只为播放 Sheet 增加 active/inactive/background 生命周期策略；非 active 时暂停播放和动态背景、取消并释放未完成封面准备/分析/AI 预热与保存任务；active 后按原上下文幂等恢复，仅在中断前确实播放且尚未完成时续播。增加纯策略 XCTest、静态门禁、真机矩阵和本文档。
+- 冻结边界：不修改播放章节、顺序、时长、正文、照片选择、封面资格/模板/Footer、完成判定、额度/扣次、会员、保存结果、首页动线、账本、同步、主题、`PERF-AUDIT-04` 或 `ARCH-03`；不通过降低图片质量或关闭合法分享能力掩盖问题。
+- 验收：完成页前后台往返 20 次时后台零动态帧、零图片解码/分析、零 AI 请求反写；回前台最多启动一轮匹配当前 context 的准备。播放中切后台只在原本播放时续播，用户手动暂停不自动恢复；完成页不重播。内存可释放的准备图片在后台清空，预览/保存仍同源；Xcode/iPhone crash/Jetsam 与 Instruments 签收前最多标记 `CODE_DONE`。
+- 工作区保护：分支 `feature/xuzhangapp-staging`，基线 `de133c7`；当前仅有用户未跟踪的 `brand-assets/`、`output/`、`tmp/` 与 `scripts/__pycache__/`，全部保留，不删除、不覆盖、不暂存。
+
+### PLAYBACK-FIX-03 完成记录
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`；代码层修复与 Windows 门禁完成，真机 crash/Jetsam 签收前不标记 `VERIFIED`。
+- 实现与文件：`NativeDemoApp/Views/SummaryPlaybackSheet.swift` 统一消费 `scenePhase`；inactive/background 时暂停播放与 8fps 动态 Canvas，取消播放、保存、图片准备/分析及 AI 导演任务，释放已准备大图、Session 和 Director 输入/决策；active 后先使旧 AI 请求失效，再只为当前 context 恢复一轮封面预热，且只恢复中断前确实在播放、尚未完成的会话。`NativeDemoAppTests/StateRegressionTests.swift` 增加恢复与预热纯策略测试；`scripts/experience_static_check.ps1` 增加生命周期接线守卫；`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 增加 `FLOW-78`。
+- Windows 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py` 和 `python scripts/validate_release_gate.py --phase windows` 全部通过；最终输出 `release_repository_gate: OK`，确定性 100/1,000/5,000 条迁移夹具与三张真实 12MP 图片夹具保持通过。Windows 无 Swift/Xcode/iPhone，未冒充执行编译、XCTest 或真机验证。
+- 剩余风险：新 TestFlight 包必须执行 `FLOW-78`，覆盖播放中、手动暂停、完成页及图片解码、Vision/Core Image、AI 请求中前后台往返 20 次，并检查 crash/Jetsam、Memory Graph、持续内存和主线程 hitch；若仍崩溃，以日志堆栈为准继续定向定位。
+
+### SHARE-FIX-04 启动记录
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 已确认根因：`NativeDemoApp/CoverEngine/Rendering/CoverCanvasRoot.swift` 已在图片槽内部按 `placement.frame` 裁切，但图片层偏移后又被全局 `.clipped()` 按原始局部边界裁剪；当槽位 `y` 偏移较大时，合格照片虽已进入 `PreparedCoverRenderInput`，最终仍会被完全裁成不可见。此问题与照片价值分、AI 导演或模板资格无关。
+- 允许范围：只纠正统一根渲染器的图片槽定位/裁切坐标系，补充渲染结构守卫与导出/像素级可见性回归覆盖；保持预览与保存消费同一锁定输入。
+- 冻结边界：不修改事实包、照片质量评分、Hero/辅助图分配、隐私规则、模板资格、Footer、文案、AI 导演、旧分享入口、首页动线或其他视觉布局；不通过取消槽内裁切导致图片溢出正文或 Footer。
+- 验收：有安全合格照片时首发 6 套的 Hero/辅助图片按 Recipe 槽位可见且仍在 frame 内裁切，不进入 `y >= 872` Footer；无图、不可用图、隐私拒绝仍安全降级。540×960 预览与 1080×1920 导出同源，快速切换和连续保存不触发新图片 IO/分析/AI，也无空槽、图片溢出或旧上下文反写。
+
+### SHARE-FIX-04 完成记录
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`；Windows 静态与发布门禁完成，Xcode 像素 XCTest 和 TestFlight 导出签收前不标记 `VERIFIED`。
+- 实现与文件：`NativeDemoApp/CoverEngine/Rendering/CoverCanvasRoot.swift` 仅移除媒体槽在应用 `placement.frame` 偏移后的错误外层 `.clipped()`；图片本身仍先在槽尺寸内 `scaledToFill/fit` 并 `.clipped()`、圆角裁切，画布根节点仍限制 540×960，Footer 保留区规则不变。`NativeDemoAppTests/CoverShareFlowTests.swift` 增加位于高 Y 偏移槽的绿色测试图导出像素断言，直接覆盖“Recipe 有图但像素不可见”；`scripts/experience_static_check.ps1` 增加禁止偏移后局部二次裁切及像素测试存在性的门禁。
+- 验证证据：`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 通过，最终输出 `release_repository_gate: OK`，既有封面 Footer、图片分析、预览/导出同源及迁移/真实图片夹具门禁同时通过。Windows 无 Swift/Xcode，未冒充运行新增 `ImageRenderer` 像素 XCTest。
+- 剩余风险：在 Xcode 执行 `CoverShareFlowTests.testExportKeepsAnOffsetMediaSlotVisibleInsideItsResolvedFrame`；新 TestFlight 按 `FLOW-77` 用 1/2/3/4+ 张安全照片逐套检查首发 6 套预览及 1080×1920 相册导出，确认 Hero/辅助图可见、槽内裁切正确、无 Footer 溢出，且无图/隐私拒绝继续安全降级。
+
+### OCR-FIX-01 启动记录
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 已确认根因：`NativeDemoApp/Services/OCRService.swift` 的日期解析允许裸 `M.d`，支付截图整段 OCR 文本里的金额 `¥4.20` 会先于默认日期命中 4 月 20 日；现有 `?? .now` 只在完全未匹配时生效，不能修正这个误命中。
+- 允许范围：只收紧 OCR 日期证据边界；货币符号、金额标签及已选金额所在 OCR 行不得作为日期候选，无明确日期时使用导入当天；保留 `4月20日`、`2026-04-20` 和明确日期标签附近日期。
+- 冻结边界：不修改 OCR 金额、商户、分类、交通事实、编辑器默认值、账本迁移、首页动线或 AI 能力；不以全面禁止裸月日破坏真实票据日期识别。
+- 验收：`支付成功 + LAWSON + ¥4.20 + 无日期` 使用注入的当天；同一输入的金额仍为 4.20、商户仍可识别。显式中文日期、完整年月日和日期标签附近的月日继续解析；金额同行即使形似日期也不得覆盖明确日期或当天回退。
+
+### OCR-FIX-01 完成记录
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`；代码、纯策略测试和 Windows 发布门禁完成，正式相册 OCR 真机签收前不标记 `VERIFIED`。
+- 实现与文件：`NativeDemoApp/Services/OCRService.swift` 新增 `OCRDateEvidencePolicy`，完整年月日和带“日”的中文月日可作为直接证据；裸 `M.d/M-d/M/d` 仅在日期/时间标签上下文成立；货币符号、金额标签和支付成功解析实际选中的金额行均排除。`parsePaymentSuccessResult` 无明确日期时返回本次导入的 `now`，既有金额、品牌匹配和分类路径不变。`NativeDemoAppTests/StateRegressionTests.swift` 覆盖 `支付成功 + LAWSON + ¥4.20` 当天回退、货币/金额标签拒绝以及三类合法日期。`scripts/experience_static_check.ps1` 和 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 增加守卫与 `FLOW-79`。
+- 验证证据：`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 通过，最终输出 `release_repository_gate: OK`；既有 OCR/语义、文案、迁移夹具与真实图片门禁同时通过。Windows 无 Vision 真机 OCR、Swift/XCTest 环境，未冒充运行。
+- 剩余风险：Xcode 执行 `OCRDateEvidencePolicyTests`；TestFlight 按 `FLOW-79` 走正式相册 OCR，重点核对真实 Vision 分行可能把金额/日期合并时的当天回退、明确日期优先、金额仍为 4.20、LAWSON/罗森与分类不变，并验证取消/重试/一次提交。
+
+### PLAYBACK-FACT-FIX-01 启动记录
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 已确认根因：首页动态故事直接优先 `HomeItem.isLateWorkCommute`，而周/月叙事候选只把同一事实当普通加分，仍可被天气或其他候选挤掉；即使命中，播放正文也没有消费已经存在的 `lateWorkCommutePlaybackLine`，因此用户看不到“凌晨下班路”的同一事实表达。这不是单一情绪分阈值不足。
+- 允许范围：只为强证据 `isLateWorkCommute == true` 建立周/月播放代表记录或唯一辅助情绪的保证，并消费专用播放文案；增加选择/文案确定性测试和真机矩阵。
+- 冻结边界：普通交通、单笔地铁/公交、白天打车不得升级为下班主线；不修改首页动线、通勤事实判定阈值、章节数/顺序/时长、额度、会员、分享封面、OCR 或全局叙事排序。
+- 验收：回归样本 `00:08 + 加班打车 + 交通 + ¥50.90 + 照片` 至少进入周期代表记录或唯一辅助情绪并使用专用播放文案；若周期已有更高等级生活主线，不强行覆盖 Lead，但下班事实仍出现一次且不重复。普通交通样本零误触发，周/月结果确定且证据 ID 可回到原记录。
+
+### PLAYBACK-FACT-FIX-01 完成记录
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`；选择、正文消费、照片偏好、测试和 Windows 发布门禁完成，TestFlight 逐章签收前不标记 `VERIFIED`。
+- 实现与文件：`NativeDemoApp/Services/PlaybackSupportServices.swift` 新增 `PlaybackLateWorkCommutePolicy`，仅将 `HomeItem.lateWorkCommutePlaybackTitle == "晚下班路上"` 的工作词强证据纳入兜底，普通夜间地铁/公交不进入强保证；同时在需要辅助呈现时优先该情绪。`NativeDemoApp/Services/PlaybackService.swift` 在周记和月章中保留用户原话/合格照片/变化 Lead 的优先级，其后才以强下班事实兜底对应代表章节；`playbackRecordCopy` 直接消费 `lateWorkCommutePlaybackLine`。代表记录已是该事实时移除重复辅助情绪；更高主线占位时专用正文只进开场 support；带照片样本的 memory anchor 优先同一 item ID。`NativeDemoAppTests/StateRegressionTests.swift` 覆盖周代表、强主线保留、普通交通拒绝与月章半段定位；`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 增加 `FLOW-80`。
+- 验证证据：`git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 通过，最终输出 `release_repository_gate: OK`；既有 3/5 章周记、6 章月章、辅助信号、叙事角色、文案、迁移与真实图片夹具门禁同时通过。Windows 无 Swift/Xcode/iPhone，未冒充运行 XCTest 或播放真机签收。
+- 剩余风险：Xcode 执行新增 `PlaybackLivingVoiceCopyTests`；TestFlight 按 `FLOW-80` 核对 `00:08 + 加班打车 + ¥50.90 + 照片` 的周/月章节、专用正文、金额和同一照片 item ID，覆盖更高主线、删工作词、改白天及普通夜间交通对照，并确认同一事实只出现一次。
+
+### COPY-FIX-03 启动记录
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`；当前唯一 `IN_PROGRESS`。
+- 已确认根因：便利店品牌的低金额固定文案池直接含“一口热食很及时”，只有商户名时也推断了热食；普通餐饮池反复使用“热乎/一口/垫一下”。稳定选择 seed 主要依赖标题，连续多笔同名“罗森”总会命中同一句，造成重复且无事实依据。
+- 允许范围：只修正餐饮/便利店情绪标签的证据门槛和确定性多样性；仅在标题、用户原话或结构字段明确出现饭团、便当、关东煮、咖啡、面等食物时使用相应具体标签；只有商户名时使用中性事实或隐藏无增量标签。
+- 冻结边界：不修改商户品牌匹配、分类、金额、OCR、记录标题、首页动线、生活印记排序、播放章节、分享、会员、存储或同步；不以随机数制造不可复现文案。
+- 验收：连续多笔同名罗森不再固定“一口热食很及时/热乎一口”，无食物证据时零“热食/热乎”声称；明确关东煮/便当/饭团/咖啡等仍可给出对应中性标签。相同记录在重启后确定，至少加入记录 ID/日期/金额等稳定身份避免同标题永久同句；没有信息增量时允许空标签并由现有 UI 安全隐藏。
+
+### COPY-FIX-03 完成记录
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`；本轮五项定向优化已全部完成代码和 Windows 门禁，Xcode/XCTest/TestFlight 签收前均不标记 `VERIFIED`，当前没有新的路线图任务进入 `IN_PROGRESS`。
+- 实现与文件：`NativeDemoApp/Services/NarrativeCopyResolver.swift` 新增共享 `DiningCopyEvidencePolicy`，把便利店品牌事实与具体食品证据分开；品牌名-only 仅使用商户级中性标签，关东煮、便当、饭团、咖啡等只有在标题/用户文字明确出现时才进入对应中性标签。稳定选择 seed 现在消费标题、可用 record ID、日期毫秒、金额位模式和品牌 ID，同一记录重启确定，不同时间/金额/ID 的同名记录不再永久锁死同一句。普通餐饮兜底按时段给中性事实，不再经无证据 food ScenePack 制造温度或具体食物。`NativeDemoApp/Services/MerchantBrandCatalog.swift` 清除便利店池凭品牌声称饭团、便当、饮料、小食和热食的内容，并清除其他餐饮品牌池无文字证据的“热餐/热饭/热乎”温度声称。`NativeDemoApp/Models/HomeItem.swift` 让明确食品细分与旧存储标签消费同一证据规则；旧版“一口热食很及时”等若标题无支持证据，会按同一 item ID 稳定纠正，不写回账本、不新增 IO/网络/全账本扫描。
+- 回归与交互边界：`NativeDemoAppTests/StateRegressionTests.swift` 增加品牌名-only 多样且可复现、明确四类食品保留、旧错误标签纠正、便利店与全部餐饮品牌池温度边界测试；`scripts/experience_static_check.ps1` 增加共享策略、旧记录、品牌池、XCTest 和矩阵守卫；`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 增加 `FLOW-81`，覆盖连续 8 笔罗森、历史错误标签、编辑删/恢复证据、杀进程重启、免费/会员、VoiceOver 和 20 次快速页面往返。没有修改商户匹配、分类、金额、OCR、首页第五个问题、首页主动作、免费每日 3 次/会员不限、播放扣次与 80% 完成签名、生活印记排序、播放章节、分享、存储或同步。
+- Windows 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终输出 `release_repository_gate: OK`；100/1,000/5,000 条确定性迁移夹具、三张真实 12MP 图片夹具、文案体验检查、copy lint、SQLite schema 与既有封面/播放/OCR 门禁同时通过。copy lint 仅保留基线中 5 条既有软提示。Windows 无 `swift`、`swiftc`、`xcodebuild` 和 iPhone，未冒充 Swift 编译、XCTest 或真机通过。
+- 剩余风险与下一步：在 Xcode 先执行全量 Debug/Release 编译和 `DiningCopyEvidencePolicyTests`，重点确认新增 `NarrativeCopyResolver.Context.recordID` 默认参数及测试目标接线；再用新 TestFlight 包依次执行 `FLOW-78`（播放前后台 20 次）、`FLOW-79`（`LAWSON + ¥4.20` 无日期）、`FLOW-80`（`00:08 + 加班打车 + ¥50.90 + 照片`）和 `FLOW-81`（餐饮证据/稳定多样性）。四项附真机结果和 crash/Jetsam/Instruments 证据后，才能分别从 `CODE_DONE` 推进为 `VERIFIED`；首页第五个问题继续保持冻结并由用户单独测试。

@@ -81,6 +81,131 @@ enum OCRServiceError: LocalizedError {
     }
 }
 
+enum OCRDateEvidencePolicy {
+    private static let explicitDateLabels = [
+        "日期", "时间", "创建时间", "付款时间", "支付时间", "交易时间", "转账时间",
+    ]
+
+    private static let amountLabels = [
+        "金额", "实付款", "实付", "应付", "原价", "优惠", "立减", "合计", "到账",
+    ]
+
+    static func resolvedDate(
+        in text: String,
+        excludingLines: Set<String> = [],
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Date {
+        firstDate(
+            in: text,
+            excludingLines: excludingLines,
+            now: now,
+            calendar: calendar
+        ) ?? now
+    }
+
+    static func firstDate(
+        in text: String,
+        excludingLines: Set<String> = [],
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Date? {
+        let normalizedExcludedLines = Set(excludingLines.map(normalizedLine))
+        let lines = text
+            .components(separatedBy: .newlines)
+            .map(normalizedLine)
+            .filter { !$0.isEmpty }
+        let hasDateLabel = explicitDateLabels.contains { text.contains($0) }
+
+        for line in lines {
+            guard !normalizedExcludedLines.contains(line),
+                  !isMonetaryLine(line) else {
+                continue
+            }
+            if let raw = firstMatch(
+                in: line,
+                pattern: #"(?<!\d)20\d{2}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}\s*日?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?"#
+            ), let date = parse(raw, now: now, calendar: calendar) {
+                return date
+            }
+            if let raw = firstMatch(
+                in: line,
+                pattern: #"(?<![\d¥￥])\d{1,2}\s*月\s*\d{1,2}\s*日(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?"#
+            ), let date = parse(raw, now: now, calendar: calendar) {
+                return date
+            }
+            if hasDateLabel,
+               let raw = firstMatch(
+                in: line,
+                pattern: #"(?<![\d¥￥])\d{1,2}\s*[-/.]\s*\d{1,2}(?!\d)(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?"#
+               ), let date = parse(raw, now: now, calendar: calendar) {
+                return date
+            }
+        }
+        return nil
+    }
+
+    private static func normalizedLine(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isMonetaryLine(_ line: String) -> Bool {
+        if amountLabels.contains(where: { line.contains($0) }) {
+            return true
+        }
+        return line.range(
+            of: #"[¥￥]\s*[-+]?\s*\d+(?:\.\d{1,2})?"#,
+            options: .regularExpression
+        ) != nil
+    }
+
+    private static func firstMatch(in text: String, pattern: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let nsText = text as NSString
+        guard let match = regex.firstMatch(
+            in: text,
+            range: NSRange(location: 0, length: nsText.length)
+        ) else {
+            return nil
+        }
+        return nsText.substring(with: match.range)
+    }
+
+    private static func parse(
+        _ value: String,
+        now: Date,
+        calendar: Calendar
+    ) -> Date? {
+        let raw = value
+            .replacingOccurrences(of: "年", with: "-")
+            .replacingOccurrences(of: "月", with: "-")
+            .replacingOccurrences(of: "日", with: "")
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ".", with: "-")
+            .replacingOccurrences(of: #"\s*-\s*"#, with: "-", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasExplicitYear = raw.range(
+            of: #"^20\d{2}-"#,
+            options: .regularExpression
+        ) != nil
+        let normalized = hasExplicitYear
+            ? raw
+            : "\(calendar.component(.year, from: now))-\(raw)"
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        formatter.isLenient = false
+        for format in ["yyyy-M-d HH:mm:ss", "yyyy-M-d HH:mm", "yyyy-M-d"] {
+            formatter.dateFormat = format
+            if let date = formatter.date(from: normalized) {
+                return date
+            }
+        }
+        return nil
+    }
+}
+
 final class OCRService {
     private enum ListAmountInfo {
         case expense(amount: Double, inlineTitle: String?)
@@ -372,7 +497,10 @@ final class OCRService {
         return brandedDraft(OCRReceiptDraft(
             title: title,
             amount: abs(selected.amount),
-            date: firstDate(in: rawText) ?? .now,
+            date: OCRDateEvidencePolicy.resolvedDate(
+                in: rawText,
+                excludingLines: [selected.line.text]
+            ),
             category: inferCategory(from: "\(title)\n\(rawText)"),
             confidence: confidence,
             rawText: rawText,
@@ -1567,32 +1695,8 @@ final class OCRService {
         return nil
     }
 
-    private func firstDate(in text: String) -> Date? {
-        let pattern = #"(?:20\d{2}[-/.年])?\d{1,2}[-/.月]\d{1,2}[日\s]*\d{0,2}:?\d{0,2}:?\d{0,2}"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
-        let nsText = text as NSString
-        guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: nsText.length)) else {
-            return nil
-        }
-        let raw = nsText.substring(with: match.range)
-            .replacingOccurrences(of: "年", with: "-")
-            .replacingOccurrences(of: "月", with: "-")
-            .replacingOccurrences(of: "日", with: "")
-            .replacingOccurrences(of: "/", with: "-")
-            .replacingOccurrences(of: ".", with: "-")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalized = raw.hasPrefix("20") ? raw : "\(Calendar.current.component(.year, from: .now))-\(raw)"
-        let formats = ["yyyy-M-d HH:mm:ss", "yyyy-M-d HH:mm", "yyyy-M-d"]
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.timeZone = .current
-        for format in formats {
-            formatter.dateFormat = format
-            if let date = formatter.date(from: normalized) {
-                return date
-            }
-        }
-        return nil
+    private func firstDate(in text: String, now: Date = .now) -> Date? {
+        OCRDateEvidencePolicy.firstDate(in: text, now: now)
     }
 
     private func listDate(in text: String, now: Date = .now) -> Date? {

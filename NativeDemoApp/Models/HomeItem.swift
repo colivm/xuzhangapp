@@ -286,8 +286,8 @@ struct HomeItem: Identifiable, Codable, Equatable {
             }
         case .dining:
             if containsAny(text, ["夜市", "夜摊", "夜市摊", "大排档"]) {
-                if containsAny(text, ["烤", "烧烤", "串", "生蚝", "海鲜", "小龙虾", "鱿鱼", "铁板"]) { return "夜市摊上吃点热的" }
-                if containsAny(text, ["炒饭", "炒粉", "炒面", "米粉", "粉", "面", "饭"]) { return "夜市里的一份热乎" }
+                if containsAny(text, ["烤", "烧烤", "串", "生蚝", "海鲜", "小龙虾", "鱿鱼", "铁板"]) { return "夜市摊这一份" }
+                if containsAny(text, ["炒饭", "炒粉", "炒面", "米粉", "粉", "面", "饭"]) { return "夜市这份餐食记下" }
                 return "夜市里吃点东西"
             }
             if containsAny(text, ["铁板鱿鱼", "烤鱿鱼", "烤生蚝", "生蚝", "烧烤", "烤冷面", "串串", "烤串", "大排档", "夜市", "夜摊"]) { return "路边摊吃点热闹" }
@@ -298,36 +298,17 @@ struct HomeItem: Identifiable, Codable, Equatable {
             }
             if containsAny(text, ["早餐", "早饭"]) { return "早餐先记下" }
             if containsAny(text, ["豆浆", "包子"]) {
-                guard let date else { return "热乎一口记下" }
-                let hour = Calendar.current.component(.hour, from: date)
-                switch hour {
-                case 5..<10:
-                    return "早餐先记下"
-                case 11..<14:
-                    return "中午垫一口"
-                case 17..<21:
-                    return "晚饭先垫一下"
-                case 21...23, 0..<5:
-                    return "夜里一口热的"
-                default:
-                    return "热乎一口记下"
-                }
+                return "豆浆包子记下"
             }
             if containsAny(text, ["茶叶蛋", "饭团", "关东煮", "便当", "三明治"]) {
-                guard let date else { return "便利店小食记下" }
-                let hour = Calendar.current.component(.hour, from: date)
-                switch hour {
-                case 5..<10:
-                    return "早餐先记下"
-                case 11..<14:
-                    return "中午垫一口"
-                case 17..<21:
-                    return "晚饭先垫一下"
-                case 21...23, 0..<5:
-                    return "夜里一口热的"
-                default:
-                    return "便利店小食记下"
-                }
+                let seed = DiningCopyEvidencePolicy.stableRecordSeed(
+                    title: text,
+                    date: date ?? Date(timeIntervalSince1970: 0),
+                    amount: amount,
+                    brandID: nil
+                )
+                return DiningCopyEvidencePolicy.specificEmotionTag(evidence: text, seed: seed)
+                    ?? "便利店小食记下"
             }
             if containsDrinkKeyword(text) { return "买杯喝的" }
             if containsAny(text, ["午餐", "午饭", "中午"]) { return "中午一顿饭" }
@@ -335,7 +316,16 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["烤生蚝", "烤鱿鱼", "铁板鱿鱼", "烤冷面", "烧烤", "串串", "烤串", "大排档"]) { return "路边摊吃点热闹" }
             if containsAny(text, ["火锅", "烤肉"]) { return "认真吃一顿" }
             if containsAny(text, ["烤鸭", "烧鸭", "卤鸭", "鸭肉"]) { return "烤鸭这份记下" }
-            if containsAny(text, ["肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "面", "粉", "馄饨", "饺子", "盖饭", "米线", "麻辣烫"]) { return "热乎一份记下" }
+            if containsAny(text, ["肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "牛肉面", "拉面", "汤面", "拌面", "炒面", "面条", "米粉", "河粉", "馄饨", "饺子", "盖饭", "米线", "麻辣烫"]) {
+                let seed = DiningCopyEvidencePolicy.stableRecordSeed(
+                    title: text,
+                    date: date ?? Date(timeIntervalSince1970: 0),
+                    amount: amount,
+                    brandID: nil
+                )
+                return DiningCopyEvidencePolicy.specificEmotionTag(evidence: text, seed: seed)
+                    ?? "这份餐食记下"
+            }
             if containsAny(text, ["甜品", "蛋糕", "面包", "冰淇淋", "冰粉", "糖水"]) { return "给今天一点甜" }
             if containsAny(text, ["水果", "酸奶", "轻食", "沙拉"]) { return "轻轻补一点" }
             if containsAny(text, ["买菜", "菜场", "生鲜", "超市菜"]) { return "回家做饭的料" }
@@ -459,7 +449,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
         if containsAny(text, ["加班", "晚归", "下班后"]) {
             if containsAny(text, ["热乎", "热饭", "热食", "热汤", "热的"]) {
-                return "加班后吃点热乎的"
+                return "加班后的热食记下"
             }
             return "晚点吃上了"
         }
@@ -467,8 +457,19 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["烤", "烧烤", "串", "生蚝", "海鲜", "小龙虾", "鱿鱼", "铁板"]) { return "夜市摊上吃点热的" }
             return "夜市里吃点东西"
         }
-        if containsAny(text, ["热乎", "热饭", "热食", "热汤", "热的", "面", "粉", "馄饨", "麻辣烫"]) {
-            return "夜里一口热的"
+        if containsAny(text, ["热乎", "热饭", "热食", "热汤", "热的"]) {
+            return "夜里的热食记下"
+        }
+        if let specific = DiningCopyEvidencePolicy.specificEmotionTag(
+            evidence: text,
+            seed: DiningCopyEvidencePolicy.stableRecordSeed(
+                title: text,
+                date: date,
+                amount: 0,
+                brandID: nil
+            )
+        ) {
+            return specific
         }
         if containsAny(text, ["饭", "餐", "吃", "外卖", "小食", "点心", "垫一下", "垫一口"]) {
             return "夜里吃点东西"
@@ -544,6 +545,29 @@ struct HomeItem: Identifiable, Codable, Equatable {
 
     private static func correctedStoredEmotionTag(for item: HomeItem, current: String) -> String? {
         let evidence = "\(item.title) \(item.merchantBrandId ?? "") \(item.category.rawValue)"
+        let convenienceBrand = MerchantBrandCatalog.isConvenienceStoreBrand(id: item.merchantBrandId)
+            || MerchantBrandCatalog.matchBrand(in: item.title).map {
+                MerchantBrandCatalog.isConvenienceStoreBrand($0)
+            } == true
+        if item.category == .dining,
+           DiningCopyEvidencePolicy.shouldReplaceStoredTag(
+               current,
+               evidence: item.title,
+               isConvenienceStore: convenienceBrand
+           ) {
+            return NarrativeCopyResolver.resolveEmotionTag(
+                context: NarrativeCopyResolver.Context(
+                    brandId: item.merchantBrandId,
+                    category: item.category,
+                    amount: item.amount,
+                    date: item.createdAt,
+                    seed: item.title,
+                    note: item.title,
+                    scenePackId: item.scenePackId,
+                    recordID: item.id
+                )
+            )
+        }
         if item.category == .transport,
            current == "车停稳了",
            containsAny(evidence, ["停车", "停车费", "车位", "停车场"]) {
@@ -725,7 +749,8 @@ struct HomeItem: Identifiable, Codable, Equatable {
                 date: item.createdAt,
                 seed: item.title,
                 note: item.title,
-                scenePackId: item.scenePackId
+                scenePackId: item.scenePackId,
+                recordID: item.id
             )
         )
         if RecordSemanticLexicon.isTitle(resolved, compatibleWith: item.category) {

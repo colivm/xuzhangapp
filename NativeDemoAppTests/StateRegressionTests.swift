@@ -5,6 +5,157 @@ import UIKit
 #endif
 @testable import NativeDemoApp
 
+final class OCRDateEvidencePolicyTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return calendar
+    }
+
+    private var now: Date {
+        calendar.date(from: DateComponents(
+            year: 2026,
+            month: 7,
+            day: 27,
+            hour: 14,
+            minute: 30
+        ))!
+    }
+
+    func testPaymentAmountCannotBecomeADateWhenTheScreenshotHasNoDateEvidence() {
+        let resolved = OCRDateEvidencePolicy.resolvedDate(
+            in: "支付成功\nLAWSON\n¥4.20",
+            excludingLines: ["¥4.20"],
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(resolved, now)
+    }
+
+    func testCurrencyAndAmountLabelsAreRejectedAsDateCandidates() {
+        XCTAssertNil(OCRDateEvidencePolicy.firstDate(
+            in: "￥4.20",
+            now: now,
+            calendar: calendar
+        ))
+        XCTAssertNil(OCRDateEvidencePolicy.firstDate(
+            in: "支付金额 4.20",
+            now: now,
+            calendar: calendar
+        ))
+    }
+
+    func testExplicitAndDateLabeledDatesRemainSupported() throws {
+        let chinese = try XCTUnwrap(OCRDateEvidencePolicy.firstDate(
+            in: "4月20日",
+            now: now,
+            calendar: calendar
+        ))
+        let full = try XCTUnwrap(OCRDateEvidencePolicy.firstDate(
+            in: "交易时间 2026-04-21 08:35",
+            now: now,
+            calendar: calendar
+        ))
+        let labeledBare = try XCTUnwrap(OCRDateEvidencePolicy.firstDate(
+            in: "日期\n4.22",
+            now: now,
+            calendar: calendar
+        ))
+
+        XCTAssertEqual(calendar.component(.month, from: chinese), 4)
+        XCTAssertEqual(calendar.component(.day, from: chinese), 20)
+        XCTAssertEqual(calendar.component(.day, from: full), 21)
+        XCTAssertEqual(calendar.component(.hour, from: full), 8)
+        XCTAssertEqual(calendar.component(.day, from: labeledBare), 22)
+    }
+}
+
+final class SummaryPlaybackSceneLifecyclePolicyTests: XCTestCase {
+    func testPlaybackResumesOnlyWhenTheActiveSessionWasInterrupted() {
+        XCTAssertTrue(
+            SummaryPlaybackSceneLifecyclePolicy.shouldResumePlayback(
+                wasPlayingBeforeInterruption: true,
+                playbackDone: false,
+                chapterCount: 5
+            )
+        )
+        XCTAssertFalse(
+            SummaryPlaybackSceneLifecyclePolicy.shouldResumePlayback(
+                wasPlayingBeforeInterruption: false,
+                playbackDone: false,
+                chapterCount: 5
+            )
+        )
+        XCTAssertFalse(
+            SummaryPlaybackSceneLifecyclePolicy.shouldResumePlayback(
+                wasPlayingBeforeInterruption: true,
+                playbackDone: true,
+                chapterCount: 5
+            )
+        )
+        XCTAssertFalse(
+            SummaryPlaybackSceneLifecyclePolicy.shouldResumePlayback(
+                wasPlayingBeforeInterruption: true,
+                playbackDone: false,
+                chapterCount: 0
+            )
+        )
+    }
+
+    func testCoverPrewarmRequiresAnActiveSceneAndAnEnabledGeneration() {
+        let active = SummaryPlaybackSceneLifecyclePolicy.shouldPrewarmCover(
+            isSceneActive: true,
+            sceneAllowsCoverWork: true,
+            hasSharePayload: true,
+            chapterCount: 5,
+            playbackDone: true,
+            activeIndex: 4,
+            showsSharePrivacy: false
+        )
+        XCTAssertTrue(active)
+
+        for (sceneActive, generationEnabled) in [(false, true), (true, false)] {
+            XCTAssertFalse(
+                SummaryPlaybackSceneLifecyclePolicy.shouldPrewarmCover(
+                    isSceneActive: sceneActive,
+                    sceneAllowsCoverWork: generationEnabled,
+                    hasSharePayload: true,
+                    chapterCount: 5,
+                    playbackDone: true,
+                    activeIndex: 4,
+                    showsSharePrivacy: false
+                )
+            )
+        }
+    }
+
+    func testCoverPrewarmStaysDeferredBeforeTheLastChapter() {
+        XCTAssertFalse(
+            SummaryPlaybackSceneLifecyclePolicy.shouldPrewarmCover(
+                isSceneActive: true,
+                sceneAllowsCoverWork: true,
+                hasSharePayload: true,
+                chapterCount: 5,
+                playbackDone: false,
+                activeIndex: 2,
+                showsSharePrivacy: false
+            )
+        )
+        XCTAssertTrue(
+            SummaryPlaybackSceneLifecyclePolicy.shouldPrewarmCover(
+                isSceneActive: true,
+                sceneAllowsCoverWork: true,
+                hasSharePayload: true,
+                chapterCount: 5,
+                playbackDone: false,
+                activeIndex: 2,
+                showsSharePrivacy: true
+            )
+        )
+    }
+}
+
 final class LifeNarrativeSignalPolicyTests: XCTestCase {
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -1538,6 +1689,114 @@ final class PlaybackLivingVoiceCopyTests: XCTestCase {
         )
 
         XCTAssertTrue(LifeStorySignalService.playbackAuxiliarySignals(from: chapter).isEmpty)
+    }
+
+    func testStrongLateWorkCommuteBecomesWeeklyRepresentativeAndUsesDedicatedCopy() throws {
+        let now = date(7, 16, 20)
+        let lateWorkCommute = HomeItem(
+            title: "加班打车",
+            amount: 50.90,
+            category: .transport,
+            source: .ocr,
+            createdAt: date(7, 14, 0, 8),
+            emotionTag: "打车这一程",
+            userEditedTitle: false,
+            memoryImageData: Data([0x01])
+        )
+        let rows = [
+            item("早餐", amount: 12, category: .dining, at: date(7, 13, 8)),
+            lateWorkCommute,
+            item("买纸巾", amount: 18, category: .daily, at: date(7, 15, 18))
+        ]
+
+        let summary = PlaybackService().buildWeekSummary(from: rows, now: now)
+        let voice = try XCTUnwrap(summary.chapters.first(where: { $0.id == "week-voices" }))
+        let dedicatedNarrationCount = summary.chapters.filter {
+            $0.narration.plain.contains("凌晨零点多还在下班路上")
+        }.count
+
+        XCTAssertEqual(voice.metrics["voiceTitle1"], "晚下班路上")
+        XCTAssertTrue(voice.narration.plain.contains("今天收得有点晚"))
+        XCTAssertTrue(voice.metrics["supportLine", default: ""].contains("50.9"))
+        XCTAssertEqual(summary.total, 80.9, accuracy: 0.001)
+        XCTAssertEqual(dedicatedNarrationCount, 1)
+        XCTAssertTrue(summary.memoryAnchors.contains(where: { $0.itemID == lateWorkCommute.id }))
+        XCTAssertFalse(
+            LifeStorySignalService.playbackAuxiliarySignals(from: summary.chapters[0])
+                .contains(where: { $0.label.contains("晚下班") })
+        )
+    }
+
+    func testHigherValueLeadKeepsItsWeeklyVoiceAndLateWorkCommuteMovesToOpeningSupport() throws {
+        let now = date(7, 16, 20)
+        let lead = HomeItem(
+            title: "第一次带妈妈去看展",
+            amount: 88,
+            category: .entertainment,
+            createdAt: date(7, 13, 15),
+            userEditedTitle: true,
+            memoryImageData: Data([0x02]),
+            memoryAnchorRole: .moment
+        )
+        let lateWorkCommute = HomeItem(
+            title: "加班打车",
+            amount: 50.90,
+            category: .transport,
+            source: .ocr,
+            createdAt: date(7, 14, 0, 8),
+            emotionTag: "打车这一程",
+            userEditedTitle: false
+        )
+
+        let summary = PlaybackService().buildWeekSummary(
+            from: [lead, lateWorkCommute, item("早餐", amount: 12, category: .dining, at: date(7, 15, 8))],
+            now: now
+        )
+        let voice = try XCTUnwrap(summary.chapters.first(where: { $0.id == "week-voices" }))
+
+        XCTAssertEqual(voice.metrics["voiceTitle1"], lead.title)
+        XCTAssertTrue(summary.chapters[0].metrics["supportLine", default: ""].contains("凌晨零点多还在下班路上"))
+        XCTAssertFalse(voice.narration.plain.contains("下班路上"))
+    }
+
+    func testOrdinaryLateTransitDoesNotReceiveTheStrongWorkCommuteGuarantee() {
+        let ordinaryTransit = HomeItem(
+            title: "地铁",
+            amount: 4,
+            category: .transport,
+            source: .ocr,
+            createdAt: date(7, 14, 0, 8),
+            emotionTag: "日常出行",
+            userEditedTitle: false
+        )
+
+        XCTAssertNil(PlaybackLateWorkCommutePolicy.preferredStrongItem(in: [ordinaryTransit]))
+        XCTAssertEqual(HomeItem.lateWorkCommutePlaybackTitle(for: ordinaryTransit), "晚上通勤路上")
+    }
+
+    func testStrongLateWorkCommuteUsesTheMatchingMonthlyHalfChapter() throws {
+        let now = date(7, 20, 20)
+        let lateWorkCommute = HomeItem(
+            title: "加班打车",
+            amount: 50.90,
+            category: .transport,
+            source: .ocr,
+            createdAt: date(7, 12, 0, 8),
+            emotionTag: "打车这一程",
+            userEditedTitle: false
+        )
+        let summary = PlaybackService().buildMonthSummary(
+            from: [
+                item("早餐", amount: 12, category: .dining, at: date(7, 4, 8)),
+                lateWorkCommute,
+                item("买纸巾", amount: 18, category: .daily, at: date(7, 18, 18))
+            ],
+            now: now
+        )
+        let lateVoice = try XCTUnwrap(summary.chapters.first(where: { $0.id == "month-late-voice" }))
+
+        XCTAssertEqual(lateVoice.metrics["lateVoiceTitle"], "晚下班路上")
+        XCTAssertTrue(lateVoice.narration.plain.contains("凌晨零点多还在下班路上"))
     }
 
     func testMonthPublishesAuxiliarySignalsOnlyOnOpeningChapter() {
@@ -7031,6 +7290,122 @@ final class CloudSessionExpirationPolicyTests: XCTestCase {
         XCTAssertEqual(invalidated.weatherCompanionEnabled, current.weatherCompanionEnabled)
         XCTAssertEqual(invalidated.colorThemeId, current.colorThemeId)
         XCTAssertEqual(invalidated.backendBaseURL, AppSettings.productionBackendBaseURL)
+    }
+}
+
+final class DiningCopyEvidencePolicyTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        return calendar
+    }
+
+    private func date(day: Int, hour: Int = 12, minute: Int = 0) -> Date {
+        calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: day,
+            hour: hour,
+            minute: minute
+        ))!
+    }
+
+    func testBrandOnlyLawsonUsesNeutralStableVarietyWithoutInventingFood() {
+        let outputs = (0..<8).map { index in
+            let input = RecordDraftResolutionInput(
+                rawTitle: "罗森",
+                fallbackCategory: .dining,
+                amount: 4.2 + Double(index),
+                date: date(day: 20 + index, minute: index),
+                merchantBrandId: "lawson",
+                categoryLockedByUser: false,
+                userEditedTitle: false,
+                source: "test"
+            )
+            let first = RecordDraftResolutionService.resolve(input)
+            let relaunched = RecordDraftResolutionService.resolve(input)
+            XCTAssertEqual(first.emotionTag, relaunched.emotionTag)
+            return first.emotionTag
+        }
+
+        XCTAssertGreaterThan(Set(outputs).count, 1)
+        let unsupportedClaims = ["热食", "热乎", "一口热的", "饭团", "便当", "关东煮", "咖啡", "饮料", "小食", "拿点吃的"]
+        XCTAssertTrue(outputs.allSatisfy { output in
+            unsupportedClaims.allSatisfy { !output.contains($0) }
+        })
+        XCTAssertTrue(outputs.allSatisfy { $0.contains("罗森") || $0 == "便利店这一笔" })
+    }
+
+    func testExplicitConvenienceFoodEvidenceKeepsTheSpecificNeutralLabel() {
+        let cases = [
+            (title: "罗森关东煮", expected: "关东煮"),
+            (title: "罗森便当", expected: "便当"),
+            (title: "罗森饭团", expected: "饭团"),
+            (title: "罗森咖啡", expected: "咖啡"),
+        ]
+
+        for (index, sample) in cases.enumerated() {
+            let output = NarrativeCopyResolver.resolveEmotionTag(
+                context: NarrativeCopyResolver.Context(
+                    brandId: "lawson",
+                    category: .dining,
+                    amount: 12 + Double(index),
+                    date: date(day: 20 + index),
+                    seed: sample.title,
+                    note: sample.title
+                )
+            )
+            XCTAssertTrue(output.contains(sample.expected), "\(sample.title) should retain \(sample.expected): \(output)")
+            XCTAssertFalse(output.contains("热食"))
+            XCTAssertFalse(output.contains("热乎"))
+            XCTAssertFalse(output.contains("一口热的"))
+        }
+    }
+
+    func testLegacyUnsupportedHeatTagIsCorrectedFromTheRecordEvidence() {
+        let item = HomeItem(
+            id: UUID(uuidString: "F1000000-0000-0000-0000-000000000001")!,
+            title: "罗森",
+            amount: 4.2,
+            category: .dining,
+            createdAt: date(day: 27, hour: 18),
+            emotionTag: "一口热食很及时",
+            merchantBrandId: "lawson"
+        )
+
+        let first = item.displayEmotionTag
+        let afterRelaunch = item.displayEmotionTag
+        XCTAssertEqual(first, afterRelaunch)
+        XCTAssertTrue(first.contains("罗森") || first == "便利店这一笔")
+        XCTAssertFalse(first.contains("热食"))
+        XCTAssertFalse(first.contains("热乎"))
+        XCTAssertFalse(first.contains("饭团"))
+        XCTAssertFalse(first.contains("便当"))
+    }
+
+    func testConvenienceBrandFallbackPoolsContainOnlyMerchantLevelFacts() {
+        let forbiddenClaims = ["热食", "热乎", "一口热的", "饭团", "便当", "关东煮", "咖啡", "饮料", "小食", "拿点吃的"]
+        for brandID in ["familymart", "lawson", "bianlifeng", "seveneleven", "meiyijia"] {
+            let notes = MerchantBrandCatalog.definition(for: brandID)?.tiers.flatMap { $0.notes } ?? []
+            XCTAssertFalse(notes.isEmpty)
+            XCTAssertTrue(notes.allSatisfy { note in
+                forbiddenClaims.allSatisfy { !note.contains($0) }
+            }, "\(brandID) fallback tiers must not invent a product")
+        }
+    }
+
+    func testDiningBrandFallbackPoolsDoNotAddUnsupportedTemperatureClaims() {
+        let unsupportedTemperature = ["热食", "热乎", "口热的", "热餐", "热饭", "顿热的"]
+        let diningNotes = MerchantBrandCatalog.definitions
+            .filter { $0.category == .dining }
+            .flatMap { $0.tiers }
+            .flatMap { $0.notes }
+
+        XCTAssertFalse(diningNotes.isEmpty)
+        XCTAssertTrue(diningNotes.allSatisfy { note in
+            unsupportedTemperature.allSatisfy { !note.contains($0) }
+        })
     }
 }
 #endif

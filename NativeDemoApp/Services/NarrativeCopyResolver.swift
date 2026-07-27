@@ -105,6 +105,164 @@ enum TrustedUserMomentNarrativePolicy {
     ]
 }
 
+enum DiningCopyEvidencePolicy {
+    enum SpecificKind: String, CaseIterable {
+        case coffee
+        case drink
+        case riceBall
+        case bento
+        case oden
+        case teaEgg
+        case sandwich
+        case bun
+        case noodles
+        case dumpling
+        case riceMeal
+        case hotpot
+        case snack
+    }
+
+    static func stableRecordSeed(
+        title: String,
+        recordID: UUID? = nil,
+        date: Date,
+        amount: Double,
+        brandID: String?
+    ) -> String {
+        let timestampMilliseconds = Int64((date.timeIntervalSince1970 * 1_000).rounded())
+        return [
+            title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            recordID?.uuidString.lowercased() ?? "draft",
+            String(timestampMilliseconds),
+            String(amount.bitPattern),
+            brandID ?? "no-brand",
+        ].joined(separator: "|")
+    }
+
+    static func specificKind(in text: String) -> SpecificKind? {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+
+        let evidence: [(SpecificKind, [String])] = [
+            (.coffee, ["咖啡", "拿铁", "美式", "coffee"]),
+            (.drink, ["奶茶", "茶饮", "果汁", "饮料", "饮品", "可乐", "雪碧", "汽水", "柠檬茶"]),
+            (.riceBall, ["饭团"]),
+            (.bento, ["便当"]),
+            (.oden, ["关东煮"]),
+            (.teaEgg, ["茶叶蛋"]),
+            (.sandwich, ["三明治"]),
+            (.bun, ["包子", "烧卖", "烧麦"]),
+            (.noodles, ["牛肉面", "拉面", "汤面", "拌面", "炒面", "面条", "面馆", "米线", "米粉", "河粉", "粉面", "麻辣烫"]),
+            (.dumpling, ["饺子", "云饺", "馄饨", "锅贴", "生煎"]),
+            (.riceMeal, ["盖饭", "炒饭", "黄焖鸡", "饭套餐"]),
+            (.hotpot, ["火锅", "烤肉", "串串", "烧烤"]),
+            (.snack, ["鸭脖", "鸭货", "卤味", "小食", "点心"]),
+        ]
+        return evidence.first { _, keywords in
+            keywords.contains { normalized.localizedCaseInsensitiveContains($0) }
+        }?.0
+    }
+
+    static func specificEmotionTag(evidence: String, seed: String) -> String? {
+        guard let kind = specificKind(in: evidence) else { return nil }
+        return pick(notes(for: kind), seed: seed + "|specific|\(kind.rawValue)")
+    }
+
+    static func convenienceStoreEmotionTag(
+        brand: MerchantBrandDefinition,
+        evidence: String,
+        seed: String
+    ) -> String {
+        if let specific = specificEmotionTag(evidence: evidence, seed: seed) {
+            return specific
+        }
+        let name = brand.displayName
+        return pick(
+            [
+                "\(name)这笔记下",
+                "路过\(name)记一笔",
+                "\(name)这一单记下",
+                "在\(name)留下一笔",
+                "\(name)这次记下",
+                "便利店这一笔",
+            ],
+            seed: seed + "|convenience-neutral"
+        )
+    }
+
+    static func genericEmotionTag(evidence: String, date: Date, seed: String) -> String {
+        if let specific = specificEmotionTag(evidence: evidence, seed: seed) {
+            return specific
+        }
+
+        let notes: [String]
+        switch Calendar.current.component(.hour, from: date) {
+        case 5..<10:
+            notes = ["早间餐饮记下", "早上这笔记下", "早间这一笔", "早餐时段记一笔"]
+        case 10..<14:
+            notes = ["午间餐饮记下", "中午这笔记下", "午间这一笔", "中午餐饮一笔"]
+        case 17..<21:
+            notes = ["晚间餐饮记下", "晚上这笔记下", "晚间这一笔", "晚饭时段记一笔"]
+        case 21...23, 0..<5:
+            notes = ["夜间餐饮记下", "夜里这笔记下", "夜间这一笔", "深夜餐饮一笔"]
+        default:
+            notes = ["餐饮这一笔", "今天这笔记下", "吃喝记一笔", "日常餐饮记下"]
+        }
+        return pick(notes, seed: seed + "|dining-neutral")
+    }
+
+    static func shouldReplaceStoredTag(
+        _ tag: String,
+        evidence: String,
+        isConvenienceStore: Bool
+    ) -> Bool {
+        let normalizedTag = tag.lowercased()
+        let normalizedEvidence = evidence.lowercased()
+        let heatTerms = ["热食", "热乎", "一口热的", "热饭", "热汤", "热腾腾", "吃点热的"]
+        if heatTerms.contains(where: { normalizedTag.contains($0) }),
+           !heatTerms.contains(where: { normalizedEvidence.contains($0) }) {
+            return true
+        }
+
+        guard isConvenienceStore, specificKind(in: normalizedEvidence) == nil else { return false }
+        if specificKind(in: normalizedTag) != nil { return true }
+        return ["拿点吃的", "买点吃的", "小食", "一口", "垫一下", "垫一口", "吃上了", "一顿饭"]
+            .contains { normalizedTag.contains($0) }
+    }
+
+    private static func notes(for kind: SpecificKind) -> [String] {
+        switch kind {
+        case .coffee: return ["咖啡这杯记下", "便利店咖啡记下", "这杯咖啡记一笔", "买杯咖啡记下"]
+        case .drink: return ["饮料这瓶记下", "便利店饮料记下", "这瓶饮料记一笔", "买瓶喝的记下"]
+        case .riceBall: return ["饭团这份记下", "便利店饭团记下", "饭团记一笔", "买了个饭团"]
+        case .bento: return ["便当这份记下", "便利店便当记下", "便当记一笔", "这份便当记下"]
+        case .oden: return ["关东煮这份记下", "便利店关东煮记下", "关东煮记一笔", "这份关东煮记下"]
+        case .teaEgg: return ["茶叶蛋记一笔", "便利店茶叶蛋记下", "茶叶蛋这份记下", "买了个茶叶蛋"]
+        case .sandwich: return ["三明治记一笔", "便利店三明治记下", "三明治这份记下", "买了份三明治"]
+        case .bun: return ["包子这份记下", "早餐包子记下", "包子记一笔", "这份包子记下"]
+        case .noodles: return ["这份面食记下", "面食这一笔", "这碗面记下", "今天这份面食"]
+        case .dumpling: return ["饺子这份记下", "这份饺子记一笔", "饺子这一餐", "今天这份饺子"]
+        case .riceMeal: return ["这份饭记下", "饭点这份记下", "这份餐食记一笔", "今天这份饭"]
+        case .hotpot: return ["这顿聚餐记下", "火锅烤肉这一顿", "这顿饭记一笔", "今天这顿记下"]
+        case .snack: return ["小食这份记下", "这份小食记一笔", "卤味小食记下", "今天这份小食"]
+        }
+    }
+
+    private static func pick(_ notes: [String], seed: String) -> String {
+        notes[stableIndex(seed: seed, count: notes.count)]
+    }
+
+    private static func stableIndex(seed: String, count: Int) -> Int {
+        guard count > 0 else { return 0 }
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in seed.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return Int(hash % UInt64(count))
+    }
+}
+
 enum NarrativeCopyResolver {
     struct Context {
         let brandId: String?
@@ -114,6 +272,7 @@ enum NarrativeCopyResolver {
         let seed: String
         let note: String
         let scenePackId: String?
+        let recordID: UUID?
 
         init(
             brandId: String?,
@@ -122,7 +281,8 @@ enum NarrativeCopyResolver {
             date: Date,
             seed: String,
             note: String = "",
-            scenePackId: String? = nil
+            scenePackId: String? = nil,
+            recordID: UUID? = nil
         ) {
             self.brandId = brandId
             self.category = category
@@ -131,6 +291,17 @@ enum NarrativeCopyResolver {
             self.seed = seed
             self.note = note
             self.scenePackId = scenePackId
+            self.recordID = recordID
+        }
+
+        var stableDiningSeed: String {
+            DiningCopyEvidencePolicy.stableRecordSeed(
+                title: seed,
+                recordID: recordID,
+                date: date,
+                amount: amount,
+                brandID: brandId
+            )
         }
     }
 
@@ -153,6 +324,17 @@ enum NarrativeCopyResolver {
     }
 
     static func resolveEmotionTag(context: Context) -> String {
+        if context.category == .dining,
+           let brand = MerchantBrandCatalog.definition(for: context.brandId)
+                ?? MerchantBrandCatalog.matchBrand(in: context.note),
+           MerchantBrandCatalog.isConvenienceStoreBrand(brand) {
+            return DiningCopyEvidencePolicy.convenienceStoreEmotionTag(
+                brand: brand,
+                evidence: context.note,
+                seed: context.stableDiningSeed
+            )
+        }
+
         if context.category == .dining,
            let lateNightTag = HomeItem.lateNightDiningEmotionTag(title: context.note, date: context.date) {
             return lateNightTag
@@ -177,6 +359,14 @@ enum NarrativeCopyResolver {
 
         if let note = noteAwareEmotionTag(context: context) {
             return note
+        }
+
+        if context.category == .dining {
+            return DiningCopyEvidencePolicy.genericEmotionTag(
+                evidence: context.note,
+                date: context.date,
+                seed: context.stableDiningSeed
+            )
         }
 
         if let pack = scenePack(for: context) {
@@ -305,16 +495,9 @@ enum NarrativeCopyResolver {
            [.dining, .daily].contains(context.category),
            emotionRuleIDs.contains("convenience") {
             if containsAny(lower, ["茶叶蛋", "饭团", "便当", "关东煮", "包子", "三明治", "热食", "小食"]) {
-                return pick(
-                    [
-                        "便利店小食记下",
-                        "路过买点吃的",
-                        "便利店热食在手边",
-                        "小食先垫一下",
-                        "便利店这一口",
-                        "午间小补给",
-                    ],
-                    seed: context.seed + "|convenienceFood"
+                return DiningCopyEvidencePolicy.specificEmotionTag(
+                    evidence: lower,
+                    seed: context.stableDiningSeed
                 )
             }
             return pick(
@@ -326,7 +509,7 @@ enum NarrativeCopyResolver {
                     "路过买一点",
                     "小东西顺路带上",
                 ],
-                seed: context.seed + "|convenience"
+                seed: context.stableDiningSeed + "|convenience"
             )
         }
 
@@ -379,11 +562,11 @@ enum NarrativeCopyResolver {
                         "夜里补一点",
                         "深夜这顿记下",
                         "晚点吃上了",
-                        "夜里一口热的",
-                        "这顿先垫一下",
+                        "夜里这顿记下",
+                        "这顿饭记一笔",
                         "夜里吃点东西",
                     ],
-                    seed: context.seed + "|nightMeal"
+                    seed: context.stableDiningSeed + "|nightMeal"
                 )
             }
 
@@ -391,12 +574,12 @@ enum NarrativeCopyResolver {
                 [
                     "中午一顿饭",
                     "饭点记一笔",
-                    "热饭到了手边",
+                    "午间这顿记下",
                     "今天吃上饭",
                     "这一顿先记下",
                     "简单吃一顿",
                 ],
-                seed: context.seed + "|meal"
+                seed: context.stableDiningSeed + "|meal"
             )
         }
 
@@ -531,18 +714,18 @@ enum NarrativeCopyResolver {
     private static func weekendMealNotes(for date: Date, note: String) -> [String] {
         let prefix = RecordCalendarContext.dayKind(for: date) == .holiday ? "假期" : "周末"
         if containsAny(note, ["夜宵", "夜里饿了", "深夜", "夜里", "凌晨"]) {
-            return ["\(prefix)夜里补一点", "夜里吃点东西", "深夜这顿记下", "晚点吃上了", "这口先垫一下", "夜里一口热的"]
+            return ["\(prefix)夜里补一点", "夜里吃点东西", "深夜这顿记下", "晚点吃上了", "夜间餐饮记下", "夜里这顿记下"]
         }
         let hour = Calendar.current.component(.hour, from: date)
         switch hour {
         case 5..<10:
             return ["\(prefix)早餐", "早上简单吃点", "早餐先记下", "早间小食", "今天早餐有着落", "早上补点能量"]
         case 11..<14:
-            return ["\(prefix)午餐", "午间吃点热乎的", "这顿午饭记下", "\(prefix)饭点留一笔", "中午简单吃一顿", "午间一顿饭"]
+            return ["\(prefix)午餐", "午间餐饮记下", "这顿午饭记下", "\(prefix)饭点留一笔", "中午简单吃一顿", "午间一顿饭"]
         case 17..<21:
-            return ["\(prefix)晚饭", "晚餐吃点热乎的", "今晚这顿记下", "晚饭时间坐一会儿", "这顿晚饭有着落", "\(prefix)晚餐"]
+            return ["\(prefix)晚饭", "晚间餐饮记下", "今晚这顿记下", "晚饭时间坐一会儿", "这顿晚饭有着落", "\(prefix)晚餐"]
         default:
-            return ["\(prefix)吃一顿", "简单吃点东西", "这顿先记下", "饭点留一笔", "吃点热乎的", "今天这顿记下"]
+            return ["\(prefix)吃一顿", "简单吃点东西", "这顿先记下", "饭点留一笔", "餐饮这一笔", "今天这顿记下"]
         }
     }
 

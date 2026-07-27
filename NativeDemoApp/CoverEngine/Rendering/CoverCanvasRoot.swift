@@ -187,7 +187,6 @@ private struct CoverTemplateBodyRenderer: View {
             x: CGFloat(placement.frame.x),
             y: CGFloat(placement.frame.y)
         )
-        .clipped()
     }
 
     private func font(for role: CoverTextRole) -> Font {

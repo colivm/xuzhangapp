@@ -264,6 +264,21 @@ final class CoverShareFlowTests: XCTestCase {
         XCTAssertTrue(session.previewRenderInput === session.exportRenderInput)
     }
 
+    @MainActor
+    func testExportKeepsAnOffsetMediaSlotVisibleInsideItsResolvedFrame() throws {
+        let session = try CoverShareFlow.prepare(makePreparationRequest(includeMedia: true))
+        let image = try XCTUnwrap(CoverExportCoordinator.renderImage(from: session))
+        let pixel = try XCTUnwrap(
+            rgbaPixel(
+                in: image,
+                at: CGPoint(x: 540, y: 960)
+            )
+        )
+
+        XCTAssertGreaterThan(pixel.green, pixel.red + 0.25)
+        XCTAssertGreaterThan(pixel.green, pixel.blue + 0.25)
+    }
+
     private func makePreparationRequest(
         expectedSourceRevision: Int = 42,
         includeMedia: Bool = false,
@@ -478,6 +493,41 @@ final class CoverShareFlowTests: XCTestCase {
             UIColor.systemGreen.setFill()
             context.cgContext.fill(CGRect(x: 0, y: 0, width: 120, height: 180))
         }
+    }
+
+    private func rgbaPixel(
+        in image: UIImage,
+        at point: CGPoint
+    ) -> (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat)? {
+        guard let cgImage = image.cgImage,
+              point.x >= 0,
+              point.y >= 0,
+              point.x < CGFloat(cgImage.width),
+              point.y < CGFloat(cgImage.height),
+              let cropped = cgImage.cropping(
+                to: CGRect(x: point.x, y: point.y, width: 1, height: 1)
+              ) else {
+            return nil
+        }
+        var bytes = [UInt8](repeating: 0, count: 4)
+        guard let context = CGContext(
+            data: &bytes,
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bytesPerRow: 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+        context.draw(cropped, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        return (
+            CGFloat(bytes[0]) / 255,
+            CGFloat(bytes[1]) / 255,
+            CGFloat(bytes[2]) / 255,
+            CGFloat(bytes[3]) / 255
+        )
     }
 
     private func makeMediaAnalysis() -> CoverMediaAnalysis {
