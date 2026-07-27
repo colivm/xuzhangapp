@@ -793,6 +793,15 @@ struct HomeJourneyLedgerFacts: Equatable {
     }
 }
 
+enum LedgerCloudUploadCompletionPolicy {
+    static func requiresCompensatingDelete(
+        uploadedItemID: UUID,
+        currentItemIDs: Set<UUID>
+    ) -> Bool {
+        !currentItemIDs.contains(uploadedItemID)
+    }
+}
+
 @MainActor
 final class HomeViewModel: ObservableObject {
     enum Period: String, CaseIterable, Identifiable {
@@ -1545,20 +1554,33 @@ final class HomeViewModel: ObservableObject {
     }
 
     func delete(at offsets: IndexSet) {
-        guard ensureLedgerWritesAllowed() else { return }
-        let deletedIDs = offsets.compactMap { items.indices.contains($0) ? items[$0].id : nil }
-        items.remove(atOffsets: offsets)
-        guard persistItems(deleting: Set(deletedIDs)) else { return }
+        let deletedIDs = Set(offsets.compactMap { items.indices.contains($0) ? items[$0].id : nil })
+        _ = deleteItems(ids: deletedIDs)
+    }
+
+    @discardableResult
+    func deleteItem(id: UUID) -> Bool {
+        deleteItems(ids: Set([id]))
+    }
+
+    @discardableResult
+    private func deleteItems(ids requestedIDs: Set<UUID>) -> Bool {
+        guard ensureLedgerWritesAllowed() else { return false }
+        let existingIDs = Set(items.lazy.map(\.id)).intersection(requestedIDs)
+        guard !existingIDs.isEmpty else { return false }
+        items.removeAll { existingIDs.contains($0.id) }
+        guard persistItems(deleting: existingIDs) else { return false }
         analyticsService.track(
             .recordDeletedBatch,
-            props: [.countBucket: AnalyticsService.countBucket(for: deletedIDs.count)]
+            props: [.countBucket: AnalyticsService.countBucket(for: existingIDs.count)]
         )
         refreshTodayPlayback()
         Task {
-            for id in deletedIDs {
+            for id in existingIDs {
                 await syncDeleteFromCloud(id: id)
             }
         }
+        return true
     }
 
     @discardableResult
@@ -1790,7 +1812,7 @@ final class HomeViewModel: ObservableObject {
         }
         let context = cloudContext()
         guard let context else {
-            syncStatusMessage = "当前只保存在本机。登录并开启云端备份后，只同步账单字段；记忆照片仍在本机。"
+            syncStatusMessage = "当前只保存在本机。登录并开启后，金额、分类、备注和日期会自动备份；照片仍保存在本机。"
             return
         }
         isSyncingCloudLedger = true
@@ -1818,7 +1840,7 @@ final class HomeViewModel: ObservableObject {
                     return
                 }
             }
-            syncStatusMessage = "账单字段已同步；记忆照片仍只在本机。重复记录已保留最新版本。"
+            syncStatusMessage = "自动备份已完成；照片仍保存在本机。重复记录已保留最新版本。"
         } catch {
             if CloudSessionFailurePolicy.shouldInvalidateSession(for: error) {
                 CloudSessionInvalidationService.invalidate()
@@ -3225,7 +3247,15 @@ final class HomeViewModel: ObservableObject {
         let service = LedgerSyncService(baseURL: context.baseURL, accessToken: context.accessToken)
         do {
             try await service.upload(item)
-            syncStatusMessage = "账单字段已同步；照片仍只在本机。"
+            if LedgerCloudUploadCompletionPolicy.requiresCompensatingDelete(
+                uploadedItemID: item.id,
+                currentItemIDs: Set(items.lazy.map(\.id))
+            ) {
+                try await service.delete(id: item.id)
+                syncStatusMessage = "云端备份已删除；本机照片不受影响。"
+                return
+            }
+            syncStatusMessage = "自动备份已完成；照片仍保存在本机。"
         } catch {
             if CloudSessionFailurePolicy.shouldInvalidateSession(for: error) {
                 CloudSessionInvalidationService.invalidate()
@@ -3242,7 +3272,7 @@ final class HomeViewModel: ObservableObject {
         let service = LedgerSyncService(baseURL: context.baseURL, accessToken: context.accessToken)
         do {
             try await service.delete(id: id)
-            syncStatusMessage = "云端账单字段已删除；本机照片不受影响。"
+            syncStatusMessage = "云端备份已删除；本机照片不受影响。"
         } catch {
             if CloudSessionFailurePolicy.shouldInvalidateSession(for: error) {
                 CloudSessionInvalidationService.invalidate()

@@ -73,6 +73,74 @@
       "expectedEmotionRule": "meal"
     },
     {
+      "id": "manual-duck-blood-vermicelli-soup-dining",
+      "mode": "manual",
+      "amount": 18,
+      "inputTitle": "鸭血粉丝汤",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
+      "id": "manual-duck-blood-vermicelli-soup-bun-dining",
+      "mode": "manual",
+      "amount": 25,
+      "inputTitle": "鸭血粉丝汤包",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
+      "id": "manual-soup-bun-dining",
+      "mode": "manual",
+      "amount": 12,
+      "inputTitle": "灌汤包",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
+      "id": "manual-xiaolong-soup-bun-dining",
+      "mode": "manual",
+      "amount": 16,
+      "inputTitle": "小笼汤包",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
+      "id": "ocr-duck-blood-vermicelli-soup-bun-dining",
+      "mode": "ocr",
+      "amount": 25,
+      "rawText": "微信支付 鸭血粉丝汤包 付款金额 ¥25.00",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
+      "id": "manual-celebrity-fan-meet-not-dining",
+      "mode": "manual",
+      "amount": 199,
+      "inputTitle": "明星粉丝见面会",
+      "expectedCategoryNot": "餐饮"
+    },
+    {
+      "id": "manual-follower-growth-not-dining",
+      "mode": "manual",
+      "amount": 99,
+      "inputTitle": "粉丝增长",
+      "expectedCategoryNot": "餐饮"
+    },
+    {
+      "id": "manual-gift-pack-not-dining",
+      "mode": "manual",
+      "amount": 39,
+      "inputTitle": "礼包",
+      "expectedCategoryNot": "餐饮"
+    },
+    {
+      "id": "manual-file-package-not-dining",
+      "mode": "manual",
+      "amount": 9,
+      "inputTitle": "文件包",
+      "expectedCategoryNot": "餐饮"
+    },
+    {
       "id": "manual-face-mask-not-dining",
       "mode": "manual",
       "amount": 49.9,

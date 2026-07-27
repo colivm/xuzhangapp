@@ -116,7 +116,7 @@ enum TraceLoadingPresentationPolicy {
         selectedPeriod: StatsPeriod,
         lifeRange: SummaryPlaybackRange,
         usesCustomRange: Bool,
-        hasVisibleSnapshot: Bool
+        hasCompleteSnapshot: Bool
     ) -> TraceLoadingPresentation {
         let message: String
         switch viewMode {
@@ -141,10 +141,10 @@ enum TraceLoadingPresentationPolicy {
 
         return TraceLoadingPresentation(
             message: message,
-            detail: hasVisibleSnapshot
+            detail: hasCompleteSnapshot
                 ? "整理完成前会暂时保留当前内容"
                 : "整理好后会一次完整呈现",
-            delayNanoseconds: hasVisibleSnapshot ? refreshDelayNanoseconds : 0
+            delayNanoseconds: hasCompleteSnapshot ? refreshDelayNanoseconds : 0
         )
     }
 }
@@ -302,11 +302,6 @@ struct TraceDayGroup: Identifiable {
     let id: String
     let date: Date
     let items: [HomeItem]
-}
-
-struct TraceSwipeDragState: Equatable {
-    let itemID: UUID
-    let translation: CGFloat
 }
 
 struct TraceMarkEvidenceGroup: Identifiable {
@@ -514,10 +509,13 @@ enum TraceChapterCoverPolicy {
 }
 
 enum TraceMonthDiaryPolicy {
+    static let maximumPhotoCount = 6
+    static let selectionLimitIncludingCover = maximumPhotoCount + 1
+
     static func anchors(
         from anchors: [SummaryMemoryAnchor],
         excludingCoverItemID coverItemID: UUID?,
-        limit: Int = 6
+        limit: Int = maximumPhotoCount
     ) -> [SummaryMemoryAnchor] {
         Array(anchors.filter { $0.itemID != coverItemID }.prefix(max(0, limit)))
     }
@@ -552,6 +550,7 @@ struct TraceChapterSnapshot {
     let items: [HomeItem]
     let marks: [LifeMarkAggregate]
     let memoryAnchors: [SummaryMemoryAnchor]
+    let monthDiaryAnchors: [SummaryMemoryAnchor]
     let coverFacts: TraceChapterCoverFacts
     let narrativePlan: LifeNarrativePlan
     let narrativeRewrite: LifeNarrativeAIRewrite?

@@ -147,6 +147,133 @@ enum TraceDetailListSnapshotComputation {
             dayGroups: dayGroups
         )
     }
+
+    static func deleting(
+        itemIDs: Set<UUID>,
+        from snapshot: TraceDetailListSnapshot,
+        nextKey: TraceDetailListSnapshotKey,
+        calendar: Calendar = .current
+    ) -> TraceDetailListSnapshot {
+        make(
+            TraceDetailListPreparationInput(
+                key: nextKey,
+                sourceItems: snapshot.items.filter { !itemIDs.contains($0.id) },
+                dateInterval: nil,
+                category: nil,
+                calendar: calendar
+            )
+        )
+    }
+}
+
+enum TraceDetailListSourcePolicy {
+    static func canReuseDerivedPeriodItems(
+        ledgerRevision: Int,
+        derivedRevision: Int,
+        usesCustomRange: Bool
+    ) -> Bool {
+        !usesCustomRange && ledgerRevision == derivedRevision
+    }
+}
+
+private struct TraceSwipeRow<Content: View, Actions: View>: View {
+    let itemID: UUID
+    @Binding var openItemID: UUID?
+    let isEnabled: Bool
+    let animation: Animation?
+    let onTap: () -> Void
+    let content: Content
+    let actions: Actions
+
+    @GestureState private var dragTranslation: CGFloat = 0
+
+    init(
+        itemID: UUID,
+        openItemID: Binding<UUID?>,
+        isEnabled: Bool,
+        animation: Animation?,
+        onTap: @escaping () -> Void,
+        @ViewBuilder actions: () -> Actions,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.itemID = itemID
+        _openItemID = openItemID
+        self.isEnabled = isEnabled
+        self.animation = animation
+        self.onTap = onTap
+        self.actions = actions()
+        self.content = content()
+    }
+
+    private var isOpen: Bool {
+        isEnabled && openItemID == itemID
+    }
+
+    private var coordinateSpaceName: String {
+        "trace-swipe-\(itemID.uuidString)"
+    }
+
+    private var rowOffset: CGFloat {
+        let restingOffset: CGFloat = isOpen ? -76 : 0
+        return min(0, max(-86, restingOffset + dragTranslation))
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            actions
+
+            content
+                .offset(x: rowOffset)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onTap)
+                .overlay(alignment: .trailing) {
+                    if isEnabled {
+                        Color.clear
+                            .frame(maxWidth: isOpen ? .infinity : nil)
+                            .frame(width: isOpen ? nil : 42)
+                            .contentShape(Rectangle())
+                            .simultaneousGesture(swipeGesture)
+                    }
+                }
+        }
+        .coordinateSpace(name: coordinateSpaceName)
+        .animation(animation, value: isOpen)
+    }
+
+    private var swipeGesture: some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .named(coordinateSpaceName))
+            .updating($dragTranslation) { value, state, transaction in
+                let horizontal = value.translation.width
+                let vertical = value.translation.height
+                guard abs(horizontal) > max(16, abs(vertical) * 1.35) else { return }
+                let baseOffset: CGFloat = isOpen ? -76 : 0
+                state = min(86, max(-86, baseOffset + horizontal)) - baseOffset
+                transaction.disablesAnimations = true
+            }
+            .onEnded { value in
+                let horizontal = value.translation.width
+                let predictedHorizontal = value.predictedEndTranslation.width
+                let vertical = value.translation.height
+                let predictedVertical = value.predictedEndTranslation.height
+                let isHorizontalSwipe = abs(horizontal) > max(34, abs(vertical) * 1.45)
+                    || abs(predictedHorizontal) > max(62, abs(predictedVertical) * 1.35)
+                guard isHorizontalSwipe else {
+                    if abs(vertical) > abs(horizontal), isOpen {
+                        withAnimation(animation) {
+                            openItemID = nil
+                        }
+                    }
+                    return
+                }
+                withAnimation(animation) {
+                    if horizontal < -28 || predictedHorizontal < -56 {
+                        openItemID = itemID
+                    } else if horizontal > 24 || predictedHorizontal > 48 {
+                        openItemID = nil
+                    }
+                }
+            }
+    }
 }
 
 private enum TracePreparedPiece {
@@ -190,12 +317,10 @@ struct StatsWebView: View {
     @State var traceInlineEditingItemID: UUID?
     @State private var handledOpenTraceRequestID: UUID?
     @State var traceSwipedItemID: UUID?
-    @State private var traceDeletingItemID: UUID?
     @State private var tracePendingDeleteItem: HomeItem?
     @State private var showTraceDeleteConfirmation = false
     @State private var traceDetailListSnapshot: TraceDetailListSnapshot?
     @State private var traceAutoCommitRequestID: UUID?
-    @GestureState private var traceSwipeDragState: TraceSwipeDragState?
     @State private var isPreparingTrace = false
     @State private var tracePreparationTask: Task<Void, Never>?
     @State private var tracePreparationGate = LatestRequestGate()
@@ -384,10 +509,10 @@ struct StatsWebView: View {
             return traceDetailListSnapshot
         }
 
+        let calendar = Calendar.current
         let sourceItems: [HomeItem]
         let dateInterval: DateInterval?
         if useCustomRange {
-            let calendar = Calendar.current
             let start = calendar.startOfDay(for: customStartDate)
             let end = calendar.date(
                 byAdding: .day,
@@ -401,7 +526,11 @@ struct StatsWebView: View {
                 sourceItems = []
                 dateInterval = nil
             }
-        } else {
+        } else if TraceDetailListSourcePolicy.canReuseDerivedPeriodItems(
+            ledgerRevision: homeViewModel.homeDashboardRevision,
+            derivedRevision: homeViewModel.itemDerivedCacheRevision,
+            usesCustomRange: false
+        ) {
             dateInterval = nil
             switch selectedPeriod {
             case .week:
@@ -411,6 +540,13 @@ struct StatsWebView: View {
             case .year:
                 sourceItems = homeViewModel.currentYearItems
             }
+        } else {
+            sourceItems = homeViewModel.items
+            dateInterval = traceDetailPresetInterval(
+                for: selectedPeriod,
+                now: Date(),
+                calendar: calendar
+            )
         }
         let snapshot = TraceDetailListSnapshotComputation.make(
             TraceDetailListPreparationInput(
@@ -418,11 +554,26 @@ struct StatsWebView: View {
                 sourceItems: sourceItems,
                 dateInterval: dateInterval,
                 category: selectedCategory,
-                calendar: .current
+                calendar: calendar
             )
         )
         traceDetailListSnapshot = snapshot
         return snapshot
+    }
+
+    private func traceDetailPresetInterval(
+        for period: StatsPeriod,
+        now: Date,
+        calendar: Calendar
+    ) -> DateInterval? {
+        switch period {
+        case .week:
+            return PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: now)
+        case .month:
+            return calendar.dateInterval(of: .month, for: now)
+        case .year:
+            return calendar.dateInterval(of: .year, for: now)
+        }
     }
 
     @State var showPeriodSheet = false
@@ -593,7 +744,7 @@ struct StatsWebView: View {
                         statsContent(availableHeight: proxy.size.height)
                     }
                     .scrollIndicators(.hidden)
-                    .scrollDisabled(traceSwipeDragState != nil || visibleTraceLoadingPresentation != nil)
+                    .scrollDisabled(visibleTraceLoadingPresentation != nil)
                     .scrollPosition(id: $tabState.scrollAnchorID, anchor: .top)
                     .accessibilityHidden(visibleTraceLoadingPresentation != nil)
 
@@ -710,12 +861,6 @@ struct StatsWebView: View {
                     .padding(.vertical, 5)
                     .background(Capsule().fill(AppColors.accent.opacity(0.10)))
                 Spacer()
-                if isPreparingTrace {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(AppColors.accent)
-                        .accessibilityLabel("正在后台更新")
-                }
             }
 
             Text(display.title)
@@ -1019,17 +1164,16 @@ struct StatsWebView: View {
                 hasMonth: preparedLifeSnapshot(for: .month) != nil
             )
             : preparedClueSnapshot != nil
-        let hasVisibleSnapshot = hasPreparedSnapshot || visibleTraceColdStartDisplay != nil
         let loadingPresentation = TraceLoadingPresentationPolicy.make(
             viewMode: traceViewMode,
             selectedPeriod: selectedPeriod,
             lifeRange: traceLifeCardRange,
             usesCustomRange: useCustomRange,
-            hasVisibleSnapshot: hasVisibleSnapshot
+            hasCompleteSnapshot: hasPreparedSnapshot
         )
         isPreparingTrace = true
 
-        if hasVisibleSnapshot {
+        if hasPreparedSnapshot {
             updateTraceLoadingPresentation(nil, animated: false)
         } else if loadingPresentation.delayNanoseconds == 0 || visibleTraceLoadingPresentation != nil {
             updateTraceLoadingPresentation(loadingPresentation, animated: true)
@@ -2367,10 +2511,7 @@ struct StatsWebView: View {
 
     private func traceLifeMonthDiaryStrip(snapshot: TraceChapterSnapshot, layout: TraceLifeCardLayout) -> some View {
         let coverItemID = snapshot.coverFacts.coverItemID
-        let anchors = TraceMonthDiaryPolicy.anchors(
-            from: snapshot.memoryAnchors,
-            excludingCoverItemID: coverItemID
-        )
+        let anchors = snapshot.monthDiaryAnchors
         let anchorItemIDs = Set(anchors.map(\.itemID)).union(coverItemID.map { [$0] } ?? [])
         let items = TraceRepresentative.items(from: snapshot.items, maxItems: 10, maxPerCategory: 2)
             .filter { !anchorItemIDs.contains($0.id) }
@@ -5611,7 +5752,7 @@ struct StatsWebView: View {
                         .padding(.bottom, 28)
                 }
                 .scrollIndicators(.hidden)
-                .scrollDisabled(traceSwipeDragState != nil || traceInlineEditingItemID != nil)
+                .scrollDisabled(traceInlineEditingItemID != nil)
                 .onChange(of: snapshot.itemIDs) { _, itemIDs in
                     guard let editingID = traceInlineEditingItemID,
                           !itemIDs.contains(editingID)
@@ -6004,16 +6145,16 @@ struct StatsWebView: View {
             traceInlineEditingItemID = nil
         }
         traceSwipedItemID = nil
-        withAnimation(.easeInOut(duration: 0.45)) {
-            traceDeletingItemID = item.id
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-            if let idx = homeViewModel.items.firstIndex(where: { $0.id == item.id }) {
-                homeViewModel.delete(at: IndexSet(integer: idx))
-            }
-            if traceDeletingItemID == item.id {
-                traceDeletingItemID = nil
-            }
+        let currentSnapshot = prepareTraceDetailListSnapshot()
+        guard homeViewModel.deleteItem(id: item.id) else { return }
+
+        let updatedSnapshot = TraceDetailListSnapshotComputation.deleting(
+            itemIDs: Set([item.id]),
+            from: currentSnapshot,
+            nextKey: traceDetailListSnapshotKey
+        )
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
+            traceDetailListSnapshot = updatedSnapshot
         }
     }
 
@@ -6461,17 +6602,28 @@ struct StatsWebView: View {
         let isEditing = traceInlineEditingItemID == item.id
         let canSwipe = traceInlineEditingItemID == nil
         let isSwiped = traceSwipedItemID == item.id && canSwipe
-        let isDeleting = traceDeletingItemID == item.id
-        let dragTranslation = traceSwipeDragState?.itemID == item.id ? traceSwipeDragState?.translation ?? 0 : 0
-        let restingOffset: CGFloat = isSwiped ? -76 : 0
-        let rowOffset = min(0, max(-86, restingOffset + dragTranslation))
-        return ZStack(alignment: .trailing) {
-            if canSwipe {
-                traceSwipeActions(for: item, isVisible: isSwiped)
-                    .padding(.trailing, 10)
-                    .zIndex(2)
-            }
-
+        return TraceSwipeRow(
+            itemID: item.id,
+            openItemID: $traceSwipedItemID,
+            isEnabled: canSwipe,
+            animation: traceEditSpring,
+            onTap: {
+                if traceSwipedItemID == item.id {
+                    withAnimation(traceEditSpring) {
+                        traceSwipedItemID = nil
+                    }
+                } else if !isEditing {
+                    openEditor(for: item, fromTraceDetail: true)
+                }
+            },
+            actions: {
+                if canSwipe {
+                    traceSwipeActions(for: item, isVisible: isSwiped)
+                        .padding(.trailing, 10)
+                        .zIndex(2)
+                }
+            },
+            content: {
             VStack(alignment: .leading, spacing: 8) {
                 traceDetailRecordSummary(item, isEditing: false)
             }
@@ -6480,31 +6632,10 @@ struct StatsWebView: View {
             .background(traceDetailRecordBackground(isEditing: false))
             .overlay(traceDetailRecordBorder(isEditing: false))
             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .offset(x: rowOffset)
-            .scaleEffect(isDeleting ? 0.96 : 1, anchor: .trailing)
-            .opacity(isDeleting ? 0 : 1)
-            .frame(height: isDeleting ? 0 : nil)
-            .clipped()
-            .onTapGesture {
-                if traceSwipedItemID == item.id {
-                    withAnimation(traceEditSpring) {
-                        traceSwipedItemID = nil
-                    }
-                } else if !isEditing {
-                    openEditor(for: item, fromTraceDetail: true)
-                }
             }
-            .overlay(alignment: .trailing) {
-                if canSwipe {
-                    traceSwipeHandle(for: item, isSwiped: isSwiped)
-                        .zIndex(3)
-                }
-            }
-        }
+        )
         .id(item.id)
-        .padding(.bottom, isLast || isDeleting ? 0 : 12)
-        .animation(traceEditSpring, value: isSwiped)
-        .animation(.easeInOut(duration: 0.45), value: isDeleting)
+        .padding(.bottom, isLast ? 0 : 12)
     }
 
     private func traceTimelineRail(isFirst: Bool, isLast: Bool, isActive: Bool) -> some View {
@@ -6645,190 +6776,6 @@ struct StatsWebView: View {
     }
     */
 
-    private func legacyTimelineBillRecordRowWithRail(_ item: HomeItem, isFirst: Bool, isLast: Bool) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            legacyTraceTimelineRail(isFirst: isFirst, isLast: isLast, isActive: false)
-            billRecordRow(item, isFirst: false)
-                .padding(.bottom, isLast ? 0 : 2)
-        }
-        .padding(.top, isFirst ? 2 : 0)
-    }
-
-    private func legacyTraceDetailBillRecordRow(_ item: HomeItem, isFirst: Bool, isLast: Bool) -> some View {
-        let isEditing = traceInlineEditingItemID == item.id
-        let canSwipe = traceInlineEditingItemID == nil
-        let isSwiped = traceSwipedItemID == item.id && canSwipe
-        let isDeleting = traceDeletingItemID == item.id
-        let dragTranslation = traceSwipeDragState?.itemID == item.id ? traceSwipeDragState?.translation ?? 0 : 0
-        let restingOffset: CGFloat = isSwiped ? -76 : 0
-        let rowOffset = min(0, max(-86, restingOffset + dragTranslation))
-        return HStack(alignment: .top, spacing: 8) {
-            legacyTraceTimelineRail(isFirst: isFirst, isLast: isLast, isActive: isSwiped || isEditing)
-
-            ZStack(alignment: .trailing) {
-                if canSwipe {
-                    traceSwipeActions(for: item, isVisible: isSwiped)
-                        .padding(.trailing, 10)
-                        .zIndex(2)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    legacyTraceDetailRecordSummary(item, isEditing: false)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(legacyTraceDetailRecordBackground(isEditing: false))
-                .overlay(legacyTraceDetailRecordBorder(isEditing: false))
-                .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
-                .offset(x: rowOffset)
-                .scaleEffect(isDeleting ? 0.96 : 1, anchor: .trailing)
-                .opacity(isDeleting ? 0 : 1)
-                .frame(height: isDeleting ? 0 : nil)
-                .clipped()
-                .onTapGesture {
-                    if traceSwipedItemID == item.id {
-                        withAnimation(traceEditSpring) {
-                            traceSwipedItemID = nil
-                        }
-                    } else if !isEditing {
-                        openEditor(for: item, fromTraceDetail: true)
-                    }
-                }
-                .overlay(alignment: .trailing) {
-                    if canSwipe {
-                        traceSwipeHandle(for: item, isSwiped: isSwiped)
-                            .zIndex(3)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .id(item.id)
-        .padding(.bottom, isLast || isDeleting ? 0 : 5)
-        .animation(traceEditSpring, value: isSwiped)
-        .animation(.easeInOut(duration: 0.45), value: isDeleting)
-    }
-
-    private func legacyTraceTimelineRail(isFirst: Bool, isLast: Bool, isActive: Bool) -> some View {
-        let isEmphasized = isActive || isFirst
-        return VStack(spacing: 0) {
-            Rectangle()
-                .fill(isFirst ? Color.clear : AppColors.line.opacity(0.42))
-                .frame(width: 1, height: 10)
-
-            ZStack {
-                Circle()
-                    .fill(isEmphasized ? AppColors.accent.opacity(isActive ? 0.20 : 0.12) : AppColors.paperWarm.opacity(0.72))
-                    .frame(width: 22, height: 22)
-                Circle()
-                    .stroke(isEmphasized ? AppColors.accent.opacity(isActive ? 0.72 : 0.46) : AppColors.line.opacity(0.68), lineWidth: isEmphasized ? 1.25 : 1)
-                    .frame(width: 14, height: 14)
-                Circle()
-                    .fill(isActive ? AppColors.accent : AppColors.accent.opacity(isFirst ? 0.72 : 0.52))
-                    .frame(width: isEmphasized ? 6.5 : 6, height: isEmphasized ? 6.5 : 6)
-            }
-
-            Rectangle()
-                .fill(isLast ? Color.clear : AppColors.line.opacity(0.42))
-                .frame(width: 1, height: 58)
-        }
-        .frame(width: 30)
-        .frame(minHeight: 70)
-    }
-
-    var legacyTraceEditSpring: Animation {
-        .spring(response: 0.38, dampingFraction: 0.90, blendDuration: 0.08)
-    }
-
-    private func legacyTraceDetailRecordSummary(_ item: HomeItem, isEditing: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(item.displayTitle)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-                    .lineLimit(2)
-                    .opacity(isEditing ? 0.28 : 1)
-                    .offset(y: isEditing ? -2 : 0)
-
-                Spacer(minLength: 8)
-
-                Text(item.amount.formatted(.cny))
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.text)
-                    .opacity(isEditing ? 0.24 : 1)
-                    .offset(x: isEditing ? -10 : 0, y: isEditing ? 5 : 0)
-            }
-
-            if !item.displayEmotionTag.isEmpty {
-                Text(item.displayEmotionTag)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(AppColors.accent)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Capsule(style: .continuous).fill(AppColors.accent.opacity(0.13)))
-                    .overlay(Capsule(style: .continuous).stroke(AppColors.accent.opacity(0.28), lineWidth: 0.7))
-                    .opacity(isEditing ? 0.35 : 1)
-            }
-
-            HStack(spacing: 6) {
-                Text(item.category.rawValue)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppColors.subtext.opacity(0.82))
-                Text("·").foregroundStyle(AppColors.subtext)
-                Text(item.createdAt.zhBillDateTime)
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.subtext)
-                Spacer()
-            }
-            .opacity(isEditing ? 0 : 1)
-            .offset(y: isEditing ? -5 : 0)
-            .frame(height: isEditing ? 0 : nil)
-        }
-    }
-
-    private func legacyTraceDetailRecordBackground(isEditing: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 19, style: .continuous)
-            .fill(.ultraThinMaterial)
-            .background(
-                RoundedRectangle(cornerRadius: 19, style: .continuous)
-                    .fill(Color.white.opacity(isEditing ? 0.48 : 0.40))
-            )
-            .overlay(
-                LinearGradient(
-                    colors: isEditing
-                    ? [AppColors.accent.opacity(0.12), Color.white.opacity(0.48), AppColors.paperWarm.opacity(0.18)]
-                    : [Color.white.opacity(0.54), Color.white.opacity(0.28), AppColors.accent.opacity(0.08)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
-            )
-            .overlay(alignment: .topLeading) {
-                LinearGradient(
-                    colors: [Color.white.opacity(isEditing ? 0.52 : 0.68), Color.white.opacity(0.0)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .frame(height: 42)
-                .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
-            }
-            .shadow(color: AppColors.subtext.opacity(isEditing ? 0.14 : 0.09), radius: isEditing ? 16 : 12, x: 0, y: isEditing ? 9 : 6)
-    }
-
-    private func legacyTraceDetailRecordBorder(isEditing: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 19, style: .continuous)
-            .stroke(
-                LinearGradient(
-                    colors: isEditing
-                    ? [Color.white.opacity(0.82), AppColors.accent.opacity(0.28), AppColors.paperBorder.opacity(0.14)]
-                    : [Color.white.opacity(0.76), Color.white.opacity(0.36), AppColors.accent.opacity(0.12)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: isEditing ? 1.2 : 1
-            )
-    }
-
     private func traceSwipeActions(for item: HomeItem, isVisible: Bool) -> some View {
         Button(role: .destructive) {
             requestTraceDeleteConfirmation(for: item)
@@ -6861,49 +6808,6 @@ struct StatsWebView: View {
                 .fill(tint)
         )
         .shadow(color: tint.opacity(0.22), radius: 12, y: 6)
-    }
-
-    private func traceSwipeHandle(for item: HomeItem, isSwiped: Bool) -> some View {
-        Color.clear
-            .frame(maxWidth: isSwiped ? .infinity : nil)
-            .frame(width: isSwiped ? nil : 42)
-            .contentShape(Rectangle())
-            .gesture(traceRowSwipeGesture(for: item))
-    }
-
-    private func traceRowSwipeGesture(for item: HomeItem) -> some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .local)
-            .updating($traceSwipeDragState) { value, state, _ in
-                let horizontal = value.translation.width
-                let vertical = value.translation.height
-                guard abs(horizontal) > max(16, abs(vertical) * 1.35) else { return }
-                let baseOffset: CGFloat = traceSwipedItemID == item.id ? -76 : 0
-                let translation = min(86, max(-86, baseOffset + horizontal)) - baseOffset
-                state = TraceSwipeDragState(itemID: item.id, translation: translation)
-            }
-            .onEnded { value in
-                let horizontal = value.translation.width
-                let predictedHorizontal = value.predictedEndTranslation.width
-                let vertical = value.translation.height
-                let predictedVertical = value.predictedEndTranslation.height
-                let isHorizontalSwipe = abs(horizontal) > max(34, abs(vertical) * 1.45)
-                    || abs(predictedHorizontal) > max(62, abs(predictedVertical) * 1.35)
-                if !isHorizontalSwipe {
-                    if abs(vertical) > abs(horizontal), traceSwipedItemID == item.id {
-                        withAnimation(traceEditSpring) {
-                            traceSwipedItemID = nil
-                        }
-                    }
-                    return
-                }
-                withAnimation(traceEditSpring) {
-                    if horizontal < -28 || predictedHorizontal < -56 {
-                        traceSwipedItemID = item.id
-                    } else if horizontal > 24 || predictedHorizontal > 48 {
-                        traceSwipedItemID = nil
-                    }
-                }
-            }
     }
 
     // MARK: - Category Filter Chip

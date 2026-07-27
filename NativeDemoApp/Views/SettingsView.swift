@@ -82,6 +82,17 @@ enum AccountMemoryStatsComputation {
     }
 }
 
+enum SettingsBackupSummaryPolicy {
+    static func summary(syncEnabled: Bool, remoteOrganizationEnabled: Bool) -> String {
+        switch (syncEnabled, remoteOrganizationEnabled) {
+        case (true, true): return "自动备份已开启 · 联网整理已开启"
+        case (true, false): return "自动备份已开启"
+        case (false, true): return "联网整理已开启"
+        case (false, false): return "仅保存在本机"
+        }
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @EnvironmentObject private var homeViewModel: HomeViewModel
@@ -467,9 +478,12 @@ struct SettingsView: View {
         if isLifetimeMember {
             return "典藏主题、完整回放和长期故事已经为你保留。"
         }
-        return settingsViewModel.hasCloudSession
-            ? "账单字段可云端备份；记忆照片仍在本机。"
-            : "不用登录也能记；换机前可导出含可用照片的本地备份。"
+        guard settingsViewModel.hasCloudSession else {
+            return "不用登录也能记；换机前可导出含可用照片的本地备份。"
+        }
+        return settingsViewModel.syncEnabled
+            ? "金额、分类、备注和日期会自动备份；照片仍保存在本机。"
+            : "自动备份未开启；照片仍保存在本机。"
     }
 
     private var lifetimeIdentitySeal: some View {
@@ -731,7 +745,7 @@ struct SettingsView: View {
         if isLifetimeMember {
             return "永久档案馆 · 随账号保留"
         }
-        let sync = settingsViewModel.syncEnabled ? "账单字段已同步" : "本地保存"
+        let sync = settingsViewModel.syncEnabled ? "自动备份已开启" : "仅保存在本机"
         let expiry = hasExpiredPaidMemberTier ? " · 会员待续期" : ""
         return "\(sync) · \(memberTierName)\(expiry)"
     }
@@ -788,25 +802,23 @@ struct SettingsView: View {
     }
 
     private var backupRowSummary: String {
-        switch (settingsViewModel.syncEnabled, settingsViewModel.useRemoteAI) {
-        case (true, true): return "账单字段云端开 · 联网整理开"
-        case (true, false): return "账单字段云端已开"
-        case (false, true): return "联网梳理已开"
-        case (false, false): return "仅本地保存"
-        }
+        SettingsBackupSummaryPolicy.summary(
+            syncEnabled: settingsViewModel.syncEnabled,
+            remoteOrganizationEnabled: settingsViewModel.useRemoteAI
+        )
     }
 
     private var cloudSyncHelperText: String {
         if homeViewModel.isSyncingCloudLedger {
-            return "正在合并云端与本机的账单字段；照片不会上传。"
+            return "正在合并云端与本机记录；照片不会上传。"
         }
         if let message = homeViewModel.syncStatusMessage, !message.isEmpty {
             return message
         }
         if settingsViewModel.syncEnabled {
-            return "金额、分类、备注、日期等账单字段会自动同步；记忆照片不上传，只保存在本机。"
+            return "金额、分类、备注和日期会自动备份；照片仍保存在本机。"
         }
-        return "首次开启只合并云端与本机的账单字段；记忆照片不上传，冲突仍保留更新时间较新的记录。"
+        return "首次开启会合并云端与本机记录；照片仍保存在本机，冲突时保留更新时间较新的记录。"
     }
 
     private var localBackupFilename: String {
@@ -1039,14 +1051,14 @@ struct SettingsView: View {
     private var clearAllRecordsHelperText: String {
         let count = homeViewModel.items.count
         if settingsViewModel.syncEnabled && settingsViewModel.hasCloudSession {
-            return count > 0 ? "当前 \(count) 笔；会清空本机记录与照片，并删除云端账单字段。" : "当前没有本机记录；云端账单字段也会一并清空。"
+            return count > 0 ? "当前 \(count) 笔；会清空本机记录与照片，并删除云端记录。" : "当前没有本机记录；云端记录也会一并清空。"
         }
         return count > 0 ? "当前 \(count) 笔；只清空这台设备上的本机账本。" : "当前没有本机记录。"
     }
 
     private var clearAllRecordsConfirmMessage: String {
         if settingsViewModel.syncEnabled && settingsViewModel.hasCloudSession {
-            return "这会删除本机记录和本机照片，并清空服务器上的账单字段；云端备份会同时关闭。这个操作不能撤销。"
+            return "这会删除本机记录和本机照片，并清空服务器上的账单记录；自动备份会同时关闭。这个操作不能撤销。"
         }
         return "这会删除这台设备上的全部本机记录、今日回放和本地复盘缓存。这个操作不能撤销。"
     }
@@ -1387,14 +1399,14 @@ struct SettingsView: View {
         case .deleteCloudLedger:
             return (
                 "icloud.slash",
-                "删除云端账单字段",
-                "只删除服务器上的账单字段，本机记录和本机照片仍保留。为避免重新上传，云端同步会同时关闭。",
+                "删除云端备份",
+                "只删除服务器上的账单记录，本机记录和本机照片仍保留。为避免重新上传，自动备份会同时关闭。",
                 Color(hex: "C7473D"),
                 [
                     SettingsConfirmationAction(id: "cancel", title: "取消", style: .secondary) {
                         dismissSettingsConfirmation(.deleteCloudLedger)
                     },
-                    SettingsConfirmationAction(id: "deleteCloudLedger", title: "确认删除云端字段", style: .destructive) {
+                    SettingsConfirmationAction(id: "deleteCloudLedger", title: "确认删除云端备份", style: .destructive) {
                         dismissSettingsConfirmation(.deleteCloudLedger)
                         Task { await settingsViewModel.deleteCloudLedger() }
                     }
@@ -1404,7 +1416,7 @@ struct SettingsView: View {
             return (
                 "icloud.and.arrow.up",
                 "开启云端备份",
-                "会先合并云端与本机的金额、分类、备注、日期等账单字段，再同步最新结果。记忆照片不会上传；重复或冲突记录仍保留更新时间较新的版本。",
+                "会先合并云端与本机记录。金额、分类、备注和日期会自动备份；照片仍保存在本机。重复或冲突记录保留更新时间较新的版本。",
                 AppColors.accent,
                 [
                     SettingsConfirmationAction(id: "cancel", title: "先不开启", style: .secondary) {
@@ -1420,7 +1432,7 @@ struct SettingsView: View {
             return (
                 "arrow.triangle.2.circlepath",
                 "这台设备已有本地账本",
-                "当前账号的云端备份偏好是开启的。要合并这台设备与当前账号的账单字段吗？记忆照片只保留在各自设备，不会上传或从云端恢复。",
+                "当前账号已开启自动备份。要合并这台设备与当前账号的记录吗？记忆照片只保留在各自设备，不会上传或从云端恢复。",
                 AppColors.accent,
                 [
                     SettingsConfirmationAction(id: "mergeLocal", title: "合并到当前账号", style: .primary) {
@@ -1429,7 +1441,7 @@ struct SettingsView: View {
                     SettingsConfirmationAction(id: "keepLocal", title: "先不同步，只看本机", style: .secondary) {
                         keepLocalLedgerOnlyForCurrentLogin()
                     },
-                    SettingsConfirmationAction(id: "replaceLocal", title: "删除本机记录和照片，再同步字段", style: .destructive) {
+                    SettingsConfirmationAction(id: "replaceLocal", title: "删除本机记录和照片，再同步云端", style: .destructive) {
                         replaceLocalLedgerWithCurrentAccountCloud()
                     }
                 ]
@@ -1495,7 +1507,7 @@ struct SettingsView: View {
             return (
                 "person.crop.circle.badge.xmark",
                 "注销账号",
-                "这会退出登录，并清空服务器上的账号、账单字段和会员绑定状态。本机记录与照片是否保留由下方操作决定；Apple 订阅不会自动取消，之后可用同一 Apple ID 登录后恢复购买。",
+                "这会退出登录，并清空服务器上的账号、账单记录和会员绑定状态。本机记录与照片是否保留由下方操作决定；Apple 订阅不会自动取消，之后可用同一 Apple ID 登录后恢复购买。",
                 Color(hex: "C7473D"),
                 [
                     SettingsConfirmationAction(id: "keepLocal", title: "保留本机账本并注销", style: .destructive) {
@@ -1647,7 +1659,7 @@ struct SettingsView: View {
             if isPreparingLocalBackup {
                 ComputationLoadingView(
                     message: "正在整理本地备份…",
-                    detail: "会把账单字段和当前可读取的照片放进同一个备份包",
+                    detail: "会把账单信息和当前可读取的照片放进同一个备份包",
                     presentation: .inline
                 )
             } else {
@@ -1713,7 +1725,7 @@ struct SettingsView: View {
             }
             settingHelper("影响今日小记的本地收束；开启联网整理后，也影响今日小记、月度整理和日/周/月轻润色。不影响 AI 指令台、宠物或生活线索。")
         case .privacy:
-            sectionBody("默认本地存储，无需登录即可完整使用。开启云端备份后，仅同步金额、分类、备注、日期等账单字段与会员状态；记忆照片仍只保存在本机。")
+            sectionBody("默认本地存储，无需登录即可完整使用。开启自动备份后，金额、分类、备注和日期会自动备份；照片仍保存在本机。会员状态随账号同步。")
             destructiveSettingsButton("清空所有记录") {
                 confirmationHost = .settingsSheet
                 showClearAllRecordsConfirm = true
@@ -1744,7 +1756,7 @@ struct SettingsView: View {
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(AppColors.text)
                         Text(settingsViewModel.hasCloudSession
-                             ? "\(settingsViewModel.displayName)，账号、账单字段备份和会员状态都放在这里；照片仍在本机。"
+                             ? "\(settingsViewModel.displayName)，账号、自动备份和会员状态都放在这里；照片仍在本机。"
                              : "不用登录也能完整记录；换机前可手动导出含可用照片的本地备份。")
                             .font(.system(size: 12))
                             .foregroundStyle(AppColors.subtext)
@@ -1778,7 +1790,7 @@ struct SettingsView: View {
 
     private var mainSettingsPanel: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionBody("这些偏好只属于你的叙账空间。默认保存在手机里；登录并开启同步后，只上传必要账单字段，记忆照片仍留在本机。")
+            sectionBody("这些偏好只属于你的叙账空间。默认保存在手机里；登录并开启自动备份后，只上传金额、分类、备注和日期，记忆照片仍留在本机。")
 
             // Display name
             settingField(label: "显示名称") {
@@ -2802,7 +2814,7 @@ struct SettingsView: View {
                     .foregroundStyle(AppColors.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.86)
-                Text("登录后可同步会员状态与账单字段")
+                Text("登录后可同步会员状态并自动备份账单")
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.subtext.opacity(0.88))
                     .lineLimit(1)
@@ -2891,7 +2903,9 @@ struct SettingsView: View {
                         }
                     }
 
-                    Text("账单字段可云端备份；记忆照片仍只在本机。")
+                    Text(settingsViewModel.syncEnabled
+                         ? "金额、分类、备注和日期会自动备份；照片仍保存在本机。"
+                         : "自动备份未开启；照片仍保存在本机。")
                         .font(.system(size: 12))
                         .italic()
                         .foregroundStyle(AppColors.subtext.opacity(0.88))
@@ -3115,7 +3129,7 @@ struct SettingsView: View {
         accountPanel("危险操作") {
             DisclosureGroup(isExpanded: $isAccountDangerExpanded) {
                 VStack(spacing: 8) {
-                    Button("删除云端账单字段", role: .destructive) {
+                    Button("删除云端备份", role: .destructive) {
                         confirmationHost = .accountSheet
                         showDeleteCloudLedgerConfirm = true
                     }
@@ -3276,7 +3290,7 @@ struct SettingsView: View {
             Text("数据与隐私")
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(AppColors.text)
-            Text("默认本地存储，无需登录即可完整使用。开启云端备份后，仅同步金额、分类、备注、日期等账单字段与会员状态；记忆照片仍只保存在本机。")
+            Text("默认本地存储，无需登录即可完整使用。开启自动备份后，金额、分类、备注和日期会自动备份；照片仍保存在本机。会员状态随账号同步。")
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.subtext)
             legalLinksRow

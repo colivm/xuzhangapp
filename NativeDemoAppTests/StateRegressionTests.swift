@@ -2727,7 +2727,7 @@ final class TraceLoadingPresentationPolicyTests: XCTestCase {
             selectedPeriod: .month,
             lifeRange: .month,
             usesCustomRange: false,
-            hasVisibleSnapshot: false
+            hasCompleteSnapshot: false
         )
 
         XCTAssertEqual(presentation.message, "正在整理本月痕迹…")
@@ -2741,7 +2741,7 @@ final class TraceLoadingPresentationPolicyTests: XCTestCase {
             selectedPeriod: .week,
             lifeRange: .week,
             usesCustomRange: false,
-            hasVisibleSnapshot: true
+            hasCompleteSnapshot: true
         )
 
         XCTAssertEqual(
@@ -2757,18 +2757,31 @@ final class TraceLoadingPresentationPolicyTests: XCTestCase {
             selectedPeriod: .month,
             lifeRange: .week,
             usesCustomRange: false,
-            hasVisibleSnapshot: false
+            hasCompleteSnapshot: false
         )
         let custom = TraceLoadingPresentationPolicy.make(
             viewMode: .clues,
             selectedPeriod: .month,
             lifeRange: .week,
             usesCustomRange: true,
-            hasVisibleSnapshot: false
+            hasCompleteSnapshot: false
         )
 
         XCTAssertEqual(month.message, "正在整理本月线索…")
         XCTAssertEqual(custom.message, "正在整理这段线索…")
+    }
+
+    func testColdStartSummaryUsesTheImmediateBlockingPresentation() {
+        let presentation = TraceLoadingPresentationPolicy.make(
+            viewMode: .life,
+            selectedPeriod: .month,
+            lifeRange: .month,
+            usesCustomRange: false,
+            hasCompleteSnapshot: false
+        )
+
+        XCTAssertEqual(presentation.delayNanoseconds, 0)
+        XCTAssertEqual(presentation.detail, "整理好后会一次完整呈现")
     }
 }
 
@@ -4577,6 +4590,17 @@ final class AccountMemoryStatsComputationTests: XCTestCase {
 }
 
 final class TraceDetailListSnapshotComputationTests: XCTestCase {
+    private func snapshotKey(revision: Int, date: Date) -> TraceDetailListSnapshotKey {
+        TraceDetailListSnapshotKey(
+            ledgerRevision: revision,
+            periodKey: "本月",
+            categoryKey: nil,
+            usesCustomRange: false,
+            customStartDate: date,
+            customEndDate: date
+        )
+    }
+
     func testDetailSnapshotSharesItemsIDsTotalAndDayGroupsFromOneFilterPass() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
@@ -4676,6 +4700,131 @@ final class TraceDetailListSnapshotComputationTests: XCTestCase {
         ))
     }
 
+    func testRapidStableIDDeletionUpdatesCountTotalAndDayGroupsWithoutResurrection() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let firstDay = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 1
+        ))!
+        let items = (0..<20).map { index in
+            HomeItem(
+                title: "连续删除 \(index + 1)",
+                amount: Double(index + 1),
+                category: .dining,
+                createdAt: calendar.date(
+                    byAdding: .hour,
+                    value: index < 10 ? index : index + 14,
+                    to: firstDay
+                )!
+            )
+        }
+        var snapshot = TraceDetailListSnapshotComputation.make(
+            TraceDetailListPreparationInput(
+                key: snapshotKey(revision: 0, date: firstDay),
+                sourceItems: items,
+                dateInterval: nil,
+                category: nil,
+                calendar: calendar
+            )
+        )
+        var deletedIDs = Set<UUID>()
+
+        for index in items.indices {
+            let deletedID = items[index].id
+            deletedIDs.insert(deletedID)
+            snapshot = TraceDetailListSnapshotComputation.deleting(
+                itemIDs: Set([deletedID]),
+                from: snapshot,
+                nextKey: snapshotKey(revision: index + 1, date: firstDay),
+                calendar: calendar
+            )
+
+            XCTAssertEqual(snapshot.items.count, items.count - index - 1)
+            XCTAssertFalse(snapshot.itemIDs.contains(deletedID))
+            XCTAssertTrue(Set(snapshot.itemIDs).intersection(deletedIDs).isEmpty)
+            XCTAssertEqual(
+                snapshot.totalExpense,
+                items.dropFirst(index + 1).reduce(0) { $0 + $1.amount },
+                accuracy: 0.001
+            )
+            XCTAssertEqual(snapshot.dayGroups.flatMap(\.items).count, snapshot.items.count)
+
+            let repeatedDeletion = TraceDetailListSnapshotComputation.deleting(
+                itemIDs: Set([deletedID]),
+                from: snapshot,
+                nextKey: snapshot.key,
+                calendar: calendar
+            )
+            XCTAssertEqual(repeatedDeletion.itemIDs, snapshot.itemIDs)
+            XCTAssertEqual(repeatedDeletion.totalExpense, snapshot.totalExpense, accuracy: 0.001)
+        }
+
+        XCTAssertTrue(snapshot.items.isEmpty)
+        XCTAssertTrue(snapshot.dayGroups.isEmpty)
+        XCTAssertEqual(snapshot.totalExpense, 0, accuracy: 0.001)
+    }
+
+    func testDeletingLastRecordInDayRemovesDayGroup() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let firstDay = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 1,
+            hour: 12
+        ))!
+        let secondDay = calendar.date(byAdding: .day, value: 1, to: firstDay)!
+        let first = HomeItem(title: "第一天", amount: 10, category: .dining, createdAt: firstDay)
+        let second = HomeItem(title: "第二天", amount: 20, category: .transport, createdAt: secondDay)
+        let initial = TraceDetailListSnapshotComputation.make(
+            TraceDetailListPreparationInput(
+                key: snapshotKey(revision: 1, date: firstDay),
+                sourceItems: [second, first],
+                dateInterval: nil,
+                category: nil,
+                calendar: calendar
+            )
+        )
+
+        let updated = TraceDetailListSnapshotComputation.deleting(
+            itemIDs: Set([second.id]),
+            from: initial,
+            nextKey: snapshotKey(revision: 2, date: firstDay),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(initial.dayGroups.count, 2)
+        XCTAssertEqual(updated.dayGroups.count, 1)
+        XCTAssertEqual(updated.dayGroups.first?.items.map(\.id), [first.id])
+        XCTAssertEqual(updated.itemIDs, [first.id])
+        XCTAssertEqual(updated.totalExpense, 10, accuracy: 0.001)
+    }
+
+    func testStaleDerivedPeriodItemsCannotBeStampedWithNewLedgerRevision() {
+        XCTAssertFalse(TraceDetailListSourcePolicy.canReuseDerivedPeriodItems(
+            ledgerRevision: 12,
+            derivedRevision: 11,
+            usesCustomRange: false
+        ))
+    }
+
+    func testCurrentDerivedPeriodItemsRemainReusableOutsideCustomRange() {
+        XCTAssertTrue(TraceDetailListSourcePolicy.canReuseDerivedPeriodItems(
+            ledgerRevision: 12,
+            derivedRevision: 12,
+            usesCustomRange: false
+        ))
+        XCTAssertFalse(TraceDetailListSourcePolicy.canReuseDerivedPeriodItems(
+            ledgerRevision: 12,
+            derivedRevision: 12,
+            usesCustomRange: true
+        ))
+    }
+
     func testPresentationCarriesInitialSnapshotAndRejectsDuplicateSheetRequest() {
         let date = Date(timeIntervalSince1970: 1_784_240_000)
         let key = TraceDetailListSnapshotKey(
@@ -4700,6 +4849,26 @@ final class TraceDetailListSnapshotComputationTests: XCTestCase {
         XCTAssertFalse(TraceDetailPresentationPolicy.accepts(payload, while: payload))
         XCTAssertEqual(payload.initialSnapshot.items.map(\.id), [item.id])
         XCTAssertEqual(payload.initialSnapshot.totalExpense, 28, accuracy: 0.001)
+    }
+}
+
+final class LedgerCloudUploadCompletionPolicyTests: XCTestCase {
+    func testLateUploadRequiresCompensatingDeleteAfterLocalRecordWasDeleted() {
+        let uploadedID = UUID()
+
+        XCTAssertTrue(LedgerCloudUploadCompletionPolicy.requiresCompensatingDelete(
+            uploadedItemID: uploadedID,
+            currentItemIDs: Set([UUID()])
+        ))
+    }
+
+    func testCompletedUploadRemainsWhenRecordStillExistsLocally() {
+        let uploadedID = UUID()
+
+        XCTAssertFalse(LedgerCloudUploadCompletionPolicy.requiresCompensatingDelete(
+            uploadedItemID: uploadedID,
+            currentItemIDs: Set([uploadedID, UUID()])
+        ))
     }
 }
 
@@ -4856,6 +5025,42 @@ final class TraceChapterCoverPolicyTests: XCTestCase {
         )
 
         XCTAssertEqual(diaryAnchors.map(\.id), [other.id])
+    }
+
+    func testMonthSnapshotPreparesSixDiaryPhotosWithoutChangingTheThreeCoverAnchors() {
+        let items = (1...8).map { index in
+            HomeItem(
+                title: "第\(index)次朋友聚会",
+                amount: Double(20 + index),
+                category: .social,
+                createdAt: date(day: index),
+                userEditedTitle: true,
+                memoryImageData: Data([UInt8(index)]),
+                memoryAnchorRole: .moment,
+                memoryAnchorSceneHint: .gathering
+            )
+        }
+        let snapshot = TraceSnapshotComputation.buildChapter(
+            TraceChapterComputationInput(
+                range: .month,
+                items: items,
+                allItems: items,
+                isMember: true,
+                prioritizeRecurringMarks: true,
+                periodKey: "2026-07",
+                usesEchoAnchor: false,
+                sourceRevision: 82,
+                now: date(day: 18)
+            )
+        )
+
+        XCTAssertEqual(snapshot.memoryAnchors.count, 3)
+        XCTAssertEqual(snapshot.monthDiaryAnchors.count, 6)
+        guard let coverItemID = snapshot.coverFacts.coverItemID else {
+            return XCTFail("month snapshot should select one cover photo")
+        }
+        XCTAssertFalse(snapshot.monthDiaryAnchors.contains { $0.itemID == coverItemID })
+        XCTAssertEqual(Set(snapshot.monthDiaryAnchors.map(\.itemID)).count, 6)
     }
 }
 
@@ -7290,6 +7495,78 @@ final class CloudSessionExpirationPolicyTests: XCTestCase {
         XCTAssertEqual(invalidated.weatherCompanionEnabled, current.weatherCompanionEnabled)
         XCTAssertEqual(invalidated.colorThemeId, current.colorThemeId)
         XCTAssertEqual(invalidated.backendBaseURL, AppSettings.productionBackendBaseURL)
+    }
+}
+
+final class SettingsBackupCopyPolicyTests: XCTestCase {
+    func testAllBackupAndOnlineOrganizationStatesUseNaturalCopy() {
+        XCTAssertEqual(
+            SettingsBackupSummaryPolicy.summary(syncEnabled: true, remoteOrganizationEnabled: true),
+            "自动备份已开启 · 联网整理已开启"
+        )
+        XCTAssertEqual(
+            SettingsBackupSummaryPolicy.summary(syncEnabled: true, remoteOrganizationEnabled: false),
+            "自动备份已开启"
+        )
+        XCTAssertEqual(
+            SettingsBackupSummaryPolicy.summary(syncEnabled: false, remoteOrganizationEnabled: true),
+            "联网整理已开启"
+        )
+        XCTAssertEqual(
+            SettingsBackupSummaryPolicy.summary(syncEnabled: false, remoteOrganizationEnabled: false),
+            "仅保存在本机"
+        )
+    }
+}
+
+final class RecordSemanticDiningBoundaryTests: XCTestCase {
+    func testPreciseSoupAndSoupBunPhrasesResolveToDining() {
+        let titles = ["鸭血粉丝汤", "鸭血粉丝汤包", "灌汤包", "小笼汤包"]
+
+        for title in titles {
+            XCTAssertEqual(RecordSemanticLexicon.bestMatchingCategory(in: title), .dining, title)
+            XCTAssertEqual(RecordSemanticLexicon.strongManualNoteCategory(of: title), .dining, title)
+
+            let resolution = RecordDraftResolutionService.resolve(
+                RecordDraftResolutionInput(
+                    rawTitle: title,
+                    fallbackCategory: .other,
+                    amount: 18,
+                    date: Date(timeIntervalSince1970: 1_784_240_000),
+                    merchantBrandId: nil,
+                    categoryLockedByUser: false,
+                    userEditedTitle: true,
+                    source: "test"
+                )
+            )
+            XCTAssertEqual(resolution.category, .dining, title)
+            XCTAssertTrue(resolution.trace.contains("category:semantic"), title)
+        }
+    }
+
+    func testAmbiguousFanAndPackageWordsDoNotResolveToDining() {
+        for title in ["明星粉丝见面会", "粉丝增长", "礼包", "文件包"] {
+            XCTAssertNotEqual(RecordSemanticLexicon.bestMatchingCategory(in: title), .dining, title)
+            XCTAssertNotEqual(RecordSemanticLexicon.strongManualNoteCategory(of: title), .dining, title)
+        }
+    }
+
+    func testUserLockedNonDiningCategoryStillWinsOverPreciseDiningPhrase() {
+        let resolution = RecordDraftResolutionService.resolve(
+            RecordDraftResolutionInput(
+                rawTitle: "鸭血粉丝汤包",
+                fallbackCategory: .shopping,
+                amount: 25,
+                date: Date(timeIntervalSince1970: 1_784_240_000),
+                merchantBrandId: nil,
+                categoryLockedByUser: true,
+                userEditedTitle: true,
+                source: "test"
+            )
+        )
+
+        XCTAssertEqual(resolution.category, .shopping)
+        XCTAssertTrue(resolution.trace.contains("category:userLocked"))
     }
 }
 

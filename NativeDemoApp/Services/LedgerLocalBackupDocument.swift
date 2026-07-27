@@ -125,17 +125,17 @@ struct LedgerLocalBackupDocument: FileDocument {
                 exportedPhotoFileCount: summary.exportedPhotoFileCount,
                 unavailablePhotoCount: summary.unavailablePhotoCount,
                 cloudPhotoBackupSupported: false,
-                note: "云端只同步账单字段；记忆照片仅保存在本机和这份手动导出的备份包中。"
+                note: "云端只备份金额、分类、备注和日期；记忆照片仅保存在本机和这份手动导出的备份包中。"
             )
         )
         let readme = """
         叙账本地备份
 
-        - ledger.json：账单字段与照片顺序/封面引用
+        - ledger.json：账单信息与照片顺序/封面引用
         - images/：本次可读取的记忆照片
         - manifest.json：导出数量与缺图说明
 
-        当前云端备份只同步金额、分类、备注、日期等账单字段，不上传记忆照片。
+        当前云端只备份金额、分类、备注和日期，不上传记忆照片。
         请把整个 .xuzhangbackup 备份包保存到“文件”、电脑或你信任的网盘，不要只取出其中一个文件。
         """
 

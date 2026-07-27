@@ -4090,3 +4090,67 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 回归与交互边界：`NativeDemoAppTests/StateRegressionTests.swift` 增加品牌名-only 多样且可复现、明确四类食品保留、旧错误标签纠正、便利店与全部餐饮品牌池温度边界测试；`scripts/experience_static_check.ps1` 增加共享策略、旧记录、品牌池、XCTest 和矩阵守卫；`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 增加 `FLOW-81`，覆盖连续 8 笔罗森、历史错误标签、编辑删/恢复证据、杀进程重启、免费/会员、VoiceOver 和 20 次快速页面往返。没有修改商户匹配、分类、金额、OCR、首页第五个问题、首页主动作、免费每日 3 次/会员不限、播放扣次与 80% 完成签名、生活印记排序、播放章节、分享、存储或同步。
 - Windows 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终输出 `release_repository_gate: OK`；100/1,000/5,000 条确定性迁移夹具、三张真实 12MP 图片夹具、文案体验检查、copy lint、SQLite schema 与既有封面/播放/OCR 门禁同时通过。copy lint 仅保留基线中 5 条既有软提示。Windows 无 `swift`、`swiftc`、`xcodebuild` 和 iPhone，未冒充 Swift 编译、XCTest 或真机通过。
 - 剩余风险与下一步：在 Xcode 先执行全量 Debug/Release 编译和 `DiningCopyEvidencePolicyTests`，重点确认新增 `NarrativeCopyResolver.Context.recordID` 默认参数及测试目标接线；再用新 TestFlight 包依次执行 `FLOW-78`（播放前后台 20 次）、`FLOW-79`（`LAWSON + ¥4.20` 无日期）、`FLOW-80`（`00:08 + 加班打车 + ¥50.90 + 照片`）和 `FLOW-81`（餐饮证据/稳定多样性）。四项附真机结果和 crash/Jetsam/Instruments 证据后，才能分别从 `CODE_DONE` 推进为 `VERIFIED`；首页第五个问题继续保持冻结并由用户单独测试。
+
+---
+
+## 66. 2026-07-27 TestFlight 痕迹、分类与备份文案定向修复队列
+
+- 用户反馈与固定顺序：`TRACE-LOADING-FIX-03` → `TRACE-PHOTO-FIX-01` → `SEMANTIC-FIX-01` → `COPY-FIX-04`。四项作为同一批 TestFlight 修复交付，但必须逐项进入 `IN_PROGRESS`、达到 `CODE_DONE` 并回填证据后再开始下一项；任何时刻最多一个 `IN_PROGRESS`。
+- 工作区保护：开始前分支为 `feature/xuzhangapp-staging`，仅有用户既有未跟踪的 `brand-assets/mockups/`、`brand-assets/source/pet-concepts/`、`brand-assets/source/pet-sprites/`、`output/`、`scripts/__pycache__/` 与 `tmp/`；全部保留，不删除、不覆盖、不暂存。`PERF-AUDIT-04` 与 `ARCH-03` 继续保持 `NOT_STARTED`。
+
+### TRACE-LOADING-FIX-03：冷启动摘要与统一 viewport 遮罩语义对齐
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 代码与体验静态门禁通过，缺 Xcode/iPhone `FLOW-82` 签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
+- 真机现象与根因：杀进程进入痕迹时先显示持久化的 `TraceColdStartDisplayEntry` 轻量摘要卡，完整快照完成后直接替换为结构差异较大的周/月卡，形成明显跳变。当前代码把轻量摘要也计入 `hasVisibleSnapshot`，因此主动关闭 `UI-FIX-03` 的统一 viewport 遮罩；摘要卡自身又显示局部 spinner，造成“先假卡、后真卡”而非稳定加载层。
+- 允许范围：只区分“完整匹配快照”和“轻量冷启动摘要”的加载呈现；轻量摘要可继续作为遮罩下的非交互承接，但不得关闭统一 viewport 遮罩。完整快照继续无动画原子发布，随后仅淡出遮罩。允许修改 `StatsTraceModels.swift`、`StatsWebView.swift`、对应 XCTest、静态门禁、真机矩阵与本文档。
+- 冻结边界：不修改周/月/线索计算、缓存 key、指纹、冷启动缓存 schema/内容、后台任务/取消/latest-wins、正式卡片结构、照片、筛选、滚动定位、额度、会员、AI、存储同步、`PERF-AUDIT-04` 或 `ARCH-03`。
+- 验收：轻量摘要命中时统一遮罩立即居中并阻止下层交互；完整匹配快照刷新仍无阻断遮罩；最终卡在遮罩下无布局动画替换后淡出。缓存缺失/损坏、快速周/月/生活/线索切换、取消和 Reduce Motion 均无双 spinner、旧内容误触或旧请求反写。
+- 实现与证据：`TraceLoadingPresentationPolicy` 将输入语义收紧为 `hasCompleteSnapshot`；`StatsWebView` 只有完整匹配快照才关闭 viewport 遮罩，轻量冷启动摘要不再参与该判定，并移除摘要卡局部 `ProgressView`。新增冷启动摘要立即阻断呈现 XCTest、两条静态防回流和 `FLOW-82`。`git diff --check` 与 `powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 通过；未修改快照 key、指纹、缓存内容、计算、取消、照片或其他冻结边界。
+- 剩余风险：Windows 无 Swift/Xcode/iPhone，参数改名、SwiftUI 遮罩层级、VoiceOver、Reduce Motion 和冷启动最终卡替换仍需编译及 `FLOW-82` 真机签收。
+
+### TRACE-PHOTO-FIX-01：本月日记真实照片来源独立化
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 代码与体验静态门禁通过，缺 Xcode/iPhone `FLOW-83` 签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
+- 已确认根因：章节快照为封面/叙事只准备最多 3 个 `memoryAnchors`；月章封面占用并从“本月日记”排除其中 1 个，因此下方最多只剩 2 张真实照片，其余位置被普通记录文字卡补齐。这不是图片加载失败。
+- 允许范围：从同一不可变月度 `snapshot.items` 独立选择最多 6 条合格带图记录，排除封面 item ID 后再排序/去重；只有真实合格照片不足时才使用文字卡。选图必须复用既有照片资格、角色、质量阈值与按需引用，不在 SwiftUI `body` 解码原图或扫描全账本。允许修改照片选择纯策略、章节快照准备/消费、对应 XCTest、静态门禁、真机矩阵与本文档。
+- 冻结边界：不改变顶部封面选择、播放/分享 memory anchors、照片原始顺序/封面索引/存储引用、图片质量与隐私门槛、月章事实/文案/布局、账单、额度、会员、AI、同步、`PERF-AUDIT-04` 或 `ARCH-03`。
+- 验收：封面外有 6 条合格带图记录时下方显示 6 张真实照片；0～5 张时按实际数量显示并仅用非照片记录补足；同一封面不重复、同一账单不重复、缺图/低质量/收据边界保持现有资格，横滑不触发额外全账本聚合或同步原图解码。
+- 实现与证据：月度章节在既有后台选图中一次准备最多 7 个合格候选；前三个继续作为原 `memoryAnchors`，封面策略完全不变；排除封面后最多 6 个写入新增只读 `monthDiaryAnchors`，本月日记渲染只消费该快照。新增 8 条带图记录验证“封面锚点仍为 3、日记照片为 6、封面与 item ID 均不重复”的 XCTest、禁止日记回读三锚点池的静态守卫和 `FLOW-83`。`git diff --check` 与体验静态门禁通过。
+- 冻结边界复核与风险：未修改选图评分/阈值、顶部封面、播放/分享、照片存储/顺序/引用或账单；Windows 无 Swift/Xcode/iPhone，新增 snapshot 字段、真实图片按需加载、缺图与 12MP 横滑仍需编译及 `FLOW-83` 签收。
+
+### SEMANTIC-FIX-01：鸭血粉丝汤等精确餐饮识别
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 语义回归与体验静态门禁通过，缺 Xcode/XCTest 与真机签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
+- 已确认根因：`鸭血粉丝汤包` 保存时即为“其他”，痕迹页只是原样显示。当前记账语义词典包含“粉面、汤面、包子、鸭肉”等，但没有能命中该标题的“鸭血粉丝汤/鸭血粉丝/汤包”证据，默认分类可能回落为“其他”。
+- 允许范围：为手动记账与 OCR 共用词典增加精确餐饮短语，并补确定性语义/OCR 回归；不得使用歧义单词“粉丝”作为独立餐饮关键词。仅影响新建或用户再次编辑并允许语义判断的记录，不静默迁移、重写既有用户分类。
+- 冻结边界：不改变用户手动锁定分类的优先级、默认分类、品牌匹配、金额/日期/标题、OCR 金额日期解析、既有记录、情绪/场景/生活线索规则、存储 DTO、同步、会员、额度、`PERF-AUDIT-04` 或 `ARCH-03`。
+- 验收：`鸭血粉丝汤`、`鸭血粉丝汤包`、`灌汤包/小笼汤包` 稳定识别为餐饮；“明星粉丝见面会、粉丝增长、礼包、文件包”等反例不因本项进入餐饮；用户明确锁定其他分类时仍保持用户选择。
+- 实现与文件：`NativeDemoApp/Resources/RecordSceneLexicon.json` 的手动、OCR 与 `meal` 情绪规则以及 `NativeDemoApp/Models/HomeItem.swift` 的强手动备注覆盖和最小 fallback 同步加入“鸭血粉丝汤、鸭血粉丝、灌汤包、小笼汤包、汤包”五个完整短语；未加入独立“粉丝”或“包”。`NativeDemoApp/Resources/RecordSceneLexicon.regression.json` 新增四个手动正例、一个 OCR 正例与四个歧义反例；`NativeDemoAppTests/StateRegressionTests.swift` 新增精确识别、歧义边界和用户锁定分类优先级 XCTest；`scripts/life_semantic_regression.py` 同步锁定三类词典来源、Swift fallback 与禁止宽泛词边界。
+- 验证证据与风险：`python scripts/life_semantic_regression.py`、JSON 解析、`git diff --check` 与 `powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 全部通过。没有静默迁移或重写既有记录；用户截图中的旧“其他”记录仍保留原分类，只有新建或再次编辑且未锁定分类时使用新规则。Windows 无 Swift/Xcode/iPhone，仍需全量编译、运行新增 XCTest，并在 TestFlight 验证手动/OCR、用户锁定和历史记录不变边界。
+
+### COPY-FIX-04：云端备份文案去除内部“字段”术语
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 文案、体验静态与完整发布门禁通过，缺 Xcode/XCTest 与 TestFlight `FLOW-84` 签收，不标记 `VERIFIED`。本批四项均已达到 `CODE_DONE`，当前无 `IN_PROGRESS`。
+- 真机现象与根因：设置首页卡片直接展示“账单字段云端开 · 联网整理开”，既使用开发术语“字段”，又用不自然的“开”，并在单行卡片中截断。相同内部术语还散落于备份帮助、会员说明和同步状态。
+- 允许范围：短状态统一为“自动备份已开启 / 联网整理已开启 / 仅保存在本机”；需要说明数据边界的正文直接列出“金额、分类、备注和日期”，并继续明确照片不上传。允许修改 iOS 当前用户可见文案、文案 lint/静态门禁、真机矩阵与本文档。
+- 冻结边界：不改变云端 DTO、同步开关/冲突合并/删除行为、照片仅本机边界、本地备份包格式、会员权益、隐私事实、联网 AI 行为、布局结构、`PERF-AUDIT-04` 或 `ARCH-03`。
+- 验收：iOS 用户可见界面不再出现孤立“账单字段”或“云端开/联网整理开”；四种开关组合短文案自然且小屏不截断；详细说明仍准确表达同步范围与照片仅本机，危险删除提示不弱化。
+- 实现与文件：`NativeDemoApp/Views/SettingsView.swift` 新增纯 `SettingsBackupSummaryPolicy`，四种组合固定为“自动备份已开启 · 联网整理已开启 / 自动备份已开启 / 联网整理已开启 / 仅保存在本机”，设置卡、账号、备份、隐私和危险确认统一改用“自动备份、云端记录、账单信息”等自然表达；详细边界统一明确“金额、分类、备注和日期会自动备份；照片仍保存在本机”。`NativeDemoApp/ViewModels/SettingsViewModel.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/Views/MemberPricingView.swift` 与 `NativeDemoApp/Services/LedgerLocalBackupDocument.swift` 的状态、会员保存边界和本地备份说明同步去除“字段”术语；云端删除、本机删除、照片保留和不可撤销语义保持明确。
+- 回归、证据与风险：`NativeDemoAppTests/StateRegressionTests.swift` 覆盖四种状态的精确文案；`scripts/copy_lint.py` 将旧“账单字段/云端开/联网整理开/联网梳理已开/仅本地保存”纳入阻断；`scripts/experience_static_check.ps1` 锁定新文案、零旧术语、XCTest 与 `FLOW-84`，`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 新增小屏、Dynamic Type、VoiceOver、四组合和危险删除矩阵。`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`；5 条 copy lint 软提示均为既有基线。未修改云端 DTO、同步/冲突/删除实现、照片不上云、本地包格式、会员或联网整理行为。Windows 无 Swift/Xcode/iPhone，仍需全量编译、运行新增 XCTest，并用新 TestFlight 完成 `FLOW-82`～`FLOW-84`。
+
+---
+
+## 67. TRACE-DELETE-FIX-01：细查列表连续左滑删除与快照一致性（2026-07-27）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 差异、语义、交互、文案、迁移与完整发布门禁通过，缺 Xcode/XCTest、iPhone Instruments 与 TestFlight `FLOW-85` 签收，不标记 `VERIFIED`。当前无 `IN_PROGRESS`，`PERF-AUDIT-04` 与 `ARCH-03` 继续保持 `NOT_STARTED`。
+- 真机证据：月度细查显示 `95 笔`；左滑一行后删除按钮能够出现，但连续操作时反馈迟缓，确认删除后顶部笔数与对应记录仍可能保留。截图中的行在滑动时还出现明显横向裁切，说明问题同时涉及手势刷新和删除后的快照发布，不是单纯云端响应慢。
+- 已确认根因：`deleteRecord` 先把单一 `traceDeletingItemID` 动画 0.45 秒，再通过延迟闭包查找索引并删除，连续操作会叠加等待和全列表高度动画；父级 `@GestureState traceSwipeDragState` 在拖动每一帧使整个 `StatsWebView` 重算，并切换 `ScrollView.scrollDisabled`。账本删除后，细查立即按新 `homeDashboardRevision` 重建，但非自定义范围读取的 `filteredItems` 会按 `PERF-15` 合法承接同日旧派生缓存；旧记录集合因此被错误盖上新 revision，成为“当前”细查快照，后续派生缓存发布又不会触发第二次细查准备，已删行可长期重新出现。
+- 目标：左滑位移只在当前行局部更新，父级长列表不逐帧失效；删除按稳定 UUID 立即提交本机变化并原子更新当前细查快照，不再等待固定动画或依赖旧索引；派生缓存修订落后时改用当前账本与精确周期重建，禁止旧记录集合冒充新 revision；晚到云端上传不得在删除完成后复活同一 ID。
+- 允许修改：`StatsWebView.swift` 的细查行局部手势、删除调用与快照来源；`StatsTraceModels.swift` 仅移除失去用途的父级拖动状态；`HomeViewModel.swift` 的稳定 ID 删除入口和直接必要的云端上传后删除补偿；对应 XCTest、体验静态门禁、真机矩阵与本文档。
+- 冻结边界：不修改本周/本月/本年、自定义日期与分类筛选含义，不修改数量/金额/日期排序、编辑/补图、正式持久化 schema、云端 DTO 与冲突合并规则、照片、周/月章节、额度、会员、AI、首页动态主动作、主题、`PERF-AUDIT-04` 或 `ARCH-03`；不把单次筛选快照回退为 SwiftUI `body` 多次扫描。
+- 计划验收：连续删除 20 条时每次均按实际 ID 即时消失，笔数、合计和日期分组同步更新；快速交错滑动、取消确认、删除当日最后一条、筛选切换、关闭重开、杀进程重启、云端开/关和上传晚到均不复活记录。100/1,000/5,000 条下横向拖动不触发父页逐帧状态发布，纵向滚动不被误锁；本机持久化失败时保留/恢复原记录并显示既有错误。Windows 只能完成代码、静态与发布门禁，Xcode/XCTest/iPhone Instruments 和 TestFlight 签收前最多标记 `CODE_DONE`。
+- 实现与文件：`NativeDemoApp/Views/StatsWebView.swift` 新增行内 `TraceSwipeRow`，把 `@GestureState`、坐标空间和拖动位移收进当前行，父级不再逐帧发布拖动状态或据此锁住纵向 `ScrollView`；移除旧延迟删除动画和不可达 legacy 手势代码。确认删除后立即调用稳定 UUID 入口，只有本机持久化成功才通过 `TraceDetailListSnapshotComputation.deleting` 原子发布新 key、记录、ID、合计和日期分组；Reduce Motion 下不做删除位移动画。`prepareTraceDetailListSnapshot` 仅在派生缓存 revision 与当前账本 revision 相等时复用周期集合，否则从当前 `items` 按精确周/月/年区间重建，旧集合不能再盖上新 revision。`NativeDemoApp/Views/StatsTraceModels.swift` 移除失去用途的共享 `TraceSwipeDragState`。
+- 删除与同步：`NativeDemoApp/ViewModels/HomeViewModel.swift` 新增 `deleteItem(id:)` 并让原 `delete(at:)` 共用稳定 ID 删除提交；仅删除仍实际存在的 UUID，持久化失败继续沿用既有 reload 与错误提示恢复原账本。`LedgerCloudUploadCompletionPolicy` 在上传返回后核对本机是否仍存在同一 ID，若记录已在上传途中删除，则立即发起补偿删除，保持最终本机删除意图；未修改云端 DTO、冲突合并或照片边界。
+- 回归与真机矩阵：`NativeDemoAppTests/StateRegressionTests.swift` 新增 20 条稳定 ID 连续删除、重复删除幂等、笔数/合计/分组一致、最后一条移除日期分组、旧/当前派生 revision 复用边界和上传晚到补偿策略测试。`scripts/experience_static_check.ps1` 锁定局部手势、零父级拖动状态、零固定删除延迟、稳定 UUID 持久化、旧缓存拒绝、云端补偿与测试名；`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 新增 `FLOW-85`，覆盖连续删除 20 条、取消/筛选/重开/重启、写入失败、云端开关与上传晚到、100/1,000/5,000 条、VoiceOver、Dynamic Type、Reduce Motion 和 Instruments。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`；5 条 copy lint 软提示均为既有基线。冻结边界确认：未修改周期/自定义日期/分类语义、金额与日期排序、编辑补图、存储 schema、云端 DTO/冲突合并、照片、周/月章节、额度、会员、AI、首页主动作、主题、`PERF-AUDIT-04` 或 `ARCH-03`。
+- 剩余风险与下一步：Windows 无 Swift/Xcode/iPhone，新增 SwiftUI 泛型行手势、严格并发诊断和 XCTest 尚未实际编译运行；100/1,000/5,000 条横滑/纵滚 Main Thread Hitches、连续确认删除、持久化失败 UI、云端真实时序、VoiceOver、Dynamic Type 与 Reduce Motion 仍需在 macOS 完成 Debug/Release build、全部 XCTest，并用新 TestFlight 按 `FLOW-85` 真机签收。下一项只做 `FLOW-85` 验证；未取得真机证据前保持 `CODE_DONE`，不启动 `PERF-AUDIT-04` 或 `ARCH-03`。

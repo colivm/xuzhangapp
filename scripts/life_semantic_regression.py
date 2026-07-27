@@ -38,7 +38,8 @@ EXPECTED_JSON_KEYWORDS = {
     "keywordRules:餐饮": [
         "茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴",
         "海底捞", "老乡鸡", "塔斯汀", "库迪", "库迪咖啡", "绝味", "袁记云饺", "萨莉亚",
-        "烤鸭", "烧鸭", "卤鸭", "鸭肉", "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "面馆",
+        "烤鸭", "烧鸭", "卤鸭", "鸭肉", "鸭血粉丝汤", "鸭血粉丝", "灌汤包", "小笼汤包", "汤包",
+        "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "面馆",
         "可乐", "水溶", "c100",
     ],
     "keywordRules:日用": [
@@ -76,7 +77,8 @@ EXPECTED_JSON_KEYWORDS = {
     ],
     "ocrKeywordRules:餐饮": [
         "海底捞", "老乡鸡", "塔斯汀", "库迪", "库迪咖啡", "绝味", "袁记云饺", "萨莉亚",
-        "烤鸭", "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "面馆",
+        "烤鸭", "鸭血粉丝汤", "鸭血粉丝", "灌汤包", "小笼汤包", "汤包",
+        "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "面馆",
     ],
     "ocrKeywordRules:日用": [
         "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈",
@@ -108,7 +110,8 @@ EXPECTED_JSON_KEYWORDS = {
         "可乐", "雪碧", "汽水", "水溶", "c100", "维C",
     ],
     "emotionKeywordRules:meal": [
-        "烤鸭", "烧鸭", "卤鸭", "鸭肉", "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "面馆",
+        "烤鸭", "烧鸭", "卤鸭", "鸭肉", "鸭血粉丝汤", "鸭血粉丝", "灌汤包", "小笼汤包", "汤包",
+        "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "面馆",
     ],
 }
 
@@ -121,7 +124,8 @@ EXPECTED_BRANDS = [
 EXPECTED_SWIFT_SNIPPETS = {
     "semantic_fallback": [
         "茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴",
-        "烤鸭", "烧鸭", "卤鸭", "鸭肉", "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "面馆",
+        "烤鸭", "烧鸭", "卤鸭", "鸭肉", "鸭血粉丝汤", "鸭血粉丝", "灌汤包", "小笼汤包", "汤包",
+        "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "面馆",
         "可乐", "水溶", "c100",
         "山姆", "永辉", "大润发", "钱大妈", "花小猪", "洗车", "汽车保养",
         "配镜", "验光", "洗牙", "网上国网", "暖气费", "取暖费", "B站会员",
@@ -425,6 +429,14 @@ def scan_json(failures: list[str]) -> None:
         key = "id" if section == "emotionKeywordRules" else "category"
         actual = collect_keywords(payload, section, key, value)
         require_contains(failures, label, actual, expected)
+
+    for section in ["keywordRules", "ocrKeywordRules"]:
+        dining_keywords = collect_keywords(payload, section, "category", "餐饮")
+        for ambiguous_keyword in ["粉丝", "包"]:
+            if ambiguous_keyword in dining_keywords:
+                failures.append(
+                    f"{section}:餐饮 must not use ambiguous standalone keyword {ambiguous_keyword}"
+                )
 
 
 def scan_swift_presence(failures: list[str]) -> dict[str, str]:

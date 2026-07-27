@@ -53,10 +53,12 @@ enum TraceSnapshotComputation {
             allItems: input.allItems,
             now: input.now
         )
-        let anchors = MemoryAnchorSelectionPolicy.selectAnchors(
+        let selectedAnchors = MemoryAnchorSelectionPolicy.selectAnchors(
             from: input.items,
             range: input.range,
-            limit: 3,
+            limit: input.range == .month
+                ? TraceMonthDiaryPolicy.selectionLimitIncludingCover
+                : 3,
             preferredItemID: preferredNarrativeAnchorItemID(
                 plan: narrativePlan,
                 items: input.items
@@ -64,12 +66,19 @@ enum TraceSnapshotComputation {
             label: memoryAnchorLabel(role:sceneHint:),
             caption: memoryAnchorCaption(role:sceneHint:)
         )
+        let anchors = Array(selectedAnchors.prefix(3))
         let coverFacts = TraceChapterCoverPolicy.make(
             range: input.range,
             items: input.items,
             anchors: anchors,
             now: input.now
         )
+        let monthDiaryAnchors = input.range == .month
+            ? TraceMonthDiaryPolicy.anchors(
+                from: selectedAnchors,
+                excludingCoverItemID: coverFacts.coverItemID
+            )
+            : []
         let narrativeRewrite = LifeNarrativeAIRewriteStore.shared.rewrite(
             for: LifeNarrativeAIPreparationPolicy.key(
                 scope: narrativeScope,
@@ -91,6 +100,7 @@ enum TraceSnapshotComputation {
             items: input.items,
             marks: marks,
             memoryAnchors: anchors,
+            monthDiaryAnchors: monthDiaryAnchors,
             coverFacts: coverFacts,
             narrativePlan: narrativePlan,
             narrativeRewrite: narrativeRewrite,

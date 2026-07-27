@@ -1018,8 +1018,8 @@ struct MemberPricingView: View {
 
             memberDataBoundaryRow(
                 symbol: "icloud",
-                title: "账单字段",
-                detail: "开启云端备份后，金额、分类、备注、日期和会员状态可随账号同步。"
+                title: "自动备份",
+                detail: "开启自动备份后，金额、分类、备注和日期会自动备份；照片仍保存在本机。会员状态随账号同步。"
             )
             memberDataBoundaryRow(
                 symbol: "photo",
@@ -1074,7 +1074,7 @@ struct MemberPricingView: View {
     }
 
     private var privacyNote: some View {
-        Text("默认不登录也能记账。开启云端备份后，仅同步金额、分类、备注、日期等账单字段与会员状态；OCR 原始图片和记忆照片都不会上传服务器。")
+        Text("默认不登录也能记账。开启自动备份后，金额、分类、备注和日期会自动备份，会员状态随账号同步；OCR 原始图片和记忆照片仍保存在本机。")
             .font(.footnote)
             .foregroundStyle(AppColors.subtext)
             .lineSpacing(3)
