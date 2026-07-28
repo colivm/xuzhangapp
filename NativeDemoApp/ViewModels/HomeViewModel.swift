@@ -2497,7 +2497,7 @@ final class HomeViewModel: ObservableObject {
             }
             return brand.category
         }
-        let frequentCategory = frequentSuggestion.flatMap { suggestion in
+        let frequentCategory: HomeItem.Category? = frequentSuggestion.flatMap { suggestion -> HomeItem.Category? in
             guard suggestion.confidence >= 0.67,
                   RecordHabitOverridePolicy.allows(
                       note: note,
