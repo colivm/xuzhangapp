@@ -36,6 +36,112 @@ struct RecordPrefillResult {
     let source: String
 }
 
+enum RecordHabitOverridePolicy {
+    static func allows(
+        note: String,
+        suggestedCategory: HomeItem.Category,
+        supportingItems: [HomeItem]
+    ) -> Bool {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+
+        if let semanticCategory = RecordSemanticLexicon.semanticCategory(of: trimmed) {
+            return semanticCategory == suggestedCategory
+        }
+
+        if let brand = MerchantBrandCatalog.matchBrand(in: trimmed) {
+            return brand.category == suggestedCategory
+        }
+
+        if RecordSemanticLexicon.isSystemGeneratedTitle(trimmed) {
+            return true
+        }
+
+        return learnedCategory(for: trimmed, from: supportingItems) == suggestedCategory
+    }
+
+    static func learnedCategory(
+        for note: String,
+        from items: [HomeItem]
+    ) -> HomeItem.Category? {
+        let normalizedNote = normalizedTitle(note)
+        guard normalizedNote.count >= 2,
+              !RecordSemanticLexicon.isSystemGeneratedTitle(note) else {
+            return nil
+        }
+
+        struct Candidate {
+            let category: HomeItem.Category
+            let similarity: Double
+            let createdAt: Date
+            let id: UUID
+        }
+
+        let candidates = items.compactMap { item -> Candidate? in
+            guard item.userEditedCategory == true else { return nil }
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty,
+                  !RecordSemanticLexicon.isSystemGeneratedTitle(title) else {
+                return nil
+            }
+            let similarity = titleSimilarity(normalizedNote, normalizedTitle(title))
+            guard similarity >= 0.78 else { return nil }
+            return Candidate(
+                category: item.category,
+                similarity: similarity,
+                createdAt: item.createdAt,
+                id: item.id
+            )
+        }
+        .sorted { lhs, rhs in
+            if abs(lhs.similarity - rhs.similarity) >= 0.001 {
+                return lhs.similarity > rhs.similarity
+            }
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt > rhs.createdAt
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
+
+        return candidates.first?.category
+    }
+
+    private static func normalizedTitle(_ title: String) -> String {
+        title.lowercased().unicodeScalars.reduce(into: "") { result, scalar in
+            if CharacterSet.alphanumerics.contains(scalar) {
+                result.append(contentsOf: String(scalar))
+            }
+        }
+    }
+
+    private static func titleSimilarity(_ lhs: String, _ rhs: String) -> Double {
+        guard lhs.count >= 2, rhs.count >= 2 else { return 0 }
+        if lhs == rhs { return 1 }
+
+        let shorterCount = min(lhs.count, rhs.count)
+        let longerCount = max(lhs.count, rhs.count)
+        let coverage = Double(shorterCount) / Double(longerCount)
+        if (lhs.contains(rhs) || rhs.contains(lhs)), coverage >= 0.72 {
+            return 0.90 + coverage * 0.09
+        }
+
+        guard shorterCount >= 4 else { return 0 }
+        let leftBigrams = bigrams(in: lhs)
+        let rightBigrams = bigrams(in: rhs)
+        guard !leftBigrams.isEmpty, !rightBigrams.isEmpty else { return 0 }
+        let overlap = leftBigrams.intersection(rightBigrams).count
+        return Double(2 * overlap) / Double(leftBigrams.count + rightBigrams.count)
+    }
+
+    private static func bigrams(in text: String) -> Set<String> {
+        let characters = Array(text)
+        guard characters.count >= 2 else { return [] }
+        return Set((0..<(characters.count - 1)).map { index in
+            String(characters[index...index + 1])
+        })
+    }
+}
+
 struct RecordPrefillService {
     private struct SceneHabit {
         let signal: LifeSceneSignal
@@ -50,9 +156,11 @@ struct RecordPrefillService {
 
     func prefill(input: RecordPrefillInput) -> RecordPrefillResult? {
         guard input.amount > 0 else { return nil }
+        guard !input.categoryLocked else { return nil }
 
+        let semanticCategory = RecordSemanticLexicon.semanticCategory(of: input.noteDraft)
         if let brand = MerchantBrandCatalog.definition(for: input.merchantBrandId),
-           !input.categoryLocked {
+           semanticCategory == nil || semanticCategory == brand.category {
             let title = NarrativeCopyResolver.resolveTitle(
                 brandId: brand.id,
                 fallback: input.noteDraft
@@ -76,9 +184,28 @@ struct RecordPrefillService {
             )
         }
 
-        guard !input.categoryLocked else { return nil }
-
         let historyItems = recentHistory(from: input.items)
+        if let semanticCategory {
+            return RecordPrefillResult(
+                category: semanticCategory,
+                title: nil,
+                emotionTag: nil,
+                confidence: 0.98,
+                source: "semantic"
+            )
+        }
+        if let learnedCategory = RecordHabitOverridePolicy.learnedCategory(
+            for: input.noteDraft,
+            from: historyItems
+        ) {
+            return RecordPrefillResult(
+                category: learnedCategory,
+                title: nil,
+                emotionTag: nil,
+                confidence: 0.92,
+                source: "entity_history"
+            )
+        }
         guard historyItems.count >= coldStartThreshold else {
             return genericPrefill(input: input, historyItems: historyItems)
         }
@@ -86,7 +213,12 @@ struct RecordPrefillService {
         let candidates = historyItems.filter { item in
             sameHabitContext(item: item, amount: input.amount, referenceDate: input.referenceDate)
         }
-        if let sceneHabit = dominantSceneHabit(in: candidates) {
+        if let sceneHabit = dominantSceneHabit(in: candidates),
+           RecordHabitOverridePolicy.allows(
+               note: input.noteDraft,
+               suggestedCategory: sceneHabit.signal.category,
+               supportingItems: historyItems
+           ) {
             let title = sceneHabitTitle(
                 for: sceneHabit,
                 amount: input.amount,
@@ -132,6 +264,13 @@ struct RecordPrefillService {
             )
             : nil
 
+        guard RecordHabitOverridePolicy.allows(
+            note: input.noteDraft,
+            suggestedCategory: topCategory.category,
+            supportingItems: historyItems
+        ) else {
+            return genericPrefill(input: input, historyItems: historyItems)
+        }
         return RecordPrefillResult(
             category: topCategory.category,
             title: topTitle,
@@ -158,7 +297,14 @@ struct RecordPrefillService {
                 context: input.context
             )
         )
-        guard let result else { return nil }
+        guard let result,
+              RecordHabitOverridePolicy.allows(
+                  note: input.noteDraft,
+                  suggestedCategory: result.recommended,
+                  supportingItems: historyItems
+              ) else {
+            return nil
+        }
         let title = historyItems.count >= coldStartThreshold
             ? supportedHabitTitle(
                 for: result.recommended,

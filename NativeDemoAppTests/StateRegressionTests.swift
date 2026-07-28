@@ -2999,6 +2999,168 @@ final class TraceSnapshotLifecycleTests: XCTestCase {
 }
 
 final class RecordInputAssistanceSnapshotTests: XCTestCase {
+    private var semanticFixCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return calendar
+    }
+
+    private var semanticFixReferenceDate: Date {
+        let now = Date()
+        for daysAgo in 1...7 {
+            guard let day = semanticFixCalendar.date(
+                byAdding: .day,
+                value: -daysAgo,
+                to: now
+            ),
+            RecordCalendarContext.isWorkday(day, calendar: semanticFixCalendar),
+            let referenceDate = semanticFixCalendar.date(
+                bySettingHour: 18,
+                minute: 43,
+                second: 0,
+                of: day
+            ) else {
+                continue
+            }
+            return referenceDate
+        }
+        return now.addingTimeInterval(-24 * 60 * 60)
+    }
+
+    private func sixYuanEveningCommuteHistory() -> [HomeItem] {
+        (0..<8).map { index in
+            HomeItem(
+                title: "地铁",
+                amount: 6,
+                category: .transport,
+                createdAt: semanticFixCalendar.date(
+                    byAdding: .minute,
+                    value: -(index + 1),
+                    to: semanticFixReferenceDate
+                )!,
+                userEditedTitle: true
+            )
+        }
+    }
+
+    private func semanticFixPrefill(
+        note: String,
+        items: [HomeItem],
+        categoryLocked: Bool = false,
+        merchantBrandID: String? = nil
+    ) -> RecordPrefillResult? {
+        RecordPrefillService().prefill(
+            input: RecordPrefillInput(
+                amount: 6,
+                referenceDate: semanticFixReferenceDate,
+                items: items,
+                noteDraft: note,
+                categoryLocked: categoryLocked,
+                merchantBrandId: merchantBrandID
+            )
+        )
+    }
+
+    func testOrientalLeavesTeaWinsOverSixYuanEveningCommuteHabit() {
+        let history = sixYuanEveningCommuteHistory()
+        let historyKey = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: 86,
+            referenceDate: semanticFixReferenceDate,
+            referenceDateEditedByUser: true,
+            calendar: semanticFixCalendar
+        )
+        let snapshotHistory = RecordInputAssistanceComputation.historySnapshot(
+            RecordInputHistoryPreparationInput(
+                key: historyKey,
+                items: history,
+                referenceDate: semanticFixReferenceDate,
+                now: semanticFixReferenceDate
+            )
+        )
+        let context = RecordContextSignal(referenceDate: semanticFixReferenceDate, weather: nil)
+        let key = RecordPrefillPreparationKey(
+            historyKey: historyKey,
+            amount: 6,
+            referenceDate: semanticFixReferenceDate,
+            noteDraft: "东方树叶 青柑普洱",
+            selectedCategory: .other,
+            context: context
+        )
+
+        let snapshot = RecordInputAssistanceComputation.prefillSnapshot(
+            RecordPrefillPreparationInput(
+                key: key,
+                history: snapshotHistory,
+                amount: 6,
+                referenceDate: semanticFixReferenceDate,
+                now: semanticFixReferenceDate,
+                noteDraft: "东方树叶 青柑普洱",
+                selectedCategory: .other,
+                context: context
+            )
+        )
+
+        XCTAssertEqual(MerchantBrandCatalog.matchBrand(in: "东方树叶")?.id, "oriental_leaves")
+        XCTAssertEqual(snapshot.appliedCategory, .dining)
+        XCTAssertEqual(snapshot.categoryGridRecommendation, .dining)
+        XCTAssertEqual(snapshot.result?.category, .dining)
+        XCTAssertNotEqual(snapshot.result?.source, "habit")
+        XCTAssertNotEqual(snapshot.result?.source, "scene_habit")
+        XCTAssertNotEqual(snapshot.result?.source, "frequent")
+    }
+
+    func testTeaProductAndBoundaryTermsKeepTheirExplicitCategories() {
+        XCTAssertEqual(RecordSemanticLexicon.semanticCategory(of: "青柑普洱"), .dining)
+        XCTAssertEqual(RecordSemanticLexicon.semanticCategory(of: "茶具"), .shopping)
+        XCTAssertEqual(RecordSemanticLexicon.semanticCategory(of: "茶叶蛋"), .dining)
+        XCTAssertEqual(
+            semanticFixPrefill(
+                note: "东方树叶",
+                items: sixYuanEveningCommuteHistory(),
+                merchantBrandID: "oriental_leaves"
+            )?.category,
+            .dining
+        )
+        XCTAssertEqual(
+            semanticFixPrefill(note: "地铁", items: sixYuanEveningCommuteHistory())?.category,
+            .transport
+        )
+    }
+
+    func testUnknownConcreteTitleRejectsAmountHabitUntilUserCorrectsThatEntity() {
+        let history = sixYuanEveningCommuteHistory()
+        XCTAssertNil(semanticFixPrefill(note: "星河蓝瓶一号", items: history))
+
+        let corrected = HomeItem(
+            title: "星河蓝瓶1号款",
+            amount: 6,
+            category: .dining,
+            createdAt: semanticFixReferenceDate.addingTimeInterval(-30),
+            userEditedTitle: true,
+            userEditedCategory: true
+        )
+        let learned = semanticFixPrefill(
+            note: "星河蓝瓶1号",
+            items: history + [corrected]
+        )
+
+        XCTAssertEqual(learned?.category, .dining)
+        XCTAssertEqual(learned?.source, "entity_history")
+    }
+
+    func testEmptyNoteKeepsReliableHabitAndUserLockPreventsPrefill() {
+        let history = sixYuanEveningCommuteHistory()
+        XCTAssertEqual(semanticFixPrefill(note: "", items: history)?.category, .transport)
+        XCTAssertNil(
+            semanticFixPrefill(
+                note: "东方树叶",
+                items: history,
+                categoryLocked: true,
+                merchantBrandID: "oriental_leaves"
+            )
+        )
+    }
+
     func testHistoryKeyChangesOnlyForLedgerOrMeaningfulDateContext() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!

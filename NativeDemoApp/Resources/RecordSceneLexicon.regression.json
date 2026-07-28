@@ -666,6 +666,47 @@
       "amount": 30,
       "inputTitle": "直播礼物",
       "expectedCategory": "娱乐"
+    },
+    {
+      "id": "manual-oriental-leaves-green-mandarin-puer-is-dining",
+      "mode": "manual",
+      "amount": 6,
+      "time": "18:43",
+      "inputTitle": "东方树叶 青柑普洱",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "drink"
+    },
+    {
+      "id": "manual-green-mandarin-puer-is-dining",
+      "mode": "manual",
+      "amount": 6,
+      "inputTitle": "青柑普洱",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "drink"
+    },
+    {
+      "id": "manual-bottled-sugar-free-tea-is-dining",
+      "mode": "manual",
+      "amount": 5,
+      "inputTitle": "瓶装无糖乌龙茶",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "drink"
+    },
+    {
+      "id": "manual-tea-set-remains-shopping",
+      "mode": "manual",
+      "amount": 88,
+      "inputTitle": "茶具",
+      "expectedCategory": "购物",
+      "expectedEmotionRule": "not:drink"
+    },
+    {
+      "id": "manual-isolated-tea-stays-neutral",
+      "mode": "manual",
+      "amount": 6,
+      "inputTitle": "茶",
+      "expectedCategory": null,
+      "expectedEmotionRule": "not:drink"
     }
   ]
 }

@@ -980,6 +980,13 @@ Assert-MultilinePattern 'NativeDemoApp/Views/StatsWebView.swift' 'TraceDetailLis
 Assert-MultilinePattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'try await service\.upload\(item\)[\s\S]{0,400}LedgerCloudUploadCompletionPolicy\.requiresCompensatingDelete[\s\S]{0,300}try await service\.delete\(id: item\.id\)' 'late cloud upload is compensated when its local record was deleted'
 Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'testRapidStableIDDeletionUpdatesCountTotalAndDayGroupsWithoutResurrection|testDeletingLastRecordInDayRemovesDayGroup|testStaleDerivedPeriodItemsCannotBeStampedWithNewLedgerRevision|testCurrentDerivedPeriodItemsRemainReusableOutsideCustomRange|testLateUploadRequiresCompensatingDeleteAfterLocalRecordWasDeleted' 'trace rapid delete stale-cache and cloud-race XCTest coverage'
 Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-85|连续删除 20 条|上传晚到|100/1,000/5,000' 'trace detail rapid delete device regression matrix'
+Assert-Pattern 'NativeDemoApp/Services/RecordPrefillService.swift' 'RecordHabitOverridePolicy|learnedCategory|userEditedCategory == true|entity_history|suggestedCategory|supportingItems' 'specific product notes share one correction-backed habit override policy'
+Assert-Pattern 'NativeDemoApp/ViewModels/HomeViewModel.swift' 'frequentCanOverride|RecordHabitOverridePolicy\.allows|RecordHabitOverridePolicy\.learnedCategory|applyProvisionalRecordCategory|recommendCategoryResult|categoryGridRecommendation' 'provisional background and immediate record recommendations share the override policy'
+Assert-NoPattern 'NativeDemoApp/Resources/RecordSceneLexicon.json' '\x22茶\x22' 'tea semantics never use the ambiguous isolated character'
+Assert-NoPattern 'NativeDemoApp/Models/HomeItem.swift' '\x22茶\x22' 'Swift semantic fallback never uses the ambiguous isolated character'
+Assert-Pattern 'NativeDemoApp/Services/MerchantBrandCatalog.swift' 'brand\("oriental_leaves", "东方树叶"|农夫山泉东方树叶|青柑普洱记下' 'Oriental Leaves is an explicit dining brand with neutral factual copy'
+Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'testOrientalLeavesTeaWinsOverSixYuanEveningCommuteHabit|testTeaProductAndBoundaryTermsKeepTheirExplicitCategories|testUnknownConcreteTitleRejectsAmountHabitUntilUserCorrectsThatEntity|testEmptyNoteKeepsReliableHabitAndUserLockPreventsPrefill' 'tea product amount-habit correction boundary XCTest coverage'
+Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-86|东方树叶 青柑普洱|¥6|18:43|未知具体商品|茶具|茶叶蛋|entity_history' 'specific product semantic override device regression matrix'
 $releaseFixtureOutput = python scripts/validate_release_gate.py --phase fixtures
 if ($LASTEXITCODE -ne 0) {
     throw "Release fixture validation failed`n$releaseFixtureOutput"

@@ -41,6 +41,7 @@ EXPECTED_JSON_KEYWORDS = {
         "烤鸭", "烧鸭", "卤鸭", "鸭肉", "鸭血粉丝汤", "鸭血粉丝", "灌汤包", "小笼汤包", "汤包",
         "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "面馆",
         "可乐", "水溶", "c100",
+        "东方树叶", "青柑普洱", "普洱茶", "乌龙茶", "茉莉花茶", "红茶", "绿茶", "瓶装茶", "无糖茶",
     ],
     "keywordRules:日用": [
         "鸡蛋", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈",
@@ -79,6 +80,7 @@ EXPECTED_JSON_KEYWORDS = {
         "海底捞", "老乡鸡", "塔斯汀", "库迪", "库迪咖啡", "绝味", "袁记云饺", "萨莉亚",
         "烤鸭", "鸭血粉丝汤", "鸭血粉丝", "灌汤包", "小笼汤包", "汤包",
         "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "面馆",
+        "东方树叶", "青柑普洱", "普洱茶", "乌龙茶", "茉莉花茶", "红茶", "绿茶", "瓶装茶", "无糖茶",
     ],
     "ocrKeywordRules:日用": [
         "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈",
@@ -108,6 +110,7 @@ EXPECTED_JSON_KEYWORDS = {
     ],
     "emotionKeywordRules:drink": [
         "可乐", "雪碧", "汽水", "水溶", "c100", "维C",
+        "东方树叶", "青柑普洱", "普洱茶", "乌龙茶", "茉莉花茶", "红茶", "绿茶", "瓶装茶", "无糖茶",
     ],
     "emotionKeywordRules:meal": [
         "烤鸭", "烧鸭", "卤鸭", "鸭肉", "鸭血粉丝汤", "鸭血粉丝", "灌汤包", "小笼汤包", "汤包",
@@ -118,7 +121,7 @@ EXPECTED_JSON_KEYWORDS = {
 EXPECTED_BRANDS = [
     "haidilao", "laoxiangji", "tastien", "cotti", "juewei", "yuanjiyunjiao",
     "saizeriya", "samsclub", "yonghui", "rtmart", "qiandama", "huaxiaozhu",
-    "sgcc_online",
+    "sgcc_online", "oriental_leaves",
 ]
 
 EXPECTED_SWIFT_SNIPPETS = {
@@ -127,6 +130,7 @@ EXPECTED_SWIFT_SNIPPETS = {
         "烤鸭", "烧鸭", "卤鸭", "鸭肉", "鸭血粉丝汤", "鸭血粉丝", "灌汤包", "小笼汤包", "汤包",
         "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "面馆",
         "可乐", "水溶", "c100",
+        "东方树叶", "青柑普洱", "普洱茶", "乌龙茶", "茉莉花茶", "红茶", "绿茶", "瓶装茶", "无糖茶",
         "山姆", "永辉", "大润发", "钱大妈", "花小猪", "洗车", "汽车保养",
         "配镜", "验光", "洗牙", "网上国网", "暖气费", "取暖费", "B站会员",
         "供暖费", "热力费", "腾讯视频会员", "充电器", "Office 365", "谷子", "潮玩", "泡泡玛特", "POP MART", "搬家",
@@ -432,11 +436,14 @@ def scan_json(failures: list[str]) -> None:
 
     for section in ["keywordRules", "ocrKeywordRules"]:
         dining_keywords = collect_keywords(payload, section, "category", "餐饮")
-        for ambiguous_keyword in ["粉丝", "包"]:
+        for ambiguous_keyword in ["粉丝", "包", "茶"]:
             if ambiguous_keyword in dining_keywords:
                 failures.append(
                     f"{section}:餐饮 must not use ambiguous standalone keyword {ambiguous_keyword}"
                 )
+    drink_keywords = collect_keywords(payload, "emotionKeywordRules", "id", "drink")
+    if "茶" in drink_keywords:
+        failures.append("emotionKeywordRules:drink must not use ambiguous standalone keyword 茶")
 
 
 def scan_swift_presence(failures: list[str]) -> dict[str, str]:

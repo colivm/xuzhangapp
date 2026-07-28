@@ -298,9 +298,15 @@ enum RecordInputAssistanceComputation {
         let frequentSuggestion = input.history.frequentSuggestions.first { suggestion in
             abs(suggestion.amount - input.amount) < 0.005
         }
+        let frequentCanOverride = frequentSuggestion.map { suggestion in
+            RecordHabitOverridePolicy.allows(
+                note: input.noteDraft,
+                suggestedCategory: suggestion.category,
+                supportingItems: input.history.prefillItems
+            ) && suggestion.confidence >= 0.67
+        } ?? false
         let shouldUseBrandPrefill = brand.map { brand in
-            !MerchantBrandCatalog.isConvenienceStoreBrand(brand)
-                || semanticCategory == nil
+            semanticCategory == nil
                 || semanticCategory == brand.category
         } ?? false
         let habitResult = RecordPrefillService().prefill(
@@ -320,7 +326,7 @@ enum RecordInputAssistanceComputation {
            brand == nil,
            semanticCategory == nil,
            let frequentSuggestion,
-           frequentSuggestionCanOverrideNote(frequentSuggestion, note: input.noteDraft) {
+           frequentCanOverride {
             let title = input.history.frequentTitlesBySuggestionID[frequentSuggestion.id]
             result = RecordPrefillResult(
                 category: frequentSuggestion.category,
@@ -339,6 +345,7 @@ enum RecordInputAssistanceComputation {
         let appliedCategory = resolvePrefillCategory(
             brand: brand,
             frequent: frequentSuggestion,
+            frequentCanOverride: frequentCanOverride,
             semanticCategory: semanticCategory,
             habitResult: habitResult
         )
@@ -357,6 +364,8 @@ enum RecordInputAssistanceComputation {
             semanticCategory: semanticCategory,
             prefillResult: sanitizedResult,
             frequentSuggestion: frequentSuggestion,
+            frequentCanOverride: frequentCanOverride,
+            supportingItems: input.history.prefillItems,
             items: input.history.prefillItems.filter { item in
                 item.createdAt >= categoryRecommendationStart
             },
@@ -536,19 +545,28 @@ enum RecordInputAssistanceComputation {
     private static func resolvePrefillCategory(
         brand: MerchantBrandDefinition?,
         frequent: RecordFrequentAmountSuggestion?,
+        frequentCanOverride: Bool,
         semanticCategory: HomeItem.Category?,
         habitResult: RecordPrefillResult?
     ) -> HomeItem.Category? {
-        if let brand { return brand.category }
+        if let brand,
+           semanticCategory == nil
+            || semanticCategory == brand.category {
+            return brand.category
+        }
         if let semanticCategory { return semanticCategory }
-        if let frequent { return frequent.category }
         if let category = habitResult?.category,
-           habitResult?.source == "generic" {
+           habitResult?.source == "entity_history" {
             return category
         }
+        if let frequent, frequentCanOverride { return frequent.category }
         if let category = habitResult?.category,
            habitResult?.source != "generic",
            (habitResult?.confidence ?? 0) >= 0.55 {
+            return category
+        }
+        if let category = habitResult?.category,
+           habitResult?.source == "generic" {
             return category
         }
         return nil
@@ -562,13 +580,13 @@ enum RecordInputAssistanceComputation {
         semanticCategory: HomeItem.Category?,
         prefillResult: RecordPrefillResult?,
         frequentSuggestion: RecordFrequentAmountSuggestion?,
+        frequentCanOverride: Bool,
+        supportingItems: [HomeItem],
         items: [HomeItem],
         context: RecordContextSignal?
     ) -> HomeItem.Category? {
         if let brand {
-            if MerchantBrandCatalog.isConvenienceStoreBrand(brand),
-               let semanticCategory,
-               semanticCategory != brand.category {
+            if let semanticCategory, semanticCategory != brand.category {
                 return semanticCategory
             }
             return brand.category
@@ -578,19 +596,28 @@ enum RecordInputAssistanceComputation {
         }
         if let category = prefillResult?.category,
            prefillResult?.source != "generic",
-           (prefillResult?.confidence ?? 0) >= 0.55 {
+           (prefillResult?.confidence ?? 0) >= 0.55,
+           RecordHabitOverridePolicy.allows(
+               note: noteDraft,
+               suggestedCategory: category,
+               supportingItems: supportingItems
+           ) {
             return category
         }
-        if let frequentSuggestion,
-           frequentSuggestionCanOverrideNote(frequentSuggestion, note: noteDraft) {
+        if let frequentSuggestion, frequentCanOverride {
             return frequentSuggestion.category
         }
         if let category = prefillResult?.category,
-           prefillResult?.source == "generic" {
+           prefillResult?.source == "generic",
+           RecordHabitOverridePolicy.allows(
+               note: noteDraft,
+               suggestedCategory: category,
+               supportingItems: supportingItems
+           ) {
             return category
         }
         guard !noteDraft.isEmpty else { return nil }
-        return CategoryRecommendService().recommend(
+        let result = CategoryRecommendService().recommend(
             input: CategoryRecommendInput(
                 amount: amount,
                 referenceDate: referenceDate,
@@ -599,16 +626,16 @@ enum RecordInputAssistanceComputation {
                 locked: false,
                 context: context
             )
-        )?.recommended
-    }
-
-    private static func frequentSuggestionCanOverrideNote(
-        _ suggestion: RecordFrequentAmountSuggestion,
-        note: String
-    ) -> Bool {
-        guard suggestion.confidence >= 0.67 else { return false }
-        let semanticCategories = RecordSemanticLexicon.matchingCategories(in: note)
-        return semanticCategories.isEmpty || semanticCategories.contains(suggestion.category)
+        )
+        guard let result,
+              RecordHabitOverridePolicy.allows(
+                  note: noteDraft,
+                  suggestedCategory: result.recommended,
+                  supportingItems: supportingItems
+              ) else {
+            return nil
+        }
+        return result.recommended
     }
 
     private static func sanitizedPrefillResult(
@@ -2071,10 +2098,13 @@ final class HomeViewModel: ObservableObject {
         let trimmedNote = noteResult.isAllowed ? noteResult.value : ""
         let brand = MerchantBrandCatalog.matchBrand(in: trimmedNote)
         let noteSemanticCategory = semanticCategory(from: trimmedNote)
+        let habitStart = Calendar.current.date(byAdding: .day, value: -180, to: Date()) ?? .distantPast
+        let habitSupportingItems = recordInputHistorySnapshot?.prefillItems ?? items.filter { item in
+            item.amount > 0 && item.createdAt >= habitStart
+        }
         if !categoryLockedByUser {
             if let brand {
-                if MerchantBrandCatalog.isConvenienceStoreBrand(brand),
-                   let noteSemanticCategory,
+                if let noteSemanticCategory,
                    noteSemanticCategory != brand.category {
                     return CategoryRecommendResult(recommended: noteSemanticCategory, reasonTag: "semantic")
                 }
@@ -2083,17 +2113,33 @@ final class HomeViewModel: ObservableObject {
             if let noteSemanticCategory {
                 return CategoryRecommendResult(recommended: noteSemanticCategory, reasonTag: "semantic")
             }
+            if let learnedCategory = RecordHabitOverridePolicy.learnedCategory(
+                for: trimmedNote,
+                from: habitSupportingItems
+            ) {
+                return CategoryRecommendResult(recommended: learnedCategory, reasonTag: "entity_history")
+            }
         }
         if !categoryLockedByUser,
            let category = recordPrefillResult?.category,
            recordPrefillResult?.source != "generic",
            let recordPrefillAmount,
            abs(recordPrefillAmount - amount) < 0.005,
-           (recordPrefillResult?.confidence ?? 0) >= 0.55 {
+           (recordPrefillResult?.confidence ?? 0) >= 0.55,
+           RecordHabitOverridePolicy.allows(
+               note: trimmedNote,
+               suggestedCategory: category,
+               supportingItems: habitSupportingItems
+           ) {
             return CategoryRecommendResult(recommended: category, reasonTag: recordPrefillResult?.source)
         }
         if let frequentSuggestion = frequentRecordAmountSuggestion(for: amount, at: selectedDate),
-           frequentSuggestionCanOverrideNote(frequentSuggestion, note: trimmedNote),
+           frequentSuggestion.confidence >= 0.67,
+           RecordHabitOverridePolicy.allows(
+               note: trimmedNote,
+               suggestedCategory: frequentSuggestion.category,
+               supportingItems: habitSupportingItems
+           ),
            !categoryLockedByUser {
             return CategoryRecommendResult(recommended: frequentSuggestion.category, reasonTag: "frequent")
         }
@@ -2101,13 +2147,18 @@ final class HomeViewModel: ObservableObject {
            let category = recordPrefillResult?.category,
            recordPrefillResult?.source == "generic",
            let recordPrefillAmount,
-           abs(recordPrefillAmount - amount) < 0.005 {
+           abs(recordPrefillAmount - amount) < 0.005,
+           RecordHabitOverridePolicy.allows(
+               note: trimmedNote,
+               suggestedCategory: category,
+               supportingItems: habitSupportingItems
+           ) {
             return CategoryRecommendResult(recommended: category, reasonTag: recordPrefillResult?.source)
         }
         guard !trimmedNote.isEmpty else { return nil }
         let start = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? .distantPast
         let recentItems = items.filter { $0.createdAt >= start && $0.amount > 0 }
-        return categoryRecommendService.recommend(
+        let result = categoryRecommendService.recommend(
             input: CategoryRecommendInput(
                 amount: amount,
                 referenceDate: selectedDate,
@@ -2117,6 +2168,15 @@ final class HomeViewModel: ObservableObject {
                 context: currentRecordContextSignal()
             )
         )
+        guard let result,
+              RecordHabitOverridePolicy.allows(
+                  note: trimmedNote,
+                  suggestedCategory: result.recommended,
+                  supportingItems: habitSupportingItems
+              ) else {
+            return nil
+        }
+        return result
     }
 
     private func currentRecordContextSignal() -> RecordContextSignal {
@@ -2423,10 +2483,32 @@ final class HomeViewModel: ObservableObject {
     ) {
         let brand = MerchantBrandCatalog.matchBrand(in: note)
         let semanticCategory = RecordSemanticLexicon.semanticCategory(of: note)
-        let frequentCategory = history.frequentSuggestions.first { suggestion in
+        let learnedCategory = RecordHabitOverridePolicy.learnedCategory(
+            for: note,
+            from: history.prefillItems
+        )
+        let frequentSuggestion = history.frequentSuggestions.first { suggestion in
             abs(suggestion.amount - amount) < 0.005
-        }?.category
-        if let category = brand?.category ?? semanticCategory ?? frequentCategory {
+        }
+        let brandCategory: HomeItem.Category? = brand.flatMap { brand in
+            if let semanticCategory,
+               semanticCategory != brand.category {
+                return nil
+            }
+            return brand.category
+        }
+        let frequentCategory = frequentSuggestion.flatMap { suggestion in
+            guard suggestion.confidence >= 0.67,
+                  RecordHabitOverridePolicy.allows(
+                      note: note,
+                      suggestedCategory: suggestion.category,
+                      supportingItems: history.prefillItems
+                  ) else {
+                return nil
+            }
+            return suggestion.category
+        }
+        if let category = brandCategory ?? semanticCategory ?? learnedCategory ?? frequentCategory {
             applyRecommendedCategory(category)
             return
         }
@@ -2467,16 +2549,6 @@ final class HomeViewModel: ObservableObject {
 
     private func semanticCategory(from note: String) -> HomeItem.Category? {
         RecordSemanticLexicon.semanticCategory(of: note)
-    }
-
-    private func frequentSuggestionCanOverrideNote(
-        _ suggestion: FrequentRecordAmountSuggestion,
-        note: String
-    ) -> Bool {
-        guard suggestion.confidence >= 0.67 else { return false }
-        let semanticCategories = RecordSemanticLexicon.matchingCategories(in: note)
-        guard !semanticCategories.isEmpty else { return true }
-        return semanticCategories.contains(suggestion.category)
     }
 
     func clearRecordInputMessage() {
