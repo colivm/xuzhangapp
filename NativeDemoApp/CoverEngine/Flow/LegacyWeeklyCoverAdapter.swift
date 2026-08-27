@@ -71,7 +71,6 @@ enum LegacyWeeklyCoverAdapter {
     ) throws -> CoverShareSession {
         let context = try assembledContext(from: source)
         let story = context.story
-        let support = context.support
         let safeMedia = context.safeMedia
         let descriptors = context.descriptors
         let recordedDayCount = context.recordedDayCount

@@ -3449,7 +3449,7 @@ struct BillPlaybackSheet: View {
                 .padding(.horizontal, 1)
             }
             .frame(height: 70)
-            .onChange(of: activeIndex) { newValue in
+            .onChange(of: activeIndex) { _, newValue in
                 guard newValue >= 0 else { return }
                 withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
                     proxy.scrollTo(newValue, anchor: .center)

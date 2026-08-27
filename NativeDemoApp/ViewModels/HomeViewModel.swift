@@ -1578,8 +1578,7 @@ final class HomeViewModel: ObservableObject {
             category: resolution.category,
             amount: updated.amount,
             date: updated.createdAt,
-            baseEmotionTag: resolution.emotionTag,
-            excluding: updated.id
+            baseEmotionTag: resolution.emotionTag
         )
         updated.merchantBrandId = resolution.merchantBrandId
         updated.userEditedCategory = true
@@ -1621,8 +1620,7 @@ final class HomeViewModel: ObservableObject {
             category: resolution.category,
             amount: amount,
             date: updated.createdAt,
-            baseEmotionTag: resolution.emotionTag,
-            excluding: updated.id
+            baseEmotionTag: resolution.emotionTag
         )
         updated.merchantBrandId = resolution.merchantBrandId
         updated.userEditedCategory = updated.userEditedCategory == true ? true : nil

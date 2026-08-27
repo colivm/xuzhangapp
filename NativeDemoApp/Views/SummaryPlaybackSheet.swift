@@ -2361,8 +2361,13 @@ struct SummaryPlaybackSheet: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
+    @MainActor
     private var customShareBackgroundCard: some View {
-        ZStack(alignment: .topTrailing) {
+        let accent = AppColors.accent
+        let accentDark = AppColors.accentDark
+        let text = AppColors.text
+        let subtext = AppColors.subtext
+        return ZStack(alignment: .topTrailing) {
             PhotosPicker(
                 selection: $customShareBackgroundItem,
                 matching: .images,
@@ -2380,7 +2385,7 @@ struct SummaryPlaybackSheet: View {
                     } else {
                         LinearGradient(
                             colors: [
-                                AppColors.accent.opacity(0.13),
+                                accent.opacity(0.13),
                                 Color.white.opacity(0.72)
                             ],
                             startPoint: .topLeading,
@@ -2395,17 +2400,17 @@ struct SummaryPlaybackSheet: View {
                                 .frame(width: 42, height: 42)
                             Image(systemName: customShareBackgroundData == nil ? "plus" : "photo.on.rectangle.angled")
                                 .font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(AppColors.accentDark.opacity(0.90))
+                                .foregroundStyle(accentDark.opacity(0.90))
                         }
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(customShareBackgroundData == nil ? "用相册照片做背景" : "已选择自定义背景")
                                 .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(customShareBackgroundData == nil ? AppColors.text : Color.white)
+                                .foregroundStyle(customShareBackgroundData == nil ? text : Color.white)
                                 .lineLimit(1)
                             Text(customShareBackgroundData == nil ? "点这里选一张本地图片" : "保存图会使用这张图片做背景")
                                 .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(customShareBackgroundData == nil ? AppColors.subtext : Color.white.opacity(0.86))
+                                .foregroundStyle(customShareBackgroundData == nil ? subtext : Color.white.opacity(0.86))
                                 .lineLimit(1)
                         }
 
@@ -2426,7 +2431,7 @@ struct SummaryPlaybackSheet: View {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(
                             isCustomShareBackgroundSelected && customShareBackgroundData != nil
-                                ? AppColors.accent.opacity(0.82)
+                                ? accent.opacity(0.82)
                                 : Color.white.opacity(0.54),
                             lineWidth: 1.2
                         )
@@ -2447,7 +2452,7 @@ struct SummaryPlaybackSheet: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(AppColors.text.opacity(0.82))
+                        .foregroundStyle(text.opacity(0.82))
                         .frame(width: 44, height: 44)
                         .background(.ultraThinMaterial, in: Circle())
                         .overlay(Circle().stroke(Color.white.opacity(0.58), lineWidth: 0.8))

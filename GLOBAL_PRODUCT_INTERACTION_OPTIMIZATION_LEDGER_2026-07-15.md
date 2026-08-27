@@ -4272,3 +4272,15 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 修改文件：`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/Services/RecordMemoryContextService.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。未修改账单 schema、SQLite/云端 DTO、同步协议、金额日期解析、分类/标题规则、生活线索、行程、回放事实、照片、会员或额度。
 - 验证证据：`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/playback_copy_lint.py`、`python scripts/copy_lint.py` 与 `git diff --check` 均退出码 0；copy lint 仅保留任务开始前已有 5 条 soft warning。`python scripts/validate_release_gate.py --phase windows` 最终输出 `release_repository_gate: OK`，AI proxy 24/24、100/1,000/5,000 条确定性夹具、三张真实 12MP 图片夹具、迁移与 SQLite schema 全部通过，集合摘要保持 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`。本机无 Swift/Xcode，未声称新增 XCTest 已实际编译运行。
 - 剩余风险与下一步：必须在 macOS 完成 Debug/Release build、全部 XCTest 和严格并发诊断，再用新 TestFlight 按 `FLOW-91` 在 100/1,000/5,000 条账本下连续编辑 20 次并用 Main Thread Hitches/Time Profiler 核对同周期列表更新、跨日/零金额/同时间排序、本机写入失败、后台最终校准、重启、VoiceOver、特大字号与 Reduce Motion。Windows 静态证据不能替代 Swift 编译或真机流畅度数据；取得这些证据前保持 `CODE_DONE`。下一项只做 `FLOW-90`/`FLOW-91` 编译与真机签收，不启动相邻重构或发布动作。
+
+---
+
+## 75. XCODE-DIAGNOSTIC-FIX-01：第 74 项编译回补与 Swift 6 告警清理（2026-08-27）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；当前无 `IN_PROGRESS`。用户在 Xcode 实际编译报告 2 条错误与 11 条告警：`HomeViewModel.swift` 两处多余 `excluding` 参数、`StatsWebView.swift` 的会员状态跨 actor 捕获、`SummaryPlaybackSheet.swift` 的主题色 actor 隔离、未使用值以及弃用 API。
+- 允许范围：只修复用户逐条提供的编译诊断；移除第 74 项漏掉的两个参数，预先快照会员 Bool，令主题色在正确 actor 上求值，清理未使用绑定，并把单参数 `onChange` 更新为 iOS 17 两参数形式。允许补充对应静态门禁和本文档证据。
+- 冻结边界：不改变 OCR 草稿解析、账单编辑、会员资格、回放生成、封面选择、同步错误文案、内容风险策略、周封面事实、动画或滚动行为；不启动性能、架构、语义或 UI 重构，不提交或推送，除非用户另行明确要求。
+- 实施结果：删除两处已经不属于 `RecordMemoryContextService` 签名的 `excluding` 实参；回放准备进入任务组前在主 actor 快照会员状态；自定义分享背景视图在主 actor 求值并把四个主题色快照传入 `PhotosPicker` 标签闭包；其余未使用绑定改为不绑定值的模式或存在性判断，并把回放条带更新为 iOS 17 两参数 `onChange`。产品行为、文案、分类、账单数据和持久化路径未改变。
+- 修改文件：`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoApp/Services/LedgerSyncService.swift`、`NativeDemoApp/Services/UserContentRiskService.swift`、`NativeDemoApp/CoverEngine/Flow/LegacyWeeklyCoverAdapter.swift`、`NativeDemoApp/Views/HomeView.swift`、`scripts/experience_static_check.ps1` 与本文档。
+- 验证证据：`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 退出码 0，新增八组契约覆盖全部 13 条源码诊断及历史方法签名；`python scripts/validate_release_gate.py --phase windows` 退出码 0，最终输出 `release_repository_gate: OK`，包含 AI proxy 24/24、100/1,000/5,000 条确定性夹具、三张真实 12MP 图片夹具、迁移与 SQLite schema；`git diff --check` 通过。copy lint 仍只有任务开始前既有的 5 条 soft warning。
+- 剩余风险与下一步：Windows 环境没有 Xcode/Swift 编译器，无法在本机证明 Swift 6 严格并发编译结果。下一项只由用户在 macOS/Xcode 执行一次 Clean Build（Swift 6）并确认这 2 条错误与 11 条告警不再出现；若仍有诊断，按 Xcode 给出的精确新位置继续回补。在该签收前保持 `CODE_DONE`，不启动相邻重构或发布动作。

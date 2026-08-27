@@ -4725,7 +4725,7 @@ struct StatsWebView: View {
                 }
             }
 
-            if let lockedPreview {
+            if lockedPreview != nil {
                 Button {
                     onShowMemberPricing?(.traceDeepInsight)
                 } label: {
@@ -6350,6 +6350,7 @@ struct StatsWebView: View {
         let items = homeViewModel.items
         let sourceRevision = homeViewModel.homeDashboardRevision
         let preparedFacts = preparedLifeSnapshot(for: range)?.periodFacts
+        let isMember = hasMemberAccess
         let performanceStartedAt = ProcessInfo.processInfo.systemUptime
         homeViewModel.markSummaryPlaybackStarted(range)
         summaryPlaybackTask?.cancel()
@@ -6360,10 +6361,10 @@ struct StatsWebView: View {
                 group.addTask(priority: .userInitiated) {
                     let service = PlaybackService()
                     if let preparedFacts,
-                       preparedFacts.matches(
+                        preparedFacts.matches(
                         range: range,
                         sourceRevision: sourceRevision,
-                        isMember: hasMemberAccess
+                        isMember: isMember
                        ) {
                         switch range {
                         case .week:
