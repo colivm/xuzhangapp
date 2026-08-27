@@ -4362,11 +4362,17 @@ struct InsightWebView: View {
             let recognition = recognizeAICommand(command)
             let decision = recognition.decision
             let normalized = decision.normalizedText
-            let range = decision.intent == .compare
-                ? aiCommandComparisonTimeRange(from: normalized)
-                : aiCommandTimeRange(from: normalized)
             let categoryIntent = recognition.categoryIntent
             let lifeMarkIntent = recognition.lifeMarkIntent
+            let range: AICommandTimeRange
+            if decision.intent == .compare {
+                range = aiCommandComparisonTimeRange(from: normalized)
+            } else if lifeMarkIntent?.id == "travel",
+                      !aiCommandHasExplicitTimeRange(normalized) {
+                range = aiCommandTimeRange(from: normalized, defaultRecentDays: 31)
+            } else {
+                range = aiCommandTimeRange(from: normalized)
+            }
 
             if let lifeMarkIntent,
                decision.intent != .unsupported,
@@ -5351,12 +5357,23 @@ struct InsightWebView: View {
                 return cached
             }
 
-            let items = items.filter { item in
-                item.amount > 0
-                    && range.contains(item.createdAt)
-                    && LifeMarkService.matches(item, intent: intent)
+            let rangeItems = items.filter { item in
+                item.amount > 0 && range.contains(item.createdAt)
             }
-            let result = sortedAICommandEvidenceItems(aiCommandScopedLifeMarkItems(items, intent: intent, command: command))
+            let matchedItems: [HomeItem]
+            if intent.id == "travel",
+               let journey = LifeJourneyFactService.primaryFact(
+                    in: rangeItems,
+                    calendar: aiCommandCalendar
+               ) {
+                let evidenceIDs = Set(journey.evidenceItemIDs)
+                matchedItems = rangeItems.filter { evidenceIDs.contains($0.id) }
+            } else {
+                matchedItems = rangeItems.filter { LifeMarkService.matches($0, intent: intent) }
+            }
+            let result = sortedAICommandEvidenceItems(
+                aiCommandScopedLifeMarkItems(matchedItems, intent: intent, command: command)
+            )
             storeAICommandLifeMarkItems(result, for: cacheKey)
             return result
         }
@@ -5501,6 +5518,9 @@ struct InsightWebView: View {
             guard let intent else { return nil }
             if intent.id == "home_utilities", aiCommandRentKeywords(from: command) != nil {
                 return "房租"
+            }
+            if intent.id == "travel", containsAny(command, ["出去玩", "出游", "游玩"]) {
+                return "出去玩"
             }
             return intent.label
         }

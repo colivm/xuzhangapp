@@ -1,6 +1,6 @@
 import Foundation
 
-struct TraceChapterComputationInput {
+struct TraceChapterComputationInput: @unchecked Sendable {
     let range: SummaryPlaybackRange
     let items: [HomeItem]
     let allItems: [HomeItem]
@@ -12,7 +12,7 @@ struct TraceChapterComputationInput {
     let now: Date
 }
 
-struct TraceClueComputationInput {
+struct TraceClueComputationInput: @unchecked Sendable {
     let items: [HomeItem]
     let allItems: [HomeItem]
     let period: StatsPeriod
@@ -34,25 +34,21 @@ enum TraceSnapshotComputation {
     }
 
     static func buildChapter(_ input: TraceChapterComputationInput) -> TraceChapterSnapshot {
-        let rawMarks = LifeMarkService.aggregates(
-            for: input.items,
+        let periodFacts = PlaybackService().preparePeriodExperienceFacts(
+            periodItems: input.items,
             allItems: input.allItems,
-            isMember: input.isMember,
-            limit: 8
+            range: input.range,
+            now: input.now,
+            sourceRevision: input.sourceRevision,
+            isMember: input.isMember
         )
+        let rawMarks = periodFacts.lifeMarks
         let rankedMarks = prioritizedMarks(
             rawMarks,
             items: input.items,
             prioritizeRecurring: input.prioritizeRecurringMarks
         )
-        let narrativeScope: LifeNarrativeScope = input.range == .week ? .week : .month
-        let narrativePlan = makeNarrativePlan(
-            scope: narrativeScope,
-            sourceRevision: input.sourceRevision,
-            items: input.items,
-            allItems: input.allItems,
-            now: input.now
-        )
+        let narrativePlan = periodFacts.narrativePlan
         let selectedAnchors = MemoryAnchorSelectionPolicy.selectAnchors(
             from: input.items,
             range: input.range,
@@ -79,14 +75,7 @@ enum TraceSnapshotComputation {
                 excludingCoverItemID: coverFacts.coverItemID
             )
             : []
-        let narrativeRewrite = LifeNarrativeAIRewriteStore.shared.rewrite(
-            for: LifeNarrativeAIPreparationPolicy.key(
-                scope: narrativeScope,
-                sourceRevision: input.sourceRevision,
-                now: input.now,
-                calendar: narrativeScope == .week ? PlaybackService.isoCalendar : Calendar.current
-            )
-        )
+        let narrativeRewrite = periodFacts.narrativeRewrite
         let marks = Array(
             narrativeMarks(
                 rankedMarks,
@@ -98,6 +87,7 @@ enum TraceSnapshotComputation {
         return TraceChapterSnapshot(
             range: input.range,
             items: input.items,
+            periodFacts: periodFacts,
             marks: marks,
             memoryAnchors: anchors,
             monthDiaryAnchors: monthDiaryAnchors,
@@ -114,16 +104,24 @@ enum TraceSnapshotComputation {
     static func buildClue(_ input: TraceClueComputationInput) -> TraceClueSnapshot {
         let clues = categoryClues(from: input.items)
         let rhythmPoints = rhythmPoints(from: input.items, period: input.period, now: input.now)
+        let journeyFact = input.narrativeScope.flatMap { scope in
+            LifeJourneyFactService.primaryFact(
+                in: input.items,
+                calendar: scope == .week ? PlaybackService.isoCalendar : Calendar.current
+            )
+        }
         let narrativePlan = input.narrativeScope.map { scope in
             makeNarrativePlan(
                 scope: scope,
                 sourceRevision: input.sourceRevision,
                 items: input.items,
                 allItems: input.allItems,
+                journeyFact: journeyFact,
                 now: input.now
             )
         }
         let narrativeRewrite = input.allowsNarrativeRewrite
+            && narrativePlan?.leadSignalID != journeyFact?.id
             ? input.narrativeScope.flatMap { scope in
                 LifeNarrativeAIRewriteStore.shared.rewrite(
                     for: LifeNarrativeAIPreparationPolicy.key(
@@ -140,7 +138,8 @@ enum TraceSnapshotComputation {
                 plan: $0,
                 rewrite: narrativeRewrite,
                 items: input.items,
-                allItems: input.allItems
+                allItems: input.allItems,
+                journeyFact: journeyFact
             )
         } ?? LifeInsightService().buildTraceInsight(
             items: input.items,
@@ -185,6 +184,7 @@ enum TraceSnapshotComputation {
             items: input.items,
             clues: clues,
             rhythmPoints: rhythmPoints,
+            journeyFact: journeyFact,
             insight: insight,
             narrativePlan: narrativePlan,
             narrativeRewrite: narrativeRewrite,
@@ -201,6 +201,7 @@ enum TraceSnapshotComputation {
         sourceRevision: Int,
         items: [HomeItem],
         allItems: [HomeItem],
+        journeyFact: LifeJourneyFact?,
         now: Date
     ) -> LifeNarrativePlan {
         let calendar = scope == .week ? PlaybackService.isoCalendar : Calendar.current
@@ -223,7 +224,8 @@ enum TraceSnapshotComputation {
                 previousItems: previousItems,
                 now: now,
                 recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousItems),
-                relationshipEcho: relationshipEcho
+                relationshipEcho: relationshipEcho,
+                journeyFact: journeyFact
             )
         )
     }
@@ -262,21 +264,28 @@ enum TraceSnapshotComputation {
         plan: LifeNarrativePlan,
         rewrite: LifeNarrativeAIRewrite?,
         items: [HomeItem],
-        allItems: [HomeItem]
+        allItems: [HomeItem],
+        journeyFact: LifeJourneyFact?
     ) -> LifeInsightResult {
         let lead = plan.signalsByRole[.lead]?.first
         let support = plan.signalsByRole[.support]?.first
         let displayedSummary = rewrite?.summary ?? plan.summary
         var fullLines: [String] = []
-        let isRelationshipLead = lead?.id.hasPrefix("echo:") == true
-        if !isRelationshipLead {
+        let isJourneyLead = lead?.id == journeyFact?.id
+        let isRelationshipLead = lead?.id.hasPrefix("echo:") == true || isJourneyLead
+        if isJourneyLead, let journeyFact {
+            fullLines.append(journeyFact.line)
+            fullLines.append(
+                "依据来自 \(journeyFact.roadEvidenceItemIDs.count) 笔道路记录和 \(journeyFact.activityEvidenceItemIDs.count) 笔异地活动记录。"
+            )
+        } else if !isRelationshipLead {
             if let supportingLine = rewrite?.supportingLine, !supportingLine.isEmpty {
                 fullLines.append(supportingLine)
             } else if let support, support.fact != displayedSummary {
                 fullLines.append(support.fact)
             }
         }
-        if let lead, isRelationshipLead {
+        if let lead, isRelationshipLead, !isJourneyLead {
             fullLines.append(contentsOf: relationshipEvidenceLines(
                 lead: lead,
                 currentItems: items,
@@ -295,7 +304,7 @@ enum TraceSnapshotComputation {
             fullLines.append(narrativeEvidenceLine(lead: lead, items: items))
         }
         let theme: LifeInsightTheme
-        if lead?.id.hasPrefix("echo:") == true {
+        if lead?.id.hasPrefix("echo:") == true || isJourneyLead {
             theme = .relation
         } else {
             switch lead?.kind {
@@ -347,6 +356,9 @@ enum TraceSnapshotComputation {
         maturity: LifeNarrativeMaturity,
         items: [HomeItem]
     ) -> String {
+        if let lead, lead.id.hasPrefix("journey:") {
+            return "这次\(lead.label)是怎么串起来的"
+        }
         if lead?.id.contains(":context-return:") == true {
             return "晚间通勤上一次出现在哪一周"
         }
@@ -692,14 +704,19 @@ enum TraceSnapshotComputation {
     }
 }
 
+enum TraceSnapshotMemoryPolicy {
+    static let chapterCacheLimit = 2
+    static let clueCacheLimit = 4
+}
+
 final class TraceSnapshotStore {
     private var chapterCache: [String: TraceChapterSnapshot] = [:]
     private var chapterCacheOrder: [String] = []
-    private let chapterCacheLimit = 8
+    private let chapterCacheLimit = TraceSnapshotMemoryPolicy.chapterCacheLimit
 
     private var clueCache: [String: TraceClueSnapshot] = [:]
     private var clueCacheOrder: [String] = []
-    private let clueCacheLimit = 24
+    private let clueCacheLimit = TraceSnapshotMemoryPolicy.clueCacheLimit
 
     func chapterSnapshot(for key: String) -> TraceChapterSnapshot? {
         chapterCache[key]
@@ -743,6 +760,22 @@ final class TraceSnapshotStore {
 
 enum LedgerDisplayFingerprintPolicy {
     static func make(items: [HomeItem]) -> String {
+        var xor: UInt64 = 0
+        var sum: UInt64 = 14_695_981_039_346_656_037
+        for item in items {
+            let hash = itemHash(item)
+            xor ^= hash
+            sum &+= hash &* 1_099_511_628_211
+        }
+        return [
+            "trace-cold-start-v2",
+            String(items.count),
+            String(xor, radix: 16),
+            String(sum, radix: 16),
+        ].joined(separator: "|")
+    }
+
+    private static func itemHash(_ item: HomeItem) -> UInt64 {
         var hash: UInt64 = 14_695_981_039_346_656_037
         let prime: UInt64 = 1_099_511_628_211
 
@@ -755,33 +788,29 @@ enum LedgerDisplayFingerprintPolicy {
             hash &*= prime
         }
 
-        combine("trace-cold-start-v1")
-        combine(String(items.count))
-        for item in items.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
-            combine(item.id.uuidString)
-            combine(String(Int64((item.createdAt.timeIntervalSince1970 * 1_000).rounded())))
-            combine(String(Int64((item.updatedAt.timeIntervalSince1970 * 1_000).rounded())))
-            combine(String(Int64((item.amount * 100).rounded())))
-            combine(item.category.rawValue)
-            combine(item.title)
-            combine(item.emotionTag)
-            combine(item.source.rawValue)
-            combine(item.merchantBrandId ?? "")
-            combine(item.draftMeta?.status.rawValue ?? "")
-            combine(item.userEditedTitle == true ? "1" : "0")
-            combine(item.userEditedCategory == true ? "1" : "0")
-            combine(item.memoryContext?.weatherKind ?? "")
-            combine(item.memoryContext?.cityName ?? "")
-            combine(item.memoryContext?.semanticPlace ?? "")
-            combine(item.scenePackId ?? "")
-            combine(String(item.memoryImageCount))
-            combine(item.memoryImageReferences.joined(separator: "|"))
-            combine(String(item.coverMemoryImageIndex ?? -1))
-            combine(item.memoryAnchorRole?.rawValue ?? "")
-            combine(item.memoryAnchorSceneHint?.rawValue ?? "")
-            combine(item.memoryAnchorCaption ?? "")
-        }
-        return String(hash, radix: 16)
+        combine(item.id.uuidString)
+        combine(String(Int64((item.createdAt.timeIntervalSince1970 * 1_000).rounded())))
+        combine(String(Int64((item.updatedAt.timeIntervalSince1970 * 1_000).rounded())))
+        combine(String(Int64((item.amount * 100).rounded())))
+        combine(item.category.rawValue)
+        combine(item.title)
+        combine(item.emotionTag)
+        combine(item.source.rawValue)
+        combine(item.merchantBrandId ?? "")
+        combine(item.draftMeta?.status.rawValue ?? "")
+        combine(item.userEditedTitle == true ? "1" : "0")
+        combine(item.userEditedCategory == true ? "1" : "0")
+        combine(item.memoryContext?.weatherKind ?? "")
+        combine(item.memoryContext?.cityName ?? "")
+        combine(item.memoryContext?.semanticPlace ?? "")
+        combine(item.scenePackId ?? "")
+        combine(String(item.memoryImageCount))
+        combine(item.memoryImageReferences.joined(separator: "|"))
+        combine(String(item.coverMemoryImageIndex ?? -1))
+        combine(item.memoryAnchorRole?.rawValue ?? "")
+        combine(item.memoryAnchorSceneHint?.rawValue ?? "")
+        combine(item.memoryAnchorCaption ?? "")
+        return hash
     }
 
     static func dayKey(for date: Date, calendar: Calendar = .current) -> String {

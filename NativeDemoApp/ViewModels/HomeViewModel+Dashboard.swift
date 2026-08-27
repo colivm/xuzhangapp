@@ -92,9 +92,48 @@ struct HomeLifeMarkPreparationInput: @unchecked Sendable {
     let frequentSuggestionLine: String?
 }
 
+struct HomeLifeMarkSemanticSignature: Equatable, @unchecked Sendable {
+    let title: String
+    let amount: Double
+    let category: HomeItem.Category
+    let createdAt: Date
+    let updatedAt: Date
+    let emotionTag: String
+    let merchantBrandID: String?
+    let scenePackID: String?
+    let cityName: String?
+    let semanticPlace: String?
+    let weatherKind: String?
+    let userEditedTitle: Bool?
+    let userEditedCategory: Bool?
+    let categoryCorrectionFrom: HomeItem.Category?
+    let draftStatus: HomeItem.DraftMeta.Status?
+
+    static func make(for item: HomeItem) -> HomeLifeMarkSemanticSignature {
+        HomeLifeMarkSemanticSignature(
+            title: item.title,
+            amount: item.amount,
+            category: item.category,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+            emotionTag: item.emotionTag,
+            merchantBrandID: item.merchantBrandId,
+            scenePackID: item.scenePackId,
+            cityName: item.memoryContext?.cityName,
+            semanticPlace: item.memoryContext?.semanticPlace,
+            weatherKind: item.memoryContext?.weatherKind,
+            userEditedTitle: item.userEditedTitle,
+            userEditedCategory: item.userEditedCategory,
+            categoryCorrectionFrom: item.categoryCorrectionFrom,
+            draftStatus: item.draftMeta?.status
+        )
+    }
+}
+
 struct HomeLifeMarkSnapshot: @unchecked Sendable {
     let key: HomeLifeMarkSnapshotKey
     let textsByItemID: [UUID: String]
+    let semanticSignaturesByItemID: [UUID: HomeLifeMarkSemanticSignature]
     let todayPrimaryLine: String?
     let weekLifeThemeText: String
     let quickRecordNudgeText: String
@@ -128,6 +167,30 @@ enum HomeLifeMarkRefreshPolicy {
         guard let previousKey else { return false }
         return previousKey.dayKey == nextKey.dayKey
             && previousKey.isMember == nextKey.isMember
+    }
+
+    static func retainedVisibleLines(
+        previousTexts: [UUID: String],
+        previousSignatures: [UUID: HomeLifeMarkSemanticSignature],
+        nextItems: [HomeItem]
+    ) -> [UUID: String] {
+        let nextSignatures = semanticSignatures(for: nextItems)
+        return previousTexts.filter { itemID, _ in
+            guard let previousSignature = previousSignatures[itemID],
+                  let nextSignature = nextSignatures[itemID] else {
+                return false
+            }
+            return previousSignature == nextSignature
+        }
+    }
+
+    static func semanticSignatures(
+        for items: [HomeItem]
+    ) -> [UUID: HomeLifeMarkSemanticSignature] {
+        Dictionary(
+            items.map { ($0.id, HomeLifeMarkSemanticSignature.make(for: $0)) },
+            uniquingKeysWith: { _, latest in latest }
+        )
     }
 }
 
@@ -182,6 +245,9 @@ enum HomeDashboardSnapshotComputation {
     }
 
     static func lifeMarkSnapshot(_ input: HomeLifeMarkPreparationInput) -> HomeLifeMarkSnapshot {
+        let semanticSignatures = HomeLifeMarkRefreshPolicy.semanticSignatures(
+            for: input.visibleItems
+        )
         let preparedContext = LifeMarkService.prepareAggregationContext(
             allItems: input.allItems,
             periodItems: input.weekItems + input.visibleItems
@@ -261,6 +327,7 @@ enum HomeDashboardSnapshotComputation {
         return HomeLifeMarkSnapshot(
             key: input.key,
             textsByItemID: texts,
+            semanticSignaturesByItemID: semanticSignatures,
             todayPrimaryLine: todayPrimaryLine,
             weekLifeThemeText: weekLifeThemeText,
             quickRecordNudgeText: quickRecordNudgeText,
@@ -355,10 +422,25 @@ extension HomeViewModel {
                 objectWillChange.send()
             }
             homeLifeMarkTextsByItemID = [:]
+            homeLifeMarkSemanticSignaturesByItemID = [:]
             homeTodayLifeMarkLine = nil
             homeWeekLifeThemeText = ""
             homeQuickRecordNudgeText = nil
             homeWeekTopCategoryText = "暂无"
+        } else {
+            let currentVisibleItems = todayItems
+            let retainedTexts = HomeLifeMarkRefreshPolicy.retainedVisibleLines(
+                previousTexts: homeLifeMarkTextsByItemID,
+                previousSignatures: homeLifeMarkSemanticSignaturesByItemID,
+                nextItems: currentVisibleItems
+            )
+            if retainedTexts != homeLifeMarkTextsByItemID {
+                objectWillChange.send()
+                homeLifeMarkTextsByItemID = retainedTexts
+            }
+            homeLifeMarkSemanticSignaturesByItemID = HomeLifeMarkRefreshPolicy.semanticSignatures(
+                for: currentVisibleItems
+            )
         }
         homeLifeMarkPreparationTask?.cancel()
         homeLifeMarkRequestID = UUID()
@@ -375,18 +457,11 @@ extension HomeViewModel {
             }
         )
         homeLifeMarkPreparationTask = Task { @MainActor in
-            await Task.yield()
+            try? await Task.sleep(
+                nanoseconds: LedgerRapidInteractionPolicy.homeSnapshotCoalescingDelayNanoseconds
+            )
             guard !Task.isCancelled, homeLifeMarkRequestID == requestID else { return }
-            let snapshot = await withTaskGroup(
-                of: HomeLifeMarkSnapshot?.self,
-                returning: HomeLifeMarkSnapshot?.self
-            ) { group in
-                group.addTask(priority: .utility) {
-                    guard !Task.isCancelled else { return nil }
-                    return HomeDashboardSnapshotComputation.lifeMarkSnapshot(input)
-                }
-                return await group.next() ?? nil
-            }
+            let snapshot = await LedgerBackgroundComputationLane.shared.buildHomeLifeMark(input)
             guard let snapshot,
                   !Task.isCancelled,
                   homeLifeMarkRequestID == requestID,
@@ -394,6 +469,7 @@ extension HomeViewModel {
                 return
             }
             let visibleSnapshotChanged = homeLifeMarkTextsByItemID != snapshot.textsByItemID
+                || homeLifeMarkSemanticSignaturesByItemID != snapshot.semanticSignaturesByItemID
                 || homeTodayLifeMarkLine != snapshot.todayPrimaryLine
                 || homeWeekLifeThemeText != snapshot.weekLifeThemeText
                 || homeQuickRecordNudgeText != snapshot.quickRecordNudgeText
@@ -401,6 +477,7 @@ extension HomeViewModel {
             if visibleSnapshotChanged {
                 objectWillChange.send()
                 homeLifeMarkTextsByItemID = snapshot.textsByItemID
+                homeLifeMarkSemanticSignaturesByItemID = snapshot.semanticSignaturesByItemID
                 homeTodayLifeMarkLine = snapshot.todayPrimaryLine
                 homeWeekLifeThemeText = snapshot.weekLifeThemeText
                 homeQuickRecordNudgeText = snapshot.quickRecordNudgeText
@@ -438,22 +515,11 @@ extension HomeViewModel {
             now: now
         )
         homeQuickRecordPreparationTask = Task { @MainActor in
-            await Task.yield()
+            try? await Task.sleep(
+                nanoseconds: LedgerRapidInteractionPolicy.homeSnapshotCoalescingDelayNanoseconds
+            )
             guard !Task.isCancelled, homeQuickRecordRequestID == requestID else { return }
-            let snapshot = await withTaskGroup(
-                of: HomeQuickRecordSnapshot?.self,
-                returning: HomeQuickRecordSnapshot?.self
-            ) { group in
-                group.addTask(priority: .utility) {
-                    guard !Task.isCancelled else { return nil }
-                    let suggestion = Self.highConfidenceQuickRecordSuggestionForSnapshot(
-                        items: input.items,
-                        at: input.now
-                    )
-                    return HomeQuickRecordSnapshot(key: input.key, suggestion: suggestion)
-                }
-                return await group.next() ?? nil
-            }
+            let snapshot = await LedgerBackgroundComputationLane.shared.buildHomeQuickRecord(input)
             guard let snapshot,
                   !Task.isCancelled,
                   homeQuickRecordRequestID == requestID,

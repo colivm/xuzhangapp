@@ -182,12 +182,24 @@ enum PlaybackAuxiliarySignalPolicy {
     ) -> [String: String] {
         guard !periodItems.isEmpty else { return [:] }
 
-        var metrics: [String: String] = [:]
-        if let lifeMark = preferredLifeMark(
-            periodItems: periodItems,
+        let lifeMarks = LifeMarkService.aggregates(
+            for: periodItems,
             allItems: allItems,
-            now: now
-        ) {
+            isMember: true,
+            now: now,
+            limit: 24
+        )
+        return preparedMetrics(periodItems: periodItems, lifeMarks: lifeMarks)
+    }
+
+    static func preparedMetrics(
+        periodItems: [HomeItem],
+        lifeMarks: [LifeMarkAggregate]
+    ) -> [String: String] {
+        guard !periodItems.isEmpty else { return [:] }
+
+        var metrics: [String: String] = [:]
+        if let lifeMark = preferredLifeMark(in: lifeMarks) {
             metrics[lifeMarkMetricKey] = lifeMark
         }
         if let emotion = preferredEmotionTag(in: periodItems) {
@@ -196,18 +208,7 @@ enum PlaybackAuxiliarySignalPolicy {
         return metrics
     }
 
-    private static func preferredLifeMark(
-        periodItems: [HomeItem],
-        allItems: [HomeItem],
-        now: Date
-    ) -> String? {
-        let aggregates = LifeMarkService.aggregates(
-            for: periodItems,
-            allItems: allItems,
-            isMember: true,
-            now: now,
-            limit: 24
-        )
+    private static func preferredLifeMark(in aggregates: [LifeMarkAggregate]) -> String? {
         guard let selected = aggregates.first(where: { aggregate in
             guard aggregate.kind == .scene else { return false }
             let label = aggregate.label.trimmingCharacters(in: .whitespacesAndNewlines)

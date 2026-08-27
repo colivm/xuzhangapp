@@ -545,9 +545,10 @@ enum TracePhotoEvidenceBindingPolicy {
     }
 }
 
-struct TraceChapterSnapshot {
+struct TraceChapterSnapshot: @unchecked Sendable {
     let range: SummaryPlaybackRange
     let items: [HomeItem]
+    let periodFacts: PeriodExperienceFacts
     let marks: [LifeMarkAggregate]
     let memoryAnchors: [SummaryMemoryAnchor]
     let monthDiaryAnchors: [SummaryMemoryAnchor]
@@ -577,10 +578,11 @@ struct TraceRhythmPoint: Identifiable {
     var id: String { label }
 }
 
-struct TraceClueSnapshot {
+struct TraceClueSnapshot: @unchecked Sendable {
     let items: [HomeItem]
     let clues: [TraceCategoryClue]
     let rhythmPoints: [TraceRhythmPoint]
+    let journeyFact: LifeJourneyFact?
     let insight: LifeInsightResult
     let narrativePlan: LifeNarrativePlan?
     let narrativeRewrite: LifeNarrativeAIRewrite?

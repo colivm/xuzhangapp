@@ -79,6 +79,7 @@ struct LifeNarrativePlanningInput {
     let now: Date
     let recentLeadSignalIDs: Set<String>
     let relationshipEcho: LifeNarrativeEcho?
+    let journeyFact: LifeJourneyFact?
 
     init(
         scope: LifeNarrativeScope,
@@ -87,7 +88,8 @@ struct LifeNarrativePlanningInput {
         previousItems: [HomeItem],
         now: Date,
         recentLeadSignalIDs: Set<String>,
-        relationshipEcho: LifeNarrativeEcho? = nil
+        relationshipEcho: LifeNarrativeEcho? = nil,
+        journeyFact: LifeJourneyFact? = nil
     ) {
         self.scope = scope
         self.sourceRevision = sourceRevision
@@ -96,6 +98,7 @@ struct LifeNarrativePlanningInput {
         self.now = now
         self.recentLeadSignalIDs = recentLeadSignalIDs
         self.relationshipEcho = relationshipEcho
+        self.journeyFact = journeyFact
     }
 }
 
@@ -166,6 +169,12 @@ enum LifeNarrativeSignalPolicy {
         }
         var candidates: [LifeNarrativeSignal] = []
 
+        if let journey = journeySignal(
+            from: input.journeyFact,
+            currentRows: rows
+        ) {
+            candidates.append(journey)
+        }
         if let relationship = relationshipSignal(
             from: input.relationshipEcho,
             sourceRevision: input.sourceRevision,
@@ -271,7 +280,9 @@ enum LifeNarrativeSignalPolicy {
         return LifeNarrativePlan(
             scope: input.scope,
             sourceRevision: input.sourceRevision,
-            maturity: lead?.id.hasPrefix("echo:") == true ? .echoEligible : baseMaturity,
+            maturity: lead?.id.hasPrefix("echo:") == true || lead?.id.hasPrefix("journey:") == true
+                ? .echoEligible
+                : baseMaturity,
             headline: headline,
             summary: summary,
             supportingLine: support?.fact,
@@ -439,6 +450,32 @@ enum LifeNarrativeSignalPolicy {
             informationGain: strength.informationGain,
             narrativeValue: strength.narrativeValue,
             representativeness: min(96, 52 + echo.currentDistinctDayCount * 10),
+            isAdministrative: false,
+            isSensitive: false,
+            isStable: false
+        )
+    }
+
+    private static func journeySignal(
+        from journey: LifeJourneyFact?,
+        currentRows: [HomeItem]
+    ) -> LifeNarrativeSignal? {
+        guard let journey else { return nil }
+        let currentIDs = Set(currentRows.map(\.id))
+        let evidenceIDs = journey.evidenceItemIDs.filter { currentIDs.contains($0) }
+        guard evidenceIDs.count >= 3,
+              !journey.roadEvidenceItemIDs.isEmpty,
+              !journey.activityEvidenceItemIDs.isEmpty else { return nil }
+        return LifeNarrativeSignal(
+            id: journey.id,
+            kind: .change,
+            label: journey.label,
+            fact: journey.line,
+            evidenceItemIDs: evidenceIDs,
+            confidence: 100,
+            informationGain: journey.isClosedLoop ? 100 : 94,
+            narrativeValue: journey.isClosedLoop ? 100 : 90,
+            representativeness: min(100, 70 + journey.routeCities.count * 6),
             isAdministrative: false,
             isSensitive: false,
             isStable: false
@@ -671,6 +708,9 @@ enum LifeNarrativeSignalPolicy {
         lead: LifeNarrativeSignal?
     ) -> String {
         guard let lead else { return periodRecordTitle(scope) }
+        if lead.id.hasPrefix("journey:") {
+            return "\(scope.periodLead)，\(lead.label)连起来了"
+        }
         if lead.id.hasPrefix("echo:") {
             if lead.id.contains(":context-return:") {
                 return "\(scope.periodLead)晚间通勤重新出现了"
@@ -702,6 +742,9 @@ enum LifeNarrativeSignalPolicy {
         activeDays: Int,
         lead: LifeNarrativeSignal?
     ) -> String {
+        if let lead, lead.id.hasPrefix("journey:") {
+            return lead.fact
+        }
         if let lead, lead.id.hasPrefix("echo:") {
             return lead.fact
         }

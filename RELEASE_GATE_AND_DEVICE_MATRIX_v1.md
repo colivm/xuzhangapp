@@ -2,7 +2,7 @@
 
 > 日期：2026-07-15
 > 适用：`NativeDemoApp` iOS 主产品
-> 当前状态：2026-07-16 Windows/代码门禁通过；当前为 Windows 环境，Xcode、StoreKit 沙盒和 iPhone 真机矩阵因工具与设备不可用而阻塞
+> 当前状态：2026-08-27 Windows/代码门禁复验通过；`INTERACTION-MEMORY-FIX-01` 已达到 `CODE_DONE`，当前为 Windows 环境，Xcode、StoreKit 沙盒和 iPhone 真机矩阵因工具与设备不可用而阻塞
 > 结论规则：自动门禁、Xcode 门禁和本文件全部必测项都通过后，才允许把相关任务标为 `VERIFIED`。
 
 ## 1. 冻结边界
@@ -52,6 +52,8 @@ python scripts/validate_release_gate.py --phase windows
 ```
 
 该命令按失败即停顺序执行：夹具结构与摘要、`git diff --check`、生活语义回归、体验静态检查、文案体验检查、文案 lint、迁移样本和 SQLite schema 实际执行。体验静态检查内部继续执行术语、会员价值、AI 能力、无障碍和可观测性专项 lint。
+
+2026-08-27 `INTERACTION-MEMORY-FIX-01` Windows 复验：完整命令退出码 0，`release_repository_gate: OK`；AI proxy 24/24、100/1,000/5,000 条夹具、三张真实 12MP 图片夹具、迁移与 SQLite schema 均通过，集合摘要仍为 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`。此结果只证明代码/静态/确定性门禁，`FLOW-89` 的 Swift 编译、XCTest、Memory Graph、Allocations、Time Profiler、Main Thread Hitches、Jetsam 和真机峰值仍为 `NOT_RUN`。
 
 ### 3.2 macOS/Xcode 门禁
 
@@ -296,6 +298,14 @@ python scripts/validate_release_gate.py --phase device-audit `
 
 | FLOW-86 | 准备工作日 18:43 的“东方树叶 青柑普洱 + ¥6”，并预置至少 8 笔同三小时时段、同金额的地铁交通历史；另备单独“东方树叶”“青柑普洱”“地铁”、空备注、未知具体商品、已由用户改为餐饮的同名/轻微变体商品、“茶具”和“茶叶蛋”；覆盖首次输入、连续改备注/金额、后台预填晚到、用户手动锁定、杀进程重启、VoiceOver 与 Reduce Motion | 逐项输入备注和 ¥6，观察分类宫格、自动选中与保存前最终推荐是否一致；在预填未完成时快速从东方树叶切到未知商品再切回，连续 20 次；对未知商品先保存为其他，再明确改成餐饮并重新输入同名及仅空格/标点不同的标题；锁定一个非推荐分类后重复；重启后复测空备注、茶具、茶叶蛋 | “东方树叶 青柑普洱”、单独品牌及品类均稳定为餐饮，不能被 ¥6 晚高峰历史改成交通；“地铁”仍为交通，空备注仍可采用可靠晚高峰交通习惯。首次出现的未知具体商品不得仅凭金额/时间自动变交通；只有用户明确改过分类的同一或足够相似商品才以 `entity_history` 学习，且不把 ¥6 泛化为交通。茶具保持购物，茶叶蛋保持餐饮，孤立“茶”不触发餐饮；后台/即时/临时三条路径一致，旧异步结果不反写，用户锁定始终最高优先，连续操作无分类闪回、明显卡顿或持久化变化；不得迁移既有错误账单、改动 OCR 金额/日期、同步 DTO、会员、额度、生活线索或播放规则 | `NOT_RUN` |
 
+| FLOW-87 | 本周、本月分别准备 100/1,000/5,000 条账本，覆盖免费/会员、有无照片、无数据；另准备新增、编辑、连续删除、跨周/月、会员切换及联网润色晚到场景，并开启 Instruments 的 Time Profiler、Main Thread Hitches 与 Allocations | 先进入痕迹并等“正在整理”完成，再连续打开/关闭同周期周记或月章 20 次；操作中穿插生活/线索切换。随后逐项改变账本修订、周期、会员状态和润色结果后立即重开；杀进程重启后先直接打开一次，再让痕迹准备完成后重开 | 同账本修订、同周期、同会员状态且痕迹已准备时，周记/月章直接复用周期事实底稿，不再次扫描完整历史、重建生活印记历史索引、历史回声或叙事计划；20 次章节事实、顺序、文案、证据与照片锚点保持原规则且无明显等待、主线程长 hitch 或持续内存增长。新增/编辑/删除、跨周期、会员变化和润色晚到必须拒绝旧底稿并只发布最新合法结果；杀进程后的首次冷计算允许安全重建，痕迹再次准备后恢复复用。无数据、VoiceOver 与 Reduce Motion 下交互语义不变；不得持久化原图或改变生活印记、章节、照片资格、额度、会员、同步和 AI 请求规则 | `NOT_RUN` |
+
+| FLOW-88 | 固定 Asia/Shanghai 时间准备同一周的南京电车充电、到宿迁过路费、宿迁充电、到连云港过路费、连云港海鲜、宿迁“徐记花甲鸡爪｜宿豫店”和周日返南京过路费，城市顺序为“南京 → 宿迁 → 连云港 → 宿迁 → 南京”；另备无道路证据、只有高铁、未返南京、无异地活动、充电从日用改交通、花甲/花蛤/蛤蜊/鸡爪/凤爪、周六深夜无工作词及 100/1,000/5,000 条夹具 | 先逐笔核对账单列表，再打开本周生活、线索、周记、月章和周分享；编辑“徐记花甲鸡爪｜宿豫店”的分类并确认标题，连续改分类/删除/重建 20 次，杀进程重启后复测。分别移除过路费与充电、移除返程、移除海鲜/夜宵活动、改成高铁往返；开启联网整理并抓包，最后用 Instruments 核对三档账本 | 账单列表仍只显示单笔事实；生活线索和复盘复用同一 journey fact ID、路线及道路/活动 evidence IDs，并以“周末跨城自驾”呈现闭环，明确南京—宿迁—连云港—宿迁—南京及充电、过路费、异地餐饮依据。无道路证据不得说自驾，高铁只能说跨城行程，未返南京不得说“最后回到/完成”，无异地活动不生成高价值行程，任何路径不得出现“老家”。城市、路线和证据 ID 不进入联网请求，远程迟到文案不得覆盖本机行程。花甲鸡爪等稳定为餐饮；手动改分类不改原标题；周六深夜没有加班/工作证据不得生成“加班后的热食”。充电改为交通或被删除后旧“超市买菜和家用”立即消失，未改行无闪烁；重启和三档账本结果确定、无旧缓存复活、明显 hitch 或持续内存增长。不得改变 schema、云端 DTO、金额日期、历史分类、章节数、会员额度、照片或分享模板 | `NOT_RUN` |
+
+| FLOW-89 | 准备含 9 张真实 12MP 照片的记录、连续带图账单，以及 100/1,000/5,000 条有图/无图账本；开启 Xcode Memory Graph、Instruments Allocations、Time Profiler、Main Thread Hitches 和 Jetsam 记录，覆盖低内存警告、前后台、VoiceOver、特大字号与 Reduce Motion | 首页、痕迹照片列表各快速上下滚动 20 轮；打开 9 图详情连续左右切换 20 轮并反复关闭重开；生活/线索、周/月、痕迹/复盘连续切换 20 轮；月度细查连续编辑/删除 20 条并交错滚动，过程中切后台、触发内存警告再回前台 | UI 缩略图最长边不超过 480px，详情显示解码最长边不超过 1,600px；9 图详情同一时刻只保留当前页及相邻页的显示解码，图片缓存不超过 40 张/32MB，低内存警告后可释放并按需恢复。图片读取解码串行且离屏取消请求不继续排队；账本派生、首页线索和痕迹快照同一时刻最多执行一个全账本重任务，快速 revision 合并且只发布最新结果。痕迹完整快照缓存最多 2 份章节/4 份线索，大列表不建立完整枚举副本，单条删除使用等价增量分组；全程无 Jetsam、假死、明显主线程长 hitch、持续内存增长、图片错位、旧快照反写或记录复活，图片原文件/备份/分享导出、事实、分类、会员与额度规则不变 | `NOT_RUN` |
+| FLOW-90 | 固定准备南京—宿迁—连云港—宿迁—南京认证行程及其 journey evidence IDs；另备只有普通周末餐饮、单笔交通、购物或缺道路/跨城/异地活动的反例，并覆盖会员/免费及 100/1,000/5,000 条账本 | 在 AI 指令台“查记录”依次输入“出去玩”“查一下出去玩”“本周出游记录”“游玩”，再输入普通餐饮/交通反例；从结果逐笔打开原记录并与痕迹线索核对，连续查询和切换任务 20 次 | 可信短语进入只读 query，不再显示“还需要再具体”；有认证行程时结果复用与痕迹相同的 journey evidence IDs，并展示道路、城市、异地活动对应原账单，不靠金额或周末猜测。无认证行程时不得把普通周末餐饮、交通或购物拼成出去玩；明确“旅行/酒店/机票”等旧查询仍保持原兜底。免费/会员沿用既有生活线索权限，查询不写账、不联网发送城市路线、不改变分类/标题/金额/日期；100/1,000/5,000 条结果确定且无明显 hitch | `NOT_RUN` |
+| FLOW-91 | 分别准备 100/1,000/5,000 条账本，今天列表至少 8 条且包含可编辑记录；开启 Instruments Main Thread Hitches 与 Time Profiler，另准备跨今天、零金额、同时间记录、本机写入失败模拟、VoiceOver、特大字号和 Reduce Motion | 从首页进入记录详情，连续编辑标题、金额、分类和时间 20 次，每次保存后立即返回首页并对照列表与再次打开的详情；再把记录移出/移入今天、改为零金额、制造同时间排序，等待后台整理完成并重启复测 | 每次本机保存成功后，首页列表与详情在同一 UI 周期显示同一最新标题、金额、分类和时间；移出今天或零金额立即消失，移入立即出现，同时间顺序稳定。即时投影只更新列表，不冒充完整 revision，后台最终指纹、回放、行程与统计按最新 revision 校准且旧结果不反写；写入失败不得显示伪成功。连续编辑 20 次无列表旧值、明显卡顿、主线程全账本历史扫描、长 hitch 或持续内存增长；100/1,000/5,000 条、重启、VoiceOver、特大字号和 Reduce Motion 均一致，不改变编辑解析、生活线索、同步、照片、会员或额度规则 | `NOT_RUN` |
+
 ## 9. 无障碍与权限矩阵
 
 | ID | 操作 | 通过标准 | 状态 |
@@ -333,3 +343,33 @@ python scripts/validate_release_gate.py --phase device-audit `
 - `PASS`：所有必测项通过，且 device-audit 与自动门禁一致。
 - `FAIL`：存在可复现缺陷，记录所属任务和定向修复范围。
 - `BLOCKED`：缺设备、账号、Xcode 或外部服务；不得写成已验证。
+
+## 11. 2026-08-18 高保值发版复验
+
+| 门禁 | 结果 | 证据位置/日志 | 签收人 | 日期 |
+|---|---|---|---|---|
+| 分支与远端一致性 | `PASS` | `feature/xuzhangapp-staging` 的 HEAD 与 `origin/feature/xuzhangapp-staging` 均为 `5c78cc5`，ahead/behind 为 `0/0`；仅保留既有未跟踪素材、输出和缓存目录 | Codex | 2026-08-18 |
+| Windows repository gate | `PASS` | `python scripts/validate_release_gate.py --phase windows` 退出码 0，最终 `release_repository_gate: OK`；100/1,000/5,000 条夹具、三张真实 12MP 夹具、差异、语义、体验静态、文案、迁移和 SQLite schema 全通过；夹具摘要为 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`，仅保留既有 5 条 copy lint 软提示 | Codex | 2026-08-18 |
+| AI 代理契约 | `PASS` | `npm test`（`ai-proxy`）24/24 通过 | Codex | 2026-08-18 |
+| 后端发布策略 | `PASS` | `npm test`（`backend`）通过；认证令牌 TTL 为 90 天，生产提醒策略为每日最多 1 次、场景冷却 7 天 | Codex | 2026-08-18 |
+| 版本与签名静态配置 | `PASS_WITH_RISK` | App Debug/Release 均为 `1.0 (1)`、`com.xuzhang.app`、Team `4SYY8L84JV`；上传前仍须确认构建号 `1` 未被 App Store Connect/TestFlight 使用，否则递增构建号 | Codex | 2026-08-18 |
+| Xcode Debug/Release build 与全部 XCTest | `BLOCKED` | 本机复核 `xcodebuild`、`swift`、`simctl`、`instruments` 均不可用；未冒充编译或 XCTest 通过 | Codex | 2026-08-18 |
+| 100/1,000/5,000 条真机、device-audit、REAL-01～06 | `BLOCKED` | 无 macOS/Xcode、iPhone 与 Instruments，未执行部署、容器审计或性能阈值签收 | Codex | 2026-08-18 |
+| StoreKit、同步、权限、无障碍与 `FLOW-01`～`FLOW-87` | `BLOCKED` | 无 StoreKit 沙盒、短信/同步测试账号、第二设备和 iPhone；`FLOW-86` 的商品语义边界与 `FLOW-87` 的周期事实复用、100/1,000/5,000 条 Instruments 性能均保持 `NOT_RUN` | Codex | 2026-08-18 |
+| 最终发版结论 | `BLOCKED` | 仓库与跨平台自动门禁通过，但本文件规定的 Xcode、XCTest、真机、性能、StoreKit、同步、权限及无障碍必测项尚未全部通过，当前不得标记 `VERIFIED` 或正式发版 | Codex | 2026-08-18 |
+
+解除阻塞的最短路径：在 macOS 运行第 3.2 节完整门禁并保存 Debug、Release、XCTest 三段独立日志；随后用本次构建在两档 iPhone 完成三档夹具、device-audit、REAL-01～06、StoreKit/同步/权限/无障碍和 `FLOW-82`～`FLOW-88`，最后再回填最终 `PASS` 或具体 `FAIL`。
+
+## 12. 2026-08-27 LIFE-JOURNEY-FIX-01 代码验收
+
+| 门禁 | 结果 | 证据位置/日志 | 签收人 | 日期 |
+|---|---|---|---|---|
+| 单笔语义与行级缓存静态门禁 | `PASS` | 花甲餐饮词典、手动分类标题保护、非工作夜间文案、充电“车主日常”及逐条语义签名/精准失效检查全部进入 `experience_static_check.ps1` 并通过 | Codex | 2026-08-27 |
+| 跨城行程事实与隐私静态门禁 | `PASS` | 行程必须具备城市、道路/长途交通和异地活动证据；闭环、自驾、老家边界、跨线索/章节/播放复用及远程过滤检查全部通过；远程叙事 rule version 为 5 | Codex | 2026-08-27 |
+| JSON、语义与文案回归 | `PASS_WITH_WARNINGS` | 两份 JSON 可解析；`life_semantic_regression.py`、`check_copy_experience.ps1`、`copy_lint.py`、`playback_copy_lint.py` 通过；仅保留任务开始前已有 5 条 copy lint soft warning | Codex | 2026-08-27 |
+| Windows repository gate | `PASS` | `python scripts/validate_release_gate.py --phase windows` 最终 `release_repository_gate: OK`；夹具集合摘要 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`，AI proxy 24/24、迁移、SQLite schema、100/1,000/5,000 和真实照片夹具均通过 | Codex | 2026-08-27 |
+| Xcode Debug/Release build 与全部 XCTest | `BLOCKED` | Windows 本机确认 `swift`、`swiftc`、`sourcekit-lsp`、`xcodebuild` 均不可用；新增 XCTest 已接线但未冒充执行通过 | Codex | 2026-08-27 |
+| `FLOW-88` iPhone/Instruments/抓包 | `NOT_RUN` | 缺 macOS/Xcode、iPhone、Instruments 与可抓包的真机环境；连续编辑/删除/重启、联网迟到、隐私请求体及三档性能等待真机签收 | Codex | 2026-08-27 |
+| 本任务结论 | `CODE_DONE` | 本机可执行门禁全部通过；在 Xcode/XCTest 和 `FLOW-88` 取得证据前不得标记 `VERIFIED` 或据此正式发版 | Codex | 2026-08-27 |
+
+本任务解除阻塞的最短路径：在 macOS 对当前工作树运行 Debug build、Release build 和全部 XCTest；随后使用同一构建完成 `FLOW-88`，保存路线/证据一致性截图、远程请求体、连续操作结果和 100/1,000/5,000 Instruments 日志，再回填 `PASS` 或具体 `FAIL`。

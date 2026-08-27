@@ -63,7 +63,7 @@ struct PreparedLifeNarrativeAIFactPack {
 }
 
 enum LifeNarrativeAIPreparationPolicy {
-    static let ruleVersion = 4
+    static let ruleVersion = 5
 
     static func prepareFactPacks(
         items: [HomeItem],
@@ -114,6 +114,10 @@ enum LifeNarrativeAIPreparationPolicy {
         }
         guard !currentItems.isEmpty else { return nil }
         let previousItems = items.filter { $0.createdAt >= previousStart && $0.createdAt < current.start }
+        let journeyFact = LifeJourneyFactService.primaryFact(
+            in: currentItems,
+            calendar: calendar
+        )
         let echo = LifeNarrativeEchoPolicy.makeEcho(
             LifeNarrativeEchoInput(
                 scope: scope,
@@ -132,9 +136,15 @@ enum LifeNarrativeAIPreparationPolicy {
                 previousItems: previousItems,
                 now: now,
                 recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousItems),
-                relationshipEcho: echo
+                relationshipEcho: echo,
+                journeyFact: journeyFact
             )
         )
+        // Cross-city routes and their evidence stay entirely local. The certified local
+        // journey wording is already complete and must not be replaced by a remote rewrite.
+        if plan.leadSignalID == journeyFact?.id {
+            return nil
+        }
         let roleOrder: [LifeNarrativeSignalRole] = [.lead, .support, .mark, .evidence]
         let relationshipMode = echo.map { plan.leadSignalID == $0.id } ?? false
         var seenSignalIDs = Set<String>()
@@ -144,6 +154,7 @@ enum LifeNarrativeAIPreparationPolicy {
         for role in roleOrder {
             for signal in plan.signalsByRole[role, default: []] {
                 guard signal.kind != .userText,
+                      !signal.id.hasPrefix("journey:"),
                       (!relationshipMode || signal.id == echo?.id),
                       seenSignalIDs.insert(signal.id).inserted else {
                     continue

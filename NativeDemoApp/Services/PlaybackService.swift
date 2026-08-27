@@ -60,6 +60,40 @@ struct SummaryPlayback: Identifiable, Codable, Equatable {
     let memoryAnchors: [SummaryMemoryAnchor]
 }
 
+struct PeriodExperienceFacts: @unchecked Sendable {
+    let range: SummaryPlaybackRange
+    let sourceRevision: Int
+    let isMember: Bool
+    let preparedAt: Date
+    let periodStart: Date
+    let periodEnd: Date
+    let periodItems: [HomeItem]
+    let previousPeriodItems: [HomeItem]
+    let lifeMarks: [LifeMarkAggregate]
+    let journeyFact: LifeJourneyFact?
+    let narrativeEcho: LifeNarrativeEcho?
+    let narrativePlan: LifeNarrativePlan
+    let narrativeRewrite: LifeNarrativeAIRewrite?
+    let auxiliaryMetrics: [String: String]
+
+    func matches(
+        range expectedRange: SummaryPlaybackRange,
+        sourceRevision expectedRevision: Int,
+        isMember expectedMembership: Bool,
+        now: Date = Date()
+    ) -> Bool {
+        guard range == expectedRange,
+              sourceRevision == expectedRevision,
+              isMember == expectedMembership else { return false }
+        let calendar = expectedRange == .week ? PlaybackService.isoCalendar : Calendar.current
+        let component: Calendar.Component = expectedRange == .week ? .weekOfYear : .month
+        guard let expectedInterval = calendar.dateInterval(of: component, for: now) else {
+            return false
+        }
+        return periodStart == expectedInterval.start && periodEnd == expectedInterval.end
+    }
+}
+
 struct ShareInsightSignal: Equatable {
     enum CategoryContext: Equatable {
         case dining
@@ -574,17 +608,149 @@ final class PlaybackService {
         return PlaybackSnapshot(durationMs: 10_000, entries: Array(rows))
     }
 
+    func preparePeriodExperienceFacts(
+        from items: [HomeItem],
+        range: SummaryPlaybackRange,
+        now: Date = Date(),
+        sourceRevision: Int,
+        isMember: Bool = true
+    ) -> PeriodExperienceFacts {
+        let calendar = range == .week ? Self.isoCalendar : Calendar.current
+        let component: Calendar.Component = range == .week ? .weekOfYear : .month
+        let interval = calendar.dateInterval(of: component, for: now)
+        let start = interval?.start ?? calendar.startOfDay(for: now)
+        let end = interval?.end ?? now
+        let periodItems = positiveItems(items, from: start, to: end)
+        return preparePeriodExperienceFacts(
+            periodItems: periodItems,
+            allItems: items,
+            range: range,
+            now: now,
+            sourceRevision: sourceRevision,
+            isMember: isMember
+        )
+    }
+
+    func preparePeriodExperienceFacts(
+        periodItems: [HomeItem],
+        allItems: [HomeItem],
+        range: SummaryPlaybackRange,
+        now: Date,
+        sourceRevision: Int,
+        isMember: Bool = true
+    ) -> PeriodExperienceFacts {
+        let calendar = range == .week ? Self.isoCalendar : Calendar.current
+        let component: Calendar.Component = range == .week ? .weekOfYear : .month
+        let interval = calendar.dateInterval(of: component, for: now)
+        let start = interval?.start ?? calendar.startOfDay(for: now)
+        let end = interval?.end ?? now
+        let normalizedPeriodItems = periodItems
+            .filter {
+                $0.amount > 0
+                    && $0.createdAt >= start
+                    && $0.createdAt < end
+            }
+            .sorted { $0.createdAt < $1.createdAt }
+        let previousStart = calendar.date(byAdding: component, value: -1, to: start) ?? start
+        let previousPeriodItems = positiveItems(allItems, from: previousStart, to: start)
+        let scope: LifeNarrativeScope = range == .week ? .week : .month
+        let journeyFact = LifeJourneyFactService.primaryFact(
+            in: normalizedPeriodItems,
+            calendar: calendar
+        )
+        let narrativeEcho = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: scope,
+                sourceRevision: sourceRevision,
+                items: allItems,
+                now: now,
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+        let narrativePlan = LifeNarrativeSignalPolicy.makePlan(
+            LifeNarrativePlanningInput(
+                scope: scope,
+                sourceRevision: sourceRevision,
+                items: normalizedPeriodItems,
+                previousItems: previousPeriodItems,
+                now: now,
+                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(
+                    from: previousPeriodItems
+                ),
+                relationshipEcho: narrativeEcho,
+                journeyFact: journeyFact
+            )
+        )
+        let narrativeRewrite: LifeNarrativeAIRewrite? = {
+            guard narrativePlan.leadSignalID != journeyFact?.id else { return nil }
+            return LifeNarrativeAIRewriteStore.shared.rewrite(
+                for: LifeNarrativeAIPreparationPolicy.key(
+                    scope: scope,
+                    sourceRevision: sourceRevision,
+                    now: now,
+                    calendar: calendar
+                )
+            )
+        }()
+        let lifeMarkContext = LifeMarkService.prepareAggregationContext(
+            allItems: allItems,
+            periodItems: normalizedPeriodItems
+        )
+        let preparedLifeMarkSets = LifeMarkService.preparedAggregateSets(
+            for: normalizedPeriodItems,
+            preparedContext: lifeMarkContext,
+            visibleIsMember: isMember,
+            visibleLimit: 8,
+            memberLimit: 24
+        )
+        return PeriodExperienceFacts(
+            range: range,
+            sourceRevision: sourceRevision,
+            isMember: isMember,
+            preparedAt: now,
+            periodStart: start,
+            periodEnd: end,
+            periodItems: normalizedPeriodItems,
+            previousPeriodItems: previousPeriodItems,
+            lifeMarks: preparedLifeMarkSets.visible,
+            journeyFact: journeyFact,
+            narrativeEcho: narrativeEcho,
+            narrativePlan: narrativePlan,
+            narrativeRewrite: narrativeRewrite,
+            auxiliaryMetrics: PlaybackAuxiliarySignalPolicy.preparedMetrics(
+                periodItems: normalizedPeriodItems,
+                lifeMarks: preparedLifeMarkSets.member
+            )
+        )
+    }
+
     func buildWeekSummary(
         from items: [HomeItem],
         now: Date = Date(),
         copySeed: String = "",
         sourceRevision: Int? = nil
     ) -> SummaryPlayback {
+        let preparedFacts = preparePeriodExperienceFacts(
+            from: items,
+            range: .week,
+            now: now,
+            sourceRevision: sourceRevision ?? items.count
+        )
+        return buildWeekSummary(from: preparedFacts, copySeed: copySeed)
+    }
+
+    func buildWeekSummary(
+        from preparedFacts: PeriodExperienceFacts,
+        copySeed: String = ""
+    ) -> SummaryPlayback {
+        precondition(preparedFacts.range == .week)
+        let now = preparedFacts.preparedAt
         let calendar = Self.isoCalendar
         let interval = calendar.dateInterval(of: .weekOfYear, for: now)
         let start = interval?.start ?? calendar.startOfDay(for: now)
         let end = interval?.end ?? now
-        let rows = positiveItems(items, from: start, to: end)
+        let rows = preparedFacts.periodItems
         let rangeLabel = "\(Self.shortDateFormatter.string(from: start))-\(Self.shortDateFormatter.string(from: calendar.date(byAdding: .day, value: -1, to: end) ?? now))"
         let total = rows.reduce(0) { $0 + $1.amount }
         let top = topCategoryStats(rows).first
@@ -593,7 +759,6 @@ final class PlaybackService {
         let title = "周记"
         let weekKey = SummaryPlaybackQuotaStore().currentWeekKey(now: now)
         let weekSeed = playbackCopySeed(base: "week-\(weekKey)", suffix: copySeed)
-        let resolvedSourceRevision = sourceRevision ?? items.count
 
         guard !rows.isEmpty else {
             return SummaryPlayback(
@@ -611,37 +776,9 @@ final class PlaybackService {
             )
         }
 
-        let previousWeekStart = calendar.date(byAdding: .weekOfYear, value: -1, to: start) ?? start
-        let previousWeekRows = positiveItems(items, from: previousWeekStart, to: start)
-        let narrativeEcho = LifeNarrativeEchoPolicy.makeEcho(
-            LifeNarrativeEchoInput(
-                scope: .week,
-                sourceRevision: resolvedSourceRevision,
-                items: items,
-                now: now,
-                recentEchoIDs: []
-            ),
-            calendar: calendar
-        )
-        let narrativePlan = LifeNarrativeSignalPolicy.makePlan(
-            LifeNarrativePlanningInput(
-                scope: .week,
-                sourceRevision: resolvedSourceRevision,
-                items: rows,
-                previousItems: previousWeekRows,
-                now: now,
-                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousWeekRows),
-                relationshipEcho: narrativeEcho
-            )
-        )
-        let narrativeRewrite = LifeNarrativeAIRewriteStore.shared.rewrite(
-            for: LifeNarrativeAIPreparationPolicy.key(
-                scope: .week,
-                sourceRevision: resolvedSourceRevision,
-                now: now,
-                calendar: calendar
-            )
-        )
+        let narrativeEcho = preparedFacts.narrativeEcho
+        let narrativePlan = preparedFacts.narrativePlan
+        let narrativeRewrite = preparedFacts.narrativeRewrite
 
         let echoAnchor = EchoAnchorService.shared.pickEchoAnchor(items: rows, periodKey: weekKey, now: now)
         let selection = momentSelector.select(from: rows, periodKey: weekKey, range: .week, now: now, echoAnchor: echoAnchor)
@@ -663,11 +800,7 @@ final class PlaybackService {
             range: .week,
             excludingTitles: Set([recordCopy.safeTitle].compactMap { $0 })
         )
-        var auxiliaryMetrics = PlaybackAuxiliarySignalPolicy.preparedMetrics(
-            periodItems: rows,
-            allItems: items,
-            now: now
-        )
+        var auxiliaryMetrics = preparedFacts.auxiliaryMetrics
         let representsLateWorkCommute = lateWorkCommuteItem?.id == representative.id
         let auxiliaryLateWorkCommuteLine = representsLateWorkCommute
             ? nil
@@ -785,7 +918,10 @@ final class PlaybackService {
                     "count": "\(rows.count)",
                     "total": Self.money(total),
                     "topCategory": top?.category ?? "日常",
-                    "supportLine": narrativeRewrite?.summary ?? narrativeEcho?.line ?? ""
+                    "supportLine": narrativeRewrite?.summary
+                        ?? preparedFacts.journeyFact?.line
+                        ?? narrativeEcho?.line
+                        ?? ""
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: weak ? "week-weak-outro" : "week-outro",
@@ -841,6 +977,7 @@ final class PlaybackService {
         ) ?? interval.start
         let previousRows = positiveItems(items, from: previousStart, to: interval.start)
         let previousStableSignalIDs = LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousRows)
+        let journeyFact = LifeJourneyFactService.primaryFact(in: rows, calendar: calendar)
         let narrativeEcho = LifeNarrativeEchoPolicy.makeEcho(
             LifeNarrativeEchoInput(
                 scope: .week,
@@ -859,17 +996,21 @@ final class PlaybackService {
                 previousItems: previousRows,
                 now: now,
                 recentLeadSignalIDs: previousStableSignalIDs,
-                relationshipEcho: narrativeEcho
+                relationshipEcho: narrativeEcho,
+                journeyFact: journeyFact
             )
         )
-        let narrativeRewrite = LifeNarrativeAIRewriteStore.shared.rewrite(
-            for: LifeNarrativeAIPreparationPolicy.key(
-                scope: .week,
-                sourceRevision: sourceRevision ?? items.count,
-                now: now,
-                calendar: calendar
+        let narrativeRewrite: LifeNarrativeAIRewrite? = {
+            guard narrativePlan.leadSignalID != journeyFact?.id else { return nil }
+            return LifeNarrativeAIRewriteStore.shared.rewrite(
+                for: LifeNarrativeAIPreparationPolicy.key(
+                    scope: .week,
+                    sourceRevision: sourceRevision ?? items.count,
+                    now: now,
+                    calendar: calendar
+                )
             )
-        )
+        }()
 
         let total = rows.reduce(0) { $0 + $1.amount }
         let top = topCategoryStats(rows).first
@@ -1384,17 +1525,28 @@ final class PlaybackService {
         copySeed: String = "",
         sourceRevision: Int? = nil
     ) -> SummaryPlayback {
+        let preparedFacts = preparePeriodExperienceFacts(
+            from: items,
+            range: .month,
+            now: now,
+            sourceRevision: sourceRevision ?? items.count
+        )
+        return buildMonthSummary(from: preparedFacts, copySeed: copySeed)
+    }
+
+    func buildMonthSummary(
+        from preparedFacts: PeriodExperienceFacts,
+        copySeed: String = ""
+    ) -> SummaryPlayback {
+        precondition(preparedFacts.range == .month)
+        let now = preparedFacts.preparedAt
         let calendar = Calendar.current
-        let interval = calendar.dateInterval(of: .month, for: now)
-        let start = interval?.start ?? calendar.startOfDay(for: now)
-        let end = interval?.end ?? now
-        let rows = positiveItems(items, from: start, to: end)
+        let rows = preparedFacts.periodItems
         let total = rows.reduce(0) { $0 + $1.amount }
         let title = "月章"
         let rangeLabel = Self.monthFormatter.string(from: now)
         let top = topCategoryStats(rows).first
         let ratio = total > 0 ? Int(round(((top?.amount ?? 0) / total) * 100)) : 0
-        let resolvedSourceRevision = sourceRevision ?? items.count
 
         guard !rows.isEmpty else {
             return SummaryPlayback(
@@ -1412,37 +1564,9 @@ final class PlaybackService {
             )
         }
 
-        let previousMonthStart = calendar.date(byAdding: .month, value: -1, to: start) ?? start
-        let previousMonthRows = positiveItems(items, from: previousMonthStart, to: start)
-        let narrativeEcho = LifeNarrativeEchoPolicy.makeEcho(
-            LifeNarrativeEchoInput(
-                scope: .month,
-                sourceRevision: resolvedSourceRevision,
-                items: items,
-                now: now,
-                recentEchoIDs: []
-            ),
-            calendar: calendar
-        )
-        let narrativePlan = LifeNarrativeSignalPolicy.makePlan(
-            LifeNarrativePlanningInput(
-                scope: .month,
-                sourceRevision: resolvedSourceRevision,
-                items: rows,
-                previousItems: previousMonthRows,
-                now: now,
-                recentLeadSignalIDs: LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousMonthRows),
-                relationshipEcho: narrativeEcho
-            )
-        )
-        let narrativeRewrite = LifeNarrativeAIRewriteStore.shared.rewrite(
-            for: LifeNarrativeAIPreparationPolicy.key(
-                scope: .month,
-                sourceRevision: resolvedSourceRevision,
-                now: now,
-                calendar: calendar
-            )
-        )
+        let narrativeEcho = preparedFacts.narrativeEcho
+        let narrativePlan = preparedFacts.narrativePlan
+        let narrativeRewrite = preparedFacts.narrativeRewrite
 
         let activeDays = Set(rows.map { calendar.startOfDay(for: $0.createdAt) }).count
         let monthKey = Self.monthKeyFormatter.string(from: now)
@@ -1506,7 +1630,11 @@ final class PlaybackService {
             lateSupport = ""
         }
 
-        let comparisonCopy = monthlyComparisonCopy(allItems: items, currentRows: rows, now: now)
+        let comparisonCopy = monthlyComparisonCopy(
+            previousRows: preparedFacts.previousPeriodItems,
+            currentRows: rows,
+            now: now
+        )
         var usedRecordTitles = Set<String>()
         if let title = earlyCopy?.safeTitle { usedRecordTitles.insert(title) }
         if let title = lateCopy?.safeTitle { usedRecordTitles.insert(title) }
@@ -1515,11 +1643,7 @@ final class PlaybackService {
             range: .month,
             excludingTitles: usedRecordTitles
         )
-        var auxiliaryMetrics = PlaybackAuxiliarySignalPolicy.preparedMetrics(
-            periodItems: rows,
-            allItems: items,
-            now: now
-        )
+        var auxiliaryMetrics = preparedFacts.auxiliaryMetrics
         let representsLateWorkCommute = lateWorkCommuteItem.map { item in
             [earlyItem?.id, lateItem?.id]
                 .compactMap { $0 }
@@ -1619,7 +1743,10 @@ final class PlaybackService {
                 metrics: [
                     "count": "\(rows.count)",
                     "total": Self.money(total),
-                    "supportLine": narrativeRewrite?.summary ?? narrativeEcho?.line ?? ""
+                    "supportLine": narrativeRewrite?.summary
+                        ?? preparedFacts.journeyFact?.line
+                        ?? narrativeEcho?.line
+                        ?? ""
                 ],
                 narration: PlaybackCopyPool.narration(
                     chapterId: "month-outro",
@@ -1893,7 +2020,7 @@ final class PlaybackService {
     }
 
     private func monthlyComparisonCopy(
-        allItems: [HomeItem],
+        previousRows: [HomeItem],
         currentRows: [HomeItem],
         now: Date
     ) -> PlaybackMonthComparisonCopy {
@@ -1921,7 +2048,7 @@ final class PlaybackService {
         ) ?? previousMonth.end
         let previousEnd = min(previousEndCandidate, previousMonth.end)
         let comparableCurrent = currentRows.filter { $0.createdAt < currentEnd }
-        let comparablePrevious = positiveItems(allItems, from: previousMonth.start, to: previousEnd)
+        let comparablePrevious = previousRows.filter { $0.createdAt < previousEnd }
         let previousLabel = Self.monthFormatter.string(from: previousMonth.start)
         let currentLabel = Self.monthFormatter.string(from: currentMonth.start)
         let previousTotal = comparablePrevious.reduce(0) { $0 + $1.amount }

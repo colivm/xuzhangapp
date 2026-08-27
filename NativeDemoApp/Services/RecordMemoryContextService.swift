@@ -6,7 +6,6 @@ struct RecordMemoryContextInput {
     let amount: Double
     let date: Date
     let baseEmotionTag: String
-    let existingItems: [HomeItem]
     let weather: WeatherSnapshot?
 }
 

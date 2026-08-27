@@ -105,6 +105,30 @@
       "expectedEmotionRule": "meal"
     },
     {
+      "id": "manual-huajia-chicken-feet-dining",
+      "mode": "manual",
+      "amount": 25,
+      "inputTitle": "徐记花甲鸡爪｜宿豫店",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
+      "id": "manual-clam-dining",
+      "mode": "manual",
+      "amount": 32,
+      "inputTitle": "花蛤蛤蜊贝类拼盘",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
+      "id": "ocr-huajia-dining",
+      "mode": "ocr",
+      "amount": 25,
+      "rawText": "微信支付 徐记花甲 宿豫店 付款金额 ¥25.00",
+      "expectedCategory": "餐饮",
+      "expectedEmotionRule": "meal"
+    },
+    {
       "id": "ocr-duck-blood-vermicelli-soup-bun-dining",
       "mode": "ocr",
       "amount": 25,

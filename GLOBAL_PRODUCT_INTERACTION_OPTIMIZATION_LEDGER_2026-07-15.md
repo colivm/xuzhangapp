@@ -4172,3 +4172,103 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过，最终 `release_repository_gate: OK`；5 条 copy lint 软提示均为既有基线。冻结边界确认：未迁移或重写任何已有账单，未修改保存 schema、OCR 金额/日期、通勤事实、场景/情绪/生活线索、会员/额度、云端 DTO/同步、首页动态主动作、`PERF-AUDIT-04` 或 `ARCH-03`。
 - 剩余风险与下一步：Windows 无 Swift/Xcode/iPhone，新增 Swift 归一化/相似度策略、严格并发诊断和 XCTest 尚未实际编译运行；后台预填晚到、连续 20 次备注切换、用户锁定、保存/重启一致性、VoiceOver 与 Reduce Motion 仍需在 macOS 完成 Debug/Release build、全部 XCTest，并用新 TestFlight 按 `FLOW-86` 真机签收。下一项只做 `FLOW-86` 验证；未取得真机证据前保持 `CODE_DONE`，不启动 `PERF-AUDIT-04` 或 `ARCH-03`。
 - Xcode 编译定向修复：`NativeDemoApp/ViewModels/HomeViewModel.swift` 为 provisional frequent suggestion 的 Optional `flatMap` 同时补充结果类型 `HomeItem.Category?` 与闭包返回类型 `-> HomeItem.Category?`，消除 `Generic parameter 'U' could not be inferred`，不改变置信度、语义优先级或任何运行时分支。修复后 `git diff --check`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 再次通过，最终 `release_repository_gate: OK`；Windows 无 Swift 编译器，仍以用户下一次 Xcode 编译结果作为本项编译签收证据。
+
+---
+
+## 69. 2026-08-18 高保值发版验证记录
+
+- 状态与范围：本轮只复验现有发布产物、分支一致性、跨平台自动门禁、Node 契约和外部签收条件，不修改产品代码、不新增功能、不迁移数据，也不把任何 `CODE_DONE` 项提升为 `VERIFIED`。当前无路线图任务进入 `IN_PROGRESS`；`SEMANTIC-FIX-02` 仍为 `CODE_DONE`，下一项仍只允许 `FLOW-86` 的 Xcode/TestFlight 验证，`PERF-AUDIT-04` 与 `ARCH-03` 保持 `NOT_STARTED`。
+- 文件与工作区：本轮仅更新 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。验证基线为 `feature/xuzhangapp-staging` 的 `5c78cc5 fix: make frequent category type explicit`，与远端 ahead/behind 为 `0/0`；既有未跟踪 `brand-assets/mockups/`、`brand-assets/source/pet-concepts/`、`brand-assets/source/pet-sprites/`、`output/`、`scripts/__pycache__/` 和 `tmp/` 全部保留、未改动、未暂存。
+- 验证证据：`python scripts/validate_release_gate.py --phase windows` 退出码 0 并输出 `release_repository_gate: OK`；100/1,000/5,000 条确定性夹具、三张真实 12MP 夹具、差异、生活语义、体验静态、文案体验、copy lint、迁移和 SQLite schema 全通过，夹具摘要保持 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`，仅有既有 5 条软提示。`npm test`（`ai-proxy`）24/24 通过；`npm test`（`backend`）确认 90 天认证令牌 TTL 和生产提醒每日 1 次/场景冷却 7 天。App Debug/Release 静态配置均为版本 `1.0`、构建号 `1`、Bundle ID `com.xuzhang.app`、Team `4SYY8L84JV`。
+- 剩余风险与发布结论：当前 Windows 复核 `xcodebuild`、`swift`、`simctl`、`instruments` 全不可用，无法执行 Debug/Release 编译、Swift 严格并发诊断、全部 XCTest、device-audit、100/1,000/5,000 条真机性能、REAL-01～06、StoreKit、双设备同步、权限、VoiceOver、Dynamic Type、Reduce Motion 或 `FLOW-82`～`FLOW-86`。构建号 `1` 上传前还须确认未在 App Store Connect/TestFlight 使用，若已使用必须递增。因此当前仅能判定“Windows 仓库门禁通过”，整体发版结论为 `BLOCKED`，不得标记 `VERIFIED` 或正式发版。
+- 下一步：在 macOS 执行 `python3 scripts/validate_release_gate.py --phase all --simulator-destination 'platform=iOS Simulator,name=iPhone 15'` 并保留 Debug、Release、XCTest 三段独立日志；用新构建完成两档 iPhone、三档夹具与 device-audit、REAL-01～06、StoreKit/同步/权限/无障碍矩阵，最后优先签收 `FLOW-82`～`FLOW-86`，其中 `FLOW-86` 必须覆盖东方树叶/青柑普洱、未知具体商品、用户纠错学习、快速切换 20 次、锁定、重启、VoiceOver 与 Reduce Motion。只有全部必测项通过后才更新最终结论为 `PASS`。
+
+---
+
+## 70. TRACE-PREP-PERF-01：痕迹事实底稿与周/月回放复用（2026-08-18）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；代码、等价性回归、体验静态门禁与完整 Windows 发布门禁通过，当前无 `IN_PROGRESS`。用户以长期真机日用确认“正在整理”是当前最大问题，并明确授权优化与自检；本项作为已知发版阻断的定向性能修复，先于通用 `PERF-AUDIT-04`，未启动 `ARCH-03`。Windows 无 Swift/Xcode/iPhone，缺编译、XCTest 与 Instruments 真机签收，不标记 `VERIFIED`。
+- 产品原则：同一周期共用事实与证据底稿，不共用最终页面。痕迹继续负责概览，线索负责解释，周记/月章继续按既有章节和文案变体展开；金额、日期、分类、生活印记、叙事证据、照片资格和敏感内容边界必须一致且可复算。
+- 允许范围：让痕迹后台准备产生可复用的周期事实快照，周/月回放优先消费同账本修订、同周期的已准备事实；缓存命中不得再次扫描完整历史。允许把生活印记历史上下文、历史回声、叙事计划和远程润色读取从重复入口收敛为一次准备，并补充 latest-wins、缓存失效、等价性、性能静态门禁与真机矩阵。
+- 冻结边界：不修改生活印记/场景/关系/叙事算法及阈值，不修改周记 3/5 章、月章 6 章的顺序/时长/文案池，不修改照片选择资格、金额、日期、分类、账本 schema、云端 DTO/同步、AI 请求、额度、会员、StoreKit、主题、首页主动作或分享模板；不持久化原图，不把过期修订冒充当前结果，不顺带执行 `PERF-AUDIT-04` 或 `ARCH-03`。
+- 计划验收：痕迹准备完成后点击同周期周记/月章不再重跑全账本生活印记、历史回声和叙事计划；相同输入的新旧构建结果在事实、章节、证据和照片锚点上等价；新增/编辑/删除、跨日、会员变化和远程润色晚到只接受最新合法修订。100/1,000/5,000 条覆盖首次准备、缓存命中、连续切换/点击 20 次、杀进程、VoiceOver、Reduce Motion 与 Instruments，完整 Windows 门禁通过；Xcode/XCTest/真机证据前最多标记 `CODE_DONE`。
+- 实现：`NativeDemoApp/Services/PlaybackService.swift` 新增只驻留内存的 `PeriodExperienceFacts`，固定周期起止、账本 revision、会员状态、当前/上一周期记录、生活印记、历史回声、叙事计划、已验证远程润色和回放辅助指标；周记/月章保留原入口和最终页面，但可直接消费匹配底稿。`matches` 同时核对周/月、账本 revision、会员状态与当前真实周期，禁止新增/编辑/删除、会员变化或跨周期后继续使用旧事实。月度同期比较只读取底稿中的上一周期记录，不再回扫全账本。
+- 痕迹与复用：`NativeDemoApp/Views/StatsTraceSnapshotStore.swift` 在构建当前周/月痕迹时统一准备事实底稿，`NativeDemoApp/Views/StatsTraceModels.swift` 让完整痕迹快照携带该底稿；`NativeDemoApp/Views/StatsWebView.swift` 仅从当前可见且生命周期 key 完全匹配的痕迹快照取底稿，并再次校验周期、revision 与会员状态，命中后直接构建独立的周记/月章表达，不命中仍走原全量安全兜底。远程润色通知继续使 chapter content revision 失效，旧润色不会借复用反写。
+- 单次生活印记准备：`NativeDemoApp/Services/LifeMarkService.swift` 新增 `preparedAggregateSets`，一次建立候选集合后分别按原排序、会员过滤和上限产出痕迹可见 8 条与回放辅助 24 条；`NativeDemoApp/Services/PlaybackSupportServices.swift` 增加消费已准备生活印记的入口并保留原 24 条边界。历史索引、候选生成、历史回声和叙事计划在同一周期痕迹准备中各执行一次，未改变生活印记定义、阈值或会员可见结果。
+- 回归与门禁：`NativeDemoAppTests/StateRegressionTests.swift` 新增周/月“直接构建 vs 底稿复用”完整 `SummaryPlayback` 等价测试，覆盖错误范围、旧 revision、会员变化、跨月拒绝和上一周期记录边界；Trace 快照测试断言底稿叙事计划与页面计划相同，并将单次候选集合的免费/会员生活印记结果与旧入口逐项比较。`scripts/experience_static_check.ps1` 锁定事实身份、单候选集合、痕迹携带、播放命中校验、XCTest 与 `FLOW-87`；`scripts/playback_copy_lint.py` 将月度比较门禁更新为“只消费已准备上一周期记录”。`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 新增 `FLOW-87`，覆盖 100/1,000/5,000 条、连续 20 次、账本/周期/会员/润色失效、杀进程、VoiceOver、Reduce Motion 与 Instruments。
+- 修改文件：`NativeDemoApp/Services/LifeMarkService.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/Services/PlaybackSupportServices.swift`、`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`scripts/playback_copy_lint.py`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。既有未提交的 2026-08-18 发版复验文档和未跟踪素材/输出/缓存目录全部保留，未提交、未推送。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py` 与 `python scripts/validate_release_gate.py --phase windows` 全部退出码 0；最终 `release_repository_gate: OK`，100/1,000/5,000 条夹具摘要仍为 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`，仅保留既有 5 条 copy lint 软提示。冻结边界复核：未修改生活印记/场景/关系/叙事阈值、周记 3/5 章、月章 6 章、照片资格、金额/日期/分类、存储 schema、云端 DTO/同步、AI 请求、额度、会员、StoreKit、主题、首页主动作或分享模板。
+- 剩余风险与下一步：Windows 无 Swift/Xcode/iPhone，新增 Swift API、严格并发诊断和 XCTest 尚未实际编译运行；`FLOW-87` 的真实等待时间、全账本扫描次数、Main Thread Hitches 与内存仍需在 macOS 完成 Debug/Release build、全部 XCTest，并用新 TestFlight 在 100/1,000/5,000 条下签收。完整事实底稿未跨进程持久化，这是为避免过期修订和敏感内容滞留而保留的边界，因此杀进程后首次冷准备仍会安全重算；若真机首轮“正在整理”仍超出目标，必须先用 `FLOW-87` Instruments 堆栈定向登记后续任务，不在本项臆测扩张。下一项只做 `FLOW-87` 编译与真机签收；未取得证据前保持 `CODE_DONE`，不启动 `PERF-AUDIT-04` 或 `ARCH-03`。
+
+---
+
+## 71. LIFE-JOURNEY-FIX-01：单笔事实一致性与跨日行程生活线索（2026-08-27）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`。用户明确要求优化反复出现的充电生活线索、花甲分类、手动改分类覆盖标题，以及南京—宿迁—连云港—宿迁—南京跨日往返未被生活线索/复盘串联的问题；当前环境代码与 Windows 门禁已完成，等待 Xcode/XCTest/真机签收。
+- 产品原则：账单列表继续只展示单笔事实，不直接塞入跨账单关系；生活线索发现关系，周记/月章/复盘复用同一份已经认证的关系事实。跨城闭环行程优先于咖啡、买菜等普通重复线索，但没有道路证据不得称“自驾”，没有返回常驻城市不得称“返程完成”，没有用户设置或原文不得称“老家”。
+- 已确认根因：`RecordEditSheet.selectCategory` 无条件用分类建议覆盖原标题；首页生活线索同日同会员时跨账本 revision 保留旧行文案；花甲/花蛤/蛤蜊/鸡爪/凤爪语义没有在正式 JSON、Swift fallback 与场景词典中统一；现有事实系统主要处理单笔城市/异地标签，没有跨日按时间排序、带道路证据和闭环资格的统一行程事实。
+- 允许范围：新增纯 `LifeJourneyFact` 等价模型与确定性聚合策略；将认证行程注入现有生活线索、不可变叙事计划与周/月事实底稿；修正首页行级生活线索的事实变化失效；手动改分类不得覆盖非空真实标题；统一补充花甲、花蛤、蛤蜊、贝类、鸡爪、凤爪、花甲鸡爪的餐饮语义；补充 XCTest、语义夹具、静态门禁、真机矩阵与本文档。
+- 冻结边界：不修改账单 schema、云端 DTO/同步、金额/日期、OCR 金额日期、用户已保存历史分类，不新增静默数据迁移；不改变账单列表结构、周记 3/5 章、月章 6 章、会员/额度/StoreKit、照片资格、分享模板、主题、首页主动作、`PERF-AUDIT-04` 或 `ARCH-03`。不得把城市名、金额、周末或餐饮单独当成自驾证据，不得从系统生成文案反推事实。
+- 计划验收：固定回归 `2026-08-22 周六至周日：南京 → 宿迁 → 连云港 → 宿迁 → 南京`，证据覆盖连续充电、过路费、连云港海鲜、宿迁夜宵和周日返南京；生活线索与复盘必须拥有相同 journey fact ID、路线和证据记录 ID。无道路证据不说自驾，未回常驻城市不说闭环，未设置城市角色不说老家；花甲系列稳定为餐饮；编辑“徐记花甲｜宿豫店”只改分类不改标题；周六深夜无工作证据不生成“加班后的热食”；充电分类或标题事实变化后旧“超市买菜和家用”立即失效。覆盖编辑、删除、重启、跨日、连续操作和 100/1,000/5,000 条确定性结果。
+- 工作区保护：开始前分支 `feature/xuzhangapp-staging`、HEAD `5c78cc5`；保留 `TRACE-PREP-PERF-01` 的 Ledger、`LifeMarkService.swift`、`PlaybackService.swift`、`PlaybackSupportServices.swift`、`StatsTraceModels.swift`、`StatsTraceSnapshotStore.swift`、`StatsWebView.swift`、`StateRegressionTests.swift`、发布矩阵与静态门禁未提交修改，并保留 `brand-assets/`、`output/`、`tmp/`、`scripts/__pycache__/` 未跟踪内容。本项只在明确范围内叠加修改，不覆盖、回退、暂存或提交相邻现场。
+- 实施结果：
+  - 首页生活线索新增逐条语义签名；同日同会员的账本 revision 变化时，只保留标题、分类、金额、日期、商户、场景、城市、用户编辑标志等事实均未变化的行。被编辑或删除的充电行先立即撤掉旧“超市买菜和家用”，未变化行继续稳定显示，后台新快照发布后再原子替换；交通类充电、补能、过路费归入中性的“车主日常”。
+  - 分类编辑只改变分类选择，不再用分类模板重写原标题；“徐记花甲鸡爪｜宿豫店”等原文保持不变。花甲鸡爪、花甲、花蛤、蛤蜊、贝类、鸡爪、凤爪已同步进入正式 JSON、回归 JSON、Swift fallback 与生活线索词典并稳定归餐饮。深夜餐饮只有存在“加班/下班后/工作/公司/单位/工位”等明确工作证据时才可说加班，单独“晚归”保持中性夜间用语。
+  - 新增本机 `LifeJourneyFact`：按时间压缩城市节点，只从 `semanticPlace == 本城` 推断常驻城市；最多连接五天，必须同时拥有跨城节点、道路或明确长途交通证据和异地活动证据。过路费或至少两笔交通类车辆补能才允许称自驾；返回本城才允许说“最后回到”；未由用户提供角色时绝不说“老家”。事实 ID、路线、道路/活动 evidence IDs 使用稳定顺序和本机指纹生成。
+  - 同一 journey fact 注入会员生活线索、周/月不可变事实底稿、线索关系主题、周记/月章结尾与周分享叙事计划；闭环周末跨城自驾优先于普通咖啡/买菜线索。线索页直接展示路线和证据数量，不再显示泛化的“变化来自哪些记录”。远程叙事规则版本升至 5；行程成为主线时不生成远程 fact pack，其他模式也过滤 journey signal，因此城市、路线和行程 evidence IDs 保持本机，迟到远程文案不能覆盖精确行程。
+- 修改文件：`NativeDemoApp/Models/HomeItem.swift`、`NativeDemoApp/Resources/RecordSceneLexicon.json`、`NativeDemoApp/Resources/RecordSceneLexicon.regression.json`、`NativeDemoApp/Services/LifeMarkService.swift`、`NativeDemoApp/Services/LifeNarrativePlanningService.swift`、`NativeDemoApp/Services/LifeNarrativeAIRewriteService.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/ViewModels/HomeViewModel+Dashboard.swift`、`NativeDemoApp/Views/RecordEditSheet.swift`、`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 验证证据：两份 RecordSceneLexicon JSON 解析通过；`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py`、`python scripts/playback_copy_lint.py`、`git diff --check` 均通过；copy lint 仅保留任务开始前已有 5 条 soft warning。`python scripts/validate_release_gate.py --phase windows` 最终 `release_repository_gate: OK`，100/1,000/5,000 夹具、三张真实 12MP 夹具、迁移、SQLite schema、AI proxy 24/24 与全部静态契约通过，集合摘要保持 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`。新增 XCTest 覆盖固定南京—宿迁—连云港—宿迁—南京路线、铁路/无道路/未返程/无活动反例、同 fact 跨线索/章节/播放/分享、AI 本机边界、100/1,000/5,000 确定性、花甲餐饮、标题保护、周六非加班及充电旧行精准失效；但本机无 Swift/Xcode，未声称 XCTest 已执行。
+- 剩余风险与下一步：Windows 上 `swift`、`swiftc`、`sourcekit-lsp`、`xcodebuild` 均不可用，新增 Swift 类型、严格并发诊断与 XCTest 仍需 macOS 实际编译；`FLOW-88` 的连续编辑/删除/重启、抓包隐私、100/1,000/5,000 Instruments 和真机 UI 文案仍为 `NOT_RUN`。行程只消费已有本机城市上下文，缺城市或缺证据时会保守不生成，不通过金额猜测补全；本项不迁移旧账单分类或已被旧版本覆盖的历史标题。下一步只做 macOS Debug/Release build、全部 XCTest 与 `FLOW-88` 真机签收，取得全部证据前保持 `CODE_DONE`，不启动相邻重构或发布动作。
+
+---
+
+## 72. INTERACTION-MEMORY-FIX-01：快速操作内存峰值与任务堆积（2026-08-27）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；代码、纯策略回归、体验静态门禁与完整 Windows 发布门禁已完成，当前无 `IN_PROGRESS`。用户真机长期使用反馈 App 感觉耗内存，快速操作时偶发卡死；本项作为新的发版阻断定向修复处理，不启动通用 `PERF-AUDIT-04` 或 `ARCH-03`。Windows 无 Swift/Xcode/iPhone，缺编译、XCTest、Memory Graph、Instruments 与真机签收，不标记 `VERIFIED`。
+- 已确认根因：通用记忆图组件的缩略图按最高 900px 解码，`NSCache` 允许 96 张/128MB，照片详情的分页会为最多 9 张图同时建立原图加载任务；每个图片视图使用独立 `Task.detached`，父视图取消不能阻止已经开始的同步读取/解码。账本 revision 快速变化时，派生缓存、首页生活线索、痕迹快照和冷启动全账本指纹还可能并排执行；取消只拒绝旧结果，不能阻止已经进入同步计算的旧任务。痕迹细查列表在渲染和单条删除时还会建立额外的枚举行数组并重建完整日期分组。
+- 允许范围：只允许收紧 UI 图片降采样、缓存、加载并发、取消与内存警告释放；照片详情只保留当前页及相邻页的显示解码；为现有账本派生、首页和痕迹准备增加短合并窗口、串行重计算边界及取消检查；移除痕迹大列表渲染的临时数组并把单条删除改为等价的增量快照更新；补充纯策略/XCTest、静态门禁、发版矩阵和本文档。
+- 冻结边界：不修改图片原文件、持久化引用、备份/同步、照片资格、封面分析与导出原图；不改变账单 schema、金额/日期/标题/分类、OCR、生活线索/行程事实、周记/月章事实和章节、会员/额度/StoreKit、分享模板或 AI 请求。不得以释放内存为由清除用户数据、降低保存可靠性、移除照片或让旧 revision 结果反写。
+- 计划验收：照片列表快速上下滚动 20 轮、照片详情 9 图连续左右切换 20 轮、痕迹生活/线索及周/月连续切换 20 轮、月度细查连续编辑/删除 20 条；后台同时覆盖 100/1,000/5,000 条账本。要求图片显示缓存受硬上限约束，原图 UI 解码只覆盖当前/相邻页，离屏任务不继续排队；同一时间每条全账本重计算管线最多一个重任务，快速 revision 只发布最新结果；列表删除即时且事实等价，无主线程长 hitch、持续内存增长、Jetsam、假死或旧数据复活。Windows 完成静态、策略和发布门禁；Xcode/XCTest、Memory Graph、Allocations、Time Profiler、Main Thread Hitches 与真机峰值仍必须单独签收。
+- 工作区保护：继续保留 `TRACE-PREP-PERF-01`、`LIFE-JOURNEY-FIX-01` 及更早未提交修改，并保留 `brand-assets/`、`output/`、`tmp/`、`scripts/__pycache__/` 等未跟踪内容；本项不回退、不暂存、不提交或推送相邻现场。
+- 实施结果：
+  - `MemoryAttachmentViews.swift` 将 UI 图片缓存从 96 张/128MB 收紧为 40 张/32MB，缩略图最长边从 900px 降至 480px，详情显示解码限制为 1,600px；9 图详情只为当前页及相邻页建立显示解码，离屏释放视图持有的 `UIImage`，系统内存警告清空共享缓存。文件读取和 ImageIO 解码统一进入单一 Actor 管线，取消的离屏请求在读取/解码前后均拒绝发布，不再由每个图片视图各自启动 `Task.detached`。
+  - `HomeViewModel.swift`、`HomeViewModel+Dashboard.swift` 与 `StatsWebView.swift` 新增统一 `LedgerBackgroundComputationLane`：账本派生、首页生活线索、快速记录建议和痕迹周/月/线索重计算串行执行；账本派生使用 120ms、痕迹使用 90ms、首页快照使用 80ms 的短合并窗口，快速 revision 取消旧请求且只发布 key、request ID 与当前 revision 一致的结果。冷启动展示指纹并入账本派生后台结果，改为顺序无关 O(n) 聚合，痕迹页面不再同步排序和扫描完整账本。
+  - `StatsTraceSnapshotStore.swift` 将完整痕迹缓存限制为 2 份章节和 4 份线索；`StatsWebView.swift` 的大列表不再创建完整 `enumerated` 临时数组，单条删除直接增量更新 items、IDs、总额和受影响日期分组，不重跑完整筛选/分组，同时继续以 `HomeViewModel.deleteItem` 的持久化成功作为 UI 移除前提。
+  - `StateRegressionTests.swift` 新增图片像素/缓存/相邻页策略、痕迹缓存上限、快速交互合并窗口、顺序无关指纹及增量删除等价性覆盖；`scripts/experience_static_check.ps1` 锁定串行管线、无图片 `Task.detached`、缓存边界、相邻页加载、离屏释放、大列表无枚举副本和增量删除契约；`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 新增 `FLOW-89` 的 9 图、快速滚动/切换/编辑删除、低内存警告及 Instruments/Jetsam 验收矩阵。
+- 修改文件：`NativeDemoApp/Views/Components/MemoryAttachmentViews.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/ViewModels/HomeViewModel+Dashboard.swift`、`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。未修改照片原文件/引用、存储与同步 DTO、账单字段、分类/生活线索/行程事实、章节、会员/额度、AI 请求或分享导出规则。
+- 验证证据：`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/playback_copy_lint.py`、`python scripts/copy_lint.py` 与 `git diff --check` 均退出码 0，copy lint 仅保留任务开始前已有 5 条 soft warning。`python scripts/validate_release_gate.py --phase windows` 最终 `release_repository_gate: OK`，AI proxy 24/24、100/1,000/5,000 条夹具、三张真实 12MP 图片夹具、迁移与 SQLite schema 全部通过，集合摘要保持 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`。本轮又完成跨文件 Actor 类型、`@unchecked Sendable` 输入/输出、通知回调、Actor 可选返回值和详情分页加载条件的静态复查；本机无 Swift/Xcode，未声称已实际编译或运行 XCTest。
+- 剩余风险与下一步：必须在 macOS 完成 Debug/Release build、全部 XCTest 和 Swift 严格并发诊断，再用新 TestFlight 按 `FLOW-89` 在 100/1,000/5,000 条账本及真实 9×12MP 照片下执行 Memory Graph、Allocations、Time Profiler、Main Thread Hitches 与 Jetsam；覆盖快速滚动/切页/关闭重开、生活/线索/周/月连续切换、月度细查连续编辑删除、前后台、低内存警告、VoiceOver、特大字号与 Reduce Motion。需要记录稳定内存、峰值、退出详情后的回落和最长 hitch；取得这些真机证据前保持 `CODE_DONE`，下一项只做 `FLOW-89` 编译与真机签收，不启动相邻重构或发布动作。
+
+---
+
+## 73. AI-JOURNEY-QUERY-FIX-01：“出去玩”无法检索已认证行程（2026-08-27）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；查询实现、纯策略回归、体验静态门禁和差异检查已完成，当前无本项 `IN_PROGRESS`。用户真机输入“出去玩”时指令台返回未识别，但同一账本的痕迹线索已经存在认证跨城行程；缺 Xcode/XCTest 与 `FLOW-90` 真机签收，不标记 `VERIFIED`。
+- 已确认根因：“出去玩”只存在于 `travel` 生活线索的展示标签，不属于 `queryIntent` 的可信短语；现有 travel 查询即使被“旅行/旅游”等词识别，也只按单笔标题关键词过滤，不能消费 `LifeJourneyFact` 已认证的道路、城市与异地活动 evidence IDs。
+- 允许范围：只为查记录任务补充“出去玩/出游/游玩”可信生活事件短语；匹配时优先复用当前查询范围内已经认证的 `LifeJourneyFact` evidence IDs，无认证行程才退回既有明确旅行关键词；结果保持只读并展示原始账单证据。补充识别、正反例、跨表面事实身份、静态门禁和真机矩阵。
+- 冻结边界：不根据金额、周末、餐饮或交通单独猜测出去玩；不改变行程认证门槛、城市/道路/闭环事实、账单分类、标题、金额、日期、会员规则、AI 联网请求、补记、存储/同步 DTO、生活线索或周记/月章算法。
+- 计划验收：固定南京—宿迁—连云港—宿迁—南京行程输入“出去玩”“查一下出去玩”“本周出游记录”均进入只读查询并返回同一 journey evidence IDs；没有道路/跨城/异地活动认证事实时不得把普通周末餐饮、交通或购物拼成出游。100/1,000/5,000 条结果确定，Xcode/XCTest 与真机签收前最多标记 `CODE_DONE`。
+- 工作区保护：保留第 72 项和更早全部未提交修改以及 `brand-assets/`、`output/`、`tmp/`、`scripts/__pycache__/` 未跟踪内容；本项不提交、不推送、不回退相邻现场。
+- 实施结果：`LifeMarkService.queryIntent` 将“出去玩/出游/游玩”注册为 `travel` 的可信只读名词短语，不扩大普通交通、餐饮或购物的单笔匹配；`InsightWebView.AICommandEngine` 对无显式时间的稀疏行程查询使用最近 31 天，并在该范围先构建既有 `LifeJourneyFact`，只返回其稳定 evidence IDs，未形成认证行程时才回到原有明确旅行关键词兜底。结果标签自然收敛为“出去玩”，会员边界和只读边界不变。
+- 修改文件：`NativeDemoApp/Services/LifeMarkService.swift`、`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 验证证据：新增 `testAICommandOutgoingTripQueryReusesCertifiedJourneyEvidence` 覆盖短语识别、南京—宿迁—连云港—宿迁—南京全部 evidence IDs 和无认证事实反例；`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `git diff --check` 退出码 0，静态门禁锁定可信短语、认证 evidence IDs、XCTest 与 `FLOW-90`。本机无 Swift/Xcode，未声称新增 XCTest 已运行。
+- 剩余风险与下一步：在 macOS 执行 Debug/Release build、全部 XCTest，并按 `FLOW-90` 核对免费/会员、原账单跳转、无认证事实 abstain 与 100/1,000/5,000 条性能；此前保持 `CODE_DONE`。本轮按既定顺序转入第 74 项，不启动其他相邻工作。
+
+---
+
+## 74. HOME-EDIT-PUBLICATION-FIX-01：编辑后首页列表旧、详情新及等待卡顿（2026-08-27）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；即时列表发布、无效主线程历史扫描清理、纯策略回归、体验静态门禁与完整 Windows 发布门禁已完成，当前无 `IN_PROGRESS`。Windows 无 Swift/Xcode/iPhone，缺实际编译、XCTest、Instruments 与 `FLOW-91` 真机签收，不标记 `VERIFIED`。
+- 已确认根因：`HomeViewModel.updateItem` 已立即更新真实 `items`，详情通过 `latestItem` 因而显示新标题；首页今日列表仍读取旧 revision 的 `itemDerivedCache.todayPositiveItems`。第 72 项把全账本派生串行后，旧快照会在后台任务排队期间继续显示，形成“列表没变、点开已修改”和明显等待感。
+- 允许范围：单条编辑持久化成功后，在主线程对旧派生快照中的今日/周/月/年列表做等价的即时单条投影并重排；完整指纹、回放、行程和统计仍由既有后台新 revision 原子校准。补充跨日期/金额/排序、latest-wins、静态门禁和真机矩阵。
+- 冻结边界：不在主线程重算完整账本，不缩短第 72 项合并窗口，不绕过持久化成功条件，不改变编辑解析、标题/分类保护、生活线索、回放、行程、同步、照片、会员或额度规则；即时投影不得冒充完整新 revision，也不得阻止后台校准。
+- 计划验收：编辑今天记录的标题、金额、分类或时间后，Sheet 关闭的同一 UI 周期首页列表即显示新值；跨出今天立即从今天列表消失，跨入今天立即出现并保持时间倒序。连续编辑 20 次只显示最新值，详情与列表一致，后台最终快照等价，无同步写失败伪成功、主线程全账本扫描、旧 revision 反写或明显 hitch。Windows 门禁通过；Xcode/XCTest 与 `FLOW-91` 真机签收前最多标记 `CODE_DONE`。
+- 工作区保护：继续保留第 73 项、第 72 项及更早全部未提交修改，并保留 `brand-assets/`、`output/`、`tmp/`、`scripts/__pycache__/` 等未跟踪内容；本项未回退、暂存、提交或推送任何现场，也未启动 `PERF-AUDIT-04`、`ARCH-03` 或相邻路线图任务。
+- 实施结果：
+  - `HomeViewModel.updateItem` 在单条记录解析完成后先构建轻量投影，但只在增量 SQLite 持久化成功后发布；今天正金额、最近三笔、本周、本月和本年列表立即按同一记录 ID 替换。常见的标题/金额/分类编辑保持原位置并直接替换元素，日期改变时才做一次有序插入，不再对每组列表全量排序；跨出今天或零金额立即从今日列表移除，跨入今天立即出现。
+  - 即时投影故意保留旧快照 key、完整账本指纹、今日回放、行程事实与统计，不能冒充后台完整 revision；既有 120ms 合并窗口、串行后台计算和 latest-wins 发布继续负责最终原子校准。写入失败时不发布投影，仍按原恢复路径回到本机真实账本。
+  - `RecordMemoryContextInput` 移除从未被情绪增强策略读取的 `existingItems`；编辑不再为了生成单笔情绪标签在主线程过滤/复制整本账单。该策略仍只读取当前记录、已保存天气上下文及既有规则，输出语义不变；OCR 的通勤场景历史仍保留原独立证据输入，没有削弱识别。
+  - `StateRegressionTests.swift` 新增即时投影回归，覆盖标题变化、稳定排序、跨出今天、零金额以及“不改完整指纹/回放”边界；原“周末餐饮不受另一笔停车记录编故事”测试继续锁定移除无效历史后的等价输出。体验静态门禁锁定持久化成功后发布、五组列表投影、无未消费全账本情绪历史和 `FLOW-91`。
+- 修改文件：`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/Services/RecordMemoryContextService.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。未修改账单 schema、SQLite/云端 DTO、同步协议、金额日期解析、分类/标题规则、生活线索、行程、回放事实、照片、会员或额度。
+- 验证证据：`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/playback_copy_lint.py`、`python scripts/copy_lint.py` 与 `git diff --check` 均退出码 0；copy lint 仅保留任务开始前已有 5 条 soft warning。`python scripts/validate_release_gate.py --phase windows` 最终输出 `release_repository_gate: OK`，AI proxy 24/24、100/1,000/5,000 条确定性夹具、三张真实 12MP 图片夹具、迁移与 SQLite schema 全部通过，集合摘要保持 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`。本机无 Swift/Xcode，未声称新增 XCTest 已实际编译运行。
+- 剩余风险与下一步：必须在 macOS 完成 Debug/Release build、全部 XCTest 和严格并发诊断，再用新 TestFlight 按 `FLOW-91` 在 100/1,000/5,000 条账本下连续编辑 20 次并用 Main Thread Hitches/Time Profiler 核对同周期列表更新、跨日/零金额/同时间排序、本机写入失败、后台最终校准、重启、VoiceOver、特大字号与 Reduce Motion。Windows 静态证据不能替代 Swift 编译或真机流畅度数据；取得这些证据前保持 `CODE_DONE`。下一项只做 `FLOW-90`/`FLOW-91` 编译与真机签收，不启动相邻重构或发布动作。

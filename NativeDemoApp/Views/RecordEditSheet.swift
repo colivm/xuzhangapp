@@ -2,6 +2,15 @@ import Foundation
 import PhotosUI
 import SwiftUI
 
+enum RecordEditCategoryMutationPolicy {
+    static func titleAfterSelectingCategory(
+        currentTitle: String,
+        category _: HomeItem.Category
+    ) -> String {
+        currentTitle
+    }
+}
+
 struct RecordEditSheet: View {
     let item: HomeItem
     var onSave: (HomeItem) -> Bool
@@ -442,26 +451,14 @@ struct RecordEditSheet: View {
 
     private func selectCategory(_ category: HomeItem.Category) {
         selectedCategory = category
-        titleText = editNoteSuggestion(for: category)
+        titleText = RecordEditCategoryMutationPolicy.titleAfterSelectingCategory(
+            currentTitle: titleText,
+            category: category
+        )
         dismissKeyboard()
         withAnimation(.easeInOut(duration: 0.18)) {
             categoryPanelExpanded = false
         }
-    }
-
-    private func editNoteSuggestion(for category: HomeItem.Category) -> String {
-        guard let pack = ScenePackCopyPool.definitions.first(where: { $0.category == category }) else {
-            return category.defaultRecordTitle
-        }
-        return ScenePackCopyPool.note(
-            for: pack,
-            amount: parsedAmount,
-            date: selectedDate,
-            categoryContext: category,
-            petName: "",
-            historyItems: [],
-            allowPetCopy: false
-        )
     }
 
     private func dismissKeyboard() {

@@ -6,14 +6,71 @@ private struct DecodedMemoryAttachmentImage: @unchecked Sendable {
     let image: UIImage
 }
 
+enum MemoryAttachmentImagePolicy {
+    static let cacheCountLimit = 40
+    static let cacheCostLimitBytes = 32 * 1024 * 1024
+    static let thumbnailMaxPixelSize = 480
+    static let originalDisplayMaxPixelSize = 1_600
+    static let originalPagePreloadRadius = 1
+
+    static func maxPixelSize(for variant: LedgerImageLoadVariant) -> Int {
+        switch variant {
+        case .thumbnail:
+            return thumbnailMaxPixelSize
+        case .original:
+            return originalDisplayMaxPixelSize
+        }
+    }
+
+    static func shouldLoadOriginalPage(index: Int, selectedIndex: Int, imageCount: Int) -> Bool {
+        guard imageCount > 0,
+              (0..<imageCount).contains(index),
+              (0..<imageCount).contains(selectedIndex) else { return false }
+        return abs(index - selectedIndex) <= originalPagePreloadRadius
+    }
+
+    static func decodedImage(_ data: Data, variant: LedgerImageLoadVariant) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(
+            data as CFData,
+            [kCGImageSourceShouldCache: false] as CFDictionary
+        ) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize(for: variant),
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(
+            source,
+            0,
+            options as CFDictionary
+        ) else { return nil }
+        return UIImage(cgImage: cgImage)
+    }
+}
+
 private final class MemoryAttachmentImageCache: @unchecked Sendable {
     static let shared = MemoryAttachmentImageCache()
 
     private let cache = NSCache<NSString, UIImage>()
+    private var memoryWarningObserver: NSObjectProtocol?
 
     private init() {
-        cache.countLimit = 96
-        cache.totalCostLimit = 128 * 1024 * 1024
+        cache.countLimit = MemoryAttachmentImagePolicy.cacheCountLimit
+        cache.totalCostLimit = MemoryAttachmentImagePolicy.cacheCostLimitBytes
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.removeAll()
+        }
+    }
+
+    deinit {
+        if let memoryWarningObserver {
+            NotificationCenter.default.removeObserver(memoryWarningObserver)
+        }
     }
 
     func image(forKey key: String) -> UIImage? {
@@ -24,6 +81,36 @@ private final class MemoryAttachmentImageCache: @unchecked Sendable {
         let pixels = max(1, Int(image.size.width * image.scale))
             * max(1, Int(image.size.height * image.scale))
         cache.setObject(image, forKey: key as NSString, cost: pixels * 4)
+    }
+
+    func removeAll() {
+        cache.removeAllObjects()
+    }
+}
+
+private actor MemoryAttachmentImageLoader {
+    static let shared = MemoryAttachmentImageLoader()
+
+    func load(
+        requestID: String,
+        reference: String?,
+        inlineData: Data?,
+        variant: LedgerImageLoadVariant
+    ) -> DecodedMemoryAttachmentImage? {
+        guard !Task.isCancelled else { return nil }
+        if let cached = MemoryAttachmentImageCache.shared.image(forKey: requestID) {
+            return DecodedMemoryAttachmentImage(image: cached)
+        }
+        let data = reference.flatMap {
+            LocalStore.loadMemoryImageData(reference: $0, variant: variant)
+        } ?? inlineData
+        guard !Task.isCancelled,
+              let data,
+              !data.isEmpty,
+              let image = MemoryAttachmentImagePolicy.decodedImage(data, variant: variant),
+              !Task.isCancelled else { return nil }
+        MemoryAttachmentImageCache.shared.insert(image, forKey: requestID)
+        return DecodedMemoryAttachmentImage(image: image)
     }
 }
 
@@ -45,14 +132,14 @@ struct MemoryAttachmentThumbnail: View {
 
     private var loadRequestID: String {
         if let normalizedReference {
-            return "\(variant.rawValue)|\(normalizedReference)"
+            return "memory-display-v2|\(variant.rawValue)|\(normalizedReference)"
         }
         guard let imageData, !imageData.isEmpty else {
-            return "\(variant.rawValue)|missing"
+            return "memory-display-v2|\(variant.rawValue)|missing"
         }
         let prefix = Data(imageData.prefix(12)).base64EncodedString()
         let suffix = Data(imageData.suffix(12)).base64EncodedString()
-        return "\(variant.rawValue)|inline|\(imageData.count)|\(prefix)|\(suffix)"
+        return "memory-display-v2|\(variant.rawValue)|inline|\(imageData.count)|\(prefix)|\(suffix)"
     }
 
     var body: some View {
@@ -84,41 +171,22 @@ struct MemoryAttachmentThumbnail: View {
             let reference = normalizedReference
             let inlineData = imageData.flatMap { $0.isEmpty ? nil : $0 }
             let requestedVariant = variant
-            let decoded = await Task.detached(priority: .utility) {
-                let data = reference.flatMap {
-                    LocalStore.loadMemoryImageData(reference: $0, variant: requestedVariant)
-                } ?? inlineData
-                guard let data, !data.isEmpty,
-                      let image = Self.decodeImage(data, variant: requestedVariant) else {
-                    return nil as DecodedMemoryAttachmentImage?
-                }
-                return DecodedMemoryAttachmentImage(image: image)
-            }.value
+            let decoded = await MemoryAttachmentImageLoader.shared.load(
+                requestID: requestID,
+                reference: reference,
+                inlineData: inlineData,
+                variant: requestedVariant
+            )
             guard !Task.isCancelled else { return }
             if let decoded {
-                MemoryAttachmentImageCache.shared.insert(decoded.image, forKey: requestID)
                 loadedImage = decoded.image
             } else {
                 loadFailed = true
             }
         }
-    }
-
-    private static func decodeImage(_ data: Data, variant: LedgerImageLoadVariant) -> UIImage? {
-        if case .thumbnail = variant,
-           let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) {
-            let options: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceShouldCacheImmediately: true,
-                kCGImageSourceThumbnailMaxPixelSize: 900,
-            ]
-            if let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) {
-                return UIImage(cgImage: cgImage)
-            }
+        .onDisappear {
+            loadedImage = nil
         }
-        guard let image = UIImage(data: data) else { return nil }
-        return image.preparingForDisplay() ?? image
     }
 
     private func memoryImageFallback(isLoading: Bool) -> some View {
@@ -627,18 +695,34 @@ struct MemoryRecordDetailSheet: View {
 
     @ViewBuilder
     private func memoryHeroImage(index: Int, height: CGFloat, fitMode: Bool) -> some View {
-        MemoryAttachmentThumbnail(
-            imageData: item.memoryImageData(at: index),
-            imageReference: item.memoryImageReference(at: index),
-            variant: .original,
-            contentMode: fitMode ? .fit : .fill,
-            height: height,
-            cornerRadius: 24
-        )
-        .background(
+        if MemoryAttachmentImagePolicy.shouldLoadOriginalPage(
+            index: index,
+            selectedIndex: selectedImageIndex,
+            imageCount: item.memoryImageCount
+        ) {
+            MemoryAttachmentThumbnail(
+                imageData: item.memoryImageData(at: index),
+                imageReference: item.memoryImageReference(at: index),
+                variant: .original,
+                contentMode: fitMode ? .fit : .fill,
+                height: height,
+                cornerRadius: 24
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Color.white.opacity(0.54))
+            )
+        } else {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(Color.white.opacity(0.54))
-        )
+                .frame(height: height)
+                .overlay {
+                    Image(systemName: "photo")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundStyle(AppColors.subtext.opacity(0.42))
+                }
+                .accessibilityHidden(true)
+        }
     }
 
     private var memoryImageManager: some View {

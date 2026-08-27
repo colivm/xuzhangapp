@@ -154,14 +154,30 @@ enum TraceDetailListSnapshotComputation {
         nextKey: TraceDetailListSnapshotKey,
         calendar: Calendar = .current
     ) -> TraceDetailListSnapshot {
-        make(
-            TraceDetailListPreparationInput(
+        guard !itemIDs.isEmpty else {
+            return TraceDetailListSnapshot(
                 key: nextKey,
-                sourceItems: snapshot.items.filter { !itemIDs.contains($0.id) },
-                dateInterval: nil,
-                category: nil,
-                calendar: calendar
+                items: snapshot.items,
+                itemIDs: snapshot.itemIDs,
+                totalExpense: snapshot.totalExpense,
+                dayGroups: snapshot.dayGroups
             )
+        }
+        let removedExpense = snapshot.items.lazy
+            .filter { itemIDs.contains($0.id) && $0.amount > 0 }
+            .reduce(0) { $0 + $1.amount }
+        let remainingItems = snapshot.items.filter { !itemIDs.contains($0.id) }
+        let remainingGroups = snapshot.dayGroups.compactMap { group -> TraceDayGroup? in
+            let items = group.items.filter { !itemIDs.contains($0.id) }
+            guard !items.isEmpty else { return nil }
+            return TraceDayGroup(id: group.id, date: group.date, items: items)
+        }
+        return TraceDetailListSnapshot(
+            key: nextKey,
+            items: remainingItems,
+            itemIDs: snapshot.itemIDs.filter { !itemIDs.contains($0) },
+            totalExpense: max(0, snapshot.totalExpense - removedExpense),
+            dayGroups: remainingGroups
         )
     }
 }
@@ -274,12 +290,6 @@ private struct TraceSwipeRow<Content: View, Actions: View>: View {
                 }
             }
     }
-}
-
-private enum TracePreparedPiece {
-    case week(TraceChapterSnapshot, cacheKey: String)
-    case month(TraceChapterSnapshot, cacheKey: String)
-    case clue(TraceClueSnapshot, cacheKey: String)
 }
 
 struct StatsWebView: View {
@@ -647,6 +657,11 @@ struct StatsWebView: View {
                     prepareTraceDetailListSnapshot()
                 }
             }
+            .onChange(of: homeViewModel.itemDerivedCacheRevision) { _, revision in
+                guard revision == homeViewModel.homeDashboardRevision else { return }
+                tabState.coldStartLedgerRevision = nil
+                restoreTraceColdStartDisplayIfNeeded()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .narrativeAIRewriteDidChange)) { _ in
                 traceSnapshotStore.invalidateAll()
                 chapterContentRevision &+= 1
@@ -1011,7 +1026,10 @@ struct StatsWebView: View {
     }
 
     private func restoreTraceColdStartDisplayIfNeeded(now: Date = Date()) {
-        let context = traceColdStartDisplayContext(now: now)
+        guard let context = traceColdStartDisplayContext(now: now) else {
+            tabState.coldStartDisplay = nil
+            return
+        }
         let scopeKey = TraceSnapshotLifecycleKeyPolicy.coldStartScopeKey(
             viewMode: traceViewMode,
             lifeRange: traceLifeCardRange,
@@ -1027,21 +1045,25 @@ struct StatsWebView: View {
         )
     }
 
-    private func traceColdStartDisplayContext(now: Date = Date()) -> TraceColdStartDisplayContext {
+    private func traceColdStartDisplayContext(now: Date = Date()) -> TraceColdStartDisplayContext? {
         let revision = homeViewModel.homeDashboardRevision
         let dayKey = LedgerDisplayFingerprintPolicy.dayKey(for: now)
-        if tabState.coldStartLedgerRevision != revision
-            || tabState.coldStartDayKey != dayKey
-            || tabState.coldStartLedgerFingerprint == nil {
+        guard let fingerprint = homeViewModel.ledgerDisplayFingerprint(now: now) else {
             tabState.coldStartLedgerRevision = revision
             tabState.coldStartDayKey = dayKey
-            tabState.coldStartLedgerFingerprint = LedgerDisplayFingerprintPolicy.make(
-                items: homeViewModel.items
-            )
+            tabState.coldStartLedgerFingerprint = nil
+            return nil
+        }
+        if tabState.coldStartLedgerRevision != revision
+            || tabState.coldStartDayKey != dayKey
+            || tabState.coldStartLedgerFingerprint != fingerprint {
+            tabState.coldStartLedgerRevision = revision
+            tabState.coldStartDayKey = dayKey
+            tabState.coldStartLedgerFingerprint = fingerprint
             tabState.coldStartDisplay = nil
         }
         return TraceColdStartDisplayContext(
-            ledgerFingerprint: tabState.coldStartLedgerFingerprint ?? "empty",
+            ledgerFingerprint: fingerprint,
             dayKey: dayKey,
             isMember: hasMemberAccess
         )
@@ -1071,9 +1093,10 @@ struct StatsWebView: View {
             total: snapshot.preview.total,
             topCategory: snapshot.preview.topCategory
         )
+        guard let context = traceColdStartDisplayContext(now: now) else { return }
         TraceColdStartDisplayStore.shared.store(
             display,
-            context: traceColdStartDisplayContext(now: now)
+            context: context
         )
     }
 
@@ -1094,9 +1117,10 @@ struct StatsWebView: View {
             total: snapshot.items.reduce(0) { $0 + $1.amount },
             topCategory: snapshot.clues.first?.category.rawValue
         )
+        guard let context = traceColdStartDisplayContext(now: now) else { return }
         TraceColdStartDisplayStore.shared.store(
             display,
-            context: traceColdStartDisplayContext(now: now)
+            context: context
         )
     }
 
@@ -1276,47 +1300,29 @@ struct StatsWebView: View {
         let publishedClueKey = cluePublicationKey
 
         tracePreparationTask = Task { @MainActor in
-            await Task.yield()
+            try? await Task.sleep(
+                nanoseconds: LedgerRapidInteractionPolicy.traceCoalescingDelayNanoseconds
+            )
             guard !Task.isCancelled, tracePreparationGate.accepts(requestID) else { return }
 
             var weekSnapshot = initialWeekSnapshot
             var monthSnapshot = initialMonthSnapshot
             var clueSnapshot = initialClueSnapshot
 
-            await withTaskGroup(of: TracePreparedPiece.self) { group in
-                if let (input, cacheKey) = pendingWeekInput {
-                    group.addTask(priority: .userInitiated) {
-                        .week(TraceSnapshotComputation.buildChapter(input), cacheKey: cacheKey)
-                    }
-                }
-                if let (input, cacheKey) = pendingMonthInput {
-                    group.addTask(priority: .userInitiated) {
-                        .month(TraceSnapshotComputation.buildChapter(input), cacheKey: cacheKey)
-                    }
-                }
-                if let (input, cacheKey) = pendingClueInput {
-                    group.addTask(priority: .userInitiated) {
-                        .clue(TraceSnapshotComputation.buildClue(input), cacheKey: cacheKey)
-                    }
-                }
-
-                for await piece in group {
-                    guard !Task.isCancelled else {
-                        group.cancelAll()
-                        return
-                    }
-                    switch piece {
-                    case let .week(snapshot, cacheKey):
-                        weekSnapshot = snapshot
-                        traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
-                    case let .month(snapshot, cacheKey):
-                        monthSnapshot = snapshot
-                        traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
-                    case let .clue(snapshot, cacheKey):
-                        clueSnapshot = snapshot
-                        traceSnapshotStore.storeClueSnapshot(snapshot, for: cacheKey)
-                    }
-                }
+            if let (input, cacheKey) = pendingWeekInput,
+               let snapshot = await LedgerBackgroundComputationLane.shared.buildTraceChapter(input) {
+                weekSnapshot = snapshot
+                traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
+            }
+            if let (input, cacheKey) = pendingMonthInput,
+               let snapshot = await LedgerBackgroundComputationLane.shared.buildTraceChapter(input) {
+                monthSnapshot = snapshot
+                traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
+            }
+            if let (input, cacheKey) = pendingClueInput,
+               let snapshot = await LedgerBackgroundComputationLane.shared.buildTraceClue(input) {
+                clueSnapshot = snapshot
+                traceSnapshotStore.storeClueSnapshot(snapshot, for: cacheKey)
             }
 
             guard !Task.isCancelled, tracePreparationGate.accepts(requestID) else { return }
@@ -1435,31 +1441,21 @@ struct StatsWebView: View {
         }
         guard let (input, cacheKey) = prepared.input else { return }
 
-        let piece = await withTaskGroup(of: TracePreparedPiece.self, returning: TracePreparedPiece?.self) { group in
-            group.addTask(priority: .utility) {
-                let snapshot = TraceSnapshotComputation.buildChapter(input)
-                return range == .week
-                    ? .week(snapshot, cacheKey: cacheKey)
-                    : .month(snapshot, cacheKey: cacheKey)
-            }
-            return await group.next()
-        }
-        guard let piece,
+        let snapshot = await LedgerBackgroundComputationLane.shared.buildTraceChapter(input)
+        guard let snapshot,
               !Task.isCancelled,
               tracePreparationGate.accepts(requestID) else { return }
-        switch piece {
-        case let .week(snapshot, cacheKey):
+        switch range {
+        case .week:
             traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
             preparedWeekSnapshot = snapshot
             preparedWeekSnapshotKey = cacheKey
             storeTraceColdStartDisplay(chapter: snapshot, now: now)
-        case let .month(snapshot, cacheKey):
+        case .month:
             traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
             preparedMonthSnapshot = snapshot
             preparedMonthSnapshotKey = cacheKey
             storeTraceColdStartDisplay(chapter: snapshot, now: now)
-        case .clue:
-            break
         }
     }
 
@@ -5907,9 +5903,9 @@ struct StatsWebView: View {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                 ForEach(groups) { group in
                     Section {
-                        ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
-                            let isFirst = index == 0
-                            let isLast = index == group.items.count - 1
+                        ForEach(group.items) { item in
+                            let isFirst = item.id == group.items.first?.id
+                            let isLast = item.id == group.items.last?.id
                             if fromTraceDetail {
                                 traceDetailBillRecordRow(item, isFirst: isFirst, isLast: isLast)
                             } else {
@@ -6353,6 +6349,7 @@ struct StatsWebView: View {
         let copySeed = nextSummaryCopySeed(for: range)
         let items = homeViewModel.items
         let sourceRevision = homeViewModel.homeDashboardRevision
+        let preparedFacts = preparedLifeSnapshot(for: range)?.periodFacts
         let performanceStartedAt = ProcessInfo.processInfo.systemUptime
         homeViewModel.markSummaryPlaybackStarted(range)
         summaryPlaybackTask?.cancel()
@@ -6362,6 +6359,25 @@ struct StatsWebView: View {
             let playback = await withTaskGroup(of: SummaryPlayback.self) { group -> SummaryPlayback? in
                 group.addTask(priority: .userInitiated) {
                     let service = PlaybackService()
+                    if let preparedFacts,
+                       preparedFacts.matches(
+                        range: range,
+                        sourceRevision: sourceRevision,
+                        isMember: hasMemberAccess
+                       ) {
+                        switch range {
+                        case .week:
+                            return service.buildWeekSummary(
+                                from: preparedFacts,
+                                copySeed: copySeed
+                            )
+                        case .month:
+                            return service.buildMonthSummary(
+                                from: preparedFacts,
+                                copySeed: copySeed
+                            )
+                        }
+                    }
                     switch range {
                     case .week:
                         return service.buildWeekSummary(

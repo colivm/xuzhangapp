@@ -103,7 +103,8 @@ def main() -> int:
             failures.append(f"missing monthly role title: {token}")
 
     required_service_boundaries = [
-        "monthlyComparisonCopy(allItems: items, currentRows: rows, now: now)",
+        "previousRows: preparedFacts.previousPeriodItems",
+        "private func monthlyComparisonCopy(\n        previousRows: [HomeItem]",
         "previousEndCandidate",
         "comparableCurrent",
         "safePlaybackTitle(for item: HomeItem)",

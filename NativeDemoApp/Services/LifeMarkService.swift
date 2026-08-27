@@ -69,6 +69,317 @@ struct LifeMarkAggregate: Identifiable, Equatable {
     let priority: Int
 }
 
+struct LifeJourneyFact: Equatable, @unchecked Sendable {
+    let id: String
+    let routeCities: [String]
+    let evidenceItemIDs: [UUID]
+    let roadEvidenceItemIDs: [UUID]
+    let activityEvidenceItemIDs: [UUID]
+    let startDate: Date
+    let endDate: Date
+    let homeCity: String?
+    let isRoadTrip: Bool
+    let isClosedLoop: Bool
+    let containsWeekend: Bool
+    let evidenceLabels: [String]
+
+    var label: String {
+        if isRoadTrip {
+            return containsWeekend ? "周末跨城自驾" : "跨城自驾"
+        }
+        return containsWeekend ? "周末跨城行程" : "跨城行程"
+    }
+
+    var routeText: String {
+        routeCities.joined(separator: " → ")
+    }
+
+    var line: String {
+        let evidence = evidenceLabels.joined(separator: "、")
+        if isClosedLoop, let homeCity {
+            return "这段路从\(homeCity)出发，路线是 \(routeText)，最后回到\(homeCity)；\(evidence)把这段行程串在了一起。"
+        }
+        return "这段跨城路线是 \(routeText)；\(evidence)把沿途记录串在了一起。"
+    }
+}
+
+enum LifeJourneyFactService {
+    private struct CityRow {
+        let item: HomeItem
+        let city: String
+    }
+
+    private struct Candidate {
+        let fact: LifeJourneyFact
+        let score: Int
+    }
+
+    private static let tollKeywords = ["过路费", "高速费", "高速通行", "高速公路", "etc通行", "etc扣费"]
+    private static let vehicleEnergyKeywords = [
+        "充电", "充车", "充电桩", "电车充电", "汽车充电", "车辆充电", "新能源充电", "先充后付",
+        "快电", "补能", "加油", "油费", "加气"
+    ]
+    private static let supportingRoadKeywords = ["停车费", "停车场", "服务区"]
+    private static let longDistanceTransitKeywords = [
+        "高铁", "动车", "火车票", "铁路", "机票", "机场", "长途汽车", "客运", "车票"
+    ]
+    private static let activityCategories: Set<HomeItem.Category> = [
+        .dining, .lodging, .entertainment, .social
+    ]
+    private static let maximumJourneyDuration: TimeInterval = 5 * 24 * 60 * 60
+
+    static func primaryFact(
+        in items: [HomeItem],
+        calendar: Calendar = .current
+    ) -> LifeJourneyFact? {
+        let rows = items
+            .filter { $0.amount > 0 && $0.draftMeta?.status != .pending }
+            .sorted { lhs, rhs in
+                if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
+                return lhs.createdAt < rhs.createdAt
+            }
+        let cityRows = rows.compactMap { item -> CityRow? in
+            guard let rawCity = item.memoryContext?.cityName,
+                  let city = normalizedCity(rawCity) else { return nil }
+            return CityRow(item: item, city: city)
+        }
+        guard cityRows.count >= 2 else { return nil }
+
+        let homeCity = inferredHomeCity(from: cityRows)
+        var candidates: [Candidate] = []
+        if let homeCity {
+            var tripStartIndex: Int?
+            var hasLeftHome = false
+            for index in cityRows.indices {
+                if cityRows[index].city == homeCity {
+                    if let tripStartIndex, hasLeftHome {
+                        if let candidate = makeCandidate(
+                            cityRows: cityRows,
+                            allRows: rows,
+                            startIndex: tripStartIndex,
+                            endIndex: index,
+                            homeCity: homeCity,
+                            closedLoop: true,
+                            calendar: calendar
+                        ) {
+                            candidates.append(candidate)
+                        }
+                    }
+                    tripStartIndex = index
+                    hasLeftHome = false
+                } else if tripStartIndex != nil {
+                    hasLeftHome = true
+                }
+            }
+            if let tripStartIndex, hasLeftHome,
+               let candidate = makeCandidate(
+                   cityRows: cityRows,
+                   allRows: rows,
+                   startIndex: tripStartIndex,
+                   endIndex: cityRows.index(before: cityRows.endIndex),
+                   homeCity: homeCity,
+                   closedLoop: false,
+                   calendar: calendar
+               ) {
+                candidates.append(candidate)
+            }
+        } else if let candidate = makeCandidate(
+            cityRows: cityRows,
+            allRows: rows,
+            startIndex: cityRows.startIndex,
+            endIndex: cityRows.index(before: cityRows.endIndex),
+            homeCity: nil,
+            closedLoop: false,
+            calendar: calendar
+        ) {
+            candidates.append(candidate)
+        }
+
+        return candidates.sorted { lhs, rhs in
+            if lhs.score == rhs.score {
+                if lhs.fact.endDate == rhs.fact.endDate { return lhs.fact.id < rhs.fact.id }
+                return lhs.fact.endDate > rhs.fact.endDate
+            }
+            return lhs.score > rhs.score
+        }.first?.fact
+    }
+
+    private static func makeCandidate(
+        cityRows: [CityRow],
+        allRows: [HomeItem],
+        startIndex: Int,
+        endIndex: Int,
+        homeCity: String?,
+        closedLoop: Bool,
+        calendar: Calendar
+    ) -> Candidate? {
+        guard startIndex >= cityRows.startIndex,
+              endIndex < cityRows.endIndex,
+              startIndex < endIndex else { return nil }
+        let selectedCityRows = Array(cityRows[startIndex...endIndex])
+        let route = compressedCities(selectedCityRows.map(\.city))
+        guard Set(route).count >= 2 else { return nil }
+
+        let startDate = selectedCityRows.first?.item.createdAt ?? .distantPast
+        let endDate = selectedCityRows.last?.item.createdAt ?? .distantPast
+        guard endDate >= startDate,
+              endDate.timeIntervalSince(startDate) <= maximumJourneyDuration else { return nil }
+        let segmentRows = allRows.filter { $0.createdAt >= startDate && $0.createdAt <= endDate }
+        let tollRows = segmentRows.filter { containsAny(factualText($0), tollKeywords) }
+        let energyRows = segmentRows.filter {
+            $0.category == .transport && containsAny(factualText($0), vehicleEnergyKeywords)
+        }
+        let supportingRoadRows = segmentRows.filter { containsAny(factualText($0), supportingRoadKeywords) }
+        let transitRows = segmentRows.filter { containsAny(factualText($0), longDistanceTransitKeywords) }
+        let isRoadTrip = !tollRows.isEmpty || energyRows.count >= 2
+        guard isRoadTrip || !transitRows.isEmpty else { return nil }
+
+        let activityRows = segmentRows.filter { item in
+            guard activityCategories.contains(item.category) || item.hasMemoryImages,
+                  let rawCity = item.memoryContext?.cityName,
+                  let city = normalizedCity(rawCity) else { return false }
+            return homeCity.map { city != $0 } ?? true
+        }
+        guard !activityRows.isEmpty else { return nil }
+
+        var roadRows = tollRows + energyRows + supportingRoadRows
+        roadRows = uniqueItems(roadRows)
+        let nodeRows = transitionRows(from: selectedCityRows)
+        let evidenceRows = sortedChronologically(
+            uniqueItems(nodeRows + roadRows + transitRows + activityRows)
+        )
+        let roadEvidenceItemIDs = sortedChronologically(roadRows).map(\.id)
+        let activityEvidenceItemIDs = sortedChronologically(activityRows).map(\.id)
+        let evidenceLabels = evidenceLabels(
+            tollRows: tollRows,
+            energyRows: energyRows,
+            transitRows: transitRows,
+            activityRows: activityRows
+        )
+        let isClosedLoop = closedLoop
+            && homeCity != nil
+            && route.first == homeCity
+            && route.last == homeCity
+        let containsWeekend = segmentRows.contains { calendar.isDateInWeekend($0.createdAt) }
+        let identitySource = [
+            route.joined(separator: ">"),
+            evidenceRows.map { $0.id.uuidString.lowercased() }.joined(separator: ","),
+            isRoadTrip ? "road" : "transit",
+            isClosedLoop ? "closed" : "open"
+        ].joined(separator: "|")
+        let fact = LifeJourneyFact(
+            id: "journey:\(stableFingerprint(identitySource))",
+            routeCities: route,
+            evidenceItemIDs: evidenceRows.map(\.id),
+            roadEvidenceItemIDs: roadEvidenceItemIDs,
+            activityEvidenceItemIDs: activityEvidenceItemIDs,
+            startDate: startDate,
+            endDate: endDate,
+            homeCity: homeCity,
+            isRoadTrip: isRoadTrip,
+            isClosedLoop: isClosedLoop,
+            containsWeekend: containsWeekend,
+            evidenceLabels: evidenceLabels
+        )
+        let score = (isClosedLoop ? 1_000 : 600)
+            + (isRoadTrip ? 240 : 80)
+            + route.count * 30
+            + activityRows.count * 12
+            + evidenceRows.count
+        return Candidate(fact: fact, score: score)
+    }
+
+    private static func inferredHomeCity(from rows: [CityRow]) -> String? {
+        let homeRows = rows.filter { $0.item.memoryContext?.semanticPlace == "本城" }
+        guard !homeRows.isEmpty else { return nil }
+        let counts = Dictionary(grouping: homeRows, by: \.city).mapValues { $0.count }
+        return counts.sorted { lhs, rhs in
+            if lhs.value == rhs.value { return lhs.key < rhs.key }
+            return lhs.value > rhs.value
+        }.first?.key
+    }
+
+    private static func transitionRows(from rows: [CityRow]) -> [HomeItem] {
+        var result: [HomeItem] = []
+        var previousCity: String?
+        for row in rows {
+            if previousCity != row.city {
+                result.append(row.item)
+                previousCity = row.city
+            }
+        }
+        if let last = rows.last?.item, result.last?.id != last.id {
+            result.append(last)
+        }
+        return result
+    }
+
+    private static func compressedCities(_ cities: [String]) -> [String] {
+        cities.reduce(into: [String]()) { result, city in
+            if result.last != city { result.append(city) }
+        }
+    }
+
+    private static func evidenceLabels(
+        tollRows: [HomeItem],
+        energyRows: [HomeItem],
+        transitRows: [HomeItem],
+        activityRows: [HomeItem]
+    ) -> [String] {
+        var labels: [String] = []
+        if !energyRows.isEmpty { labels.append("充电或加油") }
+        if !tollRows.isEmpty { labels.append("过路费") }
+        if !transitRows.isEmpty { labels.append("长途交通") }
+        if activityRows.contains(where: { $0.category == .dining }) { labels.append("异地餐饮") }
+        if activityRows.contains(where: { $0.category == .lodging }) { labels.append("住宿") }
+        if activityRows.contains(where: { $0.category == .entertainment }) { labels.append("出游活动") }
+        if labels.isEmpty { labels.append("跨城记录") }
+        return labels
+    }
+
+    private static func uniqueItems(_ items: [HomeItem]) -> [HomeItem] {
+        var seen = Set<UUID>()
+        return items.filter { seen.insert($0.id).inserted }
+    }
+
+    private static func sortedChronologically(_ items: [HomeItem]) -> [HomeItem] {
+        items.sorted { lhs, rhs in
+            if lhs.createdAt == rhs.createdAt {
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            return lhs.createdAt < rhs.createdAt
+        }
+    }
+
+    private static func factualText(_ item: HomeItem) -> String {
+        [item.title, item.category.rawValue, item.scenePackId ?? ""]
+            .joined(separator: " ")
+            .lowercased()
+    }
+
+    private static func normalizedCity(_ raw: String) -> String? {
+        var city = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        for suffix in ["自治州", "地区", "市"] where city.hasSuffix(suffix) {
+            city.removeLast(suffix.count)
+            break
+        }
+        return city.isEmpty ? nil : city
+    }
+
+    private static func stableFingerprint(_ value: String) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in value.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return String(hash, radix: 16)
+    }
+
+    private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
+        keywords.contains { text.contains($0.lowercased()) }
+    }
+}
+
 private struct LifeMarkDefinition {
     let id: String
     let label: String
@@ -86,6 +397,11 @@ enum LifeMarkService {
         fileprivate let historyItems: [HomeItem]
         fileprivate let definitionIDsByItemID: [UUID: Set<String>]
         fileprivate let historyItemsByDefinitionID: [String: [HomeItem]]
+    }
+
+    struct PreparedAggregateSets {
+        let visible: [LifeMarkAggregate]
+        let member: [LifeMarkAggregate]
     }
 
     private static var aggregateCache: [String: [LifeMarkAggregate]] = [:]
@@ -194,7 +510,7 @@ enum LifeMarkService {
             label: "日常吃饭",
             category: .dining,
             categories: [.dining],
-            keywords: ["茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "老乡鸡", "塔斯汀", "海底捞", "库迪", "袁记云饺", "萨莉亚", "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "汤面", "面馆", "面食", "面条", "粉面"],
+            keywords: ["茶叶蛋", "饭团", "关东煮", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "老乡鸡", "塔斯汀", "海底捞", "库迪", "袁记云饺", "萨莉亚", "花甲鸡爪", "花甲", "花蛤", "蛤蜊", "贝类", "鸡爪", "凤爪", "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "汤面", "面馆", "面食", "面条", "粉面"],
             access: .free,
             priority: 32,
             minimumCount: 1,
@@ -238,7 +554,10 @@ enum LifeMarkService {
             label: "车主日常",
             category: .transport,
             categories: [.transport],
-            keywords: ["洗车", "汽车保养", "车辆保养", "保养车", "ETC", "etc"],
+            keywords: [
+                "洗车", "汽车保养", "车辆保养", "保养车", "ETC", "etc", "过路费", "高速费",
+                "充电", "充车", "充电桩", "电车充电", "汽车充电", "车辆充电", "新能源充电", "先充后付", "快电", "补能", "加油", "油费"
+            ],
             access: .free,
             priority: 32,
             minimumCount: 1,
@@ -449,6 +768,49 @@ enum LifeMarkService {
         let periodItems = items.filter { $0.amount > 0 && $0.draftMeta == nil }
         guard !periodItems.isEmpty else { return [] }
 
+        return rankedAggregates(
+            preparedAggregateRows(
+                for: periodItems,
+                preparedContext: preparedContext
+            ),
+            isMember: isMember,
+            limit: limit
+        )
+    }
+
+    static func preparedAggregateSets(
+        for items: [HomeItem],
+        preparedContext: PreparedAggregationContext,
+        visibleIsMember: Bool,
+        visibleLimit: Int = 8,
+        memberLimit: Int = 24
+    ) -> PreparedAggregateSets {
+        let periodItems = items.filter { $0.amount > 0 && $0.draftMeta == nil }
+        guard !periodItems.isEmpty else {
+            return PreparedAggregateSets(visible: [], member: [])
+        }
+        let rows = preparedAggregateRows(
+            for: periodItems,
+            preparedContext: preparedContext
+        )
+        return PreparedAggregateSets(
+            visible: rankedAggregates(
+                rows,
+                isMember: visibleIsMember,
+                limit: visibleLimit
+            ),
+            member: rankedAggregates(
+                rows,
+                isMember: true,
+                limit: memberLimit
+            )
+        )
+    }
+
+    private static func preparedAggregateRows(
+        for periodItems: [HomeItem],
+        preparedContext: PreparedAggregationContext
+    ) -> [LifeMarkAggregate] {
         var rows = sceneAggregates(
             for: periodItems,
             historyItems: preparedContext.historyItems,
@@ -461,8 +823,15 @@ enum LifeMarkService {
             preparedContext: preparedContext
         )
         rows += streakAggregates(for: periodItems, preparedContext: preparedContext)
-
         return rows
+    }
+
+    private static func rankedAggregates(
+        _ rows: [LifeMarkAggregate],
+        isMember: Bool,
+        limit: Int
+    ) -> [LifeMarkAggregate] {
+        rows
             .filter { isMember || $0.access == .free }
             .sorted { lhs, rhs in
                 if lhs.priority == rhs.priority {
@@ -552,6 +921,13 @@ enum LifeMarkService {
         guard !normalized.isEmpty else { return nil }
         if let weatherCommuteIntent = weatherCommuteQueryIntent(from: normalized) {
             return weatherCommuteIntent
+        }
+        if containsAny(normalized, ["出去玩", "出游", "游玩"]) {
+            return definitionQueryIntent(
+                id: "travel",
+                supportsNounPhraseQuery: true,
+                evidenceLabel: "认证行程中的道路、城市与异地活动"
+            )
         }
         if containsAny(normalized, ["爱好类消费", "爱好消费", "兴趣消费", "兴趣类消费", "爱好装备"]) {
             return definitionQueryIntent(
@@ -817,6 +1193,27 @@ enum LifeMarkService {
 
     private static func contextAggregates(for items: [HomeItem]) -> [LifeMarkAggregate] {
         var rows: [LifeMarkAggregate] = []
+        if let journey = LifeJourneyFactService.primaryFact(in: items) {
+            let evidenceByID = Dictionary(
+                items.map { ($0.id, $0) },
+                uniquingKeysWith: { current, _ in current }
+            )
+            let evidenceItems = journey.evidenceItemIDs.compactMap { evidenceByID[$0] }
+            if !evidenceItems.isEmpty {
+                rows.append(aggregate(
+                    id: journey.id,
+                    kind: .context,
+                    access: .member,
+                    label: journey.label,
+                    title: journey.label,
+                    detail: journey.line,
+                    category: .transport,
+                    items: evidenceItems,
+                    queryHint: "这段跨城路线是怎样连起来的？",
+                    priorityOverride: 2
+                ))
+            }
+        }
         let rainyCommutes = items.filter { item in
             item.category == .transport
                 && isRainy(item)

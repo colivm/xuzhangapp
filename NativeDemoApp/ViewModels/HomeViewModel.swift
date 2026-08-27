@@ -704,6 +704,7 @@ struct ItemDerivedCachePreparationInput: @unchecked Sendable {
 
 struct ItemDerivedCacheSnapshot: Equatable, @unchecked Sendable {
     let key: ItemDerivedCachePreparationKey
+    var ledgerDisplayFingerprint = ""
     var todayPositiveItems: [HomeItem] = []
     var recentThreeTodayItems: [HomeItem] = []
     var currentWeekItems: [HomeItem] = []
@@ -746,6 +747,7 @@ enum ItemDerivedCacheComputation {
         }
         return ItemDerivedCacheSnapshot(
             key: input.key,
+            ledgerDisplayFingerprint: LedgerDisplayFingerprintPolicy.make(items: sortedItems),
             todayPositiveItems: todayPositiveItems,
             recentThreeTodayItems: Array(todayPositiveItems.prefix(3)),
             currentWeekItems: currentWeekItems,
@@ -765,8 +767,85 @@ enum ItemDerivedCacheComputation {
     }
 }
 
+enum ItemDerivedCacheImmediateMutationPolicy {
+    static func replacing(
+        _ updated: HomeItem,
+        in snapshot: ItemDerivedCacheSnapshot,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> ItemDerivedCacheSnapshot {
+        var projected = snapshot
+        let weekInterval = PlaybackService.isoCalendar.dateInterval(
+            of: .weekOfYear,
+            for: now
+        )
+        let monthInterval = calendar.dateInterval(of: .month, for: now)
+
+        projected.todayPositiveItems = replacing(
+            updated,
+            in: snapshot.todayPositiveItems,
+            includes: calendar.isDate(updated.createdAt, inSameDayAs: now) && updated.amount > 0
+        )
+        projected.recentThreeTodayItems = Array(projected.todayPositiveItems.prefix(3))
+        projected.currentWeekItems = replacing(
+            updated,
+            in: snapshot.currentWeekItems,
+            includes: weekInterval.map { interval in
+                updated.createdAt >= interval.start && updated.createdAt < interval.end
+            } ?? false
+        )
+        projected.currentMonthItems = replacing(
+            updated,
+            in: snapshot.currentMonthItems,
+            includes: monthInterval.map { interval in
+                updated.createdAt >= interval.start && updated.createdAt < interval.end
+            } ?? false
+        )
+        projected.currentYearItems = replacing(
+            updated,
+            in: snapshot.currentYearItems,
+            includes: calendar.isDate(updated.createdAt, equalTo: now, toGranularity: .year)
+        )
+        return projected
+    }
+
+    private static func replacing(
+        _ updated: HomeItem,
+        in rows: [HomeItem],
+        includes: Bool
+    ) -> [HomeItem] {
+        let existingIndex = rows.firstIndex { $0.id == updated.id }
+        guard includes else {
+            guard let existingIndex else { return rows }
+            var result = rows
+            result.remove(at: existingIndex)
+            return result
+        }
+
+        if let existingIndex,
+           rows[existingIndex].createdAt == updated.createdAt {
+            var result = rows
+            result[existingIndex] = updated
+            return result
+        }
+
+        var result = rows
+        if let existingIndex {
+            result.remove(at: existingIndex)
+        }
+        let insertionIndex = result.firstIndex { row in
+            if row.createdAt == updated.createdAt {
+                return row.id.uuidString > updated.id.uuidString
+            }
+            return row.createdAt < updated.createdAt
+        } ?? result.endIndex
+        result.insert(updated, at: insertionIndex)
+        return result
+    }
+}
+
 enum ItemDerivedCachePublicationPolicy {
-    static let coalescingDelayNanoseconds: UInt64 = 40_000_000
+    static let coalescingDelayNanoseconds: UInt64 = 120_000_000
 
     static func accepts(
         snapshotKey: ItemDerivedCachePreparationKey,
@@ -775,6 +854,63 @@ enum ItemDerivedCachePublicationPolicy {
         requestMatches: Bool
     ) -> Bool {
         requestMatches && snapshotKey == pendingKey && snapshotKey == currentKey
+    }
+}
+
+enum LedgerRapidInteractionPolicy {
+    static let traceCoalescingDelayNanoseconds: UInt64 = 90_000_000
+    static let homeSnapshotCoalescingDelayNanoseconds: UInt64 = 80_000_000
+}
+
+actor LedgerBackgroundComputationLane {
+    static let shared = LedgerBackgroundComputationLane()
+
+    func buildItemDerived(
+        _ input: ItemDerivedCachePreparationInput
+    ) -> ItemDerivedCacheSnapshot? {
+        guard !Task.isCancelled else { return nil }
+        let value = ItemDerivedCacheComputation.build(input)
+        guard !Task.isCancelled else { return nil }
+        return value
+    }
+
+    func buildHomeLifeMark(
+        _ input: HomeLifeMarkPreparationInput
+    ) -> HomeLifeMarkSnapshot? {
+        guard !Task.isCancelled else { return nil }
+        let value = HomeDashboardSnapshotComputation.lifeMarkSnapshot(input)
+        guard !Task.isCancelled else { return nil }
+        return value
+    }
+
+    func buildHomeQuickRecord(
+        _ input: HomeQuickRecordPreparationInput
+    ) -> HomeQuickRecordSnapshot? {
+        guard !Task.isCancelled else { return nil }
+        let suggestion = HomeViewModel.highConfidenceQuickRecordSuggestionForSnapshot(
+            items: input.items,
+            at: input.now
+        )
+        guard !Task.isCancelled else { return nil }
+        return HomeQuickRecordSnapshot(key: input.key, suggestion: suggestion)
+    }
+
+    func buildTraceChapter(
+        _ input: TraceChapterComputationInput
+    ) -> TraceChapterSnapshot? {
+        guard !Task.isCancelled else { return nil }
+        let value = TraceSnapshotComputation.buildChapter(input)
+        guard !Task.isCancelled else { return nil }
+        return value
+    }
+
+    func buildTraceClue(
+        _ input: TraceClueComputationInput
+    ) -> TraceClueSnapshot? {
+        guard !Task.isCancelled else { return nil }
+        let value = TraceSnapshotComputation.buildClue(input)
+        guard !Task.isCancelled else { return nil }
+        return value
     }
 }
 
@@ -875,6 +1011,7 @@ final class HomeViewModel: ObservableObject {
     private(set) var recordInputAssistanceRevision: Int = 0
     private(set) var homeDashboardRevision: Int = 0
     var homeLifeMarkTextsByItemID: [UUID: String] = [:]
+    var homeLifeMarkSemanticSignaturesByItemID: [UUID: HomeLifeMarkSemanticSignature] = [:]
     var homeTodayLifeMarkLine: String?
     var homeWeekLifeThemeText = ""
     var homeQuickRecordNudgeText: String?
@@ -1216,8 +1353,7 @@ final class HomeViewModel: ObservableObject {
                 category: resolution.category,
                 amount: draft.amount,
                 date: draft.date,
-                baseEmotionTag: resolution.emotionTag,
-                existingItems: memorySeedItems
+                baseEmotionTag: resolution.emotionTag
             )
             let memoryContext = memoryContextForRecord(date: draft.date)
             let scenePackId = OCRCommuteScenePolicy.inferredScenePackID(
@@ -1293,7 +1429,6 @@ final class HomeViewModel: ObservableObject {
 
         let wasEmpty = items.isEmpty
         let now = Date()
-        var memorySeedItems = items
         let importedItems = validDrafts.map { draft in
             let resolution = RecordDraftResolutionService.resolve(
                 RecordDraftResolutionInput(
@@ -1312,8 +1447,7 @@ final class HomeViewModel: ObservableObject {
                 category: resolution.category,
                 amount: draft.amount,
                 date: draft.date,
-                baseEmotionTag: resolution.emotionTag,
-                existingItems: memorySeedItems
+                baseEmotionTag: resolution.emotionTag
             )
             let item = HomeItem(
                 title: resolution.title,
@@ -1328,7 +1462,6 @@ final class HomeViewModel: ObservableObject {
                 userEditedCategory: true,
                 memoryContext: memoryContextForRecord(date: draft.date)
             )
-            memorySeedItems.insert(item, at: 0)
             return item
         }
 
@@ -1654,8 +1787,6 @@ final class HomeViewModel: ObservableObject {
             amount: resolved.amount,
             date: resolved.createdAt,
             baseEmotionTag: resolution.emotionTag,
-            existingItems: items,
-            excluding: resolved.id,
             weatherOverride: storedWeatherSnapshot(from: resolved.memoryContext),
             allowLiveWeather: false
         )
@@ -1680,8 +1811,14 @@ final class HomeViewModel: ObservableObject {
             resolved.emotionTag = trustedMomentTag
         }
         resolved.updatedAt = Date()
+        let projectedItemDerivedCache = ItemDerivedCacheImmediateMutationPolicy.replacing(
+            resolved,
+            in: itemDerivedCache,
+            now: resolved.updatedAt
+        )
         items[idx] = resolved
         guard persistItems(upserting: [resolved]) else { return false }
+        itemDerivedCache = projectedItemDerivedCache
         analyticsService.track(.recordUpdated)
         refreshTodayPlayback()
         Task { await syncUpsertToCloud(resolved) }
@@ -1778,8 +1915,6 @@ final class HomeViewModel: ObservableObject {
                     amount: updated.amount,
                     date: updated.createdAt,
                     baseEmotionTag: baseEmotionTag,
-                    existingItems: items,
-                    excluding: updated.id,
                     weatherOverride: storedWeatherSnapshot(from: updated.memoryContext),
                     allowLiveWeather: false
                 )
@@ -2215,8 +2350,6 @@ final class HomeViewModel: ObservableObject {
         amount: Double,
         date: Date,
         baseEmotionTag: String,
-        existingItems: [HomeItem]? = nil,
-        excluding excludedID: UUID? = nil,
         weatherOverride: WeatherSnapshot? = nil,
         allowLiveWeather: Bool = true
     ) -> String {
@@ -2224,10 +2357,6 @@ final class HomeViewModel: ObservableObject {
         let weather = weatherOverride ?? (allowLiveWeather && settings.weatherCompanionEnabled && shouldAttachLiveContext(to: date)
             ? WeatherCompanionService.shared.cachedSnapshot
             : nil)
-        let memoryItems = (existingItems ?? items).filter { item in
-            guard let excludedID else { return true }
-            return item.id != excludedID
-        }
         return RecordMemoryContextService.enhancedEmotionTag(
             input: RecordMemoryContextInput(
                 title: title,
@@ -2235,7 +2364,6 @@ final class HomeViewModel: ObservableObject {
                 amount: amount,
                 date: date,
                 baseEmotionTag: baseEmotionTag,
-                existingItems: memoryItems,
                 weather: weather
             )
         )
@@ -3168,6 +3296,13 @@ final class HomeViewModel: ObservableObject {
         itemDerivedCache.key == itemDerivedCacheKey(now: now)
     }
 
+    func ledgerDisplayFingerprint(now: Date = Date()) -> String? {
+        let key = itemDerivedCacheKey(now: now)
+        guard itemDerivedCache.key == key,
+              !itemDerivedCache.ledgerDisplayFingerprint.isEmpty else { return nil }
+        return itemDerivedCache.ledgerDisplayFingerprint
+    }
+
     func prepareItemDerivedCacheIfNeeded(now: Date) {
         let key = itemDerivedCacheKey(now: now)
         guard itemDerivedCache.key != key else { return }
@@ -3188,16 +3323,7 @@ final class HomeViewModel: ObservableObject {
                 nanoseconds: ItemDerivedCachePublicationPolicy.coalescingDelayNanoseconds
             )
             guard !Task.isCancelled, itemDerivedCacheRequestID == requestID else { return }
-            let snapshot = await withTaskGroup(
-                of: ItemDerivedCacheSnapshot?.self,
-                returning: ItemDerivedCacheSnapshot?.self
-            ) { group in
-                group.addTask(priority: .utility) {
-                    guard !Task.isCancelled else { return nil }
-                    return ItemDerivedCacheComputation.build(input)
-                }
-                return await group.next() ?? nil
-            }
+            let snapshot = await LedgerBackgroundComputationLane.shared.buildItemDerived(input)
             guard let snapshot,
                   !Task.isCancelled,
                   ItemDerivedCachePublicationPolicy.accepts(

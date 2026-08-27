@@ -565,6 +565,75 @@ final class LifeNarrativeSignalPolicyTests: XCTestCase {
         XCTAssertTrue(clue.narrativePlan?.markLabels.contains("咖啡饮品") == true)
     }
 
+    func testTraceChapterCarriesReusableFactsWithoutChangingFreeLifeMarks() {
+        let previous = [
+            item("上周咖啡", category: .dining, day: 13),
+            item("上周地铁", category: .transport, day: 14),
+        ]
+        let current = [
+            item("本周咖啡", category: .dining, day: 20),
+            item("本周拿铁", category: .dining, day: 21),
+            item("本周地铁", category: .transport, day: 21),
+        ]
+        let allItems = previous + current
+        let snapshot = TraceSnapshotComputation.buildChapter(
+            TraceChapterComputationInput(
+                range: .week,
+                items: current,
+                allItems: allItems,
+                isMember: false,
+                prioritizeRecurringMarks: false,
+                periodKey: "2026-W30",
+                usesEchoAnchor: false,
+                sourceRevision: 46,
+                now: date(21)
+            )
+        )
+        let expectedFreeMarks = LifeMarkService.aggregates(
+            for: current,
+            allItems: allItems,
+            isMember: false,
+            now: date(21),
+            limit: 8
+        )
+        let preparedContext = LifeMarkService.prepareAggregationContext(
+            allItems: allItems,
+            periodItems: current
+        )
+        let preparedMarkSets = LifeMarkService.preparedAggregateSets(
+            for: current,
+            preparedContext: preparedContext,
+            visibleIsMember: false,
+            visibleLimit: 8,
+            memberLimit: 24
+        )
+        let expectedMemberMarks = LifeMarkService.aggregates(
+            for: current,
+            allItems: allItems,
+            isMember: true,
+            now: date(21),
+            limit: 24
+        )
+
+        XCTAssertEqual(snapshot.periodFacts.narrativePlan, snapshot.narrativePlan)
+        XCTAssertEqual(snapshot.periodFacts.lifeMarks, expectedFreeMarks)
+        XCTAssertEqual(preparedMarkSets.visible, expectedFreeMarks)
+        XCTAssertEqual(preparedMarkSets.member, expectedMemberMarks)
+        XCTAssertEqual(Set(snapshot.periodFacts.periodItems.map(\.id)), Set(current.map(\.id)))
+        XCTAssertTrue(snapshot.periodFacts.matches(
+            range: .week,
+            sourceRevision: 46,
+            isMember: false,
+            now: date(21)
+        ))
+        XCTAssertFalse(snapshot.periodFacts.matches(
+            range: .week,
+            sourceRevision: 46,
+            isMember: true,
+            now: date(21)
+        ))
+    }
+
     func testNarrativePhotoLeadIsAlsoThePrimaryVisibleAnchor() {
         let earlier = HomeItem(
             title: "月初聚餐",
@@ -1239,6 +1308,317 @@ final class LifeNarrativeEchoPolicyTests: XCTestCase {
     }
 }
 
+final class LifeJourneyFactRegressionTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return calendar
+    }
+
+    private func date(_ day: Int, _ hour: Int) -> Date {
+        calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 8,
+            day: day,
+            hour: hour
+        ))!
+    }
+
+    private func item(
+        id: String,
+        title: String,
+        category: HomeItem.Category,
+        day: Int,
+        hour: Int,
+        city: String,
+        semanticPlace: String
+    ) -> HomeItem {
+        HomeItem(
+            id: UUID(uuidString: id)!,
+            title: title,
+            amount: 28,
+            category: category,
+            createdAt: date(day, hour),
+            memoryContext: HomeItem.MemoryContext(
+                weatherKind: nil,
+                temperatureCelsius: nil,
+                cityName: city,
+                semanticPlace: semanticPlace
+            )
+        )
+    }
+
+    private func journeyRows() -> [HomeItem] {
+        [
+            item(
+                id: "A1000000-0000-0000-0000-000000000001",
+                title: "南京电车充电",
+                category: .transport,
+                day: 20,
+                hour: 8,
+                city: "南京",
+                semanticPlace: "本城"
+            ),
+            item(
+                id: "A1000000-0000-0000-0000-000000000002",
+                title: "到宿迁的过路费",
+                category: .transport,
+                day: 20,
+                hour: 11,
+                city: "宿迁",
+                semanticPlace: "外地"
+            ),
+            item(
+                id: "A1000000-0000-0000-0000-000000000003",
+                title: "宿迁电车充电",
+                category: .transport,
+                day: 21,
+                hour: 9,
+                city: "宿迁",
+                semanticPlace: "外地"
+            ),
+            item(
+                id: "A1000000-0000-0000-0000-000000000004",
+                title: "到连云港的过路费",
+                category: .transport,
+                day: 22,
+                hour: 11,
+                city: "连云港",
+                semanticPlace: "外地"
+            ),
+            item(
+                id: "A1000000-0000-0000-0000-000000000005",
+                title: "连云港吃海鲜",
+                category: .dining,
+                day: 22,
+                hour: 13,
+                city: "连云港",
+                semanticPlace: "外地"
+            ),
+            item(
+                id: "A1000000-0000-0000-0000-000000000006",
+                title: "徐记花甲鸡爪｜宿豫店",
+                category: .dining,
+                day: 22,
+                hour: 22,
+                city: "宿迁",
+                semanticPlace: "外地"
+            ),
+            item(
+                id: "A1000000-0000-0000-0000-000000000007",
+                title: "周日返南京过路费",
+                category: .transport,
+                day: 23,
+                hour: 17,
+                city: "南京",
+                semanticPlace: "本城"
+            ),
+        ]
+    }
+
+    func testClosedWeekendRoadTripIsOneCertifiedFactAcrossClueChapterAndPlayback() {
+        let rows = journeyRows()
+        let now = date(23, 20)
+        guard let fact = LifeJourneyFactService.primaryFact(in: rows, calendar: calendar) else {
+            XCTFail("expected a closed road-trip fact")
+            return
+        }
+
+        XCTAssertEqual(fact.routeCities, ["南京", "宿迁", "连云港", "宿迁", "南京"])
+        XCTAssertTrue(fact.isRoadTrip)
+        XCTAssertTrue(fact.isClosedLoop)
+        XCTAssertEqual(fact.label, "周末跨城自驾")
+        XCTAssertTrue(fact.line.contains("最后回到南京"))
+        XCTAssertFalse(fact.line.contains("老家"))
+
+        let chapter = TraceSnapshotComputation.buildChapter(
+            TraceChapterComputationInput(
+                range: .week,
+                items: rows,
+                allItems: rows,
+                isMember: true,
+                prioritizeRecurringMarks: false,
+                periodKey: "2026-W34",
+                usesEchoAnchor: false,
+                sourceRevision: 91,
+                now: now
+            )
+        )
+        let clue = TraceSnapshotComputation.buildClue(
+            TraceClueComputationInput(
+                items: rows,
+                allItems: rows,
+                period: .week,
+                periodLabel: "这一周",
+                isMember: true,
+                freeRemaining: 5,
+                storedUnlock: true,
+                sourceRevision: 91,
+                narrativeScope: .week,
+                allowsNarrativeRewrite: true,
+                now: now
+            )
+        )
+        let service = PlaybackService()
+        let playback = service.buildWeekSummary(from: chapter.periodFacts, copySeed: "journey")
+        let sharePlan = service.buildWeeklyShareCardPayload(
+            from: rows,
+            now: now,
+            sourceRevision: 91
+        )?.narrativePlan
+        let outroSupport = playback.chapters.first { $0.id == "week-outro" }?.metrics["supportLine"]
+
+        XCTAssertEqual(chapter.periodFacts.journeyFact, Optional(fact))
+        XCTAssertEqual(clue.journeyFact, Optional(fact))
+        XCTAssertEqual(chapter.narrativePlan.leadSignalID, Optional(fact.id))
+        XCTAssertEqual(clue.narrativePlan?.leadSignalID, Optional(fact.id))
+        XCTAssertEqual(sharePlan?.leadSignalID, Optional(fact.id))
+        XCTAssertEqual(
+            sharePlan?.signalsByRole[.lead]?.first?.evidenceItemIDs,
+            Optional(fact.evidenceItemIDs)
+        )
+        XCTAssertEqual(outroSupport, Optional(fact.line))
+        XCTAssertEqual(clue.insight.theme, .relation)
+        XCTAssertEqual(clue.insight.previewLine, fact.line)
+        XCTAssertFalse(clue.insight.leadQuestion.contains("变化来自哪些记录"))
+        XCTAssertNil(clue.narrativeRewrite)
+    }
+
+    func testAICommandOutgoingTripQueryReusesCertifiedJourneyEvidence() {
+        let rows = journeyRows()
+        let now = date(23, 20)
+        let recognition = InsightWebView.aiCommandRecognitionDigestForTesting(
+            command: "出去玩",
+            now: now
+        )
+        let result = InsightWebView.aiCommandComputationDigestForTesting(
+            command: "出去玩",
+            items: rows,
+            hasMemberAccess: true,
+            now: now
+        )
+
+        XCTAssertTrue(recognition.hasPrefix("query#"))
+        XCTAssertTrue(recognition.contains("#travel#"))
+        XCTAssertTrue(result.hasPrefix("query#过去 31 天的出去玩记录#"))
+        for row in rows {
+            XCTAssertTrue(result.contains(row.id.uuidString), row.title)
+        }
+
+        var uncertified = rows
+        for index in uncertified.indices {
+            uncertified[index].memoryContext = nil
+            uncertified[index].title = "普通记录 \(index)"
+        }
+        let abstained = InsightWebView.aiCommandComputationDigestForTesting(
+            command: "出去玩",
+            items: uncertified,
+            hasMemberAccess: true,
+            now: now
+        )
+        XCTAssertTrue(abstained.hasPrefix("query#过去 31 天的出去玩记录#"))
+        for row in uncertified {
+            XCTAssertFalse(abstained.contains(row.id.uuidString), row.title)
+        }
+    }
+
+    func testJourneyLanguageRequiresRoadReturnAndAwayActivityEvidence() {
+        let railRows = [
+            item(
+                id: "A2000000-0000-0000-0000-000000000001",
+                title: "南京高铁出发",
+                category: .transport,
+                day: 22,
+                hour: 8,
+                city: "南京",
+                semanticPlace: "本城"
+            ),
+            item(
+                id: "A2000000-0000-0000-0000-000000000002",
+                title: "连云港海鲜",
+                category: .dining,
+                day: 22,
+                hour: 12,
+                city: "连云港",
+                semanticPlace: "外地"
+            ),
+            item(
+                id: "A2000000-0000-0000-0000-000000000003",
+                title: "高铁返南京",
+                category: .transport,
+                day: 22,
+                hour: 20,
+                city: "南京",
+                semanticPlace: "本城"
+            ),
+        ]
+        guard let railFact = LifeJourneyFactService.primaryFact(in: railRows, calendar: calendar) else {
+            XCTFail("expected a rail journey fact")
+            return
+        }
+        XCTAssertFalse(railFact.isRoadTrip)
+        XCTAssertTrue(railFact.isClosedLoop)
+        XCTAssertFalse(railFact.label.contains("自驾"))
+        XCTAssertFalse(railFact.line.contains("自驾"))
+
+        guard let openFact = LifeJourneyFactService.primaryFact(
+            in: Array(journeyRows().dropLast()),
+            calendar: calendar
+        ) else {
+            XCTFail("expected an open journey fact")
+            return
+        }
+        XCTAssertFalse(openFact.isClosedLoop)
+        XCTAssertFalse(openFact.line.contains("最后回到"))
+        XCTAssertFalse(openFact.line.contains("完成"))
+
+        var noActivity = journeyRows()
+        for index in noActivity.indices {
+            noActivity[index].category = .transport
+        }
+        XCTAssertNil(LifeJourneyFactService.primaryFact(in: noActivity, calendar: calendar))
+
+        let noRoadOrTransit = journeyRows().enumerated().map { index, row -> HomeItem in
+            var value = row
+            value.title = index == 4 ? "连云港吃海鲜" : "跨城记录 \(index)"
+            return value
+        }
+        XCTAssertNil(LifeJourneyFactService.primaryFact(in: noRoadOrTransit, calendar: calendar))
+    }
+
+    func testJourneyFactsStayLocalAndDeterministicAtReleaseScales() {
+        let base = journeyRows()
+        let now = date(23, 20)
+        guard let expected = LifeJourneyFactService.primaryFact(in: base, calendar: calendar) else {
+            XCTFail("expected a deterministic journey fact")
+            return
+        }
+
+        for count in [100, 1_000, 5_000] {
+            let unrelated = ReleaseFixtureFactory.makeItems(count: count).map { row -> HomeItem in
+                var value = row
+                value.memoryContext = nil
+                return value
+            }
+            let first = LifeJourneyFactService.primaryFact(in: unrelated + base, calendar: calendar)
+            let second = LifeJourneyFactService.primaryFact(in: base + unrelated, calendar: calendar)
+            XCTAssertEqual(first, Optional(expected), "count=\(count)")
+            XCTAssertEqual(second, Optional(expected), "count=\(count)")
+        }
+
+        let packs = LifeNarrativeAIPreparationPolicy.prepareFactPacks(
+            items: base,
+            sourceRevision: 92,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertEqual(LifeNarrativeAIPreparationPolicy.ruleVersion, 5)
+        XCTAssertNil(packs.first { $0.key.scope == LifeNarrativeScope.week.rawValue })
+        XCTAssertNil(packs.first { $0.key.scope == LifeNarrativeScope.month.rawValue })
+    }
+}
+
 final class LifeNarrativeAIRewritePolicyTests: XCTestCase {
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -1521,6 +1901,70 @@ final class PlaybackLivingVoiceCopyTests: XCTestCase {
         playback.chapters
             .flatMap { [$0.narration.warm, $0.narration.plain] }
             .joined(separator: "\n")
+    }
+
+    func testPreparedWeekFactsReusePreservesPlaybackOutputAndIdentity() {
+        let now = date(7, 15, 20)
+        let rows = [
+            item("上周早餐", amount: 13, category: .dining, at: date(7, 8, 8)),
+            item("下班地铁", amount: 4.75, category: .transport, at: date(7, 13, 19, 20)),
+            item("午饭", amount: 28, category: .dining, at: date(7, 15, 12, 20)),
+            item("买纸巾", amount: 18, category: .daily, at: date(7, 15, 18, 10))
+        ]
+        let service = PlaybackService()
+        let facts = service.preparePeriodExperienceFacts(
+            from: rows,
+            range: .week,
+            now: now,
+            sourceRevision: 44,
+            isMember: false
+        )
+        let direct = service.buildWeekSummary(
+            from: rows,
+            now: now,
+            copySeed: "reuse",
+            sourceRevision: 44
+        )
+        let reused = service.buildWeekSummary(from: facts, copySeed: "reuse")
+
+        XCTAssertEqual(reused, direct)
+        XCTAssertTrue(facts.matches(range: .week, sourceRevision: 44, isMember: false, now: now))
+        XCTAssertFalse(facts.matches(range: .week, sourceRevision: 44, isMember: true, now: now))
+        XCTAssertFalse(facts.matches(range: .month, sourceRevision: 44, isMember: false, now: now))
+        XCTAssertFalse(facts.matches(range: .week, sourceRevision: 45, isMember: false, now: now))
+    }
+
+    func testPreparedMonthFactsReusePreservesPlaybackOutputAndRejectsNextMonth() {
+        let now = date(7, 20, 20)
+        let rows = [
+            item("上月早餐", amount: 12, category: .dining, at: date(6, 4, 8)),
+            item("上月午饭", amount: 26, category: .dining, at: date(6, 12, 12)),
+            item("上月纸巾", amount: 18, category: .daily, at: date(6, 18, 19)),
+            item("本月早餐", amount: 14, category: .dining, at: date(7, 4, 8)),
+            item("本月地铁", amount: 4.75, category: .transport, at: date(7, 12, 19)),
+            item("本月纸巾", amount: 20, category: .daily, at: date(7, 18, 18))
+        ]
+        let service = PlaybackService()
+        let facts = service.preparePeriodExperienceFacts(
+            from: rows,
+            range: .month,
+            now: now,
+            sourceRevision: 61
+        )
+        let direct = service.buildMonthSummary(
+            from: rows,
+            now: now,
+            copySeed: "reuse",
+            sourceRevision: 61
+        )
+        let reused = service.buildMonthSummary(from: facts, copySeed: "reuse")
+        let nextMonth = date(8, 2, 10)
+
+        XCTAssertEqual(reused, direct)
+        XCTAssertEqual(facts.periodItems.count, 3)
+        XCTAssertEqual(facts.previousPeriodItems.count, 3)
+        XCTAssertTrue(facts.matches(range: .month, sourceRevision: 61, isMember: true, now: now))
+        XCTAssertFalse(facts.matches(range: .month, sourceRevision: 61, isMember: true, now: nextMonth))
     }
 
     func testWeekKeepsZeroOneTwoAndMatureChapterCounts() {
@@ -2408,14 +2852,12 @@ final class SingleRecordEmotionBoundaryTests: XCTestCase {
     }
 
     func testWeekendDiningDoesNotPersistCrossRecordTransportStory() {
-        let parking = HomeItem(title: "停车费", amount: 12, category: .transport, createdAt: date(7, 47))
         let result = RecordMemoryContextService.enhancedEmotionTag(input: RecordMemoryContextInput(
             title: "巧婆红汤馄饨",
             category: .dining,
             amount: 16,
             date: date(8, 22),
             baseEmotionTag: "周末早餐",
-            existingItems: [parking],
             weather: nil
         ))
 
@@ -3595,9 +4037,131 @@ final class HomeDashboardSnapshotTests: XCTestCase {
                 requestMatches: true
             )
         )
+        XCTAssertGreaterThanOrEqual(
+            ItemDerivedCachePublicationPolicy.coalescingDelayNanoseconds,
+            100_000_000
+        )
         XCTAssertLessThanOrEqual(
             ItemDerivedCachePublicationPolicy.coalescingDelayNanoseconds,
-            50_000_000
+            150_000_000
+        )
+    }
+
+    func testImmediateEditedItemProjectionKeepsListsCurrentUntilBackgroundPublication() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 8,
+            day: 26,
+            hour: 9
+        ))!
+        let first = HomeItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000501")!,
+            title: "晨间咖啡和小食",
+            amount: 10,
+            category: .dining,
+            createdAt: calendar.date(byAdding: .minute, value: -8, to: now)!
+        )
+        let second = HomeItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000502")!,
+            title: "地铁通勤",
+            amount: 4.5,
+            category: .transport,
+            createdAt: calendar.date(byAdding: .minute, value: -7, to: now)!
+        )
+        let key = ItemDerivedCachePreparationKey(
+            ledgerRevision: 12,
+            dayKey: "2026-08-26"
+        )
+        let snapshot = ItemDerivedCacheComputation.build(
+            ItemDerivedCachePreparationInput(
+                key: key,
+                items: [second, first],
+                now: now,
+                itemsAreSortedDescending: true
+            )
+        )
+
+        var edited = first
+        edited.title = "吃馄饨"
+        edited.createdAt = calendar.date(byAdding: .minute, value: 1, to: now)!
+        let projected = ItemDerivedCacheImmediateMutationPolicy.replacing(
+            edited,
+            in: snapshot,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(projected.key, snapshot.key)
+        XCTAssertEqual(projected.todayPositiveItems.map(\.title), ["吃馄饨", "地铁通勤"])
+        XCTAssertEqual(projected.recentThreeTodayItems, projected.todayPositiveItems)
+        XCTAssertEqual(projected.currentWeekItems.first(where: { $0.id == edited.id })?.title, "吃馄饨")
+        XCTAssertEqual(projected.currentMonthItems.first(where: { $0.id == edited.id })?.title, "吃馄饨")
+        XCTAssertEqual(projected.currentYearItems.first(where: { $0.id == edited.id })?.title, "吃馄饨")
+        XCTAssertEqual(projected.ledgerDisplayFingerprint, snapshot.ledgerDisplayFingerprint)
+        XCTAssertEqual(projected.todayPlayback, snapshot.todayPlayback)
+
+        edited.createdAt = calendar.date(byAdding: .day, value: -1, to: now)!
+        let movedOut = ItemDerivedCacheImmediateMutationPolicy.replacing(
+            edited,
+            in: projected,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertFalse(movedOut.todayPositiveItems.contains { $0.id == edited.id })
+        XCTAssertTrue(movedOut.currentWeekItems.contains { $0.id == edited.id })
+
+        edited.createdAt = now
+        edited.amount = 0
+        let zeroAmount = ItemDerivedCacheImmediateMutationPolicy.replacing(
+            edited,
+            in: movedOut,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertFalse(zeroAmount.todayPositiveItems.contains { $0.id == edited.id })
+        XCTAssertTrue(zeroAmount.currentWeekItems.contains { $0.id == edited.id })
+    }
+
+    func testRapidInteractionMemoryPolicyBoundsDisplayImagesSnapshotsAndCoalescing() {
+        XCTAssertLessThanOrEqual(MemoryAttachmentImagePolicy.cacheCountLimit, 40)
+        XCTAssertLessThanOrEqual(
+            MemoryAttachmentImagePolicy.cacheCostLimitBytes,
+            32 * 1024 * 1024
+        )
+        XCTAssertLessThanOrEqual(MemoryAttachmentImagePolicy.thumbnailMaxPixelSize, 480)
+        XCTAssertLessThanOrEqual(MemoryAttachmentImagePolicy.originalDisplayMaxPixelSize, 1_600)
+        XCTAssertEqual(MemoryAttachmentImagePolicy.originalPagePreloadRadius, 1)
+
+        let loadedPages = (0..<9).filter {
+            MemoryAttachmentImagePolicy.shouldLoadOriginalPage(
+                index: $0,
+                selectedIndex: 4,
+                imageCount: 9
+            )
+        }
+        XCTAssertEqual(loadedPages, [3, 4, 5])
+        XCTAssertFalse(MemoryAttachmentImagePolicy.shouldLoadOriginalPage(
+            index: 9,
+            selectedIndex: 4,
+            imageCount: 9
+        ))
+
+        XCTAssertLessThanOrEqual(TraceSnapshotMemoryPolicy.chapterCacheLimit, 2)
+        XCTAssertLessThanOrEqual(TraceSnapshotMemoryPolicy.clueCacheLimit, 4)
+        XCTAssertGreaterThanOrEqual(
+            LedgerRapidInteractionPolicy.traceCoalescingDelayNanoseconds,
+            60_000_000
+        )
+        XCTAssertLessThanOrEqual(
+            LedgerRapidInteractionPolicy.traceCoalescingDelayNanoseconds,
+            120_000_000
+        )
+        XCTAssertGreaterThanOrEqual(
+            LedgerRapidInteractionPolicy.homeSnapshotCoalescingDelayNanoseconds,
+            60_000_000
         )
     }
 
@@ -3646,6 +4210,72 @@ final class HomeDashboardSnapshotTests: XCTestCase {
                 )
             )
         )
+    }
+
+    func testLifeMarkRefreshDropsOnlyEditedOrDeletedRowsBeforeAsyncRebuild() {
+        let date = Date(timeIntervalSince1970: 1_784_240_000)
+        let chargingID = UUID(uuidString: "E1000000-0000-0000-0000-000000000001")!
+        let mealID = UUID(uuidString: "E1000000-0000-0000-0000-000000000002")!
+        let previousCharging = HomeItem(
+            id: chargingID,
+            title: "电车充电",
+            amount: 42,
+            category: .daily,
+            createdAt: date,
+            updatedAt: date
+        )
+        let meal = HomeItem(
+            id: mealID,
+            title: "牛肉面",
+            amount: 28,
+            category: .dining,
+            createdAt: date.addingTimeInterval(60),
+            updatedAt: date.addingTimeInterval(60)
+        )
+        var correctedCharging = previousCharging
+        correctedCharging.category = .transport
+        correctedCharging.userEditedCategory = true
+        correctedCharging.categoryCorrectionFrom = .daily
+        correctedCharging.updatedAt = date.addingTimeInterval(120)
+        let previousItems = [previousCharging, meal]
+        let previousTexts = [
+            chargingID: "生活线索 · 超市买菜和家用",
+            mealID: "生活线索 · 日常吃饭",
+        ]
+
+        let retained = HomeLifeMarkRefreshPolicy.retainedVisibleLines(
+            previousTexts: previousTexts,
+            previousSignatures: HomeLifeMarkRefreshPolicy.semanticSignatures(for: previousItems),
+            nextItems: [correctedCharging, meal]
+        )
+        let afterDeletion = HomeLifeMarkRefreshPolicy.retainedVisibleLines(
+            previousTexts: previousTexts,
+            previousSignatures: HomeLifeMarkRefreshPolicy.semanticSignatures(for: previousItems),
+            nextItems: [correctedCharging]
+        )
+
+        XCTAssertNil(retained[chargingID])
+        XCTAssertEqual(retained[mealID], previousTexts[mealID])
+        XCTAssertNil(afterDeletion[chargingID])
+        XCTAssertNil(afterDeletion[mealID])
+
+        let key = HomeLifeMarkSnapshotKey(
+            ledgerRevision: 3,
+            dayKey: "2026-07-21",
+            isMember: true
+        )
+        let rebuilt = HomeDashboardSnapshotComputation.lifeMarkSnapshot(
+            HomeLifeMarkPreparationInput(
+                key: key,
+                visibleItems: [correctedCharging],
+                weekItems: [correctedCharging],
+                allItems: [correctedCharging],
+                isMember: true,
+                frequentSuggestionLine: nil
+            )
+        )
+        XCTAssertEqual(rebuilt.textsByItemID[chargingID], "生活线索 · 车主日常")
+        XCTAssertFalse(rebuilt.textsByItemID[chargingID]?.contains("买菜") == true)
     }
 
     func testQuickRecordSnapshotKeyChangesOnlyWithLedgerOrMinuteBucket() {
@@ -7729,6 +8359,59 @@ final class RecordSemanticDiningBoundaryTests: XCTestCase {
 
         XCTAssertEqual(resolution.category, .shopping)
         XCTAssertTrue(resolution.trace.contains("category:userLocked"))
+    }
+
+    func testFlowerClamAndChickenFeetPhrasesResolveToDining() {
+        let titles = [
+            "徐记花甲鸡爪｜宿豫店",
+            "花甲",
+            "花蛤",
+            "蛤蜊拼盘",
+            "贝类海鲜",
+            "鸡爪",
+            "凤爪",
+        ]
+
+        for title in titles {
+            XCTAssertEqual(RecordSemanticLexicon.bestMatchingCategory(in: title), .dining, title)
+            XCTAssertEqual(RecordSemanticLexicon.strongManualNoteCategory(of: title), .dining, title)
+        }
+    }
+
+    func testManualCategoryChangePreservesTheUsersOriginalTitle() {
+        let title = "徐记花甲鸡爪｜宿豫店"
+        XCTAssertEqual(
+            RecordEditCategoryMutationPolicy.titleAfterSelectingCategory(
+                currentTitle: title,
+                category: .dining
+            ),
+            title
+        )
+    }
+
+    func testSaturdayLateDiningNeedsExplicitWorkEvidenceBeforeSayingOvertime() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let saturdayNight = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 8,
+            day: 22,
+            hour: 23
+        ))!
+
+        let neutral = HomeItem.lateNightDiningEmotionTag(
+            title: "晚归路上的一口热食",
+            date: saturdayNight
+        )
+        let explicitWork = HomeItem.lateNightDiningEmotionTag(
+            title: "加班后的一口热食",
+            date: saturdayNight
+        )
+
+        XCTAssertEqual(neutral, "晚归时吃点东西")
+        XCTAssertFalse(neutral?.contains("加班") == true)
+        XCTAssertEqual(explicitWork, "加班后的热食记下")
     }
 }
 
