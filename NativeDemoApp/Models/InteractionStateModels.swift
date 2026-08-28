@@ -65,6 +65,12 @@ struct LatestRequestGate {
     }
 }
 
+enum LedgerSnapshotPublicationPolicy {
+    static func accepts(preparedRevision: Int, currentRevision: Int) -> Bool {
+        preparedRevision == currentRevision
+    }
+}
+
 enum PostSavePromptKind: String, Codable, Equatable {
     case firstPlayback
     case memoryPhoto

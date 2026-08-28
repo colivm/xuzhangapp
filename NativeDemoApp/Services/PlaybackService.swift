@@ -74,6 +74,7 @@ struct PeriodExperienceFacts: @unchecked Sendable {
     let narrativeEcho: LifeNarrativeEcho?
     let narrativePlan: LifeNarrativePlan
     let narrativeRewrite: LifeNarrativeAIRewrite?
+    let weeklyShareLifeMark: LifeMarkAggregate?
     let auxiliaryMetrics: [String: String]
 
     func matches(
@@ -162,6 +163,18 @@ struct WeeklyShareCardPayload {
     let narrativePlan: LifeNarrativePlan?
     let narrativeEcho: LifeNarrativeEcho?
     let narrativeRewrite: LifeNarrativeAIRewrite?
+}
+
+struct WeeklyShareCardSnapshot: @unchecked Sendable {
+    let sourceRevision: Int
+    let payload: WeeklyShareCardPayload
+    let evidenceItemIDs: [UUID]
+}
+
+struct WeeklyShareCardPreparationInput: @unchecked Sendable {
+    let items: [HomeItem]
+    let sourceRevision: Int
+    let now: Date
 }
 
 struct MemoryAnchorSelectionPolicy {
@@ -698,6 +711,9 @@ final class PlaybackService {
             visibleLimit: 8,
             memberLimit: 24
         )
+        let weeklyShareLifeMark = range == .week
+            ? weeklyShareLifeMarkAggregate(from: Array(preparedLifeMarkSets.member.prefix(4)))
+            : nil
         return PeriodExperienceFacts(
             range: range,
             sourceRevision: sourceRevision,
@@ -712,6 +728,7 @@ final class PlaybackService {
             narrativeEcho: narrativeEcho,
             narrativePlan: narrativePlan,
             narrativeRewrite: narrativeRewrite,
+            weeklyShareLifeMark: weeklyShareLifeMark,
             auxiliaryMetrics: PlaybackAuxiliarySignalPolicy.preparedMetrics(
                 periodItems: normalizedPeriodItems,
                 lifeMarks: preparedLifeMarkSets.member
@@ -960,62 +977,73 @@ final class PlaybackService {
         now: Date = Date(),
         sourceRevision: Int? = nil
     ) -> WeeklyShareCardPayload? {
+        let resolvedRevision = sourceRevision ?? items.count
+        let preparedFacts = preparePeriodExperienceFacts(
+            from: items,
+            range: .week,
+            now: now,
+            sourceRevision: resolvedRevision
+        )
+        return buildWeeklyShareCardPayload(from: preparedFacts, summary: summary)
+    }
+
+    func prepareWeeklyShareCardSnapshot(
+        _ input: WeeklyShareCardPreparationInput,
+        summary: SummaryPlayback? = nil
+    ) -> WeeklyShareCardSnapshot? {
+        let preparedFacts = preparePeriodExperienceFacts(
+            from: input.items,
+            range: .week,
+            now: input.now,
+            sourceRevision: input.sourceRevision
+        )
+        return prepareWeeklyShareCardSnapshot(
+            from: preparedFacts,
+            summary: summary,
+            evidenceItemIDs: Self.weeklyShareEvidenceItemIDs(
+                from: input.items,
+                now: input.now
+            )
+        )
+    }
+
+    func prepareWeeklyShareCardSnapshot(
+        from preparedFacts: PeriodExperienceFacts,
+        summary: SummaryPlayback? = nil,
+        evidenceItemIDs: [UUID]? = nil
+    ) -> WeeklyShareCardSnapshot? {
+        guard let payload = buildWeeklyShareCardPayload(
+            from: preparedFacts,
+            summary: summary
+        ) else { return nil }
+        return WeeklyShareCardSnapshot(
+            sourceRevision: preparedFacts.sourceRevision,
+            payload: payload,
+            evidenceItemIDs: evidenceItemIDs ?? preparedFacts.periodItems.map(\.id)
+        )
+    }
+
+    func buildWeeklyShareCardPayload(
+        from preparedFacts: PeriodExperienceFacts,
+        summary: SummaryPlayback? = nil
+    ) -> WeeklyShareCardPayload? {
+        guard preparedFacts.range == .week else { return nil }
         let calendar = Self.isoCalendar
-        guard let interval = calendar.dateInterval(of: .weekOfYear, for: now) else { return nil }
-        let rows = positiveItems(items, from: interval.start, to: interval.end)
+        let now = preparedFacts.preparedAt
+        let rows = preparedFacts.periodItems
         guard !rows.isEmpty else { return nil }
-        let previousStart = calendar.date(
-            byAdding: .weekOfYear,
-            value: -1,
-            to: interval.start
-        ) ?? interval.start
-        let previousRows = positiveItems(items, from: previousStart, to: interval.start)
-        let previousStableSignalIDs = LifeNarrativeSignalPolicy.recentStableSignalIDs(from: previousRows)
-        let journeyFact = LifeJourneyFactService.primaryFact(in: rows, calendar: calendar)
-        let narrativeEcho = LifeNarrativeEchoPolicy.makeEcho(
-            LifeNarrativeEchoInput(
-                scope: .week,
-                sourceRevision: sourceRevision ?? items.count,
-                items: items,
-                now: now,
-                recentEchoIDs: []
-            ),
-            calendar: calendar
-        )
-        let narrativePlan = LifeNarrativeSignalPolicy.makePlan(
-            LifeNarrativePlanningInput(
-                scope: .week,
-                sourceRevision: sourceRevision ?? items.count,
-                items: rows,
-                previousItems: previousRows,
-                now: now,
-                recentLeadSignalIDs: previousStableSignalIDs,
-                relationshipEcho: narrativeEcho,
-                journeyFact: journeyFact
-            )
-        )
-        let narrativeRewrite: LifeNarrativeAIRewrite? = {
-            guard narrativePlan.leadSignalID != journeyFact?.id else { return nil }
-            return LifeNarrativeAIRewriteStore.shared.rewrite(
-                for: LifeNarrativeAIPreparationPolicy.key(
-                    scope: .week,
-                    sourceRevision: sourceRevision ?? items.count,
-                    now: now,
-                    calendar: calendar
-                )
-            )
-        }()
+        let intervalStart = preparedFacts.periodStart
+        let intervalEnd = preparedFacts.periodEnd
+        let narrativeEcho = preparedFacts.narrativeEcho
+        let narrativePlan = preparedFacts.narrativePlan
+        let narrativeRewrite = preparedFacts.narrativeRewrite
 
         let total = rows.reduce(0) { $0 + $1.amount }
         let top = topCategoryStats(rows).first
         let topAmount = top?.amount ?? 0
         let ratio = total > 0 ? topAmount / total : 0
-        let builtSummary = summary ?? buildWeekSummary(
-            from: items,
-            now: now,
-            sourceRevision: sourceRevision
-        )
-        let activity = dailyActivity(rows, start: interval.start, days: 7)
+        let builtSummary = summary ?? buildWeekSummary(from: preparedFacts)
+        let activity = dailyActivity(rows, start: intervalStart, days: 7)
         let trend = activity.map { activity in
             (Self.shortWeekdayFormatter.string(from: activity.date), activity.amount)
         }
@@ -1023,9 +1051,9 @@ final class PlaybackService {
             (Self.shortWeekdayFormatter.string(from: activity.date), activity.count)
         }
         let categorySlices = weeklyShareCategorySlices(from: rows)
-        let period = "\(Self.dotDateFormatter.string(from: interval.start)) ~ \(Self.dotDateFormatter.string(from: calendar.date(byAdding: .day, value: -1, to: interval.end) ?? now))"
+        let period = "\(Self.dotDateFormatter.string(from: intervalStart)) ~ \(Self.dotDateFormatter.string(from: calendar.date(byAdding: .day, value: -1, to: intervalEnd) ?? now))"
         let closing = builtSummary.chapters.last?.narration.plain ?? "这一周已经留下了可以回看的记录。"
-        let weeklyLifeMark = weeklyShareLifeMarkAggregate(rows: rows, allItems: items, now: now)
+        let weeklyLifeMark = preparedFacts.weeklyShareLifeMark
         let lifeMarkSubtitle = weeklyShareLifeMarkLine(from: weeklyLifeMark)
             ?? weeklyShareLifeMarkLine(from: builtSummary)
         let contextLine = weeklySceneMemoryLine(rows)
@@ -1064,6 +1092,24 @@ final class PlaybackService {
             narrativeEcho: narrativeEcho,
             narrativeRewrite: narrativeRewrite
         )
+    }
+
+    static func weeklyShareEvidenceItemIDs(
+        from items: [HomeItem],
+        now: Date = Date()
+    ) -> [UUID] {
+        let calendar = isoCalendar
+        guard let interval = calendar.dateInterval(of: .weekOfYear, for: now) else {
+            return []
+        }
+        return items.compactMap { item in
+            guard item.amount > 0,
+                  item.createdAt >= interval.start,
+                  item.createdAt < interval.end else {
+                return nil
+            }
+            return item.id
+        }
     }
 
     private func weeklyShareCategorySlices(from rows: [HomeItem]) -> [WeeklyShareCategorySlice] {
@@ -2285,17 +2331,8 @@ final class PlaybackService {
     }
 
     private func weeklyShareLifeMarkAggregate(
-        rows: [HomeItem],
-        allItems: [HomeItem],
-        now: Date
+        from marks: [LifeMarkAggregate]
     ) -> LifeMarkAggregate? {
-        let marks = LifeMarkService.aggregates(
-            for: rows,
-            allItems: allItems,
-            isMember: true,
-            now: now,
-            limit: 4
-        )
         return marks.sorted { lhs, rhs in
             let lhsRank = weeklyShareLifeMarkRank(lhs)
             let rhsRank = weeklyShareLifeMarkRank(rhs)

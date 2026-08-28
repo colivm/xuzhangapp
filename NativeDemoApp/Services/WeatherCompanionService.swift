@@ -1,5 +1,6 @@
 import CoreLocation
 import Foundation
+import WeatherKit
 
 struct WeatherSnapshot: Equatable {
     var temp: Double?
@@ -19,6 +20,7 @@ final class WeatherCompanionService: NSObject, @preconcurrency CLLocationManager
 
     private let manager = CLLocationManager()
     private let geocoder = CLGeocoder()
+    private let weatherService = WeatherService.shared
     private let cacheDuration: TimeInterval = 30 * 60
     private let homeCityKey = "weather_companion_home_city_v1"
     private var cachedCoordinate: CLLocationCoordinate2D?
@@ -104,21 +106,14 @@ final class WeatherCompanionService: NSObject, @preconcurrency CLLocationManager
             return nil
         }
 
-        var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
-        components?.queryItems = [
-            URLQueryItem(name: "latitude", value: String(coordinate.latitude)),
-            URLQueryItem(name: "longitude", value: String(coordinate.longitude)),
-            URLQueryItem(name: "current", value: "temperature_2m,weather_code"),
-        ]
-        guard let url = components?.url else { return nil }
-
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-            let payload = try JSONDecoder().decode(OpenMeteoResponse.self, from: data)
+            let current = try await weatherService.weather(
+                for: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude),
+                including: .current
+            )
             let snapshot = WeatherSnapshot(
-                temp: payload.current.temperature2m,
-                weatherCode: payload.current.weatherCode,
+                temp: current.temperature.converted(to: .celsius).value,
+                weatherCode: Self.legacyWeatherCode(for: current.condition),
                 ts: Date()
             )
             cachedSnapshotValue = snapshot
@@ -205,18 +200,17 @@ final class WeatherCompanionService: NSObject, @preconcurrency CLLocationManager
             .replacingOccurrences(of: "地区", with: "")
             .replacingOccurrences(of: "自治州", with: "")
     }
-}
 
-private struct OpenMeteoResponse: Decodable {
-    struct Current: Decodable {
-        var temperature2m: Double?
-        var weatherCode: Int?
-
-        enum CodingKeys: String, CodingKey {
-            case temperature2m = "temperature_2m"
-            case weatherCode = "weather_code"
+    /// Keeps the existing downstream rain/snow grouping stable while WeatherKit
+    /// becomes the source of truth. Temperature still determines hot/cold.
+    static func legacyWeatherCode(for condition: WeatherCondition) -> Int? {
+        switch condition {
+        case .drizzle, .freezingDrizzle, .freezingRain, .heavyRain, .rain, .sunShowers:
+            return 61
+        case .blizzard, .blowingSnow, .flurries, .heavySnow, .sleet, .snow, .sunFlurries, .wintryMix:
+            return 71
+        default:
+            return nil
         }
     }
-
-    var current: Current
 }

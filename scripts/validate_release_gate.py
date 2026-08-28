@@ -230,6 +230,9 @@ def run_repository_checks() -> None:
         ("experience static check", powershell_command("scripts/experience_static_check.ps1")),
         ("copy experience check", powershell_command("scripts/check_copy_experience.ps1")),
         ("copy lint", [sys.executable, "scripts/copy_lint.py"]),
+        ("public compliance pages", [sys.executable, "scripts/compliance_html_check.py"]),
+        ("App Store metadata", [sys.executable, "scripts/app_store_metadata_check.py"]),
+        ("Nginx security headers", [sys.executable, "scripts/security_headers_check.py"]),
         ("migration fixtures", [sys.executable, "scripts/validate_migration_samples.py"]),
         ("metadata schema", [sys.executable, "scripts/validate_metadata_store_schema.py"]),
     )

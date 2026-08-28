@@ -24,6 +24,9 @@
 		A100000D0000000000000001 /* AIReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001F0000000000000001 /* AIReportService.swift */; };
 		A100000E0000000000000001 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000210000000000000001 /* KeychainService.swift */; };
 		A100000F0000000000000001 /* AIUsageLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000220000000000000001 /* AIUsageLimiter.swift */; };
+		C82000010000000000000001 /* LegalConsentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C82000110000000000000001 /* LegalConsentStore.swift */; };
+		C82000020000000000000001 /* LoginPolicyConsentRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C82000120000000000000001 /* LoginPolicyConsentRow.swift */; };
+		C82000030000000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C82000130000000000000001 /* PrivacyInfo.xcprivacy */; };
 		A10000230000000000000001 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000240000000000000001 /* AuthService.swift */; };
 		A10000250000000000000001 /* LedgerSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000260000000000000001 /* LedgerSyncService.swift */; };
 		A10000270000000000000001 /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000280000000000000001 /* AnalyticsService.swift */; };
@@ -146,6 +149,9 @@
 		A100001F0000000000000001 /* AIReportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIReportService.swift; sourceTree = "<group>"; };
 		A10000210000000000000001 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		A10000220000000000000001 /* AIUsageLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIUsageLimiter.swift; sourceTree = "<group>"; };
+		C82000110000000000000001 /* LegalConsentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalConsentStore.swift; sourceTree = "<group>"; };
+		C82000120000000000000001 /* LoginPolicyConsentRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginPolicyConsentRow.swift; sourceTree = "<group>"; };
+		C82000130000000000000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A10000240000000000000001 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		A10000260000000000000001 /* LedgerSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerSyncService.swift; sourceTree = "<group>"; };
 		A10000280000000000000001 /* AnalyticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsService.swift; sourceTree = "<group>"; };
@@ -195,6 +201,7 @@
 		A100004E0000000000000001 /* InsightWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightWebView.swift; sourceTree = "<group>"; };
 		A100008A0000000000000001 /* CategoryRecommendService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryRecommendService.swift; sourceTree = "<group>"; };
 		B20000040000000000000001 /* WeatherCompanionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherCompanionService.swift; sourceTree = "<group>"; };
+		B20000090000000000000001 /* NativeDemoApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NativeDemoApp.entitlements; sourceTree = "<group>"; };
 		B20000050000000000000001 /* PetCompanionCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetCompanionCopy.swift; sourceTree = "<group>"; };
 		B20000060000000000000001 /* PetCompanionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetCompanionService.swift; sourceTree = "<group>"; };
 		B20000080000000000000001 /* PhotoLibrarySaveService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibrarySaveService.swift; sourceTree = "<group>"; };
@@ -282,6 +289,7 @@
 				F13000020000000000000001 /* LaunchScreen.storyboard */,
 				A10000370000000000000001 /* Preview Content */,
 				A100001D0000000000000001 /* Info.plist */,
+				B20000090000000000000001 /* NativeDemoApp.entitlements */,
 			);
 			path = NativeDemoApp;
 			sourceTree = "<group>";
@@ -310,6 +318,7 @@
 		A10000340000000000000001 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				C82000110000000000000001 /* LegalConsentStore.swift */,
 				A10000150000000000000001 /* LocalStore.swift */,
 				U40000120000000000000001 /* LedgerHomeItemsRepository.swift */,
 				U40000110000000000000001 /* LedgerMetadataStore.swift */,
@@ -397,6 +406,7 @@
 		A10000381000000000000001 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				C82000130000000000000001 /* PrivacyInfo.xcprivacy */,
 				A100001B1000000000000001 /* RecordSceneLexicon.json */,
 				A100001B2000000000000001 /* RecordSceneLexicon.regression.json */,
 				V10000110000000000000001 /* QARealPhotos */,
@@ -487,6 +497,7 @@
 		A10000380000000000000001 /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				C82000120000000000000001 /* LoginPolicyConsentRow.swift */,
 				F27000020000000000000001 /* ComputationLoadingView.swift */,
 				W10000110000000000000001 /* PixelPetAnimationView.swift */,
 				A100001A0000000000000001 /* StatCardView.swift */,
@@ -574,6 +585,11 @@
 				TargetAttributes = {
 					A10000400000000000000001 = {
 						CreatedOnToolsVersion = 16.0;
+						SystemCapabilities = {
+							com.apple.WeatherKit = {
+								enabled = 1;
+							};
+						};
 					};
 					U10000300000000000000001 = {
 						CreatedOnToolsVersion = 16.0;
@@ -605,6 +621,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C82000030000000000000001 /* PrivacyInfo.xcprivacy in Resources */,
 				A100000B0000000000000001 /* Assets.xcassets in Resources */,
 				A100000B1000000000000001 /* RecordSceneLexicon.json in Resources */,
 				A100000B2000000000000001 /* RecordSceneLexicon.regression.json in Resources */,
@@ -635,8 +652,10 @@
 				A10000050000000000000001 /* LocalStore.swift in Sources */,
 				A10000060000000000000001 /* HomeViewModel.swift in Sources */,
 				A10000070000000000000001 /* SettingsViewModel.swift in Sources */,
+				C82000010000000000000001 /* LegalConsentStore.swift in Sources */,
 				A10000080000000000000001 /* HomeView.swift in Sources */,
 				A10000090000000000000001 /* SettingsView.swift in Sources */,
+				C82000020000000000000001 /* LoginPolicyConsentRow.swift in Sources */,
 				A100000A0000000000000001 /* StatCardView.swift in Sources */,
 				A100000C0000000000000001 /* OCRService.swift in Sources */,
 				A100000D0000000000000001 /* AIReportService.swift in Sources */,
@@ -867,6 +886,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = NativeDemoApp/NativeDemoApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"NativeDemoApp/Preview Content\"";
@@ -896,6 +916,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = NativeDemoApp/NativeDemoApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"NativeDemoApp/Preview Content\"";

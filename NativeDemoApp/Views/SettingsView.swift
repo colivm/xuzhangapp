@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import WeatherKit
 
 struct AccountMemoryStats: Equatable, @unchecked Sendable {
     let sourceRevision: Int
@@ -1710,6 +1711,7 @@ struct SettingsView: View {
                 get: { settingsViewModel.weatherCompanionEnabled },
                 set: { settingsViewModel.weatherCompanionEnabled = $0 }
             ))
+            WeatherKitAttributionView()
             VStack(alignment: .leading, spacing: 6) {
                 Text("复盘语气")
                     .font(.system(size: 14, weight: .medium))
@@ -1842,6 +1844,7 @@ struct SettingsView: View {
                 set: { settingsViewModel.weatherCompanionEnabled = $0 }
             ))
             settingHelper("开启这个，我就能知道今天是晴是雨，陪你说更懂你的悄悄话啦！")
+            WeatherKitAttributionView()
         }
         .webCardPadding()
         .webCardBackground()
@@ -2729,6 +2732,13 @@ struct SettingsView: View {
                         .textContentType(.telephoneNumber)
                 }
 
+                LoginPolicyConsentRow(
+                    isAccepted: Binding(
+                        get: { settingsViewModel.hasAcceptedLoginPolicies },
+                        set: { settingsViewModel.setLoginPolicyAccepted($0) }
+                    )
+                )
+
                 settingField(label: "验证码") {
                     HStack(spacing: 10) {
                         TextField("验证码", text: $settingsViewModel.loginCode)
@@ -2781,8 +2791,6 @@ struct SettingsView: View {
                         .foregroundStyle(AppColors.subtext.opacity(0.92))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-
-                legalInlineText(prefix: "登录即表示你已阅读并同意")
 
                 Button("稍后再说，先不登录") {
                     showAccountSheet = false
@@ -2850,11 +2858,17 @@ struct SettingsView: View {
     }
 
     private var loginSendCodeDisabled: Bool {
-        settingsViewModel.isAuthBusy || settingsViewModel.smsCooldownRemaining > 0 || !loginPhoneIsValid
+        settingsViewModel.isAuthBusy
+            || settingsViewModel.smsCooldownRemaining > 0
+            || !loginPhoneIsValid
+            || !settingsViewModel.hasAcceptedLoginPolicies
     }
 
     private var loginButtonDisabled: Bool {
         settingsViewModel.isAuthBusy
+            || !loginPhoneIsValid
+            || settingsViewModel.loginCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !settingsViewModel.hasAcceptedLoginPolicies
     }
 
     private var accountIdentityHeader: some View {
@@ -3315,23 +3329,6 @@ struct SettingsView: View {
         .foregroundStyle(AppColors.accentDark.opacity(0.9))
     }
 
-    private func legalInlineText(prefix: String) -> some View {
-        HStack(spacing: 4) {
-            Text(prefix)
-                .foregroundStyle(AppColors.subtext.opacity(0.78))
-            Link("用户协议", destination: termsURL)
-                .foregroundStyle(AppColors.accentDark.opacity(0.9))
-            Text("和")
-                .foregroundStyle(AppColors.subtext.opacity(0.78))
-            Link("隐私政策", destination: privacyURL)
-                .foregroundStyle(AppColors.accentDark.opacity(0.9))
-        }
-        .font(.system(size: 11))
-        .frame(maxWidth: .infinity, alignment: .center)
-        .lineLimit(1)
-        .minimumScaleFactor(0.82)
-    }
-
     // MARK: - Shared Components
 
     private func sectionBody(_ text: String) -> some View {
@@ -3517,6 +3514,52 @@ struct SettingsView: View {
         .buttonStyle(.plain)
     }
 
+}
+
+private struct WeatherKitAttributionView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var attribution: WeatherAttribution?
+
+    private let fallbackLegalURL = URL(string: "https://weatherkit.apple.com/legal-attribution.html")!
+
+    var body: some View {
+        Group {
+            if let attribution {
+                Link(destination: attribution.legalPageURL) {
+                    AsyncImage(
+                        url: colorScheme == .dark
+                            ? attribution.combinedMarkLightURL
+                            : attribution.combinedMarkDarkURL
+                    ) { phase in
+                        if let image = phase.image {
+                            image
+                                .resizable()
+                                .scaledToFit()
+                        } else {
+                            attributionFallbackLabel(serviceName: attribution.serviceName)
+                        }
+                    }
+                }
+                .accessibilityLabel("天气数据由\(attribution.serviceName)提供，查看法律声明")
+            } else {
+                Link(destination: fallbackLegalURL) {
+                    attributionFallbackLabel(serviceName: "Apple Weather")
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 22)
+        .task {
+            guard attribution == nil else { return }
+            attribution = try? await WeatherService.shared.attribution
+        }
+    }
+
+    private func attributionFallbackLabel(serviceName: String) -> some View {
+        Text("天气数据由 \(serviceName) 提供 · 法律声明")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.secondary)
+    }
 }
 
 // MARK: - Web Card Styling Helpers

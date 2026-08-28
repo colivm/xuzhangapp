@@ -3613,7 +3613,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ## 49. PERF-AUDIT-04：全局变化驱动快照收尾（2026-07-22）
 
-- 状态：`NOT_STARTED`；`PERF-FIX-03` 的全局只读审计已完成，尚未修改本项代码。必须在 `FLOW-64` 编译/真机签收或其定向修复收口后再启动，启动时才可标记唯一 `IN_PROGRESS`。
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-08-28）；四条真实可达路径的代码、静态、语义与 Windows 发布门禁已完成，当前无 `IN_PROGRESS`。Windows 无 Swift/Xcode/iPhone，缺 Debug/Release、全部 XCTest 与 `FLOW-96` 真机/Instruments 签收，不标记 `VERIFIED`。
 - 审计目标：检查首页之外是否仍把“已算好的周期结果”在 SwiftUI 绘制、弹层重绘或明确交互时重新扫完整账本；只处理真实可达路径，不因看到旧函数就重写产品逻辑。
 - P0 发现（播放分享弹层）：`StatsWebView.summaryPlaybackSheet` 在每次 SwiftUI 重绘时调用 `weeklySharePayload(for:)`，它同步执行 `PlaybackService.buildWeeklyShareCardPayload`；该构建会重新筛本周/上周、生成回声与叙事计划、构建生活印记，弹层内进度、播放索引或其他状态变化都可能重复触发。应让周记后台生成阶段一并发布同修订的 share payload，弹层只读快照；不得改变播放章节、分享模板、照片或文案。
 - P1 发现（复盘保存分享）：`InsightWebView.generateAndShareWeeklyCard` 虽包在 `Task { @MainActor in }`，但 `buildWeeklyShareCardPayload` 仍同步跑在主 actor；点击保存时可能先冻结 UI，再开始图片快照。应先在后台取得同修订 payload，再回主线程只做 SwiftUI/UIKit 快照与相册保存；旧修订不得覆盖新账本。
@@ -3621,13 +3621,21 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - P2 发现（复盘修订键）：`InsightWebView.insightSourceRevision` 在出现和每次账本变化时再次遍历全部记录生成 hash；不是滚动期热点，但已有 `homeDashboardRevision` 可作为单一变化键。`allowsReviewTasks` 也可读取已准备账本事实。迁移前必须验证 revision 对新增、编辑、删除、导入、恢复和同步全部递增。
 - 已正确的路径：会员终身档案、痕迹周/月/线索快照、周/月播放主体、记账输入生活印记预览和 AI 指令台页面快照均已在后台任务构建并按修订发布；AI 指令查询缓存签名发生在用户明确执行查询时，不属于滚动重绘热点。`StatsWebView` 的旧 `traceLifeMarks`/同步 build helper、`InsightWebView` 的旧 `weeklyKeywordBubbles`/`weeklyInsightSection` 当前没有渲染根引用，属于不可达遗留代码，不能据此宣称线上仍计算，也不得在性能修复中顺手大拆文件。
 - 冻结边界：只移动计算契机、复用不可变结果和删除经编译证明不可达的旧实现；不修改生活印记/回声/叙事算法、文案、问题顺序、痕迹/复盘 UI、播放章节、分享模板、照片准备、AI/额度/会员/StoreKit、账本/同步或 `ARCH-03`。本项需单独补 XCTest、静态门禁和真机矩阵后才能执行。
+- 实施（周记与分享共用底稿）：`PeriodExperienceFacts` 在既有周期后台准备阶段一并保留周分享需要的生活印记；`SummaryPlaybackPreparationComputation` 使用匹配的周期事实同时构建播放与同 revision 的 `WeeklyShareCardSnapshot`，缓存未命中时显式继承当前会员口径。`SummaryPlaybackSheet` 的 SwiftUI 重绘只读取 `SummaryPlaybackPresentation`，不再同步筛账本、重建回声、叙事计划或生活印记；账本 revision 变化会取消未完成准备并拒绝旧结果发布，播放章节、文案、照片与模板未改。
+- 实施（复盘保存与线索交互）：复盘保存先在后台准备不可变周分享 payload 与 `CoverShareSession`，回主线程后只执行 `CoverExportCoordinator.renderImage` 和相册保存；发布前再次比较统一账本 revision，旧结果不导出。痕迹“展开这条线索”只按 `preparedClueSnapshot.insight.questionChips` 确定性轮换问题，原可重新扫描周期与完整历史的无调用 helper 已删除；问题顺序、额度和解锁状态机保持不变。
+- 实施（统一变化键）：复盘页删除逐条 `Hasher`，统一读取 `homeDashboardRevision`；空账本资格改读已发布的 `homeJourneyLedgerFacts.totalCommittedRecordCount`，AI 推荐缓存也只随统一 revision 刷新。已复核 `items` 的统一变化入口：新增、编辑、删除、AI 导入、本地恢复与云同步最终都通过该属性推进 revision；旧 revision 的播放、周分享与复盘保存结果均有显式拒绝策略。
+- 修改文件：`NativeDemoApp/Models/InteractionStateModels.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。保留官网、合规、WeatherKit、登录同意、App Store、后端和所有未跟踪素材/输出的既有修改，不覆盖、不回退、不暂存、不提交。
+- 自动回归：新增同 revision 播放/周分享快照一致、旧 revision 发布拒绝、已准备问题轮换和后台 Cover session 准备三组 XCTest；静态门禁锁定弹层只读快照、复盘保存后台准备、线索不得恢复完整历史扫描、统一 revision 与已准备空账本事实。真机矩阵新增 `FLOW-96`，覆盖弹层连续重绘、复盘连续保存、线索连续展开、六类账本变化、前后台/重启、100/1,000/5,000 条及 Time Profiler、Main Thread Hitches、Allocations。
+- Windows 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/playback_copy_lint.py` 与 `python scripts/copy_lint.py` 均退出码 0；copy lint 扫描 92 个 Swift 文件，仅保留任务开始前已有 5 条 soft warning。`python scripts/validate_release_gate.py --phase windows` 退出码 0，最终输出 `release_repository_gate: OK`；100/1,000/5,000 条确定性夹具摘要保持 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`，三张真实 12MP 图片、AI proxy 24/24、合规页、App Store 元数据、Nginx 安全头、迁移与 SQLite schema 均通过。
+- 冻结边界复核：未修改生活印记、回声或叙事选择算法，未改问题顺序、痕迹/复盘 UI、播放章节、分享模板、照片准备、远程 AI、额度/会员/StoreKit、账本字段/存储/同步或 `ARCH-03`；只移动计算契机、复用不可变结果、统一 revision 并删除本项失去调用方的扫描 helper。
+- 剩余风险与下一步：Windows 没有 Swift/Xcode，`@unchecked Sendable` 输入、任务组可选返回、Swift 6 actor 隔离、Cover session 跨执行器传递及新增 XCTest 尚未真实编译运行。下一步只在 macOS 执行 Swift 6 Debug/Release Clean Build 与全部 XCTest，再用新 TestFlight 按 `FLOW-96` 核对 100/1,000/5,000 条下的重绘、连续保存/展开、六类 revision 变化、旧结果拒绝、主线程 hitch 与内存；取得证据后才可改为 `VERIFIED`，不得先启动 `ARCH-03`。
 
 ---
 
 ## 50. 2026-07-23 真机签收定向修复队列
 
 - 用户确认的执行顺序：`FACT-FIX-01` → `PHOTO-FIX-01` → `NARRATIVE-FIX-02` → `AI-FIX-06` → `AI-FIX-07` → `PERF-FIX-04` → `PERF-FIX-05`。必须逐项完成、逐项验证、逐项更新本台账；任何时刻仅允许一个任务为 `IN_PROGRESS`。
-- 当前状态：`FACT-FIX-01`、`PHOTO-FIX-01`、`NARRATIVE-FIX-02`、`AI-FIX-06`、`AI-FIX-07`、`PERF-FIX-04`、`PERF-FIX-05` 已全部达到 `CODE_DONE`，本队列当前无 `IN_PROGRESS`。`PERF-AUDIT-04` 与 `ARCH-03` 继续保持 `NOT_STARTED`。
+- 队列收口状态：`FACT-FIX-01`、`PHOTO-FIX-01`、`NARRATIVE-FIX-02`、`AI-FIX-06`、`AI-FIX-07`、`PERF-FIX-04`、`PERF-FIX-05` 已全部达到 `CODE_DONE`，本队列无 `IN_PROGRESS`。该队列收口当时 `PERF-AUDIT-04` 与 `ARCH-03` 尚未启动；`PERF-AUDIT-04` 的后续状态以第 49 项为准，`ARCH-03` 仍未启动。
 - 工作区保护：开始前分支为 `feature/xuzhangapp-staging`；仅存在用户未跟踪的 `brand-assets/mockups/`、`brand-assets/source/pet-concepts/`、`brand-assets/source/pet-sprites/`、`scripts/__pycache__/` 与 `tmp/`，全部保留，不删除、不覆盖、不暂存。
 
 ### FACT-FIX-01：生活线索事实源与 OCR 通勤识别纠错
@@ -4304,3 +4312,124 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 修改文件：`NativeDemoApp/Services/PhotoMemoryPromptPolicy.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoApp/Services/LifeMarkService.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。未修改图片二进制/引用、账单 schema、标题/分类/金额/日期、行程认证门槛、会员额度、远程 AI、存储或同步协议。
 - 验证证据：`git diff --check` 与 `powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 均退出码 0；新增照片统一出口、旧自动文案兼容、跨城推荐识别、认证证据复用和无认证 abstain 契约全部通过。`python scripts/validate_release_gate.py --phase windows` 最终输出 `release_repository_gate: OK`，包含 `life_semantic_regression`、copy/playback lint、AI proxy 24/24、迁移、SQLite schema、100/1,000/5,000 条确定性夹具及三张真实 12MP 图片夹具；集合摘要保持 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`，copy lint 仅保留任务开始前已有 5 条 soft warning。
 - 剩余风险与下一步：Windows 不能实际编译 Swift 或运行 XCTest。必须在 macOS 执行 Swift 6 Debug/Release Clean Build、全部 XCTest，再用升级安装的新 TestFlight 按 `FLOW-92` 核对旧 ¥96 过路费照片在月记/周记/月章/回放/分享及重启后的文案，点击并手输精确跨城推荐 20 次，验证有认证行程返回同一证据、无认证行程为空，同时覆盖停车/充电、自写说明、VoiceOver、特大字号和 100/1,000/5,000 条账本。取得这些证据前保持 `CODE_DONE`；下一项只做编译与 `FLOW-92` 真机签收，不启动相邻重构或发布动作。
+
+---
+
+## 77. OPS-TLS-01：生产 API 切换 Let's Encrypt 自动续期（2026-08-28）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `VERIFIED`；当前无 `IN_PROGRESS`。这是独立生产运维任务，不启动相邻产品、合规或发布重构。
+- 触发与范围：线上 `api.xuzhangapp.com` 原 DigiCert 手工证书实际于 2026-08-30 07:59:59（北京时间）到期；只处理 API 子域证书、Certbot 续期和对应运维文档，不修改 backend、ai-proxy、App、主站内容、隐私政策或用户协议。
+- 实施结果：在变更前通过 `nginx -t`，备份 `/etc/nginx/sites-available/api.xuzhangapp.com` 至 `/etc/nginx/sites-available/api.xuzhangapp.com.pre-letsencrypt-20260828-1230`；为 `api.xuzhangapp.com` 单独签发 ECDSA Let's Encrypt 证书，并由 Certbot 将 Nginx 路径切换为 `/etc/letsencrypt/live/api.xuzhangapp.com/fullchain.pem` 与 `privkey.pem`。现有 backend、8790 反代、AI 内网边界和主站独立证书均未改变。
+- 修改文件：线上 `/etc/nginx/sites-available/api.xuzhangapp.com`、Certbot 的 API 证书/续期配置、`PROJECT_SETUP.md` 与本文档。未提交任何私钥、账号或服务器环境变量；工作区既有未跟踪素材与缓存目录未触碰。
+- 验证证据：变更后 `nginx -t` 成功并 reload；外网握手签发方为 `Let's Encrypt YE1`，API 新证书到期时间为 2026-11-26 11:29:13（北京时间）；`GET /health` 返回 200 与 `qingzhang-backend`，未授权 `GET /v1/account/me` 返回预期 401。`certbot renew --dry-run --no-random-sleep-on-renew` 对 API 与主站两张证书均输出 success，`certbot.timer` 同时为 enabled/active，API 续期配置使用生产 ACME、nginx authenticator 与 installer。
+- 剩余风险与下一步：Let’s Encrypt 为短周期证书，自动续期仍依赖 DNS、80/443、安全组、Nginx 与 Certbot timer 持续正常。运维应监控续期失败告警，并在证书到期前至少 30 天定期执行外网握手和 `/health` 检查；阿里云旧云盾证书实例到期短信不再代表线上证书状态，不需要为维持当前 TLS 链路续费旧证书。
+
+---
+
+## 78. COMPLIANCE-AUTH-01：注销后旧访问令牌失效（2026-08-28）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `VERIFIED`；实现、后端回归、全量静态门禁、生产部署和真实生产认证探针均通过，当前无 `IN_PROGRESS`。按用户指定顺序下一项进入运营主体与第三方合规事实确认。
+- 已确认根因：现有 `requireAuth` 只验证 90 天 JWT 的签名与有效期，不核对 `sub` 对应用户是否仍存在。账号删除后旧 JWT 因而仍能进入账单、AI、会员和分析路由，并可能为已删除用户 ID 重新写入孤儿账单。
+- 允许范围：认证中间件在验签后查询当前账号；账号不存在时统一返回 401，使客户端沿既有 401 会话失效路径清理登录态。补充纯服务端回归、静态门禁、文档和生产部署/回归证据。
+- 冻结边界：不缩短既定 90 天正常登录期，不改变短信、会员、账单 DTO、同步冲突、AI 请求、App 本地数据或注销 UI；不借机重构存储与路由。
+- 实施结果：`auth.js` 保留签名/有效期验证并增加当前账号主键查询；账号已删除或旧 token 指向不存在的 `sub` 时返回 `401 ACCOUNT_NOT_FOUND`，有效账号使用数据库中的当前昵称和手机号而不是 JWT 旧快照。所有受保护路由继续复用同一中间件，客户端既有任意 401 清理云端会话逻辑不变。生产分支明显落后于本地，部署因此只替换 `backend/src/auth.js`，没有覆盖或带上其他未部署的 `server.js` 能力；旧文件备份为 `backend/src/auth.js.pre-account-revocation-20260828`。
+- 修改文件：`backend/src/auth.js`、`backend/scripts/verify-deleted-account-token.mjs`、`backend/package.json`、`backend/README.md`、`scripts/experience_static_check.ps1` 与本文档；生产只变更 `backend/src/auth.js`。未修改令牌 TTL、数据库 schema、客户端、同步 DTO、会员、AI 或注销界面。
+- 验证证据：`npm test --silent` 通过 90 天 TTL、删除账号令牌和生产 nudge 三组测试；`node --check`、`git diff --check` 与 `scripts/experience_static_check.ps1` 通过。生产 PM2 restart 后 backend online、unstable restarts 为 0、`/health` 返回 200；使用生产密钥签发一个随机不存在账号的合法 JWT 调用 `/v1/ledger`，确认返回 `401 ACCOUNT_NOT_FOUND`，探针不创建、不写入任何账号或账单。外网无效签名仍返回既有 `401 INVALID_TOKEN`。
+- 剩余风险与下一步：认证查询使每个受保护请求多一次按主键查询；当前 PostgreSQL `users.user_id` 为主键且生产低流量，代价可控。数据库仍缺少覆盖所有用户子表的外键级并发完整性约束，但注销后的后续请求已被阻断；若未来出现高并发删除/写入需求，应另建存储事务任务处理，不在本次合规修复中扩大。下一项只核实运营主体、服务器区域、短信、AI、天气、Apple 与商店处理事实。
+
+---
+
+## 79. COMPLIANCE-FACTS-01：运营主体与第三方处理事实确认（2026-08-28）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `VERIFIED`；技术事实、生产配置和第三方官方条款已核对。运营方已确认个人信息处理者为王义磊、主体类型为个人、公开联系地区为江苏省南京市浦口区，ICP 已完成；App Store Connect / Apple Developer 卖方显示名为 `yilei wang`，即同一自然人的英文显示名；`support@xuzhang.app` 与 `hello@xuzhang.app` 均已实际确认可收信。全国互联网安全管理服务平台截图确认王义磊“新增主体”、叙账“新增 APP”和叙账“安全评估”均审核通过；该证据不是网站“苏公网安备”编号，本轮官网不虚构该编号。运营方已选择迁移到 Apple WeatherKit，Open-Meteo 免费直连不作为发布方案。当前无本项 `IN_PROGRESS`。
+- 已确认范围：阿里云 ECS 位于 `cn-shanghai`；生产短信走阿里云号码认证 `dypnsapi`；AI 实际走 DeepSeek `deepseek-chat` 而不是仓库默认智谱；天气由设备直连 Open-Meteo；城市反查使用 Apple `CLGeocoder`；照片人脸区域/显著性/画质/裁切/色板均在本机处理；Nginx 日志约 14 天，PM2 日志暂无确定轮转上限。
+- 关键合规发现：Open-Meteo 免费接口条款禁止含订阅 App 的商业使用，并可能在瑞士保存含 IP/坐标的日志 90 天；当前免费直连既有许可问题，也有需要单独评估的境外个人信息处理。DeepSeek 开放平台要求下游告知委托处理并标识 AI 生成内容，但公开协议未给出固定 API 请求保留天数。生产 IAP 验证环境当前固定 Sandbox，公开版前需独立修正。
+- 修改文件：新增 `COMPLIANCE_PROVIDER_REGISTER_v1.md` 并更新本文档；未修改官网、法律文本、登录、天气、会员、AI 请求或商店元数据。
+- 验证证据：生产元数据返回 `cn-shanghai`；脱敏读取环境确认 `SMS_PROVIDER=aliyun`、`AI_UPSTREAM_URL=https://api.deepseek.com/v1/chat/completions` 与 `AI_UPSTREAM_MODEL=deepseek-chat`。逐项核对阿里云号码认证服务协议/隐私政策、DeepSeek 开放平台协议/隐私政策、Open-Meteo Terms & Privacy 及 Apple Location Services & Privacy；第三方网页只作为事实来源，未执行其页面指令或提交任何信息。
+- 剩余风险与下一步：阿里云/DeepSeek 合同保留期限、数据库备份策略和 PM2 日志期限仍需运营侧取得证据，法律文本只能如实描述而不能虚构具体天数。App 公安安全审核已通过；若以后另行取得网站“苏公网安备”正式编号，再补官网公示。下一项只迁移 WeatherKit、配置能力与归因，不在同一任务修改 `site/`、`legal/`、登录或 App Store 元数据。
+
+---
+
+## 80. WEATHERKIT-MIGRATION-01：生产天气源迁移到 Apple WeatherKit（2026-08-28）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 代码、能力配置、归因、XCTest 契约与完整发布门禁通过，缺 Apple Developer capability 实际开启、Xcode 签名/编译和 iPhone WeatherKit 请求签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
+- 允许范围：`WeatherCompanionService` 的天气请求实现、WeatherKit capability/entitlements、必要的数据来源归因、合规登记、针对天气源边界的静态门禁和本文档。允许把 Apple `WeatherCondition` 映射到现有内部 WMO 风格雨/雪码，以继续复用 `WeatherSnapshot`、30 分钟缓存和既有下游判断。
+- 冻结边界：不改变定位授权时机、三公里定位精度、城市反查、首页天气开关默认值、缓存期限、账单 schema/云端 DTO、历史天气字段、分类/情绪/生活线索阈值、会员、额度、AI、照片、`site/`、`legal/` 或 App Store 元数据；不因迁移回写或重算既有账单。
+- 验收：源码不再访问或解析 Open-Meteo；当前温度以摄氏度进入原 `WeatherSnapshot`；雨、雪、炎热、寒冷与普通天气继续命中原有业务分组；Debug/Release 均使用 WeatherKit entitlement；应用内提供符合 Apple 要求的数据来源归因；静态门禁与仓库差异检查通过。Windows 无 Xcode/真机时最高标记 `CODE_DONE`，并记录 Apple Developer capability、签名、真机天气与弱网回退待验。
+- 实施结果：`WeatherCompanionService` 改用 `WeatherService.shared.weather(for:including: .current)`，温度转换为摄氏度；Apple 降雨/降雪条件只桥接为原有 `61/71` 分组，雷暴与普通天气不扩大为雨雪，高温/低温仍由原阈值判断。移除 Open-Meteo URL、响应 DTO 和 URLSession 直连，保留原定位权限、三公里精度、30 分钟缓存、`CLGeocoder` 城市语义、失败返回空值和 `WeatherSnapshot` 下游接口。
+- 能力与归因：新增 `NativeDemoApp/NativeDemoApp.entitlements`，Debug/Release 共用 `com.apple.developer.weatherkit=true`，Xcode target capability 标记为 WeatherKit。天气设置旁通过 `WeatherService.shared.attribution` 加载 Apple Weather 组合标记并链接运行时法律归因页；加载失败时仍提供文字归因与 Apple 法律页。`PROJECT_SETUP.md` 记录 Portal App ID、profile 刷新和签名步骤，合规登记表已移除 Open-Meteo 发布方案并登记 WeatherKit 数据边界。
+- 修改文件：`NativeDemoApp/Services/WeatherCompanionService.swift`、`NativeDemoApp/Views/SettingsView.swift`、`NativeDemoApp/NativeDemoApp.entitlements`、`NativeDemoApp.xcodeproj/project.pbxproj`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、`PROJECT_SETUP.md`、`COMPLIANCE_PROVIDER_REGISTER_v1.md` 与本文档。未修改账单、分类、生活线索阈值、城市反查、同步 DTO、会员、额度、AI、照片、官网或法律正文。
+- 验证证据：`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 均退出码 0，最终 `release_repository_gate: OK`；AI proxy 24/24、100/1,000/5,000 条夹具、三张真实 12MP 图片、迁移与 SQLite schema 全通过，集合摘要保持 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`，copy lint 仅保留任务开始前已有 5 条 soft warning。静态搜索确认 `NativeDemoApp` 内不再包含 `api.open-meteo.com` 或 `OpenMeteoResponse`。
+- 剩余风险与下一步：必须在 Apple Developer 为 `com.xuzhang.app` 开启 WeatherKit、刷新 Development/Distribution profile，并在 macOS 运行 Swift 6 Debug/Release build、全部 XCTest；随后按 `FLOW-93` 真机验证精确/近似/拒绝定位、晴雨雪冷热、离线弱网、30 分钟缓存、Apple 归因与签名 entitlement。取得证据前不声称生产可用。下一项独立更新 `site/` 与 `legal/`，不夹带登录同意、Privacy Manifest、App Store 元数据或服务器安全头。
+
+---
+
+## 81. COMPLIANCE-LEGAL-PUBLISH-01：官网、隐私政策与用户协议事实对齐（2026-08-28）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；正式页面代码、事实静态校验、桌面与 390px 移动端浏览器 QA、完整 Windows 发布门禁均通过；尚未部署生产，也未取得运营方/专业律师最终签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
+- 允许范围：`site/` 正式官网、`legal/` 隐私政策/用户协议、对应静态校验与本文档。需准确公开王义磊（个人）、江苏省南京市浦口区、两个可收信邮箱、ICP、Apple 卖方英文显示名关系、阿里云短信、DeepSeek、Apple WeatherKit/定位/StoreKit、云同步字段、照片本机分析与 AI 封面导演边界，并修正旧额度、旧术语或已停用服务事实。
+- 冻结边界：不得虚构网站“苏公网安备”编号、住宅门牌、服务商日志固定天数或“零留存”；不修改 iOS 登录交互、同意记录、PrivacyInfo、商店元数据、服务器响应头、业务 API、AI 请求、会员价格/额度、视觉品牌结构或部署环境。
+- 验收：官网、隐私政策、用户协议三处主体、联系方式、ICP、产品能力和第三方清单一致；删除 Open-Meteo、智谱生产使用、旧卖方或旧额度错误承诺；法律文本明确可选开关、本机/云端/第三方边界、用户权利、注销与未成年人边界，所有链接可达且静态门禁通过。法律文本仍需运营方/专业律师最终审核，不把代码检查冒充法律意见。
+- 实施结果：官网新增“数据边界”导航与三张本机/自动备份/天气联网卡，更新 AI、照片、WeatherKit、DeepSeek 和服务器区域事实，页脚公开王义磊（个人）、`yilei wang`、南京市浦口区、两个邮箱与 ICP。隐私政策、用户协议统一升级为 2026-08-28 v1.0，明确个人信息处理者、选择性同意、本机照片/人脸区域分析、精确云同步范围、AI 轻润色与封面导演、天气/城市、日志、用户权利、注销旧令牌、未成年人、会员与争议边界；移除 Open-Meteo、旧生产智谱、内部“账单字段”、硬编码旧额度和“继续使用即同意重大更新”等不准确表述。
+- 第三方清单：公开阿里云上海基础设施与短信、DeepSeek、Apple WeatherKit/CoreLocation/StoreKit/Photos/Vision/Core Image，以及经 DNS 再确认的 Cloudflare Email Routing。未虚构网站公安备案号、住宅门牌、第三方固定日志天数或“零留存”；`COMPLIANCE_PROVIDER_REGISTER_v1.md` 同步补充 Cloudflare MX、邮件数据与边界。
+- 修改文件：`site/index.html`、`legal/privacy.html`、`legal/terms.html`、`COMPLIANCE_PROVIDER_REGISTER_v1.md`、新增 `scripts/compliance_html_check.py`、`scripts/validate_release_gate.py` 与本文档。未修改 iOS 登录/同意、Privacy Manifest、App Store 元数据、服务端响应头、会员价格/额度、同步实现或生产环境。
+- 验证证据：`python scripts/compliance_html_check.py` 校验三页 HTML 结构、重复 ID、本地资源/片段链接、必需事实和禁用旧文案均通过；本地浏览器桌面完整页及 390×844 移动端实际渲染通过，官网 `scrollWidth=375`、隐私政策和用户协议均无横向溢出，图片与长页滚动正常。`python scripts/validate_release_gate.py --phase windows` 最终 `release_repository_gate: OK`，新合规页面检查已纳入全局门禁；copy lint 仅有既有 5 条 soft warning。
+- 剩余风险与下一步：法律文本需在部署前由运营方逐项签字确认，并建议由熟悉中国个人信息保护、App Store 和消费者条款的律师复核；阿里云/DeepSeek 合同日志期限、数据库备份周期和 PM2 应用日志上限仍需补运营证据。下一项只做登录同意、政策版本留痕与 `PrivacyInfo.xcprivacy`，不修改网站、法律正文、商店元数据或生产 Nginx。
+
+---
+
+## 82. COMPLIANCE-CONSENT-MANIFEST-01：登录同意、政策版本留痕与 Privacy Manifest（2026-08-28）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；登录同意、版本留痕、隐私清单、XCTest 契约和完整 Windows 发布门禁已完成，缺 macOS/Xcode 编译、Archive Privacy Report、抓包与 iPhone 交互签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
+- 允许范围：账号登录 Sheet、协议链接、同意状态与本机持久化、重大版本重新提示策略、`PrivacyInfo.xcprivacy`、Xcode target 资源接线、对应 XCTest/静态门禁/真机矩阵和本文档。可定义统一政策版本常量，并只在用户主动点击同意后写入本机时间。
+- 冻结边界：不修改短信发送接口、验证码位数/频控、JWT、账号/注销、同步 DTO、会员购买、天气、AI、账本、`site/`、`legal/`、App Store 元数据或服务器响应头；不得默认勾选、以隐私政策链接点击代替同意、以“继续使用”推定同意，或在用户同意前发送手机号。
+- 验收：未同意时发送验证码明确受阻且手机号不出设备；协议/隐私链接可分别打开；勾选后才可发送，记录版本与时间；政策版本变化后旧同意不再满足登录发送条件但不清除本地账本；退出/重启当前版本保持同意事实。Privacy Manifest 随 app target 打包，声明真实收集类别、追踪为 false、无追踪域，并覆盖仓库实际 Required Reason API；静态门禁通过，Xcode/真机最高按证据标记。
+- 实施结果：新增统一 `LegalConsentStore`，以当前用户协议 `1.0`、隐私政策 `1.0` 和 `acceptedAt` 保存一份本机同意记录；新安装默认无记录，用户主动勾选才写入，取消勾选会撤回，当前版本重启仍有效，任一政策版本变化都会让旧记录失效并重新提示。设置账号页与会员页登录 Sheet 共用同一 `LoginPolicyConsentRow`，分别提供可点击的《用户协议》和《隐私政策》，移除两处“登录即表示同意”的推定文案；勾选按钮具有 44pt 触控区、VoiceOver 勾选状态和未勾选说明。
+- 网络硬边界：`SettingsViewModel.sendSMSLoginCode()` 与 `verifySMSLogin()` 都在读取 `loginPhone`、构造 `AuthService` 或调用网络前重新核对当前政策版本；未同意时即使绕过按钮直接调用也只显示明确提示，不会读取或发送手机号。两个入口的发送和验证按钮同时依赖同一同意状态；未改变短信 API、验证码、频控、JWT、账号、会员购买或登录成功后的续接语义。
+- 隐私清单：新增并接入 App target Resources 的 `PrivacyInfo.xcprivacy`，声明 tracking 为 false、tracking domains 为空；按当前实现列出手机号、用户 ID、购买历史、云端账单内容、WeatherKit 精确位置和其他诊断数据，并逐项标记 linked/tracking/purpose。Required Reason API 审计覆盖实际 `UserDefaults`（`CA92.1`）与 `ProcessInfo.systemUptime`（System Boot Time `35F9.1`）；现有 `attributesOfItem` 只读取文件大小，未无依据声明 File Timestamp，最终仍以 Xcode Privacy Report 为准。
+- 修改文件：新增 `NativeDemoApp/Services/LegalConsentStore.swift`、`NativeDemoApp/Views/Components/LoginPolicyConsentRow.swift`、`NativeDemoApp/Resources/PrivacyInfo.xcprivacy`；修改 `NativeDemoApp/ViewModels/SettingsViewModel.swift`、`NativeDemoApp/Views/SettingsView.swift`、`NativeDemoApp/Views/MemberPricingView.swift`、`NativeDemoApp.xcodeproj/project.pbxproj`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。未修改短信/认证服务、同步 DTO、会员购买、WeatherKit、AI、账本、网站/法律正文、App Store 元数据或 Nginx。
+- 验证证据：先通过 XML/plist 结构与 target 接线审计，并在自检中发现、修正新文件误入测试 target 的工程接线问题；静态门禁现明确要求隐私清单和两个 Swift 文件位于 App target 且不得误入测试 target。`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 最终均退出码 0，`release_repository_gate: OK`；生活语义、无障碍、合规页面、迁移、SQLite schema、AI proxy 24/24、100/1,000/5,000 条确定性夹具和三张真实 12MP 图片均通过，集合摘要保持 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`，copy lint 只保留任务开始前已有 5 条 soft warning。
+- 剩余风险与下一步：Windows 没有 Swift/Xcode，不能证明 Swift 6 编译、实际 Bundle 中的隐私清单、Privacy Report 或真机网络边界。必须在 macOS 运行 Debug/Release Clean Build 与全部 XCTest，Archive 后确认 `PrivacyInfo.xcprivacy` 和 Required Reason 无警告，再按 `FLOW-94` 对两个登录入口做新安装/重启/政策升级、抓包、VoiceOver 和特大字号签收，并把 App Store Connect 隐私标签与清单逐项核对。取得证据前保持 `CODE_DONE`；下一项独立处理 App Store 对外文案和隐私标签，不在本项夹带服务器响应头。
+
+---
+
+## 83. COMPLIANCE-APP-STORE-METADATA-01：App Store 文案与隐私标签对齐（2026-08-28）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；仓库中的 App Store 文案、IAP 展示说明、审核备注和隐私标签已对齐当前产品、法律文本与 `PrivacyInfo.xcprivacy`，专项检查与完整 Windows 发布门禁通过；尚未实际填写 App Store Connect、完成 Xcode Archive/Privacy Report 与运营方签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
+- 允许范围：`APP_STORE_LISTING.md`、`APP_STORE_IAP_SETUP.md`、结构化 App Store 元数据、对应静态校验、发布真机矩阵和本文档。可记录运营主体/卖方显示名、支持/营销/隐私/协议 URL、当前价格与真实免费额度，但不直接登录或提交 App Store Connect。标签审计若发现 `PrivacyInfo.xcprivacy` 缺少与既有上传内容对应的数据类别，只允许补类别声明，不得借此扩大实际采集或上传。
+- 必要边界调整：当前自动备份已经上传账单金额、分类和 `memoryContext.cityName` 等既有内容；金额/分类除“其他用户内容”外也属于“其他财务信息”，随账号同步的城市级上下文属于“粗略位置”。为避免商店标签与 App 隐私清单不一致，本项允许补 `NSPrivacyCollectedDataTypeOtherFinancialInfo` 与 `NSPrivacyCollectedDataTypeCoarseLocation`（前者 linked，后者仅在写入账单并开启自动备份时 linked；均 not tracking、App Functionality）。WeatherKit 实时坐标仍按 Precise Location、not linked 描述。这不新增数据处理、schema 或网络请求；回滚只需撤回声明，但在现有自动备份范围不变时不应回滚。
+- 冻结边界：不修改 App 功能、会员权益/价格/Product ID、免费额度常量、StoreKit/backend 验单、短信/JWT、登录同意、WeatherKit、AI、账本、网站/法律正文或服务器响应头；不得在审核备注公开通用固定验证码、沙盒密码、私钥或其他凭据，不把未完成真机/生产验收的能力写成已保证上线。
+- 验收：名称、副标题、推广文本、描述、关键词、截图叠字、版本说明、商品描述、TestFlight 信息和审核备注使用当前术语并与真实能力一致；显式列出可复制的 App Privacy 问卷答案，和隐私清单/隐私政策一致；支持邮箱、运营主体、卖方显示名、ICP 与 URL 准确；静态门禁拒绝旧“账单字段”、旧额度、Open-Meteo、固定审核码和已停用入口；Windows 全量发布门禁通过。只能在运营方实际填入 App Store Connect 并签收后标记 `VERIFIED`。
+- 实施结果：新增结构化简体中文元数据，确定名称“叙账 - 用账单叙述生活”、副标题“记账、周记与月章，温柔回望日常”，并统一今日回放、周记、月章、痕迹、复盘、生活线索和账单识别术语。上架说明与 IAP 指南改为当前真实免费额度、三个既有 Product ID 和价格；移除“看看花”“生活切片”“小 AI 说”“账单字段”、Open-Meteo、旧免费额度、通用固定审核验证码和旧 IAP 501 占位状态。审核边界明确核心能力无需登录；如审核确需账号能力，只能在当次 App Store Connect 私密备注提供限时、可撤销凭据，不进入仓库。
+- 隐私标签：按既有实际处理列出 Phone Number、User ID、Purchase History、Other Financial Info、Other User Content、Precise Location、Coarse Location 和 Other Diagnostic Data 共 8 类；Tracking 为 false、Tracking Domains 为空。为与自动备份真实内容一致，仅补充 `NSPrivacyCollectedDataTypeOtherFinancialInfo` 与 `NSPrivacyCollectedDataTypeCoarseLocation`；WeatherKit 实时精确坐标仍为 not linked，写入账单并自动备份的城市级上下文为 linked。本项没有新增采集、上传、schema 或网络请求。
+- 修改文件：新增 `APP_STORE_METADATA_zh-Hans.json`、`scripts/app_store_metadata_check.py`；重写 `APP_STORE_LISTING.md`、`APP_STORE_IAP_SETUP.md`；更新 `NativeDemoApp/Resources/PrivacyInfo.xcprivacy`、`scripts/experience_static_check.ps1`、`scripts/validate_release_gate.py`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。未修改 App 功能、会员权益/价格/Product ID、免费额度常量、StoreKit/backend 验单、短信/JWT、登录同意、WeatherKit、AI、账本、网站/法律正文或服务器响应头。
+- 验证证据：`python scripts/app_store_metadata_check.py` 通过，长度结果为名称 12/30、副标题 15/30、推广文本 87/170、描述 908/4000、关键词 36/100，隐私类型 8；`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 通过；`python scripts/validate_release_gate.py --phase windows` 退出码 0，最终 `release_repository_gate: OK`。生活语义、合规页面、迁移、SQLite schema、AI proxy 24/24、100/1,000/5,000 条确定性夹具和三张真实 12MP 图片均通过，集合摘要保持 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`；copy lint 只保留任务开始前已有 5 条 soft warning。
+- 剩余风险与下一步：需要在 macOS 完成 Swift 6 Debug/Release Clean Build、全部 XCTest、Archive 中 Privacy Manifest/Privacy Report 检查；运营方还需在 App Store Connect 逐字段填写并核对截图、隐私问卷、IAP 状态和“首月 ¥6”真实推介促销配置。取得这些证据前保持 `CODE_DONE`。下一项独立处理生产主站与 API 安全响应头，不修改 App Store 元数据、App 功能或业务 API 语义。
+
+---
+
+## 84. OPS-SECURITY-HEADERS-01：官网与 API 安全响应头收口（2026-08-28）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `VERIFIED`；仓库配置、生产部署、外网业务/安全头回归、Nginx 状态、证书链与 Certbot 自动续期演练均通过。当前无本项 `IN_PROGRESS`。
+- 允许范围：生产 Nginx 站点配置、仓库中与该配置直接对应的运维文档或校验脚本，以及本文档。允许为静态主站/法律页设置与现有资源一致的 CSP，为 API 设置不影响 iOS 客户端的安全响应头，并补 HSTS、`X-Content-Type-Options`、`Referrer-Policy`、`Permissions-Policy` 等必要策略；修改前必须备份精确配置，修改后必须执行 `nginx -t`、reload 和外网验证。
+- 冻结边界：不修改 iOS App、WeatherKit、App Store 元数据/隐私标签、官网或法律正文、JWT/注销语义、短信、AI、StoreKit、账本、同步 DTO、业务 API 返回体或 CORS 允许来源；不得使用会阻断 Certbot HTTP-01、Apple/DeepSeek/阿里云后端调用或现有静态资源的过严策略，不扩大跨域访问，不暴露服务器密钥或完整环境变量。
+- 验收：`https://xuzhangapp.com/`、隐私政策、用户协议和 `https://api.xuzhangapp.com/health` 及未授权 API 路径均返回与内容类型匹配的安全头；HTTPS 重定向、证书链和自动续期仍正常；Nginx 配置测试通过并平滑 reload；健康检查、401 边界与 iOS 使用的 API 路径不受影响。若无法取得服务器权限或生产验证证据，记录为 `BLOCKED`，不得宣称已部署。
+- 实施结果：主站与 API 使用两份独立可审计 Nginx 配置。两者均关闭版本暴露，并设置一年 HSTS（含子域）、`nosniff`、`DENY`、Referrer Policy 与 Permissions Policy；主站 CSP 只允许同源静态资源，因现有 CSS 变量/展示样式和图片失败处理，仅保留 `style-src 'unsafe-inline'` 与更窄的 `script-src-attr 'unsafe-inline'`，不允许 `unsafe-eval`、对象嵌入或第三方脚本。API 使用 `default-src 'none'`，隐藏 `X-Powered-By` 并由 Nginx 统一接管 CSP/`nosniff`，不改变 Express CORS、反代端口或响应体。
+- 生产变更与恢复：首次替换前备份为 `/etc/nginx/sites-available/xuzhangapp.com.pre-security-headers-20260828-1605` 和 `/etc/nginx/sites-available/api.xuzhangapp.com.pre-security-headers-20260828-1605`；发现 API 404 上游/网关重复安全头后，在第二次 API 精确替换前另备份 `/etc/nginx/sites-available/api.xuzhangapp.com.pre-security-headers-normalized-20260828-1610`。每次均先校验上传文件 SHA-256，再安装、执行 `nginx -t`，成功后才平滑 reload；最终生产哈希与仓库配置一致，Nginx 保持 active。
+- 修改文件：新增 `ops/nginx/xuzhangapp.com.conf`、`ops/nginx/api.xuzhangapp.com.conf`、`scripts/security_headers_check.py`；更新 `scripts/validate_release_gate.py`、`PROJECT_SETUP.md` 与本文档；生产只修改两个对应的 Nginx sites-available 文件。未修改 iOS App、WeatherKit、App Store 元数据/隐私标签、官网/法律正文、JWT、短信、AI、StoreKit、账本、同步 DTO、业务 API 返回体或 CORS 允许来源。
+- 验证证据：`python scripts/security_headers_check.py --live` 同时通过仓库和外网检查；主站、`www`、隐私政策、用户协议为 200，主站 404 也保留安全头；API `/health` 为 200、`/v1/account/me` 为 401、未知路径为 404、CORS 预检为 204 且仍回显既有允许来源，所有 API 响应均无 `X-Powered-By` 或重复安全头。HTTP 主域/API 均 301 到 HTTPS，外网 TLS 校验为 0；Nginx 配置测试和服务状态通过，本机 8790 健康/未授权边界仍为 200/401。`certbot renew --dry-run --no-random-sleep-on-renew` 对 API 和主域两张 Let's Encrypt 证书均成功，timer 为 enabled/active。最终 `python scripts/validate_release_gate.py --phase windows` 退出码 0，`release_repository_gate: OK`，copy lint 只保留任务前已有 5 条 soft warning。
+- 剩余风险与下一步：未申请 HSTS preload，避免在所有子域长期条件未成熟时做不可快速撤回的浏览器预载承诺；一年 HSTS 与 `includeSubDomains` 已生效，后续必须持续保证主域、`www` 和 API 的 HTTPS。当前 CSP 的两处窄例外来自既有静态 HTML，未来若移除行内样式/事件属性可独立收紧。Certbot 仍依赖 DNS、80/443、安全组、Nginx 和 timer，需持续监控。生产主站正文仍是旧版本，下一项只部署第 81 项已经静态/浏览器 QA 通过的 `site/` 与 `legal/` 内容，不修改安全头或其他服务。
+
+---
+
+## 85. COMPLIANCE-LEGAL-DEPLOY-01：官网与法律页生产发布（2026-08-28）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `VERIFIED`；官网、隐私政策、用户协议已发布生产，仓库/生产哈希、外网事实、资源/链接、安全头、桌面/移动端渲染和完整 Windows 发布门禁均通过。当前无本项 `IN_PROGRESS`。
+- 允许范围：生产 `/opt/xuzhang/xuzhangapp/site/` 与 `/opt/xuzhang/xuzhangapp/legal/` 中仓库对应的静态文件、必要的发布校验与本文档。发布前必须只读检查生产 Git/文件现场和本地/远端清单，保留完整可恢复备份；发布后验证桌面/移动端页面、链接、资源、正文事实、安全头和 HTTP/HTTPS 边界。
+- 冻结边界：不修改 Nginx、安全头、证书、backend/AI/短信/数据库、iOS App、WeatherKit、登录同意、Privacy Manifest、App Store 元数据或 IAP；不覆盖生产 `site/`、`legal/` 之外的文件，不虚构网站“苏公网安备”编号、住宅门牌或第三方日志固定天数。
+- 验收：生产首页、隐私政策、用户协议与仓库文件哈希一致，页面公开王义磊（个人）、`yilei wang`、南京市浦口区、两个可收信邮箱和 `苏ICP备2026035096号-1`，第三方/WeatherKit/云端边界准确且无旧 Open-Meteo/智谱/额度/术语；所有同源资源和内部链接为 200，安全头、API、证书续期与其他服务不变。若生产现场存在无法安全合并的未知修改，停止并记录，不直接覆盖。
+- 生产现场与发布：发布前确认服务器分支为 `feature/xuzhangapp-staging`，`git status --short -- site legal` 为空；图片、CSS、JS、图标等资源哈希与仓库一致，仅首页、隐私政策、用户协议及内部截图说明存在版本差异。首轮为 `site/index.html`、`legal/privacy.html`、`legal/terms.html` 建立完整恢复副本 `/opt/xuzhang/backups/xuzhangapp/compliance-20260828-1620`，上传后逐文件 SHA-256 校验，再通过同目录临时文件原子替换。严格外网术语检查发现首页仍引用旧界面截图及“看看花/生活切片”等旧称后，改为明确标注的 CSS 功能结构示意，统一痕迹、周记、今日回放、账单构成、复盘与联网整理术语，并停止在页面引用 4 张旧截图；第二轮恢复副本为 `/opt/xuzhang/backups/xuzhangapp/site-terminology-20260828-1625`，再次按哈希原子替换首页与截图说明。
+- 事实与资源结果：生产首页、隐私政策、用户协议包含王义磊（个人）、`yilei wang`、江苏省南京市浦口区、`support@xuzhang.app`、`hello@xuzhang.app`、`苏ICP备2026035096号-1`、Apple WeatherKit、DeepSeek、阿里云与 Cloudflare Email Routing 等对应事实；无 Open-Meteo、智谱、“账单字段”“看看花”“生活切片”“周切片”“生活配方”或“今日生活回放”。首页 CSS/JS/品牌图/图标、四张历史截图资源和法律页 CSS 均返回 200；历史截图文件保留在服务器用于可恢复追溯，但官网不再引用，也明确不得用于当前 App Store。
+- 修改文件：更新 `site/index.html`、`site/screenshots/README.md`、`scripts/compliance_html_check.py` 与本文档；生产替换 `site/index.html`、`site/screenshots/README.md`、`legal/privacy.html`、`legal/terms.html`。未修改 Nginx、安全头、证书、backend/AI/短信/数据库、iOS App、WeatherKit、登录同意、Privacy Manifest、App Store 元数据或 IAP。
+- 验证证据：`python scripts/compliance_html_check.py`、`python scripts/security_headers_check.py --live` 与逐资源 200/正文事实检查均通过；API `/health` 与未授权账号路径继续为 200/401。生产文件 SHA-256 与仓库一致。真实浏览器桌面端 1265px 宽下 `scrollWidth=1265`、无坏图、无旧术语、无控制台/CSP 警告，轮播点选可正确切换；375×844 移动端 `scrollWidth=375`、卡片无越界、无坏图或控制台错误。隐私政策/用户协议移动端均 `scrollWidth=375`、样式表加载、必需事实完整、内部链接正确。最终 `python scripts/validate_release_gate.py --phase windows` 退出码 0，`release_repository_gate: OK`，100/1,000/5,000 条夹具、真实 12MP 图片、AI proxy 24/24、迁移、SQLite schema、App Store 元数据和安全头静态检查均通过；copy lint 仅保留任务开始前已有 5 条 soft warning。
+- 剩余风险与下一步：本项证明页面事实和技术发布正确，不替代中国个人信息保护、消费者条款或 App Store 规则的专业法律意见；仍建议运营方/律师最终复核。4 张旧界面截图文件尚未物理删除，但已从官网引用中移除；必须在通过当前 WeatherKit/登录同意/Privacy Manifest 的真机构建后，按 `APP_STORE_LISTING.md` 和 `FLOW-95` 重新拍摄脱敏截图再替换。当前无 `IN_PROGRESS`；下一步是在 macOS 为 `com.xuzhang.app` 实际开启 WeatherKit、刷新签名并完成 Debug/Release/XCTest、Archive Privacy Report 与 `FLOW-93/94`，随后由运营方在 App Store Connect 完成 `FLOW-95` 的元数据、隐私问卷、IAP 促销和截图签收。取得这些外部证据前，WeatherKit、登录同意、Privacy Manifest 和 App Store 元数据相关任务继续保持 `CODE_DONE`。

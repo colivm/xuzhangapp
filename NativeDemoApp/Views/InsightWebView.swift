@@ -252,6 +252,70 @@ struct InsightPageSnapshot: @unchecked Sendable {
     let reviewOverview: ReviewOverviewSnapshot
 }
 
+struct WeeklyShareExportPreparationInput: @unchecked Sendable {
+    let items: [HomeItem]
+    let sourceRevision: Int
+    let now: Date
+    let paletteID: CoverPaletteID
+}
+
+enum WeeklyShareExportPreparationResult: Sendable {
+    case ready(sourceRevision: Int, session: CoverShareSession)
+    case noContent(sourceRevision: Int)
+    case invalidContent(sourceRevision: Int)
+
+    var sourceRevision: Int {
+        switch self {
+        case let .ready(sourceRevision, _),
+             let .noContent(sourceRevision),
+             let .invalidContent(sourceRevision):
+            return sourceRevision
+        }
+    }
+}
+
+enum WeeklyShareExportPreparationComputation {
+    static func build(
+        _ input: WeeklyShareExportPreparationInput
+    ) -> WeeklyShareExportPreparationResult {
+        guard !Task.isCancelled else {
+            return .invalidContent(sourceRevision: input.sourceRevision)
+        }
+        let service = PlaybackService()
+        guard let snapshot = service.prepareWeeklyShareCardSnapshot(
+            WeeklyShareCardPreparationInput(
+                items: input.items,
+                sourceRevision: input.sourceRevision,
+                now: input.now
+            )
+        ) else {
+            return .noContent(sourceRevision: input.sourceRevision)
+        }
+        guard !Task.isCancelled else {
+            return .invalidContent(sourceRevision: input.sourceRevision)
+        }
+        do {
+            let session = try LegacyWeeklyCoverAdapter.prepareSession(
+                from: LegacyWeeklyCoverSource(
+                    sourceRevision: snapshot.sourceRevision,
+                    payload: snapshot.payload,
+                    fallbackEvidenceItemIDs: snapshot.evidenceItemIDs,
+                    media: [],
+                    unavailableMediaCount: 0,
+                    variantID: "review-weekly",
+                    paletteID: input.paletteID,
+                    backgroundFamily: .quietEditorial,
+                    backgroundImage: nil,
+                    backgroundIdentity: "review-weekly:\(input.paletteID.rawValue)"
+                )
+            )
+            return .ready(sourceRevision: snapshot.sourceRevision, session: session)
+        } catch {
+            return .invalidContent(sourceRevision: input.sourceRevision)
+        }
+    }
+}
+
 struct AICommuteDraftSlot: Equatable {
     let title: String
     let hour: Int
@@ -739,17 +803,13 @@ struct InsightWebView: View {
     }
 
     private var insightSourceRevision: Int {
-        var hasher = Hasher()
-        for item in homeViewModel.items {
-            hasher.combine(item.id)
-            hasher.combine(item.updatedAt.timeIntervalSince1970)
-        }
-        return hasher.finalize()
+        homeViewModel.homeDashboardRevision
     }
 
     private var allowsReviewTasks: Bool {
-        let hasReviewableRecord = homeViewModel.items.contains { $0.amount > 0 && $0.draftMeta == nil }
-        return NewUserProgressionPolicy.allowsReviewTasks(totalRecordCount: hasReviewableRecord ? 1 : 0)
+        NewUserProgressionPolicy.allowsReviewTasks(
+            totalRecordCount: homeViewModel.homeJourneyLedgerFacts.totalCommittedRecordCount
+        )
     }
 
     var body: some View {
@@ -857,11 +917,15 @@ struct InsightWebView: View {
             showsInsightUpdatePill = false
             isPreparingInsightPage = false
         }
-        .onChange(of: homeViewModel.items) { _, _ in
-            tabState.sourceRevision = insightSourceRevision
+        .onChange(of: homeViewModel.homeDashboardRevision) { _, revision in
+            tabState.sourceRevision = revision
             insightSnapshotNeedsRefresh = true
             scheduleInsightPreparation()
             prepareAICommandSuggestionsIfNeeded()
+        }
+        .onChange(of: homeViewModel.itemDerivedCacheRevision) { _, revision in
+            guard revision == homeViewModel.homeDashboardRevision else { return }
+            prepareInsightIfNeeded()
         }
         .onChange(of: hasMemberAccess) { _, _ in
             prepareAICommandSuggestionsIfNeeded()
@@ -7071,40 +7135,48 @@ struct InsightWebView: View {
         let usesAppTheme = settingsViewModel.shareCardUsesAppTheme
             && settingsViewModel.settings.hasMemberAccess
         let paletteID: CoverPaletteID = usesAppTheme ? .fogGreen : .quietCream
+        let input = WeeklyShareExportPreparationInput(
+            items: items,
+            sourceRevision: sourceRevision,
+            now: Date(),
+            paletteID: paletteID
+        )
 
         Task { @MainActor in
             guard !Task.isCancelled else {
                 isSavingWeeklyShareCard = false
                 return
             }
-            guard let payload = PlaybackService().buildWeeklyShareCardPayload(
-                from: items,
-                sourceRevision: sourceRevision
-            ) else {
-                weeklyShareSaveMessage = "这一周还没有足够内容生成摘页。"
+            let preparation = await withTaskGroup(
+                of: WeeklyShareExportPreparationResult.self,
+                returning: WeeklyShareExportPreparationResult.self
+            ) { group in
+                group.addTask(priority: .userInitiated) {
+                    WeeklyShareExportPreparationComputation.build(input)
+                }
+                return await group.next()
+                    ?? .invalidContent(sourceRevision: sourceRevision)
+            }
+            guard !Task.isCancelled,
+                  LedgerSnapshotPublicationPolicy.accepts(
+                    preparedRevision: preparation.sourceRevision,
+                    currentRevision: homeViewModel.homeDashboardRevision
+                  ) else {
                 isSavingWeeklyShareCard = false
                 return
             }
             let session: CoverShareSession
-            do {
-                session = try LegacyWeeklyCoverAdapter.prepareSession(
-                    from: LegacyWeeklyCoverSource(
-                        sourceRevision: sourceRevision,
-                        payload: payload,
-                        fallbackEvidenceItemIDs: weeklyCoverEvidenceItemIDs(items),
-                        media: [],
-                        unavailableMediaCount: 0,
-                        variantID: "review-weekly",
-                        paletteID: paletteID,
-                        backgroundFamily: .quietEditorial,
-                        backgroundImage: nil,
-                        backgroundIdentity: "review-weekly:\(paletteID.rawValue)"
-                    )
-                )
-            } catch {
+            switch preparation {
+            case .noContent:
+                weeklyShareSaveMessage = "这一周还没有足够内容生成摘页。"
+                isSavingWeeklyShareCard = false
+                return
+            case .invalidContent:
                 weeklyShareSaveMessage = "摘页内容校验没有通过，请稍后再试。"
                 isSavingWeeklyShareCard = false
                 return
+            case let .ready(_, preparedSession):
+                session = preparedSession
             }
             guard let img = CoverExportCoordinator.renderImage(from: session) else {
                 weeklyShareSaveMessage = "摘页暂时没有生成成功，请稍后再试。"
@@ -7120,24 +7192,6 @@ struct InsightWebView: View {
                 showWeeklyShareThemeNudge = false
             }
             isSavingWeeklyShareCard = false
-        }
-    }
-
-    private func weeklyCoverEvidenceItemIDs(
-        _ items: [HomeItem],
-        now: Date = Date()
-    ) -> [UUID] {
-        let calendar = PlaybackService.isoCalendar
-        guard let interval = calendar.dateInterval(of: .weekOfYear, for: now) else {
-            return []
-        }
-        return items.compactMap { item in
-            guard item.amount > 0,
-                  item.createdAt >= interval.start,
-                  item.createdAt < interval.end else {
-                return nil
-            }
-            return item.id
         }
     }
 }

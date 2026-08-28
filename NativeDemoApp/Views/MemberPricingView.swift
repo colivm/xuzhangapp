@@ -1417,9 +1417,6 @@ private struct MemberAccountLoginSheet: View {
     @Environment(\.dismiss) private var dismiss
     let intent: MemberLoginContinuationIntent?
     @FocusState private var focusedField: LoginField?
-    private let termsURL = URL(string: "https://xuzhangapp.com/legal/terms.html")!
-    private let privacyURL = URL(string: "https://xuzhangapp.com/legal/privacy.html")!
-
     private enum LoginField {
         case phone
         case code
@@ -1447,6 +1444,13 @@ private struct MemberAccountLoginSheet: View {
                                 .textContentType(.telephoneNumber)
                                 .focused($focusedField, equals: .phone)
                         }
+
+                        LoginPolicyConsentRow(
+                            isAccepted: Binding(
+                                get: { settingsViewModel.hasAcceptedLoginPolicies },
+                                set: { settingsViewModel.setLoginPolicyAccepted($0) }
+                            )
+                        )
 
                         loginField("验证码") {
                             HStack(spacing: 10) {
@@ -1503,12 +1507,6 @@ private struct MemberAccountLoginSheet: View {
                             .stroke(AppColors.line.opacity(0.56), lineWidth: 1)
                     )
 
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 4) { loginLegalLinks }
-                        VStack(alignment: .leading, spacing: 5) { loginLegalLinks }
-                    }
-                    .font(.footnote)
-
                     Text("登录成功只会返回会员页并恢复刚才的选择；购买或恢复仍要由你再次明确点击。")
                         .font(.footnote)
                         .foregroundStyle(AppColors.subtext.opacity(0.9))
@@ -1560,12 +1558,14 @@ private struct MemberAccountLoginSheet: View {
         settingsViewModel.isAuthBusy
             || settingsViewModel.smsCooldownRemaining > 0
             || !phoneIsValid
+            || !settingsViewModel.hasAcceptedLoginPolicies
     }
 
     private var loginButtonDisabled: Bool {
         settingsViewModel.isAuthBusy
             || !phoneIsValid
             || settingsViewModel.loginCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !settingsViewModel.hasAcceptedLoginPolicies
     }
 
     private var sendCodeTitle: String {
@@ -1596,17 +1596,6 @@ private struct MemberAccountLoginSheet: View {
         }
     }
 
-    @ViewBuilder
-    private var loginLegalLinks: some View {
-        Text("登录即表示你同意")
-            .foregroundStyle(AppColors.subtext)
-        Link("用户协议", destination: termsURL)
-            .foregroundStyle(AppColors.accentDark)
-        Text("和")
-            .foregroundStyle(AppColors.subtext)
-        Link("隐私政策", destination: privacyURL)
-            .foregroundStyle(AppColors.accentDark)
-    }
 }
 
 struct LifetimeArchivePreparationInput: @unchecked Sendable {

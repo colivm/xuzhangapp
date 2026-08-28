@@ -1,8 +1,8 @@
 # 叙账 · 项目搭建说明
 
-> 更新时间：2026-07-22
+> 更新时间：2026-08-28
 > 产品版本：叙账 v0.1  
-> 适用阶段：**主域 `xuzhangapp.com` HTTPS 已通**（Let's Encrypt，续期至 **2026-09-02**，certbot 自动续期）；API 子域见 §4.4
+> 适用阶段：主域 `xuzhangapp.com` 与 API 子域 `api.xuzhangapp.com` 均已切换为 **Let's Encrypt + Certbot 自动续期**；API 子域见 §4.4
 
 本文档汇总 **本机开发、生产 ECS、Staging 测试** 的搭建步骤。细节分支流程与 Staging 运维见 [`STAGING_ENV_SETUP.md`](STAGING_ENV_SETUP.md)。
 
@@ -96,6 +96,7 @@ curl -s http://127.0.0.1:8790/health
 1. 打开 `NativeDemoApp.xcodeproj`
 2. 选择 iOS 17+ 模拟器，`Cmd + R` 运行
 3. 正式客户端固定使用 `https://api.xuzhangapp.com`，不向用户开放后端、模型或上游密钥配置。需要本地/staging 联调时使用测试注入或对应环境构建，不在正式设置页改地址。
+4. 天气功能使用 Apple WeatherKit。首次签名或证书更新时，在 Apple Developer 的 App ID `com.xuzhang.app` 中开启 WeatherKit，刷新 Development/Distribution provisioning profile，并确认 Xcode Signing & Capabilities 显示 WeatherKit；工程的 Debug/Release 已共同引用 `NativeDemoApp/NativeDemoApp.entitlements`。
 
 > 历史 `web-preview` 已于 2026-07-22 退役。Windows 侧使用静态门禁、确定性夹具与文档评审；真实 UI/交互以 Xcode、iPhone 和 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 为准。
 | 验证码 | `123456` | `123456` |
@@ -151,8 +152,8 @@ pm2 restart backend-staging ai-proxy-staging
 | 项目 | 值 |
 |------|-----|
 | ECS IP | `47.102.205.254` |
-| **主域名** | `https://xuzhangapp.com`（Let's Encrypt，`/etc/letsencrypt/live/xuzhangapp.com/`，到期 **2026-09-02**） |
-| API 域名 | `https://api.xuzhangapp.com`（**已配 SSL**，见 §4.4） |
+| **主域名** | `https://xuzhangapp.com`（Let's Encrypt，`/etc/letsencrypt/live/xuzhangapp.com/`，Certbot 自动续期） |
+| API 域名 | `https://api.xuzhangapp.com`（Let's Encrypt，`/etc/letsencrypt/live/api.xuzhangapp.com/`，Certbot 自动续期；见 §4.4） |
 | 代码目录（示例） | `/opt/xuzhang/xuzhangapp` |
 | backend 端口 | 8790（仅本机，Nginx 反代） |
 | ai-proxy 端口 | 8787（仅本机） |
@@ -205,26 +206,31 @@ pm2 save
 
 | 项目 | 路径 |
 |------|------|
-| SSL 证书 | `/etc/nginx/ssl/api.xuzhangapp.com.pem` |
-| SSL 私钥 | `/etc/nginx/ssl/api.xuzhangapp.com.key` |
+| SSL 证书 | `/etc/letsencrypt/live/api.xuzhangapp.com/fullchain.pem` |
+| SSL 私钥 | `/etc/letsencrypt/live/api.xuzhangapp.com/privkey.pem` |
+| Certbot 续期配置 | `/etc/letsencrypt/renewal/api.xuzhangapp.com.conf` |
 
 查证书路径：
 
 ```bash
-grep -r "ssl_certificate" /etc/nginx/
-openssl x509 -in /etc/nginx/ssl/api.xuzhangapp.com.pem -noout -dates
+grep -r "ssl_certificate" /etc/nginx/sites-enabled/
+certbot certificates
+openssl x509 -in /etc/letsencrypt/live/api.xuzhangapp.com/fullchain.pem -noout -issuer -dates
+systemctl status certbot.timer --no-pager
 ```
 
-测试证有效期至 **2026-08-29**，到期前需续签或换 **Let's Encrypt**（见 §4.5 推荐方式）。
+API 子域已于 **2026-08-28** 从旧 DigiCert 手工证书切换为独立 Let's Encrypt 证书；`certbot.timer` 负责后台续期。变更证书或 Nginx 后必须执行 `nginx -t`、`certbot renew --dry-run --no-random-sleep-on-renew`，并从外网复查 `/health`。
 
 Nginx 将 `443` 反代到 `http://127.0.0.1:8790`；**8787 不对公网暴露**，AI 走 `POST /v1/ai/insight/daily` 由 backend 转发。
+
+生产站点配置以仓库中的 `ops/nginx/api.xuzhangapp.com.conf` 为可审计基线。它保留现有 Express CORS 行为和业务返回体，仅由 Nginx 增加 API 专用安全头并隐藏 `X-Powered-By`。修改时先备份当前精确文件，上传到临时路径，再替换、执行 `nginx -t` 和平滑 reload；禁止直接在生产机临时拼接无法回溯的片段。
 
 > **与主域关系**：`api.xuzhangapp.com` 与 `xuzhangapp.com` 为 **两个独立 Nginx server**、**两套证书**，互不影响。
 
 ### 4.5 主域 SSL + Nginx（`xuzhangapp.com`）
 
-**现状**：主域已用 **certbot** 签发 HTTPS（2026-06 落地）；API 子域仍为独立测试证（§4.4）。  
-**用途**：ICP 备案主站、App Store **隐私政策 URL**、用户协议链接（静态页后续部署，本节先打通 HTTPS + Nginx）。
+**现状**：主域与 API 子域均由 **certbot** 签发和续期，使用两个独立证书与两个独立 Nginx server；API 证书见 §4.4。
+**用途**：ICP 备案主站、App Store **隐私政策 URL**、用户协议链接。
 
 #### 4.5.1 DNS（阿里云）
 
@@ -272,32 +278,13 @@ chmod -R o+rX site legal
 /opt/xuzhang/xuzhangapp/legal/terms.html    → https://xuzhangapp.com/legal/terms.html
 ```
 
-#### 4.5.3 Nginx 站点（HTTP，签证前）
+#### 4.5.3 Nginx 站点
 
-新建 **`/etc/nginx/sites-available/xuzhangapp.com`**（与 `api.xuzhangapp.com` **分开文件**，互不影响）：
+生产配置以仓库中的 **`ops/nginx/xuzhangapp.com.conf`** 为可审计基线，并部署为 `/etc/nginx/sites-available/xuzhangapp.com`。它与 `api.xuzhangapp.com` 分开，包含 HTTP→HTTPS、静态目录、法务页 alias、HSTS、CSP、点击劫持、MIME 嗅探、来源和浏览器权限策略。
 
-```nginx
-# 主站 xuzhangapp.com — 静态（代码目录 /opt/xuzhang/xuzhangapp）
-server {
-    listen 80;
-    listen [::]:80;
-    server_name xuzhangapp.com www.xuzhangapp.com;
+主站 CSP 只允许同源脚本、样式、字体和连接；由于当前静态 HTML 有少量 CSS 变量/展示样式和图片加载失败处理，分别保留 `style-src 'unsafe-inline'` 与更窄的 `script-src-attr 'unsafe-inline'`，不允许 `unsafe-eval`、对象嵌入或第三方脚本。API 使用独立的 `default-src 'none'`，不得把主站 CSP 复制到 API，或反过来。
 
-    root /opt/xuzhang/xuzhangapp/site;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ =404;
-    }
-
-    # 法务页：仓库 legal/ 子目录（git pull 即更新）
-    location /legal/ {
-        alias /opt/xuzhang/xuzhangapp/legal/;
-    }
-}
-```
-
-**现有 API 配置保持不变**（`api.xuzhangapp.com` → 443 反代 `127.0.0.1:8790`）。  
+**API 配置保持独立**（`api.xuzhangapp.com` → 443 反代 `127.0.0.1:8790`）。
 两个 `server` 靠 `server_name` 区分，443 可并存多证书。
 
 启用并重载：
@@ -307,11 +294,11 @@ ln -sf /etc/nginx/sites-available/xuzhangapp.com /etc/nginx/sites-enabled/
 nginx -t && systemctl reload nginx
 ```
 
-浏览器可先测：`http://xuzhangapp.com/`（应看到占位页；**仍为 HTTP，属正常**）。
+浏览器访问 `http://xuzhangapp.com/` 应 301 跳转到 HTTPS。
 
 #### 4.5.4 申请 Let's Encrypt 证书（推荐，免费）
 
-与 API 子域测试证 **独立**；主域建议用 certbot 自动续期：
+主域与 API 子域证书彼此 **独立**；以下为主域首次签发示例：
 
 ```bash
 # Debian/Ubuntu 示例
@@ -336,7 +323,10 @@ certbot renew --dry-run
 
 ```bash
 curl -I https://xuzhangapp.com/
-curl -I https://xuzhangapp.com/legal/terms.html   # 静态页上线前可能 404，但 HTTPS 应正常
+curl -I https://xuzhangapp.com/legal/privacy.html
+curl -I https://xuzhangapp.com/legal/terms.html
+curl -I https://api.xuzhangapp.com/health
+python scripts/security_headers_check.py --live
 
 openssl s_client -connect xuzhangapp.com:443 -servername xuzhangapp.com </dev/null 2>/dev/null \
   | openssl x509 -noout -subject -dates
@@ -494,7 +484,7 @@ iOS → backend /v1/ai/insight/daily → ai-proxy → DeepSeek
 ## 11. 当前阶段下一步
 
 1. **iPhone 真机**全流程验证（`https://api.xuzhangapp.com`）
-2. **主域 HTTPS**（§4.5 Let's Encrypt + Nginx）
+2. 持续监控主域与 API 的 Certbot 自动续期和外网 `/health`
 3. 完成 **ICP 备案**
 4. 落地 **Staging**（DNS + SSL + pm2-staging，见 `STAGING_ENV_SETUP.md`）
 5. 生产安全加固（`APP_PROXY_TOKEN`、真实短信、关闭 dev 验证码）

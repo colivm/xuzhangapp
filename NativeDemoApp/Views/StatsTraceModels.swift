@@ -298,6 +298,95 @@ struct StatsTabState {
     }
 }
 
+struct SummaryPlaybackPreparationInput: @unchecked Sendable {
+    let range: SummaryPlaybackRange
+    let items: [HomeItem]
+    let preparedFacts: PeriodExperienceFacts?
+    let copySeed: String
+    let sourceRevision: Int
+    let isMember: Bool
+    let now: Date
+}
+
+struct SummaryPlaybackPresentation: Identifiable, @unchecked Sendable {
+    let playback: SummaryPlayback
+    let sourceRevision: Int
+    let weeklyShareSnapshot: WeeklyShareCardSnapshot?
+
+    var id: String {
+        "\(playback.id)|\(sourceRevision)"
+    }
+}
+
+enum SummaryPlaybackPreparationComputation {
+    static func build(
+        _ input: SummaryPlaybackPreparationInput
+    ) -> SummaryPlaybackPresentation? {
+        guard !Task.isCancelled else { return nil }
+        let service = PlaybackService()
+        let periodFacts: PeriodExperienceFacts
+        if let preparedFacts = input.preparedFacts,
+           preparedFacts.matches(
+            range: input.range,
+            sourceRevision: input.sourceRevision,
+            isMember: input.isMember,
+            now: input.now
+           ) {
+            periodFacts = preparedFacts
+        } else {
+            periodFacts = service.preparePeriodExperienceFacts(
+                from: input.items,
+                range: input.range,
+                now: input.now,
+                sourceRevision: input.sourceRevision,
+                isMember: input.isMember
+            )
+        }
+
+        guard !Task.isCancelled else { return nil }
+        let playback: SummaryPlayback
+        switch input.range {
+        case .week:
+            playback = service.buildWeekSummary(
+                from: periodFacts,
+                copySeed: input.copySeed
+            )
+        case .month:
+            playback = service.buildMonthSummary(
+                from: periodFacts,
+                copySeed: input.copySeed
+            )
+        }
+        let weeklyShareSnapshot = input.range == .week
+            ? service.prepareWeeklyShareCardSnapshot(
+                from: periodFacts,
+                summary: playback,
+                evidenceItemIDs: PlaybackService.weeklyShareEvidenceItemIDs(
+                    from: input.items,
+                    now: input.now
+                )
+            )
+            : nil
+        guard !Task.isCancelled else { return nil }
+        return SummaryPlaybackPresentation(
+            playback: playback,
+            sourceRevision: input.sourceRevision,
+            weeklyShareSnapshot: weeklyShareSnapshot
+        )
+    }
+}
+
+enum TraceInsightQuestionFocusPolicy {
+    static func nextQuestion(in questions: [String], after current: String?) -> String? {
+        guard !questions.isEmpty else { return nil }
+        guard let current,
+              let index = questions.firstIndex(of: current) else {
+            return questions[0]
+        }
+        return questions[(index + 1) % questions.count]
+    }
+}
+
 struct TraceDayGroup: Identifiable {
     let id: String
     let date: Date

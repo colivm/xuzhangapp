@@ -313,7 +313,7 @@ struct StatsWebView: View {
 
     @State private var editingItem: HomeItem?
     @State private var memoryDetailItem: HomeItem?
-    @State private var summaryPlayback: SummaryPlayback?
+    @State private var summaryPlaybackPresentation: SummaryPlaybackPresentation?
     @State private var summaryPlaybackTask: Task<Void, Never>?
     @State private var preparingSummaryRange: SummaryPlaybackRange?
     @State private var summaryQuotaPrompt: SummaryQuotaPrompt?
@@ -337,7 +337,6 @@ struct StatsWebView: View {
     @State private var visibleTraceLoadingPresentation: TraceLoadingPresentation?
     @State private var traceLoadingPresentationTask: Task<Void, Never>?
     @State private var tracePendingScrollTask: Task<Void, Never>?
-    private let playbackService = PlaybackService()
     private let momentSelector = PlaybackMomentSelector()
     private let quotaStore = SummaryPlaybackQuotaStore()
     private let lifeInsightService = LifeInsightService.shared
@@ -617,12 +616,12 @@ struct StatsWebView: View {
             }) { item in
                 memoryRecordDetailSheet(for: item)
             }
-            .sheet(item: $summaryPlayback, onDismiss: {
+            .sheet(item: $summaryPlaybackPresentation, onDismiss: {
                 let route = summaryPlaybackDismissRoute
                 summaryPlaybackDismissRoute = nil
                 handleSheetDismissRoute(route)
-            }) { playback in
-                summaryPlaybackSheet(playback)
+            }) { presentation in
+                summaryPlaybackSheet(presentation)
             }
             .onAppear {
                 handleOpenTraceRequestIfNeeded()
@@ -648,6 +647,9 @@ struct StatsWebView: View {
                 prepareTraceIfNeeded()
             }
             .onChange(of: homeViewModel.homeDashboardRevision) { _, _ in
+                summaryPlaybackTask?.cancel()
+                summaryPlaybackTask = nil
+                preparingSummaryRange = nil
                 traceSnapshotStore.invalidateAll()
                 tabState.coldStartDisplay = nil
                 tabState.coldStartLedgerRevision = nil
@@ -4183,19 +4185,6 @@ struct StatsWebView: View {
         selectedPeriod == .week ? "这一周" : "这个月"
     }
 
-    private var traceLifeInsight: LifeInsightResult {
-        traceLifeInsight(from: traceClueItems)
-    }
-
-    private func traceLifeInsight(from items: [HomeItem]) -> LifeInsightResult {
-        _ = clueContentRevision
-        return lifeInsightService.buildTraceInsight(
-            items: items,
-            historyItems: homeViewModel.items,
-            periodLabel: traceInsightPeriodLabel
-        )
-    }
-
     private var traceLifeInsightFreeRemaining: Int {
         return lifeInsightService.freeRemaining(isMember: hasMemberAccess)
     }
@@ -5336,14 +5325,10 @@ struct StatsWebView: View {
     }
 
     private func focusNextTraceInsightQuestion() {
-        let chips = traceLifeInsight.questionChips
-        guard !chips.isEmpty else { return }
-        guard let current = traceInsightFocusedQuestion,
-              let index = chips.firstIndex(of: current) else {
-            traceInsightFocusedQuestion = chips[0]
-            return
-        }
-        traceInsightFocusedQuestion = chips[(index + 1) % chips.count]
+        traceInsightFocusedQuestion = TraceInsightQuestionFocusPolicy.nextQuestion(
+            in: preparedClueSnapshot?.insight.questionChips ?? [],
+            after: traceInsightFocusedQuestion
+        )
     }
 
     private func traceInsightAnswer(
@@ -6112,15 +6097,16 @@ struct StatsWebView: View {
         }
     }
 
-    private func summaryPlaybackSheet(_ playback: SummaryPlayback) -> some View {
+    private func summaryPlaybackSheet(_ presentation: SummaryPlaybackPresentation) -> some View {
+        let playback = presentation.playback
         SummaryPlaybackSheet(
             playback: playback,
             petEnabled: settingsViewModel.petCompanionEnabled,
             isMember: hasMemberAccess,
             memberPitch: summaryMemberPitch(for: playback),
-            weeklySharePayload: weeklySharePayload(for: playback),
-            shareSourceRevision: homeViewModel.homeDashboardRevision,
-            shareEvidenceItemIDs: weeklyShareEvidenceItemIDs(),
+            weeklySharePayload: presentation.weeklyShareSnapshot?.payload,
+            shareSourceRevision: presentation.sourceRevision,
+            shareEvidenceItemIDs: presentation.weeklyShareSnapshot?.evidenceItemIDs ?? [],
             shareNickname: settingsViewModel.displayName,
             shareCardTheme: settingsViewModel.shareCardUsesAppTheme && settingsViewModel.settings.hasMemberAccess
                 ? .appTheme(appTheme)
@@ -6135,15 +6121,15 @@ struct StatsWebView: View {
             },
             onShowMemberPricing: {
                 summaryPlaybackDismissRoute = .memberPricing(.playbackQuota)
-                summaryPlayback = nil
+                summaryPlaybackPresentation = nil
             },
             onOpenWeekly: {
                 summaryPlaybackDismissRoute = .openWeekly
-                summaryPlayback = nil
+                summaryPlaybackPresentation = nil
             },
             onOpenInsight: {
                 summaryPlaybackDismissRoute = .openInsight
-                summaryPlayback = nil
+                summaryPlaybackPresentation = nil
             },
             onSaveMemoryLine: { line, range in
                 homeViewModel.markPlaybackMemoryLine(line, range: range)
@@ -6170,30 +6156,6 @@ struct StatsWebView: View {
                 detail: "这次免费已经生成月章；会员可以继续整理更多月份里的天气、路线和生活线索。",
                 cta: "了解持续回看"
             )
-        }
-    }
-
-    private func weeklySharePayload(for playback: SummaryPlayback) -> WeeklyShareCardPayload? {
-        guard playback.range == .week else { return nil }
-        return playbackService.buildWeeklyShareCardPayload(
-            from: homeViewModel.items,
-            summary: playback,
-            sourceRevision: homeViewModel.homeDashboardRevision
-        )
-    }
-
-    private func weeklyShareEvidenceItemIDs(now: Date = Date()) -> [UUID] {
-        let calendar = PlaybackService.isoCalendar
-        guard let interval = calendar.dateInterval(of: .weekOfYear, for: now) else {
-            return []
-        }
-        return homeViewModel.items.compactMap { item in
-            guard item.amount > 0,
-                  item.createdAt >= interval.start,
-                  item.createdAt < interval.end else {
-                return nil
-            }
-            return item.id
         }
     }
 
@@ -6309,60 +6271,46 @@ struct StatsWebView: View {
         let sourceRevision = homeViewModel.homeDashboardRevision
         let preparedFacts = preparedLifeSnapshot(for: range)?.periodFacts
         let isMember = hasMemberAccess
+        let now = Date()
         let performanceStartedAt = ProcessInfo.processInfo.systemUptime
         homeViewModel.markSummaryPlaybackStarted(range)
         summaryPlaybackTask?.cancel()
         preparingSummaryRange = range
         summaryPlaybackTask = Task { @MainActor in
             await Task.yield()
-            let playback = await withTaskGroup(of: SummaryPlayback.self) { group -> SummaryPlayback? in
+            let presentation = await withTaskGroup(
+                of: SummaryPlaybackPresentation?.self,
+                returning: SummaryPlaybackPresentation?.self
+            ) { group in
+                let input = SummaryPlaybackPreparationInput(
+                    range: range,
+                    items: items,
+                    preparedFacts: preparedFacts,
+                    copySeed: copySeed,
+                    sourceRevision: sourceRevision,
+                    isMember: isMember,
+                    now: now
+                )
                 group.addTask(priority: .userInitiated) {
-                    let service = PlaybackService()
-                    if let preparedFacts,
-                        preparedFacts.matches(
-                        range: range,
-                        sourceRevision: sourceRevision,
-                        isMember: isMember
-                       ) {
-                        switch range {
-                        case .week:
-                            return service.buildWeekSummary(
-                                from: preparedFacts,
-                                copySeed: copySeed
-                            )
-                        case .month:
-                            return service.buildMonthSummary(
-                                from: preparedFacts,
-                                copySeed: copySeed
-                            )
-                        }
-                    }
-                    switch range {
-                    case .week:
-                        return service.buildWeekSummary(
-                            from: items,
-                            copySeed: copySeed,
-                            sourceRevision: sourceRevision
-                        )
-                    case .month:
-                        return service.buildMonthSummary(
-                            from: items,
-                            copySeed: copySeed,
-                            sourceRevision: sourceRevision
-                        )
-                    }
+                    SummaryPlaybackPreparationComputation.build(input)
                 }
-                return await group.next()
+                return await group.next() ?? nil
             }
-            guard !Task.isCancelled, preparingSummaryRange == range else { return }
+            guard !Task.isCancelled,
+                  preparingSummaryRange == range,
+                  let presentation,
+                  LedgerSnapshotPublicationPolicy.accepts(
+                    preparedRevision: presentation.sourceRevision,
+                    currentRevision: homeViewModel.homeDashboardRevision
+                  ) else { return }
             summaryPlaybackTask = nil
             preparingSummaryRange = nil
-            summaryPlayback = playback
+            summaryPlaybackPresentation = presentation
             homeViewModel.markPerformance(
                 operation: range == .week ? .summaryWeek : .summaryMonth,
                 startedAtUptime: performanceStartedAt,
                 itemCount: items.count,
-                outcome: playback == nil ? .empty : .success
+                outcome: .success
             )
         }
     }

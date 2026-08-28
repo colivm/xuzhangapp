@@ -23,6 +23,7 @@
       <nav class="nav-links" aria-label="主导航">
         <a href="#screenshots">界面预览</a>
         <a href="#features">功能</a>
+        <a href="#privacy">数据边界</a>
         <a href="https://testflight.apple.com/join/c4QRUQkf" target="_blank" rel="noopener">TestFlight</a>
         <a href="/legal/privacy.html">隐私政策</a>
         <a href="/legal/terms.html">用户协议</a>
@@ -48,8 +49,8 @@
           <div class="trust-row" aria-label="产品原则">
             <span>本地优先</span>
             <span>习惯本地学习</span>
-            <span>OCR 原图不上传</span>
-            <span>AI 可选</span>
+            <span>照片与 OCR 原图不上云</span>
+            <span>联网整理可选</span>
           </div>
         </div>
 
@@ -61,10 +62,10 @@
 
     <section class="section section-screenshots" id="screenshots">
       <div class="wrap">
-        <h2 class="section-title">看看叙账长什么样</h2>
-        <p class="section-desc">生活切片是主入口：先看见这一周、这一月，再决定要不要请小 AI 多聊一句。</p>
+        <h2 class="section-title">看看叙账怎么用</h2>
+        <p class="section-desc">从痕迹回看周记与月章，从复盘查账、对比和补记。下面是功能结构示意，实际界面以当前 App 为准。</p>
 
-        <div class="carousel" data-carousel tabindex="0" aria-label="App 界面预览轮播">
+        <div class="carousel" data-carousel tabindex="0" aria-label="App 功能结构示意轮播">
           <button type="button" class="carousel-btn carousel-btn-prev" data-carousel-prev aria-label="上一张">‹</button>
           <button type="button" class="carousel-btn carousel-btn-next" data-carousel-next aria-label="下一张">›</button>
 
@@ -75,19 +76,18 @@
                   <div class="phone-screen">
                     <div class="phone-mock mock-stats" aria-hidden="true">
                       <div class="mock-status"></div>
-                      <div class="mock-nav">看看花</div>
+                      <div class="mock-nav">痕迹</div>
                       <div class="mock-tabs"><span class="is-on">本周</span><span>本月</span></div>
                       <div class="mock-slice-card">
-                        <p class="mock-slice-label">本周生活切片</p>
+                        <p class="mock-slice-label">本周周记</p>
                         <p class="mock-slice-title">这一周，是这样过的</p>
                         <p class="mock-slice-meta">12 笔 · ¥1,286</p>
                         <span class="mock-play">播放</span>
                       </div>
                     </div>
-                    <img class="phone-shot" src="screenshots/01-stats-slice.png" alt="看看花 · 本周生活切片" width="390" height="844" loading="lazy" onerror="this.remove()">
                   </div>
                 </div>
-                <p class="slide-caption"><strong>看看花</strong> · 本周生活切片</p>
+                <p class="slide-caption"><strong>痕迹</strong> · 这一周，慢慢整理成周记</p>
               </article>
 
               <article class="carousel-slide" data-carousel-slide aria-hidden="true">
@@ -100,10 +100,9 @@
                       <p class="mock-narrative">这周外出吃饭多了一些，也有两顿在家简单解决。</p>
                       <div class="mock-bar-row"><span></span><span></span><span class="tall"></span><span></span></div>
                     </div>
-                    <img class="phone-shot" src="screenshots/02-week-playback.png" alt="周切片播放" width="390" height="844" loading="lazy" onerror="this.remove()">
                   </div>
                 </div>
-                <p class="slide-caption"><strong>生活切片</strong> · 约半分钟讲完一周</p>
+                <p class="slide-caption"><strong>周记</strong> · 约半分钟讲完一周</p>
               </article>
 
               <article class="carousel-slide" data-carousel-slide aria-hidden="true">
@@ -111,7 +110,7 @@
                   <div class="phone-screen">
                     <div class="phone-mock mock-mix" aria-hidden="true">
                       <div class="mock-status"></div>
-                      <p class="mock-scene">生活配方</p>
+                      <p class="mock-scene">账单构成</p>
                       <div class="mock-ring"></div>
                       <ul class="mock-legend">
                         <li><span style="--c:#7fb3a2"></span>餐饮 38%</li>
@@ -119,10 +118,9 @@
                         <li><span style="--c:#e8b4c8"></span>日用 18%</li>
                       </ul>
                     </div>
-                    <img class="phone-shot" src="screenshots/03-life-mix.png" alt="生活配方" width="390" height="844" loading="lazy" onerror="this.remove()">
                   </div>
                 </div>
-                <p class="slide-caption"><strong>生活配方</strong> · 看懂这段时间的构成</p>
+                <p class="slide-caption"><strong>账单构成</strong> · 看懂这段时间的分类占比</p>
               </article>
 
               <article class="carousel-slide" data-carousel-slide aria-hidden="true">
@@ -132,12 +130,11 @@
                       <div class="mock-status"></div>
                       <div class="mock-nav">今日</div>
                       <div class="mock-today-card">
-                        <p class="mock-slice-label">今日生活回放</p>
+                        <p class="mock-slice-label">今日回放</p>
                         <p class="mock-narrative">今天节奏平稳，通勤和午餐是主角。</p>
                         <span class="mock-play">播放</span>
                       </div>
                     </div>
-                    <img class="phone-shot" src="screenshots/04-today-playback.png" alt="今日生活回放" width="390" height="844" loading="lazy" onerror="this.remove()">
                   </div>
                 </div>
                 <p class="slide-caption"><strong>今日回放</strong> · 十几秒叙完今天</p>
@@ -146,9 +143,9 @@
           </div>
 
           <div class="carousel-dots" role="tablist" aria-label="选择预览图">
-            <button type="button" class="carousel-dot is-active" data-carousel-dot role="tab" aria-selected="true" aria-label="看看花"></button>
-            <button type="button" class="carousel-dot" data-carousel-dot role="tab" aria-selected="false" aria-label="生活切片"></button>
-            <button type="button" class="carousel-dot" data-carousel-dot role="tab" aria-selected="false" aria-label="生活配方"></button>
+            <button type="button" class="carousel-dot is-active" data-carousel-dot role="tab" aria-selected="true" aria-label="痕迹"></button>
+            <button type="button" class="carousel-dot" data-carousel-dot role="tab" aria-selected="false" aria-label="周记"></button>
+            <button type="button" class="carousel-dot" data-carousel-dot role="tab" aria-selected="false" aria-label="账单构成"></button>
             <button type="button" class="carousel-dot" data-carousel-dot role="tab" aria-selected="false" aria-label="今日回放"></button>
           </div>
         </div>
@@ -168,15 +165,42 @@
           </article>
           <article class="feature">
             <div class="feature-icon" aria-hidden="true">🎬</div>
-            <h3>生活切片</h3>
+            <h3>痕迹与回放</h3>
             <p>今日回放、周度五幕、月度六章，把一段时间的花费，讲成可以回看的生活章。</p>
           </article>
           <article class="feature">
             <div class="feature-icon" aria-hidden="true">💬</div>
-            <h3>小 AI · 可选</h3>
-            <p>先叙后议。切片播完若还想多聊一句，AI 只补一段具体回看，不给下月金额目标。</p>
+            <h3>联网整理 · 可选</h3>
+            <p>本机规则先生成；登录并主动开启联网整理后，DeepSeek 只处理受控、去标识化的结构化事实，用于轻润色和封面建议。</p>
           </article>
         </div>
+      </div>
+    </section>
+
+    <section class="section" id="privacy">
+      <div class="wrap">
+        <h2 class="section-title">哪些留在本机，哪些需要联网</h2>
+        <p class="section-desc">每项联网能力都可以选择。完整信息见隐私政策，下面先把最重要的边界说清楚。</p>
+        <div class="features">
+          <article class="feature">
+            <div class="feature-icon" aria-hidden="true">📱</div>
+            <h3>照片和本地智能</h3>
+            <p>记忆照片、OCR 原图、人脸区域与裁切分析只在设备处理；不做人脸身份识别，不把照片交给大模型。</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon" aria-hidden="true">☁️</div>
+            <h3>自动备份 · 可选</h3>
+            <p>登录并开启后同步账单信息与记录上下文，服务器位于中国大陆上海；照片仍保存在本机，云端不能恢复照片。</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon" aria-hidden="true">🌦️</div>
+            <h3>天气与联网整理 · 可选</h3>
+            <p>天气由 Apple WeatherKit 提供，需要定位授权；联网整理使用 DeepSeek，但不发送手机号、登录令牌、照片或账单 UUID。</p>
+          </article>
+        </div>
+        <p class="section-desc" style="margin-top: 24px;">
+          查看<a href="/legal/privacy.html">完整隐私政策</a>和<a href="/legal/terms.html">用户协议</a>。
+        </p>
       </div>
     </section>
   </main>
@@ -195,6 +219,7 @@
       </div>
     </div>
     <div class="wrap" style="margin-top: 20px; font-size: 12px;">
+      运营者：王义磊（个人） · Apple 卖方显示名：yilei wang · 江苏省南京市浦口区<br>
       © 2026 叙账 xLife · 保留所有权利 · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">苏ICP备2026035096号-1</a>
     </div>
   </footer>

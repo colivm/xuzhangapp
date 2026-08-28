@@ -3,7 +3,90 @@ import XCTest
 #if canImport(UIKit)
 import UIKit
 #endif
+#if canImport(WeatherKit)
+import WeatherKit
+#endif
 @testable import NativeDemoApp
+
+#if canImport(WeatherKit)
+final class WeatherKitConditionBridgeTests: XCTestCase {
+    func testPrecipitationConditionsKeepExistingRainAndSnowGroups() {
+        XCTAssertEqual(WeatherCompanionService.legacyWeatherCode(for: .rain), 61)
+        XCTAssertEqual(WeatherCompanionService.legacyWeatherCode(for: .freezingRain), 61)
+        XCTAssertEqual(WeatherCompanionService.legacyWeatherCode(for: .snow), 71)
+        XCTAssertEqual(WeatherCompanionService.legacyWeatherCode(for: .wintryMix), 71)
+        XCTAssertNil(WeatherCompanionService.legacyWeatherCode(for: .clear))
+        XCTAssertNil(WeatherCompanionService.legacyWeatherCode(for: .thunderstorms))
+    }
+}
+#endif
+
+final class LegalConsentStoreTests: XCTestCase {
+    private func withIsolatedDefaults(_ body: (UserDefaults) -> Void) {
+        let suiteName = "LegalConsentStoreTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        body(defaults)
+    }
+
+    func testNewInstallRequiresExplicitConsentAndAcceptancePersistsVersionAndTime() {
+        withIsolatedDefaults { defaults in
+            let acceptedAt = Date(timeIntervalSince1970: 1_787_875_200)
+            let store = LegalConsentStore(defaults: defaults)
+
+            XCTAssertFalse(store.hasAcceptedCurrentPolicies)
+            XCTAssertNil(store.currentRecord)
+
+            let record = store.acceptCurrentPolicies(now: acceptedAt)
+
+            XCTAssertEqual(record?.termsVersion, LoginLegalPolicy.termsVersion)
+            XCTAssertEqual(record?.privacyVersion, LoginLegalPolicy.privacyVersion)
+            XCTAssertEqual(record?.acceptedAt, acceptedAt)
+            XCTAssertTrue(store.hasAcceptedCurrentPolicies)
+
+            let storeAfterRestart = LegalConsentStore(defaults: defaults)
+            XCTAssertTrue(storeAfterRestart.hasAcceptedCurrentPolicies)
+            XCTAssertEqual(storeAfterRestart.currentRecord, record)
+        }
+    }
+
+    func testPolicyVersionChangeRequiresFreshConsentWithoutDeletingTheOldRecord() {
+        withIsolatedDefaults { defaults in
+            let original = LegalConsentStore(
+                defaults: defaults,
+                termsVersion: "1.0",
+                privacyVersion: "1.0"
+            )
+            let acceptedAt = Date(timeIntervalSince1970: 1_787_875_200)
+            original.acceptCurrentPolicies(now: acceptedAt)
+
+            let updated = LegalConsentStore(
+                defaults: defaults,
+                termsVersion: "2.0",
+                privacyVersion: "1.1"
+            )
+
+            XCTAssertFalse(updated.hasAcceptedCurrentPolicies)
+            XCTAssertEqual(updated.currentRecord?.termsVersion, "1.0")
+            XCTAssertEqual(updated.currentRecord?.privacyVersion, "1.0")
+            XCTAssertEqual(updated.currentRecord?.acceptedAt, acceptedAt)
+        }
+    }
+
+    func testRevokingConsentRemovesTheStoredRecord() {
+        withIsolatedDefaults { defaults in
+            let store = LegalConsentStore(defaults: defaults)
+            store.acceptCurrentPolicies()
+            XCTAssertTrue(store.hasAcceptedCurrentPolicies)
+
+            store.revokeCurrentPolicies()
+
+            XCTAssertFalse(store.hasAcceptedCurrentPolicies)
+            XCTAssertNil(store.currentRecord)
+        }
+    }
+}
 
 final class OCRDateEvidencePolicyTests: XCTestCase {
     private var calendar: Calendar {
@@ -1971,6 +2054,71 @@ final class PlaybackLivingVoiceCopyTests: XCTestCase {
         XCTAssertFalse(facts.matches(range: .week, sourceRevision: 44, isMember: true, now: now))
         XCTAssertFalse(facts.matches(range: .month, sourceRevision: 44, isMember: false, now: now))
         XCTAssertFalse(facts.matches(range: .week, sourceRevision: 45, isMember: false, now: now))
+    }
+
+    func testPreparedWeeklyShareSnapshotStaysBoundToPlaybackRevision() throws {
+        let now = date(7, 15, 20)
+        let rows = [
+            item("上周早餐", amount: 13, category: .dining, at: date(7, 8, 8)),
+            item("下班地铁", amount: 4.75, category: .transport, at: date(7, 13, 19, 20)),
+            item("午饭", amount: 28, category: .dining, at: date(7, 15, 12, 20)),
+            item("买纸巾", amount: 18, category: .daily, at: date(7, 15, 18, 10)),
+        ]
+        let service = PlaybackService()
+        let facts = service.preparePeriodExperienceFacts(
+            from: rows,
+            range: .week,
+            now: now,
+            sourceRevision: 72,
+            isMember: false
+        )
+        let playback = service.buildWeekSummary(from: facts, copySeed: "shared-result")
+        let evidenceIDs = PlaybackService.weeklyShareEvidenceItemIDs(from: rows, now: now)
+        let reused = try XCTUnwrap(
+            service.prepareWeeklyShareCardSnapshot(
+                from: facts,
+                summary: playback,
+                evidenceItemIDs: evidenceIDs
+            )
+        )
+        let fresh = try XCTUnwrap(
+            service.prepareWeeklyShareCardSnapshot(
+                WeeklyShareCardPreparationInput(
+                    items: rows,
+                    sourceRevision: 72,
+                    now: now
+                ),
+                summary: playback
+            )
+        )
+
+        XCTAssertEqual(reused.sourceRevision, 72)
+        XCTAssertEqual(reused.evidenceItemIDs, evidenceIDs)
+        XCTAssertEqual(reused.payload.weekTotal, fresh.payload.weekTotal, accuracy: 0.001)
+        XCTAssertEqual(reused.payload.recordCount, fresh.payload.recordCount)
+        XCTAssertEqual(reused.payload.headline, playback.teaserLine)
+        XCTAssertEqual(reused.payload.headline, fresh.payload.headline)
+        XCTAssertEqual(reused.payload.subtitle, fresh.payload.subtitle)
+        XCTAssertEqual(reused.payload.narrativePlan?.leadSignalID, facts.narrativePlan.leadSignalID)
+        XCTAssertEqual(reused.payload.narrativePlan?.sourceRevision, 72)
+
+        let presentation = try XCTUnwrap(
+            SummaryPlaybackPreparationComputation.build(
+                SummaryPlaybackPreparationInput(
+                    range: .week,
+                    items: rows,
+                    preparedFacts: facts,
+                    copySeed: "shared-result",
+                    sourceRevision: 72,
+                    isMember: false,
+                    now: now
+                )
+            )
+        )
+        XCTAssertEqual(presentation.playback, playback)
+        XCTAssertEqual(presentation.sourceRevision, 72)
+        XCTAssertEqual(presentation.weeklyShareSnapshot?.sourceRevision, 72)
+        XCTAssertEqual(presentation.weeklyShareSnapshot?.payload.headline, playback.teaserLine)
     }
 
     func testPreparedMonthFactsReusePreservesPlaybackOutputAndRejectsNextMonth() {
@@ -6170,6 +6318,55 @@ final class InsightBackgroundComputationTests: XCTestCase {
 
         gate.invalidate()
         XCTAssertFalse(gate.accepts(latest))
+    }
+
+    func testSnapshotPublicationAndPreparedQuestionRotationRejectStaleWork() {
+        XCTAssertTrue(
+            LedgerSnapshotPublicationPolicy.accepts(
+                preparedRevision: 18,
+                currentRevision: 18
+            )
+        )
+        XCTAssertFalse(
+            LedgerSnapshotPublicationPolicy.accepts(
+                preparedRevision: 17,
+                currentRevision: 18
+            )
+        )
+
+        let questions = ["第一问", "第二问", "第三问"]
+        XCTAssertEqual(
+            TraceInsightQuestionFocusPolicy.nextQuestion(in: questions, after: nil),
+            "第一问"
+        )
+        XCTAssertEqual(
+            TraceInsightQuestionFocusPolicy.nextQuestion(in: questions, after: "第一问"),
+            "第二问"
+        )
+        XCTAssertEqual(
+            TraceInsightQuestionFocusPolicy.nextQuestion(in: questions, after: "第三问"),
+            "第一问"
+        )
+        XCTAssertNil(TraceInsightQuestionFocusPolicy.nextQuestion(in: [], after: nil))
+    }
+
+    func testWeeklyShareExportPreparesImmutableSessionBeforeRendering() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let result = WeeklyShareExportPreparationComputation.build(
+            WeeklyShareExportPreparationInput(
+                items: makeItems(count: 8, now: now),
+                sourceRevision: 91,
+                now: now,
+                paletteID: .quietCream
+            )
+        )
+
+        guard case let .ready(sourceRevision, session) = result else {
+            XCTFail("Expected a prepared weekly share session")
+            return
+        }
+        XCTAssertEqual(sourceRevision, 91)
+        XCTAssertEqual(session.identity.sourceRevision, 91)
     }
 
     func testReviewOverviewMakesCurrentAndPreviousSevenDaysDirectlyComparable() {

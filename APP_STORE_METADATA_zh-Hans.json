@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "locale": "zh-Hans",
+  "appName": "叙账 - 用账单叙述生活",
+  "subtitle": "记账、周记与月章，温柔回望日常",
+  "promotionalText": "记下一笔，也留下生活的线索。叙账会把真实记录整理成今日回放、周记和月章；在复盘里查账、对比和补记。默认本机保存，无需登录即可记账；自动备份、联网整理和天气互动均由你主动开启。",
+  "description": "叙账，是一款本地优先的生活记账 App。每一笔开支既能保留金额、分类和日期，也能慢慢整理成关于日常的周记、月章和生活线索。\n\n【记一笔，也留下生活线索】\n\n• 手动记账：记录金额、分类、标题、备注和日期\n• 账单识别：在本机识别微信、支付宝等账单截图，确认后再导入\n• 分类与场景：根据标题、历史修改和明确证据给出建议，你手动修改后以你的选择为准\n• 记忆照片：可把照片和一笔记录放在一起，照片分析、裁切与色板都在本机完成\n\n【从真实账单回看生活】\n\n• 今日回放：按发生顺序翻看今天已经记下的记录\n• 痕迹：把一周整理成周记，把一个月整理成月章\n• 生活线索：在有足够账单证据时，连接通勤、出行、饮食和跨城路线等上下文\n• 复盘：按时间、分类、金额和备注查账、对比、核对重复，补记内容会先预览再确认\n\n所有回看都以真实账单为依据；信息不足时会保留空白，不用金额或日期猜测生活结论。\n\n【你决定何时联网】\n\n• 不登录也能记账、查看基础统计和使用本机整理\n• 自动备份需要手机号登录并由你主动开启；开启后会备份账单标题、金额、分类、日期、备注和必要的整理上下文，照片仍保存在本机\n• 天气互动需要定位授权，当前天气由 Apple WeatherKit 提供\n• 联网整理需要登录并由你主动开启；本机先完成事实选择，DeepSeek 只处理受控、去标识化的结构化事实\n\n【免费与会员】\n\n手动记账、基础统计和本地保存始终免费。当前免费体验次数：\n\n• 今日回放：每天 3 次\n• 周记：每个自然周 3 次\n• 月章：共 10 次，不按月刷新\n• 账单识别：每天 3 次\n• 生活线索：每月 5 次\n• 月度整理：共 5 次\n\n会员适合需要连续回看、连续导入账单、使用完整生活场景和长期整理的人；永久会员另含典藏风格。套餐、价格、续订和优惠资格以 App Store 购买页实际显示为准。\n\n隐私政策：https://xuzhangapp.com/legal/privacy.html\n用户协议：https://xuzhangapp.com/legal/terms.html\n支持：support@xuzhang.app",
+  "keywords": "记账,账本,支出,消费记录,生活记录,周记,月度总结,账单识别,本地记账",
+  "whatsNew": "欢迎使用叙账。\n\n• 本地优先记账，手动修改分类后以你的选择为准\n• 今日回放、周记和月章，把一段时间的真实记录慢慢讲清楚\n• 痕迹页连接有证据的生活线索，复盘支持查账、对比和待确认补记\n• 记忆照片留在本机；自动备份、WeatherKit 天气和联网整理均由你主动开启",
+  "primaryCategory": "财务",
+  "secondaryCategory": "生活",
+  "operator": "王义磊（个人）",
+  "sellerDisplayName": "yilei wang",
+  "copyright": "© 2026 王义磊",
+  "supportEmail": "support@xuzhang.app",
+  "generalContactEmail": "hello@xuzhang.app",
+  "supportURL": "https://xuzhangapp.com/",
+  "marketingURL": "https://xuzhangapp.com/",
+  "privacyPolicyURL": "https://xuzhangapp.com/legal/privacy.html",
+  "termsURL": "https://xuzhangapp.com/legal/terms.html",
+  "icp": "苏ICP备2026035096号-1",
+  "iapProducts": [
+    {
+      "tier": "yearly",
+      "productID": "com.xuzhang.app.member.yearly",
+      "fallbackPrice": "¥88",
+      "displayName": "年度会员"
+    },
+    {
+      "tier": "monthly",
+      "productID": "com.xuzhang.app.member.monthly",
+      "fallbackPrice": "¥9",
+      "displayName": "月度会员"
+    },
+    {
+      "tier": "lifetime",
+      "productID": "com.xuzhang.app.member.lifetime",
+      "fallbackPrice": "¥168",
+      "displayName": "永久会员"
+    }
+  ],
+  "tracking": false,
+  "trackingDomains": [],
+  "privacyLabels": [
+    {
+      "appStoreCategory": "联系信息 / 电话号码",
+      "manifestType": "NSPrivacyCollectedDataTypePhoneNumber",
+      "linkedToUser": true,
+      "usedForTracking": false,
+      "purpose": "App Functionality",
+      "condition": "用户主动选择手机号登录"
+    },
+    {
+      "appStoreCategory": "标识符 / 用户 ID",
+      "manifestType": "NSPrivacyCollectedDataTypeUserID",
+      "linkedToUser": true,
+      "usedForTracking": false,
+      "purpose": "App Functionality",
+      "condition": "登录后用于账号、自动备份和会员状态"
+    },
+    {
+      "appStoreCategory": "购买项目 / 购买历史",
+      "manifestType": "NSPrivacyCollectedDataTypePurchaseHistory",
+      "linkedToUser": true,
+      "usedForTracking": false,
+      "purpose": "App Functionality",
+      "condition": "用户购买或恢复会员"
+    },
+    {
+      "appStoreCategory": "财务信息 / 其他财务信息",
+      "manifestType": "NSPrivacyCollectedDataTypeOtherFinancialInfo",
+      "linkedToUser": true,
+      "usedForTracking": false,
+      "purpose": "App Functionality",
+      "condition": "用户登录并主动开启自动备份后同步账单金额、分类等"
+    },
+    {
+      "appStoreCategory": "用户内容 / 其他用户内容",
+      "manifestType": "NSPrivacyCollectedDataTypeOtherUserContent",
+      "linkedToUser": true,
+      "usedForTracking": false,
+      "purpose": "App Functionality",
+      "condition": "用户登录并主动开启自动备份后同步标题、日期、备注和必要上下文"
+    },
+    {
+      "appStoreCategory": "位置 / 精确位置",
+      "manifestType": "NSPrivacyCollectedDataTypePreciseLocation",
+      "linkedToUser": false,
+      "usedForTracking": false,
+      "purpose": "App Functionality",
+      "condition": "用户开启天气互动并授予定位权限时，用于 WeatherKit 实时请求"
+    },
+    {
+      "appStoreCategory": "位置 / 粗略位置",
+      "manifestType": "NSPrivacyCollectedDataTypeCoarseLocation",
+      "linkedToUser": true,
+      "usedForTracking": false,
+      "purpose": "App Functionality",
+      "condition": "城市级上下文写入账单且用户主动开启自动备份时"
+    },
+    {
+      "appStoreCategory": "诊断 / 其他诊断数据",
+      "manifestType": "NSPrivacyCollectedDataTypeOtherDiagnosticData",
+      "linkedToUser": true,
+      "usedForTracking": false,
+      "purpose": "App Functionality",
+      "condition": "联网请求产生安全、限流和故障排查日志"
+    }
+  ],
+  "notCollected": [
+    "照片或视频：记忆照片、OCR 原图和本机分析结果不上传",
+    "支付信息：付款由 Apple 处理，叙账不接触银行卡号或完整支付账户",
+    "电子邮件地址：App 内不要求邮箱；用户主动发支持邮件不属于 App 自动采集",
+    "产品交互：本机匿名功能事件默认不上传",
+    "广告数据：App 不提供广告，也不跨 App 或网站追踪"
+  ]
+}

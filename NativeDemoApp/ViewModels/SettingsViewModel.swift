@@ -30,8 +30,10 @@ final class SettingsViewModel: ObservableObject {
     @Published private(set) var isAuthBusy: Bool = false
     @Published private(set) var smsCooldownRemaining: Int = 0
     @Published private(set) var hasPendingLoginCloudSyncDecision: Bool = false
+    @Published private(set) var hasAcceptedLoginPolicies: Bool = false
     /// 是否已保存访问令牌（与 Keychain 同步，用于界面展示）。
     @Published private(set) var hasCloudSession: Bool = false
+    private let legalConsentStore: LegalConsentStore
     private var smsCooldownTask: Task<Void, Never>?
     private var cloudSessionInvalidationCancellable: AnyCancellable?
     private enum ThemeTrialKeys {
@@ -40,8 +42,10 @@ final class SettingsViewModel: ObservableObject {
         static let duration: TimeInterval = 24 * 60 * 60
     }
 
-    init() {
+    init(legalConsentStore: LegalConsentStore = LegalConsentStore()) {
+        self.legalConsentStore = legalConsentStore
         settings = LocalStore.loadSettings()
+        hasAcceptedLoginPolicies = legalConsentStore.hasAcceptedCurrentPolicies
         KeychainService.removeLegacyDirectModelCredential()
         hasCloudSession = !KeychainService.loadAccessToken().isEmpty
         if !hasCloudSession {
@@ -336,6 +340,11 @@ final class SettingsViewModel: ObservableObject {
 
     func sendSMSLoginCode() async {
         authMessage = nil
+        guard legalConsentStore.hasAcceptedCurrentPolicies else {
+            hasAcceptedLoginPolicies = false
+            authMessage = "请先勾选同意《用户协议》和《隐私政策》，再获取验证码。"
+            return
+        }
         guard !isAuthBusy else { return }
         if smsCooldownRemaining > 0 {
             authMessage = "验证码发送太频繁，请 \(smsCooldownRemaining) 秒后再试。"
@@ -362,8 +371,25 @@ final class SettingsViewModel: ObservableObject {
         authMessage = nil
     }
 
+    func setLoginPolicyAccepted(_ isAccepted: Bool) {
+        if isAccepted {
+            legalConsentStore.acceptCurrentPolicies()
+        } else {
+            legalConsentStore.revokeCurrentPolicies()
+        }
+        hasAcceptedLoginPolicies = legalConsentStore.hasAcceptedCurrentPolicies
+        if hasAcceptedLoginPolicies {
+            authMessage = nil
+        }
+    }
+
     func verifySMSLogin() async {
         authMessage = nil
+        guard legalConsentStore.hasAcceptedCurrentPolicies else {
+            hasAcceptedLoginPolicies = false
+            authMessage = "请先勾选同意《用户协议》和《隐私政策》，再登录。"
+            return
+        }
         guard !isAuthBusy else { return }
         let phone = loginPhone.trimmingCharacters(in: .whitespacesAndNewlines)
         let code = loginCode.trimmingCharacters(in: .whitespacesAndNewlines)
