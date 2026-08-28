@@ -922,7 +922,7 @@ enum LifeMarkService {
         if let weatherCommuteIntent = weatherCommuteQueryIntent(from: normalized) {
             return weatherCommuteIntent
         }
-        if containsAny(normalized, ["出去玩", "出游", "游玩"]) {
+        if containsAny(normalized, ["出去玩", "出游", "游玩", "跨城路线", "跨城行程"]) {
             return definitionQueryIntent(
                 id: "travel",
                 supportsNounPhraseQuery: true,

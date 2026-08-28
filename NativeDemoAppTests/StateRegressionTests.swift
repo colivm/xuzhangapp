@@ -1521,6 +1521,45 @@ final class LifeJourneyFactRegressionTests: XCTestCase {
         for row in uncertified {
             XCTAssertFalse(abstained.contains(row.id.uuidString), row.title)
         }
+
+        let generatedHint = "这段跨城路线是怎样连起来的？"
+        let routeRecognition = InsightWebView.aiCommandRecognitionDigestForTesting(
+            command: generatedHint,
+            now: now
+        )
+        let routeResult = InsightWebView.aiCommandComputationDigestForTesting(
+            command: generatedHint,
+            items: rows,
+            hasMemberAccess: true,
+            now: now
+        )
+
+        XCTAssertEqual(LifeMarkService.queryIntent(from: generatedHint)?.id, "travel")
+        XCTAssertTrue(routeRecognition.hasPrefix("query#"))
+        XCTAssertTrue(routeRecognition.contains("#travel#"))
+        XCTAssertTrue(routeResult.hasPrefix("query#过去 31 天的跨城路线记录#"))
+        for row in rows {
+            XCTAssertTrue(routeResult.contains(row.id.uuidString), row.title)
+        }
+
+        uncertified[0].title = "旅行酒店"
+        let outgoingFallback = InsightWebView.aiCommandComputationDigestForTesting(
+            command: "出去玩",
+            items: uncertified,
+            hasMemberAccess: true,
+            now: now
+        )
+        let routeAbstained = InsightWebView.aiCommandComputationDigestForTesting(
+            command: generatedHint,
+            items: uncertified,
+            hasMemberAccess: true,
+            now: now
+        )
+        XCTAssertTrue(outgoingFallback.contains(uncertified[0].id.uuidString))
+        XCTAssertTrue(routeAbstained.hasPrefix("query#过去 31 天的跨城路线记录#"))
+        for row in uncertified {
+            XCTAssertFalse(routeAbstained.contains(row.id.uuidString), row.title)
+        }
     }
 
     func testJourneyLanguageRequiresRoadReturnAndAwayActivityEvidence() {
@@ -4716,6 +4755,61 @@ final class PhotoMemoryFactBindingTests: XCTestCase {
         XCTAssertEqual(PhotoMemoryPromptPolicy.anchorReason(for: receiptPhoto)?.assetRole, .receipt)
         XCTAssertEqual(PhotoMemoryPromptPolicy.anchorReason(for: experiencePhoto)?.assetRole, .moment)
         XCTAssertEqual(PhotoMemoryPromptPolicy.anchorReason(for: experiencePhoto)?.sceneHint, .experience)
+    }
+
+    func testTollPhotoUsesRouteRelationshipWithoutInventingItsContents() {
+        let toll = HomeItem(
+            title: "过路费",
+            amount: 96,
+            category: .transport,
+            createdAt: date,
+            memoryImageData: Data(repeating: 0x01, count: 140_000),
+            memoryAnchorRole: .object,
+            memoryAnchorSceneHint: .importantPurchase,
+            memoryAnchorCaption: "这次买的东西。",
+            memoryAnchorCreatedAt: date
+        )
+        let reason = PhotoMemoryPromptPolicy.anchorReason(for: toll)
+        let resolution = PhotoMemoryPromptPolicy.resolvedAnchorRole(for: toll)
+        let anchors = MemoryAnchorSelectionPolicy.selectAnchors(
+            from: [toll],
+            range: .month,
+            limit: 1,
+            label: { _, sceneHint in sceneHint == .travelTransport ? "出门" : "记录" },
+            caption: PhotoMemoryPromptPolicy.automaticAnchorCaption(role:sceneHint:)
+        )
+
+        XCTAssertTrue(PhotoMemoryPromptPolicy.isAutomaticallyAssignedAnchor(toll))
+        XCTAssertTrue(PhotoMemoryPromptPolicy.isAutomaticAnchorCaption("这次买的东西"))
+        XCTAssertEqual(reason?.assetRole, .place)
+        XCTAssertEqual(reason?.sceneHint, .travelTransport)
+        XCTAssertEqual(resolution.role, .place)
+        XCTAssertEqual(resolution.sceneHint, .travelTransport)
+        XCTAssertEqual(anchors.first?.caption, "和这段路一起留下。")
+        if let anchor = anchors.first {
+            XCTAssertEqual(
+                lifeSliceSafeSharePhotoCaption(for: anchor, fallback: "这次买的东西"),
+                "和这段路一起留下。"
+            )
+        }
+        XCTAssertFalse(anchors.first?.caption.contains("买") == true)
+        XCTAssertFalse(anchors.first?.caption.contains("家人") == true)
+        XCTAssertEqual(
+            PhotoMemoryPromptPolicy.resolvedAnchorCaption(
+                storedCaption: "这次买的东西。",
+                role: .place,
+                sceneHint: .travelTransport
+            ),
+            "和这段路一起留下。"
+        )
+        XCTAssertEqual(
+            PhotoMemoryPromptPolicy.resolvedAnchorCaption(
+                storedCaption: "离开家时拍的照片",
+                role: .place,
+                sceneHint: .travelTransport
+            ),
+            "离开家时拍的照片"
+        )
     }
 
     func testEditingReevaluatesAutomaticRoleButPreservesExplicitMetadata() {

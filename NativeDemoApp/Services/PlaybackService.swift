@@ -253,7 +253,9 @@ struct MemoryAnchorSelectionPolicy {
                 caption: anchorCaption?.isEmpty == false
                     ? anchorCaption!
                     : (trustedMomentCaption
-                        ?? (resolution.isQualified ? caption(role, sceneHint) : "这笔的一张照片。")),
+                        ?? (resolution.isQualified
+                            ? caption(role, sceneHint)
+                            : PhotoMemoryPromptPolicy.unclassifiedAnchorCaption)),
                 score: score(
                     item: item,
                     imageByteCount: item.memoryImageByteCount(at: index),
@@ -489,7 +491,7 @@ private final class MemoryAnchorSelectionService {
                 : (trustedMomentCaption
                     ?? (resolution.isQualified
                         ? playbackCaption(for: role, sceneHint: sceneHint)
-                        : "这笔的一张照片。"))
+                        : PhotoMemoryPromptPolicy.unclassifiedAnchorCaption))
         )
         return ScoredAnchor(
             item: item,
@@ -562,18 +564,10 @@ private final class MemoryAnchorSelectionService {
     }
 
     private func playbackCaption(for role: PhotoMemoryAssetRole, sceneHint: PhotoMemorySceneHint) -> String {
-        switch role {
-        case .moment:
-            return sceneHint == .gathering ? "和朋友的一次聚会。" : "当时拍下的一张图。"
-        case .receipt:
-            return "这类图不用好看，但以后查起来很有用。"
-        case .place:
-            return "路上拍下的一张图。"
-        case .object:
-            return "这次买的东西。"
-        case .careRecord:
-            return "照护相关的一张记录。"
-        }
+        PhotoMemoryPromptPolicy.automaticAnchorCaption(
+            role: role,
+            sceneHint: sceneHint
+        )
     }
 
     private static let dayFormatter: DateFormatter = {

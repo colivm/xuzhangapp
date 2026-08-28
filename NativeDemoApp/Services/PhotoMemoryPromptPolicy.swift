@@ -30,33 +30,10 @@ struct PhotoMemoryPromptReason: Equatable {
     let actionTitle: String
 
     var memoryAnchorCaption: String {
-        switch assetRole {
-        case .moment:
-            switch sceneHint {
-            case .gathering:
-                return "和朋友的一次聚会。"
-            case .giftMoment:
-                return "这次带去的心意。"
-            case .experience:
-                return "当时拍下的一张图。"
-            default:
-                return "当时拍下的一张图。"
-            }
-        case .receipt:
-            return "这笔票据以后查起来更清楚。"
-        case .place:
-            return "路上拍下的一张图。"
-        case .object:
-            if sceneHint == .vehicleCare {
-                return "这笔车辆记录的一张照片。"
-            }
-            return "这次买的东西。"
-        case .careRecord:
-            if sceneHint == .healthRecord {
-                return "这笔健康记录的一张照片。"
-            }
-            return "照护相关的一张记录。"
-        }
+        PhotoMemoryPromptPolicy.automaticAnchorCaption(
+            role: assetRole,
+            sceneHint: sceneHint
+        )
     }
 }
 
@@ -98,6 +75,17 @@ enum PhotoMemoryPromptPolicy {
                 title: "这笔以后适合回看",
                 detail: "如果有酒店、车站、门票或路上的照片，可以放进这笔。",
                 actionTitle: "留张路上的图"
+            )
+        }
+
+        if containsAny(text, roadTravelEvidenceKeywords) {
+            return PhotoMemoryPromptReason(
+                sceneHint: .travelTransport,
+                assetRole: .place,
+                sceneLabel: "途中记录",
+                title: "这段路可以留一张照片",
+                detail: "过路费、高速费或 ETC 记录可以关联一张沿途或出发时留下的照片。",
+                actionTitle: "留张这段路的照片"
             )
         }
 
@@ -220,6 +208,51 @@ enum PhotoMemoryPromptPolicy {
         return nil
     }
 
+    static let unclassifiedAnchorCaption = "和这笔记录一起留下。"
+
+    static func automaticAnchorCaption(
+        role: PhotoMemoryAssetRole,
+        sceneHint: PhotoMemorySceneHint
+    ) -> String {
+        switch role {
+        case .moment:
+            switch sceneHint {
+            case .gathering:
+                return "和这次见面一起留下。"
+            case .giftMoment:
+                return "和这份心意一起留下。"
+            default:
+                return unclassifiedAnchorCaption
+            }
+        case .receipt:
+            return "和这笔票据记录一起留下。"
+        case .place:
+            return sceneHint == .travelTransport
+                ? "和这段路一起留下。"
+                : "和这次出行一起留下。"
+        case .object:
+            return sceneHint == .vehicleCare
+                ? "和这笔车辆记录一起留下。"
+                : unclassifiedAnchorCaption
+        case .careRecord:
+            return sceneHint == .healthRecord
+                ? "和这笔健康记录一起留下。"
+                : "和这笔照护记录一起留下。"
+        }
+    }
+
+    static func resolvedAnchorCaption(
+        storedCaption: String?,
+        role: PhotoMemoryAssetRole,
+        sceneHint: PhotoMemorySceneHint
+    ) -> String {
+        let caption = storedCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !caption.isEmpty, !isAutomaticAnchorCaption(caption) {
+            return caption
+        }
+        return automaticAnchorCaption(role: role, sceneHint: sceneHint)
+    }
+
     static func anchorReason(for item: HomeItem) -> PhotoMemoryPromptReason? {
         let signal = LifeSceneSemanticService.classify(item)
         let text = semanticText(for: item)
@@ -283,11 +316,32 @@ enum PhotoMemoryPromptPolicy {
     }
 
     static func isAutomaticallyAssignedAnchor(_ item: HomeItem) -> Bool {
-        guard let caption = item.memoryAnchorCaption?.trimmingCharacters(in: .whitespacesAndNewlines),
+        isAutomaticAnchorCaption(item.memoryAnchorCaption)
+    }
+
+    static func isAutomaticAnchorCaption(_ value: String?) -> Bool {
+        guard let caption = value?.trimmingCharacters(in: .whitespacesAndNewlines),
               !caption.isEmpty else {
             return false
         }
-        return automaticAnchorCaptions.contains(caption)
+        if automaticAnchorCaptions.contains(caption) {
+            return true
+        }
+        let stem = automaticCaptionStem(caption)
+        if automaticAnchorCaptions.contains(where: { automaticCaptionStem($0) == stem }) {
+            return true
+        }
+        return legacyAutomaticCaptionFragments.contains {
+            caption.localizedCaseInsensitiveContains($0)
+        }
+    }
+
+    private static func automaticCaptionStem(_ value: String) -> String {
+        value.trimmingCharacters(
+            in: CharacterSet.whitespacesAndNewlines.union(
+                CharacterSet(charactersIn: "。.!！?？")
+            )
+        )
     }
 
     private static func semanticText(for item: HomeItem) -> String {
@@ -380,6 +434,10 @@ enum PhotoMemoryPromptPolicy {
         "ETC", "etc", "洗车", "汽车保养", "车辆保养", "保养车"
     ]
 
+    private static let roadTravelEvidenceKeywords = [
+        "过路费", "高速费", "高速过路费", "通行费", "高速通行费", "路费", "ETC", "etc"
+    ]
+
     private static let explicitReceiptKeywords = [
         "小票", "发票", "票据", "收据", "账单截图", "支付截图", "付款截图", "电子票"
     ]
@@ -446,6 +504,14 @@ enum PhotoMemoryPromptPolicy {
         "和朋友的一次聚会。", "这次带去的心意。", "当时拍下的一张图。",
         "这张图以后查起来更清楚。", "这笔票据以后查起来更清楚。",
         "路上拍下的一张图。", "这次买的东西。", "这笔车辆记录的一张照片。",
-        "照护相关的一张记录。", "这笔健康记录的一张照片。"
+        "照护相关的一张记录。", "这笔健康记录的一张照片。",
+        "和这笔记录一起留下。", "和这次见面一起留下。", "和这份心意一起留下。",
+        "和这笔票据记录一起留下。", "和这段路一起留下。", "和这次出行一起留下。",
+        "和这笔车辆记录一起留下。", "和这笔健康记录一起留下。", "和这笔照护记录一起留下。"
+    ]
+
+    private static let legacyAutomaticCaptionFragments = [
+        "这张图把", "代表了那笔", "代表这笔", "这件东西代表", "这类图不用好看",
+        "这几张为什么", "当时留了下来", "这条记录的照片", "这笔的一张照片"
     ]
 }

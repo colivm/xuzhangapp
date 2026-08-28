@@ -3222,111 +3222,21 @@ private struct RatioRing: View {
 
 private func lifeSliceResolvedPhotoCaption(
     for anchor: SummaryMemoryAnchor?,
-    fallback: String = "当时拍下的一张图"
+    fallback: String = PhotoMemoryPromptPolicy.unclassifiedAnchorCaption
 ) -> String {
     guard let anchor else { return fallback }
-    let caption = anchor.caption.trimmingCharacters(in: .whitespacesAndNewlines)
-    if !caption.isEmpty, !lifeSliceShouldRewritePhotoCaption(caption) {
-        return caption
-    }
-    return lifeSliceConcretePhotoCaption(for: anchor, fallback: fallback)
+    return PhotoMemoryPromptPolicy.resolvedAnchorCaption(
+        storedCaption: anchor.caption,
+        role: anchor.role,
+        sceneHint: anchor.sceneHint
+    )
 }
 
 func lifeSliceSafeSharePhotoCaption(
     for anchor: SummaryMemoryAnchor,
     fallback: String
 ) -> String {
-    switch anchor.sceneHint {
-    case .careRecord:
-        return "一条照护记录"
-    case .healthRecord:
-        return "一条健康记录"
-    default:
-        return lifeSliceResolvedPhotoCaption(for: anchor, fallback: fallback)
-    }
-}
-
-private func lifeSliceShouldRewritePhotoCaption(_ caption: String) -> Bool {
-    let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !text.isEmpty else { return false }
-    let awkwardFragments = [
-        "这张图把",
-        "留住了",
-        "留了下来",
-        "被留下",
-        "代表这笔",
-        "代表了那笔",
-        "这件东西代表",
-        "这类图不用好看",
-        "这几张为什么"
-    ]
-    return awkwardFragments.contains { text.localizedCaseInsensitiveContains($0) }
-}
-
-private func lifeSliceConcretePhotoCaption(
-    for anchor: SummaryMemoryAnchor,
-    fallback: String
-) -> String {
-    let text = [anchor.label, anchor.title, anchor.caption]
-        .joined(separator: " ")
-
-    if lifeSliceContainsAny(text, ["可乐", "饮料", "饮品", "矿泉水", "瓶装水", "咖啡", "奶茶"]) {
-        if text.localizedCaseInsensitiveContains("可乐") { return "买了一瓶可乐" }
-        if text.localizedCaseInsensitiveContains("咖啡") { return "喝了一杯咖啡" }
-        if text.localizedCaseInsensitiveContains("奶茶") { return "喝了一杯奶茶" }
-        return "买了点喝的"
-    }
-
-    switch anchor.sceneHint {
-    case .gathering:
-        if text.localizedCaseInsensitiveContains("同学") { return "和同学的一次聚会" }
-        if text.localizedCaseInsensitiveContains("家人") || text.localizedCaseInsensitiveContains("家庭") {
-            return "和家里人的一顿饭"
-        }
-        return "和朋友的一次聚会"
-    case .travel, .travelTransport:
-        if text.localizedCaseInsensitiveContains("回家") { return "回家路上" }
-        if text.localizedCaseInsensitiveContains("上班") || text.localizedCaseInsensitiveContains("通勤") { return "上班路上" }
-        return "路上的一段"
-    case .homeLife:
-        return "给家里买的"
-    case .importantPurchase:
-        return "这次买的东西"
-    case .careRecord:
-        return "照护相关的一张记录"
-    case .healthRecord:
-        return "身体相关的一张记录"
-    case .giftMoment:
-        return "这次带去的心意"
-    case .vehicleCare:
-        return "车辆相关的一张记录"
-    case .experience:
-        if lifeSliceContainsAny(text, ["电影", "影院"]) { return "看了一场电影" }
-        if lifeSliceContainsAny(text, ["展览", "美术馆", "博物馆"]) { return "看了一场展览" }
-        if lifeSliceContainsAny(text, ["演唱会", "音乐节", "live", "剧场", "话剧"]) { return "一场演出" }
-        if lifeSliceContainsAny(text, ["桌游", "剧本杀", "密室"]) { return "一起玩的一次" }
-        if lifeSliceContainsAny(text, ["景区", "门票", "露营"]) { return "出去玩的一次" }
-        return "一次现场体验"
-    }
-
-    if lifeSliceContainsAny(text, ["朋友", "同学", "约饭", "见面", "生日"]) {
-        return "和朋友的一次聚会"
-    }
-    if lifeSliceContainsAny(text, ["早餐", "午餐", "晚餐", "外卖", "饭", "餐", "火锅", "烧烤", "饭局"]) {
-        return "这一餐"
-    }
-    if lifeSliceContainsAny(text, ["通勤", "公交", "地铁", "打车", "路上", "回家", "上班"]) {
-        return text.localizedCaseInsensitiveContains("回家") ? "回家路上" : "路上的一段"
-    }
-    if lifeSliceContainsAny(text, ["购物", "添置", "快递", "下单", "衣服", "鞋", "背包", "数码", "盲盒", "手办"]) {
-        return "这次买的东西"
-    }
-
-    return lifeSliceShouldRewritePhotoCaption(fallback) ? "当时拍下的一张图" : fallback
-}
-
-private func lifeSliceContainsAny(_ text: String, _ keywords: [String]) -> Bool {
-    keywords.contains { text.localizedCaseInsensitiveContains($0) }
+    lifeSliceResolvedPhotoCaption(for: anchor, fallback: fallback)
 }
 
 struct NormalizedShareBackground {
@@ -4162,7 +4072,7 @@ private struct WeeklyStoryShareCardView: View {
 
                 collagePhoto(
                     index: 0,
-                    fallback: "这一餐",
+                    fallback: PhotoMemoryPromptPolicy.unclassifiedAnchorCaption,
                     size: CGSize(width: 356, height: 260),
                     rotation: -4,
                     offset: CGSize(width: -22, height: -58)
@@ -4170,7 +4080,7 @@ private struct WeeklyStoryShareCardView: View {
 
                 collagePhoto(
                     index: 1,
-                    fallback: "回家路上",
+                    fallback: PhotoMemoryPromptPolicy.unclassifiedAnchorCaption,
                     size: CGSize(width: 214, height: 168),
                     rotation: 5,
                     offset: CGSize(width: -112, height: 148)
@@ -4178,7 +4088,7 @@ private struct WeeklyStoryShareCardView: View {
 
                 collagePhoto(
                     index: 2,
-                    fallback: "这次买的东西",
+                    fallback: PhotoMemoryPromptPolicy.unclassifiedAnchorCaption,
                     size: CGSize(width: 214, height: 168),
                     rotation: -3,
                     offset: CGSize(width: 116, height: 146)
@@ -4232,9 +4142,9 @@ private struct WeeklyStoryShareCardView: View {
                 .padding(.top, 10)
 
             VStack(spacing: 14) {
-                cleanPhotoRow(index: 0, fallback: "这一餐")
-                cleanPhotoRow(index: 1, fallback: "回家路上")
-                cleanPhotoRow(index: 2, fallback: "这次买的东西")
+                cleanPhotoRow(index: 0, fallback: PhotoMemoryPromptPolicy.unclassifiedAnchorCaption)
+                cleanPhotoRow(index: 1, fallback: PhotoMemoryPromptPolicy.unclassifiedAnchorCaption)
+                cleanPhotoRow(index: 2, fallback: PhotoMemoryPromptPolicy.unclassifiedAnchorCaption)
             }
             .padding(.top, 24)
 
@@ -4763,7 +4673,7 @@ private struct WeeklyStoryShareCardView: View {
     private var posterPrimaryPhoto: some View {
         posterPhotoCard(
             index: 0,
-            fallbackCaption: "这一餐",
+            fallbackCaption: PhotoMemoryPromptPolicy.unclassifiedAnchorCaption,
             height: 300,
             cornerRadius: 18,
             iconSize: 30
@@ -4773,7 +4683,7 @@ private struct WeeklyStoryShareCardView: View {
     private func posterSmallPhoto(index: Int) -> some View {
         posterPhotoCard(
             index: index,
-            fallbackCaption: index == 1 ? "回家路上" : "这次买的东西",
+            fallbackCaption: PhotoMemoryPromptPolicy.unclassifiedAnchorCaption,
             height: 126,
             cornerRadius: 14,
             iconSize: 28

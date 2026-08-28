@@ -5361,13 +5361,18 @@ struct InsightWebView: View {
                 item.amount > 0 && range.contains(item.createdAt)
             }
             let matchedItems: [HomeItem]
-            if intent.id == "travel",
-               let journey = LifeJourneyFactService.primaryFact(
+            if intent.id == "travel" {
+                if let journey = LifeJourneyFactService.primaryFact(
                     in: rangeItems,
                     calendar: aiCommandCalendar
-               ) {
-                let evidenceIDs = Set(journey.evidenceItemIDs)
-                matchedItems = rangeItems.filter { evidenceIDs.contains($0.id) }
+                ) {
+                    let evidenceIDs = Set(journey.evidenceItemIDs)
+                    matchedItems = rangeItems.filter { evidenceIDs.contains($0.id) }
+                } else if aiCommandRequiresCertifiedJourney(command) {
+                    matchedItems = []
+                } else {
+                    matchedItems = rangeItems.filter { LifeMarkService.matches($0, intent: intent) }
+                }
             } else {
                 matchedItems = rangeItems.filter { LifeMarkService.matches($0, intent: intent) }
             }
@@ -5514,6 +5519,10 @@ struct InsightWebView: View {
             return items.filter { aiCommandItemMatchesRentKeywords($0, keywords: rentKeywords) }
         }
 
+        private func aiCommandRequiresCertifiedJourney(_ command: String) -> Bool {
+            containsAny(command, ["跨城路线", "跨城行程"])
+        }
+
         private func aiCommandLifeMarkLabel(_ intent: LifeMarkQueryIntent?, command: String) -> String? {
             guard let intent else { return nil }
             if intent.id == "home_utilities", aiCommandRentKeywords(from: command) != nil {
@@ -5521,6 +5530,9 @@ struct InsightWebView: View {
             }
             if intent.id == "travel", containsAny(command, ["出去玩", "出游", "游玩"]) {
                 return "出去玩"
+            }
+            if intent.id == "travel", containsAny(command, ["跨城路线", "跨城行程"]) {
+                return "跨城路线"
             }
             return intent.label
         }

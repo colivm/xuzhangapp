@@ -2842,6 +2842,14 @@ struct StatsWebView: View {
         item: HomeItem?,
         index: Int
     ) -> String {
+        if let item {
+            let title = item.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !title.isEmpty,
+               title != item.category.defaultRecordTitle,
+               !RecordSemanticLexicon.isSystemGeneratedTitle(title) {
+                return title
+            }
+        }
         if anchor != nil {
             return traceLifeMonthPhotoCaption(anchor: anchor, item: item, index: index)
         }
@@ -3375,7 +3383,7 @@ struct StatsWebView: View {
 
     private func traceLifeMonthDiaryAmountText(item: HomeItem?) -> String {
         guard let item else { return "留在这个月里" }
-        return "花费 \(item.amount.formatted(.cny))"
+        return "\(item.category.rawValue) · \(item.amount.formatted(.cny))"
     }
 
     private func traceLifeSlicePeriodText(for range: SummaryPlaybackRange) -> String {
@@ -3391,12 +3399,8 @@ struct StatsWebView: View {
 
     private func traceLifeSlicePrimaryCaption(snapshot: TraceChapterSnapshot) -> String {
         if let firstAnchor = snapshot.memoryAnchors.first {
-            let item = snapshot.items.first { $0.id == firstAnchor.itemID }
-            let base = snapshot.coverFacts.coverCaption ?? traceLifeResolvedAnchorCaption(
-                anchor: firstAnchor,
-                item: item,
-                fallback: "这周的一条记录"
-            )
+            let base = snapshot.coverFacts.coverCaption
+                ?? traceLifeResolvedAnchorCaption(anchor: firstAnchor)
             return traceLifeVisualCaption(
                 anchor: firstAnchor,
                 base: base,
@@ -3429,13 +3433,13 @@ struct StatsWebView: View {
         item: HomeItem?,
         index: Int
     ) -> String {
-        if let anchor, !anchor.caption.isEmpty {
-            return traceLifeResolvedAnchorCaption(anchor: anchor, item: item, fallback: nil)
+        if let anchor {
+            return traceLifeResolvedAnchorCaption(anchor: anchor)
         }
         if let item {
             return traceLifeSliceCaption(for: item)
         }
-        return index == 0 ? "回家路上" : "给家里添的"
+        return "一条生活记录"
     }
 
     private func traceLifeItem(
@@ -3459,7 +3463,7 @@ struct StatsWebView: View {
                 ? traceLifeGatheringCaption(for: item)
                 : "这一顿饭"
         case .daily, .home:
-            return "给家里买的"
+            return "这笔家用记录"
         case .shopping:
             return traceLifeShoppingCaption(for: item)
         case .social:
@@ -3526,50 +3530,12 @@ struct StatsWebView: View {
         }
     }
 
-    private func traceLifeResolvedAnchorCaption(
-        anchor: SummaryMemoryAnchor,
-        item: HomeItem?,
-        fallback: String?
-    ) -> String {
-        let caption = anchor.caption.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let item,
-           traceLifeIsOverclaimedGatheringCaption(caption),
-           !traceLifeLooksLikeGathering(item) {
-            return traceLifeSliceCaption(for: item)
-        }
-        if let item,
-           traceLifeShouldRewriteAwkwardPhotoCaption(caption) {
-            return traceLifeSliceCaption(for: item)
-        }
-        if !caption.isEmpty {
-            return caption
-        }
-        if let item {
-            return traceLifeSliceCaption(for: item)
-        }
-        return fallback ?? "这条记录的照片"
-    }
-
-    private func traceLifeIsOverclaimedGatheringCaption(_ caption: String) -> Bool {
-        caption.localizedCaseInsensitiveContains("见面")
-            || caption.localizedCaseInsensitiveContains("聚餐")
-    }
-
-    private func traceLifeShouldRewriteAwkwardPhotoCaption(_ caption: String) -> Bool {
-        let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return false }
-        let awkwardFragments = [
-            "当时拍下的一张图",
-            "这条记录的照片",
-            "这张图把",
-            "留住了",
-            "留了下来",
-            "代表了那笔",
-            "代表这笔",
-            "这件东西代表",
-            "当时留了下来"
-        ]
-        return awkwardFragments.contains { text.localizedCaseInsensitiveContains($0) }
+    private func traceLifeResolvedAnchorCaption(anchor: SummaryMemoryAnchor) -> String {
+        PhotoMemoryPromptPolicy.resolvedAnchorCaption(
+            storedCaption: anchor.caption,
+            role: anchor.role,
+            sceneHint: anchor.sceneHint
+        )
     }
 
     private func traceLifeGatheringCaption(for item: HomeItem) -> String {
@@ -3623,9 +3589,9 @@ struct StatsWebView: View {
             || text.localizedCaseInsensitiveContains("鞋")
             || text.localizedCaseInsensitiveContains("包包")
             || text.localizedCaseInsensitiveContains("背包") {
-            return "买了件穿用的"
+            return "这笔穿用记录"
         }
-        return "这次买的东西"
+        return "这笔购物记录"
     }
 
     private func traceLifeLooksLikeGathering(_ item: HomeItem) -> Bool {
@@ -3718,7 +3684,7 @@ struct StatsWebView: View {
 
     private func traceLifeMonthPhotoCaption(anchor: SummaryMemoryAnchor?, item: HomeItem?, index: Int) -> String {
         if let anchor {
-            let caption = traceLifeResolvedAnchorCaption(anchor: anchor, item: item, fallback: nil)
+            let caption = traceLifeResolvedAnchorCaption(anchor: anchor)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !caption.isEmpty { return caption }
             if !anchor.label.isEmpty { return anchor.label }
@@ -3825,18 +3791,10 @@ struct StatsWebView: View {
         role: PhotoMemoryAssetRole,
         sceneHint: PhotoMemorySceneHint
     ) -> String {
-        switch role {
-        case .moment:
-            return sceneHint == .gathering ? "和朋友的一次聚会。" : "这条记录的照片。"
-        case .receipt:
-            return "这张图以后查起来更清楚。"
-        case .place:
-            return "路上拍下的一张图。"
-        case .object:
-            return "这次买的东西。"
-        case .careRecord:
-            return "照护相关的一张记录。"
-        }
+        PhotoMemoryPromptPolicy.automaticAnchorCaption(
+            role: role,
+            sceneHint: sceneHint
+        )
     }
 
     private func traceChapterSnapshotCacheKey(

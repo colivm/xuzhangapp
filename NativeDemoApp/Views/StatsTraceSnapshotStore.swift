@@ -693,14 +693,10 @@ enum TraceSnapshotComputation {
         role: PhotoMemoryAssetRole,
         sceneHint: PhotoMemorySceneHint
     ) -> String {
-        switch role {
-        case .moment:
-            return sceneHint == .gathering ? "和朋友的一次聚会。" : "当时拍下的一张图。"
-        case .receipt: return "这张图以后查起来更清楚。"
-        case .place: return "路上拍下的一张图。"
-        case .object: return "这次买的东西。"
-        case .careRecord: return "照护相关的一张记录。"
-        }
+        PhotoMemoryPromptPolicy.automaticAnchorCaption(
+            role: role,
+            sceneHint: sceneHint
+        )
     }
 }
 
