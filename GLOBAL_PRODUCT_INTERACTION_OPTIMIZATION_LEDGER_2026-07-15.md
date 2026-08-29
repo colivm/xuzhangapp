@@ -4352,7 +4352,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ## 80. WEATHERKIT-MIGRATION-01：生产天气源迁移到 Apple WeatherKit（2026-08-28）
 
-- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 代码、能力配置、归因、XCTest 契约与完整发布门禁通过，缺 Apple Developer capability 实际开启、Xcode 签名/编译和 iPhone WeatherKit 请求签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；Windows 代码、能力配置、归因、XCTest 契约与完整发布门禁通过；运营方已在 Apple Developer 为 `com.xuzhang.app` 开启并保存正确的 WeatherKit 签名 Capability，启用后的 Xcode Cloud Build 323 已完成 Archive、签名、Export、上传并进入 TestFlight 测试。仍缺全部 XCTest 和 iPhone WeatherKit 请求签收，不标记 `VERIFIED`。当前无本项 `IN_PROGRESS`。
 - 允许范围：`WeatherCompanionService` 的天气请求实现、WeatherKit capability/entitlements、必要的数据来源归因、合规登记、针对天气源边界的静态门禁和本文档。允许把 Apple `WeatherCondition` 映射到现有内部 WMO 风格雨/雪码，以继续复用 `WeatherSnapshot`、30 分钟缓存和既有下游判断。
 - 冻结边界：不改变定位授权时机、三公里定位精度、城市反查、首页天气开关默认值、缓存期限、账单 schema/云端 DTO、历史天气字段、分类/情绪/生活线索阈值、会员、额度、AI、照片、`site/`、`legal/` 或 App Store 元数据；不因迁移回写或重算既有账单。
 - 验收：源码不再访问或解析 Open-Meteo；当前温度以摄氏度进入原 `WeatherSnapshot`；雨、雪、炎热、寒冷与普通天气继续命中原有业务分组；Debug/Release 均使用 WeatherKit entitlement；应用内提供符合 Apple 要求的数据来源归因；静态门禁与仓库差异检查通过。Windows 无 Xcode/真机时最高标记 `CODE_DONE`，并记录 Apple Developer capability、签名、真机天气与弱网回退待验。
@@ -4360,7 +4360,9 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 能力与归因：新增 `NativeDemoApp/NativeDemoApp.entitlements`，Debug/Release 共用 `com.apple.developer.weatherkit=true`，Xcode target capability 标记为 WeatherKit。天气设置旁通过 `WeatherService.shared.attribution` 加载 Apple Weather 组合标记并链接运行时法律归因页；加载失败时仍提供文字归因与 Apple 法律页。`PROJECT_SETUP.md` 记录 Portal App ID、profile 刷新和签名步骤，合规登记表已移除 Open-Meteo 发布方案并登记 WeatherKit 数据边界。
 - 修改文件：`NativeDemoApp/Services/WeatherCompanionService.swift`、`NativeDemoApp/Views/SettingsView.swift`、`NativeDemoApp/NativeDemoApp.entitlements`、`NativeDemoApp.xcodeproj/project.pbxproj`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、`PROJECT_SETUP.md`、`COMPLIANCE_PROVIDER_REGISTER_v1.md` 与本文档。未修改账单、分类、生活线索阈值、城市反查、同步 DTO、会员、额度、AI、照片、官网或法律正文。
 - 验证证据：`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 均退出码 0，最终 `release_repository_gate: OK`；AI proxy 24/24、100/1,000/5,000 条夹具、三张真实 12MP 图片、迁移与 SQLite schema 全通过，集合摘要保持 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`，copy lint 仅保留任务开始前已有 5 条 soft warning。静态搜索确认 `NativeDemoApp` 内不再包含 `api.open-meteo.com` 或 `OpenMeteoResponse`。
-- 剩余风险与下一步：必须在 Apple Developer 为 `com.xuzhang.app` 开启 WeatherKit、刷新 Development/Distribution profile，并在 macOS 运行 Swift 6 Debug/Release build、全部 XCTest；随后按 `FLOW-93` 真机验证精确/近似/拒绝定位、晴雨雪冷热、离线弱网、30 分钟缓存、Apple 归因与签名 entitlement。取得证据前不声称生产可用。下一项独立更新 `site/` 与 `legal/`，不夹带登录同意、Privacy Manifest、App Store 元数据或服务器安全头。
+- 2026-08-29 发布跟进证据：运营方确认正确的 WeatherKit Capability 已启用并保存；Apple Developer 证书页可见 Xcode Cloud 管理的 Development/Distribution 证书。Build 321/322 是启用前的旧失败构建，不能作为通过证据。当前提交 `1a06599` 上重新执行 `python scripts/validate_release_gate.py --phase windows`，退出码 0 且最终为 `release_repository_gate: OK`；WeatherKit entitlement、`com.xuzhang.app` Bundle ID 与 `PrivacyInfo.xcprivacy` target 接线均仍在，工作区仅保留既有未跟踪素材/输出目录。
+- 2026-08-29 Xcode Cloud 证据：App Store Connect 构建页显示版本 `1.0 (323)` 状态为“完成”，创建时间为 2026-08-29 11:10 AM；TestFlight 版本 1.0 下 Build 323 已进入“正在测试”。这证明启用正确 Capability 后当前提交可完成 Archive、分发签名、Export、上传和 Apple 处理，不再复现 Build 321/322 的 WeatherKit profile 失败；该页面未展示 XCTest、产物 entitlement、Privacy Report 或真机天气请求结果，不能扩大为这些项目已通过。
+- 剩余风险与下一步：用 TestFlight Build 323 按 `FLOW-93` 真机验证精确/近似/拒绝定位、晴雨雪冷热、离线弱网、30 分钟缓存、Apple 归因、产物 entitlement 及不再访问 Open-Meteo，并补跑全部 XCTest。随后按 `FLOW-94` 检查两个登录入口、政策版本留痕、Archive Privacy Manifest/Privacy Report，再进入 `FLOW-95` App Store Connect 填写；在这些证据齐备前不声称生产可用或标记 `VERIFIED`。
 
 ---
 
@@ -4446,3 +4448,17 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 修改文件：`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoApp/Views/SummaryPlaybackSheet.swift`、`NativeDemoApp/Services/LedgerLocalBackupDocument.swift`、`scripts/experience_static_check.ps1` 与本文档。未修改产品交互、数据、文案、分享结果、备份内容或任何服务端/合规文件。
 - 验证证据：`git diff --check` 与 `powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 退出码 0，新增三条门禁锁定显式返回、无用绑定退役及备份文档 Sendable 边界。`python scripts/validate_release_gate.py --phase windows` 退出码 0，最终输出 `release_repository_gate: OK`；AI proxy、100/1,000/5,000 条夹具、三张真实 12MP 图片、合规页、App Store 元数据、迁移和 SQLite schema 全部通过，copy lint 仅保留任务开始前已有 5 条 soft warning。
 - 剩余风险与下一步：Windows 无 Swift/Xcode，无法在本机证明编译器已接受 `FileDocument, @unchecked Sendable` 或实际清空诊断列表。下一步只在 macOS/Xcode 对当前分支执行 Swift 6 Clean Build，并确认 `StatsWebView.swift:6100/6139`、`SummaryPlaybackSheet.swift:2748` 和 `LedgerLocalBackupDocument.swift:46` 四条诊断消失；若出现新诊断，继续按精确文件/行号定向回补，不启动其他任务。
+
+---
+
+## 87. TRACE-PREP-PERF-02：本周痕迹历史回声有界计算（2026-08-29）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；历史窗口裁剪、场景分类复用、5,000 条等价回归、静态防回流和完整 Windows 发布门禁均完成，当前无本项 `IN_PROGRESS`。缺 Xcode/XCTest 与 Build 323 之后的新 TestFlight/Instruments 真机签收，不标记 `VERIFIED`。
+- 现场与根因：第 70 项已经让痕迹、周记和分享共用同一份 `PeriodExperienceFacts`，第 72/74 项也已串行化全账本重任务并限制缓存，但 `LifeNarrativeEchoPolicy.makeEcho` 仍先对全部可发布历史排序和分桶，再在每个当前场景下重复分类历史记录。现有规则实际只访问当前周期及前 12 个周期；更早记录不可能成为回声证据，却仍增加首屏等待、CPU 和临时数组。
+- 允许范围：仅优化 `LifeNarrativeEchoPolicy` 的等价输入窗口与单次场景分类复用，补充 100/1,000/5,000 条、超出 12 周/月旧记录、确定性和语义不变测试，更新静态门禁、真机矩阵及本文档。
+- 冻结边界：不修改历史回声 12 周/月上限、候选评分、场景分类器、生活线索/跨城关系门槛、事实文案、账单/照片/会员/额度/AI/同步、痕迹快照 key、缓存数量、加载遮罩、页面结构或后台并发上限；不得以展示旧快照或不完整快照掩盖真实计算。
+- 工作区保护：保留本轮 WeatherKit Build 323 台账证据、既有未跟踪素材/输出/缓存目录和所有用户现场；不回退、不暂存、不提交或推送，除非用户另行明确要求。
+- 实施结果：`LifeNarrativeEchoPolicy.makeEcho` 在排序、分桶和场景分类之前，按原规则实际会读取的距离裁剪为当前周期及前 12 个周/月；第 12 个周期仍保留，第 13 个及更早记录原本就不会被候选读取，现在不再进入排序和临时分桶。保留窗口内新增按稳定账单 UUID 的局部场景缓存，当前分组、晚间通勤、咖啡组合和各场景历史筛选复用同一 `LifeSceneSignal`，同一记录在一次回声计算中最多分类一次。候选顺序、评分、证据 ID、主动弃权与 12 周/月产品边界均未改变；未增加持久缓存、后台并发或常驻全账本副本。
+- 修改文件：`NativeDemoApp/Services/LifeNarrativeEchoService.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。未修改 `StatsWebView` 加载遮罩/快照 key、`PlaybackService` 共用事实、账单/照片/会员/额度/AI/同步或其他页面。
+- 验证证据：新增 `testEchoIgnoresRowsOutsideTwelvePeriodWindowAtReleaseScale`，以同一近周期回声分别叠加 0 与 5,000 条第 13 周之外旧记录并要求完整 `LifeNarrativeEcho` 相等；新增静态门禁锁定 12 周/月窗口、裁剪发生在分桶前、单次场景缓存、测试和 `FLOW-97`。`git diff --check` 与 `powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 退出码 0；`python scripts/validate_release_gate.py --phase windows` 退出码 0，最终 `release_repository_gate: OK`，生活语义、AI proxy 24/24、100/1,000/5,000 条确定性夹具、三张真实 12MP 图片、合规、迁移和 SQLite schema 均通过，集合摘要保持 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`，copy lint 仍只有既有 5 条 soft warning。
+- 剩余风险与下一步：Windows 无 Swift/Xcode，新增 Swift 代码和 XCTest 尚未实际编译运行，也无法量化真机“正在整理本周痕迹”的改善幅度。必须在 macOS 运行 Clean Build 与全部 XCTest，再由新 TestFlight 按 `FLOW-97` 对 100/1,000/5,000 条及第 12/13 周边界执行冷启动、Tab 往返、真实增改删和 Time Profiler/Allocations/Main Thread Hitches；重点确认第 12 周证据仍命中、第 13 周外数据不改变结果，等待时间不再随远古账单线性增长且无新内存尖峰。若保留窗口内计算仍超预算，下一项只能基于 Instruments 栈独立优化，不回退加载遮罩或扩大并发。

@@ -40,9 +40,16 @@ enum LifeNarrativeEchoPublicationPolicy {
 }
 
 enum LifeNarrativeEchoPolicy {
+    private static let maximumHistoryPeriodDistance = 12
+
     private struct Candidate {
         let echo: LifeNarrativeEcho
         let score: Int
+    }
+
+    private struct PeriodBucketRow {
+        let item: HomeItem
+        let distance: Int
     }
 
     private struct PairDayEvidence {
@@ -62,26 +69,41 @@ enum LifeNarrativeEchoPolicy {
         calendar baseCalendar: Calendar = .current
     ) -> LifeNarrativeEcho? {
         let calendar = periodCalendar(scope: input.scope, base: baseCalendar)
-        let safeItems = LifeNarrativeSignalPolicy.publishableItems(from: input.items)
+        let bucketRows = LifeNarrativeSignalPolicy.publishableItems(from: input.items)
             .filter { !LifeNarrativeSignalPolicy.isAdministrativeRecord($0) }
             .filter { $0.createdAt <= input.now }
-            .sorted { lhs, rhs in
-                if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
-                return lhs.createdAt < rhs.createdAt
+            .compactMap { item -> PeriodBucketRow? in
+                let distance = periodDistance(
+                    from: item.createdAt,
+                    to: input.now,
+                    scope: input.scope,
+                    calendar: calendar
+                )
+                guard (0...maximumHistoryPeriodDistance).contains(distance) else { return nil }
+                return PeriodBucketRow(item: item, distance: distance)
             }
-        let bucketed = Dictionary(grouping: safeItems) { item in
-            periodDistance(
-                from: item.createdAt,
-                to: input.now,
-                scope: input.scope,
-                calendar: calendar
-            )
+            .sorted { lhs, rhs in
+                if lhs.item.createdAt == rhs.item.createdAt {
+                    return lhs.item.id.uuidString < rhs.item.id.uuidString
+                }
+                return lhs.item.createdAt < rhs.item.createdAt
+            }
+        let bucketed = Dictionary(grouping: bucketRows, by: \.distance).mapValues { rows in
+            rows.map(\.item)
+        }
+        var sceneByItemID: [UUID: LifeSceneSignal] = [:]
+        sceneByItemID.reserveCapacity(bucketRows.count)
+        func scene(for item: HomeItem) -> LifeSceneSignal {
+            if let cached = sceneByItemID[item.id] { return cached }
+            let value = LifeSceneSemanticService.classify(item)
+            sceneByItemID[item.id] = value
+            return value
         }
         let currentRows = bucketed[0, default: []]
         guard currentRows.count >= 2 else { return nil }
 
         let currentGroups = Dictionary(grouping: currentRows) {
-            LifeSceneSemanticService.classify($0).kind
+            scene(for: $0).kind
         }
         var candidates: [Candidate] = []
 
@@ -90,7 +112,8 @@ enum LifeNarrativeEchoPolicy {
             sourceRevision: input.sourceRevision,
             currentRows: currentRows,
             bucketed: bucketed,
-            calendar: calendar
+            calendar: calendar,
+            scene: scene(for:)
         ) {
             candidates.append(candidate)
         }
@@ -99,17 +122,18 @@ enum LifeNarrativeEchoPolicy {
             sourceRevision: input.sourceRevision,
             currentRows: currentRows,
             bucketed: bucketed,
-            calendar: calendar
+            calendar: calendar,
+            scene: scene(for:)
         ) {
             candidates.append(candidate)
         }
 
         for (kind, rows) in currentGroups where kind != .general {
-            let scene = LifeSceneSemanticService.classify(rows.last!)
+            let resolvedScene = scene(for: rows.last!)
             let signalID = "scene:\(kind.rawValue)"
             let historyByDistance = Dictionary(uniqueKeysWithValues: (1...12).map { distance in
                 let matching = bucketed[distance, default: []].filter {
-                    LifeSceneSemanticService.classify($0).kind == kind
+                    scene(for: $0).kind == kind
                 }
                 return (distance, matching)
             })
@@ -119,7 +143,7 @@ enum LifeNarrativeEchoPolicy {
                 sourceRevision: input.sourceRevision,
                 signalKind: kind,
                 signalID: signalID,
-                label: scene.label,
+                label: resolvedScene.label,
                 currentRows: rows,
                 historyByDistance: historyByDistance,
                 calendar: calendar
@@ -130,7 +154,7 @@ enum LifeNarrativeEchoPolicy {
                 scope: input.scope,
                 sourceRevision: input.sourceRevision,
                 signalID: signalID,
-                label: scene.label,
+                label: resolvedScene.label,
                 currentRows: rows,
                 previousRows: comparableRows(
                     historyByDistance[1, default: []],
@@ -147,7 +171,7 @@ enum LifeNarrativeEchoPolicy {
                 sourceRevision: input.sourceRevision,
                 signalKind: kind,
                 signalID: signalID,
-                label: scene.label,
+                label: resolvedScene.label,
                 currentRows: rows,
                 historyByDistance: historyByDistance,
                 calendar: calendar
@@ -304,21 +328,24 @@ enum LifeNarrativeEchoPolicy {
         sourceRevision: Int,
         currentRows: [HomeItem],
         bucketed: [Int: [HomeItem]],
-        calendar: Calendar
+        calendar: Calendar,
+        scene: (HomeItem) -> LifeSceneSignal
     ) -> Candidate? {
         guard scope == .week else { return nil }
-        let currentCommutes = currentRows.filter { isHighConfidenceLateCommute($0, calendar: calendar) }
+        let currentCommutes = currentRows.filter {
+            isHighConfidenceLateCommute($0, calendar: calendar, scene: scene)
+        }
         let currentDays = narrativeDays(for: currentCommutes, calendar: calendar)
         guard currentDays.count >= 2 else { return nil }
 
         let previousCommutes = bucketed[1, default: []].filter {
-            isHighConfidenceLateCommute($0, calendar: calendar)
+            isHighConfidenceLateCommute($0, calendar: calendar, scene: scene)
         }
         guard previousCommutes.isEmpty else { return nil }
 
         let historicalMatch = (2...12).compactMap { distance -> (Int, [HomeItem])? in
             let rows = bucketed[distance, default: []].filter {
-                isHighConfidenceLateCommute($0, calendar: calendar)
+                isHighConfidenceLateCommute($0, calendar: calendar, scene: scene)
             }
             return narrativeDays(for: rows, calendar: calendar).count >= 2
                 ? (distance, rows)
@@ -359,10 +386,11 @@ enum LifeNarrativeEchoPolicy {
         sourceRevision: Int,
         currentRows: [HomeItem],
         bucketed: [Int: [HomeItem]],
-        calendar: Calendar
+        calendar: Calendar,
+        scene: (HomeItem) -> LifeSceneSignal
     ) -> Candidate? {
         guard scope == .week else { return nil }
-        let currentPairs = pairDayEvidence(in: currentRows, calendar: calendar)
+        let currentPairs = pairDayEvidence(in: currentRows, calendar: calendar, scene: scene)
         guard currentPairs.count >= 2 else { return nil }
 
         let activeHistory = (1...8).compactMap { distance -> (distance: Int, rows: [HomeItem])? in
@@ -371,7 +399,7 @@ enum LifeNarrativeEchoPolicy {
         }
         guard activeHistory.count >= 4,
               !activeHistory.contains(where: {
-                  !pairDayEvidence(in: $0.rows, calendar: calendar).isEmpty
+                  !pairDayEvidence(in: $0.rows, calendar: calendar, scene: scene).isEmpty
               }) else {
             return nil
         }
@@ -424,12 +452,15 @@ enum LifeNarrativeEchoPolicy {
 
     private static func pairDayEvidence(
         in rows: [HomeItem],
-        calendar: Calendar
+        calendar: Calendar,
+        scene: (HomeItem) -> LifeSceneSignal
     ) -> [PairDayEvidence] {
         let grouped = Dictionary(grouping: rows) { narrativeDay(for: $0.createdAt, calendar: calendar) }
         return grouped.compactMap { day, dayRows -> PairDayEvidence? in
-            let lateCommutes = dayRows.filter { isHighConfidenceLateCommute($0, calendar: calendar) }
-            let coffees = dayRows.filter { LifeSceneSemanticService.classify($0).kind == .coffee }
+            let lateCommutes = dayRows.filter {
+                isHighConfidenceLateCommute($0, calendar: calendar, scene: scene)
+            }
+            let coffees = dayRows.filter { scene($0).kind == .coffee }
             guard !lateCommutes.isEmpty, !coffees.isEmpty else { return nil }
             return PairDayEvidence(
                 day: day,
@@ -458,12 +489,13 @@ enum LifeNarrativeEchoPolicy {
 
     private static func isHighConfidenceLateCommute(
         _ item: HomeItem,
-        calendar: Calendar
+        calendar: Calendar,
+        scene: (HomeItem) -> LifeSceneSignal
     ) -> Bool {
         guard item.category == .transport else { return false }
         let hour = calendar.component(.hour, from: item.createdAt)
         guard (21...23).contains(hour) || (0..<5).contains(hour) else { return false }
-        let kind = LifeSceneSemanticService.classify(item).kind
+        let kind = scene(item).kind
         if kind == .commute { return true }
         let text = "\(item.title) \(item.emotionTag)".lowercased()
         let strongCues = ["通勤", "上班", "下班", "晚高峰", "加班", "晚归", "公司", "单位", "工位"]

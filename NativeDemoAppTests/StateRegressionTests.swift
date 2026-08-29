@@ -1008,6 +1008,48 @@ final class LifeNarrativeEchoPolicyTests: XCTestCase {
         XCTAssertNil(echo)
     }
 
+    func testEchoIgnoresRowsOutsideTwelvePeriodWindowAtReleaseScale() {
+        let historical = [6, 7].map {
+            item("看电影", category: .entertainment, day: $0, hour: 19)
+        }
+        let current = [20, 21].map {
+            item("看电影", category: .entertainment, day: $0, hour: 19)
+        }
+        let relevantRows = historical + current
+        let ancientRows = (0..<5_000).map { index in
+            item(
+                "很早的记录 \(index)",
+                category: index.isMultiple(of: 2) ? .dining : .shopping,
+                month: 1,
+                day: (index % 28) + 1,
+                hour: index % 24
+            )
+        }
+        let baseline = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .week,
+                sourceRevision: 5_000,
+                items: relevantRows,
+                now: date(21, 20),
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+        let withAncientHistory = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .week,
+                sourceRevision: 5_000,
+                items: ancientRows + relevantRows,
+                now: date(21, 20),
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(baseline?.kind, .returnAfterGap)
+        XCTAssertEqual(withAncientHistory, baseline)
+    }
+
     func testCoffeeCanCreateAnEchoForAComparableRealChange() {
         let previous = [13, 14].map { item("咖啡", category: .dining, day: $0, hour: 14) }
         let current = [20, 20, 21, 21].enumerated().map { index, day in
