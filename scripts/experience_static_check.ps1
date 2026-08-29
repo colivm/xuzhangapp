@@ -1093,6 +1093,9 @@ Assert-Pattern 'APP_STORE_METADATA_zh-Hans.json' '叙账 - 用账单叙述生活
 Assert-NoPattern 'APP_STORE_LISTING.md' '看看花|生活切片|小 AI 说|账单字段|Open-Meteo|13800138000|123456' 'App Store listing contains no stale terms providers or public review credentials'
 Assert-NoPattern 'APP_STORE_IAP_SETUP.md' '看看花|生活切片|小 AI 说|账单字段|Open-Meteo|13800138000|123456|当前为 501' 'IAP setup contains no stale capability claims or public review credentials'
 Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-95|App Store Connect|其他财务信息|粗略位置|固定验证码' 'App Store metadata privacy and credential boundary have a release matrix'
+Assert-MultilinePattern 'NativeDemoApp/Views/StatsWebView.swift' 'private func summaryPlaybackSheet\(_ presentation: SummaryPlaybackPresentation\) -> some View \{[\s\S]{0,200}return SummaryPlaybackSheet\([\s\S]{0,4000}\.presentationDragIndicator\(\.hidden\)' 'summary playback sheet returns its complete presentation modifier chain'
+Assert-MultilinePattern 'NativeDemoApp/Views/SummaryPlaybackSheet.swift' 'private func prepareCoverShareSession\(for contextKey: String\)[\s\S]{0,360}guard weeklySharePayload != nil,[\s\S]{0,220}preparedShareCardPhotos\.sourceKey == shareCardPhotoPreparationKey' 'cover preparation checks payload presence without an unused binding'
+Assert-Pattern 'NativeDemoApp/Services/LedgerLocalBackupDocument.swift' 'struct LedgerLocalBackupDocument: FileDocument, @unchecked Sendable' 'immutable local backup document explicitly owns its FileWrapper sendability boundary'
 $releaseFixtureOutput = python scripts/validate_release_gate.py --phase fixtures
 if ($LASTEXITCODE -ne 0) {
     throw "Release fixture validation failed`n$releaseFixtureOutput"

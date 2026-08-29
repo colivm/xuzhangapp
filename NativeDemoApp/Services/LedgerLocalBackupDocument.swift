@@ -17,7 +17,7 @@ enum LedgerLocalBackupError: LocalizedError {
     }
 }
 
-struct LedgerLocalBackupDocument: FileDocument {
+struct LedgerLocalBackupDocument: FileDocument, @unchecked Sendable {
     struct Summary: Equatable {
         var recordCount: Int
         var photoReferenceCount: Int

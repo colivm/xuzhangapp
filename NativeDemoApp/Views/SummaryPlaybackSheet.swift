@@ -2745,7 +2745,7 @@ struct SummaryPlaybackSheet: View {
            preparedCoverShareSession != nil {
             return
         }
-        guard let payload = weeklySharePayload,
+        guard weeklySharePayload != nil,
               let preparedShareCardPhotos,
               preparedShareCardPhotos.sourceKey == shareCardPhotoPreparationKey else {
             preparedCoverShareSession = nil

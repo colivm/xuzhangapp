@@ -6099,7 +6099,7 @@ struct StatsWebView: View {
 
     private func summaryPlaybackSheet(_ presentation: SummaryPlaybackPresentation) -> some View {
         let playback = presentation.playback
-        SummaryPlaybackSheet(
+        return SummaryPlaybackSheet(
             playback: playback,
             petEnabled: settingsViewModel.petCompanionEnabled,
             isMember: hasMemberAccess,
