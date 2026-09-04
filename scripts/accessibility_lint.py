@@ -68,7 +68,7 @@ def main() -> None:
         [
             "return ViewThatFits(in: .horizontal)",
             ".frame(maxWidth: .infinity, minHeight: 44)",
-            ".accessibilityLabel(\"\\(selectedPeriod == .week ?",
+            ".accessibilityLabel(\"这段时间的节奏，",
             "var traceEditSpring: Animation?",
             "reduceMotion ? nil : .spring",
         ],

@@ -571,6 +571,8 @@ enum LifeNarrativeEchoPolicy {
             guard let startYear = start.year, let startMonth = start.month,
                   let endYear = end.year, let endMonth = end.month else { return Int.max }
             return (endYear - startYear) * 12 + endMonth - startMonth
+        case .continuous:
+            return Int.max
         }
     }
 
@@ -579,6 +581,7 @@ enum LifeNarrativeEchoPolicy {
         case .day: return "昨天"
         case .week: return "上周"
         case .month: return "上个月同期"
+        case .continuous: return "之前"
         }
     }
 
@@ -622,6 +625,8 @@ enum LifeNarrativeEchoPolicy {
             return calendar.dateInterval(of: .weekOfYear, for: date)?.start
         case .month:
             return calendar.dateInterval(of: .month, for: date)?.start
+        case .continuous:
+            return calendar.startOfDay(for: date)
         }
     }
 
@@ -630,6 +635,7 @@ enum LifeNarrativeEchoPolicy {
         case .day: return count == 1 ? "天" : "天"
         case .week: return count == 1 ? "周" : "周"
         case .month: return count == 1 ? "个月" : "个月"
+        case .continuous: return "段"
         }
     }
 

@@ -29,6 +29,119 @@ enum TraceViewMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum TraceClueScope: String, Codable, Equatable, Sendable {
+    /// Legacy direct callers keep the period-scoped behavior unless the trace
+    /// page explicitly opts into the independent continuous scope.
+    case period
+    case continuous
+}
+
+enum TraceClueScopePolicy {
+    /// Keep the clue surface continuous while retaining the existing bounded
+    /// history contract used by trace echoes (current period + 12 prior ones).
+    static let scope: TraceClueScope = .continuous
+    static let narrativeScope: LifeNarrativeScope = .continuous
+    static let identifier = "rolling-13-weeks-v1"
+    static let periodLabel = "生活线索"
+    static let lookbackWeekCount = 12
+    static let rhythmBucketCount = 6
+    static let rhythmBucketDays = 14
+
+    static func window(
+        now: Date,
+        calendar: Calendar = PlaybackService.isoCalendar
+    ) -> DateInterval? {
+        guard let current = calendar.dateInterval(of: .weekOfYear, for: now),
+              let start = calendar.date(
+                  byAdding: .weekOfYear,
+                  value: -lookbackWeekCount,
+                  to: current.start
+              ) else {
+            return nil
+        }
+        return DateInterval(start: start, end: min(current.end, now))
+    }
+
+    static func windowKey(
+        now: Date,
+        calendar: Calendar = PlaybackService.isoCalendar
+    ) -> String {
+        guard let start = window(now: now, calendar: calendar)?.start else {
+            return "unknown"
+        }
+        let components = calendar.dateComponents([.year, .month, .day], from: start)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
+    }
+
+    static func items(
+        from allItems: [HomeItem],
+        category: HomeItem.Category? = nil,
+        now: Date,
+        calendar: Calendar = PlaybackService.isoCalendar
+    ) -> [HomeItem] {
+        let interval = window(now: now, calendar: calendar)
+        return allItems
+            .filter { item in
+                guard item.amount > 0,
+                      item.draftMeta == nil,
+                      category == nil || item.category == category else {
+                    return false
+                }
+                guard let interval else { return true }
+                return interval.contains(item.createdAt)
+            }
+            .sorted { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+    }
+
+    static func rhythmPoints(
+        from items: [HomeItem],
+        now: Date,
+        calendar: Calendar = PlaybackService.isoCalendar
+    ) -> [TraceRhythmPoint] {
+        guard let interval = window(now: now, calendar: calendar), !items.isEmpty else {
+            return []
+        }
+        return (0..<rhythmBucketCount).compactMap { index in
+            guard let start = calendar.date(
+                byAdding: .day,
+                value: index * rhythmBucketDays,
+                to: interval.start
+            ) else {
+                return nil
+            }
+            let rawEnd = calendar.date(
+                byAdding: .day,
+                value: rhythmBucketDays,
+                to: start
+            ) ?? start
+            let end = min(rawEnd, interval.end)
+            guard start < end else { return nil }
+            let count = items.filter { $0.createdAt >= start && $0.createdAt < end }.count
+            let endLabelDate = calendar.date(byAdding: .day, value: -1, to: end) ?? start
+            let startLabel = shortDate(start, calendar: calendar)
+            let endLabel = shortDate(endLabelDate, calendar: calendar)
+            return TraceRhythmPoint(
+                label: startLabel == endLabel ? startLabel : "\(startLabel)-\(endLabel)",
+                count: count,
+                isToday: now >= start && now < end,
+                startDate: start
+            )
+        }
+    }
+
+    private static func shortDate(_ date: Date, calendar: Calendar) -> String {
+        "\(calendar.component(.month, from: date))/\(calendar.component(.day, from: date))"
+    }
+}
+
 enum TraceLifePreparationPolicy {
     static let prewarmDelayNanoseconds: UInt64 = 250_000_000
 
@@ -125,18 +238,7 @@ enum TraceLoadingPresentationPolicy {
                 ? "正在整理本月痕迹…"
                 : "正在整理本周痕迹…"
         case .clues:
-            if usesCustomRange {
-                message = "正在整理这段线索…"
-            } else {
-                switch selectedPeriod {
-                case .week:
-                    message = "正在整理本周线索…"
-                case .month:
-                    message = "正在整理本月线索…"
-                case .year:
-                    message = "正在整理本年线索…"
-                }
-            }
+            message = "正在整理生活线索…"
         }
 
         return TraceLoadingPresentation(
@@ -200,6 +302,30 @@ enum TraceSnapshotLifecycleKeyPolicy {
         return parts.joined(separator: "|")
     }
 
+    static func continuousClueKey(
+        ledgerRevision: Int,
+        isMember: Bool,
+        category: HomeItem.Category?,
+        freeRemaining: Int,
+        isUnlocked: Bool,
+        dayKey: String,
+        windowKey: String,
+        contentRevision: Int
+    ) -> String {
+        [
+            "clue-v3",
+            TraceClueScopePolicy.identifier,
+            String(ledgerRevision),
+            isMember ? "member" : "free",
+            category?.rawValue ?? "all",
+            String(freeRemaining),
+            isUnlocked ? "unlocked" : "locked",
+            dayKey,
+            windowKey,
+            String(contentRevision)
+        ].joined(separator: "|")
+    }
+
     static func coldStartScopeKey(
         viewMode: TraceViewMode,
         lifeRange: SummaryPlaybackRange,
@@ -224,6 +350,12 @@ enum TraceSnapshotLifecycleKeyPolicy {
             parts.append(String(Int(calendar.startOfDay(for: customEndDate).timeIntervalSince1970)))
         }
         return parts.joined(separator: "|")
+    }
+
+    static func continuousClueColdStartScopeKey(
+        category: HomeItem.Category?
+    ) -> String {
+        "clue|\(TraceClueScopePolicy.identifier)|\(category?.rawValue ?? "all")"
     }
 }
 
@@ -663,6 +795,7 @@ struct TraceRhythmPoint: Identifiable {
     let label: String
     let count: Int
     let isToday: Bool
+    let startDate: Date? = nil
 
     var id: String { label }
 }
@@ -672,6 +805,7 @@ struct TraceClueSnapshot: @unchecked Sendable {
     let clues: [TraceCategoryClue]
     let rhythmPoints: [TraceRhythmPoint]
     let journeyFact: LifeJourneyFact?
+    let discover: DiscoverSnapshot
     let insight: LifeInsightResult
     let narrativePlan: LifeNarrativePlan?
     let narrativeRewrite: LifeNarrativeAIRewrite?
@@ -701,6 +835,56 @@ struct TraceClueSnapshot: @unchecked Sendable {
             return lead.kind == .photo && lead.evidenceItemIDs.contains(itemID) ? item : nil
         }
         return insight.theme == .memory ? item : nil
+    }
+}
+
+enum DiscoverCardKind: String, Codable, Equatable, Sendable {
+    case discovery
+    case pattern
+    case asset
+    case echo
+}
+
+struct DiscoverCard: Identifiable, Codable, Equatable, @unchecked Sendable {
+    let id: String
+    let kind: DiscoverCardKind
+    let title: String
+    let summary: String
+    let evidenceItemIDs: [UUID]
+    let novelty: Int
+    let confidence: Int
+    let storyValue: Int
+    let latestDate: Date
+
+    var editorialScore: Int {
+        novelty * confidence * storyValue
+    }
+
+    var hasEvidence: Bool {
+        !evidenceItemIDs.isEmpty
+    }
+}
+
+struct DiscoverSnapshot: Equatable, @unchecked Sendable {
+    let sourceRevision: Int
+    let recentDiscoveries: [DiscoverCard]
+    let lifePatterns: [DiscoverCard]
+    let sceneAssets: [DiscoverCard]
+    let echoes: [DiscoverCard]
+
+    static let empty = DiscoverSnapshot(
+        sourceRevision: 0,
+        recentDiscoveries: [],
+        lifePatterns: [],
+        sceneAssets: [],
+        echoes: []
+    )
+
+    var isEmpty: Bool {
+        recentDiscoveries.isEmpty
+            && lifePatterns.isEmpty
+            && sceneAssets.isEmpty
+            && echoes.isEmpty
     }
 }
 

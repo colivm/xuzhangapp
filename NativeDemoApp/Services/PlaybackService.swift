@@ -1556,6 +1556,8 @@ final class PlaybackService {
             return "这周的 \(recordCount) 笔都看过了，先停在这里。"
         case .month:
             return "这个月的 \(recordCount) 笔都看过了，先停在这里。"
+        case .continuous:
+            return "这段时间的 \(recordCount) 笔都看过了，先停在这里。"
         }
     }
 

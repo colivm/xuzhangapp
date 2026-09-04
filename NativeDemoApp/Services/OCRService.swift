@@ -64,6 +64,163 @@ struct OCRReceiptDraft: Identifiable, Equatable {
     }
 }
 
+/// OCR text contains both the thing that was bought and the payment system's
+/// bookkeeping fields.  Only the former is scene evidence.  Keeping this
+/// boundary in one policy prevents a payment processor (for example,
+/// “拉卡拉支付股份有限公司”) from competing with an explicit food title.
+enum OCRCategoryEvidencePolicy {
+    private static let semanticValueLabels = [
+        "商品说明", "商品名称", "商品", "商户全称", "商户名称", "商家名称",
+        "交易对象", "收款方", "收款账户", "付款说明", "对方账户", "付款给", "对方"
+    ]
+
+    private static let blockedSemanticValues = [
+        "支付成功", "交易成功", "付款成功", "等待确认收货", "交易关闭", "已退款",
+        "返回商家", "可在支持的商户扫码退款", "零花钱", "零钱", "银行卡"
+    ]
+
+    /// Returns the trusted product/merchant portion of an OCR result.
+    /// Unlabelled raw OCR lines are deliberately ignored: payment screenshots
+    /// contain many unrelated provider, status, amount and identifier lines.
+    static func semanticText(title: String, rawText: String) -> String {
+        var values: [String] = []
+        append(title, to: &values)
+
+        let lines = rawText.components(separatedBy: .newlines)
+        for index in lines.indices {
+            let line = compact(lines[index])
+            guard !line.isEmpty else { continue }
+            guard let label = semanticValueLabels.first(where: { line.hasPrefix($0) }) else {
+                continue
+            }
+
+            let remainder = String(line.dropFirst(label.count))
+                .trimmingCharacters(in: CharacterSet(charactersIn: " :：\t"))
+            if isUsableValue(remainder) {
+                append(remainder, to: &values)
+                continue
+            }
+
+            // Vision often puts a key and its value on adjacent lines.
+            if lines.indices.contains(index + 1) {
+                let next = compact(lines[index + 1])
+                if isUsableValue(next) {
+                    append(next, to: &values)
+                }
+            }
+        }
+
+        return values.joined(separator: "\n")
+    }
+
+    static func resolve(
+        title: String,
+        rawText: String,
+        fallback: HomeItem.Category
+    ) -> HomeItem.Category {
+        let evidence = semanticText(title: title, rawText: rawText)
+        guard !evidence.isEmpty else { return fallback }
+
+        let lower = evidence.lowercased()
+        if lower.contains("微信红包") || lower.contains("红包") || lower.contains("转账") {
+            return .social
+        }
+        if matchesGameExpense(lower) {
+            return .entertainment
+        }
+
+        var scores = Dictionary(uniqueKeysWithValues: HomeItem.Category.allCases.map { ($0, 0.0) })
+        for rule in RecordSemanticLexicon.keywordRules
+            where rule.keywords.contains(where: { lower.contains($0.lowercased()) }) {
+            scores[rule.category, default: 0] += rule.score
+        }
+        for rule in RecordSemanticLexicon.ocrKeywordRules
+            where rule.keywords.contains(where: { lower.contains($0.lowercased()) }) {
+            scores[rule.category, default: 0] += rule.score
+        }
+
+        return scores
+            .filter { $0.value > 0 }
+            .sorted { lhs, rhs in
+                if abs(lhs.value - rhs.value) < 0.001 {
+                    return categoryPriority(lhs.key) < categoryPriority(rhs.key)
+                }
+                return lhs.value > rhs.value
+            }
+            .first?.key ?? fallback
+    }
+
+    static func hasRecognizedSignal(title: String, rawText: String) -> Bool {
+        let evidence = semanticText(title: title, rawText: rawText).lowercased()
+        guard !evidence.isEmpty else { return false }
+        if evidence.contains("红包") || evidence.contains("转账") || matchesGameExpense(evidence) {
+            return true
+        }
+        return RecordSemanticLexicon.keywordRules.contains { rule in
+            rule.keywords.contains { evidence.contains($0.lowercased()) }
+        } || RecordSemanticLexicon.ocrKeywordRules.contains { rule in
+            rule.keywords.contains { evidence.contains($0.lowercased()) }
+        }
+    }
+
+    private static func append(_ value: String, to values: inout [String]) {
+        guard isUsableValue(value), !values.contains(value) else { return }
+        values.append(value)
+    }
+
+    private static func compact(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "　", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isUsableValue(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2, trimmed.count <= 80 else { return false }
+        guard !blockedSemanticValues.contains(where: { trimmed.contains($0) }) else { return false }
+        guard trimmed.range(of: #"^[-+]?¥?[0-9,.]+$"#, options: .regularExpression) == nil else {
+            return false
+        }
+        guard trimmed.range(of: #"20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}"#, options: .regularExpression) == nil else {
+            return false
+        }
+        guard trimmed.range(of: #"\d{7,}"#, options: .regularExpression) == nil else {
+            return false
+        }
+        return true
+    }
+
+    private static func matchesGameExpense(_ text: String) -> Bool {
+        let titles = [
+            "碧蓝航线", "原神", "星穹铁道", "崩坏", "明日方舟", "王者荣耀", "和平精英", "英雄联盟",
+            "逆水寒", "阴阳师", "梦幻西游", "第五人格", "蛋仔派对", "光遇", "三国杀", "炉石传说",
+            "steam", "psn", "playstation", "xbox", "switch", "nintendo"
+        ]
+        let strongTerms = ["代肝", "陪玩", "抽卡", "氪金", "游戏币", "游戏充值", "游戏服务", "赛季票"]
+        let contextualTerms = ["上号", "充值", "点券", "皮肤", "月卡", "通行证", "账号交易"]
+        let hasGameContext = text.contains("游戏") || text.contains("手游") || text.contains("端游") || text.contains("网游")
+        return titles.contains { text.contains($0) }
+            || strongTerms.contains { text.contains($0) }
+            || (hasGameContext && contextualTerms.contains { text.contains($0) })
+    }
+
+    private static func categoryPriority(_ category: HomeItem.Category) -> Int {
+        switch category {
+        case .dining: return 0
+        case .transport: return 1
+        case .shopping: return 2
+        case .daily: return 3
+        case .entertainment: return 4
+        case .lodging: return 5
+        case .health: return 6
+        case .home: return 7
+        case .social: return 8
+        case .other: return 9
+        }
+    }
+}
+
 enum OCRServiceError: LocalizedError {
     case invalidImage
     case noRecognizedText
@@ -501,7 +658,7 @@ final class OCRService {
                 in: rawText,
                 excludingLines: [selected.line.text]
             ),
-            category: inferCategory(from: "\(title)\n\(rawText)"),
+            category: inferOCRCategory(title: title, rawText: rawText),
             confidence: confidence,
             rawText: rawText,
             provider: resolvedProvider
@@ -567,7 +724,7 @@ final class OCRService {
             title: title,
             amount: abs(selected.amount),
             date: firstDate(in: rawText) ?? .now,
-            category: inferCategory(from: "\(title)\n\(rawText)"),
+            category: inferOCRCategory(title: title, rawText: rawText),
             confidence: confidence,
             rawText: rawText,
             provider: .alipay
@@ -664,7 +821,7 @@ final class OCRService {
             title: title,
             amount: abs(amount),
             date: date,
-            category: inferCategory(from: "\(title)\n\(rawText)"),
+            category: inferOCRCategory(title: title, rawText: rawText),
             confidence: confidence,
             rawText: rawText,
             provider: .alipay
@@ -682,7 +839,7 @@ final class OCRService {
             title: title,
             amount: abs(amount),
             date: date,
-            category: inferCategory(from: "\(title)\n\(rawText)"),
+            category: inferOCRCategory(title: title, rawText: rawText),
             confidence: confidence,
             rawText: rawText,
             provider: .wechat
@@ -698,7 +855,7 @@ final class OCRService {
             title: title,
             amount: abs(amount),
             date: firstDate(in: rawText) ?? .now,
-            category: inferCategory(from: rawText),
+            category: inferOCRCategory(title: title, rawText: rawText),
             confidence: confidence,
             rawText: rawText,
             provider: .generic
@@ -1446,13 +1603,16 @@ final class OCRService {
         }
         if mode == .alipay,
            let alipayCategory = alipayListCategory(from: windowLines) {
-            if let localCategory = inferCategoryIfConfident(from: alipayLocalCategoryText(title: title, windowLines: windowLines)),
+            if let localCategory = inferredOCRCategoryIfPresent(
+                title: title,
+                rawText: alipayLocalCategoryText(title: title, windowLines: windowLines)
+            ),
                shouldPreferLocalCategory(localCategory, overAlipayCategory: alipayCategory) {
                 return localCategory
             }
             return alipayCategory
         }
-        return inferCategory(from: "\(title)\n\(windowText)")
+        return inferOCRCategory(title: title, rawText: windowText)
     }
 
     private func shouldPreferLocalCategory(
@@ -1849,6 +2009,25 @@ final class OCRService {
 
     private func inferCategory(from text: String) -> HomeItem.Category {
         inferCategoryIfConfident(from: text) ?? .daily
+    }
+
+    private func inferOCRCategory(title: String, rawText: String) -> HomeItem.Category {
+        // Keep the old scorer as a conservative fallback for legacy/unstyled
+        // screenshots, but let the evidence policy decide whenever a trusted
+        // 商品/商户 value is present.
+        let fallback = inferCategory(from: title)
+        return OCRCategoryEvidencePolicy.resolve(
+            title: title,
+            rawText: rawText,
+            fallback: fallback
+        )
+    }
+
+    private func inferredOCRCategoryIfPresent(title: String, rawText: String) -> HomeItem.Category? {
+        guard OCRCategoryEvidencePolicy.hasRecognizedSignal(title: title, rawText: rawText) else {
+            return nil
+        }
+        return inferOCRCategory(title: title, rawText: rawText)
     }
 
     private func inferCategoryIfConfident(from text: String) -> HomeItem.Category? {

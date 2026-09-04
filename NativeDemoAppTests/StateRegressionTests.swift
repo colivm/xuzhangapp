@@ -154,6 +154,91 @@ final class OCRDateEvidencePolicyTests: XCTestCase {
     }
 }
 
+final class OCRCategoryEvidencePolicyTests: XCTestCase {
+    private let productTitle = "巧婆红汤馄饨（云密城店）"
+    private let paymentScreenshot = """
+    支付成功
+    商品 巧婆红汤馄饨（云密城店）
+    商户全称 南京市雨花台区红汤淮味馄饨店（个体工商户）
+    收单机构 拉卡拉支付股份有限公司
+    支付方式 零钱
+    交易单号 4200003226202609039675284401
+    """
+
+    func testProductAndMerchantEvidenceWinsOverPaymentProcessorMetadata() {
+        let semanticText = OCRCategoryEvidencePolicy.semanticText(
+            title: productTitle,
+            rawText: paymentScreenshot
+        )
+
+        XCTAssertTrue(semanticText.contains("馄饨"))
+        XCTAssertFalse(semanticText.contains("拉卡拉"))
+        XCTAssertFalse(semanticText.contains("收单机构"))
+        XCTAssertFalse(semanticText.contains("支付方式"))
+        XCTAssertFalse(semanticText.contains("4200003226202609039675284401"))
+        XCTAssertEqual(
+            OCRCategoryEvidencePolicy.resolve(
+                title: productTitle,
+                rawText: paymentScreenshot,
+                fallback: .transport
+            ),
+            .dining
+        )
+    }
+
+    func testLineSeparatedTrustedValuesStayAndMetadataRowsStayOut() {
+        let lineSeparated = """
+        当前状态
+        支付成功
+        商品
+        巧婆红汤馄饨（云密城店）
+        商户全称
+        南京市雨花台区红汤淮味馄饨店（个体工商户）
+        收单机构
+        拉卡拉支付股份有限公司
+        支付方式
+        零钱
+        交易单号
+        4200003226202609039675284401
+        """
+
+        let semanticText = OCRCategoryEvidencePolicy.semanticText(
+            title: "",
+            rawText: lineSeparated
+        )
+
+        XCTAssertTrue(semanticText.contains("馄饨"))
+        XCTAssertFalse(semanticText.contains("拉卡拉"))
+        XCTAssertFalse(semanticText.contains("4200003226202609039675284401"))
+        XCTAssertEqual(
+            OCRCategoryEvidencePolicy.resolve(
+                title: "",
+                rawText: lineSeparated,
+                fallback: .transport
+            ),
+            .dining
+        )
+    }
+
+    func testLegalEntitySuffixDoesNotCreateCommuteSceneButRealCompanyContextDoes() {
+        let processor = HomeItem(
+            title: "拉卡拉支付股份有限公司",
+            amount: 10,
+            category: .dining,
+            createdAt: Date()
+        )
+        XCTAssertNotEqual(LifeSceneSemanticService.classify(processor).kind, .commute)
+
+        let companyCommute = HomeItem(
+            title: "公司楼下打车",
+            amount: 18,
+            category: .transport,
+            createdAt: Date()
+        )
+        XCTAssertEqual(LifeSceneSemanticService.classify(companyCommute).kind, .commute)
+    }
+}
+
 final class SummaryPlaybackSceneLifecyclePolicyTests: XCTestCase {
     func testPlaybackResumesOnlyWhenTheActiveSessionWasInterrupted() {
         XCTAssertTrue(
@@ -3422,7 +3507,7 @@ final class TraceLoadingPresentationPolicyTests: XCTestCase {
         XCTAssertEqual(presentation.detail, "整理完成前会暂时保留当前内容")
     }
 
-    func testClueCopyDistinguishesMonthAndCustomRange() {
+    func testClueCopyUsesOneContinuousScopeRegardlessOfLifeRange() {
         let month = TraceLoadingPresentationPolicy.make(
             viewMode: .clues,
             selectedPeriod: .month,
@@ -3438,8 +3523,8 @@ final class TraceLoadingPresentationPolicyTests: XCTestCase {
             hasCompleteSnapshot: false
         )
 
-        XCTAssertEqual(month.message, "正在整理本月线索…")
-        XCTAssertEqual(custom.message, "正在整理这段线索…")
+        XCTAssertEqual(month.message, "正在整理生活线索…")
+        XCTAssertEqual(custom.message, "正在整理生活线索…")
     }
 
     func testColdStartSummaryUsesTheImmediateBlockingPresentation() {
@@ -3457,6 +3542,62 @@ final class TraceLoadingPresentationPolicyTests: XCTestCase {
 }
 
 final class TraceSnapshotLifecycleTests: XCTestCase {
+    func testContinuousClueKeyIgnoresLifePeriodAndCustomRangeState() {
+        let week = TraceSnapshotLifecycleKeyPolicy.continuousClueKey(
+            ledgerRevision: 9,
+            isMember: false,
+            category: .dining,
+            freeRemaining: 5,
+            isUnlocked: false,
+            dayKey: "2026-07-23",
+            windowKey: "2026-04-20",
+            contentRevision: 3
+        )
+        let month = TraceSnapshotLifecycleKeyPolicy.continuousClueKey(
+            ledgerRevision: 9,
+            isMember: false,
+            category: .dining,
+            freeRemaining: 5,
+            isUnlocked: false,
+            dayKey: "2026-07-23",
+            windowKey: "2026-04-20",
+            contentRevision: 3
+        )
+
+        XCTAssertEqual(week, month)
+        XCTAssertTrue(week.hasPrefix("clue-v3|\(TraceClueScopePolicy.identifier)|"))
+        XCTAssertEqual(
+            TraceSnapshotLifecycleKeyPolicy.continuousClueColdStartScopeKey(category: .dining),
+            "clue|\(TraceClueScopePolicy.identifier)|餐饮"
+        )
+    }
+
+    func testContinuousClueWindowIncludesCurrentAndTwelvePreviousWeeksOnly() {
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let now = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 9,
+            day: 2,
+            hour: 12
+        ))!
+        let items = [
+            HomeItem(title: "当前", amount: 1, category: .dining, createdAt: now),
+            HomeItem(title: "第12周", amount: 1, category: .dining, createdAt: now.addingTimeInterval(-12 * 7 * 86_400)),
+            HomeItem(title: "第13周", amount: 1, category: .dining, createdAt: now.addingTimeInterval(-13 * 7 * 86_400)),
+            HomeItem(title: "草稿", amount: 1, category: .dining, createdAt: now, draftMeta: .init(
+                batchId: "test",
+                importedAt: now,
+                status: .pending
+            ))
+        ]
+
+        let included = TraceClueScopePolicy.items(from: items, now: now, calendar: calendar)
+
+        XCTAssertEqual(included.map(\.title), ["当前", "第12周"])
+    }
+
     func testChapterAndClueKeysReuseOnlyTheSameRealSourceState() {
         let start = Date(timeIntervalSince1970: 1_790_000_000)
         let end = start.addingTimeInterval(6 * 24 * 60 * 60)
@@ -8861,6 +9002,191 @@ final class DiningCopyEvidencePolicyTests: XCTestCase {
         XCTAssertTrue(diningNotes.allSatisfy { note in
             unsupportedTemperature.allSatisfy { !note.contains($0) }
         })
+    }
+}
+
+final class DiscoverEditorialPolicyTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 3_600)!
+        return calendar
+    }
+
+    private var now: Date {
+        calendar.date(from: DateComponents(year: 2026, month: 9, day: 4, hour: 20))!
+    }
+
+    private func item(
+        _ title: String,
+        day: Int,
+        hour: Int = 15,
+        id: Int,
+        category: HomeItem.Category = .dining,
+        month: Int = 8
+    ) -> HomeItem {
+        HomeItem(
+            id: UUID(uuidString: String(format: "E1000000-0000-0000-0000-%012d", id))!,
+            title: title,
+            amount: 18,
+            category: category,
+            createdAt: calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: hour))!
+        )
+    }
+
+    func testEmptyDiscoverSnapshotDoesNotInventCards() {
+        let snapshot = TraceSnapshotComputation.buildDiscoverSnapshot(
+            items: [],
+            sourceRevision: 7,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertTrue(snapshot.isEmpty)
+        XCTAssertTrue(snapshot.recentDiscoveries.isEmpty)
+        XCTAssertTrue(snapshot.lifePatterns.isEmpty)
+        XCTAssertTrue(snapshot.sceneAssets.isEmpty)
+        XCTAssertTrue(snapshot.echoes.isEmpty)
+    }
+
+    func testRecentDiscoveriesOnlyPublishAChangeWithEvidenceAndStableRanking() {
+        let previous = [
+            item("午后咖啡", day: 10, id: 1, month: 8),
+            item("午后咖啡", day: 11, id: 2, month: 8)
+        ]
+        let recent = [
+            item("午后咖啡", day: 27, id: 3, month: 8),
+            item("午后咖啡", day: 28, id: 4, month: 8),
+            item("午后咖啡", day: 29, id: 5, month: 8),
+            item("晚间电影", day: 30, hour: 20, id: 6, category: .entertainment, month: 8)
+        ]
+
+        let first = TraceSnapshotComputation.buildDiscoverSnapshot(
+            items: previous + recent,
+            sourceRevision: 12,
+            now: now,
+            calendar: calendar
+        )
+        let second = TraceSnapshotComputation.buildDiscoverSnapshot(
+            items: previous + recent,
+            sourceRevision: 12,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(first, second)
+        XCTAssertFalse(first.recentDiscoveries.isEmpty)
+        XCTAssertTrue(first.recentDiscoveries.allSatisfy { $0.hasEvidence })
+        XCTAssertTrue(first.recentDiscoveries.allSatisfy { $0.kind == .discovery })
+        XCTAssertTrue(first.recentDiscoveries.contains { $0.title.contains("最近") })
+        XCTAssertEqual(
+            first.recentDiscoveries,
+            first.recentDiscoveries.sorted { lhs, rhs in
+                if lhs.editorialScore == rhs.editorialScore {
+                    if lhs.latestDate == rhs.latestDate { return lhs.id < rhs.id }
+                    return lhs.latestDate > rhs.latestDate
+                }
+                return lhs.editorialScore > rhs.editorialScore
+            }
+        )
+        XCTAssertTrue(first.lifePatterns.contains { $0.title.contains("咖啡") })
+        XCTAssertTrue(first.sceneAssets.contains { $0.summary.contains("累计") })
+    }
+
+    func testStablePresenceDoesNotBecomeARecentDiscovery() {
+        let rows = [
+            item("午后咖啡", day: 10, id: 11, month: 8),
+            item("午后咖啡", day: 11, id: 12, month: 8),
+            item("午后咖啡", day: 27, id: 13, month: 8),
+            item("午后咖啡", day: 28, id: 14, month: 8)
+        ]
+        let snapshot = TraceSnapshotComputation.buildDiscoverSnapshot(
+            items: rows,
+            sourceRevision: 13,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertFalse(snapshot.recentDiscoveries.contains { $0.title.contains("咖啡") })
+        XCTAssertTrue(snapshot.lifePatterns.contains { $0.title.contains("咖啡") })
+    }
+
+    func testDiscoverPublishesRecoveryWithCurrentAndHistoricalEvidence() {
+        let rows = [
+            item("午后咖啡", day: 1, id: 21, month: 8),
+            item("午后咖啡", day: 27, id: 22, month: 8),
+            item("午后咖啡", day: 28, id: 23, month: 8)
+        ]
+
+        let snapshot = TraceSnapshotComputation.buildDiscoverSnapshot(
+            items: rows,
+            sourceRevision: 14,
+            now: now,
+            calendar: calendar
+        )
+
+        let recovery = try! XCTUnwrap(
+            snapshot.recentDiscoveries.first { $0.title.contains("又回来了") }
+        )
+        XCTAssertTrue(recovery.hasEvidence)
+        XCTAssertTrue(recovery.evidenceItemIDs.contains(rows[0].id))
+        XCTAssertTrue(recovery.evidenceItemIDs.contains(rows[2].id))
+    }
+
+    func testDiscoverPublishesDecreaseAndDisappearanceFromPriorEvidence() {
+        let decreaseRows = [
+            item("晚间电影", day: 10, hour: 20, id: 31, category: .entertainment, month: 8),
+            item("晚间电影", day: 11, hour: 20, id: 32, category: .entertainment, month: 8),
+            item("晚间电影", day: 12, hour: 20, id: 33, category: .entertainment, month: 8),
+            item("晚间电影", day: 27, hour: 20, id: 34, category: .entertainment, month: 8)
+        ]
+        let decrease = TraceSnapshotComputation.buildDiscoverSnapshot(
+            items: decreaseRows,
+            sourceRevision: 15,
+            now: now,
+            calendar: calendar
+        )
+        let decreased = try! XCTUnwrap(
+            decrease.recentDiscoveries.first { $0.title.contains("少了一些") }
+        )
+        XCTAssertTrue(decreased.hasEvidence)
+
+        let disappearedRows = [
+            item("晚间电影", day: 10, hour: 20, id: 41, category: .entertainment, month: 8),
+            item("晚间电影", day: 11, hour: 20, id: 42, category: .entertainment, month: 8),
+            item("晚间电影", day: 12, hour: 20, id: 43, category: .entertainment, month: 8)
+        ]
+        let disappeared = TraceSnapshotComputation.buildDiscoverSnapshot(
+            items: disappearedRows,
+            sourceRevision: 16,
+            now: now,
+            calendar: calendar
+        )
+        let ended = try! XCTUnwrap(
+            disappeared.recentDiscoveries.first { $0.title.contains("暂时没再出现") }
+        )
+        XCTAssertEqual(Set(ended.evidenceItemIDs), Set(disappearedRows.map(\.id)))
+    }
+
+    func testDiscoverIgnoresRecordsOutsideTheBoundedRollingWindow() {
+        let currentRows = [
+            item("午后咖啡", day: 27, id: 51, month: 8),
+            item("午后咖啡", day: 28, id: 52, month: 8)
+        ]
+        let oldRow = item("晚间电影", day: 1, hour: 20, id: 53, category: .entertainment, month: 1)
+        let current = TraceSnapshotComputation.buildDiscoverSnapshot(
+            items: currentRows,
+            sourceRevision: 17,
+            now: now,
+            calendar: calendar
+        )
+        let withOld = TraceSnapshotComputation.buildDiscoverSnapshot(
+            items: currentRows + [oldRow],
+            sourceRevision: 17,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(current, withOld)
     }
 }
 #endif

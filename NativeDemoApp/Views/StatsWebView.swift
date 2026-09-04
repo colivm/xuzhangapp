@@ -674,11 +674,7 @@ struct StatsWebView: View {
                    !useCustomRange {
                     traceLifeCardRange = range
                 }
-                if traceViewMode == .clues {
-                    discardPreparedClueSnapshot()
-                    restoreTraceColdStartDisplayIfNeeded()
-                    scheduleTracePreparation()
-                } else {
+                if traceViewMode == .life {
                     prepareTraceIfNeeded()
                 }
                 if traceDetailPresentation != nil {
@@ -686,31 +682,16 @@ struct StatsWebView: View {
                 }
             }
             .onChange(of: useCustomRange) { _, _ in
-                if traceViewMode == .clues {
-                    discardPreparedClueSnapshot()
-                    restoreTraceColdStartDisplayIfNeeded()
-                    scheduleTracePreparation()
-                }
                 if traceDetailPresentation != nil {
                     prepareTraceDetailListSnapshot()
                 }
             }
             .onChange(of: customStartDate) { _, _ in
-                if traceViewMode == .clues, useCustomRange {
-                    discardPreparedClueSnapshot()
-                    restoreTraceColdStartDisplayIfNeeded()
-                    scheduleTracePreparation()
-                }
                 if traceDetailPresentation != nil, useCustomRange {
                     prepareTraceDetailListSnapshot()
                 }
             }
             .onChange(of: customEndDate) { _, _ in
-                if traceViewMode == .clues, useCustomRange {
-                    discardPreparedClueSnapshot()
-                    restoreTraceColdStartDisplayIfNeeded()
-                    scheduleTracePreparation()
-                }
                 if traceDetailPresentation != nil, useCustomRange {
                     prepareTraceDetailListSnapshot()
                 }
@@ -915,7 +896,12 @@ struct StatsWebView: View {
     }
 
     private var currentTraceColdStartScopeKey: String {
-        TraceSnapshotLifecycleKeyPolicy.coldStartScopeKey(
+        if traceViewMode == .clues {
+            return TraceSnapshotLifecycleKeyPolicy.continuousClueColdStartScopeKey(
+                category: selectedCategory
+            )
+        }
+        return TraceSnapshotLifecycleKeyPolicy.coldStartScopeKey(
             viewMode: traceViewMode,
             lifeRange: traceLifeCardRange,
             period: selectedPeriod,
@@ -1032,15 +1018,19 @@ struct StatsWebView: View {
             tabState.coldStartDisplay = nil
             return
         }
-        let scopeKey = TraceSnapshotLifecycleKeyPolicy.coldStartScopeKey(
-            viewMode: traceViewMode,
-            lifeRange: traceLifeCardRange,
-            period: selectedPeriod,
-            usesCustomRange: useCustomRange,
-            customStartDate: customStartDate,
-            customEndDate: customEndDate,
-            category: selectedCategory
-        )
+        let scopeKey = traceViewMode == .clues
+            ? TraceSnapshotLifecycleKeyPolicy.continuousClueColdStartScopeKey(
+                category: selectedCategory
+            )
+            : TraceSnapshotLifecycleKeyPolicy.coldStartScopeKey(
+                viewMode: traceViewMode,
+                lifeRange: traceLifeCardRange,
+                period: selectedPeriod,
+                usesCustomRange: useCustomRange,
+                customStartDate: customStartDate,
+                customEndDate: customEndDate,
+                category: selectedCategory
+            )
         tabState.coldStartDisplay = TraceColdStartDisplayStore.shared.entry(
             for: context,
             scopeKey: scopeKey
@@ -1113,7 +1103,7 @@ struct StatsWebView: View {
             savedAt: now,
             title: snapshot.narrativeHeadline ?? snapshot.insight.leadQuestion,
             summary: snapshot.narrativeSummary ?? snapshot.insight.previewLine,
-            periodLabel: useCustomRange ? "这段线索" : "\(selectedPeriod.rawValue)线索",
+            periodLabel: TraceClueScopePolicy.periodLabel,
             recordCount: snapshot.items.count,
             activeDayCount: activeDays,
             total: snapshot.items.reduce(0) { $0 + $1.amount },
@@ -1226,13 +1216,7 @@ struct StatsWebView: View {
         var weekPublicationKey: String?
         var monthPublicationKey: String?
         var cluePublicationKey: String?
-        let clueColdStartScopeKey = TraceSnapshotLifecycleKeyPolicy.coldStartScopeKey(
-            viewMode: .clues,
-            lifeRange: traceLifeCardRange,
-            period: selectedPeriod,
-            usesCustomRange: useCustomRange,
-            customStartDate: customStartDate,
-            customEndDate: customEndDate,
+        let clueColdStartScopeKey = TraceSnapshotLifecycleKeyPolicy.continuousClueColdStartScopeKey(
             category: selectedCategory
         )
 
@@ -1269,22 +1253,21 @@ struct StatsWebView: View {
             if cachedClue == nil {
                 let unlockKey = traceInsightUnlockKey(from: items)
                 let freeRemaining = lifeInsightService.freeRemaining(isMember: memberAccess, now: now)
-                let narrativeScope: LifeNarrativeScope? = useCustomRange
-                    ? nil
-                    : (selectedPeriod == .week ? .week : (selectedPeriod == .month ? .month : nil))
+                let narrativeScope: LifeNarrativeScope? = TraceClueScopePolicy.narrativeScope
                 clueInput = (
                     TraceClueComputationInput(
                         items: items,
                         allItems: allItems,
-                        period: selectedPeriod,
+                        period: .month,
                         periodLabel: traceInsightPeriodLabel,
                         isMember: memberAccess,
                         freeRemaining: freeRemaining,
                         storedUnlock: lifeInsightService.hasUnlockedTrace(unlockKey, isMember: memberAccess, now: now),
                         sourceRevision: homeViewModel.homeDashboardRevision,
                         narrativeScope: narrativeScope,
-                        allowsNarrativeRewrite: narrativeScope != nil,
-                        now: now
+                        allowsNarrativeRewrite: false,
+                        now: now,
+                        scope: TraceClueScopePolicy.scope
                     ),
                     clueKey
                 )
@@ -4030,20 +4013,6 @@ struct StatsWebView: View {
         )
     }
 
-    private var traceRangeKicker: some View {
-        HStack(spacing: 4) {
-            traceRangeTab("本周", period: .week)
-            traceRangeTab("本月", period: .month)
-        }
-        .padding(4)
-        .frame(height: 44)
-        .frame(maxWidth: .infinity)
-        .background(
-            Capsule(style: .continuous)
-                .fill(TraceColors.surfaceMuted)
-        )
-    }
-
     private var traceViewModeKicker: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
@@ -4086,25 +4055,6 @@ struct StatsWebView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
                 .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func traceRangeTab(_ title: String, period: StatsPeriod) -> some View {
-        let isSelected = !useCustomRange && selectedPeriod == period
-        return Button {
-            applyTraceRangePeriod(period)
-        } label: {
-            Text(title)
-                .font(.system(size: 15, weight: isSelected ? .bold : .medium))
-                .foregroundStyle(isSelected ? TraceColors.primaryText : TraceColors.secondaryText)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(isSelected ? Color.white.opacity(0.92) : Color.clear)
-                        .shadow(color: isSelected ? AppColors.subtext.opacity(0.06) : .clear, radius: 8, x: 0, y: 3)
-                )
         }
         .buttonStyle(.plain)
     }
@@ -4178,11 +4128,15 @@ struct StatsWebView: View {
     }
 
     private var traceClueItems: [HomeItem] {
-        heroScopedItems.filter { $0.amount > 0 && $0.draftMeta == nil }
+        TraceClueScopePolicy.items(
+            from: homeViewModel.items,
+            category: selectedCategory,
+            now: Date()
+        )
     }
 
     private var traceInsightPeriodLabel: String {
-        selectedPeriod == .week ? "这一周" : "这个月"
+        TraceClueScopePolicy.periodLabel
     }
 
     private var traceLifeInsightFreeRemaining: Int {
@@ -4199,12 +4153,12 @@ struct StatsWebView: View {
         let last = Int((sorted.last?.createdAt.timeIntervalSince1970 ?? 0).rounded())
         let cents = Int((items.reduce(0) { $0 + $1.amount } * 100).rounded())
         return [
-            selectedPeriod.rawValue,
-            traceInsightPeriodLabel,
+            TraceClueScopePolicy.identifier,
             "\(items.count)",
             "\(first)",
             "\(last)",
-            "\(cents)"
+            "\(cents)",
+            TraceClueScopePolicy.windowKey(now: Date())
         ].joined(separator: "|")
     }
 
@@ -4309,7 +4263,7 @@ struct StatsWebView: View {
         if let top = clues.first {
             let percent = Int((top.ratio * 100).rounded())
             if let peak = rhythmPoints.max(by: { $0.count < $1.count }), peak.count >= 2 {
-                return "\(top.category.rawValue)记录占 \(percent)%，\(traceRhythmNarrativeLabel(peak))是最忙的一天。"
+                return "\(top.category.rawValue)记录占 \(percent)%，\(traceRhythmNarrativeLabel(peak))是最集中的时间段。"
             }
             return "\(top.category.rawValue)记录占 \(percent)%，是这一段最清楚的生活线索。"
         }
@@ -4319,15 +4273,7 @@ struct StatsWebView: View {
     }
 
     private var traceNarrativePeriodPrefix: String {
-        if useCustomRange { return "这一段" }
-        switch selectedPeriod {
-        case .week:
-            return "这一周"
-        case .month:
-            return "这个月"
-        case .year:
-            return "这一年"
-        }
+        "这段时间"
     }
 
     private var traceHeroMetaParts: (count: String, activeDays: String, total: String)? {
@@ -4379,7 +4325,7 @@ struct StatsWebView: View {
     private func traceRhythmSummary(rhythmPoints: [TraceRhythmPoint]) -> String {
         let active = rhythmPoints.filter { $0.count > 0 }.count
         guard active > 0 else { return "还在形成" }
-        return selectedPeriod == .week ? "\(active) 天有记录" : "\(active) 周有记录"
+        return "\(active) 个时间段有记录"
     }
 
     private var traceRhythmPoints: [TraceRhythmPoint] {
@@ -4387,38 +4333,7 @@ struct StatsWebView: View {
     }
 
     private func traceRhythmPoints(from items: [HomeItem]) -> [TraceRhythmPoint] {
-        guard !items.isEmpty else { return [] }
-        let calendar = Calendar.current
-        if selectedPeriod == .month, let interval = calendar.dateInterval(of: .month, for: Date()) {
-            let today = Date()
-            let end = min(interval.end, today)
-            let labels = ["第1周", "第2周", "第3周", "第4周", "末段"]
-            return labels.indices.compactMap { index in
-                guard let start = calendar.date(byAdding: .day, value: index * 7, to: interval.start) else { return nil }
-                let rawEnd = calendar.date(byAdding: .day, value: 7, to: start) ?? start
-                let pointEnd = min(rawEnd, end)
-                guard start < pointEnd else { return nil }
-                let count = items.filter { $0.createdAt >= start && $0.createdAt < pointEnd }.count
-                return TraceRhythmPoint(
-                    label: labels[index],
-                    count: count,
-                    isToday: today >= start && today < pointEnd
-                )
-            }
-        }
-
-        guard let interval = PlaybackService.isoCalendar.dateInterval(of: .weekOfYear, for: Date()) else { return [] }
-        let labels = ["一", "二", "三", "四", "五", "六", "日"]
-        return labels.indices.compactMap { index in
-            guard let day = Calendar.current.date(byAdding: .day, value: index, to: interval.start),
-                  let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: day) else { return nil }
-            let count = items.filter { $0.createdAt >= day && $0.createdAt < nextDay }.count
-            return TraceRhythmPoint(
-                label: labels[index],
-                count: count,
-                isToday: Calendar.current.isDateInToday(day)
-            )
-        }
+        TraceClueScopePolicy.rhythmPoints(from: items, now: Date())
     }
 
     private func traceActiveDayCount(from items: [HomeItem]) -> Int {
@@ -4468,6 +4383,7 @@ struct StatsWebView: View {
 
     private func traceClueBoard(snapshot: TraceClueSnapshot) -> some View {
         VStack(spacing: 16) {
+            traceDiscoverEditorialBoard(snapshot: snapshot.discover)
             traceClueHeroCard(
                 items: snapshot.items,
                 clues: snapshot.clues,
@@ -4492,6 +4408,125 @@ struct StatsWebView: View {
         }
     }
 
+    @ViewBuilder
+    private func traceDiscoverEditorialBoard(snapshot: DiscoverSnapshot) -> some View {
+        if !snapshot.isEmpty {
+            VStack(alignment: .leading, spacing: 18) {
+                traceDiscoverSection(
+                    title: "AI 最近发现",
+                    subtitle: "只留下这段时间真正发生变化的事",
+                    cards: snapshot.recentDiscoveries,
+                    emptyText: "暂时没有新的变化，稳定的生活不会被重复提醒。"
+                )
+                traceDiscoverSection(
+                    title: "生活线索",
+                    subtitle: "已经反复出现的生活模式",
+                    cards: snapshot.lifePatterns,
+                    emptyText: "再多几次，这里的生活线索会慢慢成形。"
+                )
+                traceDiscoverSection(
+                    title: "场景资产",
+                    subtitle: "正在成长的生活知识",
+                    cards: snapshot.sceneAssets,
+                    emptyText: "有了更连续的证据，这里会长出场景资产。"
+                )
+                traceDiscoverSection(
+                    title: "过去的回声",
+                    subtitle: "重新出现时，过去就有了回应",
+                    cards: snapshot.echoes,
+                    emptyText: "还没有足够证据把现在和过去连起来。"
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func traceDiscoverSection(
+        title: String,
+        subtitle: String,
+        cards: [DiscoverCard],
+        emptyText: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(TraceColors.primaryText)
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(TraceColors.tertiaryText)
+            }
+
+            if cards.isEmpty {
+                traceQuietCluePlaceholder(emptyText)
+            } else {
+                VStack(spacing: 9) {
+                    ForEach(cards) { card in
+                        traceDiscoverCard(card)
+                    }
+                }
+            }
+        }
+    }
+
+    private func traceDiscoverCard(_ card: DiscoverCard) -> some View {
+        HStack(alignment: .top, spacing: 11) {
+            ZStack {
+                Circle()
+                    .fill(traceDiscoverCardColor(card.kind).opacity(0.13))
+                    .frame(width: 34, height: 34)
+                Image(systemName: traceDiscoverCardIcon(card.kind))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(traceDiscoverCardColor(card.kind).opacity(0.88))
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(card.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(TraceColors.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(card.summary)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(TraceColors.secondaryText)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("依据 \(card.evidenceItemIDs.count) 笔记录")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(TraceColors.tertiaryText)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.62))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(TraceColors.stroke.opacity(0.72), lineWidth: 1)
+        )
+    }
+
+    private func traceDiscoverCardIcon(_ kind: DiscoverCardKind) -> String {
+        switch kind {
+        case .discovery: return "sparkles"
+        case .pattern: return "point.3.connected.trianglepath.dotted"
+        case .asset: return "leaf"
+        case .echo: return "arrow.uturn.backward"
+        }
+    }
+
+    private func traceDiscoverCardColor(_ kind: DiscoverCardKind) -> Color {
+        switch kind {
+        case .discovery: return AppColors.accent
+        case .pattern: return AppColors.accentDark
+        case .asset: return AppColors.lockGold
+        case .echo: return TraceColors.primaryText
+        }
+    }
+
     private func buildTraceClueSnapshot() -> TraceClueSnapshot {
         let items = traceClueItems
         let cacheKey = traceClueSnapshotCacheKey(items: items)
@@ -4502,22 +4537,21 @@ struct StatsWebView: View {
         let unlockKey = traceInsightUnlockKey(from: items)
         let freeRemaining = lifeInsightService.freeRemaining(isMember: hasMemberAccess)
         let storedUnlock = lifeInsightService.hasUnlockedTrace(unlockKey, isMember: hasMemberAccess)
-        let narrativeScope: LifeNarrativeScope? = useCustomRange
-            ? nil
-            : (selectedPeriod == .week ? .week : (selectedPeriod == .month ? .month : nil))
+        let narrativeScope: LifeNarrativeScope? = TraceClueScopePolicy.narrativeScope
         let snapshot = TraceSnapshotComputation.buildClue(
             TraceClueComputationInput(
                 items: items,
                 allItems: homeViewModel.items,
-                period: selectedPeriod,
+                period: .month,
                 periodLabel: traceInsightPeriodLabel,
                 isMember: hasMemberAccess,
                 freeRemaining: freeRemaining,
                 storedUnlock: storedUnlock,
                 sourceRevision: homeViewModel.homeDashboardRevision,
                 narrativeScope: narrativeScope,
-                allowsNarrativeRewrite: narrativeScope != nil,
-                now: Date()
+                allowsNarrativeRewrite: false,
+                now: Date(),
+                scope: TraceClueScopePolicy.scope
             )
         )
         traceSnapshotStore.storeClueSnapshot(snapshot, for: cacheKey)
@@ -4526,17 +4560,14 @@ struct StatsWebView: View {
 
     private func traceClueSnapshotCacheKey(items: [HomeItem]) -> String {
         let unlockKey = traceInsightUnlockKey(from: items)
-        return TraceSnapshotLifecycleKeyPolicy.clueKey(
-            period: selectedPeriod,
+        return TraceSnapshotLifecycleKeyPolicy.continuousClueKey(
             ledgerRevision: homeViewModel.homeDashboardRevision,
             isMember: hasMemberAccess,
-            usesCustomRange: useCustomRange,
-            customStartDate: customStartDate,
-            customEndDate: customEndDate,
             category: selectedCategory,
             freeRemaining: lifeInsightService.freeRemaining(isMember: hasMemberAccess),
             isUnlocked: lifeInsightService.hasUnlockedTrace(unlockKey, isMember: hasMemberAccess),
             dayKey: LedgerDisplayFingerprintPolicy.dayKey(for: Date()),
+            windowKey: TraceClueScopePolicy.windowKey(now: Date()),
             contentRevision: clueContentRevision
         )
     }
@@ -4551,8 +4582,6 @@ struct StatsWebView: View {
         photoEvidenceItem: HomeItem?
     ) -> some View {
         return VStack(alignment: .leading, spacing: 16) {
-            traceRangeKicker
-
             VStack(alignment: .leading, spacing: 8) {
                 Text(narrativeHeadline ?? traceClueHeadline(items: items, clues: clues, marks: marks))
                     .font(.system(size: 25, weight: .bold))
@@ -4837,7 +4866,7 @@ struct StatsWebView: View {
                     Text(traceInsightThemeTitle(insight.theme))
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(TraceColors.primaryText)
-                    Text(isUnlocked ? insight.periodName : "本月还可展开 \(freeRemaining)/\(LifeInsightService.freeMonthlyLimit) 次")
+                    Text(isUnlocked ? insight.periodName : "还可展开 \(freeRemaining)/\(LifeInsightService.freeMonthlyLimit) 次")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(TraceColors.tertiaryText)
                 }
@@ -5044,7 +5073,7 @@ struct StatsWebView: View {
             let highlightedIndex = traceInsightHighlightedRhythmIndex(insight: insight, pointCount: rhythmPoints.count)
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text(selectedPeriod == .week ? "这一周的节奏" : "这个月的节奏")
+                    Text("这段时间的节奏")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(TraceColors.primaryText)
                     Spacer()
@@ -5065,7 +5094,7 @@ struct StatsWebView: View {
                 }
                 .frame(height: 112)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(selectedPeriod == .week ? "这一周" : "这个月")的节奏，\(traceRhythmSummary(rhythmPoints: rhythmPoints))")
+                .accessibilityLabel("这段时间的节奏，\(traceRhythmSummary(rhythmPoints: rhythmPoints))")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 12)
@@ -5118,12 +5147,24 @@ struct StatsWebView: View {
 
     private func traceInsightHighlightedRhythmIndex(insight: LifeInsightResult, pointCount: Int) -> Int? {
         guard let date = insight.highlightedDate, pointCount > 0 else { return nil }
-        if selectedPeriod == .month {
-            let day = Calendar.current.component(.day, from: date)
-            return min(max((day - 1) / 7, 0), pointCount - 1)
+        let points = TraceClueScopePolicy.rhythmPoints(
+            from: traceClueItems,
+            now: Date()
+        )
+        guard let index = points.firstIndex(where: { point in
+            guard let startDate = point.startDate else { return false }
+            guard let endDate = Calendar.current.date(
+                byAdding: .day,
+                value: TraceClueScopePolicy.rhythmBucketDays,
+                to: startDate
+            ) else {
+                return false
+            }
+            return date >= startDate && date < endDate
+        }) else {
+            return min(max(pointCount - 1, 0), pointCount - 1)
         }
-        let weekday = Calendar.current.component(.weekday, from: date)
-        return min(max((weekday + 5) % 7, 0), pointCount - 1)
+        return min(index, pointCount - 1)
     }
 
     private func traceDeepInsightSupportingLines(_ insight: LifeInsightResult) -> [String] {
@@ -5484,14 +5525,11 @@ struct StatsWebView: View {
     }
 
     private func traceRhythmNarrativeLabel(_ point: TraceRhythmPoint) -> String {
-        if selectedPeriod == .week, point.label.count == 1 {
-            return "周\(point.label)"
-        }
         return point.label
     }
 
     private var traceRhythmPeriodReference: String {
-        selectedPeriod == .week ? "那天" : "那一周"
+        "那些日子"
     }
 
     private func tracePeakCalendarDay(from items: [HomeItem]) -> (date: Date, count: Int)? {
@@ -5511,9 +5549,6 @@ struct StatsWebView: View {
 
     private func traceCalendarDayNarrativeLabel(_ date: Date) -> String {
         let calendar = Calendar.current
-        if selectedPeriod == .week {
-            return weekdayText(for: date)
-        }
         let month = calendar.component(.month, from: date)
         let day = calendar.component(.day, from: date)
         return "\(month)月\(day)日（\(weekdayText(for: date))）"

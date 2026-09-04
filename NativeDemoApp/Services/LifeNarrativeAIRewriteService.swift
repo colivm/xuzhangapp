@@ -258,6 +258,8 @@ enum LifeNarrativeAIPreparationPolicy {
             return calendar.dateInterval(of: .weekOfYear, for: date)
         case .month:
             return calendar.dateInterval(of: .month, for: date)
+        case .continuous:
+            return nil
         }
     }
 
@@ -270,6 +272,7 @@ enum LifeNarrativeAIPreparationPolicy {
         case .day: return calendar.date(byAdding: .day, value: -1, to: currentStart)
         case .week: return calendar.date(byAdding: .weekOfYear, value: -1, to: currentStart)
         case .month: return calendar.date(byAdding: .month, value: -1, to: currentStart)
+        case .continuous: return nil
         }
     }
 
@@ -287,6 +290,8 @@ enum LifeNarrativeAIPreparationPolicy {
         case .month:
             let components = calendar.dateComponents([.year, .month], from: now)
             return String(format: "%04d-%02d", components.year ?? 0, components.month ?? 0)
+        case .continuous:
+            return LifeNarrativeScope.continuous.rawValue
         }
     }
 }

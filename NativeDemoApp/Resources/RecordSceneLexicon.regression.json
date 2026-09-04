@@ -29,6 +29,13 @@
       "expectedCategory": "餐饮"
     },
     {
+      "id": "ocr-wonton-payment-processor-is-metadata",
+      "mode": "ocr",
+      "amount": 10,
+      "rawText": "支付成功 商品 巧婆红汤馄饨（云密城店） 商户全称 南京市雨花台区红汤淮味馄饨店（个体工商户） 收单机构 拉卡拉支付股份有限公司 支付方式 零钱 交易单号 4200003226202609039675284401",
+      "expectedCategory": "餐饮"
+    },
+    {
       "id": "manual-teppan-squid-night-market",
       "mode": "manual",
       "amount": 35,

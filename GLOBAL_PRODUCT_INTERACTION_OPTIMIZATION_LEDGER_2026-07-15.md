@@ -4462,3 +4462,67 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 修改文件：`NativeDemoApp/Services/LifeNarrativeEchoService.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。未修改 `StatsWebView` 加载遮罩/快照 key、`PlaybackService` 共用事实、账单/照片/会员/额度/AI/同步或其他页面。
 - 验证证据：新增 `testEchoIgnoresRowsOutsideTwelvePeriodWindowAtReleaseScale`，以同一近周期回声分别叠加 0 与 5,000 条第 13 周之外旧记录并要求完整 `LifeNarrativeEcho` 相等；新增静态门禁锁定 12 周/月窗口、裁剪发生在分桶前、单次场景缓存、测试和 `FLOW-97`。`git diff --check` 与 `powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 退出码 0；`python scripts/validate_release_gate.py --phase windows` 退出码 0，最终 `release_repository_gate: OK`，生活语义、AI proxy 24/24、100/1,000/5,000 条确定性夹具、三张真实 12MP 图片、合规、迁移和 SQLite schema 均通过，集合摘要保持 `df670606b42414bdf43f34d66d2b5977f897eaf5dc0fe3e5cc428f18977e7129`，copy lint 仍只有既有 5 条 soft warning。
 - 剩余风险与下一步：Windows 无 Swift/Xcode，新增 Swift 代码和 XCTest 尚未实际编译运行，也无法量化真机“正在整理本周痕迹”的改善幅度。必须在 macOS 运行 Clean Build 与全部 XCTest，再由新 TestFlight 按 `FLOW-97` 对 100/1,000/5,000 条及第 12/13 周边界执行冷启动、Tab 往返、真实增改删和 Time Profiler/Allocations/Main Thread Hitches；重点确认第 12 周证据仍命中、第 13 周外数据不改变结果，等待时间不再随远古账单线性增长且无新内存尖峰。若保留窗口内计算仍超预算，下一项只能基于 Instruments 栈独立优化，不回退加载遮罩或扩大并发。
+
+---
+
+## 88. APP-STORE-SCREENSHOTS-01：首发 App Store 截图素材（2026-09-02）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；根据 2026-09-02 用户提供的 App Store Connect 截图，已补齐 6.5 英寸上传规格，当前无本项 `IN_PROGRESS`。仍需运营方在当前 TestFlight 构建上逐张核对并签收，暂不标记 `VERIFIED`。
+- 目标：按 `APP_STORE_LISTING.md` 的前五个卖点制作 6.7 英寸 App Store 可上传的 1290×2796 PNG，并从同一脱敏结果生成 6.5 英寸可上传的 1284×2778 PNG；通过裁剪去掉状态栏和悬浮辅助按钮，统一品牌背景、标题和留白，让用户一眼看懂“记账 → 回看 → 生活线索”。
+- 允许范围：仅使用当前真机截图做非破坏性裁剪和像素级脱敏展示；允许新增 `output/app-store-screenshots-v4-high-fidelity/` 内部原图、预览和上传候选，不修改 App 功能、页面、文案、数据、官网、法律页或 App Store Connect 配置。
+- 冻结边界：不伪造系统状态、会员价格、测试账号、手机号或能力；不把 AI 当首图卖点；不使用旧官网截图作为正式截图；不改变任何产品规则或既有资源。
+- 验收：6.7 英寸与 6.5 英寸各 5 张图片分别为 1290×2796 与 1284×2778、RGB PNG、无 Alpha/EXIF，状态栏/悬浮按钮不入图、真实 UI 与字号布局保持；上传候选不得包含真实城市、商户、金额、照片或账号信息，并需在最终构建上复核。
+- 当前现场：已读取 `APP_STORE_LISTING.md`、`site/screenshots/README.md` 和项目台账；现有 `site/screenshots/` 四张旧界面图明确只作历史参考，本次不覆盖；`output/` 为既有未跟踪目录，保留其余内容。用户提供的 57/58/59/60/65 五张 1290×2796 实机图已复制到 `output/app-store-screenshots-v4-high-fidelity/source-raw/`，原图不改写。
+- 实施结果：重写 `scripts/make_app_store_screenshots_high_fidelity.py`，直接处理上述五张实机图；仅清除系统状态栏并覆盖瑞幸咖啡、原始时间/日期、金额、动态统计及个人昵称，保留原 App UI、导航、阴影、图标和宠物资产，不添加宣传标题、外部手机框或重绘整张界面。输出 6.7 英寸 `upload-ready/` 与兼容 6.5 英寸 `upload-ready-6.5-inch/` 两套各 5 张 `01-app-store.png`～`05-app-store.png`，联系图仅供预览且不在上传目录。
+- 修改文件与素材：`scripts/make_app_store_screenshots_high_fidelity.py`、`output/app-store-screenshots-v4-high-fidelity/source-raw/`、`upload-ready/` 与 `upload-ready-6.5-inch/` 各五张 PNG 及预览联系图；同步更新 `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 的 `FLOW-98`。未覆盖用户原始截图，其他既有未跟踪素材保持不变。
+- 验证证据：两套各五张上传候选已逐张检查，6.7 英寸为 `1290×2796`、6.5 英寸为 `1284×2778`，均为 RGB PNG、无 Alpha/EXIF；状态栏未入图，真实商户、原始日期时间、金额、昵称已替换为中性演示内容，未见用户照片/城市/账号残留。`python -m py_compile scripts/make_app_store_screenshots_high_fidelity.py` 已通过；后续完成 `git diff --check`、体验静态检查、App Store 元数据检查和 Windows 发布门禁后，保留其既有 5 条 copy lint soft warning 作为唯一提示。
+- 脱敏验证证据：v4 两套五张上传候选均由脚本从 source-raw 可重复生成，两个上传目录各仅含 5 张 PNG；`clean_save` 重新物化 RGB 像素并清除元数据，脚本会先删除旧候选，避免误传历史文件。视觉检查确认首页、记账、痕迹、复盘、备份与真实 UI 一致，未见状态栏或悬浮辅助按钮。
+- 剩余风险与下一步：当前只完成素材侧 CODE_DONE，未宣称最终构建签收。App Store Connect 上传前仍需用通过 `FLOW-93/94` 的最终 TestFlight/Archive 构建核对 UI 是否一致；6.5 英寸槽位使用 `output/app-store-screenshots-v4-high-fidelity/upload-ready-6.5-inch/01-app-store.png`～`05-app-store.png`，6.7 英寸槽位使用 `upload-ready/`，并分别在预览和 375/390px 缩略图确认文字可读。不要上传 source-raw 或联系图。待运营签收后再标记 `VERIFIED`。
+
+---
+
+## 89. TRACE-CLUE-SCOPE-01：线索独立连续范围与生活页周/月解耦（2026-09-02）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；线索连续范围、缓存/冷启动身份、统一加载遮罩、生活页边界保护和 Windows 全量回归已完成，当前无 `IN_PROGRESS`。Windows 无 Swift/Xcode，缺 macOS 编译、XCTest 和真机签收，不标记 `VERIFIED`。
+- 问题与目标：线索页过去复用生活页的本周/本月/本年/自定义范围，导致切换生活周期时线索内容、缓存和加载文案跟着漂移，也让用户误以为线索只属于当前生活章节。本项让生活页保留现有周/月体验，线索改为独立、连续且有界的长期观察窗口。
+- 允许范围：`StatsTraceModels` 中的线索 scope、滚动窗口和节奏分桶；`StatsTraceSnapshotStore` 的线索输入与事实/行程生成；`StatsWebView` 的线索筛选、缓存 key、冷启动承接、加载遮罩和 Hero；叙事 scope/周期文案对 `.continuous` 的支持；对应 XCTest、静态门禁、文案门禁和发布矩阵。不得借本项改动生活页周/月快照、账单分类、照片、会员额度、AI、同步或页面外观。
+- 产品决策：生活页继续保留“本周/本月”切换；线索不再显示重复的时间范围切换，统一展示“生活线索”。线索使用当前 ISO 周及前 12 周的滚动窗口（`rolling-13-weeks-v1`），当前窗口外第 13 周及更早记录不进入线索候选；节奏按 6 个连续 14 天段展示。跨城行程等关系事实仍由本地证据生成，叙事使用“这段时间”而不是本周/本月。
+- 实施结果：新增 `TraceClueScopePolicy` 与 `TraceClueScope.continuous`；线索条目统一按窗口过滤并排除草稿，缓存 key、冷启动 scope key、解锁上下文和 `TraceClueComputationInput` 均使用同一 scope；移除 Hero 内重复的周/月范围控件。`TraceSnapshotComputation.buildClue` 复用连续 scope 的行程事实与中性叙事计划，生活页周期变化不再使线索快照失效。无障碍检查脚本同步从旧周期标签更新为“这段时间的节奏”，避免静态门禁与产品文案脱节。
+- 修改文件：`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoApp/Services/LifeNarrativePlanningService.swift`、`NativeDemoApp/Services/LifeNarrativeEchoService.swift`、`NativeDemoApp/Services/LifeNarrativeAIRewriteService.swift`、`NativeDemoApp/Services/PlaybackService.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/accessibility_lint.py`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。既有 `brand-assets/`、`output/`、`tmp/`、`scripts/__pycache__/` 及其他用户现场未覆盖。
+- 冻结边界复核：生活页周/月选择、自定义日期和章节快照保持原逻辑；线索分类筛选仍可用但不改变窗口；跨城关系仍要求道路与异地活动证据；免费/会员额度、账单/照片/同步 DTO、AI 远程请求、加载遮罩的单一居中阻塞行为均未改变。
+- 验证证据：`git diff --check` 通过；`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py`、`python scripts/playback_copy_lint.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 全部退出码 0。静态检查覆盖连续 scope、窗口边界、缓存/冷启动身份、单一加载遮罩、无障碍标签和 `StateRegressionTests`；发布门禁输出 `release_repository_gate: OK`。文案 lint 仅保留任务前已有的 5 条 soft warning。
+- 剩余风险与下一步：Windows 无 Swift/Xcode，不能证明 `TraceClueComputationInput` 默认 scope、`.continuous` 分支和 SwiftUI actor 隔离已通过编译，也不能量化真机整理耗时。下一步只在 macOS 执行 Swift 6 Debug/Release Clean Build 与全部 XCTest，再按 `FLOW-99` 在 TestFlight 做周期切换、连续展开、重启、窗口边界及 100/1,000/5,000 条 Instruments 验收；若真机仍慢，只能基于 Instruments 栈开新任务，不能扩大窗口或恢复生活页周期耦合。
+
+---
+
+## 90. OCR-CLASSIFICATION-FIX-01：支付元数据隔离与商品证据优先（2026-09-03）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；支付元数据隔离、商品/商户证据优先、法律实体通勤边界、静态守卫和 Windows 回归已完成；当前无 `IN_PROGRESS`。Windows 无 Swift/Xcode，缺 XCTest 与正式相册 OCR 真机签收，不标记 `VERIFIED`。
+- 用户反馈与现场：账单识别截图中的商品为“巧婆红汤馄饨（云密城店）”，商户全称为“南京市雨花台区红汤淮味馄饨店（个体工商户）”，但导入后分类显示“交通”。收单机构“拉卡拉支付股份有限公司”只是支付链路元数据，不代表消费场景。
+- 已确认根因：`HomeViewModel.reviewedOCRDraft` 把 `draft.title + draft.rawText` 拼成一个生活语义标题；`LifeSceneSemanticService` 因 OCR 原文中的“有限公司”命中通勤“公司”强线索（7.0 分），覆盖商品“馄饨”的餐饮线索。支付方式、交易单号、状态、金额和时间等元数据也不应参与生活场景判断。
+- 允许范围：`OCRService.swift` 的 OCR 语义证据提取与分类复核、`HomeViewModel.swift` 的 OCR 草稿复核、`LifeSceneSemanticService.swift` 的法律实体后缀隔离、对应 XCTest/语义夹具/静态门禁/发布矩阵和本文档。商品名称、商户名称和用户明确标题优先；收单机构、支付方式、交易/商户单号、状态、金额、时间、导航和系统 UI 行排除。法律实体后缀（如“有限公司”“股份有限公司”“个体工商户”）不能单独触发通勤。
+- 冻结边界：不修改账单金额、日期、标题保存含义、OCR 金额/日期解析、用户手动锁定分类、商户品牌目录、分类 UI、生活线索/回放、首页主动作、会员/额度、存储/同步、AI 或 `ARCH-03`；不静默迁移历史记录，不把一般“公司”上下文从真实用户标题中删除。
+- 实施结果：新增 `OCRCategoryEvidencePolicy`，统一详情、支付宝/微信、通用 OCR 和列表 OCR 的分类复核，只从用户标题以及“商品/商品名称/商品说明/商户全称/商户名称/收款方”等可信字段提取语义；收单机构、支付方式、交易/商户单号、状态、金额、时间、导航和系统 UI 行不会进入分类文本。`HomeViewModel.reviewedOCRDraft` 不再用整段 OCR 原文构造 `HomeItem` 参与生活语义，用户手动锁定分类仍原样保留。`LifeSceneSemanticService` 在通勤强线索判断前剥离“有限公司/股份有限公司/有限责任公司/个体工商户”等法律实体后缀，保留“公司食堂/公司楼下打车/上班通勤”等真实上下文。
+- 修改文件：`NativeDemoApp/Services/OCRService.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/Services/LifeSceneSemanticService.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`NativeDemoApp/Resources/RecordSceneLexicon.regression.json`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。未修改账单金额/日期/标题保存含义、OCR 金额日期解析、商户品牌目录、分类 UI、生活线索/回放、首页主动作、会员/额度、存储/同步、AI、`ARCH-03` 或历史记录。
+- 验证证据：新增 `OCRCategoryEvidencePolicyTests`，覆盖“巧婆红汤馄饨 + 拉卡拉支付股份有限公司”稳定为餐饮、支付元数据不进入语义文本、法律实体后缀不制造通勤、真实“公司楼下打车”仍为通勤；新增 `ocr-wonton-payment-processor-is-metadata` 语义夹具和 `FLOW-100` 真机矩阵。`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py`、`python scripts/validate_release_gate.py --phase windows` 均通过，发布门禁输出 `release_repository_gate: OK`；copy lint 仅保留任务开始前已有的 soft warning。
+- 剩余风险与下一步：Windows 无 Swift/Xcode，无法证明 `OCRCategoryEvidencePolicy`、`reviewedOCRDraft` 和 `containsStrongCommuteCue` 通过 Swift 6 编译，也不能运行 XCTest 或正式 Vision 相册 OCR。下一步在 macOS/Xcode Clean Build 与全部 XCTest 后，按 `FLOW-100` 用真实微信/支付宝截图验证商品/商户字段分行、收单机构相邻行、确认/取消/重复导入、标题/分类编辑和 100/1,000/5,000 条账本；确认收单机构法律实体不改变餐饮结果后再标记 `VERIFIED`。
+
+---
+
+## 91. DISCOVER-EDITORIAL-01：线索 Discover 四层信息架构与动态发现卡片（2026-09-04）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；2026-09-04 源码收口复查已定向补齐回声条件绑定、场景桶初始化顺序、“减少/恢复/暂时消失”变化类型、滚动边界和连续线索周期文案；Windows 回归再次通过。仍缺 macOS/Xcode 编译、XCTest 和 TestFlight/Instruments 真机签收，不标记 `VERIFIED`。本项承接 Prompt v2.0 的最高优先级缺口：现有线索页有连续范围和证据底座，但仍是固定摘要结构，尚未形成“AI 最近发现 / 生活线索 / 场景资产 / 过去的回声”四层 Discover。
+- 目标：先建立本地确定性的 `DiscoverSnapshot` 和动态卡片规划，再以最小 UI 接线验证信息架构；只发布有真实 evidence ID、且具备信息增量或生活价值的内容。动态发现按 `Novelty × Confidence × Story Value` 排序，稳定存在本身不进入“AI 最近发现”。
+- 允许范围：`StatsTraceModels.swift` 中的 Discover 卡片/快照模型；`StatsTraceSnapshotStore.swift` 中基于现有连续窗口的变化检测、长期生活模式、场景资产和回声投影；`StatsWebView.swift` 中四层区域的只读展示；对应 XCTest、体验静态门禁、文案/发布矩阵。可复用现有 `LifeSceneSemanticService`、`LifeJourneyFactService`、`LifeNarrativeEchoPolicy` 与 `TraceClueScopePolicy`。
+- 冻结边界：不改变生活页周/月入口、线索 `rolling-13-weeks-v1` 窗口、账单分类/OCR/照片/金额/日期/标题、跨城行程认证门槛、会员额度、远程 AI、存储/同步、首页主动作或现有回放/周记/月章文案规则；不扩大历史扫描，不把固定统计或单笔存在伪装成变化，不先做整页视觉重构。
+- 计划验收：空账本不生成伪发现；仅有重复稳定记录时“AI 最近发现”为空或明确静默；新增/减少/首次出现/恢复等变化卡片均携带真实证据 ID，并按三项分数稳定排序；生活线索与场景资产分别体现重复模式和成长字段（累计次数、活跃天数、地点数、常见时段）；有认证回声时只显示同一回声 evidence IDs，无回声时不填充虚构历史；所有区域复用同一连续窗口和 source revision，卡片数量受界面上限约束。
+- 工作区保护：开始前已执行 `git status --short`；保留 `LifeNarrative*`、OCR、线索范围、截图素材及未跟踪目录等用户既有修改，不回退、不暂存、不提交或推送，除非用户另行明确要求。
+- 实施结果：
+  - `DiscoverCard` / `DiscoverSnapshot` 明确承载四层内容、evidence IDs、Novelty、Confidence、Story Value 和 source revision；所有动态发现最多展示 5 条，空账本与无变化场景保持静默。
+  - `TraceSnapshotComputation.buildDiscoverSnapshot` 强制复用 `rolling-13-weeks-v1` 的有界输入，并把传入日历贯穿场景分桶、活跃日和时段计算；只做一次场景分类后生成近期首次出现、恢复、增加、减少和暂时消失变化、长期生活模式、成长中的场景资产；成长字段包含累计次数、成长天数、地点数和常见时段。Discover 使用当前线索筛选后的 `input.items`，因此分类筛选继续生效但不会扩大时间窗口。
+  - 认证跨城行程进入“AI 最近发现”时沿用 `LifeJourneyFact` 的证据 ID；历史回声复用现有 `LifeNarrativeEchoPolicy` 并将固定周期词投影为 Discover 中性文案，不生成无证据历史。
+  - 收口修正回声 `if let` 条件绑定、`DiscoverSceneBucket` 初始化参数顺序、场景分类 tuple 的显式类型和代表信号的确定性排序；深度线索锁定态不再在连续线索页显示“本月”固定周期词。
+  - `StatsWebView` 接入四个独立只读区域，保留既有线索 Hero、构成和深度线索，未改变生活页周/月入口或账单/会员/同步规则。
+- 修改文件：`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。未修改 `site/`、法律页、账单 schema、OCR、照片、会员额度、远程 AI、存储/同步或首页主动作。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py`、`python scripts/playback_copy_lint.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 均通过，最终输出 `release_repository_gate: OK`；copy lint 仍只有任务开始前已有的 6 条 soft warning。新增 `DiscoverEditorialPolicyTests` 覆盖空账本不伪造、变化有证据且排序确定、稳定存在不进入动态发现、恢复/减少/暂时消失以及滚动窗口外记录隔离；静态门禁覆盖四层模型、评分、滚动边界、变化类型、UI、测试和 `FLOW-101`。
+- 剩余风险与下一步：Windows 无 Swift/Xcode，新增 `TraceClueSnapshot.discover` 接线、场景缓存和 SwiftUI 四层渲染尚未实际编译运行，也未量化 100/1,000/5,000 条真机耗时。必须在 macOS 执行 Swift 6 Debug/Release Clean Build 与全部 XCTest，再按 `FLOW-101` 在 TestFlight 验证四层内容、周期边界、增删改后的 source revision、空态/无变化静默、VoiceOver/特大字号/Reduce Motion 及 Instruments 内存和 hitch；签收前保持 `CODE_DONE`，下一项只做该项编译与真机验收，不启动相邻视觉重构。

@@ -1539,18 +1539,13 @@ final class HomeViewModel: ObservableObject {
             return reviewed
         }
 
-        let semanticCandidate = HomeItem(
-            title: "\(draft.title)\n\(draft.rawText)",
-            amount: draft.amount,
-            category: draft.category,
-            source: .ocr,
-            createdAt: draft.date,
-            merchantBrandId: reviewed.merchantBrandId
+        // OCR 原文包含收单机构、支付方式和交易号等元数据；它们不是消费场景。
+        // 只用商品/商户字段复核，避免“股份有限公司”被当成通勤“公司”。
+        reviewed.category = OCRCategoryEvidencePolicy.resolve(
+            title: reviewed.title,
+            rawText: reviewed.rawText,
+            fallback: reviewed.category
         )
-        let scene = LifeSceneSemanticService.classify(semanticCandidate)
-        if scene.confidenceTier == .strong {
-            reviewed.category = scene.category
-        }
         return reviewed
     }
 

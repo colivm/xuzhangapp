@@ -24,9 +24,39 @@ struct TraceClueComputationInput: @unchecked Sendable {
     let narrativeScope: LifeNarrativeScope?
     let allowsNarrativeRewrite: Bool
     let now: Date
+    let scope: TraceClueScope = .period
 }
 
 enum TraceSnapshotComputation {
+    private struct DiscoverSceneBucket {
+        let kind: LifeSceneKind
+        let signal: LifeSceneSignal
+        let items: [HomeItem]
+        let averageScore: Double
+        let calendar: Calendar
+
+        var latestDate: Date {
+            items.map(\.createdAt).max() ?? .distantPast
+        }
+
+        var firstDate: Date {
+            items.map(\.createdAt).min() ?? .distantPast
+        }
+
+        var activeDayCount: Int {
+            Set(items.map { calendar.startOfDay(for: $0.createdAt) }).count
+        }
+
+        var locationCount: Int {
+            Set(
+                items.compactMap { item in
+                    let city = item.memoryContext?.cityName?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return city?.isEmpty == false ? city : nil
+                }
+            ).count
+        }
+    }
+
     private struct CategoryPreviewRow {
         let name: String
         let count: Int
@@ -103,14 +133,19 @@ enum TraceSnapshotComputation {
 
     static func buildClue(_ input: TraceClueComputationInput) -> TraceClueSnapshot {
         let clues = categoryClues(from: input.items)
-        let rhythmPoints = rhythmPoints(from: input.items, period: input.period, now: input.now)
-        let journeyFact = input.narrativeScope.flatMap { scope in
+        let rhythmPoints = input.scope == .continuous
+            ? TraceClueScopePolicy.rhythmPoints(from: input.items, now: input.now)
+            : rhythmPoints(from: input.items, period: input.period, now: input.now)
+        let effectiveNarrativeScope: LifeNarrativeScope? = input.scope == .continuous
+            ? TraceClueScopePolicy.narrativeScope
+            : input.narrativeScope
+        let journeyFact = effectiveNarrativeScope.flatMap { scope in
             LifeJourneyFactService.primaryFact(
                 in: input.items,
                 calendar: scope == .week ? PlaybackService.isoCalendar : Calendar.current
             )
         }
-        let narrativePlan = input.narrativeScope.map { scope in
+        let narrativePlan = effectiveNarrativeScope.map { scope in
             makeNarrativePlan(
                 scope: scope,
                 sourceRevision: input.sourceRevision,
@@ -122,7 +157,7 @@ enum TraceSnapshotComputation {
         }
         let narrativeRewrite = input.allowsNarrativeRewrite
             && narrativePlan?.leadSignalID != journeyFact?.id
-            ? input.narrativeScope.flatMap { scope in
+            ? effectiveNarrativeScope.flatMap { scope in
                 LifeNarrativeAIRewriteStore.shared.rewrite(
                     for: LifeNarrativeAIPreparationPolicy.key(
                         scope: scope,
@@ -156,7 +191,7 @@ enum TraceSnapshotComputation {
         let rankedMarks = prioritizedMarks(
             rawMarks,
             items: input.items,
-            prioritizeRecurring: input.period == .month
+            prioritizeRecurring: input.scope == .continuous || input.period == .month
         )
         let marks = Array(
             narrativeMarks(
@@ -179,12 +214,20 @@ enum TraceSnapshotComputation {
         let canUse = insight.isMeaningful
             && !input.items.isEmpty
             && (input.storedUnlock || input.freeRemaining > 0)
+        let discover = input.scope == .continuous
+            ? buildDiscoverSnapshot(
+                items: input.items,
+                sourceRevision: input.sourceRevision,
+                now: input.now
+            )
+            : .empty
 
         return TraceClueSnapshot(
             items: input.items,
             clues: clues,
             rhythmPoints: rhythmPoints,
             journeyFact: journeyFact,
+            discover: discover,
             insight: insight,
             narrativePlan: narrativePlan,
             narrativeRewrite: narrativeRewrite,
@@ -196,6 +239,361 @@ enum TraceSnapshotComputation {
         )
     }
 
+    static func buildDiscoverSnapshot(
+        items: [HomeItem],
+        sourceRevision: Int,
+        now: Date,
+        calendar: Calendar = PlaybackService.isoCalendar
+    ) -> DiscoverSnapshot {
+        let scopedItems = TraceClueScopePolicy.items(from: items, now: now, calendar: calendar)
+        let publishableRows = LifeNarrativeSignalPolicy.publishableItems(from: scopedItems)
+        guard !publishableRows.isEmpty else {
+            return DiscoverSnapshot(
+                sourceRevision: sourceRevision,
+                recentDiscoveries: [],
+                lifePatterns: [],
+                sceneAssets: [],
+                echoes: []
+            )
+        }
+
+        let narrativeRows = publishableRows.filter {
+            !LifeNarrativeSignalPolicy.isAdministrativeRecord($0)
+        }
+        let recentStart = calendar.date(byAdding: .day, value: -14, to: now) ?? now
+        let previousStart = calendar.date(byAdding: .day, value: -28, to: now) ?? recentStart
+        let classifiedRows: [(item: HomeItem, signal: LifeSceneSignal)] = narrativeRows.map {
+            (item: $0, signal: LifeSceneSemanticService.classify($0))
+        }
+        let recentBuckets = sceneBuckets(from: classifiedRows.filter { row in
+            row.item.createdAt >= recentStart && row.item.createdAt <= now
+        }, calendar: calendar)
+        let previousBuckets = sceneBuckets(from: classifiedRows.filter { row in
+            row.item.createdAt >= previousStart && row.item.createdAt < recentStart
+        }, calendar: calendar)
+        let olderBuckets = sceneBuckets(from: classifiedRows.filter { row in
+            row.item.createdAt < previousStart
+        }, calendar: calendar)
+        let allBuckets = sceneBuckets(from: classifiedRows, calendar: calendar)
+
+        var discoveries: [DiscoverCard] = []
+        if let journey = LifeJourneyFactService.primaryFact(in: publishableRows, calendar: calendar),
+           journey.endDate >= recentStart,
+           !journey.evidenceItemIDs.isEmpty {
+            discoveries.append(
+                DiscoverCard(
+                    id: "discover:journey:\(journey.id)",
+                    kind: .discovery,
+                    title: journey.label,
+                    summary: journey.line,
+                    evidenceItemIDs: stableEvidenceIDs(journey.evidenceItemIDs),
+                    novelty: 98,
+                    confidence: 96,
+                    storyValue: 98,
+                    latestDate: journey.endDate
+                )
+            )
+        }
+
+        let candidateKinds = Set(recentBuckets.keys)
+            .union(previousBuckets.keys)
+            .filter { $0 != .general }
+            .sorted { $0.rawValue < $1.rawValue }
+        for kind in candidateKinds {
+            let recentBucket = recentBuckets[kind]
+            let previousBucket = previousBuckets[kind]
+            let olderBucket = olderBuckets[kind]
+            let recentCount = recentBucket?.items.count ?? 0
+            let previousCount = previousBucket?.items.count ?? 0
+            let recentDays = recentBucket?.activeDayCount ?? 0
+            let previousDays = previousBucket?.activeDayCount ?? 0
+            let isFirstAppearance = recentBucket != nil && previousBucket == nil && olderBucket == nil
+            let isRecovery = recentBucket != nil && previousBucket == nil && olderBucket != nil
+            let increased = recentBucket != nil
+                && previousBucket != nil
+                && (recentCount > previousCount || recentDays > previousDays)
+            let decreased = recentBucket != nil
+                && previousBucket != nil
+                && (recentCount < previousCount || recentDays < previousDays)
+            let disappeared = recentBucket == nil
+                && previousBucket != nil
+                && previousCount >= 2
+                && previousDays >= 2
+            let recentHasMeaningfulEvidence: Bool
+            if let recentBucket {
+                recentHasMeaningfulEvidence = recentCount >= 2 || recentBucket.items.contains(where: {
+                    $0.hasMemoryImages || $0.userEditedTitle == true
+                })
+            } else {
+                recentHasMeaningfulEvidence = false
+            }
+            let previousHasMeaningfulEvidence: Bool
+            if let previousBucket {
+                previousHasMeaningfulEvidence = previousCount >= 2 || previousBucket.items.contains(where: {
+                    $0.hasMemoryImages || $0.userEditedTitle == true
+                })
+            } else {
+                previousHasMeaningfulEvidence = false
+            }
+
+            let changeTitle: String
+            let changeSummary: String
+            let evidenceIDs: [UUID]
+            let novelty: Int
+            let confidence: Int
+            let storyValueScore: Int
+            let latestDate: Date
+            if let recentBucket, isFirstAppearance, recentHasMeaningfulEvidence {
+                changeTitle = "最近开始出现\(recentBucket.signal.label)"
+                changeSummary = "最近在 \(recentDays) 个日子里留下 \(recentCount) 次\(recentBucket.signal.label)，这条线索刚刚形成。"
+                evidenceIDs = stableEvidenceIDs(recentBucket.items.map(\.id))
+                novelty = 96
+                confidence = confidenceScore(for: recentBucket)
+                storyValueScore = storyValue(for: kind, activeDays: recentDays, locationCount: recentBucket.locationCount)
+                latestDate = recentBucket.latestDate
+            } else if let recentBucket, isRecovery, recentHasMeaningfulEvidence {
+                let gapDays = max(
+                    1,
+                    calendar.dateComponents([.day], from: olderBucket?.latestDate ?? previousStart, to: recentBucket.firstDate).day ?? 1
+                )
+                changeTitle = "\(recentBucket.signal.label)又回来了"
+                changeSummary = "停了约 \(gapDays) 天后，最近又在 \(recentDays) 个日子里出现 \(recentCount) 次。"
+                evidenceIDs = stableEvidenceIDs(
+                    recentBucket.items.map(\.id) + (olderBucket?.items.suffix(2).map(\.id) ?? [])
+                )
+                novelty = 94
+                confidence = confidenceScore(for: recentBucket)
+                storyValueScore = min(100, storyValue(for: kind, activeDays: recentDays, locationCount: recentBucket.locationCount) + 4)
+                latestDate = recentBucket.latestDate
+            } else if let recentBucket, increased, recentHasMeaningfulEvidence {
+                let delta = max(recentCount - previousCount, 1)
+                changeTitle = "\(recentBucket.signal.label)最近变得更频繁"
+                changeSummary = "最近在 \(recentDays) 个日子里有 \(recentCount) 次\(recentBucket.signal.label)，比之前多了 \(delta) 次。"
+                evidenceIDs = stableEvidenceIDs(
+                    recentBucket.items.map(\.id) + (previousBucket?.items.map(\.id) ?? [])
+                )
+                novelty = min(92, 58 + delta * 8 + max(recentDays - previousDays, 0) * 5)
+                confidence = confidenceScore(for: recentBucket)
+                storyValueScore = storyValue(for: kind, activeDays: recentDays, locationCount: recentBucket.locationCount)
+                latestDate = recentBucket.latestDate
+            } else if let recentBucket, decreased, previousHasMeaningfulEvidence {
+                changeTitle = "\(recentBucket.signal.label)最近少了一些"
+                changeSummary = "之前在 \(previousDays) 个日子里出现 \(previousCount) 次，最近只留下 \(recentCount) 次。"
+                evidenceIDs = stableEvidenceIDs(
+                    recentBucket.items.map(\.id) + (previousBucket?.items.map(\.id) ?? [])
+                )
+                novelty = min(86, 56 + delta * 7 + max(previousDays - recentDays, 0) * 4)
+                confidence = confidenceScore(for: previousBucket ?? recentBucket)
+                storyValueScore = storyValue(for: kind, activeDays: max(recentDays, previousDays), locationCount: recentBucket.locationCount)
+                latestDate = recentBucket.latestDate
+            } else if disappeared, let previousBucket {
+                changeTitle = "最近暂时没再出现\(previousBucket.signal.label)"
+                changeSummary = "之前在 \(previousDays) 个日子里出现 \(previousCount) 次，最近这段时间没有新的记录。"
+                evidenceIDs = stableEvidenceIDs(previousBucket.items.map(\.id))
+                novelty = 84
+                confidence = confidenceScore(for: previousBucket)
+                storyValueScore = storyValue(for: kind, activeDays: previousDays, locationCount: previousBucket.locationCount)
+                latestDate = previousBucket.latestDate
+            } else {
+                continue
+            }
+
+            discoveries.append(
+                DiscoverCard(
+                    id: "discover:change:\(kind.rawValue):\(Int(latestDate.timeIntervalSince1970)):\(recentCount):\(previousCount)",
+                    kind: .discovery,
+                    title: changeTitle,
+                    summary: changeSummary,
+                    evidenceItemIDs: evidenceIDs,
+                    novelty: novelty,
+                    confidence: confidence,
+                    storyValue: storyValueScore,
+                    latestDate: latestDate
+                )
+            )
+        }
+
+        let lifePatterns = Array(allBuckets.values
+            .filter { $0.items.count >= 2 }
+            .map { bucket in
+                DiscoverCard(
+                    id: "discover:pattern:\(bucket.kind.rawValue)",
+                    kind: .pattern,
+                    title: bucket.signal.label,
+                    summary: "已经在 \(bucket.activeDayCount) 个日子里出现 \(bucket.items.count) 次，最近一次是 \(bucket.latestDate.zhBillDateOnly)。",
+                    evidenceItemIDs: stableEvidenceIDs(bucket.items.map(\.id)),
+                    novelty: 52,
+                    confidence: confidenceScore(for: bucket),
+                    storyValue: storyValue(for: bucket.kind, activeDays: bucket.activeDayCount, locationCount: bucket.locationCount),
+                    latestDate: bucket.latestDate
+                )
+            }
+            .sorted(by: editorialOrder)
+            .prefix(6))
+
+        let sceneAssets = Array(allBuckets.values
+            .filter { bucket in
+                bucket.items.count >= 3
+                    || bucket.activeDayCount >= 3
+                    || bucket.locationCount >= 2
+            }
+            .map { bucket in
+                let durationDays = max(
+                    1,
+                    (calendar.dateComponents([.day], from: bucket.firstDate, to: bucket.latestDate).day ?? 0) + 1
+                )
+                let locationText = bucket.locationCount > 0 ? " · 涉及 \(bucket.locationCount) 个地点" : ""
+                return DiscoverCard(
+                    id: "discover:asset:\(bucket.kind.rawValue)",
+                    kind: .asset,
+                    title: "\(bucket.signal.label)这条线索在成长",
+                    summary: "累计 \(bucket.items.count) 次 · 成长 \(durationDays) 天\(locationText) · \(peakTimeLabel(for: bucket.items, calendar: calendar))最常出现。",
+                    evidenceItemIDs: stableEvidenceIDs(bucket.items.map(\.id)),
+                    novelty: 46,
+                    confidence: confidenceScore(for: bucket),
+                    storyValue: min(100, storyValue(for: bucket.kind, activeDays: bucket.activeDayCount, locationCount: bucket.locationCount) + 8),
+                    latestDate: bucket.latestDate
+                )
+            }
+            .sorted(by: editorialOrder)
+            .prefix(4))
+
+        let echoes: [DiscoverCard]
+        if let echo = LifeNarrativeEchoPolicy.makeEcho(
+            LifeNarrativeEchoInput(
+                scope: .week,
+                sourceRevision: sourceRevision,
+                items: publishableRows,
+                now: now,
+                recentEchoIDs: []
+            ),
+            calendar: calendar
+        ),
+        !echo.currentEvidenceItemIDs.isEmpty {
+            let evidenceIDs = stableEvidenceIDs(
+                echo.currentEvidenceItemIDs + echo.historicalEvidenceItemIDs
+            )
+            echoes = [
+                DiscoverCard(
+                    id: "discover:echo:\(echo.id)",
+                    kind: .echo,
+                    title: echo.label,
+                    summary: editorialEchoLine(echo.line),
+                    evidenceItemIDs: evidenceIDs,
+                    novelty: echoNovelty(for: echo.kind),
+                    confidence: min(100, 76 + echo.currentDistinctDayCount * 4),
+                    storyValue: 88,
+                    latestDate: now
+                )
+            ]
+        } else {
+            echoes = []
+        }
+
+        let rankedDiscoveries = discoveries
+            .filter(\.hasEvidence)
+            .sorted(by: editorialOrder)
+            .prefix(5)
+        return DiscoverSnapshot(
+            sourceRevision: sourceRevision,
+            recentDiscoveries: Array(rankedDiscoveries),
+            lifePatterns: Array(lifePatterns),
+            sceneAssets: Array(sceneAssets),
+            echoes: echoes
+        )
+    }
+
+    private static func sceneBuckets(
+        from rows: [(item: HomeItem, signal: LifeSceneSignal)],
+        calendar: Calendar
+    ) -> [LifeSceneKind: DiscoverSceneBucket] {
+        let grouped = Dictionary(grouping: rows) { $0.signal.kind }
+        return grouped.compactMapValues { rows in
+            guard let first = rows.first else { return nil }
+            let signals = rows.map(\.signal)
+            let representative = signals.max { lhs, rhs in
+                if abs(lhs.score - rhs.score) < 0.001 { return lhs.priority < rhs.priority }
+                return lhs.score < rhs.score
+            } ?? first.signal
+            return DiscoverSceneBucket(
+                kind: representative.kind,
+                signal: representative,
+                items: rows.map(\.item).sorted {
+                    if $0.createdAt == $1.createdAt { return $0.id.uuidString < $1.id.uuidString }
+                    return $0.createdAt < $1.createdAt
+                },
+                averageScore: signals.reduce(0) { $0 + $1.score } / Double(max(signals.count, 1)),
+                calendar: calendar
+            )
+        }
+    }
+
+    private static func confidenceScore(for bucket: DiscoverSceneBucket) -> Int {
+        min(100, max(40, Int((bucket.averageScore * 10).rounded())))
+    }
+
+    private static func storyValue(
+        for kind: LifeSceneKind,
+        activeDays: Int,
+        locationCount: Int
+    ) -> Int {
+        let kindBoost: Int
+        switch kind {
+        case .cityRoute, .lodging, .social, .leisure, .fitness:
+            kindBoost = 18
+        case .coffee, .breakfast, .quickMeal, .workMeal, .commute:
+            kindBoost = 12
+        default:
+            kindBoost = 6
+        }
+        return min(100, 48 + kindBoost + min(activeDays * 5, 20) + min(locationCount * 6, 18))
+    }
+
+    private static func peakTimeLabel(for items: [HomeItem], calendar: Calendar) -> String {
+        let buckets = Dictionary(grouping: items) { item -> String in
+            let hour = calendar.component(.hour, from: item.createdAt)
+            switch hour {
+            case 5..<11: return "上午"
+            case 11..<14: return "中午"
+            case 14..<18: return "下午"
+            case 18..<23: return "晚上"
+            default: return "深夜"
+            }
+        }
+        return buckets.max { lhs, rhs in
+            if lhs.value.count == rhs.value.count { return lhs.key > rhs.key }
+            return lhs.value.count < rhs.value.count
+        }?.key ?? "这段时间"
+    }
+
+    private static func stableEvidenceIDs(_ ids: [UUID]) -> [UUID] {
+        var seen = Set<UUID>()
+        return ids.filter { seen.insert($0).inserted }.prefix(12).map { $0 }
+    }
+
+    private static func editorialOrder(_ lhs: DiscoverCard, _ rhs: DiscoverCard) -> Bool {
+        if lhs.editorialScore == rhs.editorialScore {
+            if lhs.latestDate == rhs.latestDate { return lhs.id < rhs.id }
+            return lhs.latestDate > rhs.latestDate
+        }
+        return lhs.editorialScore > rhs.editorialScore
+    }
+
+    private static func echoNovelty(for kind: LifeNarrativeEchoKind) -> Int {
+        switch kind {
+        case .returnAfterGap, .contextReturn: return 94
+        case .newContextPair, .comparableChange: return 90
+        case .repeatRhythm: return 76
+        }
+    }
+
+    private static func editorialEchoLine(_ line: String) -> String {
+        line
+            .replacingOccurrences(of: "这周", with: "最近")
+            .replacingOccurrences(of: "上周", with: "之前")
+            .replacingOccurrences(of: "本周", with: "最近")
+    }
+
     private static func makeNarrativePlan(
         scope: LifeNarrativeScope,
         sourceRevision: Int,
@@ -205,17 +603,24 @@ enum TraceSnapshotComputation {
         now: Date
     ) -> LifeNarrativePlan {
         let calendar = scope == .week ? PlaybackService.isoCalendar : Calendar.current
-        let previousItems = previousPeriodItems(scope: scope, allItems: allItems, now: now)
-        let relationshipEcho = LifeNarrativeEchoPolicy.makeEcho(
-            LifeNarrativeEchoInput(
-                scope: scope,
-                sourceRevision: sourceRevision,
-                items: allItems,
-                now: now,
-                recentEchoIDs: []
-            ),
-            calendar: calendar
-        )
+        let previousItems: [HomeItem]
+        let relationshipEcho: LifeNarrativeEcho?
+        if scope == .continuous {
+            previousItems = []
+            relationshipEcho = nil
+        } else {
+            previousItems = previousPeriodItems(scope: scope, allItems: allItems, now: now)
+            relationshipEcho = LifeNarrativeEchoPolicy.makeEcho(
+                LifeNarrativeEchoInput(
+                    scope: scope,
+                    sourceRevision: sourceRevision,
+                    items: allItems,
+                    now: now,
+                    recentEchoIDs: []
+                ),
+                calendar: calendar
+            )
+        }
         return LifeNarrativeSignalPolicy.makePlan(
             LifeNarrativePlanningInput(
                 scope: scope,

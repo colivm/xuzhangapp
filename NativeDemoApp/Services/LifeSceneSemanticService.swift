@@ -435,7 +435,7 @@ enum LifeSceneSemanticService {
         case "meituan", "eleme", "mcdonalds", "kfc", "qixintian", "haidilao", "laoxiangji", "tastien", "yuanjiyunjiao", "saizeriya":
             add(.quickMeal, 6.6, .dining, "饭点外卖", "#饭点外卖", 20)
         case "metro_transit":
-            if item.scenePackId == "commute" || containsAny(explicitText, strongCommuteCues) {
+            if item.scenePackId == "commute" || containsStrongCommuteCue(explicitText) {
                 add(.commute, 7.2, .transport, "通勤", "#通勤", 5)
             } else {
                 add(.cityRoute, 6.8, .transport, "公共交通", "#公共交通", 18)
@@ -476,7 +476,7 @@ enum LifeSceneSemanticService {
         if containsAny(text, ["咖啡", "拿铁", "美式", "奶茶", "饮品", "饮料", "喝的", "茶饮", "可乐", "雪碧", "汽水", "果汁", "柠檬茶", "水溶", "c100", "维c", "维C", "维他", "提神", "库迪"]) {
             add(.coffee, 6.8, .dining, "咖啡饮品", "#提神", 15)
         }
-        if item.scenePackId == "commute" || containsAny(explicitText, strongCommuteCues) {
+        if item.scenePackId == "commute" || containsStrongCommuteCue(explicitText) {
             add(.commute, 7.0, .transport, "通勤", "#通勤", 6)
         }
         if containsAny(text, ["打车", "出租", "网约车", "滴滴", "花小猪", "单车", "骑车", "停车", "洗车", "汽车保养", "车辆保养", "保养车", "etc", "ETC", "车票", "高铁", "火车", "机场", "航班", "过路费", "路费", "充车", "充电桩", "电车充电", "汽车充电", "车辆充电", "新能源充电", "补能"]) {
@@ -571,6 +571,20 @@ enum LifeSceneSemanticService {
     private static let strongCommuteCues = [
         "commute", "通勤", "上班", "下班", "上下班", "到岗", "早高峰", "晚高峰", "公司", "单位", "工位"
     ]
+
+    private static func containsStrongCommuteCue(_ text: String) -> Bool {
+        // Legal-entity suffixes describe the payment counterparty, not where
+        // the user went.  Strip them before evaluating the broad “公司” cue;
+        // contextual titles such as “公司楼下/公司食堂” remain intact.
+        let normalized = text
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "　", with: "")
+            .replacingOccurrences(of: "有限责任公司", with: "")
+            .replacingOccurrences(of: "股份有限公司", with: "")
+            .replacingOccurrences(of: "有限公司", with: "")
+            .replacingOccurrences(of: "个体工商户", with: "")
+        return containsAny(normalized, strongCommuteCues)
+    }
 
     private static func containsAny(_ text: String, _ keywords: [String]) -> Bool {
         keywords.contains { text.localizedCaseInsensitiveContains($0) }

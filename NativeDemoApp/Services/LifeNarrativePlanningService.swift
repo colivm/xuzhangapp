@@ -4,12 +4,14 @@ enum LifeNarrativeScope: String, Codable, Equatable {
     case day
     case week
     case month
+    case continuous
 
     var periodLead: String {
         switch self {
         case .day: return "今天"
         case .week: return "这周"
         case .month: return "这个月"
+        case .continuous: return "这段时间"
         }
     }
 }
@@ -558,7 +560,7 @@ enum LifeNarrativeSignalPolicy {
         scope: LifeNarrativeScope,
         now: Date
     ) -> [HomeItem] {
-        guard scope != .day else { return rows }
+        guard scope != .day, scope != .continuous else { return rows }
         let calendar: Calendar = {
             guard scope == .week else { return Calendar.current }
             var value = Calendar(identifier: .iso8601)
@@ -823,6 +825,7 @@ enum LifeNarrativeSignalPolicy {
         case .day: return "今天的记录"
         case .week: return "本周记录"
         case .month: return "本月记录"
+        case .continuous: return "这段时间的记录"
         }
     }
 
@@ -880,6 +883,7 @@ enum LifeNarrativeSignalPolicy {
         case .day: return "今天还没有记录"
         case .week: return "这周还没有记录"
         case .month: return "这个月还没有记录"
+        case .continuous: return "这段时间还没有记录"
         }
     }
 
@@ -892,6 +896,7 @@ enum LifeNarrativeSignalPolicy {
         case .day: return "今天这一页暂时还是空的。"
         case .week: return "这周暂时还没有可以整理的内容。"
         case .month: return "这个月暂时还没有可以回看的内容。"
+        case .continuous: return "这段时间暂时还没有可以回看的内容。"
         }
     }
 
