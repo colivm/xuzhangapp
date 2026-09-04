@@ -1649,9 +1649,13 @@ struct ContentView: View {
 
 // MARK: - Color Mix Extension
 
-private extension Color {
-    /// Linearly interpolates between two Colors in the sRGB color space.
-    func mix(with other: Color, by fraction: Double) -> Color {
+extension Color {
+    /// iOS 17-compatible linear interpolation between two Colors in sRGB.
+    ///
+    /// Keep a distinct name from SwiftUI's iOS 18 `mix(with:by:in:)` API so
+    /// call sites never resolve to an unavailable overload on the deployment
+    /// target.
+    func appMixed(with other: Color, by fraction: Double) -> Color {
         let t = max(0, min(1, fraction))
         var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
         var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0

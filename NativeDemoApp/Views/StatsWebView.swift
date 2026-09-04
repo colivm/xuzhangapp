@@ -3301,9 +3301,9 @@ struct StatsWebView: View {
     private func traceLifeSliceFallbackColors(for category: HomeItem.Category, index: Int) -> [Color] {
         if AppColors.isDarkMode {
             let tint = AppColors.categoryColor(category)
-            let first = AppColors.surfaceMuted.mix(with: tint, by: 0.18)
-            let second = AppColors.panelStrong.mix(with: tint, by: 0.12)
-            let third = AppColors.paperMist.mix(with: tint, by: 0.08)
+            let first = AppColors.surfaceMuted.appMixed(with: tint, by: 0.18)
+            let second = AppColors.panelStrong.appMixed(with: tint, by: 0.12)
+            let third = AppColors.paperMist.appMixed(with: tint, by: 0.08)
             return index.isMultiple(of: 2) ? [first, second, third] : [second, third, first]
         }
         switch category {
