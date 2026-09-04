@@ -307,7 +307,7 @@ struct RecordEditSheet: View {
     private var editPreviewEmotionPill: some View {
         Text(previewEmotion)
             .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(AppColors.accent.opacity(0.95))
+            .foregroundStyle(editEmotionForeground)
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
             .background(editPreviewEmotionBorder)
@@ -315,7 +315,7 @@ struct RecordEditSheet: View {
 
     private var editPreviewEmotionBorder: some View {
         Capsule(style: .continuous)
-            .stroke(AppColors.accent.opacity(0.28), lineWidth: 1)
+            .stroke(AppColors.accent.opacity(AppColors.isDarkMode ? 0.22 : 0.28), lineWidth: 1)
     }
 
     private var editPreviewMetaRow: some View {
@@ -329,7 +329,7 @@ struct RecordEditSheet: View {
                 }
             }
             .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(AppColors.accent.opacity(0.9))
+            .foregroundStyle(editControlForeground)
             .buttonStyle(.plain)
         }
     }
@@ -389,7 +389,7 @@ struct RecordEditSheet: View {
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.white.opacity(0.68))
+                    .fill(AppColors.isDarkMode ? AppColors.panelStrong : Color.white.opacity(0.68))
             )
             .id("recordEditNoteField")
             .transition(.opacity.combined(with: .move(edge: .top)))
@@ -397,12 +397,12 @@ struct RecordEditSheet: View {
 
     private var editPreviewBackground: some View {
         RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(Color.white.opacity(0.68))
+            .fill(AppColors.isDarkMode ? AppColors.panelStrong : Color.white.opacity(0.68))
     }
 
     private var editPreviewBorder: some View {
         RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .stroke(Color.white.opacity(0.56), lineWidth: 1)
+            .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.62 : 0.56), lineWidth: 1)
     }
 
     private var categoryGrid: some View {
@@ -438,13 +438,17 @@ struct RecordEditSheet: View {
     }
 
     private func categoryGridButtonBackground(isSelected: Bool) -> some View {
-        let fill = isSelected ? AppColors.accent.opacity(0.18) : Color.white.opacity(0.58)
+        let fill = isSelected
+            ? AppColors.accent.opacity(AppColors.isDarkMode ? 0.16 : 0.18)
+            : (AppColors.isDarkMode ? AppColors.surfaceMuted.opacity(0.54) : Color.white.opacity(0.58))
         return RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(fill)
     }
 
     private func categoryGridButtonBorder(isSelected: Bool) -> some View {
-        let stroke = isSelected ? AppColors.accent.opacity(0.34) : Color.white.opacity(0.38)
+        let stroke = isSelected
+            ? AppColors.accent.opacity(AppColors.isDarkMode ? 0.28 : 0.34)
+            : AppColors.stroke.opacity(AppColors.isDarkMode ? 0.52 : 0.38)
         return RoundedRectangle(cornerRadius: 12, style: .continuous)
             .stroke(stroke, lineWidth: 1)
     }
@@ -509,7 +513,7 @@ struct RecordEditSheet: View {
         } label: {
             Text("更新这一笔")
                 .font(.system(size: 17, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.isDarkMode ? AppColors.onAccent : Color.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)
                 .background(
@@ -528,9 +532,20 @@ struct RecordEditSheet: View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppColors.accent.opacity(0.9))
+                .foregroundStyle(editControlForeground)
         }
         .buttonStyle(.plain)
+    }
+
+    /// These are supporting edit actions, not the page's primary CTA.  Dark
+    /// themes use the contrast-safe accent token at a lower intensity so the
+    /// links stay discoverable without competing with the record title/amount.
+    private var editControlForeground: Color {
+        AppColors.readableAccent.opacity(AppColors.isDarkMode ? 0.74 : 0.90)
+    }
+
+    private var editEmotionForeground: Color {
+        AppColors.readableAccent.opacity(AppColors.isDarkMode ? 0.78 : 0.95)
     }
 
 }

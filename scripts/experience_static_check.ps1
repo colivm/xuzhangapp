@@ -1136,6 +1136,10 @@ Assert-MultilinePattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceLifeRange
 Assert-MultilinePattern 'NativeDemoApp/Views/StatsWebView.swift' 'categoryFilterChip[\s\S]{0,520}foregroundStyle\(isSelected \? AppColors\.onAccent[\s\S]{0,260}AppColors\.panelStrong' 'trace category filters avoid fixed white pills in dark mode'
 Assert-Pattern 'NativeDemoApp/Views/StatsWebView.swift' 'AppColors\.readableAccent' 'trace accent text uses the contrast-aware theme color'
 Assert-NoMultilinePattern 'NativeDemoApp/Views/StatsWebView.swift' 'traceLifeMonthHighlights[\s\S]{0,1200}fill\(Color\.white\.opacity|traceLifeRangeTab[\s\S]{0,700}fill\(isSelected \? Color\.white|categoryFilterChip[\s\S]{0,700}Color\.white\.opacity' 'trace content surfaces do not regress to fixed white containers'
+Assert-MultilinePattern 'NativeDemoApp/Views/RecordEditSheet.swift' 'private var editControlForeground[\s\S]{0,260}AppColors\.isDarkMode' 'home record editor exposes a dark-mode-aware secondary control color'
+Assert-MultilinePattern 'NativeDemoApp/Views/RecordEditSheet.swift' 'private func quietLink[\s\S]{0,260}foregroundStyle\(editControlForeground\)' 'home record editor quiet links use the subdued control color'
+Assert-MultilinePattern 'NativeDemoApp/Views/RecordEditSheet.swift' 'categoryGridButtonBackground[\s\S]{0,500}AppColors\.isDarkMode[\s\S]{0,260}surfaceMuted' 'home record editor category choices use a subdued dark surface'
+Assert-NoMultilinePattern 'NativeDemoApp/Views/RecordEditSheet.swift' 'quietLink[\s\S]{0,260}AppColors\.accent\.opacity\(0\.9\)' 'home record editor quiet links do not regress to bright accent'
 Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'DarkModeReadabilityPolicyTests|testDarkModeHighlightOpacityIsLowerThanLight|testPrimaryAccentActionsUseThemeForeground' 'dark-mode readability has a focused XCTest contract'
 Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-102|深色模式|readableAccent|onAccent|Reduce Transparency' 'dark-mode readability device regression matrix'
 $releaseFixtureOutput = python scripts/validate_release_gate.py --phase fixtures

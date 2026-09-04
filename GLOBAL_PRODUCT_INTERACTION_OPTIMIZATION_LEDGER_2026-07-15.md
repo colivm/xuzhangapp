@@ -4541,6 +4541,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 - 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；本项在已推送的 `DISCOVER-EDITORIAL-01` 之后独立处理，不改变线索业务规则。针对 iOS 17 兼容性回归的定向修正已完成，当前无 `IN_PROGRESS`。
 - 用户反馈与根因：深色模式仍有“看不清”。源码审计确认，多个深色主题的强调色是浅色调，但按钮和确认操作固定使用 `.white` 前景；同时痕迹月章、记录列表、筛选器、OCR/设置等承载层仍使用 `Color.white.opacity(...)`，在深色背景上形成浅底叠浅字或过低层级差异。现有 token 报告只验证了原始 token 对比度，未覆盖半透明合成后的实际前景/背景组合。
+- 首页账单编辑详情的定向复核发现，`自己写一句`、时间、`改`（改分类）及分类选择仍直接使用高亮 accent/半透明白色底，在深色主题中比正文层级更抢眼；本次仅收敛该编辑页的次级控件，不扩大到其他页面。
 - 允许范围：主题解析中的可读前景与深色标识；全局语义 Surface 的高光/边框强度；痕迹页主要卡片、筛选器和记录墙的固定白色承载层；直接以 `AppColors.accent` 为背景的主操作按钮前景；对应静态门禁、XCTest 契约、发布矩阵和本文档。不得借本项修改账单、线索、OCR、会员、同步、远程 AI、业务文案或页面信息架构。
 - 产品决策：正文层级使用主题 `textPrimary/textSecondary/textTertiary`；主操作统一使用主题计算出的 `onAccent`；深色模式的卡片使用 `panelStrong/surfaceMuted`，不再用固定白色半透明底；图片上的白字和语义删除红色保持原有照片/警示语义，不做全局替换。
 - 验收：默认、纸质、天气、霓虹、工业、永久主题的 dark 模式下，首页/记账/痕迹/复盘/设置/OCR/会员的标题、正文、次要说明、筛选选中态和主按钮可读；浅色模式视觉不回退；固定白色卡片不再覆盖承载内容；VoiceOver、特大字号和 Reduce Transparency 不改变操作语义。
@@ -4550,11 +4551,13 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
   - 痕迹月章、热力、记录画布、筛选器、细查列表、记录墙、线索重点卡和空态承载层改用 `panelStrong/surfaceMuted/stroke`；线索和月章强调文字改用 `readableAccent`；本周/本月选择态统一为 accent 背景 + onAccent 前景。
   - 无照片 fallback 图块根据 dark 模式使用主题色混合调色，不再落到固定浅色背景；图片上的白字、删除按钮和照片遮罩仍保留原有语义。
   - 修正 iOS 17 部署目标兼容性：深色 fallback 调色改用项目自有 `appMixed`（sRGB 线性插值），不再解析到 iOS 18 专属 `Color.mix(with:by:in:)`。
+  - 首页 `RecordEditSheet` 的 `自己写一句`、时间和 `改` 使用深色专用的较低强度 accent；分类选择的未选中底和边框改用主题 surface/stroke，编辑预览、备注输入和更新按钮同步使用主题承载/安全前景，避免次级操作过亮。
   - 新增 `DarkModeReadabilityPolicyTests`，覆盖 dark 高光降级和强调色前景选择；新增 `FLOW-102` 全主题、无障碍和 Reduce Transparency 真机验收矩阵；体验静态门禁增加固定白色承载层回归守卫。
 - 修改文件：
   - `NativeDemoApp/ContentView.swift`
   - `NativeDemoApp/Theme/ThemeTokens.swift`
   - `NativeDemoApp/Views/StatsWebView.swift`
+  - `NativeDemoApp/Views/RecordEditSheet.swift`
   - `NativeDemoAppTests/StateRegressionTests.swift`
   - `scripts/experience_static_check.ps1`
   - `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`
