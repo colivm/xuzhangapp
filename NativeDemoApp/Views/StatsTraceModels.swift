@@ -795,7 +795,19 @@ struct TraceRhythmPoint: Identifiable {
     let label: String
     let count: Int
     let isToday: Bool
-    let startDate: Date? = nil
+    let startDate: Date?
+
+    init(
+        label: String,
+        count: Int,
+        isToday: Bool,
+        startDate: Date? = nil
+    ) {
+        self.label = label
+        self.count = count
+        self.isToday = isToday
+        self.startDate = startDate
+    }
 
     var id: String { label }
 }
