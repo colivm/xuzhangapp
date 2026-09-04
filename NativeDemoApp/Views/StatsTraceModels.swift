@@ -109,7 +109,7 @@ enum TraceClueScopePolicy {
         guard let interval = window(now: now, calendar: calendar), !items.isEmpty else {
             return []
         }
-        return (0..<rhythmBucketCount).compactMap { index in
+        return (0..<rhythmBucketCount).compactMap { index -> TraceRhythmPoint? in
             guard let start = calendar.date(
                 byAdding: .day,
                 value: index * rhythmBucketDays,

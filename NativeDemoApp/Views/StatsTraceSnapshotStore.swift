@@ -24,7 +24,35 @@ struct TraceClueComputationInput: @unchecked Sendable {
     let narrativeScope: LifeNarrativeScope?
     let allowsNarrativeRewrite: Bool
     let now: Date
-    let scope: TraceClueScope = .period
+    let scope: TraceClueScope
+
+    init(
+        items: [HomeItem],
+        allItems: [HomeItem],
+        period: StatsPeriod,
+        periodLabel: String,
+        isMember: Bool,
+        freeRemaining: Int,
+        storedUnlock: Bool,
+        sourceRevision: Int,
+        narrativeScope: LifeNarrativeScope?,
+        allowsNarrativeRewrite: Bool,
+        now: Date,
+        scope: TraceClueScope = .period
+    ) {
+        self.items = items
+        self.allItems = allItems
+        self.period = period
+        self.periodLabel = periodLabel
+        self.isMember = isMember
+        self.freeRemaining = freeRemaining
+        self.storedUnlock = storedUnlock
+        self.sourceRevision = sourceRevision
+        self.narrativeScope = narrativeScope
+        self.allowsNarrativeRewrite = allowsNarrativeRewrite
+        self.now = now
+        self.scope = scope
+    }
 }
 
 enum TraceSnapshotComputation {
@@ -377,6 +405,7 @@ enum TraceSnapshotComputation {
                 storyValueScore = storyValue(for: kind, activeDays: recentDays, locationCount: recentBucket.locationCount)
                 latestDate = recentBucket.latestDate
             } else if let recentBucket, decreased, previousHasMeaningfulEvidence {
+                let delta = max(previousCount - recentCount, 1)
                 changeTitle = "\(recentBucket.signal.label)最近少了一些"
                 changeSummary = "之前在 \(previousDays) 个日子里出现 \(previousCount) 次，最近只留下 \(recentCount) 次。"
                 evidenceIDs = stableEvidenceIDs(
