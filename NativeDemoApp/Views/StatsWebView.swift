@@ -70,6 +70,179 @@ private struct TraceLifeCardLayout {
     var playButtonHeight: CGFloat { 44 + compactness * 4 }
 }
 
+private struct DiscoverDetailSheetView: View {
+    let card: DiscoverCard
+    let onOpenRecord: (HomeItem) -> Void
+
+    @EnvironmentObject private var homeViewModel: HomeViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    private var evidenceItems: [HomeItem] {
+        DiscoverEvidenceResolutionPolicy.resolve(
+            evidenceIDs: card.evidenceItemIDs,
+            in: homeViewModel.items
+        )
+    }
+
+    private var photoItems: [HomeItem] {
+        evidenceItems.filter(\.hasMemoryImages)
+    }
+
+    private var currentEvidenceDisplayText: String {
+        guard evidenceItems.count == card.evidenceItemIDs.count else {
+            return "当前账本保留 \(evidenceItems.count) 笔可核对记录"
+        }
+        return card.evidenceDisplayText
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack(spacing: 8) {
+                            Image(systemName: card.isFeatured ? "sparkles" : "arrow.up.right")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(AppColors.accentDark)
+                            Text(card.title)
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundStyle(AppColors.text)
+                        }
+                        Text(card.summary)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
+                            .lineSpacing(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(currentEvidenceDisplayText)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(AppColors.accentDark.opacity(0.86))
+                    }
+                    .padding(.horizontal, 2)
+
+                    if !photoItems.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("照片墙")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(AppColors.text)
+
+                            LazyVGrid(
+                                columns: [
+                                    GridItem(.flexible(), spacing: 10),
+                                    GridItem(.flexible(), spacing: 10),
+                                    GridItem(.flexible(), spacing: 10)
+                                ],
+                                spacing: 10
+                            ) {
+                                ForEach(photoItems) { item in
+                                    Button {
+                                        onOpenRecord(item)
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 5) {
+                                            MemoryAttachmentThumbnail(
+                                                imageData: item.coverMemoryImageData,
+                                                imageReference: item.coverMemoryImageReference,
+                                                height: 104,
+                                                cornerRadius: 12
+                                            )
+                                            Text(item.createdAt.zhBillDateOnly)
+                                                .font(.system(size: 10, weight: .medium))
+                                                .foregroundStyle(AppColors.subtext)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("打开照片对应记录，\(item.displayTitle)")
+                                }
+                            }
+                        }
+                    } else {
+                        quietSection("这段线索还没有附带照片。")
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("记录墙")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(AppColors.text)
+
+                        if evidenceItems.isEmpty {
+                            quietSection("对应记录已不在当前账本中，线索不会保留旧内容。")
+                        } else {
+                            LazyVStack(spacing: 8) {
+                                ForEach(evidenceItems) { item in
+                                    Button {
+                                        onOpenRecord(item)
+                                    } label: {
+                                        HStack(alignment: .top, spacing: 10) {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(item.displayTitle)
+                                                    .font(.system(size: 13, weight: .semibold))
+                                                    .foregroundStyle(AppColors.text)
+                                                    .lineLimit(2)
+                                                    .multilineTextAlignment(.leading)
+                                                Text("\(item.createdAt.zhBillDateTime) · \(item.category.rawValue)")
+                                                    .font(.system(size: 11, weight: .medium))
+                                                    .foregroundStyle(AppColors.subtext)
+                                                    .lineLimit(1)
+                                            }
+                                            Spacer(minLength: 6)
+                                            VStack(alignment: .trailing, spacing: 4) {
+                                                Text(item.amount.formatted(.cny))
+                                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                                    .foregroundStyle(AppColors.text)
+                                                Image(systemName: "chevron.right")
+                                                    .font(.system(size: 10, weight: .semibold))
+                                                    .foregroundStyle(AppColors.subtext.opacity(0.72))
+                                            }
+                                        }
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 11)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                .fill(AppColors.surfaceMuted.opacity(0.72))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                .stroke(AppColors.subtext.opacity(0.12), lineWidth: 1)
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityHint("打开这笔记录的详情")
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(18)
+                .padding(.bottom, 28)
+            }
+            .background(AppColors.bg.ignoresSafeArea())
+            .navigationTitle("线索详情")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func quietSection(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(AppColors.subtext)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 13)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(AppColors.surfaceMuted.opacity(0.58))
+            )
+    }
+}
+
 struct TraceDetailListSnapshotKey: Equatable {
     let ledgerRevision: Int
     let periodKey: String
@@ -296,6 +469,7 @@ struct StatsWebView: View {
     private enum SheetDismissRoute {
         case memoryDetail(HomeItem)
         case attachMemoryImage(HomeItem)
+        case editRecord(HomeItem)
         case memberPricing(MemberPricingEntryContext)
         case openWeekly
         case openInsight
@@ -319,7 +493,9 @@ struct StatsWebView: View {
     @State private var summaryQuotaPrompt: SummaryQuotaPrompt?
     @State private var quotaRefreshID = UUID()
     @State private var traceDetailPresentation: TraceDetailPresentationPayload?
+    @State private var discoverDetailCard: DiscoverCard?
     @State private var traceDetailDismissRoute: SheetDismissRoute?
+    @State private var discoverDetailDismissRoute: SheetDismissRoute?
     @State private var editingDismissRoute: SheetDismissRoute?
     @State private var memoryDetailDismissRoute: SheetDismissRoute?
     @State private var summaryPlaybackDismissRoute: SheetDismissRoute?
@@ -601,6 +777,18 @@ struct StatsWebView: View {
                 handleSheetDismissRoute(route)
             }) { presentation in
                 traceDetailSheet(initialSnapshot: presentation.initialSnapshot)
+            }
+            .sheet(item: $discoverDetailCard, onDismiss: {
+                let route = discoverDetailDismissRoute
+                discoverDetailDismissRoute = nil
+                handleSheetDismissRoute(route)
+            }) { card in
+                DiscoverDetailSheetView(
+                    card: card,
+                    onOpenRecord: { item in
+                        openDiscoverRecord(item)
+                    }
+                )
             }
             .sheet(item: $editingItem, onDismiss: {
                 let route = editingDismissRoute
@@ -4400,6 +4588,7 @@ struct StatsWebView: View {
                 items: snapshot.items,
                 clues: snapshot.clues,
                 rhythmPoints: snapshot.rhythmPoints,
+                journeyFact: snapshot.journeyFact,
                 isUnlocked: snapshot.isDeepInsightUnlocked,
                 canUseDeepInsight: snapshot.canUseDeepInsight,
                 freeRemaining: snapshot.freeInsightRemaining
@@ -4470,6 +4659,20 @@ struct StatsWebView: View {
     }
 
     private func traceDiscoverCard(_ card: DiscoverCard) -> some View {
+        Button {
+            discoverDetailCard = card
+        } label: {
+            if card.isFeatured {
+                traceDiscoverFeaturedCardContent(card)
+            } else {
+                traceDiscoverRegularCardContent(card)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("打开线索详情，查看照片墙和记录墙")
+    }
+
+    private func traceDiscoverRegularCardContent(_ card: DiscoverCard) -> some View {
         HStack(alignment: .top, spacing: 11) {
             ZStack {
                 Circle()
@@ -4490,12 +4693,17 @@ struct StatsWebView: View {
                     .foregroundStyle(TraceColors.secondaryText)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("依据 \(card.evidenceItemIDs.count) 笔记录")
+                Text(card.evidenceDisplayText)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(TraceColors.tertiaryText)
             }
 
             Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(TraceColors.tertiaryText.opacity(0.72))
+                .padding(.top, 4)
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 12)
@@ -4506,6 +4714,67 @@ struct StatsWebView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(TraceColors.stroke.opacity(0.72), lineWidth: 1)
+        )
+    }
+
+    private func traceDiscoverFeaturedCardContent(_ card: DiscoverCard) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.64))
+                        .frame(width: 34, height: 34)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(AppColors.accentDark)
+                }
+                Text("AI 重点发现")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.accentDark)
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.accentDark.opacity(0.78))
+            }
+
+            Text(card.title)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(TraceColors.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(card.summary)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(TraceColors.secondaryText)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(card.evidenceDisplayText)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AppColors.accentDark.opacity(0.88))
+
+            HStack(spacing: 6) {
+                Text("打开这段行程")
+                    .font(.system(size: 13, weight: .bold))
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 11, weight: .bold))
+            }
+            .foregroundStyle(AppColors.accentDark)
+        }
+        .padding(.horizontal, 17)
+        .padding(.vertical, 17)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(
+                colors: [
+                    AppColors.accent.opacity(0.18),
+                    Color.white.opacity(0.78)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(AppColors.accent.opacity(0.24), lineWidth: 1)
         )
     }
 
@@ -4845,12 +5114,17 @@ struct StatsWebView: View {
         items: [HomeItem],
         clues: [TraceCategoryClue],
         rhythmPoints: [TraceRhythmPoint],
+        journeyFact: LifeJourneyFact?,
         isUnlocked snapshotUnlocked: Bool,
         canUseDeepInsight snapshotCanUse: Bool,
         freeRemaining: Int
     ) -> some View {
         let isUnlocked = snapshotUnlocked || traceDeepInsightExpanded
-        let supportingLines = traceDeepInsightSupportingLines(insight)
+        let supportingLines = traceDeepInsightSupportingLines(
+            insight,
+            items: items,
+            journeyFact: journeyFact
+        )
         return VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .center, spacing: 10) {
                 ZStack {
@@ -4863,7 +5137,11 @@ struct StatsWebView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(traceInsightThemeTitle(insight.theme))
+                    Text(
+                        journeyFact != nil && insight.previewLine == journeyFact?.line
+                            ? "\(journeyFact?.label ?? "这段行程")的证据"
+                            : traceInsightThemeTitle(insight.theme)
+                    )
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(TraceColors.primaryText)
                     Text(isUnlocked ? insight.periodName : "还可展开 \(freeRemaining)/\(LifeInsightService.freeMonthlyLimit) 次")
@@ -5035,7 +5313,7 @@ struct StatsWebView: View {
         case .effort: return "你付出的这些时间"
         case .day: return "被记完整的一天"
         case .memory: return "一条具体记录"
-        case .relation: return "两条生活线"
+        case .relation: return "同一天的两条生活线"
         }
     }
 
@@ -5167,7 +5445,45 @@ struct StatsWebView: View {
         return min(index, pointCount - 1)
     }
 
-    private func traceDeepInsightSupportingLines(_ insight: LifeInsightResult) -> [String] {
+    private func traceDeepInsightSupportingLines(
+        _ insight: LifeInsightResult,
+        items: [HomeItem],
+        journeyFact: LifeJourneyFact?
+    ) -> [String] {
+        if let journeyFact,
+           insight.theme == .relation,
+           insight.previewLine == journeyFact.line {
+            let visibleItemIDs = Set(items.map(\.id))
+            let visibleIDs = journeyFact.evidenceItemIDs.filter { visibleItemIDs.contains($0) }
+            let summary = traceJourneyEvidenceSummary(
+                journey: journeyFact,
+                evidenceIDs: visibleIDs
+            )
+            return ["\(summary.displayText)。"]
+        }
+
+        if insight.theme == .relation,
+           let highlightedDate = insight.highlightedDate {
+            let dayItems = items
+                .filter { item in
+                    item.amount > 0
+                        && item.draftMeta == nil
+                        && Calendar.current.isDate(item.createdAt, inSameDayAs: highlightedDate)
+                }
+                .sorted { $0.createdAt < $1.createdAt }
+            if !dayItems.isEmpty {
+                let timeline = dayItems.prefix(4).map {
+                    "\($0.createdAt.zhBillTime) \($0.displayTitle)"
+                }
+                let remaining = max(dayItems.count - timeline.count, 0)
+                let tail = remaining > 0 ? "，另有 \(remaining) 笔" : ""
+                return [
+                    "这条生活线来自\(traceCalendarDayNarrativeLabel(highlightedDate))实际留下的 \(dayItems.count) 笔记录：\(timeline.joined(separator: "、"))\(tail)。",
+                    "它们只是同一天发生的真实记录，不代表互为原因；放回这一天的时间线，才是这条线索的意义。"
+                ]
+            }
+        }
+
         var seen = Set<String>()
         seen.insert(insight.previewLine.trimmingCharacters(in: .whitespacesAndNewlines))
         return insight.fullLines.compactMap { line in
@@ -5177,6 +5493,24 @@ struct StatsWebView: View {
         }
         .prefix(2)
         .map { $0 }
+    }
+
+    private func traceJourneyEvidenceSummary(
+        journey: LifeJourneyFact,
+        evidenceIDs: [UUID]
+    ) -> DiscoverEvidenceSummary {
+        let evidenceSet = Set(evidenceIDs)
+        let road = Set(journey.roadEvidenceItemIDs).intersection(evidenceSet).count
+        let activity = Set(journey.activityEvidenceItemIDs).intersection(evidenceSet).count
+        let accounted = Set(journey.roadEvidenceItemIDs)
+            .union(journey.activityEvidenceItemIDs)
+            .intersection(evidenceSet)
+        return DiscoverEvidenceSummary(
+            total: evidenceSet.count,
+            road: road,
+            activity: activity,
+            other: max(evidenceSet.count - accounted.count, 0)
+        )
     }
 
     private func traceDeepInsightLine(_ text: String, index: Int) -> some View {
@@ -5990,6 +6324,8 @@ struct StatsWebView: View {
             memoryDetailItem = latestItem(matching: item)
         case .attachMemoryImage(let item):
             requestAttachMemoryImage(item)
+        case .editRecord(let item):
+            editingItem = latestItem(matching: item)
         case .memberPricing(let context):
             onShowMemberPricing?(context)
         case .openWeekly:
@@ -6049,6 +6385,16 @@ struct StatsWebView: View {
         } else {
             memoryDetailItem = target
         }
+    }
+
+    private func openDiscoverRecord(_ item: HomeItem) {
+        guard let target = homeViewModel.items.first(where: { $0.id == item.id }) else {
+            return
+        }
+        discoverDetailDismissRoute = target.hasMemoryImages
+            ? .memoryDetail(target)
+            : .editRecord(target)
+        discoverDetailCard = nil
     }
 
     private func latestItem(matching item: HomeItem) -> HomeItem {

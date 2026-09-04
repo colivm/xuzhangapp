@@ -210,12 +210,26 @@ enum TraceSnapshotComputation {
             periodLabel: input.periodLabel,
             now: input.now
         )
-        let rawMarks = LifeMarkService.aggregates(
-            for: input.items,
-            allItems: input.allItems,
-            isMember: input.isMember,
-            limit: 8
-        )
+        // Prepare the expensive life-mark context once. The previous path
+        // aggregated the visible marks and then aggregated the member preview
+        // again, which made a cold Discover load scan the same ledger twice.
+        let preparedMarkSets: LifeMarkService.PreparedAggregateSets
+        if input.items.isEmpty {
+            preparedMarkSets = LifeMarkService.PreparedAggregateSets(visible: [], member: [])
+        } else {
+            let aggregationContext = LifeMarkService.prepareAggregationContext(
+                allItems: input.allItems,
+                periodItems: input.items
+            )
+            preparedMarkSets = LifeMarkService.preparedAggregateSets(
+                for: input.items,
+                preparedContext: aggregationContext,
+                visibleIsMember: input.isMember,
+                visibleLimit: 8,
+                memberLimit: 12
+            )
+        }
+        let rawMarks = preparedMarkSets.visible
         let rankedMarks = prioritizedMarks(
             rawMarks,
             items: input.items,
@@ -230,7 +244,7 @@ enum TraceSnapshotComputation {
         )
         let rawLockedMark = input.isMember
             ? nil
-            : LifeMarkService.lockedPreview(for: input.items, allItems: input.allItems)
+            : preparedMarkSets.member.first(where: { $0.access == .member })
         let itemByID = Dictionary(
             input.allItems.map { ($0.id, $0) },
             uniquingKeysWith: { current, _ in current }
@@ -246,7 +260,8 @@ enum TraceSnapshotComputation {
             ? buildDiscoverSnapshot(
                 items: input.items,
                 sourceRevision: input.sourceRevision,
-                now: input.now
+                now: input.now,
+                journeyFact: journeyFact
             )
             : .empty
 
@@ -271,7 +286,8 @@ enum TraceSnapshotComputation {
         items: [HomeItem],
         sourceRevision: Int,
         now: Date,
-        calendar: Calendar = PlaybackService.isoCalendar
+        calendar: Calendar = PlaybackService.isoCalendar,
+        journeyFact: LifeJourneyFact? = nil
     ) -> DiscoverSnapshot {
         let scopedItems = TraceClueScopePolicy.items(from: items, now: now, calendar: calendar)
         let publishableRows = LifeNarrativeSignalPolicy.publishableItems(from: scopedItems)
@@ -305,22 +321,32 @@ enum TraceSnapshotComputation {
         let allBuckets = sceneBuckets(from: classifiedRows, calendar: calendar)
 
         var discoveries: [DiscoverCard] = []
-        if let journey = LifeJourneyFactService.primaryFact(in: publishableRows, calendar: calendar),
-           journey.endDate >= recentStart,
-           !journey.evidenceItemIDs.isEmpty {
-            discoveries.append(
-                DiscoverCard(
-                    id: "discover:journey:\(journey.id)",
-                    kind: .discovery,
-                    title: journey.label,
-                    summary: journey.line,
-                    evidenceItemIDs: stableEvidenceIDs(journey.evidenceItemIDs),
-                    novelty: 98,
-                    confidence: 96,
-                    storyValue: 98,
-                    latestDate: journey.endDate
-                )
+        if let journey = journeyFact ?? LifeJourneyFactService.primaryFact(in: publishableRows, calendar: calendar),
+           journey.endDate >= recentStart {
+            let publishableIDs = Set(publishableRows.map(\.id))
+            let journeyEvidenceIDs = stableEvidenceIDs(
+                journey.evidenceItemIDs.filter { publishableIDs.contains($0) }
             )
+            if !journeyEvidenceIDs.isEmpty {
+                discoveries.append(
+                    DiscoverCard(
+                        id: "discover:journey:\(journey.id)",
+                        kind: .discovery,
+                        title: journey.label,
+                        summary: journey.line,
+                        evidenceItemIDs: journeyEvidenceIDs,
+                        novelty: 98,
+                        confidence: 96,
+                        storyValue: 98,
+                        latestDate: journey.endDate,
+                        isFeatured: journey.isRoadTrip && journey.containsWeekend,
+                        evidenceSummary: journeyEvidenceSummary(
+                            journey: journey,
+                            evidenceIDs: journeyEvidenceIDs
+                        )
+                    )
+                )
+            }
         }
 
         let candidateKinds = Set(recentBuckets.keys)
@@ -600,6 +626,24 @@ enum TraceSnapshotComputation {
         return ids.filter { seen.insert($0).inserted }.prefix(12).map { $0 }
     }
 
+    private static func journeyEvidenceSummary(
+        journey: LifeJourneyFact,
+        evidenceIDs: [UUID]
+    ) -> DiscoverEvidenceSummary {
+        let evidenceSet = Set(evidenceIDs)
+        let roadCount = Set(journey.roadEvidenceItemIDs).intersection(evidenceSet).count
+        let activityCount = Set(journey.activityEvidenceItemIDs).intersection(evidenceSet).count
+        let accounted = Set(journey.roadEvidenceItemIDs)
+            .union(journey.activityEvidenceItemIDs)
+            .intersection(evidenceSet)
+        return DiscoverEvidenceSummary(
+            total: evidenceSet.count,
+            road: roadCount,
+            activity: activityCount,
+            other: max(evidenceSet.count - accounted.count, 0)
+        )
+    }
+
     private static func editorialOrder(_ lhs: DiscoverCard, _ rhs: DiscoverCard) -> Bool {
         if lhs.editorialScore == rhs.editorialScore {
             if lhs.latestDate == rhs.latestDate { return lhs.id < rhs.id }
@@ -709,9 +753,15 @@ enum TraceSnapshotComputation {
         let isRelationshipLead = lead?.id.hasPrefix("echo:") == true || isJourneyLead
         if isJourneyLead, let journeyFact {
             fullLines.append(journeyFact.line)
-            fullLines.append(
-                "依据来自 \(journeyFact.roadEvidenceItemIDs.count) 笔道路记录和 \(journeyFact.activityEvidenceItemIDs.count) 笔异地活动记录。"
+            let visibleItemIDs = Set(items.map(\.id))
+            let visibleIDs = stableEvidenceIDs(
+                journeyFact.evidenceItemIDs.filter { visibleItemIDs.contains($0) }
             )
+            let evidenceSummary = journeyEvidenceSummary(
+                journey: journeyFact,
+                evidenceIDs: visibleIDs
+            )
+            fullLines.append("\(evidenceSummary.displayText)。")
         } else if !isRelationshipLead {
             if let supportingLine = rewrite?.supportingLine, !supportingLine.isEmpty {
                 fullLines.append(supportingLine)

@@ -4511,7 +4511,8 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ## 91. DISCOVER-EDITORIAL-01：线索 Discover 四层信息架构与动态发现卡片（2026-09-04）
 
-- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；2026-09-04 根据后续 Xcode 编译反馈修复 `TraceRhythmPoint` 的 `startDate` 初始化器缺口，Windows 全量发布门禁再次通过。仍需 macOS/Xcode 复编、全部 XCTest 和 TestFlight/Instruments 真机签收，不标记 `VERIFIED`。
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；本轮针对首次整理耗时、生活线展开信息增量、证据数量口径和高情绪价值跨城线索详情完成定向优化。仍需 macOS/Xcode 复编、全部 XCTest 和 TestFlight/Instruments 真机签收，不标记 `VERIFIED`。
+- 本轮范围：只复用一次生活印记聚合与行程事实；为跨城发现卡补充道路/异地活动/其他行程证据分解；让“为什么这样说”在“两条生活线”下引用具体同日记录；为认证周末跨城自驾提供 Hero 卡、照片墙和记录墙详情入口。
 - 目标：先建立本地确定性的 `DiscoverSnapshot` 和动态卡片规划，再以最小 UI 接线验证信息架构；只发布有真实 evidence ID、且具备信息增量或生活价值的内容。动态发现按 `Novelty × Confidence × Story Value` 排序，稳定存在本身不进入“AI 最近发现”。
 - 允许范围：`StatsTraceModels.swift` 中的 Discover 卡片/快照模型；`StatsTraceSnapshotStore.swift` 中基于现有连续窗口的变化检测、长期生活模式、场景资产和回声投影；`StatsWebView.swift` 中四层区域的只读展示；对应 XCTest、体验静态门禁、文案/发布矩阵。可复用现有 `LifeSceneSemanticService`、`LifeJourneyFactService`、`LifeNarrativeEchoPolicy` 与 `TraceClueScopePolicy`。
 - 冻结边界：不改变生活页周/月入口、线索 `rolling-13-weeks-v1` 窗口、账单分类/OCR/照片/金额/日期/标题、跨城行程认证门槛、会员额度、远程 AI、存储/同步、首页主动作或现有回放/周记/月章文案规则；不扩大历史扫描，不把固定统计或单笔存在伪装成变化，不先做整页视觉重构。
@@ -4525,6 +4526,11 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
   - 针对 Xcode 报告的四处编译错误，为 `TraceClueComputationInput` 增加显式且向后兼容的 `scope` 初始化参数，使 `StatsWebView` 两个连续线索调用与既有周期测试调用同时成立；为节奏 `compactMap` 明确 `TraceRhythmPoint?` 返回类型；在“减少”分支本地计算 `previousCount - recentCount` 差值，避免跨分支变量越界。
   - 针对后续 `Extra argument 'startDate'` 诊断，为 `TraceRhythmPoint` 增加显式且向后兼容的 `startDate` 初始化参数；原有不传日期的周/月节奏点仍保持 `nil`，连续节奏点可保留日期用于高亮定位。
   - `StatsWebView` 接入四个独立只读区域，保留既有线索 Hero、构成和深度线索，未改变生活页周/月入口或账单/会员/同步规则。
+  - 线索冷准备改为只建立一次 `LifeMarkService.PreparedAggregationContext` 和一次候选集合，同时从同一集合读取普通/会员印记；原有普通 8 条、锁定预览 12 条的可见上限保持不变，减少首次整理的重复全账本扫描。
+  - `buildClue` 将已计算的认证 `LifeJourneyFact` 传入 Discover，避免再次计算；跨城卡以同一组 evidence ID 生成总数、道路、异地活动和其他行程关联分解，顶部依据与“为什么这样说”不再各自拼接不同口径。
+  - 认证且包含周末的跨城自驾被标记为重点发现并使用 Hero 卡；所有有证据的 Discover 卡支持打开详情，详情按当前账本重新解析 ID，提供懒加载照片墙和记录墙，编辑/删除后不会继续展示旧记录。
+  - “两条生活线”展开后的依据改为具体同日时间线（最多 4 笔并说明其余数量），明确这是同日共现而非因果；跨城主线则显示统一的证据分解。
 - 修改文件：`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。未修改 `site/`、法律页、账单 schema、OCR、照片、会员额度、远程 AI、存储/同步或首页主动作。
-- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py`、`python scripts/playback_copy_lint.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 均通过，最终输出 `release_repository_gate: OK`；copy lint 仍只有任务开始前已有的 6 条 soft warning。新增 `DiscoverEditorialPolicyTests` 覆盖空账本不伪造、变化有证据且排序确定、稳定存在不进入动态发现、恢复/减少/暂时消失以及滚动窗口外记录隔离；静态门禁除四层模型、评分、滚动边界、变化类型、UI、测试和 `FLOW-101` 外，新增 scope 初始化器、可选节奏点返回类型、减少分支本地差值和 `startDate` 初始化器四条编译形态守卫。
-- 剩余风险与下一步：Windows 无 Swift/Xcode，本轮只能根据编译器诊断定向修复并用静态守卫验证，不能在当前环境宣称四条错误已由 Swift 编译器复验，也未量化 100/1,000/5,000 条真机耗时。下一步必须先在 macOS 重新执行 Swift 6 Debug/Release Clean Build；通过后运行全部 XCTest，再按 `FLOW-101` 在 TestFlight 验证四层内容、周期边界、增删改后的 source revision、空态/无变化静默、VoiceOver/特大字号/Reduce Motion 及 Instruments 内存和 hitch。签收前保持 `CODE_DONE`，不启动相邻视觉重构。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py`、`python scripts/playback_copy_lint.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 均通过，最终输出 `release_repository_gate: OK`；copy lint 仍只有任务开始前已有的 6 条 soft warning。`DiscoverEditorialPolicyTests` 新增周末跨城重点卡证据分解、详情 ID 在删除后即时过滤且顺序保持两项覆盖；静态门禁新增聚合复用、重点卡/照片墙/记录墙、统一依据文案和详情解析守卫。
+- 剩余风险与下一步：Windows 无 Swift/Xcode，本轮只能以静态门禁和脚本回归确认源码形态，不能宣称 Swift 6 编译、XCTest、照片解码、Sheet 路由和真机耗时已通过，也未量化 100/1,000/5,000 条首次整理的实际下降幅度。下一步必须先在 macOS 重新执行 Swift 6 Debug/Release Clean Build 和全部 XCTest，再按 `FLOW-101` 在 TestFlight 验证首次整理耗时、四层内容、周末跨城 Hero、照片墙/记录墙、编辑/删除后的即时刷新、周期边界、VoiceOver/特大字号/Reduce Motion 及 Instruments 内存和 hitch。签收前保持 `CODE_DONE`，不启动相邻视觉重构。
+- 复核记录（2026-09-04）：本轮未扩大产品范围，仅重新执行 `git diff --check`、语义回归、体验静态门禁、文案门禁、播放文案门禁与 `validate_release_gate.py --phase windows`，全部通过，发布门禁仍为 `release_repository_gate: OK`；copy lint 仍仅有任务开始前的 6 条 soft warning。当前机器仍无 `swiftc`、`xcodebuild`，因此状态和下一任务保持不变。

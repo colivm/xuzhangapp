@@ -1691,6 +1691,11 @@ final class LifeJourneyFactRegressionTests: XCTestCase {
         XCTAssertEqual(outroSupport, Optional(fact.line))
         XCTAssertEqual(clue.insight.theme, .relation)
         XCTAssertEqual(clue.insight.previewLine, fact.line)
+        XCTAssertTrue(clue.insight.fullLines.contains { line in
+            line.contains("共 \(fact.evidenceItemIDs.count) 笔记录")
+                && line.contains("道路")
+                && line.contains("异地活动")
+        })
         XCTAssertFalse(clue.insight.leadQuestion.contains("变化来自哪些记录"))
         XCTAssertNil(clue.narrativeRewrite)
     }
@@ -9187,6 +9192,75 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
         )
 
         XCTAssertEqual(current, withOld)
+    }
+
+    func testWeekendRoadTripDiscoveryIsFeaturedWithOneEvidenceBreakdown() {
+        let rows: [HomeItem] = [
+            item("南京电车充电", day: 29, hour: 8, id: 61, category: .transport, month: 8),
+            item("宿迁过路费", day: 29, hour: 11, id: 62, category: .transport, month: 8),
+            item("连云港海鲜", day: 30, hour: 13, id: 63, category: .dining, month: 8),
+            item("宿迁夜宵", day: 31, hour: 22, id: 64, category: .dining, month: 8),
+            item("返南京过路费", day: 1, hour: 17, id: 65, category: .transport, month: 9)
+        ].enumerated().map { index, value in
+            var row = value
+            let city: String
+            let place: String
+            switch index {
+            case 0:
+                city = "南京"
+                place = "本城"
+            case 1, 3:
+                city = "宿迁"
+                place = "外地"
+            case 2:
+                city = "连云港"
+                place = "外地"
+            default:
+                city = "南京"
+                place = "本城"
+            }
+            row.memoryContext = HomeItem.MemoryContext(
+                weatherKind: nil,
+                temperatureCelsius: nil,
+                cityName: city,
+                semanticPlace: place
+            )
+            return row
+        }
+
+        let snapshot = TraceSnapshotComputation.buildDiscoverSnapshot(
+            items: rows,
+            sourceRevision: 61,
+            now: now,
+            calendar: calendar
+        )
+        let card = try! XCTUnwrap(
+            snapshot.recentDiscoveries.first { $0.title == "周末跨城自驾" }
+        )
+
+        XCTAssertTrue(card.isFeatured)
+        XCTAssertEqual(card.evidenceSummary?.total, card.evidenceItemIDs.count)
+        XCTAssertEqual(card.evidenceSummary?.road, 2)
+        XCTAssertEqual(card.evidenceSummary?.activity, 2)
+        XCTAssertEqual(card.evidenceSummary?.other, 1)
+        XCTAssertTrue(card.evidenceDisplayText.contains("共 5 笔记录"))
+        XCTAssertTrue(card.evidenceDisplayText.contains("2 笔道路"))
+        XCTAssertTrue(card.evidenceDisplayText.contains("2 笔异地活动"))
+    }
+
+    func testDiscoverDetailEvidenceResolutionDropsDeletedRecordsAndKeepsOrder() {
+        let rows = [
+            item("第一笔", day: 27, id: 71),
+            item("第二笔", day: 28, id: 72),
+            item("第三笔", day: 29, id: 73)
+        ]
+        let resolved = DiscoverEvidenceResolutionPolicy.resolve(
+            evidenceIDs: [rows[2].id, rows[0].id, rows[1].id],
+            in: [rows[0], rows[2]]
+        )
+
+        XCTAssertEqual(resolved.map(\.id), [rows[2].id, rows[0].id])
+        XCTAssertFalse(resolved.contains { $0.id == rows[1].id })
     }
 }
 #endif

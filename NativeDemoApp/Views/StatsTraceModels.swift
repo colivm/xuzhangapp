@@ -857,6 +857,32 @@ enum DiscoverCardKind: String, Codable, Equatable, Sendable {
     case echo
 }
 
+struct DiscoverEvidenceSummary: Codable, Equatable, Sendable {
+    let total: Int
+    let road: Int
+    let activity: Int
+    let other: Int
+
+    init(total: Int, road: Int = 0, activity: Int = 0, other: Int = 0) {
+        self.total = max(total, 0)
+        self.road = max(road, 0)
+        self.activity = max(activity, 0)
+        self.other = max(other, 0)
+    }
+
+    var displayText: String {
+        guard total > 0 else { return "暂无可核对的记录" }
+        let hasBreakdown = road > 0 || activity > 0 || other > 0
+        guard hasBreakdown else { return "依据 \(total) 笔记录" }
+
+        var parts: [String] = []
+        if road > 0 { parts.append("\(road) 笔道路") }
+        if activity > 0 { parts.append("\(activity) 笔异地活动") }
+        if other > 0 { parts.append("\(other) 笔其他行程关联") }
+        return "共 \(total) 笔记录：\(parts.joined(separator: "、"))"
+    }
+}
+
 struct DiscoverCard: Identifiable, Codable, Equatable, @unchecked Sendable {
     let id: String
     let kind: DiscoverCardKind
@@ -867,6 +893,34 @@ struct DiscoverCard: Identifiable, Codable, Equatable, @unchecked Sendable {
     let confidence: Int
     let storyValue: Int
     let latestDate: Date
+    let isFeatured: Bool
+    let evidenceSummary: DiscoverEvidenceSummary?
+
+    init(
+        id: String,
+        kind: DiscoverCardKind,
+        title: String,
+        summary: String,
+        evidenceItemIDs: [UUID],
+        novelty: Int,
+        confidence: Int,
+        storyValue: Int,
+        latestDate: Date,
+        isFeatured: Bool = false,
+        evidenceSummary: DiscoverEvidenceSummary? = nil
+    ) {
+        self.id = id
+        self.kind = kind
+        self.title = title
+        self.summary = summary
+        self.evidenceItemIDs = evidenceItemIDs
+        self.novelty = novelty
+        self.confidence = confidence
+        self.storyValue = storyValue
+        self.latestDate = latestDate
+        self.isFeatured = isFeatured
+        self.evidenceSummary = evidenceSummary
+    }
 
     var editorialScore: Int {
         novelty * confidence * storyValue
@@ -874,6 +928,10 @@ struct DiscoverCard: Identifiable, Codable, Equatable, @unchecked Sendable {
 
     var hasEvidence: Bool {
         !evidenceItemIDs.isEmpty
+    }
+
+    var evidenceDisplayText: String {
+        evidenceSummary?.displayText ?? "依据 \(evidenceItemIDs.count) 笔记录"
     }
 }
 
@@ -897,6 +955,19 @@ struct DiscoverSnapshot: Equatable, @unchecked Sendable {
             && lifePatterns.isEmpty
             && sceneAssets.isEmpty
             && echoes.isEmpty
+    }
+}
+
+enum DiscoverEvidenceResolutionPolicy {
+    static func resolve(
+        evidenceIDs: [UUID],
+        in items: [HomeItem]
+    ) -> [HomeItem] {
+        let itemsByID = Dictionary(
+            items.map { ($0.id, $0) },
+            uniquingKeysWith: { current, _ in current }
+        )
+        return evidenceIDs.compactMap { itemsByID[$0] }
     }
 }
 
