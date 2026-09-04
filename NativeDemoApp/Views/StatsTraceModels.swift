@@ -971,6 +971,73 @@ enum DiscoverEvidenceResolutionPolicy {
     }
 }
 
+/// A deterministic editorial rhythm for the evidence photo wall.
+///
+/// The wall deliberately uses a small set of repeatable compositions instead
+/// of a fixed equal-height grid or random decoration. That keeps the layout
+/// expressive while preserving stable screenshots, accessibility order and
+/// evidence-to-record identity.
+struct DiscoverMemoryWallRow: Equatable, Identifiable {
+    enum Kind: String, Equatable {
+        case hero
+        case pair
+    }
+
+    let indices: [Int]
+    let kind: Kind
+
+    var id: String {
+        "\(kind.rawValue)-\(indices.map { String($0) }.joined(separator: "-"))"
+    }
+}
+
+enum DiscoverMemoryWallLayoutPolicy {
+    static func rows(for itemCount: Int) -> [DiscoverMemoryWallRow] {
+        guard itemCount > 0 else { return [] }
+
+        switch itemCount {
+        case 1:
+            return [DiscoverMemoryWallRow(indices: [0], kind: .hero)]
+        case 2:
+            return [DiscoverMemoryWallRow(indices: [0, 1], kind: .pair)]
+        case 3:
+            return [
+                DiscoverMemoryWallRow(indices: [0], kind: .hero),
+                DiscoverMemoryWallRow(indices: [1, 2], kind: .pair)
+            ]
+        case 4:
+            return [
+                DiscoverMemoryWallRow(indices: [0, 1], kind: .pair),
+                DiscoverMemoryWallRow(indices: [2, 3], kind: .pair)
+            ]
+        case 5:
+            return [
+                DiscoverMemoryWallRow(indices: [0], kind: .hero),
+                DiscoverMemoryWallRow(indices: [1, 2], kind: .pair),
+                DiscoverMemoryWallRow(indices: [3, 4], kind: .pair)
+            ]
+        default:
+            var rows = [
+                DiscoverMemoryWallRow(indices: [0], kind: .hero),
+                DiscoverMemoryWallRow(indices: [1, 2], kind: .pair),
+                DiscoverMemoryWallRow(indices: [3, 4], kind: .pair)
+            ]
+            var nextIndex = 5
+            while nextIndex < itemCount {
+                let endIndex = min(nextIndex + 2, itemCount)
+                rows.append(
+                    DiscoverMemoryWallRow(
+                        indices: Array(nextIndex..<endIndex),
+                        kind: endIndex - nextIndex == 1 ? .hero : .pair
+                    )
+                )
+                nextIndex = endIndex
+            }
+            return rows
+        }
+    }
+}
+
 struct SummaryLaunchPreview {
     let count: Int
     let total: Double

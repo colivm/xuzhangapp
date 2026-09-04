@@ -146,6 +146,8 @@
 | 15 | A11Y-01 | 小字号、对比度、Dynamic Type 与 VoiceOver | `CODE_DONE` | 核心页面语义字体、自适应操作、44pt 触控、VoiceOver 与 Reduce Motion 门禁完成；等待 Xcode/真机签收 |
 | 16 | OBS-01 | 产品漏斗与性能可观测性 | `CODE_DONE` | 本机类型化匿名事件、敏感字段白名单、关键漏斗与耗时桶完成；等待 Xcode/真机签收 |
 | 17 | RELEASE-01 | 100/1,000/5,000 条与完整发版门禁 | `CODE_DONE` | 确定性夹具、Windows 自动门禁、Debug 隔离装载与统一真机矩阵完成；等待 macOS/Xcode、StoreKit 和 iPhone 集中签收 |
+| 18 | DISCOVER-MEMORY-WALL-01 | 线索详情生活片段墙 | `CODE_DONE` | 确定性照片拼贴与日期时间线完成；等待 `FLOW-103` 的 macOS/Xcode、无障碍、照片生命周期与 TestFlight/Instruments 签收 |
+| 19 | PERF-FIRST-SCREEN-01 | 两阶段首屏与渐进整理 | `NOT_STARTED` | 当前主要问题、既有性能修复和统一 macOS/Xcode/真机签收完成后再进入；本轮仅登记待办 |
 
 当前签收策略：后续仍需补全部 `CODE_DONE` 任务的 Xcode/真机证据；用户于 2026-07-15 再次明确要求“不要再问，全部改完后一起真机验证”，授权按台账顺序连续完成后续代码任务。该持续授权允许前一项达到 `CODE_DONE` 后直接进入下一项，但不得把任何未真机验证任务标为 `VERIFIED`，且仍须保持同一时间最多一个 `IN_PROGRESS`。
 
@@ -1035,6 +1037,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 | 2026-07-15 | OBS-01 产品与性能可观测性 | `IN_PROGRESS` → `CODE_DONE` | 可观测性契约、本机类型化事件、首记/首播/周月/AI/会员/性能接入、隐私 XCTest 与 lint | Windows 五项基础回归、专项 lint、迁移/SQLite 回归通过 | 待 Xcode 编译、本机事件核对和 100/1,000/5,000 真机耗时签收 | RELEASE-01 |
 | 2026-07-15 | RELEASE-01 发版门禁 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 按持续授权进入，冻结全部产品与数据结论 | 建立混合夹具、自动门禁和统一真机/Xcode 清单 | RELEASE-01 |
 | 2026-07-15 | RELEASE-01 发版门禁 | `IN_PROGRESS` → `CODE_DONE` | 三档发布夹具/manifest、生成与统一验证脚本、Debug 隔离装载、三档 XCTest、统一真机矩阵、体验静态门禁 | `python scripts/validate_release_gate.py --phase windows` 整体通过；集合摘要固定，既有 7 条文案软提示 | Windows 代码阶段完成；仍缺 macOS Debug/Release/XCTest、StoreKit 沙盒和 iPhone 全矩阵/device-audit | 统一 Xcode/真机签收 |
+| 2026-09-04 | DISCOVER-MEMORY-WALL-01 线索详情生活片段墙 | `NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE` | `StatsTraceModels.swift`、`StatsWebView.swift`、`StateRegressionTests.swift`、体验静态门禁、发布矩阵与本文档 | Windows 基础回归、布局 XCTest 静态接线、体验静态检查和 `validate_release_gate.py --phase windows` 通过；发布门禁 `release_repository_gate: OK` | 照片墙改为确定性 hero/pair 拼贴，记录墙按日期时间线分组；待 macOS/Xcode、照片解码、无障碍和 TestFlight/Instruments 真机签收 | FLOW-103 真机签收 |
 
 ---
 
@@ -1043,7 +1046,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 当前无 `IN_PROGRESS`；`ARCH-FIX-01`、`ARCH-01`、`ARCH-02` 已完成 Windows 代码与回归，`RELEASE-02` 继续因缺少 Xcode、iPhone、StoreKit 沙盒与权限/无障碍真机条件而 `BLOCKED`。
 - 保留阻塞任务：`GATE-00`，等待后续 macOS/Xcode 与真机补签收。
 - 用户例外授权：2026-07-15 第一次允许启动 `INT-01`，第二次允许启动 `NAV-01`；第三次明确要求后续任务不再逐项询问、全部代码完成后统一真机验证。所有授权均不代表前序 Xcode/真机验收通过。
-- 当前代码完成待签收：`INT-01`、`NAV-01`、`NAV-02`、`TEST-01`、`DATA-01`、`DATA-02`、`DATA-03`、`DATA-04`、`PERF-01`、`PERF-02`、`PROD-01`、`PROD-02`、`MEMBER-01`、`AI-01`、`A11Y-01`、`OBS-01`、`RELEASE-01`、`COPY-01`、`PERF-03`、`DATA-05`、`PERF-04`、`INT-02`、`DATA-06`、`MEMBER-02`。
+- 当前代码完成待签收：`INT-01`、`NAV-01`、`NAV-02`、`TEST-01`、`DATA-01`、`DATA-02`、`DATA-03`、`DATA-04`、`PERF-01`、`PERF-02`、`PROD-01`、`PROD-02`、`MEMBER-01`、`AI-01`、`A11Y-01`、`OBS-01`、`RELEASE-01`、`COPY-01`、`PERF-03`、`DATA-05`、`PERF-04`、`INT-02`、`DATA-06`、`MEMBER-02`、`DISCOVER-MEMORY-WALL-01`。
 - 当前阶段：Windows 代码阶段和完整 repository gate 已完成；等待 macOS/Xcode、iPhone、短信/同步测试账号与 StoreKit 沙盒补签收，只允许处理签收发现的定向问题。
 - 后续策略：只处理统一签收发现的定向问题；每个修复必须回填所属任务、边界和回归，不得重新展开产品范围。
 
@@ -4565,3 +4568,122 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py`、`python scripts/playback_copy_lint.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 均通过；静态门禁新增 iOS 18 `Color.mix` 禁用守卫，发布门禁输出 `release_repository_gate: OK`。copy lint 仍仅保留任务开始前已有的 6 条 soft warning。
 - 冻结边界复核：未修改账单、线索业务规则、OCR、会员、同步、远程 AI、业务文案或页面信息架构；浅色主题的原有视觉 token 和照片/警示白字语义保持不变。
 - 剩余风险与下一步：Windows 无 Swift/Xcode，无法实测 SwiftUI 材质合成与 31 套主题的真机观感，也不能宣称 XCTest 已运行；下一步在 macOS 执行 Swift 6 Debug/Release Clean Build 与全部 XCTest，并按 `FLOW-102` 完成全主题 iPhone、VoiceOver、特大字号、Reduce Transparency、低亮度及 100/1,000/5,000 条性能签收后再标记 `VERIFIED`。
+
+---
+
+## 93. DISCOVER-MEMORY-WALL-01：线索详情生活片段墙（2026-09-04）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；本项响应“相关记录打开后照片墙太一板一眼、记录墙缺少叙事节奏”的定向反馈。只处理线索详情的证据展示，不改变 Discover 发现规则或账单含义。
+- 目标：照片墙采用确定性的杂志式错落拼贴，记录墙按日期形成可扫描的生活片段时间线；照片和记录继续打开同一条原始账单，编辑/删除后按 evidence ID 重新解析。
+- 允许范围：`NativeDemoApp/Views/StatsWebView.swift` 的 `DiscoverDetailSheetView` 及其只读展示辅助；`NativeDemoApp/Views/StatsTraceModels.swift` 的照片墙布局策略；对应 XCTest、体验静态门禁、发布/真机矩阵和本文档。
+- 冻结边界：不修改线索连续窗口、卡片评分、跨城认证门槛、账单分类/OCR/金额/日期/标题、照片文件/顺序/封面/加载策略、会员额度、远程 AI、存储/同步、Sheet 路由和生活页周/月入口；不随机旋转、不凭空创建照片或记录，不扩大历史扫描。
+- 计划验收：1 张照片为主图；2 张照片不再等高三列；3 张照片为主图+双图；4～6 张按确定性错落双列排列；无照片继续明确降级。记录墙按同日分组并显示时间线连接，点击任意照片/记录打开正确编辑详情；删除或编辑后详情只显示当前账本仍存在的 evidence ID；特大字号、VoiceOver、Reduce Motion 和懒加载语义保持。
+- 实施结果：
+  - 新增 `DiscoverMemoryWallLayoutPolicy`，按照片数量生成稳定的 `hero`/`pair` 行：单图主图、双图错落双图、三图主图+双图、四至六图及更多照片采用交替高度和对齐的双列拼贴；不使用随机旋转，不改变 evidence 顺序。
+  - `DiscoverDetailSheetView` 改用 `LazyVStack` 懒加载照片行，缩略图仍复用现有 `MemoryAttachmentThumbnail` 和缓存/按需解码路径；每张照片保留日期、照片标识、VoiceOver 标签和打开原记录动作。
+  - 记录墙按真实日历日分组，同日记录保留卡片 evidence 顺序，以时间点、分类、金额和照片标识组成轻重交替的时间线片段；跨城行程仍能按出发—道路—活动—返程顺序阅读。
+  - 详情继续通过 `DiscoverEvidenceResolutionPolicy.resolve` 从当前账本解析 evidence ID，删除/编辑后不会保留旧 `HomeItem`；无照片和无记录状态继续使用明确空态。
+- 修改文件：`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。未修改 Discover 算法、账单/照片数据、会员、远程 AI、存储/同步、路由或生活页周期。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py`、`python scripts/playback_copy_lint.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 均通过；发布门禁输出 `release_repository_gate: OK`。新增布局 XCTest 覆盖 0/1/2/3/6/9 张照片的行组成、顺序和不重复索引。copy lint 仍仅保留任务开始前已有的 6 条 soft warning。
+- 冻结边界复核：未改变 Discover 发现、证据口径、账单字段、照片文件和加载策略、编辑/删除持久化、会员/额度、AI、同步、Sheet 路由或生活页周/月入口；仅改变详情页的确定性展示编排。
+- 剩余风险与下一步：Windows 无 Swift/Xcode，无法在本机证明 SwiftUI `ForEach`/动态行高度、照片解码生命周期、VoiceOver/特大字号和 Reduce Motion 的真机观感，也不能宣称 XCTest 已运行。下一步按 `FLOW-103` 在 macOS/Xcode Clean Build、`DiscoverEditorialPolicyTests` 和 TestFlight/Instruments 验证 1/2/3/4～6 张照片、跨日时间线、编辑/删除即时刷新、快速滚动内存和无障碍后再标记 `VERIFIED`。
+
+### 复核记录（2026-09-04）
+
+- 用户反馈底部“周末跨城自驾的证据”与改前区别不明显，并询问详情中“小红岛买东西”“修电瓶车”的纳入原因，以及“过去的回声”下方再次出现跨城自驾是否重复。
+- 源码对照结论：截图中的底部大卡实际来自 `traceDeepInsightCard`，不是 `traceDiscoverEditorialBoard` 的 Hero；两者都使用同一个 `LifeJourneyFact`，所以标题、路线和证据口径相似，形成同一事实的两次完整叙述。截图中“过去的回声”卡是另一条“饭点外卖”回声，跨城卡只是紧随其后，并非被 `echoes` 数据重复生成，但当前缺少层级分隔，用户会感知为重复。
+- `LifeJourneyFactService.makeCandidate` 会把起止时间内的道路、活动、长途交通和城市切换/结束锚点合并为证据；`transitionRows` 明确加入每次城市切换的第一条记录和行程最后一条记录。因此“小红岛买东西”“修电瓶车”更可能是路线边界锚点，落在“其他行程关联”，不是金额推断或核心道路判定。
+- 本轮仅完成产品复核，没有修改代码、账单数据或证据口径。建议下一项独立建立 `DISCOVER-JOURNEY-HIERARCHY-01`，再处理跨城证据分层、底部深度卡去重和回声去重。
+
+---
+
+## 94. DISCOVER-JOURNEY-HIERARCHY-01：跨城线索证据分层与层级去重（2026-09-04）
+
+- 状态：`NOT_STARTED`；等待用户确认后进入 `IN_PROGRESS`。本任务只处理跨城线索的展示层级与证据解释，不回改已完成的 `DISCOVER-EDITORIAL-01` 或 `DISCOVER-MEMORY-WALL-01` 算法。
+- 目标：让“AI 重点发现”成为跨城故事的唯一主入口；详情默认突出核心道路/异地活动证据，路线边界记录可展开但不与核心证据混在同一视觉层；“过去的回声”只在存在独立历史证据时呈现，不因当前跨城行程再次单独重复。
+- 允许范围：`LifeJourneyFact` 的证据角色投影、跨城详情与 Discover 卡的只读展示编排、回声与当前 Journey 的去重判定、对应 XCTest、体验静态门禁、发布/真机矩阵和本文档。可增加 `boundaryEvidenceItemIDs` 等展示用字段，但不得删除或改写原始账单。
+- 冻结边界：不改变跨城认证门槛、城市识别、道路/活动分类规则、账单金额/日期/标题/分类、照片文件和顺序、生活页周期入口、会员额度、远程 AI、存储/同步、Sheet 路由或回放文案；不静默丢弃边界证据，不把展示折叠误报为证据不存在。
+- 计划验收：1）同一周末跨城事实在 Discover 只保留一个 Hero 主叙事，底部不再出现同文案的第二张完整大卡；2）详情显示“核心证据”和“路线边界记录”两个层级，默认仍可核对全部 evidence ID；3）边界记录解释为出发/城市切换/返程锚点，“小红岛买东西”“修电瓶车”等记录不会被误标为道路或异地活动；4）无历史同类证据时“过去的回声”不显示当前 Journey，存在真实历史匹配时才显示当前+历史 evidence IDs；5）删除/编辑、照片墙/记录墙、VoiceOver、特大字号和 Reduce Motion 保持现有语义。
+- 验证要求：Windows 执行静态门禁、语义回归和发布门禁；macOS/Xcode 执行 Swift 6 Debug/Release Clean Build、相关 XCTest 和 TestFlight 真机签收；用真实南京→宿迁→连云港→宿迁→南京样本核对 10 笔总数、4 笔道路、4 笔异地活动、2 笔边界记录的解释一致性。
+- 剩余风险：在未完成该独立任务前，当前实现仍会让同一 Journey 在重点发现与深度线索处重复讲述，且“其他行程关联”对用户不够可解释；这属于展示层风险，不影响账单保存和原始证据完整性。
+
+---
+
+## 95. 性能与发热诊断复核（2026-09-04）
+
+- 范围：只读审计长时间使用后的发热、内存和“正在整理”路径；本轮未修改生产代码、数据、UI 或任务状态。
+- 代码证据：
+  - `StatsTraceSnapshotStore.swift` 的线索整理会执行场景分类、变化比较、生活模式/场景资产/回声、认证跨城事实和生活印记聚合；整理移到 `LedgerBackgroundComputationLane` 只改变线程，不会消除 CPU 工作量。
+  - `HomeViewModel.items.didSet` 会同时失效并启动账本派生缓存、首页生活线索和远程叙事预计算；取消是协作式的，已进入同步循环的旧任务仍可能完成一段计算。
+  - `HomeItem` 对刚添加或尚未外置的照片保留 `memoryImageDatas`；外置记录启动时只保留引用/字节数，但照片详情仍会解码图片。
+  - 图片解码缓存已有 40 张/约 32MB 上限，缩略图最长边 480px、详情最长边 1,600px；这降低了风险，但不能证明真实设备上无峰值。
+  - 宠物帧动画、天气/奖励/回放 `TimelineView` 与 `Canvas` 在页面可见时持续刷新，通常是次要但可叠加的 GPU/CPU 来源；联网 AI/WeatherKit 还可能带来无线电耗电。
+- 初步结论：整理期间发热主要符合 CPU 计算；整理结束仍发热时，优先排查重复/未及时停止的派生任务、图片解码与进程内原始图片数据，其次才是持续动画或网络。内存占用可能参与，但现有证据不足以断言内存泄漏。
+- 当前验证证据：完成源码审计；Windows 无 `swiftc`、`xcodebuild`、Instruments 和 iPhone，未取得 CPU/GPU/内存/热状态实测数据，因此不标记为已验证。
+- 下一步：在 macOS 真机按 `FLOW-101`、`FLOW-102`、`FLOW-103` 和 `RELEASE-02` 统一签收中增加 `Time Profiler`、`Energy Log`、`Allocations/Memory Graph`、`Main Thread Hitches` A/B；比较小/大账本、无图/多图、远程 AI/天气开关、宠物开关，并记录整理完成后 10 分钟的 CPU 与内存回落情况。若确认持续开销，再单独建立性能任务，优先做单飞任务合并、外置图片后的内存释放和热/后台降级动画。
+
+---
+
+## 96. PERF-FIRST-SCREEN-01：两阶段首屏与渐进整理（待办）
+
+- 状态：`NOT_STARTED`；本轮只登记，不进入 `IN_PROGRESS`，当前无 `IN_PROGRESS`。
+- 用户诉求：首次打开或首次进入线索时，先快速看到可用内容和可操作界面，再在后台完成高成本整理；避免新用户等待完整计算后才看到首屏。
+- 产品方案（待实施）：
+  1. 阶段一（首屏）：立即展示稳定的页面骨架、账本元数据和可安全承接的上次快照/轻量事实；不等待周/月/线索全量整理，不阻塞滚动和记账。
+  2. 阶段二（渐进整理）：后台按“当前可见内容 → 关键生活线索 → 低优先级预热”顺序准备完整快照；只在账本修订、筛选和会员身份仍匹配时原子替换，旧任务取消后不得回写。
+- 允许范围（启动时再细化）：首屏生命周期、快照冷启动承接、任务优先级/合并/取消、局部加载状态、性能埋点和对应 XCTest/真机矩阵。不得先改线索事实算法或账单数据。
+- 冻结边界：不改变账单分类、金额/日期/标题、OCR、照片文件与顺序、线索连续窗口、证据门槛、生活页周/月入口、复盘/回放文案、会员/额度、远程 AI、同步、首页主动作和现有导航语义；不使用假数据填充首屏，不用永久缓存掩盖失败。
+- 前置条件：先完成当前主要问题的代码与真机签收，尤其是 `DISCOVER-JOURNEY-HIERARCHY-01`、现有 `PERF-15`/`PERF-FIX-*`/`TRACE-PREP-PERF-02` 的 Xcode/真机验证，以及本次发热诊断中的 Instruments 基线；前置问题未收口前不得启动本任务。
+- 计划验收：新用户空/少量账本、100/1,000/5,000 条账本和无图/多图账本均能先交互后整理；阶段二完成后内容与单阶段完整计算结果一致；切后台、取消、快速编辑/删除、跨 Tab、低电量、Reduce Motion、VoiceOver、特大字号和内存/热状态无回归；首次首帧、整理完成、主线程 hitch、峰值内存和整理后 10 分钟回落均有真机证据。
+- 当前验证证据：仅完成产品方案登记；未修改生产代码，未运行本任务 XCTest 或真机性能测试。
+- 下一步：继续处理现有主要问题和统一 Xcode/真机签收；完成前置条件后，再将本项改为唯一 `IN_PROGRESS` 并按台账流程实施。
+
+---
+
+## 97. 近期反馈归档与变更追溯索引（2026-09-04）
+
+- 目的：将本轮“周末跨城”重复、统计口径混用、生活构成重复、饭点外卖回声边界、证据解释和首次整理性能反馈集中归档，并明确哪些已经完成代码、哪些仍是待优化事项。历史任务 1～96 的详细修改文件、冻结边界和验证证据继续以各自任务卡为准；本节只做索引，不替代原任务卡。
+- 台账规则：任何生产代码、测试、静态门禁、发布矩阵、官网/运维或法律改动，必须在对应任务卡记录目标、允许范围、冻结边界、修改文件、验证证据、剩余风险和下一任务；`CODE_DONE` 不能写成 `VERIFIED`，没有 macOS/Xcode、真机或生产证据时必须保留未签收状态。每次开始任务前重新检查 `git status --short`，保留现有用户修改。
+
+### 本轮已确认的问题
+
+1. **同一周末跨城故事被完整讲了两次**：截图 2 的大卡来自 `traceClueHeroCard`，截图 1 底部“周末跨城自驾的证据”来自 `traceDeepInsightCard`；两者都使用同一个 `LifeJourneyFact`、同一条路线和同一个问题标题，不是“过去的回声”把跨城事实重复生成。页面上方若出现“AI 重点发现”紧凑卡，则也是同一事实的第三个投影。
+2. **跨城故事混入了连续线索窗口的全局统计**：`372 笔`、`82 天有痕迹`、总金额和 `餐饮 148 笔`来自滚动 13 周的全部 `traceClueItems`，不是本次跨城的 10 条证据；10 条证据的正确拆分是 4 笔道路、4 笔异地活动、2 笔路线边界记录。
+3. **“生活构成”紧接着重复出现**：`traceClueCompositionCard` 无条件复用同一批连续窗口记录，因此再次展示分类数量和横向占比。它回答的是“这段窗口整体记了什么”，不是“这次跨城如何发生”，但当前视觉层级让用户误以为属于跨城卡。
+4. **“饭点外卖”是独立回声，不是重复源**：它由 `LifeNarrativeEchoPolicy.makeEcho` 单独生成；由于回声和跨城事实读取同一账本，当前餐饮记录可能与跨城活动 evidence ID 重叠，但标题重复的根因仍是 Hero/Deep 双投影。后续需要在存在独立历史证据时才保留回声。
+5. **“小红岛买东西”“修电瓶车”等记录的角色不清楚**：它们来自跨城起止时间内的城市切换/首条记录/末条记录锚点，当前被归为“其他行程关联”，不代表被金额猜测成道路或异地活动；展示上需要将核心证据与路线边界证据分层解释。
+6. **首次整理和长时间使用的性能风险仍未完成真机量化**：当前审计认为整理期间主要是 CPU 计算，持续发热还需排查任务重复/取消滞后、图片解码和原始图片驻留；不能仅凭源码断言内存泄漏。
+
+### 近期已完成代码（仍待相应环境签收）
+
+| 任务 | 已完成内容 | 当前状态与追溯位置 |
+|---|---|---|
+| `TRACE-DELETE-FIX-01` | 连续左滑删除、快照一致性和删除后列表刷新边界 | `CODE_DONE`，详见第 67 项 |
+| `LIFE-JOURNEY-FIX-01` | 充电/跨日跨城事实串联、单笔事实一致性和生活线索投影 | `CODE_DONE`，详见第 71 项 |
+| `INTERACTION-MEMORY-FIX-01` | 快速操作任务取消、内存峰值和任务堆积的定向收口 | `CODE_DONE`，详见第 72 项 |
+| `AI-JOURNEY-QUERY-FIX-01` | “出去玩”等自然语言查询命中已认证跨城行程 | `CODE_DONE`，详见第 73 项 |
+| `HOME-EDIT-PUBLICATION-FIX-01` | 首页编辑后列表即时发布、详情与列表一致、减少等待卡顿 | `CODE_DONE`，详见第 74 项 |
+| `PHOTO-JOURNEY-COPY-FIX-01` | 过路费照片事实和跨城推荐指令闭环 | `CODE_DONE`，详见第 76 项 |
+| `TRACE-PREP-PERF-01/02` | 事实底稿与回声有界计算，减少重复历史扫描 | `CODE_DONE`，详见第 70、87 项 |
+| `TRACE-CLUE-SCOPE-01` | 线索独立连续范围、冷启动身份和统一加载承接 | `CODE_DONE`，详见第 89 项 |
+| `DISCOVER-EDITORIAL-01` | Discover 四层卡片、一次聚合复用、跨城重点卡、详情入口和统一证据摘要 | `CODE_DONE`，详见第 91 项；本轮确认仍有层级重复风险 |
+| `DARK-MODE-READABILITY-01` | 深色前景/承载层、编辑详情次级控件和 iOS 17 兼容修正 | `CODE_DONE`，详见第 92 项 |
+| `DISCOVER-MEMORY-WALL-01` | 确定性杂志式照片墙、按日记录墙、编辑/删除后 evidence ID 重解析 | `CODE_DONE`，详见第 93 项 |
+
+上述任务的 Windows 静态、语义、文案和发布门禁结果已分别写入原任务卡；由于当前环境没有 Swift/Xcode、iPhone 和 Instruments，相关任务均不得提前标记为真机 `VERIFIED`。
+
+### 待优化事项与执行顺序
+
+| 优先级 | 任务 | 待解决内容 | 状态/前置条件 |
+|---:|---|---|---|
+| P0 | `DISCOVER-JOURNEY-HIERARCHY-01` | 跨城只保留一个 AI 重点主叙事；Hero/Deep 去重；统计与行程证据分口径；核心/边界证据分层；回声排除当前行程重叠并保留真实历史匹配 | `NOT_STARTED`；按第 94 项独立进入，不回改已完成算法 |
+| P1 | `PERF-FIRST-SCREEN-01` | 两阶段首屏：先展示安全快照/轻量事实，再后台渐进整理；取消旧任务、原子替换、避免首屏等待 | `NOT_STARTED`；必须先完成 P0、现有性能任务签收和 Instruments 基线 |
+| P1 | 性能真机基线 | 用 Time Profiler、Energy Log、Allocations/Memory Graph、Main Thread Hitches 对比小/大账本、无图/多图、AI/天气/宠物开关，并记录整理后 10 分钟回落 | 归档于第 95 项；尚未取得设备证据，不得据此宣称“内存泄漏已修复” |
+| P2 | 既有 `CODE_DONE` 集中签收 | Swift 6 Debug/Release Clean Build、全部 XCTest、TestFlight 真实南京→宿迁→连云港→宿迁→南京样本、VoiceOver/特大字号/Reduce Motion | 受 macOS/Xcode/iPhone 环境阻塞，按各任务卡 FLOW 矩阵执行 |
+
+### 本次台账变更
+
+- 修改文件：仅更新 `GLOBAL_PRODUCT_INTERACTION_OPTIMIZATION_LEDGER_2026-07-15.md`，未修改生产代码、账单数据、Discover 算法、网站、法律页、服务端或工程配置。
+- 验证证据：本次完成前执行 `git status --short` 保护既有工作区；修改后执行 `git diff --check`，确认台账无空白错误或冲突标记。
+- 剩余风险：台账记录已经补齐，但 P0/P1 仍未实现；所有 `CODE_DONE` 任务仍需按原任务卡完成 macOS/Xcode、XCTest、真机或生产签收，不能把文档归档当成产品问题已修复。
+- 下一任务：在当前工作区无其他 `IN_PROGRESS` 的前提下，优先启动 `DISCOVER-JOURNEY-HIERARCHY-01`；完成并验证后再启动 `PERF-FIRST-SCREEN-01`。

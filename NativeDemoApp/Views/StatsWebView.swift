@@ -70,6 +70,13 @@ private struct TraceLifeCardLayout {
     var playButtonHeight: CGFloat { 44 + compactness * 4 }
 }
 
+private struct DiscoverRecordDayGroup: Identifiable {
+    let day: Date
+    let items: [HomeItem]
+
+    var id: Date { day }
+}
+
 private struct DiscoverDetailSheetView: View {
     let card: DiscoverCard
     let onOpenRecord: (HomeItem) -> Void
@@ -86,6 +93,32 @@ private struct DiscoverDetailSheetView: View {
 
     private var photoItems: [HomeItem] {
         evidenceItems.filter(\.hasMemoryImages)
+    }
+
+    private var photoWallRows: [DiscoverMemoryWallRow] {
+        DiscoverMemoryWallLayoutPolicy.rows(for: photoItems.count)
+    }
+
+    private var recordDayGroups: [DiscoverRecordDayGroup] {
+        let calendar = Calendar.autoupdatingCurrent
+        var grouped: [Date: [HomeItem]] = [:]
+        var dayOrder: [Date] = []
+
+        // Keep the evidence order supplied by the card. This is important for
+        // a cross-city journey: departure, road, activity and return remain a
+        // readable sequence instead of being re-sorted by a dictionary.
+        for item in evidenceItems {
+            let day = calendar.startOfDay(for: item.createdAt)
+            if grouped[day] == nil {
+                dayOrder.append(day)
+            }
+            grouped[day, default: []].append(item)
+        }
+
+        return dayOrder.compactMap { day in
+            guard let items = grouped[day], !items.isEmpty else { return nil }
+            return DiscoverRecordDayGroup(day: day, items: items)
+        }
     }
 
     private var currentEvidenceDisplayText: String {
@@ -125,33 +158,9 @@ private struct DiscoverDetailSheetView: View {
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundStyle(AppColors.text)
 
-                            LazyVGrid(
-                                columns: [
-                                    GridItem(.flexible(), spacing: 10),
-                                    GridItem(.flexible(), spacing: 10),
-                                    GridItem(.flexible(), spacing: 10)
-                                ],
-                                spacing: 10
-                            ) {
-                                ForEach(photoItems) { item in
-                                    Button {
-                                        onOpenRecord(item)
-                                    } label: {
-                                        VStack(alignment: .leading, spacing: 5) {
-                                            MemoryAttachmentThumbnail(
-                                                imageData: item.coverMemoryImageData,
-                                                imageReference: item.coverMemoryImageReference,
-                                                height: 104,
-                                                cornerRadius: 12
-                                            )
-                                            Text(item.createdAt.zhBillDateOnly)
-                                                .font(.system(size: 10, weight: .medium))
-                                                .foregroundStyle(AppColors.subtext)
-                                                .lineLimit(1)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("打开照片对应记录，\(item.displayTitle)")
+                            LazyVStack(alignment: .leading, spacing: 12) {
+                                ForEach(photoWallRows.indices, id: \.self) { rowIndex in
+                                    discoverPhotoWallRow(photoWallRows[rowIndex], rowIndex: rowIndex)
                                 }
                             }
                         }
@@ -167,47 +176,9 @@ private struct DiscoverDetailSheetView: View {
                         if evidenceItems.isEmpty {
                             quietSection("对应记录已不在当前账本中，线索不会保留旧内容。")
                         } else {
-                            LazyVStack(spacing: 8) {
-                                ForEach(evidenceItems) { item in
-                                    Button {
-                                        onOpenRecord(item)
-                                    } label: {
-                                        HStack(alignment: .top, spacing: 10) {
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                Text(item.displayTitle)
-                                                    .font(.system(size: 13, weight: .semibold))
-                                                    .foregroundStyle(AppColors.text)
-                                                    .lineLimit(2)
-                                                    .multilineTextAlignment(.leading)
-                                                Text("\(item.createdAt.zhBillDateTime) · \(item.category.rawValue)")
-                                                    .font(.system(size: 11, weight: .medium))
-                                                    .foregroundStyle(AppColors.subtext)
-                                                    .lineLimit(1)
-                                            }
-                                            Spacer(minLength: 6)
-                                            VStack(alignment: .trailing, spacing: 4) {
-                                                Text(item.amount.formatted(.cny))
-                                                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                                                    .foregroundStyle(AppColors.text)
-                                                Image(systemName: "chevron.right")
-                                                    .font(.system(size: 10, weight: .semibold))
-                                                    .foregroundStyle(AppColors.subtext.opacity(0.72))
-                                            }
-                                        }
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 11)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                                .fill(AppColors.surfaceMuted.opacity(0.72))
-                                        )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                                .stroke(AppColors.subtext.opacity(0.12), lineWidth: 1)
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityHint("打开这笔记录的详情")
+                            LazyVStack(alignment: .leading, spacing: 18) {
+                                ForEach(recordDayGroups.indices, id: \.self) { groupIndex in
+                                    discoverRecordDayGroup(recordDayGroups[groupIndex], groupIndex: groupIndex)
                                 }
                             }
                         }
@@ -240,6 +211,162 @@ private struct DiscoverDetailSheetView: View {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(AppColors.surfaceMuted.opacity(0.58))
             )
+    }
+
+    @ViewBuilder
+    private func discoverPhotoWallRow(_ row: DiscoverMemoryWallRow, rowIndex: Int) -> some View {
+        HStack(alignment: rowIndex.isMultiple(of: 2) ? .top : .bottom, spacing: 12) {
+            ForEach(row.indices.indices, id: \.self) { localIndex in
+                let itemIndex = row.indices[localIndex]
+                if photoItems.indices.contains(itemIndex) {
+                    let item = photoItems[itemIndex]
+                    discoverPhotoTile(
+                        item,
+                        height: discoverPhotoTileHeight(
+                            row: row,
+                            rowIndex: rowIndex,
+                            localIndex: localIndex
+                        )
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func discoverPhotoTile(_ item: HomeItem, height: CGFloat) -> some View {
+        Button {
+            onOpenRecord(item)
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                MemoryAttachmentThumbnail(
+                    imageData: item.coverMemoryImageData,
+                    imageReference: item.coverMemoryImageReference,
+                    height: height,
+                    cornerRadius: 15
+                )
+                HStack(spacing: 5) {
+                    Text(item.createdAt.zhBillDateOnly)
+                    if item.hasMemoryImages {
+                        Image(systemName: "photo")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                }
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+                .lineLimit(1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("打开照片对应记录，\(item.displayTitle)，\(item.createdAt.zhBillDateTime)")
+        .accessibilityHint("打开这张照片对应的记录详情")
+    }
+
+    private func discoverPhotoTileHeight(
+        row: DiscoverMemoryWallRow,
+        rowIndex: Int,
+        localIndex: Int
+    ) -> CGFloat {
+        switch row.kind {
+        case .hero:
+            return 224
+        case .pair:
+            // Alternating heights and vertical alignment create a calm,
+            // repeatable collage rhythm without random rotation or jitter.
+            if rowIndex.isMultiple(of: 2) {
+                return localIndex == 0 ? 166 : 128
+            }
+            return localIndex == 0 ? 132 : 178
+        }
+    }
+
+    @ViewBuilder
+    private func discoverRecordDayGroup(_ group: DiscoverRecordDayGroup, groupIndex: Int) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(group.day.zhBillDateOnly)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(AppColors.text)
+                Text("\(group.items.count) 笔")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                Spacer(minLength: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(group.items.indices, id: \.self) { itemIndex in
+                    let item = group.items[itemIndex]
+                    HStack(alignment: .top, spacing: 10) {
+                        VStack(spacing: 0) {
+                            Circle()
+                                .fill(itemIndex == 0 ? AppColors.readableAccent : AppColors.subtext.opacity(0.45))
+                                .frame(width: 8, height: 8)
+                                .padding(.top, 7)
+                            if itemIndex < group.items.count - 1 {
+                                Rectangle()
+                                    .fill(AppColors.subtext.opacity(0.22))
+                                    .frame(width: 1.5, height: 42)
+                            }
+                        }
+                        discoverRecordTimelineRow(item, isLead: itemIndex == 0 && groupIndex == 0)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(group.day.zhBillDateOnly)，\(group.items.count) 笔相关记录")
+    }
+
+    private func discoverRecordTimelineRow(_ item: HomeItem, isLead: Bool) -> some View {
+        Button {
+            onOpenRecord(item)
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.displayTitle)
+                        .font(.system(size: isLead ? 14 : 13, weight: isLead ? .semibold : .medium))
+                        .foregroundStyle(AppColors.text)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    HStack(spacing: 6) {
+                        Text(item.createdAt.zhBillTime)
+                        Text(item.category.rawValue)
+                        if item.hasMemoryImages {
+                            Label("照片", systemImage: "photo")
+                                .labelStyle(.titleAndIcon)
+                        }
+                    }
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AppColors.subtext)
+                    .lineLimit(1)
+                }
+                Spacer(minLength: 6)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(item.amount.formatted(.cny))
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppColors.text)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(AppColors.subtext.opacity(0.72))
+                }
+            }
+            .padding(.horizontal, isLead ? 13 : 11)
+            .padding(.vertical, isLead ? 13 : 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: isLead ? 16 : 12, style: .continuous)
+                    .fill(isLead ? AppColors.panelStrong : AppColors.surfaceMuted.opacity(0.42))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: isLead ? 16 : 12, style: .continuous)
+                    .stroke(AppColors.stroke.opacity(isLead ? 0.72 : 0.42), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(item.displayTitle)，\(item.createdAt.zhBillDateTime)，\(item.category.rawValue)，\(item.amount.formatted(.cny))")
+        .accessibilityHint("打开这笔记录的详情")
     }
 }
 

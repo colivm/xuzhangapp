@@ -9286,5 +9286,30 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
         XCTAssertEqual(resolved.map(\.id), [rows[2].id, rows[0].id])
         XCTAssertFalse(resolved.contains { $0.id == rows[1].id })
     }
+
+    func testDiscoverMemoryWallUsesStableEditorialRhythmInsteadOfAUniformGrid() {
+        XCTAssertTrue(DiscoverMemoryWallLayoutPolicy.rows(for: 0).isEmpty)
+
+        let one = DiscoverMemoryWallLayoutPolicy.rows(for: 1)
+        XCTAssertEqual(one.map(\.kind), [.hero])
+        XCTAssertEqual(one.flatMap(\.indices), [0])
+
+        let two = DiscoverMemoryWallLayoutPolicy.rows(for: 2)
+        XCTAssertEqual(two.map(\.kind), [.pair])
+        XCTAssertEqual(two.flatMap(\.indices), [0, 1])
+
+        let three = DiscoverMemoryWallLayoutPolicy.rows(for: 3)
+        XCTAssertEqual(three.map(\.kind), [.hero, .pair])
+        XCTAssertEqual(three.flatMap(\.indices), [0, 1, 2])
+
+        let six = DiscoverMemoryWallLayoutPolicy.rows(for: 6)
+        XCTAssertEqual(six.map(\.kind), [.hero, .pair, .pair])
+        XCTAssertEqual(six.flatMap(\.indices), Array(0..<6))
+
+        let many = DiscoverMemoryWallLayoutPolicy.rows(for: 9)
+        XCTAssertEqual(many.flatMap(\.indices), Array(0..<9))
+        XCTAssertEqual(Set(many.flatMap(\.indices)).count, 9)
+        XCTAssertEqual(many, DiscoverMemoryWallLayoutPolicy.rows(for: 9))
+    }
 }
 #endif
