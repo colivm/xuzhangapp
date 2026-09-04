@@ -4534,3 +4534,30 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py`、`python scripts/playback_copy_lint.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 均通过，最终输出 `release_repository_gate: OK`；copy lint 仍只有任务开始前已有的 6 条 soft warning。`DiscoverEditorialPolicyTests` 新增周末跨城重点卡证据分解、详情 ID 在删除后即时过滤且顺序保持两项覆盖；静态门禁新增聚合复用、重点卡/照片墙/记录墙、统一依据文案和详情解析守卫。
 - 剩余风险与下一步：Windows 无 Swift/Xcode，本轮只能以静态门禁和脚本回归确认源码形态，不能宣称 Swift 6 编译、XCTest、照片解码、Sheet 路由和真机耗时已通过，也未量化 100/1,000/5,000 条首次整理的实际下降幅度。下一步必须先在 macOS 重新执行 Swift 6 Debug/Release Clean Build 和全部 XCTest，再按 `FLOW-101` 在 TestFlight 验证首次整理耗时、四层内容、周末跨城 Hero、照片墙/记录墙、编辑/删除后的即时刷新、周期边界、VoiceOver/特大字号/Reduce Motion 及 Instruments 内存和 hitch。签收前保持 `CODE_DONE`，不启动相邻视觉重构。
 - 复核记录（2026-09-04）：本轮未扩大产品范围，仅重新执行 `git diff --check`、语义回归、体验静态门禁、文案门禁、播放文案门禁与 `validate_release_gate.py --phase windows`，全部通过，发布门禁仍为 `release_repository_gate: OK`；copy lint 仍仅有任务开始前的 6 条 soft warning。当前机器仍无 `swiftc`、`xcodebuild`，因此状态和下一任务保持不变。
+
+---
+
+## 92. DARK-MODE-READABILITY-01：深色模式正文与操作对比度收口（2026-09-04）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`；本项在已推送的 `DISCOVER-EDITORIAL-01` 之后独立处理，不改变线索业务规则。当前无 `IN_PROGRESS`。
+- 用户反馈与根因：深色模式仍有“看不清”。源码审计确认，多个深色主题的强调色是浅色调，但按钮和确认操作固定使用 `.white` 前景；同时痕迹月章、记录列表、筛选器、OCR/设置等承载层仍使用 `Color.white.opacity(...)`，在深色背景上形成浅底叠浅字或过低层级差异。现有 token 报告只验证了原始 token 对比度，未覆盖半透明合成后的实际前景/背景组合。
+- 允许范围：主题解析中的可读前景与深色标识；全局语义 Surface 的高光/边框强度；痕迹页主要卡片、筛选器和记录墙的固定白色承载层；直接以 `AppColors.accent` 为背景的主操作按钮前景；对应静态门禁、XCTest 契约、发布矩阵和本文档。不得借本项修改账单、线索、OCR、会员、同步、远程 AI、业务文案或页面信息架构。
+- 产品决策：正文层级使用主题 `textPrimary/textSecondary/textTertiary`；主操作统一使用主题计算出的 `onAccent`；深色模式的卡片使用 `panelStrong/surfaceMuted`，不再用固定白色半透明底；图片上的白字和语义删除红色保持原有照片/警示语义，不做全局替换。
+- 验收：默认、纸质、天气、霓虹、工业、永久主题的 dark 模式下，首页/记账/痕迹/复盘/设置/OCR/会员的标题、正文、次要说明、筛选选中态和主按钮可读；浅色模式视觉不回退；固定白色卡片不再覆盖承载内容；VoiceOver、特大字号和 Reduce Transparency 不改变操作语义。
+- 实施结果：
+  - `AppColors` 增加显式 dark-mode 标识、亮/暗高光强度策略和主题对比安全的 `onAccent`/`readableAccent` 入口；全局语义 Surface 的白色高光、边框和按压效果在 dark 模式下降低强度。
+  - 首页生活奖励弹层的主按钮改用 `onAccent`，弹层边框和底部 Tab 分隔线改用主题 stroke，避免浅强调色上的白字发虚。
+  - 痕迹月章、热力、记录画布、筛选器、细查列表、记录墙、线索重点卡和空态承载层改用 `panelStrong/surfaceMuted/stroke`；线索和月章强调文字改用 `readableAccent`；本周/本月选择态统一为 accent 背景 + onAccent 前景。
+  - 无照片 fallback 图块根据 dark 模式使用主题色混合调色，不再落到固定浅色背景；图片上的白字、删除按钮和照片遮罩仍保留原有语义。
+  - 新增 `DarkModeReadabilityPolicyTests`，覆盖 dark 高光降级和强调色前景选择；新增 `FLOW-102` 全主题、无障碍和 Reduce Transparency 真机验收矩阵；体验静态门禁增加固定白色承载层回归守卫。
+- 修改文件：
+  - `NativeDemoApp/ContentView.swift`
+  - `NativeDemoApp/Theme/ThemeTokens.swift`
+  - `NativeDemoApp/Views/StatsWebView.swift`
+  - `NativeDemoAppTests/StateRegressionTests.swift`
+  - `scripts/experience_static_check.ps1`
+  - `RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`
+  - 本文档
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/check_copy_experience.ps1`、`python scripts/copy_lint.py`、`python scripts/playback_copy_lint.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 均通过；发布门禁输出 `release_repository_gate: OK`。copy lint 仍仅保留任务开始前已有的 6 条 soft warning。
+- 冻结边界复核：未修改账单、线索业务规则、OCR、会员、同步、远程 AI、业务文案或页面信息架构；浅色主题的原有视觉 token 和照片/警示白字语义保持不变。
+- 剩余风险与下一步：Windows 无 Swift/Xcode，无法实测 SwiftUI 材质合成与 31 套主题的真机观感，也不能宣称 XCTest 已运行；下一步在 macOS 执行 Swift 6 Debug/Release Clean Build 与全部 XCTest，并按 `FLOW-102` 完成全主题 iPhone、VoiceOver、特大字号、Reduce Transparency、低亮度及 100/1,000/5,000 条性能签收后再标记 `VERIFIED`。

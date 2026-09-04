@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -7658,6 +7659,29 @@ final class AccessibilityLayoutPolicyTests: XCTestCase {
 
     func testReadableTextOpacityFloorRemainsLegible() {
         XCTAssertGreaterThanOrEqual(AccessibilityLayoutPolicy.minimumReadableTextOpacity, 0.72)
+    }
+}
+
+@MainActor
+final class DarkModeReadabilityPolicyTests: XCTestCase {
+    func testDarkModeHighlightOpacityIsLowerThanLight() {
+        XCTAssertEqual(
+            AppColors.highlightOpacity(isDarkMode: false, light: 0.48, dark: 0.10),
+            0.48
+        )
+        XCTAssertEqual(
+            AppColors.highlightOpacity(isDarkMode: true, light: 0.48, dark: 0.10),
+            0.10
+        )
+    }
+
+    func testPrimaryAccentActionsUseThemeForeground() {
+        let foreground = ResolvedThemeTokens.foregroundToken(
+            on: TokenColor("#78AE9E"),
+            preferred: TokenColor("#ECF1FF")
+        )
+        XCTAssertEqual(foreground.hex, "#000000")
+        XCTAssertNotEqual(ResolvedThemeTokens.fallback.onAccent, Color.white)
     }
 }
 

@@ -11,6 +11,11 @@ struct AppColors {
 
     static var accent: Color { theme.accent }
     static var accentDark: Color { theme.accentDark }
+    /// Whether the resolved theme is using its dark token set.  Keep this
+    /// separate from the system scheme because a user can explicitly choose
+    /// a light or dark appearance while the system remains in the opposite
+    /// mode.
+    static var isDarkMode: Bool { theme.mode == .dark }
     static var bg: Color { theme.background }
     static var bgGradientEnd: Color { theme.backgroundGradientEnd }
     static var panel: Color { theme.panel }
@@ -47,6 +52,14 @@ struct AppColors {
     static var settingsEnvelopeSage: Color { theme.settingsEnvelopeSage }
     static var settingsEnvelopeDeepSage: Color { theme.settingsEnvelopeDeepSage }
     static var categoryColors: [Color] { theme.categoryColors }
+
+    static func highlightOpacity(light: Double, dark: Double) -> Double {
+        highlightOpacity(isDarkMode: isDarkMode, light: light, dark: dark)
+    }
+
+    static func highlightOpacity(isDarkMode: Bool, light: Double, dark: Double) -> Double {
+        isDarkMode ? dark : light
+    }
 
     static func categoryColor(_ category: HomeItem.Category) -> Color {
         let index: Int
@@ -119,7 +132,10 @@ struct ThemedInteractionSurface: ViewModifier {
             .overlay(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(reduceTransparency ? 0.06 : (isDisabled ? 0.10 : 0.25)),
+                        Color.white.opacity(AppColors.highlightOpacity(
+                            light: reduceTransparency ? 0.06 : (isDisabled ? 0.10 : 0.25),
+                            dark: reduceTransparency ? 0.025 : (isDisabled ? 0.045 : 0.09)
+                        )),
                         AppColors.paperWarm.opacity(isDisabled ? 0.07 : 0.15),
                         tint.opacity(isDisabled ? 0.03 : (isSelected ? 0.14 * boundedGlow : 0.055))
                     ],
@@ -149,7 +165,10 @@ struct ThemedInteractionSurface: ViewModifier {
             .stroke(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isDisabled ? 0.16 : 0.54),
+                        Color.white.opacity(AppColors.highlightOpacity(
+                            light: isDisabled ? 0.16 : 0.54,
+                            dark: isDisabled ? 0.10 : 0.24
+                        )),
                         tint.opacity(isDisabled ? 0.08 : (isSelected ? 0.34 * boundedGlow : 0.14)),
                         AppColors.line.opacity(isSelected ? 0.70 : 0.50)
                     ],
@@ -200,13 +219,26 @@ struct PurposefulCardButtonStyle: ButtonStyle {
             .offset(y: reduceMotion ? 0 : (pressed ? 0.9 * depth : 0))
             .overlay {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(Color.white.opacity(pressed ? 0.16 : 0.0), lineWidth: 1)
+                    .stroke(
+                        Color.white.opacity(
+                            AppColors.highlightOpacity(
+                                light: pressed ? 0.16 : 0.0,
+                                dark: pressed ? 0.08 : 0.0
+                            )
+                        ),
+                        lineWidth: 1
+                    )
                     .allowsHitTesting(false)
             }
             .overlay(alignment: .topLeading) {
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(pressed ? 0.12 : 0.0),
+                        Color.white.opacity(
+                            AppColors.highlightOpacity(
+                                light: pressed ? 0.12 : 0.0,
+                                dark: pressed ? 0.06 : 0.0
+                            )
+                        ),
                         Color.white.opacity(0.0)
                     ],
                     startPoint: .topLeading,
@@ -346,45 +378,48 @@ struct AppSemanticSurface: ViewModifier {
         switch role {
         case .record:
             return [
-                Color.white.opacity(0.48),
+                Color.white.opacity(AppColors.highlightOpacity(light: 0.48, dark: 0.10)),
                 AppColors.panelStrong.opacity(0.18),
                 tint.opacity(0.055)
             ]
         case .playback:
             return [
-                Color.white.opacity(0.42),
+                Color.white.opacity(AppColors.highlightOpacity(light: 0.42, dark: 0.10)),
                 AppColors.tracePlaybackButtonBg.opacity(0.34),
                 tint.opacity(0.08)
             ]
         case .trace:
             return [
-                Color.white.opacity(0.30),
+                Color.white.opacity(AppColors.highlightOpacity(light: 0.30, dark: 0.07)),
                 AppColors.surfaceMuted.opacity(0.34),
                 tint.opacity(0.035)
             ]
         case .metric:
             return [
-                Color.white.opacity(0.34),
+                Color.white.opacity(AppColors.highlightOpacity(light: 0.34, dark: 0.08)),
                 AppColors.surfaceMuted.opacity(0.42),
-                Color.white.opacity(0.16)
+                Color.white.opacity(AppColors.highlightOpacity(light: 0.16, dark: 0.04))
             ]
         case .action:
             return [
-                Color.white.opacity(isSelected ? 0.42 : 0.30),
+                Color.white.opacity(AppColors.highlightOpacity(
+                    light: isSelected ? 0.42 : 0.30,
+                    dark: isSelected ? 0.10 : 0.07
+                )),
                 tint.opacity(isSelected ? 0.16 : 0.065),
                 AppColors.panelStrong.opacity(0.22)
             ]
         case .share:
             return [
-                Color.white.opacity(0.42),
+                Color.white.opacity(AppColors.highlightOpacity(light: 0.42, dark: 0.10)),
                 AppColors.tracePlaybackButtonBg.opacity(0.24),
                 tint.opacity(0.075)
             ]
         case .quiet:
             return [
-                Color.white.opacity(0.22),
+                Color.white.opacity(AppColors.highlightOpacity(light: 0.22, dark: 0.05)),
                 AppColors.surfaceMuted.opacity(0.24),
-                Color.white.opacity(0.08)
+                Color.white.opacity(AppColors.highlightOpacity(light: 0.08, dark: 0.02))
             ]
         }
     }
@@ -446,19 +481,19 @@ struct AppSemanticSurface: ViewModifier {
     private var rimColors: [Color] {
         switch role {
         case .record:
-            return [Color.white.opacity(0.66), AppColors.line.opacity(0.46), tint.opacity(0.13)]
+            return [Color.white.opacity(AppColors.highlightOpacity(light: 0.66, dark: 0.24)), AppColors.line.opacity(0.46), tint.opacity(0.13)]
         case .playback:
-            return [Color.white.opacity(0.58), tint.opacity(0.16), AppColors.stroke.opacity(0.20)]
+            return [Color.white.opacity(AppColors.highlightOpacity(light: 0.58, dark: 0.22)), tint.opacity(0.16), AppColors.stroke.opacity(0.20)]
         case .trace:
-            return [Color.white.opacity(0.46), AppColors.stroke.opacity(0.46), tint.opacity(0.08)]
+            return [Color.white.opacity(AppColors.highlightOpacity(light: 0.46, dark: 0.18)), AppColors.stroke.opacity(0.46), tint.opacity(0.08)]
         case .metric:
-            return [Color.white.opacity(0.48), AppColors.stroke.opacity(0.48), tint.opacity(0.10)]
+            return [Color.white.opacity(AppColors.highlightOpacity(light: 0.48, dark: 0.18)), AppColors.stroke.opacity(0.48), tint.opacity(0.10)]
         case .action:
-            return [Color.white.opacity(0.56), tint.opacity(isSelected ? 0.30 : 0.14), AppColors.line.opacity(0.48)]
+            return [Color.white.opacity(AppColors.highlightOpacity(light: 0.56, dark: 0.20)), tint.opacity(isSelected ? 0.30 : 0.14), AppColors.line.opacity(0.48)]
         case .share:
-            return [Color.white.opacity(0.62), tint.opacity(0.14), AppColors.stroke.opacity(0.20)]
+            return [Color.white.opacity(AppColors.highlightOpacity(light: 0.62, dark: 0.22)), tint.opacity(0.14), AppColors.stroke.opacity(0.20)]
         case .quiet:
-            return [Color.white.opacity(0.40), AppColors.line.opacity(0.50), AppColors.stroke.opacity(0.26)]
+            return [Color.white.opacity(AppColors.highlightOpacity(light: 0.40, dark: 0.14)), AppColors.line.opacity(0.50), AppColors.stroke.opacity(0.26)]
         }
     }
 
@@ -1239,7 +1274,7 @@ struct ContentView: View {
                     } label: {
                         Text(prompt.primaryTitle)
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(AppColors.onAccent)
                             .frame(maxWidth: .infinity, minHeight: 42)
                             .background(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -1259,7 +1294,7 @@ struct ContentView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color.white.opacity(0.72), lineWidth: 1)
+                    .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.66 : 0.72), lineWidth: 1)
             )
             .padding(.horizontal, 24)
         }
@@ -1364,7 +1399,7 @@ struct ContentView: View {
                 .fill(AppColors.panelStrong)
                 .overlay(alignment: .top) {
                     Rectangle()
-                        .fill(Color.white.opacity(0.43))
+                        .fill(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.72 : 0.43))
                         .frame(height: 1)
                 }
                 .shadow(color: AppColors.bg.opacity(0.28), radius: 10, x: 0, y: -6)

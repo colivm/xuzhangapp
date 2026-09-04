@@ -103,7 +103,7 @@ private struct DiscoverDetailSheetView: View {
                         HStack(spacing: 8) {
                             Image(systemName: card.isFeatured ? "sparkles" : "arrow.up.right")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(AppColors.accentDark)
+                                .foregroundStyle(AppColors.readableAccent)
                             Text(card.title)
                                 .font(.system(size: 24, weight: .bold))
                                 .foregroundStyle(AppColors.text)
@@ -115,7 +115,7 @@ private struct DiscoverDetailSheetView: View {
                             .fixedSize(horizontal: false, vertical: true)
                         Text(currentEvidenceDisplayText)
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(AppColors.accentDark.opacity(0.86))
+                            .foregroundStyle(AppColors.readableAccent.opacity(0.90))
                     }
                     .padding(.horizontal, 2)
 
@@ -1021,13 +1021,13 @@ struct StatsWebView: View {
             .overlay {
                 VStack(alignment: .leading, spacing: 14) {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.white.opacity(0.52))
+                        .fill(AppColors.text.opacity(AppColors.highlightOpacity(light: 0.12, dark: 0.16)))
                         .frame(width: 112, height: 12)
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.42))
+                        .fill(AppColors.text.opacity(AppColors.highlightOpacity(light: 0.09, dark: 0.12)))
                         .frame(height: 72)
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.30))
+                        .fill(AppColors.text.opacity(AppColors.highlightOpacity(light: 0.06, dark: 0.08)))
                         .frame(height: 44)
                 }
                 .padding(24)
@@ -1042,7 +1042,7 @@ struct StatsWebView: View {
             HStack {
                 Text(display.periodLabel)
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppColors.accentDark)
+                    .foregroundStyle(AppColors.readableAccent)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(Capsule().fill(AppColors.accent.opacity(0.10)))
@@ -1075,7 +1075,7 @@ struct StatsWebView: View {
             if let topCategory = display.topCategory, !topCategory.isEmpty {
                 Label(topCategory, systemImage: "sparkles")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(AppColors.accentDark)
+                    .foregroundStyle(AppColors.readableAccent)
             }
         }
         .traceWarmPanel(radius: 26, padding: 24)
@@ -1787,7 +1787,7 @@ struct StatsWebView: View {
 
     private var traceLifeSliceCardBackground: some View {
         RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .fill(Color.white.opacity(0.88))
+            .fill(AppColors.panelStrong)
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .fill(.ultraThinMaterial)
@@ -1795,7 +1795,7 @@ struct StatsWebView: View {
             .overlay(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.62),
+                        AppColors.text.opacity(AppColors.highlightOpacity(light: 0.06, dark: 0.035)),
                         AppColors.paperWarm.opacity(0.18),
                         AppColors.accent.opacity(0.055)
                     ],
@@ -1809,7 +1809,7 @@ struct StatsWebView: View {
 
     private var traceLifeSliceCardBorder: some View {
         RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .stroke(Color.white.opacity(0.68), lineWidth: 1)
+            .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.72 : 0.68), lineWidth: 1)
             .allowsHitTesting(false)
     }
 
@@ -1892,7 +1892,7 @@ struct StatsWebView: View {
                 Spacer(minLength: 8)
                 Image(systemName: "calendar")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppColors.accentDark.opacity(0.74))
+                    .foregroundStyle(AppColors.readableAccent.opacity(0.90))
             }
 
             VStack(spacing: 8) {
@@ -1926,7 +1926,7 @@ struct StatsWebView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.white.opacity(0.80))
+                .fill(AppColors.panelStrong)
                 .shadow(color: AppColors.subtext.opacity(0.035), radius: 10, x: 0, y: 5)
         )
         .accessibilityElement(children: .ignore)
@@ -1982,7 +1982,7 @@ struct StatsWebView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.white.opacity(0.78))
+                .fill(AppColors.panelStrong)
                 .shadow(color: AppColors.subtext.opacity(0.032), radius: 10, x: 0, y: 5)
         )
     }
@@ -1995,7 +1995,7 @@ struct StatsWebView: View {
                     .frame(width: 28, height: 28)
                 Image(systemName: milestone.icon)
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppColors.accentDark.opacity(0.82))
+                    .foregroundStyle(AppColors.readableAccent.opacity(0.90))
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -2033,7 +2033,7 @@ struct StatsWebView: View {
                 .overlay(
                     Image(systemName: milestone.icon)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppColors.accentDark.opacity(0.62))
+                        .foregroundStyle(AppColors.readableAccent.opacity(0.86))
                 )
         }
     }
@@ -2447,7 +2447,7 @@ struct StatsWebView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.94),
+                            AppColors.panelStrong,
                             AppColors.paperWarm.opacity(0.48),
                             AppColors.accent.opacity(0.10)
                         ],
@@ -2458,7 +2458,7 @@ struct StatsWebView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.white.opacity(0.82), lineWidth: 1)
+                .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.72 : 0.82), lineWidth: 1)
         )
         .shadow(color: AppColors.subtext.opacity(0.075), radius: 16, x: 0, y: 9)
     }
@@ -2480,7 +2480,7 @@ struct StatsWebView: View {
 
             Text("按记录笔数整理")
                 .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(AppColors.accentDark.opacity(0.76))
+                .foregroundStyle(AppColors.readableAccent.opacity(0.90))
                 .padding(.horizontal, 9)
                 .frame(minHeight: 24)
                 .background(
@@ -2503,7 +2503,7 @@ struct StatsWebView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.white.opacity(0.82), lineWidth: 1)
+                        .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.64 : 0.82), lineWidth: 1)
                 )
 
             Text(
@@ -2570,7 +2570,7 @@ struct StatsWebView: View {
         .padding(.vertical, 11)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.68))
+                .fill(AppColors.panelStrong)
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(facts.monthTitle)，\(facts.activeDays)天有记录，最长连续\(facts.longestStreak)天")
@@ -2588,7 +2588,7 @@ struct StatsWebView: View {
         .frame(minHeight: 52)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.76))
+                .fill(AppColors.panelStrong)
         )
     }
 
@@ -2610,7 +2610,7 @@ struct StatsWebView: View {
 
     private func traceLifeMonthSoftSectionBackground(cornerRadius: CGFloat = 18) -> some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(Color.white.opacity(0.82))
+            .fill(AppColors.panelStrong)
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(.ultraThinMaterial)
@@ -2618,7 +2618,7 @@ struct StatsWebView: View {
             .overlay(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.70),
+                        AppColors.text.opacity(AppColors.highlightOpacity(light: 0.07, dark: 0.04)),
                         AppColors.paperWarm.opacity(0.14),
                         AppColors.accent.opacity(0.045)
                     ],
@@ -2653,7 +2653,7 @@ struct StatsWebView: View {
         .background(traceLifeMonthSoftSectionBackground())
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.76), lineWidth: 1)
+                .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.62 : 0.76), lineWidth: 1)
         )
     }
 
@@ -2665,7 +2665,7 @@ struct StatsWebView: View {
                 .font(.system(size: 11, weight: .bold))
                 .lineLimit(1)
         }
-        .foregroundStyle(AppColors.accentDark.opacity(0.84))
+        .foregroundStyle(AppColors.readableAccent.opacity(0.90))
         .padding(.horizontal, 10)
         .frame(height: 26)
         .background(
@@ -2674,7 +2674,7 @@ struct StatsWebView: View {
         )
         .overlay(
             Capsule(style: .continuous)
-                .stroke(Color.white.opacity(0.68), lineWidth: 1)
+                .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.58 : 0.68), lineWidth: 1)
         )
     }
 
@@ -2723,7 +2723,7 @@ struct StatsWebView: View {
         .background(traceLifeMonthSoftSectionBackground())
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.76), lineWidth: 1)
+                .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.62 : 0.76), lineWidth: 1)
         )
     }
 
@@ -2761,7 +2761,7 @@ struct StatsWebView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.78), lineWidth: 1)
+                    .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.64 : 0.78), lineWidth: 1)
             )
             .shadow(color: AppColors.subtext.opacity(0.06), radius: 10, x: 0, y: 5)
 
@@ -2829,7 +2829,7 @@ struct StatsWebView: View {
         .padding(.vertical, 14)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.white.opacity(0.64))
+                .fill(AppColors.panelStrong)
         )
     }
 
@@ -2889,7 +2889,7 @@ struct StatsWebView: View {
         .padding(.vertical, 13)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.white.opacity(0.62))
+                .fill(AppColors.panelStrong)
         )
     }
 
@@ -2968,11 +2968,11 @@ struct StatsWebView: View {
                 HStack {
                     Image(systemName: MemoryAttachmentVisuals.categorySystemImage(category))
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(AppColors.accentDark.opacity(0.66))
+                        .foregroundStyle(AppColors.readableAccent.opacity(0.90))
                     Spacer(minLength: 4)
                     Text(traceLifeMonthDiaryDateText(item: item))
                         .font(.system(size: 9, weight: .semibold, design: .rounded))
-                        .foregroundStyle(AppColors.accentDark.opacity(0.54))
+                        .foregroundStyle(AppColors.readableAccent.opacity(0.82))
                 }
 
                 Spacer(minLength: 0)
@@ -3040,7 +3040,7 @@ struct StatsWebView: View {
                         .frame(width: 34, height: 34)
                     Image(systemName: "doc.text.fill")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(AppColors.accentDark.opacity(0.76))
+                        .foregroundStyle(AppColors.readableAccent.opacity(0.90))
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -3074,7 +3074,7 @@ struct StatsWebView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.94),
+                            AppColors.panelStrong,
                             AppColors.paperWarm.opacity(0.48),
                             AppColors.accent.opacity(0.09)
                         ],
@@ -3085,7 +3085,7 @@ struct StatsWebView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.80), lineWidth: 1)
+                .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.64 : 0.80), lineWidth: 1)
         )
     }
 
@@ -3097,7 +3097,7 @@ struct StatsWebView: View {
                     .frame(width: 34, height: 34)
                 Image(systemName: MemoryAttachmentVisuals.categorySystemImage(item.category))
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppColors.accentDark.opacity(0.72))
+                    .foregroundStyle(AppColors.readableAccent.opacity(0.90))
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -3120,10 +3120,10 @@ struct StatsWebView: View {
         }
         .padding(.horizontal, 10)
         .frame(minHeight: 48)
-        .background(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .fill(Color.white.opacity(0.70))
-        )
+            .background(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(AppColors.panelStrong)
+            )
     }
 
     private func traceLifeSliceTwoPhotoStory(snapshot: TraceChapterSnapshot, height: CGFloat) -> some View {
@@ -3183,8 +3183,8 @@ struct StatsWebView: View {
             .background(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.96),
-                        Color.white.opacity(0.88)
+                        AppColors.panelStrong,
+                        AppColors.surfaceMuted
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -3194,7 +3194,7 @@ struct StatsWebView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.82), lineWidth: 1)
+                .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.64 : 0.82), lineWidth: 1)
         )
         .shadow(color: AppColors.subtext.opacity(0.08), radius: 14, x: 0, y: 8)
     }
@@ -3242,12 +3242,12 @@ struct StatsWebView: View {
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 6)
-            .background(Color.white.opacity(0.91))
+            .background(AppColors.panelStrong)
         }
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.78), lineWidth: 1)
+                .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.64 : 0.78), lineWidth: 1)
         )
         .shadow(color: AppColors.subtext.opacity(0.06), radius: 10, x: 0, y: 6)
     }
@@ -3264,7 +3264,7 @@ struct StatsWebView: View {
             )
 
             Canvas { context, size in
-                let line = Color.white.opacity(0.20)
+                let line = AppColors.text.opacity(AppColors.highlightOpacity(light: 0.12, dark: 0.16))
                 for row in 0..<4 {
                     let y = size.height * (0.20 + CGFloat(row) * 0.17)
                     var path = Path()
@@ -3281,14 +3281,14 @@ struct StatsWebView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Image(systemName: MemoryAttachmentVisuals.categorySystemImage(category))
                     .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(AppColors.accentDark.opacity(0.22))
+                    .foregroundStyle(AppColors.readableAccent.opacity(0.32))
                 Text(category.rawValue)
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppColors.accentDark.opacity(0.54))
+                    .foregroundStyle(AppColors.readableAccent.opacity(0.84))
                     .lineLimit(1)
                 Text(amount)
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(AppColors.accentDark.opacity(0.52))
+                    .foregroundStyle(AppColors.readableAccent.opacity(0.80))
                     .lineLimit(1)
             }
             .padding(12)
@@ -3299,6 +3299,13 @@ struct StatsWebView: View {
     }
 
     private func traceLifeSliceFallbackColors(for category: HomeItem.Category, index: Int) -> [Color] {
+        if AppColors.isDarkMode {
+            let tint = AppColors.categoryColor(category)
+            let first = AppColors.surfaceMuted.mix(with: tint, by: 0.18)
+            let second = AppColors.panelStrong.mix(with: tint, by: 0.12)
+            let third = AppColors.paperMist.mix(with: tint, by: 0.08)
+            return index.isMultiple(of: 2) ? [first, second, third] : [second, third, first]
+        }
         switch category {
         case .transport:
             return [Color(hex: "edf4f5"), Color(hex: "dcebe8"), Color(hex: "f8f1e2")]
@@ -3397,8 +3404,8 @@ struct StatsWebView: View {
             LinearGradient(
                 colors: [
                     AppColors.accent.opacity(0.18),
-                    Color(hex: "f6efe2"),
-                    Color(hex: "dfeee7")
+                    AppColors.surfaceMuted,
+                    AppColors.paperMist
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -3407,13 +3414,13 @@ struct StatsWebView: View {
             VStack(spacing: 10) {
                 Image(systemName: "text.alignleft")
                     .font(.system(size: 34, weight: .semibold))
-                    .foregroundStyle(AppColors.accentDark.opacity(0.34))
+                    .foregroundStyle(AppColors.readableAccent.opacity(0.44))
                 Text("按记录整理")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppColors.accentDark.opacity(0.62))
+                    .foregroundStyle(AppColors.readableAccent.opacity(0.86))
                 Text("分类、金额和时间都在")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppColors.accentDark.opacity(0.46))
+                    .foregroundStyle(AppColors.readableAccent.opacity(0.74))
             }
         }
     }
@@ -3444,7 +3451,7 @@ struct StatsWebView: View {
             }
             Text(isPreparing ? "正在整理…" : (isMonthLocked ? "了解会员" : title))
                 .font(.headline.weight(.bold))
-                .foregroundStyle(isEnabled ? Color.white : AppColors.subtext.opacity(0.74))
+                .foregroundStyle(isEnabled ? AppColors.onAccent : AppColors.subtext.opacity(0.74))
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
@@ -3491,7 +3498,7 @@ struct StatsWebView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
         }
-        .foregroundStyle(AppColors.accentDark.opacity(0.86))
+        .foregroundStyle(AppColors.readableAccent.opacity(0.90))
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity)
@@ -3519,7 +3526,7 @@ struct StatsWebView: View {
             .frame(minHeight: 44)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color.white.opacity(0.74))
+                    .fill(AppColors.panelStrong)
                     .shadow(color: AppColors.subtext.opacity(0.04), radius: 10, x: 0, y: 5)
             )
         }
@@ -3670,7 +3677,7 @@ struct StatsWebView: View {
                 .frame(width: size, height: size)
             Image(systemName: systemName)
                 .font(.system(size: iconSize, weight: .semibold))
-                .foregroundStyle(AppColors.accentDark.opacity(0.78))
+                .foregroundStyle(AppColors.readableAccent.opacity(0.90))
         }
     }
 
@@ -4547,7 +4554,7 @@ struct StatsWebView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.32))
+                .fill(AppColors.panelStrong.opacity(AppColors.isDarkMode ? 0.72 : 0.58))
         )
     }
 
@@ -4709,7 +4716,7 @@ struct StatsWebView: View {
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.62))
+                .fill(AppColors.panelStrong)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -4722,19 +4729,19 @@ struct StatsWebView: View {
             HStack(spacing: 8) {
                 ZStack {
                     Circle()
-                        .fill(Color.white.opacity(0.64))
+                        .fill(AppColors.surfaceMuted)
                         .frame(width: 34, height: 34)
                     Image(systemName: "sparkles")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(AppColors.accentDark)
+                        .foregroundStyle(AppColors.readableAccent)
                 }
                 Text("AI 重点发现")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppColors.accentDark)
+                    .foregroundStyle(AppColors.readableAccent)
                 Spacer(minLength: 0)
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppColors.accentDark.opacity(0.78))
+                    .foregroundStyle(AppColors.readableAccent.opacity(0.90))
             }
 
             Text(card.title)
@@ -4748,7 +4755,7 @@ struct StatsWebView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Text(card.evidenceDisplayText)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(AppColors.accentDark.opacity(0.88))
+                .foregroundStyle(AppColors.readableAccent.opacity(0.92))
 
             HStack(spacing: 6) {
                 Text("打开这段行程")
@@ -4756,7 +4763,7 @@ struct StatsWebView: View {
                 Image(systemName: "arrow.right")
                     .font(.system(size: 11, weight: .bold))
             }
-            .foregroundStyle(AppColors.accentDark)
+            .foregroundStyle(AppColors.readableAccent)
         }
         .padding(.horizontal, 17)
         .padding(.vertical, 17)
@@ -4765,7 +4772,7 @@ struct StatsWebView: View {
             LinearGradient(
                 colors: [
                     AppColors.accent.opacity(0.18),
-                    Color.white.opacity(0.78)
+                    AppColors.panelStrong
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -5204,7 +5211,7 @@ struct StatsWebView: View {
                             Spacer(minLength: 0)
                         }
                         .frame(maxWidth: .infinity, minHeight: 44)
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(AppColors.onAccent)
                         .padding(.horizontal, 14)
                         .background(traceDeepCTAButtonBackground(isOpen: true))
                     } else {
@@ -5292,12 +5299,12 @@ struct StatsWebView: View {
         } label: {
             Text(title)
                 .font(.system(size: 15, weight: isSelected ? .bold : .medium))
-                .foregroundStyle(isSelected ? TraceColors.primaryText : TraceColors.secondaryText)
+                .foregroundStyle(isSelected ? AppColors.onAccent : TraceColors.secondaryText)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
                 .background(
                     Capsule(style: .continuous)
-                        .fill(isSelected ? Color.white.opacity(0.92) : Color.clear)
+                        .fill(isSelected ? AppColors.accent : Color.clear)
                         .shadow(color: isSelected ? AppColors.subtext.opacity(0.06) : .clear, radius: 8, x: 0, y: 3)
                 )
         }
@@ -5411,7 +5418,7 @@ struct StatsWebView: View {
                                 endPoint: .bottom
                             )
                         )
-                        : AnyShapeStyle(Color.white.opacity(0.52))
+                        : AnyShapeStyle(TraceColors.stroke.opacity(AppColors.isDarkMode ? 0.78 : 0.52))
                 )
                 .frame(width: isHighlighted ? 20 : 16, height: barHeight)
 
@@ -5628,7 +5635,7 @@ struct StatsWebView: View {
                 Image(systemName: "arrow.right")
                     .font(.system(size: 11, weight: .semibold))
             }
-            .foregroundStyle(AppColors.accentDark)
+            .foregroundStyle(AppColors.readableAccent)
             .padding(.horizontal, 12)
             .frame(minHeight: 44)
             .background(
@@ -5932,7 +5939,7 @@ struct StatsWebView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.white.opacity(0.32))
+                    .fill(AppColors.panelStrong.opacity(AppColors.isDarkMode ? 0.72 : 0.58))
             )
     }
 
@@ -6185,9 +6192,9 @@ struct StatsWebView: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.58),
+                        AppColors.panelStrong,
                         AppColors.paperWarm.opacity(0.20),
-                        Color.white.opacity(0.48)
+                        AppColors.surfaceMuted
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -6197,7 +6204,7 @@ struct StatsWebView: View {
 
     private var traceDetailListBorder: some View {
         RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .stroke(Color.white.opacity(0.55), lineWidth: 1)
+            .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.64 : 0.55), lineWidth: 1)
             .allowsHitTesting(false)
     }
 
@@ -6575,7 +6582,7 @@ struct StatsWebView: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(AppColors.text.opacity(0.82))
                             .frame(maxWidth: .infinity, minHeight: 46)
-                            .background(Color.white.opacity(0.72), in: Capsule(style: .continuous))
+                            .background(AppColors.panelStrong, in: Capsule(style: .continuous))
                     }
                     .buttonStyle(.plain)
 
@@ -6590,7 +6597,7 @@ struct StatsWebView: View {
                     } label: {
                         Text(prompt.primaryTitle)
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(AppColors.onAccent)
                             .frame(maxWidth: .infinity, minHeight: 46)
                             .background(AppColors.accent.opacity(0.88), in: Capsule(style: .continuous))
                     }
@@ -6602,7 +6609,7 @@ struct StatsWebView: View {
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(Color.white.opacity(0.58), lineWidth: 1)
+                    .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.58 : 0.58), lineWidth: 1)
             )
             .shadow(color: Color.black.opacity(0.16), radius: 28, y: 14)
             .padding(.horizontal, 24)
@@ -6884,7 +6891,7 @@ struct StatsWebView: View {
 
     private var traceListRecordBackground: some View {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(Color.white.opacity(0.74))
+            .fill(AppColors.panelStrong)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(.ultraThinMaterial)
@@ -6894,7 +6901,7 @@ struct StatsWebView: View {
 
     private var traceListRecordBorder: some View {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .stroke(Color.white.opacity(0.58), lineWidth: 1)
+            .stroke(AppColors.stroke.opacity(AppColors.isDarkMode ? 0.58 : 0.58), lineWidth: 1)
     }
 
     private func timelineBillRecordRow(_ item: HomeItem, isFirst: Bool, isLast: Bool) -> some View {
@@ -7010,7 +7017,7 @@ struct StatsWebView: View {
                 .padding(.vertical, 4)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.84))
+                        .fill(AppColors.panelStrong)
                         .background(.ultraThinMaterial, in: Capsule(style: .continuous))
                 )
                 .padding(7)
@@ -7021,7 +7028,7 @@ struct StatsWebView: View {
 
     private func traceDetailRecordBackground(isEditing: Bool) -> some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color.white.opacity(isEditing ? 0.56 : 0.78))
+            .fill(AppColors.panelStrong.opacity(isEditing ? 0.88 : 1.0))
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(.ultraThinMaterial)
@@ -7124,13 +7131,13 @@ struct StatsWebView: View {
             }
         }
         .font(.system(size: 13, weight: isSelected ? .semibold : .regular, design: .rounded))
-        .foregroundStyle(isSelected ? .white : AppColors.text.opacity(0.82))
+        .foregroundStyle(isSelected ? AppColors.onAccent : AppColors.text.opacity(0.82))
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(
             isSelected
                 ? AppColors.accent
-                : Color.white.opacity(0.72),
+                : AppColors.panelStrong,
             in: Capsule(style: .continuous)
         )
         .shadow(color: isSelected ? AppColors.accent.opacity(0.2) : .clear, radius: 4, y: 2)

@@ -361,14 +361,18 @@ struct ResolvedThemeTokens {
         }?.color ?? textPrimary.color
     }
 
-    private static func foregroundColor(on background: TokenColor, preferred: TokenColor) -> Color {
+    static func foregroundToken(on background: TokenColor, preferred: TokenColor) -> TokenColor {
         if preferred.contrastRatio(to: background) >= 4.5 {
-            return preferred.color
+            return preferred
         }
         let candidates = [preferred, TokenColor("#000000"), TokenColor("#FFFFFF")]
         return candidates.max {
             $0.contrastRatio(to: background) < $1.contrastRatio(to: background)
-        }?.color ?? preferred.color
+        } ?? preferred
+    }
+
+    private static func foregroundColor(on background: TokenColor, preferred: TokenColor) -> Color {
+        foregroundToken(on: background, preferred: preferred).color
     }
 }
 
