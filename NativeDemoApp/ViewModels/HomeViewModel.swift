@@ -904,11 +904,38 @@ actor LedgerBackgroundComputationLane {
         return value
     }
 
+    func buildProgressiveTraceChapter(
+        _ input: TraceChapterProgressiveInput
+    ) -> TraceChapterSnapshot? {
+        guard !Task.isCancelled else { return nil }
+        let value = TraceSnapshotComputation.buildProgressiveChapter(input)
+        guard !Task.isCancelled else { return nil }
+        return value
+    }
+
     func buildTraceClue(
         _ input: TraceClueComputationInput
     ) -> TraceClueSnapshot? {
         guard !Task.isCancelled else { return nil }
-        let value = TraceSnapshotComputation.buildClue(input)
+        let value = TraceSnapshotComputation.buildClueIfCurrent(input)
+        guard !Task.isCancelled else { return nil }
+        return value
+    }
+
+    func buildProgressiveTraceClue(
+        _ input: TraceClueProgressiveInput
+    ) -> TraceClueSnapshot? {
+        guard !Task.isCancelled else { return nil }
+        let value = TraceSnapshotComputation.buildProgressiveClue(input)
+        guard !Task.isCancelled else { return nil }
+        return value
+    }
+
+    func buildTraceDetailList(
+        _ input: TraceDetailListPreparationInput
+    ) -> TraceDetailListSnapshot? {
+        guard !Task.isCancelled else { return nil }
+        let value = TraceDetailListSnapshotComputation.make(input)
         guard !Task.isCancelled else { return nil }
         return value
     }

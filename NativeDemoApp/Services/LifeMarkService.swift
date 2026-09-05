@@ -83,6 +83,11 @@ struct LifeJourneyFact: Equatable, @unchecked Sendable {
     let containsWeekend: Bool
     let evidenceLabels: [String]
 
+    var boundaryEvidenceItemIDs: [UUID] {
+        let coreIDs = Set(roadEvidenceItemIDs).union(activityEvidenceItemIDs)
+        return evidenceItemIDs.filter { !coreIDs.contains($0) }
+    }
+
     var label: String {
         if isRoadTrip {
             return containsWeekend ? "周末跨城自驾" : "跨城自驾"
@@ -127,6 +132,7 @@ enum LifeJourneyFactService {
         .dining, .lodging, .entertainment, .social
     ]
     private static let maximumJourneyDuration: TimeInterval = 5 * 24 * 60 * 60
+    private static let returnCompletionGraceInterval: TimeInterval = 3 * 60 * 60
 
     static func primaryFact(
         in items: [HomeItem],
@@ -153,6 +159,16 @@ enum LifeJourneyFactService {
             for index in cityRows.indices {
                 if cityRows[index].city == homeCity {
                     if let tripStartIndex, hasLeftHome {
+                        let nextDeparture = cityRows[cityRows.index(after: index)...]
+                            .first { $0.city != homeCity }?.item
+                        let completionAnchor = returnCompletionAnchor(
+                            following: cityRows[index].item,
+                            before: nextDeparture,
+                            in: rows,
+                            homeCity: homeCity,
+                            journeyStartDate: cityRows[tripStartIndex].item.createdAt,
+                            calendar: calendar
+                        )
                         if let candidate = makeCandidate(
                             cityRows: cityRows,
                             allRows: rows,
@@ -160,6 +176,7 @@ enum LifeJourneyFactService {
                             endIndex: index,
                             homeCity: homeCity,
                             closedLoop: true,
+                            completionAnchor: completionAnchor,
                             calendar: calendar
                         ) {
                             candidates.append(candidate)
@@ -211,6 +228,7 @@ enum LifeJourneyFactService {
         endIndex: Int,
         homeCity: String?,
         closedLoop: Bool,
+        completionAnchor: HomeItem? = nil,
         calendar: Calendar
     ) -> Candidate? {
         guard startIndex >= cityRows.startIndex,
@@ -220,11 +238,17 @@ enum LifeJourneyFactService {
         let route = compressedCities(selectedCityRows.map(\.city))
         guard Set(route).count >= 2 else { return nil }
 
-        let startDate = selectedCityRows.first?.item.createdAt ?? .distantPast
-        let endDate = selectedCityRows.last?.item.createdAt ?? .distantPast
+        guard let startItem = selectedCityRows.first?.item,
+              let cityEndItem = selectedCityRows.last?.item else { return nil }
+        let endItem = completionAnchor ?? cityEndItem
+        let startDate = startItem.createdAt
+        let endDate = endItem.createdAt
         guard endDate >= startDate,
               endDate.timeIntervalSince(startDate) <= maximumJourneyDuration else { return nil }
-        let segmentRows = allRows.filter { $0.createdAt >= startDate && $0.createdAt <= endDate }
+        guard let segmentStartIndex = allRows.firstIndex(where: { $0.id == startItem.id }),
+              let segmentEndIndex = allRows.firstIndex(where: { $0.id == endItem.id }),
+              segmentStartIndex <= segmentEndIndex else { return nil }
+        let segmentRows = Array(allRows[segmentStartIndex...segmentEndIndex])
         let tollRows = segmentRows.filter { containsAny(factualText($0), tollKeywords) }
         let energyRows = segmentRows.filter {
             $0.category == .transport && containsAny(factualText($0), vehicleEnergyKeywords)
@@ -287,6 +311,69 @@ enum LifeJourneyFactService {
             + activityRows.count * 12
             + evidenceRows.count
         return Candidate(fact: fact, score: score)
+    }
+
+    private static func returnCompletionAnchor(
+        following homeArrival: HomeItem,
+        before nextDeparture: HomeItem?,
+        in rows: [HomeItem],
+        homeCity: String,
+        journeyStartDate: Date,
+        calendar: Calendar
+    ) -> HomeItem? {
+        guard let arrivalIndex = rows.firstIndex(where: { $0.id == homeArrival.id }) else {
+            return nil
+        }
+        let graceDeadline = homeArrival.createdAt.addingTimeInterval(returnCompletionGraceInterval)
+        let journeyDeadline = journeyStartDate.addingTimeInterval(maximumJourneyDuration)
+        let deadline = min(graceDeadline, journeyDeadline)
+        for item in rows[arrivalIndex...] {
+            if let nextDeparture, item.createdAt >= nextDeparture.createdAt { break }
+            guard item.createdAt <= deadline,
+                  calendar.isDate(item.createdAt, inSameDayAs: homeArrival.createdAt) else {
+                break
+            }
+            let text = factualText(item)
+            let hasTravelEvidence = containsAny(text, tollKeywords)
+                || containsAny(text, longDistanceTransitKeywords)
+            if hasTravelEvidence, hasExplicitHomeDestination(item.title, homeCity: homeCity) {
+                return item
+            }
+        }
+        return nil
+    }
+
+    private static func hasExplicitHomeDestination(_ title: String, homeCity: String) -> Bool {
+        let compactTitle = title
+            .lowercased()
+            .components(separatedBy: .whitespacesAndNewlines)
+            .joined()
+            .components(separatedBy: .punctuationCharacters)
+            .joined()
+        let compactCity = homeCity
+            .lowercased()
+            .components(separatedBy: .whitespacesAndNewlines)
+            .joined()
+        guard !compactCity.isEmpty else { return false }
+        let negativeCues = ["未", "不", "没", "没有", "尚未", "还没", "无法", "未能", "没能", "差点"]
+        let onwardCues = [
+            "继续去", "继续前往", "再去", "再到", "转去", "转往", "出发去", "前往",
+            "后去", "接着去", "开往", "驶往"
+        ]
+        for cue in ["回", "返", "到", "到达", "抵达"] {
+            let destination = "\(cue)\(compactCity)"
+            var searchRange = compactTitle.startIndex..<compactTitle.endIndex
+            while let match = compactTitle.range(of: destination, range: searchRange) {
+                let prefixContext = String(compactTitle[..<match.lowerBound].suffix(6))
+                let suffix = String(compactTitle[match.upperBound...])
+                let isNegated = negativeCues.contains { prefixContext.contains($0) }
+                let continuesAway = onwardCues.contains { suffix.contains($0) }
+                if !isNegated, !continuesAway { return true }
+                guard match.upperBound < compactTitle.endIndex else { break }
+                searchRange = match.upperBound..<compactTitle.endIndex
+            }
+        }
+        return false
     }
 
     private static func inferredHomeCity(from rows: [CityRow]) -> String? {

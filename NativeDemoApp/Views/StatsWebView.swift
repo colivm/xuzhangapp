@@ -91,15 +91,40 @@ private struct DiscoverDetailSheetView: View {
         )
     }
 
-    private var photoItems: [HomeItem] {
-        evidenceItems.filter(\.hasMemoryImages)
+    private var photoWallPhotos: [DiscoverMemoryWallPhoto] {
+        DiscoverMemoryWallPhotoPolicy.photos(from: evidenceItems)
+    }
+
+    private var evidenceItemsByID: [UUID: HomeItem] {
+        Dictionary(
+            evidenceItems.map { ($0.id, $0) },
+            uniquingKeysWith: { current, _ in current }
+        )
     }
 
     private var photoWallRows: [DiscoverMemoryWallRow] {
-        DiscoverMemoryWallLayoutPolicy.rows(for: photoItems.count)
+        DiscoverMemoryWallLayoutPolicy.rows(for: photoWallPhotos.count)
     }
 
     private var recordDayGroups: [DiscoverRecordDayGroup] {
+        recordDayGroups(for: evidenceItems)
+    }
+
+    private var hasJourneyEvidenceHierarchy: Bool {
+        card.coreEvidenceItemIDs != nil || card.boundaryEvidenceItemIDs != nil
+    }
+
+    private var coreEvidenceItems: [HomeItem] {
+        let ids = Set(card.coreEvidenceItemIDs ?? [])
+        return evidenceItems.filter { ids.contains($0.id) }
+    }
+
+    private var boundaryEvidenceItems: [HomeItem] {
+        let ids = Set(card.boundaryEvidenceItemIDs ?? [])
+        return evidenceItems.filter { ids.contains($0.id) }
+    }
+
+    private func recordDayGroups(for items: [HomeItem]) -> [DiscoverRecordDayGroup] {
         let calendar = Calendar.autoupdatingCurrent
         var grouped: [Date: [HomeItem]] = [:]
         var dayOrder: [Date] = []
@@ -107,7 +132,7 @@ private struct DiscoverDetailSheetView: View {
         // Keep the evidence order supplied by the card. This is important for
         // a cross-city journey: departure, road, activity and return remain a
         // readable sequence instead of being re-sorted by a dictionary.
-        for item in evidenceItems {
+        for item in items {
             let day = calendar.startOfDay(for: item.createdAt)
             if grouped[day] == nil {
                 dayOrder.append(day)
@@ -152,7 +177,7 @@ private struct DiscoverDetailSheetView: View {
                     }
                     .padding(.horizontal, 2)
 
-                    if !photoItems.isEmpty {
+                    if !photoWallPhotos.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("照片墙")
                                 .font(.system(size: 16, weight: .bold))
@@ -175,6 +200,19 @@ private struct DiscoverDetailSheetView: View {
 
                         if evidenceItems.isEmpty {
                             quietSection("对应记录已不在当前账本中，线索不会保留旧内容。")
+                        } else if hasJourneyEvidenceHierarchy {
+                            discoverJourneyRecordSection(
+                                title: "核心证据",
+                                subtitle: "道路与异地活动",
+                                items: coreEvidenceItems,
+                                highlightsLead: true
+                            )
+                            discoverJourneyRecordSection(
+                                title: "路线边界记录",
+                                subtitle: "标记出发、城市切换与返程，不代表道路或异地活动",
+                                items: boundaryEvidenceItems,
+                                highlightsLead: false
+                            )
                         } else {
                             LazyVStack(alignment: .leading, spacing: 18) {
                                 ForEach(recordDayGroups.indices, id: \.self) { groupIndex in
@@ -218,50 +256,52 @@ private struct DiscoverDetailSheetView: View {
         HStack(alignment: rowIndex.isMultiple(of: 2) ? .top : .bottom, spacing: 12) {
             ForEach(row.indices.indices, id: \.self) { localIndex in
                 let itemIndex = row.indices[localIndex]
-                if photoItems.indices.contains(itemIndex) {
-                    let item = photoItems[itemIndex]
-                    discoverPhotoTile(
-                        item,
-                        height: discoverPhotoTileHeight(
-                            row: row,
-                            rowIndex: rowIndex,
-                            localIndex: localIndex
+                if photoWallPhotos.indices.contains(itemIndex) {
+                    let photo = photoWallPhotos[itemIndex]
+                    if let item = evidenceItemsByID[photo.itemID] {
+                        discoverPhotoTile(
+                            photo,
+                            item: item,
+                            height: discoverPhotoTileHeight(
+                                row: row,
+                                rowIndex: rowIndex,
+                                localIndex: localIndex
+                            )
                         )
-                    )
-                    .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity)
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func discoverPhotoTile(_ item: HomeItem, height: CGFloat) -> some View {
-        Button {
-            onOpenRecord(item)
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                MemoryAttachmentThumbnail(
-                    imageData: item.coverMemoryImageData,
-                    imageReference: item.coverMemoryImageReference,
-                    height: height,
-                    cornerRadius: 15
-                )
-                HStack(spacing: 5) {
-                    Text(item.createdAt.zhBillDateOnly)
-                    if item.hasMemoryImages {
-                        Image(systemName: "photo")
-                            .font(.system(size: 9, weight: .semibold))
-                    }
+    private func discoverPhotoTile(
+        _ photo: DiscoverMemoryWallPhoto,
+        item: HomeItem,
+        height: CGFloat
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            MemoryAttachmentThumbnail(
+                imageData: item.memoryImageData(at: photo.imageIndex),
+                imageReference: item.memoryImageReference(at: photo.imageIndex),
+                height: height,
+                cornerRadius: 15
+            )
+            HStack(spacing: 5) {
+                Text(item.createdAt.zhBillDateOnly)
+                Image(systemName: "photo")
+                    .font(.system(size: 9, weight: .semibold))
+                if item.memoryImageCount > 1 {
+                    Text("\(photo.imageIndex + 1)/\(item.memoryImageCount)")
                 }
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(AppColors.subtext)
-                .lineLimit(1)
             }
-            .contentShape(Rectangle())
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(AppColors.subtext)
+            .lineLimit(1)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("打开照片对应记录，\(item.displayTitle)，\(item.createdAt.zhBillDateTime)")
-        .accessibilityHint("打开这张照片对应的记录详情")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(item.createdAt.zhBillDateTime)的照片，第 \(photo.imageIndex + 1) 张，共 \(item.memoryImageCount) 张")
     }
 
     private func discoverPhotoTileHeight(
@@ -279,6 +319,38 @@ private struct DiscoverDetailSheetView: View {
                 return localIndex == 0 ? 166 : 128
             }
             return localIndex == 0 ? 132 : 178
+        }
+    }
+
+    @ViewBuilder
+    private func discoverJourneyRecordSection(
+        title: String,
+        subtitle: String,
+        items: [HomeItem],
+        highlightsLead: Bool
+    ) -> some View {
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(AppColors.text)
+                    Text(subtitle)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(AppColors.subtext)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    let groups = recordDayGroups(for: items)
+                    ForEach(groups.indices, id: \.self) { groupIndex in
+                        discoverRecordDayGroup(
+                            groups[groupIndex],
+                            groupIndex: highlightsLead ? groupIndex : groupIndex + 1
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -370,13 +442,23 @@ private struct DiscoverDetailSheetView: View {
     }
 }
 
-struct TraceDetailListSnapshotKey: Equatable {
+struct TraceDetailListSnapshotKey: Equatable, Sendable {
     let ledgerRevision: Int
     let periodKey: String
     let categoryKey: String?
     let usesCustomRange: Bool
     let customStartDate: Date
     let customEndDate: Date
+}
+
+enum TraceDetailListSnapshotPublicationPolicy {
+    static func accepts(
+        candidateKey: TraceDetailListSnapshotKey,
+        expectedKey: TraceDetailListSnapshotKey,
+        requestMatches: Bool
+    ) -> Bool {
+        requestMatches && candidateKey == expectedKey
+    }
 }
 
 struct TraceDetailListPreparationInput: @unchecked Sendable {
@@ -606,6 +688,7 @@ struct StatsWebView: View {
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
     @Environment(\.appTheme) private var appTheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @Binding var tabState: StatsTabState
     var openTraceRequestID: UUID? = nil
     var onShowMemberPricing: ((MemberPricingEntryContext) -> Void)? = nil
@@ -633,10 +716,17 @@ struct StatsWebView: View {
     @State private var tracePendingDeleteItem: HomeItem?
     @State private var showTraceDeleteConfirmation = false
     @State private var traceDetailListSnapshot: TraceDetailListSnapshot?
+    @State var isApplyingTraceCustomRange = false
+    @State private var traceCustomRangeApplicationTask: Task<Void, Never>?
+    @State private var traceCustomRangeApplicationGate = LatestRequestGate()
     @State private var traceAutoCommitRequestID: UUID?
     @State private var isPreparingTrace = false
     @State private var tracePreparationTask: Task<Void, Never>?
+    @State private var tracePrewarmTask: Task<Void, Never>?
     @State private var tracePreparationGate = LatestRequestGate()
+    @State private var pendingTracePreparationIdentity: TraceProgressivePreparationIdentity?
+    @State private var latestTracePreparationIdentity: TraceProgressivePreparationIdentity?
+    @State private var lastResumedTracePreparationIdentity: TraceProgressivePreparationIdentity?
     @State private var visibleTraceLoadingPresentation: TraceLoadingPresentation?
     @State private var traceLoadingPresentationTask: Task<Void, Never>?
     @State private var tracePendingScrollTask: Task<Void, Never>?
@@ -662,6 +752,16 @@ struct StatsWebView: View {
     var customEndDate: Date {
         get { tabState.customEndDate }
         nonmutating set { tabState.customEndDate = newValue }
+    }
+
+    var customStartDateDraft: Date {
+        get { tabState.customStartDateDraft }
+        nonmutating set { tabState.customStartDateDraft = newValue }
+    }
+
+    var customEndDateDraft: Date {
+        get { tabState.customEndDateDraft }
+        nonmutating set { tabState.customEndDateDraft = newValue }
     }
 
     var customDateFocus: CustomDateEndpoint {
@@ -756,6 +856,7 @@ struct StatsWebView: View {
         preparedMonthSnapshotKey = nil
         preparedClueSnapshotKey = nil
         tabState.coldStartDisplay = nil
+        tabState.coldStartDisplayIdentity = nil
     }
 
     var filteredItems: [HomeItem] {
@@ -798,33 +899,67 @@ struct StatsWebView: View {
     }
 
     var currentFilterSummary: String {
-        let periodText = useCustomRange ? "自定义时间" : selectedPeriod.rawValue
         let categoryText = selectedCategory?.rawValue ?? "全部分类"
-        return "\(periodText) · \(categoryText)"
+        return "\(currentTracePeriodLabel) · \(categoryText)"
+    }
+
+    var currentTracePeriodLabel: String {
+        guard useCustomRange else { return selectedPeriod.rawValue }
+        return TraceCustomRangePresentationPolicy.label(
+            startDate: customStartDate,
+            endDate: customEndDate
+        )
     }
 
     private var traceDetailListSnapshotKey: TraceDetailListSnapshotKey {
-        TraceDetailListSnapshotKey(
+        makeTraceDetailListSnapshotKey(
             ledgerRevision: homeViewModel.homeDashboardRevision,
-            periodKey: selectedPeriod.rawValue,
-            categoryKey: selectedCategory?.rawValue,
+            period: selectedPeriod,
+            category: selectedCategory,
             usesCustomRange: useCustomRange,
             customStartDate: customStartDate,
             customEndDate: customEndDate
         )
     }
 
-    @discardableResult
-    private func prepareTraceDetailListSnapshot() -> TraceDetailListSnapshot {
-        let key = traceDetailListSnapshotKey
-        if let traceDetailListSnapshot, traceDetailListSnapshot.key == key {
-            return traceDetailListSnapshot
-        }
+    private func makeTraceDetailListSnapshotKey(
+        ledgerRevision: Int,
+        period: StatsPeriod,
+        category: HomeItem.Category?,
+        usesCustomRange: Bool,
+        customStartDate: Date,
+        customEndDate: Date
+    ) -> TraceDetailListSnapshotKey {
+        TraceDetailListSnapshotKey(
+            ledgerRevision: ledgerRevision,
+            periodKey: period.rawValue,
+            categoryKey: category?.rawValue,
+            usesCustomRange: usesCustomRange,
+            customStartDate: customStartDate,
+            customEndDate: customEndDate
+        )
+    }
 
+    private func traceDetailListPreparationInput(
+        period: StatsPeriod,
+        category: HomeItem.Category?,
+        usesCustomRange: Bool,
+        customStartDate: Date,
+        customEndDate: Date
+    ) -> TraceDetailListPreparationInput {
+        let ledgerRevision = homeViewModel.homeDashboardRevision
+        let key = makeTraceDetailListSnapshotKey(
+            ledgerRevision: ledgerRevision,
+            period: period,
+            category: category,
+            usesCustomRange: usesCustomRange,
+            customStartDate: customStartDate,
+            customEndDate: customEndDate
+        )
         let calendar = Calendar.current
         let sourceItems: [HomeItem]
         let dateInterval: DateInterval?
-        if useCustomRange {
+        if usesCustomRange {
             let start = calendar.startOfDay(for: customStartDate)
             let end = calendar.date(
                 byAdding: .day,
@@ -839,12 +974,12 @@ struct StatsWebView: View {
                 dateInterval = nil
             }
         } else if TraceDetailListSourcePolicy.canReuseDerivedPeriodItems(
-            ledgerRevision: homeViewModel.homeDashboardRevision,
+            ledgerRevision: ledgerRevision,
             derivedRevision: homeViewModel.itemDerivedCacheRevision,
             usesCustomRange: false
         ) {
             dateInterval = nil
-            switch selectedPeriod {
+            switch period {
             case .week:
                 sourceItems = homeViewModel.filteredItems(in: .week)
             case .month:
@@ -855,22 +990,121 @@ struct StatsWebView: View {
         } else {
             sourceItems = homeViewModel.items
             dateInterval = traceDetailPresetInterval(
-                for: selectedPeriod,
+                for: period,
                 now: Date(),
                 calendar: calendar
             )
         }
-        let snapshot = TraceDetailListSnapshotComputation.make(
-            TraceDetailListPreparationInput(
-                key: key,
-                sourceItems: sourceItems,
-                dateInterval: dateInterval,
-                category: selectedCategory,
-                calendar: calendar
-            )
+        return TraceDetailListPreparationInput(
+            key: key,
+            sourceItems: sourceItems,
+            dateInterval: dateInterval,
+            category: category,
+            calendar: calendar
         )
+    }
+
+    @discardableResult
+    private func prepareTraceDetailListSnapshot() -> TraceDetailListSnapshot {
+        let input = traceDetailListPreparationInput(
+            period: selectedPeriod,
+            category: selectedCategory,
+            usesCustomRange: useCustomRange,
+            customStartDate: customStartDate,
+            customEndDate: customEndDate
+        )
+        if let traceDetailListSnapshot, traceDetailListSnapshot.key == input.key {
+            return traceDetailListSnapshot
+        }
+        let snapshot = TraceDetailListSnapshotComputation.make(input)
         traceDetailListSnapshot = snapshot
         return snapshot
+    }
+
+    func applyTraceCustomRangeDraft() {
+        let range = TraceCustomRangePresentationPolicy.normalized(
+            startDate: customStartDateDraft,
+            endDate: customEndDateDraft
+        )
+        let input = traceDetailListPreparationInput(
+            period: selectedPeriod,
+            category: selectedCategory,
+            usesCustomRange: true,
+            customStartDate: range.startDate,
+            customEndDate: range.endDate
+        )
+        if let traceDetailListSnapshot, traceDetailListSnapshot.key == input.key {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                tabState.commitCustomRange(range)
+                traceInlineEditingItemID = nil
+                traceSwipedItemID = nil
+            }
+            return
+        }
+        traceCustomRangeApplicationTask?.cancel()
+        let requestID = traceCustomRangeApplicationGate.begin()
+        isApplyingTraceCustomRange = true
+
+        traceCustomRangeApplicationTask = Task { @MainActor in
+            guard let snapshot = await LedgerBackgroundComputationLane.shared
+                .buildTraceDetailList(input) else {
+                if traceCustomRangeApplicationGate.accepts(requestID) {
+                    isApplyingTraceCustomRange = false
+                    traceCustomRangeApplicationTask = nil
+                }
+                return
+            }
+            let currentDraftRange = TraceCustomRangePresentationPolicy.normalized(
+                startDate: customStartDateDraft,
+                endDate: customEndDateDraft
+            )
+            let expectedKey = makeTraceDetailListSnapshotKey(
+                ledgerRevision: homeViewModel.homeDashboardRevision,
+                period: selectedPeriod,
+                category: selectedCategory,
+                usesCustomRange: true,
+                customStartDate: currentDraftRange.startDate,
+                customEndDate: currentDraftRange.endDate
+            )
+            let requestMatches = !Task.isCancelled
+                && traceCustomRangeApplicationGate.accepts(requestID)
+                && traceDetailPresentation != nil
+                && showTraceCustomDatePanel
+            guard TraceDetailListSnapshotPublicationPolicy.accepts(
+                candidateKey: snapshot.key,
+                expectedKey: expectedKey,
+                requestMatches: requestMatches
+            ) else {
+                if traceCustomRangeApplicationGate.accepts(requestID) {
+                    isApplyingTraceCustomRange = false
+                    traceCustomRangeApplicationTask = nil
+                }
+                return
+            }
+
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                traceDetailListSnapshot = snapshot
+                tabState.commitCustomRange(currentDraftRange)
+                traceInlineEditingItemID = nil
+                traceSwipedItemID = nil
+                isApplyingTraceCustomRange = false
+            }
+            traceCustomRangeApplicationTask = nil
+        }
+    }
+
+    func cancelTraceCustomRangeApplication(resetDraft: Bool) {
+        traceCustomRangeApplicationTask?.cancel()
+        traceCustomRangeApplicationTask = nil
+        traceCustomRangeApplicationGate.invalidate()
+        isApplyingTraceCustomRange = false
+        if resetDraft {
+            tabState.cancelCustomRangeEditing()
+        }
     }
 
     private func traceDetailPresetInterval(
@@ -899,6 +1133,7 @@ struct StatsWebView: View {
                 categoryFilterSheet
             }
             .sheet(item: $traceDetailPresentation, onDismiss: {
+                cancelTraceCustomRangeApplication(resetDraft: true)
                 let route = traceDetailDismissRoute
                 traceDetailDismissRoute = nil
                 handleSheetDismissRoute(route)
@@ -946,7 +1181,12 @@ struct StatsWebView: View {
             .onDisappear {
                 tracePreparationTask?.cancel()
                 tracePreparationTask = nil
+                tracePrewarmTask?.cancel()
+                tracePrewarmTask = nil
                 tracePreparationGate.invalidate()
+                pendingTracePreparationIdentity = nil
+                latestTracePreparationIdentity = nil
+                lastResumedTracePreparationIdentity = nil
                 summaryPlaybackTask?.cancel()
                 summaryPlaybackTask = nil
                 preparingSummaryRange = nil
@@ -954,8 +1194,12 @@ struct StatsWebView: View {
                 traceLoadingPresentationTask = nil
                 tracePendingScrollTask?.cancel()
                 tracePendingScrollTask = nil
+                cancelTraceCustomRangeApplication(resetDraft: true)
                 updateTraceLoadingPresentation(nil, animated: false)
                 isPreparingTrace = false
+            }
+            .onChange(of: scenePhase) { _, phase in
+                handleTraceScenePhaseChange(phase)
             }
             .onChange(of: openTraceRequestID) { _, _ in
                 handleOpenTraceRequestIfNeeded()
@@ -967,6 +1211,7 @@ struct StatsWebView: View {
                 preparingSummaryRange = nil
                 traceSnapshotStore.invalidateAll()
                 tabState.coldStartDisplay = nil
+                tabState.coldStartDisplayIdentity = nil
                 tabState.coldStartLedgerRevision = nil
                 restoreTraceColdStartDisplayIfNeeded()
                 scheduleTracePreparation()
@@ -1052,21 +1297,11 @@ struct StatsWebView: View {
             VStack(spacing: 0) {
                 tracePinnedControls
 
-                ZStack {
-                    ScrollView {
-                        statsContent(availableHeight: proxy.size.height)
-                    }
-                    .scrollIndicators(.hidden)
-                    .scrollDisabled(visibleTraceLoadingPresentation != nil)
-                    .scrollPosition(id: $tabState.scrollAnchorID, anchor: .top)
-                    .accessibilityHidden(visibleTraceLoadingPresentation != nil)
-
-                    if let presentation = visibleTraceLoadingPresentation {
-                        traceLoadingOverlay(presentation)
-                            .transition(.opacity)
-                            .zIndex(20)
-                    }
+                ScrollView {
+                    statsContent(availableHeight: proxy.size.height)
                 }
+                .scrollIndicators(.hidden)
+                .scrollPosition(id: $tabState.scrollAnchorID, anchor: .top)
             }
         }
     }
@@ -1091,29 +1326,41 @@ struct StatsWebView: View {
         .zIndex(30)
     }
 
-    private func traceLoadingOverlay(_ presentation: TraceLoadingPresentation) -> some View {
-        ZStack {
-            AppColors.bg
-                .opacity(0.82)
-                .contentShape(Rectangle())
-
-            ComputationLoadingView(
-                message: presentation.message,
-                detail: presentation.detail,
-                presentation: .card
-            )
-            .frame(maxWidth: 310)
-            .padding(.horizontal, 24)
+    private func tracePreparationStatus(_ presentation: TraceLoadingPresentation) -> some View {
+        HStack(spacing: 9) {
+            ProgressView()
+                .controlSize(.small)
+                .tint(AppColors.readableAccent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(presentation.message)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(TraceColors.primaryText)
+                Text(presentation.detail)
+                    .font(.caption)
+                    .foregroundStyle(TraceColors.tertiaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .allowsHitTesting(true)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(TraceColors.surfaceMuted.opacity(0.72))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(presentation.message)，\(presentation.detail)")
+        .allowsHitTesting(false)
     }
 
     private func statsContent(availableHeight: CGFloat) -> some View {
         let layout = TraceLifeCardLayout(screenHeight: max(availableHeight, UIScreen.main.bounds.height))
         let lifeSnapshot = visiblePreparedLifeSnapshot
-        let coldStartDisplay = visibleTraceColdStartDisplay
+        let clueSnapshot = visiblePreparedClueSnapshot
+        let firstScreen = visibleTraceFirstScreenPresentation
         return VStack(spacing: 16) {
+            if let presentation = visibleTraceLoadingPresentation {
+                tracePreparationStatus(presentation)
+                    .transition(.opacity)
+            }
             if traceViewMode == .life,
                let lifeSnapshot {
                 traceChapterCard(
@@ -1123,12 +1370,12 @@ struct StatsWebView: View {
                 .id(TraceDeferredScrollPolicy.lifeChapterAnchorID)
                 .transition(.opacity)
             } else if traceViewMode == .clues,
-                      let preparedClueSnapshot {
-                traceClueBoard(snapshot: preparedClueSnapshot)
+                      let clueSnapshot {
+                traceClueBoard(snapshot: clueSnapshot)
                     .id("trace-clue-board")
                     .transition(.opacity)
-            } else if let coldStartDisplay {
-                traceColdStartDisplayCard(coldStartDisplay)
+            } else if let firstScreen {
+                traceFirstScreenCard(firstScreen)
                     .transition(.opacity)
             } else {
                 traceTargetPreparationSurface(availableHeight: availableHeight)
@@ -1164,10 +1411,10 @@ struct StatsWebView: View {
             .accessibilityHidden(true)
     }
 
-    private func traceColdStartDisplayCard(_ display: TraceColdStartDisplayEntry) -> some View {
+    private func traceFirstScreenCard(_ presentation: TraceFirstScreenPresentation) -> some View {
         VStack(alignment: .leading, spacing: 15) {
             HStack {
-                Text(display.periodLabel)
+                Text(presentation.periodLabel)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(AppColors.readableAccent)
                     .padding(.horizontal, 10)
@@ -1176,30 +1423,48 @@ struct StatsWebView: View {
                 Spacer()
             }
 
-            Text(display.title)
+            Text(
+                presentation.title
+                    ?? (presentation.isLedgerEmpty ? "这里还在等第一笔记录" : "\(presentation.recordCount) 条账本记录已载入")
+            )
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(TraceColors.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(display.summary)
+            Text(
+                presentation.summary
+                    ?? (presentation.isLedgerEmpty
+                        ? "记下第一笔后，这里会按真实日期和记录整理。"
+                        : "完整内容正在后台整理，现在可以继续浏览、切换或记账。")
+            )
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(TraceColors.secondaryText)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 6) {
-                Text("\(display.recordCount) 笔")
-                Text("·")
-                Text("\(display.activeDayCount) 天有记录")
-                Text("·")
-                Text(display.total.formatted(.cny))
+            if let activeDayCount = presentation.activeDayCount,
+               let total = presentation.total {
+                HStack(spacing: 6) {
+                    Text("\(presentation.recordCount) 笔")
+                    Text("·")
+                    Text("\(activeDayCount) 天有记录")
+                    Text("·")
+                    Text(total.formatted(.cny))
+                }
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(TraceColors.tertiaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+            } else {
+                Label(
+                    presentation.isLedgerEmpty ? "当前账本为空" : "已载入 \(presentation.recordCount) 条真实记录",
+                    systemImage: presentation.isLedgerEmpty ? "tray" : "checkmark.circle"
+                )
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(TraceColors.tertiaryText)
             }
-            .font(.system(size: 13, weight: .regular))
-            .foregroundStyle(TraceColors.tertiaryText)
-            .lineLimit(1)
-            .minimumScaleFactor(0.78)
 
-            if let topCategory = display.topCategory, !topCategory.isEmpty {
+            if let topCategory = presentation.topCategory, !topCategory.isEmpty {
                 Label(topCategory, systemImage: "sparkles")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(AppColors.readableAccent)
@@ -1207,7 +1472,7 @@ struct StatsWebView: View {
         }
         .traceWarmPanel(radius: 26, padding: 24)
         .accessibilityElement(children: .combine)
-        .accessibilityHint("这是上次整理的同一账本内容，最新快照正在后台更新")
+        .accessibilityHint("页面已经可以操作，完整内容正在后台整理")
     }
 
     private var currentTraceColdStartScopeKey: String {
@@ -1241,6 +1506,44 @@ struct StatsWebView: View {
         return display
     }
 
+    private var traceFirstScreenPeriodLabel: String {
+        switch traceViewMode {
+        case .life:
+            return traceLifeCardRange == .week ? "本周痕迹" : "本月痕迹"
+        case .clues:
+            return TraceClueScopePolicy.periodLabel
+        }
+    }
+
+    private var visibleTraceFirstScreenPresentation: TraceFirstScreenPresentation? {
+        let now = Date()
+        let dayKey = LedgerDisplayFingerprintPolicy.dayKey(for: now)
+        if let display = visibleTraceColdStartDisplay,
+           let cachedIdentity = tabState.coldStartDisplayIdentity,
+           let fingerprint = homeViewModel.ledgerDisplayFingerprint(now: now) {
+            let expectedIdentity = TraceFirstScreenCacheIdentity(
+                ledgerFingerprint: fingerprint,
+                dayKey: dayKey,
+                isMember: hasMemberAccess,
+                scopeKey: currentTraceColdStartScopeKey
+            )
+            if let cached = TraceFirstScreenPresentationPolicy.exactCache(
+                entry: display,
+                cachedIdentity: cachedIdentity,
+                expectedIdentity: expectedIdentity
+            ) {
+                return cached
+            }
+        }
+        return TraceFirstScreenPresentationPolicy.loadedLedgerFacts(
+            ledgerRevision: homeViewModel.homeDashboardRevision,
+            dayKey: dayKey,
+            scopeKey: currentTraceColdStartScopeKey,
+            periodLabel: traceFirstScreenPeriodLabel,
+            loadedRecordCount: homeViewModel.items.count
+        )
+    }
+
     private var visiblePreparedLifeSnapshot: TraceChapterSnapshot? {
         guard TraceSnapshotVisibilityPolicy.representsSelectedLifeRange(
             range: traceLifeCardRange,
@@ -1248,6 +1551,15 @@ struct StatsWebView: View {
             usesCustomRange: useCustomRange
         ) else { return nil }
         return preparedLifeSnapshot(for: traceLifeCardRange)
+    }
+
+    private var visiblePreparedClueSnapshot: TraceClueSnapshot? {
+        let expectedKey = traceClueSnapshotCacheKey(now: Date())
+        guard TraceSnapshotVisibilityPolicy.canDisplayClue(
+            publishedKey: preparedClueSnapshotKey,
+            expectedKey: expectedKey
+        ) else { return nil }
+        return preparedClueSnapshot
     }
 
     private func preparedLifeSnapshot(
@@ -1283,9 +1595,7 @@ struct StatsWebView: View {
     }
 
     private var clueTraceNeedsRefresh: Bool {
-        let items = traceClueItems
-        return preparedClueSnapshot == nil
-            || preparedClueSnapshotKey != traceClueSnapshotCacheKey(items: items)
+        visiblePreparedClueSnapshot == nil
     }
 
     private var currentTraceNeedsRefresh: Bool {
@@ -1317,6 +1627,15 @@ struct StatsWebView: View {
         guard currentTraceNeedsRefresh else {
             tracePreparationTask?.cancel()
             tracePreparationTask = nil
+            tracePrewarmTask?.cancel()
+            tracePrewarmTask = nil
+            tracePreparationGate.invalidate()
+            pendingTracePreparationIdentity = nil
+            latestTracePreparationIdentity = traceProgressivePreparationIdentity(
+                viewMode: traceViewMode,
+                lifeRange: traceLifeCardRange,
+                now: Date()
+            )
             traceLoadingPresentationTask?.cancel()
             traceLoadingPresentationTask = nil
             updateTraceLoadingPresentation(nil, animated: true)
@@ -1331,6 +1650,7 @@ struct StatsWebView: View {
     private func restoreTraceColdStartDisplayIfNeeded(now: Date = Date()) {
         guard let context = traceColdStartDisplayContext(now: now) else {
             tabState.coldStartDisplay = nil
+            tabState.coldStartDisplayIdentity = nil
             return
         }
         let scopeKey = traceViewMode == .clues
@@ -1346,10 +1666,14 @@ struct StatsWebView: View {
                 customEndDate: customEndDate,
                 category: selectedCategory
             )
-        tabState.coldStartDisplay = TraceColdStartDisplayStore.shared.entry(
+        let display = TraceColdStartDisplayStore.shared.entry(
             for: context,
             scopeKey: scopeKey
         )
+        tabState.coldStartDisplay = display
+        tabState.coldStartDisplayIdentity = display == nil
+            ? nil
+            : TraceFirstScreenCacheIdentity(context: context, scopeKey: scopeKey)
     }
 
     private func traceColdStartDisplayContext(now: Date = Date()) -> TraceColdStartDisplayContext? {
@@ -1368,6 +1692,7 @@ struct StatsWebView: View {
             tabState.coldStartDayKey = dayKey
             tabState.coldStartLedgerFingerprint = fingerprint
             tabState.coldStartDisplay = nil
+            tabState.coldStartDisplayIdentity = nil
         }
         return TraceColdStartDisplayContext(
             ledgerFingerprint: fingerprint,
@@ -1446,248 +1771,296 @@ struct StatsWebView: View {
         )
     }
 
-    private func traceChapterPreparation(
+    private func traceChapterProgressiveInput(
         for range: SummaryPlaybackRange,
         allItems: [HomeItem],
         memberAccess: Bool,
+        sourceRevision: Int,
         now: Date
-    ) -> (cached: TraceChapterSnapshot?, input: (TraceChapterComputationInput, String)?) {
-        let items = traceLifeScopedItems(for: range)
-        let cacheKey = traceChapterSnapshotCacheKey(range: range, now: now)
-        if let cached = traceSnapshotStore.chapterSnapshot(for: cacheKey) {
-            return (cached, nil)
-        }
-        let periodKey = range == .week
-            ? quotaStore.currentWeekKey()
-            : EchoAnchorService.shared.periodKeyForMonth()
-        return (
-            nil,
-            (
-                TraceChapterComputationInput(
-                    range: range,
-                    items: items,
-                    allItems: allItems,
-                    isMember: memberAccess,
-                    prioritizeRecurringMarks: range == .month,
-                    periodKey: periodKey,
-                    usesEchoAnchor: true,
-                    sourceRevision: homeViewModel.homeDashboardRevision,
-                    now: now
-                ),
-                cacheKey
-            )
+    ) -> TraceChapterProgressiveInput? {
+        guard let interval = traceLifeDateInterval(for: range, now: now) else { return nil }
+        return TraceChapterProgressiveInput(
+            range: range,
+            allItems: allItems,
+            interval: interval,
+            isMember: memberAccess,
+            prioritizeRecurringMarks: range == .month,
+            periodKey: range == .week
+                ? quotaStore.currentWeekKey()
+                : EchoAnchorService.shared.periodKeyForMonth(),
+            usesEchoAnchor: true,
+            sourceRevision: sourceRevision,
+            now: now
         )
     }
 
+    private func traceClueProgressiveInput(
+        allItems: [HomeItem],
+        memberAccess: Bool,
+        sourceRevision: Int,
+        now: Date
+    ) -> TraceClueProgressiveInput {
+        TraceClueProgressiveInput(
+            allItems: allItems,
+            category: selectedCategory,
+            period: .month,
+            periodLabel: traceInsightPeriodLabel,
+            isMember: memberAccess,
+            freeRemaining: lifeInsightService.freeRemaining(isMember: memberAccess, now: now),
+            unlockedTraceKeys: lifeInsightService.unlockedTraceKeysSnapshot(
+                isMember: memberAccess,
+                now: now
+            ),
+            sourceRevision: sourceRevision,
+            narrativeScope: TraceClueScopePolicy.narrativeScope,
+            allowsNarrativeRewrite: false,
+            now: now,
+            scope: TraceClueScopePolicy.scope
+        )
+    }
+
+    private func traceProgressivePreparationIdentity(
+        viewMode: TraceViewMode,
+        lifeRange: SummaryPlaybackRange,
+        now: Date
+    ) -> TraceProgressivePreparationIdentity {
+        let dayKey = LedgerDisplayFingerprintPolicy.dayKey(for: now)
+        let scopeKey: String
+        let snapshotKey: String
+        let contentRevision: Int
+        switch viewMode {
+        case .life:
+            scopeKey = TraceSnapshotLifecycleKeyPolicy.coldStartScopeKey(
+                viewMode: .life,
+                lifeRange: lifeRange,
+                period: lifeRange == .week ? .week : .month,
+                usesCustomRange: false,
+                customStartDate: customStartDate,
+                customEndDate: customEndDate,
+                category: nil
+            )
+            snapshotKey = traceChapterSnapshotCacheKey(range: lifeRange, now: now)
+            contentRevision = chapterContentRevision
+        case .clues:
+            scopeKey = TraceSnapshotLifecycleKeyPolicy.continuousClueColdStartScopeKey(
+                category: selectedCategory
+            )
+            snapshotKey = traceClueSnapshotCacheKey(now: now)
+            contentRevision = clueContentRevision
+        }
+        return TraceProgressivePreparationIdentity(
+            ledgerRevision: homeViewModel.homeDashboardRevision,
+            scopeKey: scopeKey,
+            snapshotKey: snapshotKey,
+            isMember: hasMemberAccess,
+            dayKey: dayKey,
+            contentRevision: contentRevision
+        )
+    }
+
+    private func hasCompleteTraceSnapshot(
+        for identity: TraceProgressivePreparationIdentity,
+        viewMode: TraceViewMode,
+        lifeRange: SummaryPlaybackRange
+    ) -> Bool {
+        switch viewMode {
+        case .life:
+            switch lifeRange {
+            case .week:
+                return preparedWeekSnapshot != nil && preparedWeekSnapshotKey == identity.snapshotKey
+            case .month:
+                return preparedMonthSnapshot != nil && preparedMonthSnapshotKey == identity.snapshotKey
+            }
+        case .clues:
+            return preparedClueSnapshot != nil && preparedClueSnapshotKey == identity.snapshotKey
+        }
+    }
+
     private func scheduleTracePreparation() {
-        restoreTraceColdStartDisplayIfNeeded()
-        tracePreparationTask?.cancel()
-        let requestID = tracePreparationGate.begin()
         let performanceStartedAt = ProcessInfo.processInfo.systemUptime
+        let now = Date()
+        restoreTraceColdStartDisplayIfNeeded(now: now)
+        let requestedMode = traceViewMode
+        let requestedLifeRange = traceLifeCardRange
+        let identity = traceProgressivePreparationIdentity(
+            viewMode: requestedMode,
+            lifeRange: requestedLifeRange,
+            now: now
+        )
+        latestTracePreparationIdentity = identity
+
+        guard scenePhase == .active else {
+            cancelTracePreparationForInactiveScene()
+            return
+        }
+
+        tracePreparationTask?.cancel()
+        tracePrewarmTask?.cancel()
+        tracePrewarmTask = nil
+        let requestID = tracePreparationGate.begin()
+        pendingTracePreparationIdentity = identity
         traceLoadingPresentationTask?.cancel()
         traceLoadingPresentationTask = nil
-        let needsLife = traceViewMode == .life
-        let needsClues = traceViewMode == .clues
-        let hasPreparedSnapshot = needsLife
-            ? TraceLifePreparationPolicy.hasVisibleSnapshot(
-                selectedRange: traceLifeCardRange,
-                hasWeek: preparedLifeSnapshot(for: .week) != nil,
-                hasMonth: preparedLifeSnapshot(for: .month) != nil
-            )
-            : preparedClueSnapshot != nil
-        let loadingPresentation = TraceLoadingPresentationPolicy.make(
-            viewMode: traceViewMode,
-            selectedPeriod: selectedPeriod,
-            lifeRange: traceLifeCardRange,
-            usesCustomRange: useCustomRange,
-            hasCompleteSnapshot: hasPreparedSnapshot
-        )
-        isPreparingTrace = true
-
-        if hasPreparedSnapshot {
-            updateTraceLoadingPresentation(nil, animated: false)
-        } else if loadingPresentation.delayNanoseconds == 0 || visibleTraceLoadingPresentation != nil {
-            updateTraceLoadingPresentation(loadingPresentation, animated: true)
-        } else {
-            traceLoadingPresentationTask = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: loadingPresentation.delayNanoseconds)
-                guard !Task.isCancelled,
-                      isPreparingTrace,
-                      tracePreparationGate.accepts(requestID) else { return }
-                updateTraceLoadingPresentation(loadingPresentation, animated: true)
-            }
-        }
 
         let allItems = homeViewModel.items
-        let memberAccess = hasMemberAccess
-        let now = Date()
-        let primaryLifeRange = traceLifeCardRange
-        var cachedWeek: TraceChapterSnapshot?
-        var cachedMonth: TraceChapterSnapshot?
-        var cachedClue: TraceClueSnapshot?
-        var weekInput: (TraceChapterComputationInput, String)?
-        var monthInput: (TraceChapterComputationInput, String)?
-        var clueInput: (TraceClueComputationInput, String)?
-        var weekPublicationKey: String?
-        var monthPublicationKey: String?
-        var cluePublicationKey: String?
-        let clueColdStartScopeKey = TraceSnapshotLifecycleKeyPolicy.continuousClueColdStartScopeKey(
-            category: selectedCategory
+
+        let hasCompleteSnapshot = hasCompleteTraceSnapshot(
+            for: identity,
+            viewMode: requestedMode,
+            lifeRange: requestedLifeRange
+        )
+        let loadingPresentation = TraceLoadingPresentationPolicy.make(
+            viewMode: requestedMode,
+            selectedPeriod: selectedPeriod,
+            lifeRange: requestedLifeRange,
+            usesCustomRange: useCustomRange,
+            hasCompleteSnapshot: hasCompleteSnapshot
+        )
+        isPreparingTrace = true
+        if hasCompleteSnapshot {
+            updateTraceLoadingPresentation(nil, animated: false)
+        } else {
+            updateTraceLoadingPresentation(loadingPresentation, animated: false)
+        }
+        TraceFirstScreenPerformanceSignpost.firstInteractive(
+            mode: requestedMode.rawValue,
+            startedAtUptime: performanceStartedAt,
+            itemCount: allItems.count
         )
 
-        if needsLife {
-            switch traceLifeCardRange {
-            case .week:
-                weekPublicationKey = traceChapterSnapshotCacheKey(range: .week, now: now)
-                let prepared = traceChapterPreparation(
-                    for: .week,
-                    allItems: allItems,
-                    memberAccess: memberAccess,
-                    now: now
-                )
-                cachedWeek = prepared.cached
-                weekInput = prepared.input
-            case .month:
-                monthPublicationKey = traceChapterSnapshotCacheKey(range: .month, now: now)
-                let prepared = traceChapterPreparation(
-                    for: .month,
-                    allItems: allItems,
-                    memberAccess: memberAccess,
-                    now: now
-                )
-                cachedMonth = prepared.cached
-                monthInput = prepared.input
-            }
-        }
-
-        if needsClues {
-            let items = traceClueItems
-            let clueKey = traceClueSnapshotCacheKey(items: items)
-            cluePublicationKey = clueKey
-            cachedClue = traceSnapshotStore.clueSnapshot(for: clueKey)
-            if cachedClue == nil {
-                let unlockKey = traceInsightUnlockKey(from: items)
-                let freeRemaining = lifeInsightService.freeRemaining(isMember: memberAccess, now: now)
-                let narrativeScope: LifeNarrativeScope? = TraceClueScopePolicy.narrativeScope
-                clueInput = (
-                    TraceClueComputationInput(
-                        items: items,
-                        allItems: allItems,
-                        period: .month,
-                        periodLabel: traceInsightPeriodLabel,
-                        isMember: memberAccess,
-                        freeRemaining: freeRemaining,
-                        storedUnlock: lifeInsightService.hasUnlockedTrace(unlockKey, isMember: memberAccess, now: now),
-                        sourceRevision: homeViewModel.homeDashboardRevision,
-                        narrativeScope: narrativeScope,
-                        allowsNarrativeRewrite: false,
-                        now: now,
-                        scope: TraceClueScopePolicy.scope
-                    ),
-                    clueKey
-                )
-            }
-        }
-
-        let initialWeekSnapshot = cachedWeek
-        let initialMonthSnapshot = cachedMonth
-        let initialClueSnapshot = cachedClue
-        let pendingWeekInput = weekInput
-        let pendingMonthInput = monthInput
-        let pendingClueInput = clueInput
-        let publishedWeekKey = weekPublicationKey
-        let publishedMonthKey = monthPublicationKey
-        let publishedClueKey = cluePublicationKey
-
-        tracePreparationTask = Task { @MainActor in
-            try? await Task.sleep(
-                nanoseconds: LedgerRapidInteractionPolicy.traceCoalescingDelayNanoseconds
+        let memberAccess = hasMemberAccess
+        let sourceRevision = identity.ledgerRevision
+        let cachedChapter = requestedMode == .life
+            ? traceSnapshotStore.chapterSnapshot(for: identity.snapshotKey)
+            : nil
+        let cachedClue = requestedMode == .clues
+            ? traceSnapshotStore.clueSnapshot(for: identity.snapshotKey)
+            : nil
+        let chapterInput = requestedMode == .life && cachedChapter == nil
+            ? traceChapterProgressiveInput(
+                for: requestedLifeRange,
+                allItems: allItems,
+                memberAccess: memberAccess,
+                sourceRevision: sourceRevision,
+                now: now
             )
+            : nil
+        let clueInput = requestedMode == .clues && cachedClue == nil
+            ? traceClueProgressiveInput(
+                allItems: allItems,
+                memberAccess: memberAccess,
+                sourceRevision: sourceRevision,
+                now: now
+            )
+            : nil
+
+        tracePreparationTask = Task(priority: .userInitiated) { @MainActor in
+            if hasCompleteSnapshot {
+                try? await Task.sleep(
+                    nanoseconds: LedgerRapidInteractionPolicy.traceCoalescingDelayNanoseconds
+                )
+            }
             guard !Task.isCancelled, tracePreparationGate.accepts(requestID) else { return }
 
-            var weekSnapshot = initialWeekSnapshot
-            var monthSnapshot = initialMonthSnapshot
-            var clueSnapshot = initialClueSnapshot
-
-            if let (input, cacheKey) = pendingWeekInput,
-               let snapshot = await LedgerBackgroundComputationLane.shared.buildTraceChapter(input) {
-                weekSnapshot = snapshot
-                traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
+            var chapterSnapshot = cachedChapter
+            var clueSnapshot = cachedClue
+            if let chapterInput {
+                chapterSnapshot = await LedgerBackgroundComputationLane.shared
+                    .buildProgressiveTraceChapter(chapterInput)
             }
-            if let (input, cacheKey) = pendingMonthInput,
-               let snapshot = await LedgerBackgroundComputationLane.shared.buildTraceChapter(input) {
-                monthSnapshot = snapshot
-                traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
-            }
-            if let (input, cacheKey) = pendingClueInput,
-               let snapshot = await LedgerBackgroundComputationLane.shared.buildTraceClue(input) {
-                clueSnapshot = snapshot
-                traceSnapshotStore.storeClueSnapshot(snapshot, for: cacheKey)
+            if let clueInput {
+                clueSnapshot = await LedgerBackgroundComputationLane.shared
+                    .buildProgressiveTraceClue(clueInput)
             }
 
-            guard !Task.isCancelled, tracePreparationGate.accepts(requestID) else { return }
-            traceLoadingPresentationTask?.cancel()
-            traceLoadingPresentationTask = nil
+            let currentIdentity = traceProgressivePreparationIdentity(
+                viewMode: traceViewMode,
+                lifeRange: traceLifeCardRange,
+                now: Date()
+            )
+            guard !Task.isCancelled,
+                  (chapterSnapshot != nil || clueSnapshot != nil),
+                  TraceProgressivePublicationPolicy.accepts(
+                      candidateIdentity: identity,
+                      pendingIdentity: pendingTracePreparationIdentity,
+                      currentIdentity: currentIdentity,
+                      requestMatches: tracePreparationGate.accepts(requestID),
+                      isSceneActive: scenePhase == .active
+                  ) else { return }
+
+            if let chapterSnapshot {
+                traceSnapshotStore.storeChapterSnapshot(
+                    chapterSnapshot,
+                    for: identity.snapshotKey
+                )
+            }
+            if let clueSnapshot {
+                traceSnapshotStore.storeClueSnapshot(
+                    clueSnapshot,
+                    for: identity.snapshotKey
+                )
+            }
+
             var snapshotTransaction = Transaction(animation: nil)
             snapshotTransaction.disablesAnimations = true
             withTransaction(snapshotTransaction) {
-                if let weekSnapshot {
-                    preparedWeekSnapshot = weekSnapshot
-                    preparedWeekSnapshotKey = publishedWeekKey
-                }
-                if let monthSnapshot {
-                    preparedMonthSnapshot = monthSnapshot
-                    preparedMonthSnapshotKey = publishedMonthKey
+                if let chapterSnapshot {
+                    switch requestedLifeRange {
+                    case .week:
+                        preparedWeekSnapshot = chapterSnapshot
+                        preparedWeekSnapshotKey = identity.snapshotKey
+                    case .month:
+                        preparedMonthSnapshot = chapterSnapshot
+                        preparedMonthSnapshotKey = identity.snapshotKey
+                    }
                 }
                 if let clueSnapshot {
                     preparedClueSnapshot = clueSnapshot
-                    preparedClueSnapshotKey = publishedClueKey
+                    preparedClueSnapshotKey = identity.snapshotKey
                     if let focusedQuestion = traceInsightFocusedQuestion,
                        !clueSnapshot.insight.questionChips.contains(focusedQuestion) {
                         traceInsightFocusedQuestion = clueSnapshot.insight.questionChips.first
                     }
                 }
                 isPreparingTrace = false
+                visibleTraceLoadingPresentation = nil
             }
-            if let weekSnapshot {
-                storeTraceColdStartDisplay(chapter: weekSnapshot, now: now)
-            }
-            if let monthSnapshot {
-                storeTraceColdStartDisplay(chapter: monthSnapshot, now: now)
-            }
-            if let clueSnapshot {
-                storeTraceColdStartDisplay(
-                    clue: clueSnapshot,
-                    scopeKey: clueColdStartScopeKey,
-                    now: now
-                )
-            }
-            tabState.coldStartDisplay = nil
-            updateTraceLoadingPresentation(nil, animated: true)
-            markVisibleCurrentWeekTraceSeenIfEligible(now: now)
-            schedulePendingTraceScrollIfPossible()
-            homeViewModel.markPerformance(
-                operation: needsLife ? .traceLifePreparation : .traceCluePreparation,
+            TraceFirstScreenPerformanceSignpost.fullReady(
+                mode: requestedMode.rawValue,
                 startedAtUptime: performanceStartedAt,
                 itemCount: allItems.count
             )
 
-            if needsLife {
-                try? await Task.sleep(
-                    nanoseconds: TraceLifePreparationPolicy.prewarmDelayNanoseconds
-                )
-                guard !Task.isCancelled,
-                      tracePreparationGate.accepts(requestID) else { return }
-                await prewarmTraceChapter(
-                    range: TraceLifePreparationPolicy.prewarmRange(after: primaryLifeRange),
-                    requestID: requestID,
-                    allItems: allItems,
-                    memberAccess: memberAccess,
+            if let chapterSnapshot {
+                storeTraceColdStartDisplay(chapter: chapterSnapshot, now: now)
+            }
+            if let clueSnapshot {
+                storeTraceColdStartDisplay(
+                    clue: clueSnapshot,
+                    scopeKey: identity.scopeKey,
                     now: now
                 )
             }
-            guard tracePreparationGate.accepts(requestID) else { return }
+            tabState.coldStartDisplay = nil
+            tabState.coldStartDisplayIdentity = nil
+            pendingTracePreparationIdentity = nil
             tracePreparationTask = nil
+            markVisibleCurrentWeekTraceSeenIfEligible(now: now)
+            schedulePendingTraceScrollIfPossible()
+            homeViewModel.markPerformance(
+                operation: requestedMode == .life ? .traceLifePreparation : .traceCluePreparation,
+                startedAtUptime: performanceStartedAt,
+                itemCount: allItems.count
+            )
+            scheduleTracePrewarming(
+                after: identity,
+                requestID: requestID,
+                primaryMode: requestedMode,
+                primaryLifeRange: requestedLifeRange,
+                allItems: allItems,
+                memberAccess: memberAccess,
+                now: now
+            )
         }
     }
 
@@ -1708,55 +2081,213 @@ struct StatsWebView: View {
         }
     }
 
+    private func cancelTracePreparationForInactiveScene() {
+        tracePreparationTask?.cancel()
+        tracePreparationTask = nil
+        tracePrewarmTask?.cancel()
+        tracePrewarmTask = nil
+        traceLoadingPresentationTask?.cancel()
+        traceLoadingPresentationTask = nil
+        tracePreparationGate.invalidate()
+        pendingTracePreparationIdentity = nil
+        isPreparingTrace = false
+        updateTraceLoadingPresentation(nil, animated: false)
+    }
+
+    private func handleTraceScenePhaseChange(_ phase: ScenePhase) {
+        guard !TraceProgressiveLifecyclePolicy.shouldCancel(isSceneActive: phase == .active) else {
+            lastResumedTracePreparationIdentity = nil
+            cancelTracePreparationForInactiveScene()
+            return
+        }
+        let currentIdentity = traceProgressivePreparationIdentity(
+            viewMode: traceViewMode,
+            lifeRange: traceLifeCardRange,
+            now: Date()
+        )
+        latestTracePreparationIdentity = currentIdentity
+        let hasCompleteSnapshot = hasCompleteTraceSnapshot(
+            for: currentIdentity,
+            viewMode: traceViewMode,
+            lifeRange: traceLifeCardRange
+        )
+        guard let resumedIdentity = TraceProgressiveLifecyclePolicy.identityToResume(
+            isSceneActive: true,
+            latestRequestedIdentity: latestTracePreparationIdentity,
+            currentIdentity: currentIdentity,
+            hasCompleteSnapshot: hasCompleteSnapshot,
+            lastResumedIdentity: lastResumedTracePreparationIdentity
+        ) else { return }
+        lastResumedTracePreparationIdentity = resumedIdentity
+        scheduleTracePreparation()
+    }
+
+    private func traceBaseRequestStillCurrent(
+        _ identity: TraceProgressivePreparationIdentity,
+        requestID: UUID
+    ) -> Bool {
+        guard scenePhase == .active,
+              !Task.isCancelled,
+              tracePreparationGate.accepts(requestID),
+              latestTracePreparationIdentity == identity else { return false }
+        return traceProgressivePreparationIdentity(
+            viewMode: traceViewMode,
+            lifeRange: traceLifeCardRange,
+            now: Date()
+        ) == identity
+    }
+
+    private func scheduleTracePrewarming(
+        after primaryIdentity: TraceProgressivePreparationIdentity,
+        requestID: UUID,
+        primaryMode: TraceViewMode,
+        primaryLifeRange: SummaryPlaybackRange,
+        allItems: [HomeItem],
+        memberAccess: Bool,
+        now: Date
+    ) {
+        tracePrewarmTask?.cancel()
+        tracePrewarmTask = Task(priority: .utility) { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: TraceLifePreparationPolicy.prewarmDelayNanoseconds
+            )
+            guard traceBaseRequestStillCurrent(primaryIdentity, requestID: requestID) else { return }
+
+            if primaryMode == .life {
+                await prewarmTraceClue(
+                    primaryIdentity: primaryIdentity,
+                    requestID: requestID,
+                    allItems: allItems,
+                    memberAccess: memberAccess,
+                    now: now
+                )
+                await prewarmTraceChapter(
+                    range: TraceLifePreparationPolicy.prewarmRange(after: primaryLifeRange),
+                    primaryIdentity: primaryIdentity,
+                    requestID: requestID,
+                    allItems: allItems,
+                    memberAccess: memberAccess,
+                    now: now
+                )
+            } else {
+                await prewarmTraceChapter(
+                    range: primaryLifeRange,
+                    primaryIdentity: primaryIdentity,
+                    requestID: requestID,
+                    allItems: allItems,
+                    memberAccess: memberAccess,
+                    now: now
+                )
+                await prewarmTraceChapter(
+                    range: TraceLifePreparationPolicy.prewarmRange(after: primaryLifeRange),
+                    primaryIdentity: primaryIdentity,
+                    requestID: requestID,
+                    allItems: allItems,
+                    memberAccess: memberAccess,
+                    now: now
+                )
+            }
+            guard traceBaseRequestStillCurrent(primaryIdentity, requestID: requestID) else { return }
+            tracePrewarmTask = nil
+        }
+    }
+
     @MainActor
     private func prewarmTraceChapter(
         range: SummaryPlaybackRange,
+        primaryIdentity: TraceProgressivePreparationIdentity,
         requestID: UUID,
         allItems: [HomeItem],
         memberAccess: Bool,
         now: Date
     ) async {
-        guard lifeTraceNeedsRefresh(for: range),
-              !Task.isCancelled,
-              tracePreparationGate.accepts(requestID) else { return }
-        await Task.yield()
-        guard !Task.isCancelled, tracePreparationGate.accepts(requestID) else { return }
-
-        let prepared = traceChapterPreparation(
-            for: range,
-            allItems: allItems,
-            memberAccess: memberAccess,
+        guard traceBaseRequestStillCurrent(primaryIdentity, requestID: requestID) else { return }
+        let identity = traceProgressivePreparationIdentity(
+            viewMode: .life,
+            lifeRange: range,
             now: now
         )
-        if let cached = prepared.cached {
-            if range == .week {
-                preparedWeekSnapshot = cached
-                preparedWeekSnapshotKey = traceChapterSnapshotCacheKey(range: .week, now: now)
-            } else {
-                preparedMonthSnapshot = cached
-                preparedMonthSnapshotKey = traceChapterSnapshotCacheKey(range: .month, now: now)
-            }
-            storeTraceColdStartDisplay(chapter: cached, now: now)
-            return
+        var snapshot = traceSnapshotStore.chapterSnapshot(for: identity.snapshotKey)
+        if snapshot == nil,
+           let input = traceChapterProgressiveInput(
+               for: range,
+               allItems: allItems,
+               memberAccess: memberAccess,
+               sourceRevision: identity.ledgerRevision,
+               now: now
+           ) {
+            snapshot = await LedgerBackgroundComputationLane.shared
+                .buildProgressiveTraceChapter(input)
         }
-        guard let (input, cacheKey) = prepared.input else { return }
-
-        let snapshot = await LedgerBackgroundComputationLane.shared.buildTraceChapter(input)
+        let currentIdentity = traceProgressivePreparationIdentity(
+            viewMode: .life,
+            lifeRange: range,
+            now: Date()
+        )
         guard let snapshot,
-              !Task.isCancelled,
-              tracePreparationGate.accepts(requestID) else { return }
+              traceBaseRequestStillCurrent(primaryIdentity, requestID: requestID),
+              TraceProgressivePublicationPolicy.accepts(
+                  candidateIdentity: identity,
+                  pendingIdentity: identity,
+                  currentIdentity: currentIdentity,
+                  requestMatches: tracePreparationGate.accepts(requestID),
+                  isSceneActive: scenePhase == .active
+              ) else { return }
+        traceSnapshotStore.storeChapterSnapshot(snapshot, for: identity.snapshotKey)
         switch range {
         case .week:
-            traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
             preparedWeekSnapshot = snapshot
-            preparedWeekSnapshotKey = cacheKey
-            storeTraceColdStartDisplay(chapter: snapshot, now: now)
+            preparedWeekSnapshotKey = identity.snapshotKey
         case .month:
-            traceSnapshotStore.storeChapterSnapshot(snapshot, for: cacheKey)
             preparedMonthSnapshot = snapshot
-            preparedMonthSnapshotKey = cacheKey
-            storeTraceColdStartDisplay(chapter: snapshot, now: now)
+            preparedMonthSnapshotKey = identity.snapshotKey
         }
+        storeTraceColdStartDisplay(chapter: snapshot, now: now)
+    }
+
+    @MainActor
+    private func prewarmTraceClue(
+        primaryIdentity: TraceProgressivePreparationIdentity,
+        requestID: UUID,
+        allItems: [HomeItem],
+        memberAccess: Bool,
+        now: Date
+    ) async {
+        guard traceBaseRequestStillCurrent(primaryIdentity, requestID: requestID) else { return }
+        let identity = traceProgressivePreparationIdentity(
+            viewMode: .clues,
+            lifeRange: traceLifeCardRange,
+            now: now
+        )
+        var snapshot = traceSnapshotStore.clueSnapshot(for: identity.snapshotKey)
+        if snapshot == nil {
+            let input = traceClueProgressiveInput(
+                allItems: allItems,
+                memberAccess: memberAccess,
+                sourceRevision: identity.ledgerRevision,
+                now: now
+            )
+            snapshot = await LedgerBackgroundComputationLane.shared
+                .buildProgressiveTraceClue(input)
+        }
+        let currentIdentity = traceProgressivePreparationIdentity(
+            viewMode: .clues,
+            lifeRange: traceLifeCardRange,
+            now: Date()
+        )
+        guard let snapshot,
+              traceBaseRequestStillCurrent(primaryIdentity, requestID: requestID),
+              TraceProgressivePublicationPolicy.accepts(
+                  candidateIdentity: identity,
+                  pendingIdentity: identity,
+                  currentIdentity: currentIdentity,
+                  requestMatches: tracePreparationGate.accepts(requestID),
+                  isSceneActive: scenePhase == .active
+              ) else { return }
+        traceSnapshotStore.storeClueSnapshot(snapshot, for: identity.snapshotKey)
+        preparedClueSnapshot = snapshot
+        preparedClueSnapshotKey = identity.snapshotKey
+        storeTraceColdStartDisplay(clue: snapshot, scopeKey: identity.scopeKey, now: now)
     }
 
     private var heroScopedItems: [HomeItem] {
@@ -4461,39 +4992,24 @@ struct StatsWebView: View {
         TraceClueScopePolicy.periodLabel
     }
 
-    private var traceLifeInsightFreeRemaining: Int {
-        return lifeInsightService.freeRemaining(isMember: hasMemberAccess)
-    }
-
     private var traceInsightUnlockKey: String {
-        traceInsightUnlockKey(from: traceClueItems)
+        traceInsightUnlockKey(from: visiblePreparedClueSnapshot?.items ?? [])
     }
 
     private func traceInsightUnlockKey(from items: [HomeItem]) -> String {
-        let sorted = items.sorted { $0.createdAt < $1.createdAt }
-        let first = Int((sorted.first?.createdAt.timeIntervalSince1970 ?? 0).rounded())
-        let last = Int((sorted.last?.createdAt.timeIntervalSince1970 ?? 0).rounded())
-        let cents = Int((items.reduce(0) { $0 + $1.amount } * 100).rounded())
-        return [
-            TraceClueScopePolicy.identifier,
-            "\(items.count)",
-            "\(first)",
-            "\(last)",
-            "\(cents)",
-            TraceClueScopePolicy.windowKey(now: Date())
-        ].joined(separator: "|")
+        TraceInsightUnlockKeyPolicy.make(items: items, now: Date())
     }
 
     private var hasUnlockedTraceDeepInsight: Bool {
-        lifeInsightService.hasUnlockedTrace(traceInsightUnlockKey, isMember: hasMemberAccess)
+        visiblePreparedClueSnapshot?.isDeepInsightUnlocked ?? hasMemberAccess
     }
 
     private var hasTraceInsightData: Bool {
-        !traceClueItems.isEmpty
+        !(visiblePreparedClueSnapshot?.items.isEmpty ?? true)
     }
 
     private var canUseTraceDeepInsight: Bool {
-        hasTraceInsightData && (hasUnlockedTraceDeepInsight || traceLifeInsightFreeRemaining > 0)
+        visiblePreparedClueSnapshot?.canUseDeepInsight ?? false
     }
 
     private var traceCategoryClues: [TraceCategoryClue] {
@@ -4704,31 +5220,72 @@ struct StatsWebView: View {
     }
 
     private func traceClueBoard(snapshot: TraceClueSnapshot) -> some View {
-        VStack(spacing: 16) {
+        let hasPrimaryJourneyCard = snapshot.journeyFact.map { journeyFact in
+            snapshot.discover.recentDiscoveries.contains {
+                $0.id == "discover:journey:\(journeyFact.id)"
+            }
+        } ?? false
+        let separatesJourneyNarrative = DiscoverJourneyHierarchyPolicy.suppressesLegacyNarrative(
+            journeyFact: snapshot.journeyFact,
+            insight: snapshot.insight,
+            hasPrimaryDiscoverCard: hasPrimaryJourneyCard
+        )
+        return VStack(spacing: 16) {
             traceDiscoverEditorialBoard(snapshot: snapshot.discover)
-            traceClueHeroCard(
-                items: snapshot.items,
-                clues: snapshot.clues,
-                rhythmPoints: snapshot.rhythmPoints,
-                marks: snapshot.marks,
-                narrativeHeadline: snapshot.narrativeHeadline,
-                narrativeSummary: snapshot.narrativeSummary,
-                photoEvidenceItem: snapshot.photoEvidenceItem
-            )
-            traceClueCompositionCard(items: snapshot.items, clues: snapshot.clues)
+            if separatesJourneyNarrative, let journeyFact = snapshot.journeyFact {
+                traceContinuousOverview(
+                    items: snapshot.items,
+                    clues: snapshot.clues,
+                    journeyFact: journeyFact
+                )
+            } else {
+                traceClueHeroCard(
+                    items: snapshot.items,
+                    clues: snapshot.clues,
+                    rhythmPoints: snapshot.rhythmPoints,
+                    marks: snapshot.marks,
+                    narrativeHeadline: snapshot.narrativeHeadline,
+                    narrativeSummary: snapshot.narrativeSummary,
+                    photoEvidenceItem: snapshot.photoEvidenceItem
+                )
+                traceClueCompositionCard(items: snapshot.items, clues: snapshot.clues)
+            }
             traceLifeMarkCard(marks: snapshot.marks, lockedPreview: snapshot.lockedMark)
-            traceDeepInsightCard(
-                insight: snapshot.insight,
-                items: snapshot.items,
-                clues: snapshot.clues,
-                rhythmPoints: snapshot.rhythmPoints,
-                journeyFact: snapshot.journeyFact,
-                isUnlocked: snapshot.isDeepInsightUnlocked,
-                canUseDeepInsight: snapshot.canUseDeepInsight,
-                freeRemaining: snapshot.freeInsightRemaining
-            )
+            if !separatesJourneyNarrative {
+                traceDeepInsightCard(
+                    insight: snapshot.insight,
+                    items: snapshot.items,
+                    clues: snapshot.clues,
+                    rhythmPoints: snapshot.rhythmPoints,
+                    journeyFact: snapshot.journeyFact,
+                    isUnlocked: snapshot.isDeepInsightUnlocked,
+                    canUseDeepInsight: snapshot.canUseDeepInsight,
+                    freeRemaining: snapshot.freeInsightRemaining
+                )
+            }
             traceAppendixStrip
         }
+    }
+
+    private func traceContinuousOverview(
+        items: [HomeItem],
+        clues: [TraceCategoryClue],
+        journeyFact: LifeJourneyFact
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("连续 \(TraceClueScopePolicy.lookbackWeekCount + 1) 周概览")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(TraceColors.primaryText)
+                Text("按这段时间的全部 \(items.count) 笔记录统计；上面的行程只依据 \(journeyFact.evidenceItemIDs.count) 笔记录。")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(TraceColors.tertiaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            traceClueCompositionCard(items: items, clues: clues)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -4931,8 +5488,9 @@ struct StatsWebView: View {
     }
 
     private func buildTraceClueSnapshot() -> TraceClueSnapshot {
+        let now = Date()
         let items = traceClueItems
-        let cacheKey = traceClueSnapshotCacheKey(items: items)
+        let cacheKey = traceClueSnapshotCacheKey(now: now)
         if let cached = traceSnapshotStore.clueSnapshot(for: cacheKey) {
             return cached
         }
@@ -4953,7 +5511,7 @@ struct StatsWebView: View {
                 sourceRevision: homeViewModel.homeDashboardRevision,
                 narrativeScope: narrativeScope,
                 allowsNarrativeRewrite: false,
-                now: Date(),
+                now: now,
                 scope: TraceClueScopePolicy.scope
             )
         )
@@ -4961,16 +5519,23 @@ struct StatsWebView: View {
         return snapshot
     }
 
-    private func traceClueSnapshotCacheKey(items: [HomeItem]) -> String {
-        let unlockKey = traceInsightUnlockKey(from: items)
+    private func traceClueSnapshotCacheKey(now: Date) -> String {
+        let unlockedKeys = lifeInsightService.unlockedTraceKeysSnapshot(
+            isMember: hasMemberAccess,
+            now: now
+        )
         return TraceSnapshotLifecycleKeyPolicy.continuousClueKey(
             ledgerRevision: homeViewModel.homeDashboardRevision,
             isMember: hasMemberAccess,
             category: selectedCategory,
-            freeRemaining: lifeInsightService.freeRemaining(isMember: hasMemberAccess),
-            isUnlocked: lifeInsightService.hasUnlockedTrace(unlockKey, isMember: hasMemberAccess),
-            dayKey: LedgerDisplayFingerprintPolicy.dayKey(for: Date()),
-            windowKey: TraceClueScopePolicy.windowKey(now: Date()),
+            freeRemaining: lifeInsightService.freeRemaining(isMember: hasMemberAccess, now: now),
+            isUnlocked: hasMemberAccess,
+            unlockStateKey: TraceInsightUnlockKeyPolicy.stateKey(
+                unlockedKeys: unlockedKeys,
+                isMember: hasMemberAccess
+            ),
+            dayKey: LedgerDisplayFingerprintPolicy.dayKey(for: now),
+            windowKey: TraceClueScopePolicy.windowKey(now: now),
             contentRevision: clueContentRevision
         )
     }
@@ -5482,7 +6047,10 @@ struct StatsWebView: View {
     ) -> some View {
         if !rhythmPoints.isEmpty {
             let maxCount = max(rhythmPoints.map(\.count).max() ?? 1, 1)
-            let highlightedIndex = traceInsightHighlightedRhythmIndex(insight: insight, pointCount: rhythmPoints.count)
+            let highlightedIndex = traceInsightHighlightedRhythmIndex(
+                insight: insight,
+                rhythmPoints: rhythmPoints
+            )
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("这段时间的节奏")
@@ -5557,13 +6125,12 @@ struct StatsWebView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func traceInsightHighlightedRhythmIndex(insight: LifeInsightResult, pointCount: Int) -> Int? {
-        guard let date = insight.highlightedDate, pointCount > 0 else { return nil }
-        let points = TraceClueScopePolicy.rhythmPoints(
-            from: traceClueItems,
-            now: Date()
-        )
-        guard let index = points.firstIndex(where: { point in
+    private func traceInsightHighlightedRhythmIndex(
+        insight: LifeInsightResult,
+        rhythmPoints: [TraceRhythmPoint]
+    ) -> Int? {
+        guard let date = insight.highlightedDate, !rhythmPoints.isEmpty else { return nil }
+        guard let index = rhythmPoints.firstIndex(where: { point in
             guard let startDate = point.startDate else { return false }
             guard let endDate = Calendar.current.date(
                 byAdding: .day,
@@ -5574,9 +6141,9 @@ struct StatsWebView: View {
             }
             return date >= startDate && date < endDate
         }) else {
-            return min(max(pointCount - 1, 0), pointCount - 1)
+            return rhythmPoints.count - 1
         }
-        return min(index, pointCount - 1)
+        return min(index, rhythmPoints.count - 1)
     }
 
     private func traceDeepInsightSupportingLines(

@@ -55,6 +55,33 @@ struct TraceClueComputationInput: @unchecked Sendable {
     }
 }
 
+struct TraceChapterProgressiveInput: @unchecked Sendable {
+    let range: SummaryPlaybackRange
+    let allItems: [HomeItem]
+    let interval: DateInterval
+    let isMember: Bool
+    let prioritizeRecurringMarks: Bool
+    let periodKey: String
+    let usesEchoAnchor: Bool
+    let sourceRevision: Int
+    let now: Date
+}
+
+struct TraceClueProgressiveInput: @unchecked Sendable {
+    let allItems: [HomeItem]
+    let category: HomeItem.Category?
+    let period: StatsPeriod
+    let periodLabel: String
+    let isMember: Bool
+    let freeRemaining: Int
+    let unlockedTraceKeys: Set<String>
+    let sourceRevision: Int
+    let narrativeScope: LifeNarrativeScope?
+    let allowsNarrativeRewrite: Bool
+    let now: Date
+    let scope: TraceClueScope
+}
+
 enum TraceSnapshotComputation {
     private struct DiscoverSceneBucket {
         let kind: LifeSceneKind
@@ -89,6 +116,72 @@ enum TraceSnapshotComputation {
         let name: String
         let count: Int
         let amount: Double
+    }
+
+    static func buildProgressiveChapter(
+        _ input: TraceChapterProgressiveInput
+    ) -> TraceChapterSnapshot? {
+        guard !currentTaskIsCancelled else { return nil }
+        let items = input.allItems
+            .filter {
+                $0.createdAt >= input.interval.start
+                    && $0.createdAt < input.interval.end
+                    && $0.amount > 0
+                    && $0.draftMeta == nil
+            }
+            .sorted {
+                if $0.createdAt != $1.createdAt { return $0.createdAt > $1.createdAt }
+                return $0.id.uuidString < $1.id.uuidString
+            }
+        guard !currentTaskIsCancelled else { return nil }
+        let snapshot = buildChapter(
+            TraceChapterComputationInput(
+                range: input.range,
+                items: items,
+                allItems: input.allItems,
+                isMember: input.isMember,
+                prioritizeRecurringMarks: input.prioritizeRecurringMarks,
+                periodKey: input.periodKey,
+                usesEchoAnchor: input.usesEchoAnchor,
+                sourceRevision: input.sourceRevision,
+                now: input.now
+            )
+        )
+        return currentTaskIsCancelled ? nil : snapshot
+    }
+
+    static func buildProgressiveClue(
+        _ input: TraceClueProgressiveInput
+    ) -> TraceClueSnapshot? {
+        guard !currentTaskIsCancelled else { return nil }
+        let items = TraceClueScopePolicy.items(
+            from: input.allItems,
+            category: input.category,
+            now: input.now
+        )
+        guard !currentTaskIsCancelled else { return nil }
+        let unlockKey = TraceInsightUnlockKeyPolicy.make(items: items, now: input.now)
+        let storedUnlock = input.isMember || input.unlockedTraceKeys.contains(unlockKey)
+        return buildClueIfCurrent(
+            TraceClueComputationInput(
+                items: items,
+                allItems: input.allItems,
+                period: input.period,
+                periodLabel: input.periodLabel,
+                isMember: input.isMember,
+                freeRemaining: input.freeRemaining,
+                storedUnlock: storedUnlock,
+                sourceRevision: input.sourceRevision,
+                narrativeScope: input.narrativeScope,
+                allowsNarrativeRewrite: input.allowsNarrativeRewrite,
+                now: input.now,
+                scope: input.scope
+            )
+        )
+    }
+
+    private static var currentTaskIsCancelled: Bool {
+        withUnsafeCurrentTask { $0?.isCancelled ?? false }
     }
 
     static func buildChapter(_ input: TraceChapterComputationInput) -> TraceChapterSnapshot {
@@ -160,10 +253,32 @@ enum TraceSnapshotComputation {
     }
 
     static func buildClue(_ input: TraceClueComputationInput) -> TraceClueSnapshot {
+        guard let snapshot = buildClue(input, observesCancellation: false) else {
+            preconditionFailure("Non-cancellable trace computation must return a snapshot")
+        }
+        return snapshot
+    }
+
+    static func buildClueIfCurrent(
+        _ input: TraceClueComputationInput
+    ) -> TraceClueSnapshot? {
+        buildClue(input, observesCancellation: true)
+    }
+
+    private static func buildClue(
+        _ input: TraceClueComputationInput,
+        observesCancellation: Bool
+    ) -> TraceClueSnapshot? {
+        func shouldStop() -> Bool {
+            observesCancellation && currentTaskIsCancelled
+        }
+
+        guard !shouldStop() else { return nil }
         let clues = categoryClues(from: input.items)
         let rhythmPoints = input.scope == .continuous
             ? TraceClueScopePolicy.rhythmPoints(from: input.items, now: input.now)
             : rhythmPoints(from: input.items, period: input.period, now: input.now)
+        guard !shouldStop() else { return nil }
         let effectiveNarrativeScope: LifeNarrativeScope? = input.scope == .continuous
             ? TraceClueScopePolicy.narrativeScope
             : input.narrativeScope
@@ -183,6 +298,7 @@ enum TraceSnapshotComputation {
                 now: input.now
             )
         }
+        guard !shouldStop() else { return nil }
         let narrativeRewrite = input.allowsNarrativeRewrite
             && narrativePlan?.leadSignalID != journeyFact?.id
             ? effectiveNarrativeScope.flatMap { scope in
@@ -210,6 +326,7 @@ enum TraceSnapshotComputation {
             periodLabel: input.periodLabel,
             now: input.now
         )
+        guard !shouldStop() else { return nil }
         // Prepare the expensive life-mark context once. The previous path
         // aggregated the visible marks and then aggregated the member preview
         // again, which made a cold Discover load scan the same ledger twice.
@@ -229,6 +346,7 @@ enum TraceSnapshotComputation {
                 memberLimit: 12
             )
         }
+        guard !shouldStop() else { return nil }
         let rawMarks = preparedMarkSets.visible
         let rankedMarks = prioritizedMarks(
             rawMarks,
@@ -252,6 +370,7 @@ enum TraceSnapshotComputation {
         let lockedMark = rawLockedMark.flatMap { mark in
             isAdministrativeMark(mark, itemByID: itemByID) ? nil : mark
         }
+        guard !shouldStop() else { return nil }
         let isUnlocked = !insight.isMeaningful || input.storedUnlock
         let canUse = insight.isMeaningful
             && !input.items.isEmpty
@@ -264,6 +383,7 @@ enum TraceSnapshotComputation {
                 journeyFact: journeyFact
             )
             : .empty
+        guard !shouldStop() else { return nil }
 
         return TraceClueSnapshot(
             items: input.items,
@@ -320,14 +440,24 @@ enum TraceSnapshotComputation {
         }, calendar: calendar)
         let allBuckets = sceneBuckets(from: classifiedRows, calendar: calendar)
 
+        let resolvedJourney = journeyFact
+            ?? LifeJourneyFactService.primaryFact(in: publishableRows, calendar: calendar)
         var discoveries: [DiscoverCard] = []
-        if let journey = journeyFact ?? LifeJourneyFactService.primaryFact(in: publishableRows, calendar: calendar),
+        if let journey = resolvedJourney,
            journey.endDate >= recentStart {
             let publishableIDs = Set(publishableRows.map(\.id))
             let journeyEvidenceIDs = stableEvidenceIDs(
                 journey.evidenceItemIDs.filter { publishableIDs.contains($0) }
             )
             if !journeyEvidenceIDs.isEmpty {
+                let roadIDs = Set(journey.roadEvidenceItemIDs)
+                let activityIDs = Set(journey.activityEvidenceItemIDs)
+                let coreEvidenceIDs = journeyEvidenceIDs.filter {
+                    roadIDs.contains($0) || activityIDs.contains($0)
+                }
+                let boundaryEvidenceIDs = journeyEvidenceIDs.filter {
+                    !roadIDs.contains($0) && !activityIDs.contains($0)
+                }
                 discoveries.append(
                     DiscoverCard(
                         id: "discover:journey:\(journey.id)",
@@ -343,7 +473,9 @@ enum TraceSnapshotComputation {
                         evidenceSummary: journeyEvidenceSummary(
                             journey: journey,
                             evidenceIDs: journeyEvidenceIDs
-                        )
+                        ),
+                        coreEvidenceItemIDs: coreEvidenceIDs,
+                        boundaryEvidenceItemIDs: boundaryEvidenceIDs
                     )
                 )
             }
@@ -513,6 +645,7 @@ enum TraceSnapshotComputation {
             .sorted(by: editorialOrder)
             .prefix(4))
 
+        let journeyEvidenceSet = Set(resolvedJourney?.evidenceItemIDs ?? [])
         let echoes: [DiscoverCard]
         if let echo = LifeNarrativeEchoPolicy.makeEcho(
             LifeNarrativeEchoInput(
@@ -523,24 +656,29 @@ enum TraceSnapshotComputation {
                 recentEchoIDs: []
             ),
             calendar: calendar
-        ),
-        !echo.currentEvidenceItemIDs.isEmpty {
-            let evidenceIDs = stableEvidenceIDs(
-                echo.currentEvidenceItemIDs + echo.historicalEvidenceItemIDs
-            )
-            echoes = [
-                DiscoverCard(
-                    id: "discover:echo:\(echo.id)",
-                    kind: .echo,
-                    title: echo.label,
-                    summary: editorialEchoLine(echo.line),
-                    evidenceItemIDs: evidenceIDs,
-                    novelty: echoNovelty(for: echo.kind),
-                    confidence: min(100, 76 + echo.currentDistinctDayCount * 4),
-                    storyValue: 88,
-                    latestDate: now
-                )
-            ]
+        ) {
+            if let independentEvidence = DiscoverEchoEvidencePolicy.independentEvidence(
+                currentItemIDs: echo.currentEvidenceItemIDs,
+                historicalItemIDs: echo.historicalEvidenceItemIDs,
+                excluding: journeyEvidenceSet
+            ) {
+                let evidenceIDs = stableEvidenceIDs(independentEvidence.allItemIDs)
+                echoes = [
+                    DiscoverCard(
+                        id: "discover:echo:\(echo.id)",
+                        kind: .echo,
+                        title: echo.label,
+                        summary: editorialEchoLine(echo.line),
+                        evidenceItemIDs: evidenceIDs,
+                        novelty: echoNovelty(for: echo.kind),
+                        confidence: min(100, 76 + echo.currentDistinctDayCount * 4),
+                        storyValue: 88,
+                        latestDate: now
+                    )
+                ]
+            } else {
+                echoes = []
+            }
         } else {
             echoes = []
         }

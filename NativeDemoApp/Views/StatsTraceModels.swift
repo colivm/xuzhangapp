@@ -22,7 +22,52 @@ enum TraceCustomRangePreset {
     case last30Days
 }
 
-enum TraceViewMode: String, CaseIterable, Identifiable {
+struct TraceCustomDateRange: Equatable, Sendable {
+    let startDate: Date
+    let endDate: Date
+}
+
+enum TraceCustomRangePresentationPolicy {
+    static func normalized(
+        startDate: Date,
+        endDate: Date,
+        calendar: Calendar = .current
+    ) -> TraceCustomDateRange {
+        let firstDay = calendar.startOfDay(for: startDate)
+        let secondDay = calendar.startOfDay(for: endDate)
+        return firstDay <= secondDay
+            ? TraceCustomDateRange(startDate: firstDay, endDate: secondDay)
+            : TraceCustomDateRange(startDate: secondDay, endDate: firstDay)
+    }
+
+    static func label(
+        startDate: Date,
+        endDate: Date,
+        calendar: Calendar = .current
+    ) -> String {
+        let range = normalized(
+            startDate: startDate,
+            endDate: endDate,
+            calendar: calendar
+        )
+        let start = calendar.dateComponents([.year, .month, .day], from: range.startDate)
+        let end = calendar.dateComponents([.year, .month, .day], from: range.endDate)
+        let startMonth = start.month ?? 0
+        let startDay = start.day ?? 0
+        let endMonth = end.month ?? 0
+        let endDay = end.day ?? 0
+
+        if calendar.isDate(range.startDate, inSameDayAs: range.endDate) {
+            return "\(startMonth)月\(startDay)日"
+        }
+        if start.year == end.year {
+            return "\(startMonth)月\(startDay)日 - \(endMonth)月\(endDay)日"
+        }
+        return "\(start.year ?? 0)年\(startMonth)月\(startDay)日 - \(end.year ?? 0)年\(endMonth)月\(endDay)日"
+    }
+}
+
+enum TraceViewMode: String, CaseIterable, Identifiable, Sendable {
     case life = "生活"
     case clues = "线索"
 
@@ -142,6 +187,48 @@ enum TraceClueScopePolicy {
     }
 }
 
+enum TraceInsightUnlockKeyPolicy {
+    static func make(
+        items: [HomeItem],
+        now: Date,
+        calendar: Calendar = PlaybackService.isoCalendar
+    ) -> String {
+        var firstDate: Date?
+        var lastDate: Date?
+        var total = 0.0
+        for item in items {
+            firstDate = min(firstDate ?? item.createdAt, item.createdAt)
+            lastDate = max(lastDate ?? item.createdAt, item.createdAt)
+            total += item.amount
+        }
+        let first = Int((firstDate?.timeIntervalSince1970 ?? 0).rounded())
+        let last = Int((lastDate?.timeIntervalSince1970 ?? 0).rounded())
+        let cents = Int((total * 100).rounded())
+        return [
+            TraceClueScopePolicy.identifier,
+            String(items.count),
+            String(first),
+            String(last),
+            String(cents),
+            TraceClueScopePolicy.windowKey(now: now, calendar: calendar)
+        ].joined(separator: "|")
+    }
+
+    static func stateKey(unlockedKeys: Set<String>, isMember: Bool) -> String {
+        guard !isMember else { return "member" }
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for key in unlockedKeys.sorted() {
+            for byte in key.utf8 {
+                hash ^= UInt64(byte)
+                hash &*= 1_099_511_628_211
+            }
+            hash ^= 0xFF
+            hash &*= 1_099_511_628_211
+        }
+        return String(hash, radix: 16)
+    }
+}
+
 enum TraceLifePreparationPolicy {
     static let prewarmDelayNanoseconds: UInt64 = 250_000_000
 
@@ -202,6 +289,13 @@ enum TraceSnapshotVisibilityPolicy {
     ) -> Bool {
         publishedScopeKey == expectedScopeKey
     }
+
+    static func canDisplayClue(
+        publishedKey: String?,
+        expectedKey: String
+    ) -> Bool {
+        publishedKey == expectedKey
+    }
 }
 
 enum TraceDeferredScrollPolicy {
@@ -244,8 +338,8 @@ enum TraceLoadingPresentationPolicy {
         return TraceLoadingPresentation(
             message: message,
             detail: hasCompleteSnapshot
-                ? "整理完成前会暂时保留当前内容"
-                : "整理好后会一次完整呈现",
+                ? "当前内容可继续使用，最新结果会在后台更新"
+                : "已可浏览和记账，完整内容会在后台补齐",
             delayNanoseconds: hasCompleteSnapshot ? refreshDelayNanoseconds : 0
         )
     }
@@ -308,6 +402,7 @@ enum TraceSnapshotLifecycleKeyPolicy {
         category: HomeItem.Category?,
         freeRemaining: Int,
         isUnlocked: Bool,
+        unlockStateKey: String = "none",
         dayKey: String,
         windowKey: String,
         contentRevision: Int
@@ -320,6 +415,7 @@ enum TraceSnapshotLifecycleKeyPolicy {
             category?.rawValue ?? "all",
             String(freeRemaining),
             isUnlocked ? "unlocked" : "locked",
+            unlockStateKey,
             dayKey,
             windowKey,
             String(contentRevision)
@@ -375,14 +471,206 @@ struct TraceColdStartDisplayContext: Codable, Equatable {
     let ledgerFingerprint: String
     let dayKey: String
     let isMember: Bool
+    let displayPolicyVersion: Int
+
+    init(
+        ledgerFingerprint: String,
+        dayKey: String,
+        isMember: Bool,
+        displayPolicyVersion: Int = TraceFirstScreenPresentationPolicy.currentDisplayPolicyVersion
+    ) {
+        self.ledgerFingerprint = ledgerFingerprint
+        self.dayKey = dayKey
+        self.isMember = isMember
+        self.displayPolicyVersion = displayPolicyVersion
+    }
 }
 
 struct TraceColdStartDisplayCache: Codable, Equatable {
-    static let schemaVersion = 1
+    static let schemaVersion = 2
 
     let schemaVersion: Int
     let context: TraceColdStartDisplayContext
     var entries: [String: TraceColdStartDisplayEntry]
+}
+
+struct TraceFirstScreenCacheIdentity: Codable, Equatable, Hashable, Sendable {
+    let ledgerFingerprint: String
+    let dayKey: String
+    let isMember: Bool
+    let scopeKey: String
+    let displayPolicyVersion: Int
+
+    init(
+        ledgerFingerprint: String,
+        dayKey: String,
+        isMember: Bool,
+        scopeKey: String,
+        displayPolicyVersion: Int = TraceFirstScreenPresentationPolicy.currentDisplayPolicyVersion
+    ) {
+        self.ledgerFingerprint = ledgerFingerprint
+        self.dayKey = dayKey
+        self.isMember = isMember
+        self.scopeKey = scopeKey
+        self.displayPolicyVersion = displayPolicyVersion
+    }
+
+    init(context: TraceColdStartDisplayContext, scopeKey: String) {
+        self.init(
+            ledgerFingerprint: context.ledgerFingerprint,
+            dayKey: context.dayKey,
+            isMember: context.isMember,
+            scopeKey: scopeKey,
+            displayPolicyVersion: context.displayPolicyVersion
+        )
+    }
+}
+
+enum TraceFirstScreenSource: Equatable, Sendable {
+    case exactCache(identity: TraceFirstScreenCacheIdentity, savedAt: Date)
+    case loadedLedger(ledgerRevision: Int, dayKey: String)
+}
+
+struct TraceFirstScreenPresentation: Equatable, Sendable {
+    let source: TraceFirstScreenSource
+    let scopeKey: String
+    let title: String?
+    let summary: String?
+    let periodLabel: String
+    let recordCount: Int
+    let activeDayCount: Int?
+    let total: Double?
+    let topCategory: String?
+
+    var isLedgerEmpty: Bool {
+        recordCount == 0
+    }
+
+    var hasDetailedFacts: Bool {
+        activeDayCount != nil || total != nil || topCategory != nil
+    }
+}
+
+enum TraceFirstScreenPresentationPolicy {
+    static let currentDisplayPolicyVersion = 1
+
+    static func exactCache(
+        entry: TraceColdStartDisplayEntry,
+        cachedIdentity: TraceFirstScreenCacheIdentity,
+        expectedIdentity: TraceFirstScreenCacheIdentity
+    ) -> TraceFirstScreenPresentation? {
+        guard cachedIdentity == expectedIdentity,
+              entry.scopeKey == expectedIdentity.scopeKey,
+              expectedIdentity.displayPolicyVersion == currentDisplayPolicyVersion else {
+            return nil
+        }
+        return TraceFirstScreenPresentation(
+            source: .exactCache(identity: cachedIdentity, savedAt: entry.savedAt),
+            scopeKey: entry.scopeKey,
+            title: entry.title,
+            summary: entry.summary,
+            periodLabel: entry.periodLabel,
+            recordCount: entry.recordCount,
+            activeDayCount: entry.activeDayCount,
+            total: entry.total,
+            topCategory: entry.topCategory
+        )
+    }
+
+    /// This path intentionally exposes only facts already known after loading.
+    /// Scoped totals, active days and categories belong to progressive preparation.
+    static func loadedLedgerFacts(
+        ledgerRevision: Int,
+        dayKey: String,
+        scopeKey: String,
+        periodLabel: String,
+        loadedRecordCount: Int
+    ) -> TraceFirstScreenPresentation {
+        TraceFirstScreenPresentation(
+            source: .loadedLedger(ledgerRevision: ledgerRevision, dayKey: dayKey),
+            scopeKey: scopeKey,
+            title: nil,
+            summary: nil,
+            periodLabel: periodLabel,
+            recordCount: loadedRecordCount,
+            activeDayCount: nil,
+            total: nil,
+            topCategory: nil
+        )
+    }
+
+    static func hasUsableFirstScreen(_ presentation: TraceFirstScreenPresentation?) -> Bool {
+        presentation != nil
+    }
+
+    static func blocksInteraction(
+        hasCompleteSnapshot: Bool,
+        firstScreen: TraceFirstScreenPresentation?
+    ) -> Bool {
+        !hasCompleteSnapshot && !hasUsableFirstScreen(firstScreen)
+    }
+}
+
+struct TraceProgressivePreparationIdentity: Equatable, Hashable, Sendable {
+    let ledgerRevision: Int
+    let scopeKey: String
+    let snapshotKey: String
+    let isMember: Bool
+    let dayKey: String
+    let contentRevision: Int
+}
+
+enum TraceProgressivePublicationPolicy {
+    static func accepts(
+        candidateIdentity: TraceProgressivePreparationIdentity,
+        pendingIdentity: TraceProgressivePreparationIdentity?,
+        currentIdentity: TraceProgressivePreparationIdentity,
+        requestMatches: Bool,
+        isSceneActive: Bool
+    ) -> Bool {
+        isSceneActive
+            && requestMatches
+            && candidateIdentity == pendingIdentity
+            && candidateIdentity == currentIdentity
+    }
+}
+
+enum TraceProgressiveLifecyclePolicy {
+    static func shouldCancel(isSceneActive: Bool) -> Bool {
+        !isSceneActive
+    }
+
+    static func identityToResume(
+        isSceneActive: Bool,
+        latestRequestedIdentity: TraceProgressivePreparationIdentity?,
+        currentIdentity: TraceProgressivePreparationIdentity,
+        hasCompleteSnapshot: Bool,
+        lastResumedIdentity: TraceProgressivePreparationIdentity? = nil
+    ) -> TraceProgressivePreparationIdentity? {
+        guard isSceneActive,
+              !hasCompleteSnapshot,
+              latestRequestedIdentity == currentIdentity,
+              lastResumedIdentity != currentIdentity else {
+            return nil
+        }
+        return currentIdentity
+    }
+
+    static func shouldResume(
+        isSceneActive: Bool,
+        latestRequestedIdentity: TraceProgressivePreparationIdentity?,
+        currentIdentity: TraceProgressivePreparationIdentity,
+        hasCompleteSnapshot: Bool,
+        lastResumedIdentity: TraceProgressivePreparationIdentity? = nil
+    ) -> Bool {
+        identityToResume(
+            isSceneActive: isSceneActive,
+            latestRequestedIdentity: latestRequestedIdentity,
+            currentIdentity: currentIdentity,
+            hasCompleteSnapshot: hasCompleteSnapshot,
+            lastResumedIdentity: lastResumedIdentity
+        ) != nil
+    }
 }
 
 struct StatsTabState {
@@ -390,6 +678,8 @@ struct StatsTabState {
     var selectedCategory: HomeItem.Category?
     var customStartDate = Date()
     var customEndDate = Date()
+    var customStartDateDraft = Date()
+    var customEndDateDraft = Date()
     var customDateFocus: CustomDateEndpoint = .start
     var useCustomRange = false
     var showsCustomDatePanel = false
@@ -412,6 +702,28 @@ struct StatsTabState {
     var coldStartDayKey: String?
     var coldStartLedgerFingerprint: String?
     var coldStartDisplay: TraceColdStartDisplayEntry?
+    var coldStartDisplayIdentity: TraceFirstScreenCacheIdentity?
+
+    mutating func beginCustomRangeEditing() {
+        customStartDateDraft = customStartDate
+        customEndDateDraft = customEndDate
+        showsCustomDatePanel = true
+    }
+
+    mutating func cancelCustomRangeEditing() {
+        customStartDateDraft = customStartDate
+        customEndDateDraft = customEndDate
+        showsCustomDatePanel = false
+    }
+
+    mutating func commitCustomRange(_ range: TraceCustomDateRange) {
+        customStartDate = range.startDate
+        customEndDate = range.endDate
+        customStartDateDraft = range.startDate
+        customEndDateDraft = range.endDate
+        useCustomRange = true
+        showsCustomDatePanel = false
+    }
 
     mutating func selectViewMode(_ mode: TraceViewMode) {
         viewMode = mode
@@ -782,7 +1094,7 @@ struct TraceChapterSnapshot: @unchecked Sendable {
     let preview: SummaryLaunchPreview
 }
 
-struct TraceCategoryClue: Identifiable {
+struct TraceCategoryClue: Identifiable, Equatable {
     let category: HomeItem.Category
     let count: Int
     let total: Double
@@ -791,7 +1103,7 @@ struct TraceCategoryClue: Identifiable {
     var id: String { category.rawValue }
 }
 
-struct TraceRhythmPoint: Identifiable {
+struct TraceRhythmPoint: Identifiable, Equatable {
     let label: String
     let count: Int
     let isToday: Bool
@@ -812,7 +1124,7 @@ struct TraceRhythmPoint: Identifiable {
     var id: String { label }
 }
 
-struct TraceClueSnapshot: @unchecked Sendable {
+struct TraceClueSnapshot: Equatable, @unchecked Sendable {
     let items: [HomeItem]
     let clues: [TraceCategoryClue]
     let rhythmPoints: [TraceRhythmPoint]
@@ -878,7 +1190,7 @@ struct DiscoverEvidenceSummary: Codable, Equatable, Sendable {
         var parts: [String] = []
         if road > 0 { parts.append("\(road) 笔道路") }
         if activity > 0 { parts.append("\(activity) 笔异地活动") }
-        if other > 0 { parts.append("\(other) 笔其他行程关联") }
+        if other > 0 { parts.append("\(other) 笔路线边界记录") }
         return "共 \(total) 笔记录：\(parts.joined(separator: "、"))"
     }
 }
@@ -895,6 +1207,8 @@ struct DiscoverCard: Identifiable, Codable, Equatable, @unchecked Sendable {
     let latestDate: Date
     let isFeatured: Bool
     let evidenceSummary: DiscoverEvidenceSummary?
+    let coreEvidenceItemIDs: [UUID]?
+    let boundaryEvidenceItemIDs: [UUID]?
 
     init(
         id: String,
@@ -907,7 +1221,9 @@ struct DiscoverCard: Identifiable, Codable, Equatable, @unchecked Sendable {
         storyValue: Int,
         latestDate: Date,
         isFeatured: Bool = false,
-        evidenceSummary: DiscoverEvidenceSummary? = nil
+        evidenceSummary: DiscoverEvidenceSummary? = nil,
+        coreEvidenceItemIDs: [UUID]? = nil,
+        boundaryEvidenceItemIDs: [UUID]? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -920,6 +1236,8 @@ struct DiscoverCard: Identifiable, Codable, Equatable, @unchecked Sendable {
         self.latestDate = latestDate
         self.isFeatured = isFeatured
         self.evidenceSummary = evidenceSummary
+        self.coreEvidenceItemIDs = coreEvidenceItemIDs
+        self.boundaryEvidenceItemIDs = boundaryEvidenceItemIDs
     }
 
     var editorialScore: Int {
@@ -932,6 +1250,75 @@ struct DiscoverCard: Identifiable, Codable, Equatable, @unchecked Sendable {
 
     var evidenceDisplayText: String {
         evidenceSummary?.displayText ?? "依据 \(evidenceItemIDs.count) 笔记录"
+    }
+}
+
+struct DiscoverMemoryWallPhoto: Equatable, Identifiable {
+    let itemID: UUID
+    let imageIndex: Int
+
+    var id: String {
+        "\(itemID.uuidString.lowercased())-\(imageIndex)"
+    }
+}
+
+enum DiscoverMemoryWallPhotoPolicy {
+    static let expandedPhotoLimit = 8
+
+    static func photos(from items: [HomeItem]) -> [DiscoverMemoryWallPhoto] {
+        let itemsWithPhotos = items.filter(\.hasMemoryImages)
+        let totalPhotoCount = itemsWithPhotos.reduce(0) { $0 + $1.memoryImageCount }
+
+        if totalPhotoCount > expandedPhotoLimit {
+            return itemsWithPhotos.compactMap { item in
+                guard let coverIndex = item.normalizedCoverMemoryImageIndex else { return nil }
+                return DiscoverMemoryWallPhoto(itemID: item.id, imageIndex: coverIndex)
+            }
+        }
+
+        return itemsWithPhotos.flatMap { item in
+            guard let coverIndex = item.normalizedCoverMemoryImageIndex else { return [] }
+            let orderedIndices = [coverIndex] + (0..<item.memoryImageCount).filter { $0 != coverIndex }
+            return orderedIndices.map {
+                DiscoverMemoryWallPhoto(itemID: item.id, imageIndex: $0)
+            }
+        }
+    }
+}
+
+enum DiscoverJourneyHierarchyPolicy {
+    static func suppressesLegacyNarrative(
+        journeyFact: LifeJourneyFact?,
+        insight: LifeInsightResult,
+        hasPrimaryDiscoverCard: Bool
+    ) -> Bool {
+        guard hasPrimaryDiscoverCard, let journeyFact else { return false }
+        return insight.theme == .relation && insight.previewLine == journeyFact.line
+    }
+}
+
+struct DiscoverIndependentEchoEvidence: Equatable {
+    let currentItemIDs: [UUID]
+    let historicalItemIDs: [UUID]
+
+    var allItemIDs: [UUID] {
+        currentItemIDs + historicalItemIDs
+    }
+}
+
+enum DiscoverEchoEvidencePolicy {
+    static func independentEvidence(
+        currentItemIDs: [UUID],
+        historicalItemIDs: [UUID],
+        excluding journeyItemIDs: Set<UUID>
+    ) -> DiscoverIndependentEchoEvidence? {
+        let current = currentItemIDs.filter { !journeyItemIDs.contains($0) }
+        let historical = historicalItemIDs.filter { !journeyItemIDs.contains($0) }
+        guard !current.isEmpty, !historical.isEmpty else { return nil }
+        return DiscoverIndependentEchoEvidence(
+            currentItemIDs: current,
+            historicalItemIDs: historical
+        )
     }
 }
 

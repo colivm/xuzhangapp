@@ -147,7 +147,9 @@
 | 16 | OBS-01 | 产品漏斗与性能可观测性 | `CODE_DONE` | 本机类型化匿名事件、敏感字段白名单、关键漏斗与耗时桶完成；等待 Xcode/真机签收 |
 | 17 | RELEASE-01 | 100/1,000/5,000 条与完整发版门禁 | `CODE_DONE` | 确定性夹具、Windows 自动门禁、Debug 隔离装载与统一真机矩阵完成；等待 macOS/Xcode、StoreKit 和 iPhone 集中签收 |
 | 18 | DISCOVER-MEMORY-WALL-01 | 线索详情生活片段墙 | `CODE_DONE` | 确定性照片拼贴与日期时间线完成；等待 `FLOW-103` 的 macOS/Xcode、无障碍、照片生命周期与 TestFlight/Instruments 签收 |
-| 19 | PERF-FIRST-SCREEN-01 | 两阶段首屏与渐进整理 | `NOT_STARTED` | 当前主要问题、既有性能修复和统一 macOS/Xcode/真机签收完成后再进入；本轮仅登记待办 |
+| 19 | TRACE-CUSTOM-RANGE-FIX-01 | 细查自定义日期一次应用与范围回显 | `CODE_DONE` | 草稿/已提交范围分离、真实日期回显、后台单次快照与无动画原子发布完成；等待 `FLOW-104` 的 macOS/Xcode、XCTest、TestFlight 与 Instruments 签收 |
+| 20 | LIFE-JOURNEY-RETURN-FIX-01 | 跨城返程证据与闭环终点识别 | `CODE_DONE` | 同日短窗口内的明确返程道路/长途证据已成为真实完成锚点；Windows 门禁完成，等待 macOS/Xcode、XCTest、真机与 Instruments 签收 |
+| 21 | PERF-FIRST-SCREEN-01 | 两阶段首屏与渐进整理 | `CODE_DONE` | 两阶段首屏、陈旧发布保护、生命周期、顺序预热、双阶段 signpost 与规模等价测试源码完成；等待 `FLOW-106` 的 macOS/Xcode、XCTest、TestFlight 真机与 Instruments 签收 |
 
 当前签收策略：后续仍需补全部 `CODE_DONE` 任务的 Xcode/真机证据；用户于 2026-07-15 再次明确要求“不要再问，全部改完后一起真机验证”，授权按台账顺序连续完成后续代码任务。该持续授权允许前一项达到 `CODE_DONE` 后直接进入下一项，但不得把任何未真机验证任务标为 `VERIFIED`，且仍须保持同一时间最多一个 `IN_PROGRESS`。
 
@@ -4599,13 +4601,23 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ## 94. DISCOVER-JOURNEY-HIERARCHY-01：跨城线索证据分层与层级去重（2026-09-04）
 
-- 状态：`NOT_STARTED`；等待用户确认后进入 `IN_PROGRESS`。本任务只处理跨城线索的展示层级与证据解释，不回改已完成的 `DISCOVER-EDITORIAL-01` 或 `DISCOVER-MEMORY-WALL-01` 算法。
+- 状态：`CODE_DONE`；2026-09-05 在工作区干净且无其他 `IN_PROGRESS` 的前提下启动并完成 Windows 代码阶段。本任务只处理跨城线索的展示层级与证据解释，并纳入线索详情照片墙的只读展开规则，没有回改已完成的 `DISCOVER-EDITORIAL-01` 或 `DISCOVER-MEMORY-WALL-01` 事实算法；缺少 macOS/Xcode、XCTest、真机与 Instruments 证据，因此不得标记 `VERIFIED`。
 - 目标：让“AI 重点发现”成为跨城故事的唯一主入口；详情默认突出核心道路/异地活动证据，路线边界记录可展开但不与核心证据混在同一视觉层；“过去的回声”只在存在独立历史证据时呈现，不因当前跨城行程再次单独重复。
 - 允许范围：`LifeJourneyFact` 的证据角色投影、跨城详情与 Discover 卡的只读展示编排、回声与当前 Journey 的去重判定、对应 XCTest、体验静态门禁、发布/真机矩阵和本文档。可增加 `boundaryEvidenceItemIDs` 等展示用字段，但不得删除或改写原始账单。
 - 冻结边界：不改变跨城认证门槛、城市识别、道路/活动分类规则、账单金额/日期/标题/分类、照片文件和顺序、生活页周期入口、会员额度、远程 AI、存储/同步、Sheet 路由或回放文案；不静默丢弃边界证据，不把展示折叠误报为证据不存在。
 - 计划验收：1）同一周末跨城事实在 Discover 只保留一个 Hero 主叙事，底部不再出现同文案的第二张完整大卡；2）详情显示“核心证据”和“路线边界记录”两个层级，默认仍可核对全部 evidence ID；3）边界记录解释为出发/城市切换/返程锚点，“小红岛买东西”“修电瓶车”等记录不会被误标为道路或异地活动；4）无历史同类证据时“过去的回声”不显示当前 Journey，存在真实历史匹配时才显示当前+历史 evidence IDs；5）删除/编辑、照片墙/记录墙、VoiceOver、特大字号和 Reduce Motion 保持现有语义。
 - 验证要求：Windows 执行静态门禁、语义回归和发布门禁；macOS/Xcode 执行 Swift 6 Debug/Release Clean Build、相关 XCTest 和 TestFlight 真机签收；用真实南京→宿迁→连云港→宿迁→南京样本核对 10 笔总数、4 笔道路、4 笔异地活动、2 笔边界记录的解释一致性。
-- 剩余风险：在未完成该独立任务前，当前实现仍会让同一 Journey 在重点发现与深度线索处重复讲述，且“其他行程关联”对用户不够可解释；这属于展示层风险，不影响账单保存和原始证据完整性。
+- 风险边界：本项只收口展示层重复和证据解释，不影响账单保存与原始证据完整性；代码完成后的未签收风险见下方当前记录。
+
+### 当前记录
+
+- 实现：跨城 Discover 卡新增核心证据与路线边界 evidence ID 投影，详情记录墙按“道路与异地活动 / 出发、城市切换与返程锚点”分层；当最近 14 天的重点卡确实承接同一 Journey 时，旧 Hero 与深度卡不再重复叙述，连续 13 周全局统计独立成概览且生活构成只展示一次；回声排除当前 Journey 重叠，并要求同时保留独立当前证据和真实历史证据。
+- 照片墙：改为按 `itemID + imageIndex` 展示真实照片；总图数不超过 8 张时按 evidence 顺序全部展开且每笔封面优先，超过 8 张时每笔只选 `normalizedCoverMemoryImageIndex`；照片瓦片取消账单跳转，记录墙的详情路由保持不变。照片文件、存储顺序、封面含义、加载组件和原始 evidence ID 未改变。
+- 修改文件：`NativeDemoApp/Services/LifeMarkService.swift`、`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 和本文档。
+- 验证证据：`git diff --check` 通过；`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 在补齐本地 Node/Python 运行时与后端依赖后通过；最终 `python scripts/validate_release_gate.py --phase windows` 通过，其中 `life_semantic_regression: OK`、`Static experience checks passed`、`Copy experience checks passed`、`release_repository_gate: OK`，仅保留既有 6 条文案 soft warning。新增 XCTest 源码覆盖照片少量全展/封面优先、多量按笔收敛、Journey 承接条件、核心/边界分区和回声独立证据门槛，但当前 Windows 环境未执行 XCTest。
+- 冻结边界复核：没有改变跨城认证、城市识别、道路/活动分类、账单字段、照片文件与存储顺序、会员额度、远程 AI、存储/同步、Sheet 路由或回放文案；删除/编辑后的详情仍按当前账本重解析 evidence ID。
+- 剩余风险：缺少 Swift 6 编译、XCTest、真实照片解码、南京→宿迁→连云港→宿迁→南京 10 笔真机样本、VoiceOver、特大字号、Reduce Motion、快速滚动和 Instruments 证据；因此维持 `CODE_DONE`。照片多量阈值 8 和只读瓦片的真机视觉密度仍需按 `FLOW-101`/`FLOW-103` 签收。
+- 下一任务：先完成本项及既有性能任务的 macOS/Xcode、TestFlight 真机与 Instruments 基线；前置条件满足后，才可将 `PERF-FIRST-SCREEN-01` 设为唯一 `IN_PROGRESS`。
 
 ---
 
@@ -4624,19 +4636,31 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ---
 
-## 96. PERF-FIRST-SCREEN-01：两阶段首屏与渐进整理（待办）
+## 96. PERF-FIRST-SCREEN-01：两阶段首屏与渐进整理（2026-09-05）
 
-- 状态：`NOT_STARTED`；本轮只登记，不进入 `IN_PROGRESS`，当前无 `IN_PROGRESS`。
+- 状态：`IN_PROGRESS` → `CODE_DONE`；2026-09-05 完成 Windows 代码阶段与仓库门禁，当前无 `IN_PROGRESS`。第 94、98、99 项继续保持 `CODE_DONE`；本项及既有任务仍未取得 macOS/Xcode、XCTest 实跑、TestFlight 真机或 Instruments 证据，因此没有标记为 `VERIFIED`。
 - 用户诉求：首次打开或首次进入线索时，先快速看到可用内容和可操作界面，再在后台完成高成本整理；避免新用户等待完整计算后才看到首屏。
-- 产品方案（待实施）：
+- 产品方案：
   1. 阶段一（首屏）：立即展示稳定的页面骨架、账本元数据和可安全承接的上次快照/轻量事实；不等待周/月/线索全量整理，不阻塞滚动和记账。
   2. 阶段二（渐进整理）：后台按“当前可见内容 → 关键生活线索 → 低优先级预热”顺序准备完整快照；只在账本修订、筛选和会员身份仍匹配时原子替换，旧任务取消后不得回写。
-- 允许范围（启动时再细化）：首屏生命周期、快照冷启动承接、任务优先级/合并/取消、局部加载状态、性能埋点和对应 XCTest/真机矩阵。不得先改线索事实算法或账单数据。
+- 允许范围：`StatsTabState` 的首屏阶段状态、严格匹配的冷启动摘要与真实账本轻量承接、痕迹当前可见快照/关键生活线索/低优先级预热的调度顺序、任务优先级/合并/取消、前后台生命周期、request/revision/scope/member 三重以上发布校验、非阻塞局部整理状态、性能埋点和对应 XCTest/静态门禁/真机矩阵。不得先改线索事实算法或账单数据。
 - 冻结边界：不改变账单分类、金额/日期/标题、OCR、照片文件与顺序、线索连续窗口、证据门槛、生活页周/月入口、复盘/回放文案、会员/额度、远程 AI、同步、首页主动作和现有导航语义；不使用假数据填充首屏，不用永久缓存掩盖失败。
-- 前置条件：先完成当前主要问题的代码与真机签收，尤其是 `DISCOVER-JOURNEY-HIERARCHY-01`、现有 `PERF-15`/`PERF-FIX-*`/`TRACE-PREP-PERF-02` 的 Xcode/真机验证，以及本次发热诊断中的 Instruments 基线；前置问题未收口前不得启动本任务。
+- 前置条件记录：原任务卡要求先完成 `DISCOVER-JOURNEY-HIERARCHY-01`、现有 `PERF-15`/`PERF-FIX-*`/`TRACE-PREP-PERF-02` 的 Xcode/真机验证和发热诊断 Instruments 基线。第 94 项及最近定向问题已经完成 Windows 代码阶段；用户最新指令明确要求继续按台账优先级执行，因此本轮在外部签收仍缺失的情况下只推进本项代码与 Windows 门禁。缺失的前置证据继续作为剩余风险和最终签收条件，不得写成已经完成。
 - 计划验收：新用户空/少量账本、100/1,000/5,000 条账本和无图/多图账本均能先交互后整理；阶段二完成后内容与单阶段完整计算结果一致；切后台、取消、快速编辑/删除、跨 Tab、低电量、Reduce Motion、VoiceOver、特大字号和内存/热状态无回归；首次首帧、整理完成、主线程 hitch、峰值内存和整理后 10 分钟回落均有真机证据。
-- 当前验证证据：仅完成产品方案登记；未修改生产代码，未运行本任务 XCTest 或真机性能测试。
-- 下一步：继续处理现有主要问题和统一 Xcode/真机签收；完成前置条件后，再将本项改为唯一 `IN_PROGRESS` 并按台账流程实施。
+- 启动现场：已完整复核 `AGENTS.md`、本台账、任务卡、现有冷启动缓存/快照生命周期/后台计算路径与 `git status --short`。开始时共有 10 个已修改跟踪文件：本文档、`LifeMarkService.swift`、`HomeViewModel.swift`、`StatsTraceFilters.swift`、`StatsTraceModels.swift`、`StatsTraceSnapshotStore.swift`、`StatsWebView.swift`、`StateRegressionTests.swift`、发布矩阵与体验静态门禁；无未跟踪文件。全部作为既有工作区叠加保护，不重置、不清理、不覆盖。
+- 审计结论：原实现的严格 fingerprint/day/member/scope 冷启动摘要可以作为阶段一安全内容，但缓存未命中时只有不可访问骨架；旧加载契约还会禁用滚动并把内容从 VoiceOver 隐藏。线索范围筛选、排序和 unlock key 原先在主线程进入后台 lane 之前执行，完成后只校验 latest request，没有把 ledger revision、当前 scope key 和会员身份组成显式原子发布契约，旧任务还可能先写入内存缓存。本项按这些根因定向收口。
+- 实现结果：
+  - 阶段一只承接 fingerprint、日期、会员、scope 与展示策略版本全部精确匹配的冷启动摘要；缓存 schema 升级为 v2，旧的不兼容条目自动失效。缓存未命中时只显示当前已载入账本的真实记录数或真实空态，不生成部分 `TraceClueSnapshot`，也不伪造线索、金额、活跃天数或分类结论。
+  - 整理状态改为不拦截点击的页内提示；移除依赖加载状态的滚动禁用和 VoiceOver 隐藏。缺少当前完整快照时立即以 `.userInitiated` 开始，只有已有可用完整快照的刷新才保留短合并窗口。
+  - 周/月范围筛选及连续线索筛选、排序、unlock key 与完整快照构建进入共享 `LedgerBackgroundComputationLane`；线索计算在高成本阶段之间检查协作取消。完整结果以无动画事务一次替换阶段一，不暴露半成品。
+  - 发布前同时核对 request、账本 revision、scope、snapshot key、会员身份、日期、内容 revision 和 active scene；校验通过前不写内存缓存。切入后台或 inactive 时取消主任务和预热，回前台只恢复一份最新未完成身份；完成当前内容后，由单一 `.utility` 任务顺序预热线索与其余周/月快照。
+  - 新增 `TraceFirstInteractive` 与 `TraceFullReady` Points of Interest signpost，二者使用同一单调时钟起点并记录模式、粗粒度账本数量和阶段耗时，供 `FLOW-106` 在 Instruments 分别量取首屏可交互与完整整理时间。
+  - `TraceFirstScreenProgressivePolicyTests` 源码覆盖空/少量账本、缓存五维精确身份、request/revision/scope/key/member/day/content 陈旧拒绝、后台取消与一次前台恢复；线索以及周/月章节均覆盖 0、5、100、1,000、5,000 条的渐进计算与直接完整计算逐字段等价。首屏静态守卫改为逐项断言，避免 `|` 正则只命中任意一个关键词仍误通过。
+- 修改文件：本项为 `NativeDemoApp/Services/AnalyticsService.swift`、`NativeDemoApp/Services/LifeInsightService.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`scripts/observability_lint.py`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。`LifeMarkService.swift`、`StatsTraceFilters.swift` 及共享文件内第 94、98、99 项的既有修改均原样保留，不计入本项实现。
+- 验证证据：`git diff --check` 通过；完整 `powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 通过并输出 `observability_lint: OK`、`Static experience checks passed`；`python scripts/validate_release_gate.py --phase windows` 通过并输出 `life_semantic_regression: OK`、`Copy experience checks passed`、`release_repository_gate: OK`，100/1,000/5,000 条确定性夹具与真实照片夹具通过，仅保留既有 6 条 copy soft warning。Windows 没有 Swift、`swiftc`、`xcodebuild`、iPhone 或 Instruments，XCTest 仅完成源码与 Target 接线，未实际运行。
+- 冻结边界复核：未改变账单分类、金额/日期/标题、OCR、照片文件与顺序、线索连续窗口、Journey/Discover 证据门槛、生活页周/月入口、复盘/回放文案、会员/额度、远程 AI、同步、首页主动作或导航语义；阶段一不使用假数据，缓存不能覆盖失败或越过身份校验。
+- 剩余风险：仍需 Swift 6 Debug/Release Clean Build 验证 `os.signpost`、actor isolation 与任务优先级；需实际运行 `TraceFirstScreenProgressivePolicyTests` 和全部 XCTest。共享 actor 在其他重任务执行期间仍可能排队，部分内部同步算法只能在阶段边界响应取消；真实空/少量/100/1,000/5,000 条及无图/多图账本的首帧、完整整理、Main Thread Hitches、峰值内存、Energy Log 与完成后 10 分钟回落均没有 TestFlight/iPhone/Instruments 数据。
+- 下一步：不启动未定义的新代码任务；按 `FLOW-106` 补本项 macOS/Xcode、全部 XCTest、同一 TestFlight 构建的 iPhone 与 Instruments 签收，并与第 94、98、99 项及既有 `CODE_DONE` 矩阵集中验证。取得全部要求证据前维持 `CODE_DONE`。
 
 ---
 
@@ -4666,9 +4690,10 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 | `PHOTO-JOURNEY-COPY-FIX-01` | 过路费照片事实和跨城推荐指令闭环 | `CODE_DONE`，详见第 76 项 |
 | `TRACE-PREP-PERF-01/02` | 事实底稿与回声有界计算，减少重复历史扫描 | `CODE_DONE`，详见第 70、87 项 |
 | `TRACE-CLUE-SCOPE-01` | 线索独立连续范围、冷启动身份和统一加载承接 | `CODE_DONE`，详见第 89 项 |
-| `DISCOVER-EDITORIAL-01` | Discover 四层卡片、一次聚合复用、跨城重点卡、详情入口和统一证据摘要 | `CODE_DONE`，详见第 91 项；本轮确认仍有层级重复风险 |
+| `DISCOVER-EDITORIAL-01` | Discover 四层卡片、一次聚合复用、跨城重点卡、详情入口和统一证据摘要 | `CODE_DONE`，详见第 91 项；层级重复由第 94 项定向收口 |
 | `DARK-MODE-READABILITY-01` | 深色前景/承载层、编辑详情次级控件和 iOS 17 兼容修正 | `CODE_DONE`，详见第 92 项 |
 | `DISCOVER-MEMORY-WALL-01` | 确定性杂志式照片墙、按日记录墙、编辑/删除后 evidence ID 重解析 | `CODE_DONE`，详见第 93 项 |
+| `DISCOVER-JOURNEY-HIERARCHY-01` | 跨城唯一主叙事、核心/边界证据分层、回声独立证据与照片墙只读多图规则 | `CODE_DONE`，详见第 94 项；等待 macOS/Xcode、XCTest、真机与 Instruments 签收 |
 
 上述任务的 Windows 静态、语义、文案和发布门禁结果已分别写入原任务卡；由于当前环境没有 Swift/Xcode、iPhone 和 Instruments，相关任务均不得提前标记为真机 `VERIFIED`。
 
@@ -4676,14 +4701,49 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 | 优先级 | 任务 | 待解决内容 | 状态/前置条件 |
 |---:|---|---|---|
-| P0 | `DISCOVER-JOURNEY-HIERARCHY-01` | 跨城只保留一个 AI 重点主叙事；Hero/Deep 去重；统计与行程证据分口径；核心/边界证据分层；回声排除当前行程重叠并保留真实历史匹配 | `NOT_STARTED`；按第 94 项独立进入，不回改已完成算法 |
-| P1 | `PERF-FIRST-SCREEN-01` | 两阶段首屏：先展示安全快照/轻量事实，再后台渐进整理；取消旧任务、原子替换、避免首屏等待 | `NOT_STARTED`；必须先完成 P0、现有性能任务签收和 Instruments 基线 |
+| P0 | `DISCOVER-JOURNEY-HIERARCHY-01` | 跨城只保留一个 AI 重点主叙事；Hero/Deep 去重；统计与行程证据分口径；核心/边界证据分层；回声排除当前行程重叠并保留真实历史匹配 | `CODE_DONE`；Windows 代码与发布门禁完成，等待第 94 项 macOS/Xcode、XCTest、真机与 Instruments 签收 |
+| P1 | `PERF-FIRST-SCREEN-01` | 两阶段首屏：先展示安全快照/轻量事实，再后台渐进整理；取消旧任务、原子替换、避免首屏等待 | `CODE_DONE`；Windows 代码与全量门禁完成，等待第 96 项及 `FLOW-106` 的 macOS/Xcode、XCTest、TestFlight 真机与 Instruments 签收 |
 | P1 | 性能真机基线 | 用 Time Profiler、Energy Log、Allocations/Memory Graph、Main Thread Hitches 对比小/大账本、无图/多图、AI/天气/宠物开关，并记录整理后 10 分钟回落 | 归档于第 95 项；尚未取得设备证据，不得据此宣称“内存泄漏已修复” |
 | P2 | 既有 `CODE_DONE` 集中签收 | Swift 6 Debug/Release Clean Build、全部 XCTest、TestFlight 真实南京→宿迁→连云港→宿迁→南京样本、VoiceOver/特大字号/Reduce Motion | 受 macOS/Xcode/iPhone 环境阻塞，按各任务卡 FLOW 矩阵执行 |
 
 ### 本次台账变更
 
-- 修改文件：仅更新 `GLOBAL_PRODUCT_INTERACTION_OPTIMIZATION_LEDGER_2026-07-15.md`，未修改生产代码、账单数据、Discover 算法、网站、法律页、服务端或工程配置。
-- 验证证据：本次完成前执行 `git status --short` 保护既有工作区；修改后执行 `git diff --check`，确认台账无空白错误或冲突标记。
-- 剩余风险：台账记录已经补齐，但 P0/P1 仍未实现；所有 `CODE_DONE` 任务仍需按原任务卡完成 macOS/Xcode、XCTest、真机或生产签收，不能把文档归档当成产品问题已修复。
-- 下一任务：在当前工作区无其他 `IN_PROGRESS` 的前提下，优先启动 `DISCOVER-JOURNEY-HIERARCHY-01`；完成并验证后再启动 `PERF-FIRST-SCREEN-01`。
+- 索引建立时修改文件：仅更新 `GLOBAL_PRODUCT_INTERACTION_OPTIMIZATION_LEDGER_2026-07-15.md`，未修改生产代码、账单数据、Discover 算法、网站、法律页、服务端或工程配置；后续各任务的实际文件仍以第 94、96、98、99 项为准。
+- 索引建立时验证证据：执行 `git status --short` 保护既有工作区，并以 `git diff --check` 确认台账无空白错误或冲突标记；后续 Windows 门禁证据见各任务卡。
+- 剩余风险：P0 与 P1 均已完成 Windows 代码阶段但尚未取得 macOS/Xcode、XCTest、TestFlight 真机或 Instruments 证据；所有 `CODE_DONE` 任务仍需按原任务卡完成对应环境签收，不能把 Windows 门禁或文档归档当成真机验证。
+- 下一任务：当前无 `IN_PROGRESS`；按第 94、95、96、98、99 项及 `FLOW-101`～`FLOW-106` 集中补齐 macOS/Xcode、全部 XCTest、TestFlight 真机与 Instruments 证据，不启动未定义的新代码任务。
+
+---
+
+## 98. TRACE-CUSTOM-RANGE-FIX-01：细查自定义日期一次应用与范围回显（2026-09-05）
+
+- 状态：`CODE_DONE`；Windows 代码与发布门禁完成，当前无 `IN_PROGRESS`。用户提供的真机截图显示，已选择 `8月6日` 至 `9月4日` 并应用后，时间控件仍显示“具体时间段”，顶部摘要仍显示“自定义时间”，且应用过程有明显卡顿。
+- 目标：两个已应用状态统一显示真实日期范围；日期面板使用独立草稿，取消不改变当前筛选，应用时规范化起止日期并只提交一次；列表替换不参与整页弹簧动画。
+- 允许范围：`StatsTabState` 的细查日期草稿、确定性日期范围展示策略、`StatsTraceFilters` 的打开/取消/应用编排、既有 `TraceDetailListSnapshot` 的单次刷新、对应 XCTest、体验静态门禁、真机矩阵和本文档。
+- 冻结边界：不改变本周/本月/本年、自定义日期的包含边界、时区来源、分类筛选、记录数量、金额合计、日期/同日排序、编辑删除、`LazyVStack`、痕迹主章节、跨城/回声事实、照片、会员额度、存储同步、Sheet 路由或 `PERF-FIRST-SCREEN-01`；不增加固定延时，不把有效旧结果伪装成新筛选结果。
+- 计划验证：同日、同年跨月和跨年范围文案确定且两处一致；已应用范围再次编辑时，逐日调整不刷新列表，取消保留原范围，应用后只按最终规范化范围刷新一次；100/1,000/5,000 条账本下应用不再带动整份列表弹簧动画；Windows 门禁通过后保持 `CODE_DONE`，待 macOS/Xcode、XCTest、TestFlight 真机与 Main Thread Hitches 证据后才能标记 `VERIFIED`。
+- 实现结果：
+  - 新增 `TraceCustomRangePresentationPolicy`，把起止时间规范化到当前日历日边界并纠正倒置范围；已应用标签确定显示为单日 `8月6日`、同年 `8月6日 - 9月4日` 或跨年 `2025年12月31日 - 2026年1月2日`，时间控件和顶部摘要复用同一文案来源。
+  - `StatsTabState` 分离已提交范围与编辑草稿，打开时复制、取消/下滑时恢复、应用成功时一次提交；日期步进和快捷范围只修改草稿，不再逐日触发列表重算，跨年长标签允许两行与缩放。
+  - 应用操作捕获账本 revision、分类和最终日期 key，经共享 `LedgerBackgroundComputationLane` 后台只生成一份 `TraceDetailListSnapshot`；Task 取消、latest request gate、Sheet/面板存活状态和 candidate/expected key 共同拒绝旧请求或旧 revision，已接受的日期、列表、笔数和合计在禁动画事务中原子发布。
+  - 新增 9 个 XCTest 源码用例覆盖单日/同年/跨年文案、倒置范围、草稿隔离、取消、提交和陈旧发布拒绝；体验静态守卫及 `FLOW-104` 覆盖 100/1,000/5,000 条、动态字体、VoiceOver、Reduce Motion 和 Instruments 场景。
+- 修改文件：`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/Views/StatsTraceFilters.swift`、`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。`LifeMarkService.swift`、`StatsTraceSnapshotStore.swift` 及同文件内的 Discover 改动属于前序任务，原样保留。
+- 验证证据：`git diff --check` 通过；完整 `scripts/experience_static_check.ps1` 通过；`python scripts/validate_release_gate.py --phase windows` 通过并输出 `release_repository_gate: OK`，包含语义、体验静态、文案、合规页、App Store 元数据、安全头、迁移样本、SQLite schema 及 100/1,000/5,000 条确定性夹具检查。Windows 环境没有 Swift、`swiftc` 或 `xcodebuild`，新增 XCTest 仅完成源码与 Target 接线，未运行。
+- 剩余风险：共享 actor 串行通道在既有重任务期间可能排队，排序阶段只能在计算前后响应协作取消；Swift 6 编译/actor 隔离、半宽控件跨年标签、动态字体、VoiceOver、Reduce Motion、快速关闭重开以及 100/1,000/5,000 条下的 Main Thread Hitches/Time Profiler 尚无 macOS、Xcode、TestFlight、真机或 Instruments 证据，因此不得标记为 `VERIFIED`。
+- 下一任务：用户随后提供真实记录截图，确认 `8月23日 18:26 过路费回南京` 未进入已经识别的跨城行程；下一项切换为 `LIFE-JOURNEY-RETURN-FIX-01`。`PERF-FIRST-SCREEN-01` 保持 `NOT_STARTED`，本轮不启动。
+
+---
+
+## 99. LIFE-JOURNEY-RETURN-FIX-01：跨城返程证据与闭环终点识别（2026-09-05）
+
+- 状态：`CODE_DONE`；2026-09-05 完成 Windows 代码阶段。用户截图中的 `8月23日 18:25 卤味`、`18:25 修电瓶车` 已在南京，而紧随其后的 `18:26 过路费回南京` 文案和交通事实更明确，却没有进入跨城行程证据。当前环境没有 macOS/Xcode、XCTest、真机或 Instruments 证据，因此不得标记 `VERIFIED`。
+- 根因：`LifeJourneyFactService.primaryFact` 在离城后遇到第一条 `homeCity` 记录就立即闭合候选，`makeCandidate` 再以该记录时间截断 `segmentRows`，因此后续明确返程记录从未进入过路费/长途交通识别；普通记录被显示为路线边界来自城市切换投影，并非其文案比返程证据更强。
+- 目标：真实城市证据已经确认闭环时，允许同一返程连续段内、同日短窗口且明确以 home city 为目的地的道路或长途交通记录成为完成锚点；行程 `endDate`、道路证据和统一 evidence IDs 同步延长到该锚点。
+- 允许范围：`LifeJourneyFactService` 的闭环完成锚点选择与候选终点、对应 XCTest、体验静态门禁、真机矩阵和本文档；只有证明确属事实投影错误时才允许修改 Discover snapshot，不在 `StatsWebView` 展示层补造 evidence ID。
+- 冻结边界：不改变 home city 推断、城市路线压缩、最大行程时长、道路/异地活动认证门槛、开放行程、候选排序、日期时区、记录分类、照片、回声、会员、存储同步或远程 AI；标题不能单独把开放行程变成闭环，不把出现 home city 的任意文案、整天本城记录、下一次离城或次日本城日常并入当前行程；不启动 `PERF-FIRST-SCREEN-01`。
+- 计划验证：截图同构样本 `南京出发 → 宿迁 → 连云港 → 宿迁 → 卤味 → 修电瓶车 → 过路费回南京` 保持唯一闭环路线，明确返程记录进入 `roadEvidenceItemIDs` 和 `evidenceItemIDs` 并成为 `endDate`；`到南京的过路费` 同样命中，`从南京回宿迁`、超出短窗口、次日记录、下一次离城和没有城市闭环均不得误并；乱序输入和 100/1,000/5,000 条保持确定一致。Windows 完成后最多标记 `CODE_DONE`，仍需 macOS/Xcode、XCTest、TestFlight 与 Instruments 才能 `VERIFIED`。
+- 实现结果：真实城市证据仍负责确认行程闭环；从首条本城到达记录开始，只在同一自然日、3 小时内、原有 5 天行程上限内且严格早于下一次离城的位置寻找最早明确返程锚点。锚点必须同时具备过路费或高铁等长途交通证据，并以“回/返/到/到达/抵达 + home city”明确表达目的地；`未到南京`、`从南京回宿迁`、`到南京后继续去宿迁`、`到南京后去宿迁`、`到南京后开往宿迁` 等否定、错误方向或续程文案均拒绝。候选证据使用统一稳定排序后的 item 索引切片，避免同刻下一次离城被 UUID 顺序带入旧行程；命中锚点时同步更新 Journey `endDate`、道路/长途证据与统一 evidence IDs，普通卤味、修车、话费和次日咖啡不被伪装成道路证据。
+- 修改文件：本任务范围为 `NativeDemoApp/Services/LifeMarkService.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 和本文档；这些文件内既有 `DISCOVER-JOURNEY-HIERARCHY-01`、`TRACE-CUSTOM-RANGE-FIX-01` 修改以及 `StatsTraceSnapshotStore.swift` 等其他脏工作区文件均原样保留，不计入本任务实现。
+- 验证证据：`git diff --check` 通过；完整 `powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 通过；`python scripts/validate_release_gate.py --phase windows` 通过并输出 `life_semantic_regression: OK`、`Static experience checks passed`、`Copy experience checks passed`、`release_repository_gate: OK`，100/1,000/5,000 条确定性夹具与真实照片夹具均通过，仅保留既有 6 条 copy soft warning。新增 XCTest 源码覆盖截图同构返程、到达措辞、高铁返程、否定/错误方向/续程、3 小时与跨日边界、5 天上限、同刻下一次离城双 UUID 顺序、无城市闭环、删除锚点、乱序和三档规模确定性；Windows 环境无法执行 XCTest。
+- 剩余风险：尚未取得 Swift 6 Debug/Release Clean Build、`LifeJourneyFactRegressionTests` 实际运行、真实南京→宿迁→连云港→宿迁→南京账本的编辑/删除/重启验证，以及 TestFlight、VoiceOver、特大字号、Reduce Motion、Time Profiler、Main Thread Hitches 和 Allocations 证据；自然语言目的地规则保持保守且有界，新增真实表达仍需在 `FLOW-105` 真机样本中持续核对，因此维持 `CODE_DONE`。
+- 下一任务：原计划先补 `FLOW-105` 与既有矩阵的外部签收；用户随后明确要求按台账优先级开始优化并继续，因此 `PERF-FIRST-SCREEN-01` 曾作为唯一 `IN_PROGRESS` 启动 Windows 代码阶段，现已在第 96 项收口为 `CODE_DONE`。第 99 项仍保持 `CODE_DONE`，其 macOS/Xcode、XCTest、TestFlight 真机和 Instruments 风险不因后续任务完成而消失。

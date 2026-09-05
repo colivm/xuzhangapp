@@ -79,7 +79,24 @@ def main() -> None:
     )
     require(
         "NativeDemoApp/Views/StatsWebView.swift",
-        ["operation: needsLife ? .traceLifePreparation", "markSummaryPlaybackStarted", "operation: range == .week ? .summaryWeek"],
+        [
+            "TraceFirstScreenPerformanceSignpost.firstInteractive",
+            "TraceFirstScreenPerformanceSignpost.fullReady",
+            "operation: requestedMode == .life ? .traceLifePreparation",
+            "markSummaryPlaybackStarted",
+            "operation: range == .week ? .summaryWeek",
+        ],
+    )
+    require(
+        "NativeDemoApp/Services/AnalyticsService.swift",
+        [
+            "import os.signpost",
+            "enum TraceFirstScreenPerformanceSignpost",
+            'name: "TraceFirstInteractive"',
+            '"stage=first-interactive',
+            'name: "TraceFullReady"',
+            '"stage=full-ready',
+        ],
     )
     require(
         "NativeDemoApp/Views/HomeView.swift",

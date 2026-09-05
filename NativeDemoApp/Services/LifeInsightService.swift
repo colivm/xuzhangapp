@@ -1,6 +1,6 @@
 import Foundation
 
-enum LifeInsightTheme: String, Hashable {
+enum LifeInsightTheme: String, Hashable, Sendable {
     case forming
     case steady
     case change
@@ -10,7 +10,7 @@ enum LifeInsightTheme: String, Hashable {
     case relation
 }
 
-struct LifeInsightResult {
+struct LifeInsightResult: Equatable, Sendable {
     let leadQuestion: String
     let teaser: String
     let previewLine: String
@@ -142,6 +142,12 @@ final class LifeInsightService {
         guard !isMember else { return true }
         syncMonthIfNeeded(now: now)
         return unlockedTraceKeys().contains(key)
+    }
+
+    func unlockedTraceKeysSnapshot(isMember: Bool, now: Date = Date()) -> Set<String> {
+        guard !isMember else { return [] }
+        syncMonthIfNeeded(now: now)
+        return unlockedTraceKeys()
     }
 
     func markTraceUnlocked(_ key: String, isMember: Bool, now: Date = Date()) {

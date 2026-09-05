@@ -1,4 +1,49 @@
 import Foundation
+import os.signpost
+
+enum TraceFirstScreenPerformanceSignpost {
+    private static let log = OSLog(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.xlife.NativeDemoApp",
+        category: .pointsOfInterest
+    )
+
+    static func firstInteractive(
+        mode: String,
+        startedAtUptime: TimeInterval,
+        itemCount: Int
+    ) {
+        os_signpost(
+            .event,
+            log: log,
+            name: "TraceFirstInteractive",
+            "stage=first-interactive mode=%{public}@ elapsed_ms=%{public}ld ledger_count=%{public}ld",
+            mode,
+            elapsedMilliseconds(since: startedAtUptime),
+            max(0, itemCount)
+        )
+    }
+
+    static func fullReady(
+        mode: String,
+        startedAtUptime: TimeInterval,
+        itemCount: Int
+    ) {
+        os_signpost(
+            .event,
+            log: log,
+            name: "TraceFullReady",
+            "stage=full-ready mode=%{public}@ elapsed_ms=%{public}ld ledger_count=%{public}ld",
+            mode,
+            elapsedMilliseconds(since: startedAtUptime),
+            max(0, itemCount)
+        )
+    }
+
+    private static func elapsedMilliseconds(since startedAtUptime: TimeInterval) -> Int {
+        let elapsed = max(0, ProcessInfo.processInfo.systemUptime - startedAtUptime)
+        return Int((elapsed * 1_000).rounded())
+    }
+}
 
 enum ProductAnalyticsEvent: String, Codable, CaseIterable, Hashable {
     case appOpened = "app_opened"

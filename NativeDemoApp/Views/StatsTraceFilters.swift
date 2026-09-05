@@ -16,6 +16,20 @@ extension StatsWebView {
         )
     }
 
+    private var customStartDateDraftBinding: Binding<Date> {
+        Binding(
+            get: { customStartDateDraft },
+            set: { customStartDateDraft = $0 }
+        )
+    }
+
+    private var customEndDateDraftBinding: Binding<Date> {
+        Binding(
+            get: { customEndDateDraft },
+            set: { customEndDateDraft = $0 }
+        )
+    }
+
     var tracePeriodFilter: some View {
         VStack(alignment: .leading, spacing: 4) {
             filterLabel("时间")
@@ -31,15 +45,20 @@ extension StatsWebView {
                 }
                 Button("具体时间段") {
                     withAnimation(traceEditSpring) {
-                        showTraceCustomDatePanel.toggle()
+                        if showTraceCustomDatePanel {
+                            tabState.cancelCustomRangeEditing()
+                        } else {
+                            tabState.beginCustomRangeEditing()
+                        }
                         traceInlineEditingItemID = nil
                         traceSwipedItemID = nil
                     }
                 }
             } label: {
-                filterButtonLabel(useCustomRange ? "具体时间段" : selectedPeriod.rawValue)
+                filterButtonLabel(currentTracePeriodLabel)
             }
             .buttonStyle(.plain)
+            .disabled(isApplyingTraceCustomRange)
         }
         .frame(maxWidth: .infinity)
     }
@@ -60,23 +79,27 @@ extension StatsWebView {
                 filterButtonLabel(selectedCategory?.rawValue ?? "全部分类")
             }
             .buttonStyle(.plain)
+            .disabled(isApplyingTraceCustomRange)
         }
         .frame(maxWidth: .infinity)
     }
 
     var traceCustomDatePanel: some View {
         VStack(alignment: .leading, spacing: 10) {
-            traceQuickRangeGrid
+            VStack(alignment: .leading, spacing: 10) {
+                traceQuickRangeGrid
 
-            HStack(spacing: 8) {
-                traceInlineDatePicker(title: "开始", selection: customStartDateBinding)
-                traceInlineDatePicker(title: "结束", selection: customEndDateBinding)
+                HStack(spacing: 8) {
+                    traceInlineDatePicker(title: "开始", selection: customStartDateDraftBinding)
+                    traceInlineDatePicker(title: "结束", selection: customEndDateDraftBinding)
+                }
             }
+            .disabled(isApplyingTraceCustomRange)
 
             HStack(spacing: 8) {
                 Button("取消") {
                     withAnimation(traceEditSpring) {
-                        showTraceCustomDatePanel = false
+                        cancelTraceCustomRangeApplication(resetDraft: true)
                     }
                 }
                 .font(.system(size: 13, weight: .medium))
@@ -88,27 +111,30 @@ extension StatsWebView {
                         .fill(Color.white.opacity(0.45))
                 )
 
-                Button("应用") {
-                    withAnimation(traceEditSpring) {
-                        if customStartDate > customEndDate {
-                            let start = customStartDate
-                            customStartDate = customEndDate
-                            customEndDate = start
+                Button {
+                    applyTraceCustomRangeDraft()
+                } label: {
+                    ZStack {
+                        Text("应用")
+                            .opacity(isApplyingTraceCustomRange ? 0 : 1)
+                        if isApplyingTraceCustomRange {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.white)
                         }
-                        useCustomRange = true
-                        showTraceCustomDatePanel = false
-                        traceInlineEditingItemID = nil
-                        traceSwipedItemID = nil
                     }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 9)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(AppColors.accent.opacity(0.86))
+                    )
                 }
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(AppColors.accent.opacity(0.86))
-                )
+                .buttonStyle(.plain)
+                .disabled(isApplyingTraceCustomRange)
+                .accessibilityLabel(isApplyingTraceCustomRange ? "正在应用" : "应用")
             }
         }
         .padding(12)
@@ -189,8 +215,8 @@ extension StatsWebView {
         }
 
         withAnimation(.easeInOut(duration: 0.16)) {
-            customStartDate = range.0
-            customEndDate = range.1
+            customStartDateDraft = range.0
+            customEndDateDraft = range.1
         }
     }
 
@@ -301,6 +327,9 @@ extension StatsWebView {
             Text(title)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(AppColors.text.opacity(0.88))
+                .lineLimit(2)
+                .minimumScaleFactor(0.68)
+                .multilineTextAlignment(.leading)
             Spacer()
             Image(systemName: "chevron.down")
                 .font(.system(size: 9, weight: .bold))
