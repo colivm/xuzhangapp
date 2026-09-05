@@ -1276,7 +1276,7 @@ enum DiscoverMemoryWallPhotoPolicy {
             }
         }
 
-        return itemsWithPhotos.flatMap { item in
+        return itemsWithPhotos.flatMap { item -> [DiscoverMemoryWallPhoto] in
             guard let coverIndex = item.normalizedCoverMemoryImageIndex else { return [] }
             let orderedIndices = [coverIndex] + (0..<item.memoryImageCount).filter { $0 != coverIndex }
             return orderedIndices.map {
