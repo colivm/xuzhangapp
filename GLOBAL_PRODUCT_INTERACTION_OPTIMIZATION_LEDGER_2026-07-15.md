@@ -4814,6 +4814,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
   - 高价值行显示 chevron 与 VoiceOver 提示；普通 scene 行保持原有非详情的资产表现。没有 evidence ID 的资产不显示伪造入口。
 - 修改文件：`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。`StatsWebView.swift` 中上一项 `TRACE-FIRST-SCREEN-ENTRY-01` 的账单列表直接种子快照修复原样保留。
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 均通过；最终 `release_repository_gate: OK`。新增 `testHighValueLifeAssetsKeepOneJourneyNarrativeAndAStableDetailEntry` XCTest 源码覆盖 Journey 去重、主卡复用、里程碑入口和普通 scene 不升级；Windows 未运行 Swift XCTest。
+- Xcode 编译回补（2026-09-07）：用户报告 `StatsWebView.swift:5765` 的 opaque return type 错误。根因是 `traceLifeMarkCard` 增加局部 `visibleMarks/hidesJourney` 后仍为普通 `-> some View` 函数，最终 `VStack` 缺少显式 `return`。已补回 `return VStack(...)`，未改变视图层级、去重条件或详情入口行为；Windows 语义回归与体验静态检查继续通过。当前环境仍无 Swift/Xcode，需用户在 macOS Clean Build 复验。
 - 冻结边界复核：未改变 Journey 认证门槛、城市/道路/活动事实、账单字段、金额/日期/分类、照片文件与顺序、会员额度、回声算法、生活页周/月入口、底部 Tab、同步或远程 AI；详情墙仍按当前账本 evidence ID 重解析。
 - 剩余风险：需要在 macOS/Xcode 完成 Swift 6 Debug/Release 编译与 `DiscoverEditorialPolicyTests`，并在 TestFlight 真机验证不同会员状态、编辑/删除、无照片/多照片、VoiceOver、特大字号、深色模式和快速重复点击；当前仍未取得真实 Journey 资产入口的视觉与主线程/内存证据。
 - 下一任务：按 `FLOW-108` 集中完成 macOS/Xcode、XCTest、TestFlight 真机与 Instruments 签收；在外部证据补齐前维持 `CODE_DONE`，不启动新的线索视觉重构。

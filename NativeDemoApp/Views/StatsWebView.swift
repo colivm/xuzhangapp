@@ -5776,7 +5776,7 @@ struct StatsWebView: View {
             )
         }
         let hidesJourney = visibleMarks.count != marks.count
-        VStack(alignment: .leading, spacing: 13) {
+        return VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .center) {
                 Text("生活线索")
                     .font(.system(size: 15, weight: .semibold))
