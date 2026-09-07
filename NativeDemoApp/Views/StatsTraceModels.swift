@@ -1267,6 +1267,57 @@ struct DiscoverCard: Identifiable, Codable, Equatable, @unchecked Sendable {
     }
 }
 
+/// Keeps the long-lived life-mark list light while giving emotionally valuable
+/// assets a stable way back to their evidence wall. Scene marks are deliberately
+/// excluded: they continue to evolve as lightweight patterns, while context,
+/// milestone and streak marks represent a distinct life moment worth revisiting.
+enum TraceLifeMarkDetailPolicy {
+    static func isHighValue(_ mark: LifeMarkAggregate) -> Bool {
+        switch mark.kind {
+        case .context, .milestone, .streak:
+            return true
+        case .scene:
+            return false
+        }
+    }
+
+    static func hidesDuplicateJourney(
+        _ mark: LifeMarkAggregate,
+        journeyFact: LifeJourneyFact?,
+        hasPrimaryJourneyCard: Bool
+    ) -> Bool {
+        guard hasPrimaryJourneyCard, let journeyFact else { return false }
+        return mark.kind == .context && mark.id == journeyFact.id
+    }
+
+    static func detailCard(
+        for mark: LifeMarkAggregate,
+        journeyCard: DiscoverCard? = nil
+    ) -> DiscoverCard? {
+        guard isHighValue(mark), !mark.itemIDs.isEmpty else { return nil }
+        if let journeyCard,
+           mark.kind == .context,
+           journeyCard.id == "discover:journey:\(mark.id)" {
+            return journeyCard
+        }
+        var seen = Set<UUID>()
+        let evidenceIDs = mark.itemIDs.filter { seen.insert($0).inserted }
+        guard !evidenceIDs.isEmpty else { return nil }
+        return DiscoverCard(
+            id: "discover:asset-mark:\(mark.id)",
+            kind: .asset,
+            title: mark.title,
+            summary: mark.detail,
+            evidenceItemIDs: evidenceIDs,
+            novelty: 74,
+            confidence: 90,
+            storyValue: 92,
+            latestDate: mark.latestDate,
+            evidenceSummary: DiscoverEvidenceSummary(total: evidenceIDs.count)
+        )
+    }
+}
+
 struct DiscoverMemoryWallPhoto: Equatable, Identifiable {
     let itemID: UUID
     let imageIndex: Int

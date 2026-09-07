@@ -6773,6 +6773,37 @@ final class TraceDetailListSnapshotComputationTests: XCTestCase {
         XCTAssertEqual(first.dayGroups.map(\.id), second.dayGroups.map(\.id))
     }
 
+    func testDirectLedgerSeedIsRenderableBeforeBackgroundRefresh() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        let date = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 8,
+            hour: 12
+        ))!
+        let item = HomeItem(
+            title: "午餐",
+            amount: 28,
+            category: .dining,
+            createdAt: date
+        )
+        let snapshot = TraceDetailListSnapshotComputation.make(
+            TraceDetailListPreparationInput(
+                key: snapshotKey(revision: 9, date: date),
+                sourceItems: [item],
+                dateInterval: nil,
+                category: nil,
+                calendar: calendar
+            )
+        )
+
+        XCTAssertEqual(snapshot.items.map(\.id), [item.id])
+        XCTAssertEqual(snapshot.dayGroups.flatMap(\.items).map(\.id), [item.id])
+        XCTAssertEqual(snapshot.totalExpense, 28, accuracy: 0.001)
+    }
+
     func testDetailSnapshotKeyChangesOnlyForLedgerOrFilterInput() {
         let date = Date(timeIntervalSince1970: 1_784_240_000)
         let first = TraceDetailListSnapshotKey(
@@ -10292,6 +10323,105 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
                 hasPrimaryDiscoverCard: false
             )
         )
+    }
+
+    func testHighValueLifeAssetsKeepOneJourneyNarrativeAndAStableDetailEntry() {
+        let journeyID = UUID(uuidString: "E1000000-0000-0000-0000-000000000089")!
+        let journey = LifeJourneyFact(
+            id: "journey:asset-entry",
+            routeCities: ["南京", "宿迁", "南京"],
+            evidenceItemIDs: [journeyID],
+            roadEvidenceItemIDs: [journeyID],
+            activityEvidenceItemIDs: [],
+            startDate: now,
+            endDate: now,
+            homeCity: "南京",
+            isRoadTrip: true,
+            isClosedLoop: true,
+            containsWeekend: true,
+            evidenceLabels: ["过路费"]
+        )
+        let journeyCard = DiscoverCard(
+            id: "discover:journey:\(journey.id)",
+            kind: .discovery,
+            title: journey.label,
+            summary: journey.line,
+            evidenceItemIDs: journey.evidenceItemIDs,
+            novelty: 98,
+            confidence: 96,
+            storyValue: 98,
+            latestDate: now,
+            isFeatured: true,
+            evidenceSummary: DiscoverEvidenceSummary(total: 1, road: 1),
+            coreEvidenceItemIDs: [journeyID],
+            boundaryEvidenceItemIDs: []
+        )
+        let journeyMark = LifeMarkAggregate(
+            id: journey.id,
+            kind: .context,
+            access: .member,
+            label: journey.label,
+            title: journey.label,
+            detail: journey.line,
+            category: .transport,
+            count: 1,
+            total: 18,
+            latestDate: now,
+            itemIDs: [journeyID],
+            queryHint: "这段路怎么串起来的？",
+            priority: 2
+        )
+        let milestone = LifeMarkAggregate(
+            id: "coffee_first",
+            kind: .milestone,
+            access: .member,
+            label: "第一次咖啡",
+            title: "第一次咖啡",
+            detail: "第一次被记下，之后可以回看当时的记录。",
+            category: .dining,
+            count: 1,
+            total: 20,
+            latestDate: now,
+            itemIDs: [journeyID],
+            queryHint: "第一次咖啡是哪天？",
+            priority: 4
+        )
+        let ordinaryScene = LifeMarkAggregate(
+            id: "coffee_drink",
+            kind: .scene,
+            access: .free,
+            label: "咖啡饮品",
+            title: "咖啡饮品",
+            detail: "已经出现 3 次。",
+            category: .dining,
+            count: 3,
+            total: 60,
+            latestDate: now,
+            itemIDs: [journeyID],
+            queryHint: "最近咖啡饮品是哪几次？",
+            priority: 18
+        )
+
+        XCTAssertTrue(
+            TraceLifeMarkDetailPolicy.hidesDuplicateJourney(
+                journeyMark,
+                journeyFact: journey,
+                hasPrimaryJourneyCard: true
+            )
+        )
+        XCTAssertFalse(
+            TraceLifeMarkDetailPolicy.hidesDuplicateJourney(
+                journeyMark,
+                journeyFact: journey,
+                hasPrimaryJourneyCard: false
+            )
+        )
+        XCTAssertEqual(
+            TraceLifeMarkDetailPolicy.detailCard(for: journeyMark, journeyCard: journeyCard),
+            journeyCard
+        )
+        XCTAssertNotNil(TraceLifeMarkDetailPolicy.detailCard(for: milestone))
+        XCTAssertNil(TraceLifeMarkDetailPolicy.detailCard(for: ordinaryScene))
     }
 
     func testDiscoverEchoNeedsCurrentAndHistoricalEvidenceOutsideTheJourney() {

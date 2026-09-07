@@ -1052,6 +1052,20 @@ struct StatsWebView: View {
         }
     }
 
+    private func immediateTraceDetailListSnapshot(
+        input: TraceDetailListPreparationInput
+    ) -> TraceDetailListSnapshot {
+        if let traceDetailListSnapshot,
+           traceDetailListSnapshot.key == input.key {
+            return traceDetailListSnapshot
+        }
+        // The record list is a direct ledger view. Seed it from the current
+        // ledger before any narrative/summary work finishes; the background
+        // pass below only confirms the same scoped snapshot against a newer
+        // revision.
+        return TraceDetailListSnapshotComputation.make(input)
+    }
+
     @discardableResult
     private func prepareTraceDetailListSnapshot() -> TraceDetailListSnapshot {
         cancelTraceDetailListPreparation()
@@ -5320,6 +5334,10 @@ struct StatsWebView: View {
                 $0.id == "discover:journey:\(journeyFact.id)"
             }
         } ?? false
+        let primaryJourneyCard = snapshot.discover.recentDiscoveries.first { card in
+            guard let journeyFact = snapshot.journeyFact else { return false }
+            return card.id == "discover:journey:\(journeyFact.id)"
+        }
         let separatesJourneyNarrative = DiscoverJourneyHierarchyPolicy.suppressesLegacyNarrative(
             journeyFact: snapshot.journeyFact,
             insight: snapshot.insight,
@@ -5345,7 +5363,12 @@ struct StatsWebView: View {
                 )
                 traceClueCompositionCard(items: snapshot.items, clues: snapshot.clues)
             }
-            traceLifeMarkCard(marks: snapshot.marks, lockedPreview: snapshot.lockedMark)
+            traceLifeMarkCard(
+                marks: snapshot.marks,
+                lockedPreview: snapshot.lockedMark,
+                journeyFact: snapshot.journeyFact,
+                primaryJourneyCard: primaryJourneyCard
+            )
             if !separatesJourneyNarrative {
                 traceDeepInsightCard(
                     insight: snapshot.insight,
@@ -5741,8 +5764,18 @@ struct StatsWebView: View {
 
     private func traceLifeMarkCard(
         marks: [LifeMarkAggregate],
-        lockedPreview: LifeMarkAggregate?
+        lockedPreview: LifeMarkAggregate?,
+        journeyFact: LifeJourneyFact?,
+        primaryJourneyCard: DiscoverCard?
     ) -> some View {
+        let visibleMarks = marks.filter {
+            !TraceLifeMarkDetailPolicy.hidesDuplicateJourney(
+                $0,
+                journeyFact: journeyFact,
+                hasPrimaryJourneyCard: primaryJourneyCard != nil
+            )
+        }
+        let hidesJourney = visibleMarks.count != marks.count
         VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .center) {
                 Text("生活线索")
@@ -5754,12 +5787,32 @@ struct StatsWebView: View {
                     .foregroundStyle(TraceColors.tertiaryText)
             }
 
-            if marks.isEmpty {
-                traceQuietCluePlaceholder("多留下几笔，运动、补给、旅行、家账这些印记会自然出现。")
+            if visibleMarks.isEmpty {
+                if hidesJourney {
+                    Text("这段跨城行程已在上方 AI 重点发现中统一收录，可随时打开详情。")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(TraceColors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 11)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(TraceColors.surfaceMuted)
+                        )
+                } else {
+                    traceQuietCluePlaceholder("多留下几笔，运动、补给、旅行、家账这些印记会自然出现。")
+                }
             } else {
                 VStack(spacing: 8) {
-                    ForEach(Array(marks.prefix(4))) { mark in
-                        traceLifeMarkRow(mark)
+                    ForEach(Array(visibleMarks.prefix(4))) { mark in
+                        traceLifeMarkRow(
+                            mark,
+                            detailCard: TraceLifeMarkDetailPolicy.detailCard(
+                                for: mark,
+                                journeyCard: primaryJourneyCard
+                            )
+                        )
                     }
                 }
             }
@@ -5801,7 +5854,28 @@ struct StatsWebView: View {
         .traceGlassPanel(radius: 20, padding: 18)
     }
 
-    private func traceLifeMarkRow(_ mark: LifeMarkAggregate) -> some View {
+    @ViewBuilder
+    private func traceLifeMarkRow(
+        _ mark: LifeMarkAggregate,
+        detailCard: DiscoverCard?
+    ) -> some View {
+        if let detailCard {
+            Button {
+                discoverDetailCard = detailCard
+            } label: {
+                traceLifeMarkRowContent(mark, detailCard: detailCard)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("打开这条高价值线索的照片墙和记录墙")
+        } else {
+            traceLifeMarkRowContent(mark, detailCard: nil)
+        }
+    }
+
+    private func traceLifeMarkRowContent(
+        _ mark: LifeMarkAggregate,
+        detailCard: DiscoverCard?
+    ) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Text(traceLifeMarkIcon(for: mark))
                 .font(.system(size: 15))
@@ -5836,15 +5910,22 @@ struct StatsWebView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(mark.count) 次")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(TraceColors.primaryText)
-                Text(mark.total.formatted(.cny))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(TraceColors.tertiaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+            HStack(alignment: .center, spacing: 7) {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(mark.count) 次")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(TraceColors.primaryText)
+                    Text(mark.total.formatted(.cny))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(TraceColors.tertiaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+                if detailCard != nil {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(AppColors.readableAccent.opacity(0.82))
+                }
             }
         }
         .padding(.horizontal, 12)
@@ -6744,10 +6825,10 @@ struct StatsWebView: View {
         let cachedSnapshot = traceDetailListSnapshot.flatMap { snapshot in
             snapshot.key == input.key ? snapshot : nil
         }
-        let initialSnapshot = cachedSnapshot ?? .placeholder(for: input.key)
+        let initialSnapshot = immediateTraceDetailListSnapshot(input: input)
         let candidate = TraceDetailPresentationPayload(initialSnapshot: initialSnapshot)
         guard TraceDetailPresentationPolicy.accepts(candidate, while: traceDetailPresentation) else { return }
-        traceDetailListSnapshot = cachedSnapshot
+        traceDetailListSnapshot = initialSnapshot
         traceDetailPresentation = candidate
         if cachedSnapshot == nil {
             prepareTraceDetailListForPresentation(input: input)
@@ -6773,10 +6854,10 @@ struct StatsWebView: View {
         let cachedSnapshot = traceDetailListSnapshot.flatMap { snapshot in
             snapshot.key == input.key ? snapshot : nil
         }
-        let initialSnapshot = cachedSnapshot ?? .placeholder(for: input.key)
+        let initialSnapshot = immediateTraceDetailListSnapshot(input: input)
         let candidate = TraceDetailPresentationPayload(initialSnapshot: initialSnapshot)
         guard TraceDetailPresentationPolicy.accepts(candidate, while: traceDetailPresentation) else { return }
-        traceDetailListSnapshot = cachedSnapshot
+        traceDetailListSnapshot = initialSnapshot
         traceDetailPresentation = candidate
         if cachedSnapshot == nil {
             prepareTraceDetailListForPresentation(input: input)
@@ -6867,17 +6948,10 @@ struct StatsWebView: View {
                             .font(.system(size: 22, weight: .bold))
                             .foregroundStyle(AppColors.text)
 
-                        if isPreparingTraceDetailList {
-                            Text("\(currentFilterSummary) · 正在载入记录…")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(AppColors.subtext)
-                                .fixedSize(horizontal: false, vertical: true)
-                        } else {
-                            Text(traceDetailMetaText(snapshot: snapshot))
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(AppColors.subtext)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                        Text(traceDetailMetaText(snapshot: snapshot))
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(AppColors.subtext)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(alignment: .top, spacing: 8) {
@@ -6893,9 +6967,8 @@ struct StatsWebView: View {
 
                         if isPreparingTraceDetailList {
                             traceDetailListLoadingState
-                        } else {
-                            traceDetailFocusedList(snapshot: snapshot)
                         }
+                        traceDetailFocusedList(snapshot: snapshot)
                         }
                         .padding(18)
                         .padding(.bottom, 28)
@@ -6962,26 +7035,21 @@ struct StatsWebView: View {
     }
 
     private var traceDetailListLoadingState: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 9) {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(AppColors.readableAccent)
-                Text("正在载入这段记录")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppColors.text)
-            }
-            Text("记录列表先打开，内容会按当前范围补齐。")
+        HStack(spacing: 7) {
+            ProgressView()
+                .controlSize(.small)
+                .tint(AppColors.readableAccent)
+            Text("账单已显示 · 正在确认最新状态")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
-                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(.horizontal, 2)
+        .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(traceDetailListBackground)
-        .overlay(traceDetailListBorder)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("正在载入这段记录，记录列表先打开，内容会按当前范围补齐")
+        .accessibilityLabel("账单已显示，正在确认最新状态；整理只负责补充生活总结")
+        .allowsHitTesting(false)
     }
 
     private func traceDetailFocusedList(snapshot: TraceDetailListSnapshot) -> some View {

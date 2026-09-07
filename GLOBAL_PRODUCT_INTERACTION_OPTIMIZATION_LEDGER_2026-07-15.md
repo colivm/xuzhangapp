@@ -150,7 +150,7 @@
 | 19 | TRACE-CUSTOM-RANGE-FIX-01 | 细查自定义日期一次应用与范围回显 | `CODE_DONE` | 草稿/已提交范围分离、真实日期回显、后台单次快照与无动画原子发布完成；等待 `FLOW-104` 的 macOS/Xcode、XCTest、TestFlight 与 Instruments 签收 |
 | 20 | LIFE-JOURNEY-RETURN-FIX-01 | 跨城返程证据与闭环终点识别 | `CODE_DONE` | 同日短窗口内的明确返程道路/长途证据已成为真实完成锚点；Windows 门禁完成，等待 macOS/Xcode、XCTest、真机与 Instruments 签收 |
 | 21 | PERF-FIRST-SCREEN-01 | 两阶段首屏与渐进整理 | `CODE_DONE` | 两阶段首屏、陈旧发布保护、生命周期、顺序预热、双阶段 signpost 与规模等价测试源码完成；等待 `FLOW-106` 的 macOS/Xcode、XCTest、TestFlight 真机与 Instruments 签收 |
-| 22 | TRACE-FIRST-SCREEN-ENTRY-01 | 痕迹整理首屏记录列表入口 | `CODE_DONE` | 仅痕迹页整理中的首屏卡片暴露记录入口，后台异步准备列表并显示局部状态；等待 `FLOW-107` 的 macOS/Xcode、XCTest 与真机签收 |
+| 22 | TRACE-FIRST-SCREEN-ENTRY-01 | 痕迹整理首屏记录列表入口 | `CODE_DONE` | 仅痕迹页整理中的首屏卡片暴露记录入口；账单事实先显示，后台仅确认列表状态并补充整理提示；等待 `FLOW-107` 的 macOS/Xcode、XCTest 与真机签收 |
 
 当前签收策略：后续仍需补全部 `CODE_DONE` 任务的 Xcode/真机证据；用户于 2026-07-15 再次明确要求“不要再问，全部改完后一起真机验证”，授权按台账顺序连续完成后续代码任务。该持续授权允许前一项达到 `CODE_DONE` 后直接进入下一项，但不得把任何未真机验证任务标为 `VERIFIED`，且仍须保持同一时间最多一个 `IN_PROGRESS`。
 
@@ -4786,9 +4786,34 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 实施结果：
   - `TraceFirstScreenRecordEntryPolicy` 只为痕迹模式生成“查看本周记录/查看本月记录/查看这段记录”，线索模式始终返回空，不增加线索入口或改变线索快照。
   - 首屏卡片在整理进行中、账本非空时展示 48pt 以上弱按钮；空账本不展示无意义入口，整理完成后仍由既有“细查这一段”承接。
-  - 记录列表打开改为占位快照立即呈现，真实 `TraceDetailListSnapshot` 通过 `LedgerBackgroundComputationLane` 后台生成；列表承载层显示局部“正在载入这段记录”，不显示全屏遮罩、不阻塞滚动或记账。
+  - 记录列表打开时先从当前账本范围生成真实 `TraceDetailListSnapshot`，账单行、数量和合计立即呈现；`LedgerBackgroundComputationLane` 只在后台确认同范围状态，列表承载层显示轻量“账单已显示 · 正在确认最新状态”，不显示全屏遮罩、不阻塞滚动或记账。
   - 新增列表准备任务的取消和 latest-request gate；关闭 Sheet、前后台切换、筛选/账本 revision 变化时拒绝旧结果，快速重复点击不会叠开第二个列表。
+- 2026-09-07 用户真机反馈与定向修复：原实现虽然立即打开 Sheet，但占位快照配合 `isPreparingTraceDetailList` 将账单行整体替换成加载卡，造成“明确记录也要等整理”的空列表体验。现改为打开时从当前账本范围同步生成首个真实列表快照，后台任务只做同范围状态确认；整理期间仍保留真实记录、编辑和滚动，仅在列表上方显示轻量状态，整理不再阻塞账单事实。
+- 本次修复范围：仅调整 `StatsWebView.swift` 的记录列表首屏种子快照、刷新状态呈现，补充直接账本种子回归和对应静态门禁/矩阵文案；未改变线索整理、账单字段、分类、金额、日期、记录排序、删除或后台陈述结果。
+- 本次验证：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows`；Windows 无 Swift/Xcode，新增 XCTest、首开观感和 465/1,000/5,000 条真机 hitch 仍待 `FLOW-107`。
 - 修改文件：`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。未修改线索算法、账单字段、两阶段首屏身份规则、底部 Tab、会员/额度、照片、存储同步或导航目的地。
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 均通过，最终 `release_repository_gate: OK`；新增 `testTraceRecordEntryIsLimitedToTheLifeFirstScreen` XCTest 源码用例覆盖周/月/自定义范围和线索模式不出现入口。Windows 未运行 Swift XCTest。
 - 冻结边界复核：入口仅属于痕迹整理首屏，线索页没有新增入口；没有新增底部 Tab、没有等待完整线索整理、没有重新实现记录列表路由、没有改变账单或快照数据含义。
-- 剩余风险与下一任务：尚未验证 Swift 6 编译、占位快照到真实列表的 Sheet 首开观感、不同屏幕高度/特大字号/VoiceOver/Reduce Motion/深色模式、快速关闭和真实 465/1,000/5,000 条账本的主线程 hitch。下一步按 `FLOW-107` 在 macOS/Xcode、TestFlight 和真机签收；不与线索视觉重构合并。
+- 剩余风险与下一任务：尚未验证 Swift 6 编译、真实列表种子快照的 Sheet 首开观感、不同屏幕高度/特大字号/VoiceOver/Reduce Motion/深色模式、快速关闭和真实 465/1,000/5,000 条账本的主线程 hitch。下一步按 `FLOW-107` 在 macOS/Xcode、TestFlight 和真机签收；不与线索视觉重构合并。
+
+---
+
+## 102. DISCOVER-ASSET-ENTRY-01：高价值场景资产入口与跨城主叙事去重（2026-09-07）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`（2026-09-07）；Windows 代码与仓库门禁完成。当前环境没有 Swift/Xcode、iPhone 和 Instruments，不能标记为 `VERIFIED`。
+- 用户反馈：真机上“周末跨城自驾”仍在生活线索的资产列表与下方证据大卡完整出现两次；场景资产列表里的高情绪价值线索没有可回看的入口。普通线索仍应保持轻量、持续迭代，不全部升级成复杂详情。
+- 目标：同一认证 Journey 只保留一个完整主叙事；高价值生活资产保留一个可再次打开的照片墙/记录墙入口；普通场景线索继续使用现有轻量迭代展示。
+- 允许范围：`StatsWebView.swift` 的生活线索资产行承接与 Journey 去重、`StatsTraceModels.swift` 的高价值资产判定/详情卡转换、对应 `StateRegressionTests.swift`、体验静态门禁、发布矩阵与本文档。不得改动 Journey 认证、账单字段、照片文件、会员额度、底部 Tab 或生活页周期入口。
+- 产品方案：认证跨城 Journey 由上方 AI 重点发现卡统一讲完整故事并打开现有详情 Sheet；生活线索列表不再重复渲染同一 Journey。上下文、里程碑和连续节奏等高价值资产行显示可回看承接并复用同一详情 Sheet；普通场景行保持非复杂入口的原有迭代语气。
+- 去重规则：以稳定 Journey ID 和证据身份去重，不按标题字符串；只隐藏与当前已投影 Journey 完全相同的资产行，不误伤普通旅行/交通资产，也不删除任何 evidence ID。
+- 计划验证：同一 Journey 只有一个完整标题/路线/证据叙事；高价值资产点击后能看到当前账本解析出的记录墙和照片墙，编辑/删除后不复活旧记录；普通场景资产仍可持续更新且不强制打开详情；快速点击、空证据和会员锁定状态不崩溃。Windows 阶段完成后保持 `CODE_DONE`，待 macOS/Xcode、XCTest、TestFlight 真机与 Instruments 签收。
+- 实现结果：
+  - 新增 `TraceLifeMarkDetailPolicy`，将 `.context`、`.milestone`、`.streak` 视为高价值资产；`.scene` 继续保持普通线索的轻量迭代，不强制生成复杂详情。
+  - 当当前连续线索已有稳定 `discover:journey:<journeyID>` 主卡时，生活线索列表隐藏同一 Journey 的完整资产行，并保留一条轻量承接说明；跨城完整标题、路线和证据只由上方 AI 重点发现卡承接。
+  - 高价值资产行复用现有 `DiscoverDetailSheetView`，使用真实 `itemIDs` 构建详情卡，打开后继续按当前账本解析照片墙/记录墙；Journey 若有主卡则直接复用主卡，保留核心/路线边界证据分层。
+  - 高价值行显示 chevron 与 VoiceOver 提示；普通 scene 行保持原有非详情的资产表现。没有 evidence ID 的资产不显示伪造入口。
+- 修改文件：`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。`StatsWebView.swift` 中上一项 `TRACE-FIRST-SCREEN-ENTRY-01` 的账单列表直接种子快照修复原样保留。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 均通过；最终 `release_repository_gate: OK`。新增 `testHighValueLifeAssetsKeepOneJourneyNarrativeAndAStableDetailEntry` XCTest 源码覆盖 Journey 去重、主卡复用、里程碑入口和普通 scene 不升级；Windows 未运行 Swift XCTest。
+- 冻结边界复核：未改变 Journey 认证门槛、城市/道路/活动事实、账单字段、金额/日期/分类、照片文件与顺序、会员额度、回声算法、生活页周/月入口、底部 Tab、同步或远程 AI；详情墙仍按当前账本 evidence ID 重解析。
+- 剩余风险：需要在 macOS/Xcode 完成 Swift 6 Debug/Release 编译与 `DiscoverEditorialPolicyTests`，并在 TestFlight 真机验证不同会员状态、编辑/删除、无照片/多照片、VoiceOver、特大字号、深色模式和快速重复点击；当前仍未取得真实 Journey 资产入口的视觉与主线程/内存证据。
+- 下一任务：按 `FLOW-108` 集中完成 macOS/Xcode、XCTest、TestFlight 真机与 Instruments 签收；在外部证据补齐前维持 `CODE_DONE`，不启动新的线索视觉重构。
