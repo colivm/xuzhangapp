@@ -3881,6 +3881,40 @@ final class TraceFirstScreenProgressivePolicyTests: XCTestCase {
         ))!
     }
 
+    func testTraceRecordEntryIsLimitedToTheLifeFirstScreen() {
+        XCTAssertEqual(
+            TraceFirstScreenRecordEntryPolicy.title(
+                viewMode: .life,
+                lifeRange: .month,
+                usesCustomRange: false
+            ),
+            "查看本月记录"
+        )
+        XCTAssertEqual(
+            TraceFirstScreenRecordEntryPolicy.title(
+                viewMode: .life,
+                lifeRange: .week,
+                usesCustomRange: false
+            ),
+            "查看本周记录"
+        )
+        XCTAssertEqual(
+            TraceFirstScreenRecordEntryPolicy.title(
+                viewMode: .life,
+                lifeRange: .month,
+                usesCustomRange: true
+            ),
+            "查看这段记录"
+        )
+        XCTAssertNil(
+            TraceFirstScreenRecordEntryPolicy.title(
+                viewMode: .clues,
+                lifeRange: .month,
+                usesCustomRange: false
+            )
+        )
+    }
+
     func testEmptyAndSmallLedgersAlwaysHaveAnInteractiveFirstScreen() {
         for count in [0, 5] {
             let presentation = TraceFirstScreenPresentationPolicy.loadedLedgerFacts(

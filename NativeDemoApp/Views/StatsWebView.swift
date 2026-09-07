@@ -475,6 +475,16 @@ struct TraceDetailListSnapshot: @unchecked Sendable {
     let itemIDs: [UUID]
     let totalExpense: Double
     let dayGroups: [TraceDayGroup]
+
+    static func placeholder(for key: TraceDetailListSnapshotKey) -> TraceDetailListSnapshot {
+        TraceDetailListSnapshot(
+            key: key,
+            items: [],
+            itemIDs: [],
+            totalExpense: 0,
+            dayGroups: []
+        )
+    }
 }
 
 struct TraceDetailPresentationPayload: Identifiable {
@@ -716,6 +726,9 @@ struct StatsWebView: View {
     @State private var tracePendingDeleteItem: HomeItem?
     @State private var showTraceDeleteConfirmation = false
     @State private var traceDetailListSnapshot: TraceDetailListSnapshot?
+    @State private var isPreparingTraceDetailList = false
+    @State private var traceDetailListPreparationTask: Task<Void, Never>?
+    @State private var traceDetailListPreparationGate = LatestRequestGate()
     @State var isApplyingTraceCustomRange = false
     @State private var traceCustomRangeApplicationTask: Task<Void, Never>?
     @State private var traceCustomRangeApplicationGate = LatestRequestGate()
@@ -1004,8 +1017,44 @@ struct StatsWebView: View {
         )
     }
 
+    private func cancelTraceDetailListPreparation() {
+        traceDetailListPreparationTask?.cancel()
+        traceDetailListPreparationTask = nil
+        traceDetailListPreparationGate.invalidate()
+        isPreparingTraceDetailList = false
+    }
+
+    private func prepareTraceDetailListForPresentation(
+        input: TraceDetailListPreparationInput
+    ) {
+        traceDetailListPreparationTask?.cancel()
+        let requestID = traceDetailListPreparationGate.begin()
+        isPreparingTraceDetailList = true
+        traceDetailListPreparationTask = Task { @MainActor in
+            guard let snapshot = await LedgerBackgroundComputationLane.shared
+                .buildTraceDetailList(input) else {
+                guard traceDetailListPreparationGate.accepts(requestID) else { return }
+                isPreparingTraceDetailList = false
+                traceDetailListPreparationTask = nil
+                return
+            }
+
+            let expectedKey = traceDetailListSnapshotKey
+            guard !Task.isCancelled,
+                  traceDetailListPreparationGate.accepts(requestID),
+                  traceDetailPresentation != nil,
+                  snapshot.key == expectedKey else {
+                return
+            }
+            traceDetailListSnapshot = snapshot
+            isPreparingTraceDetailList = false
+            traceDetailListPreparationTask = nil
+        }
+    }
+
     @discardableResult
     private func prepareTraceDetailListSnapshot() -> TraceDetailListSnapshot {
+        cancelTraceDetailListPreparation()
         let input = traceDetailListPreparationInput(
             period: selectedPeriod,
             category: selectedCategory,
@@ -1133,6 +1182,7 @@ struct StatsWebView: View {
                 categoryFilterSheet
             }
             .sheet(item: $traceDetailPresentation, onDismiss: {
+                cancelTraceDetailListPreparation()
                 cancelTraceCustomRangeApplication(resetDraft: true)
                 let route = traceDetailDismissRoute
                 traceDetailDismissRoute = nil
@@ -1194,6 +1244,7 @@ struct StatsWebView: View {
                 traceLoadingPresentationTask = nil
                 tracePendingScrollTask?.cancel()
                 tracePendingScrollTask = nil
+                cancelTraceDetailListPreparation()
                 cancelTraceCustomRangeApplication(resetDraft: true)
                 updateTraceLoadingPresentation(nil, animated: false)
                 isPreparingTrace = false
@@ -1464,6 +1515,50 @@ struct StatsWebView: View {
                 .foregroundStyle(TraceColors.tertiaryText)
             }
 
+            if let recordEntryTitle = TraceFirstScreenRecordEntryPolicy.title(
+                viewMode: traceViewMode,
+                lifeRange: traceLifeCardRange,
+                usesCustomRange: useCustomRange
+            ),
+               isPreparingTrace,
+               !presentation.isLedgerEmpty,
+               presentation.recordCount > 0 {
+                Button {
+                    openTraceDetail()
+                } label: {
+                    HStack(spacing: 11) {
+                        Image(systemName: "list.bullet.rectangle.portrait")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(AppColors.readableAccent)
+                            .frame(width: 30, height: 30)
+                            .background(
+                                Circle()
+                                    .fill(AppColors.accent.opacity(0.12))
+                            )
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(recordEntryTitle)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(TraceColors.primaryText)
+                            Text("按时间浏览，可直接编辑")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(TraceColors.tertiaryText)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(AppColors.readableAccent)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(recordEntryTitle)
+                .accessibilityHint("打开当前痕迹范围的记录列表")
+            }
+
             if let topCategory = presentation.topCategory, !topCategory.isEmpty {
                 Label(topCategory, systemImage: "sparkles")
                     .font(.system(size: 12, weight: .semibold))
@@ -1471,7 +1566,7 @@ struct StatsWebView: View {
             }
         }
         .traceWarmPanel(radius: 26, padding: 24)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityHint("页面已经可以操作，完整内容正在后台整理")
     }
 
@@ -6639,9 +6734,26 @@ struct StatsWebView: View {
 
     private func openTraceDetail() {
         traceInlineEditingItemID = nil
-        let candidate = TraceDetailPresentationPayload(initialSnapshot: prepareTraceDetailListSnapshot())
+        let input = traceDetailListPreparationInput(
+            period: selectedPeriod,
+            category: selectedCategory,
+            usesCustomRange: useCustomRange,
+            customStartDate: customStartDate,
+            customEndDate: customEndDate
+        )
+        let cachedSnapshot = traceDetailListSnapshot.flatMap { snapshot in
+            snapshot.key == input.key ? snapshot : nil
+        }
+        let initialSnapshot = cachedSnapshot ?? .placeholder(for: input.key)
+        let candidate = TraceDetailPresentationPayload(initialSnapshot: initialSnapshot)
         guard TraceDetailPresentationPolicy.accepts(candidate, while: traceDetailPresentation) else { return }
+        traceDetailListSnapshot = cachedSnapshot
         traceDetailPresentation = candidate
+        if cachedSnapshot == nil {
+            prepareTraceDetailListForPresentation(input: input)
+        } else {
+            cancelTraceDetailListPreparation()
+        }
     }
 
     private func openTraceDetail(for range: SummaryPlaybackRange) {
@@ -6651,9 +6763,26 @@ struct StatsWebView: View {
         selectedCategory = nil
         traceInlineEditingItemID = nil
         traceSwipedItemID = nil
-        let candidate = TraceDetailPresentationPayload(initialSnapshot: prepareTraceDetailListSnapshot())
+        let input = traceDetailListPreparationInput(
+            period: selectedPeriod,
+            category: selectedCategory,
+            usesCustomRange: useCustomRange,
+            customStartDate: customStartDate,
+            customEndDate: customEndDate
+        )
+        let cachedSnapshot = traceDetailListSnapshot.flatMap { snapshot in
+            snapshot.key == input.key ? snapshot : nil
+        }
+        let initialSnapshot = cachedSnapshot ?? .placeholder(for: input.key)
+        let candidate = TraceDetailPresentationPayload(initialSnapshot: initialSnapshot)
         guard TraceDetailPresentationPolicy.accepts(candidate, while: traceDetailPresentation) else { return }
+        traceDetailListSnapshot = cachedSnapshot
         traceDetailPresentation = candidate
+        if cachedSnapshot == nil {
+            prepareTraceDetailListForPresentation(input: input)
+        } else {
+            cancelTraceDetailListPreparation()
+        }
     }
 
     private func handleOpenTraceRequestIfNeeded() {
@@ -6738,10 +6867,17 @@ struct StatsWebView: View {
                             .font(.system(size: 22, weight: .bold))
                             .foregroundStyle(AppColors.text)
 
-                        Text(traceDetailMetaText(snapshot: snapshot))
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(AppColors.subtext)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if isPreparingTraceDetailList {
+                            Text("\(currentFilterSummary) · 正在载入记录…")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(AppColors.subtext)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            Text(traceDetailMetaText(snapshot: snapshot))
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(AppColors.subtext)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
 
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(alignment: .top, spacing: 8) {
@@ -6755,7 +6891,11 @@ struct StatsWebView: View {
                             }
                         }
 
-                        traceDetailFocusedList(snapshot: snapshot)
+                        if isPreparingTraceDetailList {
+                            traceDetailListLoadingState
+                        } else {
+                            traceDetailFocusedList(snapshot: snapshot)
+                        }
                         }
                         .padding(18)
                         .padding(.bottom, 28)
@@ -6819,6 +6959,29 @@ struct StatsWebView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .allowsHitTesting(traceInlineEditingItem != nil)
         .animation(traceEditSpring, value: traceInlineEditingItemID)
+    }
+
+    private var traceDetailListLoadingState: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 9) {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(AppColors.readableAccent)
+                Text("正在载入这段记录")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppColors.text)
+            }
+            Text("记录列表先打开，内容会按当前范围补齐。")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(traceDetailListBackground)
+        .overlay(traceDetailListBorder)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("正在载入这段记录，记录列表先打开，内容会按当前范围补齐")
     }
 
     private func traceDetailFocusedList(snapshot: TraceDetailListSnapshot) -> some View {

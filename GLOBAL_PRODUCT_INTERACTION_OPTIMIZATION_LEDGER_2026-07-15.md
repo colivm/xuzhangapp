@@ -150,6 +150,7 @@
 | 19 | TRACE-CUSTOM-RANGE-FIX-01 | 细查自定义日期一次应用与范围回显 | `CODE_DONE` | 草稿/已提交范围分离、真实日期回显、后台单次快照与无动画原子发布完成；等待 `FLOW-104` 的 macOS/Xcode、XCTest、TestFlight 与 Instruments 签收 |
 | 20 | LIFE-JOURNEY-RETURN-FIX-01 | 跨城返程证据与闭环终点识别 | `CODE_DONE` | 同日短窗口内的明确返程道路/长途证据已成为真实完成锚点；Windows 门禁完成，等待 macOS/Xcode、XCTest、真机与 Instruments 签收 |
 | 21 | PERF-FIRST-SCREEN-01 | 两阶段首屏与渐进整理 | `CODE_DONE` | 两阶段首屏、陈旧发布保护、生命周期、顺序预热、双阶段 signpost 与规模等价测试源码完成；等待 `FLOW-106` 的 macOS/Xcode、XCTest、TestFlight 真机与 Instruments 签收 |
+| 22 | TRACE-FIRST-SCREEN-ENTRY-01 | 痕迹整理首屏记录列表入口 | `CODE_DONE` | 仅痕迹页整理中的首屏卡片暴露记录入口，后台异步准备列表并显示局部状态；等待 `FLOW-107` 的 macOS/Xcode、XCTest 与真机签收 |
 
 当前签收策略：后续仍需补全部 `CODE_DONE` 任务的 Xcode/真机证据；用户于 2026-07-15 再次明确要求“不要再问，全部改完后一起真机验证”，授权按台账顺序连续完成后续代码任务。该持续授权允许前一项达到 `CODE_DONE` 后直接进入下一项，但不得把任何未真机验证任务标为 `VERIFIED`，且仍须保持同一时间最多一个 `IN_PROGRESS`。
 
@@ -4755,3 +4756,39 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：`git diff --check` 通过；完整 `powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 通过；`python scripts/validate_release_gate.py --phase windows` 通过并输出 `life_semantic_regression: OK`、`Static experience checks passed`、`Copy experience checks passed`、`release_repository_gate: OK`，100/1,000/5,000 条确定性夹具与真实照片夹具均通过，仅保留既有 6 条 copy soft warning。新增 XCTest 源码覆盖截图同构返程、到达措辞、高铁返程、否定/错误方向/续程、3 小时与跨日边界、5 天上限、同刻下一次离城双 UUID 顺序、无城市闭环、删除锚点、乱序和三档规模确定性；Windows 环境无法执行 XCTest。
 - 剩余风险：尚未取得 Swift 6 Debug/Release Clean Build、`LifeJourneyFactRegressionTests` 实际运行、真实南京→宿迁→连云港→宿迁→南京账本的编辑/删除/重启验证，以及 TestFlight、VoiceOver、特大字号、Reduce Motion、Time Profiler、Main Thread Hitches 和 Allocations 证据；自然语言目的地规则保持保守且有界，新增真实表达仍需在 `FLOW-105` 真机样本中持续核对，因此维持 `CODE_DONE`。
 - 下一任务：原计划先补 `FLOW-105` 与既有矩阵的外部签收；用户随后明确要求按台账优先级开始优化并继续，因此 `PERF-FIRST-SCREEN-01` 曾作为唯一 `IN_PROGRESS` 启动 Windows 代码阶段，现已在第 96 项收口为 `CODE_DONE`。第 99 项仍保持 `CODE_DONE`，其 macOS/Xcode、XCTest、TestFlight 真机和 Instruments 风险不因后续任务完成而消失。
+
+---
+
+## 100. 最新代码同步与前项问题核查（2026-09-07）
+
+- 范围：按运营方要求同步 `feature/xuzhangapp-staging`，核对 2026-09-06 的最新提交及此前“线索重复/证据口径/首次整理过慢/照片墙/深色模式/返程证据”等问题的完成状态；本次不改变产品规则、账单数据或 UI 逻辑。
+- 同步结果：当前分支已从 `d1f6811` 快进至 `9e04562`，与 `origin/feature/xuzhangapp-staging` 完全一致；包含 `53e7531 feat: refine trace journeys and first-screen loading` 与 `9e04562 fix: make discover photo type inference explicit`。未跟踪的 `brand-assets/`、`output/`、`tmp/`、截图脚本和缓存均保留。
+- 核查结论：
+  - `DISCOVER-JOURNEY-HIERARCHY-01`：代码已完成唯一跨城主叙事、核心/边界证据分层、连续概览与回声独立证据门槛；状态仍为 `CODE_DONE`。
+  - `PERF-FIRST-SCREEN-01`：代码已完成首屏可交互承接、后台渐进整理、陈旧请求拒绝、前后台取消/恢复、顺序预热和 `TraceFirstInteractive`/`TraceFullReady` signpost；状态仍为 `CODE_DONE`，不能据此宣称真机耗时已达标。
+  - 线索详情照片墙/记录墙、深色模式、连续删除、首页编辑即时发布、回声有界计算、返程过路费锚点、东方树叶/商品语义与 OCR 支付元数据隔离均在提交与门禁中保持覆盖；对应任务仍按台账等待 macOS/Xcode、XCTest、TestFlight 或 Instruments 签收。
+- 验证证据：`git merge --ff-only origin/feature/xuzhangapp-staging` 成功；本地与远端 commit SHA 均为 `9e045626b4435f7697398e55978458b025953529`；`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 均通过，最终 `release_repository_gate: OK`。门禁保留既有 6 条 copy lint soft warning。
+- 冻结边界复核：本次未修改生产代码、账单分类/OCR/金额/日期、照片文件、会员/额度、同步、官网/法律页或服务端；仅追加本核查记录。
+- 剩余风险与下一任务：当前环境无 Swift/Xcode、iPhone 和 Instruments，尚未实际运行 XCTest、Swift 6 Debug/Release Clean Build、TestFlight 真实行程、首屏耗时/内存/发热/Main Thread Hitches 量化；所有相关任务继续保持 `CODE_DONE`。下一步按 `FLOW-101`～`FLOW-106` 在 macOS/Xcode 与真机集中签收，未取得外部证据前不把代码完成改写为 `VERIFIED`。
+
+---
+
+## 101. TRACE-FIRST-SCREEN-ENTRY-01：痕迹整理首屏记录列表入口（2026-09-07）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-07）；痕迹页入口实现和 Windows 回归已完成，线索页未改。由于当前环境没有 Swift/Xcode、iPhone 和 Instruments，不能标记为 `VERIFIED`。
+- 用户反馈：两阶段首屏已经能显示“账本记录已载入”和后台整理状态，但痕迹页整理期间没有明显的记录浏览入口，用户仍需等待完整内容或自行寻找入口；线索页不需要增加该入口。
+- 产品决策：仅在痕迹页（`traceViewMode == .life`）的首屏事实卡片内部增加一个低权重、明确可点的“查看记录”入口；不新增底部 Tab，不使用“订单列表”作为产品术语。入口根据当前痕迹范围显示“查看本周记录”或“查看本月记录”，与叙账“记录/生活”语气一致；线索页保持现状，不增加入口或改动层级。
+- 交互方案：入口复用现有 `openTraceDetail(for:)` 与当前已选择的周/月周期、分类、自定义范围和账本 revision；仅在阶段一首屏卡片和整理状态同时存在时展示，点击即可进入记录列表承载层，再由既有后台列表快照按当前范围发布，禁止为入口重新扫描全账本或弹出全屏加载遮罩。阶段二完成后首屏卡片消失，继续由现有“细查这一段”承接，不产生第二套列表路由。
+- 视觉方案：在首屏卡片的统计信息下增加一行 48pt 以上触控高度的弱按钮：左侧 `list.bullet.rectangle.portrait` 图标，中间“查看记录”及“按时间浏览，可直接编辑”副文案，右侧 chevron；使用现有 `TraceColors`/`AppColors.readableAccent`，仅图标与 chevron 使用强调色，避免再增加重边框、强阴影或大面积按钮。空账本不显示无意义入口，保留“记下第一笔”的承接。
+- 性能与状态边界：首屏入口不得等待完整线索/周月章节；记录列表加载期间只显示局部行级状态，滚动、切换和记账仍可用。必须沿用 request/revision/scope/category/member 身份校验，旧快照、取消、快速重复点击和编辑/删除后的列表发布规则不变。
+- 未来允许修改范围：`StatsWebView.swift` 痕迹模式首屏卡片和记录列表打开编排、必要的 `StatsTraceModels.swift` 入口状态策略、对应 XCTest、体验静态门禁和 `FLOW-107` 真机矩阵；不改线索模式、线索事实算法、账单字段、首屏两阶段身份规则、底部 Tab 结构、生活页周期入口、会员/额度、存储同步或照片加载策略。
+- 计划验收：新用户空账本、少量账本和 465/1,000/5,000 条账本在痕迹页整理期间均能直接点开；线索页快照和入口完全不变。点击后不出现全屏遮罩，列表最终与完整快照逐字段一致；周/月周期、分类、自定义范围保持，快速重复点击只打开一个列表，编辑/删除后不复活旧记录；VoiceOver、特大字号、Reduce Motion 和深色模式可读。
+- 实施结果：
+  - `TraceFirstScreenRecordEntryPolicy` 只为痕迹模式生成“查看本周记录/查看本月记录/查看这段记录”，线索模式始终返回空，不增加线索入口或改变线索快照。
+  - 首屏卡片在整理进行中、账本非空时展示 48pt 以上弱按钮；空账本不展示无意义入口，整理完成后仍由既有“细查这一段”承接。
+  - 记录列表打开改为占位快照立即呈现，真实 `TraceDetailListSnapshot` 通过 `LedgerBackgroundComputationLane` 后台生成；列表承载层显示局部“正在载入这段记录”，不显示全屏遮罩、不阻塞滚动或记账。
+  - 新增列表准备任务的取消和 latest-request gate；关闭 Sheet、前后台切换、筛选/账本 revision 变化时拒绝旧结果，快速重复点击不会叠开第二个列表。
+- 修改文件：`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。未修改线索算法、账单字段、两阶段首屏身份规则、底部 Tab、会员/额度、照片、存储同步或导航目的地。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 均通过，最终 `release_repository_gate: OK`；新增 `testTraceRecordEntryIsLimitedToTheLifeFirstScreen` XCTest 源码用例覆盖周/月/自定义范围和线索模式不出现入口。Windows 未运行 Swift XCTest。
+- 冻结边界复核：入口仅属于痕迹整理首屏，线索页没有新增入口；没有新增底部 Tab、没有等待完整线索整理、没有重新实现记录列表路由、没有改变账单或快照数据含义。
+- 剩余风险与下一任务：尚未验证 Swift 6 编译、占位快照到真实列表的 Sheet 首开观感、不同屏幕高度/特大字号/VoiceOver/Reduce Motion/深色模式、快速关闭和真实 465/1,000/5,000 条账本的主线程 hitch。下一步按 `FLOW-107` 在 macOS/Xcode、TestFlight 和真机签收；不与线索视觉重构合并。

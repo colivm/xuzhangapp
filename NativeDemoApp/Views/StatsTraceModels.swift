@@ -611,6 +611,20 @@ enum TraceFirstScreenPresentationPolicy {
     }
 }
 
+enum TraceFirstScreenRecordEntryPolicy {
+    static func title(
+        viewMode: TraceViewMode,
+        lifeRange: SummaryPlaybackRange,
+        usesCustomRange: Bool
+    ) -> String? {
+        guard viewMode == .life else { return nil }
+        if usesCustomRange {
+            return "查看这段记录"
+        }
+        return lifeRange == .week ? "查看本周记录" : "查看本月记录"
+    }
+}
+
 struct TraceProgressivePreparationIdentity: Equatable, Hashable, Sendable {
     let ledgerRevision: Int
     let scopeKey: String
