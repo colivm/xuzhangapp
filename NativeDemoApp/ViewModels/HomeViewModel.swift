@@ -296,7 +296,7 @@ enum RecordInputAssistanceComputation {
         let brand = MerchantBrandCatalog.matchBrand(in: input.noteDraft)
         let semanticCategory = RecordSemanticLexicon.semanticCategory(of: input.noteDraft)
         let frequentSuggestion = input.history.frequentSuggestions.first { suggestion in
-            abs(suggestion.amount - input.amount) < 0.005
+            Int((suggestion.amount * 100).rounded()) == Int((input.amount * 100).rounded())
         }
         let frequentCanOverride = frequentSuggestion.map { suggestion in
             RecordHabitOverridePolicy.allows(
@@ -322,11 +322,38 @@ enum RecordInputAssistanceComputation {
         )
 
         var result = habitResult
-        if habitResult == nil,
-           brand == nil,
+        if brand == nil,
            semanticCategory == nil,
            let frequentSuggestion,
-           frequentCanOverride {
+           frequentCanOverride,
+           let frequentTitle = input.history.frequentTitlesBySuggestionID[frequentSuggestion.id],
+           !frequentTitle.isEmpty {
+            // A repeated amount is not enough to invent a merchant. Reuse the
+            // title only when the same amount/time/category already has a
+            // stable, user-visible history title. This also covers the case
+            // where the generic habit path returned a category but no title.
+            let resultCategory = result?.category
+            let hasStableResultTitle = result?.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            if (resultCategory == nil || resultCategory == frequentSuggestion.category),
+               (!hasStableResultTitle || result?.source == "generic") {
+                result = RecordPrefillResult(
+                    category: resultCategory ?? frequentSuggestion.category,
+                    title: frequentTitle,
+                    emotionTag: habitEmotionTag(
+                        title: frequentTitle,
+                        category: frequentSuggestion.category,
+                        amount: input.amount,
+                        date: input.referenceDate
+                    ),
+                    confidence: max(result?.confidence ?? 0, frequentSuggestion.confidence),
+                    source: "frequent"
+                )
+            }
+        } else if habitResult == nil,
+                  brand == nil,
+                  semanticCategory == nil,
+                  let frequentSuggestion,
+                  frequentCanOverride {
             let title = input.history.frequentTitlesBySuggestionID[frequentSuggestion.id]
             result = RecordPrefillResult(
                 category: frequentSuggestion.category,
@@ -703,7 +730,7 @@ struct ItemDerivedCachePreparationInput: @unchecked Sendable {
 }
 
 struct ItemDerivedCacheSnapshot: Equatable, @unchecked Sendable {
-    let key: ItemDerivedCachePreparationKey
+    var key: ItemDerivedCachePreparationKey
     var ledgerDisplayFingerprint = ""
     var todayPositiveItems: [HomeItem] = []
     var recentThreeTodayItems: [HomeItem] = []
@@ -768,6 +795,42 @@ enum ItemDerivedCacheComputation {
 }
 
 enum ItemDerivedCacheImmediateMutationPolicy {
+    static func adding(
+        _ added: HomeItem,
+        in snapshot: ItemDerivedCacheSnapshot,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> ItemDerivedCacheSnapshot {
+        replacing(added, in: snapshot, now: now, calendar: calendar)
+    }
+
+    static func removing(
+        ids: Set<UUID>,
+        from snapshot: ItemDerivedCacheSnapshot
+    ) -> ItemDerivedCacheSnapshot {
+        guard !ids.isEmpty else { return snapshot }
+        var projected = snapshot
+        projected.todayPositiveItems.removeAll { ids.contains($0.id) }
+        projected.recentThreeTodayItems = Array(projected.todayPositiveItems.prefix(3))
+        projected.currentWeekItems.removeAll { ids.contains($0.id) }
+        projected.currentMonthItems.removeAll { ids.contains($0.id) }
+        projected.currentYearItems.removeAll { ids.contains($0.id) }
+        return projected
+    }
+
+    static func rekeying(
+        _ snapshot: ItemDerivedCacheSnapshot,
+        ledgerRevision: Int,
+        now: Date
+    ) -> ItemDerivedCacheSnapshot {
+        var projected = snapshot
+        projected.key = ItemDerivedCachePreparationKey(
+            ledgerRevision: ledgerRevision,
+            dayKey: HomeViewModel.dayKey(for: now)
+        )
+        return projected
+    }
+
     static func replacing(
         _ updated: HomeItem,
         in snapshot: ItemDerivedCacheSnapshot,
@@ -1019,6 +1082,7 @@ final class HomeViewModel: ObservableObject {
         didSet {
             recordInputAssistanceRevision &+= 1
             homeDashboardRevision &+= 1
+            itemDerivedCacheNeedsFullRefresh = true
             invalidateRecordInputHistorySnapshot()
             invalidateHomeDashboardSnapshots()
             prepareItemDerivedCacheIfNeeded(now: Date())
@@ -1129,6 +1193,7 @@ final class HomeViewModel: ObservableObject {
     private var itemDerivedCachePreparationTask: Task<Void, Never>?
     private var itemDerivedCacheRequestID = UUID()
     private(set) var itemDerivedCacheRevision = -1
+    private var itemDerivedCacheNeedsFullRefresh = false
     private var narrativeAIPreparationTask: Task<Void, Never>?
     private var narrativeAIPreparationRevision = -1
     private var narrativeAIConfigurationCancellable: AnyCancellable?
@@ -1173,6 +1238,7 @@ final class HomeViewModel: ObservableObject {
         )
         itemDerivedCache = ItemDerivedCacheComputation.build(initialDerivedInput)
         itemDerivedCacheRevision = initialDerivedInput.key.ledgerRevision
+        itemDerivedCacheNeedsFullRefresh = false
         latestPlayback = itemDerivedCache.todayPlayback
         insights = LocalStore.loadDailyInsights().sorted { $0.createdAt > $1.createdAt }
         if let data = UserDefaults.standard.data(forKey: "latest_action_card_v1"),
@@ -1301,7 +1367,7 @@ final class HomeViewModel: ObservableObject {
         guard let result = recordPrefillResult,
               let recordPrefillAmount,
               let currentAmount = Double(inputAmount.replacingOccurrences(of: ",", with: "")),
-              abs(recordPrefillAmount - currentAmount) < 0.005,
+              Int((recordPrefillAmount * 100).rounded()) == Int((currentAmount * 100).rounded()),
               result.category == nil || result.category == category,
               let title = result.title?.trimmingCharacters(in: .whitespacesAndNewlines),
               !title.isEmpty,
@@ -1831,14 +1897,8 @@ final class HomeViewModel: ObservableObject {
             resolved.emotionTag = trustedMomentTag
         }
         resolved.updatedAt = Date()
-        let projectedItemDerivedCache = ItemDerivedCacheImmediateMutationPolicy.replacing(
-            resolved,
-            in: itemDerivedCache,
-            now: resolved.updatedAt
-        )
         items[idx] = resolved
         guard persistItems(upserting: [resolved]) else { return false }
-        itemDerivedCache = projectedItemDerivedCache
         analyticsService.track(.recordUpdated)
         refreshTodayPlayback()
         Task { await syncUpsertToCloud(resolved) }
@@ -2175,7 +2235,7 @@ final class HomeViewModel: ObservableObject {
         }
         guard let result = recordPrefillResult,
               let recordPrefillAmount,
-              abs(recordPrefillAmount - amount) < 0.005 else {
+              Int((recordPrefillAmount * 100).rounded()) == Int((amount * 100).rounded()) else {
             return items.count < 6 ? "先帮你放到合适分类。" : nil
         }
 
@@ -2279,7 +2339,7 @@ final class HomeViewModel: ObservableObject {
            let category = recordPrefillResult?.category,
            recordPrefillResult?.source != "generic",
            let recordPrefillAmount,
-           abs(recordPrefillAmount - amount) < 0.005,
+           Int((recordPrefillAmount * 100).rounded()) == Int((amount * 100).rounded()),
            (recordPrefillResult?.confidence ?? 0) >= 0.55,
            RecordHabitOverridePolicy.allows(
                note: trimmedNote,
@@ -2302,7 +2362,7 @@ final class HomeViewModel: ObservableObject {
            let category = recordPrefillResult?.category,
            recordPrefillResult?.source == "generic",
            let recordPrefillAmount,
-           abs(recordPrefillAmount - amount) < 0.005,
+           Int((recordPrefillAmount * 100).rounded()) == Int((amount * 100).rounded()),
            RecordHabitOverridePolicy.allows(
                note: trimmedNote,
                suggestedCategory: category,
@@ -2636,7 +2696,7 @@ final class HomeViewModel: ObservableObject {
             from: history.prefillItems
         )
         let frequentSuggestion = history.frequentSuggestions.first { suggestion in
-            abs(suggestion.amount - amount) < 0.005
+            Int((suggestion.amount * 100).rounded()) == Int((amount * 100).rounded())
         }
         let brandCategory: HomeItem.Category? = brand.flatMap { brand in
             if let semanticCategory,
@@ -2877,7 +2937,7 @@ final class HomeViewModel: ObservableObject {
 
     private func frequentRecordAmountSuggestion(for amount: Double, at date: Date) -> FrequentRecordAmountSuggestion? {
         frequentRecordAmountSuggestions(at: date).first { suggestion in
-            abs(suggestion.amount - amount) < 0.005
+            Int((suggestion.amount * 100).rounded()) == Int((amount * 100).rounded())
         }
     }
 
@@ -3325,7 +3385,7 @@ final class HomeViewModel: ObservableObject {
 
     func prepareItemDerivedCacheIfNeeded(now: Date) {
         let key = itemDerivedCacheKey(now: now)
-        guard itemDerivedCache.key != key else { return }
+        guard itemDerivedCache.key != key || itemDerivedCacheNeedsFullRefresh else { return }
         guard itemDerivedCachePreparationKey != key else { return }
 
         itemDerivedCachePreparationTask?.cancel()
@@ -3358,6 +3418,7 @@ final class HomeViewModel: ObservableObject {
             itemDerivedCache = snapshot
             latestPlayback = snapshot.todayPlayback
             itemDerivedCacheRevision = key.ledgerRevision
+            itemDerivedCacheNeedsFullRefresh = false
             itemDerivedCachePreparationKey = nil
             itemDerivedCachePreparationTask = nil
             resumePendingHomeDashboardPreparationIfNeeded()
@@ -3433,7 +3494,55 @@ final class HomeViewModel: ObservableObject {
             syncStatusMessage = message
             return false
         }
+        publishImmediateItemDerivedProjection(
+            upserting: upserting,
+            deleting: deleting,
+            now: Date()
+        )
         return true
+    }
+
+    private func publishImmediateItemDerivedProjection(
+        upserting: [HomeItem],
+        deleting: Set<UUID>,
+        now: Date
+    ) {
+        let dayKey = Self.dayKey(for: now)
+        var projected: ItemDerivedCacheSnapshot
+        if itemDerivedCache.key.dayKey == dayKey,
+           itemDerivedCache.key.ledgerRevision >= 0 {
+            projected = itemDerivedCache
+        } else {
+            projected = ItemDerivedCacheComputation.build(
+                ItemDerivedCachePreparationInput(
+                    key: ItemDerivedCachePreparationKey(
+                        ledgerRevision: homeDashboardRevision,
+                        dayKey: dayKey
+                    ),
+                    items: items,
+                    now: now,
+                    itemsAreSortedDescending: false
+                )
+            )
+        }
+        projected = ItemDerivedCacheImmediateMutationPolicy.removing(
+            ids: deleting,
+            from: projected
+        )
+        for item in upserting {
+            projected = ItemDerivedCacheImmediateMutationPolicy.adding(
+                item,
+                in: projected,
+                now: now
+            )
+        }
+        itemDerivedCache = ItemDerivedCacheImmediateMutationPolicy.rekeying(
+            projected,
+            ledgerRevision: homeDashboardRevision,
+            now: now
+        )
+        itemDerivedCacheRevision = homeDashboardRevision
+        itemDerivedCacheNeedsFullRefresh = true
     }
 
     private func ledgerChanges(from oldItems: [HomeItem], to newItems: [HomeItem]) -> LedgerHomeItemsChangeSet {
@@ -3527,7 +3636,7 @@ final class HomeViewModel: ObservableObject {
         return Array(map.values)
     }
 
-    private nonisolated static func dayKey(for date: Date) -> String {
+    fileprivate nonisolated static func dayKey(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)

@@ -282,12 +282,13 @@ enum TraceSnapshotComputation {
         let effectiveNarrativeScope: LifeNarrativeScope? = input.scope == .continuous
             ? TraceClueScopePolicy.narrativeScope
             : input.narrativeScope
-        let journeyFact = effectiveNarrativeScope.flatMap { scope in
-            LifeJourneyFactService.primaryFact(
+        let detectedJourneyFacts: [LifeJourneyFact] = effectiveNarrativeScope.map { scope in
+            LifeJourneyFactService.allFacts(
                 in: input.items,
                 calendar: scope == .week ? PlaybackService.isoCalendar : Calendar.current
             )
-        }
+        } ?? []
+        let journeyFact = detectedJourneyFacts.first
         let narrativePlan = effectiveNarrativeScope.map { scope in
             makeNarrativePlan(
                 scope: scope,
@@ -380,7 +381,8 @@ enum TraceSnapshotComputation {
                 items: input.items,
                 sourceRevision: input.sourceRevision,
                 now: input.now,
-                journeyFact: journeyFact
+                journeyFact: journeyFact,
+                precomputedJourneyFacts: detectedJourneyFacts
             )
             : .empty
         guard !shouldStop() else { return nil }
@@ -407,7 +409,8 @@ enum TraceSnapshotComputation {
         sourceRevision: Int,
         now: Date,
         calendar: Calendar = PlaybackService.isoCalendar,
-        journeyFact: LifeJourneyFact? = nil
+        journeyFact: LifeJourneyFact? = nil,
+        precomputedJourneyFacts: [LifeJourneyFact]? = nil
     ) -> DiscoverSnapshot {
         let scopedItems = TraceClueScopePolicy.items(from: items, now: now, calendar: calendar)
         let publishableRows = LifeNarrativeSignalPolicy.publishableItems(from: scopedItems)
@@ -440,17 +443,22 @@ enum TraceSnapshotComputation {
         }, calendar: calendar)
         let allBuckets = sceneBuckets(from: classifiedRows, calendar: calendar)
 
-        let resolvedJourney = journeyFact
-            ?? LifeJourneyFactService.primaryFact(in: publishableRows, calendar: calendar)
+        var journeyFacts = precomputedJourneyFacts ?? LifeJourneyFactService.allFacts(in: publishableRows, calendar: calendar)
+        if let journeyFact, !journeyFacts.contains(where: { $0.id == journeyFact.id }) {
+            journeyFacts.insert(journeyFact, at: 0)
+        }
         let publishableIDs = Set(publishableRows.map(\.id))
         var discoveries: [DiscoverCard] = []
-        if let journey = resolvedJourney,
-           let journeyCard = journeyDiscoverCard(
-               journey: journey,
-               publishableIDs: publishableIDs,
-               isRecent: true
-           ) {
-            if journey.endDate >= recentStart {
+        let featuredJourneyID = journeyFacts.first(where: {
+            $0.isRoadTrip && $0.containsWeekend
+        })?.id
+        for journey in journeyFacts where journey.endDate >= recentStart {
+            if let journeyCard = journeyDiscoverCard(
+                journey: journey,
+                publishableIDs: publishableIDs,
+                isRecent: true,
+                isFeatured: journey.id == featuredJourneyID
+            ) {
                 discoveries.append(journeyCard)
             }
         }
@@ -619,30 +627,23 @@ enum TraceSnapshotComputation {
             .sorted(by: editorialOrder)
             .prefix(4))
 
-        // A certified journey remains a durable scene asset after it leaves
-        // the rolling "recent discoveries" window. This gives the user one
-        // stable evidence-wall entry instead of allowing the LifeMark context
-        // row to recreate the same story as a second narrative.
-        if let journey = resolvedJourney,
-           journey.endDate < recentStart,
-           let journeyCard = journeyDiscoverCard(
-               journey: journey,
-               publishableIDs: publishableIDs,
-               isRecent: false
-           ) {
-            sceneAssets.removeAll { $0.id == journeyCard.id }
-            sceneAssets.append(journeyCard)
-            sceneAssets.sort(by: editorialOrder)
-            if sceneAssets.count > 4 {
-                sceneAssets = Array(sceneAssets.prefix(4))
-                if !sceneAssets.contains(where: { $0.id == journeyCard.id }) {
-                    sceneAssets[sceneAssets.index(before: sceneAssets.endIndex)] = journeyCard
-                    sceneAssets.sort(by: editorialOrder)
-                }
+        // Certified journeys are durable scene assets after leaving the
+        // rolling discovery window. Unlike ordinary scene patterns they are
+        // never truncated: each one is a long-lived, user-openable memory.
+        for journey in journeyFacts where journey.endDate < recentStart {
+            if let journeyCard = journeyDiscoverCard(
+                journey: journey,
+                publishableIDs: publishableIDs,
+                isRecent: false,
+                isFeatured: journey.id == featuredJourneyID
+            ) {
+                sceneAssets.removeAll { $0.id == journeyCard.id }
+                sceneAssets.append(journeyCard)
             }
         }
+        sceneAssets.sort(by: editorialOrder)
 
-        let journeyEvidenceSet = Set(resolvedJourney?.evidenceItemIDs ?? [])
+        let journeyEvidenceSet = Set(journeyFacts.flatMap(\.evidenceItemIDs))
         let echoes: [DiscoverCard]
         if let echo = LifeNarrativeEchoPolicy.makeEcho(
             LifeNarrativeEchoInput(
@@ -696,7 +697,8 @@ enum TraceSnapshotComputation {
     private static func journeyDiscoverCard(
         journey: LifeJourneyFact,
         publishableIDs: Set<UUID>,
-        isRecent: Bool
+        isRecent: Bool,
+        isFeatured: Bool
     ) -> DiscoverCard? {
         let journeyEvidenceIDs = stableEvidenceIDs(
             journey.evidenceItemIDs.filter { publishableIDs.contains($0) }
@@ -720,7 +722,7 @@ enum TraceSnapshotComputation {
             confidence: 96,
             storyValue: 98,
             latestDate: journey.endDate,
-            isFeatured: journey.isRoadTrip && journey.containsWeekend,
+            isFeatured: isFeatured && journey.isRoadTrip && journey.containsWeekend,
             evidenceSummary: journeyEvidenceSummary(
                 journey: journey,
                 evidenceIDs: journeyEvidenceIDs

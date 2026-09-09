@@ -2138,6 +2138,7 @@ final class LifeJourneyFactRegressionTests: XCTestCase {
             XCTFail("expected a deterministic journey fact")
             return
         }
+        XCTAssertEqual(LifeJourneyFactService.allFacts(in: base, calendar: calendar).first, expected)
         guard let delayedExpected = LifeJourneyFactService.primaryFact(
             in: delayedBase,
             calendar: calendar
@@ -4808,6 +4809,71 @@ final class RecordInputAssistanceSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.result?.category, .dining)
     }
 
+    func testManualAmountMatchesShortcutAmountWhenHistoryHasStableMerchantTitle() {
+        let calendar = Calendar.current
+        let referenceDate = calendar.date(
+            bySettingHour: 9,
+            minute: 8,
+            second: 0,
+            of: Date()
+        ) ?? Date()
+        let repeated = (0..<3).map { index in
+            HomeItem(
+                title: "瑞幸咖啡",
+                amount: 9.9,
+                category: .dining,
+                createdAt: referenceDate.addingTimeInterval(TimeInterval(-(index + 1) * 86_400)),
+                userEditedTitle: true
+            )
+        }
+        let supporting = repeated + (0..<3).map { index in
+            HomeItem(
+                title: "日常记录 \(index)",
+                amount: Double(20 + index),
+                category: .other,
+                createdAt: referenceDate.addingTimeInterval(TimeInterval(-(index + 1) * 7_200))
+            )
+        }
+        let historyKey = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: 7,
+            referenceDate: referenceDate,
+            referenceDateEditedByUser: false
+        )
+        let history = RecordInputAssistanceComputation.historySnapshot(
+            RecordInputHistoryPreparationInput(
+                key: historyKey,
+                items: supporting,
+                referenceDate: referenceDate,
+                now: referenceDate
+            )
+        )
+        let key = RecordPrefillPreparationKey(
+            historyKey: historyKey,
+            amount: 9.9,
+            referenceDate: referenceDate,
+            noteDraft: "",
+            selectedCategory: .other,
+            context: RecordContextSignal(referenceDate: referenceDate, weather: nil)
+        )
+        let snapshot = RecordInputAssistanceComputation.prefillSnapshot(
+            RecordPrefillPreparationInput(
+                key: key,
+                history: history,
+                amount: 9.9,
+                referenceDate: referenceDate,
+                now: referenceDate,
+                noteDraft: "",
+                selectedCategory: .other,
+                context: key.context
+            )
+        )
+
+        XCTAssertEqual(history.frequentSuggestions.first?.amount, 9.9)
+        XCTAssertEqual(snapshot.result?.title, "瑞幸咖啡")
+        XCTAssertTrue(["frequent", "habit", "scene_habit"].contains(snapshot.result?.source ?? ""))
+        XCTAssertEqual(snapshot.appliedCategory, .dining)
+    }
+
     func testPreviewLifeMarkSnapshotIsDeterministicForTheSameDraftAndLedgerRevision() {
         let date = Date(timeIntervalSince1970: 1_784_240_000)
         let draft = HomeItem(
@@ -5208,6 +5274,48 @@ final class HomeDashboardSnapshotTests: XCTestCase {
         )
         XCTAssertFalse(zeroAmount.todayPositiveItems.contains { $0.id == edited.id })
         XCTAssertTrue(zeroAmount.currentWeekItems.contains { $0.id == edited.id })
+    }
+
+    func testImmediateLedgerMutationProjectionAddsAndRemovesHomeRows() {
+        let now = Date()
+        let existing = HomeItem(
+            title: "早餐",
+            amount: 12,
+            category: .dining,
+            createdAt: now.addingTimeInterval(-60)
+        )
+        let added = HomeItem(
+            title: "瑞幸咖啡",
+            amount: 9.9,
+            category: .dining,
+            createdAt: now
+        )
+        let key = ItemDerivedCachePreparationKey(
+            ledgerRevision: 4,
+            dayKey: "test-day"
+        )
+        let base = ItemDerivedCacheComputation.build(
+            ItemDerivedCachePreparationInput(
+                key: key,
+                items: [existing],
+                now: now,
+                itemsAreSortedDescending: true
+            )
+        )
+        let withAdded = ItemDerivedCacheImmediateMutationPolicy.adding(
+            added,
+            in: base,
+            now: now
+        )
+        XCTAssertEqual(withAdded.todayPositiveItems.map(\.id), [added.id, existing.id])
+        XCTAssertEqual(withAdded.recentThreeTodayItems.count, 2)
+
+        let afterDelete = ItemDerivedCacheImmediateMutationPolicy.removing(
+            ids: [added.id],
+            from: withAdded
+        )
+        XCTAssertEqual(afterDelete.todayPositiveItems.map(\.id), [existing.id])
+        XCTAssertFalse(afterDelete.recentThreeTodayItems.contains { $0.id == added.id })
     }
 
     func testRapidInteractionMemoryPolicyBoundsDisplayImagesSnapshotsAndCoalescing() {
@@ -10568,6 +10676,33 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
         XCTAssertTrue(card.isFeatured)
         XCTAssertEqual(Set(card.evidenceItemIDs), Set(journeyIDs))
         XCTAssertEqual(card.evidenceSummary?.total, journeyIDs.count)
+    }
+
+    func testDiscoverEditorialTitlesSeparatePatternsFromAssets() {
+        let commute = DiscoverCard(
+            id: "discover:pattern:transport",
+            kind: .pattern,
+            title: "通勤出行",
+            summary: "",
+            evidenceItemIDs: [],
+            novelty: 1,
+            confidence: 1,
+            storyValue: 1,
+            latestDate: .now
+        )
+        let coffeeAsset = DiscoverCard(
+            id: "discover:asset:dining",
+            kind: .asset,
+            title: "咖啡饮品这条线索在成长",
+            summary: "",
+            evidenceItemIDs: [],
+            novelty: 1,
+            confidence: 1,
+            storyValue: 1,
+            latestDate: .now
+        )
+        XCTAssertEqual(commute.editorialTitle, "通勤模式")
+        XCTAssertEqual(coffeeAsset.editorialTitle, "咖啡习惯正在形成")
     }
 
     func testDiscoverEchoNeedsCurrentAndHistoricalEvidenceOutsideTheJourney() {

@@ -138,6 +138,17 @@ enum LifeJourneyFactService {
         in items: [HomeItem],
         calendar: Calendar = .current
     ) -> LifeJourneyFact? {
+        allFacts(in: items, calendar: calendar).first
+    }
+
+    /// Returns every independently detected, certified journey in stable
+    /// editorial order. `primaryFact` remains the compatibility accessor for
+    /// callers that need one lead journey, while Discover can retain all
+    /// high-value experiences as durable assets.
+    static func allFacts(
+        in items: [HomeItem],
+        calendar: Calendar = .current
+    ) -> [LifeJourneyFact] {
         let rows = items
             .filter { $0.amount > 0 && $0.draftMeta?.status != .pending }
             .sorted { lhs, rhs in
@@ -149,7 +160,7 @@ enum LifeJourneyFactService {
                   let city = normalizedCity(rawCity) else { return nil }
             return CityRow(item: item, city: city)
         }
-        guard cityRows.count >= 2 else { return nil }
+        guard cityRows.count >= 2 else { return [] }
 
         let homeCity = inferredHomeCity(from: cityRows)
         var candidates: [Candidate] = []
@@ -218,7 +229,7 @@ enum LifeJourneyFactService {
                 return lhs.fact.endDate > rhs.fact.endDate
             }
             return lhs.score > rhs.score
-        }.first?.fact
+        }.map(\.fact)
     }
 
     private static func makeCandidate(

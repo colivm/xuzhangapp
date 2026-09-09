@@ -1265,6 +1265,25 @@ struct DiscoverCard: Identifiable, Codable, Equatable, @unchecked Sendable {
     var evidenceDisplayText: String {
         evidenceSummary?.displayText ?? "依据 \(evidenceItemIDs.count) 笔记录"
     }
+
+    /// Presentation-only naming keeps card identity and semantic labels stable
+    /// while making adjacent Discover sections read as distinct editorial
+    /// objects instead of repeating the same noun.
+    var editorialTitle: String {
+        switch title {
+        case "通勤出行": return "通勤模式"
+        case "咖啡饮品": return "咖啡习惯"
+        case "通勤": return "通勤又回来了"
+        default:
+            if title.hasSuffix("这条线索在成长") {
+                let base = title.replacingOccurrences(of: "这条线索在成长", with: "")
+                if base == "咖啡饮品" { return "咖啡习惯正在形成" }
+                if base == "通勤出行" { return "通勤模式正在形成" }
+                return "\(base)习惯正在形成"
+            }
+            return title
+        }
+    }
 }
 
 /// Keeps the long-lived life-mark list light while giving emotionally valuable

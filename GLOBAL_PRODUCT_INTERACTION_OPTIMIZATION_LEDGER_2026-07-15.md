@@ -4844,3 +4844,31 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 允许范围：`NativeDemoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-xuzhang.png`、`NativeDemoApp/Info.plist`、`NativeDemoApp.xcodeproj/project.pbxproj`、`ci_scripts/ci_pre_xcodebuild.sh`、App Store 资产校验脚本、发布门禁/矩阵与本文档。不得修改 App 功能、账单、会员、同步、天气、网站、法律页或截图内容。
 - 冻结边界：不把仓库改动冒充 App Store Connect 已处理/已选择；不提交或操作 Apple 账号；CI 已提供的 `CI_BUILD_NUMBER` 覆盖能力保留；不把图标做成圆角、不添加透明像素、不改变 App Store 版本名 `1.0`。
 - 计划验收：图标 1024×1024、PNG RGB、无 Alpha/`tRNS`、四角和四边为满版品牌底色；Debug/Release 的 `CFBundleShortVersionString` 为 1.0，默认 `CFBundleVersion` 为 324，CI 指定构建号时可确定性覆盖；Windows 门禁通过。macOS/Xcode Archive 与 App Store Connect 处理/可选构建仍需运营方外部签收。
+
+### 104. HOME-RECORD-FACT-CONSISTENCY-01：首页记录即时事实与金额预填充一致性（2026-09-09）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-09）；当前无 `IN_PROGRESS`。本项响应真实首页反馈：手动键盘输入 `9.9` 与快捷金额 `¥9.90` 预填充结果不一致；连续记账或从列表删除后首页仍短暂显示旧的三条记录且刷新慢。当前 Windows 代码与仓库门禁已完成；无 Swift/Xcode、iPhone 和 Instruments，不能标记为 `VERIFIED`。
+- 根因：金额习惯建议原先只在习惯服务完全返回 `nil` 时才回退到历史标题；当通用习惯路径已经给出分类但标题为空时，稳定的“瑞幸咖啡”标题不会被复用。首页 `itemDerivedCache` 在账本写盘成功后仍等待后台完整重建，新增/删除没有先投影到 `todayPositiveItems`/`recentThreeTodayItems`，快速操作时旧派生快照会继续可见。
+- 目标：手动金额与快捷金额使用同一“分为单位、时间段/星期类型、分类和历史标题证据”匹配；金额本身不得创造品牌。所有正常账本变更在 `LocalStore.saveHomeItemChanges` 成功后立即更新首页事实列表，复杂旅程/播放派生仍由可取消的后台任务以最新 revision 补齐，旧结果不得覆盖新结果。
+- 允许范围：`NativeDemoApp/ViewModels/HomeViewModel.swift` 的记录预填充和 `ItemDerivedCacheImmediateMutationPolicy`；`NativeDemoAppTests/StateRegressionTests.swift` 的金额一致性、添加/删除即时投影回归。不得修改品牌库内容、分类含义、账单字段、OCR、照片、会员、同步 DTO、线索算法或底部导航。
+- 实施结果：
+  - 当备注为空且存在同金额、同时间桶/星期类型、同分类的稳定历史标题时，即使习惯服务已经返回“无标题”的通用结果，也复用该历史标题；若分类冲突则保持原结果，金额单独仍不会猜品牌。
+  - 派生缓存支持添加、批量删除和按当前账本 revision 重新标记；写盘成功后先投影真实首页记录与排序，再保留后台完整快照刷新标记，避免列表删除后旧记录复活。
+  - 新增 `testManualAmountMatchesShortcutAmountWhenHistoryHasStableMerchantTitle` 和 `testImmediateLedgerMutationProjectionAddsAndRemovesHomeRows`，覆盖手动/快捷金额等价、无品牌证据不猜测以及快速添加/删除的首页行集合。
+- 修改文件：`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。未修改未跟踪的 `brand-assets/`、`output/`、`tmp/` 和截图脚本。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 均通过，最终 `release_repository_gate: OK`；Windows 未运行 Swift XCTest。
+- 剩余风险：需在 macOS/Xcode 做 Swift 6 Debug/Release Clean Build 并运行新增 XCTest；在真机连续输入、快速连续保存、列表快速删除/撤销、跨日切换和 465/1,000/5,000 条账本上核对首屏 hitch、内存、发热、播放/生活线索派生最终一致性。下一步按 `FLOW-109` 完成 Xcode/TestFlight/Instruments 签收，再决定是否启动 `APP-STORE-BUILD-ICON-FIX-01`；本项未扩大到通用 `PERF-AUDIT-04`。
+
+### 105. DISCOVER-MULTI-JOURNEY-EDITORIAL-01：多段高价值经历与卡片命名收口（2026-09-09）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`（2026-09-09）；本轮只在第 102 项已批准的 Discover/Journey 呈现范围内执行，未启动新的视觉重构任务。
+- 用户要求：按最终方案执行，保留现有“周末跨城自驾”高亮主卡；支持多条高价值经历长期保留；消除“生活线索”重复标题；同一 Journey 的解释卡不与场景资产入口重复；普通线索继续轻量迭代。
+- 实施结果：
+  - `LifeJourneyFactService` 新增 `allFacts`，`primaryFact` 保持兼容并返回排序后的首条；Discover 现在可投影全部认证 Journey。
+  - 每条 Journey 都生成稳定 `discover:journey:<id>` 入口；普通 scene 资产仍保留原有限制，Journey 资产不再被 `.prefix(4)` 截断；仅价值排序第一条周末自驾使用高亮主卡，其余 Journey 为可点击次级卡。
+  - DiscoverCard 增加展示层 `editorialTitle`：通勤/咖啡等模式与成长资产使用不同标题；Journey 标题“周末跨城自驾”保持不变。生活线索列表下方重复标题改为“可回看的生活片段”。身份、证据 ID 和保存语义不变。
+  - 详情墙继续按稳定证据 ID 解析照片和记录；连续窗口统计与 Journey 绑定证据的口径保持分层说明，不把全量节奏误认为单段行程证据。
+- 修改文件：`NativeDemoApp/Services/LifeMarkService.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档；既有首页即时投影改动和未跟踪用户素材均保留。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 均通过，最终 `release_repository_gate: OK`；新增标题展示回归，保留 Journey 资产入口/旧 Journey 资产/去重相关回归。当前 Windows 无 Swift/Xcode，未宣称编译或真机通过。
+- 冻结边界复核：未改 Journey 认证门槛、账单字段/金额/日期/分类、照片存储、同步 DTO、会员额度、生活页周期、底部 Tab、远程 AI 或第一张高亮卡视觉结构；普通 `.scene` 线索仍不强制升级为详情。
+- 剩余风险与下一步：按 `FLOW-108` 在 macOS/Xcode 运行 Swift 6 Debug/Release 与 Discover/XCTest，使用多条真实跨城 Journey 验证只突出一张主卡、每条资产可打开照片墙/记录墙、编辑/删除不复活旧证据，并完成深色模式、VoiceOver、特大字号和 Instruments 签收；在外部证据补齐前保持 `CODE_DONE`。

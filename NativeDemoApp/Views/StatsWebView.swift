@@ -174,7 +174,7 @@ private struct DiscoverDetailSheetView: View {
                             Image(systemName: card.isFeatured ? "sparkles" : "arrow.up.right")
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(AppColors.readableAccent)
-                            Text(card.title)
+                            Text(card.editorialTitle)
                                 .font(.system(size: 24, weight: .bold))
                                 .foregroundStyle(AppColors.text)
                         }
@@ -5524,7 +5524,7 @@ struct StatsWebView: View {
             }
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(card.title)
+                Text(card.editorialTitle)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(TraceColors.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -5577,7 +5577,7 @@ struct StatsWebView: View {
                     .foregroundStyle(AppColors.readableAccent.opacity(0.90))
             }
 
-            Text(card.title)
+            Text(card.editorialTitle)
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(TraceColors.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -5814,7 +5814,7 @@ struct StatsWebView: View {
         // that gets deduplicated, while this row remains the stable detail entry.
         return VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .center) {
-                Text("生活线索")
+                Text("可回看的生活片段")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(TraceColors.primaryText)
                 Spacer()
