@@ -163,7 +163,7 @@ struct SettingsView: View {
             switch self {
             case .backup: return "备份与联网"
             case .appearance: return "外观"
-            case .companion: return "陪伴与语气"
+            case .companion: return "陪伴设置"
             case .privacy: return "数据与隐私"
             }
         }
@@ -631,9 +631,9 @@ struct SettingsView: View {
             }
 
             settingsFeatureTile(
-                title: "陪伴语气",
+                title: "陪伴设置",
                 subtitle: companionRowSummary,
-                systemImage: "gearshape",
+                systemImage: "pawprint.fill",
                 style: .mint
             ) {
                 activeSettingsSheet = .companion
@@ -978,14 +978,7 @@ struct SettingsView: View {
     private var companionRowSummary: String {
         guard settingsViewModel.petCompanionEnabled else { return "宠物已关" }
         if settingsViewModel.weatherCompanionEnabled { return "宠物开 · 天气互动" }
-        return "宠物开 · \(aiToneSummary)"
-    }
-
-    private var aiToneSummary: String {
-        switch settingsViewModel.aiTone {
-        case .gentle: return "温和"
-        case .neutral: return "中性"
-        }
+        return "宠物开 · 基础陪伴"
     }
 
     private func requestCloudSyncChange(_ enabled: Bool) {
@@ -1711,21 +1704,8 @@ struct SettingsView: View {
                 get: { settingsViewModel.weatherCompanionEnabled },
                 set: { settingsViewModel.weatherCompanionEnabled = $0 }
             ))
+            settingHelper("开启后，宠物会结合当天的天气生成更贴近情境的互动；关闭后仍保留基础陪伴。")
             WeatherKitAttributionView()
-            VStack(alignment: .leading, spacing: 6) {
-                Text("复盘语气")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppColors.text.opacity(0.82))
-                HStack(spacing: 4) {
-                    webToneButton("温和", isActive: settingsViewModel.aiTone == .gentle) {
-                        settingsViewModel.aiTone = .gentle
-                    }
-                    webToneButton("中性", isActive: settingsViewModel.aiTone == .neutral) {
-                        settingsViewModel.aiTone = .neutral
-                    }
-                }
-            }
-            settingHelper("影响今日小记的本地收束；开启联网整理后，也影响今日小记、月度整理和日/周/月轻润色。不影响 AI 指令台、宠物或生活线索。")
         case .privacy:
             sectionBody("默认本地存储，无需登录即可完整使用。开启自动备份后，金额、分类、备注和日期会自动备份；照片仍保存在本机。会员状态随账号同步。")
             destructiveSettingsButton("清空所有记录") {
@@ -3269,34 +3249,6 @@ struct SettingsView: View {
 
     // MARK: - AI Settings
 
-    private var aiSettingsPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("复盘语气")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(AppColors.text)
-
-            // Tone
-            VStack(alignment: .leading, spacing: 6) {
-                Text("语气偏好")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppColors.text.opacity(0.82))
-                HStack(spacing: 4) {
-                    webToneButton("温和", isActive: settingsViewModel.aiTone == .gentle) {
-                        settingsViewModel.aiTone = .gentle
-                    }
-                    webToneButton("中性", isActive: settingsViewModel.aiTone == .neutral) {
-                        settingsViewModel.aiTone = .neutral
-                    }
-                }
-            }
-
-            settingHelper("影响今日小记的本地收束；开启联网整理后，也影响今日小记、月度整理和日/周/月轻润色。不影响 AI 指令台、宠物或生活线索。")
-
-        }
-        .webCardPadding()
-        .webCardBackground()
-    }
-
     // MARK: - Privacy Note
 
     private var privacyNote: some View {
@@ -3494,22 +3446,6 @@ struct SettingsView: View {
                     .stroke(stroke, lineWidth: 1)
             )
             .shadow(color: shadow, radius: 6, y: 3)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func webToneButton(_ title: String, isActive: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: isActive ? .semibold : .regular))
-                .foregroundStyle(isActive ? .white : AppColors.text.opacity(0.82))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(
-                    isActive ? AppColors.accent : Color.white.opacity(0.72),
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                )
-                .shadow(color: isActive ? AppColors.accent.opacity(0.2) : .clear, radius: 4, y: 2)
         }
         .buttonStyle(.plain)
     }
