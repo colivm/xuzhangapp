@@ -970,7 +970,7 @@ extension HomeViewModel {
             historyItems: items,
             calendar: calendar
         )
-        items.contains { item in
+        return items.contains { item in
             calendar.isDate(item.createdAt, inSameDayAs: now)
                 && item.amount > 0
                 && commuteDirection(for: item.createdAt, calendar: calendar) == direction
