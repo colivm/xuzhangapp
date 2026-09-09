@@ -1259,7 +1259,7 @@ enum LifeMarkService {
         preparedContext: PreparedAggregationContext? = nil
     ) -> [LifeMarkAggregate] {
         let commuteEvidenceIndex = CommuteEvidencePolicy.EvidenceIndex(historyItems: historyItems)
-        definitions.compactMap { definition in
+        definitions.compactMap { definition -> LifeMarkAggregate? in
             if ["weekend_gathering", "travel"].contains(definition.id) {
                 return nil
             }

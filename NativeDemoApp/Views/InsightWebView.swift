@@ -396,6 +396,7 @@ enum AICommuteDuplicatePolicy {
         day: Date,
         proposedAmount: Double,
         historyItems: [HomeItem] = [],
+        evidenceIndex: CommuteEvidencePolicy.EvidenceIndex? = nil,
         calendar: Calendar = .current
     ) -> Bool {
         guard item.amount > 0,
@@ -412,6 +413,7 @@ enum AICommuteDuplicatePolicy {
         let contextualCommute = CommuteEvidencePolicy.matches(
             item,
             historyItems: historyItems,
+            evidenceIndex: evidenceIndex,
             calendar: calendar
         )
         guard explicitlyCommute || contextualCommute else { return false }

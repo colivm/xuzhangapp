@@ -4901,6 +4901,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 均通过，最终 `release_repository_gate: OK`；Windows 无 Swift/Xcode，未运行 XCTest。
 - 冻结边界复核：未改变账单字段、分类含义、金额保存、品牌库、OCR、照片、会员、同步 DTO、Journey、生活页周期及既有通勤金额/工作日保存语义。
 - 剩余风险：需在 macOS/Xcode 完成 Swift 6 Debug/Release 与新增 XCTest，并在真机验证 09:07 晚记、当天中午补记、历史补记、旅行交通排除、首页提示刷新和不同历史数据量；当前不得标记 `VERIFIED`。
+- 2026-09-09 Archive 编译回补：`AICommuteDuplicatePolicy.matches` 补齐可选 `evidenceIndex` 参数，通勤批量聚合的 `compactMap` 闭包补齐 `[LifeMarkAggregate]?` 返回类型；这两处仅修复 Swift 类型/调用签名，不改变运行时规则。Windows 静态回归与发布门禁再次通过，macOS/Xcode Archive 仍待外部重跑。
 - 下一任务：按 `FLOW-110` 完成 Xcode/XCTest/真机签收；外部证据补齐前不扩大通勤规则到其他分类或新产品视觉。
 
 ### 108. SETTINGS-COMPANION-ENTRY-01：设置页陪伴入口与低价值语气选项收口（2026-09-09）
