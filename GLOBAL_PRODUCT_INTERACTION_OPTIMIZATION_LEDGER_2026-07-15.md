@@ -4872,3 +4872,16 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 均通过，最终 `release_repository_gate: OK`；新增标题展示回归，保留 Journey 资产入口/旧 Journey 资产/去重相关回归。当前 Windows 无 Swift/Xcode，未宣称编译或真机通过。
 - 冻结边界复核：未改 Journey 认证门槛、账单字段/金额/日期/分类、照片存储、同步 DTO、会员额度、生活页周期、底部 Tab、远程 AI 或第一张高亮卡视觉结构；普通 `.scene` 线索仍不强制升级为详情。
 - 剩余风险与下一步：按 `FLOW-108` 在 macOS/Xcode 运行 Swift 6 Debug/Release 与 Discover/XCTest，使用多条真实跨城 Journey 验证只突出一张主卡、每条资产可打开照片墙/记录墙、编辑/删除不复活旧证据，并完成深色模式、VoiceOver、特大字号和 Instruments 签收；在外部证据补齐前保持 `CODE_DONE`。
+
+### 106. RELEASE-PERF-INTERACTION-01：上线前性能与快速交互专项（2026-09-09）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`（2026-09-09）；目标是上线前降低痕迹/线索首屏重绘、详情墙重复解析和快速操作期间的主线程压力，不扩展产品功能。
+- 代码审计结论：线索页在快照已经可见后，`traceClueItems` 仍会在多个 SwiftUI computed property 中反复对完整账本做范围筛选和排序；详情墙的证据解析按多个派生属性重复建立 ID 字典；连续快速操作则依赖快照 revision gate，不能再引入第二套状态源。
+- 实施结果：
+  - 已发布且仍匹配当前 revision 的线索快照现在直接复用 `snapshot.items`、`snapshot.clues` 和 `snapshot.marks`；只有首屏尚未发布或快照失效时才回退到范围筛选/聚合，减少重绘期间的重复 O(n) 扫描、排序和生活线索聚合。
+  - 保留现有后台快照、取消和 latest-revision gate；没有把账单事实等待整理，也没有改变线索范围、分类筛选或生活页周期。
+  - 新增性能回归与静态门禁，锁定“已发布快照优先、失效时回退”的行为；多 Journey 和标题回归继续保留。
+- 修改文件：`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、本文档；前序首页、Discover 多 Journey 改动及未跟踪用户素材均保留。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 已通过；Windows 无 Swift/Xcode，完整 `validate_release_gate.py --phase windows` 应在提交前再次运行，XCTest/Instruments/真机仍未执行。
+- 冻结边界：不改账单字段、分类、金额、日期、OCR、照片存储、同步 DTO、会员额度、Journey 认证、卡片视觉结构、生活页或底部导航；不以 Windows 结果冒充上线签收。
+- 下一步：提交前运行完整 Windows release gate；随后在 macOS/Xcode 做 Clean Debug/Release、全部 XCTest，以及 465/1,000/5,000 条账本连续打开线索、快速点卡/返回、详情墙编辑/删除、快速记账和冷启动 Instruments。只有这些外部证据通过才可将发版结论标为 `VERIFIED`。

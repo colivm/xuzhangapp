@@ -392,6 +392,16 @@ python scripts/validate_release_gate.py --phase device-audit `
 
 本任务解除阻塞的最短路径：在 macOS 对当前工作树运行 Debug build、Release build 和全部 XCTest；随后使用同一构建完成 `FLOW-88`，保存路线/证据一致性截图、远程请求体、连续操作结果和 100/1,000/5,000 Instruments 日志，再回填 `PASS` 或具体 `FAIL`。
 
+## 14. 2026-09-09 RELEASE-PERF-INTERACTION-01 代码验收
+
+| 门禁 | 结果 | 证据位置/日志 | 签收人 | 日期 |
+|---|---|---|---|---|
+| 线索快照复用 | `PASS` | 已发布且 revision 匹配时，`traceClueItems`、分类线索和生活线索直接读取 `visiblePreparedClueSnapshot`；静态门禁覆盖快照优先与失效回退 | Codex | 2026-09-09 |
+| Windows repository gate | `PASS` | `git diff --check`、语义回归、体验静态检查和 `validate_release_gate.py --phase windows` 通过，最终 `release_repository_gate: OK` | Codex | 2026-09-09 |
+| Swift 6 Debug/Release 与 XCTest | `BLOCKED` | 当前环境无 macOS/Xcode/Swift，未冒充编译和 XCTest 结果 | Codex | 2026-09-09 |
+| 465/1,000/5,000 条账本 Instruments | `NOT_RUN` | 需在真机核对线索首屏、快速切换、连续点卡、详情墙返回、编辑/删除后的主线程 hitch、内存和发热 | Codex | 2026-09-09 |
+| 发版结论 | `CODE_DONE` | 代码和 Windows 门禁完成；取得 Xcode、真机、Instruments 与既有 FLOW-108/FLOW-109 证据前，不标记 `VERIFIED` | Codex | 2026-09-09 |
+
 ## 13. 2026-09-09 HOME-RECORD-FACT-CONSISTENCY-01 代码验收
 
 | 门禁 | 结果 | 证据位置/日志 | 签收人 | 日期 |

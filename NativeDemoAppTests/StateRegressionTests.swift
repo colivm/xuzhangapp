@@ -10705,6 +10705,14 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
         XCTAssertEqual(coffeeAsset.editorialTitle, "咖啡习惯正在形成")
     }
 
+    func testAllJourneyFactsKeepsPrimaryCompatibilityOrdering() {
+        let rows = journeyRows()
+        let all = LifeJourneyFactService.allFacts(in: rows, calendar: calendar)
+        XCTAssertFalse(all.isEmpty)
+        XCTAssertEqual(all.first, LifeJourneyFactService.primaryFact(in: rows, calendar: calendar))
+        XCTAssertEqual(Set(all.map(\.id)).count, all.count)
+    }
+
     func testDiscoverEchoNeedsCurrentAndHistoricalEvidenceOutsideTheJourney() {
         let journeyID = UUID(uuidString: "E1000000-0000-0000-0000-000000000086")!
         let currentID = UUID(uuidString: "E1000000-0000-0000-0000-000000000087")!

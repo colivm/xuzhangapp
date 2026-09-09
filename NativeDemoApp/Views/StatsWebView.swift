@@ -5108,7 +5108,15 @@ struct StatsWebView: View {
     }
 
     private var traceClueItems: [HomeItem] {
-        TraceClueScopePolicy.items(
+        // Once the immutable clue snapshot is visible, reuse its scoped and
+        // sorted records. Re-filtering the full ledger from several computed
+        // properties during every SwiftUI redraw was a major source of hitch
+        // on large accounts. The fallback is used only while preparing or
+        // when the selected scope has no published snapshot yet.
+        if let snapshot = visiblePreparedClueSnapshot {
+            return snapshot.items
+        }
+        return TraceClueScopePolicy.items(
             from: homeViewModel.items,
             category: selectedCategory,
             now: Date()
@@ -5140,11 +5148,17 @@ struct StatsWebView: View {
     }
 
     private var traceCategoryClues: [TraceCategoryClue] {
-        traceCategoryClues(from: traceClueItems)
+        if let snapshot = visiblePreparedClueSnapshot {
+            return snapshot.clues
+        }
+        return traceCategoryClues(from: traceClueItems)
     }
 
     private var traceLifeMarks: [LifeMarkAggregate] {
-        traceLifeMarks(from: traceClueItems, limit: 6)
+        if let snapshot = visiblePreparedClueSnapshot {
+            return snapshot.marks
+        }
+        return traceLifeMarks(from: traceClueItems, limit: 6)
     }
 
     private func traceCategoryClues(from items: [HomeItem]) -> [TraceCategoryClue] {
