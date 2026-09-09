@@ -154,6 +154,7 @@
 | 23 | COMMUTE-CONTEXT-RECOGNITION-01 | 早通勤结构化上下文识别与补记一致性 | `CODE_DONE` | 09:07 无文案账单与稳定历史证据共用识别策略；等待 `FLOW-110` 的 macOS/Xcode、XCTest 与真机签收 |
 | 24 | SETTINGS-COMPANION-ENTRY-01 | 设置页陪伴入口与低价值语气选项收口 | `CODE_DONE` | 陪伴入口命名、天气互动说明和语气控件收口完成；等待 `FLOW-111` 的 macOS/Xcode、XCTest 与真机签收 |
 | 25 | APP-DISPLAY-NAME-CONSISTENCY-01 | 安装包名称与权限提示统一为叙账 | `CODE_DONE` | `CFBundleDisplayName` 与系统权限提示已统一为“叙账”；等待新 TestFlight 构建安装验收 |
+| 26 | IPHONE-ONLY-DISTRIBUTION-01 | 发布包仅支持 iPhone | `CODE_DONE` | App 与测试 target 的 `TARGETED_DEVICE_FAMILY` 已统一为 `1`，不再声明 iPad 支持；等待新构建在 App Store Connect 验证设备截图要求 |
 
 当前签收策略：后续仍需补全部 `CODE_DONE` 任务的 Xcode/真机证据；用户于 2026-07-15 再次明确要求“不要再问，全部改完后一起真机验证”，授权按台账顺序连续完成后续代码任务。该持续授权允许前一项达到 `CODE_DONE` 后直接进入下一项，但不得把任何未真机验证任务标为 `VERIFIED`，且仍须保持同一时间最多一个 `IN_PROGRESS`。
 
@@ -4925,3 +4926,11 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 实施结果：`NativeDemoApp/Info.plist` 的 `CFBundleDisplayName` 改为“叙账”；定位、保存到照片、访问照片三条系统权限说明同步改为“叙账”。未修改 Bundle ID、`PRODUCT_NAME`、版本号、数据字段或 App Store Connect 元数据。
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows`；需在本轮提交前执行并记录结果。Windows 无 Swift/Xcode，不能标记 `VERIFIED`。
 - 剩余风险与下一步：旧 TestFlight 安装包不会自动改名，必须上传新构建并在真机重新安装核对桌面名称和权限弹窗；外部签收前保持 `CODE_DONE`，下一步按 `FLOW-112` 验收。
+
+### 110. IPHONE-ONLY-DISTRIBUTION-01：发布包仅支持 iPhone（2026-09-09）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-09）。
+- 用户问题：App Store Connect 因包声明支持 iPad，要求上传 13 英寸 iPad 截图；产品当前只提供 iPhone 竖屏体验。
+- 实施结果：`NativeDemoApp.xcodeproj/project.pbxproj` 中 App 与测试 target 的 Debug/Release 配置均由 `TARGETED_DEVICE_FAMILY = "1,2"` 改为 `"1"`，仅声明 iPhone。未修改界面、Bundle ID、版本号、签名或数据规则。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows`；需在本轮提交前执行并记录结果。Windows 无 Swift/Xcode，不能标记 `VERIFIED`。
+- 剩余风险与下一步：必须上传新构建后 App Store Connect 才会重新计算设备截图要求；旧构建仍可能显示 iPad 要求。需在新构建详情确认只出现 iPhone 截图槽位，并在 TestFlight 真机核对安装与布局。
