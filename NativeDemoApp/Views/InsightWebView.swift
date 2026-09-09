@@ -395,6 +395,7 @@ enum AICommuteDuplicatePolicy {
         slot: AICommuteDraftSlot,
         day: Date,
         proposedAmount: Double,
+        historyItems: [HomeItem] = [],
         calendar: Calendar = .current
     ) -> Bool {
         guard item.amount > 0,
@@ -408,7 +409,12 @@ enum AICommuteDuplicatePolicy {
         let hasMorningCue = containsAny(text, morningCues)
         let hasEveningCue = containsAny(text, eveningCues)
         let explicitlyCommute = item.scenePackId == "commute" || containsAny(text, commuteCues)
-        guard explicitlyCommute else { return false }
+        let contextualCommute = CommuteEvidencePolicy.matches(
+            item,
+            historyItems: historyItems,
+            calendar: calendar
+        )
+        guard explicitlyCommute || contextualCommute else { return false }
         if containsAny(text, nonCommuteTravelCues), !hasMorningCue, !hasEveningCue, item.scenePackId != "commute" {
             return false
         }
@@ -5236,9 +5242,19 @@ struct InsightWebView: View {
             let draftWeekdays = Array(allDraftWeekdays.suffix(commuteDraftWorkdayLimit(for: range)))
             let didLimitDraftDays = allDraftWeekdays.count > draftWeekdays.count
             let commuteCandidates = filteredAICommandItems(range: range, category: .transport)
+            let commuteHistory = filteredAICommandItems(
+                range: aiCommandRecentRange(days: 90, label: "最近 90 天"),
+                category: .transport
+            )
             let now = self.now
             let drafts = draftWeekdays.flatMap { day in
-                commuteDrafts(for: day, amount: resolvedAmount, candidates: commuteCandidates, now: now)
+                commuteDrafts(
+                    for: day,
+                    amount: resolvedAmount,
+                    candidates: commuteCandidates,
+                    historyItems: commuteHistory,
+                    now: now
+                )
             }
             guard !drafts.isEmpty else {
                 let singleDayText = commuteSingleDayBlockedText(for: range, now: now)
@@ -5493,7 +5509,21 @@ struct InsightWebView: View {
                     matchedItems = rangeItems.filter { LifeMarkService.matches($0, intent: intent) }
                 }
             } else {
-                matchedItems = rangeItems.filter { LifeMarkService.matches($0, intent: intent) }
+                if intent.id == "commute" {
+                    let commuteEvidenceIndex = CommuteEvidencePolicy.EvidenceIndex(
+                        historyItems: items,
+                        calendar: aiCommandCalendar
+                    )
+                    matchedItems = rangeItems.filter {
+                        CommuteEvidencePolicy.matches(
+                            $0,
+                            evidenceIndex: commuteEvidenceIndex,
+                            calendar: aiCommandCalendar
+                        )
+                    }
+                } else {
+                    matchedItems = rangeItems.filter { LifeMarkService.matches($0, intent: intent) }
+                }
             }
             let result = sortedAICommandEvidenceItems(
                 aiCommandScopedLifeMarkItems(matchedItems, intent: intent, command: command)
@@ -5756,6 +5786,7 @@ struct InsightWebView: View {
             for day: Date,
             amount: Double,
             candidates: [HomeItem],
+            historyItems: [HomeItem] = [],
             now: Date = Date()
         ) -> [AICommandRecordDraft] {
             AICommuteDraftSchedule.eligibleSlots(for: day, now: now).map { slot in
@@ -5765,7 +5796,8 @@ struct InsightWebView: View {
                     date: draftDate,
                     amount: amount,
                     slot: slot,
-                    candidates: candidates
+                    candidates: candidates,
+                    historyItems: historyItems
                 )
             }
         }
@@ -5775,9 +5807,16 @@ struct InsightWebView: View {
             date: Date,
             amount: Double,
             slot: AICommuteDraftSlot,
-            candidates: [HomeItem]
+            candidates: [HomeItem],
+            historyItems: [HomeItem] = []
         ) -> AICommandRecordDraft {
-            if let existing = existingCommuteLikeItem(on: date, amount: amount, slot: slot, candidates: candidates) {
+            if let existing = existingCommuteLikeItem(
+                on: date,
+                amount: amount,
+                slot: slot,
+                candidates: candidates,
+                historyItems: historyItems
+            ) {
                 return AICommandRecordDraft(
                     title: title,
                     amount: amount,
@@ -5798,11 +5837,25 @@ struct InsightWebView: View {
             on date: Date,
             amount: Double,
             slot: AICommuteDraftSlot,
-            candidates: [HomeItem]
+            candidates: [HomeItem],
+            historyItems: [HomeItem] = []
         ) -> HomeItem? {
             guard isCommuteWorkday(date) else { return nil }
+            let commuteEvidenceIndex = CommuteEvidencePolicy.EvidenceIndex(
+                historyItems: historyItems,
+                calendar: aiCommandCalendar
+            )
             return candidates
-                .filter { AICommuteDuplicatePolicy.matches($0, slot: slot, day: date, proposedAmount: amount) }
+                .filter {
+                    AICommuteDuplicatePolicy.matches(
+                        $0,
+                        slot: slot,
+                        day: date,
+                        proposedAmount: amount,
+                        evidenceIndex: commuteEvidenceIndex,
+                        calendar: aiCommandCalendar
+                    )
+                }
                 .sorted { lhs, rhs in
                     abs(lhs.amount - amount) < abs(rhs.amount - amount)
                 }
@@ -5810,16 +5863,16 @@ struct InsightWebView: View {
         }
 
         private func inferredCommuteAmount() -> (amount: Double, count: Int)? {
-            let candidates = filteredAICommandItems(range: aiCommandRecentRange(days: 90, label: "最近 90 天"), category: .transport)
+            let history = filteredAICommandItems(range: aiCommandRecentRange(days: 90, label: "最近 90 天"), category: .transport)
+            let candidates = history
                 .filter { item in
-                    let text = "\(item.title) \(item.displayEmotionTag)"
-                    let hour = Calendar.current.component(.hour, from: item.createdAt)
-                    let isRushHour = (6...10).contains(hour) || (16...21).contains(hour)
-                    return item.amount > 0
-                        && item.amount <= 80
-                        && isCommuteWorkday(item.createdAt)
-                        && isRushHour
-                        && (containsAny(text, ["通勤", "地铁", "公交", "早高峰", "晚高峰", "上班", "下班"]) || item.amount <= 15)
+                    item.amount <= 80
+                        && CommuteEvidencePolicy.direction(for: item.createdAt, calendar: aiCommandCalendar) != nil
+                        && CommuteEvidencePolicy.matches(
+                            item,
+                            historyItems: history,
+                            calendar: aiCommandCalendar
+                        )
                 }
             guard !candidates.isEmpty else { return nil }
             let grouped = Dictionary(grouping: candidates) { Int(($0.amount * 100).rounded()) }

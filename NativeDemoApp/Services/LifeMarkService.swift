@@ -509,9 +509,6 @@ enum LifeMarkService {
     private static let telecomBillKeywords = ["话费", "话费券", "话费充值", "手机话费", "手机充值", "通讯费", "通信费", "中国移动", "中国移动通信集团", "中国联通", "中国电信", "移动通信", "运营商缴费"]
     private static let casualDrinkKeywords = ["可乐", "雪碧", "汽水", "水溶", "c100", "维c", "维他", "果汁", "饮料"]
     private static let intentionalDrinkKeywords = ["咖啡", "拿铁", "美式", "奶茶", "茶饮", "柠檬茶", "瑞幸", "星巴克", "manner", "蜜雪", "喜茶", "奈雪"]
-    private static let strongCommuteFactCues = [
-        "通勤", "上班", "下班", "上下班", "到岗", "早高峰", "晚高峰", "地铁通勤", "公交通勤"
-    ]
     private static let broadDailySupplySpecificDefinitionIDs: Set<String> = [
         "fitness",
         "home_utilities",
@@ -830,11 +827,14 @@ enum LifeMarkService {
         periodItems: [HomeItem]? = nil
     ) -> PreparedAggregationContext {
         let historyItems = allItems.filter { $0.amount > 0 && $0.draftMeta == nil }
+        let commuteEvidenceIndex = CommuteEvidencePolicy.EvidenceIndex(historyItems: historyItems)
         let candidatePeriodItems = (periodItems ?? allItems).filter {
             $0.amount > 0 && $0.draftMeta == nil
         }
         let relevantDefinitions = definitions.filter { definition in
-            candidatePeriodItems.contains { matches($0, definition: definition) }
+            candidatePeriodItems.contains {
+                matches($0, definition: definition, historyItems: historyItems, evidenceIndex: commuteEvidenceIndex)
+            }
         }
         var definitionIDsByItemID: [UUID: Set<String>] = [:]
         var historyItemsByDefinitionID: [String: [HomeItem]] = [:]
@@ -843,7 +843,12 @@ enum LifeMarkService {
 
         for item in historyItems {
             var matchedDefinitionIDs = Set<String>()
-            for definition in relevantDefinitions where matches(item, definition: definition) {
+            for definition in relevantDefinitions where matches(
+                item,
+                definition: definition,
+                historyItems: historyItems,
+                evidenceIndex: commuteEvidenceIndex
+            ) {
                 matchedDefinitionIDs.insert(definition.id)
                 historyItemsByDefinitionID[definition.id, default: []].append(item)
             }
@@ -1253,6 +1258,7 @@ enum LifeMarkService {
         historyItems: [HomeItem],
         preparedContext: PreparedAggregationContext? = nil
     ) -> [LifeMarkAggregate] {
+        let commuteEvidenceIndex = CommuteEvidencePolicy.EvidenceIndex(historyItems: historyItems)
         definitions.compactMap { definition in
             if ["weekend_gathering", "travel"].contains(definition.id) {
                 return nil
@@ -1260,7 +1266,9 @@ enum LifeMarkService {
             let matched = matchedItems(
                 in: items,
                 definition: definition,
-                preparedContext: preparedContext
+                preparedContext: preparedContext,
+                historyItems: historyItems,
+                evidenceIndex: commuteEvidenceIndex
             )
             guard matched.count >= definition.minimumCount else { return nil }
             if definition.id == "coffee_drink",
@@ -1270,7 +1278,9 @@ enum LifeMarkService {
                 return nil
             }
             let historyMatched = preparedContext?.historyItemsByDefinitionID[definition.id]
-                ?? historyItems.filter { matches($0, definition: definition) }
+                ?? historyItems.filter {
+                    matches($0, definition: definition, historyItems: historyItems, evidenceIndex: commuteEvidenceIndex)
+                }
             return aggregate(
                 id: definition.id,
                 kind: .scene,
@@ -1382,6 +1392,7 @@ enum LifeMarkService {
         preparedContext: PreparedAggregationContext? = nil
     ) -> [LifeMarkAggregate] {
         let periodIDs = Set(periodItems.map(\.id))
+        let commuteEvidenceIndex = CommuteEvidencePolicy.EvidenceIndex(historyItems: historyItems)
         let trackedDefinitionIDs = [
             "fitness",
             "coffee_drink",
@@ -1397,12 +1408,16 @@ enum LifeMarkService {
             let periodMatched = matchedItems(
                 in: periodItems,
                 definition: definition,
-                preparedContext: preparedContext
+                preparedContext: preparedContext,
+                historyItems: historyItems,
+                evidenceIndex: commuteEvidenceIndex
             )
             guard !periodMatched.isEmpty else { continue }
             let periodMatchedIDs = Set(periodMatched.map(\.id))
             let sorted = (preparedContext?.historyItemsByDefinitionID[definition.id]
-                ?? historyItems.filter { matches($0, definition: definition) })
+                ?? historyItems.filter {
+                    matches($0, definition: definition, historyItems: historyItems, evidenceIndex: commuteEvidenceIndex)
+                })
                 .sorted { $0.createdAt < $1.createdAt }
             let grouped = Dictionary(grouping: sorted) { item in
                 milestoneLabel(for: definition, item: item)
@@ -1437,11 +1452,16 @@ enum LifeMarkService {
         preparedContext: PreparedAggregationContext? = nil
     ) -> [LifeMarkAggregate] {
         let calendar = Calendar.current
+        let commuteEvidenceIndex = CommuteEvidencePolicy.EvidenceIndex(
+            historyItems: preparedContext?.historyItems ?? items
+        )
         return definitions.compactMap { definition in
             let matched = matchedItems(
                 in: items,
                 definition: definition,
-                preparedContext: preparedContext
+                preparedContext: preparedContext,
+                historyItems: preparedContext?.historyItems ?? items,
+                evidenceIndex: commuteEvidenceIndex
             )
             let days = Set(matched.map { calendar.startOfDay(for: $0.createdAt) }).sorted()
             guard let streak = longestStreak(in: days), streak.count >= 3 else { return nil }
@@ -1494,7 +1514,12 @@ enum LifeMarkService {
         )
     }
 
-    private static func matches(_ item: HomeItem, definition: LifeMarkDefinition) -> Bool {
+    private static func matches(
+        _ item: HomeItem,
+        definition: LifeMarkDefinition,
+        historyItems: [HomeItem]? = nil,
+        evidenceIndex: CommuteEvidencePolicy.EvidenceIndex? = nil
+    ) -> Bool {
         if definition.id == "weekend_gathering", !isWeekend(item.createdAt) {
             return false
         }
@@ -1502,7 +1527,7 @@ enum LifeMarkService {
             return true
         }
         if definition.id == "commute" {
-            return commuteFactMatches(item)
+            return commuteFactMatches(item, historyItems: historyItems, evidenceIndex: evidenceIndex)
         }
         let text = semanticText(for: item)
         let categoryMatched = definition.categories.contains(item.category)
@@ -1543,12 +1568,14 @@ enum LifeMarkService {
     private static func matchedItems(
         in items: [HomeItem],
         definition: LifeMarkDefinition,
-        preparedContext: PreparedAggregationContext?
+        preparedContext: PreparedAggregationContext?,
+        historyItems: [HomeItem],
+        evidenceIndex: CommuteEvidencePolicy.EvidenceIndex? = nil
     ) -> [HomeItem] {
         items.filter { item in
             guard let preparedContext,
                   let matchedDefinitionIDs = preparedContext.definitionIDsByItemID[item.id] else {
-                return matches(item, definition: definition)
+                return matches(item, definition: definition, historyItems: historyItems, evidenceIndex: evidenceIndex)
             }
             return matchedDefinitionIDs.contains(definition.id)
         }
@@ -1846,16 +1873,16 @@ enum LifeMarkService {
         .lowercased()
     }
 
-    private static func commuteFactMatches(_ item: HomeItem) -> Bool {
-        guard item.category == .transport else { return false }
-        if item.scenePackId == "commute" { return true }
-        let explicitText = [
-            factualTitle(for: item),
-            item.memoryContext?.semanticPlace ?? ""
-        ]
-        .joined(separator: " ")
-        .lowercased()
-        return containsAny(explicitText, strongCommuteFactCues)
+    private static func commuteFactMatches(
+        _ item: HomeItem,
+        historyItems: [HomeItem]? = nil,
+        evidenceIndex: CommuteEvidencePolicy.EvidenceIndex? = nil
+    ) -> Bool {
+        CommuteEvidencePolicy.matches(
+            item,
+            historyItems: historyItems ?? [],
+            evidenceIndex: evidenceIndex
+        )
     }
 
     private static func factualTitle(for item: HomeItem) -> String {

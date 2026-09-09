@@ -151,6 +151,7 @@
 | 20 | LIFE-JOURNEY-RETURN-FIX-01 | 跨城返程证据与闭环终点识别 | `CODE_DONE` | 同日短窗口内的明确返程道路/长途证据已成为真实完成锚点；Windows 门禁完成，等待 macOS/Xcode、XCTest、真机与 Instruments 签收 |
 | 21 | PERF-FIRST-SCREEN-01 | 两阶段首屏与渐进整理 | `CODE_DONE` | 两阶段首屏、陈旧发布保护、生命周期、顺序预热、双阶段 signpost 与规模等价测试源码完成；等待 `FLOW-106` 的 macOS/Xcode、XCTest、TestFlight 真机与 Instruments 签收 |
 | 22 | TRACE-FIRST-SCREEN-ENTRY-01 | 痕迹整理首屏记录列表入口 | `CODE_DONE` | 仅痕迹页整理中的首屏卡片暴露记录入口；账单事实先显示，后台仅确认列表状态并补充整理提示；等待 `FLOW-107` 的 macOS/Xcode、XCTest 与真机签收 |
+| 23 | COMMUTE-CONTEXT-RECOGNITION-01 | 早通勤结构化上下文识别与补记一致性 | `CODE_DONE` | 09:07 无文案账单与稳定历史证据共用识别策略；等待 `FLOW-110` 的 macOS/Xcode、XCTest 与真机签收 |
 
 当前签收策略：后续仍需补全部 `CODE_DONE` 任务的 Xcode/真机证据；用户于 2026-07-15 再次明确要求“不要再问，全部改完后一起真机验证”，授权按台账顺序连续完成后续代码任务。该持续授权允许前一项达到 `CODE_DONE` 后直接进入下一项，但不得把任何未真机验证任务标为 `VERIFIED`，且仍须保持同一时间最多一个 `IN_PROGRESS`。
 
@@ -4885,3 +4886,18 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 已通过；Windows 无 Swift/Xcode，完整 `validate_release_gate.py --phase windows` 应在提交前再次运行，XCTest/Instruments/真机仍未执行。
 - 冻结边界：不改账单字段、分类、金额、日期、OCR、照片存储、同步 DTO、会员额度、Journey 认证、卡片视觉结构、生活页或底部导航；不以 Windows 结果冒充上线签收。
 - 下一步：提交前运行完整 Windows release gate；随后在 macOS/Xcode 做 Clean Debug/Release、全部 XCTest，以及 465/1,000/5,000 条账本连续打开线索、快速点卡/返回、详情墙编辑/删除、快速记账和冷启动 Instruments。只有这些外部证据通过才可将发版结论标为 `VERIFIED`。
+
+### 107. COMMUTE-CONTEXT-RECOGNITION-01：早通勤结构化上下文识别与补记一致性（2026-09-09）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`（2026-09-09）。本轮只处理“9 点多、交通分类、无通勤文案但有稳定历史证据”的识别与补记重复判定，不扩展到通用分类或金额猜品牌。
+- 用户场景：账单实际发生在 09:07，金额与历史早通勤一致，但标题没有“通勤”；首页/生活线索未识别，复盘补记仍提示“今天还没记通勤”。
+- 目标：把账单发生时间、交通分类、稳定历史金额/时段证据与明确通勤证据统一为一套可测试策略；录入晚早不改变账单发生时间语义；首页生活线索与 AI 补记共用该策略。
+- 允许范围：`NativeDemoApp/Services/RecordCalendarContext.swift`、`NativeDemoApp/Services/LifeMarkService.swift`、`NativeDemoApp/Views/InsightWebView.swift`、相关 `NativeDemoAppTests/StateRegressionTests.swift` 与静态门禁/发布矩阵/本文档。不得修改账单字段、分类含义、金额保存、品牌库、OCR、照片、会员、同步 DTO、Journey 或生活页周期。
+- 实施结果：新增 `CommuteEvidencePolicy`，统一显式通勤、`scenePack=commute` 与“同方向时间段 + 分级金额 + 至少两天历史显式证据”的识别；早通勤窗口覆盖 07:00–10:59，晚记不改变账单发生时间。LifeMark 聚合、首页通勤提示和 AI 补记重复检测均接入该策略；移除 AI 补记中仅凭低金额交通的兜底；旅行/外地语义继续排除。
+- 性能补强：新增 `EvidenceIndex`，先按“金额分 + 早/晚方向”建立历史日期集合，批量聚合、首页候选和补记重复检测均复用索引，避免在每笔记录上重复扫描历史造成 O(n²)。
+- 新增回归：09:07 无文案但两天历史证据命中生活线索与补记冲突；仅低金额临时交通不命中；明确通勤方向和金额边界保持原行为。
+- 修改文件：`NativeDemoApp/Services/RecordCalendarContext.swift`、`NativeDemoApp/Services/LifeMarkService.swift`、`NativeDemoApp/ViewModels/HomeViewModel+Dashboard.swift`、`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/life_semantic_regression.py`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 均通过，最终 `release_repository_gate: OK`；Windows 无 Swift/Xcode，未运行 XCTest。
+- 冻结边界复核：未改变账单字段、分类含义、金额保存、品牌库、OCR、照片、会员、同步 DTO、Journey、生活页周期及既有通勤金额/工作日保存语义。
+- 剩余风险：需在 macOS/Xcode 完成 Swift 6 Debug/Release 与新增 XCTest，并在真机验证 09:07 晚记、当天中午补记、历史补记、旅行交通排除、首页提示刷新和不同历史数据量；当前不得标记 `VERIFIED`。
+- 下一任务：按 `FLOW-110` 完成 Xcode/XCTest/真机签收；外部证据补齐前不扩大通勤规则到其他分类或新产品视觉。

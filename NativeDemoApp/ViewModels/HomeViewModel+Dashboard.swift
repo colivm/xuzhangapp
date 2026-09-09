@@ -807,6 +807,10 @@ extension HomeViewModel {
     ) -> HomeCommuteHabitCandidate? {
         let recentStart = calendar.date(byAdding: .day, value: -120, to: now) ?? .distantPast
         let weekdayGroup = commuteWeekdayGroup(for: now, direction: direction, calendar: calendar)
+        let commuteEvidenceIndex = CommuteEvidencePolicy.EvidenceIndex(
+            historyItems: items,
+            calendar: calendar
+        )
         let candidates = items.filter { item in
             item.amount > 0
                 && item.createdAt >= recentStart
@@ -814,7 +818,7 @@ extension HomeViewModel {
                 && isWorkday(item.createdAt, calendar: calendar)
                 && commuteWeekdayGroup(for: item.createdAt, direction: direction, calendar: calendar) == weekdayGroup
                 && commuteDirection(for: item.createdAt, calendar: calendar) == direction
-                && isCommuteRecord(item)
+                && isCommuteRecord(item, evidenceIndex: commuteEvidenceIndex, calendar: calendar)
         }
         let minimumSupport = minimumCommuteSupport(isBackfill: isBackfill)
         guard candidates.count >= minimumSupport.totalSamples else { return nil }
@@ -962,26 +966,31 @@ extension HomeViewModel {
         now: Date,
         calendar: Calendar
     ) -> Bool {
+        let commuteEvidenceIndex = CommuteEvidencePolicy.EvidenceIndex(
+            historyItems: items,
+            calendar: calendar
+        )
         items.contains { item in
             calendar.isDate(item.createdAt, inSameDayAs: now)
                 && item.amount > 0
                 && commuteDirection(for: item.createdAt, calendar: calendar) == direction
-                && isCommuteRecord(item)
+                && isCommuteRecord(item, evidenceIndex: commuteEvidenceIndex, calendar: calendar)
         }
     }
 
-    private nonisolated static func isCommuteRecord(_ item: HomeItem) -> Bool {
+    private nonisolated static func isCommuteRecord(
+        _ item: HomeItem,
+        historyItems: [HomeItem] = [],
+        evidenceIndex: CommuteEvidencePolicy.EvidenceIndex? = nil,
+        calendar: Calendar = .current
+    ) -> Bool {
         guard item.category == .transport else { return false }
         if item.scenePackId == "commute" { return true }
-        let text = "\(item.title) \(item.displayEmotionTag) \(item.memoryContext?.semanticPlace ?? "")".lowercased()
-        return containsAny(
-            text,
-            [
-                "通勤", "上班", "下班", "早高峰", "晚高峰", "到岗", "到站",
-                "地铁", "公交", "轨道交通", "打车", "滴滴", "花小猪",
-                "网约车", "回家", "到家", "路费"
-            ]
+        let index = evidenceIndex ?? CommuteEvidencePolicy.EvidenceIndex(
+            historyItems: historyItems,
+            calendar: calendar
         )
+        return CommuteEvidencePolicy.matches(item, evidenceIndex: index, calendar: calendar)
     }
 
     private nonisolated static func isMorningCommutePromptTime(_ date: Date, calendar: Calendar) -> Bool {

@@ -235,7 +235,7 @@ DISPLAY_EMOTION_ONLY_SCOPES = [
     ("free_scene_pack", "semanticText(for item: HomeItem)", ["item.emotionTag"]),
     ("life_insight", "photoMemorySignal(from rows: [TraceInsightRow], periodLabel: String)", ["item.emotionTag"]),
     ("stats_web_view", "traceInsightAnswer(", ["item.emotionTag"]),
-    ("dashboard", "isCommuteRecord(_ item: HomeItem)", ["item.emotionTag"]),
+    ("dashboard", "isCommuteRecord(", ["item.emotionTag"]),
     ("insight_web_view", "aiCommandMemoryItemMatches(_ item: HomeItem, command: String)", ["item.emotionTag"]),
     ("insight_web_view", "aiCommandSameSceneMemoryItem(_ item: HomeItem, anchor: HomeItem, command: String)", ["item.emotionTag", "anchor.emotionTag"]),
     ("insight_web_view", "aiCommandItemMatchesKeywords(_ item: HomeItem, keywords: [String])", ["item.emotionTag"]),
@@ -603,7 +603,8 @@ def scan_ai_command_boundaries(failures: list[str], text: str) -> None:
         or 'eveningCues = ["下班", "晚高峰", "回家"' not in duplicate_scope
         or "let fallbackDirection: AICommuteDirection = hour < 15 ? .morning : .evening" not in duplicate_scope
         or 'item.scenePackId == "commute"' not in duplicate_scope
-        or "guard explicitlyCommute else { return false }" not in duplicate_scope
+        or "guard explicitlyCommute || contextualCommute else { return false }" not in duplicate_scope
+        or "CommuteEvidencePolicy.matches" not in duplicate_scope
     ):
         failures.append(
             f"{SWIFT_FILES['insight_web_view']}: commute duplicate checks must prefer direction cues and reject ordinary transport"

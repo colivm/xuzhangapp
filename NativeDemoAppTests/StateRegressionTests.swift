@@ -3601,6 +3601,63 @@ final class AICommuteBoundaryTests: XCTestCase {
 
         XCTAssertFalse(AICommuteDuplicatePolicy.matches(work, slot: morningSlot, day: day, proposedAmount: 4.75, calendar: calendar))
     }
+
+    func testLateEnteredMorningTransportUsesStableHistoricalCommuteEvidence() {
+        let target = HomeItem(
+            title: "",
+            amount: 4.75,
+            category: .transport,
+            createdAt: date(2026, 7, 17, 9, 7)
+        )
+        let history = [
+            HomeItem(title: "早高峰通勤", amount: 4.75, category: .transport, createdAt: date(2026, 7, 15, 8, 32)),
+            HomeItem(title: "上班地铁", amount: 4.75, category: .transport, createdAt: date(2026, 7, 16, 8, 28))
+        ]
+
+        XCTAssertTrue(
+            CommuteEvidencePolicy.matches(
+                target,
+                historyItems: history,
+                calendar: calendar
+            )
+        )
+
+        let morningSlot = AICommuteDraftSchedule.slots[0]
+        XCTAssertTrue(
+            AICommuteDuplicatePolicy.matches(
+                target,
+                slot: morningSlot,
+                day: date(2026, 7, 17, 0, 0),
+                proposedAmount: 4.75,
+                historyItems: history,
+                calendar: calendar
+            )
+        )
+
+        let aggregates = LifeMarkService.aggregates(
+            for: [target],
+            allItems: [target] + history,
+            isMember: true,
+            now: date(2026, 7, 17, 12, 0)
+        )
+        XCTAssertTrue(aggregates.contains { $0.id == "commute" && $0.itemIDs == [target.id] })
+    }
+
+    func testLowAmountTransportWithoutHistoricalEvidenceDoesNotBecomeCommute() {
+        let taxi = HomeItem(
+            title: "临时打车",
+            amount: 4.75,
+            category: .transport,
+            createdAt: date(2026, 7, 17, 9, 7)
+        )
+        XCTAssertFalse(
+            CommuteEvidencePolicy.matches(
+                taxi,
+                historyItems: [],
+                calendar: calendar
+            )
+        )
+    }
 }
 
 final class PlaybackQuotaRegressionTests: XCTestCase {

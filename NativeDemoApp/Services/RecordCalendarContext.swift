@@ -112,3 +112,104 @@ enum RecordCalendarContext {
         return false
     }
 }
+
+/// Shared, conservative evidence policy for recognizing commute records.
+///
+/// A transport category or a low amount is not sufficient on its own. When a
+/// record has no explicit commute wording, it can only be promoted by a
+/// repeated, same-direction historical pattern (same amount in cents, same
+/// time band, and at least two distinct prior workdays). This keeps the rule
+/// useful for late-entered records while avoiding guesses for one-off trips.
+enum CommuteEvidencePolicy {
+    enum Direction: Equatable {
+        case morning
+        case evening
+    }
+
+    private static let explicitCues = [
+        "通勤", "上班", "下班", "上下班", "到岗", "早高峰", "晚高峰",
+        "地铁", "公交", "轨道交通", "去公司", "去单位", "回家", "到家"
+    ]
+    private static let travelCues = ["高铁", "动车", "火车", "机票", "机场", "酒店", "旅行", "旅游", "出差", "返乡", "长途"]
+
+    struct EvidenceIndex {
+        private struct Pattern: Hashable {
+            let cents: Int
+            let direction: Direction
+        }
+
+        private let historicalDaysByPattern: [Pattern: Set<String>]
+
+        init(historyItems: [HomeItem], calendar: Calendar = .current) {
+            var grouped: [Pattern: Set<String>] = [:]
+            for candidate in historyItems where candidate.amount > 0 && candidate.category == .transport {
+                guard hasExplicitCue(candidate),
+                      let direction = CommuteEvidencePolicy.direction(for: candidate.createdAt, calendar: calendar),
+                      RecordCalendarContext.isWorkday(candidate.createdAt, calendar: calendar) else { continue }
+                let pattern = Pattern(cents: cents(candidate.amount), direction: direction)
+                grouped[pattern, default: []].insert(
+                    RecordCalendarContext.dayKey(for: candidate.createdAt, calendar: calendar)
+                )
+            }
+            historicalDaysByPattern = grouped
+        }
+
+        fileprivate func supports(_ item: HomeItem, calendar: Calendar) -> Bool {
+            guard let direction = CommuteEvidencePolicy.direction(for: item.createdAt, calendar: calendar) else {
+                return false
+            }
+            let pattern = Pattern(cents: cents(item.amount), direction: direction)
+            return historicalDaysByPattern[pattern, default: []].count >= 2
+        }
+    }
+
+    static func matches(
+        _ item: HomeItem,
+        historyItems: [HomeItem] = [],
+        evidenceIndex: EvidenceIndex? = nil,
+        calendar: Calendar = .current
+    ) -> Bool {
+        matches(
+            item,
+            evidenceIndex: evidenceIndex ?? EvidenceIndex(historyItems: historyItems, calendar: calendar),
+            calendar: calendar
+        )
+    }
+
+    static func matches(
+        _ item: HomeItem,
+        evidenceIndex: EvidenceIndex,
+        calendar: Calendar = .current
+    ) -> Bool {
+        guard item.amount > 0, item.category == .transport else { return false }
+        if item.scenePackId == "commute" || hasExplicitCue(item) { return true }
+        let normalizedTitle = item.title.lowercased()
+        if travelCues.contains(where: { normalizedTitle.contains($0) }) { return false }
+        if item.memoryContext?.semanticPlace == "外地" { return false }
+        guard direction(for: item.createdAt, calendar: calendar) != nil,
+              RecordCalendarContext.isWorkday(item.createdAt, calendar: calendar) else {
+            return false
+        }
+
+        return evidenceIndex.supports(item, calendar: calendar)
+    }
+
+    static func hasExplicitCue(_ item: HomeItem) -> Bool {
+        let text = [item.title, item.memoryContext?.semanticPlace ?? "", item.scenePackId ?? ""]
+            .joined(separator: " ")
+            .lowercased()
+        return explicitCues.contains { text.localizedCaseInsensitiveContains($0) }
+    }
+
+    static func direction(for date: Date, calendar: Calendar = .current) -> Direction? {
+        switch calendar.component(.hour, from: date) {
+        case 7...10: return .morning
+        case 16...21: return .evening
+        default: return nil
+        }
+    }
+
+    private static func cents(_ amount: Double) -> Int {
+        Int((amount * 100).rounded())
+    }
+}

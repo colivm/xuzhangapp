@@ -323,6 +323,7 @@ python scripts/validate_release_gate.py --phase device-audit `
 
 | FLOW-107 | 使用痕迹页本周/本月整理中的首屏卡片，覆盖空账本、少量账本、465/1,000/5,000 条账本、全部/单分类、自定义范围及浅色/深色、特大字号、VoiceOver、Reduce Motion | 阶段一首屏出现后立即点击“查看本周记录/查看本月记录”，连续快速点击、下滑关闭、切换周期/分类、在列表准备期间新增/编辑/删除一笔；另进入线索模式核对页面没有新增入口 | 入口只出现在痕迹页整理中的首屏卡片，线索页完全不变；点击后立即打开记录列表承载层，账单记录先按当前账本与范围直接显示，后台刷新期间只显示轻量状态，不得以空态或全屏遮罩替代已有记录；整理只补充生活总结，不阻塞事实列表。后台结果按当前周期/分类/自定义范围与完整快照逐字段一致。快速重复点击只打开一个列表，取消/后台/旧 revision 不反写；编辑/删除后不复活旧记录。空账本不显示无意义入口，VoiceOver、特大字号、Reduce Motion 和深色模式可读；不得新增底部 Tab、改变两阶段身份规则或触发第二次全账本整理 | `NOT_RUN` |
 | FLOW-108 | 使用包含一条或多条认证跨城 Journey（含 `南京 → 宿迁 → 连云港 → 宿迁 → 南京` 周末闭环）、连续通勤、第一次购买和普通咖啡/交通场景资产的线索账本；覆盖 Journey 结束超过最近 14 天、免费/会员、无照片/多照片、编辑/删除证据、浅色/深色、特大字号和 VoiceOver | 进入痕迹 → 线索，分别查看 AI 最近发现、生活线索/场景资产和过去的回声；确认每条高价值 Journey 场景资产行均保留且可打开照片墙/记录墙，同一 Journey 的独立深度证据卡不再并列出现，排序第一的高价值 Journey 才使用高亮主卡；点击跨城、连续通勤、第一次购买等高价值资产行，打开详情后查看照片墙/记录墙，再编辑或删除一笔并返回；在 AI 指令台查询“过去 31 天的出去玩记录”，核对按天分布跟随真实匹配日期而非查询当天倒推；重复快速点击并切换会员状态 | 所有认证 Journey 均保留稳定资产入口且只突出一个最高价值主卡；Journey 生活线索行不因存在 Discover 卡而隐藏，深度卡只在无同 Journey 资产时作为兜底，其他变化/回声不受影响；详情顶部明确“只统计这段行程绑定的证据”及真实日期范围，核心道路/异地活动与路线边界分层，不混入连续线索窗口的全量节奏；普通场景资产继续轻量迭代，不被强制升级成复杂详情；有匹配记录的按天分布以匹配记录最晚日期为锚点并保持连续窗口，无匹配记录才回退查询范围末尾；空 evidence、锁定会员、快速点击、深色模式、大字和 VoiceOver 不崩溃或截断。Windows 只能完成静态/脚本检查，必须在 macOS/Xcode 运行 Discover/资产入口与 AI daily-window XCTest 并完成 TestFlight 目视签收后才可标记 `VERIFIED` | `NOT_RUN` |
+| FLOW-110 | 使用 09:07 交通账单（无“通勤”文案、金额与早高峰历史相同），另备至少两天同金额/同早高峰且带明确通勤证据的历史记录、仅一笔低金额交通、明确通勤标题、晚高峰与旅行交通样本 | 先记入目标日期账单，再打开首页/线索和复盘补记；分别在当天 09:07 后、当天中午补记、历史日期补记，核对是否识别为早通勤、是否错误提示“今天还没记通勤”、是否把临时打车/旅行交通误判；快速重复打开和编辑后重试 | 识别同时使用账单发生时间（7:00–10:00 早通勤窗口）、交通分类、金额按分、同方向时段及至少两天历史明确通勤证据；录入时间晚于发生时间不改变判断；首页/生活线索、AI 补记重复检测共用同一策略；仅低金额或单笔交通无历史证据不命中，明确文案和 `scenePack=commute` 继续高置信命中。Windows 只能完成静态/脚本检查，必须在 macOS/Xcode 运行通勤 XCTest 并在真机核对补记入口与首页状态后才可标记 `VERIFIED` | `NOT_RUN` |
 
 ## 9. 无障碍与权限矩阵
 
@@ -413,3 +414,14 @@ python scripts/validate_release_gate.py --phase device-audit `
 | Xcode Debug/Release build 与 XCTest | `BLOCKED` | 当前环境无 Swift/Xcode；新增 XCTest 仅完成源码接线，未冒充真机或编译通过 | Codex | 2026-09-09 |
 | `FLOW-109` iPhone/Instruments | `NOT_RUN` | 需验证手动输入 9.9、快捷金额、连续保存、列表快速删除/撤销、跨日切换以及 465/1,000/5,000 条账本的首屏 hitch、内存、发热和后台最终一致性 | Codex | 2026-09-09 |
 | 本任务结论 | `CODE_DONE` | Windows 代码阶段完成；取得 macOS/Xcode、XCTest、TestFlight 和 Instruments 证据前不得标记 `VERIFIED` 或据此正式发版 | Codex | 2026-09-09 |
+
+## 15. 2026-09-09 COMMUTE-CONTEXT-RECOGNITION-01 代码验收
+
+| 门禁 | 结果 | 证据位置/日志 | 签收人 | 日期 |
+|---|---|---|---|---|
+| 通勤结构化证据策略 | `PASS` | `CommuteEvidencePolicy` 统一显式通勤、7:00–10:59/16:00–21:59 方向窗口、金额分和至少两天历史证据；`EvidenceIndex` 复用历史模式索引；旅行/外地语义排除 | Codex | 2026-09-09 |
+| 首页、生活线索与补记接线 | `PASS` | `HomeViewModel+Dashboard`、`LifeMarkService`、`InsightWebView` 均复用同一策略；移除仅凭低金额交通的补记兜底 | Codex | 2026-09-09 |
+| Windows repository gate | `PASS` | `git diff --check`、`life_semantic_regression.py`、`experience_static_check.ps1`、`validate_release_gate.py --phase windows` 通过，最终 `release_repository_gate: OK` | Codex | 2026-09-09 |
+| Swift 6 Debug/Release 与 XCTest | `BLOCKED` | 当前环境无 macOS/Xcode/Swift，新增通勤回归仅完成源码接线 | Codex | 2026-09-09 |
+| `FLOW-110` 真机签收 | `NOT_RUN` | 需真机验证 09:07 晚记、当天中午补记、历史补记、旅行交通排除及首页提示刷新 | Codex | 2026-09-09 |
+| 本任务结论 | `CODE_DONE` | Windows 代码阶段完成；Xcode、XCTest 与真机证据补齐前不得标记 `VERIFIED` | Codex | 2026-09-09 |
