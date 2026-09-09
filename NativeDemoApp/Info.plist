@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>xLife</string>
+	<string>叙账</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -34,11 +34,11 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>xLife uses local weather to make records feel more contextual. You can turn this off in Settings.</string>
+	<string>叙账使用本地天气，让记录更贴近当下情境。你可以在设置中关闭。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>xLife saves story images to your photo library only when you ask it to.</string>
+	<string>叙账只会在你主动选择时，将故事图片保存到照片。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>xLife accesses your photo library only when you choose a photo to attach to a record.</string>
+	<string>叙账只会在你选择照片附加到记录时访问照片。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
