@@ -1281,13 +1281,14 @@ enum TraceLifeMarkDetailPolicy {
         }
     }
 
-    static func hidesDuplicateJourney(
+    static func isJourneyAsset(
         _ mark: LifeMarkAggregate,
-        journeyFact: LifeJourneyFact?,
-        hasPrimaryJourneyCard: Bool
+        journeyFact: LifeJourneyFact?
     ) -> Bool {
-        guard hasPrimaryJourneyCard, let journeyFact else { return false }
-        return mark.kind == .context && mark.id == journeyFact.id
+        guard let journeyFact else { return false }
+        return mark.kind == .context
+            && mark.id == journeyFact.id
+            && !mark.itemIDs.isEmpty
     }
 
     static func detailCard(
@@ -1355,10 +1356,33 @@ enum DiscoverJourneyHierarchyPolicy {
     static func suppressesLegacyNarrative(
         journeyFact: LifeJourneyFact?,
         insight: LifeInsightResult,
-        hasPrimaryDiscoverCard: Bool
+        hasPrimaryDiscoverCard: Bool,
+        hasJourneyAsset: Bool = false,
+        leadSignalID: String? = nil
     ) -> Bool {
-        guard hasPrimaryDiscoverCard, let journeyFact else { return false }
-        return insight.theme == .relation && insight.previewLine == journeyFact.line
+        guard (hasPrimaryDiscoverCard || hasJourneyAsset), let journeyFact else {
+            return false
+        }
+
+        // The planner's stable identity is the first check. The explicit text
+        // checks are a bounded fallback for a stale/older snapshot whose plan
+        // has no Journey identity (or whose card was rendered from the legacy
+        // relation path). They intentionally require the same relation copy
+        // used by the Journey evidence card, so an unrelated insight is not
+        // hidden merely because it shares a category or date.
+        if leadSignalID == journeyFact.id { return true }
+
+        guard insight.theme == .relation else { return false }
+        let normalizedJourneyLine = journeyFact.line
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedPreview = insight.previewLine
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let canonicalQuestion = "这次\(journeyFact.label)是怎么串起来的"
+        return normalizedPreview == normalizedJourneyLine
+            || insight.leadQuestion == canonicalQuestion
+            || insight.fullLines.contains {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedJourneyLine
+            }
     }
 }
 

@@ -4798,23 +4798,49 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ---
 
-## 102. DISCOVER-ASSET-ENTRY-01：高价值场景资产入口与跨城主叙事去重（2026-09-07）
+## 102. DISCOVER-ASSET-ENTRY-01：高价值场景资产入口与跨城主叙事去重（2026-09-07，2026-09-08 定向回归）
 
-- 状态：`IN_PROGRESS` → `CODE_DONE`（2026-09-07）；Windows 代码与仓库门禁完成。当前环境没有 Swift/Xcode、iPhone 和 Instruments，不能标记为 `VERIFIED`。
+- 状态：`CODE_DONE`（2026-09-08）→ `IN_PROGRESS`（2026-09-08 用户澄清“场景资产不是重复对象”后再次定向回归）→ `CODE_DONE`（2026-09-08）；本轮只调整 Journey 资产与证据卡的呈现层级和统计口径，Windows 代码与仓库门禁已完成。当前环境没有 Swift/Xcode、iPhone 和 Instruments，不能标记为 `VERIFIED`。
 - 用户反馈：真机上“周末跨城自驾”仍在生活线索的资产列表与下方证据大卡完整出现两次；场景资产列表里的高情绪价值线索没有可回看的入口。普通线索仍应保持轻量、持续迭代，不全部升级成复杂详情。
 - 目标：同一认证 Journey 只保留一个完整主叙事；高价值生活资产保留一个可再次打开的照片墙/记录墙入口；普通场景线索继续使用现有轻量迭代展示。
-- 允许范围：`StatsWebView.swift` 的生活线索资产行承接与 Journey 去重、`StatsTraceModels.swift` 的高价值资产判定/详情卡转换、对应 `StateRegressionTests.swift`、体验静态门禁、发布矩阵与本文档。不得改动 Journey 认证、账单字段、照片文件、会员额度、底部 Tab 或生活页周期入口。
-- 产品方案：认证跨城 Journey 由上方 AI 重点发现卡统一讲完整故事并打开现有详情 Sheet；生活线索列表不再重复渲染同一 Journey。上下文、里程碑和连续节奏等高价值资产行显示可回看承接并复用同一详情 Sheet；普通场景行保持非复杂入口的原有迭代语气。
-- 去重规则：以稳定 Journey ID 和证据身份去重，不按标题字符串；只隐藏与当前已投影 Journey 完全相同的资产行，不误伤普通旅行/交通资产，也不删除任何 evidence ID。
+- 允许范围：`StatsWebView.swift` 的生活线索资产行承接与 Journey 去重、`StatsTraceSnapshotStore.swift` 的认证 Journey Discover 投影、`StatsTraceModels.swift` 的高价值资产判定/详情卡转换、`InsightWebView.swift` 的 AI 查询按天分布窗口、对应 `StateRegressionTests.swift`、体验静态门禁、发布矩阵与本文档。不得改动 Journey 认证、账单字段、照片文件、会员额度、底部 Tab 或生活页周期入口。
+- 产品方案：认证跨城 Journey 的生活线索行本身就是高价值场景资产，必须保留为稳定的照片墙/记录墙入口；同一 Journey 的“证据”深度卡只作为解释层，不再与资产行同时讲一遍完整路线。普通场景行保持非复杂入口的原有迭代语气。
+- 去重规则：以稳定 Journey ID 和 evidence 身份去重，不按标题字符串；保留唯一高价值资产入口，隐藏与该资产完全相同的独立深度叙事，不误伤普通旅行/交通资产，也不删除任何 evidence ID。Journey 证据卡若被单独渲染，统计必须只取该 Journey 绑定的 evidence IDs，不得混入连续线索窗口的全量节奏。
 - 计划验证：同一 Journey 只有一个完整标题/路线/证据叙事；高价值资产点击后能看到当前账本解析出的记录墙和照片墙，编辑/删除后不复活旧记录；普通场景资产仍可持续更新且不强制打开详情；快速点击、空证据和会员锁定状态不崩溃。Windows 阶段完成后保持 `CODE_DONE`，待 macOS/Xcode、XCTest、TestFlight 真机与 Instruments 签收。
 - 实现结果：
   - 新增 `TraceLifeMarkDetailPolicy`，将 `.context`、`.milestone`、`.streak` 视为高价值资产；`.scene` 继续保持普通线索的轻量迭代，不强制生成复杂详情。
-  - 当当前连续线索已有稳定 `discover:journey:<journeyID>` 主卡时，生活线索列表隐藏同一 Journey 的完整资产行，并保留一条轻量承接说明；跨城完整标题、路线和证据只由上方 AI 重点发现卡承接。
+  - 生活线索中的 Journey context 行不再隐藏：它是用户可回看的高价值场景资产，点击后复用稳定 Journey evidence 进入详情墙。
+  - 当 Journey context 行或稳定 `discover:journey:<journeyID>` 卡存在时，隐藏同一 Journey 的独立深度证据卡；其他变化/回声卡不受影响。
   - 高价值资产行复用现有 `DiscoverDetailSheetView`，使用真实 `itemIDs` 构建详情卡，打开后继续按当前账本解析照片墙/记录墙；Journey 若有主卡则直接复用主卡，保留核心/路线边界证据分层。
   - 高价值行显示 chevron 与 VoiceOver 提示；普通 scene 行保持原有非详情的资产表现。没有 evidence ID 的资产不显示伪造入口。
-- 修改文件：`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。`StatsWebView.swift` 中上一项 `TRACE-FIRST-SCREEN-ENTRY-01` 的账单列表直接种子快照修复原样保留。
+- 修改文件：`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsTraceSnapshotStore.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoApp/Views/InsightWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。`StatsWebView.swift` 中上一项 `TRACE-FIRST-SCREEN-ENTRY-01` 的账单列表直接种子快照修复原样保留。
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 均通过；最终 `release_repository_gate: OK`。新增 `testHighValueLifeAssetsKeepOneJourneyNarrativeAndAStableDetailEntry` XCTest 源码覆盖 Journey 去重、主卡复用、里程碑入口和普通 scene 不升级；Windows 未运行 Swift XCTest。
 - Xcode 编译回补（2026-09-07）：用户报告 `StatsWebView.swift:5765` 的 opaque return type 错误。根因是 `traceLifeMarkCard` 增加局部 `visibleMarks/hidesJourney` 后仍为普通 `-> some View` 函数，最终 `VStack` 缺少显式 `return`。已补回 `return VStack(...)`，未改变视图层级、去重条件或详情入口行为；Windows 语义回归与体验静态检查继续通过。当前环境仍无 Swift/Xcode，需用户在 macOS Clean Build 复验。
 - 冻结边界复核：未改变 Journey 认证门槛、城市/道路/活动事实、账单字段、金额/日期/分类、照片文件与顺序、会员额度、回声算法、生活页周/月入口、底部 Tab、同步或远程 AI；详情墙仍按当前账本 evidence ID 重解析。
 - 剩余风险：需要在 macOS/Xcode 完成 Swift 6 Debug/Release 编译与 `DiscoverEditorialPolicyTests`，并在 TestFlight 真机验证不同会员状态、编辑/删除、无照片/多照片、VoiceOver、特大字号、深色模式和快速重复点击；当前仍未取得真实 Journey 资产入口的视觉与主线程/内存证据。
+- 本轮定向回归：用户在真实账本上仍看到“周末跨城自驾”重复，根因是超过 14 天的认证 Journey 没有进入 Discover 主卡，导致生活线索 context 行重新出现；同时 AI 指令“按天分布”固定以查询结束日倒推 7 天，未锚定实际匹配记录。修复将旧 Journey 投影为 `sceneAssets` 中唯一稳定 `discover:journey:<journeyID>` 卡，并让主卡判定同时覆盖 `recentDiscoveries` 与 `sceneAssets`；AI 分布窗口以匹配记录最晚日期为锚点，空结果才回退查询范围末尾。
+- 本轮实现结果：`buildDiscoverSnapshot` 抽出统一 Journey 卡构建逻辑；认证 Journey 在最近 14 天内进入 `recentDiscoveries`，更早但仍在连续线索窗口内的 Journey 进入 `sceneAssets`，最多保留四项并保证 Journey 入口不被截断。`traceClueBoard` 同时从两个 Discover 区域寻找稳定 ID，保留生活线索中的高价值 context 入口，并用稳定 Journey 身份隐藏重复的独立深度证据卡；未改变普通 `.scene` 线索的轻量行为。AI `dailyBars` 改用 `AICommandDailyBarWindowPolicy`：有匹配记录时以最晚匹配日为锚点生成连续窗口，并限制在查询范围内；空结果保留范围末尾回退。
+- 本轮新增回归：`testOlderCertifiedJourneyRemainsAStableSceneAssetAfterRecentWindow`、`AICommandDailyBarWindowPolicyTests`（匹配日期锚定、短范围边界和空结果回退）。
+- 本轮验证：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 均通过，最终 `release_repository_gate: OK`；Windows 未运行 Swift XCTest。
+- 本轮冻结边界复核：未改 Journey 认证门槛、账单字段/分类/金额/日期、照片/同步/会员/额度、生活页周期、普通场景线索或远程 AI；仅调整 Discover 投影去重和 AI 图表展示窗口。
+- 剩余风险：需在 macOS/Xcode 完成 Swift 6 Debug/Release 编译并运行新增 XCTest，在 TestFlight 用真实 8 月行程和“过去 31 天出去玩记录”核对页面只保留一个标题、详情墙证据及按天分布日期；仍需 VoiceOver、特大字号、深色模式和 Instruments 签收。
+- 2026-09-08 用户澄清后的定向回归：确认重复对象不是“场景资产本身”，而是同一认证 Journey 的生活线索 context 资产行与独立“周末跨城自驾的证据”深度卡。资产行是稳定的高情绪价值入口，保留；深度卡是解释层，若已有 Journey 资产则不再并列渲染。`DiscoverJourneyHierarchyPolicy` 优先使用 narrative plan 的稳定 `leadSignalID`，旧快照身份过期时只对明确的 Journey 关系文案做兜底，不依赖相似标题猜测。
+- 本轮统计口径修正：Journey 详情新增真实证据日期范围和“只统计这段行程绑定的证据”说明；概览改称“连续线索概览”，连续节奏图明确标记为连续线索窗口，避免把 6 个 14 天 bucket 误读为月度或全量账单。Journey 的核心道路/异地活动与路线边界仍由详情墙分层展示。
+- 本轮修改文件：`NativeDemoApp/Views/StatsTraceModels.swift`、`NativeDemoApp/Views/StatsWebView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档；未修改 Journey 认证、账单字段、照片/同步、会员额度、生活页周期或普通场景线索。
+- 本轮验证：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 均通过；Windows 无 Swift/Xcode，XCTest、真机视觉和 Instruments 仍待 `FLOW-108`。
+- 剩余风险与下一任务：需在 macOS/Xcode 完成 Swift 6 Debug/Release 编译与 `DiscoverEditorialPolicyTests`，在真实南京→宿迁→连云港→宿迁→南京账本核对资产行保留、深度卡不重复、详情日期范围和记录/照片墙；外部证据补齐前继续保持 `CODE_DONE`，下一步按 `FLOW-108` 集中签收，不启动新的线索视觉重构。
 - 下一任务：按 `FLOW-108` 集中完成 macOS/Xcode、XCTest、TestFlight 真机与 Instruments 签收；在外部证据补齐前维持 `CODE_DONE`，不启动新的线索视觉重构。
+
+---
+
+- 2026-09-08 用户明确问题修正：确认前一版过滤 Journey context 行的方向不对，已还原为始终保留高价值场景资产及其详情入口；真正去重对象限定为同一 Journey 的“跨城证据”解释卡。去重现在先看稳定 `leadSignalID`，若旧快照身份过期但仍显示 Journey 原文，则用同一关系主题、canonical question 或完整 Journey line 兜底；普通变化线索不会因分类、日期或相似标题被隐藏。删除了无调用的旧 `hidesDuplicateJourney` 过滤接口，避免后续再次误把资产入口当成重复内容。
+- 本次自检：新增/调整 `DiscoverJourneyHierarchyPolicy` 回归，覆盖“资产保留 + 证据卡隐藏”“旧身份但明确 Journey 文案仍隐藏”“独立变化卡保留”；静态门禁同步改为检查最近发现与持久场景资产均参与 Journey 身份查找。
+- 本次验证：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 和 `python scripts/validate_release_gate.py --phase windows` 均通过；Windows 无 Swift/Xcode，XCTest、真机视觉和 Instruments 仍待 `FLOW-108`。
+
+## 103. APP-STORE-BUILD-ICON-FIX-01：构建可选性与 App Store 图标资产（2026-09-08）
+
+- 状态：`NOT_STARTED`（2026-09-08 暂缓）；本项响应用户反馈“无法选择构建版本”和 App Store 图标不能带透明背景、不能预先做圆角。开始前已执行 `git status --short`，既有未跟踪的 `brand-assets/`、`output/`、`tmp/`、截图脚本与缓存目录原样保留。本轮按用户最新反馈优先恢复第 102 项，未修改本项允许范围内文件。
+- 目标：让仓库产出的 App Icon 是满版正方形、无 Alpha 通道、没有白色圆角留白；让 `CFBundleVersion` 与 Xcode 的 `CURRENT_PROJECT_VERSION` 使用同一来源，并将提交中的下一个构建号置于已知 TestFlight Build 323 之后，避免本地 Archive 因旧/不一致构建号无法作为可选构建。
+- 允许范围：`NativeDemoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-xuzhang.png`、`NativeDemoApp/Info.plist`、`NativeDemoApp.xcodeproj/project.pbxproj`、`ci_scripts/ci_pre_xcodebuild.sh`、App Store 资产校验脚本、发布门禁/矩阵与本文档。不得修改 App 功能、账单、会员、同步、天气、网站、法律页或截图内容。
+- 冻结边界：不把仓库改动冒充 App Store Connect 已处理/已选择；不提交或操作 Apple 账号；CI 已提供的 `CI_BUILD_NUMBER` 覆盖能力保留；不把图标做成圆角、不添加透明像素、不改变 App Store 版本名 `1.0`。
+- 计划验收：图标 1024×1024、PNG RGB、无 Alpha/`tRNS`、四角和四边为满版品牌底色；Debug/Release 的 `CFBundleShortVersionString` 为 1.0，默认 `CFBundleVersion` 为 324，CI 指定构建号时可确定性覆盖；Windows 门禁通过。macOS/Xcode Archive 与 App Store Connect 处理/可选构建仍需运营方外部签收。

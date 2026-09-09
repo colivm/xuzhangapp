@@ -153,6 +153,18 @@ private struct DiscoverDetailSheetView: View {
         return card.evidenceDisplayText
     }
 
+    private var evidenceScopeText: String? {
+        guard hasJourneyEvidenceHierarchy,
+              let firstDate = evidenceItems.map(\.createdAt).min(),
+              let lastDate = evidenceItems.map(\.createdAt).max() else {
+            return nil
+        }
+        let rangeText = firstDate == lastDate
+            ? firstDate.zhBillDateOnly
+            : "\(firstDate.zhBillDateOnly) - \(lastDate.zhBillDateOnly)"
+        return "只统计这段行程绑定的证据 · \(rangeText)"
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -174,6 +186,12 @@ private struct DiscoverDetailSheetView: View {
                         Text(currentEvidenceDisplayText)
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(AppColors.readableAccent.opacity(0.90))
+                        if let evidenceScopeText {
+                            Text(evidenceScopeText)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(AppColors.subtext)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                     .padding(.horizontal, 2)
 
@@ -5329,23 +5347,33 @@ struct StatsWebView: View {
     }
 
     private func traceClueBoard(snapshot: TraceClueSnapshot) -> some View {
-        let hasPrimaryJourneyCard = snapshot.journeyFact.map { journeyFact in
-            snapshot.discover.recentDiscoveries.contains {
-                $0.id == "discover:journey:\(journeyFact.id)"
+        let journeyCardID = snapshot.journeyFact.map { "discover:journey:\($0.id)" }
+        let primaryJourneyCard: DiscoverCard?
+        if let journeyCardID {
+            primaryJourneyCard = snapshot.discover.recentDiscoveries.first { card in
+                card.id == journeyCardID
+            } ?? snapshot.discover.sceneAssets.first { card in
+                card.id == journeyCardID
+            }
+        } else {
+            primaryJourneyCard = nil
+        }
+        let hasPrimaryJourneyCard = primaryJourneyCard != nil
+        let hasJourneyAsset = snapshot.journeyFact.map { journeyFact in
+            snapshot.marks.contains {
+                TraceLifeMarkDetailPolicy.isJourneyAsset($0, journeyFact: journeyFact)
             }
         } ?? false
-        let primaryJourneyCard = snapshot.discover.recentDiscoveries.first { card in
-            guard let journeyFact = snapshot.journeyFact else { return false }
-            return card.id == "discover:journey:\(journeyFact.id)"
-        }
-        let separatesJourneyNarrative = DiscoverJourneyHierarchyPolicy.suppressesLegacyNarrative(
+        let hidesDuplicateJourneyEvidence = DiscoverJourneyHierarchyPolicy.suppressesLegacyNarrative(
             journeyFact: snapshot.journeyFact,
             insight: snapshot.insight,
-            hasPrimaryDiscoverCard: hasPrimaryJourneyCard
+            hasPrimaryDiscoverCard: hasPrimaryJourneyCard,
+            hasJourneyAsset: hasJourneyAsset,
+            leadSignalID: snapshot.narrativePlan?.leadSignalID
         )
         return VStack(spacing: 16) {
             traceDiscoverEditorialBoard(snapshot: snapshot.discover)
-            if separatesJourneyNarrative, let journeyFact = snapshot.journeyFact {
+            if hidesDuplicateJourneyEvidence, let journeyFact = snapshot.journeyFact {
                 traceContinuousOverview(
                     items: snapshot.items,
                     clues: snapshot.clues,
@@ -5366,10 +5394,9 @@ struct StatsWebView: View {
             traceLifeMarkCard(
                 marks: snapshot.marks,
                 lockedPreview: snapshot.lockedMark,
-                journeyFact: snapshot.journeyFact,
                 primaryJourneyCard: primaryJourneyCard
             )
-            if !separatesJourneyNarrative {
+            if !hidesDuplicateJourneyEvidence {
                 traceDeepInsightCard(
                     insight: snapshot.insight,
                     items: snapshot.items,
@@ -5392,16 +5419,20 @@ struct StatsWebView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("连续 \(TraceClueScopePolicy.lookbackWeekCount + 1) 周概览")
+                Text("连续线索概览")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(TraceColors.primaryText)
-                Text("按这段时间的全部 \(items.count) 笔记录统计；上面的行程只依据 \(journeyFact.evidenceItemIDs.count) 笔记录。")
+                Text("连续线索窗口共 \(items.count) 笔记录；这段行程详情只依据已绑定的 \(journeyFact.evidenceItemIDs.count) 笔证据。")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(TraceColors.tertiaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            traceClueCompositionCard(items: items, clues: clues)
+            traceClueCompositionCard(
+                items: items,
+                clues: clues,
+                scopeNote: "这里是连续线索窗口的整体构成，不代表这次跨城行程的证据数量。"
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -5537,7 +5568,7 @@ struct StatsWebView: View {
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(AppColors.readableAccent)
                 }
-                Text("AI 重点发现")
+                Text(card.kind == .asset ? "值得回看" : "AI 重点发现")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(AppColors.readableAccent)
                 Spacer(minLength: 0)
@@ -5560,7 +5591,7 @@ struct StatsWebView: View {
                 .foregroundStyle(AppColors.readableAccent.opacity(0.92))
 
             HStack(spacing: 6) {
-                Text("打开这段行程")
+                Text(card.kind == .asset ? "回看这段行程" : "打开这段行程")
                     .font(.system(size: 13, weight: .bold))
                 Image(systemName: "arrow.right")
                     .font(.system(size: 11, weight: .bold))
@@ -5717,7 +5748,11 @@ struct StatsWebView: View {
         .traceWarmPanel(radius: 26, padding: 24)
     }
 
-    private func traceClueCompositionCard(items: [HomeItem], clues: [TraceCategoryClue]) -> some View {
+    private func traceClueCompositionCard(
+        items: [HomeItem],
+        clues: [TraceCategoryClue],
+        scopeNote: String? = nil
+    ) -> some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack {
                 Text("生活构成")
@@ -5727,6 +5762,13 @@ struct StatsWebView: View {
                 Text("\(items.count) 笔")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(TraceColors.tertiaryText)
+            }
+
+            if let scopeNote {
+                Text(scopeNote)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(TraceColors.tertiaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if clues.isEmpty {
@@ -5765,17 +5807,11 @@ struct StatsWebView: View {
     private func traceLifeMarkCard(
         marks: [LifeMarkAggregate],
         lockedPreview: LifeMarkAggregate?,
-        journeyFact: LifeJourneyFact?,
         primaryJourneyCard: DiscoverCard?
     ) -> some View {
-        let visibleMarks = marks.filter {
-            !TraceLifeMarkDetailPolicy.hidesDuplicateJourney(
-                $0,
-                journeyFact: journeyFact,
-                hasPrimaryJourneyCard: primaryJourneyCard != nil
-            )
-        }
-        let hidesJourney = visibleMarks.count != marks.count
+        // A context Journey is intentionally retained here as a compact,
+        // high-value scene asset. The standalone explanatory card is the layer
+        // that gets deduplicated, while this row remains the stable detail entry.
         return VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .center) {
                 Text("生活线索")
@@ -5787,25 +5823,11 @@ struct StatsWebView: View {
                     .foregroundStyle(TraceColors.tertiaryText)
             }
 
-            if visibleMarks.isEmpty {
-                if hidesJourney {
-                    Text("这段跨城行程已在上方 AI 重点发现中统一收录，可随时打开详情。")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(TraceColors.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 11)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(TraceColors.surfaceMuted)
-                        )
-                } else {
-                    traceQuietCluePlaceholder("多留下几笔，运动、补给、旅行、家账这些印记会自然出现。")
-                }
+            if marks.isEmpty {
+                traceQuietCluePlaceholder("多留下几笔，运动、补给、旅行、家账这些印记会自然出现。")
             } else {
                 VStack(spacing: 8) {
-                    ForEach(Array(visibleMarks.prefix(4))) { mark in
+                    ForEach(Array(marks.prefix(4))) { mark in
                         traceLifeMarkRow(
                             mark,
                             detailCard: TraceLifeMarkDetailPolicy.detailCard(
@@ -6229,7 +6251,7 @@ struct StatsWebView: View {
             )
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("这段时间的节奏")
+                    Text("连续线索窗口的节奏")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(TraceColors.primaryText)
                     Spacer()
@@ -6250,7 +6272,7 @@ struct StatsWebView: View {
                 }
                 .frame(height: 112)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("这段时间的节奏，\(traceRhythmSummary(rhythmPoints: rhythmPoints))")
+                .accessibilityLabel("这段时间的节奏，\(traceRhythmSummary(rhythmPoints: rhythmPoints))（连续线索窗口）")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 12)

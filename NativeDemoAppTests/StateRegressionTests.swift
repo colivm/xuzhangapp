@@ -8449,6 +8449,54 @@ final class AICommandQueryMetricScopeTests: XCTestCase {
     }
 }
 
+final class AICommandDailyBarWindowPolicyTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return calendar
+    }
+
+    private func date(year: Int = 2026, month: Int, day: Int, hour: Int = 12) -> Date {
+        calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
+    }
+
+    func testWindowFollowsMatchedRecordsInsteadOfQueryEnd() {
+        let dates = AICommandDailyBarWindowPolicy.dates(
+            rangeStart: date(month: 8, day: 9, hour: 0),
+            rangeEnd: date(month: 9, day: 9, hour: 0),
+            requestedDays: 31,
+            itemDates: [date(month: 8, day: 21), date(month: 8, day: 23)],
+            calendar: calendar
+        )
+
+        XCTAssertEqual(dates.count, 7)
+        XCTAssertEqual(dates.first, date(month: 8, day: 17, hour: 0))
+        XCTAssertEqual(dates.last, date(month: 8, day: 23, hour: 0))
+        XCTAssertFalse(dates.contains(date(month: 9, day: 2, hour: 0)))
+    }
+
+    func testWindowStaysInsideShortRangeAndPreservesEmptyFallback() {
+        let shortRange = AICommandDailyBarWindowPolicy.dates(
+            rangeStart: date(month: 8, day: 20, hour: 0),
+            rangeEnd: date(month: 8, day: 24, hour: 0),
+            requestedDays: 7,
+            itemDates: [date(month: 8, day: 21)],
+            calendar: calendar
+        )
+        XCTAssertEqual(shortRange.map { calendar.component(.day, from: $0) }, [20, 21, 22, 23])
+
+        let empty = AICommandDailyBarWindowPolicy.dates(
+            rangeStart: date(month: 8, day: 9, hour: 0),
+            rangeEnd: date(month: 9, day: 9, hour: 0),
+            requestedDays: 31,
+            itemDates: [],
+            calendar: calendar
+        )
+        XCTAssertEqual(empty.first, date(month: 9, day: 2, hour: 0))
+        XCTAssertEqual(empty.last, date(month: 9, day: 8, hour: 0))
+    }
+}
+
 final class AICommandComparisonPresentationPolicyTests: XCTestCase {
     func testChangeKindsUseExistingAmountsAndCountsWithoutFuzzyPairing() {
         XCTAssertEqual(
@@ -10172,6 +10220,12 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
         let card = try! XCTUnwrap(
             snapshot.recentDiscoveries.first { $0.title == "周末跨城自驾" }
         )
+        XCTAssertEqual(
+            (snapshot.recentDiscoveries + snapshot.sceneAssets)
+                .filter { $0.id == card.id }
+                .count,
+            1
+        )
 
         XCTAssertTrue(card.isFeatured)
         XCTAssertEqual(card.evidenceSummary?.total, card.evidenceItemIDs.count)
@@ -10301,6 +10355,15 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
             periodName: "生活线索",
             theme: .change
         )
+        let canonicalQuestionOnly = LifeInsightResult(
+            leadQuestion: "这次周末跨城自驾是怎么串起来的",
+            teaser: "另一句证据说明",
+            previewLine: "另一句证据说明",
+            fullLines: [],
+            questionChips: [],
+            periodName: "生活线索",
+            theme: .relation
+        )
 
         XCTAssertTrue(
             DiscoverJourneyHierarchyPolicy.suppressesLegacyNarrative(
@@ -10321,6 +10384,53 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
                 journeyFact: journey,
                 insight: duplicate,
                 hasPrimaryDiscoverCard: false
+            )
+        )
+        XCTAssertTrue(
+            DiscoverJourneyHierarchyPolicy.suppressesLegacyNarrative(
+                journeyFact: journey,
+                insight: duplicate,
+                hasPrimaryDiscoverCard: false,
+                hasJourneyAsset: true
+            )
+        )
+        XCTAssertTrue(
+            DiscoverJourneyHierarchyPolicy.suppressesLegacyNarrative(
+                journeyFact: journey,
+                insight: canonicalQuestionOnly,
+                hasPrimaryDiscoverCard: false,
+                hasJourneyAsset: true
+            )
+        )
+        XCTAssertTrue(
+            DiscoverJourneyHierarchyPolicy.suppressesLegacyNarrative(
+                journeyFact: journey,
+                insight: unrelated,
+                hasPrimaryDiscoverCard: false,
+                hasJourneyAsset: true,
+                leadSignalID: journey.id
+            )
+        )
+        // A legacy relation snapshot can carry the Journey copy while its
+        // planner identity is stale. The explicit Journey text still makes
+        // this the duplicate evidence card, so the durable asset remains the
+        // only entry point.
+        XCTAssertTrue(
+            DiscoverJourneyHierarchyPolicy.suppressesLegacyNarrative(
+                journeyFact: journey,
+                insight: duplicate,
+                hasPrimaryDiscoverCard: false,
+                hasJourneyAsset: true,
+                leadSignalID: "change:coffee:up"
+            )
+        )
+        XCTAssertFalse(
+            DiscoverJourneyHierarchyPolicy.suppressesLegacyNarrative(
+                journeyFact: journey,
+                insight: unrelated,
+                hasPrimaryDiscoverCard: false,
+                hasJourneyAsset: true,
+                leadSignalID: "change:coffee:up"
             )
         )
     }
@@ -10403,17 +10513,9 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
         )
 
         XCTAssertTrue(
-            TraceLifeMarkDetailPolicy.hidesDuplicateJourney(
+            TraceLifeMarkDetailPolicy.isJourneyAsset(
                 journeyMark,
-                journeyFact: journey,
-                hasPrimaryJourneyCard: true
-            )
-        )
-        XCTAssertFalse(
-            TraceLifeMarkDetailPolicy.hidesDuplicateJourney(
-                journeyMark,
-                journeyFact: journey,
-                hasPrimaryJourneyCard: false
+                journeyFact: journey
             )
         )
         XCTAssertEqual(
@@ -10422,6 +10524,50 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
         )
         XCTAssertNotNil(TraceLifeMarkDetailPolicy.detailCard(for: milestone))
         XCTAssertNil(TraceLifeMarkDetailPolicy.detailCard(for: ordinaryScene))
+    }
+
+    func testOlderCertifiedJourneyRemainsAStableSceneAssetAfterRecentWindow() {
+        let journeyIDs = [
+            UUID(uuidString: "E1000000-0000-0000-0000-000000000090")!,
+            UUID(uuidString: "E1000000-0000-0000-0000-000000000091")!,
+            UUID(uuidString: "E1000000-0000-0000-0000-000000000092")!
+        ]
+        let rows = [
+            item("南京出发", day: 21, hour: 8, id: 90, category: .transport),
+            item("连云港海鲜", day: 22, hour: 13, id: 91, category: .dining),
+            item("返南京过路费", day: 23, hour: 17, id: 92, category: .transport)
+        ]
+        let oldNow = calendar.date(from: DateComponents(year: 2026, month: 9, day: 8, hour: 20))!
+        let journey = LifeJourneyFact(
+            id: "journey:older-scene-asset",
+            routeCities: ["南京", "连云港", "南京"],
+            evidenceItemIDs: journeyIDs,
+            roadEvidenceItemIDs: [journeyIDs[0], journeyIDs[2]],
+            activityEvidenceItemIDs: [journeyIDs[1]],
+            startDate: rows[0].createdAt,
+            endDate: rows[2].createdAt,
+            homeCity: "南京",
+            isRoadTrip: true,
+            isClosedLoop: true,
+            containsWeekend: true,
+            evidenceLabels: ["过路费", "异地餐饮"]
+        )
+
+        let snapshot = TraceSnapshotComputation.buildDiscoverSnapshot(
+            items: rows,
+            sourceRevision: 93,
+            now: oldNow,
+            calendar: calendar,
+            journeyFact: journey
+        )
+        let journeyCardID = "discover:journey:\(journey.id)"
+        XCTAssertFalse(snapshot.recentDiscoveries.contains { $0.id == journeyCardID })
+        XCTAssertEqual(snapshot.sceneAssets.filter { $0.id == journeyCardID }.count, 1)
+        let card = try! XCTUnwrap(snapshot.sceneAssets.first { $0.id == journeyCardID })
+        XCTAssertEqual(card.kind, .asset)
+        XCTAssertTrue(card.isFeatured)
+        XCTAssertEqual(Set(card.evidenceItemIDs), Set(journeyIDs))
+        XCTAssertEqual(card.evidenceSummary?.total, journeyIDs.count)
     }
 
     func testDiscoverEchoNeedsCurrentAndHistoricalEvidenceOutsideTheJourney() {

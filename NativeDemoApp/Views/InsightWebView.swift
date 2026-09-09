@@ -1,6 +1,61 @@
 import SwiftUI
 import UIKit
 
+/// Chooses a compact, continuous day window for AI query results. When a
+/// query matches records, the window follows those records; only an empty
+/// result falls back to the end of the requested range.
+enum AICommandDailyBarWindowPolicy {
+    static func dates(
+        rangeStart: Date,
+        rangeEnd: Date,
+        requestedDays: Int,
+        itemDates: [Date],
+        calendar: Calendar
+    ) -> [Date] {
+        let requestedCount = max(1, min(requestedDays, 7))
+        let hasFiniteRange = rangeStart != .distantPast && rangeEnd != .distantFuture
+        let startDay = calendar.startOfDay(for: rangeStart)
+        let lastDay: Date
+        if hasFiniteRange {
+            let endProbe = rangeEnd.addingTimeInterval(-0.001)
+            lastDay = calendar.startOfDay(for: endProbe)
+        } else {
+            lastDay = itemDates.map { calendar.startOfDay(for: $0) }.max() ?? calendar.startOfDay(for: Date())
+        }
+
+        let availableDays: Int
+        if hasFiniteRange,
+           let distance = calendar.dateComponents([.day], from: startDay, to: lastDay).day {
+            availableDays = max(1, distance + 1)
+        } else {
+            availableDays = requestedCount
+        }
+        let count = min(requestedCount, availableDays)
+        let scopedDates = itemDates
+            .map { calendar.startOfDay(for: $0) }
+            .filter { date in
+                !hasFiniteRange || (date >= startDay && date <= lastDay)
+            }
+        let anchor = scopedDates.max() ?? lastDay
+        guard let desiredStart = calendar.date(byAdding: .day, value: -(count - 1), to: anchor) else {
+            return []
+        }
+
+        let windowStart: Date
+        if !hasFiniteRange {
+            windowStart = desiredStart
+        } else {
+            let minimumStart = startDay
+            let maximumStart = calendar.date(byAdding: .day, value: -(count - 1), to: lastDay) ?? lastDay
+            windowStart = min(max(desiredStart, minimumStart), maximumStart)
+        }
+
+        return (0..<count).compactMap {
+            calendar.date(byAdding: .day, value: $0, to: windowStart)
+        }
+    }
+}
+
 private enum AICommandSurfaceRole {
     case panel
     case metric
@@ -5658,14 +5713,18 @@ struct InsightWebView: View {
         }
 
         private func dailyBars(range: AICommandTimeRange, items: [HomeItem]) -> [AICommandBar] {
-            let calendar = Calendar.current
-            let days = max(1, min(range.barDays, 7))
-            let finalDay = calendar.date(byAdding: .day, value: -1, to: range.end) ?? now
-            let itemsByDay = Dictionary(grouping: items) { item in
+            let calendar = aiCommandCalendar
+            let itemsByDay = Dictionary(grouping: items.filter { range.contains($0.createdAt) }) { item in
                 calendar.startOfDay(for: item.createdAt)
             }
-            return (0..<days).compactMap { offset in
-                guard let day = calendar.date(byAdding: .day, value: offset - (days - 1), to: finalDay) else { return nil }
+            let days = AICommandDailyBarWindowPolicy.dates(
+                rangeStart: range.start,
+                rangeEnd: range.end,
+                requestedDays: range.barDays,
+                itemDates: itemsByDay.keys.map { $0 },
+                calendar: calendar
+            )
+            return days.map { day in
                 let dayItems = itemsByDay[calendar.startOfDay(for: day)] ?? []
                 return AICommandBar(
                     label: shortDateText(day),

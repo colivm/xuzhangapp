@@ -442,42 +442,16 @@ enum TraceSnapshotComputation {
 
         let resolvedJourney = journeyFact
             ?? LifeJourneyFactService.primaryFact(in: publishableRows, calendar: calendar)
+        let publishableIDs = Set(publishableRows.map(\.id))
         var discoveries: [DiscoverCard] = []
         if let journey = resolvedJourney,
-           journey.endDate >= recentStart {
-            let publishableIDs = Set(publishableRows.map(\.id))
-            let journeyEvidenceIDs = stableEvidenceIDs(
-                journey.evidenceItemIDs.filter { publishableIDs.contains($0) }
-            )
-            if !journeyEvidenceIDs.isEmpty {
-                let roadIDs = Set(journey.roadEvidenceItemIDs)
-                let activityIDs = Set(journey.activityEvidenceItemIDs)
-                let coreEvidenceIDs = journeyEvidenceIDs.filter {
-                    roadIDs.contains($0) || activityIDs.contains($0)
-                }
-                let boundaryEvidenceIDs = journeyEvidenceIDs.filter {
-                    !roadIDs.contains($0) && !activityIDs.contains($0)
-                }
-                discoveries.append(
-                    DiscoverCard(
-                        id: "discover:journey:\(journey.id)",
-                        kind: .discovery,
-                        title: journey.label,
-                        summary: journey.line,
-                        evidenceItemIDs: journeyEvidenceIDs,
-                        novelty: 98,
-                        confidence: 96,
-                        storyValue: 98,
-                        latestDate: journey.endDate,
-                        isFeatured: journey.isRoadTrip && journey.containsWeekend,
-                        evidenceSummary: journeyEvidenceSummary(
-                            journey: journey,
-                            evidenceIDs: journeyEvidenceIDs
-                        ),
-                        coreEvidenceItemIDs: coreEvidenceIDs,
-                        boundaryEvidenceItemIDs: boundaryEvidenceIDs
-                    )
-                )
+           let journeyCard = journeyDiscoverCard(
+               journey: journey,
+               publishableIDs: publishableIDs,
+               isRecent: true
+           ) {
+            if journey.endDate >= recentStart {
+                discoveries.append(journeyCard)
             }
         }
 
@@ -618,7 +592,7 @@ enum TraceSnapshotComputation {
             .sorted(by: editorialOrder)
             .prefix(6))
 
-        let sceneAssets = Array(allBuckets.values
+        var sceneAssets = Array(allBuckets.values
             .filter { bucket in
                 bucket.items.count >= 3
                     || bucket.activeDayCount >= 3
@@ -644,6 +618,29 @@ enum TraceSnapshotComputation {
             }
             .sorted(by: editorialOrder)
             .prefix(4))
+
+        // A certified journey remains a durable scene asset after it leaves
+        // the rolling "recent discoveries" window. This gives the user one
+        // stable evidence-wall entry instead of allowing the LifeMark context
+        // row to recreate the same story as a second narrative.
+        if let journey = resolvedJourney,
+           journey.endDate < recentStart,
+           let journeyCard = journeyDiscoverCard(
+               journey: journey,
+               publishableIDs: publishableIDs,
+               isRecent: false
+           ) {
+            sceneAssets.removeAll { $0.id == journeyCard.id }
+            sceneAssets.append(journeyCard)
+            sceneAssets.sort(by: editorialOrder)
+            if sceneAssets.count > 4 {
+                sceneAssets = Array(sceneAssets.prefix(4))
+                if !sceneAssets.contains(where: { $0.id == journeyCard.id }) {
+                    sceneAssets[sceneAssets.index(before: sceneAssets.endIndex)] = journeyCard
+                    sceneAssets.sort(by: editorialOrder)
+                }
+            }
+        }
 
         let journeyEvidenceSet = Set(resolvedJourney?.evidenceItemIDs ?? [])
         let echoes: [DiscoverCard]
@@ -693,6 +690,43 @@ enum TraceSnapshotComputation {
             lifePatterns: Array(lifePatterns),
             sceneAssets: Array(sceneAssets),
             echoes: echoes
+        )
+    }
+
+    private static func journeyDiscoverCard(
+        journey: LifeJourneyFact,
+        publishableIDs: Set<UUID>,
+        isRecent: Bool
+    ) -> DiscoverCard? {
+        let journeyEvidenceIDs = stableEvidenceIDs(
+            journey.evidenceItemIDs.filter { publishableIDs.contains($0) }
+        )
+        guard !journeyEvidenceIDs.isEmpty else { return nil }
+        let roadIDs = Set(journey.roadEvidenceItemIDs)
+        let activityIDs = Set(journey.activityEvidenceItemIDs)
+        let coreEvidenceIDs = journeyEvidenceIDs.filter {
+            roadIDs.contains($0) || activityIDs.contains($0)
+        }
+        let boundaryEvidenceIDs = journeyEvidenceIDs.filter {
+            !roadIDs.contains($0) && !activityIDs.contains($0)
+        }
+        return DiscoverCard(
+            id: "discover:journey:\(journey.id)",
+            kind: isRecent ? .discovery : .asset,
+            title: journey.label,
+            summary: journey.line,
+            evidenceItemIDs: journeyEvidenceIDs,
+            novelty: isRecent ? 98 : 82,
+            confidence: 96,
+            storyValue: 98,
+            latestDate: journey.endDate,
+            isFeatured: journey.isRoadTrip && journey.containsWeekend,
+            evidenceSummary: journeyEvidenceSummary(
+                journey: journey,
+                evidenceIDs: journeyEvidenceIDs
+            ),
+            coreEvidenceItemIDs: coreEvidenceIDs,
+            boundaryEvidenceItemIDs: boundaryEvidenceIDs
         )
     }
 
