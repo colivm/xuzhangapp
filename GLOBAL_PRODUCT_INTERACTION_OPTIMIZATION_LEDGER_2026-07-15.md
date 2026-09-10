@@ -156,6 +156,7 @@
 | 25 | APP-DISPLAY-NAME-CONSISTENCY-01 | 安装包名称与权限提示统一为叙账 | `CODE_DONE` | `CFBundleDisplayName` 与系统权限提示已统一为“叙账”；等待新 TestFlight 构建安装验收 |
 | 26 | IPHONE-ONLY-DISTRIBUTION-01 | 发布包仅支持 iPhone | `CODE_DONE` | App 与测试 target 的 `TARGETED_DEVICE_FAMILY` 已统一为 `1`，不再声明 iPad 支持；等待新构建在 App Store Connect 验证设备截图要求 |
 | 27 | SITE-HERO-LAYOUT-FIX-01 | 官网首页首屏双栏排版修正 | `CODE_DONE` | 修复桌面端主视觉侵入左侧文案和首屏宽度不足；图片限制在右侧网格列，小屏堆叠规则保持不变 |
+| 28 | SITE-CAROUSEL-SCREENSHOTS-01 | 官网轮播替换为当前默认主题真机截图 | `CODE_DONE` | 按用户指定顺序，用去状态栏的 1290×2796 高清图替换 CSS 示意轮播；同源图可供后续 App Store 预览 |
 
 当前签收策略：后续仍需补全部 `CODE_DONE` 任务的 Xcode/真机证据；用户于 2026-07-15 再次明确要求“不要再问，全部改完后一起真机验证”，授权按台账顺序连续完成后续代码任务。该持续授权允许前一项达到 `CODE_DONE` 后直接进入下一项，但不得把任何未真机验证任务标为 `VERIFIED`，且仍须保持同一时间最多一个 `IN_PROGRESS`。
 
@@ -1051,7 +1052,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ## 9. 当前交接状态
 
-- 当前无 `IN_PROGRESS`；`ARCH-FIX-01`、`ARCH-01`、`ARCH-02` 已完成 Windows 代码与回归，`RELEASE-02` 继续因缺少 Xcode、iPhone、StoreKit 沙盒与权限/无障碍真机条件而 `BLOCKED`。
+- 当前无 `IN_PROGRESS`；`SITE-CAROUSEL-SCREENSHOTS-01` 已完成 Windows 代码与浏览器核对。`ARCH-FIX-01`、`ARCH-01`、`ARCH-02` 已完成 Windows 代码与回归，`RELEASE-02` 继续因缺少 Xcode、iPhone、StoreKit 沙盒与权限/无障碍真机条件而 `BLOCKED`。
 - 保留阻塞任务：`GATE-00`，等待后续 macOS/Xcode 与真机补签收。
 - 用户例外授权：2026-07-15 第一次允许启动 `INT-01`，第二次允许启动 `NAV-01`；第三次明确要求后续任务不再逐项询问、全部代码完成后统一真机验证。所有授权均不代表前序 Xcode/真机验收通过。
 - 当前代码完成待签收：`INT-01`、`NAV-01`、`NAV-02`、`TEST-01`、`DATA-01`、`DATA-02`、`DATA-03`、`DATA-04`、`PERF-01`、`PERF-02`、`PROD-01`、`PROD-02`、`MEMBER-01`、`AI-01`、`A11Y-01`、`OBS-01`、`RELEASE-01`、`COPY-01`、`PERF-03`、`DATA-05`、`PERF-04`、`INT-02`、`DATA-06`、`MEMBER-02`、`DISCOVER-MEMORY-WALL-01`。
@@ -4944,3 +4945,12 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 修改文件：`site/site.css`、本文档。未修改官网文案、TestFlight 链接、法律页面或 App 代码。
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows`；需在本轮提交前执行并记录结果。桌面浏览器视觉验收仍待运营方确认。
 - 剩余风险与下一步：需在 1280px、1024px、768px 和手机宽度浏览器确认文案不遮挡、图片不溢出、按钮可点击；外部视觉签收前保持 `CODE_DONE`。
+
+### 112. SITE-CAROUSEL-SCREENSHOTS-01：官网轮播替换为当前默认主题真机截图（2026-09-10）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-10）。
+- 用户问题：用最新默认主题真机界面替换官网 CSS 示意轮播；去掉状态栏；保持现有手机框轮播风格；按用户截图顺序；尺寸同时满足官网展示和后续 App Store 预览。
+- 实施结果：从 `E:\叙账截图` 只取用户指定的 12 张 1290×2796 原图，填充顶部状态栏与 Dynamic Island，不改 App UI 像素。官网 `site/screenshots/01-home-empty.png`～`12-appearance.png` 替换旧示意；`site/index.html` 轮播改为真实截图；屏幕比例改为 1290/2796。同源 6.7 英寸与 6.5 英寸副本写在 `output/app-store-screenshots-v5/`。源目录未选用的 59/60/61/62/63/65/67/126 原图未复制。
+- 修改文件：`site/index.html`、`site/site.css`、`site/screenshots/`、`scripts/make_site_carousel_screenshots.py`、本文档。未修改 App 功能、法律页、Nginx、IAP 或 App Store Connect。
+- 验证证据：`python scripts/compliance_html_check.py`、`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows`；本地 1920px 与 375px 浏览器轮播切换、无坏图、375 宽 `scrollWidth=375`。Windows 无生产部署权限，不能标记 `VERIFIED`。
+- 剩余风险与下一步：正式上线需把 `site/` 部署到生产；App Store 上传前仍建议按 `FLOW-98` 核对商户、昵称、城市是否需要脱敏。外部签收前保持 `CODE_DONE`。

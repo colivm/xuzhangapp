@@ -377,7 +377,7 @@ a:hover {
 
 .phone-screen {
   position: relative;
-  aspect-ratio: 390 / 844;
+  aspect-ratio: 1290 / 2796;
   border-radius: 28px;
   overflow: hidden;
   background: var(--bg);
