@@ -9,7 +9,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="site.css">
+  <link rel="stylesheet" href="site.css?v=glass-keep">
 </head>
 <body>
   <header class="site-header">
@@ -43,7 +43,7 @@
           </p>
           <div class="hero-actions">
             <a class="btn btn-primary" href="https://testflight.apple.com/join/c4QRUQkf" target="_blank" rel="noopener">通过 TestFlight 试用</a>
-            <a class="btn btn-ghost" href="#features">看看能做什么</a>
+            <a class="btn btn-ghost" href="#screenshots">看看真实界面</a>
           </div>
           <p class="hero-note">账单默认保存在你的手机里，不登录也能记。越常记录，分类和备注越像你的生活习惯。当前开放 TestFlight 内测，正式上架后这里会更新 App Store 下载方式。</p>
           <div class="trust-row" aria-label="产品原则">
@@ -54,8 +54,25 @@
           </div>
         </div>
 
-        <figure class="hero-visual" aria-label="xLife 品牌视觉">
-          <img src="hero-brand.png" alt="xLife 用账单，叙述生活" width="1280" height="640" onerror="this.hidden=true">
+        <figure class="hero-visual" aria-label="xLife 品牌视觉与真实界面">
+          <img class="hero-wash" src="hero-wash.png" alt="" width="850" height="640" onerror="this.hidden=true">
+          <div class="hero-devices">
+            <div class="phone phone-ghost phone-ghost-a" aria-hidden="true">
+              <div class="phone-screen">
+                <img class="phone-shot" src="screenshots/04-home-first.png" alt="" width="1290" height="2796">
+              </div>
+            </div>
+            <div class="phone phone-hero">
+              <div class="phone-screen">
+                <img class="phone-shot" src="screenshots/05-home-today.png" alt="今日页记下多笔后的痕迹" width="1290" height="2796">
+              </div>
+            </div>
+            <div class="phone phone-ghost phone-ghost-b" aria-hidden="true">
+              <div class="phone-screen">
+                <img class="phone-shot" src="screenshots/08-review.png" alt="" width="1290" height="2796">
+              </div>
+            </div>
+          </div>
         </figure>
       </div>
     </section>
@@ -206,17 +223,17 @@
 
         <div class="features">
           <article class="feature">
-            <div class="feature-icon" aria-hidden="true">📝</div>
+            <span class="feature-index">01</span>
             <h3>只输金额，也能省力</h3>
             <p>明确品牌时用专属生活句；没有品牌时，从本机账本习惯预填分类和备注。免费也能完整记账。</p>
           </article>
           <article class="feature">
-            <div class="feature-icon" aria-hidden="true">🎬</div>
+            <span class="feature-index">02</span>
             <h3>痕迹与回放</h3>
             <p>今日回放、周度五幕、月度六章，把一段时间的花费，讲成可以回看的生活章。</p>
           </article>
           <article class="feature">
-            <div class="feature-icon" aria-hidden="true">💬</div>
+            <span class="feature-index">03</span>
             <h3>联网整理 · 可选</h3>
             <p>本机规则先生成；登录并主动开启联网整理后，DeepSeek 只处理受控、去标识化的结构化事实，用于轻润色和封面建议。</p>
           </article>
@@ -230,22 +247,22 @@
         <p class="section-desc">每项联网能力都可以选择。完整信息见隐私政策，下面先把最重要的边界说清楚。</p>
         <div class="features">
           <article class="feature">
-            <div class="feature-icon" aria-hidden="true">📱</div>
+            <span class="feature-index">本机</span>
             <h3>照片和本地智能</h3>
             <p>记忆照片、OCR 原图、人脸区域与裁切分析只在设备处理；不做人脸身份识别，不把照片交给大模型。</p>
           </article>
           <article class="feature">
-            <div class="feature-icon" aria-hidden="true">☁️</div>
+            <span class="feature-index">可选</span>
             <h3>自动备份 · 可选</h3>
             <p>登录并开启后同步账单信息与记录上下文，服务器位于中国大陆上海；照片仍保存在本机，云端不能恢复照片。</p>
           </article>
           <article class="feature">
-            <div class="feature-icon" aria-hidden="true">🌦️</div>
+            <span class="feature-index">可选</span>
             <h3>天气与联网整理 · 可选</h3>
             <p>天气由 Apple WeatherKit 提供，需要定位授权；联网整理使用 DeepSeek，但不发送手机号、登录令牌、照片或账单 UUID。</p>
           </article>
         </div>
-        <p class="section-desc" style="margin-top: 24px;">
+        <p class="section-desc privacy-links">
           查看<a href="/legal/privacy.html">完整隐私政策</a>和<a href="/legal/terms.html">用户协议</a>。
         </p>
       </div>
@@ -255,8 +272,8 @@
   <footer class="site-footer">
     <div class="wrap footer-grid">
       <div>
-        <strong style="color: var(--text);">叙账 · xLife</strong>
-        <p style="margin: 8px 0 0;">xuzhangapp.com · 用账单，叙述生活</p>
+        <strong class="footer-name">叙账 · xLife</strong>
+        <p class="footer-tag">xuzhangapp.com · 用账单，叙述生活</p>
       </div>
       <div class="footer-links">
         <a href="/legal/privacy.html">隐私政策</a>
@@ -265,11 +282,11 @@
         <a href="mailto:support@xuzhang.app">support@xuzhang.app</a>
       </div>
     </div>
-    <div class="wrap" style="margin-top: 20px; font-size: 12px;">
+    <div class="wrap footer-legal">
       运营者：王义磊（个人） · Apple 卖方显示名：yilei wang · 江苏省南京市浦口区<br>
       © 2026 叙账 xLife · 保留所有权利 · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">苏ICP备2026035096号-1</a>
     </div>
   </footer>
-  <script src="site.js" defer></script>
+  <script src="site.js?v=glass-keep" defer></script>
 </body>
 </html>

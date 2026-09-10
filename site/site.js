@@ -19,6 +19,7 @@
     });
     slides.forEach((slide, n) => {
       slide.setAttribute("aria-hidden", n === index ? "false" : "true");
+      slide.classList.toggle("is-current", n === index);
     });
   }
 
