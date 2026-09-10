@@ -155,6 +155,7 @@
 | 24 | SETTINGS-COMPANION-ENTRY-01 | 设置页陪伴入口与低价值语气选项收口 | `CODE_DONE` | 陪伴入口命名、天气互动说明和语气控件收口完成；等待 `FLOW-111` 的 macOS/Xcode、XCTest 与真机签收 |
 | 25 | APP-DISPLAY-NAME-CONSISTENCY-01 | 安装包名称与权限提示统一为叙账 | `CODE_DONE` | `CFBundleDisplayName` 与系统权限提示已统一为“叙账”；等待新 TestFlight 构建安装验收 |
 | 26 | IPHONE-ONLY-DISTRIBUTION-01 | 发布包仅支持 iPhone | `CODE_DONE` | App 与测试 target 的 `TARGETED_DEVICE_FAMILY` 已统一为 `1`，不再声明 iPad 支持；等待新构建在 App Store Connect 验证设备截图要求 |
+| 27 | SITE-HERO-LAYOUT-FIX-01 | 官网首页首屏双栏排版修正 | `CODE_DONE` | 修复桌面端主视觉侵入左侧文案和首屏宽度不足；图片限制在右侧网格列，小屏堆叠规则保持不变 |
 
 当前签收策略：后续仍需补全部 `CODE_DONE` 任务的 Xcode/真机证据；用户于 2026-07-15 再次明确要求“不要再问，全部改完后一起真机验证”，授权按台账顺序连续完成后续代码任务。该持续授权允许前一项达到 `CODE_DONE` 后直接进入下一项，但不得把任何未真机验证任务标为 `VERIFIED`，且仍须保持同一时间最多一个 `IN_PROGRESS`。
 
@@ -4934,3 +4935,12 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 实施结果：`NativeDemoApp.xcodeproj/project.pbxproj` 中 App 与测试 target 的 Debug/Release 配置均由 `TARGETED_DEVICE_FAMILY = "1,2"` 改为 `"1"`，仅声明 iPhone。未修改界面、Bundle ID、版本号、签名或数据规则。
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows`；需在本轮提交前执行并记录结果。Windows 无 Swift/Xcode，不能标记 `VERIFIED`。
 - 剩余风险与下一步：必须上传新构建后 App Store Connect 才会重新计算设备截图要求；旧构建仍可能显示 iPad 要求。需在新构建详情确认只出现 iPhone 截图槽位，并在 TestFlight 真机核对安装与布局。
+
+### 111. SITE-HERO-LAYOUT-FIX-01：官网首页首屏双栏排版修正（2026-09-10）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-10）。
+- 用户问题：桌面端官网首屏主视觉宽度按视口固定，超过实际网格列宽，覆盖左侧标题、说明和按钮区域。
+- 实施结果：`site/site.css` 将 Hero 容器扩展到宽屏布局，双栏改为可收缩列并增加间距；主视觉宽度限制为所在列的 `100%`，不再溢出覆盖文案；980px 以下原有上下堆叠布局保持。
+- 修改文件：`site/site.css`、本文档。未修改官网文案、TestFlight 链接、法律页面或 App 代码。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows`；需在本轮提交前执行并记录结果。桌面浏览器视觉验收仍待运营方确认。
+- 剩余风险与下一步：需在 1280px、1024px、768px 和手机宽度浏览器确认文案不遮挡、图片不溢出、按钮可点击；外部视觉签收前保持 `CODE_DONE`。
