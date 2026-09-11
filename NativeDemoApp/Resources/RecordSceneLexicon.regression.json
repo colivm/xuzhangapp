@@ -36,6 +36,14 @@
       "expectedCategory": "餐饮"
     },
     {
+      "id": "ocr-medical-insurance-premium-not-daily",
+      "mode": "ocr",
+      "amount": 32.71,
+      "rawText": "2026.9月保费缴清-好医保·长期医疗 保险 -32.71",
+      "expectedCategory": "其他",
+      "expectedCategoryNot": "日用"
+    },
+    {
       "id": "manual-teppan-squid-night-market",
       "mode": "manual",
       "amount": 35,

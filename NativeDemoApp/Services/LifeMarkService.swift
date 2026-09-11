@@ -1529,6 +1529,10 @@ enum LifeMarkService {
         if definition.id == "commute" {
             return commuteFactMatches(item, historyItems: historyItems, evidenceIndex: evidenceIndex)
         }
+        if definition.id == "daily_supply",
+           !containsAny(dailySupplyEvidenceText(for: item), definition.keywords) {
+            return false
+        }
         let text = semanticText(for: item)
         let categoryMatched = definition.categories.contains(item.category)
         let keywordMatched = containsAny(text, definition.keywords)
@@ -1896,6 +1900,21 @@ enum LifeMarkService {
             return ""
         }
         return title
+    }
+
+    private static func dailySupplyEvidenceText(for item: HomeItem) -> String {
+        let brand = MerchantBrandCatalog.definition(for: item.merchantBrandId)
+            ?? MerchantBrandCatalog.matchBrand(in: item.title)
+        return [
+            factualTitle(for: item),
+            brand?.displayName ?? "",
+            brand?.id ?? "",
+            item.memoryContext?.cityName ?? "",
+            item.memoryContext?.semanticPlace ?? "",
+            item.scenePackId ?? ""
+        ]
+        .joined(separator: " ")
+        .lowercased()
     }
 
     private static func isRainy(_ item: HomeItem) -> Bool {

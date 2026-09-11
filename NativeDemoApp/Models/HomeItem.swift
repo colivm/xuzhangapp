@@ -424,6 +424,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["探望", "看望", "拜访"]) { return "去见挂念的人" }
             if containsAny(text, ["请客", "聚餐", "朋友"]) { return "见面吃一顿" }
         case .other:
+            if containsAny(text, RecordSemanticLexicon.insuranceKeywords) { return "保障安排记下" }
             if containsAny(text, ["打印", "复印", "证件照"]) { return "临时办点事" }
             if containsAny(text, ["驾校", "驾校报名费", "驾考", "学车"]) { return "学车安排记下" }
             if containsAny(text, ["彩票", "福彩", "体彩", "刮刮乐"]) { return "这笔单独记下" }
@@ -603,6 +604,10 @@ struct HomeItem: Identifiable, Codable, Equatable {
                 amount: item.amount,
                 date: item.createdAt
             ) ?? "手机话费记下"
+        }
+
+        if containsAny(item.title, RecordSemanticLexicon.insuranceKeywords) {
+            return "保障安排记下"
         }
 
         if isBabyLikeEmotionTag(current),
@@ -1234,6 +1239,10 @@ enum RecordSemanticLexicon {
     static let ocrKeywordRules: [RecordSemanticKeywordRule] = payload.ocrKeywordRules
     static let comboRules: [RecordSemanticComboRule] = payload.comboRules
     static let emotionKeywordRules: [RecordSemanticEmotionRule] = payload.emotionKeywordRules
+    static let insuranceKeywords = [
+        "保险", "保费", "保费缴清", "长期医疗", "好医保", "医疗险", "百万医疗",
+        "重疾险", "意外险", "寿险", "车险", "保单", "投保", "续保", "保险公司", "社保", "医保"
+    ]
 
     private static let strongManualNoteOverrideRules: [(category: HomeItem.Category, keywords: [String])] = [
         (.dining, ["茶叶蛋", "饭团", "关东煮", "便当", "三明治", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "咖啡", "奶茶", "拿铁", "美式", "东方树叶", "青柑普洱", "普洱茶", "乌龙茶", "茉莉花茶", "红茶", "绿茶", "瓶装茶", "无糖茶", "花甲鸡爪", "花甲", "花蛤", "蛤蜊", "贝类", "鸡爪", "凤爪", "鸭血粉丝汤", "鸭血粉丝", "灌汤包", "小笼汤包", "汤包", "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "汤面", "面馆", "面食"]),
@@ -1245,7 +1254,7 @@ enum RecordSemanticLexicon {
         (.health, ["药店", "医院", "挂号", "门诊", "体检", "洗牙", "配镜", "健身房", "私教"]),
         (.lodging, ["酒店", "民宿", "住宿", "电竞酒店"]),
         (.social, ["红包", "随礼", "份子钱", "白事随礼", "奠仪", "帛金"]),
-        (.other, ["驾校", "驾校报名费", "彩票", "刮刮乐"])
+        (.other, ["驾校", "驾校报名费", "彩票", "刮刮乐"] + insuranceKeywords)
     ]
 
     private static let payload: RecordSceneLexiconPayload = {
@@ -1287,6 +1296,7 @@ enum RecordSemanticLexicon {
             .init(category: .health, score: 4.0, keywords: ["药店", "药房", "买药", "医院", "挂号", "门诊", "体检", "洗牙", "配镜", "验光", "医美", "医美脱毛", "光子嫩肤", "水光针", "健身", "健身房", "健身卡", "月卡", "年卡", "私教", "团课", "课程", "跑步", "理疗", "康复", "按摩", "补剂", "蛋白", "能量胶", "运动装备", "运动鞋", "运动服"]),
             .init(category: .home, score: 4.0, keywords: ["房租", "水电", "电费", "燃气", "物业", "宽带", "暖气费", "取暖费", "供暖费", "采暖费", "热力费", "供热费", "暖气缴费", "热力公司", "网上国网", "国网", "保洁", "家政", "钟点工", "开荒保洁", "上门保洁", "深度保洁", "擦玻璃", "清洗油烟机", "空调清洗", "搬家", "搬家公司", "货拉拉搬家"]),
             .init(category: .social, score: 4.0, keywords: ["红包", "送礼", "请客", "份子钱", "随礼", "探望", "白事", "白事随礼", "奠仪", "帛金", "花圈"]),
+            .init(category: .other, score: 6.4, keywords: insuranceKeywords),
             .init(category: .other, score: 3.0, keywords: ["驾校", "驾校报名费", "驾考", "学车", "彩票", "福彩", "体彩", "刮刮乐"]),
         ],
         ocrKeywordRules: [
@@ -1294,7 +1304,8 @@ enum RecordSemanticLexicon {
             .init(category: .daily, score: 3.0, keywords: ["山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈"]),
             .init(category: .shopping, score: 3.8, keywords: ["Office 365", "Microsoft 365", "Adobe订阅", "Creative Cloud", "Notion订阅", "Notion会员", "充电器", "数据线", "充电宝", "谷子", "潮玩", "吧唧", "亚克力", "盲盒", "泡泡玛特", "POP MART", "POPMART", "痛包", "同人本", "乙游周边", "漫展周边"]),
             .init(category: .transport, score: 4.0, keywords: ["花小猪", "洗车", "汽车保养", "车辆保养", "保养车", "ETC", "etc", "充车", "充电桩", "电车充电"]),
-            .init(category: .home, score: 4.0, keywords: ["网上国网", "国网", "暖气费", "取暖费", "供暖费", "采暖费", "热力费", "供热费", "家政", "保洁", "上门保洁", "搬家", "搬家公司", "货拉拉搬家"])
+            .init(category: .home, score: 4.0, keywords: ["网上国网", "国网", "暖气费", "取暖费", "供暖费", "采暖费", "热力费", "供热费", "家政", "保洁", "上门保洁", "搬家", "搬家公司", "货拉拉搬家"]),
+            .init(category: .other, score: 6.4, keywords: insuranceKeywords)
         ],
         comboRules: [
             .init(keywords: ["高铁", "机票", "机场", "车站", "返程", "出发"], scores: [.transport: 3.2, .lodging: 1.2, .entertainment: 1.0])

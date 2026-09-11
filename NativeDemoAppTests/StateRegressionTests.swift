@@ -10267,6 +10267,89 @@ final class RecordSemanticDiningBoundaryTests: XCTestCase {
     }
 }
 
+final class InsuranceClassificationBoundaryTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 60 * 60)!
+        return calendar
+    }
+
+    private func date(day: Int, hour: Int = 12) -> Date {
+        calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 9,
+            day: day,
+            hour: hour
+        ))!
+    }
+
+    func testMedicalInsurancePremiumUsesOtherCategoryAndSpecificCopy() {
+        let title = "2026.9月保费缴清-好医保·长期医疗"
+        XCTAssertEqual(RecordSemanticLexicon.bestMatchingCategory(in: title), .other)
+        XCTAssertEqual(RecordSemanticLexicon.strongManualNoteCategory(of: title), .other)
+
+        let resolution = RecordDraftResolutionService.resolve(
+            RecordDraftResolutionInput(
+                rawTitle: title,
+                fallbackCategory: .daily,
+                amount: 32.71,
+                date: date(day: 10),
+                merchantBrandId: nil,
+                categoryLockedByUser: false,
+                userEditedTitle: false,
+                source: "ocr"
+            )
+        )
+        XCTAssertEqual(resolution.category, .other)
+        XCTAssertEqual(resolution.emotionTag, "保障安排记下")
+        XCTAssertEqual(
+            OCRCategoryEvidencePolicy.resolve(
+                title: "保险",
+                rawText: title,
+                fallback: .daily
+            ),
+            .other
+        )
+    }
+
+    func testLegacyInsuranceMisclassifiedAsDailyDoesNotCreateSupplyLifeMark() {
+        let legacy = HomeItem(
+            title: "保险",
+            amount: 32.71,
+            category: .daily,
+            createdAt: date(day: 10, hour: 10),
+            emotionTag: "清洁纸巾一起补"
+        )
+        XCTAssertEqual(legacy.displayEmotionTag, "保障安排记下")
+
+        let marks = LifeMarkService.aggregates(
+            for: [legacy],
+            allItems: [legacy],
+            isMember: true,
+            limit: 12
+        )
+        XCTAssertFalse(marks.contains { $0.id == "daily_supply" || $0.id == "groceries" })
+    }
+
+    func testGenuineDailySupplyStillCreatesTheExistingLifeMark() {
+        let supply = HomeItem(
+            title: "超市买菜",
+            amount: 48,
+            category: .daily,
+            createdAt: date(day: 11, hour: 18),
+            emotionTag: "超市买菜和家用"
+        )
+        let marks = LifeMarkService.aggregates(
+            for: [supply],
+            allItems: [supply],
+            isMember: true,
+            limit: 12
+        )
+        XCTAssertTrue(marks.contains { $0.id == "daily_supply" })
+    }
+}
+
 final class DiningCopyEvidencePolicyTests: XCTestCase {
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)

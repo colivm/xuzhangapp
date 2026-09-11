@@ -1253,6 +1253,12 @@ Assert-Pattern 'backend/src/store.js' 'user_id = EXCLUDED\.user_id' 'legitimate 
 Assert-Pattern 'backend/scripts/verify-ledger-tombstone-and-iap-binding.mjs' 'always reject, including Sandbox|persist the new owner' 'IAP rebind rejection and persistence have executable coverage'
 Assert-Pattern 'NativeDemoApp/Services/AuthService.swift' '登录购买时使用的账号恢复|更换 Apple ID 后重新购买|联系客服处理迁移' 'account conflict copy gives login, separate Apple ID, and support paths'
 Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-111|必须保持免费|不要改绑|更换 Apple ID' 'same Apple ID conflict is rejected and explained on device'
+Assert-Pattern 'NativeDemoApp/Resources/RecordSceneLexicon.json' '保费缴清|好医保|长期医疗|重疾险|车险|保单' 'medical insurance has strong semantic evidence'
+Assert-Pattern 'NativeDemoApp/Resources/RecordSceneLexicon.regression.json' 'ocr-medical-insurance-premium-not-daily|expectedCategoryNot.*日用' 'medical insurance OCR regression fixture'
+Assert-Pattern 'NativeDemoApp/Models/HomeItem.swift' 'insuranceKeywords|保障安排记下' 'insurance classification and copy stay explicit'
+Assert-Pattern 'NativeDemoApp/Services/LifeMarkService.swift' 'dailySupplyEvidenceText|definition\.id == "daily_supply"' 'broad daily supply life mark requires factual evidence'
+Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'InsuranceClassificationBoundaryTests|testMedicalInsurancePremiumUsesOtherCategoryAndSpecificCopy|testLegacyInsuranceMisclassifiedAsDailyDoesNotCreateSupplyLifeMark|testGenuineDailySupplyStillCreatesTheExistingLifeMark' 'insurance classification and life-mark XCTest coverage'
+Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-114|好医保.*清洁纸巾一起补|保障安排记下' 'insurance OCR device regression matrix'
 $releaseFixtureOutput = python scripts/validate_release_gate.py --phase fixtures
 if ($LASTEXITCODE -ne 0) {
     throw "Release fixture validation failed`n$releaseFixtureOutput"

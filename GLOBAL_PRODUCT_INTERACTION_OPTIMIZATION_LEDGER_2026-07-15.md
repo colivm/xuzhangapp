@@ -161,6 +161,7 @@
 | 30 | SYNC-IAP-FIX-01 | 云同步与订阅绑定优化 | `CODE_DONE` | 本机账本归属询问、删除墓碑、远端胜出保留本机照片、全量同步防重入与增量上传、沙盒订阅改绑与恢复购买错误透传；等待 Xcode/XCTest 与 `FLOW-111` 双设备真机签收 |
 | 31 | AUTH-REINSTALL-FIX-01 | 删除 App 后重装不应恢复旧登录 | `CODE_DONE` | 用沙盒安装标记区分升级与新安装：升级保留会话，删除后重装清除 Keychain token；等待 Xcode/XCTest 与 `FLOW-113` TestFlight 签收 |
 | 32 | IAP-BINDING-FIX-02 | 撤销 Sandbox 自动改绑并统一交易归属 | `CODE_DONE` | Sandbox 与 Production 均禁止无 token 跨账号改绑；客户端提示登录原账号或更换 Apple ID；合法 token 改绑同步更新绑定 owner；等待 Xcode/XCTest 与 `FLOW-111` 真机重签 |
+| 33 | OCR-INSURANCE-CLASSIFICATION-FIX-01 | 保险账单不再误判为日用或超市生活线索 | `CODE_DONE` | 保险强规则归入“其他”，旧错误文案展示修正，日用线索必须依赖真实标题/品牌证据；等待 Xcode/XCTest 与 `FLOW-114` 相册 OCR 真机签收 |
 
 当前签收策略：后续仍需补全部 `CODE_DONE` 任务的 Xcode/真机证据；用户于 2026-07-15 再次明确要求“不要再问，全部改完后一起真机验证”，授权按台账顺序连续完成后续代码任务。该持续授权允许前一项达到 `CODE_DONE` 后直接进入下一项，但不得把任何未真机验证任务标为 `VERIFIED`，且仍须保持同一时间最多一个 `IN_PROGRESS`。
 
@@ -1054,6 +1055,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 | 2026-09-11 | SYNC-IAP-FIX-01 云同步与订阅绑定优化 | `NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE` | backend `store.js`/`server.js`/`iapService.js`/`contentSafety.js`/新验证脚本；客户端归属策略、合并策略、`LocalStore`、同步服务、`HomeViewModel`、`SettingsViewModel`、`SettingsView`、`MemberPricingView`、`AuthService`；XCTest、静态门禁、发布矩阵、API 文档与本文档 | backend `npm test` 四项通过；`git diff --check`、`life_semantic_regression.py`、`validate_release_gate.py --phase windows` 通过，`release_repository_gate: OK` | 换账号登录先弹归属询问且文案写明归属；删除按墓碑收敛；远端胜出保留本机照片；全量同步防重入并只传增量；沙盒订阅可改绑、恢复购买透出真实原因。待 Xcode/XCTest 与 `FLOW-111` 双设备+沙盒真机签收 | FLOW-111 真机签收 |
 | 2026-09-11 | AUTH-REINSTALL-FIX-01 删除重装后旧登录残留 | `NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE` | `InteractionStateModels.swift`、`LocalStore.swift`、`SettingsViewModel.swift`、`StateRegressionTests.swift`、体验静态门禁、发布矩阵与本文档 | `git diff --check`、`life_semantic_regression.py`、`experience_static_check.ps1` 通过；新增安装/升级/重装纯策略覆盖与静态防回流 | 删除 App 后重装不再继承 Keychain 旧 token；覆盖升级仍保留登录；待 macOS/Xcode 与 `FLOW-113` TestFlight 真机签收 | FLOW-113 真机签收 |
 | 2026-09-11 | IAP-BINDING-FIX-02 撤销 Sandbox 自动改绑 | `NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE` | backend `iapService.js`/`server.js`/`store.js`/验证脚本/README；客户端 `AuthService.swift`、XCTest、静态门禁、发布矩阵与本文档 | `backend npm test`、`node --check`、`git diff --check`、生活语义回归、体验静态门禁和完整 Windows 发布门禁全部通过，最终 `release_repository_gate: OK`；仅既有 7 条文案软提示 | 无 token 跨账号绑定不再改绑；客户端明确提示登录原账号、更换 Apple ID 或联系客服；合法 token 改绑会更新 owner；待 Xcode/XCTest 与 `FLOW-111` 真机重签 | FLOW-111 真机重签 |
+| 2026-09-11 | OCR-INSURANCE-CLASSIFICATION-FIX-01 保险误判为日用 | `NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE` | `RecordSceneLexicon.json`/`RecordSceneLexicon.regression.json`、`HomeItem.swift`、`LifeMarkService.swift`、`StateRegressionTests.swift`、体验静态门禁、发布矩阵与本文档 | 生活语义回归、JSON 解析、体验静态门禁和完整 Windows 发布门禁通过，最终 `release_repository_gate: OK`；新增保险分类/旧记录/真实日用三类 XCTest 源码和 `FLOW-114` | 保险归入其他且不再生成日用文案；旧错误记录不再命中超市生活线索；真实日用仍保留原线索；待 Xcode/XCTest 与正式相册 OCR 真机签收 | FLOW-114 真机签收 |
 
 ---
 
@@ -1062,7 +1064,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 当前无 `IN_PROGRESS`；`IAP-BINDING-FIX-02` 已撤销 `SYNC-IAP-FIX-01` 引入的 Sandbox 自动改绑，待 macOS/Xcode 与 `FLOW-111` 真机重新签收。`AUTH-REINSTALL-FIX-01` 已完成 Windows 代码与静态门禁，待 Xcode/XCTest 与 `FLOW-113` TestFlight 删除重装签收。`RELEASE-02` 继续因缺少 Xcode、iPhone、StoreKit 沙盒与权限/无障碍真机条件而 `BLOCKED`。
 - 保留阻塞任务：`GATE-00`，等待后续 macOS/Xcode 与真机补签收。
 - 用户例外授权：2026-07-15 第一次允许启动 `INT-01`，第二次允许启动 `NAV-01`；第三次明确要求后续任务不再逐项询问、全部代码完成后统一真机验证。所有授权均不代表前序 Xcode/真机验收通过。
-- 当前代码完成待签收：`INT-01`、`NAV-01`、`NAV-02`、`TEST-01`、`DATA-01`、`DATA-02`、`DATA-03`、`DATA-04`、`PERF-01`、`PERF-02`、`PROD-01`、`PROD-02`、`MEMBER-01`、`AI-01`、`A11Y-01`、`OBS-01`、`RELEASE-01`、`COPY-01`、`PERF-03`、`DATA-05`、`PERF-04`、`INT-02`、`DATA-06`、`MEMBER-02`、`DISCOVER-MEMORY-WALL-01`、`SYNC-IAP-FIX-01`、`AUTH-REINSTALL-FIX-01`、`IAP-BINDING-FIX-02`。
+- 当前代码完成待签收：`INT-01`、`NAV-01`、`NAV-02`、`TEST-01`、`DATA-01`、`DATA-02`、`DATA-03`、`DATA-04`、`PERF-01`、`PERF-02`、`PROD-01`、`PROD-02`、`MEMBER-01`、`AI-01`、`A11Y-01`、`OBS-01`、`RELEASE-01`、`COPY-01`、`PERF-03`、`DATA-05`、`PERF-04`、`INT-02`、`DATA-06`、`MEMBER-02`、`DISCOVER-MEMORY-WALL-01`、`SYNC-IAP-FIX-01`、`AUTH-REINSTALL-FIX-01`、`IAP-BINDING-FIX-02`、`OCR-INSURANCE-CLASSIFICATION-FIX-01`。
 - 当前阶段：Windows 代码阶段和完整 repository gate 已完成；等待 macOS/Xcode、iPhone、短信/同步测试账号与 StoreKit 沙盒补签收，只允许处理签收发现的定向问题。
 - 后续策略：只处理统一签收发现的定向问题；每个修复必须回填所属任务、边界和回归，不得重新展开产品范围。
 
@@ -5025,3 +5027,22 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据（2026-09-11，Windows）：`backend npm test` 通过，覆盖 Sandbox 无 token 跨账号拒绝、合法 token 改绑持久化、墓碑与场景包白名单；`node --check`、`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过。Windows 无 Swift/Xcode，XCTest 尚未运行。
 - 冻结边界复核：未改变交易验证、Product ID、会员权益、云端绑定接口路径、Provider 环境配置、账本或同步逻辑；仅修正授权规则、合法改绑持久化和用户指引。
 - 剩余风险与下一步：本次代码不会自动回收已经被错误写成 `lifetime` 的 B 测试账号 session；部署后必须按交易号确认正确 owner，并将仅由该交易产生的错误会员状态重置为 `free`，再由 B 退出重登验证。需在 macOS/Xcode 运行 IAP 相关 XCTest，并在 TestFlight 用“A 已购买、B 使用同一沙盒 Apple ID”复测；B 必须保持免费、看到明确指引且不得改绑。随后各自使用不同沙盒 Apple ID，分别验证 B 能独立购买、A 能继续恢复。取得真机证据前保持 `CODE_DONE`。
+
+---
+
+### 117. OCR-INSURANCE-CLASSIFICATION-FIX-01：保险账单不再误判为日用或超市生活线索（2026-09-11）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-11）。
+- 用户问题：支付截图明确是“2026.9月保费缴清-好医保·长期医疗”，导入后却保存为“保险 / 日用 / 清洁纸巾一起补”，并出现“生活线索 · 超市买菜和家用”。
+- 根因：语义词典没有保险/保费规则，OCR 分类 fallback 为日用；日用场景包生成“清洁纸巾一起补”；生活线索又把分类名“日用”当作文本关键词，因此任何日用分类都命中 `daily_supply`，与真实标题无关。
+- 目标：保险强证据归入现有“其他”分类，保留保险标题并生成“保障安排记下”；日用生活线索必须依赖真实标题、品牌或结构化场景证据，不能只靠分类名。
+- 允许范围：`RecordSceneLexicon.json` 的保险关键词、fallback 词典、`HomeItem` 的保险语义/展示文案、`LifeMarkService` 的日用线索证据边界、回归 fixture、XCTest、静态门禁、发布矩阵和本文档。
+- 冻结边界：不新增账单分类，不改变 OCR 金额/日期/商户提取，不改变其他分类、会员额度、同步 DTO、照片边界、生活线索文案池或首页布局。
+- 实施结果：
+  1. “保险、保费、保费缴清、好医保、长期医疗、医疗险、百万医疗、重疾险、意外险、寿险、车险、保单、投保、续保、保险公司、社保、医保”作为强语义规则归入“其他”。
+  2. 保险记录生成“保障安排记下”；旧版本已保存的“日用 / 清洁纸巾一起补”记录在展示层纠正副文案，不再沿用日用场景包文案。
+  3. `daily_supply` 生活线索增加事实证据门禁：只检查真实标题、品牌、城市/场景等字段，不再把“日用”分类名本身视作“日用”关键词；真实“纸巾 / 超市买菜 / 日用品补货”仍保留原线索。
+- 修改文件：`NativeDemoApp/Resources/RecordSceneLexicon.json`、`NativeDemoApp/Resources/RecordSceneLexicon.regression.json`、`NativeDemoApp/Models/HomeItem.swift`、`NativeDemoApp/Services/LifeMarkService.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 验证证据（2026-09-11，Windows）：`python scripts/life_semantic_regression.py` 通过，新增“好医保 / 保费缴清”OCR 回归样例归入“其他”；两个词典 JSON 解析通过；体验静态门禁和完整 `python scripts/validate_release_gate.py --phase windows` 通过，最终 `release_repository_gate: OK`，仅保留既有 7 条文案软提示。新增 `InsuranceClassificationBoundaryTests` 覆盖新导入分类与文案、旧日用错误记录不生成生活线索、真实日用记录仍生成原线索。Windows 无 Swift/Xcode，XCTest 尚未运行。
+- 冻结边界复核：未新增“保险”分类；未修改其他分类规则、OCR 字段提取、金额/日期、照片、会员、同步或首页结构。现有旧记录仍保留原始 `category` 存储值，但副文案和生活线索不再按错误日用语义呈现。
+- 剩余风险与下一步：需在 macOS/Xcode 运行 `InsuranceClassificationBoundaryTests`，并用新 TestFlight 构建按 `FLOW-114` 走正式相册 OCR，确认保险新导入为“其他”、旧记录不再出现“超市买菜和家用”，同时真实日用记录仍能产生原线索。外部签收前保持 `CODE_DONE`。
