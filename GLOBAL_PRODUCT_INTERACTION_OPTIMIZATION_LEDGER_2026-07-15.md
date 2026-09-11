@@ -158,6 +158,7 @@
 | 27 | SITE-HERO-LAYOUT-FIX-01 | 官网首页首屏双栏排版修正 | `CODE_DONE` | 修复桌面端主视觉侵入左侧文案和首屏宽度不足；图片限制在右侧网格列，小屏堆叠规则保持不变 |
 | 28 | SITE-CAROUSEL-SCREENSHOTS-01 | 官网轮播替换为当前默认主题真机截图 | `CODE_DONE` | 按用户指定顺序，用去状态栏的 1290×2796 高清图替换 CSS 示意轮播；同源图可供后续 App Store 预览 |
 | 29 | SITE-VISUAL-POLISH-01 | 官网视觉精致化 | `CODE_DONE` | 首屏真机叠水彩、默认手账呼吸底、悬浮玻璃顶栏、logo 呼吸和功能卡片精致化完成；等待生产部署与外部视觉签收 |
+| 30 | SYNC-IAP-FIX-01 | 云同步与订阅绑定优化 | `CODE_DONE` | 本机账本归属询问、删除墓碑、远端胜出保留本机照片、全量同步防重入与增量上传、沙盒订阅改绑与恢复购买错误透传；等待 Xcode/XCTest 与 `FLOW-111` 双设备真机签收 |
 
 当前签收策略：后续仍需补全部 `CODE_DONE` 任务的 Xcode/真机证据；用户于 2026-07-15 再次明确要求“不要再问，全部改完后一起真机验证”，授权按台账顺序连续完成后续代码任务。该持续授权允许前一项达到 `CODE_DONE` 后直接进入下一项，但不得把任何未真机验证任务标为 `VERIFIED`，且仍须保持同一时间最多一个 `IN_PROGRESS`。
 
@@ -1048,12 +1049,13 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 | 2026-07-15 | RELEASE-01 发版门禁 | `NOT_STARTED` → `IN_PROGRESS` | 本文档 | 按持续授权进入，冻结全部产品与数据结论 | 建立混合夹具、自动门禁和统一真机/Xcode 清单 | RELEASE-01 |
 | 2026-07-15 | RELEASE-01 发版门禁 | `IN_PROGRESS` → `CODE_DONE` | 三档发布夹具/manifest、生成与统一验证脚本、Debug 隔离装载、三档 XCTest、统一真机矩阵、体验静态门禁 | `python scripts/validate_release_gate.py --phase windows` 整体通过；集合摘要固定，既有 7 条文案软提示 | Windows 代码阶段完成；仍缺 macOS Debug/Release/XCTest、StoreKit 沙盒和 iPhone 全矩阵/device-audit | 统一 Xcode/真机签收 |
 | 2026-09-04 | DISCOVER-MEMORY-WALL-01 线索详情生活片段墙 | `NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE` | `StatsTraceModels.swift`、`StatsWebView.swift`、`StateRegressionTests.swift`、体验静态门禁、发布矩阵与本文档 | Windows 基础回归、布局 XCTest 静态接线、体验静态检查和 `validate_release_gate.py --phase windows` 通过；发布门禁 `release_repository_gate: OK` | 照片墙改为确定性 hero/pair 拼贴，记录墙按日期时间线分组；待 macOS/Xcode、照片解码、无障碍和 TestFlight/Instruments 真机签收 | FLOW-103 真机签收 |
+| 2026-09-11 | SYNC-IAP-FIX-01 云同步与订阅绑定优化 | `NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE` | backend `store.js`/`server.js`/`iapService.js`/`contentSafety.js`/新验证脚本；客户端归属策略、合并策略、`LocalStore`、同步服务、`HomeViewModel`、`SettingsViewModel`、`SettingsView`、`MemberPricingView`、`AuthService`；XCTest、静态门禁、发布矩阵、API 文档与本文档 | backend `npm test` 四项通过；`git diff --check`、`life_semantic_regression.py`、`validate_release_gate.py --phase windows` 通过，`release_repository_gate: OK` | 换账号登录先弹归属询问且文案写明归属；删除按墓碑收敛；远端胜出保留本机照片；全量同步防重入并只传增量；沙盒订阅可改绑、恢复购买透出真实原因。待 Xcode/XCTest 与 `FLOW-111` 双设备+沙盒真机签收 | FLOW-111 真机签收 |
 
 ---
 
 ## 9. 当前交接状态
 
-- 当前无 `IN_PROGRESS`；`SITE-VISUAL-POLISH-01` 已完成 Windows 代码与本地浏览器核对。`RELEASE-02` 继续因缺少 Xcode、iPhone、StoreKit 沙盒与权限/无障碍真机条件而 `BLOCKED`。
+- 当前无 `IN_PROGRESS`；`SYNC-IAP-FIX-01` 已于 2026-09-11 完成 Windows 代码、backend 脚本与 repository gate，待 macOS/Xcode 与 `FLOW-111` 真机签收。`RELEASE-02` 继续因缺少 Xcode、iPhone、StoreKit 沙盒与权限/无障碍真机条件而 `BLOCKED`。
 - 保留阻塞任务：`GATE-00`，等待后续 macOS/Xcode 与真机补签收。
 - 用户例外授权：2026-07-15 第一次允许启动 `INT-01`，第二次允许启动 `NAV-01`；第三次明确要求后续任务不再逐项询问、全部代码完成后统一真机验证。所有授权均不代表前序 Xcode/真机验收通过。
 - 当前代码完成待签收：`INT-01`、`NAV-01`、`NAV-02`、`TEST-01`、`DATA-01`、`DATA-02`、`DATA-03`、`DATA-04`、`PERF-01`、`PERF-02`、`PROD-01`、`PROD-02`、`MEMBER-01`、`AI-01`、`A11Y-01`、`OBS-01`、`RELEASE-01`、`COPY-01`、`PERF-03`、`DATA-05`、`PERF-04`、`INT-02`、`DATA-06`、`MEMBER-02`、`DISCOVER-MEMORY-WALL-01`。
@@ -4964,3 +4966,21 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 修改文件：`site/index.html`、`site/site.css`、`site/site.js`、`site/hero-wash.png`、本文档。未修改产品承诺、法律页正文、轮播 12 张顺序或 App 代码。
 - 验证证据：`python scripts/compliance_html_check.py` 通过；`git diff --check` 无空白错误；本地 `http://127.0.0.1:8765/` 桌面 1920 核对首屏无字标残影、玻璃下翻仍在、占位底色不再挡内容。Windows 无生产部署权限，不能标记 `VERIFIED`。
 - 剩余风险与下一步：正式上线需部署 `site/`；减少动态时动画关闭。外部视觉签收前保持 `CODE_DONE`。
+
+### 114. SYNC-IAP-FIX-01：云同步与订阅绑定优化（2026-09-11）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-11）。
+- 用户问题：(1) A 账号记账后登出，B 账号登录开启同步，A 的账单自动归到 B 名下，用户看不懂弹窗；(2) 删除的账单会复活；(3) 云端版本胜出时本机照片字段被冲掉；(4) 全量同步每次重传所有账单且无重入保护；(5) 订阅沙盒交易被多个测试账号复用，服务端报 `TRANSACTION_ALREADY_BOUND`，客户端恢复购买又把真实原因吞成"没有可恢复的权益"。
+- 目标：云同步优先修复数据丢失风险（删除墓碑、字段保留、账本归属标记、弹窗优化），订阅绑定优化环境隔离与错误透传。本地优先不变：登出不清空本机账本。
+- 允许范围：backend `server.js`/`store.js`/`iapService.js`/`contentSafety.js`/`package.json`/新增验证脚本；客户端 `InteractionStateModels.swift`/`LocalStore.swift`/`LedgerSyncService.swift`/`HomeViewModel.swift`/`SettingsViewModel.swift`/`SettingsView.swift`/`MemberPricingView.swift`/`AuthService.swift`；`StateRegressionTests.swift`、静态门禁、发布矩阵、API 文档与本文档。
+- 冻结边界：不改变账单字段含义、分类规则、金额保存、照片存储格式、会员套餐/价格/Product ID、StoreKit 验证逻辑、`updatedAt` 冲突基本规则、登出保留本机账本或 `web-preview`。`AppSettings` 编码字段未新增，归属标记单独存 `UserDefaults`。
+- 实施结果：
+  1. 账本归属：新增 `CloudLedgerOwnershipPolicy`；本机账本首次上传或开启备份时记下当前账号到 `local_ledger_owner_user_id_v1`，登出保留，清空本机或注销该账号时清除。登录后 `SettingsViewModel.loginLedgerDecision` 按"本机有记录 + 归属非空且≠当前账号"判定，不再只看服务端备份开关；设置页登录后与手动开启备份两条路径都先弹归属询问，文案改为"这台设备上的记录属于另一个账号"，写明记录数并说明原账号云端不受影响。全新账号 B（服务端备份为关）也会被问到。未登录用户不受影响。
+  2. 删除墓碑：backend `ledgers` 新增 `deleted_at`，`DELETE` 改软删除并返回 `deletedAt`，`GET /v1/ledger` 附带 180 天内 `tombstones`；`upsertLedger` 与 `deleteLedger` 都按 `updated_at` 单调比较，旧上传不复活、删除后又编辑可恢复。客户端 `CloudLedgerMergePolicy.merge` 按墓碑删除本机记录且不重传。
+  3. 字段保留：远端胜出时 `applyingSyncedFields` 只覆盖 DTO 里的可同步字段，本机照片、封面、记忆锚点保留；`scenePackId` 进服务端白名单，不再被丢弃。
+  4. 全量同步：`syncCloudLedgerNow` 加 `isSyncingCloudLedger` 入口守卫；只上传本机更新或云端缺失的记录，不再逐条重传全部合并结果。
+  5. 订阅绑定：backend `resolveIAPBindingDecision` 纯函数——有 `appAccountToken` 一律以 Apple 为准（可覆盖过期的服务端绑定）；无 token 且生产环境绑他人返回 409 `TRANSACTION_ALREADY_BOUND`；沙盒环境允许改绑并记 `iap_sandbox_rebind` 日志，因为沙盒 Apple ID 在测试者间共享。客户端恢复购买保留首个真实错误，`IAPRestoreFailureCopy` 只对账号不符/过期/撤销类错误码透出服务端原因并引导换账号；网络或未知错误仍用原通用文案。
+- 修改文件：见允许范围；新增 `backend/scripts/verify-ledger-tombstone-and-iap-binding.mjs` 并接入 `npm test`。
+- 验证证据（2026-09-11，Windows）：`backend npm test` 四项通过（新脚本内存模式覆盖墓碑保留/旧上传不复活/删后编辑恢复/过期墓碑清理/`scenePackId` 白名单/五种绑定决策）；`node --check` 四个后端源文件通过；`git diff --check` 无空白错误；`python scripts/life_semantic_regression.py` OK；`python scripts/validate_release_gate.py --phase windows` 整体 `release_repository_gate: OK`（含新增 21 条体验静态断言），仅既有 7 条文案软提示。运行静态门禁时需 `rg` 在 PowerShell PATH 中（本机通过 Cursor 自带 ripgrep 补齐）。Windows 无 Swift/Xcode，新增 `CloudLedgerOwnershipPolicyTests`/`CloudLedgerMergePolicyTests`/`IAPRestoreFailureCopyTests` 仅完成源码接线，不能标记 `VERIFIED`。
+- 冻结边界复核：未改变账单字段、分类、金额、照片存储、会员套餐/价格/Product ID、StoreKit 校验、`updatedAt` 新者胜规则、登出保留本机账本；`AppSettings` 编码键未变，历史设置无需迁移；生产库首次启动自动 `ALTER TABLE ledgers ADD COLUMN IF NOT EXISTS deleted_at`，旧客户端忽略 `tombstones` 字段仍可工作。
+- 剩余风险与下一步：需在 macOS/Xcode 完成 Swift 6 Debug/Release 与三组 XCTest，并按 `FLOW-111` 用双设备双账号和 StoreKit 沙盒验证换账号弹窗、墓碑收敛、照片保留、订阅改绑；服务端部署后需确认 `deleted_at` 列已加。外部签收前保持 `CODE_DONE`。

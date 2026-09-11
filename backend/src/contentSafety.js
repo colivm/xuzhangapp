@@ -75,6 +75,8 @@ export function sanitizeLedgerItem(rawItem) {
   if (raw.userEditedCategory === true) item.userEditedCategory = true;
   const categoryCorrectionFrom = normalizeUserText(raw.categoryCorrectionFrom, 24);
   if (categoryCorrectionFrom) item.categoryCorrectionFrom = categoryCorrectionFrom;
+  const scenePackId = normalizeUserText(raw.scenePackId, 48);
+  if (scenePackId) item.scenePackId = scenePackId;
   const memoryContext = sanitizeMemoryContext(raw.memoryContext);
   if (memoryContext) item.memoryContext = memoryContext;
   const draftMeta = sanitizeDraftMeta(raw.draftMeta);

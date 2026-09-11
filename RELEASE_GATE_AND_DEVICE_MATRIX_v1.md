@@ -324,6 +324,7 @@ python scripts/validate_release_gate.py --phase device-audit `
 | FLOW-107 | 使用痕迹页本周/本月整理中的首屏卡片，覆盖空账本、少量账本、465/1,000/5,000 条账本、全部/单分类、自定义范围及浅色/深色、特大字号、VoiceOver、Reduce Motion | 阶段一首屏出现后立即点击“查看本周记录/查看本月记录”，连续快速点击、下滑关闭、切换周期/分类、在列表准备期间新增/编辑/删除一笔；另进入线索模式核对页面没有新增入口 | 入口只出现在痕迹页整理中的首屏卡片，线索页完全不变；点击后立即打开记录列表承载层，账单记录先按当前账本与范围直接显示，后台刷新期间只显示轻量状态，不得以空态或全屏遮罩替代已有记录；整理只补充生活总结，不阻塞事实列表。后台结果按当前周期/分类/自定义范围与完整快照逐字段一致。快速重复点击只打开一个列表，取消/后台/旧 revision 不反写；编辑/删除后不复活旧记录。空账本不显示无意义入口，VoiceOver、特大字号、Reduce Motion 和深色模式可读；不得新增底部 Tab、改变两阶段身份规则或触发第二次全账本整理 | `NOT_RUN` |
 | FLOW-108 | 使用包含一条或多条认证跨城 Journey（含 `南京 → 宿迁 → 连云港 → 宿迁 → 南京` 周末闭环）、连续通勤、第一次购买和普通咖啡/交通场景资产的线索账本；覆盖 Journey 结束超过最近 14 天、免费/会员、无照片/多照片、编辑/删除证据、浅色/深色、特大字号和 VoiceOver | 进入痕迹 → 线索，分别查看 AI 最近发现、生活线索/场景资产和过去的回声；确认每条高价值 Journey 场景资产行均保留且可打开照片墙/记录墙，同一 Journey 的独立深度证据卡不再并列出现，排序第一的高价值 Journey 才使用高亮主卡；点击跨城、连续通勤、第一次购买等高价值资产行，打开详情后查看照片墙/记录墙，再编辑或删除一笔并返回；在 AI 指令台查询“过去 31 天的出去玩记录”，核对按天分布跟随真实匹配日期而非查询当天倒推；重复快速点击并切换会员状态 | 所有认证 Journey 均保留稳定资产入口且只突出一个最高价值主卡；Journey 生活线索行不因存在 Discover 卡而隐藏，深度卡只在无同 Journey 资产时作为兜底，其他变化/回声不受影响；详情顶部明确“只统计这段行程绑定的证据”及真实日期范围，核心道路/异地活动与路线边界分层，不混入连续线索窗口的全量节奏；普通场景资产继续轻量迭代，不被强制升级成复杂详情；有匹配记录的按天分布以匹配记录最晚日期为锚点并保持连续窗口，无匹配记录才回退查询范围末尾；空 evidence、锁定会员、快速点击、深色模式、大字和 VoiceOver 不崩溃或截断。Windows 只能完成静态/脚本检查，必须在 macOS/Xcode 运行 Discover/资产入口与 AI daily-window XCTest 并完成 TestFlight 目视签收后才可标记 `VERIFIED` | `NOT_RUN` |
 | FLOW-110 | 使用 09:07 交通账单（无“通勤”文案、金额与早高峰历史相同），另备至少两天同金额/同早高峰且带明确通勤证据的历史记录、仅一笔低金额交通、明确通勤标题、晚高峰与旅行交通样本 | 先记入目标日期账单，再打开首页/线索和复盘补记；分别在当天 09:07 后、当天中午补记、历史日期补记，核对是否识别为早通勤、是否错误提示“今天还没记通勤”、是否把临时打车/旅行交通误判；快速重复打开和编辑后重试 | 识别同时使用账单发生时间（7:00–10:00 早通勤窗口）、交通分类、金额按分、同方向时段及至少两天历史明确通勤证据；录入时间晚于发生时间不改变判断；首页/生活线索、AI 补记重复检测共用同一策略；仅低金额或单笔交通无历史证据不命中，明确文案和 `scenePack=commute` 继续高置信命中。Windows 只能完成静态/脚本检查，必须在 macOS/Xcode 运行通勤 XCTest 并在真机核对补记入口与首页状态后才可标记 `VERIFIED` | `NOT_RUN` |
+| FLOW-111 | 准备两个专用同步账号 A/B 和两台设备；A 在设备 1 记账并开启自动备份；另备一个从未开过备份的全新账号 C；StoreKit 沙盒准备一个已用 A 验过的订阅 | (1) 设备 1 登出 A → 登录 C（服务端备份为关）：核对是否弹“这台设备上的记录属于另一个账号”，分别选合并/先不同步/删本机再同步；再登出 C 手动打开备份开关重试。(2) 设备 1 删除一笔 A 的账单，设备 2 在离线状态下仍持有该账单，联网后打开设置页全量同步，再回到设备 1 同步。(3) 设备 2 给一笔账单加照片并设封面，设备 1 改该账单标题后同步。(4) 登录 C 后用 A 的沙盒 Apple ID 恢复购买；再用 A 登录恢复 | 本机账本登出不清空；换账号登录时只要本机记录曾同步到其他账号就先弹归属询问，文案写明记录数和“原账号云端不受影响”；未登录用户不受影响。删除通过墓碑收敛，设备 2 的旧副本不再复活，设备 1 也不再重新上传；删除后再编辑的记录仍能恢复。云端标题胜出时设备 2 的照片、封面和场景包保留。设置页 onAppear 与登录态变化同时触发时只跑一次全量合并，且只上传本机更新或云端缺失的记录。恢复购买失败时显示“已经绑定到另一个叙账账号”并引导换账号，不再一律显示“没有可恢复的权益”；沙盒环境无 appAccountToken 的交易允许改绑并在服务端打 `iap_sandbox_rebind` 日志，生产环境仍返回 `TRANSACTION_ALREADY_BOUND`。Windows 只能完成静态检查与 backend 内存模式脚本，必须在 macOS/Xcode 运行 `CloudLedgerOwnershipPolicyTests`/`CloudLedgerMergePolicyTests`/`IAPRestoreFailureCopyTests`，并在真机双设备与 StoreKit 沙盒完成上述四组操作后才可标记 `VERIFIED` | `NOT_RUN` |
 
 ## 9. 无障碍与权限矩阵
 
@@ -425,3 +426,17 @@ python scripts/validate_release_gate.py --phase device-audit `
 | Swift 6 Debug/Release 与 XCTest | `BLOCKED` | 当前环境无 macOS/Xcode/Swift，新增通勤回归仅完成源码接线 | Codex | 2026-09-09 |
 | `FLOW-110` 真机签收 | `NOT_RUN` | 需真机验证 09:07 晚记、当天中午补记、历史补记、旅行交通排除及首页提示刷新 | Codex | 2026-09-09 |
 | 本任务结论 | `CODE_DONE` | Windows 代码阶段完成；Xcode、XCTest 与真机证据补齐前不得标记 `VERIFIED` | Codex | 2026-09-09 |
+
+## 16. 2026-09-11 SYNC-IAP-FIX-01 代码验收
+
+| 门禁 | 结果 | 证据位置/日志 | 签收人 | 日期 |
+|---|---|---|---|---|
+| 本机账本归属与换账号弹窗 | `PASS` | `CloudLedgerOwnershipPolicy` 决定登录后是否弹归属询问；归属存 `local_ledger_owner_user_id_v1`，登出保留、清空本机或注销该账号时清除；`SettingsView` 在登录后与手动开启备份两条路径都先问归属，文案写明记录数与原账号不受影响 | Claude | 2026-09-11 |
+| 删除墓碑与字段保留 | `PASS` | backend `ledgers.deleted_at` 软删除、180 天保留、`GET /v1/ledger` 返回 `tombstones`、旧上传不复活；客户端 `CloudLedgerMergePolicy` 按墓碑删除本机记录且不重传，远端胜出只覆盖 DTO 字段；`scenePackId` 进服务端白名单 | Claude | 2026-09-11 |
+| 全量同步重入与增量上传 | `PASS` | `syncCloudLedgerNow` 加 `isSyncingCloudLedger` 守卫，只上传 `mergeResult.uploads` | Claude | 2026-09-11 |
+| 订阅绑定与错误透传 | `PASS` | backend `resolveIAPBindingDecision`：有 appAccountToken 一律以 Apple 为准；生产无 token 且绑他人返回 `TRANSACTION_ALREADY_BOUND`；沙盒允许改绑并记 `iap_sandbox_rebind` 日志。客户端恢复购买保留首个真实错误并用 `IAPRestoreFailureCopy` 透出 | Claude | 2026-09-11 |
+| backend 脚本回归 | `PASS` | `npm test` 四项通过，新增 `scripts/verify-ledger-tombstone-and-iap-binding.mjs`（内存模式） | Claude | 2026-09-11 |
+| Windows repository gate | `PASS` | `git diff --check`、`life_semantic_regression.py`、`experience_static_check.ps1`（含新增 21 条断言）、`validate_release_gate.py --phase windows` 通过，最终 `release_repository_gate: OK`；仅既有 7 条文案软提示 | Claude | 2026-09-11 |
+| Swift 6 Debug/Release 与 XCTest | `BLOCKED` | 当前环境无 macOS/Xcode/Swift，新增三组 XCTest 仅完成源码接线 | Claude | 2026-09-11 |
+| `FLOW-111` 真机签收 | `NOT_RUN` | 需双设备双账号与 StoreKit 沙盒验证换账号弹窗、墓碑收敛、照片保留和订阅改绑 | Claude | 2026-09-11 |
+| 本任务结论 | `CODE_DONE` | Windows 代码阶段完成；Xcode、XCTest 与真机证据补齐前不得标记 `VERIFIED` | Claude | 2026-09-11 |

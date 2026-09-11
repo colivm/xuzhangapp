@@ -4,6 +4,8 @@ enum LocalStore {
     private static let settingsKey = "app_settings_v1"
     private static let cloudSyncPreferencesKey = "cloud_sync_preferences_v1"
     private static let cloudSyncServerMigrationKey = "cloud_sync_server_migrations_v1"
+    /// 本机账本最近一次同步到的账号。登出不清空，用于识别换账号登录时本机记录属于谁。
+    private static let localLedgerOwnerUserIdKey = "local_ledger_owner_user_id_v1"
     private static let homeItemsBackupKey = "home_items_v1_backup"
     private static let homeItemsFile = "home_items_v1.json"
     private static let preImageMigrationBackupFile = "home_items_v1.pre_image_migration.json"
@@ -76,6 +78,20 @@ enum LocalStore {
         var ids = migratedCloudSyncPreferenceUserIds()
         ids.remove(userId)
         UserDefaults.standard.set(Array(ids), forKey: cloudSyncServerMigrationKey)
+    }
+
+    static func loadLocalLedgerOwnerUserId() -> String {
+        (UserDefaults.standard.string(forKey: localLedgerOwnerUserIdKey) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func saveLocalLedgerOwnerUserId(_ userId: String) {
+        let trimmed = userId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            UserDefaults.standard.removeObject(forKey: localLedgerOwnerUserIdKey)
+        } else {
+            UserDefaults.standard.set(trimmed, forKey: localLedgerOwnerUserIdKey)
+        }
     }
 
     static func loadHomeItems() -> [HomeItem] {

@@ -9865,6 +9865,193 @@ final class ReleaseScaleFixtureTests: XCTestCase {
     }
 }
 
+final class CloudLedgerOwnershipPolicyTests: XCTestCase {
+    func testEmptyLocalLedgerNeverAsksRegardlessOfOwner() {
+        XCTAssertEqual(
+            CloudLedgerOwnershipPolicy.loginDecision(
+                localItemCount: 0,
+                localLedgerOwnerUserId: "user-a",
+                currentUserId: "user-b",
+                accountCloudSyncEnabled: true
+            ),
+            .none
+        )
+    }
+
+    func testLocalLedgerSyncedToAnotherAccountAlwaysAsksEvenWhenNewAccountNeverEnabledSync() {
+        // 用户复现路径：A 记账并同步 → 登出 → 登录全新的 B（服务端同步为关）。
+        XCTAssertEqual(
+            CloudLedgerOwnershipPolicy.loginDecision(
+                localItemCount: 1,
+                localLedgerOwnerUserId: "user-a",
+                currentUserId: "user-b",
+                accountCloudSyncEnabled: false
+            ),
+            .localLedgerBelongsToAnotherAccount
+        )
+    }
+
+    func testLocalLedgerOwnedByCurrentAccountDoesNotAsk() {
+        XCTAssertEqual(
+            CloudLedgerOwnershipPolicy.loginDecision(
+                localItemCount: 5,
+                localLedgerOwnerUserId: "user-a",
+                currentUserId: "user-a",
+                accountCloudSyncEnabled: true
+            ),
+            .none
+        )
+    }
+
+    func testNeverSyncedLocalLedgerKeepsLegacyMergePromptOnlyWhenAccountHasSyncOn() {
+        XCTAssertEqual(
+            CloudLedgerOwnershipPolicy.loginDecision(
+                localItemCount: 5,
+                localLedgerOwnerUserId: "",
+                currentUserId: "user-a",
+                accountCloudSyncEnabled: true
+            ),
+            .mergeUnownedLocalLedger
+        )
+        XCTAssertEqual(
+            CloudLedgerOwnershipPolicy.loginDecision(
+                localItemCount: 5,
+                localLedgerOwnerUserId: "",
+                currentUserId: "user-a",
+                accountCloudSyncEnabled: false
+            ),
+            .none
+        )
+    }
+
+    func testOwnerFollowsSyncEnableAndClearsWithLocalLedger() {
+        XCTAssertEqual(CloudLedgerOwnershipPolicy.ownerAfterEnablingSync(currentUserId: "  user-a "), "user-a")
+        XCTAssertEqual(CloudLedgerOwnershipPolicy.ownerAfterClearingLocalLedger(), "")
+    }
+}
+
+final class CloudLedgerMergePolicyTests: XCTestCase {
+    private func item(
+        _ id: UUID,
+        title: String,
+        updatedAt: Date,
+        images: [Data] = [],
+        references: [String] = [],
+        cover: Int? = nil,
+        scenePackId: String? = nil
+    ) -> HomeItem {
+        HomeItem(
+            id: id,
+            title: title,
+            amount: 10,
+            category: .dining,
+            createdAt: updatedAt.addingTimeInterval(-3600),
+            updatedAt: updatedAt,
+            scenePackId: scenePackId,
+            memoryImageDatas: images,
+            memoryImageReferences: references,
+            coverMemoryImageIndex: cover
+        )
+    }
+
+    private let base = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func testRemoteTombstoneDeletesLocalRecordAndNeverReuploadsIt() {
+        let id = UUID()
+        let local = item(id, title: "已在别的设备删除", updatedAt: base)
+        let result = CloudLedgerMergePolicy.merge(
+            local: [local],
+            remote: [],
+            tombstones: [.init(id: id, deletedAt: base.addingTimeInterval(60))]
+        )
+        XCTAssertTrue(result.merged.isEmpty)
+        XCTAssertTrue(result.uploads.isEmpty)
+        XCTAssertEqual(result.deletedByRemote, [id])
+    }
+
+    func testLocalEditNewerThanTombstoneSurvivesAndIsUploaded() {
+        let id = UUID()
+        let local = item(id, title: "删除后又改过", updatedAt: base.addingTimeInterval(120))
+        let result = CloudLedgerMergePolicy.merge(
+            local: [local],
+            remote: [],
+            tombstones: [.init(id: id, deletedAt: base.addingTimeInterval(60))]
+        )
+        XCTAssertEqual(result.merged.map(\.id), [id])
+        XCTAssertEqual(result.uploads.map(\.id), [id])
+        XCTAssertTrue(result.deletedByRemote.isEmpty)
+    }
+
+    func testRemoteWinnerKeepsLocalPhotosCoverAndScenePack() {
+        let id = UUID()
+        let photo = Data([0x01, 0x02])
+        let local = item(
+            id,
+            title: "旧标题",
+            updatedAt: base,
+            images: [photo, photo],
+            references: ["ref-a", "ref-b"],
+            cover: 1,
+            scenePackId: "commute"
+        )
+        let remote = item(id, title: "新标题", updatedAt: base.addingTimeInterval(60))
+        let result = CloudLedgerMergePolicy.merge(local: [local], remote: [remote], tombstones: [])
+
+        XCTAssertEqual(result.merged.count, 1)
+        let merged = result.merged[0]
+        XCTAssertEqual(merged.title, "新标题")
+        XCTAssertEqual(merged.updatedAt, remote.updatedAt)
+        XCTAssertEqual(merged.memoryImageReferences, ["ref-a", "ref-b"])
+        XCTAssertEqual(merged.memoryImageDatas.count, 2)
+        XCTAssertEqual(merged.coverMemoryImageIndex, 1)
+        XCTAssertEqual(merged.scenePackId, "commute")
+        XCTAssertTrue(result.uploads.isEmpty, "Remote already has the newest version; nothing to re-upload.")
+    }
+
+    func testOnlyLocalNewerOrMissingRecordsAreUploaded() {
+        let sameID = UUID()
+        let localNewerID = UUID()
+        let localOnlyID = UUID()
+        let remoteOnlyID = UUID()
+        let local = [
+            item(sameID, title: "same", updatedAt: base),
+            item(localNewerID, title: "local newer", updatedAt: base.addingTimeInterval(60)),
+            item(localOnlyID, title: "local only", updatedAt: base),
+        ]
+        let remote = [
+            item(sameID, title: "same", updatedAt: base),
+            item(localNewerID, title: "remote older", updatedAt: base),
+            item(remoteOnlyID, title: "remote only", updatedAt: base),
+        ]
+        let result = CloudLedgerMergePolicy.merge(local: local, remote: remote, tombstones: [])
+        XCTAssertEqual(Set(result.merged.map(\.id)), [sameID, localNewerID, localOnlyID, remoteOnlyID])
+        XCTAssertEqual(Set(result.uploads.map(\.id)), [localNewerID, localOnlyID])
+        XCTAssertEqual(result.merged.first { $0.id == localNewerID }?.title, "local newer")
+    }
+}
+
+final class IAPRestoreFailureCopyTests: XCTestCase {
+    func testBoundToAnotherAccountIsSurfacedInsteadOfGenericNoEntitlement() {
+        let message = IAPRestoreFailureCopy.message(
+            for: AuthServiceError.iapVerifyFailed(code: "TRANSACTION_ALREADY_BOUND", message: "")
+        )
+        XCTAssertTrue(message.contains("另一个叙账账号"))
+        XCTAssertNotEqual(message, IAPRestoreFailureCopy.genericMessage)
+    }
+
+    func testUnknownOrNetworkFailuresFallBackToGenericMessage() {
+        XCTAssertEqual(IAPRestoreFailureCopy.message(for: nil), IAPRestoreFailureCopy.genericMessage)
+        XCTAssertEqual(
+            IAPRestoreFailureCopy.message(for: URLError(.notConnectedToInternet)),
+            IAPRestoreFailureCopy.genericMessage
+        )
+        XCTAssertEqual(
+            IAPRestoreFailureCopy.message(for: AuthServiceError.iapVerifyFailed(code: "APPLE_LOOKUP_FAILED", message: "x")),
+            IAPRestoreFailureCopy.genericMessage
+        )
+    }
+}
+
 final class CloudSessionExpirationPolicyTests: XCTestCase {
     func testOnlyUnauthorizedHTTPResponsesInvalidateTheCloudSession() {
         XCTAssertTrue(

@@ -2052,6 +2052,8 @@ final class HomeViewModel: ObservableObject {
             syncStatusMessage = recordInputMessage
             return
         }
+        // 设置页 onAppear 与登录态变化可能同时触发；一次只允许一个全量合并。
+        guard !isSyncingCloudLedger else { return }
         let context = cloudContext()
         guard let context else {
             syncStatusMessage = "当前只保存在本机。登录并开启后，金额、分类、备注和日期会自动备份；照片仍保存在本机。"
@@ -2061,16 +2063,22 @@ final class HomeViewModel: ObservableObject {
         defer { isSyncingCloudLedger = false }
         let service = LedgerSyncService(baseURL: context.baseURL, accessToken: context.accessToken)
         do {
-            let remoteItems = try await service.fetchAll().sorted { $0.createdAt > $1.createdAt }
-            let merged = mergeLedgers(local: items, remote: remoteItems).sorted { $0.createdAt > $1.createdAt }
+            let snapshot = try await service.fetchSnapshot()
+            let mergeResult = CloudLedgerMergePolicy.merge(
+                local: items,
+                remote: snapshot.items,
+                tombstones: snapshot.tombstones
+            )
+            let merged = mergeResult.merged.sorted { $0.createdAt > $1.createdAt }
             let changes = ledgerChanges(from: items, to: merged)
             items = merged
             guard persistItems(upserting: changes.upserts, deleting: changes.deletedIDs) else {
                 syncStatusMessage = "同步结果没有写入本机，原账本仍保留。请重启后再试。"
                 return
             }
-            // Re-upload merged result to converge both sides (idempotent upsert).
-            for item in merged {
+            markLocalLedgerOwner(context.userId)
+            // 只回传本机更新或云端缺失的记录；云端已是最新的记录不重复上传。
+            for item in mergeResult.uploads {
                 do {
                     try await service.upload(item)
                 } catch {
@@ -2081,6 +2089,9 @@ final class HomeViewModel: ObservableObject {
                     syncStatusMessage = CloudSessionInvalidationService.userMessage
                     return
                 }
+            }
+            if !mergeResult.deletedByRemote.isEmpty {
+                refreshTodayPlayback()
             }
             syncStatusMessage = "自动备份已完成；照片仍保存在本机。重复记录已保留最新版本。"
         } catch {
@@ -2769,6 +2780,7 @@ final class HomeViewModel: ObservableObject {
         let deletedIDs = Set(items.map(\.id))
         items = []
         guard persistItems(deleting: deletedIDs) else { return }
+        LocalStore.saveLocalLedgerOwnerUserId(CloudLedgerOwnershipPolicy.ownerAfterClearingLocalLedger())
         insights = []
         latestPlayback = nil
         latestActionCard = nil
@@ -3560,12 +3572,19 @@ final class HomeViewModel: ObservableObject {
         LocalStore.saveDailyInsights(insights)
     }
 
-    private func cloudContext() -> (baseURL: String, accessToken: String)? {
+    private func cloudContext() -> (baseURL: String, accessToken: String, userId: String)? {
         let settings = LocalStore.loadSettings()
         let baseURL = settings.backendBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let token = KeychainService.loadAccessToken()
         guard settings.syncEnabled, !baseURL.isEmpty, !token.isEmpty else { return nil }
-        return (baseURL, token)
+        return (baseURL, token, settings.cloudUserId)
+    }
+
+    /// 本机账本一旦同步到某个账号，就记下归属；登出时保留，换账号登录时用于提示。
+    private func markLocalLedgerOwner(_ userId: String) {
+        let owner = CloudLedgerOwnershipPolicy.ownerAfterEnablingSync(currentUserId: userId)
+        guard !owner.isEmpty, LocalStore.loadLocalLedgerOwnerUserId() != owner else { return }
+        LocalStore.saveLocalLedgerOwnerUserId(owner)
     }
 
     private func syncUpsertToCloud(_ item: HomeItem) async {
@@ -3574,6 +3593,7 @@ final class HomeViewModel: ObservableObject {
         let service = LedgerSyncService(baseURL: context.baseURL, accessToken: context.accessToken)
         do {
             try await service.upload(item)
+            markLocalLedgerOwner(context.userId)
             if LedgerCloudUploadCompletionPolicy.requiresCompensatingDelete(
                 uploadedItemID: item.id,
                 currentItemIDs: Set(items.lazy.map(\.id))
@@ -3619,21 +3639,6 @@ final class HomeViewModel: ObservableObject {
             return value.formatted(.cny.precision(.fractionLength(0)))
         }
         return value.formatted(.cny.precision(.fractionLength(2)))
-    }
-
-    private func mergeLedgers(local: [HomeItem], remote: [HomeItem]) -> [HomeItem] {
-        var map: [UUID: HomeItem] = [:]
-        for item in remote {
-            map[item.id] = item
-        }
-        for item in local {
-            if let existing = map[item.id] {
-                map[item.id] = item.updatedAt >= existing.updatedAt ? item : existing
-            } else {
-                map[item.id] = item
-            }
-        }
-        return Array(map.values)
     }
 
     fileprivate nonisolated static func dayKey(for date: Date) -> String {

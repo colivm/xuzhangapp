@@ -46,7 +46,8 @@ npm run dev
 - 支持 PostgreSQL：设置 `DATABASE_URL` 后自动切换 DB 存储；生产环境必须配置。
 - 支持 Redis 存储短信验证码：设置 `REDIS_URL` 后验证码会带 TTL 写入 Redis，验证成功后删除；生产环境必须配置。
 - 微信登录仍为 stub；IAP 验单配置 `APPLE_*` 与 `IAP_*_PRODUCT_ID` 后可联调沙盒/生产。
-- 账单上行采用 `updatedAt` 冲突策略（新版本覆盖旧版本）。
+- 账单上行采用 `updatedAt` 冲突策略（新版本覆盖旧版本）。删除为软删除：`ledgers.deleted_at` 记录墓碑并保留 180 天，`GET /v1/ledger` 同时返回 `tombstones`，让离线设备的旧副本不会把已删除记录重新推回云端；删除后又编辑（`updatedAt` 更晚）的记录会被恢复。
+- IAP 绑定：交易带 `appAccountToken` 时以 Apple 为准（与当前账号不符返回 `APP_ACCOUNT_MISMATCH`）；不带 token 且服务端已绑定到别的账号时，生产环境返回 `TRANSACTION_ALREADY_BOUND`，沙盒环境（`environment=Sandbox`）允许改绑并记录 `iap_sandbox_rebind` 日志，因为沙盒 Apple ID 在测试者之间共享。
 - 手机号登录签发的访问令牌有效期为 90 天；每个受保护请求在验签后还会核对账号当前是否存在。用户注销后旧令牌立即返回 401，不能重新写入账单或继续调用会员、AI 与分析接口；用户主动退出、服务端轮换 `JWT_SECRET` 或接口明确返回 401 时仍需重新登录。
 - 账单写入会校验 `title`、`amount` 等基础字段，并拦截手机号、证件号、银行卡号、链接/邮箱、明显不适内容和少量公共安全高风险短语。
 - AI 转发前后会做基础内容安全检查；日志只记录拦截原因和脱敏样本，不应记录完整账单正文。

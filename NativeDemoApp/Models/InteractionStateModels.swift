@@ -888,6 +888,129 @@ enum MemberLoginContinuationIntent: Equatable {
     case restorePurchases
 }
 
+/// 登录后是否需要用户先决定本机账本和当前账号的关系。
+///
+/// 本机账本永远保留，登出不清空；这里只决定是否要在合并前弹一次明确的询问。
+enum CloudLedgerOwnershipPolicy {
+    enum LoginDecision: Equatable {
+        /// 本机没有记录，或本机记录已经属于当前账号：可以按账号偏好直接继续。
+        case none
+        /// 本机记录从未同步到任何账号，但当前账号已开启自动备份：沿用原有"合并/先不同步/替换"询问。
+        case mergeUnownedLocalLedger
+        /// 本机记录曾同步到另一个账号：无论账号偏好如何，都要先弹明确的归属询问。
+        case localLedgerBelongsToAnotherAccount
+    }
+
+    static func loginDecision(
+        localItemCount: Int,
+        localLedgerOwnerUserId: String,
+        currentUserId: String,
+        accountCloudSyncEnabled: Bool
+    ) -> LoginDecision {
+        guard localItemCount > 0 else { return .none }
+        let owner = localLedgerOwnerUserId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !owner.isEmpty, owner != currentUserId {
+            return .localLedgerBelongsToAnotherAccount
+        }
+        if owner.isEmpty, accountCloudSyncEnabled {
+            return .mergeUnownedLocalLedger
+        }
+        return .none
+    }
+
+    /// 当前账号首次开启自动备份时，本机账本归属改为当前账号。
+    static func ownerAfterEnablingSync(currentUserId: String) -> String {
+        currentUserId.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 清空本机账本后，本机没有任何记录，归属也随之清空。
+    static func ownerAfterClearingLocalLedger() -> String { "" }
+}
+
+/// 云端账本合并规则：远端账单只带可同步字段，本机专属字段永远从本机记录保留。
+enum CloudLedgerMergePolicy {
+    struct Tombstone: Equatable {
+        let id: UUID
+        let deletedAt: Date
+    }
+
+    struct Result: Equatable {
+        var merged: [HomeItem]
+        /// 合并后需要重新上传到云端的记录（本机版本更新或云端缺失）。
+        var uploads: [HomeItem]
+        /// 被远端墓碑删除的本机记录 ID。
+        var deletedByRemote: Set<UUID>
+    }
+
+    static func merge(
+        local: [HomeItem],
+        remote: [HomeItem],
+        tombstones: [Tombstone]
+    ) -> Result {
+        let tombstoneByID = Dictionary(
+            tombstones.map { ($0.id, $0.deletedAt) },
+            uniquingKeysWith: { Swift.max($0, $1) }
+        )
+        var remoteByID: [UUID: HomeItem] = [:]
+        for item in remote {
+            remoteByID[item.id] = item
+        }
+
+        var merged: [HomeItem] = []
+        var uploads: [HomeItem] = []
+        var deletedByRemote: Set<UUID> = []
+        var seen: Set<UUID> = []
+
+        for localItem in local {
+            seen.insert(localItem.id)
+            if let deletedAt = tombstoneByID[localItem.id], deletedAt >= localItem.updatedAt {
+                deletedByRemote.insert(localItem.id)
+                continue
+            }
+            guard let remoteItem = remoteByID[localItem.id] else {
+                merged.append(localItem)
+                uploads.append(localItem)
+                continue
+            }
+            if localItem.updatedAt > remoteItem.updatedAt {
+                merged.append(localItem)
+                uploads.append(localItem)
+            } else {
+                merged.append(applyingSyncedFields(from: remoteItem, onto: localItem))
+            }
+        }
+
+        for remoteItem in remote where !seen.contains(remoteItem.id) {
+            if let deletedAt = tombstoneByID[remoteItem.id], deletedAt >= remoteItem.updatedAt {
+                continue
+            }
+            merged.append(remoteItem)
+        }
+
+        return Result(merged: merged, uploads: uploads, deletedByRemote: deletedByRemote)
+    }
+
+    /// 远端胜出时只覆盖 DTO 里存在的可同步字段，本机照片、封面、记忆锚点保持不变。
+    static func applyingSyncedFields(from remote: HomeItem, onto local: HomeItem) -> HomeItem {
+        var next = local
+        next.title = remote.title
+        next.amount = remote.amount
+        next.category = remote.category
+        next.source = remote.source
+        next.createdAt = remote.createdAt
+        next.updatedAt = remote.updatedAt
+        next.emotionTag = remote.emotionTag
+        next.merchantBrandId = remote.merchantBrandId
+        next.draftMeta = remote.draftMeta
+        next.userEditedTitle = remote.userEditedTitle
+        next.userEditedCategory = remote.userEditedCategory
+        next.categoryCorrectionFrom = remote.categoryCorrectionFrom
+        next.memoryContext = remote.memoryContext
+        next.scenePackId = remote.scenePackId ?? local.scenePackId
+        return next
+    }
+}
+
 struct MemberLoginContinuationState: Equatable {
     private(set) var pendingLoginIntent: MemberLoginContinuationIntent?
     private(set) var resumedIntent: MemberLoginContinuationIntent?

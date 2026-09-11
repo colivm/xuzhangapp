@@ -1350,18 +1350,23 @@ struct MemberPricingView: View {
                     return
                 }
                 var restoredPayload: IAPPurchaseVerification?
+                var firstVerifyFailure: Error?
                 for payload in payloads {
                     do {
                         try await settingsViewModel.verifyIAPPurchase(payload)
                         restoredPayload = payload
                         break
                     } catch {
+                        if firstVerifyFailure == nil {
+                            firstVerifyFailure = error
+                        }
                         continue
                     }
                 }
                 guard let restoredPayload else {
                     homeViewModel.markMemberRestoreCompleted(outcome: .empty)
-                    purchaseNotice = "当前账号暂时没有可恢复的会员权益。请确认使用的是购买时的账号。"
+                    // 把服务端的真实原因（绑定到另一个账号、已过期等）透出来，不再一律说"没有可恢复的权益"。
+                    purchaseNotice = IAPRestoreFailureCopy.message(for: firstVerifyFailure)
                     return
                 }
                 await iapService.finish(transactionId: restoredPayload.transactionId)

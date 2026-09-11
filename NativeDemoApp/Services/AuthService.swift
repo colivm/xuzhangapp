@@ -42,7 +42,7 @@ enum AuthServiceError: LocalizedError {
             case "TRANSACTION_EXPIRED":
                 return "这笔 App Store 订阅已经过期。请使用购买时绑定的手机号账号恢复有效订阅，或重新开通会员。"
             case "TRANSACTION_ALREADY_BOUND":
-                return "这笔 App Store 交易已经绑定到另一个叙账账号。请登录购买时绑定的账号，或联系客服处理。"
+                return "这笔 App Store 订阅已经绑定到另一个叙账账号。请退出登录，换回购买时使用的手机号账号再恢复；如果确认是同一个人，请联系客服解绑。"
             case "APP_ACCOUNT_MISMATCH":
                 return "这笔 App Store 订阅属于另一个叙账账号，请登录购买时的手机号账号恢复。"
             case "APP_ACCOUNT_TOKEN_MISSING":
@@ -61,6 +61,34 @@ enum AuthServiceError: LocalizedError {
         case .unsupported:
             return "该登录方式尚未接入。"
         }
+    }
+}
+
+/// 恢复购买时把服务端拒绝原因翻译成用户能行动的提示。
+enum IAPRestoreFailureCopy {
+    static let genericMessage = "当前账号暂时没有可恢复的会员权益。请确认使用的是购买时的账号。"
+
+    /// 这些错误码说明 App Store 里确实有订阅，只是账号对不上；提示要引导用户换账号，而不是说"没有权益"。
+    static let accountMismatchCodes: Set<String> = [
+        "TRANSACTION_ALREADY_BOUND",
+        "APP_ACCOUNT_MISMATCH",
+        "APP_ACCOUNT_TOKEN_MISSING",
+        "TRANSACTION_EXPIRED",
+        "TRANSACTION_REVOKED",
+    ]
+
+    static func message(for error: Error?) -> String {
+        guard let error else { return genericMessage }
+        if let authError = error as? AuthServiceError,
+           case .iapVerifyFailed(let code, _) = authError,
+           accountMismatchCodes.contains(code) {
+            return authError.errorDescription ?? genericMessage
+        }
+        if let settingsError = error as? SettingsViewModelError,
+           case .loginRequired = settingsError {
+            return settingsError.errorDescription ?? genericMessage
+        }
+        return genericMessage
     }
 }
 

@@ -1000,6 +1000,11 @@ struct SettingsView: View {
         } else {
             confirmationHost = .main
         }
+        // 本机记录曾同步到另一个账号：不走普通"开启并同步"，先明确归属。
+        if !homeViewModel.items.isEmpty, settingsViewModel.localLedgerBelongsToAnotherAccount {
+            showLoginCloudSyncMergeConfirm = true
+            return
+        }
         showEnableCloudSyncConfirm = true
     }
 
@@ -1011,13 +1016,34 @@ struct SettingsView: View {
     }
 
     private func handleCloudSessionBecameActive() {
-        guard settingsViewModel.hasPendingLoginCloudSyncDecision else { return }
-        if homeViewModel.items.isEmpty {
-            settingsViewModel.enableCloudSyncForCurrentAccount()
-            return
+        let decision = settingsViewModel.loginLedgerDecision(localItemCount: homeViewModel.items.count)
+        switch decision {
+        case .none:
+            // 本机没有记录或记录已属于当前账号：沿用账号的备份偏好，不打扰。
+            if settingsViewModel.hasPendingLoginCloudSyncDecision {
+                settingsViewModel.enableCloudSyncForCurrentAccount()
+            } else {
+                settingsViewModel.finishLoginLedgerOwnershipCheck()
+            }
+        case .mergeUnownedLocalLedger, .localLedgerBelongsToAnotherAccount:
+            confirmationHost = showAccountSheet ? .accountSheet : .main
+            showLoginCloudSyncMergeConfirm = true
         }
-        confirmationHost = showAccountSheet ? .accountSheet : .main
-        showLoginCloudSyncMergeConfirm = true
+    }
+
+    private var loginCloudSyncMergeCopy: (title: String, message: String, mergeTitle: String) {
+        if settingsViewModel.localLedgerBelongsToAnotherAccount {
+            return (
+                "这台设备上的记录属于另一个账号",
+                "本机的 \(homeViewModel.items.count) 笔记录之前同步到的是另一个叙账账号。要把它们合并到当前登录的账号吗？合并后这些记录会出现在当前账号的云端备份里，原账号的云端记录不受影响。记忆照片只保留在本机。",
+                "合并到当前账号"
+            )
+        }
+        return (
+            "这台设备已有本地账本",
+            "当前账号已开启自动备份。要合并这台设备与当前账号的记录吗？记忆照片只保留在各自设备，不会上传或从云端恢复。",
+            "合并到当前账号"
+        )
     }
 
     private func mergeLocalLedgerIntoCurrentAccount() {
@@ -1423,13 +1449,14 @@ struct SettingsView: View {
                 ]
             )
         case .loginCloudSyncMerge:
+            let copy = loginCloudSyncMergeCopy
             return (
                 "arrow.triangle.2.circlepath",
-                "这台设备已有本地账本",
-                "当前账号已开启自动备份。要合并这台设备与当前账号的记录吗？记忆照片只保留在各自设备，不会上传或从云端恢复。",
+                copy.title,
+                copy.message,
                 AppColors.accent,
                 [
-                    SettingsConfirmationAction(id: "mergeLocal", title: "合并到当前账号", style: .primary) {
+                    SettingsConfirmationAction(id: "mergeLocal", title: copy.mergeTitle, style: .primary) {
                         mergeLocalLedgerIntoCurrentAccount()
                     },
                     SettingsConfirmationAction(id: "keepLocal", title: "先不同步，只看本机", style: .secondary) {

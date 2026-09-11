@@ -30,6 +30,8 @@ final class SettingsViewModel: ObservableObject {
     @Published private(set) var isAuthBusy: Bool = false
     @Published private(set) var smsCooldownRemaining: Int = 0
     @Published private(set) var hasPendingLoginCloudSyncDecision: Bool = false
+    /// 本次登录后是否还需要核对本机账本归属（换账号登录时先询问，再决定是否合并）。
+    @Published private(set) var hasPendingLoginLedgerOwnershipCheck: Bool = false
     @Published private(set) var hasAcceptedLoginPolicies: Bool = false
     /// 是否已保存访问令牌（与 Keychain 同步，用于界面展示）。
     @Published private(set) var hasCloudSession: Bool = false
@@ -414,6 +416,7 @@ final class SettingsViewModel: ObservableObject {
             enforceCurrentThemeAccess(showsMessage: true)
             settings.syncEnabled = false
             hasPendingLoginCloudSyncDecision = session.cloudSyncEnabled ?? LocalStore.loadCloudSyncPreference(for: session.userId)
+            hasPendingLoginLedgerOwnershipCheck = true
             SummaryPlaybackQuotaStore().syncLocalUsageAfterLogin(userId: session.userId)
             persist()
             if let account = try? await client.fetchAccountMe(accessToken: session.accessToken) {
@@ -442,6 +445,7 @@ final class SettingsViewModel: ObservableObject {
         settings.syncEnabled = false
         enforceCurrentThemeAccess(showsMessage: true)
         hasPendingLoginCloudSyncDecision = false
+        hasPendingLoginLedgerOwnershipCheck = false
         if Self.isBackendDefaultDisplayName(settings.displayName) {
             settings.displayName = Self.localDefaultDisplayName
         }
@@ -451,13 +455,38 @@ final class SettingsViewModel: ObservableObject {
         notifyNarrativeAIConfigurationChanged()
     }
 
+    /// 登录后本机账本与当前账号的关系。由设置页传入本机记录数后决定是否弹归属询问。
+    func loginLedgerDecision(localItemCount: Int) -> CloudLedgerOwnershipPolicy.LoginDecision {
+        guard hasCloudSession, !settings.syncEnabled,
+              hasPendingLoginLedgerOwnershipCheck || hasPendingLoginCloudSyncDecision else { return .none }
+        return CloudLedgerOwnershipPolicy.loginDecision(
+            localItemCount: localItemCount,
+            localLedgerOwnerUserId: LocalStore.loadLocalLedgerOwnerUserId(),
+            currentUserId: settings.cloudUserId,
+            accountCloudSyncEnabled: hasPendingLoginCloudSyncDecision
+        )
+    }
+
+    /// 用户手动打开备份开关时，本机账本是否属于另一个账号。
+    var localLedgerBelongsToAnotherAccount: Bool {
+        let owner = LocalStore.loadLocalLedgerOwnerUserId()
+        return hasCloudSession && !owner.isEmpty && owner != settings.cloudUserId
+    }
+
+    func finishLoginLedgerOwnershipCheck() {
+        guard hasPendingLoginLedgerOwnershipCheck else { return }
+        hasPendingLoginLedgerOwnershipCheck = false
+    }
+
     func enableCloudSyncForCurrentAccount() {
         hasPendingLoginCloudSyncDecision = false
+        hasPendingLoginLedgerOwnershipCheck = false
         setCloudSyncEnabled(true, rememberForAccount: true)
     }
 
     func keepCloudSyncOffForCurrentLogin() {
         hasPendingLoginCloudSyncDecision = false
+        hasPendingLoginLedgerOwnershipCheck = false
         settings.syncEnabled = false
         persist()
         authMessage = "已先保留本机账本，不会自动备份金额、分类、备注和日期；照片仍保存在本机。"
@@ -507,8 +536,12 @@ final class SettingsViewModel: ObservableObject {
             settings.syncEnabled = false
             enforceCurrentThemeAccess(showsMessage: true)
             hasPendingLoginCloudSyncDecision = false
+            hasPendingLoginLedgerOwnershipCheck = false
             LocalStore.removeCloudSyncPreference(for: deletedUserId)
             LocalStore.removeCloudSyncPreferenceMigration(for: deletedUserId)
+            if LocalStore.loadLocalLedgerOwnerUserId() == deletedUserId {
+                LocalStore.saveLocalLedgerOwnerUserId("")
+            }
             if Self.isBackendDefaultDisplayName(settings.displayName) {
                 settings.displayName = Self.localDefaultDisplayName
             }
@@ -651,6 +684,11 @@ final class SettingsViewModel: ObservableObject {
     private func setCloudSyncEnabled(_ enabled: Bool, rememberForAccount: Bool) {
         settings.syncEnabled = enabled
         if rememberForAccount, !settings.cloudUserId.isEmpty {
+            if enabled {
+                LocalStore.saveLocalLedgerOwnerUserId(
+                    CloudLedgerOwnershipPolicy.ownerAfterEnablingSync(currentUserId: settings.cloudUserId)
+                )
+            }
             LocalStore.saveCloudSyncPreference(enabled, for: settings.cloudUserId)
             LocalStore.markCloudSyncPreferenceMigratedToAccount(for: settings.cloudUserId)
             syncCloudSyncPreferenceToAccount(enabled)
@@ -761,6 +799,7 @@ final class SettingsViewModel: ObservableObject {
         settings = LocalStore.loadSettings()
         hasCloudSession = false
         hasPendingLoginCloudSyncDecision = false
+        hasPendingLoginLedgerOwnershipCheck = false
         if Self.isBackendDefaultDisplayName(settings.displayName) {
             settings.displayName = Self.localDefaultDisplayName
         }

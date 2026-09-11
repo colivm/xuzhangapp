@@ -62,6 +62,7 @@ export async function initStore() {
       );
     `);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS cloud_sync_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE ledgers ADD COLUMN IF NOT EXISTS deleted_at TEXT NULL`);
     usePostgres = true;
   }
 
@@ -298,14 +299,47 @@ export async function upsertIAPTransaction(record) {
   );
 }
 
+// Tombstones (soft-deleted ledger rows) are retained for this long so that
+// devices that were offline when the deletion happened can still converge.
+export const LEDGER_TOMBSTONE_RETENTION_MS = 180 * 24 * 60 * 60 * 1000;
+
+// Client timestamps use second precision ISO8601 ("...:00Z"). Server-generated
+// timestamps must match that shape so plain string comparison stays correct.
+export function ledgerTimestampNow(date = new Date()) {
+  return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 export async function getLedgersByUserId(userId) {
-  if (!usePostgres) return memory.ledgersByUserId.get(userId) || [];
-  const result = await pool.query(`SELECT payload FROM ledgers WHERE user_id = $1 ORDER BY updated_at DESC`, [userId]);
+  if (!usePostgres) {
+    return (memory.ledgersByUserId.get(userId) || []).filter((x) => !x.deletedAt);
+  }
+  const result = await pool.query(
+    `SELECT payload FROM ledgers WHERE user_id = $1 AND deleted_at IS NULL ORDER BY updated_at DESC`,
+    [userId]
+  );
   return result.rows.map((row) => row.payload);
 }
 
+export async function getLedgerTombstonesByUserId(userId, now = Date.now()) {
+  const cutoff = ledgerTimestampNow(new Date(now - LEDGER_TOMBSTONE_RETENTION_MS));
+  if (!usePostgres) {
+    const rows = memory.ledgersByUserId.get(userId) || [];
+    const kept = rows.filter((x) => !x.deletedAt || String(x.deletedAt) >= cutoff);
+    memory.ledgersByUserId.set(userId, kept);
+    return kept
+      .filter((x) => x.deletedAt)
+      .map((x) => ({ id: x.id, deletedAt: x.deletedAt, updatedAt: x.updatedAt }));
+  }
+  await pool.query(`DELETE FROM ledgers WHERE user_id = $1 AND deleted_at IS NOT NULL AND deleted_at < $2`, [userId, cutoff]);
+  const result = await pool.query(
+    `SELECT item_id, deleted_at, updated_at FROM ledgers WHERE user_id = $1 AND deleted_at IS NOT NULL`,
+    [userId]
+  );
+  return result.rows.map((row) => ({ id: row.item_id, deletedAt: row.deleted_at, updatedAt: row.updated_at }));
+}
+
 export async function upsertLedger(userId, item) {
-  const incomingUpdatedAt = String(item.updatedAt || item.createdAt || new Date().toISOString());
+  const incomingUpdatedAt = String(item.updatedAt || item.createdAt || ledgerTimestampNow());
   if (!usePostgres) {
     const rows = memory.ledgersByUserId.get(userId) || [];
     const existing = rows.find((x) => x.id === item.id);
@@ -318,25 +352,33 @@ export async function upsertLedger(userId, item) {
     return;
   }
   await pool.query(
-    `INSERT INTO ledgers(user_id, item_id, payload, updated_at)
-     VALUES ($1, $2, $3::jsonb, $4)
+    `INSERT INTO ledgers(user_id, item_id, payload, updated_at, deleted_at)
+     VALUES ($1, $2, $3::jsonb, $4, NULL)
      ON CONFLICT (user_id, item_id)
-     DO UPDATE SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at
+     DO UPDATE SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at, deleted_at = NULL
      WHERE ledgers.updated_at <= EXCLUDED.updated_at`,
     [userId, item.id, JSON.stringify({ ...item, updatedAt: incomingUpdatedAt }), incomingUpdatedAt]
   );
 }
 
-export async function deleteLedger(userId, itemId) {
+export async function deleteLedger(userId, itemId, deletedAt = ledgerTimestampNow()) {
+  const stamp = String(deletedAt);
   if (!usePostgres) {
     const rows = memory.ledgersByUserId.get(userId) || [];
-    memory.ledgersByUserId.set(
-      userId,
-      rows.filter((x) => x.id !== itemId)
-    );
+    const existing = rows.find((x) => x.id === itemId);
+    if (existing && String(existing.updatedAt || existing.createdAt || "") > stamp) return;
+    const tombstone = { id: itemId, updatedAt: stamp, deletedAt: stamp };
+    memory.ledgersByUserId.set(userId, [tombstone, ...rows.filter((x) => x.id !== itemId)]);
     return;
   }
-  await pool.query(`DELETE FROM ledgers WHERE user_id = $1 AND item_id = $2`, [userId, itemId]);
+  await pool.query(
+    `INSERT INTO ledgers(user_id, item_id, payload, updated_at, deleted_at)
+     VALUES ($1, $2, $3::jsonb, $4, $4)
+     ON CONFLICT (user_id, item_id)
+     DO UPDATE SET updated_at = EXCLUDED.updated_at, deleted_at = EXCLUDED.deleted_at
+     WHERE ledgers.updated_at <= EXCLUDED.updated_at`,
+    [userId, itemId, JSON.stringify({ id: itemId, updatedAt: stamp, deletedAt: stamp }), stamp]
+  );
 }
 
 export async function deleteLedgersByUserId(userId) {

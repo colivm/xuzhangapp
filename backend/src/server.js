@@ -7,7 +7,9 @@ import {
   deleteLedgersByUserId,
   deleteSmsCode,
   getLedgersByUserId,
+  getLedgerTombstonesByUserId,
   getIAPTransactionByOriginalId,
+  ledgerTimestampNow,
   getOrCreateUserByPhone,
   getSessionByUserId,
   getUserById,
@@ -39,7 +41,7 @@ import {
 } from "./nudgePolicy.js";
 import { getMemberCtaCopy } from "./memberFlow.js";
 import { buildTodayPlayback } from "./playback.js";
-import { IAPVerifyError, verifyAppStoreTransaction } from "./iapService.js";
+import { IAPVerifyError, resolveIAPBindingDecision, verifyAppStoreTransaction } from "./iapService.js";
 import {
   redactForLog,
   sanitizeLedgerItem,
@@ -189,7 +191,8 @@ if (!isProduction) {
 
 app.get("/v1/ledger", requireAuth, async (req, res) => {
   const rows = await getLedgersByUserId(req.user.userId);
-  res.json({ ok: true, items: rows });
+  const tombstones = await getLedgerTombstonesByUserId(req.user.userId);
+  res.json({ ok: true, items: rows, tombstones });
 });
 
 app.post("/v1/ledger", requireAuth, async (req, res) => {
@@ -211,8 +214,13 @@ app.post("/v1/ledger", requireAuth, async (req, res) => {
 });
 
 app.delete("/v1/ledger/:id", requireAuth, async (req, res) => {
-  await deleteLedger(req.user.userId, req.params.id);
-  res.json({ ok: true });
+  const itemId = String(req.params.id || "").trim().slice(0, 80);
+  if (!itemId) {
+    return res.status(400).json({ ok: false, error: "INVALID_LEDGER_ITEM" });
+  }
+  const deletedAt = ledgerTimestampNow();
+  await deleteLedger(req.user.userId, itemId, deletedAt);
+  res.json({ ok: true, deletedAt });
 });
 
 app.delete("/v1/ledger", requireAuth, async (req, res) => {
@@ -242,15 +250,29 @@ app.post("/v1/iap/verify", requireAuth, async (req, res) => {
     });
 
     const existing = await getIAPTransactionByOriginalId(verified.originalTransactionId);
-    if (existing && existing.userId !== req.user.userId) {
-      return res.status(409).json({ ok: false, error: "TRANSACTION_ALREADY_BOUND" });
-    }
-    if (!verified.hasAppAccountToken && !existing) {
-      return res.status(409).json({
+    const decision = resolveIAPBindingDecision({
+      existing,
+      currentUserId: req.user.userId,
+      hasAppAccountToken: verified.hasAppAccountToken,
+      environment: verified.environment,
+    });
+    if (decision.action === "reject") {
+      return res.status(decision.status).json({
         ok: false,
-        error: "APP_ACCOUNT_TOKEN_MISSING",
-        message: "Transaction is not bound to the current xLife account.",
+        error: decision.error,
+        message: decision.message,
+        environment: verified.environment,
       });
+    }
+    if (decision.rebound) {
+      console.warn("[iap]", JSON.stringify({
+        event: decision.sandboxRebind ? "iap_sandbox_rebind" : "iap_rebind_by_app_account_token",
+        originalTransactionId: verified.originalTransactionId,
+        fromUserId: existing?.userId || null,
+        toUserId: req.user.userId,
+        environment: verified.environment,
+        ts: new Date().toISOString(),
+      }));
     }
 
     await upsertIAPTransaction({

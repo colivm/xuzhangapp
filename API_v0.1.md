@@ -252,9 +252,12 @@ ai-proxy 直连接口（仅服务端内部）使用 `{ "code": "...", "message":
 ```json
 {
   "ok": true,
-  "items": [ { "id": "...", "title": "午餐", "amount": 35.0 } ]
+  "items": [ { "id": "...", "title": "午餐", "amount": 35.0 } ],
+  "tombstones": [ { "id": "...", "deletedAt": "2026-09-11T08:00:00Z", "updatedAt": "2026-09-11T08:00:00Z" } ]
 }
 ```
+
+`tombstones` 是最近 180 天内被删除的账单 ID（软删除）。客户端合并时：本机记录 `updatedAt <= deletedAt` 则本地删除且不重新上传；本机记录更新时间晚于 `deletedAt`（删除后又编辑）则上传恢复。
 
 ---
 
@@ -279,11 +282,12 @@ ai-proxy 直连接口（仅服务端内部）使用 `{ "code": "...", "message":
 - **Method**: `DELETE`
 - **Path**: `/v1/ledger/:id`
 - **Auth**: Bearer JWT
+- 软删除：服务端写入墓碑并在 `GET /v1/ledger` 的 `tombstones` 中返回 180 天；若该账单在服务端的 `updatedAt` 晚于删除时间，删除被忽略。
 
 **Response 200**
 
 ```json
-{ "ok": true }
+{ "ok": true, "deletedAt": "2026-09-11T08:00:00Z" }
 ```
 
 ---

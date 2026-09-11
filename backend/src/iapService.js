@@ -13,6 +13,45 @@ export function tierForProductId(productId) {
   return Object.entries(config.iapProductIds).find(([, id]) => id && id === productId)?.[0] || "";
 }
 
+export function isSandboxEnvironment(environment) {
+  return String(environment || "").trim().toLowerCase() === "sandbox";
+}
+
+/**
+ * Decide whether a verified App Store transaction may be bound to the current account.
+ *
+ * Order of truth:
+ * 1. Apple's `appAccountToken` on the transaction. `verifyAppStoreTransaction` already
+ *    rejects a token that belongs to another account, so `hasAppAccountToken === true`
+ *    means Apple says this transaction belongs to the current account. That always wins
+ *    over a stale server-side binding.
+ * 2. The server-side binding table. Without a token, a transaction already bound to
+ *    another account is rejected in production.
+ * 3. Sandbox test Apple IDs are shared between testers, so in the Sandbox environment a
+ *    token-less transaction may be rebound instead of locking the tester out.
+ */
+export function resolveIAPBindingDecision({ existing, currentUserId, hasAppAccountToken, environment }) {
+  const boundToOther = Boolean(existing) && existing.userId !== currentUserId;
+  if (hasAppAccountToken) {
+    return { action: "bind", rebound: boundToOther };
+  }
+  if (boundToOther) {
+    if (isSandboxEnvironment(environment)) {
+      return { action: "bind", rebound: true, sandboxRebind: true };
+    }
+    return { action: "reject", status: 409, error: "TRANSACTION_ALREADY_BOUND", message: "This App Store transaction is bound to another account." };
+  }
+  if (!existing) {
+    return {
+      action: "reject",
+      status: 409,
+      error: "APP_ACCOUNT_TOKEN_MISSING",
+      message: "Transaction is not bound to the current account.",
+    };
+  }
+  return { action: "bind", rebound: false };
+}
+
 export async function verifyAppStoreTransaction({ productId, transactionId, signedTransactionInfo, expectedAppAccountToken }) {
   ensureAppleConfig();
   if (!tierForProductId(productId)) {

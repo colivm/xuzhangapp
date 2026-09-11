@@ -45,9 +45,20 @@ private struct LedgerMemoryContextDTO: Codable {
     let semanticPlace: String?
 }
 
+private struct LedgerTombstoneDTO: Codable {
+    let id: String
+    let deletedAt: String
+}
+
 private struct LedgerListResponse: Codable {
     let ok: Bool
     let items: [LedgerDTO]
+    let tombstones: [LedgerTombstoneDTO]?
+}
+
+struct LedgerCloudSnapshot: Equatable {
+    var items: [HomeItem]
+    var tombstones: [CloudLedgerMergePolicy.Tombstone]
 }
 
 final class LedgerSyncService {
@@ -104,10 +115,19 @@ final class LedgerSyncService {
     }
 
     func fetchAll() async throws -> [HomeItem] {
+        try await fetchSnapshot().items
+    }
+
+    func fetchSnapshot() async throws -> LedgerCloudSnapshot {
         let request = try makeRequest(path: "/v1/ledger", method: "GET")
         let (data, _) = try await data(for: request)
         let payload = try JSONDecoder().decode(LedgerListResponse.self, from: data)
-        return payload.items.map { dto in
+        let tombstones = (payload.tombstones ?? []).compactMap { dto -> CloudLedgerMergePolicy.Tombstone? in
+            guard let id = UUID(uuidString: dto.id),
+                  let deletedAt = iso8601.date(from: dto.deletedAt) else { return nil }
+            return CloudLedgerMergePolicy.Tombstone(id: id, deletedAt: deletedAt)
+        }
+        let items = payload.items.map { dto in
             let id = UUID(uuidString: dto.id) ?? UUID()
             let createdAt = iso8601.date(from: dto.createdAt) ?? .now
             let updatedAt = iso8601.date(from: dto.updatedAt) ?? createdAt
@@ -149,6 +169,7 @@ final class LedgerSyncService {
                 scenePackId: dto.scenePackId
             )
         }
+        return LedgerCloudSnapshot(items: items, tombstones: tombstones)
     }
 
     private func makeRequest(path: String, method: String) throws -> URLRequest {
