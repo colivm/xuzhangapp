@@ -42,9 +42,9 @@ enum AuthServiceError: LocalizedError {
             case "TRANSACTION_EXPIRED":
                 return "这笔 App Store 订阅已经过期。请使用购买时绑定的手机号账号恢复有效订阅，或重新开通会员。"
             case "TRANSACTION_ALREADY_BOUND":
-                return "这笔 App Store 订阅已经绑定到另一个叙账账号。请退出登录，换回购买时使用的手机号账号再恢复；如果确认是同一个人，请联系客服解绑。"
+                return "这个 Apple ID 的会员已经绑定到另一个叙账账号。请退出当前账号，登录购买时使用的账号恢复；如果要给当前账号单独开通，需要先在系统设置中更换 Apple ID 后重新购买。如果是同一人的两个账号，请联系客服处理迁移。"
             case "APP_ACCOUNT_MISMATCH":
-                return "这笔 App Store 订阅属于另一个叙账账号，请登录购买时的手机号账号恢复。"
+                return "这个 Apple ID 的会员属于另一个叙账账号。请退出当前账号，登录购买时使用的账号恢复；如果要给当前账号单独开通，需要先更换 Apple ID 后重新购买。如果是同一人的两个账号，请联系客服处理迁移。"
             case "APP_ACCOUNT_TOKEN_MISSING":
                 return "这笔订阅还没有绑定到当前手机号账号，请重新开通或联系客服处理。"
             case "APP_ACCOUNT_TOKEN_REQUIRED":

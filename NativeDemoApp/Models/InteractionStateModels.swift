@@ -888,6 +888,19 @@ enum MemberLoginContinuationIntent: Equatable {
     case restorePurchases
 }
 
+/// 区分应用升级和删除 App 后重新安装。
+///
+/// Keychain 可能跨卸载保留，而应用沙盒会被删除。首次安装标记缺失时，只有同时没有
+/// 任何既有本机数据，才能确认这是一次全新安装并丢弃旧登录会话。
+enum ApplicationInstallationSessionPolicy {
+    static func shouldDiscardPersistedSession(
+        hasInstallMarker: Bool,
+        hasExistingInstallationData: Bool
+    ) -> Bool {
+        !hasInstallMarker && !hasExistingInstallationData
+    }
+}
+
 /// 登录后是否需要用户先决定本机账本和当前账号的关系。
 ///
 /// 本机账本永远保留，登出不清空；这里只决定是否要在合并前弹一次明确的询问。

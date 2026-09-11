@@ -6,6 +6,8 @@ enum LocalStore {
     private static let cloudSyncServerMigrationKey = "cloud_sync_server_migrations_v1"
     /// 本机账本最近一次同步到的账号。登出不清空，用于识别换账号登录时本机记录属于谁。
     private static let localLedgerOwnerUserIdKey = "local_ledger_owner_user_id_v1"
+    /// 应用沙盒内是否至少启动过一次；删除 App 后该标记会随沙盒一起消失。
+    private static let installationMarkerKey = "app_installation_marker_v1"
     private static let homeItemsBackupKey = "home_items_v1_backup"
     private static let homeItemsFile = "home_items_v1.json"
     private static let preImageMigrationBackupFile = "home_items_v1.pre_image_migration.json"
@@ -29,6 +31,18 @@ enum LocalStore {
         } catch {
             return .default
         }
+    }
+
+    /// 在读取 Keychain 会话前执行。返回 true 时表示这是删除 App 后的全新安装。
+    static func prepareInstallationLaunch() -> Bool {
+        let defaults = UserDefaults.standard
+        let hasInstallMarker = defaults.bool(forKey: installationMarkerKey)
+        let shouldDiscard = ApplicationInstallationSessionPolicy.shouldDiscardPersistedSession(
+            hasInstallMarker: hasInstallMarker,
+            hasExistingInstallationData: hasPersistedInstallationData()
+        )
+        defaults.set(true, forKey: installationMarkerKey)
+        return shouldDiscard
     }
 
     static func saveSettings(_ settings: AppSettings) {
@@ -154,6 +168,24 @@ enum LocalStore {
         guard !reference.isEmpty,
               let repository = homeItemsRepository() else { return nil }
         return repository.loadImageData(reference: reference, variant: variant)
+    }
+
+    private static func hasPersistedInstallationData() -> Bool {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: settingsKey) != nil
+            || defaults.object(forKey: homeItemsBackupKey) != nil {
+            return true
+        }
+        guard let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return false
+        }
+        let legacyLedgerURL = documentsURL.appendingPathComponent(homeItemsFile)
+        let metadataRootURL = documentsURL.appendingPathComponent(
+            LedgerStorageSchema.storeDirectoryName,
+            isDirectory: true
+        )
+        return FileManager.default.fileExists(atPath: legacyLedgerURL.path)
+            || FileManager.default.fileExists(atPath: metadataRootURL.path)
     }
 
     private static func homeItemsRepository() -> LedgerHomeItemsRepository? {

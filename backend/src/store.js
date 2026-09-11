@@ -280,7 +280,8 @@ export async function upsertIAPTransaction(record) {
     `INSERT INTO iap_transactions(original_transaction_id, user_id, transaction_id, product_id, member_tier, member_expires_at, environment, verified_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (original_transaction_id) DO UPDATE
-     SET transaction_id = EXCLUDED.transaction_id,
+     SET user_id = EXCLUDED.user_id,
+         transaction_id = EXCLUDED.transaction_id,
          product_id = EXCLUDED.product_id,
          member_tier = EXCLUDED.member_tier,
          member_expires_at = EXCLUDED.member_expires_at,

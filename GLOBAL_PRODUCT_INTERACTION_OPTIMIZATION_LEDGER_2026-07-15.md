@@ -159,6 +159,8 @@
 | 28 | SITE-CAROUSEL-SCREENSHOTS-01 | 官网轮播替换为当前默认主题真机截图 | `CODE_DONE` | 按用户指定顺序，用去状态栏的 1290×2796 高清图替换 CSS 示意轮播；同源图可供后续 App Store 预览 |
 | 29 | SITE-VISUAL-POLISH-01 | 官网视觉精致化 | `CODE_DONE` | 首屏真机叠水彩、默认手账呼吸底、悬浮玻璃顶栏、logo 呼吸和功能卡片精致化完成；等待生产部署与外部视觉签收 |
 | 30 | SYNC-IAP-FIX-01 | 云同步与订阅绑定优化 | `CODE_DONE` | 本机账本归属询问、删除墓碑、远端胜出保留本机照片、全量同步防重入与增量上传、沙盒订阅改绑与恢复购买错误透传；等待 Xcode/XCTest 与 `FLOW-111` 双设备真机签收 |
+| 31 | AUTH-REINSTALL-FIX-01 | 删除 App 后重装不应恢复旧登录 | `CODE_DONE` | 用沙盒安装标记区分升级与新安装：升级保留会话，删除后重装清除 Keychain token；等待 Xcode/XCTest 与 `FLOW-113` TestFlight 签收 |
+| 32 | IAP-BINDING-FIX-02 | 撤销 Sandbox 自动改绑并统一交易归属 | `CODE_DONE` | Sandbox 与 Production 均禁止无 token 跨账号改绑；客户端提示登录原账号或更换 Apple ID；合法 token 改绑同步更新绑定 owner；等待 Xcode/XCTest 与 `FLOW-111` 真机重签 |
 
 当前签收策略：后续仍需补全部 `CODE_DONE` 任务的 Xcode/真机证据；用户于 2026-07-15 再次明确要求“不要再问，全部改完后一起真机验证”，授权按台账顺序连续完成后续代码任务。该持续授权允许前一项达到 `CODE_DONE` 后直接进入下一项，但不得把任何未真机验证任务标为 `VERIFIED`，且仍须保持同一时间最多一个 `IN_PROGRESS`。
 
@@ -1050,15 +1052,17 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 | 2026-07-15 | RELEASE-01 发版门禁 | `IN_PROGRESS` → `CODE_DONE` | 三档发布夹具/manifest、生成与统一验证脚本、Debug 隔离装载、三档 XCTest、统一真机矩阵、体验静态门禁 | `python scripts/validate_release_gate.py --phase windows` 整体通过；集合摘要固定，既有 7 条文案软提示 | Windows 代码阶段完成；仍缺 macOS Debug/Release/XCTest、StoreKit 沙盒和 iPhone 全矩阵/device-audit | 统一 Xcode/真机签收 |
 | 2026-09-04 | DISCOVER-MEMORY-WALL-01 线索详情生活片段墙 | `NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE` | `StatsTraceModels.swift`、`StatsWebView.swift`、`StateRegressionTests.swift`、体验静态门禁、发布矩阵与本文档 | Windows 基础回归、布局 XCTest 静态接线、体验静态检查和 `validate_release_gate.py --phase windows` 通过；发布门禁 `release_repository_gate: OK` | 照片墙改为确定性 hero/pair 拼贴，记录墙按日期时间线分组；待 macOS/Xcode、照片解码、无障碍和 TestFlight/Instruments 真机签收 | FLOW-103 真机签收 |
 | 2026-09-11 | SYNC-IAP-FIX-01 云同步与订阅绑定优化 | `NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE` | backend `store.js`/`server.js`/`iapService.js`/`contentSafety.js`/新验证脚本；客户端归属策略、合并策略、`LocalStore`、同步服务、`HomeViewModel`、`SettingsViewModel`、`SettingsView`、`MemberPricingView`、`AuthService`；XCTest、静态门禁、发布矩阵、API 文档与本文档 | backend `npm test` 四项通过；`git diff --check`、`life_semantic_regression.py`、`validate_release_gate.py --phase windows` 通过，`release_repository_gate: OK` | 换账号登录先弹归属询问且文案写明归属；删除按墓碑收敛；远端胜出保留本机照片；全量同步防重入并只传增量；沙盒订阅可改绑、恢复购买透出真实原因。待 Xcode/XCTest 与 `FLOW-111` 双设备+沙盒真机签收 | FLOW-111 真机签收 |
+| 2026-09-11 | AUTH-REINSTALL-FIX-01 删除重装后旧登录残留 | `NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE` | `InteractionStateModels.swift`、`LocalStore.swift`、`SettingsViewModel.swift`、`StateRegressionTests.swift`、体验静态门禁、发布矩阵与本文档 | `git diff --check`、`life_semantic_regression.py`、`experience_static_check.ps1` 通过；新增安装/升级/重装纯策略覆盖与静态防回流 | 删除 App 后重装不再继承 Keychain 旧 token；覆盖升级仍保留登录；待 macOS/Xcode 与 `FLOW-113` TestFlight 真机签收 | FLOW-113 真机签收 |
+| 2026-09-11 | IAP-BINDING-FIX-02 撤销 Sandbox 自动改绑 | `NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE` | backend `iapService.js`/`server.js`/`store.js`/验证脚本/README；客户端 `AuthService.swift`、XCTest、静态门禁、发布矩阵与本文档 | `backend npm test`、`node --check`、`git diff --check`、生活语义回归、体验静态门禁和完整 Windows 发布门禁全部通过，最终 `release_repository_gate: OK`；仅既有 7 条文案软提示 | 无 token 跨账号绑定不再改绑；客户端明确提示登录原账号、更换 Apple ID 或联系客服；合法 token 改绑会更新 owner；待 Xcode/XCTest 与 `FLOW-111` 真机重签 | FLOW-111 真机重签 |
 
 ---
 
 ## 9. 当前交接状态
 
-- 当前无 `IN_PROGRESS`；`SYNC-IAP-FIX-01` 已于 2026-09-11 完成 Windows 代码、backend 脚本与 repository gate，待 macOS/Xcode 与 `FLOW-111` 真机签收。`RELEASE-02` 继续因缺少 Xcode、iPhone、StoreKit 沙盒与权限/无障碍真机条件而 `BLOCKED`。
+- 当前无 `IN_PROGRESS`；`IAP-BINDING-FIX-02` 已撤销 `SYNC-IAP-FIX-01` 引入的 Sandbox 自动改绑，待 macOS/Xcode 与 `FLOW-111` 真机重新签收。`AUTH-REINSTALL-FIX-01` 已完成 Windows 代码与静态门禁，待 Xcode/XCTest 与 `FLOW-113` TestFlight 删除重装签收。`RELEASE-02` 继续因缺少 Xcode、iPhone、StoreKit 沙盒与权限/无障碍真机条件而 `BLOCKED`。
 - 保留阻塞任务：`GATE-00`，等待后续 macOS/Xcode 与真机补签收。
 - 用户例外授权：2026-07-15 第一次允许启动 `INT-01`，第二次允许启动 `NAV-01`；第三次明确要求后续任务不再逐项询问、全部代码完成后统一真机验证。所有授权均不代表前序 Xcode/真机验收通过。
-- 当前代码完成待签收：`INT-01`、`NAV-01`、`NAV-02`、`TEST-01`、`DATA-01`、`DATA-02`、`DATA-03`、`DATA-04`、`PERF-01`、`PERF-02`、`PROD-01`、`PROD-02`、`MEMBER-01`、`AI-01`、`A11Y-01`、`OBS-01`、`RELEASE-01`、`COPY-01`、`PERF-03`、`DATA-05`、`PERF-04`、`INT-02`、`DATA-06`、`MEMBER-02`、`DISCOVER-MEMORY-WALL-01`。
+- 当前代码完成待签收：`INT-01`、`NAV-01`、`NAV-02`、`TEST-01`、`DATA-01`、`DATA-02`、`DATA-03`、`DATA-04`、`PERF-01`、`PERF-02`、`PROD-01`、`PROD-02`、`MEMBER-01`、`AI-01`、`A11Y-01`、`OBS-01`、`RELEASE-01`、`COPY-01`、`PERF-03`、`DATA-05`、`PERF-04`、`INT-02`、`DATA-06`、`MEMBER-02`、`DISCOVER-MEMORY-WALL-01`、`SYNC-IAP-FIX-01`、`AUTH-REINSTALL-FIX-01`、`IAP-BINDING-FIX-02`。
 - 当前阶段：Windows 代码阶段和完整 repository gate 已完成；等待 macOS/Xcode、iPhone、短信/同步测试账号与 StoreKit 沙盒补签收，只允许处理签收发现的定向问题。
 - 后续策略：只处理统一签收发现的定向问题；每个修复必须回填所属任务、边界和回归，不得重新展开产品范围。
 
@@ -4984,3 +4988,40 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据（2026-09-11，Windows）：`backend npm test` 四项通过（新脚本内存模式覆盖墓碑保留/旧上传不复活/删后编辑恢复/过期墓碑清理/`scenePackId` 白名单/五种绑定决策）；`node --check` 四个后端源文件通过；`git diff --check` 无空白错误；`python scripts/life_semantic_regression.py` OK；`python scripts/validate_release_gate.py --phase windows` 整体 `release_repository_gate: OK`（含新增 21 条体验静态断言），仅既有 7 条文案软提示。运行静态门禁时需 `rg` 在 PowerShell PATH 中（本机通过 Cursor 自带 ripgrep 补齐）。Windows 无 Swift/Xcode，新增 `CloudLedgerOwnershipPolicyTests`/`CloudLedgerMergePolicyTests`/`IAPRestoreFailureCopyTests` 仅完成源码接线，不能标记 `VERIFIED`。
 - 冻结边界复核：未改变账单字段、分类、金额、照片存储、会员套餐/价格/Product ID、StoreKit 校验、`updatedAt` 新者胜规则、登出保留本机账本；`AppSettings` 编码键未变，历史设置无需迁移；生产库首次启动自动 `ALTER TABLE ledgers ADD COLUMN IF NOT EXISTS deleted_at`，旧客户端忽略 `tombstones` 字段仍可工作。
 - 剩余风险与下一步：需在 macOS/Xcode 完成 Swift 6 Debug/Release 与三组 XCTest，并按 `FLOW-111` 用双设备双账号和 StoreKit 沙盒验证换账号弹窗、墓碑收敛、照片保留、订阅改绑；服务端部署后需确认 `deleted_at` 列已加。外部签收前保持 `CODE_DONE`。
+- 2026-09-11 更正：本项“Sandbox 允许无 token 自动改绑”的规则已被 `IAP-BINDING-FIX-02` 撤销。Sandbox 只代表测试环境，不能改变交易归属；无 Apple `appAccountToken` 证明时，同一 Apple ID 下另一个叙账账号必须保持免费并收到 `TRANSACTION_ALREADY_BOUND`。
+
+---
+
+### 115. AUTH-REINSTALL-FIX-01：删除 App 后重装不应恢复旧登录（2026-09-11）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-11）。
+- 用户问题：已登录账号的 TestFlight 构建删除后从 TestFlight 重新安装，首次打开仍显示旧账号登录状态。原因是 iOS 删除 App 会清除沙盒文件，但 Keychain 条目可能继续保留；`SettingsViewModel` 只检查 `backend_access_token` 是否存在，因此把跨卸载保留的旧 token 当成有效本机会话恢复。
+- 目标：删除 App 后重新安装必须回到未登录状态；同一 App 覆盖升级必须保留原登录、账本、照片和设置；清理只作用于旧 Keychain token，不删除本机账本、照片、云端记录、会员绑定或同步偏好。
+- 允许范围：`InteractionStateModels.swift` 的安装生命周期纯策略、`LocalStore.swift` 的沙盒安装标记与既有数据探测、`SettingsViewModel` 启动恢复顺序、`StateRegressionTests.swift`、体验静态门禁、发布矩阵和本文档。
+- 冻结边界：不修改 `AppSettings` 编码字段、JWT/TTL、短信登录、会员套餐/价格/Product ID、StoreKit、云端 DTO、同步冲突规则、本机账本/照片格式、登出保留本机账本或任何 UI 结构。
+- 实施结果：
+  1. 新增 `ApplicationInstallationSessionPolicy`。只有在安装标记缺失且本机没有设置、账本备份、旧 JSON 账本或 SQLite 元数据时，才判定为删除后的全新安装并丢弃旧登录会话。
+  2. `LocalStore.prepareInstallationLaunch()` 在读取 Keychain 前记录沙盒安装标记并执行上述判定；该标记随 App 删除消失，但覆盖升级会保留。
+  3. `SettingsViewModel.init` 在读取 `backend_access_token` 前先执行安装判定，只有全新安装才调用 `KeychainService.clearAccessToken()`；老版本首次升级到本版本时依靠既有本机数据保留登录。
+- 修改文件：`NativeDemoApp/Models/InteractionStateModels.swift`、`NativeDemoApp/Services/LocalStore.swift`、`NativeDemoApp/ViewModels/SettingsViewModel.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 验证证据（2026-09-11，Windows）：`git diff --check` 通过；`python scripts/life_semantic_regression.py` 输出 `OK`；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 完整通过。新增 `ApplicationInstallationSessionPolicyTests` 覆盖全新安装丢弃旧会话、无标记升级保留已有会话和已登记安装始终保持会话；静态门禁锁定安装标记、清理顺序及 `FLOW-113`。Windows 无 Swift/Xcode，XCTest 尚未运行。
+- 冻结边界复核：未改变登录协议、90 天 token、云端同步、账本合并、照片本地存储、会员权益或设置编码；删除重装只清旧 Keychain access token，不触碰本机账本和照片。
+- 剩余风险与下一步：必须在 macOS/Xcode 运行新增 XCTest，并用包含本修复的新 TestFlight 构建按 `FLOW-113` 验证：已登录构建覆盖升级后登录仍保留；删除 App 后重装首次打开为未登录；随后重新登录可正常同步。当前 `CODE_DONE`，外部签收前不得标记 `VERIFIED`。
+
+---
+
+### 116. IAP-BINDING-FIX-02：撤销 Sandbox 自动改绑并统一交易归属（2026-09-11）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-11）。
+- 用户问题：A、B 两个叙账账号使用同一个 TestFlight 沙盒 Apple ID 时，B 打开会员页后自动显示已开通永久会员。此前 `SYNC-IAP-FIX-01` 为方便共享沙盒 Apple ID 的测试者，允许无 `appAccountToken` 的交易在 Sandbox 自动改绑，导致 B 的 session 被写成永久会员。
+- 目标：交易归属必须与运行环境无关。只有 Apple `appAccountToken` 明确证明交易属于当前叙账账号时才允许绑定或在旧绑定错误时更正；没有 token 证明时，Production 和 Sandbox 都必须拒绝跨账号绑定。
+- 允许范围：backend `iapService.js`/`server.js`/`store.js`/验证脚本/README；客户端 `AuthService.swift` 的错误文案、对应 XCTest、体验静态门禁、发布矩阵和本文档。
+- 冻结边界：不修改 StoreKit 拉单逻辑、Apple 交易签名校验、会员套餐/价格/Product ID、Provider 环境路由、账本 DTO、同步冲突规则、照片边界或账号体系。
+- 实施结果：
+  1. `resolveIAPBindingDecision` 删除 Sandbox 专用分支；`environment` 不再参与授权判断。无 token 且绑定到其他账号时，Sandbox 同样返回 409 `TRANSACTION_ALREADY_BOUND`。
+  2. `upsertIAPTransaction` 的冲突更新补充 `user_id = EXCLUDED.user_id`，确保只有 Apple token 证明归属时才发生的合法改绑会真实更新绑定 owner，避免 session 与交易表不一致。
+  3. 客户端跨账号错误文案改为三个明确路径：先登录购买时使用的账号恢复；若要给当前账号单独开通，则先在系统设置更换 Apple ID 后重新购买；同一人的多账号需要迁移时联系客服。客户端不会自动退出 Apple ID，也不会自动改绑。
+- 修改文件：`backend/src/iapService.js`、`backend/src/server.js`、`backend/src/store.js`、`backend/scripts/verify-ledger-tombstone-and-iap-binding.mjs`、`backend/README.md`、`NativeDemoApp/Services/AuthService.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`API_v0.1.md`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 与本文档。
+- 验证证据（2026-09-11，Windows）：`backend npm test` 通过，覆盖 Sandbox 无 token 跨账号拒绝、合法 token 改绑持久化、墓碑与场景包白名单；`node --check`、`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 与 `python scripts/validate_release_gate.py --phase windows` 全部通过。Windows 无 Swift/Xcode，XCTest 尚未运行。
+- 冻结边界复核：未改变交易验证、Product ID、会员权益、云端绑定接口路径、Provider 环境配置、账本或同步逻辑；仅修正授权规则、合法改绑持久化和用户指引。
+- 剩余风险与下一步：本次代码不会自动回收已经被错误写成 `lifetime` 的 B 测试账号 session；部署后必须按交易号确认正确 owner，并将仅由该交易产生的错误会员状态重置为 `free`，再由 B 退出重登验证。需在 macOS/Xcode 运行 IAP 相关 XCTest，并在 TestFlight 用“A 已购买、B 使用同一沙盒 Apple ID”复测；B 必须保持免费、看到明确指引且不得改绑。随后各自使用不同沙盒 Apple ID，分别验证 B 能独立购买、A 能继续恢复。取得真机证据前保持 `CODE_DONE`。

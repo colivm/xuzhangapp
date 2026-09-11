@@ -1242,6 +1242,17 @@ Assert-Pattern 'backend/src/contentSafety.js' 'const scenePackId = normalizeUser
 Assert-Pattern 'backend/package.json' 'test:ledger-sync' 'backend test suite runs the ledger tombstone and IAP binding checks'
 Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'CloudLedgerOwnershipPolicyTests|testLocalLedgerSyncedToAnotherAccountAlwaysAsksEvenWhenNewAccountNeverEnabledSync|CloudLedgerMergePolicyTests|testRemoteTombstoneDeletesLocalRecordAndNeverReuploadsIt|testRemoteWinnerKeepsLocalPhotosCoverAndScenePack|testOnlyLocalNewerOrMissingRecordsAreUploaded|IAPRestoreFailureCopyTests' 'cloud ownership merge and IAP restore copy XCTest coverage'
 Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-111|属于另一个账号|墓碑|TRANSACTION_ALREADY_BOUND' 'account switch tombstone and sandbox binding device regression matrix'
+Assert-Pattern 'NativeDemoApp/Models/InteractionStateModels.swift' 'enum ApplicationInstallationSessionPolicy|shouldDiscardPersistedSession' 'fresh install session policy is one testable decision'
+Assert-Pattern 'NativeDemoApp/Services/LocalStore.swift' 'app_installation_marker_v1|prepareInstallationLaunch|hasPersistedInstallationData' 'fresh install marker survives only inside the app sandbox'
+Assert-MultilinePattern 'NativeDemoApp/ViewModels/SettingsViewModel.swift' 'init\(legalConsentStore: LegalConsentStore = LegalConsentStore\(\)\) \{[\s\S]{0,220}prepareInstallationLaunch\(\)[\s\S]{0,180}KeychainService\.clearAccessToken\(\)[\s\S]{0,420}hasCloudSession = !KeychainService\.loadAccessToken\(\)\.isEmpty' 'fresh install clears the retained keychain session before restoring login state'
+Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'ApplicationInstallationSessionPolicyTests|testFreshInstallWithoutAnyAppDataDiscardsPersistedKeychainSession|testFirstLaunchAfterUpgradeKeepsAnExistingSessionWithoutMarker' 'fresh install and upgrade session XCTest coverage'
+Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-113|删除 App|重新安装|升级' 'delete reinstall and upgrade session device regression matrix'
+Assert-Pattern 'backend/src/iapService.js' 'resolveIAPBindingDecision|without Apple proof|always rejected' 'IAP binding never rebinds without Apple account proof'
+Assert-NoPattern 'backend/src/iapService.js' 'isSandboxEnvironment|sandboxRebind' 'sandbox does not change transaction ownership'
+Assert-Pattern 'backend/src/store.js' 'user_id = EXCLUDED\.user_id' 'legitimate IAP rebinds persist the new owner'
+Assert-Pattern 'backend/scripts/verify-ledger-tombstone-and-iap-binding.mjs' 'always reject, including Sandbox|persist the new owner' 'IAP rebind rejection and persistence have executable coverage'
+Assert-Pattern 'NativeDemoApp/Services/AuthService.swift' '登录购买时使用的账号恢复|更换 Apple ID 后重新购买|联系客服处理迁移' 'account conflict copy gives login, separate Apple ID, and support paths'
+Assert-Pattern 'RELEASE_GATE_AND_DEVICE_MATRIX_v1.md' 'FLOW-111|必须保持免费|不要改绑|更换 Apple ID' 'same Apple ID conflict is rejected and explained on device'
 $releaseFixtureOutput = python scripts/validate_release_gate.py --phase fixtures
 if ($LASTEXITCODE -ne 0) {
     throw "Release fixture validation failed`n$releaseFixtureOutput"

@@ -46,9 +46,12 @@ final class SettingsViewModel: ObservableObject {
 
     init(legalConsentStore: LegalConsentStore = LegalConsentStore()) {
         self.legalConsentStore = legalConsentStore
+        if LocalStore.prepareInstallationLaunch() {
+            KeychainService.clearAccessToken()
+        }
+        KeychainService.removeLegacyDirectModelCredential()
         settings = LocalStore.loadSettings()
         hasAcceptedLoginPolicies = legalConsentStore.hasAcceptedCurrentPolicies
-        KeychainService.removeLegacyDirectModelCredential()
         hasCloudSession = !KeychainService.loadAccessToken().isEmpty
         if !hasCloudSession {
             settings.syncEnabled = false

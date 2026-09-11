@@ -13,10 +13,6 @@ export function tierForProductId(productId) {
   return Object.entries(config.iapProductIds).find(([, id]) => id && id === productId)?.[0] || "";
 }
 
-export function isSandboxEnvironment(environment) {
-  return String(environment || "").trim().toLowerCase() === "sandbox";
-}
-
 /**
  * Decide whether a verified App Store transaction may be bound to the current account.
  *
@@ -25,21 +21,21 @@ export function isSandboxEnvironment(environment) {
  *    rejects a token that belongs to another account, so `hasAppAccountToken === true`
  *    means Apple says this transaction belongs to the current account. That always wins
  *    over a stale server-side binding.
- * 2. The server-side binding table. Without a token, a transaction already bound to
- *    another account is rejected in production.
- * 3. Sandbox test Apple IDs are shared between testers, so in the Sandbox environment a
- *    token-less transaction may be rebound instead of locking the tester out.
+ * 2. The server-side binding table. Without Apple proof, a transaction already bound to
+ *    another account is always rejected, including in Sandbox.
  */
-export function resolveIAPBindingDecision({ existing, currentUserId, hasAppAccountToken, environment }) {
+export function resolveIAPBindingDecision({ existing, currentUserId, hasAppAccountToken }) {
   const boundToOther = Boolean(existing) && existing.userId !== currentUserId;
   if (hasAppAccountToken) {
     return { action: "bind", rebound: boundToOther };
   }
   if (boundToOther) {
-    if (isSandboxEnvironment(environment)) {
-      return { action: "bind", rebound: true, sandboxRebind: true };
-    }
-    return { action: "reject", status: 409, error: "TRANSACTION_ALREADY_BOUND", message: "This App Store transaction is bound to another account." };
+    return {
+      action: "reject",
+      status: 409,
+      error: "TRANSACTION_ALREADY_BOUND",
+      message: "This App Store transaction is bound to another account. Sign in with the account used for the purchase, or use another Apple ID to subscribe to the current account.",
+    };
   }
   if (!existing) {
     return {

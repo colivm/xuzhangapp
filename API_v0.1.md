@@ -472,11 +472,40 @@ curl -X POST https://api.xuzhangapp.com/v1/ai/insight/daily \
 
 ---
 
-## 8. 内购验单（预留）
+## 8. 内购验单
 
 - **Method**: `POST`
 - **Path**: `/v1/iap/verify`
-- **Status**: `501 IAP_VERIFY_NOT_IMPLEMENTED`
+- **Auth**: Bearer JWT
+
+**Request**
+
+```json
+{
+  "productId": "com.xuzhang.app.member.lifetime",
+  "transactionId": "2000000000000001",
+  "signedTransactionInfo": "<StoreKit 2 JWS>"
+}
+```
+
+服务端通过 App Store Server API 校验交易、Product ID、Bundle ID、撤销/过期状态和
+`appAccountToken`。一笔 `originalTransactionId` 只能绑定一个叙账账号；交易已经绑定其他
+账号时，Production 和 Sandbox 都返回 `409 TRANSACTION_ALREADY_BOUND`，不会自动改绑。
+只有 Apple `appAccountToken` 明确匹配当前账号时才允许绑定或更正旧绑定。
+
+**Response 200**
+
+```json
+{
+  "ok": true,
+  "productId": "com.xuzhang.app.member.lifetime",
+  "transactionId": "2000000000000001",
+  "originalTransactionId": "2000000000000001",
+  "environment": "Production",
+  "memberTier": "lifetime",
+  "memberExpiresAt": null
+}
+```
 
 ---
 
@@ -495,7 +524,11 @@ curl -X POST https://api.xuzhangapp.com/v1/ai/insight/daily \
 | `INVALID_EVENT` | 400 | 埋点 event 为空 |
 | `UPSTREAM_ERROR` | 502 | ai-proxy 转发失败 |
 | `WECHAT_NOT_IMPLEMENTED` | 501 | 微信登录未接入 |
-| `IAP_VERIFY_NOT_IMPLEMENTED` | 501 | 内购验单未接入 |
+| `TRANSACTION_ALREADY_BOUND` | 409 | 交易已绑定其他叙账账号，不自动改绑 |
+| `APP_ACCOUNT_MISMATCH` | 409 | Apple `appAccountToken` 属于其他叙账账号 |
+| `APP_ACCOUNT_TOKEN_MISSING` | 409 | 无 `appAccountToken` 且没有可确认的历史绑定 |
+| `TRANSACTION_EXPIRED` | 400 | 订阅交易已过期 |
+| `TRANSACTION_REVOKED` | 400 | 交易已撤销 |
 
 ### ai-proxy（内部）
 

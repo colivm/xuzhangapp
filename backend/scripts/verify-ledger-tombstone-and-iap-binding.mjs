@@ -7,7 +7,7 @@ process.env.DATABASE_URL = "";
 process.env.REDIS_URL = "";
 
 const store = await import("../src/store.js");
-const { resolveIAPBindingDecision, isSandboxEnvironment } = await import("../src/iapService.js");
+const { resolveIAPBindingDecision } = await import("../src/iapService.js");
 const { sanitizeLedgerItem } = await import("../src/contentSafety.js");
 
 await store.initStore();
@@ -61,38 +61,44 @@ assert.equal(sanitized.item.scenePackId, "commute", "scenePackId must survive th
 
 // --- IAP binding decision --------------------------------------------------
 
-assert.equal(isSandboxEnvironment("Sandbox"), true);
-assert.equal(isSandboxEnvironment("Production"), false);
-
 const boundToB = { userId: "user-b", originalTransactionId: "orig-1" };
 
 // Apple's appAccountToken says the transaction is ours: always bind, even over a stale server binding.
 assert.deepEqual(
-  resolveIAPBindingDecision({ existing: boundToB, currentUserId: "user-a", hasAppAccountToken: true, environment: "Production" }),
+  resolveIAPBindingDecision({ existing: boundToB, currentUserId: "user-a", hasAppAccountToken: true }),
   { action: "bind", rebound: true }
 );
 
-// No token, production, bound to somebody else: reject with the explicit code.
-const rejected = resolveIAPBindingDecision({ existing: boundToB, currentUserId: "user-a", hasAppAccountToken: false, environment: "Production" });
+// No token and bound to somebody else: always reject, including Sandbox.
+const rejected = resolveIAPBindingDecision({ existing: boundToB, currentUserId: "user-a", hasAppAccountToken: false });
 assert.equal(rejected.action, "reject");
 assert.equal(rejected.status, 409);
 assert.equal(rejected.error, "TRANSACTION_ALREADY_BOUND");
 
-// No token, sandbox, bound to somebody else: sandbox Apple IDs are shared, allow the rebind.
-assert.deepEqual(
-  resolveIAPBindingDecision({ existing: boundToB, currentUserId: "user-a", hasAppAccountToken: false, environment: "Sandbox" }),
-  { action: "bind", rebound: true, sandboxRebind: true }
-);
-
 // No token and no prior binding: cannot prove ownership.
-const missing = resolveIAPBindingDecision({ existing: null, currentUserId: "user-a", hasAppAccountToken: false, environment: "Production" });
+const missing = resolveIAPBindingDecision({ existing: null, currentUserId: "user-a", hasAppAccountToken: false });
 assert.equal(missing.action, "reject");
 assert.equal(missing.error, "APP_ACCOUNT_TOKEN_MISSING");
 
 // No token but already bound to me: idempotent re-verify.
 assert.deepEqual(
-  resolveIAPBindingDecision({ existing: { userId: "user-a" }, currentUserId: "user-a", hasAppAccountToken: false, environment: "Production" }),
+  resolveIAPBindingDecision({ existing: { userId: "user-a" }, currentUserId: "user-a", hasAppAccountToken: false }),
   { action: "bind", rebound: false }
 );
 
-console.log("Ledger tombstone retention, scenePackId whitelist and IAP binding decision verified.");
+const transaction = {
+  originalTransactionId: "orig-rebind",
+  userId: "user-a",
+  transactionId: "txn-1",
+  productId: "com.xuzhang.app.member.lifetime",
+  memberTier: "lifetime",
+  memberExpiresAt: null,
+  environment: "Sandbox",
+  verifiedAt: early,
+};
+await store.upsertIAPTransaction(transaction);
+await store.upsertIAPTransaction({ ...transaction, userId: "user-b", verifiedAt: later });
+const persistedRebind = await store.getIAPTransactionByOriginalId(transaction.originalTransactionId);
+assert.equal(persistedRebind.userId, "user-b", "A legitimate appAccountToken rebind must persist the new owner.");
+
+console.log("Ledger tombstone retention, scenePackId whitelist and strict IAP binding verified.");

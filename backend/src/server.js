@@ -254,7 +254,6 @@ app.post("/v1/iap/verify", requireAuth, async (req, res) => {
       existing,
       currentUserId: req.user.userId,
       hasAppAccountToken: verified.hasAppAccountToken,
-      environment: verified.environment,
     });
     if (decision.action === "reject") {
       return res.status(decision.status).json({
@@ -266,7 +265,7 @@ app.post("/v1/iap/verify", requireAuth, async (req, res) => {
     }
     if (decision.rebound) {
       console.warn("[iap]", JSON.stringify({
-        event: decision.sandboxRebind ? "iap_sandbox_rebind" : "iap_rebind_by_app_account_token",
+        event: "iap_rebind_by_app_account_token",
         originalTransactionId: verified.originalTransactionId,
         fromUserId: existing?.userId || null,
         toUserId: req.user.userId,

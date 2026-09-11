@@ -9930,6 +9930,41 @@ final class CloudLedgerOwnershipPolicyTests: XCTestCase {
     }
 }
 
+final class ApplicationInstallationSessionPolicyTests: XCTestCase {
+    func testFreshInstallWithoutAnyAppDataDiscardsPersistedKeychainSession() {
+        XCTAssertTrue(
+            ApplicationInstallationSessionPolicy.shouldDiscardPersistedSession(
+                hasInstallMarker: false,
+                hasExistingInstallationData: false
+            )
+        )
+    }
+
+    func testFirstLaunchAfterUpgradeKeepsAnExistingSessionWithoutMarker() {
+        XCTAssertFalse(
+            ApplicationInstallationSessionPolicy.shouldDiscardPersistedSession(
+                hasInstallMarker: false,
+                hasExistingInstallationData: true
+            )
+        )
+    }
+
+    func testRegisteredInstallationAlwaysKeepsItsSession() {
+        XCTAssertFalse(
+            ApplicationInstallationSessionPolicy.shouldDiscardPersistedSession(
+                hasInstallMarker: true,
+                hasExistingInstallationData: false
+            )
+        )
+        XCTAssertFalse(
+            ApplicationInstallationSessionPolicy.shouldDiscardPersistedSession(
+                hasInstallMarker: true,
+                hasExistingInstallationData: true
+            )
+        )
+    }
+}
+
 final class CloudLedgerMergePolicyTests: XCTestCase {
     private func item(
         _ id: UUID,
@@ -10036,6 +10071,9 @@ final class IAPRestoreFailureCopyTests: XCTestCase {
             for: AuthServiceError.iapVerifyFailed(code: "TRANSACTION_ALREADY_BOUND", message: "")
         )
         XCTAssertTrue(message.contains("另一个叙账账号"))
+        XCTAssertTrue(message.contains("登录购买时使用的账号"))
+        XCTAssertTrue(message.contains("更换 Apple ID"))
+        XCTAssertTrue(message.contains("联系客服"))
         XCTAssertNotEqual(message, IAPRestoreFailureCopy.genericMessage)
     }
 
