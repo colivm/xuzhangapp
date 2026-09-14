@@ -10112,10 +10112,30 @@ final class IAPRestoreFailureCopyTests: XCTestCase {
             for: AuthServiceError.iapVerifyFailed(code: "TRANSACTION_ALREADY_BOUND", message: "")
         )
         XCTAssertTrue(message.contains("另一个叙账账号"))
-        XCTAssertTrue(message.contains("登录购买时使用的账号"))
-        XCTAssertTrue(message.contains("更换 Apple ID"))
-        XCTAssertTrue(message.contains("联系客服"))
+        XCTAssertTrue(message.contains("购买时使用的手机号账号"))
+        XCTAssertFalse(message.contains("更换 Apple ID"))
+        XCTAssertTrue(message.contains("不能解绑或转移"))
+        XCTAssertFalse(message.contains("联系客服"))
         XCTAssertNotEqual(message, IAPRestoreFailureCopy.genericMessage)
+    }
+
+    func testLifetimeConflictIsLabeledAsPurchaseNotSubscription() {
+        let message = IAPRestoreFailureCopy.message(
+            for: AuthServiceError.iapVerifyFailed(code: "TRANSACTION_ALREADY_BOUND", message: ""),
+            tier: .lifetime
+        )
+        XCTAssertTrue(message.contains("App Store 购买"))
+        XCTAssertFalse(message.contains("App Store 订阅"))
+        XCTAssertFalse(message.contains("解绑"))
+    }
+
+    func testYearlyExpirationCopyNamesTheSubscriptionTier() {
+        let message = IAPPurchaseFailureCopy.message(
+            for: IAPServiceError.transactionExpired,
+            tier: .yearly
+        )
+        XCTAssertTrue(message.contains("年度订阅"))
+        XCTAssertFalse(message.contains("购买"))
     }
 
     func testUnknownOrNetworkFailuresFallBackToGenericMessage() {

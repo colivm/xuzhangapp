@@ -5101,3 +5101,52 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 冻结边界复核：仅调整餐饮情绪标签的时间优先级；不改变账单标题、金额、日期保存含义、分类/OCR、同步协议、照片、会员和其他类别标签。
 - Windows 验证证据（2026-09-14）：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 待本轮执行；Windows 无 Swift/Xcode，新增 XCTest 只能完成源码接线，不能标记 `VERIFIED`。
 - 剩余风险与下一步：需在 macOS/Xcode 运行新增 XCTest，并在真机验证 12:00 午餐、17:56 晚餐、21:30 夜宵及“中午带饭”历史补记四条边界；外部签收前保持 `CODE_DONE`。下一项为统一 Xcode/真机签收（`RELEASE-02`）。
+
+### 123. APP-REVIEW-EULA-METADATA-FIX-01：订阅应用描述补齐 Terms of Use (EULA)（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-14）。
+- 用户问题：App Review 自动拒绝，指出应用元数据未提供可用的 Terms of Use (EULA) 链接；仓库虽有中文“用户协议”链接，但未强制要求应用描述出现 Apple 可识别的英文 EULA 标签和标准地址。
+- 目标：应用描述明确包含可点击的 `Terms of Use (EULA)` 标准 Apple EULA URL；叙账服务条款继续单独保留，避免把两者混为一谈。
+- 实施结果：
+  1. `APP_STORE_METADATA_zh-Hans.json` 与 `APP_STORE_LISTING.md` 的描述新增 `Terms of Use (EULA)：https://www.apple.com/legal/internet-services/itunes/dev/stdeula/`，并保留隐私政策和叙账服务条款。
+  2. `APP_STORE_IAP_SETUP.md`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 补充 App Store Connect 填写和 FLOW-95 验收要求；若未来改用自定义 EULA，需在 License Agreement 字段配置。
+  3. `scripts/app_store_metadata_check.py` 新增 `eulaURL`、英文标签、HTTPS 和描述内完整链接校验，防止再次漏填。
+- 修改文件：`APP_STORE_METADATA_zh-Hans.json`、`APP_STORE_LISTING.md`、`APP_STORE_IAP_SETUP.md`、`scripts/app_store_metadata_check.py`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 冻结边界复核：仅修改 App Store 元数据及审核流程门禁；不改变 App 内订阅价格、Product ID、StoreKit 验证、会员权益、服务条款内容或隐私数据规则。
+- Windows 验证证据（2026-09-14）：待执行 `python scripts/app_store_metadata_check.py`、`python scripts/validate_release_gate.py --phase windows`、`git diff --check`；无需 Xcode 编译，公网 URL 点击和 App Store Connect 保存仍需运营方验收。
+- 剩余风险与下一步：必须在 App Store Connect 对当前版本实际粘贴更新后的完整描述并保存，在产品页点击 EULA 返回 200 后重新提交审核；若仍使用自定义服务协议，确认不将其替代 Apple 标准 EULA。外部签收前保持 `CODE_DONE`。
+
+### 124. IAP-PURCHASE-COPY-FIX-01：区分订阅与永久购买错误并移除解绑承诺（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-14）。
+- 用户问题：月度订阅可以购买但年度尝试提示过期；永久会员是非消耗型购买，却沿用“App Store 订阅”错误文案；跨账号归属提示还提供“联系客服解绑”，与不可改绑规则冲突。
+- 根因证据：服务器 `iap_transactions` 仅有当前账号一笔已过期月度交易和一笔永久购买，没有年度交易；年度错误发生在客户端本地过期检查阶段，不能归因于交易改绑。年度产品是否可购买仍需在 App Store Connect 核对订阅组、销售状态和沙盒续订周期。
+- 实施结果：
+  1. `IAPRestoreFailureCopy` 支持按 `IAPTier` 生成提示；永久会员冲突显示“App Store 购买”，月度/年度显示“App Store 订阅”。
+  2. 购买路径使用按套餐区分的过期/归属提示；恢复路径保留失败交易对应的 tier，避免用第一条错误覆盖永久购买语义。
+  3. 删除“联系客服解绑”表述，明确交易不能解绑或转移，只能登录购买时的手机号账号恢复；不提供任何改绑入口。
+  4. 增加永久购买冲突和无解绑承诺的 XCTest 回归。
+- 修改文件：`NativeDemoApp/Services/AuthService.swift`、`NativeDemoApp/Views/MemberPricingView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、本文档。
+- 冻结边界复核：未改变 Product ID、套餐价格、StoreKit 购买/验证、Apple 交易归属和会员权益；仅调整错误分类、文案和恢复失败的 tier 传递。
+- Windows 验证证据（2026-09-14）：待执行 `git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows`；Windows 无 Swift/Xcode，新增 XCTest 待 macOS 执行。
+- 剩余风险与下一步：年度订阅仍需在 App Store Connect 确认与月度同一订阅组、状态为 Ready for Sale，并用 Sandbox 新交易验证；外部签收前保持 `CODE_DONE`。
+
+### 125. DATA-06-LOCAL-BACKUP-PICKER-FIX-01：本地备份包在文件 App 中不可选择（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-14）。本项是 DATA-06 导入入口的定向修复，不改变备份包结构、照片边界、校验、预览、冲突合并或回滚规则。
+- 用户问题：删除 App 重装后，本地照片只能依靠 `.xuzhangbackup` 恢复；在文件 App 中可以进入备份包看到 `ledger.json`、`manifest.json`、`README.txt`，但无法把整个备份包选回叙账。
+- 根因：`LedgerLocalBackupDocument.contentType` 仅在代码中动态创建，`Info.plist` 没有注册自定义 UTI 与 `.xuzhangbackup` 扩展名映射。文件 App 将备份包当普通目录打开，包内文件又不符合导入器允许类型，导致选择入口不可用。
+- 实施结果：在 `Info.plist` 注册 `com.xuzhangapp.ledger-backup`（继承 `com.apple.package`/`public.data`，映射 `xuzhangbackup` 扩展名和 MIME 类型），声明文档类型并设置 `LSSupportsOpeningDocumentsInPlace = YES`，通过 App Store 文档配置校验；导入器同时接受 `.package` 作为兼容兜底，但仍要求完整包并执行原有清单、记录 ID、照片路径和 SHA 校验。恢复合并按记录 ID 去重：空账本只插入一次；云同步先恢复账单后，若本地同 ID 缺照片，则只补入备份照片并保留云端较新的标题、金额、分类、日期等字段；已有本机照片或文件引用不会被备份空值覆盖。
+- 修改文件：`NativeDemoApp/Info.plist`、`NativeDemoApp/Views/SettingsView.swift`、`NativeDemoApp/Services/LedgerLocalBackupDocument.swift`、`NativeDemoAppTests/LedgerLocalBackupDocumentTests.swift`、`scripts/experience_static_check.ps1` 与本文档。
+- 验证证据：`plistlib` 解析 `Info.plist` 成功；`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 全部通过；新增空账本去重和云端账单照片补入 XCTest 已接线。Windows 无 Xcode，尚未执行 iOS 文件 App 真机选择和重装后照片恢复验收，不能标记 `VERIFIED`。
+- 冻结边界复核：未修改 `.xuzhangbackup` 包结构、照片仅本机与本地备份边界、照片缺失语义、导入预览/确认、按 ID 较新胜出、失败不替换账本等既有规则；未触碰云同步、会员、IAP 或账单字段。
+- 剩余风险与下一步：用新 TestFlight 构建在文件 App 根目录选择整个 `.xuzhangbackup`（不要进入包内选择 `ledger.json`），确认能弹出导入预览，并验证包含照片的记录在删除重装后恢复；若系统仍只允许进入目录，则需把包改为单文件 ZIP 并迁移导入器，作为独立后续任务。
+
+### 126. APP-STORE-DESCRIPTION-REFRESH-01：上架描述与当前能力、EULA 对齐（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-14）。
+- 范围：更新 App Store 描述，补充本地备份去重与缺照片补入、当前免费额度、会员类型、自动续订披露及 Apple 标准 EULA；删除“账单字段”等旧术语，保留 DeepSeek、WeatherKit 和照片本地边界的事实说明。
+- 修改文件：`APP_STORE_METADATA_zh-Hans.json`、`APP_STORE_LISTING.md`、本文档。
+- 验证证据：`python scripts/app_store_metadata_check.py` 通过（description 1282/4000、promotionalText 87/170、keywords 36/100）；`git diff --check` 通过。App Store Connect 实际粘贴、链接点击和新构建审核仍待运营方完成。
+- 冻结边界：未修改 App 功能、价格、Product ID、订阅归属、隐私实现或服务条款正文；描述不承诺照片云端备份、定位每笔必有或交易可解绑/改绑。
+- 下一步：在 App Store Connect 粘贴 `description`、`whatsNew` 和 EULA 标准链接，确认产品页可点击后重新提交审核。

@@ -42,7 +42,7 @@ enum AuthServiceError: LocalizedError {
             case "TRANSACTION_EXPIRED":
                 return "这笔 App Store 订阅已经过期。请使用购买时绑定的手机号账号恢复有效订阅，或重新开通会员。"
             case "TRANSACTION_ALREADY_BOUND":
-                return "这笔 App Store 订阅已经绑定到另一个叙账账号。请退出登录，换回购买时使用的手机号账号再恢复；如果确认是同一个人，请联系客服解绑。"
+                return "这笔 App Store 订阅已经绑定到另一个叙账账号。请登录购买时使用的手机号账号恢复；这笔订阅不能解绑或转移。"
             case "APP_ACCOUNT_MISMATCH":
                 return "这笔 App Store 订阅属于另一个叙账账号，请登录购买时的手机号账号恢复。"
             case "APP_ACCOUNT_TOKEN_MISSING":
@@ -77,11 +77,17 @@ enum IAPRestoreFailureCopy {
         "TRANSACTION_REVOKED",
     ]
 
-    static func message(for error: Error?) -> String {
+    static func message(for error: Error?, tier: IAPTier? = nil) -> String {
         guard let error else { return genericMessage }
         if let authError = error as? AuthServiceError,
-           case .iapVerifyFailed(let code, _) = authError,
-           accountMismatchCodes.contains(code) {
+           case .iapVerifyFailed(let code, _) = authError {
+            guard accountMismatchCodes.contains(code) else { return genericMessage }
+            if code == "TRANSACTION_ALREADY_BOUND" {
+                if tier == .lifetime {
+                    return "这笔 App Store 购买已经绑定到另一个叙账账号。请登录购买时的手机号账号恢复；这笔购买不能解绑或转移。"
+                }
+                return "这笔 App Store 订阅已经绑定到另一个叙账账号。请登录购买时的手机号账号恢复；这笔订阅不能解绑或转移。"
+            }
             return authError.errorDescription ?? genericMessage
         }
         if let settingsError = error as? SettingsViewModelError,
@@ -89,6 +95,23 @@ enum IAPRestoreFailureCopy {
             return settingsError.errorDescription ?? genericMessage
         }
         return genericMessage
+    }
+}
+
+enum IAPPurchaseFailureCopy {
+    static func message(for error: Error, tier: IAPTier) -> String {
+        if let authError = error as? AuthServiceError,
+           case .iapVerifyFailed(let code, _) = authError,
+           code == "TRANSACTION_ALREADY_BOUND" {
+            return IAPRestoreFailureCopy.message(for: authError, tier: tier)
+        }
+        if let iapError = error as? IAPServiceError,
+           case .transactionExpired = iapError,
+           tier != .lifetime {
+            let planName = tier == .yearly ? "年度" : "月度"
+            return "这笔 App Store " + planName + "订阅已过期或尚未生效，请在当前 Apple ID 的订阅设置中确认后再试。"
+        }
+        return (error as? LocalizedError)?.errorDescription ?? "购买没有完成。请确认 Apple 购买状态后再试。"
     }
 }
 

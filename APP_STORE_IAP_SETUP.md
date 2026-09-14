@@ -13,7 +13,8 @@
 | 支持邮箱 | `support@xuzhang.app` |
 | 营销 / 支持 URL | `https://xuzhangapp.com/` |
 | 隐私政策 | `https://xuzhangapp.com/legal/privacy.html` |
-| 用户协议 | `https://xuzhangapp.com/legal/terms.html` |
+| Terms of Use (EULA，Apple 标准) | `https://www.apple.com/legal/internet-services/itunes/dev/stdeula/` |
+| 用户协议（叙账服务条款） | `https://xuzhangapp.com/legal/terms.html` |
 
 核心功能无需登录。手机号登录只用于用户主动选择的自动备份、联网整理和会员账号关联；发送验证码前必须主动勾选用户协议与隐私政策。
 
@@ -71,7 +72,7 @@ App 内当前展示“首月推介 ¥6”。正式提交前只能二选一：
 - 商品显示名、订阅周期、StoreKit 实际价格。
 - 自动续期订阅可在 App Store 账户设置中管理或取消。
 - “恢复购买”入口。
-- 用户协议与隐私政策链接。
+- `Terms of Use (EULA)` 与隐私政策链接；应用描述必须出现完整英文标签和可点击 URL。
 - 未登录购买会先进入手机号登录；登录成功只返回会员页，不自动扣款，仍需用户再次确认。
 - 购买取消、待处理、校验失败、过期和恢复无权益都有明确状态。
 
@@ -95,7 +96,8 @@ App Review 的“需要登录”默认不勾选，因为手动记账、本地保
 会员页可查看年度、月度和永久会员，并测试购买、取消和恢复购买。价格以 StoreKit 当前返回值为准。
 
 隐私政策：https://xuzhangapp.com/legal/privacy.html
-用户协议：https://xuzhangapp.com/legal/terms.html
+Terms of Use (EULA)：https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+用户协议（服务条款）：https://xuzhangapp.com/legal/terms.html
 支持：support@xuzhang.app
 ```
 
@@ -156,6 +158,7 @@ Beta 描述：
 - [ ] 月度与年度位于同一订阅组；永久会员为非消耗型。
 - [ ] App 内与 App Store 的显示名、周期、权益和实际价格一致。
 - [ ] 订阅管理、恢复购买、协议与隐私链接均可达。
+- [ ] 应用描述含 `Terms of Use (EULA)` 标准链接；若提交自定义 EULA，则已在 App Store Connect 的 License Agreement 字段配置并可点击验证。
 - [ ] 审核备注未包含通用固定验证码或公开凭据。
 - [ ] Production + Sandbox 服务端验单与真机 StoreKit 矩阵通过。
 
