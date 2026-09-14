@@ -282,13 +282,15 @@ ai-proxy 直连接口（仅服务端内部）使用 `{ "code": "...", "message":
 - **Method**: `DELETE`
 - **Path**: `/v1/ledger/:id`
 - **Auth**: Bearer JWT
-- 软删除：服务端写入墓碑并在 `GET /v1/ledger` 的 `tombstones` 中返回 180 天；若该账单在服务端的 `updatedAt` 晚于删除时间，删除被忽略。
+- 软删除：服务端写入墓碑并在 `GET /v1/ledger` 的 `tombstones` 中返回 180 天；若该账单在服务端的 `updatedAt` 晚于删除时间，删除被忽略。客户端删除意图会在本机按账号持久化并重试，避免离线删除在下次同步时复活。
 
 **Response 200**
 
 ```json
 { "ok": true, "deletedAt": "2026-09-11T08:00:00Z" }
 ```
+
+`DELETE /v1/ledger` 清空云端账本同样写入当前时间的墓碑（返回 `deletedAt`），而不是硬删除；这样另一台离线设备的旧上传会被单调时间戳规则拒绝。清空后产生、且 `updatedAt` 晚于清空时间的新记录仍可正常上传。
 
 ---
 
@@ -491,7 +493,7 @@ curl -X POST https://api.xuzhangapp.com/v1/ai/insight/daily \
 服务端通过 App Store Server API 校验交易、Product ID、Bundle ID、撤销/过期状态和
 `appAccountToken`。一笔 `originalTransactionId` 只能绑定一个叙账账号；交易已经绑定其他
 账号时，Production 和 Sandbox 都返回 `409 TRANSACTION_ALREADY_BOUND`，不会自动改绑。
-只有 Apple `appAccountToken` 明确匹配当前账号时才允许绑定或更正旧绑定。
+只有首次绑定时才接受 Apple `appAccountToken`；已有交易归属不可更正或改绑。
 
 **Response 200**
 

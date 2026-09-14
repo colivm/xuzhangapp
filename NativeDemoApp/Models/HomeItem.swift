@@ -177,6 +177,13 @@ struct HomeItem: Identifiable, Codable, Equatable {
     var displayEmotionTag: String {
         let trimmed = emotionTag.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
+        // 餐饮记录的存量标签可能是在中午生成、之后才被补记/改到晚间。
+        // 明确时间优先于旧的“午饭”叙事；只有标题本身写明午餐时才保留午餐事实。
+        if category == .dining,
+           let eveningTag = Self.eveningDiningEmotionTag(title: title, date: createdAt),
+           Self.isNoonMealEmotionTag(trimmed) {
+            return eveningTag
+        }
         if let lateCommute = Self.lateWorkCommuteEmotionTag(for: self),
            Self.shouldPreferLateWorkCommuteTag(current: trimmed) {
             return lateCommute
@@ -482,6 +489,20 @@ struct HomeItem: Identifiable, Codable, Equatable {
             return "夜里吃点东西"
         }
         return nil
+    }
+
+    static func eveningDiningEmotionTag(title: String, date: Date?) -> String? {
+        guard let date else { return nil }
+        let hour = Calendar.current.component(.hour, from: date)
+        guard (17..<21).contains(hour) else { return nil }
+        let text = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // 用户标题中的明确午餐事实优先，不能被时间推断覆盖。
+        guard !containsAny(text, ["早餐", "早饭", "午餐", "午饭", "中午"]) else { return nil }
+        return "晚饭时间坐一会儿"
+    }
+
+    private static func isNoonMealEmotionTag(_ text: String) -> Bool {
+        containsAny(text.lowercased(), ["午餐", "午饭", "中午", "午间"])
     }
 
     static func isLateWorkCommute(_ item: HomeItem) -> Bool {

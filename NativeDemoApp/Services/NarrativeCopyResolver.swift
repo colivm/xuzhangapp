@@ -348,6 +348,10 @@ enum NarrativeCopyResolver {
             if let note = drinkBrandEmotionTag(brand: brand, context: context) {
                 return note
             }
+            if context.category == .dining,
+               let eveningTag = HomeItem.eveningDiningEmotionTag(title: context.note, date: context.date) {
+                return eveningTag
+            }
             if let note = note(from: brand.tiers, amount: context.amount, seed: context.seed) {
                 return note
             }

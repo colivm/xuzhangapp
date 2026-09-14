@@ -218,14 +218,18 @@ app.delete("/v1/ledger/:id", requireAuth, async (req, res) => {
   if (!itemId) {
     return res.status(400).json({ ok: false, error: "INVALID_LEDGER_ITEM" });
   }
-  const deletedAt = ledgerTimestampNow();
+  const requestedDeletedAt = String(req.query?.deletedAt || "").trim();
+  const parsedDeletedAt = requestedDeletedAt ? Date.parse(requestedDeletedAt) : NaN;
+  const deletedAt = Number.isFinite(parsedDeletedAt) && parsedDeletedAt <= Date.now()
+    ? ledgerTimestampNow(new Date(parsedDeletedAt))
+    : ledgerTimestampNow();
   await deleteLedger(req.user.userId, itemId, deletedAt);
   res.json({ ok: true, deletedAt });
 });
 
 app.delete("/v1/ledger", requireAuth, async (req, res) => {
-  await deleteLedgersByUserId(req.user.userId);
-  res.json({ ok: true });
+  const deletedAt = await deleteLedgersByUserId(req.user.userId);
+  res.json({ ok: true, deletedAt });
 });
 
 app.delete("/v1/account", requireAuth, async (req, res) => {
@@ -254,6 +258,7 @@ app.post("/v1/iap/verify", requireAuth, async (req, res) => {
       existing,
       currentUserId: req.user.userId,
       hasAppAccountToken: verified.hasAppAccountToken,
+      environment: verified.environment,
     });
     if (decision.action === "reject") {
       return res.status(decision.status).json({
@@ -265,7 +270,7 @@ app.post("/v1/iap/verify", requireAuth, async (req, res) => {
     }
     if (decision.rebound) {
       console.warn("[iap]", JSON.stringify({
-        event: "iap_rebind_by_app_account_token",
+        event: decision.sandboxRebind ? "iap_sandbox_rebind" : "iap_rebind_by_app_account_token",
         originalTransactionId: verified.originalTransactionId,
         fromUserId: existing?.userId || null,
         toUserId: req.user.userId,
@@ -273,7 +278,6 @@ app.post("/v1/iap/verify", requireAuth, async (req, res) => {
         ts: new Date().toISOString(),
       }));
     }
-
     await upsertIAPTransaction({
       originalTransactionId: verified.originalTransactionId,
       userId: req.user.userId,

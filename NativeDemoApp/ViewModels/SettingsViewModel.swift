@@ -568,6 +568,7 @@ final class SettingsViewModel: ObservableObject {
             }
             throw SettingsViewModelError.loginRequired
         }
+        let accountIDAtStart = settings.cloudUserId
         isAuthBusy = true
         defer { isAuthBusy = false }
         let client = AuthService(baseURL: backendBaseURL)
@@ -589,6 +590,12 @@ final class SettingsViewModel: ObservableObject {
             }
         } catch {
             // The verify endpoint is still authoritative for this operation.
+        }
+        // 账号切换期间旧账号的 entitlement 请求可能晚返回；禁止它污染新账号状态。
+        guard !accountIDAtStart.isEmpty,
+              settings.cloudUserId == accountIDAtStart,
+              KeychainService.loadAccessToken() == token else {
+            return
         }
         settings.memberTier = resolvedTier
         settings.memberExpiresAt = resolvedExpiresAt

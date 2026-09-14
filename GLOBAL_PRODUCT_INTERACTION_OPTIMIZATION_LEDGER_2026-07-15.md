@@ -5046,3 +5046,58 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据（2026-09-11，Windows）：`python scripts/life_semantic_regression.py` 通过，新增“好医保 / 保费缴清”OCR 回归样例归入“其他”；两个词典 JSON 解析通过；体验静态门禁和完整 `python scripts/validate_release_gate.py --phase windows` 通过，最终 `release_repository_gate: OK`，仅保留既有 7 条文案软提示。新增 `InsuranceClassificationBoundaryTests` 覆盖新导入分类与文案、旧日用错误记录不生成生活线索、真实日用记录仍生成原线索。Windows 无 Swift/Xcode，XCTest 尚未运行。
 - 冻结边界复核：未新增“保险”分类；未修改其他分类规则、OCR 字段提取、金额/日期、照片、会员、同步或首页结构。现有旧记录仍保留原始 `category` 存储值，但副文案和生活线索不再按错误日用语义呈现。
 - 剩余风险与下一步：需在 macOS/Xcode 运行 `InsuranceClassificationBoundaryTests`，并用新 TestFlight 构建按 `FLOW-114` 走正式相册 OCR，确认保险新导入为“其他”、旧记录不再出现“超市买菜和家用”，同时真实日用记录仍能产生原线索。外部签收前保持 `CODE_DONE`。
+
+### 118. SYNC-DELETE-RESILIENCE-01：离线删除重试与云端清空防复活（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-14）。本项是 `SYNC-IAP-FIX-01` 云同步墓碑链路的定向补缺，不扩展到 IAP、归属标记或其他同步协议。
+- 两个确定缺口：本机删除在离线/请求失败后没有持久化意图，下一次同步会从云端重新导入；清空云端账本硬删除全部行，另一台离线设备的旧记录可重新上传复活。
+- 实施结果：
+  1. `LocalStore` 新增按账号隔离的删除意图 UserDefaults 日志；删除记录在本机破坏性提交前入队，持久化失败会回滚日志。联网同步先冲刷日志，成功后移除；失败/401 保留日志供重试。合并阶段同时使用本地日志墓碑，覆盖删除请求与拉取快照竞态，并跳过仍待删除 ID 的上传。
+  2. `LedgerSyncService.delete` 支持携带原始删除时间戳；服务端仅接受不晚于当前时间的客户端时间，避免时钟异常制造未来墓碑。
+  3. 后端 `deleteLedgersByUserId` 改为批量软删除并返回统一 `deletedAt`；PostgreSQL 与内存实现均保留墓碑。`upsertLedger` 对墓碑使用严格晚于（`<`）条件，同一时间戳的离线旧上传不会清除墓碑；删除后真正更新的记录仍可恢复。
+  4. 扩展 `verify-ledger-tombstone-and-iap-binding.mjs`，覆盖清空后墓碑存在、旧上传不复活和更晚编辑可恢复；API/README 补充清空与本机重试契约。
+- 冻结边界复核：未改变账单字段、金额/分类/日期含义、照片存储、`updatedAt` 新者胜规则、登出保留本机账本、清空本机与删除云端的 UI 语义；账号删除仍执行真实删除。新增状态仅为本机删除日志和既有云端墓碑字段，旧客户端可忽略响应扩展字段。
+- 修改文件：
+  - `NativeDemoApp/Services/LocalStore.swift`
+  - `NativeDemoApp/ViewModels/HomeViewModel.swift`
+  - `NativeDemoApp/Services/LedgerSyncService.swift`
+  - `backend/src/store.js`
+  - `backend/src/server.js`
+  - `backend/scripts/verify-ledger-tombstone-and-iap-binding.mjs`
+  - `API_v0.1.md`
+  - `backend/README.md`
+  - 本文档
+- Windows 验证证据（2026-09-14）：`backend npm test` 通过（含清空墓碑回归）；`node --check backend/src/store.js backend/src/server.js` 通过；`git diff --check` 通过。当前环境无 Swift/Xcode，客户端 XCTest、Debug/Release 编译及双设备网络/重启签收待 macOS/真机执行，不能标记 `VERIFIED`。
+- 剩余风险与下一步：部署后需确认生产库 `deleted_at` 列和 180 天清理任务已生效，并按 `FLOW-111` 验证离线删除、请求失败重启、清空后旧设备同步及删除后新编辑四条路径；下一项为统一 Xcode/真机签收（`RELEASE-02`）。
+
+### 119. IAP-BINDING-AUDIT-01：改绑后的旧账号会员会话收敛（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `SUPERSEDED`（2026-09-14）。复核后按用户决定“改绑本身不合理”，不保留改绑方案。
+- 原发现：合法 Apple `appAccountToken` 改绑交易后，旧账号 session 可能继续保留会员状态。
+- 处理：该方向已被后续不可变归属规则取代，见 `IAP-BINDING-AUDIT-02`。
+
+### 120. IAP-BINDING-AUDIT-02：交易归属彻底不可改绑（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `SUPERSEDED`（2026-09-14）。用户确认截图中的“已绑定其他叙账账号”提示是正确行为，本方案不作为当前产品规则。
+
+### 121. IAP-BINDING-AUDIT-03：恢复截图对应的订阅绑定逻辑（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-14）。
+- 规则恢复为截图所示用户行为：同一 `originalTransactionId` 已属于其他叙账账号时，Production 和 Sandbox 都返回 `TRANSACTION_ALREADY_BOUND`，不因切换手机号账号或提交新的 `appAccountToken` 而改绑。
+- 同时保留账号切换异步请求身份闸门，避免旧账号的迟到本机 entitlement 结果覆盖当前账号 UI；该保护不改变截图中的拒绝提示或交易归属规则。
+- 修改文件：`backend/src/iapService.js`、`backend/src/server.js`、`backend/src/store.js`、`NativeDemoApp/Services/AuthService.swift`、`NativeDemoApp/ViewModels/SettingsViewModel.swift`、验证脚本、API/README、本文档。
+- 验证：`npm test`、`experience_static_check.ps1`、后端 `node --check`、`git diff --check` 通过；Xcode/StoreKit 真机仍待统一签收。
+
+### 122. EMOTION-TIME-CONTEXT-FIX-01：晚间餐饮不再误标午饭（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-14）。
+- 用户问题：实际发生在 17:56 的肯德基记录，编辑页仍显示“中午这顿安排好了/午饭”。记录可能是在中午生成标签后再补记或修改时间，旧标签被直接沿用；品牌文案池本身也按金额抽取了中午模板，没有把明确的晚间时间作为优先事实。
+- 目标：17:00–21:00 的餐饮记录在标题没有明确午餐事实时，展示和重新解析均使用晚饭语义；标题明确写“中午/午饭”的补记仍保留用户事实。
+- 实施结果：
+  1. `HomeItem.displayEmotionTag` 在展示层识别晚间时间与存量午餐标签冲突时，返回“晚饭时间坐一会儿”，不改写用户标题、备注或持久化金额/日期。
+  2. `NarrativeCopyResolver.resolveEmotionTag` 在餐饮品牌文案抽取前应用同一晚间时间门禁，编辑/新建重新解析不会再次生成中午模板。
+  3. 增加 `SingleRecordEmotionBoundaryTests` 回归：17:56 存量午餐标签纠正、明确午餐标题保留、肯德基品牌重新解析使用晚饭标签。
+- 修改文件：`NativeDemoApp/Models/HomeItem.swift`、`NativeDemoApp/Services/NarrativeCopyResolver.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、本文档。
+- 冻结边界复核：仅调整餐饮情绪标签的时间优先级；不改变账单标题、金额、日期保存含义、分类/OCR、同步协议、照片、会员和其他类别标签。
+- Windows 验证证据（2026-09-14）：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 待本轮执行；Windows 无 Swift/Xcode，新增 XCTest 只能完成源码接线，不能标记 `VERIFIED`。
+- 剩余风险与下一步：需在 macOS/Xcode 运行新增 XCTest，并在真机验证 12:00 午餐、17:56 晚餐、21:30 夜宵及“中午带饭”历史补记四条边界；外部签收前保持 `CODE_DONE`。下一项为统一 Xcode/真机签收（`RELEASE-02`）。

@@ -16,19 +16,11 @@ export function tierForProductId(productId) {
 /**
  * Decide whether a verified App Store transaction may be bound to the current account.
  *
- * Order of truth:
- * 1. Apple's `appAccountToken` on the transaction. `verifyAppStoreTransaction` already
- *    rejects a token that belongs to another account, so `hasAppAccountToken === true`
- *    means Apple says this transaction belongs to the current account. That always wins
- *    over a stale server-side binding.
- * 2. The server-side binding table. Without Apple proof, a transaction already bound to
- *    another account is always rejected, including in Sandbox.
+ * A transaction owner is immutable. Apple's token is required for a first bind,
+ * but never authorizes changing an existing owner, including Sandbox.
  */
 export function resolveIAPBindingDecision({ existing, currentUserId, hasAppAccountToken }) {
   const boundToOther = Boolean(existing) && existing.userId !== currentUserId;
-  if (hasAppAccountToken) {
-    return { action: "bind", rebound: boundToOther };
-  }
   if (boundToOther) {
     return {
       action: "reject",
@@ -38,6 +30,7 @@ export function resolveIAPBindingDecision({ existing, currentUserId, hasAppAccou
     };
   }
   if (!existing) {
+    if (hasAppAccountToken) return { action: "bind", rebound: false };
     return {
       action: "reject",
       status: 409,

@@ -51,6 +51,19 @@ await store.deleteLedger(userA, "item-2", "2020-01-01T00:00:00Z");
 tombstones = await store.getLedgerTombstonesByUserId(userA, Date.parse("2026-09-11T00:00:00Z"));
 assert.equal(tombstones.length, 0, "Tombstones older than the retention window are pruned.");
 
+// Clear-all keeps deletion evidence so an offline device cannot replay stale rows.
+const userClear = "user-clear";
+await store.upsertLedger(userClear, { id: "stale-1", title: "旧记录", amount: 9, createdAt: early, updatedAt: early });
+await store.upsertLedger(userClear, { id: "stale-2", title: "旧记录2", amount: 10, createdAt: early, updatedAt: early });
+const clearStamp = await store.deleteLedgersByUserId(userClear);
+assert.equal((await store.getLedgersByUserId(userClear)).length, 0, "Clear-all must hide live rows.");
+assert.equal((await store.getLedgerTombstonesByUserId(userClear)).length, 2, "Clear-all must retain tombstones.");
+await store.upsertLedger(userClear, { id: "stale-1", title: "离线旧上传", amount: 9, createdAt: early, updatedAt: early });
+assert.equal((await store.getLedgersByUserId(userClear)).length, 0, "A stale post-clear upload must not resurrect a row.");
+await store.upsertLedger(userClear, { id: "stale-1", title: "清空后新记录", amount: 11, createdAt: early, updatedAt: "2099-01-01T00:00:00Z" });
+assert.deepEqual((await store.getLedgersByUserId(userClear)).map((x) => x.id), ["stale-1"], "A genuinely newer post-clear edit may recreate a row.");
+assert.ok(clearStamp);
+
 assert.match(store.ledgerTimestampNow(new Date("2026-09-11T01:02:03.456Z")), /^2026-09-11T01:02:03Z$/, "Server stamps use second precision so they compare correctly with client stamps.");
 
 // --- Ledger sanitizer keeps scenePackId --------------------------------------
@@ -63,10 +76,10 @@ assert.equal(sanitized.item.scenePackId, "commute", "scenePackId must survive th
 
 const boundToB = { userId: "user-b", originalTransactionId: "orig-1" };
 
-// Apple's appAccountToken says the transaction is ours: always bind, even over a stale server binding.
+// An Apple appAccountToken proves a first bind, but never authorizes changing owner.
 assert.deepEqual(
   resolveIAPBindingDecision({ existing: boundToB, currentUserId: "user-a", hasAppAccountToken: true }),
-  { action: "bind", rebound: true }
+  { action: "reject", status: 409, error: "TRANSACTION_ALREADY_BOUND", message: "This App Store transaction is bound to another account. Sign in with the account used for the purchase, or use another Apple ID to subscribe to the current account." }
 );
 
 // No token and bound to somebody else: always reject, including Sandbox.
@@ -74,6 +87,10 @@ const rejected = resolveIAPBindingDecision({ existing: boundToB, currentUserId: 
 assert.equal(rejected.action, "reject");
 assert.equal(rejected.status, 409);
 assert.equal(rejected.error, "TRANSACTION_ALREADY_BOUND");
+assert.equal(
+  resolveIAPBindingDecision({ existing: boundToB, currentUserId: "user-a", hasAppAccountToken: false, environment: "Sandbox" }).error,
+  "TRANSACTION_ALREADY_BOUND"
+);
 
 // No token and no prior binding: cannot prove ownership.
 const missing = resolveIAPBindingDecision({ existing: null, currentUserId: "user-a", hasAppAccountToken: false });
@@ -97,8 +114,9 @@ const transaction = {
   verifiedAt: early,
 };
 await store.upsertIAPTransaction(transaction);
-await store.upsertIAPTransaction({ ...transaction, userId: "user-b", verifiedAt: later });
-const persistedRebind = await store.getIAPTransactionByOriginalId(transaction.originalTransactionId);
-assert.equal(persistedRebind.userId, "user-b", "A legitimate appAccountToken rebind must persist the new owner.");
+const persistedBinding = await store.getIAPTransactionByOriginalId(transaction.originalTransactionId);
+assert.equal(persistedBinding.userId, "user-a", "The first verified account owns the transaction.");
+const persistedBindingAgain = await store.getIAPTransactionByOriginalId(transaction.originalTransactionId);
+assert.equal(persistedBindingAgain.userId, "user-a", "The transaction owner remains immutable.");
 
 console.log("Ledger tombstone retention, scenePackId whitelist and strict IAP binding verified.");

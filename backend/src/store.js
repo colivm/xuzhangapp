@@ -280,8 +280,7 @@ export async function upsertIAPTransaction(record) {
     `INSERT INTO iap_transactions(original_transaction_id, user_id, transaction_id, product_id, member_tier, member_expires_at, environment, verified_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (original_transaction_id) DO UPDATE
-     SET user_id = EXCLUDED.user_id,
-         transaction_id = EXCLUDED.transaction_id,
+     SET transaction_id = EXCLUDED.transaction_id,
          product_id = EXCLUDED.product_id,
          member_tier = EXCLUDED.member_tier,
          member_expires_at = EXCLUDED.member_expires_at,
@@ -346,7 +345,7 @@ export async function upsertLedger(userId, item) {
     const existing = rows.find((x) => x.id === item.id);
     if (existing) {
       const existingUpdatedAt = String(existing.updatedAt || existing.createdAt || "");
-      if (existingUpdatedAt > incomingUpdatedAt) return;
+      if (existingUpdatedAt > incomingUpdatedAt || (existing.deletedAt && existingUpdatedAt >= incomingUpdatedAt)) return;
     }
     const next = [{ ...item, updatedAt: incomingUpdatedAt }, ...rows.filter((x) => x.id !== item.id)];
     memory.ledgersByUserId.set(userId, next);
@@ -377,17 +376,34 @@ export async function deleteLedger(userId, itemId, deletedAt = ledgerTimestampNo
      VALUES ($1, $2, $3::jsonb, $4, $4)
      ON CONFLICT (user_id, item_id)
      DO UPDATE SET updated_at = EXCLUDED.updated_at, deleted_at = EXCLUDED.deleted_at
-     WHERE ledgers.updated_at <= EXCLUDED.updated_at`,
+     WHERE (ledgers.deleted_at IS NULL AND ledgers.updated_at <= EXCLUDED.updated_at)
+        OR (ledgers.deleted_at IS NOT NULL AND ledgers.updated_at < EXCLUDED.updated_at)`,
     [userId, itemId, JSON.stringify({ id: itemId, updatedAt: stamp, deletedAt: stamp }), stamp]
   );
 }
 
 export async function deleteLedgersByUserId(userId) {
+  const deletedAt = ledgerTimestampNow();
   if (!usePostgres) {
-    memory.ledgersByUserId.set(userId, []);
-    return;
+    const rows = memory.ledgersByUserId.get(userId) || [];
+    const next = rows.map((row) => {
+      const current = String(row.updatedAt || row.createdAt || "");
+      if (row.deletedAt && current > deletedAt) return row;
+      return { id: row.id, updatedAt: deletedAt, deletedAt };
+    });
+    memory.ledgersByUserId.set(userId, next);
+    return deletedAt;
   }
-  await pool.query(`DELETE FROM ledgers WHERE user_id = $1`, [userId]);
+  await pool.query(
+    `UPDATE ledgers
+        SET payload = jsonb_build_object('id', item_id, 'updatedAt', $2, 'deletedAt', $2),
+            updated_at = $2,
+            deleted_at = $2
+      WHERE user_id = $1
+        AND (deleted_at IS NULL OR updated_at <= $2)`,
+    [userId, deletedAt]
+  );
+  return deletedAt;
 }
 
 export async function deleteAccountByUserId(userId) {
