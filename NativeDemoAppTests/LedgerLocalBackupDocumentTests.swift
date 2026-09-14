@@ -260,6 +260,87 @@ final class LedgerLocalBackupDocumentTests: XCTestCase {
         XCTAssertEqual(current, local)
     }
 
+    func testEmptyLedgerImportInsertsEachBackupRecordOnce() throws {
+        let id = UUID(uuidString: "99999999-9999-9999-9999-999999999999")!
+        let backup = [HomeItem(id: id, title: "备份记录", amount: 8, category: .daily)]
+
+        let plan = try LedgerLocalBackupRestorePlanner.makePlan(
+            localItems: [],
+            backupItems: backup
+        )
+
+        XCTAssertEqual(plan.mergedItems.count, 1)
+        XCTAssertEqual(plan.changes.upserts.map(\.id), [id])
+        XCTAssertEqual(plan.summary.insertedRecordCount, 1)
+    }
+
+    func testPhotoOnlyImportFillsCloudRecordWithoutReplacingNewerLedgerFields() throws {
+        let base = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let id = UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")!
+        let local = HomeItem(
+            id: id,
+            title: "云端较新标题",
+            amount: 12,
+            category: .daily,
+            createdAt: base,
+            updatedAt: base.addingTimeInterval(100)
+        )
+        let backup = HomeItem(
+            id: id,
+            title: "本地备份旧标题",
+            amount: 10,
+            category: .daily,
+            createdAt: base,
+            updatedAt: base.addingTimeInterval(10),
+            memoryImageDatas: [Data([1, 2, 3])],
+            coverMemoryImageIndex: 0
+        )
+
+        let plan = try LedgerLocalBackupRestorePlanner.makePlan(
+            localItems: [local],
+            backupItems: [backup]
+        )
+        let merged = try XCTUnwrap(plan.mergedItems.first)
+
+        XCTAssertEqual(merged.title, "云端较新标题")
+        XCTAssertEqual(merged.amount, 12)
+        XCTAssertEqual(merged.memoryImageData(at: 0), Data([1, 2, 3]))
+        XCTAssertEqual(plan.summary.updatedRecordCount, 1)
+        XCTAssertEqual(plan.changes.upserts.count, 1)
+    }
+
+    func testNewerBackupWithoutPhotosDoesNotEraseLocalPhotoReference() throws {
+        let base = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let id = UUID(uuidString: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")!
+        let reference = "images/\(id.uuidString.lowercased())/existing.jpg"
+        let local = HomeItem(
+            id: id,
+            title: "本机照片",
+            amount: 5,
+            category: .daily,
+            createdAt: base,
+            updatedAt: base,
+            memoryImageReferences: [reference]
+        )
+        let backup = HomeItem(
+            id: id,
+            title: "云端较新",
+            amount: 6,
+            category: .daily,
+            createdAt: base,
+            updatedAt: base.addingTimeInterval(20)
+        )
+
+        let plan = try LedgerLocalBackupRestorePlanner.makePlan(
+            localItems: [local],
+            backupItems: [backup]
+        )
+        let merged = try XCTUnwrap(plan.mergedItems.first)
+
+        XCTAssertEqual(merged.title, "云端较新")
+        XCTAssertEqual(merged.memoryImageReference(at: 0), reference)
+    }
+
     private func replacingFirstPhoto(in root: FileWrapper, with data: Data) throws -> FileWrapper {
         var rootFiles = try XCTUnwrap(root.fileWrappers)
         let images = try XCTUnwrap(rootFiles["images"]?.fileWrappers)
