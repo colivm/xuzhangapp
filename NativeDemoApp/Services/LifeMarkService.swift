@@ -762,7 +762,7 @@ enum LifeMarkService {
             label: "学习成长",
             category: .shopping,
             categories: [.shopping, .entertainment, .daily, .other],
-            keywords: ["书", "书店", "教材", "文具", "本子", "笔", "课程", "培训", "考试", "报名费", "资料", "学习", "读书", "驾校", "驾校报名费", "驾考", "学车"],
+            keywords: ["书店", "教材", "文具", "本子", "钢笔", "圆珠笔", "中性笔", "铅笔", "课程", "培训", "考试", "报名费", "资料", "学习", "读书", "驾校", "驾校报名费", "驾考", "学车"],
             access: .free,
             priority: 36,
             minimumCount: 1,
@@ -780,6 +780,26 @@ enum LifeMarkService {
             requiresKeywordMatch: true
         )
     ]
+
+    private static func matchesDefinitionKeyword(_ text: String, _ definition: LifeMarkDefinition) -> Bool {
+        let normalized = text.lowercased()
+        switch definition.id {
+        case "learning_growth":
+            if SemanticBoundaryGuard.matchesStationery(normalized) { return true }
+            // 课程必须带学习/培训语境，避免英语课程、视频课程等泛服务误入学习线。
+            if containsAny(normalized, ["课程", "培训", "考试", "报名费", "驾校", "驾考", "学车"]) {
+                return containsAny(normalized, ["学习", "教材", "培训", "考试", "报名", "驾校", "驾考", "学车", "英语课", "课程包"])
+            }
+            return containsAny(normalized, ["书店", "教材", "文具", "本子", "资料", "学习", "读书"])
+        case "fitness":
+            return SemanticBoundaryGuard.matchesFitness(normalized)
+        case "travel":
+            return SemanticBoundaryGuard.matchesLongDistanceTransit(normalized)
+                || containsAny(normalized, ["旅行", "旅游", "异地", "外地", "出差", "酒店", "民宿", "住宿", "机票", "机场", "景区", "返程", "行程"])
+        default:
+            return containsAny(normalized, definition.keywords)
+        }
+    }
 
     static func aggregates(
         for items: [HomeItem],
@@ -1059,7 +1079,7 @@ enum LifeMarkService {
             if definition.id == "pet_supply" {
                 return SemanticBoundaryGuard.matchesPetSupply(normalized) || normalized.contains(definition.label)
             }
-            return containsAny(normalized, definition.keywords) || normalized.contains(definition.label)
+            return matchesDefinitionKeyword(normalized, definition) || normalized.contains(definition.label)
         }
         .map { definition in
             LifeMarkQueryIntent(
@@ -1099,7 +1119,7 @@ enum LifeMarkService {
         if intent.id == "pet_supply" {
             return categoryMatched && SemanticBoundaryGuard.matchesPetSupply(text)
         }
-        let keywordMatched = containsAny(text, intent.keywords)
+        let keywordMatched = matchesDefinitionKeyword(text, definitions.first(where: { $0.id == intent.id }) ?? LifeMarkDefinition(id: intent.id, label: intent.label, category: .other, categories: intent.categories, keywords: intent.keywords, access: .free, priority: 999, minimumCount: 1, requiresKeywordMatch: intent.requiresKeywordMatch))
         return intent.requiresKeywordMatch
             ? categoryMatched && keywordMatched
             : categoryMatched || keywordMatched
@@ -1174,7 +1194,7 @@ enum LifeMarkService {
             "learning_growth", "pet_supply",
         ]
         return trustedIDs.contains(definition.id)
-            && containsAny(normalized, definition.keywords)
+            && matchesDefinitionKeyword(normalized, definition)
     }
 
     private static func facetMatches(_ item: HomeItem, facet: AICommandSemanticFacet) -> Bool {
@@ -1213,7 +1233,7 @@ enum LifeMarkService {
         case .interestGear:
             guard let definition = definitions.first(where: { $0.id == "interest_gear" }),
                   definition.categories.contains(item.category) else { return false }
-            return containsAny(querySemanticText(for: item), definition.keywords)
+            return matchesDefinitionKeyword(querySemanticText(for: item), definition)
         case .awayFromHome:
             if item.memoryContext?.semanticPlace == "外地" { return true }
             guard item.memoryContext?.semanticPlace == nil else { return false }
@@ -1535,7 +1555,7 @@ enum LifeMarkService {
         }
         let text = semanticText(for: item)
         let categoryMatched = definition.categories.contains(item.category)
-        let keywordMatched = containsAny(text, definition.keywords)
+        let keywordMatched = matchesDefinitionKeyword(text, definition)
         if definition.id == "baby_supply" {
             return categoryMatched && SemanticBoundaryGuard.matchesBabySupply(text)
         }

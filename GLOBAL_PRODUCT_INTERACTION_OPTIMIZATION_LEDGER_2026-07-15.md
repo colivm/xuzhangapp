@@ -162,6 +162,10 @@
 | 31 | AUTH-REINSTALL-FIX-01 | 删除 App 后重装不应恢复旧登录 | `CODE_DONE` | 用沙盒安装标记区分升级与新安装：升级保留会话，删除后重装清除 Keychain token；等待 Xcode/XCTest 与 `FLOW-113` TestFlight 签收 |
 | 32 | IAP-BINDING-FIX-02 | 撤销 Sandbox 自动改绑并统一交易归属 | `CODE_DONE` | Sandbox 与 Production 均禁止无 token 跨账号改绑；客户端提示登录原账号或更换 Apple ID；合法 token 改绑同步更新绑定 owner；等待 Xcode/XCTest 与 `FLOW-111` 真机重签 |
 | 33 | OCR-INSURANCE-CLASSIFICATION-FIX-01 | 保险账单不再误判为日用或超市生活线索 | `CODE_DONE` | 保险强规则归入“其他”，旧错误文案展示修正，日用线索必须依赖真实标题/品牌证据；等待 Xcode/XCTest 与 `FLOW-114` 相册 OCR 真机签收 |
+| 34 | RECORD-CATEGORY-SEMANTIC-BOUNDARY-01 | 记录输入分类入口与情绪语义边界修复 | `CODE_DONE` | 金额有效即可改分类/角度；避免“临时花了一笔”误命中文具情绪；仅限记录预览与购物语义关键词，Windows 回归已通过，等待 Xcode/真机签收 |
+| 35 | PERF-PERSISTENCE-ASYNC-01 | 阶段 A：本地账单持久化后台化 | `CODE_DONE` | 串行 writer actor、版本门控、失败回滚与云端上传等待；只处理本地写入链路，Windows 回归已通过，等待 Xcode/Instruments/真机签收 |
+| 36 | SEMANTIC-KEYWORD-BOUNDARY-AUDIT-01 | 宽泛关键词语义误判审计与修复 | `CODE_DONE` | 已按“花/笔存量纠正 → 裙 → 卡/课程 → 动车”顺序收紧情绪标签、生活场景、母婴边界和词典入口；Windows 回归通过，待 Xcode/真机签收 |
+| 37 | PERF-MEMORY-PROJECTION-01 | P2：账单原图内存释放与按需读取 | `CODE_DONE` | 持久化成功后用 metadata-only projection 替换账单与派生缓存中的原图 Data；保留引用/byteCount，详情仍按需读取；Windows 门禁通过，待 Xcode/Allocations/真机签收 |
 
 当前签收策略：后续仍需补全部 `CODE_DONE` 任务的 Xcode/真机证据；用户于 2026-07-15 再次明确要求“不要再问，全部改完后一起真机验证”，授权按台账顺序连续完成后续代码任务。该持续授权允许前一项达到 `CODE_DONE` 后直接进入下一项，但不得把任何未真机验证任务标为 `VERIFIED`，且仍须保持同一时间最多一个 `IN_PROGRESS`。
 
@@ -5197,3 +5201,76 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：完成 Swift 源码静态审计和调用链核对；本轮未改产品代码，未冒充真机性能验证。
 - 冻结边界复核：未改变业务逻辑、账单字段、同步协议、照片云端边界、会员或 UI 结构。
 - 剩余风险与下一任务：所有耗时和帧率仍需 macOS/Xcode Instruments 真机测量；下一项只允许实施阶段 A 的持久化后台化，并补齐失败回滚与版本竞态测试。
+
+### 131. RECORD-CATEGORY-SEMANTIC-BOUNDARY-01：记录输入分类入口与情绪语义边界修复（2026-09-15）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-15）。
+- 用户问题：只输入金额时预览卡片没有“改分类/换个角度”，填写备注后才出现；编辑“临时花了一笔”并改为购物后，情绪标签被“笔”子串误判为“书桌常用的补上”。
+- 目标：金额有效且预览可见时就提供分类与角度入口；购物文具识别使用明确词边界，保留真实文具标题的命中能力。
+- 允许修改：`NativeDemoApp/Views/Components/LifeEntryPreviewCard.swift`、`NativeDemoApp/Views/RecordView.swift`、`NativeDemoApp/Models/RecordPreviewTier.swift`（仅入口显示条件）；`NativeDemoApp/Models/HomeItem.swift`（仅购物文具关键词）；对应 `NativeDemoAppTests/StateRegressionTests.swift` 与静态门禁。
+- 冻结边界：不改变账单金额、日期、标题保存含义；不改变分类结果、OCR、同步、会员、照片和其他类别情绪规则；不重构预览层级或首页主动作框架。
+- 验收：金额有效但无备注时可见并可打开“改分类/换个角度”；金额无效时仍隐藏；“临时花了一笔”不返回书桌文具标签；“买了一支钢笔/买文具”仍保持文具标签；取消/关闭分类网格不改变原输入。
+- 实施结果：
+  1. `LifeEntryPreviewCard` 在金额对应的非隐藏预览层级显示“改分类”；会员和免费用户的“换个角度”不再要求备注已确认，只要求金额有效。
+  2. `HomeItem` 将文具识别从裸“笔”改为明确文具词，并排除“一笔/这笔/笔钱/花了一笔”等金额量词；真实“买一支笔”仍命中文具语义。
+  3. 新增金额预览层级和购物文具边界 XCTest 回归。
+- 修改文件：`NativeDemoApp/Views/Components/LifeEntryPreviewCard.swift`、`NativeDemoApp/Views/RecordView.swift`、`NativeDemoApp/Models/RecordPreviewTier.swift`、`NativeDemoApp/Models/HomeItem.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、本文档。
+- 冻结边界复核：未改变账单保存字段、分类保存规则、OCR、同步、会员资格、照片或首页主动作；仅放宽预览操作入口展示并收窄购物文具关键词误判。
+- Windows 验证证据（2026-09-15）：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 全部通过；Windows 无 Swift/Xcode，新增 XCTest 仅完成源码接线，未冒充真机验证。
+- 剩余风险与下一步：需 macOS/Xcode 真机签收金额无备注时的分类网格、会员/免费角度入口、取消路径及编辑重解析；外部签收前保持 `CODE_DONE`，下一项为统一 `RELEASE-02` 签收。
+
+### 132. PERF-PERSISTENCE-ASYNC-01：阶段 A 本地账单持久化后台化（2026-09-15）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-15）。
+- 用户问题：补图、删图、编辑、封面和批量导入最终同步执行图片哈希/外置、SQLite 事务与孤儿清理，主线程出现短暂停顿和掉帧。
+- 目标：主 actor 只提交不可变变更快照并发布轻量处理中投影；本地持久化由串行 actor 按顺序执行；旧结果不得覆盖新账本，失败不触发云端上传。
+- 允许修改：`NativeDemoApp/Services/LedgerPersistenceWriter.swift`、`NativeDemoApp/Services/LocalStore.swift`（仅 QA 隔离路径桥接）、`NativeDemoApp/ViewModels/HomeViewModel.swift`（持久化提交/版本门控/上传等待）、Xcode target 接线、`NativeDemoAppTests/StateRegressionTests.swift` 与静态门禁。
+- 冻结边界：不改变账单字段、分类/情绪、同步新者胜、照片云端边界、会员/IAP、额度、导入结果和 UI 产品结构；不进入批量导入重构、同步队列重构或图片格式重构。
+- 实施结果：新增 `LedgerPersistenceWriter` actor，复用现有 `LedgerHomeItemsRepository.saveChanges`，保证图片写盘、SQLite 变更和孤儿清理按单一串行队列执行；`HomeViewModel.persistItems` 改为提交后台任务并立即发布轻量投影，使用 `persistenceRevision` 丢弃旧完成结果；失败只在最新修订回滚本机账本并显示错误；云端上传/删除等待对应本地写入成功。
+- 修改文件：`NativeDemoApp/Services/LedgerPersistenceWriter.swift`、`NativeDemoApp/Services/LocalStore.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp.xcodeproj/project.pbxproj`、`scripts/experience_static_check.ps1`、本文档。
+- Windows 验证证据（2026-09-15）：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 全部通过；新增 revision policy XCTest 已接线，Windows 无 Swift/Xcode，未冒充编译或真机验证。
+- 剩余风险与下一步：当前尚未在 Xcode/真机验证 actor 跨线程 Sendable、实际主线程阻塞和失败注入；批量 OCR/AI 仍沿用同一 writer 但尚未做单事务批量优化。完成 macOS/真机签收后才可标记 `VERIFIED`，下一项为阶段 B `PERF-BATCH-IMPORT-ASYNC-01`。
+
+### 133. SEMANTIC-KEYWORD-BOUNDARY-AUDIT-01：宽泛关键词语义误判审计（2026-09-15）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-15）。本轮已完成审计后的定向修复。
+- 审计范围：`HomeItem.refinedEmotionTag`、`HomeItem.correctedStoredEmotionTag`、`LifeMarkService` 学习/生活线索关键词、`RecordSceneLexicon`/`SemanticBoundaryGuard` 分类关键词及 `LifeSceneSemanticService` 场景判断。
+- 高可信发现：
+  1. “临时花了一笔”在去掉“笔”误命中后仍会命中购物规则中的裸“花”，新记录会得到“给日子添点好看”；已存旧“书桌常用的补上”也因纠正条件要求 refined 为空而继续保留旧标签。
+  2. “另记两笔/分了几笔/又付了几笔”等量词表达不在现有排除列表内，仍可能命中购物文具的裸“笔”；应采用正向文具词或明确“买/支/只”证据，不继续堆叠否定短语。
+  3. `LifeMarkService.learning_growth` 仍使用裸“笔”，泛化支出标题可能错误生成“学习成长”线索。
+  4. 购物关键词在 `RecordSceneLexicon.json`、`LifeSceneSemanticService.swift`、`SemanticBoundaryGuard.swift` 多处使用裸“裙”；“裙带菜”等非服饰词可能被打成购物/衣物语义。
+  5. 健康强规则仍有“月卡/年卡/课程”等宽词；“英语课程”或“视频会员年卡”可能被推向健康/健身语义，需运动上下文共同成立。
+  6. 交通情绪规则中“动车”是子串证据；“机动车年检/电动车充电”可能分别被误导为远途或短途骑行，需优先明确交通对象。
+  7. `SemanticBoundaryGuard` 的母婴强证据仍有裸“米粉/推车/奶粉”；“桂林米粉”“手推车”“成人奶粉”可能被推向家庭照护/母婴线索，与 JSON 规则边界不一致。
+- 实施结果：
+  1. `HomeItem` 与 `SemanticBoundaryGuard` 改为正向文具、鲜花、健身和长途交通证据；历史“书桌常用的补上”在不满足文具证据时自动纠正。
+  2. `LifeMarkService` 的学习成长、健身、旅行匹配复用边界守卫；`LifeSceneSemanticService` 移除裸“裙”、裸“月卡/年卡/课程”和宽泛交通证据。
+  3. 母婴识别不再把桂林米粉、手推车、成人奶粉当作母婴；词典同步收紧，保留婴儿奶粉/婴儿推车/婴儿米粉等明确证据。
+  4. 新增情绪标签、生活场景、LifeMark 和词典边界回归，覆盖正例与反例。
+- 修改文件：`NativeDemoApp/Models/HomeItem.swift`、`NativeDemoApp/Services/SemanticBoundaryGuard.swift`、`NativeDemoApp/Services/LifeMarkService.swift`、`NativeDemoApp/Services/LifeSceneSemanticService.swift`、`NativeDemoApp/Resources/RecordSceneLexicon.json`、`NativeDemoAppTests/StateRegressionTests.swift`、本文档。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 均通过；Windows 无 Swift/Xcode，新增 XCTest 尚未运行。
+- 冻结边界：未改变账单字段、金额日期保存、同步、会员、照片、额度和 UI 入口；只收紧语义证据并补充历史标签展示纠正。
+- 剩余风险与下一步：Xcode 编译、XCTest 和真机需验证“临时花了一笔”、真实文具、裙带菜、婴儿用品、成人奶粉、视频年卡、健身课程、机动车年检和动车票边界；下一项为统一 `RELEASE-02` 签收。
+
+### 134. SEMANTIC-KEYWORD-BOUNDARY-AUDIT-01：定向修复执行记录（2026-09-15）
+
+- 状态变化：`IN_PROGRESS` → `CODE_DONE`。
+- 范围：情绪标签 `HomeItem`、生活场景 `LifeSceneSemanticService`、LifeMark `learning_growth/fitness/travel`、`SemanticBoundaryGuard` 以及 `RecordSceneLexicon.json`。
+- 证据：花/笔、旧标签纠正、裙带菜、视频会员年卡、健身课程、机动车年检、电动车充电、桂林米粉、手推车、成人奶粉及婴儿用品回归已接线；Windows 全量静态/语义/release gate 通过。
+- 风险：当前环境无法运行 Xcode/XCTest/真机，不能标记 `VERIFIED`。
+
+### 135. PERF-MEMORY-PROJECTION-01：P2 账单原图内存释放与按需读取（2026-09-15）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-15）。
+- 用户问题：账单 `HomeItem` 在图片写盘后仍可能长期持有原图 `Data`，图片越多越大，运行时间越长越容易造成 RSS 上升、派生计算复制和列表掉帧。
+- 允许范围：只处理本地持久化成功后的内存 projection、`HomeItem` 派生缓存中的同一对象替换和已有图片引用按需读取；不改图片格式、备份结构、云端 DTO、同步冲突、账单字段、语义和 UI。
+- 实施结果：
+  1. `LedgerHomeItemsRepository.saveChanges` 返回成功后的 `LedgerPersistenceSaveResult`，其中 `persistedItems` 使用 `LedgerImageStore.metadataOnly`，只保留图片引用和 byteCount，不保留原图字节。
+  2. `LedgerPersistenceWriter` 透传该结果；`HomeViewModel.completePersistence` 在 revision 仍为最新时，用 metadata-only 记录替换 `items`，并同步替换 `ItemDerivedCacheSnapshot` 中的记录副本。
+  3. 详情、分享、备份继续通过已有 `LocalStore.loadMemoryImageData(reference:variant:)`/引用读取原图；未改变缺图和按需加载语义。
+  4. 增加 metadata-only projection 回归，验证 Data 释放后引用和 byteCount 保留。
+- 修改文件：`NativeDemoApp/Services/LedgerHomeItemsRepository.swift`、`NativeDemoApp/Services/LedgerPersistenceWriter.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、本文档。
+- 冻结边界复核：未修改同步上传内容和归属、照片文件/引用格式、备份导出恢复、账单保存字段、分类/情绪/生活场景、会员/IAP、额度或 UI 产品结构。
+- Windows 验证：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 通过；词典 JSON 解析通过。Windows 无 Swift/Xcode，新增 XCTest 尚未运行。
+- 剩余风险：必须在 macOS/Xcode 用 Allocations/Memory Graph 验证补图保存后 `HomeViewModel.items` 不再保留原图、1000 条多图账本 RSS 不持续增长、详情按需读取仍可用；Xcode/真机签收前保持 `CODE_DONE`。下一项为 `RELEASE-02` 集中签收，不启动新的 P2 重构。

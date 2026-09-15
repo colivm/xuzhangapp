@@ -3553,6 +3553,164 @@ final class SingleRecordEmotionBoundaryTests: XCTestCase {
 
         XCTAssertEqual(resolution.emotionTag, "晚饭时间坐一会儿")
     }
+
+    func testGenericShoppingTitleDoesNotMatchDeskStationeryKeyword() {
+        let item = HomeItem(
+            title: "临时花了一笔",
+            amount: 18,
+            category: .shopping,
+            createdAt: date(14, 10),
+            emotionTag: "书桌常用的补上"
+        )
+
+        XCTAssertEqual(item.displayEmotionTag, "日常添置")
+    }
+
+    func testExplicitStationeryTermsKeepDeskStationeryEmotion() {
+        let pen = HomeItem(
+            title: "买了一支钢笔",
+            amount: 18,
+            category: .shopping,
+            createdAt: date(14, 10)
+        )
+        let plainPen = HomeItem(
+            title: "买了一支笔",
+            amount: 8,
+            category: .shopping,
+            createdAt: date(14, 10)
+        )
+        let stationery = HomeItem(
+            title: "买文具",
+            amount: 18,
+            category: .shopping,
+            createdAt: date(14, 10)
+        )
+
+        XCTAssertEqual(pen.displayEmotionTag, "书桌常用的补上")
+        XCTAssertEqual(plainPen.displayEmotionTag, "书桌常用的补上")
+        XCTAssertEqual(stationery.displayEmotionTag, "书桌常用的补上")
+    }
+
+    func testSemanticBoundaryRejectsCommonSubstringFalsePositives() {
+        XCTAssertFalse(SemanticBoundaryGuard.matchesStationery("另记两笔，分了几笔"))
+        XCTAssertTrue(SemanticBoundaryGuard.matchesStationery("书桌买了一个笔芯"))
+        XCTAssertFalse(SemanticBoundaryGuard.matchesFlowerShopping("花呗还款、买花生和棉花"))
+        XCTAssertTrue(SemanticBoundaryGuard.matchesFlowerShopping("花店买一束鲜花"))
+        XCTAssertFalse(SemanticBoundaryGuard.matchesBabySupply("桂林米粉、手推车、成人奶粉"))
+        XCTAssertTrue(SemanticBoundaryGuard.matchesBabySupply("婴儿推车和婴儿奶粉"))
+        XCTAssertFalse(SemanticBoundaryGuard.matchesFitness("视频会员年卡、英语课程"))
+        XCTAssertTrue(SemanticBoundaryGuard.matchesFitness("健身房年卡、瑜伽课程"))
+        XCTAssertFalse(SemanticBoundaryGuard.matchesLongDistanceTransit("机动车年检、电动车充电"))
+        XCTAssertTrue(SemanticBoundaryGuard.matchesLongDistanceTransit("买动车票去外地"))
+    }
+
+    func testLifeSceneDoesNotTreat裙带菜AsClothingOrVideoAnnualCardAsFitness() {
+        let seaweed = HomeItem(title: "裙带菜", amount: 12, category: .shopping, createdAt: date(14, 10))
+        let video = HomeItem(title: "视频会员年卡", amount: 98, category: .health, createdAt: date(14, 10))
+        let seaweedScene = LifeSceneSemanticService.classify(seaweed)
+        let videoScene = LifeSceneSemanticService.classify(video)
+        XCTAssertNotEqual(seaweed.displayEmotionTag, "给衣柜添一件")
+        XCTAssertNotEqual(video.displayEmotionTag, "健身会员安排")
+        XCTAssertNotEqual(seaweedScene.kind, .shopping)
+        XCTAssertNotEqual(videoScene.kind, .fitness)
+    }
+
+    func testSceneLexiconDoesNotPromoteOrdinaryFoodToolsOrAdultNutritionToBabyCare() {
+        let food = HomeItem(title: "桂林米粉", amount: 18, category: .dining, createdAt: date(14, 10))
+        let cart = HomeItem(title: "手推车", amount: 80, category: .shopping, createdAt: date(14, 10))
+        let adultNutrition = HomeItem(title: "成人奶粉", amount: 120, category: .daily, createdAt: date(14, 10))
+
+        XCTAssertNotEqual(LifeSceneSemanticService.classify(food).kind, .homeSupply)
+        XCTAssertNotEqual(LifeSceneSemanticService.classify(cart).kind, .homeSupply)
+        XCTAssertNotEqual(LifeSceneSemanticService.classify(adultNutrition).kind, .homeSupply)
+    }
+
+    func testVehicleMaintenanceDoesNotBecomeAnOutingScene() {
+        let charging = HomeItem(title: "电动车充电", amount: 8, category: .transport, createdAt: date(14, 10))
+        let inspection = HomeItem(title: "机动车年检", amount: 120, category: .transport, createdAt: date(14, 10))
+
+        XCTAssertNotEqual(LifeSceneSemanticService.classify(charging).kind, .cityRoute)
+        XCTAssertNotEqual(LifeSceneSemanticService.classify(inspection).kind, .cityRoute)
+    }
+
+    func testLifeMarkLearningGrowthRequiresLearningEvidence() {
+        let item = HomeItem(title: "另记两笔，分了几笔", amount: 36, category: .shopping, createdAt: date(14, 10))
+        let marks = LifeMarkService.aggregates(for: [item], allItems: [item], isMember: false)
+        XCTAssertFalse(marks.contains(where: { $0.id == "learning_growth" }))
+    }
+
+}
+
+final class RecordPreviewTierBoundaryTests: XCTestCase {
+    func testAmountOnlyInputRemainsVisibleWhisperTier() {
+        let tier = RecordPreviewTier.resolve(.init(
+            amount: 18,
+            itemsCount: 0,
+            hasBrand: false,
+            hasNote: false,
+            previewLineWasRotated: false,
+            isEditing: false,
+            prefillSource: nil,
+            prefillConfidence: nil
+        ))
+
+        XCTAssertEqual(tier, .whisper)
+    }
+
+    func testInvalidAmountKeepsPreviewHidden() {
+        let tier = RecordPreviewTier.resolve(.init(
+            amount: 0,
+            itemsCount: 0,
+            hasBrand: false,
+            hasNote: false,
+            previewLineWasRotated: false,
+            isEditing: false,
+            prefillSource: nil,
+            prefillConfidence: nil
+        ))
+
+        XCTAssertEqual(tier, .hidden)
+    }
+}
+
+final class LedgerPersistenceRevisionPolicyTests: XCTestCase {
+    func testOnlyCurrentPersistenceCompletionCanPublishOrRollback() {
+        XCTAssertTrue(LedgerPersistenceRevisionPolicy.acceptsCompletion(
+            completionRevision: 8,
+            currentRevision: 8
+        ))
+        XCTAssertFalse(LedgerPersistenceRevisionPolicy.acceptsCompletion(
+            completionRevision: 7,
+            currentRevision: 8
+        ))
+    }
+
+    func testPersistenceProjectionReleasesImageBytesFromDerivedCache() {
+        let id = UUID()
+        let reference = "images/\(id.uuidString.lowercased())/photo.jpg"
+        let full = HomeItem(
+            id: id,
+            title: "带图账单",
+            amount: 18,
+            category: .shopping,
+            memoryImageDatas: [Data(repeating: 1, count: 128)],
+            memoryImageReferences: [reference],
+            memoryImageByteCounts: [128]
+        )
+        var metadata = full
+        metadata.setExternalMemoryImages(
+            references: [reference],
+            data: [Data()],
+            byteCounts: [128]
+        )
+        var snapshot = ItemDerivedCacheSnapshot.empty(for: .init(ledgerRevision: 1, dayKey: "2026-09-15"))
+        snapshot.todayPositiveItems = [full]
+        snapshot.replaceItems(with: [id: metadata])
+
+        XCTAssertNil(snapshot.todayPositiveItems[0].memoryImageData(at: 0))
+        XCTAssertEqual(snapshot.todayPositiveItems[0].memoryImageReference(at: 0), reference)
+        XCTAssertEqual(snapshot.todayPositiveItems[0].memoryImageByteCount(at: 0), 128)
+    }
 }
 
 final class AICommuteBoundaryTests: XCTestCase {

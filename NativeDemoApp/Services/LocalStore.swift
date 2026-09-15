@@ -206,7 +206,10 @@ enum LocalStore {
         currentItemsForFallback: [HomeItem]
     ) -> Bool {
         guard let repository = homeItemsRepository() else { return false }
-        return repository.saveChanges(changes, currentItemsForFallback: currentItemsForFallback)
+        return repository.saveChanges(
+            changes,
+            currentItemsForFallback: currentItemsForFallback
+        ).success
     }
 
     static func loadMemoryImageData(
@@ -259,6 +262,21 @@ enum LocalStore {
             preImageMigrationBackupFile: preImageMigrationBackupFile
         )
     }
+
+    #if DEBUG
+    /// Supplies the isolated QA ledger location to the background persistence actor.
+    /// Production builds intentionally return no alternate context.
+    static func releaseFixtureStoreContextForPersistenceWriter() -> LedgerPersistenceStoreContext? {
+        guard let context = releaseFixtureStoreContext() else { return nil }
+        return LedgerPersistenceStoreContext(
+            documentsURL: context.documentsURL,
+            defaults: context.defaults,
+            homeItemsBackupKey: homeItemsBackupKey,
+            homeItemsFile: homeItemsFile,
+            preImageMigrationBackupFile: preImageMigrationBackupFile
+        )
+    }
+    #endif
 
     #if DEBUG
     private struct ReleaseFixtureStoreContext {

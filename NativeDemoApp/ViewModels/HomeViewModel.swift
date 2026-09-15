@@ -743,6 +743,17 @@ struct ItemDerivedCacheSnapshot: Equatable, @unchecked Sendable {
     static func empty(for key: ItemDerivedCachePreparationKey) -> ItemDerivedCacheSnapshot {
         ItemDerivedCacheSnapshot(key: key)
     }
+
+    mutating func replaceItems(with replacements: [UUID: HomeItem]) {
+        func replace(_ rows: [HomeItem]) -> [HomeItem] {
+            rows.map { replacements[$0.id] ?? $0 }
+        }
+        todayPositiveItems = replace(todayPositiveItems)
+        recentThreeTodayItems = replace(recentThreeTodayItems)
+        currentWeekItems = replace(currentWeekItems)
+        currentMonthItems = replace(currentMonthItems)
+        currentYearItems = replace(currentYearItems)
+    }
 }
 
 enum ItemDerivedCacheComputation {
@@ -1090,6 +1101,7 @@ final class HomeViewModel: ObservableObject {
         }
     }
     @Published private(set) var syncStatusMessage: String?
+    @Published private(set) var isPersistingLedger: Bool = false
     @Published private(set) var isSyncingCloudLedger: Bool = false
     @Published private(set) var isRestoringLocalBackup: Bool = false
     private(set) var latestPlayback: PlaybackSnapshot?
@@ -1198,6 +1210,12 @@ final class HomeViewModel: ObservableObject {
     private var narrativeAIPreparationRevision = -1
     private var narrativeAIConfigurationCancellable: AnyCancellable?
     private var localLedgerWritesBlocked = false
+    private let persistenceWriter = LedgerPersistenceWriter()
+    private var persistenceRevision: UInt64 = 0
+    private var pendingPersistenceTasks: [UInt64: Task<LedgerPersistenceSaveResult, Never>] = [:]
+    private var pendingPersistenceRevisionByID: [UUID: UInt64] = [:]
+    private var completedPersistenceResults: [UInt64: Bool] = [:]
+    private var completedPersistenceResultByID: [UUID: Bool] = [:]
 
     init() {
         currentWeekTraceSeenKey = UserDefaults.standard.string(
@@ -3531,21 +3549,145 @@ final class HomeViewModel: ObservableObject {
     ) -> Bool {
         guard ensureLedgerWritesAllowed() else { return false }
         let changes = LedgerHomeItemsChangeSet(upserts: upserting, deletedIDs: deleting)
-        guard LocalStore.saveHomeItemChanges(changes, currentItemsForFallback: items) else {
-            let reloadResult = LocalStore.loadHomeItemsResult()
-            items = reloadResult.items.sorted { $0.createdAt > $1.createdAt }
-            localLedgerWritesBlocked = reloadResult.writesBlocked
-            let message = reloadResult.issueMessage
-                ?? "这次修改没有写入本机，原账本仍保留。请重启后再试。"
-            recordInputMessage = message
-            syncStatusMessage = message
-            return false
+        guard !changes.isEmpty else { return true }
+
+        persistenceRevision &+= 1
+        let revision = persistenceRevision
+        let fallback = items
+        isPersistingLedger = true
+        let task = Task { [persistenceWriter] in
+            await persistenceWriter.saveChanges(
+                changes,
+                currentItemsForFallback: fallback
+            )
+        }
+        pendingPersistenceTasks[revision] = task
+        for id in Set(upserting.map(\.id)).union(deleting) {
+            pendingPersistenceRevisionByID[id] = revision
         }
         publishImmediateItemDerivedProjection(
             upserting: upserting,
             deleting: deleting,
             now: Date()
         )
+        Task { @MainActor [weak self] in
+            let result = await task.value
+            await self?.completePersistence(
+                revision: revision,
+                recordIDs: Set(upserting.map(\.id)).union(deleting),
+                result: result
+            )
+        }
+        return true
+    }
+
+    private func completePersistence(
+        revision: UInt64,
+        recordIDs: Set<UUID>,
+        result: LedgerPersistenceSaveResult
+    ) async {
+        let success = result.success
+        completedPersistenceResults[revision] = success
+        pendingPersistenceTasks.removeValue(forKey: revision)
+        for id in recordIDs {
+            pendingPersistenceRevisionByID.removeValue(forKey: id)
+            completedPersistenceResultByID[id] = success
+        }
+        if completedPersistenceResults.count > 32 {
+            let oldest = completedPersistenceResults.keys.sorted().prefix(completedPersistenceResults.count - 32)
+            for key in oldest { completedPersistenceResults.removeValue(forKey: key) }
+        }
+        isPersistingLedger = !pendingPersistenceTasks.isEmpty
+
+        if success {
+            guard LedgerPersistenceRevisionPolicy.acceptsCompletion(
+                completionRevision: revision,
+                currentRevision: persistenceRevision
+            ) else { return }
+
+            // The writer has externalized any image bytes and returned a
+            // metadata-only projection. Replace only the records touched by
+            // this revision; unrelated in-memory edits stay untouched.
+            if !result.persistedItems.isEmpty {
+                let persistedByID = Dictionary(uniqueKeysWithValues: result.persistedItems.map { ($0.id, $0) })
+                items = items.map { persistedByID[$0.id] ?? $0 }
+                itemDerivedCache.replaceItems(with: persistedByID)
+                if let history = recordInputHistorySnapshot {
+                    recordInputHistorySnapshot = RecordInputHistorySnapshot(
+                        key: history.key,
+                        prefillItems: history.prefillItems.map { persistedByID[$0.id] ?? $0 },
+                        frequentSuggestions: history.frequentSuggestions,
+                        frequentTitlesBySuggestionID: history.frequentTitlesBySuggestionID
+                    )
+                }
+            }
+            return
+        }
+
+        guard LedgerPersistenceRevisionPolicy.acceptsCompletion(
+            completionRevision: revision,
+            currentRevision: persistenceRevision
+        ) else {
+            // A newer edit is already in memory. Re-submit this request's
+            // affected records against that latest projection instead of
+            // letting an older failed write disappear silently.
+            let currentIDs = Set(items.map(\.id))
+            let retryUpserts = recordIDs.compactMap { id in
+                items.first(where: { $0.id == id })
+            }
+            let retryDeletes = recordIDs.subtracting(currentIDs)
+            _ = persistItems(upserting: retryUpserts, deleting: retryDeletes)
+            for item in retryUpserts {
+                Task { await syncUpsertToCloud(item) }
+            }
+            for id in retryDeletes {
+                Task { await syncDeleteFromCloud(id: id) }
+            }
+            return
+        }
+
+        let reloadResult = await Task.detached(priority: .utility) {
+            LocalStore.loadHomeItemsResult()
+        }.value
+        guard LedgerPersistenceRevisionPolicy.acceptsCompletion(
+            completionRevision: revision,
+            currentRevision: persistenceRevision
+        ) else { return }
+        items = reloadResult.items.sorted { $0.createdAt > $1.createdAt }
+        localLedgerWritesBlocked = reloadResult.writesBlocked
+        let message = reloadResult.issueMessage
+            ?? "这次修改没有写入本机，原账本仍保留。请重启后再试。"
+        recordInputMessage = message
+        syncStatusMessage = message
+    }
+
+    private func waitForPersistence(of recordIDs: Set<UUID>) async -> Bool {
+        for id in recordIDs {
+            if let completed = completedPersistenceResultByID.removeValue(forKey: id) {
+                guard completed else { return false }
+                continue
+            }
+            while let revision = pendingPersistenceRevisionByID[id] {
+                if let result = completedPersistenceResults[revision] {
+                    pendingPersistenceRevisionByID.removeValue(forKey: id)
+                    completedPersistenceResultByID.removeValue(forKey: id)
+                    if !pendingPersistenceRevisionByID.values.contains(revision) {
+                        completedPersistenceResults.removeValue(forKey: revision)
+                    }
+                    guard result else { return false }
+                    continue
+                }
+                guard let task = pendingPersistenceTasks[revision] else {
+                    pendingPersistenceRevisionByID.removeValue(forKey: id)
+                    continue
+                }
+                let result = await task.value
+                pendingPersistenceRevisionByID.removeValue(forKey: id)
+                completedPersistenceResultByID.removeValue(forKey: id)
+                guard result.success else { return false }
+            }
+        }
+        isPersistingLedger = !pendingPersistenceTasks.isEmpty
         return true
     }
 
@@ -3624,6 +3766,7 @@ final class HomeViewModel: ObservableObject {
 
     private func syncUpsertToCloud(_ item: HomeItem) async {
         guard !LocalStore.isReleaseFixtureMode else { return }
+        guard await waitForPersistence(of: [item.id]) else { return }
         guard let context = cloudContext() else { return }
         let service = LedgerSyncService(baseURL: context.baseURL, accessToken: context.accessToken)
         do {
@@ -3650,6 +3793,7 @@ final class HomeViewModel: ObservableObject {
 
     private func syncDeleteFromCloud(id: UUID) async {
         guard !LocalStore.isReleaseFixtureMode else { return }
+        guard await waitForPersistence(of: [id]) else { return }
         guard let context = cloudContext() else { return }
         let service = LedgerSyncService(baseURL: context.baseURL, accessToken: context.accessToken)
         let intent = LocalStore.loadCloudLedgerDeletionIntents(for: context.userId).first(where: { $0.id == id })

@@ -1,6 +1,6 @@
 import Foundation
 
-enum RecordPreviewTier {
+enum RecordPreviewTier: Equatable {
     case hidden
     case whisper
     case confirm

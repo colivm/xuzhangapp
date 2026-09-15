@@ -2111,9 +2111,9 @@ struct RecordView: View {
             amountText: inputAmountValue.formatted(.cny),
             primaryActionTitle: previewQuickActionTitle,
             showsPrimaryAction: isMember,
-            showAngleAction: isMember && previewLineWasRotated && previewTier == .confirm,
-            showsFreePrimaryAction: !isMember && hasValidAmount && previewTier == .confirm,
-            showFreeAngleAction: !isMember && hasValidAmount && previewTier == .confirm,
+            showAngleAction: isMember && hasValidAmount && previewTier != .hidden,
+            showsFreePrimaryAction: !isMember && hasValidAmount && previewTier != .hidden,
+            showFreeAngleAction: !isMember && hasValidAmount && previewTier != .hidden,
             freeScenePackLimitText: freeScenePackLimitText,
             onTap: {
                 openNoteEditor()
