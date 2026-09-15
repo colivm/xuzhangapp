@@ -3672,7 +3672,7 @@ final class HomeViewModel: ObservableObject {
             // unrelated record must not prevent us from releasing image Data
             // for this record from memory.
             if !result.persistedItems.isEmpty {
-                let persistedByID = Dictionary(uniqueKeysWithValues: result.persistedItems.compactMap { item in
+                let persistedByID: [UUID: HomeItem] = Dictionary(uniqueKeysWithValues: result.persistedItems.compactMap { item in
                     guard latestPersistenceRevisionByID[item.id] == revision else { return nil }
                     return (item.id, item)
                 })

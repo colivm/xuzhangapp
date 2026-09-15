@@ -5295,3 +5295,12 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据（Windows）：`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 均通过；当前环境无 Xcode，未宣称 Swift 编译或真机验证。
 - 冻结边界：未修改生活场景规则、关键词、账单字段、同步、照片、会员/IAP 或 UI。
 - 剩余风险与下一任务：需在 macOS/Xcode 执行 Swift 6 Debug/Release 编译确认；外部签收前维持 `CODE_DONE`，下一项为 `RELEASE-02` 集中签收。
+
+### 138. PERSISTED-PROJECTION-TYPE-INFERENCE-FIX-01：metadata-only 投影字典类型标注（2026-09-15）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-15）。
+- 用户问题：Xcode 在 `HomeViewModel.swift:3675` 报 `Generic parameter 'Key/Value' could not be inferred`。
+- 实施结果：为按记录 ID 构建的 metadata-only 投影字典显式标注 `[UUID: HomeItem]`，保持 revision 过滤和原图释放逻辑不变。
+- 验证证据（Windows）：`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 均通过；当前环境无 Xcode，未宣称 Swift 编译或真机验证。
+- 冻结边界：仅修复 Swift 类型推断，不改变账单字段、持久化时序、同步、照片、语义、会员/IAP 或 UI。
+- 剩余风险与下一任务：需在 macOS/Xcode 执行 Swift 6 Debug/Release 编译确认；外部签收前维持 `CODE_DONE`，下一项为 `RELEASE-02` 集中签收。
