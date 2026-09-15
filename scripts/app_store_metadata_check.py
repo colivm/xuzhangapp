@@ -67,6 +67,8 @@ def main() -> int:
         "https://xuzhangapp.com/",
         "https://xuzhangapp.com/legal/privacy.html",
         "https://xuzhangapp.com/legal/terms.html",
+        "Terms of Use (EULA)",
+        "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
         "苏ICP备2026035096号-1",
         "Apple WeatherKit",
         "DeepSeek",
@@ -74,6 +76,15 @@ def main() -> int:
     for fact in expected_facts:
         if fact not in public_copy:
             fail(f"missing current App Store fact: {fact}", failures)
+
+    eula_url = metadata.get("eulaURL")
+    if eula_url != "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/":
+        fail("eulaURL must use Apple's standard Terms of Use URL", failures)
+    description = metadata.get("description", "")
+    if "Terms of Use (EULA)" not in description or eula_url not in description:
+        fail("metadata description must contain a labeled, clickable Terms of Use (EULA) URL", failures)
+    if not re.match(r"^https://", str(eula_url)):
+        fail("eulaURL must use HTTPS", failures)
 
     forbidden = (
         "看看花",

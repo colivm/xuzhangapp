@@ -42,6 +42,35 @@ final class LedgerLocalBackupDocumentTests: XCTestCase {
         XCTAssertEqual(manifest["photoReferenceCount"] as? Int, 2)
     }
 
+    func testExternalizedPhotoReferenceIsResolvedIntoBackupPackage() throws {
+        let image = Data([7, 8, 9, 10])
+        let itemID = UUID(uuidString: "ABABABAB-1111-2222-3333-ABABABABABAB")!
+        let reference = "images/\(itemID.uuidString.lowercased())/old-reference.jpg"
+        let item = HomeItem(
+            id: itemID,
+            title: "外置照片",
+            amount: 16,
+            category: .shopping,
+            memoryImageReferences: [reference]
+        )
+
+        let document = try LedgerLocalBackupDocument(
+            items: [item],
+            imageDataResolver: { candidate in
+                candidate == reference ? image : nil
+            }
+        )
+        let rootFiles = try XCTUnwrap(document.exportedFileWrapperForTesting().fileWrappers)
+
+        XCTAssertEqual(document.summary.photoReferenceCount, 1)
+        XCTAssertEqual(document.summary.exportedPhotoFileCount, 1)
+        XCTAssertEqual(document.summary.unavailablePhotoCount, 0)
+        let images = try XCTUnwrap(rootFiles["images"]?.fileWrappers)
+        let recordFiles = try XCTUnwrap(images[itemID.uuidString.lowercased()]?.fileWrappers)
+        XCTAssertEqual(recordFiles.count, 1)
+        XCTAssertEqual(recordFiles.values.first?.regularFileContents, image)
+    }
+
     func testUnavailablePhotoIsReportedWithoutBreakingLedgerExport() throws {
         let reference = "images/bbbbbbbb-2222-2222-2222-bbbbbbbbbbbb/\(String(repeating: "a", count: 64)).jpg"
         let item = HomeItem(
@@ -258,6 +287,115 @@ final class LedgerLocalBackupDocumentTests: XCTestCase {
 
         XCTAssertNil(result)
         XCTAssertEqual(current, local)
+    }
+
+    func testEmptyLedgerImportInsertsEachBackupRecordOnce() throws {
+        let id = UUID(uuidString: "99999999-9999-9999-9999-999999999999")!
+        let backup = [HomeItem(id: id, title: "备份记录", amount: 8, category: .daily)]
+
+        let plan = try LedgerLocalBackupRestorePlanner.makePlan(
+            localItems: [],
+            backupItems: backup
+        )
+
+        XCTAssertEqual(plan.mergedItems.count, 1)
+        XCTAssertEqual(plan.changes.upserts.map(\.id), [id])
+        XCTAssertEqual(plan.summary.insertedRecordCount, 1)
+    }
+
+    func testPhotoOnlyImportFillsCloudRecordWithoutReplacingNewerLedgerFields() throws {
+        let base = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let id = UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")!
+        let local = HomeItem(
+            id: id,
+            title: "云端较新标题",
+            amount: 12,
+            category: .daily,
+            createdAt: base,
+            updatedAt: base.addingTimeInterval(100)
+        )
+        let backup = HomeItem(
+            id: id,
+            title: "本地备份旧标题",
+            amount: 10,
+            category: .daily,
+            createdAt: base,
+            updatedAt: base.addingTimeInterval(10),
+            memoryImageDatas: [Data([1, 2, 3])],
+            coverMemoryImageIndex: 0
+        )
+
+        let plan = try LedgerLocalBackupRestorePlanner.makePlan(
+            localItems: [local],
+            backupItems: [backup]
+        )
+        let merged = try XCTUnwrap(plan.mergedItems.first)
+
+        XCTAssertEqual(merged.title, "云端较新标题")
+        XCTAssertEqual(merged.amount, 12)
+        XCTAssertEqual(merged.memoryImageData(at: 0), Data([1, 2, 3]))
+        XCTAssertEqual(plan.summary.updatedRecordCount, 1)
+        XCTAssertEqual(plan.changes.upserts.count, 1)
+    }
+
+    func testValidBackupPhotoReplacesStaleLocalReference() throws {
+        let id = UUID(uuidString: "CCCCCCCC-1111-2222-3333-CCCCCCCCCCCC")!
+        let local = HomeItem(
+            id: id,
+            title: "云端账单",
+            amount: 20,
+            category: .shopping,
+            updatedAt: Date(timeIntervalSinceReferenceDate: 100),
+            memoryImageReferences: ["images/\(id.uuidString.lowercased())/missing.jpg"]
+        )
+        let photo = Data([4, 5, 6])
+        let backup = HomeItem(
+            id: id,
+            title: "本地备份",
+            amount: 21,
+            category: .shopping,
+            updatedAt: Date(timeIntervalSinceReferenceDate: 200),
+            memoryImageDatas: [photo]
+        )
+
+        let plan = try LedgerLocalBackupRestorePlanner.makePlan(
+            localItems: [local],
+            backupItems: [backup]
+        )
+
+        XCTAssertEqual(plan.mergedItems.first?.memoryImageData(at: 0), photo)
+    }
+
+    func testNewerBackupWithoutPhotosDoesNotEraseLocalPhotoReference() throws {
+        let base = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let id = UUID(uuidString: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")!
+        let reference = "images/\(id.uuidString.lowercased())/existing.jpg"
+        let local = HomeItem(
+            id: id,
+            title: "本机照片",
+            amount: 5,
+            category: .daily,
+            createdAt: base,
+            updatedAt: base,
+            memoryImageReferences: [reference]
+        )
+        let backup = HomeItem(
+            id: id,
+            title: "云端较新",
+            amount: 6,
+            category: .daily,
+            createdAt: base,
+            updatedAt: base.addingTimeInterval(20)
+        )
+
+        let plan = try LedgerLocalBackupRestorePlanner.makePlan(
+            localItems: [local],
+            backupItems: [backup]
+        )
+        let merged = try XCTUnwrap(plan.mergedItems.first)
+
+        XCTAssertEqual(merged.title, "云端较新")
+        XCTAssertEqual(merged.memoryImageReference(at: 0), reference)
     }
 
     private func replacingFirstPhoto(in root: FileWrapper, with data: Data) throws -> FileWrapper {

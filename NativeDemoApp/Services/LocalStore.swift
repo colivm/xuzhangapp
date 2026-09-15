@@ -12,6 +12,54 @@ enum LocalStore {
     private static let homeItemsFile = "home_items_v1.json"
     private static let preImageMigrationBackupFile = "home_items_v1.pre_image_migration.json"
     private static let dailyInsightsFile = "daily_insights_v1.json"
+    private static let cloudLedgerDeletionJournalKey = "cloud_ledger_deletion_journal_v1"
+
+    struct CloudLedgerDeletionIntent: Codable, Equatable {
+        let id: UUID
+        let deletedAt: Date
+    }
+
+    static func enqueueCloudLedgerDeletion(id: UUID, deletedAt: Date, for userId: String) {
+        let account = userId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !account.isEmpty else { return }
+        var journal = loadCloudLedgerDeletionJournal()
+        var intents = journal[account] ?? []
+        if let index = intents.firstIndex(where: { $0.id == id }) {
+            intents[index] = CloudLedgerDeletionIntent(id: id, deletedAt: max(intents[index].deletedAt, deletedAt))
+        } else {
+            intents.append(CloudLedgerDeletionIntent(id: id, deletedAt: deletedAt))
+        }
+        journal[account] = intents
+        saveCloudLedgerDeletionJournal(journal)
+    }
+
+    static func loadCloudLedgerDeletionIntents(for userId: String) -> [CloudLedgerDeletionIntent] {
+        let account = userId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !account.isEmpty else { return [] }
+        return loadCloudLedgerDeletionJournal()[account] ?? []
+    }
+
+    static func removeCloudLedgerDeletion(id: UUID, for userId: String) {
+        let account = userId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !account.isEmpty else { return }
+        var journal = loadCloudLedgerDeletionJournal()
+        journal[account]?.removeAll { $0.id == id }
+        if journal[account]?.isEmpty == true { journal.removeValue(forKey: account) }
+        saveCloudLedgerDeletionJournal(journal)
+    }
+
+    private static func loadCloudLedgerDeletionJournal() -> [String: [CloudLedgerDeletionIntent]] {
+        guard let data = UserDefaults.standard.data(forKey: cloudLedgerDeletionJournalKey),
+              let value = try? JSONDecoder().decode([String: [CloudLedgerDeletionIntent]].self, from: data) else {
+            return [:]
+        }
+        return value
+    }
+
+    private static func saveCloudLedgerDeletionJournal(_ value: [String: [CloudLedgerDeletionIntent]]) {
+        guard let data = try? JSONEncoder().encode(value) else { return }
+        UserDefaults.standard.set(data, forKey: cloudLedgerDeletionJournalKey)
+    }
 
     static var isReleaseFixtureMode: Bool {
         #if DEBUG

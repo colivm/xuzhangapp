@@ -108,13 +108,17 @@ struct FocusedRecordEditor: View {
         .onChange(of: selectedPhotos) { _, newValue in
             guard !newValue.isEmpty else { return }
             Task {
-                var compressedImages: [Data] = []
+                var sourceImages: [Data] = []
                 for photo in newValue.prefix(photoPickerSelectionLimit) {
-                    if let data = try? await photo.loadTransferable(type: Data.self),
-                       let compressedData = MemoryImageCompressor.compressedJPEGData(from: data) {
-                        compressedImages.append(compressedData)
+                    if let data = try? await photo.loadTransferable(type: Data.self) {
+                        sourceImages.append(data)
                     }
                 }
+                // Decode/resize/encode away from the main actor; photo
+                // selection should not hitch the editor animation or scroll.
+                let compressedImages = await Task.detached(priority: .userInitiated) {
+                    sourceImages.compactMap { MemoryImageCompressor.compressedJPEGData(from: $0) }
+                }.value
                 await MainActor.run {
                     selectedPhotos = []
                     guard !compressedImages.isEmpty else { return }

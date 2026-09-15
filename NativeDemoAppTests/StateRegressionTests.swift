@@ -3512,6 +3512,47 @@ final class SingleRecordEmotionBoundaryTests: XCTestCase {
         XCTAssertFalse(line.contains("车停稳了"))
         XCTAssertFalse(line.contains("刚翻开第一页"))
     }
+
+    func testEveningDiningDoesNotKeepStoredNoonTagAfterTimeEdit() {
+        let item = HomeItem(
+            title: "肯德基",
+            amount: 25.90,
+            category: .dining,
+            createdAt: date(17, 56),
+            emotionTag: "中午这顿安排好了"
+        )
+
+        XCTAssertEqual(item.displayEmotionTag, "晚饭时间坐一会儿")
+    }
+
+    func testExplicitNoonTitleStillWinsOverEveningClock() {
+        let item = HomeItem(
+            title: "中午带饭",
+            amount: 25.90,
+            category: .dining,
+            createdAt: date(17, 56),
+            emotionTag: "中午这顿安排好了"
+        )
+
+        XCTAssertEqual(item.displayEmotionTag, "中午这顿安排好了")
+    }
+
+    func testDiningResolutionUsesEveningTagForBrandAfterSeventeen() {
+        let resolution = RecordDraftResolutionService.resolve(
+            RecordDraftResolutionInput(
+                rawTitle: "肯德基",
+                fallbackCategory: .dining,
+                amount: 25.90,
+                date: date(17, 56),
+                merchantBrandId: "kfc",
+                categoryLockedByUser: false,
+                userEditedTitle: true,
+                source: "test"
+            )
+        )
+
+        XCTAssertEqual(resolution.emotionTag, "晚饭时间坐一会儿")
+    }
 }
 
 final class AICommuteBoundaryTests: XCTestCase {
@@ -10071,10 +10112,30 @@ final class IAPRestoreFailureCopyTests: XCTestCase {
             for: AuthServiceError.iapVerifyFailed(code: "TRANSACTION_ALREADY_BOUND", message: "")
         )
         XCTAssertTrue(message.contains("另一个叙账账号"))
-        XCTAssertTrue(message.contains("登录购买时使用的账号"))
-        XCTAssertTrue(message.contains("更换 Apple ID"))
-        XCTAssertTrue(message.contains("联系客服"))
+        XCTAssertTrue(message.contains("购买时使用的手机号账号"))
+        XCTAssertFalse(message.contains("更换 Apple ID"))
+        XCTAssertTrue(message.contains("不能解绑或转移"))
+        XCTAssertFalse(message.contains("联系客服"))
         XCTAssertNotEqual(message, IAPRestoreFailureCopy.genericMessage)
+    }
+
+    func testLifetimeConflictIsLabeledAsPurchaseNotSubscription() {
+        let message = IAPRestoreFailureCopy.message(
+            for: AuthServiceError.iapVerifyFailed(code: "TRANSACTION_ALREADY_BOUND", message: ""),
+            tier: .lifetime
+        )
+        XCTAssertTrue(message.contains("App Store 购买"))
+        XCTAssertFalse(message.contains("App Store 订阅"))
+        XCTAssertFalse(message.contains("解绑"))
+    }
+
+    func testYearlyExpirationCopyNamesTheSubscriptionTier() {
+        let message = IAPPurchaseFailureCopy.message(
+            for: IAPServiceError.transactionExpired,
+            tier: .yearly
+        )
+        XCTAssertTrue(message.contains("年度订阅"))
+        XCTAssertFalse(message.contains("购买"))
     }
 
     func testUnknownOrNetworkFailuresFallBackToGenericMessage() {

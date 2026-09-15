@@ -109,8 +109,13 @@ final class LedgerSyncService {
         _ = try await data(for: request)
     }
 
-    func delete(id: UUID) async throws {
-        let request = try makeRequest(path: "/v1/ledger/\(id.uuidString)", method: "DELETE")
+    func delete(id: UUID, deletedAt: Date? = nil) async throws {
+        var request = try makeRequest(path: "/v1/ledger/\(id.uuidString)", method: "DELETE")
+        if let deletedAt {
+            var components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)
+            components?.queryItems = [URLQueryItem(name: "deletedAt", value: iso8601.string(from: deletedAt))]
+            if let url = components?.url { request.url = url }
+        }
         _ = try await data(for: request)
     }
 

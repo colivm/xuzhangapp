@@ -325,7 +325,10 @@ struct SettingsView: View {
                 }
                 .fileImporter(
                     isPresented: $isImportingLocalBackup,
-                    allowedContentTypes: [LedgerLocalBackupDocument.contentType],
+                    // Keep the declared backup UTI first; `.package` also lets
+                    // Files select packages created before the UTI declaration
+                    // shipped. The importer still validates the full structure.
+                    allowedContentTypes: [LedgerLocalBackupDocument.contentType, .package],
                     allowsMultipleSelection: false
                 ) { result in
                     handleLocalBackupImportSelection(result)

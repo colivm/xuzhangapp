@@ -1737,8 +1737,15 @@ final class HomeViewModel: ObservableObject {
     func deleteOCRDraftItem(id: UUID) {
         guard ensureLedgerWritesAllowed() else { return }
         guard let idx = items.firstIndex(where: { $0.id == id }), items[idx].draftMeta != nil else { return }
+        let deletionUserId = cloudContext()?.userId ?? LocalStore.loadLocalLedgerOwnerUserId()
+        if !deletionUserId.isEmpty {
+            LocalStore.enqueueCloudLedgerDeletion(id: id, deletedAt: Date(), for: deletionUserId)
+        }
         items.remove(at: idx)
-        guard persistItems(deleting: [id]) else { return }
+        guard persistItems(deleting: [id]) else {
+            if !deletionUserId.isEmpty { LocalStore.removeCloudLedgerDeletion(id: id, for: deletionUserId) }
+            return
+        }
         clearOCRStatusIfNoPendingDrafts()
         analyticsService.track(.ocrDraftDeleted)
         refreshTodayPlayback()
@@ -1814,8 +1821,20 @@ final class HomeViewModel: ObservableObject {
         guard ensureLedgerWritesAllowed() else { return false }
         let existingIDs = Set(items.lazy.map(\.id)).intersection(requestedIDs)
         guard !existingIDs.isEmpty else { return false }
+        let deletionUserId = cloudContext()?.userId ?? LocalStore.loadLocalLedgerOwnerUserId()
+        let deletedAt = Date()
+        if !deletionUserId.isEmpty {
+            for id in existingIDs {
+                LocalStore.enqueueCloudLedgerDeletion(id: id, deletedAt: deletedAt, for: deletionUserId)
+            }
+        }
         items.removeAll { existingIDs.contains($0.id) }
-        guard persistItems(deleting: existingIDs) else { return false }
+        guard persistItems(deleting: existingIDs) else {
+            if !deletionUserId.isEmpty {
+                for id in existingIDs { LocalStore.removeCloudLedgerDeletion(id: id, for: deletionUserId) }
+            }
+            return false
+        }
         analyticsService.track(
             .recordDeletedBatch,
             props: [.countBucket: AnalyticsService.countBucket(for: existingIDs.count)]
@@ -2063,11 +2082,26 @@ final class HomeViewModel: ObservableObject {
         defer { isSyncingCloudLedger = false }
         let service = LedgerSyncService(baseURL: context.baseURL, accessToken: context.accessToken)
         do {
+            let pendingDeletes = LocalStore.loadCloudLedgerDeletionIntents(for: context.userId)
+            for intent in pendingDeletes {
+                do {
+                    try await service.delete(id: intent.id, deletedAt: intent.deletedAt)
+                    LocalStore.removeCloudLedgerDeletion(id: intent.id, for: context.userId)
+                } catch {
+                    guard CloudSessionFailurePolicy.shouldInvalidateSession(for: error) else { continue }
+                    CloudSessionInvalidationService.invalidate()
+                    syncStatusMessage = CloudSessionInvalidationService.userMessage
+                    return
+                }
+            }
             let snapshot = try await service.fetchSnapshot()
+            let journalTombstones = pendingDeletes.map {
+                CloudLedgerMergePolicy.Tombstone(id: $0.id, deletedAt: $0.deletedAt)
+            }
             let mergeResult = CloudLedgerMergePolicy.merge(
                 local: items,
                 remote: snapshot.items,
-                tombstones: snapshot.tombstones
+                tombstones: snapshot.tombstones + journalTombstones
             )
             let merged = mergeResult.merged.sorted { $0.createdAt > $1.createdAt }
             let changes = ledgerChanges(from: items, to: merged)
@@ -2078,7 +2112,8 @@ final class HomeViewModel: ObservableObject {
             }
             markLocalLedgerOwner(context.userId)
             // 只回传本机更新或云端缺失的记录；云端已是最新的记录不重复上传。
-            for item in mergeResult.uploads {
+            let pendingIDs = Set(LocalStore.loadCloudLedgerDeletionIntents(for: context.userId).map(\.id))
+            for item in mergeResult.uploads where !pendingIDs.contains(item.id) {
                 do {
                     try await service.upload(item)
                 } catch {
@@ -3617,8 +3652,10 @@ final class HomeViewModel: ObservableObject {
         guard !LocalStore.isReleaseFixtureMode else { return }
         guard let context = cloudContext() else { return }
         let service = LedgerSyncService(baseURL: context.baseURL, accessToken: context.accessToken)
+        let intent = LocalStore.loadCloudLedgerDeletionIntents(for: context.userId).first(where: { $0.id == id })
         do {
-            try await service.delete(id: id)
+            try await service.delete(id: id, deletedAt: intent?.deletedAt)
+            LocalStore.removeCloudLedgerDeletion(id: id, for: context.userId)
             syncStatusMessage = "云端备份已删除；本机照片不受影响。"
         } catch {
             if CloudSessionFailurePolicy.shouldInvalidateSession(for: error) {

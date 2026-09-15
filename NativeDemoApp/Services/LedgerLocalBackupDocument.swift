@@ -382,12 +382,18 @@ enum LedgerLocalBackupRestorePlanner {
                 inserted += 1
                 continue
             }
-            guard backupItem.updatedAt > localItem.updatedAt else {
+            let backupWins = backupItem.updatedAt > localItem.updatedAt
+            let candidate = mergedItem(
+                local: localItem,
+                backup: backupItem,
+                backupWins: backupWins
+            )
+            guard candidate != localItem else {
                 keptLocal += 1
                 continue
             }
-            mergedByID[backupItem.id] = backupItem
-            upserts.append(backupItem)
+            mergedByID[backupItem.id] = candidate
+            upserts.append(candidate)
             updated += 1
         }
 
@@ -407,6 +413,56 @@ enum LedgerLocalBackupRestorePlanner {
         if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
         if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
         return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    /// A cloud merge can restore the ledger fields first while intentionally
+    /// omitting local photos. A local backup must be able to fill that hole
+    /// without duplicating records or replacing newer cloud fields.
+    private static func mergedItem(
+        local: HomeItem,
+        backup: HomeItem,
+        backupWins: Bool
+    ) -> HomeItem {
+        var result = backupWins ? backup : local
+        // A metadata-only record can retain a reference after its image file
+        // has been deleted (for example after an incomplete migration or
+        // manual cleanup). Treating that stale reference as a real photo
+        // would overwrite a valid photo restored from the backup package.
+        let localHasPhotoData = (0..<local.memoryImageCount).contains {
+            local.memoryImageData(at: $0) != nil
+        }
+        let localHasPhotoReference = (0..<local.memoryImageCount).contains {
+            local.memoryImageReference(at: $0) != nil
+        }
+        let backupHasPhoto = (0..<backup.memoryImageCount).contains {
+            backup.memoryImageData(at: $0) != nil
+        }
+
+        if localHasPhotoData {
+            // Never discard photos already present on this device, even when
+            // the backup has a newer ledger timestamp but no photo payload.
+            copyPhotoPayload(from: local, to: &result)
+        } else if backupHasPhoto {
+            copyPhotoPayload(from: backup, to: &result)
+        } else if localHasPhotoReference {
+            // Preserve a reference when the backup also has no usable photo;
+            // the existing missing-photo placeholder remains recoverable later.
+            copyPhotoPayload(from: local, to: &result)
+        }
+        return result
+    }
+
+    private static func copyPhotoPayload(from source: HomeItem, to target: inout HomeItem) {
+        target.memoryImageData = source.memoryImageData
+        target.memoryImageDatas = source.memoryImageDatas
+        target.memoryImageReferences = source.memoryImageReferences
+        target.memoryImageByteCounts = source.memoryImageByteCounts
+        target.unavailableMemoryImageIndices = source.unavailableMemoryImageIndices
+        target.coverMemoryImageIndex = source.coverMemoryImageIndex
+        target.memoryAnchorRole = source.memoryAnchorRole
+        target.memoryAnchorSceneHint = source.memoryAnchorSceneHint
+        target.memoryAnchorCaption = source.memoryAnchorCaption
+        target.memoryAnchorCreatedAt = source.memoryAnchorCreatedAt
     }
 }
 

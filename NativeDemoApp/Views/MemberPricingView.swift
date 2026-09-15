@@ -1328,7 +1328,7 @@ struct MemberPricingView: View {
                 purchaseNotice = "会员已开通，回放和导入额度已更新。"
             } catch {
                 homeViewModel.markMemberPurchaseCompleted(plan: plan.id, outcome: .failure)
-                purchaseNotice = (error as? LocalizedError)?.errorDescription ?? "购买没有完成。请确认支付状态后再试。"
+                purchaseNotice = IAPPurchaseFailureCopy.message(for: error, tier: tier)
             }
         }
     }
@@ -1350,7 +1350,7 @@ struct MemberPricingView: View {
                     return
                 }
                 var restoredPayload: IAPPurchaseVerification?
-                var firstVerifyFailure: Error?
+                var firstVerifyFailure: (error: Error, tier: IAPTier)?
                 for payload in payloads {
                     do {
                         try await settingsViewModel.verifyIAPPurchase(payload)
@@ -1358,7 +1358,7 @@ struct MemberPricingView: View {
                         break
                     } catch {
                         if firstVerifyFailure == nil {
-                            firstVerifyFailure = error
+                            firstVerifyFailure = (error: error, tier: payload.tier)
                         }
                         continue
                     }
@@ -1366,7 +1366,10 @@ struct MemberPricingView: View {
                 guard let restoredPayload else {
                     homeViewModel.markMemberRestoreCompleted(outcome: .empty)
                     // 把服务端的真实原因（绑定到另一个账号、已过期等）透出来，不再一律说"没有可恢复的权益"。
-                    purchaseNotice = IAPRestoreFailureCopy.message(for: firstVerifyFailure)
+                    purchaseNotice = IAPRestoreFailureCopy.message(
+                        for: firstVerifyFailure?.error,
+                        tier: firstVerifyFailure?.tier
+                    )
                     return
                 }
                 await iapService.finish(transactionId: restoredPayload.transactionId)

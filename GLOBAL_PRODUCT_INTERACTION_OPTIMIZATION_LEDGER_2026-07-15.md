@@ -5046,3 +5046,130 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据（2026-09-11，Windows）：`python scripts/life_semantic_regression.py` 通过，新增“好医保 / 保费缴清”OCR 回归样例归入“其他”；两个词典 JSON 解析通过；体验静态门禁和完整 `python scripts/validate_release_gate.py --phase windows` 通过，最终 `release_repository_gate: OK`，仅保留既有 7 条文案软提示。新增 `InsuranceClassificationBoundaryTests` 覆盖新导入分类与文案、旧日用错误记录不生成生活线索、真实日用记录仍生成原线索。Windows 无 Swift/Xcode，XCTest 尚未运行。
 - 冻结边界复核：未新增“保险”分类；未修改其他分类规则、OCR 字段提取、金额/日期、照片、会员、同步或首页结构。现有旧记录仍保留原始 `category` 存储值，但副文案和生活线索不再按错误日用语义呈现。
 - 剩余风险与下一步：需在 macOS/Xcode 运行 `InsuranceClassificationBoundaryTests`，并用新 TestFlight 构建按 `FLOW-114` 走正式相册 OCR，确认保险新导入为“其他”、旧记录不再出现“超市买菜和家用”，同时真实日用记录仍能产生原线索。外部签收前保持 `CODE_DONE`。
+
+### 118. SYNC-DELETE-RESILIENCE-01：离线删除重试与云端清空防复活（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-14）。本项是 `SYNC-IAP-FIX-01` 云同步墓碑链路的定向补缺，不扩展到 IAP、归属标记或其他同步协议。
+- 两个确定缺口：本机删除在离线/请求失败后没有持久化意图，下一次同步会从云端重新导入；清空云端账本硬删除全部行，另一台离线设备的旧记录可重新上传复活。
+- 实施结果：
+  1. `LocalStore` 新增按账号隔离的删除意图 UserDefaults 日志；删除记录在本机破坏性提交前入队，持久化失败会回滚日志。联网同步先冲刷日志，成功后移除；失败/401 保留日志供重试。合并阶段同时使用本地日志墓碑，覆盖删除请求与拉取快照竞态，并跳过仍待删除 ID 的上传。
+  2. `LedgerSyncService.delete` 支持携带原始删除时间戳；服务端仅接受不晚于当前时间的客户端时间，避免时钟异常制造未来墓碑。
+  3. 后端 `deleteLedgersByUserId` 改为批量软删除并返回统一 `deletedAt`；PostgreSQL 与内存实现均保留墓碑。`upsertLedger` 对墓碑使用严格晚于（`<`）条件，同一时间戳的离线旧上传不会清除墓碑；删除后真正更新的记录仍可恢复。
+  4. 扩展 `verify-ledger-tombstone-and-iap-binding.mjs`，覆盖清空后墓碑存在、旧上传不复活和更晚编辑可恢复；API/README 补充清空与本机重试契约。
+- 冻结边界复核：未改变账单字段、金额/分类/日期含义、照片存储、`updatedAt` 新者胜规则、登出保留本机账本、清空本机与删除云端的 UI 语义；账号删除仍执行真实删除。新增状态仅为本机删除日志和既有云端墓碑字段，旧客户端可忽略响应扩展字段。
+- 修改文件：
+  - `NativeDemoApp/Services/LocalStore.swift`
+  - `NativeDemoApp/ViewModels/HomeViewModel.swift`
+  - `NativeDemoApp/Services/LedgerSyncService.swift`
+  - `backend/src/store.js`
+  - `backend/src/server.js`
+  - `backend/scripts/verify-ledger-tombstone-and-iap-binding.mjs`
+  - `API_v0.1.md`
+  - `backend/README.md`
+  - 本文档
+- Windows 验证证据（2026-09-14）：`backend npm test` 通过（含清空墓碑回归）；`node --check backend/src/store.js backend/src/server.js` 通过；`git diff --check` 通过。当前环境无 Swift/Xcode，客户端 XCTest、Debug/Release 编译及双设备网络/重启签收待 macOS/真机执行，不能标记 `VERIFIED`。
+- 剩余风险与下一步：部署后需确认生产库 `deleted_at` 列和 180 天清理任务已生效，并按 `FLOW-111` 验证离线删除、请求失败重启、清空后旧设备同步及删除后新编辑四条路径；下一项为统一 Xcode/真机签收（`RELEASE-02`）。
+
+### 119. IAP-BINDING-AUDIT-01：改绑后的旧账号会员会话收敛（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `SUPERSEDED`（2026-09-14）。复核后按用户决定“改绑本身不合理”，不保留改绑方案。
+- 原发现：合法 Apple `appAccountToken` 改绑交易后，旧账号 session 可能继续保留会员状态。
+- 处理：该方向已被后续不可变归属规则取代，见 `IAP-BINDING-AUDIT-02`。
+
+### 120. IAP-BINDING-AUDIT-02：交易归属彻底不可改绑（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `SUPERSEDED`（2026-09-14）。用户确认截图中的“已绑定其他叙账账号”提示是正确行为，本方案不作为当前产品规则。
+
+### 121. IAP-BINDING-AUDIT-03：恢复截图对应的订阅绑定逻辑（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-14）。
+- 规则恢复为截图所示用户行为：同一 `originalTransactionId` 已属于其他叙账账号时，Production 和 Sandbox 都返回 `TRANSACTION_ALREADY_BOUND`，不因切换手机号账号或提交新的 `appAccountToken` 而改绑。
+- 同时保留账号切换异步请求身份闸门，避免旧账号的迟到本机 entitlement 结果覆盖当前账号 UI；该保护不改变截图中的拒绝提示或交易归属规则。
+- 修改文件：`backend/src/iapService.js`、`backend/src/server.js`、`backend/src/store.js`、`NativeDemoApp/Services/AuthService.swift`、`NativeDemoApp/ViewModels/SettingsViewModel.swift`、验证脚本、API/README、本文档。
+- 验证：`npm test`、`experience_static_check.ps1`、后端 `node --check`、`git diff --check` 通过；Xcode/StoreKit 真机仍待统一签收。
+
+### 122. EMOTION-TIME-CONTEXT-FIX-01：晚间餐饮不再误标午饭（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-14）。
+- 用户问题：实际发生在 17:56 的肯德基记录，编辑页仍显示“中午这顿安排好了/午饭”。记录可能是在中午生成标签后再补记或修改时间，旧标签被直接沿用；品牌文案池本身也按金额抽取了中午模板，没有把明确的晚间时间作为优先事实。
+- 目标：17:00–21:00 的餐饮记录在标题没有明确午餐事实时，展示和重新解析均使用晚饭语义；标题明确写“中午/午饭”的补记仍保留用户事实。
+- 实施结果：
+  1. `HomeItem.displayEmotionTag` 在展示层识别晚间时间与存量午餐标签冲突时，返回“晚饭时间坐一会儿”，不改写用户标题、备注或持久化金额/日期。
+  2. `NarrativeCopyResolver.resolveEmotionTag` 在餐饮品牌文案抽取前应用同一晚间时间门禁，编辑/新建重新解析不会再次生成中午模板。
+  3. 增加 `SingleRecordEmotionBoundaryTests` 回归：17:56 存量午餐标签纠正、明确午餐标题保留、肯德基品牌重新解析使用晚饭标签。
+- 修改文件：`NativeDemoApp/Models/HomeItem.swift`、`NativeDemoApp/Services/NarrativeCopyResolver.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、本文档。
+- 冻结边界复核：仅调整餐饮情绪标签的时间优先级；不改变账单标题、金额、日期保存含义、分类/OCR、同步协议、照片、会员和其他类别标签。
+- Windows 验证证据（2026-09-14）：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 待本轮执行；Windows 无 Swift/Xcode，新增 XCTest 只能完成源码接线，不能标记 `VERIFIED`。
+- 剩余风险与下一步：需在 macOS/Xcode 运行新增 XCTest，并在真机验证 12:00 午餐、17:56 晚餐、21:30 夜宵及“中午带饭”历史补记四条边界；外部签收前保持 `CODE_DONE`。下一项为统一 Xcode/真机签收（`RELEASE-02`）。
+
+### 123. APP-REVIEW-EULA-METADATA-FIX-01：订阅应用描述补齐 Terms of Use (EULA)（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-14）。
+- 用户问题：App Review 自动拒绝，指出应用元数据未提供可用的 Terms of Use (EULA) 链接；仓库虽有中文“用户协议”链接，但未强制要求应用描述出现 Apple 可识别的英文 EULA 标签和标准地址。
+- 目标：应用描述明确包含可点击的 `Terms of Use (EULA)` 标准 Apple EULA URL；叙账服务条款继续单独保留，避免把两者混为一谈。
+- 实施结果：
+  1. `APP_STORE_METADATA_zh-Hans.json` 与 `APP_STORE_LISTING.md` 的描述新增 `Terms of Use (EULA)：https://www.apple.com/legal/internet-services/itunes/dev/stdeula/`，并保留隐私政策和叙账服务条款。
+  2. `APP_STORE_IAP_SETUP.md`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md` 补充 App Store Connect 填写和 FLOW-95 验收要求；若未来改用自定义 EULA，需在 License Agreement 字段配置。
+  3. `scripts/app_store_metadata_check.py` 新增 `eulaURL`、英文标签、HTTPS 和描述内完整链接校验，防止再次漏填。
+- 修改文件：`APP_STORE_METADATA_zh-Hans.json`、`APP_STORE_LISTING.md`、`APP_STORE_IAP_SETUP.md`、`scripts/app_store_metadata_check.py`、`RELEASE_GATE_AND_DEVICE_MATRIX_v1.md`、本文档。
+- 冻结边界复核：仅修改 App Store 元数据及审核流程门禁；不改变 App 内订阅价格、Product ID、StoreKit 验证、会员权益、服务条款内容或隐私数据规则。
+- Windows 验证证据（2026-09-14）：待执行 `python scripts/app_store_metadata_check.py`、`python scripts/validate_release_gate.py --phase windows`、`git diff --check`；无需 Xcode 编译，公网 URL 点击和 App Store Connect 保存仍需运营方验收。
+- 剩余风险与下一步：必须在 App Store Connect 对当前版本实际粘贴更新后的完整描述并保存，在产品页点击 EULA 返回 200 后重新提交审核；若仍使用自定义服务协议，确认不将其替代 Apple 标准 EULA。外部签收前保持 `CODE_DONE`。
+
+### 124. IAP-PURCHASE-COPY-FIX-01：区分订阅与永久购买错误并移除解绑承诺（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-14）。
+- 用户问题：月度订阅可以购买但年度尝试提示过期；永久会员是非消耗型购买，却沿用“App Store 订阅”错误文案；跨账号归属提示还提供“联系客服解绑”，与不可改绑规则冲突。
+- 根因证据：服务器 `iap_transactions` 仅有当前账号一笔已过期月度交易和一笔永久购买，没有年度交易；年度错误发生在客户端本地过期检查阶段，不能归因于交易改绑。年度产品是否可购买仍需在 App Store Connect 核对订阅组、销售状态和沙盒续订周期。
+- 实施结果：
+  1. `IAPRestoreFailureCopy` 支持按 `IAPTier` 生成提示；永久会员冲突显示“App Store 购买”，月度/年度显示“App Store 订阅”。
+  2. 购买路径使用按套餐区分的过期/归属提示；恢复路径保留失败交易对应的 tier，避免用第一条错误覆盖永久购买语义。
+  3. 删除“联系客服解绑”表述，明确交易不能解绑或转移，只能登录购买时的手机号账号恢复；不提供任何改绑入口。
+  4. 增加永久购买冲突和无解绑承诺的 XCTest 回归。
+- 修改文件：`NativeDemoApp/Services/AuthService.swift`、`NativeDemoApp/Views/MemberPricingView.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、本文档。
+- 冻结边界复核：未改变 Product ID、套餐价格、StoreKit 购买/验证、Apple 交易归属和会员权益；仅调整错误分类、文案和恢复失败的 tier 传递。
+- Windows 验证证据（2026-09-14）：待执行 `git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows`；Windows 无 Swift/Xcode，新增 XCTest 待 macOS 执行。
+- 剩余风险与下一步：年度订阅仍需在 App Store Connect 确认与月度同一订阅组、状态为 Ready for Sale，并用 Sandbox 新交易验证；外部签收前保持 `CODE_DONE`。
+
+### 125. DATA-06-LOCAL-BACKUP-PICKER-FIX-01：本地备份包在文件 App 中不可选择（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-14）。本项是 DATA-06 导入入口的定向修复，不改变备份包结构、照片边界、校验、预览、冲突合并或回滚规则。
+- 用户问题：删除 App 重装后，本地照片只能依靠 `.xuzhangbackup` 恢复；在文件 App 中可以进入备份包看到 `ledger.json`、`manifest.json`、`README.txt`，但无法把整个备份包选回叙账。
+- 根因：`LedgerLocalBackupDocument.contentType` 仅在代码中动态创建，`Info.plist` 没有注册自定义 UTI 与 `.xuzhangbackup` 扩展名映射。文件 App 将备份包当普通目录打开，包内文件又不符合导入器允许类型，导致选择入口不可用。
+- 实施结果：在 `Info.plist` 注册 `com.xuzhangapp.ledger-backup`（继承 `com.apple.package`/`public.data`，映射 `xuzhangbackup` 扩展名和 MIME 类型），声明文档类型并设置 `LSSupportsOpeningDocumentsInPlace = YES`，通过 App Store 文档配置校验；导入器同时接受 `.package` 作为兼容兜底，但仍要求完整包并执行原有清单、记录 ID、照片路径和 SHA 校验。恢复合并按记录 ID 去重：空账本只插入一次；云同步先恢复账单后，若本地同 ID 缺照片，则只补入备份照片并保留云端较新的标题、金额、分类、日期等字段；已有本机照片或文件引用不会被备份空值覆盖。
+- 修改文件：`NativeDemoApp/Info.plist`、`NativeDemoApp/Views/SettingsView.swift`、`NativeDemoApp/Services/LedgerLocalBackupDocument.swift`、`NativeDemoAppTests/LedgerLocalBackupDocumentTests.swift`、`scripts/experience_static_check.ps1` 与本文档。
+- 验证证据：`plistlib` 解析 `Info.plist` 成功；`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 全部通过；新增空账本去重和云端账单照片补入 XCTest 已接线。Windows 无 Xcode，尚未执行 iOS 文件 App 真机选择和重装后照片恢复验收，不能标记 `VERIFIED`。
+- 冻结边界复核：未修改 `.xuzhangbackup` 包结构、照片仅本机与本地备份边界、照片缺失语义、导入预览/确认、按 ID 较新胜出、失败不替换账本等既有规则；未触碰云同步、会员、IAP 或账单字段。
+- 剩余风险与下一步：用新 TestFlight 构建在文件 App 根目录选择整个 `.xuzhangbackup`（不要进入包内选择 `ledger.json`），确认能弹出导入预览，并验证包含照片的记录在删除重装后恢复；若系统仍只允许进入目录，则需把包改为单文件 ZIP 并迁移导入器，作为独立后续任务。
+
+### 126. APP-STORE-DESCRIPTION-REFRESH-01：上架描述与当前能力、EULA 对齐（2026-09-14）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-14）。
+- 范围：更新 App Store 描述，补充本地备份去重与缺照片补入、当前免费额度、会员类型、自动续订披露及 Apple 标准 EULA；删除“账单字段”等旧术语，保留 DeepSeek、WeatherKit 和照片本地边界的事实说明。
+- 修改文件：`APP_STORE_METADATA_zh-Hans.json`、`APP_STORE_LISTING.md`、本文档。
+- 验证证据：`python scripts/app_store_metadata_check.py` 通过（description 1282/4000、promotionalText 87/170、keywords 36/100）；`git diff --check` 通过。App Store Connect 实际粘贴、链接点击和新构建审核仍待运营方完成。
+- 冻结边界：未修改 App 功能、价格、Product ID、订阅归属、隐私实现或服务条款正文；描述不承诺照片云端备份、定位每笔必有或交易可解绑/改绑。
+- 下一步：在 App Store Connect 粘贴 `description`、`whatsNew` 和 EULA 标准链接，确认产品页可点击后重新提交审核。
+
+### 127. DATA-06-LOCAL-BACKUP-PHOTO-EXPORT-02：外置照片引用导出与恢复边界补强（2026-09-15）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-15）。
+- 用户问题：旧备份预览显示“0 张照片可恢复”；外置照片迁移后，导出必须从本机照片引用读取实际文件，而不是只读取账单内存中的图片字节。
+- 实施结果：
+  1. 保持当前导出器按 `memoryImageCount` 遍历，并通过照片引用读取原图后写入 `images/<recordID>/<sha256>.jpg`；新增回归覆盖 metadata-only 外置引用也能导出照片。
+  2. 恢复合并时不再把失效本机引用误判为可用照片；备份中存在有效照片时优先恢复，只有备份也无照片时才保留本机缺图引用。
+- 修改文件：`NativeDemoApp/Services/LedgerLocalBackupDocument.swift`、`NativeDemoAppTests/LedgerLocalBackupDocumentTests.swift`、本文档。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 通过；Windows 无 Swift/Xcode，新增 XCTest 尚未运行。
+- 冻结边界复核：未改变云端照片边界、`.xuzhangbackup` 包结构、照片校验、账单字段和冲突时间规则；云端仍不上传照片。
+- 剩余风险与下一步：必须用新 TestFlight 在仍保留本机照片的设备导出一次，确认导出提示显示“已导出 N 个照片文件”；删除重装后只能恢复卸载前已导出的完整包。随后在 macOS/Xcode 执行新增 XCTest 与真机导入验收。
+
+### 128. EDIT-PHOTO-PERF-FIX-01：账单编辑补充照片移出主线程压缩（2026-09-15）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-15）。
+- 用户问题：账单编辑中补充照片时出现掉帧。
+- 根因：`RecordEditSheet` 与 `FocusedRecordEditor` 的 SwiftUI `Task` 继承主 actor，图片解码、缩放和 JPEG 压缩直接占用主线程。
+- 实施结果：先在主 actor 读取 PhotosPicker 原始 Data，再用 `Task.detached(priority: .userInitiated)` 批量完成压缩，最后只在 `MainActor.run` 提交照片；新增体验静态门禁防止回归。
+- 修改文件：`NativeDemoApp/Views/RecordEditSheet.swift`、`NativeDemoApp/Views/FocusedRecordEditor.swift`、`scripts/experience_static_check.ps1`、本文档。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 通过；Windows 无 Swift/Xcode，尚未完成真机帧率与写盘耗时验证。
+- 冻结边界复核：未改变照片数量上限、压缩尺寸/质量、账单字段、照片存储格式、保存失败语义和云端照片边界。
+- 剩余风险与下一步：`attachMemoryImages` 后续仍会同步执行本地文件/SQLite 持久化；需在真机用 10MP 多选照片确认主线程压缩热点消失，若仍有尾帧再单独拆分持久化写盘任务。
