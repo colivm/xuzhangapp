@@ -13,9 +13,9 @@ enum SemanticBoundaryGuard {
     }
 
     static let babyStrongKeywords = [
-        "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "辅食", "米粉",
+        "尿不湿", "纸尿裤", "拉拉裤",
         "奶瓶", "安抚奶嘴", "宝宝湿巾", "婴儿湿巾", "童装",
-        "儿童座椅", "推车", "托育费", "托班费", "幼儿园学费", "早教课"
+        "儿童座椅", "托育费", "托班费", "幼儿园学费", "早教课"
     ]
 
     static let babyContextKeywords = ["宝宝", "婴儿", "母婴", "儿童", "幼儿"]
@@ -55,7 +55,7 @@ enum SemanticBoundaryGuard {
         ]),
         (.shopping, [
             "淘宝", "京东", "拼多多", "快递", "下单", "充电器", "数据线", "充电宝",
-            "耳机", "手机", "电脑", "衣服", "外套", "裤子", "裙", "护肤", "化妆",
+            "耳机", "手机", "电脑", "衣服", "外套", "裤子", "连衣裙", "半身裙", "短裙", "长裙", "裙装", "护肤", "化妆",
             "渔具", "鱼竿", "路亚", "露营", "帐篷", "摄影", "相机", "镜头",
             "模型", "手办", "谷子", "潮玩", "盲盒", "泡泡玛特", "乐器"
         ]),
@@ -94,10 +94,86 @@ enum SemanticBoundaryGuard {
     static func matchesBabySupply(_ text: String) -> Bool {
         let normalized = normalize(text)
         guard !normalized.isEmpty else { return false }
+        // 不把普通食品、成人营养品或工具车当作母婴用品。
+        if containsAny(normalized, ["桂林米粉", "米粉店", "炒米粉", "米粉汤", "手推车", "购物车", "成人奶粉", "中老年奶粉"]) {
+            return false
+        }
+        // 辅食机/工具是厨房小家电或配件，不因为同时写了“婴儿/宝宝”就升级为母婴消耗品。
+        // 这组排除必须先于“婴儿辅食”强词判断，避免子串先命中。
+        if containsAny(normalized, ["辅食机", "辅食工具", "辅食料理机", "辅食研磨器", "宠物辅食", "成人辅食"]) {
+            return false
+        }
+        if containsAny(normalized, ["婴儿米粉", "宝宝米粉", "婴幼儿米粉", "婴儿辅食", "宝宝辅食", "幼儿辅食", "婴幼儿辅食", "米糊"]) {
+            return true
+        }
+        if containsAny(normalized, ["婴儿车", "婴儿推车", "宝宝推车", "儿童推车", "婴儿奶粉", "宝宝奶粉", "配方奶粉", "幼儿奶粉"]) {
+            return true
+        }
+        // “辅食”单独出现可能是宠物/成人食品或辅食机，不足以证明母婴语义。
+        if containsAny(normalized, ["宠物辅食", "成人辅食"])
+            || (containsAny(normalized, petContextKeywords) && containsAny(normalized, ["辅食", "米粉"])) {
+            return false
+        }
+        if containsAny(normalized, babyContextKeywords)
+            && containsAny(normalized, ["辅食", "米粉"]) {
+            return true
+        }
         if containsAny(normalized, babyStrongKeywords) { return true }
         if isHouseholdCleaningSupply(normalized) { return false }
         return containsAny(normalized, babyContextKeywords)
             && containsAny(normalized, babyContextObjectKeywords)
+    }
+
+    static func matchesStationery(_ text: String) -> Bool {
+        let normalized = normalize(text)
+        guard !normalized.isEmpty else { return false }
+        // “笔记本电脑”中的“笔”不是文具；先排除复合数码商品，避免数量短语“一支笔”误命中。
+        if containsAny(normalized, ["笔记本电脑", "笔记本计算机", "笔记本电脑包"]) {
+            return false
+        }
+        if containsAny(normalized, ["文具", "本子", "练习册", "教材", "钢笔", "圆珠笔", "中性笔", "铅笔", "马克笔", "水彩笔", "荧光笔", "签字笔", "笔芯"]) {
+            return true
+        }
+        // “一笔/这笔/几笔/笔钱”是账单量词，不是文具证据；“买一支笔”才是。
+        // 裸“买笔”会命中“买笔记本/买笔记本电脑”；只有数量或明确文具
+        // 语境才作为文具证据，避免把电子产品账单标成书桌用品。
+        return containsAny(normalized, ["一支笔", "两支笔", "支笔", "只笔"])
+            && !containsAny(normalized, ["一笔", "这笔", "几笔", "笔钱", "花了一笔", "另记两笔", "分了几笔"])
+    }
+
+    static func matchesFlowerShopping(_ text: String) -> Bool {
+        let normalized = normalize(text)
+        guard !normalized.isEmpty else { return false }
+        if containsAny(normalized, ["花呗", "花生", "棉花", "花甲", "花蛤", "花小猪", "花费", "花销"]) { return false }
+        return containsAny(normalized, ["鲜花", "花束", "花店", "花卉", "绿植", "盆栽", "干花", "永生花", "花瓶", "买花", "送花"])
+    }
+
+    static func matchesFitness(_ text: String) -> Bool {
+        let normalized = normalize(text)
+        guard !normalized.isEmpty else { return false }
+        let explicit = ["健身", "健身房", "健身卡", "运动", "训练", "跑步", "瑜伽", "普拉提", "游泳", "球场", "羽毛球", "网球", "篮球", "私教", "团课", "运动鞋", "运动服", "护具", "补剂", "蛋白", "能量胶", "理疗", "康复", "锻炼"]
+        if containsAny(normalized, explicit) { return true }
+        // 月卡/年卡/课程本身没有健康语义，必须有运动上下文。
+        return containsAny(normalized, ["月卡", "年卡", "课程", "课包"])
+            && containsAny(normalized, ["运动", "健身", "训练", "瑜伽", "游泳", "球馆", "球场", "私教", "团课"])
+    }
+
+    static func matchesLongDistanceTransit(_ text: String) -> Bool {
+        let normalized = normalize(text)
+        guard !normalized.isEmpty else { return false }
+        if containsAny(normalized, ["机动车", "电动车", "电车充电", "电动车充电", "汽车充电", "车辆充电", "充电桩", "年检", "保养", "停车", "停车费", "停车场", "停车票", "停车缴费"]) {
+            return false
+        }
+        // 玩具/模型不是交通凭证；排除后再判断“火车”强词。
+        if containsAny(normalized, ["火车模型", "火车玩具", "火车头模型", "高铁模型", "动车模型"]) {
+            return false
+        }
+        if containsAny(normalized, ["高铁", "火车", "火车票", "动车票", "坐动车", "乘动车", "动车组", "机票", "机场", "航班"]) {
+            return true
+        }
+        // 裸“车票”无法区分长途客票和停车票；仅在明确出发/到达语境下采信。
+        return containsAny(normalized, ["车票"])
+            && containsAny(normalized, ["外地", "出发", "到达", "乘坐", "坐车", "去", "回", "返程", "长途", "客运", "车站"])
     }
 
     static func matchesPetSupply(_ text: String, petName: String? = nil) -> Bool {

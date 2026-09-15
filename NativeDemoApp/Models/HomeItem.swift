@@ -261,7 +261,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
                 if containsAny(text, ["课", "私教", "训练"]) { return "游泳课记一回" }
                 return "今天下水一回"
             }
-            if containsAny(text, ["健身房", "健身卡", "健身会员", "月卡", "年卡"]) {
+            if SemanticBoundaryGuard.matchesFitness(text) {
                 return amount >= 300 ? "健身会员安排" : "健身卡次记下"
             }
             if containsAny(text, ["瑜伽", "普拉提", "团课", "私教", "课包"]) {
@@ -347,7 +347,7 @@ struct HomeItem: Identifiable, Codable, Equatable {
             if containsAny(text, ["打车", "出租", "网约车", "滴滴", "花小猪"]) { return "打车这一程" }
             if containsAny(text, ["地铁", "公交", "巴士"]) { return "公共交通一段" }
             if containsAny(text, ["共享单车", "单车", "骑车", "电动车"]) { return "短短骑一程" }
-            if containsAny(text, ["高铁", "火车", "动车", "车票"]) { return "远一点的路" }
+            if SemanticBoundaryGuard.matchesLongDistanceTransit(text) { return "远一点的路" }
             if containsAny(text, ["机票", "机场", "航班"]) { return "飞一程记下" }
             if containsAny(text, ["高速", "过路费", "etc"]) { return "路上通行一笔" }
         case .shopping:
@@ -371,12 +371,14 @@ struct HomeItem: Identifiable, Codable, Equatable {
                 if containsAny(text, ["狗粮", "猫粮", "宠物粮", "宠物口粮"]) { return "毛孩子口粮补上" }
                 return "毛孩子日常补给"
             }
-            if containsAny(text, ["衣服", "上衣", "裤子", "裙", "外套", "内衣"]) { return "给衣柜添一件" }
+            if containsAny(text, ["衣服", "上衣", "裤子", "连衣裙", "半身裙", "短裙", "长裙", "裙装", "外套", "内衣"]) { return "给衣柜添一件" }
             if containsAny(text, ["鞋", "袜"]) { return "脚下换新一点" }
             if containsAny(text, ["护肤", "洗面奶", "面霜", "防晒", "口红", "化妆"]) { return "洗护美妆补上" }
             if containsAny(text, ["手机", "耳机", "充电器", "数据线", "充电宝", "电脑", "键盘"]) { return "数码小物到位" }
-            if containsAny(text, ["书", "文具", "本子", "笔"]) { return "书桌常用的补上" }
-            if containsAny(text, ["花", "香薰", "摆件"]) { return "给日子添点好看" }
+            // “一笔/这笔/笔钱”中的“笔”是金额量词，不是文具证据。
+            // 保留真实的“买支笔/钢笔”命中，同时避免“临时花了一笔”被收窄成书桌场景。
+            if SemanticBoundaryGuard.matchesStationery(text) { return "书桌常用的补上" }
+            if SemanticBoundaryGuard.matchesFlowerShopping(text) || containsAny(text, ["香薰", "摆件"]) { return "给日子添点好看" }
             if containsAny(text, ["快递", "运费"]) { return "路上的小费用" }
         case .daily:
             if containsTelecomBillKeyword(text) { return "手机话费记下" }
@@ -644,6 +646,31 @@ struct HomeItem: Identifiable, Codable, Equatable {
         if isSupplyOverclaimTag(current),
            containsTelecomBillKeyword(evidence) {
             return "手机话费记下"
+        }
+
+        // 旧版本把“临时花了一笔”里的“笔”当成了文具；展示层也要纠正已持久化的窄标签。
+        if item.category == .shopping,
+           current == "书桌常用的补上",
+           !SemanticBoundaryGuard.matchesStationery(item.title) {
+            return inferEmotionTag(category: item.category, amount: item.amount)
+        }
+
+        // 收紧语义规则后，旧账单里已经保存的窄标签也必须按标题证据重新校验。
+        // 否则“裙带菜”“视频会员年卡”“机动车年检”等旧记录会继续展示历史误判。
+        if item.category == .shopping,
+           current == "给衣柜添一件",
+           !containsAny(item.title, ["衣服", "上衣", "裤子", "连衣裙", "半身裙", "短裙", "长裙", "裙装", "外套", "内衣"]) {
+            return inferEmotionTag(category: item.category, amount: item.amount)
+        }
+        if item.category == .health,
+           current == "健身会员安排",
+           !SemanticBoundaryGuard.matchesFitness(evidence) {
+            return correctedEmotionFallback(for: item)
+        }
+        if item.category == .transport,
+           current == "远一点的路",
+           !SemanticBoundaryGuard.matchesLongDistanceTransit(evidence) {
+            return correctedEmotionFallback(for: item)
         }
 
         return nil
@@ -1308,13 +1335,13 @@ enum RecordSemanticLexicon {
             .init(category: .transport, score: 4.0, keywords: ["地铁", "公交", "打车", "滴滴", "花小猪", "洗车", "汽车保养", "车辆保养", "保养车", "ETC", "etc", "充车", "充电桩", "电车充电", "汽车充电", "车辆充电", "新能源充电", "补能", "高铁", "机票", "机场", "路费", "通勤"]),
             .init(category: .dining, score: 4.8, keywords: ["咖啡", "奶茶", "早餐", "早饭", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "宵夜", "外卖", "吃顿饭", "一顿饭", "垫一下", "垫一口", "夜里补", "热食", "热乎", "轻食", "小食", "点心", "补点能量", "吃一口", "饮品", "饮料", "喝的", "可乐", "雪碧", "汽水", "果汁", "东方树叶", "青柑普洱", "普洱茶", "乌龙茶", "茉莉花茶", "红茶", "绿茶", "瓶装茶", "无糖茶", "水溶", "c100", "维C", "维c", "维他", "拿铁", "美式", "肠粉", "黄焖鸡", "冒菜", "生煎", "锅贴", "七欣天", "海底捞", "老乡鸡", "塔斯汀", "库迪", "绝味", "鸭脖", "鸭货", "周黑鸭", "煌上煌", "袁记云饺", "萨莉亚", "火锅", "烤肉", "烤鸭", "烧鸭", "卤鸭", "鸭肉", "鸡爪", "凤爪", "花甲鸡爪", "麻辣烫", "披萨", "炸鸡", "汉堡", "卤味", "生蚝", "烤生蚝", "海鲜", "花甲", "花蛤", "蛤蜊", "贝类", "鱿鱼", "铁板鱿鱼", "烧烤", "夜市", "夜摊", "大排档", "小吃", "美团外卖", "饿了么", "鸭血粉丝汤", "鸭血粉丝", "灌汤包", "小笼汤包", "汤包", "牛肉面", "兰州牛肉面", "兰州拉面", "拉面", "汤面", "面馆", "面食", "面条", "粉面"]),
             .init(category: .dining, score: 2.8, keywords: ["便利蜂", "便利店", "全家", "罗森", "711", "7-11", "美宜佳", "茶叶蛋", "饭团", "关东煮"]),
-            .init(category: .shopping, score: 4.0, keywords: ["淘宝", "京东", "拼多多", "购物", "下单", "快递", "衣服", "外套", "裤子", "裙", "数码", "耳机", "手机", "电脑", "Office 365", "Microsoft 365", "Adobe订阅", "Creative Cloud", "Notion订阅", "Notion会员", "充电器", "数据线", "充电宝", "渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "谷子", "潮玩", "吧唧", "徽章", "亚克力", "立牌", "盲盒", "泡泡玛特", "POP MART", "POPMART", "LABUBU", "棉花娃娃", "痛包", "同人本", "乙游周边", "漫展周边", "乐器", "茶具", "咖啡器具"]),
+            .init(category: .shopping, score: 4.0, keywords: ["淘宝", "京东", "拼多多", "购物", "下单", "快递", "衣服", "外套", "裤子", "连衣裙", "半身裙", "短裙", "长裙", "裙装", "数码", "耳机", "手机", "电脑", "Office 365", "Microsoft 365", "Adobe订阅", "Creative Cloud", "Notion订阅", "Notion会员", "充电器", "数据线", "充电宝", "渔具", "鱼竿", "路亚", "露营", "骑行", "摄影", "相机", "镜头", "模型", "手办", "谷子", "潮玩", "吧唧", "徽章", "亚克力", "立牌", "盲盒", "泡泡玛特", "POP MART", "POPMART", "LABUBU", "棉花娃娃", "痛包", "同人本", "乙游周边", "漫展周边", "乐器", "茶具", "咖啡器具"]),
             .init(category: .daily, score: 6.4, keywords: SemanticBoundaryGuard.babyStrongKeywords + SemanticBoundaryGuard.petStrongKeywords),
             .init(category: .daily, score: 3.0, keywords: ["超市", "日用品", "纸巾", "洗衣", "打印", "理发", "宠物用品", "买菜", "生鲜", "盒马", "叮咚买菜", "小象超市", "朴朴超市", "美团闪购", "京东秒送", "山姆", "山姆会员", "永辉", "永辉超市", "大润发", "钱大妈"]),
             .init(category: .daily, score: 4.6, keywords: ["纸巾", "抽纸", "卷纸", "湿巾", "洗衣液", "洗衣凝珠", "洗洁精", "垃圾袋", "清洁", "日化", "日用品", "家用", "补货", "买菜", "生鲜", "水果", "蔬菜", "肉禽", "水产", "鸡蛋", "给家补货"]),
             .init(category: .entertainment, score: 3.0, keywords: ["电影", "影院", "游戏", "网吧", "网咖", "上网费", "直播打赏", "主播打赏", "抖音打赏", "直播礼物", "B站会员", "哔哩哔哩会员", "爱奇艺会员", "腾讯视频会员", "优酷会员", "芒果TV会员", "网易云会员", "网易云音乐会员", "QQ音乐会员", "喜马拉雅会员", "百度网盘会员", "WPS会员", "iCloud订阅", "Apple Music", "演唱会", "门票"]),
             .init(category: .lodging, score: 4.0, keywords: ["酒店", "民宿", "住宿", "宾馆", "电竞酒店"]),
-            .init(category: .health, score: 4.0, keywords: ["药店", "药房", "买药", "医院", "挂号", "门诊", "体检", "洗牙", "配镜", "验光", "医美", "医美脱毛", "光子嫩肤", "水光针", "健身", "健身房", "健身卡", "月卡", "年卡", "私教", "团课", "课程", "跑步", "理疗", "康复", "按摩", "补剂", "蛋白", "能量胶", "运动装备", "运动鞋", "运动服"]),
+            .init(category: .health, score: 4.0, keywords: ["药店", "药房", "买药", "医院", "挂号", "门诊", "体检", "洗牙", "配镜", "验光", "医美", "医美脱毛", "光子嫩肤", "水光针", "健身", "健身房", "健身卡", "私教", "团课", "跑步", "理疗", "康复", "按摩", "补剂", "蛋白", "能量胶", "运动装备", "运动鞋", "运动服"]),
             .init(category: .home, score: 4.0, keywords: ["房租", "水电", "电费", "燃气", "物业", "宽带", "暖气费", "取暖费", "供暖费", "采暖费", "热力费", "供热费", "暖气缴费", "热力公司", "网上国网", "国网", "保洁", "家政", "钟点工", "开荒保洁", "上门保洁", "深度保洁", "擦玻璃", "清洗油烟机", "空调清洗", "搬家", "搬家公司", "货拉拉搬家"]),
             .init(category: .social, score: 4.0, keywords: ["红包", "送礼", "请客", "份子钱", "随礼", "探望", "白事", "白事随礼", "奠仪", "帛金", "花圈"]),
             .init(category: .other, score: 6.4, keywords: insuranceKeywords),

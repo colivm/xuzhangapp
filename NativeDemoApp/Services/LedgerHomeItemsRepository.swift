@@ -13,6 +13,14 @@ struct LedgerHomeItemsChangeSet {
     var isEmpty: Bool { upserts.isEmpty && deletedIDs.isEmpty }
 }
 
+/// Result of a local write. `persistedItems` is deliberately metadata-only so
+/// callers can replace their in-memory projection and release original image
+/// bytes immediately after the write succeeds.
+struct LedgerPersistenceSaveResult: @unchecked Sendable {
+    let success: Bool
+    let persistedItems: [HomeItem]
+}
+
 final class LedgerHomeItemsRepository {
     private enum LegacyPayloadState {
         case missing
@@ -162,16 +170,20 @@ final class LedgerHomeItemsRepository {
         }
     }
 
-    @discardableResult
     func saveChanges(
         _ changes: LedgerHomeItemsChangeSet,
         currentItemsForFallback: [HomeItem]
-    ) -> Bool {
-        guard !changes.isEmpty else { return true }
+    ) -> LedgerPersistenceSaveResult {
+        guard !changes.isEmpty else { return LedgerPersistenceSaveResult(success: true, persistedItems: []) }
         do {
             let manifest = try metadataStore.loadManifest()
             guard manifest?.activeStore == .metadataV2 else {
-                return save(currentItemsForFallback)
+                let externalizedForProjection = try imageStore.prepareForPersistence(changes.upserts)
+                let success = save(currentItemsForFallback)
+                return LedgerPersistenceSaveResult(
+                    success: success,
+                    persistedItems: success ? imageStore.metadataOnly(externalizedForProjection) : []
+                )
             }
             let externalized = try imageStore.prepareForPersistence(changes.upserts)
             _ = try metadataStore.applyChanges(
@@ -196,10 +208,18 @@ final class LedgerHomeItemsRepository {
                     print("Failed to remove deleted record images \(id): \(error)")
                 }
             }
-            return true
+            return LedgerPersistenceSaveResult(
+                success: true,
+                persistedItems: imageStore.metadataOnly(externalized)
+            )
         } catch {
             print("Failed to save changed ledger records: \(error)")
-            return save(currentItemsForFallback)
+            let success = save(currentItemsForFallback)
+            let externalizedForProjection = (try? imageStore.prepareForPersistence(changes.upserts)) ?? changes.upserts
+            return LedgerPersistenceSaveResult(
+                success: success,
+                persistedItems: success ? imageStore.metadataOnly(externalizedForProjection) : []
+            )
         }
     }
 
