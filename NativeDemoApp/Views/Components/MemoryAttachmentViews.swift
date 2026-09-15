@@ -703,11 +703,10 @@ struct MemoryRecordDetailSheet: View {
             MemoryAttachmentThumbnail(
                 imageData: item.memoryImageData(at: index),
                 imageReference: item.memoryImageReference(at: index),
-                // The collapsed hero is only 330pt tall. Decoding a 1,600px
-                // image for every page makes a swipe compete with image work;
-                // keep the full-resolution path for the explicitly expanded
-                // viewer only.
-                variant: fitMode ? .original : .thumbnail,
+                // Decode one full-resolution page at a time. During an
+                // expanded swipe, the outgoing/incoming neighbors stay at
+                // thumbnail size instead of competing for two large decodes.
+                variant: fitMode && index == selectedImageIndex ? .original : .thumbnail,
                 contentMode: fitMode ? .fit : .fill,
                 height: height,
                 cornerRadius: 24

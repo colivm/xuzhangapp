@@ -5180,8 +5180,8 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 用户问题：带图详情中金额符号与数字间距过大，图片左右滑动有掉帧感。
 - 实施结果：
   1. 金额输入由固定宽度改为紧凑自适应布局，收窄金额输入区域，减少 `¥` 与金额数字之间的无效留白。
-  2. 详情图未展开时使用 480px 缩略图；只有用户展开图片查看时才使用 1,600px 原图，避免分页滑动期间同时解码多张大图。
-  3. 更新静态门禁，固定“收起缩略图、展开原图”的性能边界。
+  2. 详情图未展开时使用 480px 缩略图；展开后也只让当前页使用 1,600px 原图，相邻页保持缩略图，避免分页滑动期间同时解码多张大图。
+  3. 更新静态门禁，固定“当前展开页原图、其他页缩略图”的性能边界。
 - 修改文件：`NativeDemoApp/Views/Components/MemoryAttachmentViews.swift`、`scripts/experience_static_check.ps1`、本文档。
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 通过；Windows 无 Swift/Xcode，尚未完成真机 9 张图片连续滑动和长标题金额布局验收。
 - 冻结边界复核：未改变照片数量上限、照片顺序、封面规则、图片存储格式、账单字段或删除/设封面行为。
