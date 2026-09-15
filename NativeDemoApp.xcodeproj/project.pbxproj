@@ -109,6 +109,7 @@
 		U30000020000000000000001 /* LedgerImageStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = U30000120000000000000001 /* LedgerImageStoreTests.swift */; };
 		U40000010000000000000001 /* LedgerMetadataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = U40000110000000000000001 /* LedgerMetadataStore.swift */; };
 		U40000020000000000000001 /* LedgerHomeItemsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = U40000120000000000000001 /* LedgerHomeItemsRepository.swift */; };
+		U40000050000000000000001 /* LedgerPersistenceWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = U40000150000000000000001 /* LedgerPersistenceWriter.swift */; };
 		U40000030000000000000001 /* LedgerMetadataStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = U40000130000000000000001 /* LedgerMetadataStoreTests.swift */; };
 		U40000040000000000000001 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = U40000140000000000000001 /* libsqlite3.tbd */; };
 		U50000010000000000000001 /* LedgerLocalBackupDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = U50000110000000000000001 /* LedgerLocalBackupDocument.swift */; };
@@ -236,6 +237,7 @@
 		U30000120000000000000001 /* LedgerImageStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerImageStoreTests.swift; sourceTree = "<group>"; };
 		U40000110000000000000001 /* LedgerMetadataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerMetadataStore.swift; sourceTree = "<group>"; };
 		U40000120000000000000001 /* LedgerHomeItemsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerHomeItemsRepository.swift; sourceTree = "<group>"; };
+		U40000150000000000000001 /* LedgerPersistenceWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerPersistenceWriter.swift; sourceTree = "<group>"; };
 		U40000130000000000000001 /* LedgerMetadataStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerMetadataStoreTests.swift; sourceTree = "<group>"; };
 		U40000140000000000000001 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.text-based-dylib-definition; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		U50000110000000000000001 /* LedgerLocalBackupDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerLocalBackupDocument.swift; sourceTree = "<group>"; };
@@ -321,6 +323,7 @@
 				C82000110000000000000001 /* LegalConsentStore.swift */,
 				A10000150000000000000001 /* LocalStore.swift */,
 				U40000120000000000000001 /* LedgerHomeItemsRepository.swift */,
+				U40000150000000000000001 /* LedgerPersistenceWriter.swift */,
 				U40000110000000000000001 /* LedgerMetadataStore.swift */,
 				U50000110000000000000001 /* LedgerLocalBackupDocument.swift */,
 				U60000110000000000000001 /* InsightComputationService.swift */,
@@ -734,6 +737,7 @@
 				U30000010000000000000001 /* LedgerImageStore.swift in Sources */,
 				U40000010000000000000001 /* LedgerMetadataStore.swift in Sources */,
 				U40000020000000000000001 /* LedgerHomeItemsRepository.swift in Sources */,
+				U40000050000000000000001 /* LedgerPersistenceWriter.swift in Sources */,
 				U50000010000000000000001 /* LedgerLocalBackupDocument.swift in Sources */,
 				U60000010000000000000001 /* InsightComputationService.swift in Sources */,
 				W10000010000000000000001 /* PixelPetAnimationView.swift in Sources */,

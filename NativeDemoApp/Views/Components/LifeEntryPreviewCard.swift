@@ -25,6 +25,7 @@ struct LifeEntryPreviewCard: View {
 
     private var isWhisper: Bool { tier == .whisper }
     private var isConfirm: Bool { tier == .confirm }
+    private var isHidden: Bool { tier == .hidden }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -162,7 +163,7 @@ struct LifeEntryPreviewCard: View {
 
             Spacer(minLength: 8)
 
-            if isConfirm {
+            if !isHidden {
                 Button("改分类", action: onChangeCategory)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppColors.accent.opacity(0.72))
@@ -175,7 +176,7 @@ struct LifeEntryPreviewCard: View {
         HStack(spacing: 0) {
             if showsPrimaryAction {
                 quietAction(primaryActionTitle, action: onPrimaryAction)
-                if showAngleAction && isConfirm {
+                if showAngleAction {
                     separator
                     quietAction("换个角度", action: onAngleAction)
                 }
@@ -184,7 +185,7 @@ struct LifeEntryPreviewCard: View {
                 quietAction(primaryActionTitle) {
                     onFreePrimaryAction?()
                 }
-                if showFreeAngleAction && isConfirm {
+                if showFreeAngleAction {
                     separator
                     quietAction("换个角度") {
                         onFreeAngleAction?()
