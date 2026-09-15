@@ -479,9 +479,9 @@ enum LifeSceneSemanticService {
         if item.scenePackId == "commute" || containsStrongCommuteCue(explicitText) {
             add(.commute, 7.0, .transport, "通勤", "#通勤", 6)
         }
-        if (!containsAny(text, ["停车", "洗车", "汽车保养", "车辆保养", "保养车", "年检", "充车", "充电桩", "电车充电", "电动车充电", "汽车充电", "车辆充电", "新能源充电", "补能"])
-            && (containsAny(text, ["打车", "出租", "网约车", "滴滴", "花小猪", "单车", "骑车", "机场", "航班", "过路费", "路费"])
-                || SemanticBoundaryGuard.matchesLongDistanceTransit(text)) {
+        if !containsAny(text, ["停车", "洗车", "汽车保养", "车辆保养", "保养车", "年检", "充车", "充电桩", "电车充电", "电动车充电", "汽车充电", "车辆充电", "新能源充电", "补能"]) &&
+            (containsAny(text, ["打车", "出租", "网约车", "滴滴", "花小猪", "单车", "骑车", "机场", "航班", "过路费", "路费"]) ||
+             SemanticBoundaryGuard.matchesLongDistanceTransit(text)) {
             add(.cityRoute, 6.4, .transport, "出行", "#出门办事", 19)
         }
         if containsAny(text, ["便利蜂", "便利店", "全家", "罗森", "7-11", "711", "美宜佳", "茶叶蛋", "饭团", "关东煮", "小食"]) {

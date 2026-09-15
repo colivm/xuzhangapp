@@ -5286,3 +5286,12 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据（Windows）：`python scripts/life_semantic_regression.py` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 通过并输出 `Static experience checks passed.`；`git diff --check` 无空白错误（仅 Windows 行尾提示）。新增 XCTest 已接线但当前环境无 macOS/Xcode，未宣称 XCTest、编译、真机或 Instruments 已通过。
 - 冻结边界复核：未修改备份包格式、照片文件格式、同步 DTO、会员/IAP 归属、金额/日期/分类保存契约；历史标签只在展示投影纠正，未批量改写数据库。
 - 剩余风险与下一任务：仍需 macOS/Xcode Swift 6 Debug/Release 编译、并发失败注入 XCTest、备份导入失败回滚和真机 Allocations/Memory Graph 验证；外部签收前维持 `CODE_DONE`，下一项为 `RELEASE-02` 集中签收。
+
+### 137. LIFE-SCENE-SWIFT-SYNTAX-FIX-01：出行条件跨行语法修复（2026-09-15）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-15）。
+- 用户问题：Xcode 在 `LifeSceneSemanticService.swift:487` 报 `Expected ')' in expression list`，实际原因是前一段多行 `if` 条件把 `&&`/`||` 放在下一行开头，解析器将错误位置指向后续便利店关键词条件。
+- 实施结果：仅调整 `LifeSceneSemanticService.swift` 出行判断的换行方式，将连接运算符放在前一行/表达式尾部；条件语义不变，仍保留停车/车辆排除及长途交通守卫。
+- 验证证据（Windows）：`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 均通过；当前环境无 Xcode，未宣称 Swift 编译或真机验证。
+- 冻结边界：未修改生活场景规则、关键词、账单字段、同步、照片、会员/IAP 或 UI。
+- 剩余风险与下一任务：需在 macOS/Xcode 执行 Swift 6 Debug/Release 编译确认；外部签收前维持 `CODE_DONE`，下一项为 `RELEASE-02` 集中签收。
