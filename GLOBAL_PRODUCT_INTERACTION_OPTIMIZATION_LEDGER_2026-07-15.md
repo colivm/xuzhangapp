@@ -5173,3 +5173,16 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 通过；Windows 无 Swift/Xcode，尚未完成真机帧率与写盘耗时验证。
 - 冻结边界复核：未改变照片数量上限、压缩尺寸/质量、账单字段、照片存储格式、保存失败语义和云端照片边界。
 - 剩余风险与下一步：`attachMemoryImages` 后续仍会同步执行本地文件/SQLite 持久化；需在真机用 10MP 多选照片确认主线程压缩热点消失，若仍有尾帧再单独拆分持久化写盘任务。
+
+### 129. DETAIL-PHOTO-UI-PERF-01：带图详情金额布局与分页解码优化（2026-09-15）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-15）。
+- 用户问题：带图详情中金额符号与数字间距过大，图片左右滑动有掉帧感。
+- 实施结果：
+  1. 金额输入由固定宽度改为紧凑自适应布局，收窄金额输入区域，减少 `¥` 与金额数字之间的无效留白。
+  2. 详情图未展开时使用 480px 缩略图；只有用户展开图片查看时才使用 1,600px 原图，避免分页滑动期间同时解码多张大图。
+  3. 更新静态门禁，固定“收起缩略图、展开原图”的性能边界。
+- 修改文件：`NativeDemoApp/Views/Components/MemoryAttachmentViews.swift`、`scripts/experience_static_check.ps1`、本文档。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 通过；Windows 无 Swift/Xcode，尚未完成真机 9 张图片连续滑动和长标题金额布局验收。
+- 冻结边界复核：未改变照片数量上限、照片顺序、封面规则、图片存储格式、账单字段或删除/设封面行为。
+- 剩余风险与下一步：若真机仍有滑动尾帧，再单独评估减少相邻页预加载或拆分图片文件/SQLite 持久化；本项未改动保存语义。

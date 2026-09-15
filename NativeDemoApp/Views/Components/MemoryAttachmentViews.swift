@@ -703,7 +703,11 @@ struct MemoryRecordDetailSheet: View {
             MemoryAttachmentThumbnail(
                 imageData: item.memoryImageData(at: index),
                 imageReference: item.memoryImageReference(at: index),
-                variant: .original,
+                // The collapsed hero is only 330pt tall. Decoding a 1,600px
+                // image for every page makes a swipe compete with image work;
+                // keep the full-resolution path for the explicitly expanded
+                // viewer only.
+                variant: fitMode ? .original : .thumbnail,
                 contentMode: fitMode ? .fit : .fill,
                 height: height,
                 cornerRadius: 24
@@ -859,12 +863,13 @@ struct MemoryRecordDetailSheet: View {
 
                 Spacer(minLength: 10)
 
-                HStack(spacing: 2) {
+                HStack(spacing: 3) {
                     Text("¥")
                         .font(.system(size: 20, weight: .bold, design: .rounded))
                     TextField("0.00", text: $amountText)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
+                        .frame(width: 68)
                         .focused($isAmountFocused)
                         .submitLabel(.done)
                         .onSubmit { saveDraftChanges() }
@@ -877,7 +882,7 @@ struct MemoryRecordDetailSheet: View {
                 }
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(AppColors.text)
-                .frame(width: 116)
+                .fixedSize(horizontal: true, vertical: false)
             }
 
             TextField("未填写备注", text: $titleText)
