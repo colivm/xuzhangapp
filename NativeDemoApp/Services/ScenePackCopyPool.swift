@@ -238,7 +238,7 @@ enum ScenePackCopyPool {
 
         if containsAny(normalized, ["地铁", "公交"]) { return ["公共交通这一程"] }
         if containsAny(normalized, ["打车", "出租", "网约车", "滴滴", "花小猪"]) { return ["打车这一程"] }
-        if containsAny(normalized, ["高铁", "火车", "机票", "机场"]) { return ["远一点的路程记下"] }
+        if SemanticBoundaryGuard.matchesLongDistanceTransit(normalized) { return ["远一点的路程记下"] }
 
         if containsAny(normalized, ["酒店", "民宿", "住宿", "宾馆", "客栈"]) {
             return ["这次住宿记下"]

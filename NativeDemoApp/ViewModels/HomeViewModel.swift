@@ -1214,6 +1214,10 @@ final class HomeViewModel: ObservableObject {
     private var persistenceRevision: UInt64 = 0
     private var pendingPersistenceTasks: [UInt64: Task<LedgerPersistenceSaveResult, Never>] = [:]
     private var pendingPersistenceRevisionByID: [UUID: UInt64] = [:]
+    /// Latest revision ever submitted for each record. This outlives the
+    /// pending map so a late completion from an older write cannot overwrite
+    /// a newer write that already finished.
+    private var latestPersistenceRevisionByID: [UUID: UInt64] = [:]
     private var completedPersistenceResults: [UInt64: Bool] = [:]
     private var completedPersistenceResultByID: [UUID: Bool] = [:]
 
@@ -2128,6 +2132,15 @@ final class HomeViewModel: ObservableObject {
                 syncStatusMessage = "同步结果没有写入本机，原账本仍保留。请重启后再试。"
                 return
             }
+            // The writer runs asynchronously.  Do not upload a merged record
+            // until its local metadata/image externalization has completed;
+            // otherwise a fast cloud upload can race a later local failure or
+            // leave the two stores observing different revisions.
+            let persistedIDs = Set(changes.upserts.map(\.id)).union(changes.deletedIDs)
+            guard await waitForPersistence(of: persistedIDs) else {
+                syncStatusMessage = "同步结果没有写入本机，原账本仍保留。请重启后再试。"
+                return
+            }
             markLocalLedgerOwner(context.userId)
             // 只回传本机更新或云端缺失的记录；云端已是最新的记录不重复上传。
             let pendingIDs = Set(LocalStore.loadCloudLedgerDeletionIntents(for: context.userId).map(\.id))
@@ -2168,6 +2181,22 @@ final class HomeViewModel: ObservableObject {
             return nil
         }
 
+        isRestoringLocalBackup = true
+        defer { isRestoringLocalBackup = false }
+
+        // A restore must be ordered after every outstanding local write. The
+        // writer actor is serial, but planning from an in-memory snapshot
+        // while an earlier edit is still queued could otherwise resurrect
+        // stale fields from the backup.
+        let pendingRestoreIDs = Set(pendingPersistenceRevisionByID.keys)
+        if !pendingRestoreIDs.isEmpty,
+           !(await waitForPersistence(of: pendingRestoreIDs)) {
+            let message = "本机仍有上一笔修改没有写入完成，请稍后再恢复备份。"
+            recordInputMessage = message
+            syncStatusMessage = message
+            return nil
+        }
+
         let plan: LedgerLocalBackupRestorePlan
         do {
             plan = try LedgerLocalBackupRestorePlanner.makePlan(
@@ -2184,22 +2213,45 @@ final class HomeViewModel: ObservableObject {
             return plan.summary
         }
 
-        isRestoringLocalBackup = true
-        defer { isRestoringLocalBackup = false }
-        let didPersist = await Task.detached(priority: .userInitiated) {
-            LocalStore.saveHomeItemChanges(
-                plan.changes,
-                currentItemsForFallback: plan.mergedItems
-            )
-        }.value
-        guard didPersist else {
+        // Keep the currently visible ledger until the writer has committed.
+        // Publishing the planned snapshot before the asynchronous write made
+        // a failed restore appear successful (and briefly exposed all backup
+        // image Data on the main actor). The change set already carries the
+        // complete backup records, so the writer does not need this projection
+        // to be installed first.
+        let changedIDs = Set(plan.changes.upserts.map(\.id)).union(plan.changes.deletedIDs)
+        guard persistItems(
+            upserting: plan.changes.upserts,
+            deleting: plan.changes.deletedIDs,
+            allowDuringRestore: true
+        ) else {
             let message = "这次恢复没有写入本机，本机原账本和照片仍保留。请稍后再试。"
             recordInputMessage = message
             syncStatusMessage = message
             return nil
         }
 
-        items = plan.mergedItems
+        guard await waitForPersistence(of: changedIDs) else {
+            let message = "这次恢复没有写入本机，本机原账本和照片仍保留。请稍后再试。"
+            recordInputMessage = message
+            syncStatusMessage = message
+            return nil
+        }
+
+        // Reload the committed metadata projection so the restored backup does
+        // not leave full image Data resident in HomeViewModel.items.
+        let persisted = await Task.detached(priority: .utility) {
+            LocalStore.loadHomeItemsResult()
+        }.value
+        guard !persisted.writesBlocked else {
+            let message = persisted.issueMessage
+                ?? "这次恢复没有写入本机，本机原账本和照片仍保留。请稍后再试。"
+            recordInputMessage = message
+            syncStatusMessage = message
+            return nil
+        }
+
+        items = persisted.items.sorted { $0.createdAt > $1.createdAt }
         refreshTodayPlayback()
         return plan.summary
     }
@@ -3526,8 +3578,8 @@ final class HomeViewModel: ObservableObject {
         pendingCategoryCorrectionFrom = nil
     }
 
-    private func ensureLedgerWritesAllowed() -> Bool {
-        guard !isRestoringLocalBackup else {
+    private func ensureLedgerWritesAllowed(allowDuringRestore: Bool = false) -> Bool {
+        guard allowDuringRestore || !isRestoringLocalBackup else {
             let message = "正在安全合并本地备份，请稍候。"
             recordInputMessage = message
             syncStatusMessage = message
@@ -3545,9 +3597,10 @@ final class HomeViewModel: ObservableObject {
     @discardableResult
     private func persistItems(
         upserting: [HomeItem] = [],
-        deleting: Set<UUID> = []
+        deleting: Set<UUID> = [],
+        allowDuringRestore: Bool = false
     ) -> Bool {
-        guard ensureLedgerWritesAllowed() else { return false }
+        guard ensureLedgerWritesAllowed(allowDuringRestore: allowDuringRestore) else { return false }
         let changes = LedgerHomeItemsChangeSet(upserts: upserting, deletedIDs: deleting)
         guard !changes.isEmpty else { return true }
 
@@ -3564,6 +3617,11 @@ final class HomeViewModel: ObservableObject {
         pendingPersistenceTasks[revision] = task
         for id in Set(upserting.map(\.id)).union(deleting) {
             pendingPersistenceRevisionByID[id] = revision
+            latestPersistenceRevisionByID[id] = revision
+            // A previous completion may still be buffered for this record;
+            // it belongs to the old revision and must not satisfy a wait for
+            // this newly submitted write.
+            completedPersistenceResultByID.removeValue(forKey: id)
         }
         publishImmediateItemDerivedProjection(
             upserting: upserting,
@@ -3590,7 +3648,15 @@ final class HomeViewModel: ObservableObject {
         completedPersistenceResults[revision] = success
         pendingPersistenceTasks.removeValue(forKey: revision)
         for id in recordIDs {
-            pendingPersistenceRevisionByID.removeValue(forKey: id)
+            guard LedgerPersistenceRevisionPolicy.ownsRecordCompletion(
+                completionRevision: revision,
+                latestRevisionForRecord: latestPersistenceRevisionByID[id]
+            ) else {
+                continue
+            }
+            if pendingPersistenceRevisionByID[id] == revision {
+                pendingPersistenceRevisionByID.removeValue(forKey: id)
+            }
             completedPersistenceResultByID[id] = success
         }
         if completedPersistenceResults.count > 32 {
@@ -3600,16 +3666,17 @@ final class HomeViewModel: ObservableObject {
         isPersistingLedger = !pendingPersistenceTasks.isEmpty
 
         if success {
-            guard LedgerPersistenceRevisionPolicy.acceptsCompletion(
-                completionRevision: revision,
-                currentRevision: persistenceRevision
-            ) else { return }
-
             // The writer has externalized any image bytes and returned a
-            // metadata-only projection. Replace only the records touched by
-            // this revision; unrelated in-memory edits stay untouched.
+            // metadata-only projection. Replace only records for which this
+            // revision is still the latest write. A newer write to an
+            // unrelated record must not prevent us from releasing image Data
+            // for this record from memory.
             if !result.persistedItems.isEmpty {
-                let persistedByID = Dictionary(uniqueKeysWithValues: result.persistedItems.map { ($0.id, $0) })
+                let persistedByID = Dictionary(uniqueKeysWithValues: result.persistedItems.compactMap { item in
+                    guard latestPersistenceRevisionByID[item.id] == revision else { return nil }
+                    return (item.id, item)
+                })
+                guard !persistedByID.isEmpty else { return }
                 items = items.map { persistedByID[$0.id] ?? $0 }
                 itemDerivedCache.replaceItems(with: persistedByID)
                 if let history = recordInputHistorySnapshot {
@@ -3628,14 +3695,20 @@ final class HomeViewModel: ObservableObject {
             completionRevision: revision,
             currentRevision: persistenceRevision
         ) else {
-            // A newer edit is already in memory. Re-submit this request's
-            // affected records against that latest projection instead of
-            // letting an older failed write disappear silently.
+            // A revision can touch several records. Retry only the records
+            // still owned by this completion; another record in the same
+            // batch may already have a newer edit and must not be submitted
+            // a third time from this stale failure path.
+            let retryIDs = recordIDs.filter { id in
+                guard let latest = latestPersistenceRevisionByID[id] else { return true }
+                return latest <= revision
+            }
+            guard !retryIDs.isEmpty else { return }
             let currentIDs = Set(items.map(\.id))
-            let retryUpserts = recordIDs.compactMap { id in
+            let retryUpserts = retryIDs.compactMap { id in
                 items.first(where: { $0.id == id })
             }
-            let retryDeletes = recordIDs.subtracting(currentIDs)
+            let retryDeletes = retryIDs.subtracting(currentIDs)
             _ = persistItems(upserting: retryUpserts, deleting: retryDeletes)
             for item in retryUpserts {
                 Task { await syncUpsertToCloud(item) }
@@ -3669,21 +3742,35 @@ final class HomeViewModel: ObservableObject {
             }
             while let revision = pendingPersistenceRevisionByID[id] {
                 if let result = completedPersistenceResults[revision] {
-                    pendingPersistenceRevisionByID.removeValue(forKey: id)
-                    completedPersistenceResultByID.removeValue(forKey: id)
+                    let ownsRevision = pendingPersistenceRevisionByID[id] == revision
+                    if ownsRevision {
+                        pendingPersistenceRevisionByID.removeValue(forKey: id)
+                        completedPersistenceResultByID.removeValue(forKey: id)
+                    }
                     if !pendingPersistenceRevisionByID.values.contains(revision) {
                         completedPersistenceResults.removeValue(forKey: revision)
                     }
+                    // A newer write superseded this completion while the
+                    // caller was suspended. Keep waiting for that revision;
+                    // an older failure must not make a newer successful edit
+                    // report failure.
+                    guard ownsRevision else { continue }
                     guard result else { return false }
                     continue
                 }
                 guard let task = pendingPersistenceTasks[revision] else {
-                    pendingPersistenceRevisionByID.removeValue(forKey: id)
+                    if pendingPersistenceRevisionByID[id] == revision {
+                        pendingPersistenceRevisionByID.removeValue(forKey: id)
+                    }
                     continue
                 }
                 let result = await task.value
-                pendingPersistenceRevisionByID.removeValue(forKey: id)
-                completedPersistenceResultByID.removeValue(forKey: id)
+                let ownsRevision = pendingPersistenceRevisionByID[id] == revision
+                if ownsRevision {
+                    pendingPersistenceRevisionByID.removeValue(forKey: id)
+                    completedPersistenceResultByID.removeValue(forKey: id)
+                }
+                guard ownsRevision else { continue }
                 guard result.success else { return false }
             }
         }

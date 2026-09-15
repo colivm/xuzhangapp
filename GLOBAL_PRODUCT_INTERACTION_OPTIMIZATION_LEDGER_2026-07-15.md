@@ -5272,3 +5272,17 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 冻结边界复核：未修改同步上传内容和归属、照片文件/引用格式、备份导出恢复、账单保存字段、分类/情绪/生活场景、会员/IAP、额度或 UI 产品结构。
 - Windows 验证：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows` 通过；词典 JSON 解析通过。Windows 无 Swift/Xcode，新增 XCTest 尚未运行。
 - 剩余风险：必须在 macOS/Xcode 用 Allocations/Memory Graph 验证补图保存后 `HomeViewModel.items` 不再保留原图、1000 条多图账本 RSS 不持续增长、详情按需读取仍可用；Xcode/真机签收前保持 `CODE_DONE`。下一项为 `RELEASE-02` 集中签收，不启动新的 P2 重构。
+
+### 136. PERSISTENCE-SEMANTIC-FIVE-GAP-CLOSE-01：五项遗留审计缺口收口（2026-09-15）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`（2026-09-15）。本轮只收口前述五项审计缺口，不改变账单字段、云端照片边界、会员/IAP、价格、产品结构或既有冻结任务。
+- 修复范围：重复 `Sendable` 声明；同一记录连续编辑及批量写入的 revision 竞态；备份恢复绕过 writer、失败时提前替换可见账本及恢复后原图长期驻留；历史窄情绪标签的展示纠正；“笔/辅食/车票/火车/机场”关键词在情绪、LifeMark、场景词典和文案旁路中的语义边界。
+- 实施结果：
+  1. `LedgerPersistenceSaveResult` 只在模型声明处保留 `@unchecked Sendable`；`HomeViewModel` 按记录维护最新 revision，旧完成结果不能清理或覆盖新写入；不同记录的独立完成仍可释放 metadata-only 图片投影；批量失败只重试仍由旧 revision 所有的记录；全量同步等待本地 writer 成功后才上传。
+  2. 本地备份恢复先等待挂起写入，再通过 `persistItems`/`LedgerPersistenceWriter` 提交；提交失败或等待失败不替换当前可见 `items`；成功后重新读取 metadata-only 账本，避免恢复图片 `Data` 长期驻留。
+  3. 历史“给衣柜添一件”“健身会员安排”“远一点的路”标签会按当前标题/分类证据纠正，不修改原始存量字段。
+  4. 收紧 `SemanticBoundaryGuard`、`LifeMarkService`、`LifeSceneSemanticService`、`FreeScenePackService`、`ScenePackCopyPool` 及词典：排除笔记本电脑、辅食机/宠物辅食、火车模型、机场/高铁站停车费等旁路误判；裸“车票”只在明确出发/到达上下文成立。
+- 修改文件：`NativeDemoApp/Models/HomeItem.swift`、`NativeDemoApp/Resources/RecordSceneLexicon.json`、`NativeDemoApp/Services/FreeScenePackService.swift`、`NativeDemoApp/Services/LedgerPersistenceWriter.swift`、`NativeDemoApp/Services/LifeMarkService.swift`、`NativeDemoApp/Services/LifeSceneSemanticService.swift`、`NativeDemoApp/Services/ScenePackCopyPool.swift`、`NativeDemoApp/Services/SemanticBoundaryGuard.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、本文档。
+- 验证证据（Windows）：`python scripts/life_semantic_regression.py` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 通过并输出 `Static experience checks passed.`；`git diff --check` 无空白错误（仅 Windows 行尾提示）。新增 XCTest 已接线但当前环境无 macOS/Xcode，未宣称 XCTest、编译、真机或 Instruments 已通过。
+- 冻结边界复核：未修改备份包格式、照片文件格式、同步 DTO、会员/IAP 归属、金额/日期/分类保存契约；历史标签只在展示投影纠正，未批量改写数据库。
+- 剩余风险与下一任务：仍需 macOS/Xcode Swift 6 Debug/Release 编译、并发失败注入 XCTest、备份导入失败回滚和真机 Allocations/Memory Graph 验证；外部签收前维持 `CODE_DONE`，下一项为 `RELEASE-02` 集中签收。

@@ -120,14 +120,14 @@ enum LifeJourneyFactService {
     }
 
     private static let tollKeywords = ["过路费", "高速费", "高速通行", "高速公路", "etc通行", "etc扣费"]
+    private static let longDistanceTransitKeywords = [
+        "高铁", "火车票", "动车票", "机票", "机场", "航班", "铁路", "长途汽车", "客运"
+    ]
     private static let vehicleEnergyKeywords = [
         "充电", "充车", "充电桩", "电车充电", "汽车充电", "车辆充电", "新能源充电", "先充后付",
         "快电", "补能", "加油", "油费", "加气"
     ]
     private static let supportingRoadKeywords = ["停车费", "停车场", "服务区"]
-    private static let longDistanceTransitKeywords = [
-        "高铁", "动车", "火车票", "铁路", "机票", "机场", "长途汽车", "客运", "车票"
-    ]
     private static let activityCategories: Set<HomeItem.Category> = [
         .dining, .lodging, .entertainment, .social
     ]
@@ -265,7 +265,7 @@ enum LifeJourneyFactService {
             $0.category == .transport && containsAny(factualText($0), vehicleEnergyKeywords)
         }
         let supportingRoadRows = segmentRows.filter { containsAny(factualText($0), supportingRoadKeywords) }
-        let transitRows = segmentRows.filter { containsAny(factualText($0), longDistanceTransitKeywords) }
+        let transitRows = segmentRows.filter { containsLongDistanceTransitEvidence(factualText($0)) }
         let isRoadTrip = !tollRows.isEmpty || energyRows.count >= 2
         guard isRoadTrip || !transitRows.isEmpty else { return nil }
 
@@ -346,12 +346,23 @@ enum LifeJourneyFactService {
             }
             let text = factualText(item)
             let hasTravelEvidence = containsAny(text, tollKeywords)
-                || containsAny(text, longDistanceTransitKeywords)
+                || (!containsAny(text, ["停车", "停车费", "停车场", "停车票", "停车缴费"])
+                    && (containsAny(text, longDistanceTransitKeywords)
+                        || SemanticBoundaryGuard.matchesLongDistanceTransit(text)))
             if hasTravelEvidence, hasExplicitHomeDestination(item.title, homeCity: homeCity) {
                 return item
             }
         }
         return nil
+    }
+
+    private static func containsLongDistanceTransitEvidence(_ text: String) -> Bool {
+        // 车票必须经过上下文守卫，避免“停车票/买车票”被当成跨城证据。
+        guard !containsAny(text, ["停车", "停车费", "停车场", "停车票", "停车缴费"]) else {
+            return false
+        }
+        return SemanticBoundaryGuard.matchesLongDistanceTransit(text)
+            || containsAny(text, ["铁路", "长途汽车", "客运"])
     }
 
     private static func hasExplicitHomeDestination(_ title: String, homeCity: String) -> Bool {
@@ -674,7 +685,7 @@ enum LifeMarkService {
             label: "宝宝照护",
             category: .daily,
             categories: [.daily, .shopping, .health],
-            keywords: ["宝宝", "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "母婴", "婴儿", "辅食", "宝宝湿巾", "婴儿湿巾", "奶瓶", "安抚奶嘴", "早教", "早教课", "托育费", "托班费", "幼儿园学费", "童装", "儿童座椅", "推车"],
+            keywords: ["宝宝", "奶粉", "尿不湿", "纸尿裤", "拉拉裤", "母婴", "婴儿", "婴儿辅食", "宝宝辅食", "幼儿辅食", "婴幼儿辅食", "宝宝湿巾", "婴儿湿巾", "奶瓶", "安抚奶嘴", "早教", "早教课", "托育费", "托班费", "幼儿园学费", "童装", "儿童座椅", "推车"],
             access: .free,
             priority: 12,
             minimumCount: 1,
@@ -793,9 +804,12 @@ enum LifeMarkService {
             return containsAny(normalized, ["书店", "教材", "文具", "本子", "资料", "学习", "读书"])
         case "fitness":
             return SemanticBoundaryGuard.matchesFitness(normalized)
+        case "baby_supply":
+            // 词典中的“辅食”等宽词不再直接触发，统一经过母婴边界守卫。
+            return SemanticBoundaryGuard.matchesBabySupply(normalized)
         case "travel":
             return SemanticBoundaryGuard.matchesLongDistanceTransit(normalized)
-                || containsAny(normalized, ["旅行", "旅游", "异地", "外地", "出差", "酒店", "民宿", "住宿", "机票", "机场", "景区", "返程", "行程"])
+                || containsAny(normalized, ["旅行", "旅游", "异地", "外地", "出差", "酒店", "民宿", "住宿", "景区", "返程", "行程"])
         default:
             return containsAny(normalized, definition.keywords)
         }

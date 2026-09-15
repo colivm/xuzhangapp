@@ -655,6 +655,24 @@ struct HomeItem: Identifiable, Codable, Equatable {
             return inferEmotionTag(category: item.category, amount: item.amount)
         }
 
+        // 收紧语义规则后，旧账单里已经保存的窄标签也必须按标题证据重新校验。
+        // 否则“裙带菜”“视频会员年卡”“机动车年检”等旧记录会继续展示历史误判。
+        if item.category == .shopping,
+           current == "给衣柜添一件",
+           !containsAny(item.title, ["衣服", "上衣", "裤子", "连衣裙", "半身裙", "短裙", "长裙", "裙装", "外套", "内衣"]) {
+            return inferEmotionTag(category: item.category, amount: item.amount)
+        }
+        if item.category == .health,
+           current == "健身会员安排",
+           !SemanticBoundaryGuard.matchesFitness(evidence) {
+            return correctedEmotionFallback(for: item)
+        }
+        if item.category == .transport,
+           current == "远一点的路",
+           !SemanticBoundaryGuard.matchesLongDistanceTransit(evidence) {
+            return correctedEmotionFallback(for: item)
+        }
+
         return nil
     }
 

@@ -53,9 +53,18 @@ enum LedgerPersistenceRevisionPolicy {
     static func acceptsCompletion(completionRevision: UInt64, currentRevision: UInt64) -> Bool {
         completionRevision == currentRevision
     }
+
+    /// A record can have multiple writes in flight. A completion may publish
+    /// its per-record result only while it is still the latest write for that
+    /// record. Older completions must not clear or overwrite newer state.
+    static func ownsRecordCompletion(
+        completionRevision: UInt64,
+        latestRevisionForRecord: UInt64?
+    ) -> Bool {
+        latestRevisionForRecord == completionRevision
+    }
 }
 
 extension LedgerHomeItemsChangeSet: @unchecked Sendable {}
 extension HomeItem: @unchecked Sendable {}
 extension LedgerHomeItemsLoadResult: @unchecked Sendable {}
-extension LedgerPersistenceSaveResult: @unchecked Sendable {}

@@ -241,7 +241,8 @@ final class LifeMarkSceneRewardService: @unchecked Sendable {
                 detail: "奖励体验「看病买药健身恢复」场景包 7 天，记录训练、恢复和身体状态的连续变化。"
             )
         }
-        if containsAny(text, ["酒店", "民宿", "住宿", "机票", "高铁", "火车", "机场", "景区", "景点", "门票", "旅行", "旅游", "露营地"]) {
+        if containsAny(text, ["酒店", "民宿", "住宿", "景区", "景点", "门票", "旅行", "旅游", "露营地"])
+            || SemanticBoundaryGuard.matchesLongDistanceTransit(text) {
             return RewardCandidate(
                 groupId: "travel_trip",
                 packId: "travel",

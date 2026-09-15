@@ -3593,14 +3593,26 @@ final class SingleRecordEmotionBoundaryTests: XCTestCase {
 
     func testSemanticBoundaryRejectsCommonSubstringFalsePositives() {
         XCTAssertFalse(SemanticBoundaryGuard.matchesStationery("另记两笔，分了几笔"))
+        XCTAssertFalse(SemanticBoundaryGuard.matchesStationery("买笔记本电脑"))
+        XCTAssertFalse(SemanticBoundaryGuard.matchesStationery("买了一支笔记本电脑"))
         XCTAssertTrue(SemanticBoundaryGuard.matchesStationery("书桌买了一个笔芯"))
         XCTAssertFalse(SemanticBoundaryGuard.matchesFlowerShopping("花呗还款、买花生和棉花"))
         XCTAssertTrue(SemanticBoundaryGuard.matchesFlowerShopping("花店买一束鲜花"))
         XCTAssertFalse(SemanticBoundaryGuard.matchesBabySupply("桂林米粉、手推车、成人奶粉"))
+        XCTAssertFalse(SemanticBoundaryGuard.matchesBabySupply("买辅食、宠物辅食和辅食机"))
+        XCTAssertFalse(SemanticBoundaryGuard.matchesBabySupply("给宝宝买辅食机"))
+        XCTAssertFalse(SemanticBoundaryGuard.matchesBabySupply("婴儿辅食料理机"))
         XCTAssertTrue(SemanticBoundaryGuard.matchesBabySupply("婴儿推车和婴儿奶粉"))
+        XCTAssertTrue(SemanticBoundaryGuard.matchesBabySupply("给宝宝买辅食"))
         XCTAssertFalse(SemanticBoundaryGuard.matchesFitness("视频会员年卡、英语课程"))
         XCTAssertTrue(SemanticBoundaryGuard.matchesFitness("健身房年卡、瑜伽课程"))
         XCTAssertFalse(SemanticBoundaryGuard.matchesLongDistanceTransit("机动车年检、电动车充电"))
+        XCTAssertFalse(SemanticBoundaryGuard.matchesLongDistanceTransit("停车票"))
+        XCTAssertFalse(SemanticBoundaryGuard.matchesLongDistanceTransit("买车票"))
+        XCTAssertFalse(SemanticBoundaryGuard.matchesLongDistanceTransit("买火车模型"))
+        XCTAssertFalse(SemanticBoundaryGuard.matchesLongDistanceTransit("高铁站停车费"))
+        XCTAssertFalse(SemanticBoundaryGuard.matchesLongDistanceTransit("机场停车费"))
+        XCTAssertTrue(SemanticBoundaryGuard.matchesLongDistanceTransit("买车票去外地"))
         XCTAssertTrue(SemanticBoundaryGuard.matchesLongDistanceTransit("买动车票去外地"))
     }
 
@@ -3613,6 +3625,34 @@ final class SingleRecordEmotionBoundaryTests: XCTestCase {
         XCTAssertNotEqual(video.displayEmotionTag, "健身会员安排")
         XCTAssertNotEqual(seaweedScene.kind, .shopping)
         XCTAssertNotEqual(videoScene.kind, .fitness)
+    }
+
+    func testPersistedNarrowEmotionTagsAreCorrectedByCurrentTitleEvidence() {
+        let seaweed = HomeItem(
+            title: "裙带菜",
+            amount: 12,
+            category: .shopping,
+            createdAt: date(14, 10),
+            emotionTag: "给衣柜添一件"
+        )
+        let video = HomeItem(
+            title: "视频会员年卡",
+            amount: 98,
+            category: .health,
+            createdAt: date(14, 10),
+            emotionTag: "健身会员安排"
+        )
+        let inspection = HomeItem(
+            title: "机动车年检",
+            amount: 260,
+            category: .transport,
+            createdAt: date(14, 10),
+            emotionTag: "远一点的路"
+        )
+
+        XCTAssertNotEqual(seaweed.displayEmotionTag, "给衣柜添一件")
+        XCTAssertNotEqual(video.displayEmotionTag, "健身会员安排")
+        XCTAssertNotEqual(inspection.displayEmotionTag, "远一点的路")
     }
 
     func testSceneLexiconDoesNotPromoteOrdinaryFoodToolsOrAdultNutritionToBabyCare() {
@@ -3682,6 +3722,21 @@ final class LedgerPersistenceRevisionPolicyTests: XCTestCase {
         XCTAssertFalse(LedgerPersistenceRevisionPolicy.acceptsCompletion(
             completionRevision: 7,
             currentRevision: 8
+        ))
+    }
+
+    func testOlderRecordCompletionDoesNotOwnNewerRevisionResult() {
+        XCTAssertFalse(LedgerPersistenceRevisionPolicy.ownsRecordCompletion(
+            completionRevision: 7,
+            latestRevisionForRecord: 8
+        ))
+        XCTAssertTrue(LedgerPersistenceRevisionPolicy.ownsRecordCompletion(
+            completionRevision: 8,
+            latestRevisionForRecord: 8
+        ))
+        XCTAssertFalse(LedgerPersistenceRevisionPolicy.ownsRecordCompletion(
+            completionRevision: 8,
+            latestRevisionForRecord: nil
         ))
     }
 
