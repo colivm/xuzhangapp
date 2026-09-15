@@ -201,13 +201,17 @@ struct RecordEditSheet: View {
         .onChange(of: selectedEditPhotos) { _, newValue in
             guard !newValue.isEmpty else { return }
             Task {
-                var compressedImages: [Data] = []
+                var sourceImages: [Data] = []
                 for photo in newValue.prefix(editPhotoPickerSelectionLimit) {
-                    if let data = try? await photo.loadTransferable(type: Data.self),
-                       let compressedData = MemoryImageCompressor.compressedJPEGData(from: data) {
-                        compressedImages.append(compressedData)
+                    if let data = try? await photo.loadTransferable(type: Data.self) {
+                        sourceImages.append(data)
                     }
                 }
+                // UIImage decoding, resizing and JPEG encoding are CPU-heavy;
+                // keep them off the main actor so the editor remains scrollable.
+                let compressedImages = await Task.detached(priority: .userInitiated) {
+                    sourceImages.compactMap { MemoryImageCompressor.compressedJPEGData(from: $0) }
+                }.value
                 await MainActor.run {
                     selectedEditPhotos = []
                     guard !compressedImages.isEmpty else { return }

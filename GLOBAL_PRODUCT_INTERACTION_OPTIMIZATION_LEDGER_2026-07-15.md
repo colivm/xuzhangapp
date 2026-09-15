@@ -5162,3 +5162,14 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 通过；Windows 无 Swift/Xcode，新增 XCTest 尚未运行。
 - 冻结边界复核：未改变云端照片边界、`.xuzhangbackup` 包结构、照片校验、账单字段和冲突时间规则；云端仍不上传照片。
 - 剩余风险与下一步：必须用新 TestFlight 在仍保留本机照片的设备导出一次，确认导出提示显示“已导出 N 个照片文件”；删除重装后只能恢复卸载前已导出的完整包。随后在 macOS/Xcode 执行新增 XCTest 与真机导入验收。
+
+### 128. EDIT-PHOTO-PERF-FIX-01：账单编辑补充照片移出主线程压缩（2026-09-15）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-15）。
+- 用户问题：账单编辑中补充照片时出现掉帧。
+- 根因：`RecordEditSheet` 与 `FocusedRecordEditor` 的 SwiftUI `Task` 继承主 actor，图片解码、缩放和 JPEG 压缩直接占用主线程。
+- 实施结果：先在主 actor 读取 PhotosPicker 原始 Data，再用 `Task.detached(priority: .userInitiated)` 批量完成压缩，最后只在 `MainActor.run` 提交照片；新增体验静态门禁防止回归。
+- 修改文件：`NativeDemoApp/Views/RecordEditSheet.swift`、`NativeDemoApp/Views/FocusedRecordEditor.swift`、`scripts/experience_static_check.ps1`、本文档。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 通过；Windows 无 Swift/Xcode，尚未完成真机帧率与写盘耗时验证。
+- 冻结边界复核：未改变照片数量上限、压缩尺寸/质量、账单字段、照片存储格式、保存失败语义和云端照片边界。
+- 剩余风险与下一步：`attachMemoryImages` 后续仍会同步执行本地文件/SQLite 持久化；需在真机用 10MP 多选照片确认主线程压缩热点消失，若仍有尾帧再单独拆分持久化写盘任务。
