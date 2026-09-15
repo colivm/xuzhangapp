@@ -424,20 +424,30 @@ enum LedgerLocalBackupRestorePlanner {
         backupWins: Bool
     ) -> HomeItem {
         var result = backupWins ? backup : local
-        let localHasPhoto = (0..<local.memoryImageCount).contains {
+        // A metadata-only record can retain a reference after its image file
+        // has been deleted (for example after an incomplete migration or
+        // manual cleanup). Treating that stale reference as a real photo
+        // would overwrite a valid photo restored from the backup package.
+        let localHasPhotoData = (0..<local.memoryImageCount).contains {
             local.memoryImageData(at: $0) != nil
-                || local.memoryImageReference(at: $0) != nil
+        }
+        let localHasPhotoReference = (0..<local.memoryImageCount).contains {
+            local.memoryImageReference(at: $0) != nil
         }
         let backupHasPhoto = (0..<backup.memoryImageCount).contains {
             backup.memoryImageData(at: $0) != nil
         }
 
-        if localHasPhoto {
+        if localHasPhotoData {
             // Never discard photos already present on this device, even when
             // the backup has a newer ledger timestamp but no photo payload.
             copyPhotoPayload(from: local, to: &result)
         } else if backupHasPhoto {
             copyPhotoPayload(from: backup, to: &result)
+        } else if localHasPhotoReference {
+            // Preserve a reference when the backup also has no usable photo;
+            // the existing missing-photo placeholder remains recoverable later.
+            copyPhotoPayload(from: local, to: &result)
         }
         return result
     }

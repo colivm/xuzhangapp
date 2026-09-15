@@ -5150,3 +5150,15 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：`python scripts/app_store_metadata_check.py` 通过（description 1282/4000、promotionalText 87/170、keywords 36/100）；`git diff --check` 通过。App Store Connect 实际粘贴、链接点击和新构建审核仍待运营方完成。
 - 冻结边界：未修改 App 功能、价格、Product ID、订阅归属、隐私实现或服务条款正文；描述不承诺照片云端备份、定位每笔必有或交易可解绑/改绑。
 - 下一步：在 App Store Connect 粘贴 `description`、`whatsNew` 和 EULA 标准链接，确认产品页可点击后重新提交审核。
+
+### 127. DATA-06-LOCAL-BACKUP-PHOTO-EXPORT-02：外置照片引用导出与恢复边界补强（2026-09-15）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-15）。
+- 用户问题：旧备份预览显示“0 张照片可恢复”；外置照片迁移后，导出必须从本机照片引用读取实际文件，而不是只读取账单内存中的图片字节。
+- 实施结果：
+  1. 保持当前导出器按 `memoryImageCount` 遍历，并通过照片引用读取原图后写入 `images/<recordID>/<sha256>.jpg`；新增回归覆盖 metadata-only 外置引用也能导出照片。
+  2. 恢复合并时不再把失效本机引用误判为可用照片；备份中存在有效照片时优先恢复，只有备份也无照片时才保留本机缺图引用。
+- 修改文件：`NativeDemoApp/Services/LedgerLocalBackupDocument.swift`、`NativeDemoAppTests/LedgerLocalBackupDocumentTests.swift`、本文档。
+- 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 通过；Windows 无 Swift/Xcode，新增 XCTest 尚未运行。
+- 冻结边界复核：未改变云端照片边界、`.xuzhangbackup` 包结构、照片校验、账单字段和冲突时间规则；云端仍不上传照片。
+- 剩余风险与下一步：必须用新 TestFlight 在仍保留本机照片的设备导出一次，确认导出提示显示“已导出 N 个照片文件”；删除重装后只能恢复卸载前已导出的完整包。随后在 macOS/Xcode 执行新增 XCTest 与真机导入验收。
