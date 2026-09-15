@@ -5186,3 +5186,14 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 通过；Windows 无 Swift/Xcode，尚未完成真机 9 张图片连续滑动和长标题金额布局验收。
 - 冻结边界复核：未改变照片数量上限、照片顺序、封面规则、图片存储格式、账单字段或删除/设封面行为。
 - 剩余风险与下一步：若真机仍有滑动尾帧，再单独评估减少相邻页预加载或拆分图片文件/SQLite 持久化；本项未改动保存语义。
+
+### 130. GLOBAL-PERFORMANCE-AUDIT-01：全局性能检查与分阶段治理方案（2026-09-15）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-15）。
+- 目标：对主线程、图片管线、账单存储、列表渲染、同步网络、后台计算和启动路径做全局证据审计，形成按影响/风险/收益排序的专项方案。
+- 本轮边界：先审计、量化和排优先级；未经单项验收不批量重构，不改变账单字段、同步冲突、会员、照片云端边界和业务语义。
+- 交付物：问题证据（文件/调用链/规模）、P0/P1/P2 分级、分阶段改造顺序、真机 Instruments/XCTest 验收矩阵、剩余风险与下一任务。
+- 实施结果：新增 `GLOBAL_PERFORMANCE_AUDIT_AND_ROADMAP_v1.md`，覆盖主线程同步持久化、批量导入、图片/缩略图、备份导出、痕迹快照、分享渲染、同步去重、冷启动和内存驻留问题；确定阶段 0 基线，下一任务为 `PERF-PERSISTENCE-ASYNC-01`。
+- 验证证据：完成 Swift 源码静态审计和调用链核对；本轮未改产品代码，未冒充真机性能验证。
+- 冻结边界复核：未改变业务逻辑、账单字段、同步协议、照片云端边界、会员或 UI 结构。
+- 剩余风险与下一任务：所有耗时和帧率仍需 macOS/Xcode Instruments 真机测量；下一项只允许实施阶段 A 的持久化后台化，并补齐失败回滚与版本竞态测试。
