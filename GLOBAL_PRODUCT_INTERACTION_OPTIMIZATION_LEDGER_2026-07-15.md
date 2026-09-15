@@ -5190,7 +5190,6 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 通过；Windows 无 Swift/Xcode，尚未完成真机 9 张图片连续滑动和长标题金额布局验收。
 - 冻结边界复核：未改变照片数量上限、照片顺序、封面规则、图片存储格式、账单字段或删除/设封面行为。
 - 剩余风险与下一步：若真机仍有滑动尾帧，再单独评估减少相邻页预加载或拆分图片文件/SQLite 持久化；本项未改动保存语义。
-
 ### 130. GLOBAL-PERFORMANCE-AUDIT-01：全局性能检查与分阶段治理方案（2026-09-15）
 
 - 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（2026-09-15）。
