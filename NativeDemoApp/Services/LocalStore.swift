@@ -221,6 +221,11 @@ enum LocalStore {
         return repository.loadImageData(reference: reference, variant: variant)
     }
 
+    static func prewarmMemoryImageThumbnails(for items: [HomeItem]) {
+        guard let repository = homeItemsRepository() else { return }
+        repository.prewarmThumbnails(for: items)
+    }
+
     private static func hasPersistedInstallationData() -> Bool {
         let defaults = UserDefaults.standard
         if defaults.object(forKey: settingsKey) != nil

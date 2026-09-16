@@ -1228,6 +1228,12 @@ final class HomeViewModel: ObservableObject {
         let ledgerLoadStartedAt = ProcessInfo.processInfo.systemUptime
         let ledgerLoadResult = LocalStore.loadHomeItemsResult()
         items = ledgerLoadResult.items.sorted { $0.createdAt > $1.createdAt }
+        let recentPhotoItems = Array(items.prefix(24).filter { !$0.memoryImageReferences.isEmpty })
+        if !recentPhotoItems.isEmpty {
+            Task.detached(priority: .utility) {
+                LocalStore.prewarmMemoryImageThumbnails(for: recentPhotoItems)
+            }
+        }
         analyticsService.trackPerformance(
             operation: .ledgerColdStart,
             startedAtUptime: ledgerLoadStartedAt,
