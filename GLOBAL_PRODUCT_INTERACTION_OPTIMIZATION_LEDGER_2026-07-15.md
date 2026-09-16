@@ -5325,7 +5325,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
   - `/opt/xuzhang/xuzhangapp-staging` 已部署同一修复代码，staging `.env` 使用 `NODE_ENV=staging`、8791/8788、Sandbox Apple endpoint、独立 JWT/代理 token 和数据库 `xuzhang-staging`，PM2 为 `backend-staging`/`ai-proxy-staging`。
   - Nginx 新增 `staging-api.xuzhangapp.com → 127.0.0.1:8791`，已签发并启用 HTTPS 证书；生产域名继续反代 8790。
   - 已在清空前生成 `/opt/xuzhang/backups/xuzhang-before-reset-20260916-115806.dump`；按用户授权清空 `xuzhang` 的 users/sessions/ledgers/iap_transactions/sms_codes，当前均为 0；新建 `xuzhang-staging` 并确认 schema 初始化、当前记录数均为 0。
-- 验证证据：本地 `backend npm test` 通过；`python scripts/validate_release_gate.py --phase windows` 通过；远程 `nginx -t`、生产/预发布两个 HTTPS `/health`、8790/8791/8787/8788 进程检查通过；PM2 已 `save`。
+- 验证证据：本地 `backend npm test` 通过；`python scripts/validate_release_gate.py --phase windows`（含 endpoint 模板门禁，commit `65cefe4`）通过并输出 `release_repository_gate: OK`；远程 `nginx -t`、生产/预发布两个 HTTPS `/health`、8790/8791/8787/8788 进程检查通过；PM2 已 `save`。
 - 冻结边界：未改会员 Product ID、交易归属规则、价格或账单字段；数据库清空与 staging 建库是本次用户明确授权的环境操作。
 - 剩余风险与下一步：当前 Windows 无 Xcode/Swift，尚未生成带 `STAGING` 条件的新 TestFlight 包，也未完成 StoreKit Sandbox/Production 真实购买、恢复、过期、撤销和错环境验单；生产 Apple JWS 签名链校验仍是独立安全缺口。完成 macOS/Xcode 与双环境真机验收前保持 `CODE_DONE`。
 
