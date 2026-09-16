@@ -731,7 +731,7 @@ struct MemoryRecordDetailSheet: View {
     private var memoryImageManager: some View {
         VStack(alignment: .leading, spacing: 12) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
+                LazyHStack(spacing: 10) {
                     ForEach(0..<item.memoryImageCount, id: \.self) { index in
                         Button {
                             selectedImageIndex = index
