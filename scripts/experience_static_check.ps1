@@ -1252,6 +1252,8 @@ Assert-Pattern 'NativeDemoApp/Views/MemberPricingView.swift' 'firstVerifyFailure
 Assert-Pattern 'backend/src/store.js' 'deleted_at TEXT NULL|LEDGER_TOMBSTONE_RETENTION_MS|getLedgerTombstonesByUserId|ledgerTimestampNow' 'backend ledger uses soft deletes with retention'
 Assert-MultilinePattern 'backend/src/store.js' 'export async function deleteLedgersByUserId[\s\S]{0,900}deletedAt = ledgerTimestampNow[\s\S]{0,900}UPDATE ledgers' 'cloud clear-all retains tombstones instead of hard deleting rows'
 Assert-Pattern 'backend/src/iapService.js' 'export function resolveIAPBindingDecision|isSandboxEnvironment|sandboxRebind' 'backend IAP binding decision is a pure testable function'
+Assert-Pattern 'backend/src/config.js' 'APPLE_PRODUCTION_API_BASE_URL|APPLE_SANDBOX_API_BASE_URL|validateIAPEnvironmentConfig' 'IAP runtime environment has explicit production and staging endpoint validation'
+Assert-Pattern 'backend/src/server.js' 'validateIAPEnvironmentConfig\(process\.env\.NODE_ENV\)' 'backend startup invokes the IAP environment gate'
 Assert-Pattern 'backend/src/contentSafety.js' 'const scenePackId = normalizeUserText\(raw\.scenePackId' 'backend ledger whitelist keeps scenePackId'
 Assert-Pattern 'backend/package.json' 'test:ledger-sync' 'backend test suite runs the ledger tombstone and IAP binding checks'
 Assert-Pattern 'NativeDemoAppTests/StateRegressionTests.swift' 'CloudLedgerOwnershipPolicyTests|testLocalLedgerSyncedToAnotherAccountAlwaysAsksEvenWhenNewAccountNeverEnabledSync|CloudLedgerMergePolicyTests|testRemoteTombstoneDeletesLocalRecordAndNeverReuploadsIt|testRemoteWinnerKeepsLocalPhotosCoverAndScenePack|testOnlyLocalNewerOrMissingRecordsAreUploaded|IAPRestoreFailureCopyTests' 'cloud ownership merge and IAP restore copy XCTest coverage'

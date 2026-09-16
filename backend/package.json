@@ -6,11 +6,12 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "test": "npm run test:auth-token && npm run test:deleted-account-token && npm run test:nudge-policy && npm run test:ledger-sync",
+    "test": "npm run test:auth-token && npm run test:deleted-account-token && npm run test:nudge-policy && npm run test:ledger-sync && npm run test:iap-environment",
     "test:auth-token": "node scripts/verify-auth-token-ttl.mjs",
     "test:deleted-account-token": "node scripts/verify-deleted-account-token.mjs",
     "test:nudge-policy": "node scripts/verify-nudge-policy.mjs",
-    "test:ledger-sync": "node scripts/verify-ledger-tombstone-and-iap-binding.mjs"
+    "test:ledger-sync": "node scripts/verify-ledger-tombstone-and-iap-binding.mjs",
+    "test:iap-environment": "node scripts/verify-iap-environment-gate.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -37,6 +37,8 @@ from generate_release_fixtures import (
 ROOT = Path(__file__).resolve().parents[1]
 REAL_PHOTO_RESOURCE_DIR = ROOT / "NativeDemoApp" / "Resources" / "QARealPhotos"
 REAL_PHOTO_MANIFEST_PATH = ROOT / "qa" / "real_photo_fixtures" / "manifest.json"
+APPLE_PRODUCTION_API_BASE_URL = "https://api.storekit.itunes.apple.com"
+APPLE_SANDBOX_API_BASE_URL = "https://api.storekit-sandbox.itunes.apple.com"
 
 
 def validate_png(data: bytes) -> None:
@@ -225,6 +227,7 @@ def powershell_command(script: str) -> list[str]:
 def run_repository_checks() -> None:
     validate_fixtures()
     commands = (
+        ("IAP environment gate", ["node", "backend/scripts/verify-iap-environment-gate.mjs"]),
         ("git diff --check", ["git", "diff", "--check"]),
         ("life semantic regression", [sys.executable, "scripts/life_semantic_regression.py"]),
         ("experience static check", powershell_command("scripts/experience_static_check.ps1")),

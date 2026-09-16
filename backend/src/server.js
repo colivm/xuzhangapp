@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { config } from "./config.js";
+import { config, validateIAPEnvironmentConfig } from "./config.js";
 import {
   deleteAccountByUserId,
   deleteLedger,
@@ -449,8 +449,14 @@ function clientIP(req) {
 }
 
 function validateProductionConfig() {
-  if (!isProduction) return;
-  const issues = [];
+  const issues = validateIAPEnvironmentConfig(process.env.NODE_ENV);
+  if (!isProduction && process.env.NODE_ENV !== "staging") {
+    return;
+  }
+  if (process.env.NODE_ENV === "staging") {
+    if (issues.length) throw new Error(`Unsafe staging backend config:\n- ${issues.join("\n- ")}`);
+    return;
+  }
   if (!config.jwtSecret || config.jwtSecret === "dev-secret-change-me" || config.jwtSecret.length < 32) {
     issues.push("JWT_SECRET must be set to a strong production value.");
   }
