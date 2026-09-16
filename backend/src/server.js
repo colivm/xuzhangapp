@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { config, validateIAPEnvironmentConfig } from "./config.js";
+import { config, normalizeNodeEnv, validateIAPEnvironmentConfig } from "./config.js";
 import {
   deleteAccountByUserId,
   deleteLedger,
@@ -50,7 +50,8 @@ import {
 } from "./contentSafety.js";
 
 const app = express();
-const isProduction = process.env.NODE_ENV === "production";
+const nodeEnv = normalizeNodeEnv(process.env.NODE_ENV);
+const isProduction = nodeEnv === "production";
 validateProductionConfig();
 app.use(cors({ origin: config.allowOrigin === "*" ? true : config.allowOrigin }));
 app.use(express.json({ limit: "1mb" }));
@@ -449,11 +450,11 @@ function clientIP(req) {
 }
 
 function validateProductionConfig() {
-  const issues = validateIAPEnvironmentConfig(process.env.NODE_ENV);
-  if (!isProduction && process.env.NODE_ENV !== "staging") {
+  const issues = validateIAPEnvironmentConfig(nodeEnv);
+  if (!isProduction && nodeEnv !== "staging") {
     return;
   }
-  if (process.env.NODE_ENV === "staging") {
+  if (nodeEnv === "staging") {
     if (issues.length) throw new Error(`Unsafe staging backend config:\n- ${issues.join("\n- ")}`);
     return;
   }

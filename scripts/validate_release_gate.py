@@ -7,6 +7,8 @@ import argparse
 import base64
 import binascii
 import json
+import os
+import re
 import shutil
 import sqlite3
 import struct
@@ -37,6 +39,9 @@ from generate_release_fixtures import (
 ROOT = Path(__file__).resolve().parents[1]
 REAL_PHOTO_RESOURCE_DIR = ROOT / "NativeDemoApp" / "Resources" / "QARealPhotos"
 REAL_PHOTO_MANIFEST_PATH = ROOT / "qa" / "real_photo_fixtures" / "manifest.json"
+APP_PROJECT_PATH = ROOT / "NativeDemoApp.xcodeproj" / "project.pbxproj"
+PRODUCTION_BRANCH = "xuzhang1.0-release-2026"
+STAGING_BRANCH = "feature/xuzhangapp-staging"
 
 
 def validate_png(data: bytes) -> None:
@@ -222,9 +227,10 @@ def powershell_command(script: str) -> list[str]:
     return [executable, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script]
 
 
-def run_repository_checks() -> None:
+def run_repository_checks(branch: str | None = None) -> None:
     validate_fixtures()
     validate_iap_environment_templates()
+    validate_branch_app_configuration(branch)
     commands = (
         ("IAP environment gate", ["node", "backend/scripts/verify-iap-environment-gate.mjs"]),
         ("git diff --check", ["git", "diff", "--check"]),
@@ -241,6 +247,101 @@ def run_repository_checks() -> None:
     for label, command in commands:
         run_command(label, command)
     print("\nrelease_repository_gate: OK")
+
+
+def _branch_name(explicit: str | None = None) -> str:
+    """Resolve the branch used by the release gate without trusting a CI default."""
+    if explicit:
+        return explicit.strip()
+    for variable in ("RELEASE_GATE_BRANCH", "GITHUB_REF_NAME", "CI_COMMIT_REF_NAME", "BRANCH_NAME"):
+        value = os.environ.get(variable, "").strip()
+        if value:
+            return value.removeprefix("refs/heads/")
+    try:
+        completed = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return ""
+    return completed.stdout.strip()
+
+
+def _app_target_configurations(project_text: str) -> dict[str, str]:
+    """Return Swift compilation conditions for the app target's Debug/Release configs.
+
+    Parsing the target's configuration list keeps the check scoped to the app target;
+    the test target may legitimately inherit different settings in the future.
+    """
+    list_match = re.search(
+        r'Build configuration list for PBXNativeTarget "NativeDemoApp"\s*\*/\s*=\s*\{'
+        r"(?P<body>.*?)(?=^\s*\};)",
+        project_text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not list_match:
+        raise AssertionError("NativeDemoApp target configuration list is missing")
+    ids = {
+        name: identifier
+        for identifier, name in re.findall(
+            r"([A-Za-z0-9]+)\s+/\*\s*(Debug|Release)\s*\*/", list_match.group("body")
+        )
+    }
+    if set(ids) != {"Debug", "Release"}:
+        raise AssertionError(f"NativeDemoApp target must expose Debug and Release configs, found {sorted(ids)}")
+
+    configurations: dict[str, str] = {}
+    for name, identifier in ids.items():
+        block_match = re.search(
+            rf"^\s*{re.escape(identifier)}\s+/\*\s*{name}\s*\*/\s*=\s*\{{(?P<body>.*?)"
+            r"(?=^\s*\};)",
+            project_text,
+            re.MULTILINE | re.DOTALL,
+        )
+        if not block_match:
+            raise AssertionError(f"NativeDemoApp {name} configuration {identifier} is missing")
+        setting_match = re.search(
+            r"^\s*SWIFT_ACTIVE_COMPILATION_CONDITIONS\s*=\s*([^;]+);",
+            block_match.group("body"),
+            re.MULTILINE,
+        )
+        configurations[name] = setting_match.group(1).strip() if setting_match else ""
+    return configurations
+
+
+def validate_app_configuration_for_branch(branch: str, project_text: str) -> None:
+    """Enforce the production/staging branch boundary for app compilation settings."""
+    branch = branch.strip()
+    configurations = _app_target_configurations(project_text)
+    staging_configs = {
+        name
+        for name, conditions in configurations.items()
+        if re.search(r"(?:^|\s)STAGING(?:\s|$)", conditions.replace('"', ""))
+    }
+    if branch == PRODUCTION_BRANCH:
+        if staging_configs:
+            names = ", ".join(sorted(staging_configs))
+            raise AssertionError(
+                f"production branch {PRODUCTION_BRANCH} cannot define STAGING in NativeDemoApp configs: {names}"
+            )
+    elif branch == STAGING_BRANCH:
+        if "Release" not in staging_configs:
+            raise AssertionError(
+                f"staging branch {STAGING_BRANCH} must define STAGING for the NativeDemoApp Release config"
+            )
+    else:
+        raise AssertionError(
+            f"release gate only permits {PRODUCTION_BRANCH} or {STAGING_BRANCH}; "
+            f"got {branch or '(detached HEAD)'}"
+        )
+    print(f"app_branch_configuration: OK branch={branch or '(detached HEAD)'} staging={sorted(staging_configs)}")
+
+
+def validate_branch_app_configuration(branch: str | None = None) -> None:
+    validate_app_configuration_for_branch(_branch_name(branch), APP_PROJECT_PATH.read_text(encoding="utf-8"))
 
 
 def validate_iap_environment_templates() -> None:
@@ -369,6 +470,13 @@ def parse_args() -> argparse.Namespace:
         help="fixtures only, repository checks, Xcode checks, or repository plus Xcode",
     )
     parser.add_argument(
+        "--release-branch",
+        help=(
+            "branch to evaluate for the app staging boundary; defaults to RELEASE_GATE_BRANCH, "
+            "CI branch variables, or the checked-out git branch"
+        ),
+    )
+    parser.add_argument(
         "--simulator-destination",
         default="platform=iOS Simulator,name=iPhone 15",
     )
@@ -383,15 +491,16 @@ def main() -> int:
     if args.phase == "fixtures":
         validate_fixtures()
     elif args.phase == "windows":
-        run_repository_checks()
+        run_repository_checks(args.release_branch)
     elif args.phase == "xcode":
+        validate_branch_app_configuration(args.release_branch)
         run_xcode_checks(args.simulator_destination)
     elif args.phase == "device-audit":
         if args.device_container is None or args.expected_count is None:
             raise SystemExit("device-audit requires --device-container and --expected-count")
         audit_device_container(args.device_container, args.expected_count, args.photo_profile)
     else:
-        run_repository_checks()
+        run_repository_checks(args.release_branch)
         run_xcode_checks(args.simulator_destination)
     return 0
 

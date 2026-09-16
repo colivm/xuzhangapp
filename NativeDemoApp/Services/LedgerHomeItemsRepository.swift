@@ -178,8 +178,10 @@ final class LedgerHomeItemsRepository {
         do {
             let manifest = try metadataStore.loadManifest()
             guard manifest?.activeStore == .metadataV2 else {
-                let externalizedForProjection = try imageStore.prepareForPersistence(changes.upserts)
-                let success = save(currentItemsForFallback)
+                let fallbackItems = applying(changes, to: currentItemsForFallback)
+                let projectionItems = uniqueUpserts(in: changes)
+                let externalizedForProjection = try imageStore.prepareForPersistence(projectionItems)
+                let success = save(fallbackItems)
                 return LedgerPersistenceSaveResult(
                     success: success,
                     persistedItems: success ? imageStore.metadataOnly(externalizedForProjection) : []
@@ -214,8 +216,10 @@ final class LedgerHomeItemsRepository {
             )
         } catch {
             print("Failed to save changed ledger records: \(error)")
-            let success = save(currentItemsForFallback)
-            let externalizedForProjection = (try? imageStore.prepareForPersistence(changes.upserts)) ?? changes.upserts
+            let fallbackItems = applying(changes, to: currentItemsForFallback)
+            let success = save(fallbackItems)
+            let projectionItems = uniqueUpserts(in: changes)
+            let externalizedForProjection = (try? imageStore.prepareForPersistence(projectionItems)) ?? projectionItems
             return LedgerPersistenceSaveResult(
                 success: success,
                 persistedItems: success ? imageStore.metadataOnly(externalizedForProjection) : []
@@ -273,6 +277,46 @@ final class LedgerHomeItemsRepository {
         case .unreadable:
             return false
         }
+    }
+
+    /// Applies a change set to the last visible snapshot before writing the
+    /// compatibility JSON path. This keeps legacy and emergency writes
+    /// semantically equivalent to the metadata change-set path.
+    private func applying(
+        _ changes: LedgerHomeItemsChangeSet,
+        to currentItems: [HomeItem]
+    ) -> [HomeItem] {
+        var result = currentItems.filter { !changes.deletedIDs.contains($0.id) }
+        var indexByID: [UUID: Int] = [:]
+        for (index, item) in result.enumerated() {
+            indexByID[item.id] = index
+        }
+        for item in changes.upserts {
+            if let index = indexByID[item.id] {
+                result[index] = item
+            } else {
+                indexByID[item.id] = result.count
+                result.append(item)
+            }
+        }
+        return result
+    }
+
+    /// A malformed/duplicated change set can fail metadata validation. Keep
+    /// the returned in-memory projection unique so a successful legacy
+    /// fallback cannot crash its caller while reporting the committed items.
+    private func uniqueUpserts(in changes: LedgerHomeItemsChangeSet) -> [HomeItem] {
+        var result: [HomeItem] = []
+        var indexByID: [UUID: Int] = [:]
+        for item in changes.upserts {
+            if let index = indexByID[item.id] {
+                result[index] = item
+            } else {
+                indexByID[item.id] = result.count
+                result.append(item)
+            }
+        }
+        return result
     }
 
     @discardableResult

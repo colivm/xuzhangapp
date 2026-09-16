@@ -1,5 +1,11 @@
 import jwt from "jsonwebtoken";
-import { config, loadApplePrivateKey } from "./config.js";
+import {
+  APPLE_PRODUCTION_API_BASE_URL,
+  APPLE_SANDBOX_API_BASE_URL,
+  config,
+  isPlaceholderConfigValue,
+  loadApplePrivateKey,
+} from "./config.js";
 
 export class IAPVerifyError extends Error {
   constructor(code, message, status = 400) {
@@ -52,7 +58,7 @@ export async function verifyAppStoreTransaction({ productId, transactionId, sign
   validateTransactionPayload(payload, {
     productId,
     transactionId,
-    expectedEnvironment: expectedAppleEnvironment(),
+    expectedEnvironment: transactionInfo.endpointEnvironment || expectedAppleEnvironment(),
   });
   const appAccountToken = validateAppAccountToken(payload, expectedAppAccountToken);
 
@@ -77,21 +83,27 @@ export async function verifyAppStoreTransaction({ productId, transactionId, sign
 
 function ensureAppleConfig() {
   const missing = [];
-  if (!config.appleIssuerId) missing.push("APPLE_ISSUER_ID");
-  if (!config.appleKeyId) missing.push("APPLE_KEY_ID");
-  if (!config.appleBundleId) missing.push("APPLE_BUNDLE_ID");
-  if (!config.applePrivateKey && !config.applePrivateKeyPath) missing.push("APPLE_PRIVATE_KEY_PATH");
-  if (!config.iapProductIds.monthly) missing.push("IAP_MONTHLY_PRODUCT_ID");
-  if (!config.iapProductIds.yearly) missing.push("IAP_YEARLY_PRODUCT_ID");
-  if (!config.iapProductIds.lifetime) missing.push("IAP_LIFETIME_PRODUCT_ID");
+  const required = [
+    ["APPLE_ISSUER_ID", config.appleIssuerId],
+    ["APPLE_KEY_ID", config.appleKeyId],
+    ["APPLE_BUNDLE_ID", config.appleBundleId],
+    ["APPLE_PRIVATE_KEY_PATH", config.applePrivateKeyPath || config.applePrivateKey],
+    ["IAP_MONTHLY_PRODUCT_ID", config.iapProductIds.monthly],
+    ["IAP_YEARLY_PRODUCT_ID", config.iapProductIds.yearly],
+    ["IAP_LIFETIME_PRODUCT_ID", config.iapProductIds.lifetime],
+  ];
+  for (const [name, value] of required) {
+    if (!String(value || "").trim()) missing.push(name);
+    else if (isPlaceholderConfigValue(value)) missing.push(`${name} (placeholder)`);
+  }
   if (missing.length) {
     throw new IAPVerifyError("IAP_NOT_CONFIGURED", `Missing env: ${missing.join(", ")}`, 503);
   }
 }
 
-async function fetchTransactionInfo(transactionId) {
+async function fetchTransactionInfo(transactionId, baseUrl = config.appleAppStoreApiBaseUrl) {
   const token = makeAppStoreServerToken();
-  const base = config.appleAppStoreApiBaseUrl.replace(/\/$/, "");
+  const base = baseUrl.replace(/\/$/, "");
   const url = `${base}/inApps/v1/transactions/${encodeURIComponent(transactionId)}`;
   const response = await fetch(url, {
     method: "GET",
@@ -102,18 +114,38 @@ async function fetchTransactionInfo(transactionId) {
   });
   const text = await response.text();
   if (!response.ok) {
-    throw new IAPVerifyError("APPLE_LOOKUP_FAILED", text || `Apple lookup failed (${response.status})`, 502);
+    const notFound = response.status === 404 || /transaction[\s_-]*(?:was\s+)?not[\s_-]*found/i.test(text);
+    const error = new IAPVerifyError(
+      notFound ? "APPLE_TRANSACTION_NOT_FOUND" : "APPLE_LOOKUP_FAILED",
+      text || `Apple lookup failed (${response.status})`,
+      502
+    );
+    error.appleTransactionNotFound = notFound;
+    throw error;
   }
   const json = JSON.parse(text || "{}");
   if (!json.signedTransactionInfo) {
     throw new IAPVerifyError("APPLE_BAD_RESPONSE", "Apple response missing signedTransactionInfo.", 502);
   }
-  return json;
+  return {
+    ...json,
+    endpointEnvironment: appleEnvironmentForEndpoint(baseUrl),
+  };
 }
 
 async function resolveTransactionInfo({ transactionId, signedTransactionInfo }) {
   void signedTransactionInfo;
-  return fetchTransactionInfo(transactionId);
+  const primaryEnvironment = expectedAppleEnvironment();
+  try {
+    return await fetchTransactionInfo(transactionId, config.appleAppStoreApiBaseUrl);
+  } catch (error) {
+    if (!shouldFallbackToSandbox({ endpointEnvironment: primaryEnvironment, error })) throw error;
+    return fetchTransactionInfo(transactionId, APPLE_SANDBOX_API_BASE_URL);
+  }
+}
+
+export function shouldFallbackToSandbox({ endpointEnvironment, error }) {
+  return endpointEnvironment === "Production" && Boolean(error?.appleTransactionNotFound);
 }
 
 function makeAppStoreServerToken() {
@@ -158,7 +190,11 @@ function validateTransactionPayload(payload, { productId, transactionId, expecte
 }
 
 function expectedAppleEnvironment() {
-  const hostname = new URL(config.appleAppStoreApiBaseUrl).hostname;
+  return appleEnvironmentForEndpoint(config.appleAppStoreApiBaseUrl);
+}
+
+function appleEnvironmentForEndpoint(baseUrl) {
+  const hostname = new URL(baseUrl).hostname;
   return hostname === "api.storekit-sandbox.itunes.apple.com" ? "Sandbox" : "Production";
 }
 

@@ -5331,3 +5331,46 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 - 后续配置补充：新增 `ops/nginx/staging-api.xuzhangapp.com.conf`，与生产反代保持 HTTPS、安全响应头和隐藏 Express 标识一致；已同步到服务器并通过 `nginx -t`、staging HTTPS 响应头检查。
 - 门禁补充：`validate_release_gate.py` 现在还检查生产/预发布 `.env` 模板的 endpoint 与 `NODE_ENV` 配对，避免仓库门禁再次对环境配置失明。
+
+### 141. RECENT-FIX-REVIEW-01：最近修复审查（2026-09-16）
+
+- 范围：审查 `08878a8` 及其前序 IAP 生产/预发布隔离提交；未修改产品代码，未改变既有 roadmap 状态。
+- 验证：`backend` 执行 `npm test` 全部通过；`python scripts/validate_release_gate.py --phase windows` 通过；静态检查覆盖 IAP endpoint 模板和纯函数门禁。
+- 发现与剩余风险：
+  1. 高风险：`NativeDemoApp.xcodeproj/project.pbxproj` 的 App target Debug、Release 均设置 `SWIFT_ACTIVE_COMPILATION_CONDITIONS = "STAGING $(inherited)"`；从 `feature/xuzhangapp-staging` 归档会让 Release/TestFlight 包指向 `staging-api.xuzhangapp.com`。当前 release gate 未检查分支与 Release 编译条件的关系。
+  2. 高风险：`backend/src/server.js` 用大小写敏感的原始 `NODE_ENV` 控制 `isProduction` 和启动门禁；`Production`、`PRODUCTION` 或带空格值会绕过生产校验并暴露开发路由，虽 `config.js` 的 validator 已做 trim/lowercase。
+  3. 中风险：IAP URL 校验只比较 HTTPS、hostname 和 `/` pathname，未拒绝端口、query/hash 等变体；后续 URL 拼接可能请求非官方 origin。应校验完整 origin。
+  4. 中风险：IAP 测试仅覆盖配置 endpoint 配对，未覆盖交易 payload environment、错环境响应、server 启动大小写变体和 URL 变体；生产/预发布 StoreKit 真机验单仍未完成。
+  5. 独立安全风险：`iapService.js` 仍只解码 JWS payload，未验证 Apple JWS 签名；本轮未扩大范围修复。
+- 工作区保护：保留既有 `backend/.env.staging.example` 修改以及未跟踪 `brand-assets/`、`output/`、`tmp/`、截图脚本和缓存文件。
+- 下一步：先修正 Release 配置隔离与 `NODE_ENV` 规范化，再补严格 URL/交易环境回归；完成 macOS/Xcode、StoreKit 双环境和真机验收前，`IAP-PRODUCTION-ROUTE-GATE-FIX-01` 继续保持 `CODE_DONE`。
+
+### 142. RECENT-FIX-REVIEW-01：审查补充与发布阻塞风险（2026-09-16）
+
+- 审查对象：IAP 环境门禁、STAGING 编译条件、持久化恢复收口；未修改代码或 roadmap 状态。
+- 验证证据：`backend/npm test` exit 0；`python scripts/validate_release_gate.py --phase windows` exit 0（`release_repository_gate: OK`）；恶意 endpoint 变体实测仍被 `validateIAPEnvironmentConfig` 接受（query/hash/8443）。
+- 发现（按优先级）：
+  1. **P1，正式收费/审核阻塞**：`backend/src/iapService.js` 只请求配置的 Production endpoint，并要求 JWS `environment == Production`；无 Sandbox fallback。`APP_STORE_IAP_SETUP.md` 第 7 节仍要求 Production 与 TestFlight Sandbox 按 Apple 返回正确路由，且当前台账记录 Production 真实交易尚未验通（已知测试仍为 401）。TestFlight/App Review 的 Sandbox 购买、恢复、过期和撤销矩阵未完成，不能把本修复标为可发布。
+  2. **P1，备份恢复兼容路径数据丢失**：`HomeViewModel.swift:3609-3615` 把旧 `items` 传为 fallback；`LedgerHomeItemsRepository.swift:180-186,215-222` 在 metadata manifest 缺失或激活失败时调用 `save(currentItemsForFallback)`，忽略 `changes`。旧格式/激活失败时可能显示恢复成功但实际仍写回旧账本；需补 legacy/failure XCTest。
+  3. **P1，配置占位符可启动**：`validateIAPEnvironmentConfig` 只检查非空，`.env.staging.example` 中 `<...>`、`YOUR_PASSWORD` 等占位值会通过 staging 启动门禁，首笔验单才失败。
+  4. **P2，环境变量大小写绕过门禁**：`server.js:53,453-458` 用原始大小写敏感的 `NODE_ENV` 控制生产/预发布分支；`Production`/`PRODUCTION` 已实测可绕过生产检查并启动 memory store，同时暴露 dev routes。应统一 trim/lowercase 后再分支。
+  5. **P2，URL 门禁过宽**：`config.js:65-79` 仅校验协议、hostname、pathname，允许 query/hash/非 443 端口；后续字符串拼接可能请求非官方 origin。应校验完整 origin、端口及无 query/hash。
+  6. **P2，内测分支发布误操作风险**：`08878a8` 在 App target Debug 与 Release 都定义 `STAGING`；对该分支归档会生成连 staging 的 Release 包。当前 gate 未检查分支与 Release 配置关系。该设置符合当前 staging 分支意图，但应改为独立 scheme/config 或增加发布门禁。
+  7. **独立安全缺口未被本轮修复**：`iapService.js` 仍只 Base64 解码 JWS，未验证 Apple 签名/证书链；生产验单不能仅凭 endpoint 和环境字段宣称安全。
+- 下一步：先修复备份 fallback、规范化 NODE_ENV、拒绝占位符和严格 URL；为 Production/TestFlight Sandbox 设计签名后路由并完成真实 StoreKit 矩阵，再进行 Xcode/真机签收。`IAP-PRODUCTION-ROUTE-GATE-FIX-01` 维持 `CODE_DONE`。
+
+### 143. RELEASE-GATE-BACKEND-RISK-FIX-01：发布门禁与后端风险修复（2026-09-16）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS`。
+- 范围：修复最近审查发现的 `NODE_ENV` 规范化绕过、Apple endpoint/占位符校验、生产包误用 STAGING 的发布门禁、备份恢复 fallback 忽略变更，以及 Production/TestFlight Sandbox 验单路由回归。
+- 冻结边界：不改变生产分支的正式 API 地址、会员 Product ID、价格、账单字段、交易归属和照片边界；不清理既有工作区修改。
+- 计划验证：backend npm tests、Windows release gate、Swift/XCTest 源码接线检查；当前 Windows 无 Xcode，不能宣称编译或真机已验证。
+
+### 144. RELEASE-GATE-BACKEND-RISK-FIX-01：实施结果（2026-09-16）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`。
+- 后端修复：统一 `NODE_ENV` trim/lowercase；严格限制 Apple Production/Sandbox origin；拒绝示例占位符；Production 仅在 Apple 明确交易不存在时安全回退 Sandbox，并按实际请求 endpoint 校验交易环境。
+- 持久化修复：legacy/metadata 激活失败 fallback 先将 upsert/delete changes 合并到当前快照再写入，避免恢复成功提示但账本仍为旧内容；新增 legacy 与失败路径 XCTest。
+- 发布门禁：`validate_release_gate.py` 解析 App target Debug/Release 编译条件；生产分支 `xuzhang1.0-release-2026` 禁止 `STAGING`，预发布分支 `feature/xuzhangapp-staging` 要求 Release 含 `STAGING`；新增 `--release-branch`/CI 分支识别。
+- 验证：`backend/npm test` 通过；`git diff --check` 通过；`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 通过并输出 `release_repository_gate: OK`；`experience_static_check.ps1` 通过。Windows 无 Xcode，Swift/XCTest、真实 StoreKit 和真机验收尚未执行。
+- 剩余风险：Apple JWS 签名链仍未实现；Production 真实购买与 TestFlight/App Review Sandbox 矩阵仍需 macOS/StoreKit 验证；正式发布必须显式使用生产分支并执行 Release gate。

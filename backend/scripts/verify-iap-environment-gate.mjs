@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import {
   APPLE_PRODUCTION_API_BASE_URL,
   APPLE_SANDBOX_API_BASE_URL,
+  normalizeNodeEnv,
   validateIAPEnvironmentConfig,
 } from "../src/config.js";
+import { shouldFallbackToSandbox } from "../src/iapService.js";
 
 const shared = {
   appleIssuerId: "issuer",
@@ -21,6 +23,53 @@ assert.deepEqual(
   }),
   [],
   "production accepts only the production endpoint"
+);
+
+assert.equal(normalizeNodeEnv("  Production "), "production", "NODE_ENV is normalized before branching");
+assert.equal(normalizeNodeEnv("PRODUCTION"), "production", "NODE_ENV normalization is case-insensitive");
+assert.equal(
+  shouldFallbackToSandbox({ endpointEnvironment: "Production", error: { appleTransactionNotFound: true } }),
+  true,
+  "production falls back only after Apple transaction-not-found"
+);
+assert.equal(
+  shouldFallbackToSandbox({ endpointEnvironment: "Production", error: { appleTransactionNotFound: false } }),
+  false,
+  "production does not fall back after auth or server failures"
+);
+assert.equal(
+  shouldFallbackToSandbox({ endpointEnvironment: "Sandbox", error: { appleTransactionNotFound: true } }),
+  false,
+  "staging remains Sandbox-only"
+);
+
+for (const variant of [
+  `${APPLE_PRODUCTION_API_BASE_URL}/?query=1`,
+  `${APPLE_PRODUCTION_API_BASE_URL}/#fragment`,
+  "https://api.storekit.itunes.apple.com:8443",
+  "https://user:pass@api.storekit.itunes.apple.com",
+]) {
+  assert.ok(
+    validateIAPEnvironmentConfig("production", { ...shared, appleAppStoreApiBaseUrl: variant }).some((issue) => issue.includes("production must use")),
+    `production rejects endpoint variant: ${variant}`
+  );
+}
+
+assert.ok(
+  validateIAPEnvironmentConfig("staging", {
+    ...shared,
+    appleAppStoreApiBaseUrl: APPLE_SANDBOX_API_BASE_URL,
+    appleIssuerId: "<shared-app-store-server-api-issuer-id>",
+  }).some((issue) => issue.includes("placeholder")),
+  "staging rejects copied placeholder credentials"
+);
+assert.ok(
+  validateIAPEnvironmentConfig("production", {
+    ...shared,
+    appleAppStoreApiBaseUrl: APPLE_PRODUCTION_API_BASE_URL,
+    appleBundleId: "com.example.NativeDemoApp",
+  }).some((issue) => issue.includes("placeholder")),
+  "production rejects example bundle identifiers"
 );
 assert.ok(
   validateIAPEnvironmentConfig("production", {
