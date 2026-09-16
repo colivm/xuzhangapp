@@ -231,6 +231,14 @@ final class LedgerHomeItemsRepository {
         imageStore.loadData(reference: reference, variant: variant)
     }
 
+    func prewarmThumbnails(for items: [HomeItem]) {
+        for item in items where !item.memoryImageReferences.isEmpty {
+            for reference in item.memoryImageReferences where !reference.isEmpty {
+                ensureThumbnail(reference: reference)
+            }
+        }
+    }
+
     private func recoverFromActiveMetadataFailure(_ error: Error) -> LedgerHomeItemsLoadResult {
         print("Failed to load active metadata ledger: \(error)")
         switch legacyPayloadState() {

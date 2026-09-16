@@ -5401,3 +5401,9 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 真机剩余风险：需验证首次保存后预热不阻塞交互、旧账本补齐缩略图、9 张图片首屏、快速翻页取消/重开、缺图恢复和 Allocations/Memory Graph；详情图片专项用例见 `RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md`。
 >>>>>>> 1be1c76 (Speed up detail image loading and add release signoff cases)
 
+
+### 149. DETAIL-IMAGE-LOAD-PERF-FIX-01：冷启动近期图片预热补充（2026-09-16）
+
+- 实施补充：账本冷启动后在 utility 任务中对最近 24 条带图记录预热缺失缩略图；不等待预热完成，不阻塞首页交互；详情懒加载仍作为兜底。
+- 修改文件：`NativeDemoApp/Services/LedgerHomeItemsRepository.swift`、`NativeDemoApp/Services/LocalStore.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`scripts/experience_static_check.ps1`。
+- 验证：`git diff --check`、`experience_static_check.ps1` 通过；Xcode/XCTest/真机仍待执行。
