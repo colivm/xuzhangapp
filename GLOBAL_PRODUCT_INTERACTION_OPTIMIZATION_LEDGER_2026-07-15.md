@@ -5314,3 +5314,17 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 已执行验证：静态源码与配置审计；`python scripts/validate_release_gate.py --phase windows` 通过，但该结果不覆盖生产 `.env`、Apple API 路由或 StoreKit 真机验单。
 - 冻结边界：本轮未修改 IAP、会员、交易归属、价格或服务端行为。
 - 剩余风险与下一任务：需要单独建立 `IAP-PRODUCTION-ROUTE-GATE-FIX-01`，在生产启动门禁强制要求 Production URL，并为 staging/TestFlight 显式允许 Sandbox；补充 Production + Sandbox 验单路由/回退、交易有效/过期/撤销/恢复和错误码回归后，再进行 macOS/Xcode 与真机签收。
+
+### 140. IAP-PRODUCTION-ROUTE-GATE-FIX-01：生产/预发布隔离与验单环境门禁（2026-09-16）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`。
+- 代码处理：`backend/src/config.js` 增加 Production/Sandbox 官方 endpoint 常量及环境配对启动校验；`backend/src/server.js` 在 production/staging 启动时执行校验；`backend/src/iapService.js` 校验 Apple 交易 `environment` 与当前 endpoint 一致；新增 `backend/scripts/verify-iap-environment-gate.mjs`，并接入 `backend npm test` 与 `validate_release_gate.py --phase windows`。
+- TestFlight 切换：`NativeDemoApp/Models/AppSettings.swift` 增加 `STAGING` 编译条件；带 `SWIFT_ACTIVE_COMPILATION_CONDITIONS=STAGING` 的内测包指向 `https://staging-api.xuzhangapp.com`，正式包默认指向 `https://api.xuzhangapp.com`。构建说明已补入 `PROJECT_SETUP.md`。
+- 服务器实施：
+  - `/opt/xuzhang/xuzhangapp` 已部署 release commit `c1a48e5` 代码，生产 `.env` 固定 `NODE_ENV=production`、8790、Production Apple endpoint，PM2 为 `backend`/`ai-proxy`。
+  - `/opt/xuzhang/xuzhangapp-staging` 已部署同一修复代码，staging `.env` 使用 `NODE_ENV=staging`、8791/8788、Sandbox Apple endpoint、独立 JWT/代理 token 和数据库 `xuzhang-staging`，PM2 为 `backend-staging`/`ai-proxy-staging`。
+  - Nginx 新增 `staging-api.xuzhangapp.com → 127.0.0.1:8791`，已签发并启用 HTTPS 证书；生产域名继续反代 8790。
+  - 已在清空前生成 `/opt/xuzhang/backups/xuzhang-before-reset-20260916-115806.dump`；按用户授权清空 `xuzhang` 的 users/sessions/ledgers/iap_transactions/sms_codes，当前均为 0；新建 `xuzhang-staging` 并确认 schema 初始化、当前记录数均为 0。
+- 验证证据：本地 `backend npm test` 通过；`python scripts/validate_release_gate.py --phase windows` 通过；远程 `nginx -t`、生产/预发布两个 HTTPS `/health`、8790/8791/8787/8788 进程检查通过；PM2 已 `save`。
+- 冻结边界：未改会员 Product ID、交易归属规则、价格或账单字段；数据库清空与 staging 建库是本次用户明确授权的环境操作。
+- 剩余风险与下一步：当前 Windows 无 Xcode/Swift，尚未生成带 `STAGING` 条件的新 TestFlight 包，也未完成 StoreKit Sandbox/Production 真实购买、恢复、过期、撤销和错环境验单；生产 Apple JWS 签名链校验仍是独立安全缺口。完成 macOS/Xcode 与双环境真机验收前保持 `CODE_DONE`。
