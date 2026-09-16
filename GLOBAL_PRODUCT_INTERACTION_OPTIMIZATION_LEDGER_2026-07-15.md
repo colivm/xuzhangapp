@@ -5332,3 +5332,34 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 后续配置补充：新增 `ops/nginx/staging-api.xuzhangapp.com.conf`，与生产反代保持 HTTPS、安全响应头和隐藏 Express 标识一致；已同步到服务器并通过 `nginx -t`、staging HTTPS 响应头检查。
 - 门禁补充：`validate_release_gate.py` 现在还检查生产/预发布 `.env` 模板的 endpoint 与 `NODE_ENV` 配对，避免仓库门禁再次对环境配置失明。
 - 分支同步复核（2026-09-16）：`feature/xuzhangapp-staging` 已推送并更新到 `f3210b9`；服务器 `/opt/xuzhang/xuzhangapp-staging` 的 HEAD 已同步到同一提交，PM2 staging 服务保持 8791/8788。服务器工作区仍保留历史换行差异，未覆盖 `.env` 配置。
+- 生产分支切换复核（2026-09-16）：服务器 `/opt/xuzhang/xuzhangapp` 的 `HEAD`/当前分支已切换为 `xuzhang1.0-release-2026`，提交为 `e939ac1 record staging branch synchronization`；仅更新 Git 引用，保留生产工作文件与 `.env`。PM2 `backend`/`ai-proxy` 均在线，`https://api.xuzhangapp.com/health` 返回 `ok:true`，生产 `.env` 仍为 `NODE_ENV=production`、8790、Apple Production endpoint。
+- Redis 隔离补充（2026-09-16）：staging `/opt/xuzhang/xuzhangapp-staging/backend/.env` 已切换为 `REDIS_URL=redis://127.0.0.1:6379/1`、`REDIS_KEY_PREFIX=xuzhang-staging`；生产继续使用默认 DB 0 与 `xuzhang` 前缀。修改前备份为 `/opt/xuzhang/backups/xuzhangapp-staging-env-before-redis-20260916-130658.bak`。重启 `backend-staging` 并执行 `pm2 save` 后，staging HTTPS `/health` 正常，Redis DB0/DB1 当前均为空。
+- 服务器工作区清理复核（2026-09-16）：生产与 staging 均先打包备份，再执行 `git reset --hard HEAD` 清除历史换行/暂存索引差异；未触碰被 `.gitignore` 忽略的环境文件。备份分别为 `/opt/xuzhang/backups/xuzhangapp-worktree-before-clean-20260916-133919.tar.gz` 与 `/opt/xuzhang/backups/xuzhangapp-staging-worktree-before-clean-20260916-134212.tar.gz`。两目录 `git status` 均干净（仅分支相对远端 ahead），生产和 staging 服务重启、`pm2 save` 及 HTTPS `/health` 均正常。
+
+### 141. IAP-SERVER-KEY-TYPE-FIX-01：App Store Server API 密钥类型纠正与 STAGING 编译条件落地（2026-09-16）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`（服务器侧已验收；真机与生产真实购买待签收）。
+- 用户问题：TestFlight 内购后服务端验单失败 `APPLE_LOOKUP_FAILED`，Apple 返回 401。
+- 根因：`APPLE_KEY_ID=29236M72GY` 是 **App Store Connect API key**，不是 **App Store Server API key**。Apple 将两类密钥放在 Users and Access → Integrations 的两个独立分区，不可互换；`iss`/`kid`/`.p8` 三者自洽但类型错误，Apple 拒签 JWT → 401。
+- 关键判据（同一 `iss`、同一 `aud`，仅换 key）：旧 key 在 `api.appstoreconnect.apple.com/v1/apps` 返回 **200**、在 App Store Server API 返回 **401**；新 key `4VA2F2LZ9B` 在同一对照下 ASC API 返回 **401**、Sandbox 端点返回 **404**（`4040010 Transaction id not found`），即 JWT 已被 Apple 验签通过。两类 key 的通过/拒绝方向完全相反，构成类型判定证据。
+- 已排除假设（避免重复排查）：沙盒/生产地址指向错误（症状应为 404 而非 401）；环境隔离缺失；`APPLE_ISSUER_ID` 误填 Team ID；`APPLE_BUNDLE_ID` 为占位符；服务器时钟偏移；`.p8` 损坏或格式错误（257 字节、`BEGIN PRIVATE KEY`、EC P-256 PKCS#8）。
+- 服务器实施：
+  - 新密钥上传至 `/opt/xuzhang/secrets/AuthKey_4VA2F2LZ9B.p8`，权限 `600 root:root`，`md5 b8cd2e336098c1a755541f241bcfc67d` 与本地一致。
+  - 生产 `/opt/xuzhang/xuzhangapp/backend/.env` 与 staging `/opt/xuzhang/xuzhangapp-staging/backend/.env` 各改 2 行（`APPLE_KEY_ID`、`APPLE_PRIVATE_KEY_PATH`），`diff` 确认无其他改动；`APPLE_ISSUER_ID`、`APPLE_BUNDLE_ID`、`APPLE_APP_STORE_API_BASE_URL` 未动。修改前备份为两目录下 `.env.bak-20260916-iapkey`。
+  - `pm2 restart backend backend-staging` 并 `pm2 save`；生产/预发布 HTTPS `/health` 均 200；错误日志 mtime 早于本次重启，无新增错误。
+- 验收证据（服务器实测）：
+  - Sandbox：`tx=2000001191692986` 返回 **200** 且含真实 `signedTransactionInfo`（Apple JWS 签名交易信息），验单链路端到端跑通；`tx=1` 返回 404。
+  - Production：对 `tx=1`、`tx=9999999999999999`、`tx=2000001191692986` 均返回 **401 空 body**。对照实验显示伪造 key、错误 keyid、无 token 三种情况均返回带 `Unauthenticated` 消息的 401，与真 key 的空 body 401 形态不同，据此判断生产端点对"不存在的交易"返回裸 401，JWT 本身已被接受。**生产真实交易验单未验证**，需真实生产购买后确认。
+- STAGING 编译条件（内测包误连生产后端）：
+  - 现象：TestFlight 包请求进入生产链路（nginx `access.log` 中 `NativeDemoApp/371` 的 `/v1/iap/verify` 与 `/v1/account/me`），而 `/opt/xuzhang/xuzhangapp-staging` 的 `backend-staging-out.log` 仅 3 行启动日志、零业务请求，staging 库 `iap_transactions` 为 0 行。
+  - 根因：`feature/xuzhangapp-staging` 上 `AppSettings.swift` 已有 `#if STAGING` 分支，但 `ci_scripts/ci_pre_xcodebuild.sh` 仅 18 行、只写 `CFBundleVersion`，从未注入 `SWIFT_ACTIVE_COMPILATION_CONDITIONS`，编译条件从未生效，永远走 `#else` 指向生产。
+  - 修复：commit `08878a8`（已推送 origin），在 App target 的 Debug 与 Release 配置注入 `SWIFT_ACTIVE_COMPILATION_CONDITIONS = "STAGING $(inherited)"`；带 `$(inherited)` 是为保留项目级 `DEBUG` 标志，避免 target 级配置覆盖。仅 2 行改动，混合换行原样保留。
+  - 复核：`AppSettings.init(from:)` 末尾调用 `applyProductionBackendEndpoint()`，本地持久化的旧生产地址每次 decode 均被编译期常量覆盖，不存在旧值残留导致仍连生产的风险；全仓库仅 `AppSettings.swift:5` 一处 `#if STAGING`。
+- 取证缺口：nginx 使用 combined 日志格式，不记录 Host 头，且两个域名的 `access_log` 为同一文件，故无法从日志字面证明 `NativeDemoApp/371` 请求命中的是 `api.xuzhangapp.com` 而非 `staging-api.xuzhangapp.com`；该结论由 staging 零请求、CI 脚本缺失注入、staging 历史 `EADDRINUSE :::8790` 三条旁证推出。
+- 冻结边界：未改会员 Product ID、交易归属规则、价格、账单字段或服务端验单逻辑；第 1 步为纯凭证替换，第 2 步仅改构建设置。
+- 剩余风险与下一步：
+  - 需在 Xcode Cloud 确认 staging workflow 确实从 `feature/xuzhangapp-staging` 构建，否则 commit `08878a8` 不生效；已发出的 build 371 仍指向生产，需重出包。
+  - StoreKit Sandbox/Production 真实购买、恢复、过期、撤销与错环境验单仍未执行；生产 Apple JWS 签名链校验收据缺失。
+  - `.gitignore` 未覆盖 `*.p8` 与 `tmp/`，`tmp/iap-401-排查总结.md` 含 Issuer ID、Key ID 与服务器 IP，建议补规则（本条目未修改仓库配置）。
+  - 本地 `backend/.env` 仍指向旧 key `29236M72GY`，本地验单会继续 401（仅影响本机开发）。
+  - 遗留代码不一致：`backend/src/server.js:273` 读取 `decision.sandboxRebind`，但 `iapService.js:22` 的 `resolveIAPBindingDecision` 不返回该字段；PM2 `backend` 的 `exec cwd` 为 `/opt/xuzhang/xuzhangapp/ai-proxy` 而非 backend 目录。
