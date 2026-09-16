@@ -234,7 +234,7 @@ final class LedgerHomeItemsRepository {
     func prewarmThumbnails(for items: [HomeItem]) {
         for item in items where !item.memoryImageReferences.isEmpty {
             for reference in item.memoryImageReferences where !reference.isEmpty {
-                ensureThumbnail(reference: reference)
+                imageStore.prewarmThumbnail(reference: reference)
             }
         }
     }

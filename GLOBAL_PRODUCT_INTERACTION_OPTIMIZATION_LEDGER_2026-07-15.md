@@ -5407,3 +5407,15 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 实施补充：账本冷启动后在 utility 任务中对最近 24 条带图记录预热缺失缩略图；不等待预热完成，不阻塞首页交互；详情懒加载仍作为兜底。
 - 修改文件：`NativeDemoApp/Services/LedgerHomeItemsRepository.swift`、`NativeDemoApp/Services/LocalStore.swift`、`NativeDemoApp/ViewModels/HomeViewModel.swift`、`scripts/experience_static_check.ps1`。
 - 验证：`git diff --check`、`experience_static_check.ps1` 通过；Xcode/XCTest/真机仍待执行。
+
+### 150. LEDGER-IMAGE-PREWARM-SCOPE-FIX-01：缩略图预热入口作用域修复（2026-09-16）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`。
+- 用户问题：Xcode 报 `Cannot find 'ensureThumbnail' in scope`，位置 `LedgerHomeItemsRepository.swift:237`。
+- 根因：`ensureThumbnail(reference:)` 是 `LedgerImageStore` 的私有实现，`LedgerHomeItemsRepository` 直接调用超出作用域。
+- 实施：在 `LedgerImageStore` 增加内部 `prewarmThumbnail(reference:)` 入口，由入口转调私有 `ensureThumbnail`；仓储改为通过 `imageStore.prewarmThumbnail(reference:)` 调用。未扩大缩略图实现可见性，未改变预热逻辑或图片引用格式。
+- 修改文件：`NativeDemoApp/Services/LedgerImageStore.swift`、`NativeDemoApp/Services/LedgerHomeItemsRepository.swift`、本文档。
+- 验证证据（Windows）：`git diff --check` 通过；`scripts/experience_static_check.ps1` 通过；`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 通过并输出 `release_repository_gate: OK`。
+- 未完成验证：当前环境无 Xcode/Swift 工具链，未执行 Swift Debug/Release 编译、XCTest 或真机验收，因此不得标记 `VERIFIED`。
+- 冻结边界：未改变图片持久化、账单字段、备份结构、同步、详情交互、会员/IAP 或发布配置；保留用户既有工作区修改与未跟踪文件。
+- 剩余风险与下一步：在 macOS/Xcode 上确认 Swift 编译与缩略图预热 XCTest；随后在 staging 和生产分支分别执行对应 Release gate，并完成真机签收。

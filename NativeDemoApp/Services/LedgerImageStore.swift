@@ -238,6 +238,10 @@ final class LedgerImageStore {
     /// Best-effort background-friendly preparation for the detail thumbnail.
     /// Persistence already runs off the main actor; failures are left to the
     /// existing lazy loader rather than failing an otherwise valid ledger save.
+    func prewarmThumbnail(reference: String) {
+        ensureThumbnail(reference: reference)
+    }
+
     private func ensureThumbnail(reference: String) {
         guard let originalURL = try? safeURL(for: reference),
               fileManager.fileExists(atPath: originalURL.path),
