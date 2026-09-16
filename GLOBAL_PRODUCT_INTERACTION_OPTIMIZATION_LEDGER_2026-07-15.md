@@ -5330,3 +5330,4 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 剩余风险与下一步：当前 Windows 无 Xcode/Swift，尚未生成带 `STAGING` 条件的新 TestFlight 包，也未完成 StoreKit Sandbox/Production 真实购买、恢复、过期、撤销和错环境验单；生产 Apple JWS 签名链校验仍是独立安全缺口。完成 macOS/Xcode 与双环境真机验收前保持 `CODE_DONE`。
 
 - 后续配置补充：新增 `ops/nginx/staging-api.xuzhangapp.com.conf`，与生产反代保持 HTTPS、安全响应头和隐藏 Express 标识一致；已同步到服务器并通过 `nginx -t`、staging HTTPS 响应头检查。
+- 门禁补充：`validate_release_gate.py` 现在还检查生产/预发布 `.env` 模板的 endpoint 与 `NODE_ENV` 配对，避免仓库门禁再次对环境配置失明。

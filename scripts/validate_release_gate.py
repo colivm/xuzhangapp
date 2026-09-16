@@ -224,6 +224,7 @@ def powershell_command(script: str) -> list[str]:
 
 def run_repository_checks() -> None:
     validate_fixtures()
+    validate_iap_environment_templates()
     commands = (
         ("IAP environment gate", ["node", "backend/scripts/verify-iap-environment-gate.mjs"]),
         ("git diff --check", ["git", "diff", "--check"]),
@@ -240,6 +241,15 @@ def run_repository_checks() -> None:
     for label, command in commands:
         run_command(label, command)
     print("\nrelease_repository_gate: OK")
+
+
+def validate_iap_environment_templates() -> None:
+    production = (ROOT / "backend" / ".env.example").read_text(encoding="utf-8")
+    staging = (ROOT / "backend" / ".env.staging.example").read_text(encoding="utf-8")
+    assert "APPLE_APP_STORE_API_BASE_URL=https://api.storekit.itunes.apple.com" in production
+    assert "APPLE_APP_STORE_API_BASE_URL=https://api.storekit-sandbox.itunes.apple.com" in staging
+    assert "NODE_ENV=staging" in staging
+    print("iap_environment_templates: OK")
 
 
 def run_xcode_checks(destination: str) -> None:
