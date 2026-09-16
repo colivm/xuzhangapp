@@ -5367,3 +5367,10 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 
 
+
+### 142. RELEASE-GATE-BACKEND-RISK-FIX-01：实施结果（2026-09-16）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`。
+- 实施：统一 `NODE_ENV` 规范化；严格 Apple endpoint 与占位符校验；Production 交易不存在时安全回退 Sandbox 并按实际 endpoint 校验环境；修复 legacy/metadata 激活失败时备份恢复 fallback 忽略变更；发布门禁按分支检查 App target 的 `STAGING` 条件。
+- 验证：`backend/npm test`、`git diff --check`、`experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows --release-branch xuzhang1.0-release-2026` 已通过；生产分支实测 `staging=[]`。Windows 无 Xcode，Swift/XCTest、StoreKit 和真机验收仍待完成。
+- 下一步：正式发布继续使用本分支并执行 Release gate；完成生产/TestFlight Sandbox 真实购买矩阵和 Apple JWS 签名链校验后再标记 `VERIFIED`。
