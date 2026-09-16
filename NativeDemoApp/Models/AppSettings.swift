@@ -2,8 +2,13 @@ import Foundation
 import SwiftUI
 
 struct AppSettings: Codable, Equatable {
+#if STAGING
+    static let productionBackendBaseURL = "https://staging-api.xuzhangapp.com"
+    static let productionAIEndpoint = "https://staging-api.xuzhangapp.com/v1/ai/insight/daily"
+#else
     static let productionBackendBaseURL = "https://api.xuzhangapp.com"
     static let productionAIEndpoint = "https://api.xuzhangapp.com/v1/ai/insight/daily"
+#endif
     static let defaultColorThemeId = "xuzhang_default"
 
     enum Appearance: String, Codable, CaseIterable, Identifiable {

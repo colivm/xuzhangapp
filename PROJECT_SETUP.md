@@ -420,6 +420,8 @@ feature/*  →  feature/xuzhangapp-staging  →  xuzhang1.0-release-2026
 
 ## 7. iOS 生产联调配置
 
+内测 TestFlight 包必须使用 `STAGING` 编译条件，让 `AppSettings` 指向 `https://staging-api.xuzhangapp.com`；正式包不设置该条件，继续指向生产域名。归档时可在 Xcode Build Settings 或命令行传入 `SWIFT_ACTIVE_COMPILATION_CONDITIONS=STAGING`。
+
 | 设置项 | 值 |
 |--------|-----|
 | Bundle ID | `com.xuzhang.app` |
