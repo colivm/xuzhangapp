@@ -167,6 +167,11 @@ final class LedgerImageStore {
         if item.memoryImageReferences.count == images.count,
            item.memoryImageReferences.allSatisfy({ !$0.isEmpty }) {
             // Already externalized records do not touch or re-hash photo files on metadata-only saves.
+            // Keep the display path warm so the first detail visit never has to
+            // transcode the original image on the user-facing loading path.
+            for reference in item.memoryImageReferences {
+                ensureThumbnail(reference: reference)
+            }
             return item
         }
 
@@ -214,6 +219,7 @@ final class LedgerImageStore {
             } else {
                 try data.write(to: targetURL, options: .atomic)
             }
+            ensureThumbnail(reference: reference)
             references.append(reference)
             persistedData.append(data)
         }
@@ -227,6 +233,34 @@ final class LedgerImageStore {
             unavailableIndices: unavailable
         )
         return item
+    }
+
+    /// Best-effort background-friendly preparation for the detail thumbnail.
+    /// Persistence already runs off the main actor; failures are left to the
+    /// existing lazy loader rather than failing an otherwise valid ledger save.
+    private func ensureThumbnail(reference: String) {
+        guard let originalURL = try? safeURL(for: reference),
+              fileManager.fileExists(atPath: originalURL.path),
+              let thumbnailReference = thumbnailReference(for: reference),
+              let thumbnailURL = try? safeThumbnailURL(for: thumbnailReference) else {
+            return
+        }
+        if let attributes = try? fileManager.attributesOfItem(atPath: thumbnailURL.path),
+           let size = attributes[.size] as? NSNumber,
+           size.intValue > 0 {
+            return
+        }
+        guard let generated = createThumbnailData(from: originalURL, maxPixelSize: 720),
+              !generated.isEmpty else { return }
+        do {
+            try fileManager.createDirectory(
+                at: thumbnailURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try generated.write(to: thumbnailURL, options: .atomic)
+        } catch {
+            // Lazy detail loading remains the recovery path.
+        }
     }
 
     private func hydratedItem(_ source: HomeItem) -> HomeItem {

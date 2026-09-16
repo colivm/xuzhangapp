@@ -5374,3 +5374,29 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 发布门禁：`validate_release_gate.py` 解析 App target Debug/Release 编译条件；生产分支 `xuzhang1.0-release-2026` 禁止 `STAGING`，预发布分支 `feature/xuzhangapp-staging` 要求 Release 含 `STAGING`；新增 `--release-branch`/CI 分支识别。
 - 验证：`backend/npm test` 通过；`git diff --check` 通过；`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 通过并输出 `release_repository_gate: OK`；`experience_static_check.ps1` 通过。Windows 无 Xcode，Swift/XCTest、真实 StoreKit 和真机验收尚未执行。
 - 剩余风险：Apple JWS 签名链仍未实现；Production 真实购买与 TestFlight/App Review Sandbox 矩阵仍需 macOS/StoreKit 验证；正式发布必须显式使用生产分支并执行 Release gate。
+
+### 146. RELEASE-CANDIDATE-AUDIT-01：1.0 封版审计（2026-09-16）
+
+- 结论：当前不可标记 `VERIFIED`，仅达到代码与 Windows 门禁完成。
+- 生产分支实审：在干净 worktree 的 `xuzhang1.0-release-2026@bbef83c` 执行 `python scripts/validate_release_gate.py --phase windows --release-branch xuzhang1.0-release-2026` 通过；fixture 100/1000/5000、真实照片、IAP 配置、分支编译条件、语义与静态检查均通过，生产 App target 无 `STAGING`。后端 `npm test` 通过。
+- 封版阻塞：`GATE-00` 仍为 `BLOCKED`；尚无 macOS/Xcode Debug/Release 编译、完整 XCTest、TestFlight/真机、StoreKit Production/Sandbox 购买/恢复/过期/撤销/错环境矩阵、Instruments 性能证据；Apple JWS 签名链仍未实现。多个 `CODE_DONE` 任务尚未外部签收。
+- 工作区：当前 checkout 为 `feature/xuzhangapp-staging`；既有 `.env.staging.example` 修改和未跟踪素材/输出文件均保留。正式封版必须在 `xuzhang1.0-release-2026` 的干净 checkout 执行门禁。
+
+### 147. DETAIL-IMAGE-LOAD-AUDIT-01：消费详情图片加载慢审查（2026-09-16）
+
+- 性质：只读性能定位，未修改产品代码或 roadmap 状态。
+- 结论：首因是首次详情打开时的本地缩略图生成与串行排队，不是网络请求。
+- 证据：`LedgerImageStore.externalizedItem` 只持久化原图；`loadThumbnailData` 在没有 thumbnail 文件时同步读取原图、ImageIO 生成 720px JPEG 并写盘；随后 `MemoryAttachmentImagePolicy.decodedImage` 又进行一次 ImageIO 解码。详情主图和底部缩略图同时创建 `MemoryAttachmentThumbnail`，最多还会为全部图片创建任务；`MemoryAttachmentImageLoader` actor 将磁盘读取、缩略图生成和解码串行执行。
+- 展开图片时：当前页切换为 `.original`，会读取完整原图后再下采样到 1600px；关闭或快速翻页只能取消后续检查，已进入的同步 Data/ImageIO 工作仍会占用串行 actor。
+- 次要放大因素：缩略图生成失败时回退读取整张原图；NSCache 只缓存解码后的 UIImage，应用重启后仍需重新读取和解码；详情视图重建会清空本地 `loadedImage` 状态。
+- 建议后续独立性能任务：保存/导入后台预生成缩略图；首屏只加载选中图和可见缩略图；增加 in-flight 请求去重并限制并发；将文件读取和 ImageIO 转码移出串行 actor；用 Instruments 测量首张缩略图生成和详情首屏时间。
+
+### 148. DETAIL-IMAGE-LOAD-PERF-FIX-01：详情图片首屏加载优化（2026-09-16）
+
+- 状态：`NOT_STARTED` → `IN_PROGRESS` → `CODE_DONE`。
+- 用户问题：消费详情首次打开图片长时间显示“正在加载图片”。
+- 实施：`LedgerImageStore` 在后台持久化路径预生成 720px 详情缩略图，已有引用记录补齐缺失缩略图；详情底部图片条改为 `LazyHStack`，避免一次为所有图片创建加载任务；新增缩略图预热 XCTest 和静态门禁。
+- 修改文件：`NativeDemoApp/Services/LedgerImageStore.swift`、`NativeDemoApp/Views/Components/MemoryAttachmentViews.swift`、`NativeDemoAppTests/LedgerMetadataStoreTests.swift`、`scripts/experience_static_check.ps1`、`RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md`、本文档。
+- 冻结边界：未改变图片引用格式、账单字段、备份包结构、云端照片边界、详情交互语义或会员/IAP；仍保留懒加载作为缩略图预热失败时的恢复路径。
+- Windows 验证：`git diff --check`、`experience_static_check.ps1`、`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 通过；后者输出 `release_repository_gate: OK`。当前环境无 Xcode，新增 XCTest 尚未运行。
+- 真机剩余风险：需验证首次保存后预热不阻塞交互、旧账本补齐缩略图、9 张图片首屏、快速翻页取消/重开、缺图恢复和 Allocations/Memory Graph；详情图片专项用例见 `RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md`。

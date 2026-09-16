@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import XCTest
 @testable import NativeDemoApp
 
@@ -82,6 +83,34 @@ final class LedgerMetadataStoreTests: XCTestCase {
         XCTAssertEqual(loaded.memoryImageReferences[0], loaded.memoryImageReferences[1])
         XCTAssertEqual(loaded.coverMemoryImageIndex, 1)
         XCTAssertEqual(imageStore.hydrate([loaded]).first?.memoryImages, [repeatedImage, repeatedImage])
+    }
+
+    func testPrepareForPersistencePrewarmsDetailThumbnail() throws {
+        let root = documentsURL.appendingPathComponent(LedgerStorageSchema.storeDirectoryName, isDirectory: true)
+        let imageStore = LedgerImageStore(storeRootURL: root)
+        let item = HomeItem(
+            id: UUID(uuidString: "99999999-9999-4999-8999-999999999999")!,
+            title: "预热图片",
+            amount: 10,
+            category: .dining,
+            memoryImageDatas: [try XCTUnwrap(makeTinyJPEG())]
+        )
+
+        let externalized = try XCTUnwrap(imageStore.prepareForPersistence([item]).first)
+        let reference = try XCTUnwrap(externalized.memoryImageReferences.first)
+        let thumbnailReference = reference.replacingOccurrences(of: "images/", with: "thumbnails/", options: [.anchored])
+        let thumbnailURL = root.appendingPathComponent(thumbnailReference)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
+        XCTAssertGreaterThan((try? Data(contentsOf: thumbnailURL).count) ?? 0, 0)
+    }
+
+    private func makeTinyJPEG() -> Data? {
+        #if canImport(UIKit)
+        return UIImage(systemName: "photo")?.jpegData(compressionQuality: 0.8)
+        #else
+        return nil
+        #endif
     }
 
     func testReconcileReportsOnlyInsertedUpdatedAndDeletedRows() throws {
