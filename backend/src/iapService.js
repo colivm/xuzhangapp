@@ -49,7 +49,11 @@ export async function verifyAppStoreTransaction({ productId, transactionId, sign
 
   const transactionInfo = await resolveTransactionInfo({ transactionId, signedTransactionInfo });
   const payload = decodeJWSPayload(transactionInfo.signedTransactionInfo);
-  validateTransactionPayload(payload, { productId, transactionId });
+  validateTransactionPayload(payload, {
+    productId,
+    transactionId,
+    expectedEnvironment: expectedAppleEnvironment(),
+  });
   const appAccountToken = validateAppAccountToken(payload, expectedAppAccountToken);
 
   const tier = tierForProductId(payload.productId);
@@ -130,7 +134,7 @@ function makeAppStoreServerToken() {
   );
 }
 
-function validateTransactionPayload(payload, { productId, transactionId }) {
+function validateTransactionPayload(payload, { productId, transactionId, expectedEnvironment }) {
   if (String(payload.productId || "") !== productId) {
     throw new IAPVerifyError("PRODUCT_MISMATCH", "Transaction productId does not match request.", 400);
   }
@@ -143,6 +147,19 @@ function validateTransactionPayload(payload, { productId, transactionId }) {
   if (payload.revocationDate) {
     throw new IAPVerifyError("TRANSACTION_REVOKED", "Transaction has been revoked.", 400);
   }
+  const actualEnvironment = String(payload.environment || "").trim();
+  if (!actualEnvironment || actualEnvironment !== expectedEnvironment) {
+    throw new IAPVerifyError(
+      "IAP_ENVIRONMENT_MISMATCH",
+      `Transaction environment ${actualEnvironment || "unknown"} does not match the configured ${expectedEnvironment} endpoint.`,
+      400
+    );
+  }
+}
+
+function expectedAppleEnvironment() {
+  const hostname = new URL(config.appleAppStoreApiBaseUrl).hostname;
+  return hostname === "api.storekit-sandbox.itunes.apple.com" ? "Sandbox" : "Production";
 }
 
 function validateAppAccountToken(payload, expectedAppAccountToken) {

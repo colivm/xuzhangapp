@@ -5304,3 +5304,13 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据（Windows）：`git diff --check`、`python scripts/life_semantic_regression.py`、`scripts/experience_static_check.ps1` 均通过；当前环境无 Xcode，未宣称 Swift 编译或真机验证。
 - 冻结边界：仅修复 Swift 类型推断，不改变账单字段、持久化时序、同步、照片、语义、会员/IAP 或 UI。
 - 剩余风险与下一任务：需在 macOS/Xcode 执行 Swift 6 Debug/Release 编译确认；外部签收前维持 `CODE_DONE`，下一项为 `RELEASE-02` 集中签收。
+
+### 139. IAP-PRODUCTION-ROUTE-GATE-AUDIT-01：生产验单环境与门禁缺口分析（2026-09-16）
+
+- 性质：只读问题分析，未启动新的产品实现任务，未改变既有 roadmap 状态。
+- 问题范围：生产内购验单可能沿用 Sandbox 地址，且生产启动校验与 Windows release gate 均未对此配置做硬校验。
+- 证据文件：`backend/.env`（当前运行配置为 Sandbox；该文件被忽略，不纳入 Git）；`backend/.env.example`（默认示例也是 Sandbox）；`backend/src/config.js`（单一 `APPLE_APP_STORE_API_BASE_URL`）；`backend/src/iapService.js`（始终调用该单一地址，`signedTransactionInfo` 未用于环境路由）；`backend/src/server.js`（`validateProductionConfig` 未校验 Apple API 地址）；`scripts/validate_release_gate.py`（repository gate 未检查部署环境变量）；`APP_STORE_IAP_SETUP.md`、`COMPLIANCE_PROVIDER_REGISTER_v1.md`（仅文档提醒，尚未形成可执行门禁）。
+- 影响：若生产部署复用 Sandbox 配置，Production 交易会被发往 Sandbox，Apple 查询失败或无法授予会员；当前启动仍可能成功，`release_repository_gate: OK` 也不能证明生产验单地址正确。实现同时没有 Production/Sandbox 的自动路由或回退校验。
+- 已执行验证：静态源码与配置审计；`python scripts/validate_release_gate.py --phase windows` 通过，但该结果不覆盖生产 `.env`、Apple API 路由或 StoreKit 真机验单。
+- 冻结边界：本轮未修改 IAP、会员、交易归属、价格或服务端行为。
+- 剩余风险与下一任务：需要单独建立 `IAP-PRODUCTION-ROUTE-GATE-FIX-01`，在生产启动门禁强制要求 Production URL，并为 staging/TestFlight 显式允许 Sandbox；补充 Production + Sandbox 验单路由/回退、交易有效/过期/撤销/恢复和错误码回归后，再进行 macOS/Xcode 与真机签收。
