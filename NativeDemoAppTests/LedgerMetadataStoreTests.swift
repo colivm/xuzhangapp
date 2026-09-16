@@ -209,4 +209,83 @@ final class LedgerMetadataStoreTests: XCTestCase {
         XCTAssertFalse(repository.save([newItem]))
         XCTAssertEqual(try Data(contentsOf: legacyURL), invalidData)
     }
+
+    func testChangeSetLegacyFallbackAppliesUpsertsAndDeletes() throws {
+        let retained = HomeItem(
+            id: UUID(uuidString: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA")!,
+            title: "原记录",
+            amount: 10,
+            category: .dining
+        )
+        let removed = HomeItem(
+            id: UUID(uuidString: "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB")!,
+            title: "待删除",
+            amount: 20,
+            category: .transport
+        )
+        let inserted = HomeItem(
+            id: UUID(uuidString: "CCCCCCCC-CCCC-4CCC-8CCC-CCCCCCCCCCCC")!,
+            title: "新增记录",
+            amount: 30,
+            category: .shopping
+        )
+        var updated = retained
+        updated.title = "已更新"
+        updated.updatedAt = retained.updatedAt.addingTimeInterval(60)
+
+        let encoder = JSONEncoder()
+        let legacyData = try encoder.encode([retained, removed])
+        try legacyData.write(
+            to: documentsURL.appendingPathComponent("home_items_v1.json"),
+            options: .atomic
+        )
+        defaults.set(legacyData, forKey: "home_items_v1_backup")
+
+        let repository = LedgerHomeItemsRepository(documentsURL: documentsURL, defaults: defaults)
+        let result = repository.saveChanges(
+            LedgerHomeItemsChangeSet(upserts: [updated, inserted], deletedIDs: [removed.id]),
+            currentItemsForFallback: [retained, removed]
+        )
+
+        XCTAssertTrue(result.success)
+        let loaded = repository.load()
+        XCTAssertEqual(Set(loaded.items.map(\.id)), Set([retained.id, inserted.id]))
+        XCTAssertEqual(loaded.items.first(where: { $0.id == retained.id })?.title, "已更新")
+        XCTAssertEqual(loaded.items.first(where: { $0.id == inserted.id })?.title, "新增记录")
+        XCTAssertFalse(loaded.items.contains(where: { $0.id == removed.id }))
+    }
+
+    func testMetadataWriteFailureLegacyFallbackIncludesChanges() throws {
+        let original = HomeItem(
+            id: UUID(uuidString: "DDDDDDDD-DDDD-4DDD-8DDD-DDDDDDDDDDDD")!,
+            title: "原记录",
+            amount: 10,
+            category: .dining
+        )
+        let legacyData = try JSONEncoder().encode([original])
+        try legacyData.write(
+            to: documentsURL.appendingPathComponent("home_items_v1.json"),
+            options: .atomic
+        )
+        defaults.set(legacyData, forKey: "home_items_v1_backup")
+
+        let repository = LedgerHomeItemsRepository(documentsURL: documentsURL, defaults: defaults)
+        XCTAssertEqual(repository.load().items.map(\.id), [original.id])
+
+        var updated = original
+        updated.title = "失败后仍保留的更新"
+        updated.updatedAt = original.updatedAt.addingTimeInterval(60)
+        // Duplicate IDs intentionally fail metadata validation. The emergency
+        // legacy path must still apply the last upsert instead of rewriting the
+        // stale fallback snapshot.
+        let result = repository.saveChanges(
+            LedgerHomeItemsChangeSet(upserts: [updated, updated], deletedIDs: []),
+            currentItemsForFallback: [original]
+        )
+
+        XCTAssertTrue(result.success)
+        let loaded = repository.load()
+        XCTAssertEqual(loaded.items.count, 1)
+        XCTAssertEqual(loaded.items.first?.title, "失败后仍保留的更新")
+    }
 }

@@ -5363,3 +5363,7 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
   - `.gitignore` 未覆盖 `*.p8` 与 `tmp/`，`tmp/iap-401-排查总结.md` 含 Issuer ID、Key ID 与服务器 IP，建议补规则（本条目未修改仓库配置）。
   - 本地 `backend/.env` 仍指向旧 key `29236M72GY`，本地验单会继续 401（仅影响本机开发）。
   - 遗留代码不一致：`backend/src/server.js:273` 读取 `decision.sandboxRebind`，但 `iapService.js:22` 的 `resolveIAPBindingDecision` 不返回该字段；PM2 `backend` 的 `exec cwd` 为 `/opt/xuzhang/xuzhangapp/ai-proxy` 而非 backend 目录。
+
+
+
+

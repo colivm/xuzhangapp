@@ -9,6 +9,24 @@ dotenv.config({ path: resolve(__dirname, "..", ".env") });
 export const APPLE_PRODUCTION_API_BASE_URL = "https://api.storekit.itunes.apple.com";
 export const APPLE_SANDBOX_API_BASE_URL = "https://api.storekit-sandbox.itunes.apple.com";
 
+export function normalizeNodeEnv(value = process.env.NODE_ENV) {
+  return String(value || "").trim().toLowerCase();
+}
+
+/** Values copied from an example file must never be accepted by a deployed gate. */
+export function isPlaceholderConfigValue(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return (
+    /<[^>]+>/.test(text) ||
+    /^(?:your|replace|change|todo|example|placeholder)(?:[-_].*)?$/i.test(text) ||
+    /^(?:YOUR_|REPLACE_|CHANGE_ME|TODO_|PLACEHOLDER_)/i.test(text) ||
+    /(?:^|[._/@-])(?:your[_-]?password|your[_-]?secret|key[_-]?id|issuer[_-]?id)(?:$|[._/@-])/i.test(text) ||
+    /(?:^|[./])com\.example\./i.test(text) ||
+    /(?:^|[./])absolute[\\/]path[\\/]to(?:[./]|$)/i.test(text)
+  );
+}
+
 export const config = {
   port: Number(process.env.PORT || 8790),
   jwtSecret: process.env.JWT_SECRET || "dev-secret-change-me",
@@ -47,7 +65,7 @@ export const config = {
  * production verification into Sandbox verification.
  */
 export function validateIAPEnvironmentConfig(nodeEnv = process.env.NODE_ENV, runtimeConfig = config) {
-  const mode = String(nodeEnv || "").trim().toLowerCase();
+  const mode = normalizeNodeEnv(nodeEnv);
   if (mode !== "production" && mode !== "staging") return [];
 
   const expectedBase = mode === "production"
@@ -62,7 +80,14 @@ export function validateIAPEnvironmentConfig(nodeEnv = process.env.NODE_ENV, run
     return issues;
   }
   const expected = new URL(expectedBase);
-  if (actual.protocol !== "https:" || actual.hostname !== expected.hostname || actual.pathname !== "/") {
+  if (
+    actual.origin !== expected.origin ||
+    actual.pathname !== "/" ||
+    actual.search ||
+    actual.hash ||
+    actual.username ||
+    actual.password
+  ) {
     issues.push(`${mode} must use ${expectedBase} for App Store transaction verification.`);
   }
   const required = [
@@ -75,7 +100,11 @@ export function validateIAPEnvironmentConfig(nodeEnv = process.env.NODE_ENV, run
     ["IAP_LIFETIME_PRODUCT_ID", runtimeConfig.iapProductIds.lifetime],
   ];
   for (const [name, value] of required) {
-    if (!String(value || "").trim()) issues.push(`${name} is required for ${mode} IAP verification.`);
+    if (!String(value || "").trim()) {
+      issues.push(`${name} is required for ${mode} IAP verification.`);
+    } else if (isPlaceholderConfigValue(value)) {
+      issues.push(`${name} contains a placeholder value and must be replaced for ${mode} IAP verification.`);
+    }
   }
   return issues;
 }
