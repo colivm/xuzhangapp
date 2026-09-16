@@ -5328,3 +5328,5 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 验证证据：本地 `backend npm test` 通过；`python scripts/validate_release_gate.py --phase windows` 通过；远程 `nginx -t`、生产/预发布两个 HTTPS `/health`、8790/8791/8787/8788 进程检查通过；PM2 已 `save`。
 - 冻结边界：未改会员 Product ID、交易归属规则、价格或账单字段；数据库清空与 staging 建库是本次用户明确授权的环境操作。
 - 剩余风险与下一步：当前 Windows 无 Xcode/Swift，尚未生成带 `STAGING` 条件的新 TestFlight 包，也未完成 StoreKit Sandbox/Production 真实购买、恢复、过期、撤销和错环境验单；生产 Apple JWS 签名链校验仍是独立安全缺口。完成 macOS/Xcode 与双环境真机验收前保持 `CODE_DONE`。
+
+- 后续配置补充：新增 `ops/nginx/staging-api.xuzhangapp.com.conf`，与生产反代保持 HTTPS、安全响应头和隐藏 Express 标识一致；已同步到服务器并通过 `nginx -t`、staging HTTPS 响应头检查。
