@@ -5331,3 +5331,4 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 - 后续配置补充：新增 `ops/nginx/staging-api.xuzhangapp.com.conf`，与生产反代保持 HTTPS、安全响应头和隐藏 Express 标识一致；已同步到服务器并通过 `nginx -t`、staging HTTPS 响应头检查。
 - 门禁补充：`validate_release_gate.py` 现在还检查生产/预发布 `.env` 模板的 endpoint 与 `NODE_ENV` 配对，避免仓库门禁再次对环境配置失明。
+- 分支同步复核（2026-09-16）：`feature/xuzhangapp-staging` 已推送并更新到 `f3210b9`；服务器 `/opt/xuzhang/xuzhangapp-staging` 的 HEAD 已同步到同一提交，PM2 staging 服务保持 8791/8788。服务器工作区仍保留历史换行差异，未覆盖 `.env` 配置。
