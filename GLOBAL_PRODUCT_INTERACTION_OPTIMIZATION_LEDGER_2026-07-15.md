@@ -5626,7 +5626,12 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ### 163. QUICK-NOTE-AMOUNT-BRANCH-SYNC-01：快捷备注与金额输入优化双分支交付（2026-09-17）
 
-- 状态：`IN_PROGRESS`（2026-09-17），当前唯一交付任务；不新增产品功能、不变更第 161/162 节 CODE_DONE 与待 Xcode/真机签收状态。用户明确授权同步生产分支并将两个分支提交推送。
+- 状态：`IN_PROGRESS` → `CODE_DONE`（2026-09-17），当前无进行中的实现/交付任务；不新增产品功能、不变更第 161/162 节 CODE_DONE 与待 Xcode/真机签收状态。用户明确授权同步生产分支并将两个分支提交推送。
 - 提交范围：第 159–162 节相关台账、三个产品文件（`HomeViewModel.swift`、`RecordView.swift`、`RecordDraftResolutionService.swift`）、`StateRegressionTests.swift` 及两个新增专项脚本；不提交用户 `backend/.env.staging.example`、素材、输出、缓存或截图脚本。
 - 环境边界：通过 `cherry-pick -x` 同步本轮提交，不合并 staging 分支或复制工程配置。测试/生产各在干净提交 worktree 完整运行原 Windows release gate 与两个专项检查；配置和原门禁规则不改。只允许正常 fast-forward 推送，不强推、不部署、不上传 App Store。
 - 开始现场：本地/远端 staging `70dca99`、生产 `49d963a`，fetch 后两分支 ahead/behind 均为 0/0；索引为空。保留既有用户文件及原审计 worktree；完成后补充提交哈希、双环境证据与远端一致性结果。
+- 交付结果：staging 代码提交 `1676b19d5bf3621d39b64648d9dc315ef1aed9f6`；生产通过 `cherry-pick -x` 获得 `fe752cc2c31fea11115dc4ec77d8eec3d3d40fae`，无冲突。两个代码提交均已通过同一次普通 fast-forward 原子推送到 origin 对应分支；本段为随后同步至两分支的仅文档交付记录。
+- 独立检查：在 staging 提交的干净 detached worktree 与真实生产分支 worktree，分别按原 lockfile `npm ci --ignore-scripts --no-audit --no-fund` 后完整运行 `python scripts/validate_release_gate.py --phase windows --release-branch <对应分支>`，退出码均 0、`release_repository_gate: OK`；两个专项脚本也均通过，仅既有 7 条文案软提示。未借用主工作区未提交的环境文件，未减少或修改任何原门禁。
+- 配置与文件一致性：staging 工程相对 `70dca99` 完全未改，Debug/Release 均含 STAGING；生产工程相对 `49d963a` 完全未改，staging=[]。两提交的 NativeDemoApp、NativeDemoAppTests、scripts 无跨分支差异；提交文件严格限于本节白名单 7 个文件。用户 `.env.staging.example` 哈希与交付前相同，其他素材/输出/脚本保留。
+- 日志与风险：完整日志位于 `C:/Users/yf/AppData/Local/Temp/xuzhang-record-release-7ffb484ef6784d92aa7a174a3910c36f/staging.log`、`production.log`。本轮同步分支并不等于发布或运行 iOS 测试；本机未执行 Swift/Xcode、30 项新增 XCTest 或真机性能验证，继续按第 161/162 节签收。
+- 下一步：本条仅文档提交同步并推送后再核对两远端分支与本地头一致、ahead/behind 0/0；清理本轮临时验证 worktree，保留日志和原审计 worktree。不启动其他优化，不部署或上传 App Store。
