@@ -44,6 +44,7 @@ import {
 import { getMemberCtaCopy } from "./memberFlow.js";
 import { buildTodayPlayback } from "./playback.js";
 import { IAPVerifyError, resolveIAPBindingDecision, verifyAppStoreTransaction } from "./iapService.js";
+import { iapFailureDiagnostics } from "./iapDiagnostics.js";
 import {
   redactForLog,
   sanitizeLedgerItem,
@@ -338,7 +339,19 @@ app.post("/v1/iap/verify", requireAuth, async (req, res) => {
     });
   } catch (error) {
     if (error instanceof IAPVerifyError) {
-      return res.status(error.status).json({ ok: false, error: error.code, message: error.message });
+      res.status(error.status).json({ ok: false, error: error.code, message: error.message });
+      // Read-only diagnostics never replace this failure or grant membership.
+      iapFailureDiagnostics.schedule({
+        phone: req.user.phone,
+        accountToken: req.user.userId,
+        productId,
+        transactionId,
+        signedTransactionInfo: req.body?.signedTransactionInfo,
+        failureCode: error.code,
+        failedLookupStatus: error.appleHttpStatus,
+        failedLookupEnvironment: error.appleEndpointEnvironment,
+      });
+      return;
     }
     res.status(500).json({ ok: false, error: "IAP_VERIFY_FAILED", message: String(error?.message || error) });
   }

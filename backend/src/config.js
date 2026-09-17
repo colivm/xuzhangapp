@@ -43,6 +43,11 @@ export const config = {
     codeSha256: process.env.REVIEW_LOGIN_CODE_SHA256 || "",
     expiresAt: process.env.REVIEW_LOGIN_EXPIRES_AT || "",
   },
+  iapDiagnostics: {
+    enabled: process.env.IAP_DIAGNOSTICS_ENABLED || "false",
+    phone: process.env.IAP_DIAGNOSTICS_PHONE || "",
+    expiresAt: process.env.IAP_DIAGNOSTICS_EXPIRES_AT || "",
+  },
   aliyunSmsAccessKeyId: process.env.ALIYUN_SMS_ACCESS_KEY_ID || "",
   aliyunSmsAccessKeySecret: process.env.ALIYUN_SMS_ACCESS_KEY_SECRET || "",
   aliyunSmsSchemeName: process.env.ALIYUN_SMS_SCHEME_NAME || "",

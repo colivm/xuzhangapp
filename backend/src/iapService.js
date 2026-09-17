@@ -121,11 +121,16 @@ async function fetchTransactionInfo(transactionId, baseUrl = config.appleAppStor
       502
     );
     error.appleTransactionNotFound = notFound;
+    error.appleHttpStatus = response.status;
+    error.appleEndpointEnvironment = appleEnvironmentForEndpoint(baseUrl);
     throw error;
   }
   const json = JSON.parse(text || "{}");
   if (!json.signedTransactionInfo) {
-    throw new IAPVerifyError("APPLE_BAD_RESPONSE", "Apple response missing signedTransactionInfo.", 502);
+    const error = new IAPVerifyError("APPLE_BAD_RESPONSE", "Apple response missing signedTransactionInfo.", 502);
+    error.appleHttpStatus = response.status;
+    error.appleEndpointEnvironment = appleEnvironmentForEndpoint(baseUrl);
+    throw error;
   }
   return {
     ...json,
@@ -148,7 +153,7 @@ export function shouldFallbackToSandbox({ endpointEnvironment, error }) {
   return endpointEnvironment === "Production" && Boolean(error?.appleTransactionNotFound);
 }
 
-function makeAppStoreServerToken() {
+export function makeAppStoreServerToken() {
   const now = Math.floor(Date.now() / 1000);
   return jwt.sign(
     {
