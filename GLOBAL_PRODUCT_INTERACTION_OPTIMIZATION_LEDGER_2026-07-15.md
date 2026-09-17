@@ -5660,3 +5660,30 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 提交后验证：staging 干净 detached worktree 和实际生产分支 worktree 各自完整运行 backend `npm ci --ignore-scripts --no-audit --no-fund`、原 Windows release gate、meal_emotion/quick_note/amount_input 三个专项，退出码均 0、`release_repository_gate: OK`；仅既有 7 条文案软提示。staging Debug/Release 均含 STAGING，生产 staging=[]。工程/环境模板/原门禁相对各自基线未变，NativeDemoApp、NativeDemoAppTests、scripts 跨分支无差异；台账既有历史分支差异原样保留，没有整文件覆盖生产台账。
 - 日志与保护：保留 `C:/Users/yf/AppData/Local/Temp/xuzhang-meal-delivery-bd5d6c2a94ba40baadd3521dcf100f29/` 下的 staging.log、production.log、依赖和 staging 专项日志；用户 `.env.staging.example` 哈希与开始一致，其他未跟踪文件未提交或清理。
 - 收尾与剩余风险：本条仅文档交付记录随后同步推送，核对最终远端头与 ahead/behind，再按精确路径及状态检查清理本轮两个验证 worktree，保留原审计 worktree 和日志。未部署/上传 App Store，8 项新增 XCTest、Swift 编译及真机仍按第 164 节等待外部验收。
+
+### 166. HOME-SWIPE-AND-EMOTION-ENTRY-FIX-01：首页滑动治理对齐与情绪候选入口收敛（2026-09-17）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`，当前无进行中的实现任务，未标记 VERIFIED。承接本线程已完整读取的台账与第 165 节续读；用户确认痕迹页滑动更好，明确要求将该治理同步首页并收窄统一情绪候选入口，不任意扩展；不启动其他 roadmap 项。
+- 首页范围：仅 `HomeView.swift` 今日全部列表，将拖动状态收在行内、稳定坐标和同时手势、不因横滑禁用整页纵滚；保留左滑删除、二次确认、原行点击编辑/图片详情、已有存储/同步入口。移除固定 0.45 秒延迟和多重消失动画，按稳定 ID 删除并尊重 Reduce Motion；不改痕迹页已验收实现、不重构共享持久化/缓存或页面视觉主题。
+- 情绪范围：仅记账候选策略入口，按既有明确餐饮事实（餐次、咖啡/饮品及已有食品语义）选同场景有限表达，替换逐个完整标题白名单。默认生成、用户分类锁、品牌/备注/角度事实、选择身份与保存复核、展示纠正、生活印记/奖励事实保护保持；不扩展十分类词典或修改全局生成/存量显示，不修本轮范围外品牌默认叙事。支持不了的场景沿用原候选。
+- 允许文件：`HomeView.swift`、`RecordDraftResolutionService.swift`、对应 `StateRegressionTests.swift`、原 meal 专项随入口更新及新增本轮专项、本文档。现有完整门禁规则/两套项目配置冻结。保留用户环境文件与未跟踪素材、输出和脚本。
+- 验证：针对首页局部手势/无延迟稳定 ID 删除/确认与失败、情绪原默认/锁定瑞幸/三餐语义/具体食品与冲突锚点/循环及保存回显设置回归；测试、生产两个实际分支配置下分别完整执行原 Windows 门禁和相关专项。无 macOS/Xcode/iPhone，Swift、XCTest 与帧耗时需外部签收，不标记 VERIFIED。
+- AI 个性池与支付：个性化联网 AI 静默文案扩展本轮仅评估复杂度、隐私与作用范围，不实现/联网/扩词/改权益；支付安全修复继续后排。无提交推送授权，不更新生产分支。
+- 下一步：完成上述两处独立局部修复、交叉审阅及双环境验证后记录证据与残留风险，不顺手做其他性能优化。
+- 实施边界：首页局部复制已验收的 TraceSwipeRow 手势合同（仅类型/坐标空间名不同），不提取跨页组件、不修改痕迹页；拖动瞬时状态归行内、同时识别纵向滚动，今日列表改 LazyVStack。删除确认/取消与编辑/图片详情路由保留，直接调用原稳定 ID 删除接口；移除高度/透明度/缩放叠加和 0.45 秒延迟，失败未被模型接受时不主动收起编辑，减少动态效果下不使用编辑弹簧。该接口返回接受状态，不等同于磁盘持久化已完成。
+- 情绪入口：原 24 次生成器扫描和最多 6 条上限保留；已能切换的池不追加、不重排，仅不足 2 条时通过统一 RecordEmotionCandidateSource 按餐次/咖啡/饮品/已有具体餐食语义补充最多 3 条。取消完整快捷标题白名单，标题和非空事实锚点须属于同一语义；天气/通勤/夜间强场景、冲突餐次、增强预览与原自动不同、非餐饮及原有专属食品分支均保守让回。食品大类包含米粉/麻辣烫时用“餐食”，不推断面条；天气按语义短语排除，避免把“雪碧”当下雪。两路候选共用原分类兼容、规则子集、最终显示相等、legacy/reward 事实签名守卫，保存复核/默认值与草稿身份未改。
+- 已知边界：本次补充的是记账页可选表达，不修全局默认文案；如既有品牌默认将饮品说成晚饭，仍保留为独立待排查项，不能通过混入饮品候选隐藏错误。没有可靠语义或全部被事实守卫过滤时继续静态显示，不为所有标题强行制造切换按钮。没有增加历史扫描、网络、存储字段、分类词典或场景权益变更。
+- 个性 AI 池评估（未实施）：“本机个性表达缓存”可以另立任务；联网润色意味着提交的上下文离开手机，不能宣称全程本地。若以后授权，应限定已支持语义场景和用户确认/反复使用的习惯，最小化且经同意发送信息，每次 2–3 条、限频限量/有效期/可清空，生成后经同一事实/展示/安全守卫再采用；不扩 AI 分类关键词、不改默认分类/历史记录/权益/奖励，不在输入与保存链路请求网络。iOS 后台执行不保证持续运行；封版阶段不建议捎带实现此中高复杂度功能。
+- 实际文件与回归：仅两个产品文件、`StateRegressionTests.swift`、更新 `scripts/meal_emotion_regression.py`、新增 `scripts/home_swipe_regression.py` 和本文档。新增 5 项 XCTest：锁定餐饮的瑞幸 12.9／19:26 原默认与循环/保存、自然用语“今天晚饭”、咖啡/奶茶/饭团/面食及米粉单例补充与雪碧、强场景/冲突锚点/无证据拒绝、罗森原池顺序不变；新样例并入原生活印记/奖励一致性夹具。已有餐次/事实改变失效测试保留；只将“今天晚饭”从完整标题白名单反例移为语义正例。源码交叉审阅无剩余阻塞，XCTest 本机未编译或执行。
+- 剩余真机签收：Mac 执行 Debug/Release 编译与 XCTest；iPhone 核对今日全部首次进入、连续上下滚、斜滑/横滑再纵滑、一次仅开一行、删除取消/确认/连续删除/最后一条、减少动态效果及图片详情/无图编辑路由。情绪核对锁定与未锁定瑞幸、原罗森/馄饨、手写晚饭→快捷备注→切换→立即保存回显、改事实/换角度后旧选择失效、场景权益及生活印记/奖励不变。尚无帧耗时实测，不宣称已彻底消除所有卡顿。
+- 双环境验证：从真实 staging `3bb9b24` 与 production `1a3311c` 分别创建隔离 detached worktree，仅复制本轮五个产品/测试/专项文件并核对 SHA-256；各自按 lockfile 安装 backend 依赖后完整执行原 `python scripts/validate_release_gate.py --phase windows --release-branch <对应分支>`，两者退出码 0、`release_repository_gate: OK`。首页/情绪/快捷备注/金额四项专项在两边均通过，`git diff --check` 通过；仅既有 7 条文案软提示。staging Debug/Release 均含 STAGING，生产 staging=[]；工程、环境模板及原完整门禁规则相对各自基线未改，未减少检查。
+- 日志与保护：门禁日志位于 `C:/Users/yf/AppData/Local/Temp/xuzhang-home-emotion-1d0950603f73435cbd79e24545c62f7c/staging.log`、`production.log`，依赖日志同目录；最终五文件副本哈希与主工作区一致。用户 `.env.staging.example` 仍为 SHA-256 `48FF5A142D67DBEAD8817432F23CE2A089C9A11C54D0A9D1B41622A30F8CD92C`，未跟踪素材/输出/脚本及原审计 worktree 保留。无提交、推送、生产分支更新或部署。
+- 下一任务：先按上述 Mac/iPhone 清单签收本轮两项体验修复，再由用户安排支付安全缺口；AI 个性池只保留评估，不在本轮续做或启动相邻优化。
+- 收尾：按精确绝对路径、变更白名单及五文件哈希检查后，仅移除本轮 staging/production 两个临时验证 worktree（含可重建依赖/检查缓存），保留日志、主工作区和原 `xuzhang-audit-20260916195422`；没有删除用户数据。
+
+### 167. HOME-EMOTION-STAGING-DELIVERY-01：首页滑动与情绪候选修复当前分支交付（2026-09-17）
+
+- 状态：`IN_PROGRESS`，当前唯一交付任务，不新增产品实现。用户要求先提交推送之前修改，个人 AI 文案池独立任务尚未建档/启动；不将其混入本轮。第 166 节的“未授权提交/未提交”是该轮历史状态，本轮已获提交推送授权。
+- 范围：精确提交第 166 节两个产品文件、`StateRegressionTests.swift`、`meal_emotion_regression.py`、`home_swipe_regression.py` 及本文档，共 6 文件；不再改产品代码，不提交用户环境模板或未跟踪素材/输出/缓存/截图脚本。仅推送当前 `feature/xuzhangapp-staging`，不更新生产分支，不部署、不强推。
+- 验证计划：提交快照及真实生产配置的隔离副本分别完整运行原 Windows release gate 与四项专项，不修改或削减检查；生产副本仅用于配置兼容验证，不代表同步生产分支。保留第 166 节 Swift/XCTest/真机待签收边界。
+- 下一步：核对暂存白名单、形成修复提交、完成双环境验证并记录证据后普通 fast-forward 推送，核对远端哈希；不顺带启动 AI 个性池或支付安全实现。
