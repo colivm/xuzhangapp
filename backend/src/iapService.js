@@ -53,7 +53,7 @@ export async function verifyAppStoreTransaction({ productId, transactionId, sign
     throw new IAPVerifyError("UNKNOWN_PRODUCT", "Unknown IAP productId.", 400);
   }
 
-  const transactionInfo = await resolveTransactionInfo({ transactionId, signedTransactionInfo });
+  const transactionInfo = await resolveTransactionInfo({ productId, transactionId, signedTransactionInfo });
   const payload = decodeJWSPayload(transactionInfo.signedTransactionInfo);
   validateTransactionPayload(payload, {
     productId,
@@ -138,9 +138,32 @@ async function fetchTransactionInfo(transactionId, baseUrl = config.appleAppStor
   };
 }
 
-async function resolveTransactionInfo({ transactionId, signedTransactionInfo }) {
-  void signedTransactionInfo;
+// Unverified client data can choose only a fixed lookup endpoint, never grant
+// membership. The independently fetched Apple payload still passes every
+// existing transaction/account/binding check; do not use hint fields as results.
+function hasMatchingSandboxRoutingHint({ productId, transactionId, signedTransactionInfo }) {
+  if (typeof signedTransactionInfo !== "string" || signedTransactionInfo.length > 32 * 1024
+      || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(signedTransactionInfo)) return false;
+  try {
+    const [headerPart, payloadPart] = signedTransactionInfo.split(".");
+    const header = JSON.parse(Buffer.from(headerPart, "base64url").toString("utf8"));
+    const hint = JSON.parse(Buffer.from(payloadPart, "base64url").toString("utf8"));
+    return header?.alg === "ES256" && hint?.environment === "Sandbox"
+      && hint.transactionId === transactionId && hint.productId === productId
+      && hint.bundleId === config.appleBundleId;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveTransactionInfo({ productId, transactionId, signedTransactionInfo }) {
   const primaryEnvironment = expectedAppleEnvironment();
+  if (primaryEnvironment === "Production"
+      && hasMatchingSandboxRoutingHint({ productId, transactionId, signedTransactionInfo })) {
+    // TestFlight/App Review may call the production business API with Sandbox
+    // transactions. This is initial routing, not a fallback after an Apple 401.
+    return fetchTransactionInfo(transactionId, APPLE_SANDBOX_API_BASE_URL);
+  }
   try {
     return await fetchTransactionInfo(transactionId, config.appleAppStoreApiBaseUrl);
   } catch (error) {
