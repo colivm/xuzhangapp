@@ -5683,7 +5683,11 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ### 167. HOME-EMOTION-STAGING-DELIVERY-01：首页滑动与情绪候选修复当前分支交付（2026-09-17）
 
-- 状态：`IN_PROGRESS`，当前唯一交付任务，不新增产品实现。用户要求先提交推送之前修改，个人 AI 文案池独立任务尚未建档/启动；不将其混入本轮。第 166 节的“未授权提交/未提交”是该轮历史状态，本轮已获提交推送授权。
+- 状态：`IN_PROGRESS` → `CODE_DONE`，修复提交已推送，当前无进行中的产品实现任务，未新增 VERIFIED。用户要求先提交推送之前修改，个人 AI 文案池独立任务尚未建档/启动；不将其混入本轮。第 166 节的“未授权提交/未提交”是该轮历史状态，本轮已获提交推送授权。
 - 范围：精确提交第 166 节两个产品文件、`StateRegressionTests.swift`、`meal_emotion_regression.py`、`home_swipe_regression.py` 及本文档，共 6 文件；不再改产品代码，不提交用户环境模板或未跟踪素材/输出/缓存/截图脚本。仅推送当前 `feature/xuzhangapp-staging`，不更新生产分支，不部署、不强推。
 - 验证计划：提交快照及真实生产配置的隔离副本分别完整运行原 Windows release gate 与四项专项，不修改或削减检查；生产副本仅用于配置兼容验证，不代表同步生产分支。保留第 166 节 Swift/XCTest/真机待签收边界。
 - 下一步：核对暂存白名单、形成修复提交、完成双环境验证并记录证据后普通 fast-forward 推送，核对远端哈希；不顺带启动 AI 个性池或支付安全实现。
+- 交付结果：修复提交 `4a27e6e6bfac910576a2af2008f8f911cc4282af`，6 文件白名单复核通过；已普通 fast-forward 推送到 `origin/feature/xuzhangapp-staging`，`git ls-remote` 核对一致。生产本地及远端均仍为 `1a3311cd667658ec61bcf9a6f81a090d41fec54e`，未同步、未部署。本段随后以仅台账提交推送，产品快照不再改变。
+- 验证证据：staging 修复提交的干净 detached worktree、真实生产 `1a3311c` 的隔离副本，各自按 backend lockfile 安装依赖，完整执行原 Windows release gate 与首页/情绪/快捷备注/金额四专项，两边退出码均 0、`release_repository_gate: OK`。staging Debug/Release 均含 STAGING，生产 staging=[]；工程、环境模板和原门禁规则相对各自基线均未改，生产复制的五文件 SHA-256 与 staging 提交检出副本一致。`git diff --check` 通过；仅既有 7 条文案软提示，不冒充 Swift/XCTest 或真机运行。
+- 日志与保护：日志保留于 `C:/Users/yf/AppData/Local/Temp/xuzhang-home-delivery-8ba1543971174b31a3e210607ef7f6f3/`（staging.log、production.log 及依赖日志）。仅清理绝对路径/状态白名单/副本一致性已核验的本轮两个临时 worktree，保留原审计 worktree。用户 `.env.staging.example` 哈希仍为 `48FF5A142D67DBEAD8817432F23CE2A089C9A11C54D0A9D1B41622A30F8CD92C`，既有未跟踪素材/输出/脚本均未提交或删除。
+- 收尾与下一步：推送本段仅文档记录后核对当前分支远端头及 ahead/behind，产品继续按第 166 节等待 Mac/iPhone 验收；个人 AI 文案池另行建档，不在交付提交中实现。
