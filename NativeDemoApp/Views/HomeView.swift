@@ -1,5 +1,18 @@
 import SwiftUI
 
+struct HomeNarrativePillColors {
+    let foreground: Color
+    let background: Color
+    let border: Color
+
+    init(theme: ResolvedThemeTokens) {
+        let isDark = theme.mode == .dark
+        foreground = isDark ? theme.textPrimary : theme.textSecondary
+        background = isDark ? theme.surfaceMuted : Color.white.opacity(0.58)
+        border = isDark ? theme.stroke : Color.white.opacity(0.46)
+    }
+}
+
 private struct TodaySwipeDragState: Equatable {
     let itemID: UUID
     let translation: CGFloat
@@ -1041,7 +1054,7 @@ struct HomeView: View {
     private func narrativePill(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(AppColors.readableSubtext)
+            .foregroundStyle(narrativePillColors.foreground)
             .lineLimit(1)
             .minimumScaleFactor(0.78)
             .padding(.horizontal, 10)
@@ -1050,14 +1063,18 @@ struct HomeView: View {
             .overlay(narrativePillBorder)
     }
 
+    private var narrativePillColors: HomeNarrativePillColors {
+        HomeNarrativePillColors(theme: ThemeResolver.current)
+    }
+
     private var narrativePillBackground: some View {
         Capsule(style: .continuous)
-            .fill(Color.white.opacity(0.58))
+            .fill(narrativePillColors.background)
     }
 
     private var narrativePillBorder: some View {
         Capsule(style: .continuous)
-            .stroke(Color.white.opacity(0.46), lineWidth: 1)
+            .stroke(narrativePillColors.border, lineWidth: 1)
     }
 
     private func homeActionCard(

@@ -292,6 +292,16 @@ struct HomeItem: Identifiable, Codable, Equatable {
                 return "恢复护理安排"
             }
         case .dining:
+            if let foodTag = DiningCopyEvidencePolicy.contextualFoodEmotionTag(
+                evidence: text,
+                date: date,
+                seed: DiningCopyEvidencePolicy.stableRecordSeed(
+                    title: text, date: date ?? Date(timeIntervalSince1970: 0),
+                    amount: amount, brandID: nil
+                )
+            ) {
+                return foodTag
+            }
             if containsAny(text, ["夜市", "夜摊", "夜市摊", "大排档"]) {
                 if containsAny(text, ["烤", "烧烤", "串", "生蚝", "海鲜", "小龙虾", "鱿鱼", "铁板"]) { return "夜市摊这一份" }
                 if containsAny(text, ["炒饭", "炒粉", "炒面", "米粉", "粉", "面", "饭"]) { return "夜市这份餐食记下" }

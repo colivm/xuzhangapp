@@ -191,6 +191,20 @@ struct RecordPrefillPreparationKey: Equatable {
     let context: RecordContextSignal?
 }
 
+// Draft-only provenance: generated copy is not a new handwritten fact or a
+// user category correction. Date/history changes must not erase its origin.
+struct RecordGeneratedNoteContext: Equatable {
+    let title: String
+    let category: HomeItem.Category
+
+    func matches(title: String, category: HomeItem.Category) -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty
+            && trimmed == self.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            && category == self.category
+    }
+}
+
 struct RecordPrefillPreparationInput: @unchecked Sendable {
     let key: RecordPrefillPreparationKey
     let history: RecordInputHistorySnapshot
@@ -321,90 +335,48 @@ enum RecordInputAssistanceComputation {
             )
         )
 
-        var result = habitResult
-        if brand == nil,
-           semanticCategory == nil,
-           let frequentSuggestion,
-           frequentCanOverride,
-           let frequentTitle = input.history.frequentTitlesBySuggestionID[frequentSuggestion.id],
-           !frequentTitle.isEmpty {
-            // A repeated amount is not enough to invent a merchant. Reuse the
-            // title only when the same amount/time/category already has a
-            // stable, user-visible history title. This also covers the case
-            // where the generic habit path returned a category but no title.
-            let resultCategory = result?.category
-            let hasStableResultTitle = result?.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-            if (resultCategory == nil || resultCategory == frequentSuggestion.category),
-               (!hasStableResultTitle || result?.source == "generic") {
-                result = RecordPrefillResult(
-                    category: resultCategory ?? frequentSuggestion.category,
-                    title: frequentTitle,
-                    emotionTag: habitEmotionTag(
-                        title: frequentTitle,
-                        category: frequentSuggestion.category,
-                        amount: input.amount,
-                        date: input.referenceDate
-                    ),
-                    confidence: max(result?.confidence ?? 0, frequentSuggestion.confidence),
-                    source: "frequent"
-                )
-            }
-        } else if habitResult == nil,
-                  brand == nil,
-                  semanticCategory == nil,
-                  let frequentSuggestion,
-                  frequentCanOverride {
-            let title = input.history.frequentTitlesBySuggestionID[frequentSuggestion.id]
-            result = RecordPrefillResult(
-                category: frequentSuggestion.category,
-                title: title,
-                emotionTag: habitEmotionTag(
-                    title: title,
-                    category: frequentSuggestion.category,
-                    amount: input.amount,
-                    date: input.referenceDate
-                ),
-                confidence: frequentSuggestion.confidence,
-                source: "frequent"
-            )
-        }
-
-        let appliedCategory = resolvePrefillCategory(
-            brand: brand,
-            frequent: frequentSuggestion,
-            frequentCanOverride: frequentCanOverride,
-            semanticCategory: semanticCategory,
-            habitResult: habitResult
-        )
-        let displayCategory = appliedCategory ?? input.selectedCategory
-        let sanitizedResult = sanitizedPrefillResult(result, for: displayCategory)
-        let categoryRecommendationStart = Calendar.current.date(
-            byAdding: .day,
-            value: -90,
-            to: input.now
-        ) ?? .distantPast
-        let categoryGridRecommendation = categoryGridRecommendation(
-            amount: input.amount,
-            referenceDate: input.referenceDate,
-            noteDraft: input.noteDraft,
-            brand: brand,
-            semanticCategory: semanticCategory,
-            prefillResult: sanitizedResult,
+        let result = adoptedPrefillResult(
+            habitResult: habitResult,
             frequentSuggestion: frequentSuggestion,
             frequentCanOverride: frequentCanOverride,
-            supportingItems: input.history.prefillItems,
-            items: input.history.prefillItems.filter { item in
-                item.createdAt >= categoryRecommendationStart
-            },
-            context: input.context
+            frequentTitle: frequentSuggestion.flatMap { input.history.frequentTitlesBySuggestionID[$0.id] },
+            amount: input.amount,
+            referenceDate: input.referenceDate
         )
         return RecordPrefillSnapshot(
             key: input.key,
             amount: input.amount,
-            result: sanitizedResult,
-            appliedCategory: appliedCategory,
-            categoryGridRecommendation: categoryGridRecommendation
+            result: result,
+            appliedCategory: result?.category,
+            categoryGridRecommendation: result?.category
         )
+    }
+
+    static func matchesCurrentDraft(
+        _ key: RecordPrefillPreparationKey,
+        historyKey: RecordInputHistoryKey,
+        amount: Double?,
+        referenceDate: Date,
+        noteDraft: String,
+        selectedCategory: HomeItem.Category,
+        categoryLockedByUser: Bool,
+        generatedNoteContext: RecordGeneratedNoteContext?
+    ) -> Bool {
+        !categoryLockedByUser
+            && generatedNoteContext?.matches(title: noteDraft, category: selectedCategory) != true
+            && key.historyKey == historyKey
+            && key.amount == amount
+            && key.referenceDate == referenceDate
+            && key.noteDraft == noteDraft
+            && key.selectedCategory == selectedCategory
+    }
+
+    static func canDescribeAdoptedRecommendation(
+        _ result: RecordPrefillResult,
+        selectedCategory: HomeItem.Category
+    ) -> Bool {
+        result.category == selectedCategory
+            && (result.source == "generic" || result.confidence >= 0.55)
     }
 
     static func previewLifeMarkText(
@@ -569,100 +541,47 @@ enum RecordInputAssistanceComputation {
         return (top.category, top.count, confidence)
     }
 
-    private static func resolvePrefillCategory(
-        brand: MerchantBrandDefinition?,
-        frequent: RecordFrequentAmountSuggestion?,
-        frequentCanOverride: Bool,
-        semanticCategory: HomeItem.Category?,
-        habitResult: RecordPrefillResult?
-    ) -> HomeItem.Category? {
-        if let brand,
-           semanticCategory == nil
-            || semanticCategory == brand.category {
-            return brand.category
-        }
-        if let semanticCategory { return semanticCategory }
-        if let category = habitResult?.category,
-           habitResult?.source == "entity_history" {
-            return category
-        }
-        if let frequent, frequentCanOverride { return frequent.category }
-        if let category = habitResult?.category,
-           habitResult?.source != "generic",
-           (habitResult?.confidence ?? 0) >= 0.55 {
-            return category
-        }
-        if let category = habitResult?.category,
-           habitResult?.source == "generic" {
-            return category
-        }
-        return nil
-    }
-
-    private static func categoryGridRecommendation(
-        amount: Double,
-        referenceDate: Date,
-        noteDraft: String,
-        brand: MerchantBrandDefinition?,
-        semanticCategory: HomeItem.Category?,
-        prefillResult: RecordPrefillResult?,
+    static func adoptedPrefillResult(
+        habitResult: RecordPrefillResult?,
         frequentSuggestion: RecordFrequentAmountSuggestion?,
         frequentCanOverride: Bool,
-        supportingItems: [HomeItem],
-        items: [HomeItem],
-        context: RecordContextSignal?
-    ) -> HomeItem.Category? {
-        if let brand {
-            if let semanticCategory, semanticCategory != brand.category {
-                return semanticCategory
-            }
-            return brand.category
-        }
-        if let semanticCategory {
-            return semanticCategory
-        }
-        if let category = prefillResult?.category,
-           prefillResult?.source != "generic",
-           (prefillResult?.confidence ?? 0) >= 0.55,
-           RecordHabitOverridePolicy.allows(
-               note: noteDraft,
-               suggestedCategory: category,
-               supportingItems: supportingItems
-           ) {
-            return category
+        frequentTitle: String?,
+        amount: Double,
+        referenceDate: Date
+    ) -> RecordPrefillResult? {
+        // The service resolves brand/explicit semantics/entity history first.
+        // Keep that authority, then exact-amount history, then ordinary habits.
+        if let habitResult,
+           let category = habitResult.category,
+           ["brand", "semantic", "entity_history"].contains(habitResult.source) {
+            return sanitizedPrefillResult(habitResult, for: category)
         }
         if let frequentSuggestion, frequentCanOverride {
-            return frequentSuggestion.category
-        }
-        if let category = prefillResult?.category,
-           prefillResult?.source == "generic",
-           RecordHabitOverridePolicy.allows(
-               note: noteDraft,
-               suggestedCategory: category,
-               supportingItems: supportingItems
-           ) {
-            return category
-        }
-        guard !noteDraft.isEmpty else { return nil }
-        let result = CategoryRecommendService().recommend(
-            input: CategoryRecommendInput(
-                amount: amount,
-                referenceDate: referenceDate,
-                items: items,
-                noteDraft: noteDraft,
-                locked: false,
-                context: context
+            // Never carry a defeated candidate's title into the winning category.
+            let stableTitle = frequentTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let compatibleHabitTitle = habitResult?.category == frequentSuggestion.category
+                && habitResult?.source != "generic" ? habitResult?.title : nil
+            let title = stableTitle?.isEmpty == false ? stableTitle : compatibleHabitTitle
+            let result = RecordPrefillResult(
+                category: frequentSuggestion.category,
+                title: title,
+                emotionTag: habitEmotionTag(
+                    title: title,
+                    category: frequentSuggestion.category,
+                    amount: amount,
+                    date: referenceDate
+                ),
+                confidence: frequentSuggestion.confidence,
+                source: "frequent"
             )
-        )
-        guard let result,
-              RecordHabitOverridePolicy.allows(
-                  note: noteDraft,
-                  suggestedCategory: result.recommended,
-                  supportingItems: supportingItems
-              ) else {
+            return sanitizedPrefillResult(result, for: frequentSuggestion.category)
+        }
+        guard let habitResult,
+              let category = habitResult.category,
+              habitResult.source == "generic" || habitResult.confidence >= 0.55 else {
             return nil
         }
-        return result.recommended
+        return sanitizedPrefillResult(habitResult, for: category)
     }
 
     private static func sanitizedPrefillResult(
@@ -674,11 +593,15 @@ enum RecordInputAssistanceComputation {
               !title.isEmpty else {
             return result
         }
-        guard RecordSemanticLexicon.canDisplayPrefillTitle(
-            title,
-            category: category,
-            source: result.source
-        ) else {
+        // Merchant compatibility alone is insufficient (e.g. 罗森纸巾):
+        // explicit product meaning must not reclassify this title at save time.
+        let titleCategory = RecordSemanticLexicon.semanticCategory(of: title)
+        guard titleCategory == nil || titleCategory == category,
+              RecordSemanticLexicon.canDisplayPrefillTitle(
+                title,
+                category: category,
+                source: result.source
+              ) else {
             return RecordPrefillResult(
                 category: result.category,
                 title: nil,
@@ -1077,11 +1000,30 @@ final class HomeViewModel: ObservableObject {
 
     typealias FrequentRecordAmountSuggestion = RecordFrequentAmountSuggestion
 
-    @Published var inputTitle: String = ""
-    @Published var inputAmount: String = ""
+    @Published var inputTitle: String = "" {
+        didSet {
+            guard inputTitle != oldValue else { return }
+            if recordGeneratedNoteContext?.matches(title: inputTitle, category: selectedCategory) != true {
+                recordGeneratedNoteContext = nil
+            }
+            // Do not leave the old request alive during the view's typing debounce.
+            invalidateRecordPrefillSnapshot()
+        }
+    }
+    @Published var inputAmount: String = "" {
+        didSet {
+            guard inputAmount != oldValue else { return }
+            invalidateRecordPrefillSnapshot()
+        }
+    }
     @Published var selectedCategory: HomeItem.Category = .other
     @Published private(set) var categoryLockedByUser: Bool = false
-    @Published var selectedDate: Date = .now
+    @Published var selectedDate: Date = .now {
+        didSet {
+            guard selectedDate != oldValue else { return }
+            invalidateRecordPrefillSnapshot()
+        }
+    }
     @Published private(set) var selectedDateEditedByUser: Bool = false
     @Published var selectedPeriod: Period = .month
     @Published private(set) var ocrStatus: String = ""
@@ -1189,6 +1131,7 @@ final class HomeViewModel: ObservableObject {
     private var recordPrefillPreparationKey: RecordPrefillPreparationKey?
     private var recordPrefillPreparationTask: Task<Void, Never>?
     private var recordPrefillRequestID = UUID()
+    private var recordGeneratedNoteContext: RecordGeneratedNoteContext?
     var homeLifeMarkSnapshotKey: HomeLifeMarkSnapshotKey?
     var homeLifeMarkPreparationTask: Task<Void, Never>?
     var homeLifeMarkRequestID = UUID()
@@ -1302,7 +1245,8 @@ final class HomeViewModel: ObservableObject {
         userEditedTitle: Bool = false,
         preserveEmptyTitle: Bool = false,
         categoryLockedForSave: Bool? = nil,
-        scenePackId: String? = nil
+        scenePackId: String? = nil,
+        emotionSelection: RecordEmotionSelection? = nil
     ) -> Bool {
         guard ensureLedgerWritesAllowed() else { return false }
         guard let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0 else { return false }
@@ -1314,37 +1258,25 @@ final class HomeViewModel: ObservableObject {
             return false
         }
         recordInputMessage = nil
-        let trimmed = noteResult.value
-        let titleWasIntentionallyBlank = preserveEmptyTitle && trimmed.isEmpty
-        let prefillTitle = compatiblePrefillTitleForSave(category: selectedCategory)
-        let baseTitle: String
-        if titleWasIntentionallyBlank {
-            baseTitle = RecordSemanticLexicon.emptyNoteTitle
-        } else if trimmed.isEmpty, let prefillTitle {
-            baseTitle = prefillTitle
-        } else {
-            baseTitle = trimmed.isEmpty ? selectedCategory.defaultRecordTitle : trimmed
-        }
-        let resolution = RecordDraftResolutionService.resolve(
-            RecordDraftResolutionInput(
-                rawTitle: baseTitle,
-                fallbackCategory: selectedCategory,
-                amount: amount,
-                date: selectedDate,
-                merchantBrandId: MerchantBrandCatalog.matchBrand(in: baseTitle)?.id,
-                categoryLockedByUser: shouldLockCategory,
-                userEditedTitle: userEditedTitle || titleWasIntentionallyBlank,
-                source: "manual",
-                scenePackId: scenePackId
-            )
+        let draft = resolvedManualRecordDraft(
+            normalizedTitle: noteResult.value, amount: amount,
+            userEditedTitle: userEditedTitle, preserveEmptyTitle: preserveEmptyTitle,
+            categoryLockedForSave: shouldLockCategory, scenePackId: scenePackId
         )
-        let emotionTag = memoryEnhancedEmotionTag(
+        let baseTitle = draft.baseTitle
+        let resolution = draft.resolution
+        let automaticEmotionTag = memoryEnhancedEmotionTag(
             title: resolution.title,
             category: resolution.category,
             amount: amount,
             date: selectedDate,
             baseEmotionTag: resolution.emotionTag
         )
+        let emotionTag = RecordEmotionScenePolicy.validatedTag(
+            selection: emotionSelection, resolution: resolution,
+            amount: amount, date: selectedDate, scenePackID: scenePackId,
+            automaticEmotionTag: automaticEmotionTag
+        ) ?? automaticEmotionTag
         let memoryContext = memoryContextForRecord(date: selectedDate)
         let newItem = HomeItem(
             title: resolution.title,
@@ -1355,7 +1287,7 @@ final class HomeViewModel: ObservableObject {
             updatedAt: Date(),
             emotionTag: emotionTag,
             merchantBrandId: resolution.merchantBrandId,
-            userEditedTitle: userEditedTitle && resolution.title == baseTitle ? true : nil,
+            userEditedTitle: userEditedTitle && !isCurrentRecordNoteGenerated && resolution.title == baseTitle ? true : nil,
             userEditedCategory: shouldLockCategory ? true : nil,
             categoryCorrectionFrom: shouldLockCategory ? pendingCategoryCorrectionFrom : nil,
             memoryContext: memoryContext,
@@ -1366,6 +1298,51 @@ final class HomeViewModel: ObservableObject {
         resetInput()
         schedulePostManualRecordWork(for: newItem, wasEmpty: wasEmpty)
         return true
+    }
+
+    /// The emotion chooser must use exactly the same normalization, blank-note,
+    /// prefill and explicit-intent rules as manual save, without changing the draft.
+    func resolvedManualRecordDraft(
+        normalizedTitle: String, amount: Double, userEditedTitle: Bool,
+        preserveEmptyTitle: Bool, categoryLockedForSave: Bool, scenePackId: String?
+    ) -> (baseTitle: String, resolution: RecordDraftResolution) {
+        let titleWasIntentionallyBlank = preserveEmptyTitle && normalizedTitle.isEmpty
+        let prefillTitle = compatiblePrefillTitleForSave(category: selectedCategory)
+        let baseTitle: String
+        if titleWasIntentionallyBlank {
+            baseTitle = RecordSemanticLexicon.emptyNoteTitle
+        } else if normalizedTitle.isEmpty, let prefillTitle {
+            baseTitle = prefillTitle
+        } else {
+            baseTitle = normalizedTitle.isEmpty ? selectedCategory.defaultRecordTitle : normalizedTitle
+        }
+        let resolution = RecordDraftResolutionService.resolve(
+            RecordDraftResolutionInput(
+                rawTitle: baseTitle, fallbackCategory: selectedCategory,
+                amount: amount, date: selectedDate,
+                merchantBrandId: MerchantBrandCatalog.matchBrand(in: baseTitle)?.id,
+                categoryLockedByUser: categoryLockedForSave,
+                userEditedTitle: userEditedTitle || titleWasIntentionallyBlank,
+                source: "manual", scenePackId: scenePackId,
+                generatedNoteContext: currentRecordGeneratedNoteContext
+            )
+        )
+        return (baseTitle, resolution)
+    }
+
+    func automaticRecordEmotionTag(
+        for resolution: RecordDraftResolution, amount: Double, weatherCompanionEnabled: Bool
+    ) -> String {
+        // The preview already owns the observed settings; do not decode persisted
+        // settings on every SwiftUI body evaluation. Save still revalidates them.
+        RecordMemoryContextService.enhancedEmotionTag(
+            input: RecordMemoryContextInput(
+                title: resolution.title, category: resolution.category,
+                amount: amount, date: selectedDate, baseEmotionTag: resolution.emotionTag,
+                weather: weatherCompanionEnabled && shouldAttachLiveContext(to: selectedDate)
+                    ? WeatherCompanionService.shared.cachedSnapshot : nil
+            )
+        )
     }
 
     private func schedulePostManualRecordWork(for newItem: HomeItem, wasEmpty: Bool) {
@@ -2360,6 +2337,10 @@ final class HomeViewModel: ObservableObject {
               Int((recordPrefillAmount * 100).rounded()) == Int((amount * 100).rounded()) else {
             return items.count < 6 ? "先帮你放到合适分类。" : nil
         }
+        guard RecordInputAssistanceComputation.canDescribeAdoptedRecommendation(
+            result,
+            selectedCategory: selectedCategory
+        ) else { return nil }
 
         switch result.source {
         case "scene_habit":
@@ -2617,6 +2598,10 @@ final class HomeViewModel: ObservableObject {
             invalidateRecordPrefillSnapshot()
             return
         }
+        guard !isCurrentRecordNoteGenerated else {
+            invalidateRecordPrefillSnapshot()
+            return
+        }
         guard let history = recordInputHistorySnapshot,
               history.key == historyKey else {
             invalidateRecordPrefillSnapshot()
@@ -2717,6 +2702,7 @@ final class HomeViewModel: ObservableObject {
            existingKey.amount == amount,
            existingKey.referenceDate == selectedDate,
            existingKey.noteDraft == trimmedNote,
+           existingKey.selectedCategory == selectedCategory,
            existingKey.context == context {
             return
         }
@@ -2782,7 +2768,24 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func applyRecordPrefillSnapshot(_ snapshot: RecordPrefillSnapshot) {
-        guard recordPrefillPreparationKey == snapshot.key else { return }
+        let noteResult = UserContentRiskService.shared.validateManualNote(inputTitle, allowEmpty: true)
+        let trimmedNote = noteResult.isAllowed ? noteResult.value : ""
+        let historyKey = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: recordInputAssistanceRevision,
+            referenceDate: selectedDate,
+            referenceDateEditedByUser: selectedDateEditedByUser
+        )
+        guard recordPrefillPreparationKey == snapshot.key,
+              RecordInputAssistanceComputation.matchesCurrentDraft(
+                snapshot.key,
+                historyKey: historyKey,
+                amount: Double(inputAmount.replacingOccurrences(of: ",", with: "")),
+                referenceDate: selectedDate,
+                noteDraft: trimmedNote,
+                selectedCategory: selectedCategory,
+                categoryLockedByUser: categoryLockedByUser,
+                generatedNoteContext: recordGeneratedNoteContext
+              ) else { return }
         if let category = snapshot.appliedCategory {
             applyRecommendedCategory(category)
         }
@@ -2906,6 +2909,7 @@ final class HomeViewModel: ObservableObject {
 
     func selectCategory(_ category: HomeItem.Category) {
         rememberCategoryCorrectionIfNeeded(to: category)
+        recordGeneratedNoteContext = nil
         selectedCategory = category
         categoryLockedByUser = true
         invalidateRecordPrefillSnapshot()
@@ -2917,17 +2921,33 @@ final class HomeViewModel: ObservableObject {
         pendingCategoryCorrectionFrom = nil
     }
 
+    var isCurrentRecordNoteGenerated: Bool {
+        recordGeneratedNoteContext?.matches(title: inputTitle, category: selectedCategory) == true
+    }
+
+    var currentRecordGeneratedNoteContext: RecordGeneratedNoteContext? {
+        isCurrentRecordNoteGenerated ? recordGeneratedNoteContext : nil
+    }
+
+    func applyGeneratedRecordTitle(_ title: String) {
+        let category = selectedCategory
+        let normalizedTitle = UserContentRiskService.shared.normalizedManualNote(title)
+        inputTitle = normalizedTitle
+        recordGeneratedNoteContext = RecordGeneratedNoteContext(title: normalizedTitle, category: category)
+        invalidateRecordPrefillSnapshot()
+    }
+
     func applyScenePackDraft(title: String, category: HomeItem.Category) {
         rememberCategoryCorrectionIfNeeded(to: category)
-        inputTitle = title
         selectedCategory = category
         categoryLockedByUser = true
-        invalidateRecordPrefillSnapshot()
+        applyGeneratedRecordTitle(title)
         recordInputMessage = nil
     }
 
     func applyScenePackCategory(_ category: HomeItem.Category) {
         rememberCategoryCorrectionIfNeeded(to: category)
+        recordGeneratedNoteContext = nil
         selectedCategory = category
         categoryLockedByUser = true
         invalidateRecordPrefillSnapshot()
@@ -2936,6 +2956,9 @@ final class HomeViewModel: ObservableObject {
 
     func applyRecommendedCategory(_ category: HomeItem.Category) {
         guard !categoryLockedByUser else { return }
+        if category != selectedCategory {
+            recordGeneratedNoteContext = nil
+        }
         selectedCategory = category
         lastAutoRecommendedCategory = category
     }
@@ -3573,6 +3596,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func resetInput() {
+        recordGeneratedNoteContext = nil
         inputTitle = ""
         inputAmount = ""
         selectedDate = .now

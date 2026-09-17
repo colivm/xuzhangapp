@@ -97,7 +97,6 @@ final class SettingsViewModel: ObservableObject {
         get { settings.appearance }
         set {
             settings.appearance = newValue
-            applyThemeResolver()
             persist()
         }
     }
@@ -271,7 +270,6 @@ final class SettingsViewModel: ObservableObject {
         }
         settings.colorThemeId = resolvedId
         themeMessage = nil
-        applyThemeResolver()
         persist()
         return true
     }
@@ -281,7 +279,6 @@ final class SettingsViewModel: ObservableObject {
         settings.colorThemeId = ThemeResolver.defaultThemeId
         settings.shareCardUsesAppTheme = false
         themeMessage = nil
-        applyThemeResolver()
         persist()
     }
 
@@ -323,7 +320,6 @@ final class SettingsViewModel: ObservableObject {
         UserDefaults.standard.set(themeId, forKey: ThemeTrialKeys.themeId)
         settings.colorThemeId = themeId
         themeMessage = "典藏主题试用中，24 小时后会自动回到默认主题。"
-        applyThemeResolver()
         persist()
         return true
     }
@@ -675,7 +671,6 @@ final class SettingsViewModel: ObservableObject {
                 themeMessage = wasExpiredTrial ? "典藏主题试用已结束，已回到默认主题。" : "会员主题已回到默认，开通后可以再切回来。"
             }
         }
-        applyThemeResolver()
     }
 
     private func isExpiredLifetimeThemeTrial(themeId: String) -> Bool {
@@ -685,10 +680,6 @@ final class SettingsViewModel: ObservableObject {
               definition.tier == .lifetime else { return false }
         let usedAt = UserDefaults.standard.double(forKey: ThemeTrialKeys.usedAt)
         return usedAt > 0 && Date().timeIntervalSince1970 >= usedAt + ThemeTrialKeys.duration
-    }
-
-    private func applyThemeResolver() {
-        ThemeResolver.shared.apply(themeId: settings.colorThemeId, appearance: settings.appearance)
     }
 
     private func setCloudSyncEnabled(_ enabled: Bool, rememberForAccount: Bool) {

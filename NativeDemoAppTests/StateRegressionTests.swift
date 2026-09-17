@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import XCTest
 import SwiftUI
 #if canImport(UIKit)
@@ -5219,6 +5220,579 @@ final class RecordInputAssistanceSnapshotTests: XCTestCase {
     }
 }
 
+final class RecordRecommendationConsistencyTests: XCTestCase {
+    // Keep fixtures recent for RecordPrefillService's 180-day window and well
+    // inside one hour bucket; no dependence on weekday or a fixed release date.
+    private var referenceDate: Date {
+        let calendar = Calendar.current
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: Date())!
+        return calendar.date(bySettingHour: 12, minute: 30, second: 0, of: yesterday)!
+    }
+
+    private func historyItem(
+        title: String,
+        amount: Double,
+        category: HomeItem.Category,
+        index: Int,
+        at date: Date,
+        userEditedTitle: Bool = true,
+        userEditedCategory: Bool = false
+    ) -> HomeItem {
+        HomeItem(
+            title: title,
+            amount: amount,
+            category: category,
+            createdAt: date.addingTimeInterval(TimeInterval(-(index + 1) * 60)),
+            emotionTag: "",
+            userEditedTitle: userEditedTitle,
+            userEditedCategory: userEditedCategory
+        )
+    }
+
+    private func snapshot(
+        items: [HomeItem],
+        amount: Double,
+        note: String = "",
+        selectedCategory: HomeItem.Category = .other,
+        at date: Date
+    ) -> RecordPrefillSnapshot {
+        let historyKey = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: 153,
+            referenceDate: date,
+            referenceDateEditedByUser: true
+        )
+        let history = RecordInputAssistanceComputation.historySnapshot(
+            RecordInputHistoryPreparationInput(
+                key: historyKey,
+                items: items,
+                referenceDate: date,
+                now: date
+            )
+        )
+        let key = RecordPrefillPreparationKey(
+            historyKey: historyKey,
+            amount: amount,
+            referenceDate: date,
+            noteDraft: note,
+            selectedCategory: selectedCategory,
+            context: nil
+        )
+        return RecordInputAssistanceComputation.prefillSnapshot(
+            RecordPrefillPreparationInput(
+                key: key,
+                history: history,
+                amount: amount,
+                referenceDate: date,
+                now: date,
+                noteDraft: note,
+                selectedCategory: selectedCategory,
+                context: nil
+            )
+        )
+    }
+
+    private func conflictingHistory(
+        at date: Date,
+        shoppingTitle: String = "衣服"
+    ) -> [HomeItem] {
+        let shopping = (0..<2).map { index in
+            historyItem(title: shoppingTitle, amount: 100, category: .shopping, index: index, at: date)
+        }
+        let dining = (2..<10).map { index in
+            historyItem(title: "牛肉面", amount: 95, category: .dining, index: index, at: date)
+        }
+        return shopping + dining
+    }
+
+    func testAdoptedHabitThresholdDoesNotInventATitleOrDescribeAnotherCategory() {
+        let date = referenceDate
+        for source in ["habit", "scene_habit"] {
+            for confidence in [0.54, 0.55, 0.65] {
+                let candidate = RecordPrefillResult(
+                    category: .dining,
+                    title: nil,
+                    emotionTag: nil,
+                    confidence: confidence,
+                    source: source
+                )
+                let adopted = RecordInputAssistanceComputation.adoptedPrefillResult(
+                    habitResult: candidate,
+                    frequentSuggestion: nil,
+                    frequentCanOverride: false,
+                    frequentTitle: nil,
+                    amount: 12,
+                    referenceDate: date
+                )
+                if confidence < 0.55 {
+                    XCTAssertNil(adopted, source)
+                } else {
+                    XCTAssertEqual(adopted?.category, .dining, source)
+                    XCTAssertNil(adopted?.title, "Category confidence must not manufacture a title")
+                }
+                XCTAssertEqual(
+                    RecordInputAssistanceComputation.canDescribeAdoptedRecommendation(candidate, selectedCategory: .dining),
+                    confidence >= 0.55,
+                    source
+                )
+                XCTAssertFalse(
+                    RecordInputAssistanceComputation.canDescribeAdoptedRecommendation(candidate, selectedCategory: .other),
+                    source
+                )
+            }
+        }
+    }
+
+    func testSixRecordSparseHabitDoesNotPublishItsUnadoptedDiningCandidate() throws {
+        let date = referenceDate
+        let amounts = [12.0, 31, 42, 53, 64, 75]
+        let items = amounts.enumerated().map { index, amount in
+            historyItem(
+                title: index == 0 ? "牛肉面" : "星河随记",
+                amount: amount,
+                category: index == 0 ? .dining : .other,
+                index: index,
+                at: date
+            )
+        }
+        let candidate = try XCTUnwrap(RecordPrefillService().prefill(
+            input: RecordPrefillInput(
+                amount: 12,
+                referenceDate: date,
+                items: items,
+                noteDraft: "",
+                categoryLocked: false,
+                merchantBrandId: nil
+            )
+        ))
+        XCTAssertEqual(candidate.source, "habit")
+        XCTAssertEqual(candidate.category, .dining)
+        XCTAssertEqual(candidate.confidence, 0.54, accuracy: 0.000_001)
+        XCTAssertNil(candidate.title)
+
+        let result = snapshot(items: items, amount: 12, at: date)
+        XCTAssertNil(result.result)
+        XCTAssertNil(result.appliedCategory)
+        XCTAssertNil(result.categoryGridRecommendation)
+        XCTAssertEqual(result.appliedCategory ?? result.key.selectedCategory, .other)
+        XCTAssertFalse(RecordInputAssistanceComputation.canDescribeAdoptedRecommendation(candidate, selectedCategory: .other))
+    }
+
+    func testColdStartEmptyNoteDoesNotInventARecommendationOrTitle() {
+        let result = snapshot(items: [], amount: 50, at: referenceDate)
+        XCTAssertNil(result.result)
+        XCTAssertNil(result.appliedCategory)
+        XCTAssertNil(result.categoryGridRecommendation)
+        XCTAssertEqual(result.key.selectedCategory, .other)
+    }
+
+    func testGenericDecisionKeepsItsExistingAdoptionPolicy() throws {
+        let candidate = RecordPrefillResult(category: .other, title: nil, emotionTag: nil, confidence: 0.4, source: "generic")
+        let adopted = try XCTUnwrap(RecordInputAssistanceComputation.adoptedPrefillResult(
+            habitResult: candidate,
+            frequentSuggestion: nil,
+            frequentCanOverride: false,
+            frequentTitle: nil,
+            amount: 50,
+            referenceDate: referenceDate
+        ))
+        XCTAssertEqual(adopted.category, .other)
+        XCTAssertEqual(adopted.source, "generic")
+        XCTAssertNil(adopted.title)
+        XCTAssertTrue(RecordInputAssistanceComputation.canDescribeAdoptedRecommendation(adopted, selectedCategory: .other))
+        XCTAssertFalse(RecordInputAssistanceComputation.canDescribeAdoptedRecommendation(adopted, selectedCategory: .dining))
+    }
+
+    func testServiceKeepsTitleConfidenceSeparateFromCategoryConfidence() throws {
+        let date = referenceDate
+        func candidate(diningCount: Int) throws -> RecordPrefillResult {
+            let dining = (0..<diningCount).map { index in
+                historyItem(title: "星河一号", amount: 12, category: .dining, index: index, at: date)
+            }
+            let shopping = (diningCount..<(diningCount + 3)).map { index in
+                historyItem(title: "蓝瓶二号", amount: 12, category: .shopping, index: index, at: date)
+            }
+            return try XCTUnwrap(RecordPrefillService().prefill(
+                input: RecordPrefillInput(
+                    amount: 12,
+                    referenceDate: date,
+                    items: dining + shopping,
+                    noteDraft: "",
+                    categoryLocked: false,
+                    merchantBrandId: nil
+                )
+            ))
+        }
+
+        let categoryOnly = try candidate(diningCount: 4)
+        XCTAssertEqual(categoryOnly.source, "habit")
+        XCTAssertGreaterThanOrEqual(categoryOnly.confidence, 0.55)
+        XCTAssertLessThan(categoryOnly.confidence, 0.65)
+        XCTAssertNil(categoryOnly.title)
+
+        let titleCandidate = try candidate(diningCount: 6)
+        XCTAssertEqual(titleCandidate.source, "habit")
+        XCTAssertGreaterThanOrEqual(titleCandidate.confidence, 0.65)
+        XCTAssertEqual(titleCandidate.title, "星河一号")
+    }
+
+    func testExactAmountShoppingWinsOverNearbyDiningForEverySnapshotOutput() throws {
+        let date = referenceDate
+        let items = conflictingHistory(at: date)
+        let habit = try XCTUnwrap(RecordPrefillService().prefill(
+            input: RecordPrefillInput(
+                amount: 100,
+                referenceDate: date,
+                items: items,
+                noteDraft: "",
+                categoryLocked: false,
+                merchantBrandId: nil
+            )
+        ))
+        XCTAssertEqual(habit.category, .dining, "Fixture must actually have conflicting habit evidence")
+        XCTAssertGreaterThanOrEqual(habit.confidence, 0.55)
+
+        let result = snapshot(items: items, amount: 100, at: date)
+        let adopted = try XCTUnwrap(result.result)
+        XCTAssertEqual(result.appliedCategory, .shopping)
+        XCTAssertEqual(result.categoryGridRecommendation, .shopping)
+        XCTAssertEqual(adopted.category, .shopping)
+        XCTAssertEqual(adopted.source, "frequent")
+        XCTAssertEqual(adopted.title, "衣服")
+        XCTAssertTrue(RecordInputAssistanceComputation.canDescribeAdoptedRecommendation(adopted, selectedCategory: .shopping))
+        XCTAssertFalse(RecordInputAssistanceComputation.canDescribeAdoptedRecommendation(habit, selectedCategory: .shopping))
+    }
+
+    func testWinningAmountWithoutReliableTitleDoesNotBorrowDefeatedDiningTitle() {
+        let date = referenceDate
+        let result = snapshot(items: conflictingHistory(at: date, shoppingTitle: "购物记录"), amount: 100, at: date)
+        XCTAssertEqual(result.appliedCategory, .shopping)
+        XCTAssertEqual(result.categoryGridRecommendation, .shopping)
+        XCTAssertEqual(result.result?.category, .shopping)
+        XCTAssertEqual(result.result?.source, "frequent")
+        XCTAssertNil(result.result?.title)
+        XCTAssertNil(result.result?.emotionTag)
+    }
+
+    func testReliableFourYuanSeventyFiveTransitKeepsCategoryAndTitle() {
+        let date = referenceDate
+        let items = (0..<6).map { index in
+            historyItem(title: "地铁/公交", amount: 4.75, category: .transport, index: index, at: date)
+        }
+        let result = snapshot(items: items, amount: 4.75, at: date)
+        XCTAssertEqual(result.appliedCategory, .transport)
+        XCTAssertEqual(result.categoryGridRecommendation, .transport)
+        XCTAssertEqual(result.result?.category, .transport)
+        XCTAssertEqual(result.result?.title, "地铁/公交")
+    }
+
+    func testConflictingProductMeaningIsNotPublishedAsACompatibleMerchantTitle() {
+        let date = referenceDate
+        // A historic dining label and a dining-brand alias cannot make a
+        // paper-tissue title safe: the save resolver recognizes daily supplies.
+        let result = RecordInputAssistanceComputation.adoptedPrefillResult(
+            habitResult: nil,
+            frequentSuggestion: RecordFrequentAmountSuggestion(
+                amount: 12,
+                category: .dining,
+                count: 3,
+                confidence: 1,
+                latest: date
+            ),
+            frequentCanOverride: true,
+            frequentTitle: "罗森纸巾",
+            amount: 12,
+            referenceDate: date
+        )
+        XCTAssertEqual(RecordSemanticLexicon.semanticCategory(of: "罗森纸巾"), .daily)
+        XCTAssertEqual(result?.category, .dining)
+        XCTAssertNil(result?.title)
+        XCTAssertNil(result?.emotionTag)
+    }
+
+    func testConvenienceProductKeepsItsExplicitMeaningAfterPrefillAlreadySelectedIt() {
+        let date = referenceDate
+        let fallbackCategories: [HomeItem.Category] = [.other, .daily]
+        for fallback in fallbackCategories {
+            for source in ["preview", "manual"] {
+                let resolution = RecordDraftResolutionService.resolve(
+                    RecordDraftResolutionInput(
+                        rawTitle: "罗森纸巾",
+                        fallbackCategory: fallback,
+                        amount: 12,
+                        date: date,
+                        merchantBrandId: "lawson",
+                        categoryLockedByUser: false,
+                        userEditedTitle: true,
+                        source: source
+                    )
+                )
+                XCTAssertEqual(resolution.category, .daily)
+                XCTAssertEqual(resolution.title, "罗森纸巾")
+                XCTAssertNil(resolution.merchantBrandId)
+            }
+        }
+    }
+
+    func testExplicitNoteBrandAndLearnedEntityKeepPriorityOverAmountHistory() {
+        let date = referenceDate
+        let items = conflictingHistory(at: date)
+        let cases: [(note: String, category: HomeItem.Category, source: String)] = [
+            ("牛肉面", .dining, "semantic"),
+            ("瑞幸咖啡", .dining, "brand"),
+            ("罗森纸巾", .daily, "semantic"),
+        ]
+        for testCase in cases {
+            let result = snapshot(items: items, amount: 100, note: testCase.note, at: date)
+            XCTAssertEqual(result.appliedCategory, testCase.category, testCase.note)
+            XCTAssertEqual(result.categoryGridRecommendation, testCase.category, testCase.note)
+            XCTAssertEqual(result.result?.category, testCase.category, testCase.note)
+            XCTAssertEqual(result.result?.source, testCase.source, testCase.note)
+        }
+
+        let corrected = historyItem(
+            title: "星河蓝瓶一号",
+            amount: 7,
+            category: .health,
+            index: 11,
+            at: date,
+            userEditedCategory: true
+        )
+        let learned = snapshot(items: items + [corrected], amount: 100, note: corrected.title, at: date)
+        XCTAssertEqual(learned.appliedCategory, .health)
+        XCTAssertEqual(learned.categoryGridRecommendation, .health)
+        XCTAssertEqual(learned.result?.category, .health)
+        XCTAssertEqual(learned.result?.source, "entity_history")
+    }
+
+    func testFrequentOverrideRequiresPermissionAndPreservesCompatibleHabitTitle() {
+        let date = referenceDate
+        let suggestion = RecordFrequentAmountSuggestion(amount: 100, category: .shopping, count: 2, confidence: 1, latest: date)
+        let dining = RecordPrefillResult(category: .dining, title: "牛肉面", emotionTag: nil, confidence: 0.9, source: "habit")
+        let rejected = RecordInputAssistanceComputation.adoptedPrefillResult(
+            habitResult: dining,
+            frequentSuggestion: suggestion,
+            frequentCanOverride: false,
+            frequentTitle: "衣服",
+            amount: 100,
+            referenceDate: date
+        )
+        XCTAssertEqual(rejected?.category, .dining)
+        XCTAssertEqual(rejected?.title, "牛肉面")
+
+        let shopping = RecordPrefillResult(category: .shopping, title: "衣服", emotionTag: nil, confidence: 0.9, source: "habit")
+        let adopted = RecordInputAssistanceComputation.adoptedPrefillResult(
+            habitResult: shopping,
+            frequentSuggestion: suggestion,
+            frequentCanOverride: true,
+            frequentTitle: nil,
+            amount: 100,
+            referenceDate: date
+        )
+        XCTAssertEqual(adopted?.category, .shopping)
+        XCTAssertEqual(adopted?.title, "衣服")
+        XCTAssertEqual(adopted?.source, "frequent")
+    }
+
+    func testCurrentDraftGuardRejectsEveryChangedInputAndExplicitLock() {
+        let date = referenceDate
+        let historyKey = RecordInputHistoryKey(ledgerRevision: 153, referenceContext: "current-context")
+        let key = RecordPrefillPreparationKey(
+            historyKey: historyKey,
+            amount: 50,
+            referenceDate: date,
+            noteDraft: "当前备注",
+            selectedCategory: .other,
+            context: nil
+        )
+        func matches(
+            history: RecordInputHistoryKey? = nil,
+            amount: Double? = 50,
+            changedDate: Date? = nil,
+            note: String = "当前备注",
+            category: HomeItem.Category = .other,
+            locked: Bool = false,
+            generated: RecordGeneratedNoteContext? = nil
+        ) -> Bool {
+            RecordInputAssistanceComputation.matchesCurrentDraft(
+                key,
+                historyKey: history ?? historyKey,
+                amount: amount,
+                referenceDate: changedDate ?? date,
+                noteDraft: note,
+                selectedCategory: category,
+                categoryLockedByUser: locked,
+                generatedNoteContext: generated
+            )
+        }
+
+        XCTAssertTrue(matches())
+        XCTAssertFalse(matches(note: "已经输入的新备注"), "Old completion must fail even before the debounce schedules a new key")
+        XCTAssertFalse(matches(note: ""))
+        XCTAssertFalse(matches(amount: 51))
+        XCTAssertFalse(matches(amount: nil))
+        XCTAssertFalse(matches(changedDate: date.addingTimeInterval(60)))
+        XCTAssertFalse(matches(category: .shopping))
+        XCTAssertFalse(matches(history: RecordInputHistoryKey(ledgerRevision: 154, referenceContext: historyKey.referenceContext)))
+        XCTAssertFalse(matches(history: RecordInputHistoryKey(ledgerRevision: 153, referenceContext: "another-context")))
+        XCTAssertFalse(matches(locked: true), "Category and scene-pack locks share this boundary")
+        XCTAssertFalse(matches(generated: RecordGeneratedNoteContext(title: key.noteDraft, category: .other)))
+        XCTAssertTrue(matches(generated: RecordGeneratedNoteContext(title: "已被改掉的生成句", category: .other)))
+    }
+
+    func testGeneratedNoteContextMatchesOnlyItsNonemptyTitleAndCategory() {
+        let context = RecordGeneratedNoteContext(title: " 买到常用的小东西 ", category: .shopping)
+        XCTAssertTrue(context.matches(title: "买到常用的小东西", category: .shopping))
+        XCTAssertFalse(context.matches(title: "牛肉面", category: .shopping))
+        XCTAssertFalse(context.matches(title: "", category: .shopping))
+        XCTAssertFalse(context.matches(title: "买到常用的小东西", category: .other))
+        XCTAssertFalse(RecordGeneratedNoteContext(title: "  ", category: .other).matches(title: "", category: .other))
+    }
+
+    func testGeneratedShoppingRemainsProtectedAcrossDateAndHistoryRecalculation() {
+        let title = "买到常用的小东西"
+        let context = RecordGeneratedNoteContext(title: title, category: .shopping)
+        let date = referenceDate
+        for offset in [0.0, 6 * 3_600] {
+            let currentDate = date.addingTimeInterval(offset)
+            let historyKey = RecordInputAssistanceComputation.historyKey(
+                ledgerRevision: offset == 0 ? 153 : 154,
+                referenceDate: currentDate,
+                referenceDateEditedByUser: true
+            )
+            let key = RecordPrefillPreparationKey(
+                historyKey: historyKey,
+                amount: 50,
+                referenceDate: currentDate,
+                noteDraft: title,
+                selectedCategory: .shopping,
+                context: nil
+            )
+            XCTAssertFalse(RecordInputAssistanceComputation.matchesCurrentDraft(
+                key,
+                historyKey: historyKey,
+                amount: 50,
+                referenceDate: currentDate,
+                noteDraft: title,
+                selectedCategory: .shopping,
+                categoryLockedByUser: false,
+                generatedNoteContext: context
+            ))
+            let resolution = RecordDraftResolutionService.resolve(
+                RecordDraftResolutionInput(
+                    rawTitle: title,
+                    fallbackCategory: .shopping,
+                    amount: 50,
+                    date: currentDate,
+                    merchantBrandId: nil,
+                    categoryLockedByUser: false,
+                    userEditedTitle: false,
+                    source: "manual",
+                    generatedNoteContext: context
+                )
+            )
+            XCTAssertEqual(resolution.category, .shopping)
+            XCTAssertEqual(resolution.title, title)
+            XCTAssertTrue(resolution.trace.contains("category:generatedDraft"))
+            XCTAssertFalse(resolution.trace.contains("category:userLocked"))
+        }
+    }
+
+    func testEditedGeneratedNoteReturnsToExplicitSemanticClassification() {
+        let generated = RecordGeneratedNoteContext(title: "买到常用的小东西", category: .shopping)
+        let resolution = RecordDraftResolutionService.resolve(
+            RecordDraftResolutionInput(
+                rawTitle: "牛肉面",
+                fallbackCategory: .shopping,
+                amount: 50,
+                date: referenceDate,
+                merchantBrandId: nil,
+                categoryLockedByUser: false,
+                userEditedTitle: true,
+                source: "manual",
+                generatedNoteContext: generated
+            )
+        )
+        XCTAssertEqual(resolution.category, .dining)
+        XCTAssertEqual(resolution.title, "牛肉面")
+        XCTAssertTrue(resolution.trace.contains("category:semantic"))
+        XCTAssertFalse(resolution.trace.contains("category:generatedDraft"))
+    }
+
+    func testGeneratedSocialCopyUsesSameCategoryInPreviewAndSaveWithoutAUserLock() {
+        let title = "一起吃顿饭"
+        let date = referenceDate
+        let generated = RecordGeneratedNoteContext(title: title, category: .social)
+        var results: [RecordDraftResolution] = []
+        for source in ["preview", "manual"] {
+            let resolution = RecordDraftResolutionService.resolve(
+                RecordDraftResolutionInput(
+                    rawTitle: title,
+                    fallbackCategory: .social,
+                    amount: 50,
+                    date: date,
+                    merchantBrandId: nil,
+                    categoryLockedByUser: false,
+                    userEditedTitle: false,
+                    source: source,
+                    generatedNoteContext: generated
+                )
+            )
+            XCTAssertEqual(resolution.category, .social)
+            XCTAssertEqual(resolution.title, title)
+            XCTAssertTrue(resolution.trace.contains("category:generatedDraft"))
+            XCTAssertFalse(resolution.trace.contains("category:userLocked"))
+            results.append(resolution)
+        }
+        XCTAssertEqual(results[0].emotionTag, results[1].emotionTag)
+        XCTAssertEqual(results[0].merchantBrandId, results[1].merchantBrandId)
+    }
+
+    func testSameSocialPhraseWithoutGeneratedOriginKeepsExistingDiningSemantics() {
+        let resolution = RecordDraftResolutionService.resolve(
+            RecordDraftResolutionInput(
+                rawTitle: "一起吃顿饭",
+                fallbackCategory: .social,
+                amount: 50,
+                date: referenceDate,
+                merchantBrandId: nil,
+                categoryLockedByUser: false,
+                userEditedTitle: true,
+                source: "manual"
+            )
+        )
+        XCTAssertEqual(resolution.category, .dining)
+        XCTAssertEqual(resolution.title, "一起吃顿饭")
+        XCTAssertTrue(resolution.trace.contains("category:semantic"))
+        XCTAssertFalse(resolution.trace.contains("category:generatedDraft"))
+    }
+
+    func testExplicitScenePackLockStillWinsAndRetainsExistingTitleRepair() {
+        let title = "酒店住一晚"
+        let date = referenceDate
+        var input = RecordDraftResolutionInput(
+            rawTitle: title,
+            fallbackCategory: .transport,
+            amount: 100,
+            date: date,
+            merchantBrandId: nil,
+            categoryLockedByUser: true,
+            userEditedTitle: false,
+            source: "manual",
+            scenePackId: "travel"
+        )
+        let existingPackResolution = RecordDraftResolutionService.resolve(input)
+        input.generatedNoteContext = RecordGeneratedNoteContext(title: title, category: .transport)
+        let generatedPackResolution = RecordDraftResolutionService.resolve(input)
+        XCTAssertEqual(generatedPackResolution.category, .transport)
+        XCTAssertTrue(generatedPackResolution.trace.contains("category:userLocked"))
+        XCTAssertFalse(generatedPackResolution.trace.contains("category:generatedDraft"))
+        XCTAssertEqual(generatedPackResolution.title, existingPackResolution.title)
+        XCTAssertEqual(generatedPackResolution.emotionTag, existingPackResolution.emotionTag)
+        XCTAssertEqual(generatedPackResolution.merchantBrandId, existingPackResolution.merchantBrandId)
+        XCTAssertNotEqual(existingPackResolution.title, title, "This task must not silently change locked-pack title repair")
+    }
+}
+
 final class HomeDashboardSnapshotTests: XCTestCase {
     func testJourneyLedgerFactsReuseOneCommittedRecordSnapshot() {
         let calendar = Calendar(identifier: .gregorian)
@@ -9061,6 +9635,177 @@ final class DarkModeReadabilityPolicyTests: XCTestCase {
         XCTAssertEqual(foreground.hex, "#000000")
         XCTAssertNotEqual(ResolvedThemeTokens.fallback.onAccent, Color.white)
     }
+
+    func testAllThemesFollowingSystemDarkMatchExplicitDark() {
+        let resolver = ThemeResolver()
+        XCTAssertEqual(resolver.themes.count, 31)
+        for theme in resolver.themes {
+            let automatic = resolver.resolve(themeId: theme.id, appearance: .system, systemColorScheme: .dark)
+            let explicit = resolver.resolve(themeId: theme.id, appearance: .dark, systemColorScheme: .light)
+            XCTAssertEqual(automatic.mode, .dark, theme.id)
+            assertSameTheme(automatic, explicit)
+        }
+    }
+
+    func testAllThemesFollowingSystemLightMatchExplicitLight() {
+        let resolver = ThemeResolver()
+        XCTAssertEqual(resolver.themes.count, 31)
+        for theme in resolver.themes {
+            let automatic = resolver.resolve(themeId: theme.id, appearance: .system, systemColorScheme: .light)
+            let explicit = resolver.resolve(themeId: theme.id, appearance: .light, systemColorScheme: .dark)
+            XCTAssertEqual(automatic.mode, .light, theme.id)
+            assertSameTheme(automatic, explicit)
+        }
+    }
+
+    func testExplicitAppearanceIgnoresOppositeSystemScheme() {
+        let resolver = ThemeResolver()
+        for theme in resolver.themes {
+            for appearance in [AppSettings.Appearance.light, .dark] {
+                assertSameTheme(
+                    resolver.resolve(themeId: theme.id, appearance: appearance, systemColorScheme: .light),
+                    resolver.resolve(themeId: theme.id, appearance: appearance, systemColorScheme: .dark)
+                )
+            }
+        }
+    }
+
+    func testSystemThemeTracksBothSchemeChangesAndIdempotentRefresh() {
+        let resolver = ThemeResolver()
+        resolver.apply(themeId: ThemeResolver.defaultThemeId, appearance: .system, systemColorScheme: .dark)
+        XCTAssertEqual(resolver.colors.mode, .dark)
+        withObservationTracking {
+            _ = resolver.colors.mode
+        } onChange: {
+            XCTFail("An unchanged appearance refresh must not republish theme colors.")
+        }
+        resolver.apply(themeId: ThemeResolver.defaultThemeId, appearance: .system, systemColorScheme: .dark)
+        // Use a separate resolver below so the one-shot unchanged-value guard
+        // above never observes an intentionally different appearance.
+        let changingResolver = ThemeResolver()
+        for scheme in [ColorScheme.dark, .light, .dark] {
+            changingResolver.apply(themeId: ThemeResolver.defaultThemeId, appearance: .system, systemColorScheme: scheme)
+            XCTAssertEqual(changingResolver.colors.mode, scheme == .dark ? .dark : .light)
+        }
+    }
+
+    func testThemeChangesAndDefaultRestoreKeepSystemDark() {
+        let resolver = ThemeResolver()
+        for theme in resolver.themes {
+            resolver.apply(themeId: theme.id, appearance: .system, systemColorScheme: .dark)
+            XCTAssertEqual(resolver.colors.id, theme.id)
+            XCTAssertEqual(resolver.colors.mode, .dark)
+        }
+        resolver.apply(themeId: ThemeResolver.defaultThemeId, appearance: .system, systemColorScheme: .dark)
+        XCTAssertEqual(resolver.colors.id, ThemeResolver.defaultThemeId)
+        XCTAssertEqual(resolver.colors.mode, .dark)
+    }
+
+    func testUnknownThemeFallbackPreservesEffectiveDarkAppearance() {
+        let resolver = ThemeResolver()
+        assertSameTheme(
+            resolver.resolve(themeId: "missing_theme", appearance: .system, systemColorScheme: .dark),
+            resolver.resolve(themeId: ThemeResolver.defaultThemeId, appearance: .dark, systemColorScheme: .light)
+        )
+    }
+
+    func testStaticAppColorReadsRegisterThemeObservation() {
+        let resolver = ThemeResolver.shared
+        let previous = resolver.colors
+        defer {
+            resolver.apply(
+                themeId: previous.id,
+                appearance: previous.mode == .dark ? .dark : .light,
+                systemColorScheme: previous.mode == .dark ? .dark : .light
+            )
+        }
+        resolver.apply(themeId: ThemeResolver.defaultThemeId, appearance: .light, systemColorScheme: .light)
+        let changed = expectation(description: "AppColors readers observe theme changes without resetting view identity")
+        withObservationTracking {
+            _ = AppColors.text
+            _ = AppColors.isDarkMode
+        } onChange: {
+            changed.fulfill()
+        }
+        resolver.apply(themeId: ThemeResolver.defaultThemeId, appearance: .system, systemColorScheme: .dark)
+        wait(for: [changed], timeout: 0.1)
+        XCTAssertTrue(AppColors.isDarkMode)
+    }
+
+    func testDarkHomeTotalPillsAreOpaqueAndReadableForEveryTheme() {
+        let resolver = ThemeResolver()
+        XCTAssertEqual(resolver.themes.count, 31)
+        for theme in resolver.themes {
+            let resolved = resolver.resolve(themeId: theme.id, appearance: .system, systemColorScheme: .dark)
+            let palette = HomeNarrativePillColors(theme: resolved)
+            XCTAssertEqual(palette.background, resolved.surfaceMuted, theme.id)
+            XCTAssertEqual(palette.foreground, resolved.textPrimary, theme.id)
+            XCTAssertEqual(palette.border, resolved.stroke, theme.id)
+#if canImport(UIKit)
+            XCTAssertGreaterThanOrEqual(
+                opaqueContrastRatio(palette.foreground, palette.background),
+                4.5,
+                theme.id
+            )
+#endif
+        }
+    }
+
+    func testLightHomeTotalPillsKeepOriginalAppearance() {
+        let resolver = ThemeResolver()
+        for theme in resolver.themes {
+            let resolved = resolver.resolve(themeId: theme.id, appearance: .light, systemColorScheme: .dark)
+            let palette = HomeNarrativePillColors(theme: resolved)
+            XCTAssertEqual(palette.foreground, resolved.textSecondary, theme.id)
+            XCTAssertEqual(palette.background, Color.white.opacity(0.58), theme.id)
+            XCTAssertEqual(palette.border, Color.white.opacity(0.46), theme.id)
+        }
+    }
+
+    private func assertSameTheme(_ lhs: ResolvedThemeTokens, _ rhs: ResolvedThemeTokens) {
+        XCTAssertEqual(lhs.id, rhs.id)
+        XCTAssertEqual(lhs.mode, rhs.mode)
+        func colors(_ theme: ResolvedThemeTokens) -> [Color] {
+            [
+                theme.background, theme.backgroundGradientEnd, theme.surface,
+                theme.surfaceWarm, theme.surfaceMuted, theme.stroke,
+                theme.textPrimary, theme.textSecondary, theme.textTertiary,
+                theme.accent, theme.accentDark, theme.readableAccent, theme.onAccent,
+                theme.lockGold, theme.heroGradientPink, theme.heroGradientTeal,
+                theme.panel, theme.panelStrong, theme.line, theme.paperWarm,
+                theme.paperMist, theme.paperBorder, theme.paperCrease,
+                theme.tabActiveBg, theme.tabInactiveBg, theme.tabInactiveGlyph,
+                theme.floatingPetPanel, theme.settingsIdentityPanel,
+                theme.settingsChapterPanel, theme.tracePlaybackButtonBg,
+                theme.traceAppendixBg, theme.monthlyInsightBg,
+                theme.settingsEnvelopeIvory, theme.settingsEnvelopeWarm,
+                theme.settingsEnvelopeMint, theme.settingsEnvelopeSage,
+                theme.settingsEnvelopeDeepSage
+            ] + theme.categoryColors
+        }
+        XCTAssertEqual(colors(lhs), colors(rhs), lhs.id)
+    }
+
+#if canImport(UIKit)
+    private func opaqueContrastRatio(_ foreground: Color, _ background: Color) -> Double {
+        func luminance(_ color: Color) -> Double {
+            var red: CGFloat = 0
+            var green: CGFloat = 0
+            var blue: CGFloat = 0
+            var alpha: CGFloat = 0
+            XCTAssertTrue(UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+            XCTAssertEqual(alpha, 1, accuracy: 0.0001)
+            func linear(_ value: CGFloat) -> Double {
+                let component = Double(value)
+                return component <= 0.04045 ? component / 12.92 : pow((component + 0.055) / 1.055, 2.4)
+            }
+            return linear(red) * 0.2126 + linear(green) * 0.7152 + linear(blue) * 0.0722
+        }
+        let first = luminance(foreground)
+        let second = luminance(background)
+        return (max(first, second) + 0.05) / (min(first, second) + 0.05)
+    }
+#endif
 }
 
 final class PixelPetAnimationPolicyTests: XCTestCase {
@@ -11404,6 +12149,601 @@ final class DiscoverEditorialPolicyTests: XCTestCase {
         XCTAssertEqual(many.flatMap(\.indices), Array(0..<9))
         XCTAssertEqual(Set(many.flatMap(\.indices)).count, 9)
         XCTAssertEqual(many, DiscoverMemoryWallLayoutPolicy.rows(for: 9))
+    }
+}
+
+final class DiningFoodContextRegressionTests: XCTestCase {
+    private func date(day: Int = 17, hour: Int = 8, minute: Int = 30) -> Date {
+        Calendar.current.date(from: DateComponents(
+            year: 2026, month: 9, day: day, hour: hour, minute: minute
+        ))!
+    }
+
+    private func tag(_ title: String, at date: Date, variant: Int = 0, brand: String? = nil) -> String {
+        NarrativeCopyResolver.resolveEmotionTag(context: .init(
+            brandId: brand, category: .dining, amount: 12, date: date,
+            seed: title + "|choice:\(variant)", note: title
+        ))
+    }
+
+    private func resolution(_ title: String, at date: Date) -> RecordDraftResolution {
+        RecordDraftResolutionService.resolve(.init(
+            rawTitle: title, fallbackCategory: .dining, amount: 12, date: date,
+            merchantBrandId: nil, categoryLockedByUser: false,
+            userEditedTitle: true, source: "test"
+        ))
+    }
+
+    func testSeparateFoodsNeverBorrowAnotherFoodNameAcrossSeeds() {
+        let foods = ["馄饨", "饺子", "锅贴", "生煎"]
+        for food in foods {
+            for hour in [8, 12, 18, 23] {
+                let outputs = (0..<32).map { tag(food, at: date(hour: hour), variant: $0) }
+                XCTAssertGreaterThan(Set(outputs).count, 1, food)
+                for output in outputs {
+                    XCTAssertTrue(output.contains(food), output)
+                    XCTAssertTrue(foods.filter { $0 != food }.allSatisfy { !output.contains($0) }, output)
+                }
+            }
+        }
+    }
+
+    func testWeekdayAndWeekendBreakfastDoNotInventWork() {
+        for day in [17, 19] {
+            for variant in 0..<24 {
+                let output = tag("馄饨", at: date(day: day), variant: variant)
+                XCTAssertTrue(output.contains("馄饨") && output.contains("早餐"), output)
+                XCTAssertTrue(["上班", "工作", "通勤", "热乎", "热食"].allSatisfy { !output.contains($0) }, output)
+            }
+        }
+    }
+
+    func testBreakfastInferenceUsesOnlyFiveThroughNineFiftyNine() {
+        let cases = [(4, 59, false), (5, 0, true), (9, 59, true), (10, 0, false)]
+        for (hour, minute, breakfast) in cases {
+            let output = tag("馄饨", at: date(hour: hour, minute: minute))
+            XCTAssertEqual(output.contains("早餐"), breakfast, output)
+        }
+    }
+
+    func testExplicitMealFactsWinOverTheMorningClock() {
+        for meal in ["午饭", "晚饭", "夜宵"] {
+            for variant in 0..<24 {
+                let output = tag(meal + "馄饨", at: date(), variant: variant)
+                XCTAssertTrue(output.contains(meal) && output.contains("馄饨"), output)
+                XCTAssertFalse(output.contains("早餐"), output)
+            }
+        }
+    }
+
+    func testBackfilledBreakfastRemainsBreakfastAtNight() {
+        for hour in [18, 23] {
+            let output = tag("早餐馄饨", at: date(hour: hour))
+            XCTAssertTrue(output.contains("早餐") && output.contains("馄饨"), output)
+            let item = HomeItem(title: "早餐馄饨", amount: 12, category: .dining,
+                                createdAt: date(hour: hour), emotionTag: output)
+            XCTAssertEqual(item.displayEmotionTag, output)
+        }
+    }
+
+    func testConflictingExplicitMealsStayFoodSpecificWithoutGuessingAMeal() {
+        let output = tag("早餐午饭馄饨", at: date())
+        XCTAssertTrue(output.contains("馄饨"))
+        XCTAssertFalse(output.contains("早餐") || output.contains("午饭"))
+    }
+
+    func testBeforeWorkExpressionRequiresExplicitEvidenceAndBreakfastContext() {
+        for day in [17, 19] {
+            let output = tag("上班前吃馄饨", at: date(day: day))
+            XCTAssertTrue(output.contains("上班前") && output.contains("早餐"), output)
+            XCTAssertFalse(tag("公司馄饨", at: date(day: day)).contains("上班前"))
+            XCTAssertFalse(tag("上班前午饭馄饨", at: date(day: day)).contains("早餐"))
+        }
+    }
+
+    func testExplicitWontonWinsOverCloudDumplingBrandCue() {
+        for variant in 0..<24 {
+            let output = tag("袁记云饺馄饨", at: date(), variant: variant, brand: "yuanjiyunjiao")
+            XCTAssertTrue(output.contains("馄饨") && output.contains("早餐"), output)
+            XCTAssertFalse(output.contains("饺子") || output.contains("水饺"), output)
+        }
+    }
+
+    func testStrongLateWorkAndNightMarketContextsKeepTheirExistingPriority() {
+        for title in ["加班馄饨", "晚归馄饨", "夜宵加班馄饨", "夜市馄饨"] {
+            let at = date(hour: 23)
+            XCTAssertNil(DiningCopyEvidencePolicy.contextualFoodEmotionTag(evidence: title, date: at, seed: title))
+            XCTAssertEqual(tag(title, at: at), HomeItem.lateNightDiningEmotionTag(title: title, date: at), title)
+        }
+    }
+
+    func testContextualFoodPolicyDoesNotExtendToOtherFoodsOrCategories() {
+        for title in ["咖啡", "牛肉面", "罗森", "袁记云饺"] {
+            XCTAssertNil(DiningCopyEvidencePolicy.contextualFoodEmotionTag(evidence: title, date: date(), seed: title))
+        }
+        for category in [HomeItem.Category.shopping, .other] {
+            let output = NarrativeCopyResolver.resolveEmotionTag(context: .init(
+                brandId: nil, category: category, amount: 12, date: date(), seed: "馄饨", note: "馄饨"
+            ))
+            XCTAssertFalse(output.contains("馄饨") || output.contains("早餐"), output)
+        }
+    }
+
+    func testDirectGenericAndRefinedPathsAlsoKeepBreakfastAndFoodIdentity() {
+        let generic = DiningCopyEvidencePolicy.genericEmotionTag(evidence: "馄饨", date: date(), seed: "馄饨")
+        let refined = HomeItem.refinedEmotionTag(title: "馄饨", category: .dining, amount: 12, date: date()) ?? ""
+        for output in [generic, refined] {
+            XCTAssertTrue(output.contains("早餐") && output.contains("馄饨"), output)
+            XCTAssertFalse(output.contains("饺子"), output)
+        }
+    }
+
+    func testBreakfastCandidatesCycleAndSurviveSaveValidationAndDisplay() throws {
+        for title in ["馄饨", "饺子", "锅贴", "生煎", "袁记云饺馄饨", "上班前的馄饨早餐"] {
+            let at = date()
+            let resolved = resolution(title, at: at)
+            let scene = RecordEmotionSceneContext(
+                title: resolved.title, category: resolved.category, amount: 12, date: at,
+                merchantBrandID: resolved.merchantBrandId, scenePackID: nil, semanticAnchor: nil,
+                previewEmotionTag: resolved.emotionTag, automaticEmotionTag: resolved.emotionTag
+            )
+            let choices = RecordEmotionScenePolicy.candidates(for: scene)
+            XCTAssertGreaterThan(choices.count, 1, title)
+            XCTAssertEqual(Set(choices).count, choices.count)
+            let first = try XCTUnwrap(choices.first)
+            var current = first
+            for _ in choices.indices {
+                current = try XCTUnwrap(RecordEmotionScenePolicy.next(after: current, candidates: choices))
+            }
+            XCTAssertEqual(current, first)
+            let savedResolution = resolution(title, at: at)
+            for choice in choices {
+                XCTAssertTrue(choice.contains("早餐"), choice)
+                XCTAssertEqual(RecordEmotionScenePolicy.validatedTag(
+                    selection: .init(context: scene, tag: choice), resolution: savedResolution,
+                    amount: 12, date: at, scenePackID: nil, automaticEmotionTag: savedResolution.emotionTag
+                ), choice)
+                let item = scene.item(emotionTag: choice)
+                XCTAssertEqual(item.displayEmotionTag, choice)
+                let baseline = scene.item(emotionTag: resolved.emotionTag)
+                for isMember in [false, true] {
+                    let originalMarks = LifeMarkService.aggregates(for: [baseline], allItems: [baseline],
+                        isMember: isMember, now: at, limit: 100)
+                    let chosenMarks = LifeMarkService.aggregates(for: [item], allItems: [item],
+                        isMember: isMember, now: at, limit: 100)
+                    XCTAssertEqual(Set(originalMarks.map(\.id)), Set(chosenMarks.map(\.id)), choice)
+                }
+            }
+        }
+    }
+
+    func testLegacyFoodMismatchIsCorrectedOnlyOnDisplayWithoutMutation() {
+        for (title, oldTag) in [("馄饨", "饺子这一餐"), ("饺子", "馄饨这一餐"), ("锅贴", "饺子这一餐"), ("生煎", "饺子这一餐")] {
+            let item = HomeItem(title: title, amount: 12, category: .dining,
+                                createdAt: date(), emotionTag: oldTag)
+            let unchanged = item
+            XCTAssertTrue(item.displayEmotionTag.contains(title), item.displayEmotionTag)
+            XCTAssertEqual(item.displayEmotionTag, item.displayEmotionTag)
+            XCTAssertEqual(item.emotionTag, oldTag)
+            XCTAssertEqual(item, unchanged)
+        }
+    }
+
+    func testMixedFoodsKeepEitherSupportedStoredLabel() {
+        for emotion in ["馄饨这一餐", "饺子这一餐"] {
+            let item = HomeItem(title: "馄饨和饺子", amount: 12, category: .dining,
+                                createdAt: date(), emotionTag: emotion)
+            XCTAssertEqual(item.displayEmotionTag, emotion)
+        }
+    }
+
+    func testSameDraftRemainsDeterministicWithoutPersistedCyclingState() {
+        let at = date()
+        let first = resolution("馄饨", at: at)
+        XCTAssertEqual(first.emotionTag, resolution("馄饨", at: at).emotionTag)
+        let variants = (0..<24).map { tag("馄饨", at: at, variant: $0) }
+        XCTAssertGreaterThan(Set(variants).count, 1)
+    }
+}
+
+final class RecordEmotionScenePolicyTests: XCTestCase {
+    @MainActor
+    func testRecordSessionRetainsEmotionChoiceUntilDraftCommitReset() {
+        let session = RecordTabSession()
+        let scene = context()
+        let selection = RecordEmotionSelection(context: scene, tag: scene.previewEmotionTag)
+        session.emotionSelection = selection
+        session.categoryGridExpanded = true
+        session.categoryGridExpanded = false
+        session.scenePackExpanded = true
+        session.scenePackExpanded = false
+        XCTAssertEqual(session.emotionSelection, selection)
+        session.resetAfterCommittedDraft()
+        XCTAssertNil(session.emotionSelection)
+    }
+
+    private var date: Date {
+        Calendar.current.date(from: DateComponents(
+            year: 2026, month: 9, day: 17, hour: 12
+        ))!
+    }
+
+    private func context(
+        title: String = "罗森",
+        category: HomeItem.Category = .dining,
+        amount: Double = 18,
+        brandID: String? = "lawson",
+        packID: String? = nil,
+        anchor: String? = nil,
+        preview: String? = nil,
+        automatic: String? = nil
+    ) -> RecordEmotionSceneContext {
+        let generated = NarrativeCopyResolver.resolveEmotionTag(
+            context: .init(
+                brandId: brandID, category: category, amount: amount, date: date,
+                seed: title, note: title, scenePackId: packID
+            )
+        )
+        return RecordEmotionSceneContext(
+            title: title, category: category, amount: amount, date: date,
+            merchantBrandID: brandID, scenePackID: packID, semanticAnchor: anchor,
+            previewEmotionTag: preview ?? generated,
+            automaticEmotionTag: automatic ?? generated
+        )
+    }
+
+    private func resolution(for context: RecordEmotionSceneContext) -> RecordDraftResolution {
+        RecordDraftResolution(
+            category: context.category, title: context.title,
+            emotionTag: context.previewEmotionTag, merchantBrandId: context.merchantBrandID,
+            source: "emotion-scene-test", trace: []
+        )
+    }
+
+    private var factualFixtures: [RecordEmotionSceneContext] {
+        [
+            context(),
+            context(title: "罗森咖啡"),
+            context(title: "罗森饮料", amount: 8),
+            context(title: "罗森便当"),
+            context(title: "牛肉面", amount: 22, brandID: nil),
+            context(title: "上班地铁", category: .transport, amount: 4, brandID: nil, packID: "commute"),
+            context(title: "日常外套", category: .shopping, amount: 268, brandID: nil),
+            context(title: "路亚鱼竿", category: .shopping, amount: 268, brandID: nil),
+            context(title: "手机话费", category: .daily, amount: 50, brandID: nil, preview: "手机话费记下"),
+            context(title: "医疗保险", category: .other, amount: 100, brandID: nil),
+        ]
+    }
+
+    func testConvenienceStoreHasRealDeterministicDistinctChoicesWithinSix() {
+        let scene = context()
+        let first = RecordEmotionScenePolicy.candidates(for: scene)
+        let second = RecordEmotionScenePolicy.candidates(for: scene)
+
+        // This positive fixture must not pass if filtering accidentally removes every choice.
+        XCTAssertGreaterThan(first.count, 1)
+        XCTAssertLessThanOrEqual(first.count, 6)
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(first.first, scene.previewEmotionTag)
+        XCTAssertEqual(Set(first).count, first.count)
+        XCTAssertTrue(first.allSatisfy {
+            $0.contains("罗森") || $0 == "便利店这一笔"
+        })
+    }
+
+    func testNextCyclesEachCandidateOnceThenReturnsToTheFirst() throws {
+        let choices = RecordEmotionScenePolicy.candidates(for: context())
+        XCTAssertGreaterThan(choices.count, 1)
+        let first = try XCTUnwrap(choices.first)
+        var current = first
+        var visited: [String] = []
+        for _ in choices.indices {
+            visited.append(current)
+            current = try XCTUnwrap(RecordEmotionScenePolicy.next(after: current, candidates: choices))
+        }
+        XCTAssertEqual(visited, choices)
+        XCTAssertEqual(current, first)
+        XCTAssertEqual(
+            RecordEmotionScenePolicy.next(after: "不在候选里的旧标签", candidates: choices),
+            first
+        )
+    }
+
+    func testEmptyAndSingletonChoicesDoNotOfferAChange() {
+        XCTAssertNil(RecordEmotionScenePolicy.next(after: "", candidates: []))
+        XCTAssertNil(RecordEmotionScenePolicy.next(after: "唯一标签", candidates: ["唯一标签"]))
+        XCTAssertNil(RecordEmotionScenePolicy.next(after: "旧标签", candidates: ["唯一标签"]))
+    }
+
+    func testMissingNoteOrNonpositiveAmountCannotOfferChoices() {
+        XCTAssertTrue(RecordEmotionScenePolicy.candidates(for: context(title: "")).isEmpty)
+        XCTAssertTrue(RecordEmotionScenePolicy.candidates(for: context(title: RecordSemanticLexicon.emptyNoteTitle)).isEmpty)
+        XCTAssertTrue(RecordEmotionScenePolicy.candidates(for: context(amount: 0)).isEmpty)
+        XCTAssertTrue(RecordEmotionScenePolicy.candidates(for: context(amount: -1)).isEmpty)
+    }
+
+    func testEveryRealCandidatePassesSaveValidationWithoutChangingResolution() {
+        for scene in factualFixtures {
+            let resolved = resolution(for: scene)
+            let choices = RecordEmotionScenePolicy.candidates(for: scene)
+            XCTAssertFalse(choices.isEmpty, scene.title)
+            XCTAssertLessThanOrEqual(choices.count, 6, scene.title)
+            XCTAssertEqual(Set(choices).count, choices.count, scene.title)
+            for tag in choices {
+                XCTAssertEqual(
+                    RecordEmotionScenePolicy.validatedTag(
+                        selection: .init(context: scene, tag: tag), resolution: resolved,
+                        amount: scene.amount, date: scene.date, scenePackID: scene.scenePackID,
+                        automaticEmotionTag: scene.automaticEmotionTag
+                    ),
+                    tag,
+                    "\(scene.title): \(tag)"
+                )
+            }
+            XCTAssertEqual(resolved.category, scene.category)
+            XCTAssertEqual(resolved.title, scene.title)
+            XCTAssertEqual(resolved.merchantBrandId, scene.merchantBrandID)
+        }
+    }
+
+    func testNilAndForgedSelectionsCannotOverrideAutomaticEmotion() {
+        let scene = context()
+        for selection in [
+            nil,
+            RecordEmotionSelection(context: scene, tag: "雨天通勤"),
+            RecordEmotionSelection(context: scene, tag: "不属于任何候选的标签"),
+        ] as [RecordEmotionSelection?] {
+            XCTAssertNil(RecordEmotionScenePolicy.validatedTag(
+                selection: selection, resolution: resolution(for: scene),
+                amount: scene.amount, date: scene.date, scenePackID: scene.scenePackID,
+                automaticEmotionTag: scene.automaticEmotionTag
+            ))
+        }
+    }
+
+    func testChangedTitleCategoryOrBrandRejectsTheOldSelection() throws {
+        let scene = context()
+        let tag = try XCTUnwrap(RecordEmotionScenePolicy.candidates(for: scene).first)
+        let changedResolutions = [
+            RecordDraftResolution(
+                category: scene.category, title: "罗森咖啡", emotionTag: scene.previewEmotionTag,
+                merchantBrandId: scene.merchantBrandID, source: "test", trace: []
+            ),
+            RecordDraftResolution(
+                category: .daily, title: scene.title, emotionTag: scene.previewEmotionTag,
+                merchantBrandId: scene.merchantBrandID, source: "test", trace: []
+            ),
+            RecordDraftResolution(
+                category: scene.category, title: scene.title, emotionTag: scene.previewEmotionTag,
+                merchantBrandId: "familymart", source: "test", trace: []
+            ),
+            RecordDraftResolution(
+                category: scene.category, title: scene.title, emotionTag: scene.previewEmotionTag,
+                merchantBrandId: nil, source: "test", trace: []
+            ),
+        ]
+        for changed in changedResolutions {
+            XCTAssertNil(RecordEmotionScenePolicy.validatedTag(
+                selection: .init(context: scene, tag: tag), resolution: changed,
+                amount: scene.amount, date: scene.date, scenePackID: scene.scenePackID,
+                automaticEmotionTag: scene.automaticEmotionTag
+            ))
+        }
+    }
+
+    func testChangedAmountDateOrPackRejectsTheOldSelection() throws {
+        let scene = context(packID: "food")
+        let tag = try XCTUnwrap(RecordEmotionScenePolicy.candidates(for: scene).first)
+        let mutations: [(Double, Date, String?)] = [
+            (scene.amount + 1, scene.date, scene.scenePackID),
+            (scene.amount, scene.date.addingTimeInterval(60), scene.scenePackID),
+            (scene.amount, scene.date, "commute"),
+            (scene.amount, scene.date, nil),
+        ]
+        for (amount, date, packID) in mutations {
+            XCTAssertNil(RecordEmotionScenePolicy.validatedTag(
+                selection: .init(context: scene, tag: tag), resolution: resolution(for: scene),
+                amount: amount, date: date, scenePackID: packID,
+                automaticEmotionTag: scene.automaticEmotionTag
+            ))
+        }
+    }
+
+    func testChangedAutomaticEmotionRejectsTheOldSelection() throws {
+        let scene = context()
+        let tag = try XCTUnwrap(RecordEmotionScenePolicy.candidates(for: scene).first)
+        XCTAssertNil(RecordEmotionScenePolicy.validatedTag(
+            selection: .init(context: scene, tag: tag), resolution: resolution(for: scene),
+            amount: scene.amount, date: scene.date, scenePackID: scene.scenePackID,
+            automaticEmotionTag: "外地记录"
+        ))
+    }
+
+    func testHandwrittenDoubleSpacesUseNormalizedChoiceContextThroughSaveValidation() throws {
+        let rawTitle = "罗森  咖啡"
+        let normalizedTitle = UserContentRiskService.shared.normalizedManualNote(rawTitle)
+        XCTAssertEqual(normalizedTitle, "罗森 咖啡")
+        func resolve(_ title: String) -> RecordDraftResolution {
+            RecordDraftResolutionService.resolve(.init(
+                rawTitle: title, fallbackCategory: .dining, amount: 18, date: date,
+                merchantBrandId: MerchantBrandCatalog.matchBrand(in: title)?.id,
+                categoryLockedByUser: false, userEditedTitle: true, source: "manual"
+            ))
+        }
+        let rawPreview = resolve(rawTitle)
+        let chooserResolution = resolve(normalizedTitle)
+        XCTAssertEqual(rawPreview.title, rawTitle)
+        XCTAssertEqual(
+            UserContentRiskService.shared.normalizedManualNote(rawPreview.title),
+            chooserResolution.title
+        )
+        XCTAssertEqual(rawPreview.category, chooserResolution.category)
+        XCTAssertEqual(rawPreview.merchantBrandId, chooserResolution.merchantBrandId)
+
+        let scene = RecordEmotionSceneContext(
+            title: chooserResolution.title, category: chooserResolution.category,
+            amount: 18, date: date, merchantBrandID: chooserResolution.merchantBrandId,
+            scenePackID: nil, semanticAnchor: nil,
+            previewEmotionTag: chooserResolution.emotionTag,
+            automaticEmotionTag: chooserResolution.emotionTag
+        )
+        let choices = RecordEmotionScenePolicy.candidates(for: scene)
+        XCTAssertGreaterThan(choices.count, 1)
+        let chosen = try XCTUnwrap(RecordEmotionScenePolicy.next(
+            after: scene.previewEmotionTag, candidates: choices
+        ))
+        XCTAssertNotEqual(chosen, scene.previewEmotionTag)
+
+        let validatedNote = UserContentRiskService.shared.validateManualNote(rawTitle, allowEmpty: true)
+        XCTAssertTrue(validatedNote.isAllowed)
+        XCTAssertEqual(validatedNote.value, normalizedTitle)
+        let saveResolution = resolve(validatedNote.value)
+        XCTAssertEqual(saveResolution.title, "罗森 咖啡")
+        XCTAssertEqual(
+            RecordEmotionScenePolicy.validatedTag(
+                selection: .init(context: scene, tag: chosen), resolution: saveResolution,
+                amount: 18, date: date, scenePackID: nil,
+                automaticEmotionTag: saveResolution.emotionTag
+            ),
+            chosen
+        )
+        XCTAssertEqual(scene.item(emotionTag: chosen).displayEmotionTag, chosen)
+    }
+
+    func testSemanticAnchorAndAutomaticPreviewArePartOfDraftIdentity() {
+        let original = context()
+        XCTAssertNotEqual(original, context(anchor: "罗森咖啡"))
+        XCTAssertNotEqual(original, context(preview: "新的预览标签"))
+        XCTAssertNotEqual(original, context(automatic: "新的自动标签"))
+        XCTAssertEqual(Set([original, context(), context(anchor: "罗森咖啡")]).count, 2)
+    }
+
+    func testSpecificDiningChoicesStayWithCoffeeDrinkOrBentoEvidence() {
+        let fixtures: [(RecordEmotionSceneContext, String)] = [
+            (context(title: "罗森咖啡"), "咖啡"),
+            (context(title: "罗森饮料", amount: 8), "drink"),
+            (context(title: "罗森便当"), "便当"),
+        ]
+        for (scene, evidence) in fixtures {
+            let choices = RecordEmotionScenePolicy.candidates(for: scene)
+            XCTAssertGreaterThan(choices.count, 1, scene.title)
+            for tag in choices {
+                if evidence == "drink" {
+                    XCTAssertTrue(tag.contains("饮料") || tag.contains("喝的"), tag)
+                } else {
+                    XCTAssertTrue(tag.contains(evidence), tag)
+                }
+                XCTAssertEqual(scene.item(emotionTag: tag).displayEmotionTag, tag)
+            }
+        }
+    }
+
+    func testCanonicalTelecomInsuranceAndTransportRemainSingletons() {
+        let fixtures: [(RecordEmotionSceneContext, String)] = [
+            (context(title: "手机话费", category: .daily, amount: 50, brandID: nil, preview: "手机话费记下"), "手机话费记下"),
+            (context(title: "医疗保险", category: .other, amount: 100, brandID: nil), "保障安排记下"),
+            (context(title: "上班地铁", category: .transport, amount: 4, brandID: nil, packID: "commute"), "公共交通一段"),
+        ]
+        for (scene, expected) in fixtures {
+            let choices = RecordEmotionScenePolicy.candidates(for: scene)
+            XCTAssertEqual(choices, [expected], scene.title)
+            XCTAssertNil(RecordEmotionScenePolicy.next(after: expected, candidates: choices))
+        }
+    }
+
+    func testTelecomAlternativesThatWouldBeRewrittenOnDisplayAreNotOffered() {
+        let scene = context(title: "手机话费", category: .daily, amount: 50, brandID: nil)
+        XCTAssertNotEqual(scene.previewEmotionTag, "手机话费记下")
+        XCTAssertEqual(scene.item(emotionTag: scene.previewEmotionTag).displayEmotionTag, "手机话费记下")
+        let choices = RecordEmotionScenePolicy.candidates(for: scene)
+        XCTAssertTrue(choices.isEmpty)
+        XCTAssertNil(RecordEmotionScenePolicy.next(after: scene.previewEmotionTag, candidates: choices))
+    }
+
+    func testLegacyRainAndAwayFactsCannotBeRemovedByCycling() {
+        let rainy = context(
+            title: "上班地铁", category: .transport, amount: 4, brandID: nil,
+            packID: "commute", preview: "雨天通勤", automatic: "雨天通勤"
+        )
+        let away = context(preview: "外地记录", automatic: "外地记录")
+        XCTAssertEqual(RecordEmotionScenePolicy.candidates(for: rainy), ["雨天通勤"])
+        XCTAssertEqual(RecordEmotionScenePolicy.candidates(for: away), ["外地记录"])
+        let weatherChanged = context(
+            title: "上班地铁", category: .transport, amount: 4, brandID: nil,
+            packID: "commute", automatic: "雨天通勤"
+        )
+        XCTAssertTrue(RecordEmotionScenePolicy.candidates(for: weatherChanged).isEmpty)
+    }
+
+    func testEveryCandidatePreservesDisplaySceneLifeMarksAndQueryFacets() {
+        let facets: [AICommandSemanticFacet] = [
+            .weatherHot, .weatherCold, .weatherRain, .weatherSnow,
+            .commute, .interestGear, .awayFromHome,
+        ]
+        for scene in factualFixtures {
+            let baseline = scene.item(emotionTag: scene.automaticEmotionTag)
+            let expectedScene = LifeSceneSemanticService.classify(baseline)
+            let choices = RecordEmotionScenePolicy.candidates(for: scene)
+            XCTAssertFalse(choices.isEmpty, scene.title)
+            for tag in choices {
+                var selected = baseline
+                selected.emotionTag = tag
+                XCTAssertEqual(selected.displayEmotionTag, tag, scene.title)
+                XCTAssertEqual(LifeSceneSemanticService.classify(selected), expectedScene, scene.title)
+                for isMember in [false, true] {
+                    let originalMarks = LifeMarkService.aggregates(
+                        for: [baseline], allItems: [baseline], isMember: isMember,
+                        now: scene.date, limit: 100
+                    )
+                    let selectedMarks = LifeMarkService.aggregates(
+                        for: [selected], allItems: [selected], isMember: isMember,
+                        now: scene.date, limit: 100
+                    )
+                    XCTAssertEqual(
+                        Set(selectedMarks.map(\.id)), Set(originalMarks.map(\.id)),
+                        "\(scene.title): \(tag), member: \(isMember)"
+                    )
+                }
+                for facet in facets {
+                    let intent = LifeMarkQueryIntent(
+                        id: "emotion-scene-test", label: "", categories: [], keywords: [],
+                        requiresKeywordMatch: false, semanticFacets: [facet]
+                    )
+                    XCTAssertEqual(
+                        LifeMarkService.matches(selected, intent: intent),
+                        LifeMarkService.matches(baseline, intent: intent),
+                        "\(scene.title): \(tag), facet: \(facet)"
+                    )
+                }
+            }
+        }
+    }
+
+    private func rewardPackID(for item: HomeItem) -> String? {
+        let suiteName = "RecordEmotionScenePolicyTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let service = LifeMarkSceneRewardService(defaults: defaults, now: { item.createdAt })
+        return service.registerRewardIfNeeded(
+            for: item, allItems: [item], currentPackIds: [],
+            definitions: ScenePackCopyPool.definitions, isMember: false
+        )?.packId
+    }
+
+    func testEmotionChoicePreservesRewardEligibilityWithAPositiveInterestFixture() {
+        let interest = context(title: "路亚鱼竿", category: .shopping, amount: 268, brandID: nil)
+        XCTAssertEqual(rewardPackID(for: interest.item(emotionTag: interest.automaticEmotionTag)), "shopping")
+        for scene in factualFixtures {
+            let baseline = scene.item(emotionTag: scene.automaticEmotionTag)
+            let expectedRewardPack = rewardPackID(for: baseline)
+            let choices = RecordEmotionScenePolicy.candidates(for: scene)
+            XCTAssertFalse(choices.isEmpty, scene.title)
+            for tag in choices {
+                var selected = baseline
+                selected.emotionTag = tag
+                XCTAssertEqual(rewardPackID(for: selected), expectedRewardPack, "\(scene.title): \(tag)")
+            }
+        }
     }
 }
 #endif

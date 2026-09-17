@@ -5419,3 +5419,137 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 未完成验证：当前环境无 Xcode/Swift 工具链，未执行 Swift Debug/Release 编译、XCTest 或真机验收，因此不得标记 `VERIFIED`。
 - 冻结边界：未改变图片持久化、账单字段、备份结构、同步、详情交互、会员/IAP 或发布配置；保留用户既有工作区修改与未跟踪文件。
 - 剩余风险与下一步：在 macOS/Xcode 上确认 Swift 编译与缩略图预热 XCTest；随后在 staging 和生产分支分别执行对应 Release gate，并完成真机签收。
+
+### 151. RECORD-RECOMMENDATION-CONSISTENCY-AUDIT-01：推荐分类提示、帮写与保存一致性排查（2026-09-17）
+
+- 性质与范围：用户明确要求先排查、不改代码。本轮只读审计手动记录的金额预填、推荐提示、预览、帮写、改分类、换角度、保存与异步失效链路；仅追加本条审计记录，不启动实现任务，不改变既有 roadmap 状态。
+- 用户期望：没有主动改分类或实际选定其他角度、没有新增明确备注事实时，页面既然显示当前推荐分类，默认分类、帮写所用分类和保存分类就应一致；没有可信推荐时可以保留“其他”，但不能同时显示另一类别已经被推荐采用的提示。打开再取消分类/角度选择不属于主动改动。
+- 已确认主因：`RecordPrefillService.swift:252-279,491-503` 会返回低可信的 `habit` 候选；最高分类不足 3 条或同条件候选不足 4 条时置信度最多为 `0.54`，标题另外要求 `>= 0.65`。`HomeViewModel.swift:572-599` 真正采用普通习惯分类要求 `>= 0.55`，没有更高优先级依据时实际分类保留初始 `.other`；但 `recordLearningHint`（2342-2399）直接读取候选分类，`habit` 分支没有可信度或与实际分类一致性检查，仍显示“这个时间附近常是购物/吃饭”。`sanitizedPrefillResult`（668-690）只处理标题兼容性，保留候选分类，不能消除矛盾。
+- 保存证据：`RecordView.saveManualRecord`（1021）调用 `HomeViewModel.addManualRecord`（1301），后者以 `selectedCategory` 为 `RecordDraftResolutionService` 的 fallback；空白备注/中性文案没有新的品牌或语义证据时沿用此分类，`HomeItem` 在 1352 行直接使用解析结果。因此问题在保存前就已存在，不需要假设用户手动选了“其他”或存储层丢失购物分类。
+- 帮写证据：会员与免费入口（`RecordView.swift:1239-1277`）都通过 `nextCategoryCopyTitle`（1128）读取实际 `selectedCategory`；`.other` 首句就是“先放进账本”（1232-1233）。帮写会设置 `previewLineWasRotated = true`、`lastDraftIntent = .category`，但不等于用户主动改分类，也不设置 `categoryLockedByUser`；刷新入口（1746-1751）随后可因这两个文案状态跳过自动预填，旧推荐提示仍可能保留。
+- 用户澄清后的二次核对：问题精确为保存前同一张卡上“这个时间常是餐饮”与实际默认“其他”并存，连续点击“换一句”仍在其他分类内轮换。`previewQuickActionTitle`（950-955）只是按预览层级把同一动作显示为“帮我写一句”或“换一句”；在未选角度、无手写锚点时，两者均走 `categoryCopy` → `nextCategoryCopyTitle` → `.other` 文案池，递增的只是该分类的 variant（1128-1176、1232-1236），没有采纳提示中的餐饮分类。已重新逐行核对提示、已采用分类发布、换句路由和刷新守卫；未修改产品代码，未新增运行时验证。后续实现范围与真机剩余风险保持本条原结论。
+- 已确认的第二处分歧：`resolvePrefillCategory` 在 589 行优先采用可信常用金额分类，而 `categoryGridRecommendation`（624-635）先读取可信习惯分类；`prefillSnapshot`（324-380）遇到二者分类冲突又可能保留习惯结果。故即使超过 `0.55`，实际分类、提示与分类网格推荐仍可能不同，不能只修低可信阈值。
+- 主动操作边界：真正点击分类选项（`RecordView.swift:2651-2664`）或选定角度（1935-1964）才调用 `selectCategory` / `applyScenePackDraft` / `applyScenePackCategory`；这些入口设置 `categoryLockedByUser = true` 并失效旧预填（`HomeViewModel.swift:2907-2933`）。自动应用、刷新和异步发布均检查此锁。仅打开面板/Sheet 或取消不调用这些入口。选角度时可能保留用户原备注；后续帮写优先使用选定角度。用户锁定后再写明确备注仍保留锁定分类，不能在本次修复中顺带改变该边界。
+- 截图对应：图 1 的“未填写备注 + 购物提示”、图 4 的“先放进账本 + 吃饭提示 + 其他”均可由上述路径解释；图 2 的标题/出行分类一致符合可靠预填路径。图 2“出行”与图 3“交通”分别是同一 `.transport` 的展示标签和原始名称，不是分类丢失。仅凭截图不能确定用户当时的候选条数、置信度或具体预填来源，也不能断言图 4 到图 3 中间发生了哪些操作。
+- 附加时序风险（未真机复现）：新计算前 `applyProvisionalRecordCategory`（2809-2851）可能把旧自动分类暂时回退 `.other`，保存入口不等待后台预填；备注编辑的 220ms 防抖期间旧请求尚未立即失效。已有 request ID、key、取消和用户锁保护确实存在，不能宣称所有旧异步结果都能覆盖当前草稿；需要专项验证快速改金额/日期/备注后立即帮写或保存。
+- 验证证据：源码逐入口与字段交叉核对；`python scripts/life_semantic_regression.py` 退出码 0，输出 `life_semantic_regression: OK`；`scripts/experience_static_check.ps1` 退出码 0，输出 `Static experience checks passed.`。现有 `StateRegressionTests.swift:4990,5060,5123` 主要覆盖可靠习惯、锁定和稳定金额标题；语义脚本的 665-667 行跳过含历史/选中分类/用户锁的分类样例，因此这些检查通过不能证明提示、帮写与保存一致。
+- 文件与冻结边界：产品、测试、词典、金额/日期/标题、持久化/同步、会员/OCR、首页框架均未修改；首轮只追加本文档审计条目，深入复核另新增下述审计文档。保留既有 `backend/.env.staging.example` 和所有未跟踪素材/输出/脚本。
+- 剩余风险与下一任务：Windows 无 Swift/Xcode，未执行 XCTest 或复现 iPhone UI；本轮不标记修复完成。后续若进入独立 `RECORD-RECOMMENDATION-CONSISTENCY-FIX-01`，应统一已采用推荐的分类、依据和提示来源，保留低可信不猜事实与用户显式选择边界；覆盖低可信购物/餐饮、可靠交通、习惯与常用金额冲突、仅帮写/连续换句、实际改分类/选角度、打开取消、手写备注、快速修改立即保存和切 Tab 返回，每项同时核对提示、预览、生成文案与落库分类。当前按用户要求停留在排查结论，不启动该实现任务。
+- 深入复核（用户强调此页为最重要页面）：新增 `RECORD_PAGE_RECOMMENDATION_STATE_AUDIT_2026-09-17.md`，记录状态归属、五项源码确定问题、异步/预览/持久化风险、显式操作保护与 23 类后续操作矩阵。仍未改产品或测试代码，未变更 roadmap 状态。完整台账阅读是后续业务实现的前置要求，本次只读诊断不宣称已完成该前置步骤。
+- 新确认的文案反馈问题：正常连续换句、history key 有效时只在原分类轮换；但 `RecordView.swift:1746-1751` 先启动 warmup，再执行换句守卫，日期/revision 改变后 `HomeViewModel.swift:2698-2704` 的回调直接重启预填。自动购物且未锁定时，帮写“买到常用的小东西”后仅改时间，若没有对应纠正历史，该句因无类别关键词、也不在 `generatedSystemTitles` 集合，会被 `RecordHabitOverridePolicy.allows` 当成未知具体备注，拒绝习惯/常用金额覆盖；provisional 分支可把购物回退其他，后续也不能恢复。不是所有换句必然改分类，用户分类锁仍受保护。已只读核对词典：上述句子、“日用小补给”“先放进账本”无关键词命中；“下单一个需要的”命中购物。
+- 新确认的意图边界：①可靠预填标题但 inputTitle 为空时，仅打开编辑器就被 `noteWasExplicitlyCleared` 当作主动清空，保存可能变“未填写备注”（`RecordView.swift:668,699,1011,1024`）；②清空金额清掉 lastDraftIntent/编辑器/锚点/角度，却保留原备注与用户分类锁（1823-1840），手写“牛肉面”后主动选购物、再清空重输金额，会因手写标记丢失而将原话修复为购物兜底标题。两项均单列范围，不顺手修复。
+- 预览与失败路径补充：预览/保存的 userEditedTitle 判定不同，预览还可用原备注锚点，保存不传锚点；具体情绪/线索差异待专项用例。手动保存清空草稿、转今日页发生在异步持久化结果之前；最新写入失败会重载账本并提示，但未见恢复原草稿路径。此为独立故障注入验收项，不作为截图主因，不扩大到存储重构。
+- 深入复核证据与限制：逐行复核源码、独立交叉审计、词典只读匹配与置信度算术核对；先前语义脚本/静态体验检查通过仍不足以覆盖完整按钮顺序。本次未运行 Swift/XCTest/真机/持久化故障注入，不标记 CODE_DONE/VERIFIED。后续最小分类一致性范围应包含低可信候选、证据优先级及系统帮写后重算来源三条链路；新增意图与存储边界需各自明确范围，均未开始实现。
+- 文档交付检查：`git diff --check` 通过（仅既有 LF/CRLF 提示）；审计文档 46 个本地引用目标均存在、无行尾空白；`git diff --name-only -- NativeDemoApp NativeDemoAppTests scripts` 无输出，业务/测试/现有脚本没有新增修改。独立复核确认 D3/D4/D5 的条件与结论吻合，并收紧“日期修改须改变 history key”和“打开/取消不冻结合法异步推荐”的表述。
+
+### 152. RECORD-SCENE-LOCK-EXTENSION-AUDIT-01：记录页场景包、意图锁与访问权益关联审计（2026-09-17）
+
+- 性质与范围：用户继续要求把场景包使用、锁定和当前页关联扩展一并考虑。继续只读诊断，在 `RECORD_PAGE_RECOMMENDATION_STATE_AUDIT_2026-09-17.md` 新增第 9–13 节；不启动实现，不变更任何 roadmap 状态。范围覆盖实际角度选择入口、九个场景包、分类用户锁、免费三包/首周/会员/奖励访问限制、配置替换/排序/领取、日期金额变更、预览保存、跨页与 scenePackId 下游证据。
+- 三类状态已区分：categoryLockedByUser 保护显式类别；会员/免费/试用决定包访问；previewLineWasRotated + lastDraftIntent 只控制部分预填刷新。真正选分类/包才加用户锁，后续新的显式选择仍可覆盖旧类别；打开取消、免费配置替换、仅领取奖励都不等于为当前草稿应用角度。修改备注不自动解锁，preferNoteSemanticsForCurrentDraft 无实际调用。分类锁不能被访问权限锁或换句标记替代。
+- 已确认场景文案与固定类别分歧：travel 包固定 transport，却含住宿/门票/餐饮模板，且 View 的包兼容集合认可这些类别。默认公历中文日期 2026-09-10、金额 100、空备注、初次选 travel 时，当前索引算法可生成“经济型住宿这一晚”；词典只命中住宿，预览与保存随后按锁定交通修复为“日常出行”。证据：ScenePackCopyPool:108,138,574；RecordView:735,1677；RecordDraftResolutionService:37；HomeItem:1517。为源码/种子算术推导，未执行 SwiftUI。
+- 已确认系统文案被当成事实继续保留：food 生成早餐后改为晚间，分类锁阻止预填，原生成句保留；再次换句时即使没有手写锚点，也会把当前生成句作为 sourceTitle 交给 anchoredScenePackCopy 的早餐分支，继续生成早餐。证据 RecordView:1316,1353,1535,1862；ScenePackCopyPool:281。手写真正早餐另有保留价值，不能一律覆盖；金额档、日期时段、工作日/假期需联合测试。
+- 下游合同边界：commute 包显示“地铁公交打车停车”且描述含短途办事/补能，但 scenePackId=commute 在 RecordCalendarContext:184 和 LifeSceneSemanticService:479 被当明确通勤证据。手写停车后选该包可保存原话但产生通勤信号。台账第 107 节已冻结显式 commute 证据策略，因此这里只记录“宽泛选包是否等于确认通勤”的跨层合同，不顺手改首页/AI/生活线索规则。选包保存的 userEditedCategory 还会影响 RecordPrefillService:434 的后续习惯权重。
+- 访问权益承诺分歧：首周把 travel/family 换入免费三槽后，首周结束仍能从当前免费卡片选用；currentPackIds/orderedFreePacks 不移除到期扩展包，当前免费卡片无扩展锁检查。与 RecordView:266 的“扩展角度会锁定”提示冲突。是否保留首周已选槽位需单独明确权益政策；不擅自撤销资格。
+- 已选角度的权限延续：把 active 包替换出免费三槽、会员降级、奖励到期/切换，均无统一 activeScenePack 重评估；换句只检查 active 非空，保存只校验包类别相等。canUseScenePackForCurrentAccess 只有声明无调用。必须区分保留既有草稿/允许保存与继续生成新受限文案，不能用清锁或退其他来解决访问限制。
+- 奖励与时间边界：奖励从领取时起算七天、不占基础槽位、只有一个 activeKey，领取 B 会替换 A；领取本身不应用草稿角度。面板权限布尔快照可能跨首周/24 小时边界失效，service 会重新判断拒绝替换，但 Void 回调后的 UI 仍直接显示“已换上”；列为需时钟注入/真机验证风险，不宣称已经运行复现。memberScenePackSection、preferredFreeScenePack、keepSelectedCategory:true 等未发现实际调用，不把遗留代码算生效入口。
+- 验证证据与文件：新增 20 类场景包联合验收情境；独立只读交叉审计访问权限链路；当前词典匹配与 Swift FNV 索引算法等价算术核对；`git diff --check` 通过，88 个报告本地引用目标存在且无行尾空白；业务、测试、词典、脚本、会员/OCR/存储/同步代码无新增改动。只更新审计报告与本文档，保留用户原有环境/素材/脚本。
+- 剩余风险与下一步：无 Swift/Xcode/iPhone，未执行 UI 序列、首周/奖励/替换窗口跨界或持久化故障注入；现有奖励冷启动测试不覆盖上述联合状态。原分类 D1/D2/D5 与新增场景 S1/S2 需在后续明确任务范围中设计统一来源与决策；权限延续、首周承诺、通勤证据合同须单独签收，不扩大当前修复权限。本轮仍不改业务代码，不标记 CODE_DONE/VERIFIED。
+
+### 153. RECORD-RECOMMENDATION-CONSISTENCY-FIX-01：已采纳推荐与生成来源一致性修复（2026-09-17）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`（2026-09-17），当前无进行中的实现任务。用户最新授权“优化一下，要仔细分析，不要改出新问题”；主代理已完整阅读本台账 1–5455 行，既有代码完成任务保持原状态，不启动 ARCH-03 或相邻路线图任务。Windows 代码与仓库门禁完成，未标记 VERIFIED。
+- 范围与冻结例外：仅修复第 151 节 D1/D2/D5 和关联陈旧异步发布：统一已采用分类、提示、网格推荐的来源；区分本次系统帮写与真实新备注；校验异步结果仍属于当前草稿。允许修改 HomeViewModel.swift、RecordView.swift、对应 XCTest、静态守卫与审计文档。
+- 保持边界：不降低习惯分类/标题阈值，不扩大金额猜品牌，不覆盖具体未知手写备注，不把系统帮写当用户分类纠正；实际选分类/角度才设用户锁，打开/取消不设锁。保持保存解析、场景包类别映射、scenePackId 下游合同、免费/会员/奖励访问规则、金额日期、OCR、照片、存储同步和跨 Tab 草稿延续。
+- 本轮不合并：D3 编辑器打开与清空、D4 清空金额的意图延续、S1 旅行包跨类别、S2 场景生成句时间锚点、首周/奖励到期政策和持久化失败恢复；这些属于独立边界，保留审计记录。
+- 迁移与回退：仅增加内存草稿来源并收敛推荐发布，不新增存储字段、数据迁移或历史账目改写；如回退，定向撤销本任务代码与测试即可，不触碰用户既有环境配置/素材和其他任务。
+- 计划验证：低可信 0.54/采用 0.55/标题 0.65；常用金额与习惯冲突；可靠交通标题正例；生成后改日期/历史更新/连续换句；改成手写备注释放来源；显式类别/包锁；旧请求晚于新备注/帮写/金额/日期；金额变化与新草稿。执行 Windows 语义、静态、文案及完整 release gate，Swift/XCTest 和真机仍需外部环境，不宣称 VERIFIED。
+- 必要范围补充：独立复核发现普通换句的手写锚点可将“请客朋友”（人情）改写为“一起吃顿饭”（词典餐饮），只禁止预填重算仍会在预览/保存时二次改类。因此允许在 RecordDraftResolutionService.swift 增加默认关闭、仅当前匹配生成来源生效的保类输入；不冒充用户锁，不写 userEditedCategory，不影响 OCR/历史编辑。显式分类/包锁仍优先并保持原标题修复规则。
+- 解析边界补充：核对历史标题时发现“罗森纸巾”可能被品牌兼容性放行，保存再改类别；预填标题现在同时检查明确商品语义。另确认现有便利店商品优先规则在 fallback 已等于商品类别时，把该语义折叠成 nil，反而让品牌把日用改回餐饮。解析器保留未折叠的明确语义，使“日用已被预填采用”与“尚未采用”都遵守既有便利店商品优先合同；不改变用户锁、非便利店品牌优先、词典或权益规则，增加前后两类 fallback 的预览/保存回归。
+- 实施结果：
+  1. 唯一 adoptedPrefillResult 决策派生实际类别、提示依据和分类网格；移除快照中相互竞争的两套类别选择。保留分类 >=0.55、普通习惯标题 >=0.65 的原门槛；低可信候选不再作为已采用类别发布，常用金额胜出不借其他类别标题。
+  2. 普通/场景帮写登记经过既有长度规范化的内存生成来源；VM 历史完成回调也尊重来源守卫。改日期/历史 revision/切 Tab 不将生成句误当新事实；真实改写、显式类别入口、新一笔按生命周期释放来源。
+  3. 备注、金额、日期变更立即失效旧预填，异步发布比对当前草稿所有相关身份；不添加整账本同步扫描，不以生成来源伪造用户分类锁或纠正历史。
+  4. 预览与保存共用有效生成来源，保留普通换句采用类别；显式分类和包锁仍更高优先级。修正上述便利店商品已采用后再次改类的相等类别边界，其他解析优先级不变。
+- 实际文件：`NativeDemoApp/ViewModels/HomeViewModel.swift`、`NativeDemoApp/Views/RecordView.swift`、`NativeDemoApp/Services/RecordDraftResolutionService.swift`、`NativeDemoAppTests/StateRegressionTests.swift`、`scripts/experience_static_check.ps1`、`RECORD_PAGE_RECOMMENDATION_STATE_AUDIT_2026-09-17.md`、本文档。用户已有 `backend/.env.staging.example` 和未跟踪素材/输出/脚本均保留，无提交、推送、权益或账本数据操作。
+- 验证证据：新增 19 个 `RecordRecommendationConsistencyTests` 纯计算 XCTest 和 23 条静态守卫；经独立测试编写/夹具复核及主代理逐入口检查。最终 `python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 退出码 0，输出 `release_repository_gate: OK`，覆盖 `git diff --check`、语义回归、静态体验、文案体验/copy lint、发布配置、合规、schema、迁移与 100/1,000/5,000 条夹具；仅既有 7 条文案软提示。单独的语义回归、静态体验、copy lint 和 diff 检查亦通过。
+- 验证限制与风险：本机无 Swift/swiftc/Xcode，新增 XCTest 尚未编译/执行；纯策略测试和静态守卫不能证明 SwiftUI observer、真实并发按钮顺序及落库已在 iPhone 上通过。共享解析器的便利店商品边界需连同手动记录、OCR 确认和历史编辑一起复测；不改变 OCR 提取，但不可把共享解析的影响描述为完全不涉及 OCR。D3/D4/S1/S2、权益延续和持久化失败仍按原审计留待独立任务。
+- 下一任务：先在 macOS/Xcode 完成 Debug/Release Clean Build 和全部 XCTest，再按审计文档第 14 节用免费/会员、餐饮/购物/交通/其他及场景包，覆盖弱/强推荐、连续换句、日期/金额/手写变化、旧请求、打开取消、切 Tab 和下一笔；逐步核对提示/类别/文案/保存结果。取得外部证据前维持 CODE_DONE，不启动未授权的权益或页面架构改造。
+
+### 154. RECORD-EMOTION-SCENE-CYCLE-01：记账页情绪标签场景内切换（2026-09-17）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`（2026-09-17），当前无进行中的实现任务，未标记 VERIFIED。用户明确授权记账页情绪标签点击切换，强调不是生活印记、不得扩大范围；主代理已完整阅读台账，接续第 153 节既有修改，不回退用户工作区。
+- 合理性与范围：同一事实场景允许选择不同表达，但不允许把同一分类等同于同一场景。仅情绪标签新增独立点击入口；固定备注、分类、金额、日期、品牌、场景包和手写锚点，复用现有生成分支，只改变选句种子。仅一个有效候选时保持静态。
+- 冻结边界：不修改生活印记生成/奖励、语义词典、分类推荐/用户锁、备注帮写/换角度、会员与场景包访问、OCR、历史编辑、数据模型或同步协议；不新增持久化字段。沿用已有 emotionTag 保存选择，不绕过全局展示纠正规则。
+- 计划文件：RecordDraftResolutionService.swift（局部纯选择策略）、RecordView.swift（草稿选择/候选准备）、LifeEntryPreviewCard.swift（标签按钮）、HomeViewModel.swift（保存前校验）、StateRegressionTests.swift、experience_static_check.ps1、本文档。
+- 计划验证：候选去重/循环/单例；事实字段变化使选择失效；切 Tab 延续和新一笔重置；保存后的展示稳定性；天气/通勤/异地旧标签事实签名不变；分类锁与生活印记预览隔离。Windows 语义/静态/完整 gate；无 Swift/Xcode，XCTest 和真机验证另列风险，不标记 VERIFIED。
+- 剩余风险与下一步：先完成上述最小实现并交叉复核，不合并第 151–153 节遗留意图/权益问题；外部验证重点为独立点击命中、VoiceOver、44pt 触区、快速改备注/日期后保存、选中标签落库及生活印记不随点击变化。
+- 实施结果：独立情绪按钮带轻量循环图标、44pt 触区和 VoiceOver 提示；候选按完整事实上下文在 utility 任务中准备，最多扫描 24 个种子、保留 6 条去重候选，不扫描账本。零/单候选不显示切换图标，标签区域保留同高，避免候选准备完成时卡片跳动。
+- 场景与下游保护：复用既有 NarrativeCopyResolver，不新增情绪词池或绕过 HomeItem 展示纠正；候选限制语义规则集合，并要求最终 displayEmotionTag 等于所选文案。核对七组天气/通勤/异地 legacy 事实签名，以及奖励侧 baby/pet/longDistance predicates 与全部奖励关键词逐词命中，保证点击不增删这些事实；LifeMarkService、FreeScenePackService 和 LifeSceneSemanticService 无代码修改。不能用 classify 相等作为场景安全的主要证明，因为该方法本身不读 emotionTag。
+- 保存与生命周期：选择只保存在 RecordTabSession，不设分类锁或 userEditedCategory；切 Tab 延续，成功提交后清空；事实、锚点或自动天气结果改变即失效，异步任务开始/发布均检查当前上下文。保存先按原规则自动增强情绪，再仅接纳与最终草稿及候选集合都相符的选择；未切换时仍按原逻辑保存。
+- 规范化边界修补：独立复核发现 `罗森  咖啡` 在保存时合并空白，会导致首版情绪选择失效。将原手动保存的 baseTitle/解析步骤原样提取为只读 resolvedManualRecordDraft，候选使用同一规范化输入、空白/预填/用户锁/生成来源规则，并检查与当前预览事实一致；未修改分类优先级或全局预览备注逻辑。新增双空格手写备注的选择→保存校验测试。
+- 点击区域变化：为隔离情绪按钮与打开备注的手势，原整卡 onTap 收到 noteContent；点标题/提示/生活印记区域及“自己写一句”仍打开备注，情绪按钮只切换标签。元信息、金额和卡片空白不再继承整卡打开备注手势，这是本次必要的可感知交互差异，真机需专项确认，不将其描述为所有其他点击行为完全不变。
+- 修改前后对比：
+
+  | 情境 | 修改前 | 修改后 |
+  | --- | --- | --- |
+  | 点击情绪标签 | 无独立切换，可能随整卡进入备注 | 仅在存在多个有效候选时场景内循环 |
+  | 保存情绪 | 自动解析与天气增强 | 未选择保持原逻辑；有效选择在自动增强后采用 |
+  | 分类、备注、金额、角度/权益 | 由原入口决定 | 点击标签不改这些字段或用户锁 |
+  | 生活印记与奖励 | 依原事实规则 | 规则不动，候选保持既有标签事实签名，印记预览 key 不随选择改变 |
+  | 改事实、切 Tab、新一笔 | 无手动情绪选择状态 | 改事实失效；切 Tab 保留；成功保存后清空 |
+  | 无可替换候选 | 自动标签 | 保持静态，不跨场景凑文案 |
+
+- 测试文件：StateRegressionTests.swift 新增 18 个 RecordEmotionScenePolicyTests（含真实罗森、咖啡/饮料/便当多候选正例、话费展示归一/单例、保险、地铁、鱼竿奖励正例、双空格规范化、草稿 reset）；experience_static_check.ps1 新增候选/保存/生命周期/手势隔离接线守卫。测试代码已经交叉审阅，但本机无 Swift/swiftc/Xcode，未编译或执行 XCTest。
+- 保留范围与回退：本任务仅上述 7 个文件；既有第 153 节修改、backend/.env.staging.example 和未跟踪素材/脚本保持原样。无提交/推送、账本/会员数据操作；回退仅撤销第 154 节专属情绪选择/接线/测试，不撤销前序分类修复。话费、保险等既有固定/展示归一分支可能没有可切换候选；本次不扩充这些文案，不修“吃饭”词典覆盖、旅行包跨类、场景时间锚点或权益延续问题。
+- 最终验证证据：`git diff --check`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 通过；最终 `python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 退出码 0，输出 `release_repository_gate: OK`。覆盖语义、静态、文案、发布配置、合规、schema/迁移、100/1,000/5,000 条与真实图片夹具；仅既有 7 条文案软提示。静态守卫与纯策略测试不能替代 Swift 编译或 SwiftUI 运行验证。
+- 下一任务与剩余风险：在 macOS/Xcode 执行 Debug/Release Clean Build 和完整 XCTest；真机依次验证免费/会员均可切换、咖啡不变餐食、具体标签无候选时无图标、点击不打开备注、44pt/VoiceOver/深浅色、连续换标签后直接保存、双空格备注、改金额/日期/手写/实际换角度后旧选择失效、切 Tab 返回、新一笔不继承、天气更新和生活印记/奖励不受点击影响。复核手势区域缩小是否符合预期；取得这些证据前保持 CODE_DONE，不启动相邻路线图任务。
+
+### 155. THEME-SYSTEM-DARK-HERO-AUDIT-01：跟随系统深色与首页金额按钮只读排查（2026-09-17）
+
+- 性质与范围：用户询问手动深色和跟随系统深色为何不同，并反馈首页首卡“今日合计/本周累计”看不清。本轮只读定位两处原因，仅追加本审计，不修改产品代码或 roadmap 状态；已询问用户是否同时授权最小修复，未自行扩大到全站主题改造。
+- 明暗不同的确定缺陷：SettingsViewModel.applyThemeResolver（690–691）未传 systemColorScheme，ThemeResolver.apply（30–38）默认该参数为 .light；因此该路径下 .system 按浅色 token 解析，而 .dark 不受影响。appearance/setTheme/恢复默认/权益检查会走该路径；进入设置（SettingsView:255）、返回前台（ContentView:825）或账号权益刷新可在设置实值未变时再次套用浅色。
+- 为什么可能持续不一致：App 的 preferredColorScheme 在 .system 下返回 nil，让系统控件正确跟随 iOS；自定义 AppColors 则读取全局 ThemeResolver.current。App 还有另一套 onChange/onAppear 写主题，但权益刷新若没有改变 Equatable settings 实值，settings onChange 不保证再次纠正。因此可能形成系统控件深色、自定义颜色浅色的混合。App 层 @Environment(colorScheme) 的实际窗口值与回调顺序尚未真机验证，不断言它始终为 light；.system 返回 nil 本身不是错误。
+- 首页按钮的独立缺陷：HomeView.todayStoryHero（1022、1030）两个按钮共用 narrativePill（1041），文字取随主题变浅的 readableSubtext；但背景仍固定 Color.white.opacity(0.58)，边框固定白色 0.46（1053–1060）。因此即使正确采用 dark token，也会出现浅字叠亮灰底。上一轮第 92 项修正了全局 Surface/编辑详情等，没有覆盖该局部胶囊背景，不能以 token 检查通过否认用户可读性问题。
+- 验证证据：两条主题写入链路与按钮实际调用点交叉审阅；`python scripts/theme_catalog_check.py` 退出码 0，31 套主题均存在 light/dark 配置。按 sRGB 将 58% 白色叠在各主题 panelStrong 上估算，按钮次级文字对比度约 1.00–1.29:1，默认主题约 1.11:1；这是合成估算，不是 iPhone 像素测量，明显低于普通小字常用 4.5:1 基准。现有 DarkModeReadabilityPolicyTests 只覆盖高光强度和强调色按钮前景，不覆盖跟随系统路径及首卡胶囊。
+- 最小修复建议（未实施）：以 WindowGroup 内真实根 View 的有效 colorScheme 为唯一主题同步来源；SettingsViewModel 仅更新设置，不再用缺失系统参数的入口写 token，移除 apply 的隐含 .light 默认参数以防复发。两个首页按钮仅改深色承载/边框/文字组合，保留浅色视觉、文案、金额计算、按钮路由和布局；不修改主题目录、会员权益、试用期限、账本、分类或前序记账页改动。
+- 文件与剩余风险：本轮仅改本文档，原有 dirty worktree 与未跟踪素材保持不变。Windows 无 Swift/Xcode/iPhone，未运行 XCTest/SwiftUI 或真机验证。后续获授权后单列修复任务，覆盖系统浅/深 × App 跟随/浅/深、31 个主题、冷启动、前后台、进入设置、无变化权益刷新、切主题/恢复默认、打开 Sheet、低亮度和 Reduce Transparency；不将静态检查当作视觉签收。
+
+### 156. DINING-WONTON-MORNING-EMOTION-AUDIT-01：馄饨误写饺子与早晨情绪缺失排查（2026-09-17）
+
+- 性质与范围：用户截图显示“馄饨 / 餐饮 / 08:30 / 饺子这一餐 / ¥12.00”，询问工作日早晨为何不是早餐/上班前情绪。本轮只读生成、显示、时段与点击轮换链路，仅追加本文档，不改业务代码、不启动实现或改变 roadmap 状态；深色模式上一问仍停留在第 155 节排查。
+- 食物名错误（源码确定）：NarrativeCopyResolver.swift:142–168 的 specificKind 将“饺子、云饺、馄饨、锅贴、生煎”都映射为 dumpling；244 行对应四条文案均写“饺子”（包含截图原句“饺子这一餐”）。这是过粗的食品分组泄漏到具体文案，不是餐饮大分类选错，也不是生活印记。
+- 早晨规则被绕过（源码确定）：无品牌“馄饨”由 resolveEmotionTag:360 先调用 HomeItem.refinedEmotionTag；HomeItem.swift:306 只在备注明确含“早餐/早饭”时返回早餐，326–334 的具体食品命中后直接返回上述饺子池，不再走 noteAware/generic 时段分支。即使走 genericEmotionTag:193，该方法也先返回 specificEmotionTag，再判断 5..<10 等小时；因此只挪动外层一个分支不足以修好。星期/工作日没有进入这条具体食品路径，日期这里只参与稳定选句种子。
+- 截图对照：瑞幸的“咖啡香落进早上”来自 drinkBrandEmotionTag:640–647，咖啡品牌单独有 5..<10 的时段池，优先于 refined；所以同屏咖啡与馄饨的时间感不同有代码依据。ScenePackCopyPool:282–287 虽有早晨“上班前补点能量”，但前述返回已阻断此池；不能把场景包存在早餐文案等同于普通餐饮情绪已使用它。
+- 重复与上一轮切换边界：食品池仅四句，无跨记录避免连续重复机制；stableRecordSeed 含标题、日期毫秒、金额等，故同一草稿重复计算稳定，不同日期仍可能碰到同一句，但不能凭单张截图断言每次新记录必定都是第三句。第 154 节仅轮换 Context.seed；refined 分支却自行用 title/date/amount 重建 seed，不读取该轮换值。因此当前同一“馄饨”草稿仍只有一个有效候选，不会通过点击自动出现早餐文案；前一任务没有修复原有食品池内容/时段优先级。
+- 合理边界与后续建议（未实施）：保留明确食物“馄饨”，早餐时段可提供“早上这一碗”“早餐有着落”等同场景表达；有明确“上班前”等备注或经认可的工作场景证据才使用“上班前吃好一点”，不把工作日自动等同于每个人正在上班。明确备注中的其他用餐事实应高于时间推断。未来若授权修复，应联合检查具体食品身份、食物×时段表达、同场景轮换种子和最终展示，而非将馄饨机械替换成另一个固定标签；不顺带改生活印记、分类锁、金额、场景权益或历史数据。
+- 验证与文件：独立交叉源码审阅；`python scripts/life_semantic_regression.py` 退出码 0，输出 `life_semantic_regression: OK`，不代表该截图行为已有回归覆盖。NarrativeCopyResolver.swift、HomeItem.swift、RecordCalendarContext.swift、ScenePackCopyPool.swift 的 git diff 均为空，确认本轮未改这些规则。只修改本文档，保留前序 dirty worktree。无 Swift/Xcode/iPhone，未执行 UI/XCTest；截图未包含完整记录日期、毫秒、应用版本或生成来源，不能据此唯一还原选句种子与全部历史重复。
+
+### 157. USER-REPORTED-DARK-DINING-FIX-01：两组已定位问题的授权定向修复（2026-09-17）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`（2026-09-17），当前无进行中的实现任务；未标记 VERIFIED。用户明确要求“把这两个问题都优化修复一下”，本任务仅包含第 155、156 节两组已报告问题；主代理已完整阅读台账并逐项续读新增审计，保持前序 CODE_DONE/外部验收状态，不启动相邻路线图任务。
+- 子范围 A：消除跟随系统的浅色默认回退和主题多写入方；在真实根视图观察有效明暗，统一同步主题；修正首页“今日合计/本周累计”深色前景、底色和边框，保持浅色外观、布局、金额和跳转。
+- 子范围 B：明确区分馄饨/饺子/锅贴/生煎文案；具体餐食情绪结合早餐时段，明确用餐备注优先于时钟，不只凭工作日猜上班；修通选句 seed，使同场景切换有真实多候选；修正既有错误食品名的展示，不做历史账本迁移或重新写入。
+- 冻结边界：不修改分类推荐/用户锁、备注帮写/场景包类别或访问权益、生活印记/奖励、金额/日期、存储/同步、会员试用或主题目录；不做全站主题重构，不合并第 151–154 节已延期意图问题。允许共享餐饮生成/展示入口的定向修正，须评估手动/OCR/历史显示，不宣称共享层完全不影响其他入口。
+- 计划文件：NativeDemoAppApp.swift、ThemeResolver.swift、SettingsViewModel.swift、HomeView.swift；NarrativeCopyResolver.swift、HomeItem.swift；相应 XCTest、语义夹具/脚本（仅必要契约）、静态守卫和本文档。保留全部既有工作区修改；不提交/推送、不更改用户账本。
+- 验证计划：31 主题下跟随/显式浅深等价与设置/前后台刷新接线；首卡按钮颜色对比；馄饨不称饺子、早餐与明确午/晚/夜餐冲突、周末/工作日不冒充上班、轮换和保存展示一致、原餐饮与便利店边界；Windows 完整 release gate。无 Swift/Xcode，XCTest 编译运行、SwiftUI 切换和 iPhone 视觉须外部验收，不标记 VERIFIED。
+- 子范围 A 实施：WindowGroup 内 AppThemeRootView 成为唯一主题 apply 方，读取有效 colorScheme，并在主题/偏好/明暗变化及回前台时同步；SettingsViewModel 不再直接 apply，所有设置持久化和访问/试用判断原样保留。apply/resolve 均移除隐含 .light 参数。ThemeResolver 用 iOS 17 原生 Observation 跟踪静态 AppColors 的实际颜色读取，缓存不参与观察，相同主题＋明暗不重复发布；没有通过 .id 重建 Tab、Sheet 或未保存草稿。
+- 首页按钮配色：两按钮共用 HomeNarrativePillColors；深色采用不透明 surfaceMuted、textPrimary、stroke，浅色仍为原 textSecondary、白色 0.58 背景与白色 0.46 边框。逐主题 sRGB token 算术核对 31 套深色对比度为 8.38–15.01:1；这是颜色值估算，不是设备像素实测。布局、金额计算和点击路由未改。
+- 子范围 B 实施：原 dumpling 分组拆出 wonton/potsticker/panFriedBun；明确“袁记云饺馄饨”中的商品优先于“云饺”商家线索。仅这四类食品（含水饺同义词）新增共用 contextualFoodEmotionTag，覆盖主要解析、refined 与 generic 入口；5:00–9:59 提供包含真实食品名的早餐表达，明确早餐/午饭/晚饭/夜宵优先于时钟，多餐冲突保持中性；仅明确“上班前”且为早餐上下文才提供上班前表达，不由工作日推断职业活动。
+- 既有场景保护：独立复核发现提前返回可能吞掉夜间加班、晚归、温度证据及夜市表达，已增加让回原分支的守卫及专项测试。非目标咖啡、其他面食、便利店无商品证据、非餐饮类别继续沿用原有分支；不宣称已解决全部食品的轮换或全局商家文案问题。
+- 轮换与历史展示：目标食品入口使用 Context.stableDiningSeed（包含传入的选句 seed），从而让既有 24 次有界候选扫描产生真实多候选；不改第 154 节分类/场景/奖励签名守卫、保存校验或生命周期。新增标签避开既有通用标签再细化覆盖，选中值沿用原 emotionTag 保存。旧的具体食品错配只由 displayEmotionTag 重算显示，不改存量字段；“馄饨和饺子”允许任一有证据的标签。稳定种子保证同一输入稳定，不提供跨账目绝不重复的承诺，也不新增历史游标或账本扫描。
+- 修改前后对比：
+
+  | 情境 | 修改前 | 修改后 |
+  | --- | --- | --- |
+  | 系统深色＋App 跟随系统 | 设置/权益刷新可能错误写入浅色 token | 仅真实窗口明暗驱动主题，跟随深色与显式深色解析等价 |
+  | 首页今日合计/本周累计 | 浅字叠固定白色半透明底 | 深色不透明承载＋高对比文字，浅色不变 |
+  | 08:30 记录馄饨 | 饺子文案池且跳过早餐 | 馄饨早餐表达，同场景可换句 |
+  | 明确午饭/晚饭/夜宵或补记早餐 | 具体食品及固定分支竞争 | 目标食品的明确餐次优先，冲突时不猜餐次 |
+  | 工作日/周末 | 该食品分支不体现早餐，亦无可靠上班证据 | 两者可体现早餐；上班前措辞必须有明确备注证据 |
+  | 旧馄饨账目显示饺子 | 继续显示错误食品名 | 只纠正显示，不改历史存储；混合食品不误纠正 |
+  | 分类锁、备注解析、生活印记、场景包权益 | 各按既有规则 | 这些规则未修改，目标标签候选继续受原事实守卫约束 |
+
+- 实际文件：NativeDemoAppApp.swift、Theme/ThemeResolver.swift、ViewModels/SettingsViewModel.swift、Views/HomeView.swift、Services/NarrativeCopyResolver.swift、Models/HomeItem.swift、NativeDemoAppTests/StateRegressionTests.swift、scripts/experience_static_check.ps1、本文档。前序分类/情绪交互修改、backend/.env.staging.example 和未跟踪素材/输出/脚本均保留，无提交、推送、用户账本或外部数据变更。
+- 新增回归：9 项 DarkModeReadabilityPolicyTests，覆盖 31 主题浅/深跟随与显式模式等价、偏好优先、重复刷新、主题切换/恢复默认、未知主题、静态 AppColors 观察链与按钮配色对比；15 项 DiningFoodContextRegressionTests，覆盖食品身份、多 seed、早餐边界、工作日/周末、明确餐次/补记/冲突、明确上班前、品牌商品冲突、强夜间场景、非目标隔离、真实候选循环、保存校验/展示/生活印记一致、旧标签只读纠正与混合食品。增加 19 条静态接线守卫。XCTest 已写入并源码核对，未编译或运行。
+- 验证证据：`git diff --check`、`python scripts/theme_catalog_check.py`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 均通过；最终 `python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 退出码 0，输出 `release_repository_gate: OK`。覆盖语义/静态/文案/合规/发布配置/schema/迁移与 100/1,000/5,000 条及真实图片夹具，仅既有 7 条文案软提示。
+- 剩余风险与下一任务：Windows 无 Swift/swiftc/Xcode，不能把上述脚本当成 Swift 编译、XCTest 或 UI 运行通过。先在 macOS 完成 Debug/Release Clean Build 和全部 XCTest；iPhone 核对系统浅/深 × App 跟随/浅/深、31 主题、冷启动首帧、前后台、设置/无变化权益刷新、Sheet 和未保存草稿保留、两个金额按钮低亮度/Reduce Transparency 可读性。再验证 08:30 馄饨及另外三类食品切换→保存→重启、周末/明确上班前、早餐补记/午晚夜餐、强夜间场景、旧错误与混合标签；共享生成/展示入口需连同手动、OCR 确认和历史展示回归。代码未改生活印记/奖励规则，但仍须真机核对情绪切换不改变其结果；未获上述证据前保持 CODE_DONE，不启动相邻路线图任务。

@@ -30,6 +30,7 @@ final class RecordTabSession: ObservableObject {
     @Published var userNoteAnchorTitle: String?
     @Published var ocrQuotaUpsellVisibleThisSession = false
     @Published var suppressNextNoteSemanticUnlock = false
+    @Published var emotionSelection: RecordEmotionSelection?
 
     func resetAfterCommittedDraft() {
         selectedEntryMode = .manual
@@ -46,6 +47,7 @@ final class RecordTabSession: ObservableObject {
         userNoteAnchorTitle = nil
         ocrQuotaUpsellVisibleThisSession = false
         suppressNextNoteSemanticUnlock = false
+        emotionSelection = nil
     }
 }
 
@@ -69,6 +71,8 @@ struct RecordView: View {
     @State private var recommendedCategoryRefreshTask: Task<Void, Never>?
     @State private var preparedPreviewLifeMarkKey: RecordPreviewLifeMarkKey?
     @State private var previewLifeMarkTextSnapshot: String?
+    @State private var preparedEmotionSceneContext: RecordEmotionSceneContext?
+    @State private var preparedEmotionCandidates: [String] = []
     @State private var scenePackFeedback: String?
     @State private var freeScenePackRefreshToken = 0
     @State private var freeLockedSceneHint: ScenePackAngleSheet.LockedSceneHint?
@@ -577,7 +581,7 @@ struct RecordView: View {
             } else {
                 userNoteAnchorTitle = nil
                 activeScenePack = nil
-                homeViewModel.inputTitle = title
+                homeViewModel.applyGeneratedRecordTitle(title)
             }
         }
         if !keepSelectedCategory {
@@ -691,7 +695,8 @@ struct RecordView: View {
     }
 
     private var hasPreviewNote: Bool {
-        inputTitleCompatibleWithSelectedCategory
+        (homeViewModel.isCurrentRecordNoteGenerated && !homeViewModel.categoryLockedByUser)
+            || inputTitleCompatibleWithSelectedCategory
             || (lastDraftIntent == .note && !homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             || compatiblePrefillTitle != nil
     }
@@ -713,6 +718,7 @@ struct RecordView: View {
     }
 
     private var previewTitleIsExplicitUserEdit: Bool {
+        guard !homeViewModel.isCurrentRecordNoteGenerated else { return false }
         let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty,
               inputTitleCompatibleWithSelectedCategory || lastDraftIntent == .note else { return false }
@@ -734,6 +740,9 @@ struct RecordView: View {
 
     private var previewHeadline: String {
         let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if homeViewModel.isCurrentRecordNoteGenerated, !homeViewModel.categoryLockedByUser {
+            return title
+        }
         if !title.isEmpty, inputTitleCompatibleWithSelectedCategory || lastDraftIntent == .note { return title }
         if shouldUseNeutralRemarkFallback {
             return RecordSemanticLexicon.emptyNoteTitle
@@ -758,17 +767,90 @@ struct RecordView: View {
                 categoryLockedByUser: categoryLockedForCurrentIntent,
                 userEditedTitle: previewTitleIsExplicitUserEdit,
                 source: "preview",
-                scenePackId: activeScenePackIdForCurrentRecord
+                scenePackId: activeScenePackIdForCurrentRecord,
+                generatedNoteContext: homeViewModel.currentRecordGeneratedNoteContext
             )
         )
     }
 
-    private var previewEmotion: String {
+    private var automaticPreviewEmotion: String {
         if shouldUseNeutralRemarkFallback {
             return ""
         }
         guard let resolution = previewDraftResolution else { return "" }
         return previewEmotionTag(for: resolution)
+    }
+
+    private var emotionSceneContext: RecordEmotionSceneContext? {
+        guard hasValidAmount, !shouldUseNeutralRemarkFallback,
+              let previewResolution = previewDraftResolution else { return nil }
+        let resolution = homeViewModel.resolvedManualRecordDraft(
+            normalizedTitle: UserContentRiskService.shared.normalizedManualNote(homeViewModel.inputTitle),
+            amount: inputAmountValue, userEditedTitle: currentTitleShouldBeUserEdited,
+            preserveEmptyTitle: shouldUseNeutralRemarkFallback,
+            categoryLockedForSave: categoryLockedForCurrentIntent,
+            scenePackId: activeScenePackIdForCurrentRecord
+        ).resolution
+        // Do not offer a choice against a fact that the existing preview would
+        // repair differently. Whitespace normalization itself is not a new scene.
+        guard UserContentRiskService.shared.normalizedManualNote(previewResolution.title) == resolution.title,
+              previewResolution.category == resolution.category,
+              previewResolution.merchantBrandId == resolution.merchantBrandId else { return nil }
+        return RecordEmotionSceneContext(
+            title: resolution.title, category: resolution.category,
+            amount: inputAmountValue, date: homeViewModel.selectedDate,
+            merchantBrandID: resolution.merchantBrandId, scenePackID: activeScenePackIdForCurrentRecord,
+            semanticAnchor: previewSemanticAnchorTitle,
+            previewEmotionTag: previewEmotionTag(for: resolution),
+            automaticEmotionTag: homeViewModel.automaticRecordEmotionTag(
+                for: resolution, amount: inputAmountValue,
+                weatherCompanionEnabled: settingsViewModel.weatherCompanionEnabled
+            )
+        )
+    }
+
+    private var currentEmotionSelection: RecordEmotionSelection? {
+        guard let selection = tabSession.emotionSelection,
+              selection.context == emotionSceneContext else { return nil }
+        return selection
+    }
+
+    private var previewEmotion: String {
+        currentEmotionSelection?.tag ?? automaticPreviewEmotion
+    }
+
+    private var canCyclePreviewEmotion: Bool {
+        guard let context = emotionSceneContext else { return false }
+        return preparedEmotionSceneContext == context && preparedEmotionCandidates.count > 1
+    }
+
+    private func cyclePreviewEmotion() {
+        guard canCyclePreviewEmotion, let context = emotionSceneContext,
+              let tag = RecordEmotionScenePolicy.next(after: previewEmotion, candidates: preparedEmotionCandidates) else { return }
+        tabSession.emotionSelection = RecordEmotionSelection(context: context, tag: tag)
+    }
+
+    private func prepareEmotionCandidates(for context: RecordEmotionSceneContext?) async {
+        guard !Task.isCancelled, emotionSceneContext == context else { return }
+        if tabSession.emotionSelection?.context != context {
+            tabSession.emotionSelection = nil
+        }
+        guard let context else {
+            preparedEmotionSceneContext = nil
+            preparedEmotionCandidates = []
+            return
+        }
+        guard preparedEmotionSceneContext != context else { return }
+        let candidates = await withTaskGroup(of: [String].self, returning: [String].self) { group in
+            group.addTask(priority: .utility) {
+                guard !Task.isCancelled else { return [] }
+                return RecordEmotionScenePolicy.candidates(for: context)
+            }
+            return await group.next() ?? []
+        }
+        guard !Task.isCancelled, emotionSceneContext == context else { return }
+        preparedEmotionSceneContext = context
+        preparedEmotionCandidates = candidates
     }
 
     private var previewLifeMarkText: String? {
@@ -790,7 +872,7 @@ struct RecordView: View {
             amount: inputAmountValue,
             category: category,
             createdAt: homeViewModel.selectedDate,
-            emotionTag: previewEmotion,
+            emotionTag: automaticPreviewEmotion,
             merchantBrandID: previewBrand?.id,
             scenePackID: activeScenePackIdForCurrentRecord,
             isMember: isMember
@@ -938,7 +1020,7 @@ struct RecordView: View {
     }
 
     private var currentTitleShouldBeUserEdited: Bool {
-        guard noteEditorExpanded else { return false }
+        guard noteEditorExpanded, !homeViewModel.isCurrentRecordNoteGenerated else { return false }
         let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return false }
         if title == homeViewModel.recordPrefillResult?.title?.trimmingCharacters(in: .whitespacesAndNewlines) {
@@ -1025,7 +1107,8 @@ struct RecordView: View {
             userEditedTitle: currentTitleShouldBeUserEdited,
             preserveEmptyTitle: shouldUseNeutralRemarkFallback,
             categoryLockedForSave: categoryLockedForCurrentIntent,
-            scenePackId: activeScenePackIdForCurrentRecord
+            scenePackId: activeScenePackIdForCurrentRecord,
+            emotionSelection: currentEmotionSelection
         )
         guard didSave else {
             withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
@@ -1306,7 +1389,7 @@ struct RecordView: View {
         switch decision {
         case let .categoryCopy(anchorTitle):
             activeScenePack = nil
-            homeViewModel.inputTitle = nextCategoryCopyTitle(anchorTitle: anchorTitle)
+            homeViewModel.applyGeneratedRecordTitle(nextCategoryCopyTitle(anchorTitle: anchorTitle))
         case let .scenePackCopy(pack, anchorTitle):
             activeScenePack = pack
             applyScenePackCopy(pack, sourceTitle: sourceTitle, anchorTitle: anchorTitle)
@@ -1328,13 +1411,13 @@ struct RecordView: View {
         )
         let variant = scenePackVariants[variantKey, default: 0]
         scenePackVariants[variantKey] = variant + 1
-        homeViewModel.inputTitle = scenePackCopyTitle(
+        homeViewModel.applyGeneratedRecordTitle(scenePackCopyTitle(
             for: pack,
             amount: amount,
             categoryContext: category,
             variant: variant,
             sourceTitle: anchorTitle ?? sourceTitle
-        )
+        ))
     }
 
     private func currentUserNoteAnchorTitle(
@@ -1785,6 +1868,14 @@ struct RecordView: View {
             .task(id: previewLifeMarkPreparationKey) {
                 await preparePreviewLifeMark(for: previewLifeMarkPreparationKey)
             }
+            .task(id: emotionSceneContext) {
+                await prepareEmotionCandidates(for: emotionSceneContext)
+            }
+            .onChange(of: emotionSceneContext) { _, context in
+                if tabSession.emotionSelection?.context != context {
+                    tabSession.emotionSelection = nil
+                }
+            }
             .onChange(of: selectedPhoto) { _, newValue in
                 guard let newValue else { return }
                 Task {
@@ -2135,7 +2226,8 @@ struct RecordView: View {
             onFreePrimaryAction: handleFreePreviewQuickAction,
             onFreeAngleAction: {
                 openFreeScenePackAngleSheet()
-            }
+            },
+            onCycleEmotion: canCyclePreviewEmotion ? cyclePreviewEmotion : nil
         )
     }
 
@@ -2895,7 +2987,7 @@ struct RecordView: View {
                 previewLineWasRotated = true
                 lastDraftIntent = .category
                 activeScenePack = nil
-                homeViewModel.inputTitle = nextCategoryCopyTitle()
+                homeViewModel.applyGeneratedRecordTitle(nextCategoryCopyTitle())
             },
             onToggleExpanded: {
                 dismissKeyboard()
