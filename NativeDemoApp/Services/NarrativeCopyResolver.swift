@@ -116,6 +116,9 @@ enum DiningCopyEvidencePolicy {
         case sandwich
         case bun
         case noodles
+        case wonton
+        case potsticker
+        case panFriedBun
         case dumpling
         case riceMeal
         case hotpot
@@ -153,7 +156,11 @@ enum DiningCopyEvidencePolicy {
             (.sandwich, ["三明治"]),
             (.bun, ["包子", "烧卖", "烧麦"]),
             (.noodles, ["牛肉面", "拉面", "汤面", "拌面", "炒面", "面条", "面馆", "米线", "米粉", "河粉", "粉面", "麻辣烫"]),
-            (.dumpling, ["饺子", "云饺", "馄饨", "锅贴", "生煎"]),
+            // Explicit food wins over the weaker “云饺” merchant-name cue.
+            (.wonton, ["馄饨"]),
+            (.potsticker, ["锅贴"]),
+            (.panFriedBun, ["生煎"]),
+            (.dumpling, ["饺子", "水饺", "云饺"]),
             (.riceMeal, ["盖饭", "炒饭", "黄焖鸡", "饭套餐"]),
             (.hotpot, ["火锅", "烤肉", "串串", "烧烤"]),
             (.snack, ["鸭脖", "鸭货", "卤味", "小食", "点心"]),
@@ -166,6 +173,66 @@ enum DiningCopyEvidencePolicy {
     static func specificEmotionTag(evidence: String, seed: String) -> String? {
         guard let kind = specificKind(in: evidence) else { return nil }
         return pick(notes(for: kind), seed: seed + "|specific|\(kind.rawValue)")
+    }
+
+    /// The previously conflated foods keep their identity and share one meal-context
+    /// policy across draft generation and display. A weekday is not work evidence.
+    static func contextualFoodEmotionTag(evidence: String, date: Date?, seed: String) -> String? {
+        guard let kind = specificKind(in: evidence) else { return nil }
+        let food: String
+        switch kind {
+        case .wonton: food = "馄饨"
+        case .potsticker: food = "锅贴"
+        case .panFriedBun: food = "生煎"
+        case .dumpling:
+            // A merchant called 云饺 does not by itself prove what was bought.
+            guard evidence.contains("饺子") || evidence.contains("水饺") else { return nil }
+            food = evidence.contains("饺子") ? "饺子" : "水饺"
+        default: return nil
+        }
+
+        let mealCues: [(String, [String])] = [
+            ("早餐", ["早餐", "早饭"]),
+            ("午饭", ["午餐", "午饭", "中午"]),
+            ("晚饭", ["晚餐", "晚饭"]),
+            ("夜宵", ["夜宵", "宵夜", "深夜", "夜里", "凌晨", "夜市", "夜摊"]),
+        ]
+        let explicitMeals = mealCues.filter { _, cues in cues.contains { evidence.contains($0) } }
+        let hour = date.map { Calendar.current.component(.hour, from: $0) }
+        // Keep the existing strong late-work/late-return/temperature narratives.
+        // An explicitly recorded day meal still outranks the clock when backfilling.
+        let hasExplicitDayMeal = explicitMeals.contains { $0.0 != "夜宵" }
+        let hasStrongNightContext = ["加班", "下班后", "工作", "公司", "单位", "工位", "晚归", "热乎", "热饭", "热食", "热汤", "热的"]
+            .contains { evidence.contains($0) }
+        if !hasExplicitDayMeal, hasStrongNightContext,
+           hour.map({ (21...23).contains($0) || (0..<5).contains($0) }) == true {
+            return nil
+        }
+        if !hasExplicitDayMeal, ["夜市", "夜摊", "大排档"].contains(where: { evidence.contains($0) }) {
+            return nil
+        }
+        // Conflicting explicit meals stay neutral rather than guessing one of them.
+        let meal: String?
+        if explicitMeals.count == 1 {
+            meal = explicitMeals[0].0
+        } else if explicitMeals.isEmpty, hour.map({ (5..<10).contains($0) }) == true {
+            meal = "早餐"
+        } else {
+            meal = nil
+        }
+        if meal == "早餐", evidence.contains("上班前") {
+            return pick(
+                ["上班前的\(food)早餐", "上班前，早餐有\(food)", "上班前，\(food)陪着早餐", "上班前这份\(food)早餐"],
+                seed: seed + "|food-before-work|\(kind.rawValue)"
+            )
+        }
+        if let meal {
+            return pick(
+                ["\(meal)有\(food)相伴", "\(meal)这份\(food)", "\(food)陪着这顿\(meal)", "\(meal)的\(food)记下"],
+                seed: seed + "|food-meal|\(kind.rawValue)|\(meal)"
+            )
+        }
+        return specificEmotionTag(evidence: evidence, seed: seed)
     }
 
     static func convenienceStoreEmotionTag(
@@ -191,6 +258,9 @@ enum DiningCopyEvidencePolicy {
     }
 
     static func genericEmotionTag(evidence: String, date: Date, seed: String) -> String {
+        if let contextual = contextualFoodEmotionTag(evidence: evidence, date: date, seed: seed) {
+            return contextual
+        }
         if let specific = specificEmotionTag(evidence: evidence, seed: seed) {
             return specific
         }
@@ -218,6 +288,16 @@ enum DiningCopyEvidencePolicy {
     ) -> Bool {
         let normalizedTag = tag.lowercased()
         let normalizedEvidence = evidence.lowercased()
+        // Repair only a positively evidenced food-family mismatch. Mixed meals can
+        // legitimately mention either food; never rewrite the stored record here.
+        let foodFamilies = [["馄饨"], ["锅贴"], ["生煎"], ["饺子", "水饺"]]
+        if foodFamilies.contains(where: { family in family.contains { normalizedEvidence.contains($0) } }),
+           foodFamilies.contains(where: { family in
+               family.contains { normalizedTag.contains($0) }
+                   && !family.contains { normalizedEvidence.contains($0) }
+           }) {
+            return true
+        }
         let heatTerms = ["热食", "热乎", "一口热的", "热饭", "热汤", "热腾腾", "吃点热的"]
         if heatTerms.contains(where: { normalizedTag.contains($0) }),
            !heatTerms.contains(where: { normalizedEvidence.contains($0) }) {
@@ -241,6 +321,9 @@ enum DiningCopyEvidencePolicy {
         case .sandwich: return ["三明治记一笔", "便利店三明治记下", "三明治这份记下", "买了份三明治"]
         case .bun: return ["包子这份记下", "早餐包子记下", "包子记一笔", "这份包子记下"]
         case .noodles: return ["这份面食记下", "面食这一笔", "这碗面记下", "今天这份面食"]
+        case .wonton: return ["馄饨这份记下", "这份馄饨记一笔", "馄饨这一餐", "今天这份馄饨"]
+        case .potsticker: return ["锅贴这份记下", "这份锅贴记一笔", "锅贴这一餐", "今天这份锅贴"]
+        case .panFriedBun: return ["生煎这份记下", "这份生煎记一笔", "生煎这一餐", "今天这份生煎"]
         case .dumpling: return ["饺子这份记下", "这份饺子记一笔", "饺子这一餐", "今天这份饺子"]
         case .riceMeal: return ["这份饭记下", "饭点这份记下", "这份餐食记一笔", "今天这份饭"]
         case .hotpot: return ["这顿聚餐记下", "火锅烤肉这一顿", "这顿饭记一笔", "今天这顿记下"]
@@ -324,6 +407,12 @@ enum NarrativeCopyResolver {
     }
 
     static func resolveEmotionTag(context: Context) -> String {
+        if context.category == .dining,
+           let foodTag = DiningCopyEvidencePolicy.contextualFoodEmotionTag(
+               evidence: context.note, date: context.date, seed: context.stableDiningSeed
+           ) {
+            return foodTag
+        }
         if context.category == .dining,
            let brand = MerchantBrandCatalog.definition(for: context.brandId)
                 ?? MerchantBrandCatalog.matchBrand(in: context.note),

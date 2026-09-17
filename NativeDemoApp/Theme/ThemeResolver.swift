@@ -1,14 +1,19 @@
 import SwiftUI
+import Observation
 
+@Observable
 @MainActor
-final class ThemeResolver: ObservableObject {
+final class ThemeResolver {
     static let shared = ThemeResolver()
     nonisolated static let defaultThemeId = "xuzhang_default"
 
-    @Published private(set) var colors: ResolvedThemeTokens = .fallback
+    // Observation also tracks reads through AppColors/ThemeResolver.current.
+    // Existing views and presented sheets update without remounting their state.
+    private(set) var colors: ResolvedThemeTokens = .fallback
 
-    private var cachedCatalog: ThemeCatalog?
-    private var resolvedCache: [String: ResolvedThemeTokens] = [:]
+    @ObservationIgnored private var cachedCatalog: ThemeCatalog?
+    @ObservationIgnored private var resolvedCache: [String: ResolvedThemeTokens] = [:]
+    @ObservationIgnored private var appliedThemeKey: String?
 
     static var current: ResolvedThemeTokens {
         shared.colors
@@ -30,19 +35,23 @@ final class ThemeResolver: ObservableObject {
     func apply(
         themeId: String,
         appearance: AppSettings.Appearance,
-        systemColorScheme: ColorScheme = .light
+        systemColorScheme: ColorScheme
     ) {
-        colors = resolve(
+        let resolved = resolve(
             themeId: themeId,
             appearance: appearance,
             systemColorScheme: systemColorScheme
         )
+        let key = "\(resolved.id)#\(resolved.mode.rawValue)"
+        guard appliedThemeKey != key else { return }
+        appliedThemeKey = key
+        colors = resolved
     }
 
     func resolve(
         themeId: String,
         appearance: AppSettings.Appearance,
-        systemColorScheme: ColorScheme = .light
+        systemColorScheme: ColorScheme
     ) -> ResolvedThemeTokens {
         let mode = resolvedMode(appearance: appearance, systemColorScheme: systemColorScheme)
         let id = catalog.themeIDs.contains(themeId) ? themeId : Self.defaultThemeId

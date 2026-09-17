@@ -22,6 +22,7 @@ struct LifeEntryPreviewCard: View {
     var onAngleAction: () -> Void
     var onFreePrimaryAction: (() -> Void)? = nil
     var onFreeAngleAction: (() -> Void)? = nil
+    var onCycleEmotion: (() -> Void)? = nil
 
     private var isWhisper: Bool { tier == .whisper }
     private var isConfirm: Bool { tier == .confirm }
@@ -45,10 +46,22 @@ struct LifeEntryPreviewCard: View {
         .recordSurface(radius: isWhisper ? 16 : 18, padding: 0, tint: AppColors.accent)
         .pressableCardFeedback(radius: isWhisper ? 16 : 18, depth: isWhisper ? 0.55 : 0.8)
         .contentShape(RoundedRectangle(cornerRadius: isWhisper ? 16 : 18, style: .continuous))
-        .onTapGesture(perform: onTap)
     }
 
     private var bodyContent: some View {
+        VStack(alignment: .leading, spacing: isWhisper ? 7 : 8) {
+            noteContent
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onTap)
+
+            emotionPill
+
+            metaRow
+        }
+    }
+
+    private var noteContent: some View {
         VStack(alignment: .leading, spacing: isWhisper ? 7 : 8) {
             Text(headline)
                 .font(.system(size: isWhisper ? 15.5 : 21, weight: isWhisper ? .regular : .semibold))
@@ -71,10 +84,6 @@ struct LifeEntryPreviewCard: View {
             if let lifeMarkText, !lifeMarkText.isEmpty, isConfirm {
                 lifeMarkPill(lifeMarkText)
             }
-
-            emotionPill
-
-            metaRow
         }
     }
 
@@ -133,15 +142,38 @@ struct LifeEntryPreviewCard: View {
     @ViewBuilder
     private var emotionPill: some View {
         if isConfirm && !emotion.isEmpty {
-            Text(emotion)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(AppColors.subtext.opacity(0.76))
-                .lineLimit(1)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(emotionPillBackground)
-                .overlay(emotionPillBorder)
+            if let onCycleEmotion {
+                Button(action: onCycleEmotion) {
+                    emotionPillLabel(canCycle: true)
+                        .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("情绪标签：\(emotion)")
+                .accessibilityHint("点击切换同一场景内的情绪标签")
+            } else {
+                emotionPillLabel(canCycle: false)
+                    .frame(minHeight: 44, alignment: .leading)
+            }
         }
+    }
+
+    private func emotionPillLabel(canCycle: Bool) -> some View {
+        HStack(spacing: 5) {
+            Text(emotion)
+                .lineLimit(1)
+            if canCycle {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 9, weight: .medium))
+                    .accessibilityHidden(true)
+            }
+        }
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(AppColors.subtext.opacity(0.76))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(emotionPillBackground)
+        .overlay(emotionPillBorder)
     }
 
     private var emotionPillBackground: some View {
