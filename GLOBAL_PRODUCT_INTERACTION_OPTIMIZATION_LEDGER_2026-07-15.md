@@ -5634,3 +5634,25 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 配置与文件一致性：staging 工程相对 `70dca99` 完全未改，Debug/Release 均含 STAGING；生产工程相对 `49d963a` 完全未改，staging=[]。两提交的 NativeDemoApp、NativeDemoAppTests、scripts 无跨分支差异；提交文件严格限于本节白名单 7 个文件。用户 `.env.staging.example` 哈希与交付前相同，其他素材/输出/脚本保留。
 - 日志与风险：完整日志位于 `C:/Users/yf/AppData/Local/Temp/xuzhang-record-release-7ffb484ef6784d92aa7a174a3910c36f/staging.log`、`production.log`。本轮同步分支并不等于发布或运行 iOS 测试；本机未执行 Swift/Xcode、30 项新增 XCTest 或真机性能验证，继续按第 161/162 节签收。
 - 下一步：本条仅文档提交同步并推送后再核对两远端分支与本地头一致、ahead/behind 0/0；清理本轮临时验证 worktree，保留日志和原审计 worktree。不启动其他优化，不部署或上传 App Store。
+
+### 164. RECORD-QUICK-MEAL-EMOTION-CYCLE-FIX-01：用餐快捷备注的情绪切换最小修复（2026-09-17）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`，未标记 VERIFIED。主代理承接本线程此前完整台账阅读，并核对最新第 163 节及冻结边界；用户明确授权“最小范围修复”。当前无进行中的实现任务，不启动其他优化或分支交付。
+- 根因与允许范围：旧 `HomeItem.refinedEmotionTag` 对明确早餐/午餐/晚餐返回固定标签，切换候选仅改种子，去重后只有一项。只在记账页 `RecordEmotionScenePolicy` 为已确认且无餐次冲突的固定用餐标签补充有限同场景表达；通过原语义、展示、事实签名与保存校验，不改全局自动标签默认值。
+- 文件与冻结边界：允许 `RecordDraftResolutionService.swift`、`StateRegressionTests.swift`、新增专项静态检查和本文档。快捷备注生成/点击来源、金额 180ms 合并、RecordView 按钮门槛、分类锁、场景包权益、生活印记/奖励、历史显示修正规则、模型/存储/同步、两套工程配置与既有门禁规则均不改。保留用户 `.env.staging.example` 和未跟踪素材/脚本。
+- 验证计划：覆盖截图的 18.5／2026-09-17 17:15／晚餐记一笔，以及早午晚快捷模板、纯手写用餐、候选循环、保存回显、无选择时旧默认不变；反向覆盖具体食物/品牌、餐次冲突、天气增强、非餐饮和原固定单例。完整 Windows 门禁按真实 staging/生产配置分别执行，不削减；本机无 Swift/Xcode/iPhone，不冒充已执行 XCTest/真机验证。
+- 迁移与回退：不新增字段或迁移，回退本节候选补充及测试即可，既有记录和默认生成路径不变。剩余风险为 Swift 编译、真机候选按钮恢复和连续切换后保存；完成后记录证据并转 CODE_DONE。
+- 实际修改：仅一个产品文件 `RecordDraftResolutionService.swift`，在既有 24 次/最多 6 条候选循环内，为 9 条早午晚快捷模板及对应纯餐名（含“中午”）补充每餐 3 条中性表达。无商户、标题精确命中、锚点为空或属于同餐、预览与自动默认均匹配原固定标签时才启用；其余输入仍走原生成器。新增候选全部通过原去重、类别/语义规则子集、最终展示相等和 legacy/reward 事实签名校验。保留原默认为首项，未主动切换时保存结果不变。
+- 交互与性能：不修改 RecordView、快捷备注点击来源、分类锁、情绪缓存身份、生活印记或全局 HomeItem/NarrativeCopyResolver。仅增加少量固定字符串匹配，不扫账本、不新增网络或发布状态，原后台候选、取消/过期检查、180ms 金额合并和保存复核保持。
+- 回归：`StateRegressionTests.swift` 新增 8 项 XCTest，覆盖 18.5／9 月 17 日 17:15、九模板生成/锁定分类/保存回显、手写餐次、循环、跨时段与夜间、锚点冲突、品牌/食品/天气保护及事实变化失效；三餐样例同时进入原生活印记/奖励一致性夹具。本机未运行 Swift/XCTest。新增 `scripts/meal_emotion_regression.py` 校验模板完整覆盖、默认保留与筛选守卫；本专项、quick_note、amount_input 三项静态检查通过。独立代码审阅无阻塞项，`git diff --check` 通过。
+- 双环境完整证据：分别从实际 staging `e61c4bf` 与生产 `e0170ab` 新建隔离 worktree，仅复制本轮产品、测试、专项三个文件并逐个核验 SHA-256；各自按 backend lockfile 安装依赖，完整执行原 `validate_release_gate.py --phase windows --release-branch <对应分支>` 及三个专项，退出码均 0、`release_repository_gate: OK`。staging Debug/Release 均带 STAGING，生产 staging=[]；工程、环境模板与原门禁规则未改，仅既有 7 条文案软提示。主工作区用户 `.env.staging.example` 哈希保持 `48FF5A142D67DBEAD8817432F23CE2A089C9A11C54D0A9D1B41622A30F8CD92C`。
+- 日志与收尾：日志保留在 `C:/Users/yf/AppData/Local/Temp/xuzhang-meal-emotion-d60506d6af734f48926311185dfbd4ae/`（staging.log、production.log、依赖及生产专项日志）；逐个核对绝对路径、状态白名单和源文件一致性后仅移除本轮 staging/production 验证副本，保留原审计 worktree 和用户文件。未提交、推送或更新生产分支。
+- 下一步/剩余风险：待 macOS 编译和 8 项新增 XCTest；真机按截图流程手写→点晚餐快捷备注→等待候选→切换标签→立即保存，核对默认不切换、分类锁、深浅色和回显。未运行 SwiftUI/iPhone，不能把静态通过视为按钮已真机验收；不继续扩充其他场景文案。
+
+### 165. RECORD-QUICK-MEAL-EMOTION-BRANCH-SYNC-01：用餐情绪切换修复双分支交付（2026-09-17）
+
+- 状态：`IN_PROGRESS`，当前唯一进行中的交付任务。承接本线程完整台账阅读和第 164 节修复；用户明确要求“提交推送 同步分支”。不新增产品修改，不改变原 CODE_DONE 和待 Xcode/真机验收状态。
+- 范围与方式：仅提交第 164 节产品文件、测试、新专项脚本和本文档共 4 个文件；生产通过 `cherry-pick -x` 同步，不合并 staging 或覆盖工程配置。正常 fast-forward 原子推送两个分支，不强推、不部署或上传 App Store。
+- 开始证据：fetch 后 staging `e61c4bf`、生产 `e0170ab` 均与各自 origin 一致，ahead/behind 0/0，索引为空；保留用户 `.env.staging.example`（SHA-256 `48FF5A142D67DBEAD8817432F23CE2A089C9A11C54D0A9D1B41622A30F8CD92C`）和所有未跟踪素材/脚本。
+- 交付检查：两个实际提交各用独立 worktree 按原 backend lockfile 安装依赖，分别执行原完整 Windows release gate 和 meal_emotion/quick_note/amount_input 三个专项；核对 staging Debug/Release 的 STAGING 与生产无 STAGING、原门禁/配置未改。复用已有原因分析，不再次扩大审计或重写测试。
+- 下一步：提交和同步后验证、推送、核对远端哈希，再记录实际交付结果；临时验证副本仅在绝对路径/状态白名单核验后清理，保留日志。Swift/XCTest/真机仍待外部验收。
