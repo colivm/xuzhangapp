@@ -5652,8 +5652,12 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 
 ### 165. RECORD-QUICK-MEAL-EMOTION-BRANCH-SYNC-01：用餐情绪切换修复双分支交付（2026-09-17）
 
-- 状态：`IN_PROGRESS`，当前唯一进行中的交付任务。承接本线程完整台账阅读和第 164 节修复；用户明确要求“提交推送 同步分支”。不新增产品修改，不改变原 CODE_DONE 和待 Xcode/真机验收状态。
+- 状态：`IN_PROGRESS` → `CODE_DONE`，当前无进行中的实现/交付任务。承接本线程完整台账阅读和第 164 节修复；用户明确要求“提交推送 同步分支”。不新增产品修改，不改变原 CODE_DONE 和待 Xcode/真机验收状态。
 - 范围与方式：仅提交第 164 节产品文件、测试、新专项脚本和本文档共 4 个文件；生产通过 `cherry-pick -x` 同步，不合并 staging 或覆盖工程配置。正常 fast-forward 原子推送两个分支，不强推、不部署或上传 App Store。
 - 开始证据：fetch 后 staging `e61c4bf`、生产 `e0170ab` 均与各自 origin 一致，ahead/behind 0/0，索引为空；保留用户 `.env.staging.example`（SHA-256 `48FF5A142D67DBEAD8817432F23CE2A089C9A11C54D0A9D1B41622A30F8CD92C`）和所有未跟踪素材/脚本。
 - 交付检查：两个实际提交各用独立 worktree 按原 backend lockfile 安装依赖，分别执行原完整 Windows release gate 和 meal_emotion/quick_note/amount_input 三个专项；核对 staging Debug/Release 的 STAGING 与生产无 STAGING、原门禁/配置未改。复用已有原因分析，不再次扩大审计或重写测试。
 - 下一步：提交和同步后验证、推送、核对远端哈希，再记录实际交付结果；临时验证副本仅在绝对路径/状态白名单核验后清理，保留日志。Swift/XCTest/真机仍待外部验收。
+- 实际交付：staging 修复提交 `c50c3601639827be213089fef93a9f49a57bdf5d`，生产 `cherry-pick -x` 得到 `40d30c8a4da26531a873d5a7069dbe32a59901c2`，无冲突；白名单 4 文件，没有提交用户环境文件或素材。两个提交均已普通 fast-forward 原子推送，`git ls-remote` 核对远端哈希一致。
+- 提交后验证：staging 干净 detached worktree 和实际生产分支 worktree 各自完整运行 backend `npm ci --ignore-scripts --no-audit --no-fund`、原 Windows release gate、meal_emotion/quick_note/amount_input 三个专项，退出码均 0、`release_repository_gate: OK`；仅既有 7 条文案软提示。staging Debug/Release 均含 STAGING，生产 staging=[]。工程/环境模板/原门禁相对各自基线未变，NativeDemoApp、NativeDemoAppTests、scripts 跨分支无差异；台账既有历史分支差异原样保留，没有整文件覆盖生产台账。
+- 日志与保护：保留 `C:/Users/yf/AppData/Local/Temp/xuzhang-meal-delivery-bd5d6c2a94ba40baadd3521dcf100f29/` 下的 staging.log、production.log、依赖和 staging 专项日志；用户 `.env.staging.example` 哈希与开始一致，其他未跟踪文件未提交或清理。
+- 收尾与剩余风险：本条仅文档交付记录随后同步推送，核对最终远端头与 ahead/behind，再按精确路径及状态检查清理本轮两个验证 worktree，保留原审计 worktree 和日志。未部署/上传 App Store，8 项新增 XCTest、Swift 编译及真机仍按第 164 节等待外部验收。
