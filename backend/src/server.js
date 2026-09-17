@@ -6,6 +6,7 @@ import {
   deleteLedger,
   deleteLedgersByUserId,
   deleteSmsCode,
+  consumeReviewLoginAttempt,
   getLedgersByUserId,
   getLedgerTombstonesByUserId,
   getIAPTransactionByOriginalId,
@@ -23,6 +24,7 @@ import {
   upsertLedger,
 } from "./store.js";
 import { requireAuth, signAccessToken } from "./auth.js";
+import { reviewLoginPolicy } from "./reviewLogin.js";
 import { deleteEventsByUserId, trackEvent, listEvents, summarizeEvents } from "./analytics.js";
 import {
   checkSmsSendRateLimit,
@@ -65,12 +67,18 @@ app.post("/v1/auth/sms/send", async (req, res) => {
   if (!/^1\d{10}$/.test(phone)) {
     return res.status(400).json({ ok: false, error: "INVALID_PHONE" });
   }
-  if (!isSmsConfigured()) {
+  const isReview = reviewLoginPolicy.handlesPhone(phone);
+  if (!isReview && !isSmsConfigured()) {
     return res.status(503).json({ ok: false, error: "SMS_NOT_CONFIGURED" });
   }
   const limit = checkSmsSendRateLimit(phone, clientIP(req));
   if (!limit.ok) {
     return res.status(429).json({ ok: false, error: limit.error, retryAfterSec: limit.retryAfterSec });
+  }
+  if (isReview) {
+    // Reviewer already has the private credential. Never send or rotate an SMS.
+    if (!reviewLoginPolicy.isActive()) return res.status(400).json({ ok: false, error: "INVALID_CODE" });
+    return res.json({ ok: true, cooldownSec: 60 });
   }
   try {
     const result = await sendLoginSmsCode(phone);
@@ -91,15 +99,39 @@ app.post("/v1/auth/sms/verify", async (req, res) => {
   if (!limit.ok) {
     return res.status(429).json({ ok: false, error: limit.error, retryAfterSec: limit.retryAfterSec });
   }
-  const snapshot = await getSmsCode(phone);
-  if (!snapshot || snapshot.expireAt < Date.now() || snapshot.code !== code) {
+  const isReview = reviewLoginPolicy.handlesPhone(phone);
+  let validCode;
+  if (isReview) {
+    try {
+      const reviewLimit = await consumeReviewLoginAttempt(phone);
+      if (!reviewLimit.ok) return res.status(429).json({ ok: false, error: reviewLimit.error, retryAfterSec: reviewLimit.retryAfterSec });
+    } catch {
+      // A store outage must not bypass the shared account attempt budget.
+      return res.status(503).json({ ok: false, error: "LOGIN_UNAVAILABLE" });
+    }
+    validCode = reviewLoginPolicy.verify(phone, code);
+  } else {
+    const snapshot = await getSmsCode(phone);
+    validCode = snapshot && snapshot.expireAt >= Date.now() && snapshot.code === code;
+  }
+  if (!validCode) {
     markSmsVerifyFailed(phone, clientIP(req));
     return res.status(400).json({ ok: false, error: "INVALID_CODE" });
   }
   clearSmsVerifyFailures(phone, clientIP(req));
-  await deleteSmsCode(phone);
+  if (!isReview) await deleteSmsCode(phone);
   const user = await getOrCreateUserByPhone(phone);
-  const accessToken = signAccessToken(user);
+  let accessToken;
+  if (isReview) {
+    try {
+      // tokenClaims rechecks expiry after asynchronous storage work.
+      accessToken = signAccessToken(user, { reviewPolicy: reviewLoginPolicy });
+    } catch {
+      return res.status(400).json({ ok: false, error: "INVALID_CODE" });
+    }
+  } else {
+    accessToken = signAccessToken(user);
+  }
   const session = await getSessionByUserId(user.userId);
   return res.json({
     ok: true,

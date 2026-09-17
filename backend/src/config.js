@@ -37,6 +37,12 @@ export const config = {
   redisKeyPrefix: process.env.REDIS_KEY_PREFIX || "xuzhang",
   smsProvider: process.env.SMS_PROVIDER || "",
   devAllowSmsCode: process.env.DEV_ALLOW_SMS_CODE || "",
+  reviewLogin: {
+    enabled: process.env.REVIEW_LOGIN_ENABLED || "false",
+    phone: process.env.REVIEW_LOGIN_PHONE || "",
+    codeSha256: process.env.REVIEW_LOGIN_CODE_SHA256 || "",
+    expiresAt: process.env.REVIEW_LOGIN_EXPIRES_AT || "",
+  },
   aliyunSmsAccessKeyId: process.env.ALIYUN_SMS_ACCESS_KEY_ID || "",
   aliyunSmsAccessKeySecret: process.env.ALIYUN_SMS_ACCESS_KEY_SECRET || "",
   aliyunSmsSchemeName: process.env.ALIYUN_SMS_SCHEME_NAME || "",
