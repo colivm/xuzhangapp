@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { createClient } from "redis";
-import { config } from "./config.js";
+import { config, normalizeNodeEnv } from "./config.js";
+import { createReviewAttemptLimiter } from "./reviewLogin.js";
 
 const memory = {
   usersByPhone: new Map(),
@@ -14,6 +15,12 @@ const memory = {
 let pool = null;
 let usePostgres = false;
 let redis = null;
+
+export const consumeReviewLoginAttempt = createReviewAttemptLimiter({
+  getRedis: () => redis,
+  prefix: config.redisKeyPrefix,
+  allowMemory: !["staging", "production"].includes(normalizeNodeEnv()),
+});
 
 export async function initStore() {
   if (config.redisUrl) {
