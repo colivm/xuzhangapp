@@ -12412,7 +12412,235 @@ final class RecordEmotionScenePolicyTests: XCTestCase {
             context(title: "路亚鱼竿", category: .shopping, amount: 268, brandID: nil),
             context(title: "手机话费", category: .daily, amount: 50, brandID: nil, preview: "手机话费记下"),
             context(title: "医疗保险", category: .other, amount: 100, brandID: nil),
+            context(title: "早餐记一笔", brandID: nil),
+            context(title: "午餐记一笔", brandID: nil),
+            context(title: "晚餐记一笔", amount: 18.5, brandID: nil),
         ]
+    }
+
+    private func mealDate(hour: Int, minute: Int = 15) -> Date {
+        Calendar.current.date(from: DateComponents(
+            year: 2026, month: 9, day: 17, hour: hour, minute: minute
+        ))!
+    }
+
+    private func mealResolution(
+        _ title: String, at date: Date, generated: Bool, locked: Bool = false,
+        source: String = "preview"
+    ) -> RecordDraftResolution {
+        RecordDraftResolutionService.resolve(.init(
+            rawTitle: title, fallbackCategory: .dining, amount: 18.5, date: date,
+            merchantBrandId: nil, categoryLockedByUser: locked,
+            userEditedTitle: !generated, source: source,
+            generatedNoteContext: generated ? .init(title: title, category: .dining) : nil
+        ))
+    }
+
+    private func mealContext(
+        _ resolution: RecordDraftResolution, at date: Date, anchor: String? = nil
+    ) -> RecordEmotionSceneContext {
+        RecordEmotionSceneContext(
+            title: resolution.title, category: resolution.category, amount: 18.5, date: date,
+            merchantBrandID: resolution.merchantBrandId, scenePackID: nil, semanticAnchor: anchor,
+            previewEmotionTag: resolution.emotionTag, automaticEmotionTag: resolution.emotionTag
+        )
+    }
+
+    private var supplementalMealTags: Set<String> {
+        [
+            "早餐这顿记下", "这顿早饭记下", "早餐留一笔",
+            "午餐这顿记下", "这顿午饭记下", "午餐留一笔",
+            "晚餐这顿记下", "这顿晚饭记下", "晚餐留一笔",
+        ]
+    }
+
+    func testQuickDinnerAt1715OffersDeterministicCycleAndKeepsAutomaticDefault() throws {
+        let date = mealDate(hour: 17)
+        let resolved = mealResolution("晚餐记一笔", at: date, generated: true)
+        let scene = mealContext(resolved, at: date, anchor: resolved.title)
+        XCTAssertEqual(scene.amount, 18.5)
+        XCTAssertEqual(resolved.emotionTag, "晚饭时间坐一会儿")
+        let choices = RecordEmotionScenePolicy.candidates(for: scene)
+        XCTAssertGreaterThan(choices.count, 1)
+        XCTAssertLessThanOrEqual(choices.count, 6)
+        XCTAssertEqual(choices, RecordEmotionScenePolicy.candidates(for: scene))
+        XCTAssertEqual(choices.first, "晚饭时间坐一会儿")
+        XCTAssertEqual(Set(choices).count, choices.count)
+        var current = try XCTUnwrap(choices.first)
+        var visited: [String] = []
+        for _ in choices.indices {
+            visited.append(current)
+            current = try XCTUnwrap(RecordEmotionScenePolicy.next(after: current, candidates: choices))
+        }
+        XCTAssertEqual(visited, choices)
+        XCTAssertEqual(current, choices.first)
+        XCTAssertNil(RecordEmotionScenePolicy.validatedTag(
+            selection: nil, resolution: resolved, amount: 18.5, date: date,
+            scenePackID: nil, automaticEmotionTag: resolved.emotionTag
+        ))
+        XCTAssertEqual(scene.item(emotionTag: resolved.emotionTag).displayEmotionTag, resolved.emotionTag)
+    }
+
+    func testAllNineQuickMealTemplatesKeepGeneratedPreviewSaveAndDisplayConsistent() {
+        let fixtures = [(8, "早餐先记下"), (12, "中午一顿饭"), (17, "晚饭时间坐一会儿")]
+        var covered: Set<String> = []
+        for (hour, expectedDefault) in fixtures {
+            let date = mealDate(hour: hour)
+            let titles = RecordQuickNotePolicy.templates(for: .dining, at: date)
+            XCTAssertEqual(titles.count, 3)
+            for title in titles {
+                covered.insert(title)
+                for locked in [false, true] {
+                    let preview = mealResolution(title, at: date, generated: true, locked: locked)
+                    let saved = mealResolution(title, at: date, generated: true, locked: locked, source: "manual")
+                    let scene = mealContext(preview, at: date, anchor: title)
+                    XCTAssertEqual(preview.title, title)
+                    XCTAssertEqual(saved.title, title)
+                    XCTAssertEqual(preview.category, .dining)
+                    XCTAssertEqual(saved.category, .dining)
+                    XCTAssertEqual(preview.emotionTag, expectedDefault)
+                    XCTAssertEqual(saved.emotionTag, expectedDefault)
+                    XCTAssertEqual(preview.merchantBrandId, saved.merchantBrandId)
+                    XCTAssertTrue(saved.trace.contains(locked ? "category:userLocked" : "category:generatedDraft"))
+                    let choices = RecordEmotionScenePolicy.candidates(for: scene)
+                    XCTAssertGreaterThan(choices.count, 1, title)
+                    XCTAssertLessThanOrEqual(choices.count, 6, title)
+                    XCTAssertEqual(choices.first, expectedDefault, title)
+                    for tag in choices {
+                        XCTAssertEqual(RecordEmotionScenePolicy.validatedTag(
+                            selection: .init(context: scene, tag: tag), resolution: saved,
+                            amount: 18.5, date: date, scenePackID: nil,
+                            automaticEmotionTag: saved.emotionTag
+                        ), tag, title)
+                        XCTAssertEqual(scene.item(emotionTag: tag).displayEmotionTag, tag, title)
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(covered.count, 9)
+    }
+
+    func testBareHandwrittenMealsUseTheSameChoicesAsTheirQuickTemplates() {
+        let fixtures = [
+            (8, "早餐记一笔", ["早餐", "早饭"]),
+            (12, "午餐记一笔", ["午餐", "午饭", "中午"]),
+            (17, "晚餐记一笔", ["晚餐", "晚饭"]),
+        ]
+        for (hour, quickTitle, handwrittenTitles) in fixtures {
+            let date = mealDate(hour: hour)
+            let generated = mealResolution(quickTitle, at: date, generated: true)
+            let expected = RecordEmotionScenePolicy.candidates(for: mealContext(generated, at: date))
+            XCTAssertGreaterThan(expected.count, 1)
+            for title in handwrittenTitles {
+                let saved = mealResolution(title, at: date, generated: false, source: "manual")
+                let scene = mealContext(saved, at: date)
+                XCTAssertEqual(saved.title, title)
+                XCTAssertEqual(saved.emotionTag, generated.emotionTag)
+                XCTAssertEqual(RecordEmotionScenePolicy.candidates(for: scene), expected, title)
+                for tag in expected {
+                    XCTAssertEqual(RecordEmotionScenePolicy.validatedTag(
+                        selection: .init(context: scene, tag: tag), resolution: saved,
+                        amount: 18.5, date: date, scenePackID: nil,
+                        automaticEmotionTag: saved.emotionTag
+                    ), tag, title)
+                }
+            }
+        }
+    }
+
+    func testExplicitMealChoicesKeepMealEvidenceWhenClockIsInAnotherDayPeriod() {
+        for (title, hour, expected) in [
+            ("早餐", 19, "早餐先记下"),
+            ("午饭", 19, "中午一顿饭"),
+            ("晚餐", 8, "晚饭时间坐一会儿"),
+        ] {
+            let date = mealDate(hour: hour)
+            let resolved = mealResolution(title, at: date, generated: false)
+            let scene = mealContext(resolved, at: date)
+            XCTAssertEqual(resolved.emotionTag, expected, title)
+            let choices = RecordEmotionScenePolicy.candidates(for: scene)
+            XCTAssertGreaterThan(choices.count, 1, title)
+            XCTAssertEqual(choices.first, expected, title)
+            for tag in choices {
+                XCTAssertEqual(scene.item(emotionTag: tag).displayEmotionTag, tag, title)
+            }
+        }
+        // Late dinner already has a night-specific automatic label; keep that boundary.
+        let lateDate = mealDate(hour: 23)
+        let lateDinner = mealResolution("晚餐", at: lateDate, generated: false)
+        XCTAssertNotEqual(lateDinner.emotionTag, "晚饭时间坐一会儿")
+        XCTAssertTrue(supplementalMealTags.isDisjoint(with: RecordEmotionScenePolicy.candidates(
+            for: mealContext(lateDinner, at: lateDate)
+        )))
+    }
+
+    func testMealAlternativesRequireBothCanonicalTagsAndDiningCategory() {
+        let fixtures = [
+            context(title: "晚餐", category: .daily, brandID: nil,
+                    preview: "晚饭时间坐一会儿", automatic: "晚饭时间坐一会儿"),
+            context(title: "晚餐", brandID: nil,
+                    preview: "晚饭时间坐一会儿", automatic: "雨天通勤"),
+            context(title: "晚餐", brandID: nil,
+                    preview: "雨天通勤", automatic: "晚饭时间坐一会儿"),
+            context(title: "晚餐", brandID: nil,
+                    preview: "中午一顿饭", automatic: "中午一顿饭"),
+            context(title: "晚餐", brandID: "lawson",
+                    preview: "晚饭时间坐一会儿", automatic: "晚饭时间坐一会儿"),
+        ]
+        for scene in fixtures {
+            XCTAssertTrue(supplementalMealTags.isDisjoint(with: RecordEmotionScenePolicy.candidates(for: scene)))
+        }
+    }
+
+    func testMealAlternativesDoNotBroadenSpecificFoodBrandWeatherOrConflictingNotes() {
+        let date = mealDate(hour: 17)
+        for title in [
+            "晚餐咖啡", "晚餐馄饨", "罗森晚餐", "加班晚餐", "雨天晚餐",
+            "早餐晚餐", "午餐晚饭", "晚餐夜宵", "晚餐宵夜", "今天晚饭",
+        ] {
+            let resolved = mealResolution(title, at: date, generated: false)
+            let scene = mealContext(resolved, at: date)
+            XCTAssertTrue(supplementalMealTags.isDisjoint(with: RecordEmotionScenePolicy.candidates(for: scene)), title)
+        }
+    }
+
+    func testMealAlternativesAllowSameMealAnchorAndRejectConcreteOrConflictingAnchors() {
+        let date = mealDate(hour: 17)
+        let resolved = mealResolution("晚餐记一笔", at: date, generated: true)
+        let expected = RecordEmotionScenePolicy.candidates(for: mealContext(resolved, at: date))
+        XCTAssertGreaterThan(expected.count, 1)
+        for anchor in ["", "晚餐", "晚饭", "这顿晚饭先记下"] {
+            let scene = mealContext(resolved, at: date, anchor: anchor)
+            XCTAssertEqual(RecordEmotionScenePolicy.candidates(for: scene), expected, anchor)
+        }
+        for anchor in ["早餐", "午饭", "夜宵", "晚餐咖啡", "罗森", "雨天晚餐", "加班晚饭"] {
+            let scene = mealContext(resolved, at: date, anchor: anchor)
+            XCTAssertTrue(supplementalMealTags.isDisjoint(with: RecordEmotionScenePolicy.candidates(for: scene)), anchor)
+        }
+    }
+
+    func testSelectedMealAlternativeCannotSurviveChangedDraftFacts() throws {
+        let date = mealDate(hour: 17)
+        let resolved = mealResolution("晚餐记一笔", at: date, generated: true)
+        let scene = mealContext(resolved, at: date)
+        let tag = try XCTUnwrap(RecordEmotionScenePolicy.next(
+            after: scene.previewEmotionTag, candidates: RecordEmotionScenePolicy.candidates(for: scene)
+        ))
+        let selection = RecordEmotionSelection(context: scene, tag: tag)
+        let changedTitle = mealResolution("午餐记一笔", at: date, generated: true, source: "manual")
+        let mutations: [(RecordDraftResolution, Double, Date, String?, String)] = [
+            (changedTitle, 18.5, date, nil, resolved.emotionTag),
+            (resolved, 19, date, nil, resolved.emotionTag),
+            (resolved, 18.5, date.addingTimeInterval(60), nil, resolved.emotionTag),
+            (resolved, 18.5, date, "food", resolved.emotionTag),
+            (resolved, 18.5, date, nil, "雨天通勤"),
+        ]
+        for (draft, amount, date, packID, automatic) in mutations {
+            XCTAssertNil(RecordEmotionScenePolicy.validatedTag(
+                selection: selection, resolution: draft, amount: amount, date: date,
+                scenePackID: packID, automaticEmotionTag: automatic
+            ))
+        }
     }
 
     func testConvenienceStoreHasRealDeterministicDistinctChoicesWithinSix() {
