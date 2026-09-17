@@ -5661,3 +5661,17 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 提交后验证：staging 干净 detached worktree 和实际生产分支 worktree 各自完整运行 backend `npm ci --ignore-scripts --no-audit --no-fund`、原 Windows release gate、meal_emotion/quick_note/amount_input 三个专项，退出码均 0、`release_repository_gate: OK`；仅既有 7 条文案软提示。staging Debug/Release 均含 STAGING，生产 staging=[]。工程/环境模板/原门禁相对各自基线未变，NativeDemoApp、NativeDemoAppTests、scripts 跨分支无差异；台账既有历史分支差异原样保留，没有整文件覆盖生产台账。
 - 日志与保护：保留 `C:/Users/yf/AppData/Local/Temp/xuzhang-meal-delivery-bd5d6c2a94ba40baadd3521dcf100f29/` 下的 staging.log、production.log、依赖和 staging 专项日志；用户 `.env.staging.example` 哈希与开始一致，其他未跟踪文件未提交或清理。
 - 收尾与剩余风险：本条仅文档交付记录随后同步推送，核对最终远端头与 ahead/behind，再按精确路径及状态检查清理本轮两个验证 worktree，保留原审计 worktree 和日志。未部署/上传 App Store，8 项新增 XCTest、Swift 编译及真机仍按第 164 节等待外部验收。
+
+### 170. APP-REVIEW-SCOPED-LOGIN-01：双环境专用审核登录配置（2026-09-17）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`，当前无进行中的实现任务，部署/启用和实际审核包签收待外部条件，不标记 VERIFIED。用户针对 App Review 2.1(a) 无法验证账号功能的拒审，授权测试和生产后端均支持专用号码配置；不修改 iOS，不复用全局开发验证码，不将 Apple Sandbox 与 App staging 环境混淆。
+- 允许范围：backend 专用审核登录策略、新增配置项、现有 SMS send/verify 接线及仅审核令牌的撤销保护、对应单元/接口测试和 npm test 增量接线；新增独立无凭据配置模板/使用说明、修正仓库审核信息指引和本文档。普通短信流程、会员/IAP/账本规则、iOS 与两套发布配置、原完整门禁冻结；不顺带修支付签名链或部署首页前轮修复。
+- 安全合同：默认关闭；只对精确专用手机号接受独立随机数字凭据，服务器仅存摘要，配置强制到期；保留原 IP/手机号失败限流，审核账号增加跨 IP 尝试限制；成功不消耗审核凭据，支持重复登录。正常短信不受影响；配置停用/轮换/到期应使审核令牌失效，普通令牌 TTL 不变。审核账号须为用户控制的独立测试身份，不自动赋予会员、不读真实个人账号。
+- 配置与部署边界：当前用户尚未给出号码/凭据，已非阻塞询问；先实现并在两套配置中保持关闭。服务器仅在精确目录/运行服务/文件差异核验后按授权范围部署，可回退，不打印 .env 或密钥。若访问不可用则交付代码和可配置说明并明确缺项，不伪称已上线/可登录。
+- 验证计划：关闭/误配/指定账号/错号码/错码/重复登录/错误限流/跨 IP/到期/轮换/旧 JWT/注销/普通 SMS 单次使用回归；两分支各自完整 Windows release gate 和 backend 全量测试不减不改，实际 Build 369 仍需用户验证。保留所有已有文档及用户环境/素材改动，仅将本任务补丁同步两分支。
+- 实际文件：新增 `backend/src/reviewLogin.js`、`backend/.env.review-login.example`、`backend/scripts/verify-review-login.mjs`；修改 backend 的 config/auth/server/store、package.json 增量测试接线、README，以及 `APP_STORE_IAP_SETUP.md`、`APP_STORE_LISTING.md` 的登录审核说明。没有修改 iOS、会员/支付规则、原依赖锁、环境模板或既有检查脚本。
+- 实现与复核：只匹配配置号码，接受 8–12 位数字凭据的 SHA256 摘要（建议随机 12 位）；默认关闭，强制带时区到期与强 JWT 密钥。开启期间包括过期时不回退普通 SMS；误点发送保留冷却但不发短信/换码。Redis 原子账户预算每 10 分钟 10 次，成功也计数，跨 IP/worker 生效；staging/production 启用必须有 Redis，异常不降级。专用 JWT 最长 24 小时、不晚于配置到期，HMAC 配置指纹支持轮换/停用后撤销（需重启全部 worker），原普通 90 天令牌/注销检查保持。安全复核关闭了 Redis 内存降级边界及到期签发异常两项发现。
+- 双环境证据：staging 代码提交 `1ceda72`、production 定向 `cherry-pick -x` 提交 `934c190`；两者 backend/审核说明完全一致，未夹带之前首页/情绪五文件。各自干净 worktree 按 lockfile 安装依赖、运行完整 backend npm test（原 5 项 + 新审核专项）及原 `validate_release_gate.py --phase windows --release-branch <对应分支>`，退出码全部 0，均 `release_repository_gate: OK`，只保留既有文案软提示。新专项覆盖关闭/误配/精确号码/重复/到期/撤销/注销/普通短信单次使用/跨 IP 与跨 worker 预算、Redis 异常；四个本地 HTTP 服务仅回环、隔离实际外部配置，Redis 使用契约模拟，不冒充线上 Redis 实测。
+- 日志与配置保护：完整证据在 `C:/Users/yf/AppData/Local/Temp/xuzhang-review-login-dcec633cbfd84cdca6cc5ef37fb677ae/` 的 staging/production 的 dependencies、backend、gate 日志。相对各分支基线，iOS 工程、两套环境模板、原门禁及 package-lock 未变；用户 `.env.staging.example` SHA256 仍为 `48FF5A142D67DBEAD8817432F23CE2A089C9A11C54D0A9D1B41622A30F8CD92C`。原第 168/169 节、签收文档与未跟踪资料保持原工作区状态，不混入本任务提交。
+- 部署边界与剩余风险：文档中服务器 SSH 的只读 BatchMode 探测返回 `Permission denied (publickey,password)`，未获得在线文件/服务配置证据，没有上传、重启或启用任何服务器。用户尚未提供专用号码，仓库不含真实凭据，功能默认关闭。不自动开会员，仍需准备可访问全部待审能力的专用权益/数据。当前 iOS 源码支持直接填写数字凭据，实际 Build 369 尚需用户验收；本机未运行 Xcode/真机，未关闭既有支付签名链缺口。
+- 下一步：本节文档定向提交两分支并普通推送、核对远端；取得可用部署通道后，仅部署本补丁并在两环境私密配置号码/摘要/到期，分别实测后填写 App Store Connect 私密审核字段。回退先停用并重启；在专用令牌过期前保留撤销校验，避免旧 auth.js 接受已签发审核令牌。不启动个人 AI 池或扩大到其他优化。
