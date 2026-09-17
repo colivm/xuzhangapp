@@ -5552,3 +5552,12 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 新增回归：9 项 DarkModeReadabilityPolicyTests，覆盖 31 主题浅/深跟随与显式模式等价、偏好优先、重复刷新、主题切换/恢复默认、未知主题、静态 AppColors 观察链与按钮配色对比；15 项 DiningFoodContextRegressionTests，覆盖食品身份、多 seed、早餐边界、工作日/周末、明确餐次/补记/冲突、明确上班前、品牌商品冲突、强夜间场景、非目标隔离、真实候选循环、保存校验/展示/生活印记一致、旧标签只读纠正与混合食品。增加 19 条静态接线守卫。XCTest 已写入并源码核对，未编译或运行。
 - 验证证据：`git diff --check`、`python scripts/theme_catalog_check.py`、`python scripts/life_semantic_regression.py`、`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/experience_static_check.ps1` 均通过；最终 `python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging` 退出码 0，输出 `release_repository_gate: OK`。覆盖语义/静态/文案/合规/发布配置/schema/迁移与 100/1,000/5,000 条及真实图片夹具，仅既有 7 条文案软提示。
 - 剩余风险与下一任务：Windows 无 Swift/swiftc/Xcode，不能把上述脚本当成 Swift 编译、XCTest 或 UI 运行通过。先在 macOS 完成 Debug/Release Clean Build 和全部 XCTest；iPhone 核对系统浅/深 × App 跟随/浅/深、31 主题、冷启动首帧、前后台、设置/无变化权益刷新、Sheet 和未保存草稿保留、两个金额按钮低亮度/Reduce Transparency 可读性。再验证 08:30 馄饨及另外三类食品切换→保存→重启、周末/明确上班前、早餐补记/午晚夜餐、强夜间场景、旧错误与混合标签；共享生成/展示入口需连同手动、OCR 确认和历史展示回归。代码未改生活印记/奖励规则，但仍须真机核对情绪切换不改变其结果；未获上述证据前保持 CODE_DONE，不启动相邻路线图任务。
+
+### 158. RECENT-FIXES-BRANCH-SYNC-01：近期修复提交、推送与生产分支同步（2026-09-17）
+
+- 性质与授权：用户明确要求将最近几轮修复提交推送并同步生产分支。本轮仅交付第 151–157 节已有审计及 CODE_DONE 修复，不新增产品优化任务，不改变既有 roadmap 或外部验收状态；最近讨论的宣传文案未落盘，不包含在提交中。
+- 提交范围：14 个文件，包含推荐分类/帮写/保存一致性、情绪标签场景内切换、跟随系统深色与首页金额按钮、馄饨食品身份/早餐文案，以及测试、静态守卫、审计报告和台账。保留且未提交 backend/.env.staging.example 的用户改动、品牌素材、输出、缓存、截图/图标脚本和 tmp；未使用全量暂存、强推或破坏性 Git 操作。
+- 实际提交与推送：staging 修复提交 `5516a67a7111d64bb3cfca63c566d266a792524c`；生产通过 `cherry-pick -x` 得到 `1cc3d82eac5af48c6089d55e901a2a02025684bd`，无冲突。两提交已以普通 fast-forward 的原子推送发送到 origin 的 `feature/xuzhangapp-staging` 与 `xuzhang1.0-release-2026`；本节作为后续仅文档的交付记录同步至两分支。
+- 环境边界：未整体合并 staging 分支。生产 project.pbxproj 与原生产 `dc392b7` 完全相同，Debug/Release 均无 STAGING；staging 保留两配置的 STAGING 标记。两分支业务代码、测试、脚本及本轮审计报告一致，仅保留既有台账历史和工程配置差异；未改 endpoint、后端部署配置、权益、用户数据，也未执行服务器部署、Archive 或 App Store 发布。
+- 独立验证：分别在干净的 staging 提交 worktree 与真实生产分支 worktree 运行 `python scripts/validate_release_gate.py --phase windows --release-branch <对应分支>`，两者均退出码 0、输出 `release_repository_gate: OK`，仅既有 7 条文案软提示。新 worktree 首次因缺少 dotenv 在 IAP gate 中止；按既有 lockfile 执行 `npm ci --ignore-scripts --no-audit --no-fund` 后全量重跑通过，未修改依赖清单或锁文件，未借用主目录的未提交环境配置。另核对修复提交文件白名单、diff whitespace、生产工程配置和跨分支业务文件相等。
+- 剩余风险与下一步：同步生产分支不等于发布或真机签收。19 项推荐、18 项情绪切换、15 项餐饮及 9 项主题新增 XCTest 共 61 项尚未在本机编译/运行；继续按第 153、154、157 节在 macOS/Xcode 和 iPhone 验证，未获证据前不标记 VERIFIED。后续仅文档记录完成后再次核对远端与本地分支头一致，保留主工作区原有用户文件。
