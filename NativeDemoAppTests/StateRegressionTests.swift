@@ -12747,3 +12747,544 @@ final class RecordEmotionScenePolicyTests: XCTestCase {
     }
 }
 #endif
+
+final class RecordQuickNotePolicyTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return calendar
+    }
+
+    private func date(month: Int = 9, day: Int, hour: Int = 12) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: hour))!
+    }
+
+    private var referenceDate: Date { date(day: 17) }
+
+    private func record(
+        _ title: String, on date: Date, category: HomeItem.Category = .dining,
+        amount: Double = 18, userEdited: Bool? = true,
+        draftStatus: HomeItem.DraftMeta.Status? = nil
+    ) -> HomeItem {
+        var item = HomeItem(
+            title: title, amount: amount, category: category, createdAt: date,
+            userEditedTitle: userEdited
+        )
+        if let draftStatus {
+            item.draftMeta = .init(batchId: "quick-note-test", importedAt: date, status: draftStatus)
+        }
+        return item
+    }
+
+    private func history(_ items: [HomeItem], at date: Date? = nil) -> [String: [String]] {
+        RecordQuickNotePolicy.historicalTitles(items: items, at: date ?? referenceDate, calendar: calendar)
+    }
+
+    private func titles(_ items: [HomeItem]) -> Set<String> {
+        Set(history(items).values.flatMap { $0 })
+    }
+
+    private func assertStableResolution(
+        _ title: String, category: HomeItem.Category, date: Date,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        for locked in [false, true] {
+            for source in ["preview", "manual"] {
+                let result = RecordDraftResolutionService.resolve(.init(
+                    rawTitle: title, fallbackCategory: category, amount: 18, date: date,
+                    merchantBrandId: nil, categoryLockedByUser: locked,
+                    userEditedTitle: false, source: source,
+                    generatedNoteContext: .init(title: title, category: category)
+                ))
+                XCTAssertEqual(result.category, category, "\(title), locked: \(locked)", file: file, line: line)
+                XCTAssertEqual(result.title, title, "\(category): \(title), locked: \(locked)", file: file, line: line)
+            }
+        }
+    }
+
+    func testAllCategoryTemplatesStayCompatibleAcrossHourBoundariesAndWeekends() {
+        let unsupportedFacts = ["早班", "加班", "下班", "出差", "热乎", "工作日", "假期", "休息日"]
+        for day in [17, 19] {
+            for hour in [0, 5, 9, 10, 13, 14, 16, 17, 20, 21, 23] {
+                for category in HomeItem.Category.allCases {
+                    let candidates = RecordQuickNotePolicy.templates(
+                        for: category, at: date(day: day, hour: hour), calendar: calendar
+                    )
+                    XCTAssertEqual(candidates.count, 3, "\(category), hour: \(hour)")
+                    XCTAssertEqual(Set(candidates).count, candidates.count)
+                    for title in candidates {
+                        XCTAssertTrue(RecordQuickNotePolicy.isCompatible(title, category: category), title)
+                        XCTAssertLessThanOrEqual(title.count, 32)
+                        XCTAssertFalse(unsupportedFacts.contains { title.contains($0) }, title)
+                    }
+                }
+            }
+        }
+    }
+
+    func testTemplatesPreserveTitleAndCategoryInLockedAndUnlockedPreviewAndSave() {
+        for day in [17, 19] {
+            for hour in [8, 12, 15, 19, 23] {
+                let currentDate = date(day: day, hour: hour)
+                for category in HomeItem.Category.allCases {
+                    for title in RecordQuickNotePolicy.templates(for: category, at: currentDate, calendar: calendar) {
+                        assertStableResolution(title, category: category, date: currentDate)
+                    }
+                }
+            }
+        }
+    }
+
+    func testDiningTemplatesFollowMealBandsWithoutAssumingWorkOrHolidayActivities() {
+        let expectations = [(5, "早餐"), (9, "早餐"), (10, "午"), (13, "午"), (17, "晚"), (20, "晚")]
+        for (hour, cue) in expectations {
+            let workday = RecordQuickNotePolicy.templates(for: .dining, at: date(day: 17, hour: hour), calendar: calendar)
+            let weekend = RecordQuickNotePolicy.templates(for: .dining, at: date(day: 19, hour: hour), calendar: calendar)
+            let holiday = RecordQuickNotePolicy.templates(for: .dining, at: date(month: 5, day: 1, hour: hour), calendar: calendar)
+            XCTAssertTrue(workday.allSatisfy { $0.contains(cue) })
+            XCTAssertEqual(workday, weekend)
+            XCTAssertEqual(workday, holiday)
+        }
+        for hour in [0, 4, 21, 23] {
+            let candidates = RecordQuickNotePolicy.templates(for: .dining, at: date(day: 17, hour: hour), calendar: calendar)
+            XCTAssertFalse(candidates.contains { $0.contains("早餐") || $0.contains("午餐") || $0.contains("加班") })
+        }
+    }
+
+    func testCompatibilityRejectsOldConvenienceStoreDailyCopyAndForeignBrands() {
+        XCTAssertFalse(RecordQuickNotePolicy.isCompatible("便利店补一袋日常", category: .daily))
+        XCTAssertFalse(RecordQuickNotePolicy.isCompatible("罗森咖啡", category: .daily))
+        XCTAssertFalse(RecordQuickNotePolicy.isCompatible("京东", category: .dining))
+        XCTAssertFalse(RecordQuickNotePolicy.isCompatible("", category: .daily))
+        XCTAssertFalse(RecordQuickNotePolicy.isCompatible(String(repeating: "物", count: 33), category: .daily))
+        XCTAssertTrue(RecordQuickNotePolicy.isCompatible("日用品补一笔", category: .daily))
+        XCTAssertTrue(RecordQuickNotePolicy.isCompatible("罗森咖啡", category: .dining))
+    }
+
+    func testHistoryNeedsTwoDistinctDaysEvenWhenOneDayHasManyRecords() {
+        let repeatedDate = date(day: 15)
+        var items = (0..<8).map { index in
+            record("同日咖啡", on: repeatedDate.addingTimeInterval(Double(index * 60)))
+        }
+        items += [record("拿铁咖啡", on: date(day: 14)), record("拿铁咖啡", on: date(day: 15))]
+        XCTAssertEqual(titles(items), Set(["拿铁咖啡"]))
+    }
+
+    func testHistorySeparatesCategoriesMealBandsWorkdaysWeekendsAndHolidays() {
+        let items = [
+            record("早餐咖啡", on: date(day: 14, hour: 8)),
+            record("早餐咖啡", on: date(day: 15, hour: 8)),
+            record("午间咖啡", on: date(day: 14)),
+            record("午间咖啡", on: date(day: 15)),
+            record("周末咖啡", on: date(day: 12)),
+            record("周末咖啡", on: date(day: 13)),
+            record("假日咖啡", on: date(month: 5, day: 1)),
+            record("假日咖啡", on: date(month: 6, day: 19)),
+            record("跨时段咖啡", on: date(day: 14, hour: 8)),
+            record("跨时段咖啡", on: date(day: 15, hour: 15)),
+            record("跨日型咖啡", on: date(day: 13)),
+            record("跨日型咖啡", on: date(day: 14)),
+            record("常用小物", on: date(day: 14), category: .daily),
+            record("常用小物", on: date(day: 15), category: .shopping),
+        ]
+        let pool = history(items)
+        let fixtures: [(Date, String)] = [
+            (date(day: 17, hour: 8), "早餐咖啡"),
+            (date(day: 17), "午间咖啡"),
+            (date(day: 19), "周末咖啡"),
+            (date(month: 5, day: 1), "假日咖啡"),
+        ]
+        for (contextDate, expected) in fixtures {
+            let key = RecordQuickNotePolicy.contextKey(category: .dining, date: contextDate, calendar: calendar)
+            XCTAssertEqual(pool[key], [expected])
+        }
+        XCTAssertEqual(Set(pool.values.flatMap { $0 }), Set(fixtures.map { $0.1 }))
+    }
+
+    func testHistoryIncludesExact180DayBoundaryButExcludesExpiredAndFutureSupport() {
+        let cutoff = calendar.date(byAdding: .day, value: -180, to: referenceDate)!
+        let laterWeekend = calendar.date(byAdding: .day, value: 7, to: cutoff)!
+        let items = [
+            record("边界咖啡", on: cutoff),
+            record("边界咖啡", on: laterWeekend),
+            record("过期咖啡", on: cutoff.addingTimeInterval(-1)),
+            record("过期咖啡", on: laterWeekend),
+            record("未来咖啡", on: date(day: 10)),
+            record("未来咖啡", on: date(day: 24)),
+        ]
+        XCTAssertEqual(titles(items), Set(["边界咖啡"]))
+    }
+
+    func testDifferentPositiveAmountsCanSupportOneTitleButZeroAndNegativeAmountsCannot() {
+        let items = [
+            record("常喝咖啡", on: date(day: 14), amount: 9.9),
+            record("常喝咖啡", on: date(day: 15), amount: 28),
+            record("零元咖啡", on: date(day: 14), amount: 0),
+            record("零元咖啡", on: date(day: 15), amount: 18),
+            record("退款咖啡", on: date(day: 14), amount: -18),
+            record("退款咖啡", on: date(day: 15), amount: 18),
+        ]
+        XCTAssertEqual(titles(items), Set(["常喝咖啡"]))
+    }
+
+    func testPendingAndResolvedDraftMetadataBothExcludeUnorganizedHistory() {
+        let items = [
+            record("普通咖啡", on: date(day: 14)),
+            record("普通咖啡", on: date(day: 15)),
+            record("待整理咖啡", on: date(day: 14)),
+            record("待整理咖啡", on: date(day: 15), draftStatus: .pending),
+            record("已校对咖啡", on: date(day: 14)),
+            record("已校对咖啡", on: date(day: 15), draftStatus: .resolved),
+        ]
+        XCTAssertEqual(titles(items), Set(["普通咖啡"]))
+    }
+
+    func testHistoryRejectsAmountsDefaultTitlesAndUneditedGenericCopy() {
+        let rejected = ["18.00", "￥20", HomeItem.Category.dining.defaultRecordTitle, "早餐先记下", "餐饮消费"]
+        var items = rejected.flatMap { title in
+            [record(title, on: date(day: 14)), record(title, on: date(day: 15))]
+        }
+        items += [
+            record("这顿吃得舒服", on: date(day: 14), userEdited: false),
+            record("这顿吃得舒服", on: date(day: 15), userEdited: nil),
+            record("牛肉面", on: date(day: 14)),
+            record("牛肉面", on: date(day: 15)),
+        ]
+        XCTAssertEqual(titles(items), Set(["牛肉面"]))
+    }
+
+    func testHistoryEnforcesTwoToTwelveCharactersAfterTrimming() {
+        let twelveCharacters = "每日常喝的大杯热拿铁咖啡"
+        let thirteenCharacters = "我" + twelveCharacters
+        XCTAssertEqual(twelveCharacters.count, 12)
+        XCTAssertEqual(thirteenCharacters.count, 13)
+        let fixtures = ["茶", "咖啡", twelveCharacters, thirteenCharacters, "  拿铁咖啡  "]
+        let items = fixtures.flatMap { title in
+            [record(title, on: date(day: 14)), record(title, on: date(day: 15))]
+        }
+        XCTAssertEqual(titles(items), Set(["咖啡", twelveCharacters, "拿铁咖啡"]))
+    }
+
+    func testHistoryAcceptsRepeatedBrandOrUserEditedTitleWithoutInventingManualProvenance() {
+        let items = [
+            record("罗森咖啡", on: date(day: 14), userEdited: nil),
+            record("罗森咖啡", on: date(day: 15), userEdited: false),
+            record("拿铁咖啡", on: date(day: 14), userEdited: true),
+            record("拿铁咖啡", on: date(day: 15), userEdited: false),
+            record("牛肉面", on: date(day: 14), userEdited: false),
+            record("牛肉面", on: date(day: 15), userEdited: false),
+        ]
+        XCTAssertEqual(titles(items), Set(["罗森咖啡", "拿铁咖啡"]))
+    }
+
+    func testHistoryRanksDistinctDaysThenRecencyAndLimitsEachContextToSix() {
+        let tiedTitles = ["丙咖啡", "丁咖啡", "戊咖啡", "己咖啡", "庚咖啡", "辛咖啡"]
+        var items = [
+            record("甲咖啡", on: date(day: 10)),
+            record("甲咖啡", on: date(day: 11)),
+            record("甲咖啡", on: date(day: 14)),
+            record("乙咖啡", on: date(day: 14)),
+            record("乙咖啡", on: date(day: 16)),
+        ]
+        items += tiedTitles.flatMap { title in
+            [record(title, on: date(day: 14)), record(title, on: date(day: 15))]
+        }
+        items += (0..<12).map { _ in record("辛咖啡", on: date(day: 15)) }
+        let key = RecordQuickNotePolicy.contextKey(category: .dining, date: referenceDate, calendar: calendar)
+        let expected = ["甲咖啡", "乙咖啡"] + Array(tiedTitles.sorted().prefix(4))
+        XCTAssertEqual(history(items)[key], expected)
+        XCTAssertEqual(history(Array(items.reversed()))[key], expected)
+        XCTAssertEqual(expected.count, 6)
+    }
+
+    func testNewUsersReceiveNeutralTemplatesForEveryCategory() {
+        for category in HomeItem.Category.allCases {
+            let candidates = RecordQuickNotePolicy.suggestions(
+                category: category, date: referenceDate, history: [], prefill: nil,
+                anchor: "", calendar: calendar
+            )
+            XCTAssertEqual(candidates, RecordQuickNotePolicy.templates(for: category, at: referenceDate, calendar: calendar))
+            XCTAssertFalse(candidates.isEmpty)
+            XCTAssertLessThanOrEqual(candidates.count, 4)
+        }
+    }
+
+    func testSuggestionsDeduplicateAndReserveTwoPlacesForNeutralTemplates() {
+        let personalized = ["美式咖啡", "拿铁咖啡", "牛肉面", "便当"]
+        let candidates = RecordQuickNotePolicy.suggestions(
+            category: .dining, date: referenceDate,
+            history: ["美式咖啡", "美式咖啡", "拿铁咖啡", "牛肉面", "便当"],
+            prefill: "美式咖啡", anchor: "", calendar: calendar
+        )
+        XCTAssertEqual(Array(candidates.prefix(2)), ["美式咖啡", "拿铁咖啡"])
+        XCTAssertEqual(candidates.count, 4)
+        XCTAssertEqual(Set(candidates).count, candidates.count)
+        XCTAssertEqual(candidates.filter { personalized.contains($0) }.count, 2)
+        let defaults = RecordQuickNotePolicy.templates(for: .dining, at: referenceDate, calendar: calendar)
+        XCTAssertEqual(candidates.filter { defaults.contains($0) }.count, 2)
+    }
+
+    func testSuggestionsRejectCategoryConflictsAndPreserveAcceptedTitlesOnSave() {
+        let candidates = RecordQuickNotePolicy.suggestions(
+            category: .daily, date: referenceDate,
+            history: ["便利店补一袋日常", "罗森咖啡", "纸巾", "猫砂"],
+            prefill: "午餐便当", anchor: "", calendar: calendar
+        )
+        XCTAssertEqual(Array(candidates.prefix(2)), ["纸巾", "猫砂"])
+        XCTAssertLessThanOrEqual(candidates.count, 4)
+        for title in candidates {
+            XCTAssertTrue(RecordQuickNotePolicy.isCompatible(title, category: .daily), title)
+            assertStableResolution(title, category: .daily, date: referenceDate)
+        }
+    }
+
+    func testFoodAndBrandAnchorsExcludeDifferentFoodOrAnotherMerchant() {
+        let candidates = RecordQuickNotePolicy.suggestions(
+            category: .dining, date: referenceDate,
+            history: ["罗森便当", "全家咖啡", "拿铁咖啡", "罗森咖啡"],
+            prefill: "罗森饮料", anchor: "罗森咖啡", calendar: calendar
+        )
+        XCTAssertEqual(Array(candidates.prefix(2)), ["拿铁咖啡", "罗森咖啡"])
+        XCTAssertFalse(candidates.contains("罗森便当"))
+        XCTAssertFalse(candidates.contains("全家咖啡"))
+        XCTAssertFalse(candidates.contains("罗森饮料"))
+        XCTAssertEqual(candidates.count, 4)
+        for title in candidates {
+            XCTAssertTrue(RecordQuickNotePolicy.respectsAnchor(title, anchor: "罗森咖啡"), title)
+        }
+    }
+
+    func testBabyAndPetAnchorsDoNotSubstituteForEachOther() {
+        let fixtures = [
+            (anchor: "猫砂", accepted: "猫粮", rejected: "宝宝湿巾"),
+            (anchor: "宝宝湿巾", accepted: "纸尿裤", rejected: "猫粮"),
+        ]
+        for fixture in fixtures {
+            let candidates = RecordQuickNotePolicy.suggestions(
+                category: .daily, date: referenceDate,
+                history: [fixture.rejected, fixture.accepted], prefill: fixture.rejected,
+                anchor: fixture.anchor, calendar: calendar
+            )
+            XCTAssertEqual(candidates.first, fixture.accepted)
+            XCTAssertFalse(candidates.contains(fixture.rejected))
+            XCTAssertTrue(candidates.contains("日用品补一笔"))
+            XCTAssertLessThanOrEqual(candidates.count, 4)
+            for title in candidates {
+                XCTAssertTrue(RecordQuickNotePolicy.respectsAnchor(title, anchor: fixture.anchor), title)
+            }
+        }
+    }
+}
+
+final class RecordAmountInputCoalescingTests: XCTestCase {
+    func testContinuousInputOnlyCompletesLatestRequest() {
+        var gate = RecordAmountInputGate()
+        let requests = (0..<12).map { _ in gate.begin() }
+
+        for request in requests.dropLast() {
+            XCTAssertFalse(gate.finish(request))
+            XCTAssertEqual(gate.pending, requests.last)
+        }
+        XCTAssertTrue(gate.finish(requests.last!))
+        XCTAssertNil(gate.pending)
+    }
+
+    func testReturningToEarlierAmountDoesNotReviveItsRequest() {
+        var gate = RecordAmountInputGate()
+        let firstOne = gate.begin()
+        let twelve = gate.begin()
+        let secondOne = gate.begin()
+
+        XCTAssertNotEqual(firstOne, secondOne, "The 1 -> 12 -> 1 sequence contains three input events.")
+        XCTAssertFalse(gate.finish(firstOne))
+        XCTAssertFalse(gate.finish(twelve))
+        XCTAssertEqual(gate.pending, secondOne)
+        XCTAssertTrue(gate.finish(secondOne))
+    }
+
+    func testRequestCanFinishOnlyOnce() {
+        var gate = RecordAmountInputGate()
+        let request = gate.begin()
+
+        XCTAssertTrue(gate.finish(request))
+        XCTAssertFalse(gate.finish(request))
+        XCTAssertFalse(gate.finish(request))
+        XCTAssertNil(gate.pending)
+    }
+
+    func testExplicitFlushRejectsOldCallbackWithoutConsumingNextInput() {
+        var gate = RecordAmountInputGate()
+        let oldRequest = gate.begin()
+        let pendingForFlush = gate.pending!
+        XCTAssertTrue(gate.finish(pendingForFlush))
+        XCTAssertFalse(gate.finish(oldRequest))
+
+        let nextRequest = gate.begin()
+        XCTAssertFalse(gate.finish(oldRequest))
+        XCTAssertEqual(gate.pending, nextRequest)
+        XCTAssertTrue(gate.finish(nextRequest))
+    }
+
+    func testCancellationInvalidatesPendingCallbackAndAllowsNewRequest() {
+        var gate = RecordAmountInputGate()
+        let cancelledRequest = gate.begin()
+        gate.cancel()
+
+        XCTAssertNil(gate.pending)
+        XCTAssertFalse(gate.finish(cancelledRequest))
+        let nextRequest = gate.begin()
+        XCTAssertNotEqual(cancelledRequest, nextRequest)
+        XCTAssertFalse(gate.finish(cancelledRequest))
+        XCTAssertEqual(gate.pending, nextRequest)
+        XCTAssertTrue(gate.finish(nextRequest))
+    }
+
+    func testMemoBuildsSameKeyOnceAcrossRepeatedReads() {
+        let memo = RecordDraftMemo<String, Int>()
+        var builds = 0
+        for _ in 0..<8 {
+            let value = memo.value(for: "current draft") {
+                builds += 1
+                return builds
+            }
+            XCTAssertEqual(value, 1)
+        }
+        XCTAssertEqual(builds, 1)
+    }
+
+    func testMemoCachesNilInsteadOfTreatingItAsAMiss() {
+        let memo = RecordDraftMemo<String, String?>()
+        var builds = 0
+        let first = memo.value(for: "neutral draft") {
+            builds += 1
+            return nil
+        }
+        let repeated = memo.value(for: "neutral draft") {
+            builds += 1
+            return "must not be built"
+        }
+
+        XCTAssertNil(first)
+        XCTAssertNil(repeated)
+        XCTAssertEqual(builds, 1)
+        XCTAssertEqual(memo.value(for: "explicit draft") {
+            builds += 1
+            return "new result"
+        }, "new result")
+        XCTAssertEqual(builds, 2)
+    }
+
+    func testMemoRebuildsChangedKeyAndEvictsEarlierDraft() {
+        let memo = RecordDraftMemo<String, Int>()
+        var builds = 0
+        for (key, expected) in [("1", 1), ("12", 2), ("1", 3)] {
+            XCTAssertEqual(memo.value(for: key) {
+                builds += 1
+                return builds
+            }, expected)
+        }
+        XCTAssertEqual(builds, 3)
+    }
+
+    func testEveryDraftAndPrefillDependencyInvalidatesPreviewMemo() {
+        let mutations: [(String, (inout RecordPreviewComputationKey) -> Void)] = [
+            ("amount text", { $0.amountText = "12.00" }),
+            ("title", { $0.title = "午餐便当" }),
+            ("category", { $0.category = .daily }),
+            ("category lock", { $0.categoryLocked = true }),
+            ("record date", { $0.date = $0.date.addingTimeInterval(60) }),
+            ("note editor", { $0.noteEditorExpanded = true }),
+            ("manual note intent", { $0.noteIntent = true }),
+            ("rotated copy", { $0.lineWasRotated = true }),
+            ("scene identity", { $0.scenePackID = "family" }),
+            ("scene category", { $0.scenePackCategory = .daily }),
+            ("semantic anchor", { $0.noteAnchor = "便当" }),
+            ("prefill title", { $0.prefillTitle = "午餐" }),
+            ("prefill category", { $0.prefillCategory = .other }),
+            ("prefill emotion", { $0.prefillEmotion = "补点能量" }),
+            ("prefill source", { $0.prefillSource = "brand" }),
+            ("prefill confidence", { $0.prefillConfidence = 0.9 }),
+            ("weather setting", { $0.weatherEnabled = false }),
+        ]
+        for (name, mutate) in mutations {
+            assertPreviewMemoInvalidated(name, mutate: mutate)
+        }
+    }
+
+    func testCalendarIdentityAndTimeZoneInvalidatePreviewMemo() {
+        assertPreviewMemoInvalidated("calendar identifier") {
+            $0.calendar = Calendar(identifier: .buddhist)
+        }
+        assertPreviewMemoInvalidated("calendar time zone") {
+            $0.calendar.timeZone = TimeZone(secondsFromGMT: 8 * 3_600)!
+        }
+        assertPreviewMemoInvalidated("calendar week boundary") {
+            $0.calendar.firstWeekday = 2
+        }
+    }
+
+    func testGeneratedNotePresenceTitleAndCategoryInvalidatePreviewMemo() {
+        assertPreviewMemoInvalidated("removed generated provenance") { $0.generatedNote = nil }
+        assertPreviewMemoInvalidated("generated title") {
+            $0.generatedNote = RecordGeneratedNoteContext(title: "午餐便当", category: .dining)
+        }
+        assertPreviewMemoInvalidated("generated category") {
+            $0.generatedNote = RecordGeneratedNoteContext(title: "拿铁咖啡", category: .daily)
+        }
+    }
+
+    func testWeatherPresenceTemperatureCodeAndTimestampInvalidatePreviewMemo() {
+        assertPreviewMemoInvalidated("weather expired or unavailable") { $0.weather = nil }
+        assertPreviewMemoInvalidated("temperature") { $0.weather?.temp = 31 }
+        assertPreviewMemoInvalidated("weather code") { $0.weather?.weatherCode = 71 }
+        assertPreviewMemoInvalidated("weather timestamp") {
+            $0.weather?.ts = Date(timeIntervalSince1970: 1_800_000_060)
+        }
+    }
+
+    private func assertPreviewMemoInvalidated(
+        _ dependency: String,
+        mutate: (inout RecordPreviewComputationKey) -> Void,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let original = previewKey()
+        var changed = original
+        mutate(&changed)
+        XCTAssertNotEqual(original, changed, dependency, file: file, line: line)
+
+        let memo = RecordDraftMemo<RecordPreviewComputationKey, Int>()
+        var builds = 0
+        XCTAssertEqual(memo.value(for: original) {
+            builds += 1
+            return builds
+        }, 1, dependency, file: file, line: line)
+        XCTAssertEqual(memo.value(for: changed) {
+            builds += 1
+            return builds
+        }, 2, dependency, file: file, line: line)
+        XCTAssertEqual(memo.value(for: changed) {
+            builds += 1
+            return builds
+        }, 2, dependency, file: file, line: line)
+        XCTAssertEqual(builds, 2, dependency, file: file, line: line)
+    }
+
+    private func previewKey() -> RecordPreviewComputationKey {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.firstWeekday = 1
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        return RecordPreviewComputationKey(
+            calendar: calendar,
+            amountText: "12", title: "拿铁咖啡", category: .dining,
+            categoryLocked: false, date: date,
+            generatedNote: RecordGeneratedNoteContext(title: "拿铁咖啡", category: .dining),
+            noteEditorExpanded: false, noteIntent: false, lineWasRotated: false,
+            scenePackID: "food", scenePackCategory: .dining, noteAnchor: "咖啡",
+            prefillTitle: "拿铁咖啡", prefillCategory: .dining,
+            prefillEmotion: "喝点喜欢的", prefillSource: "frequent", prefillConfidence: 0.8,
+            weatherEnabled: true, weather: WeatherSnapshot(temp: 18, weatherCode: 61, ts: date)
+        )
+    }
+}

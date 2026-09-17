@@ -1,5 +1,65 @@
 import Foundation
 
+/// Monotonic request identity, not an amount comparison (1 -> 12 -> 1 is new input).
+struct RecordAmountInputGate {
+    static let delayNanoseconds: UInt64 = 180_000_000
+    private(set) var revision: UInt64 = 0
+    private(set) var pending: UInt64?
+
+    mutating func begin() -> UInt64 {
+        revision &+= 1
+        pending = revision
+        return revision
+    }
+
+    mutating func finish(_ request: UInt64) -> Bool {
+        guard pending == request else { return false }
+        pending = nil
+        return true
+    }
+
+    mutating func cancel() {
+        revision &+= 1
+        pending = nil
+    }
+}
+
+/// Single-entry, non-publishing memo: even nil results are reusable.
+final class RecordDraftMemo<Key: Equatable, Value> {
+    private var cached: (key: Key, value: Value)?
+
+    func value(for key: Key, build: () -> Value) -> Value {
+        if let cached, cached.key == key { return cached.value }
+        let value = build()
+        cached = (key, value)
+        return value
+    }
+}
+
+/// Cheap raw identity only; constructing it must not resolve semantics or save drafts.
+struct RecordPreviewComputationKey: Equatable {
+    var calendar: Calendar = .current
+    var amountText: String
+    var title: String
+    var category: HomeItem.Category
+    var categoryLocked: Bool
+    var date: Date
+    var generatedNote: RecordGeneratedNoteContext?
+    var noteEditorExpanded: Bool
+    var noteIntent: Bool
+    var lineWasRotated: Bool
+    var scenePackID: String?
+    var scenePackCategory: HomeItem.Category?
+    var noteAnchor: String?
+    var prefillTitle: String?
+    var prefillCategory: HomeItem.Category?
+    var prefillEmotion: String?
+    var prefillSource: String?
+    var prefillConfidence: Double?
+    var weatherEnabled: Bool
+    var weather: WeatherSnapshot?
+}
+
 struct RecordDraftResolution {
     let category: HomeItem.Category
     let title: String
@@ -65,6 +125,7 @@ enum RecordEmotionScenePolicy {
         var result: [String] = []
         var seen: Set<String> = []
         for index in 0..<24 {
+            if Task.isCancelled { return [] }
             let tag = index == 0 ? context.previewEmotionTag : NarrativeCopyResolver.resolveEmotionTag(
                 context: NarrativeCopyResolver.Context(
                     brandId: context.merchantBrandID, category: context.category,

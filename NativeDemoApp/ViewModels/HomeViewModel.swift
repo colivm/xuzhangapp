@@ -180,6 +180,180 @@ struct RecordInputHistorySnapshot: @unchecked Sendable {
     let prefillItems: [HomeItem]
     let frequentSuggestions: [RecordFrequentAmountSuggestion]
     let frequentTitlesBySuggestionID: [String: String]
+    let quickNoteTitlesByContext: [String: [String]]
+}
+
+/// Only the optional quick-note chips use this pool. Amount/prefill learning is unchanged.
+enum RecordQuickNotePolicy {
+    static let historyLimit = 6
+    static let displayLimit = 4
+
+    struct PoolKey: Equatable {
+        let context: String
+        let history: [String]
+        let prefill: String?
+    }
+
+    struct Evidence {
+        let brandID: String?
+        let food: DiningCopyEvidencePolicy.SpecificKind?
+        let family: SemanticBoundaryGuard.FamilyCareKind?
+
+        init(_ title: String) {
+            brandID = MerchantBrandCatalog.matchBrand(in: title)?.id
+            food = DiningCopyEvidencePolicy.specificKind(in: title)
+            family = SemanticBoundaryGuard.familyCareKind(in: title)
+        }
+
+        func accepts(_ candidate: Evidence) -> Bool {
+            if let brandID, let other = candidate.brandID, brandID != other { return false }
+            if let food, let other = candidate.food, food != other { return false }
+            if let family, let other = candidate.family, family != other { return false }
+            return true
+        }
+    }
+
+    struct Pool {
+        let personalized: [(title: String, evidence: Evidence)]
+        let defaults: [String]
+    }
+
+    private struct Support {
+        var days: Set<Date> = []
+        var latest: Date = .distantPast
+        var userEdited = false
+    }
+
+    static func contextKey(category: HomeItem.Category, date: Date, calendar: Calendar = .current) -> String {
+        let kind = RecordCalendarContext.dayKind(for: date, calendar: calendar)
+        let dayKey = kind == .workday ? "workday" : (kind == .holiday ? "holiday" : "weekend")
+        return "\(category.rawValue)|\(timeBand(date, calendar: calendar))|\(dayKey)"
+    }
+
+    private static func timeBand(_ date: Date, calendar: Calendar) -> Int {
+        switch calendar.component(.hour, from: date) {
+        case 5..<10: return 0
+        case 10..<14: return 1
+        case 14..<17: return 2
+        case 17..<21: return 3
+        default: return 4
+        }
+    }
+
+    /// One background pass per history snapshot, never a per-keystroke ledger scan.
+    /// Group first so validation/semantic matching runs once per repeated title.
+    static func historicalTitles(
+        items: [HomeItem], at date: Date, calendar: Calendar = .current
+    ) -> [String: [String]] {
+        let start = calendar.date(byAdding: .day, value: -180, to: date) ?? .distantPast
+        var groups: [String: [String: Support]] = [:]
+        var categories: [String: HomeItem.Category] = [:]
+        for item in items {
+            if Task.isCancelled { return [:] }
+            guard item.amount > 0, item.draftMeta == nil,
+                  item.createdAt >= start, item.createdAt <= date else { continue }
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard (2...12).contains(title.count) else { continue }
+            let key = contextKey(category: item.category, date: item.createdAt, calendar: calendar)
+            var support = groups[key]?[title] ?? Support()
+            support.days.insert(calendar.startOfDay(for: item.createdAt))
+            support.latest = max(support.latest, item.createdAt)
+            support.userEdited = support.userEdited || item.userEditedTitle == true
+            groups[key, default: [:]][title] = support
+            categories[key] = item.category
+        }
+        var result: [String: [String]] = [:]
+        for (key, titles) in groups {
+            if Task.isCancelled { return [:] }
+            guard let category = categories[key] else { continue }
+            let ranked = titles.filter { $0.value.days.count >= 2 }.sorted { lhs, rhs in
+                if lhs.value.days.count != rhs.value.days.count { return lhs.value.days.count > rhs.value.days.count }
+                if lhs.value.latest != rhs.value.latest { return lhs.value.latest > rhs.value.latest }
+                return lhs.key < rhs.key
+            }
+            var accepted: [String] = []
+            for (title, support) in ranked {
+                if Task.isCancelled { return [:] }
+                guard RecordPrefillService.isHabitTitle(title, category: category),
+                      RecordSemanticLexicon.canReuseHabitTitle(title, category: category, userEditedTitle: support.userEdited),
+                      isCompatible(title, category: category),
+                      UserContentRiskService.shared.validateManualNote(title, allowEmpty: false).isAllowed else { continue }
+                accepted.append(title)
+                if accepted.count == historyLimit { break }
+            }
+            if !accepted.isEmpty { result[key] = accepted }
+        }
+        return result
+    }
+
+    static func templates(for category: HomeItem.Category, at date: Date, calendar: Calendar = .current) -> [String] {
+        switch category {
+        case .dining:
+            switch timeBand(date, calendar: calendar) {
+            case 0: return ["早餐记一笔", "这顿早餐先记下", "早餐花费记下来"]
+            case 1: return ["午餐记一笔", "这顿午饭先记下", "午餐花费记下来"]
+            case 2: return ["下午餐饮记一笔", "这次餐饮花费", "吃点喝点记下来"]
+            case 3: return ["晚餐记一笔", "这顿晚饭先记下", "晚餐花费记下来"]
+            default: return ["这顿餐饮记一笔", "吃点东西记下来", "餐饮花费先记下"]
+            }
+        case .transport: return ["这趟出行记一笔", "路上花费记下来", "出行费用先记下"]
+        case .shopping: return ["这次购物记一笔", "购物花费记下来", "添置物品先记下"]
+        case .daily: return ["日用品补一笔", "日常用品记下来", "这次日用开销"]
+        case .entertainment: return ["休闲娱乐记一笔", "这次娱乐花费", "放松一下的开销"]
+        case .lodging: return ["住宿费用记一笔", "这次住宿先记下", "住店花费记下来"]
+        case .health: return ["健康开销记一笔", "这次健康花费", "健康事项先记下"]
+        case .home: return ["居家开销记一笔", "住处费用记下来", "这次居家花费"]
+        case .social: return ["人情往来记一笔", "这份心意先记下", "往来花费记下来"]
+        case .other: return ["这笔开销先记下", "零散花费记一笔", "先留一笔记录"]
+        }
+    }
+
+    static func isCompatible(_ title: String, category: HomeItem.Category) -> Bool {
+        guard !title.isEmpty, title.count <= 32,
+              RecordSemanticLexicon.isTitle(title, compatibleWith: category) else { return false }
+        if let brand = MerchantBrandCatalog.matchBrand(in: title), brand.category != category { return false }
+        return true
+    }
+
+    /// Keep concrete food/brand/family evidence within the current draft; neutral templates add no new facts.
+    static func respectsAnchor(_ title: String, anchor: String) -> Bool {
+        Evidence(anchor).accepts(Evidence(title))
+    }
+
+    static func preparePool(
+        category: HomeItem.Category, date: Date, history: [String], prefill: String?,
+        calendar: Calendar = .current
+    ) -> Pool {
+        var seen: Set<String> = []
+        let personalized = ([prefill].compactMap { $0 } + Array(history.prefix(historyLimit)))
+            .filter { seen.insert($0).inserted }
+            .filter { isCompatible($0, category: category) }
+            .map { (title: $0, evidence: Evidence($0)) }
+        return Pool(
+            personalized: personalized,
+            defaults: templates(for: category, at: date, calendar: calendar).filter { isCompatible($0, category: category) }
+        )
+    }
+
+    static func suggestions(pool: Pool, anchor: String) -> [String] {
+        guard !pool.personalized.isEmpty else { return Array(pool.defaults.prefix(displayLimit)) }
+        let evidence = Evidence(anchor)
+        let personalized = pool.personalized.filter { evidence.accepts($0.evidence) }.map { $0.title }
+        // At most two learned/prefilled notes, leaving room for neutral category templates.
+        var result = Array(personalized.prefix(2))
+        var seen = Set(result)
+        for title in pool.defaults where seen.insert(title).inserted {
+            result.append(title)
+        }
+        return Array(result.prefix(displayLimit))
+    }
+
+    static func suggestions(
+        category: HomeItem.Category, date: Date, history: [String], prefill: String?, anchor: String,
+        calendar: Calendar = .current
+    ) -> [String] {
+        suggestions(pool: preparePool(category: category, date: date, history: history, prefill: prefill, calendar: calendar), anchor: anchor)
+    }
 }
 
 struct RecordPrefillPreparationKey: Equatable {
@@ -300,7 +474,8 @@ enum RecordInputAssistanceComputation {
             key: input.key,
             prefillItems: prefillItems,
             frequentSuggestions: suggestions,
-            frequentTitlesBySuggestionID: titles
+            frequentTitlesBySuggestionID: titles,
+            quickNoteTitlesByContext: RecordQuickNotePolicy.historicalTitles(items: input.items, at: input.referenceDate)
         )
     }
 
@@ -1014,8 +1189,12 @@ final class HomeViewModel: ObservableObject {
         didSet {
             guard inputAmount != oldValue else { return }
             invalidateRecordPrefillSnapshot()
+            scheduleRecordAmountInput()
         }
     }
+    @Published private(set) var isRecordAmountInputPending = false
+    private var recordAmountInputGate = RecordAmountInputGate()
+    private var recordAmountInputTask: Task<Void, Never>?
     @Published var selectedCategory: HomeItem.Category = .other
     @Published private(set) var categoryLockedByUser: Bool = false
     @Published var selectedDate: Date = .now {
@@ -1052,6 +1231,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var currentWeekTraceSeenKey: String?
     @Published private(set) var recordPrefillResult: RecordPrefillResult?
     @Published private(set) var recordWarmupSuggestions: [FrequentRecordAmountSuggestion] = []
+    @Published private(set) var recordQuickNoteTitlesByContext: [String: [String]] = [:]
     @Published private(set) var recordRecommendedCategory: HomeItem.Category?
     private(set) var recordInputAssistanceRevision: Int = 0
     private(set) var homeDashboardRevision: Int = 0
@@ -1125,6 +1305,7 @@ final class HomeViewModel: ObservableObject {
     private var emittedRouteGuidanceKeys: Set<String> = []
     private var recordPrefillAmount: Double?
     private var recordInputHistorySnapshot: RecordInputHistorySnapshot?
+    private var recordQuickNotePoolCache: (key: RecordQuickNotePolicy.PoolKey, pool: RecordQuickNotePolicy.Pool)?
     private var recordInputHistoryPreparationKey: RecordInputHistoryKey?
     private var recordInputHistoryPreparationTask: Task<Void, Never>?
     private var recordInputHistoryRequestID = UUID()
@@ -1250,6 +1431,7 @@ final class HomeViewModel: ObservableObject {
     ) -> Bool {
         guard ensureLedgerWritesAllowed() else { return false }
         guard let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0 else { return false }
+        flushPendingRecordAmountInput()
         let wasEmpty = items.isEmpty
         let shouldLockCategory = categoryLockedForSave ?? categoryLockedByUser
         let noteResult = UserContentRiskService.shared.validateManualNote(inputTitle, allowEmpty: true)
@@ -2577,6 +2759,40 @@ final class HomeViewModel: ObservableObject {
         Calendar.current.isDate(date, inSameDayAs: Date())
     }
 
+    private func scheduleRecordAmountInput() {
+        recordAmountInputTask?.cancel()
+        guard let amount = Double(inputAmount.replacingOccurrences(of: ",", with: "")), amount > 0 else {
+            cancelPendingRecordAmountInput()
+            return
+        }
+        let request = recordAmountInputGate.begin()
+        if !isRecordAmountInputPending { isRecordAmountInputPending = true }
+        recordAmountInputTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: RecordAmountInputGate.delayNanoseconds)
+            guard !Task.isCancelled, recordAmountInputGate.finish(request) else { return }
+            recordAmountInputTask = nil
+            isRecordAmountInputPending = false
+            refreshRecordPrefill()
+        }
+    }
+
+    /// Explicit actions consume only pending amount work. Full prefill stays asynchronous.
+    func flushPendingRecordAmountInput() {
+        guard let request = recordAmountInputGate.pending,
+              recordAmountInputGate.finish(request) else { return }
+        recordAmountInputTask?.cancel()
+        recordAmountInputTask = nil
+        isRecordAmountInputPending = false
+        refreshRecordPrefill()
+    }
+
+    func cancelPendingRecordAmountInput() {
+        recordAmountInputGate.cancel()
+        recordAmountInputTask?.cancel()
+        recordAmountInputTask = nil
+        if isRecordAmountInputPending { isRecordAmountInputPending = false }
+    }
+
     func refreshRecordPrefill() {
         let now = Date()
         let historyKey = RecordInputAssistanceComputation.historyKey(
@@ -2588,6 +2804,9 @@ final class HomeViewModel: ObservableObject {
         if recordInputHistorySnapshot?.key != historyKey {
             prepareRecordInputHistorySnapshot(key: historyKey, now: now)
         }
+
+        // History completion and title/focus observers must not bypass amount settling.
+        guard !isRecordAmountInputPending else { return }
 
         let normalizedAmount = inputAmount.replacingOccurrences(of: ",", with: "")
         guard let amount = Double(normalizedAmount), amount > 0 else {
@@ -2625,6 +2844,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func cancelRecordInputAssistancePreparation() {
+        cancelPendingRecordAmountInput()
         recordInputHistoryPreparationTask?.cancel()
         recordInputHistoryPreparationTask = nil
         recordInputHistoryPreparationKey = nil
@@ -2683,6 +2903,9 @@ final class HomeViewModel: ObservableObject {
             recordInputHistorySnapshot = snapshot
             recordInputHistoryPreparationKey = nil
             recordInputHistoryPreparationTask = nil
+            if recordQuickNoteTitlesByContext != snapshot.quickNoteTitlesByContext {
+                recordQuickNoteTitlesByContext = snapshot.quickNoteTitlesByContext
+            }
             if recordWarmupSuggestions != snapshot.frequentSuggestions {
                 recordWarmupSuggestions = snapshot.frequentSuggestions
             }
@@ -2874,6 +3097,10 @@ final class HomeViewModel: ObservableObject {
         recordInputHistoryPreparationKey = nil
         recordInputHistoryRequestID = UUID()
         recordInputHistorySnapshot = nil
+        recordQuickNotePoolCache = nil
+        if !recordQuickNoteTitlesByContext.isEmpty {
+            recordQuickNoteTitlesByContext = [:]
+        }
         if !recordWarmupSuggestions.isEmpty {
             recordWarmupSuggestions = []
         }
@@ -2908,6 +3135,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func selectCategory(_ category: HomeItem.Category) {
+        flushPendingRecordAmountInput()
         rememberCategoryCorrectionIfNeeded(to: category)
         recordGeneratedNoteContext = nil
         selectedCategory = category
@@ -2938,6 +3166,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func applyScenePackDraft(title: String, category: HomeItem.Category) {
+        flushPendingRecordAmountInput()
         rememberCategoryCorrectionIfNeeded(to: category)
         selectedCategory = category
         categoryLockedByUser = true
@@ -2946,6 +3175,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func applyScenePackCategory(_ category: HomeItem.Category) {
+        flushPendingRecordAmountInput()
         rememberCategoryCorrectionIfNeeded(to: category)
         recordGeneratedNoteContext = nil
         selectedCategory = category
@@ -2984,84 +3214,24 @@ final class HomeViewModel: ObservableObject {
     }
 
     func noteSuggestions(for category: HomeItem.Category, at date: Date = .now) -> [String] {
-        let defaults: [String]
-        let isWorkday = RecordCalendarContext.isWorkday(date)
-        let nonWorkdayPrefix = RecordCalendarContext.dayKind(for: date) == .holiday ? "假期" : "休息日"
-        switch category {
-        case .dining:
-            let hour = Calendar.current.component(.hour, from: date)
-            switch hour {
-            case 5..<10:
-                defaults = isWorkday
-                    ? ["早餐路上买点吃的", "早班前续一杯咖啡", "出门前吃一口热的"]
-                    : ["早上买点吃的", "\(nonWorkdayPrefix)早餐先记下", "出门前吃一口热的"]
-            case 10..<14:
-                defaults = isWorkday
-                    ? ["午间简单吃一顿", "食堂一份热饭", "饭点买杯喝的"]
-                    : ["午间简单吃一顿", "\(nonWorkdayPrefix)午饭记一笔", "饭点买杯喝的"]
-            case 14..<17:
-                defaults = isWorkday
-                    ? ["下午续一杯咖啡", "便利店买点轻食", "忙到一半补一口"]
-                    : ["下午续一杯咖啡", "便利店买点轻食", "\(nonWorkdayPrefix)下午垫一口"]
-            case 17..<21:
-                defaults = isWorkday
-                    ? ["晚餐吃一顿热饭", "下班后吃点热乎的", "和人一起吃晚饭"]
-                    : ["晚餐吃一顿热饭", "\(nonWorkdayPrefix)晚饭记一下", "和人一起吃晚饭"]
-            default:
-                defaults = isWorkday
-                    ? ["加班后吃点热乎的", "晚归路上的一口热食", "深夜买点小食"]
-                    : ["夜里吃点热乎的", "晚归路上的一口热食", "深夜买点小食"]
-            }
-        case .transport:
-            defaults = ["地铁到站，路上这一段", "打车走完这一程", "停车和油费记一笔"]
-        case .shopping:
-            defaults = ["下单一个需要的", "买到常用的小东西", "快递路上记一笔"]
-        case .daily:
-            defaults = ["便利店补一袋日常", "超市买点家里要用的", "日用品刚好补上"]
-        case .entertainment:
-            defaults = RecordCalendarContext.isNonWorkday(date)
-                ? ["买了这场电影票", "游戏里充了一笔", "\(nonWorkdayPrefix)出去坐一会儿"]
-                : ["买了这场电影票", "游戏里充了一笔", "下班后放松一下"]
-        case .lodging:
-            defaults = isWorkday
-                ? ["今晚住在这里", "出差住宿记一笔", "短住一晚记下"]
-                : ["今晚住在这里", "短住一晚记下", "这晚住宿记下来"]
-        case .health:
-            defaults = healthNoteSuggestions()
-        case .home:
-            defaults = ["水电燃气交上了", "家里添个要用的", "修修补补记一笔"]
-        case .social:
-            defaults = ["见面带点东西", "和朋友吃了一顿", "探望时买点东西"]
-        case .other:
-            defaults = ["临时花了一笔", "还没想好归哪类", "先把这笔记下"]
+        let key = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: recordInputAssistanceRevision, referenceDate: date,
+            referenceDateEditedByUser: selectedDateEditedByUser
+        )
+        let history = recordInputHistorySnapshot?.key == key
+            ? recordQuickNoteTitlesByContext[RecordQuickNotePolicy.contextKey(category: category, date: date)] ?? []
+            : []
+        let poolKey = RecordQuickNotePolicy.PoolKey(
+            context: RecordQuickNotePolicy.contextKey(category: category, date: date),
+            history: history, prefill: compatiblePrefillTitleForSave(category: category)
+        )
+        if recordQuickNotePoolCache?.key != poolKey {
+            recordQuickNotePoolCache = (poolKey, RecordQuickNotePolicy.preparePool(
+                category: category, date: date, history: history, prefill: poolKey.prefill
+            ))
         }
-        guard let prefill = compatiblePrefillTitleForSave(category: category) else {
-            return defaults
-        }
-        return uniqueNoteSuggestions([prefill] + defaults)
-    }
-
-    private func healthNoteSuggestions() -> [String] {
-        let title = inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if containsFitnessCue(title) {
-            return ["运动前小准备", "运动后补给一下", "一场运动记下来"]
-        }
-        return ["药店补点常备药", "问诊挂号记一笔", "体检项目记下来"]
-    }
-
-    private func containsFitnessCue(_ text: String) -> Bool {
-        let cues = ["运动", "健身", "锻炼", "训练", "跑步", "瑜伽", "游泳", "球场", "课程", "护具", "运动鞋", "运动服", "补给", "恢复", "能量", "月卡", "年卡"]
-        return cues.contains { text.contains($0) }
-    }
-
-    private func uniqueNoteSuggestions(_ suggestions: [String]) -> [String] {
-        var seen = Set<String>()
-        return suggestions.filter { suggestion in
-            let trimmed = suggestion.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, !seen.contains(trimmed) else { return false }
-            seen.insert(trimmed)
-            return true
-        }
+        guard let pool = recordQuickNotePoolCache?.pool else { return [] }
+        return RecordQuickNotePolicy.suggestions(pool: pool, anchor: inputTitle)
     }
 
     func frequentRecordAmounts(at date: Date = .now) -> [Double] {
@@ -3714,7 +3884,8 @@ final class HomeViewModel: ObservableObject {
                         key: history.key,
                         prefillItems: history.prefillItems.map { persistedByID[$0.id] ?? $0 },
                         frequentSuggestions: history.frequentSuggestions,
-                        frequentTitlesBySuggestionID: history.frequentTitlesBySuggestionID
+                        frequentTitlesBySuggestionID: history.frequentTitlesBySuggestionID,
+                        quickNoteTitlesByContext: history.quickNoteTitlesByContext
                     )
                 }
             }
