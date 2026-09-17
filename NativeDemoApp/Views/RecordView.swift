@@ -73,6 +73,9 @@ struct RecordView: View {
     @State private var previewLifeMarkTextSnapshot: String?
     @State private var preparedEmotionSceneContext: RecordEmotionSceneContext?
     @State private var preparedEmotionCandidates: [String] = []
+    @State private var previewResolutionMemo = RecordDraftMemo<RecordPreviewComputationKey, RecordDraftResolution?>()
+    @State private var previewEmotionMemo = RecordDraftMemo<RecordPreviewComputationKey, String>()
+    @State private var emotionContextMemo = RecordDraftMemo<RecordPreviewComputationKey, RecordEmotionSceneContext?>()
     @State private var scenePackFeedback: String?
     @State private var freeScenePackRefreshToken = 0
     @State private var freeLockedSceneHint: ScenePackAngleSheet.LockedSceneHint?
@@ -534,6 +537,7 @@ struct RecordView: View {
         keepSelectedCategory: Bool = false,
         trackMemberSceneUsage: Bool = true
     ) {
+        homeViewModel.flushPendingRecordAmountInput()
         dismissKeyboard()
         let shouldPreserveUserNote = shouldPreserveUserNoteWhenChangingAngle
         if !shouldPreserveUserNote {
@@ -753,7 +757,29 @@ struct RecordView: View {
         return previewFallbackTitle(for: homeViewModel.selectedCategory)
     }
 
+    private var previewComputationKey: RecordPreviewComputationKey {
+        let prefill = homeViewModel.recordPrefillResult
+        return RecordPreviewComputationKey(
+            amountText: homeViewModel.inputAmount, title: homeViewModel.inputTitle,
+            category: homeViewModel.selectedCategory, categoryLocked: homeViewModel.categoryLockedByUser,
+            date: homeViewModel.selectedDate, generatedNote: homeViewModel.currentRecordGeneratedNoteContext,
+            noteEditorExpanded: noteEditorExpanded, noteIntent: lastDraftIntent == .note,
+            lineWasRotated: previewLineWasRotated, scenePackID: activeScenePack?.id,
+            scenePackCategory: activeScenePack?.category, noteAnchor: userNoteAnchorTitle,
+            prefillTitle: prefill?.title, prefillCategory: prefill?.category,
+            prefillEmotion: prefill?.emotionTag, prefillSource: prefill?.source, prefillConfidence: prefill?.confidence,
+            weatherEnabled: settingsViewModel.weatherCompanionEnabled,
+            weather: settingsViewModel.weatherCompanionEnabled && Calendar.current.isDateInToday(homeViewModel.selectedDate)
+                ? WeatherCompanionService.shared.cachedSnapshot : nil
+        )
+    }
+
     private var previewDraftResolution: RecordDraftResolution? {
+        guard !homeViewModel.isRecordAmountInputPending else { return nil }
+        return previewResolutionMemo.value(for: previewComputationKey) { uncachedPreviewDraftResolution }
+    }
+
+    private var uncachedPreviewDraftResolution: RecordDraftResolution? {
         guard !shouldUseNeutralRemarkFallback else { return nil }
         let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let draftTitle = title.isEmpty ? previewHeadline : title
@@ -774,14 +800,19 @@ struct RecordView: View {
     }
 
     private var automaticPreviewEmotion: String {
-        if shouldUseNeutralRemarkFallback {
-            return ""
+        guard !homeViewModel.isRecordAmountInputPending else { return "" }
+        return previewEmotionMemo.value(for: previewComputationKey) {
+            guard !shouldUseNeutralRemarkFallback, let resolution = previewDraftResolution else { return "" }
+            return previewEmotionTag(for: resolution)
         }
-        guard let resolution = previewDraftResolution else { return "" }
-        return previewEmotionTag(for: resolution)
     }
 
     private var emotionSceneContext: RecordEmotionSceneContext? {
+        guard selectedEntryMode == .manual, !homeViewModel.isRecordAmountInputPending else { return nil }
+        return emotionContextMemo.value(for: previewComputationKey) { uncachedEmotionSceneContext }
+    }
+
+    private var uncachedEmotionSceneContext: RecordEmotionSceneContext? {
         guard hasValidAmount, !shouldUseNeutralRemarkFallback,
               let previewResolution = previewDraftResolution else { return nil }
         let resolution = homeViewModel.resolvedManualRecordDraft(
@@ -831,7 +862,8 @@ struct RecordView: View {
     }
 
     private func prepareEmotionCandidates(for context: RecordEmotionSceneContext?) async {
-        guard !Task.isCancelled, emotionSceneContext == context else { return }
+        guard !Task.isCancelled, selectedEntryMode == .manual,
+              !homeViewModel.isRecordAmountInputPending, emotionSceneContext == context else { return }
         if tabSession.emotionSelection?.context != context {
             tabSession.emotionSelection = nil
         }
@@ -862,6 +894,7 @@ struct RecordView: View {
     }
 
     private var previewLifeMarkPreparationKey: RecordPreviewLifeMarkKey? {
+        guard selectedEntryMode == .manual, !homeViewModel.isRecordAmountInputPending else { return nil }
         guard previewTier == .confirm, hasValidAmount, focusedField != .note else { return nil }
         let category = previewDraftResolution?.category ?? homeViewModel.selectedCategory
         let rawTitle = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -880,6 +913,7 @@ struct RecordView: View {
     }
 
     private func preparePreviewLifeMark(for key: RecordPreviewLifeMarkKey?) async {
+        guard !Task.isCancelled, previewLifeMarkPreparationKey == key else { return }
         guard let key else { return }
         guard preparedPreviewLifeMarkKey != key else { return }
         let draft = HomeItem(
@@ -1091,6 +1125,7 @@ struct RecordView: View {
     }
 
     private func openNoteEditor() {
+        homeViewModel.flushPendingRecordAmountInput()
         dismissKeyboard()
         withAnimation(.easeInOut(duration: 0.2)) {
             noteEditorExpanded = true
@@ -1101,6 +1136,7 @@ struct RecordView: View {
     }
 
     private func saveManualRecord() {
+        homeViewModel.flushPendingRecordAmountInput()
         guard hasValidAmount else { return }
         dismissKeyboard()
         let didSave = homeViewModel.addManualRecord(
@@ -1320,6 +1356,7 @@ struct RecordView: View {
     }
 
     private func handlePreviewQuickAction() {
+        homeViewModel.flushPendingRecordAmountInput()
         dismissKeyboard()
         guard hasValidAmount else { return }
         guard isMember else {
@@ -1342,6 +1379,7 @@ struct RecordView: View {
     }
 
     private func handleFreePreviewQuickAction() {
+        homeViewModel.flushPendingRecordAmountInput()
         dismissKeyboard()
         guard hasValidAmount else { return }
 
@@ -1787,6 +1825,7 @@ struct RecordView: View {
     }
 
     private func openFreeScenePackAngleSheet() {
+        homeViewModel.flushPendingRecordAmountInput()
         dismissKeyboard()
         prepareFreeLockedSceneHintIfNeeded()
         showScenePackAngleSheet = true
@@ -1872,6 +1911,9 @@ struct RecordView: View {
                 await prepareEmotionCandidates(for: emotionSceneContext)
             }
             .onChange(of: emotionSceneContext) { _, context in
+                // A pending draft cannot use the old choice. Keep it dormant so
+                // formatting-only edits (12 -> 12.00) can retain the same choice.
+                guard selectedEntryMode == .manual, !homeViewModel.isRecordAmountInputPending else { return }
                 if tabSession.emotionSelection?.context != context {
                     tabSession.emotionSelection = nil
                 }
@@ -1958,8 +2000,10 @@ struct RecordView: View {
             }
             .onChange(of: selectedEntryMode) { _, newValue in
                 if newValue == .manual {
+                    refreshRecommendedCategory()
                     focusAmountPad(delay: 0.08)
                 } else {
+                    homeViewModel.cancelRecordInputAssistancePreparation()
                     dismissKeyboard()
                 }
             }
@@ -2220,6 +2264,7 @@ struct RecordView: View {
                 openNoteEditor()
             },
             onAngleAction: {
+                homeViewModel.flushPendingRecordAmountInput()
                 dismissKeyboard()
                 showScenePackAngleSheet = true
             },
@@ -2798,6 +2843,50 @@ struct RecordView: View {
 
     // MARK: - Note Section
 
+    private var canUseActiveQuickNoteScene: Bool {
+        guard let pack = activeScenePack else { return true }
+        return implicitScenePacksForCurrentAccess.contains { $0.id == pack.id }
+    }
+
+    private func quickNoteMatchesActiveScene(_ title: String) -> Bool {
+        guard let pack = activeScenePack else { return true }
+        guard titleIsCompatibleWithScenePack(title, pack: pack, categoryContext: homeViewModel.selectedCategory) else {
+            return false
+        }
+        // The shared scene relation is deliberately broad. Narrow only this
+        // candidate list: household history must not stand in for baby/pet care.
+        let hasFamilyEvidence = containsBabyKeyword(title) || containsPetKeyword(title)
+        if pack.id == "family", !hasFamilyEvidence {
+            return RecordQuickNotePolicy.templates(
+                for: homeViewModel.selectedCategory, at: homeViewModel.selectedDate
+            ).contains(title)
+        }
+        if pack.id == "supply", hasFamilyEvidence { return false }
+        if pack.id == "commute", containsTravelKeyword(title) { return false }
+        return true
+    }
+
+    private var quickNoteSuggestions: [String] {
+        guard canUseActiveQuickNoteScene else { return [] }
+        return homeViewModel.noteSuggestions(for: homeViewModel.selectedCategory, at: homeViewModel.selectedDate)
+            .filter { quickNoteMatchesActiveScene($0) }
+    }
+
+    private func applyQuickNoteSuggestion(_ suggestion: String) {
+        homeViewModel.flushPendingRecordAmountInput()
+        guard canUseActiveQuickNoteScene,
+              RecordQuickNotePolicy.isCompatible(suggestion, category: homeViewModel.selectedCategory),
+              quickNoteMatchesActiveScene(suggestion) else { return }
+        dismissKeyboard()
+        lastDraftIntent = .category
+        let normalized = UserContentRiskService.shared.normalizedManualNote(suggestion)
+        suppressNextNoteSemanticUnlock = homeViewModel.inputTitle != normalized
+        // Register provenance even when selecting the same text. A chip is
+        // user-selected generated copy, not newly handwritten semantic evidence.
+        homeViewModel.applyGeneratedRecordTitle(normalized)
+        rememberUserNoteAnchor(homeViewModel.inputTitle)
+    }
+
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             TextField(
@@ -2830,18 +2919,9 @@ struct RecordView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(homeViewModel.noteSuggestions(for: homeViewModel.selectedCategory, at: homeViewModel.selectedDate), id: \.self) { suggestion in
+                    ForEach(quickNoteSuggestions, id: \.self) { suggestion in
                         Button(suggestion) {
-                            dismissKeyboard()
-                            lastDraftIntent = .category
-                            rememberUserNoteAnchor(suggestion)
-                            if homeViewModel.inputTitle != suggestion {
-                                suppressNextNoteSemanticUnlock = true
-                                homeViewModel.inputTitle = suggestion
-                            } else {
-                                suppressNextNoteSemanticUnlock = false
-                            }
-                            clearActiveScenePackIfManualNoteMovedAway()
+                            applyQuickNoteSuggestion(suggestion)
                         }
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(recordInk.opacity(0.88))
