@@ -5,7 +5,7 @@ import SwiftUI
 struct FocusedRecordEditor: View {
     let item: HomeItem
     var autoCommitRequestID: UUID?
-    var onSave: (HomeItem) -> Bool
+    var onSave: (HomeItem, RecordEditIntent) -> Bool
     var onCancel: () -> Void
     var onDelete: () -> Void
     var onAttachMemoryImage: (() -> Void)?
@@ -15,6 +15,8 @@ struct FocusedRecordEditor: View {
     @State private var noteText: String
     @State private var selectedCategory: HomeItem.Category
     @State private var selectedDate: Date
+    @State private var initialBaseline: HomeItem
+    @State private var categoryIntent: RecordExplicitIntentState
     @State private var mode: EditorMode = .editing
     @State private var isDatePanelVisible = false
     @State private var validationMessage: String?
@@ -37,7 +39,7 @@ struct FocusedRecordEditor: View {
     init(
         item: HomeItem,
         autoCommitRequestID: UUID? = nil,
-        onSave: @escaping (HomeItem) -> Bool,
+        onSave: @escaping (HomeItem, RecordEditIntent) -> Bool,
         onCancel: @escaping () -> Void,
         onDelete: @escaping () -> Void,
         onAttachMemoryImage: (() -> Void)? = nil,
@@ -54,6 +56,10 @@ struct FocusedRecordEditor: View {
         _noteText = State(initialValue: item.hasMeaningfulTitle ? item.title : "")
         _selectedCategory = State(initialValue: item.category)
         _selectedDate = State(initialValue: item.createdAt)
+        _initialBaseline = State(initialValue: item)
+        _categoryIntent = State(initialValue: RecordExplicitIntentState(
+            category: item.category, userSelectedCategory: item.userEditedCategory == true
+        ))
     }
 
     private var parsedAmount: Double {
@@ -62,6 +68,24 @@ struct FocusedRecordEditor: View {
 
     private var cleanNote: String {
         noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var editIntent: RecordEditIntent {
+        RecordEditPolicy.intent(
+            baseline: initialBaseline, amountText: amountText, noteText: noteText,
+            initialNoteText: initialBaseline.hasMeaningfulTitle ? initialBaseline.title : "",
+            date: selectedDate, categoryIntent: categoryIntent
+        )
+    }
+
+    private var proposedItem: HomeItem {
+        RecordEditPolicy.proposedItem(
+            intent: editIntent, amountText: amountText, noteText: noteText, date: selectedDate
+        )
+    }
+
+    private var previewEmotion: String {
+        RecordEditPolicy.applying(proposedItem, intent: editIntent, to: item).displayEmotionTag
     }
 
     private var accent: Color {
@@ -159,8 +183,8 @@ struct FocusedRecordEditor: View {
 
                 amountEditor
 
-                if !item.displayEmotionTag.isEmpty {
-                    Text(item.displayEmotionTag)
+                if !previewEmotion.isEmpty {
+                    Text(previewEmotion)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(accent)
                         .lineLimit(1)
@@ -231,8 +255,8 @@ struct FocusedRecordEditor: View {
                     .background(saveButtonBackground)
             }
             .buttonStyle(.plain)
-            .disabled(parsedAmount <= 0)
-            .opacity(parsedAmount <= 0 ? 0.54 : 1)
+            .disabled(proposedItem.amount <= 0)
+            .opacity(proposedItem.amount <= 0 ? 0.54 : 1)
             .padding(.top, 18)
         }
         .padding(.horizontal, 16)
@@ -409,17 +433,21 @@ struct FocusedRecordEditor: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(AppColors.subtext)
 
-            TextField("这一笔想怎么被记住？", text: $noteText)
+            CommittedRecordNoteField(
+                text: noteText,
+                placeholder: "这一笔想怎么被记住？",
+                isFocused: Binding(
+                    get: { focusedField == .note },
+                    set: { focusedField = $0 ? .note : nil }
+                ),
+                font: .systemFont(ofSize: 14, weight: .semibold),
+                textAlignment: .right,
+                onCommittedChange: commitNote,
+                onSubmit: dismissKeyboard
+            )
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(AppColors.text)
                 .multilineTextAlignment(.trailing)
-                .focused($focusedField, equals: .note)
-                .onChange(of: noteText) { _, value in
-                    if value.count > 32 {
-                        noteText = String(value.prefix(32))
-                    }
-                    validationMessage = nil
-                }
 
             Image(systemName: "chevron.right")
                 .font(.system(size: 10, weight: .semibold))
@@ -471,6 +499,8 @@ struct FocusedRecordEditor: View {
         let isSelected = selectedCategory == category
         let rowAccent = AppColors.categoryColor(category)
         return Button {
+            dismissKeyboard()
+            categoryIntent.selectCategory(category)
             selectedCategory = category
             validationMessage = nil
             withAnimation(editorSpring) {
@@ -574,20 +604,32 @@ struct FocusedRecordEditor: View {
     }
 
     private func save() {
-        focusedField = nil
-        guard parsedAmount > 0 else {
+        dismissKeyboard()
+        guard proposedItem.amount > 0 else {
             validationMessage = "金额先留在这里，补完整再保存。"
             return
         }
-        var updated = item
-        updated.amount = parsedAmount
-        updated.title = cleanNote.isEmpty ? selectedCategory.defaultRecordTitle : cleanNote
-        updated.category = selectedCategory
-        updated.createdAt = selectedDate
-        updated.updatedAt = Date()
-        if !onSave(updated) {
+        if !onSave(proposedItem, editIntent) {
             validationMessage = "这句备注里可能有隐私信息，先改成更简单的记录。"
         }
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        focusedField = nil
+    }
+
+    private func commitNote(_ value: String) {
+        let title = String(value.prefix(32))
+        guard title != noteText else { return }
+        let meaningChanged = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            != noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+        noteText = title
+        if meaningChanged {
+            categoryIntent.writeNote(title)
+            selectedCategory = categoryIntent.category
+        }
+        validationMessage = nil
     }
 
     private func sanitizedAmountText(_ value: String) -> String {

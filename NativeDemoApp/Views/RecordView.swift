@@ -9,10 +9,40 @@ enum RecordEntryMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+// Presentation provenance only; the VM's explicit event state owns category order.
 fileprivate enum RecordDraftIntent {
     case automatic
     case note
     case category
+}
+
+/// A candidate is valid only for the exact draft it was requested from.
+struct RecordNotePolishContext: Equatable {
+    let amount: String
+    let title: String
+    let category: HomeItem.Category
+    let date: Date
+    let anchor: String?
+    let scenePackID: String?
+    let categoryExplicit: Bool
+}
+
+struct RecordNotePolishCandidate {
+    let context: RecordNotePolishContext
+    let title: String
+}
+
+enum RecordHandwrittenNotePolishPolicy {
+    /// Keep every original fact. A rewrite must not invent a meal, temperature,
+    /// journey or purchase merely because a category/scene template contains it.
+    static func candidates(anchor: String) -> [String] {
+        let original = UserContentRiskService.shared.normalizedManualNote(anchor)
+        guard !original.isEmpty else { return [] }
+        let base = original.trimmingCharacters(in: CharacterSet(charactersIn: "，。！？；、,.!?; "))
+        guard !base.isEmpty else { return [] }
+        let variants = ["\(base)，记一笔", "记下：\(base)", "\(base)，留个记录", "这一笔：\(base)"]
+        return variants.filter { $0.count <= 32 && $0 != original }
+    }
 }
 
 final class RecordTabSession: ObservableObject {
@@ -29,8 +59,10 @@ final class RecordTabSession: ObservableObject {
     @Published fileprivate var lastDraftIntent: RecordDraftIntent = .automatic
     @Published var userNoteAnchorTitle: String?
     @Published var ocrQuotaUpsellVisibleThisSession = false
-    @Published var suppressNextNoteSemanticUnlock = false
     @Published var emotionSelection: RecordEmotionSelection?
+    @Published var handwrittenPolishCandidate: RecordNotePolishCandidate?
+    @Published var handwrittenPolishUndoContext: RecordNotePolishContext?
+    @Published var handwrittenPolishVariant = 0
 
     func resetAfterCommittedDraft() {
         selectedEntryMode = .manual
@@ -46,8 +78,10 @@ final class RecordTabSession: ObservableObject {
         lastDraftIntent = .automatic
         userNoteAnchorTitle = nil
         ocrQuotaUpsellVisibleThisSession = false
-        suppressNextNoteSemanticUnlock = false
         emotionSelection = nil
+        handwrittenPolishCandidate = nil
+        handwrittenPolishUndoContext = nil
+        handwrittenPolishVariant = 0
     }
 }
 
@@ -176,11 +210,6 @@ struct RecordView: View {
     private var ocrQuotaUpsellVisibleThisSession: Bool {
         get { tabSession.ocrQuotaUpsellVisibleThisSession }
         nonmutating set { tabSession.ocrQuotaUpsellVisibleThisSession = newValue }
-    }
-
-    private var suppressNextNoteSemanticUnlock: Bool {
-        get { tabSession.suppressNextNoteSemanticUnlock }
-        nonmutating set { tabSession.suppressNextNoteSemanticUnlock = newValue }
     }
 
     private struct ScenePackUsageStat {
@@ -539,6 +568,7 @@ struct RecordView: View {
     ) {
         homeViewModel.flushPendingRecordAmountInput()
         dismissKeyboard()
+        invalidateHandwrittenPolish()
         let shouldPreserveUserNote = shouldPreserveUserNoteWhenChangingAngle
         if !shouldPreserveUserNote {
             lastDraftIntent = .category
@@ -604,15 +634,15 @@ struct RecordView: View {
         userNoteAnchorTitle = trimmed.isEmpty ? nil : trimmed
     }
 
-    private func manualNoteOverrideCategory(_ title: String) -> HomeItem.Category? {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        guard !homeViewModel.categoryLockedByUser else { return nil }
-        guard let category = RecordSemanticLexicon.strongManualNoteCategory(of: trimmed),
-              category != homeViewModel.selectedCategory else {
-            return nil
-        }
-        return category
+    private func applyCommittedUserNote(_ title: String) {
+        guard title != homeViewModel.inputTitle else { return }
+        invalidateHandwrittenPolish()
+        homeViewModel.applyUserRecordTitle(title)
+        lastDraftIntent = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .automatic : .note
+        userNoteAnchorTitle = homeViewModel.recordHandwrittenAnchor
+        clearActiveScenePackIfManualNoteMovedAway()
+        homeViewModel.clearRecordInputMessage()
+        refreshRecommendedCategory(debounced: true)
     }
 
     private func scenePackVariantKey(
@@ -699,7 +729,8 @@ struct RecordView: View {
     }
 
     private var hasPreviewNote: Bool {
-        (homeViewModel.isCurrentRecordNoteGenerated && !homeViewModel.categoryLockedByUser)
+        homeViewModel.hasHandwrittenRecordNote
+            || (homeViewModel.isCurrentRecordNoteGenerated && !homeViewModel.categoryLockedByUser)
             || inputTitleCompatibleWithSelectedCategory
             || (lastDraftIntent == .note && !homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             || compatiblePrefillTitle != nil
@@ -722,17 +753,12 @@ struct RecordView: View {
     }
 
     private var previewTitleIsExplicitUserEdit: Bool {
-        guard !homeViewModel.isCurrentRecordNoteGenerated else { return false }
-        let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty,
-              inputTitleCompatibleWithSelectedCategory || lastDraftIntent == .note else { return false }
-        if title == homeViewModel.recordPrefillResult?.title?.trimmingCharacters(in: .whitespacesAndNewlines) {
-            return false
-        }
-        return noteEditorExpanded || homeViewModel.categoryLockedByUser
+        homeViewModel.isCurrentRecordNoteHandwritten
     }
 
     private var categoryLockedForCurrentIntent: Bool {
+        // The VM carries settled handwritten decisions separately. This flag
+        // remains a real category click so persistence cannot mislabel a note.
         homeViewModel.categoryLockedByUser
     }
 
@@ -743,14 +769,12 @@ struct RecordView: View {
     }
 
     private var previewHeadline: String {
-        let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if homeViewModel.isCurrentRecordNoteGenerated, !homeViewModel.categoryLockedByUser {
-            return title
-        }
-        if !title.isEmpty, inputTitleCompatibleWithSelectedCategory || lastDraftIntent == .note { return title }
         if shouldUseNeutralRemarkFallback {
             return RecordSemanticLexicon.emptyNoteTitle
         }
+        if let resolution = previewDraftResolution { return resolution.title }
+        let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty { return title }
         if let prefillTitle = compatiblePrefillTitle {
             return prefillTitle
         }
@@ -765,7 +789,7 @@ struct RecordView: View {
             date: homeViewModel.selectedDate, generatedNote: homeViewModel.currentRecordGeneratedNoteContext,
             noteEditorExpanded: noteEditorExpanded, noteIntent: lastDraftIntent == .note,
             lineWasRotated: previewLineWasRotated, scenePackID: activeScenePack?.id,
-            scenePackCategory: activeScenePack?.category, noteAnchor: userNoteAnchorTitle,
+            scenePackCategory: activeScenePack?.category, noteAnchor: homeViewModel.recordHandwrittenAnchor ?? userNoteAnchorTitle,
             prefillTitle: prefill?.title, prefillCategory: prefill?.category,
             prefillEmotion: prefill?.emotionTag, prefillSource: prefill?.source, prefillConfidence: prefill?.confidence,
             weatherEnabled: settingsViewModel.weatherCompanionEnabled,
@@ -781,22 +805,13 @@ struct RecordView: View {
 
     private var uncachedPreviewDraftResolution: RecordDraftResolution? {
         guard !shouldUseNeutralRemarkFallback else { return nil }
-        let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let draftTitle = title.isEmpty ? previewHeadline : title
-        return RecordDraftResolutionService.resolve(
-            RecordDraftResolutionInput(
-                rawTitle: draftTitle,
-                fallbackCategory: homeViewModel.selectedCategory,
-                amount: inputAmountValue,
-                date: homeViewModel.selectedDate,
-                merchantBrandId: previewBrand?.id,
-                categoryLockedByUser: categoryLockedForCurrentIntent,
-                userEditedTitle: previewTitleIsExplicitUserEdit,
-                source: "preview",
-                scenePackId: activeScenePackIdForCurrentRecord,
-                generatedNoteContext: homeViewModel.currentRecordGeneratedNoteContext
-            )
-        )
+        return homeViewModel.resolvedManualRecordDraft(
+            normalizedTitle: UserContentRiskService.shared.normalizedManualNote(homeViewModel.inputTitle),
+            amount: inputAmountValue, userEditedTitle: currentTitleShouldBeUserEdited,
+            preserveEmptyTitle: shouldUseNeutralRemarkFallback,
+            categoryLockedForSave: categoryLockedForCurrentIntent,
+            scenePackId: activeScenePackIdForCurrentRecord
+        ).resolution
     }
 
     private var automaticPreviewEmotion: String {
@@ -963,7 +978,7 @@ struct RecordView: View {
 
     private var previewSemanticAnchorTitle: String? {
         let current = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let anchor = userNoteAnchorTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let anchor = (homeViewModel.recordHandwrittenAnchor ?? userNoteAnchorTitle)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !anchor.isEmpty, anchor != current else { return nil }
         guard noteHasSpecificSemantics(anchor) else { return nil }
         return anchor
@@ -975,21 +990,10 @@ struct RecordView: View {
     }
 
     private func previewEmotionTag(for resolution: RecordDraftResolution) -> String {
-        guard let anchor = previewSemanticAnchorTitle else { return resolution.emotionTag }
-        let resolved = NarrativeCopyResolver.resolveEmotionTag(
-            context: NarrativeCopyResolver.Context(
-                brandId: resolution.merchantBrandId,
-                category: resolution.category,
-                amount: inputAmountValue,
-                date: homeViewModel.selectedDate,
-                seed: "\(resolution.title)|\(anchor)",
-                note: "\(resolution.title) \(anchor)",
-                scenePackId: activeScenePackIdForCurrentRecord
-            )
+        homeViewModel.automaticRecordEmotionTag(
+            for: resolution, amount: inputAmountValue,
+            weatherCompanionEnabled: settingsViewModel.weatherCompanionEnabled
         )
-        return RecordSemanticLexicon.isTitle(resolved, compatibleWith: resolution.category)
-            ? resolved
-            : resolution.emotionTag
     }
 
     private func noteHasSpecificSemantics(_ text: String) -> Bool {
@@ -1038,14 +1042,15 @@ struct RecordView: View {
     }
 
     private var previewCardMeta: String {
-        switch previewTier {
-        case .hidden:
-            return ""
-        case .whisper:
-            return homeViewModel.selectedDate.zhBillDateTime
-        case .confirm:
+        let tier = previewTier
+        guard tier != .hidden else { return "" }
+        if tier.showsCategory(hasResolvedCategory:
+            homeViewModel.categoryLockedByUser || homeViewModel.hasExplicitRecordCategoryDecision
+                || homeViewModel.hasCurrentRecordCategoryRecommendation
+        ) {
             return previewMeta
         }
+        return homeViewModel.selectedDate.zhBillDateTime
     }
 
     private var previewHint: String? {
@@ -1054,16 +1059,11 @@ struct RecordView: View {
     }
 
     private var currentTitleShouldBeUserEdited: Bool {
-        guard noteEditorExpanded, !homeViewModel.isCurrentRecordNoteGenerated else { return false }
-        let title = homeViewModel.inputTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return false }
-        if title == homeViewModel.recordPrefillResult?.title?.trimmingCharacters(in: .whitespacesAndNewlines) {
-            return false
-        }
-        return lastDraftIntent == .note
+        previewTitleIsExplicitUserEdit
     }
 
     private var previewQuickActionTitle: String {
+        if homeViewModel.hasHandwrittenRecordNote { return "润色一下" }
         if !shouldUseNeutralRemarkFallback,
            previewBrand != nil || homeViewModel.recordPrefillResult?.source == "brand" {
             return "换说法"
@@ -1095,6 +1095,9 @@ struct RecordView: View {
     }
 
     private func dismissKeyboard() {
+        // UIKit ends marked-text composition synchronously before an action
+        // reads the draft (especially save immediately after Chinese input).
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         amountPadActive = false
         focusedField = nil
     }
@@ -1359,6 +1362,10 @@ struct RecordView: View {
         homeViewModel.flushPendingRecordAmountInput()
         dismissKeyboard()
         guard hasValidAmount else { return }
+        if homeViewModel.hasHandwrittenRecordNote {
+            requestHandwrittenPolishCandidate()
+            return
+        }
         guard isMember else {
             withAnimation(.easeInOut(duration: 0.2)) {
                 noteEditorExpanded = true
@@ -1366,7 +1373,7 @@ struct RecordView: View {
             return
         }
         let sourceTitle = homeViewModel.inputTitle
-        let sourceWasManualNote = lastDraftIntent == .note
+        let sourceWasManualNote = homeViewModel.hasHandwrittenRecordNote
         previewLineWasRotated = true
         applyNoteRewriteDecision(
             resolveNoteRewriteDecision(
@@ -1375,7 +1382,6 @@ struct RecordView: View {
             ),
             sourceTitle: sourceTitle
         )
-        lastDraftIntent = .category
     }
 
     private func handleFreePreviewQuickAction() {
@@ -1383,8 +1389,13 @@ struct RecordView: View {
         dismissKeyboard()
         guard hasValidAmount else { return }
 
+        if homeViewModel.hasHandwrittenRecordNote {
+            requestHandwrittenPolishCandidate()
+            return
+        }
+
         let sourceTitle = homeViewModel.inputTitle
-        let sourceWasManualNote = lastDraftIntent == .note
+        let sourceWasManualNote = homeViewModel.hasHandwrittenRecordNote
         previewLineWasRotated = true
 
         applyNoteRewriteDecision(
@@ -1394,7 +1405,108 @@ struct RecordView: View {
             ),
             sourceTitle: sourceTitle
         )
-        lastDraftIntent = .category
+    }
+
+    private var handwrittenPolishContext: RecordNotePolishContext {
+        RecordNotePolishContext(
+            amount: homeViewModel.inputAmount, title: homeViewModel.inputTitle,
+            category: homeViewModel.selectedCategory, date: homeViewModel.selectedDate,
+            anchor: homeViewModel.recordHandwrittenAnchor, scenePackID: activeScenePack?.id,
+            categoryExplicit: homeViewModel.hasExplicitRecordCategoryDecision
+        )
+    }
+
+    private var currentHandwrittenPolishCandidate: RecordNotePolishCandidate? {
+        guard homeViewModel.hasHandwrittenRecordNote,
+              let candidate = tabSession.handwrittenPolishCandidate,
+              candidate.context == handwrittenPolishContext else { return nil }
+        return candidate
+    }
+
+    private var canUndoHandwrittenPolish: Bool {
+        homeViewModel.hasHandwrittenRecordNote
+            && tabSession.handwrittenPolishUndoContext == handwrittenPolishContext
+    }
+
+    private func invalidateHandwrittenPolish() {
+        tabSession.handwrittenPolishCandidate = nil
+        tabSession.handwrittenPolishUndoContext = nil
+    }
+
+    private func requestHandwrittenPolishCandidate() {
+        guard let anchor = homeViewModel.recordHandwrittenAnchor else { return }
+        let candidates = RecordHandwrittenNotePolishPolicy.candidates(anchor: anchor)
+            .filter { $0 != homeViewModel.inputTitle }
+        guard !candidates.isEmpty else {
+            let message = "原话已经很完整，可以直接保留"
+            scenePackFeedback = message
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                if scenePackFeedback == message { scenePackFeedback = nil }
+            }
+            return
+        }
+        let previous = currentHandwrittenPolishCandidate?.title
+        var variant = tabSession.handwrittenPolishVariant
+        if candidates[variant % candidates.count] == previous { variant += 1 }
+        tabSession.handwrittenPolishVariant = variant + 1
+        tabSession.handwrittenPolishCandidate = RecordNotePolishCandidate(
+            context: handwrittenPolishContext, title: candidates[variant % candidates.count]
+        )
+    }
+
+    private func adoptHandwrittenPolishCandidate() {
+        guard let candidate = currentHandwrittenPolishCandidate else { return }
+        homeViewModel.applyGeneratedRecordTitle(candidate.title, preservingHandwrittenAnchor: true)
+        tabSession.handwrittenPolishCandidate = nil
+        tabSession.handwrittenPolishUndoContext = handwrittenPolishContext
+    }
+
+    private func undoHandwrittenPolish() {
+        guard canUndoHandwrittenPolish else { return }
+        homeViewModel.restoreHandwrittenRecordTitle()
+        invalidateHandwrittenPolish()
+    }
+
+    @ViewBuilder
+    private var handwrittenPolishPanel: some View {
+        if let candidate = currentHandwrittenPolishCandidate {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("润色候选")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(AppColors.subtext)
+                Text(candidate.title)
+                    .font(.body)
+                    .foregroundStyle(recordInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("候选备注：\(candidate.title)，尚未采用")
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) { handwrittenPolishActions }
+                    VStack(alignment: .leading, spacing: 4) { handwrittenPolishActions }
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        } else if canUndoHandwrittenPolish {
+            Button("撤销润色，恢复原话", action: undoHandwrittenPolish)
+                .font(.footnote)
+                .frame(minHeight: 44)
+        }
+    }
+
+    @ViewBuilder
+    private var handwrittenPolishActions: some View {
+        Button("用这句", action: adoptHandwrittenPolishCandidate)
+            .font(.footnote.weight(.semibold))
+            .frame(minHeight: 44)
+        Button("再看一句", action: requestHandwrittenPolishCandidate)
+            .font(.footnote)
+            .frame(minHeight: 44)
+        Button(homeViewModel.inputTitle == homeViewModel.recordHandwrittenAnchor ? "保留原文" : "保持当前备注") {
+            tabSession.handwrittenPolishCandidate = nil
+        }
+            .font(.footnote)
+            .frame(minHeight: 44)
     }
 
     private func resolveNoteRewriteDecision(
@@ -1868,7 +1980,7 @@ struct RecordView: View {
     private func refreshRecommendedCategoryNow() {
         guard selectedEntryMode == .manual else { return }
         homeViewModel.refreshRecordWarmupSuggestions()
-        guard !homeViewModel.categoryLockedByUser else { return }
+        guard !homeViewModel.hasExplicitRecordCategoryDecision else { return }
         guard !(previewLineWasRotated && lastDraftIntent == .category) else { return }
         homeViewModel.refreshRecordPrefill()
     }
@@ -1916,6 +2028,14 @@ struct RecordView: View {
                 guard selectedEntryMode == .manual, !homeViewModel.isRecordAmountInputPending else { return }
                 if tabSession.emotionSelection?.context != context {
                     tabSession.emotionSelection = nil
+                }
+            }
+            .onChange(of: handwrittenPolishContext) { _, context in
+                if tabSession.handwrittenPolishCandidate?.context != context {
+                    tabSession.handwrittenPolishCandidate = nil
+                }
+                if tabSession.handwrittenPolishUndoContext != context {
+                    tabSession.handwrittenPolishUndoContext = nil
                 }
             }
             .onChange(of: selectedPhoto) { _, newValue in
@@ -1972,23 +2092,8 @@ struct RecordView: View {
                 refreshRecommendedCategory()
             }
             .onChange(of: homeViewModel.inputTitle) { _, _ in
-                if homeViewModel.inputTitle.count > 32 {
-                    homeViewModel.inputTitle = String(homeViewModel.inputTitle.prefix(32))
-                    return
-                }
-                if focusedField == .note {
-                    if lastDraftIntent != .note {
-                        lastDraftIntent = .note
-                    }
-                    if suppressNextNoteSemanticUnlock {
-                        suppressNextNoteSemanticUnlock = false
-                    } else if let category = manualNoteOverrideCategory(homeViewModel.inputTitle) {
-                        homeViewModel.applyRecommendedCategory(category)
-                    }
-                    rememberUserNoteAnchor(homeViewModel.inputTitle)
-                } else if suppressNextNoteSemanticUnlock {
-                    suppressNextNoteSemanticUnlock = false
-                }
+                // Only the committed text-field callback creates a user intent.
+                // Programmatic generation, adoption and restoration also arrive here.
                 homeViewModel.clearRecordInputMessage()
                 refreshRecommendedCategory(debounced: focusedField == .note)
             }
@@ -2207,6 +2312,7 @@ struct RecordView: View {
             amountField
             if hasValidAmount {
                 lifeEntryPreview
+                handwrittenPolishPanel
             }
             if !amountPadActive {
                 saveRow
@@ -2789,6 +2895,7 @@ struct RecordView: View {
         let isSelected = homeViewModel.selectedCategory == category
         return Button {
             dismissKeyboard()
+            invalidateHandwrittenPolish()
             withAnimation(.easeInOut(duration: 0.12)) {
                 if !shouldPreserveUserNoteWhenChangingAngle {
                     lastDraftIntent = .category
@@ -2878,9 +2985,9 @@ struct RecordView: View {
               RecordQuickNotePolicy.isCompatible(suggestion, category: homeViewModel.selectedCategory),
               quickNoteMatchesActiveScene(suggestion) else { return }
         dismissKeyboard()
+        invalidateHandwrittenPolish()
         lastDraftIntent = .category
         let normalized = UserContentRiskService.shared.normalizedManualNote(suggestion)
-        suppressNextNoteSemanticUnlock = homeViewModel.inputTitle != normalized
         // Register provenance even when selecting the same text. A chip is
         // user-selected generated copy, not newly handwritten semantic evidence.
         homeViewModel.applyGeneratedRecordTitle(normalized)
@@ -2889,16 +2996,17 @@ struct RecordView: View {
 
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextField(
-                "",
-                text: $homeViewModel.inputTitle,
-                prompt: Text("已归类到「\(homeViewModel.selectedCategory.label)」，可补充点细节（不填也能保存）")
-                    .foregroundStyle(AppColors.subtext.opacity(0.72))
+            CommittedRecordNoteField(
+                text: homeViewModel.inputTitle,
+                placeholder: "已归类到「\(homeViewModel.selectedCategory.label)」，可补充点细节（不填也能保存）",
+                isFocused: Binding(
+                    get: { focusedField == .note },
+                    set: { focusedField = $0 ? .note : nil }
+                ),
+                onCommittedChange: applyCommittedUserNote,
+                onSubmit: dismissKeyboard
             )
-            .focused($focusedField, equals: .note)
-            .submitLabel(.done)
-            .onSubmit { dismissKeyboard() }
-            .font(.system(size: 16))
+            .frame(minHeight: 24)
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
             .background(
@@ -3064,6 +3172,10 @@ struct RecordView: View {
             badgeText: "会员可用",
             onQuickGenerate: {
                 dismissKeyboard()
+                if homeViewModel.hasHandwrittenRecordNote {
+                    requestHandwrittenPolishCandidate()
+                    return
+                }
                 previewLineWasRotated = true
                 lastDraftIntent = .category
                 activeScenePack = nil
@@ -3392,6 +3504,109 @@ struct RecordView: View {
     private func applyDot00() {
         let base = Double(homeViewModel.inputAmount.replacingOccurrences(of: ",", with: "")) ?? 0
         homeViewModel.inputAmount = String(format: "%.2f", base)
+    }
+}
+
+/// Report only committed user text. SwiftUI's value observer cannot distinguish
+/// a programmatic replacement from typing and exposes intermediate IME text.
+struct CommittedRecordNoteField: UIViewRepresentable {
+    let text: String
+    let placeholder: String
+    @Binding var isFocused: Bool
+    var maximumLength: Int = 32
+    var font: UIFont = .systemFont(ofSize: 16)
+    var textAlignment: NSTextAlignment = .natural
+    let onCommittedChange: (String) -> Void
+    var onSubmit: () -> Void = {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField()
+        field.delegate = context.coordinator
+        field.text = text
+        field.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: font)
+        field.textAlignment = textAlignment
+        field.adjustsFontForContentSizeCategory = true
+        field.textColor = UIColor(AppColors.text)
+        field.tintColor = UIColor(AppColors.accent)
+        field.returnKeyType = .done
+        field.accessibilityLabel = "备注"
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
+        return field
+    }
+
+    func updateUIView(_ field: UITextField, context: Context) {
+        context.coordinator.parent = self
+        field.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: font)
+        field.textColor = UIColor(AppColors.text)
+        field.tintColor = UIColor(AppColors.accent)
+        field.textAlignment = textAlignment
+        field.attributedPlaceholder = NSAttributedString(
+            string: placeholder,
+            attributes: [.foregroundColor: UIColor(AppColors.subtext.opacity(0.72))]
+        )
+        // A state refresh while the keyboard is composing must not replace the
+        // marked text with the last committed model value.
+        if field.markedTextRange == nil, !context.coordinator.isComposing, field.text != text {
+            field.text = text
+            context.coordinator.lastReportedText = text
+        }
+        if isFocused, !field.isFirstResponder {
+            DispatchQueue.main.async { [weak field, weak coordinator = context.coordinator] in
+                guard let field, let coordinator, coordinator.parent.isFocused else { return }
+                field.becomeFirstResponder()
+            }
+        } else if !isFocused, field.isFirstResponder {
+            field.resignFirstResponder()
+        }
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: CommittedRecordNoteField
+        var lastReportedText: String
+        var isComposing = false
+
+        init(_ parent: CommittedRecordNoteField) {
+            self.parent = parent
+            self.lastReportedText = parent.text
+        }
+
+        @objc func textChanged(_ field: UITextField) {
+            isComposing = field.markedTextRange != nil
+            guard !isComposing else { return }
+            publishCommittedText(field)
+        }
+
+        private func publishCommittedText(_ field: UITextField) {
+            let rawValue = field.text ?? ""
+            // Merely opening/closing an older long note must preserve it.
+            guard rawValue != lastReportedText else { return }
+            let value = String(rawValue.prefix(parent.maximumLength))
+            if field.text != value { field.text = value }
+            guard value != lastReportedText else { return }
+            lastReportedText = value
+            parent.onCommittedChange(value)
+        }
+
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            if !parent.isFocused { parent.isFocused = true }
+        }
+
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            textField.unmarkText()
+            isComposing = false
+            publishCommittedText(textField)
+            if parent.isFocused { parent.isFocused = false }
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            textField.resignFirstResponder()
+            parent.onSubmit()
+            return true
+        }
     }
 }
 

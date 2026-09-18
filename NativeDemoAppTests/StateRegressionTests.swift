@@ -10,6 +10,308 @@ import WeatherKit
 #endif
 @testable import NativeDemoApp
 
+final class RecordContinuousIntentTests: XCTestCase {
+    private let date = Date(timeIntervalSince1970: 1_800_000_000.125)
+
+    private func resolution(_ state: RecordExplicitIntentState, note: String, generated: Bool = false) -> RecordDraftResolution {
+        RecordDraftResolutionService.resolve(.init(
+            rawTitle: note, fallbackCategory: state.category, amount: 32, date: date,
+            merchantBrandId: nil, categoryLockedByUser: state.categoryWasSelectedByUser,
+            userEditedTitle: !generated, source: "continuous_regression",
+            generatedNoteContext: generated ? .init(title: note, category: state.category) : nil,
+            categoryIsSettled: state.preventsAutomaticCategoryChanges,
+            preserveConfirmedTitle: true, manualNoteAnchor: generated ? nil : note
+        ))
+    }
+
+    private func edited(
+        _ baseline: HomeItem, state: RecordExplicitIntentState,
+        note: String? = nil, amount: String? = nil, changedDate: Date? = nil,
+        current: HomeItem? = nil
+    ) -> HomeItem {
+        let text = note ?? baseline.title
+        let amountText = amount ?? String(format: "%.2f", baseline.amount)
+        let date = changedDate ?? baseline.createdAt
+        let intent = RecordEditPolicy.intent(
+            baseline: baseline, amountText: amountText, noteText: text,
+            initialNoteText: baseline.title, date: date, categoryIntent: state
+        )
+        let proposed = RecordEditPolicy.proposedItem(
+            intent: intent, amountText: amountText, noteText: text, date: date
+        )
+        return RecordEditPolicy.applying(proposed, intent: intent, to: current ?? baseline)
+    }
+
+    func testShoppingThenNightSnackWinsBeforeSaveAndSurvivesDecodedEdits() throws {
+        var state = RecordExplicitIntentState(category: .other)
+        state.selectCategory(.shopping)
+        state.writeNote("夜宵")
+        XCTAssertEqual(state.category, .dining)
+        XCTAssertFalse(state.categoryWasSelectedByUser)
+        let result = resolution(state, note: "夜宵")
+        XCTAssertEqual(result.category, .dining)
+        XCTAssertEqual(result.title, "夜宵")
+        let saved = HomeItem(
+            title: result.title, amount: 32, category: result.category,
+            createdAt: date, updatedAt: date, emotionTag: "夜宵这顿记下", userEditedTitle: true
+        )
+        let reopened = try JSONDecoder().decode(HomeItem.self, from: JSONEncoder().encode(saved))
+        XCTAssertEqual(reopened.category, .dining)
+        for _ in 0..<2 {
+            let entryState = RecordExplicitIntentState(
+                category: reopened.category, userSelectedCategory: reopened.userEditedCategory == true
+            )
+            XCTAssertEqual(edited(reopened, state: entryState), reopened)
+        }
+    }
+
+    func testNightSnackThenShoppingAndRepeatedReversalKeepLastSelection() throws {
+        var state = RecordExplicitIntentState(category: .other)
+        state.writeNote("夜宵")
+        state.selectCategory(.shopping)
+        var result = resolution(state, note: "夜宵")
+        XCTAssertEqual(result.category, .shopping)
+        XCTAssertEqual(result.title, "夜宵")
+        XCTAssertEqual(result.emotionTag, "")
+        state.writeNote("牛肉面")
+        XCTAssertEqual(state.category, .dining)
+        state.selectCategory(.shopping)
+        result = resolution(state, note: "牛肉面")
+        let saved = HomeItem(
+            title: result.title, amount: 32, category: result.category,
+            createdAt: date, emotionTag: result.emotionTag,
+            userEditedTitle: true, userEditedCategory: true
+        )
+        let reopened = try JSONDecoder().decode(HomeItem.self, from: JSONEncoder().encode(saved))
+        XCTAssertEqual(edited(reopened, state: .init(category: .shopping, userSelectedCategory: true)), reopened)
+        XCTAssertEqual(reopened.category, .shopping)
+    }
+
+    func testAutomaticResultsNeverOverrideEitherExplicitSource() {
+        var state = RecordExplicitIntentState(category: .other)
+        state.adoptAutomaticCategory(.daily)
+        XCTAssertEqual(state.category, .daily)
+        state.selectCategory(.shopping)
+        let revision = state.revision
+        state.adoptAutomaticCategory(.dining)
+        XCTAssertEqual(state.category, .shopping)
+        XCTAssertEqual(state.revision, revision)
+        state.writeNote("夜宵")
+        state.adoptAutomaticCategory(.shopping)
+        XCTAssertEqual(state.category, .dining)
+        XCTAssertFalse(state.categoryWasSelectedByUser)
+    }
+
+    func testGeneratedSocialAndConvenienceSentencesRetainChosenCategory() {
+        for (category, text) in [(HomeItem.Category.social, "一起吃顿饭"), (.daily, "便利店补一袋日常")] {
+            var state = RecordExplicitIntentState(category: category)
+            state.selectCategory(category)
+            let before = state
+            let generated = resolution(state, note: text, generated: true)
+            XCTAssertEqual(generated.category, category)
+            XCTAssertEqual(state, before)
+        }
+    }
+
+    func testExplicitEvidenceUsesSpecificWordsAndRejectsMixedCategories() {
+        let expected: [(String, HomeItem.Category)] = [
+            ("夜宵", .dining), ("宵夜", .dining), ("午饭", .dining), ("瑞幸", .dining),
+            ("手机话费", .daily), ("咖啡器具", .shopping), ("手机充电器", .shopping),
+            ("罗森买纸巾", .daily), ("请客朋友", .social), ("电影", .entertainment)
+        ]
+        for (note, category) in expected {
+            XCTAssertEqual(RecordExplicitIntentPolicy.category(for: note), category, note)
+        }
+        for note in ["", "记一下", "夜宵和地铁", "咖啡和咖啡器具"] {
+            var state = RecordExplicitIntentState(category: .shopping, userSelectedCategory: true)
+            XCTAssertNil(state.writeNote(note), note)
+            XCTAssertEqual(state.category, .shopping, note)
+            XCTAssertTrue(state.categoryWasSelectedByUser, note)
+        }
+    }
+
+    func testExistingManualChoiceCanBeSupersededByNewNoteWithoutFakeCorrection() {
+        let original = HomeItem(
+            title: "旧备注", amount: 32, category: .shopping, createdAt: date,
+            userEditedCategory: true, categoryCorrectionFrom: .daily
+        )
+        var state = RecordExplicitIntentState(category: .shopping, userSelectedCategory: true)
+        state.writeNote("夜宵")
+        let result = edited(original, state: state, note: "夜宵")
+        XCTAssertEqual(result.category, .dining)
+        XCTAssertEqual(result.title, "夜宵")
+        XCTAssertNil(result.userEditedCategory)
+        XCTAssertNil(result.categoryCorrectionFrom)
+        XCTAssertEqual(result.userEditedTitle, true)
+        state.selectCategory(.shopping)
+        let reversed = edited(original, state: state, note: "夜宵")
+        XCTAssertEqual(reversed.category, .shopping)
+        XCTAssertEqual(reversed.userEditedCategory, true)
+        XCTAssertEqual(reversed.title, "夜宵")
+    }
+
+    func testNewBrandIntentAndOldBrandUnbinding() throws {
+        let original = HomeItem(title: "原备注", amount: 32, category: .shopping, createdAt: date, userEditedCategory: true)
+        var state = RecordExplicitIntentState(category: .shopping, userSelectedCategory: true)
+        state.writeNote("瑞幸")
+        let coffee = edited(original, state: state, note: "瑞幸")
+        XCTAssertEqual(coffee.category, .dining)
+        XCTAssertEqual(coffee.merchantBrandId, try XCTUnwrap(MerchantBrandCatalog.matchBrand(in: "瑞幸")).id)
+        state.selectCategory(.shopping)
+        XCTAssertNil(edited(original, state: state, note: "瑞幸").merchantBrandId)
+        var next = RecordExplicitIntentState(category: coffee.category)
+        next.writeNote("手机充电器")
+        let charger = edited(coffee, state: next, note: "手机充电器")
+        XCTAssertEqual(charger.category, .shopping)
+        XCTAssertNil(charger.merchantBrandId)
+    }
+
+    func testOriginalUpdateKeepsPrecisionEmotionAndAllMetadata() throws {
+        let original = HomeItem(
+            title: "夜宵", amount: 32.123456, category: .shopping, source: .ocr,
+            createdAt: date, updatedAt: date.addingTimeInterval(0.125), emotionTag: "自己选的表达",
+            userEditedTitle: true, userEditedCategory: true, categoryCorrectionFrom: .daily,
+            memoryContext: .init(weatherKind: "rain", temperatureCelsius: 18, cityName: "苏州", semanticPlace: nil),
+            memoryImageDatas: [Data([1, 2, 3])]
+        )
+        let reopened = try JSONDecoder().decode(HomeItem.self, from: JSONEncoder().encode(original))
+        let state = RecordExplicitIntentState(category: reopened.category, userSelectedCategory: true)
+        let result = edited(reopened, state: state)
+        XCTAssertEqual(result, reopened)
+        XCTAssertEqual(result.amount, 32.123456)
+        XCTAssertEqual(result.updatedAt, original.updatedAt)
+        XCTAssertEqual(result.emotionTag, "自己选的表达")
+    }
+
+    func testAmountAndDateOnlyKeepSavedCategoryWithoutNewManualProvenance() {
+        let original = HomeItem(title: "夜宵", amount: 32, category: .shopping, createdAt: date)
+        let state = RecordExplicitIntentState(category: original.category)
+        let changed = edited(original, state: state, amount: "35", changedDate: date.addingTimeInterval(0.25))
+        XCTAssertEqual(changed.category, .shopping)
+        XCTAssertEqual(changed.amount, 35)
+        XCTAssertEqual(changed.createdAt, date.addingTimeInterval(0.25))
+        XCTAssertNil(changed.userEditedCategory)
+    }
+
+    func testSameCategoryClickChangesOnlyProvenance() {
+        let original = HomeItem(title: "夜宵", amount: 32, category: .shopping, createdAt: date, emotionTag: "自选表达")
+        var state = RecordExplicitIntentState(category: original.category)
+        XCTAssertEqual(edited(original, state: state), original)
+        state.selectCategory(.shopping)
+        let selected = edited(original, state: state)
+        var expected = original
+        expected.userEditedCategory = true
+        XCTAssertEqual(selected, expected)
+    }
+
+    func testEditorMergesOnlyChangedFieldsIntoLatestLedgerRow() {
+        let original = HomeItem(title: "夜宵", amount: 32, category: .dining, createdAt: date)
+        var latest = original
+        latest.appendMemoryImages([Data([4, 5, 6])])
+        latest.category = .social
+        latest.title = "同步后的新备注"
+        latest.amount = 45
+        latest.userEditedCategory = true
+        let state = RecordExplicitIntentState(category: original.category)
+        XCTAssertEqual(edited(original, state: state, current: latest), latest)
+        let result = edited(original, state: state, amount: "36", current: latest)
+        XCTAssertEqual(result.amount, 36)
+        XCTAssertEqual(result.category, .social)
+        XCTAssertEqual(result.memoryImageDatas, latest.memoryImageDatas)
+        XCTAssertEqual(result.userEditedCategory, true)
+    }
+
+    func testPolishCandidatesPreserveFactsAndLength() {
+        for anchor in ["夜宵", "徐记花甲鸡爪｜宿豫店", "路亚", "请客朋友"] {
+            let candidates = RecordHandwrittenNotePolishPolicy.candidates(anchor: anchor)
+            XCTAssertFalse(candidates.isEmpty)
+            for text in candidates {
+                XCTAssertTrue(text.contains(anchor))
+                XCTAssertLessThanOrEqual(text.count, 32)
+                for invented in ["加班", "晚归", "热乎", "便利店", "早餐"] where !anchor.contains(invented) {
+                    XCTAssertFalse(text.contains(invented))
+                }
+            }
+        }
+        XCTAssertTrue(RecordHandwrittenNotePolishPolicy.candidates(anchor: String(repeating: "字", count: 32)).isEmpty)
+    }
+
+    func testHandwrittenQuickNotesCannotAddMealOrSpecificFacts() {
+        XCTAssertFalse(RecordQuickNotePolicy.respectsHandwrittenAnchor("早餐记一笔", anchor: "夜宵"))
+        XCTAssertFalse(RecordQuickNotePolicy.respectsHandwrittenAnchor("瑞幸咖啡", anchor: "夜宵"))
+        XCTAssertFalse(RecordQuickNotePolicy.respectsHandwrittenAnchor("加班吃夜宵", anchor: "夜宵"))
+        XCTAssertTrue(RecordQuickNotePolicy.respectsHandwrittenAnchor("夜宵记一笔", anchor: "夜宵"))
+    }
+
+    func testPolishCandidateIdentityChangesWithFactsButNotCandidateBrowsing() {
+        let baseline = RecordNotePolishContext(
+            amount: "32", title: "夜宵", category: .dining, date: date,
+            anchor: "夜宵", scenePackID: nil, categoryExplicit: true
+        )
+        let candidate = RecordNotePolishCandidate(context: baseline, title: "夜宵，记一笔")
+        XCTAssertEqual(candidate.context, baseline)
+        XCTAssertNotEqual(candidate.context, RecordNotePolishContext(
+            amount: "32", title: "夜宵", category: .shopping, date: date,
+            anchor: "夜宵", scenePackID: nil, categoryExplicit: true
+        ))
+        XCTAssertNotEqual(candidate.context, RecordNotePolishContext(
+            amount: "32", title: "午饭", category: .dining, date: date,
+            anchor: "午饭", scenePackID: nil, categoryExplicit: true
+        ))
+        XCTAssertEqual(baseline.title, "夜宵")
+    }
+}
+
+#if canImport(UIKit)
+@MainActor
+final class CommittedRecordNoteFieldTests: XCTestCase {
+    private final class Position: UITextPosition {}
+    private final class Range: UITextRange {
+        override var start: UITextPosition { Position() }
+        override var end: UITextPosition { Position() }
+        override var isEmpty: Bool { false }
+    }
+    private final class ComposingField: UITextField {
+        var composing = false
+        override var markedTextRange: UITextRange? { composing ? Range() : nil }
+    }
+
+    func testIMEPublishesOnlyTheCommittedNoteOnce() {
+        var committed: [String] = []
+        let control = CommittedRecordNoteField(
+            text: "", placeholder: "备注", isFocused: .constant(true),
+            onCommittedChange: { committed.append($0) }
+        )
+        let coordinator = control.makeCoordinator()
+        let field = ComposingField()
+        field.composing = true
+        field.text = "ye xiao"
+        coordinator.textChanged(field)
+        XCTAssertTrue(committed.isEmpty)
+        field.composing = false
+        field.text = "夜宵"
+        coordinator.textChanged(field)
+        coordinator.textFieldDidEndEditing(field)
+        XCTAssertEqual(committed, ["夜宵"])
+    }
+
+    func testOpeningAndClosingOldLongNoteDoesNotTruncateOrCreateIntent() {
+        let original = String(repeating: "旧备注", count: 20)
+        var committed: [String] = []
+        let control = CommittedRecordNoteField(
+            text: original, placeholder: "备注", isFocused: .constant(true),
+            onCommittedChange: { committed.append($0) }
+        )
+        let field = UITextField()
+        field.text = original
+        control.makeCoordinator().textFieldDidEndEditing(field)
+        XCTAssertEqual(field.text, original)
+        XCTAssertTrue(committed.isEmpty)
+    }
+}
+#endif
+
+
 #if canImport(WeatherKit)
 final class WeatherKitConditionBridgeTests: XCTestCase {
     func testPrecipitationConditionsKeepExistingRainAndSnowGroups() {
@@ -3683,6 +3985,15 @@ final class SingleRecordEmotionBoundaryTests: XCTestCase {
 }
 
 final class RecordPreviewTierBoundaryTests: XCTestCase {
+    func testCategoryVisibilityDoesNotRequireGeneratingANote() {
+        XCTAssertTrue(RecordPreviewTier.whisper.showsCategory(hasResolvedCategory: true))
+        XCTAssertFalse(RecordPreviewTier.whisper.showsCategory(hasResolvedCategory: false))
+        for resolved in [false, true] {
+            XCTAssertFalse(RecordPreviewTier.hidden.showsCategory(hasResolvedCategory: resolved))
+            XCTAssertTrue(RecordPreviewTier.confirm.showsCategory(hasResolvedCategory: resolved))
+        }
+    }
+
     func testAmountOnlyInputRemainsVisibleWhisperTier() {
         let tier = RecordPreviewTier.resolve(.init(
             amount: 18,
@@ -4839,6 +5150,46 @@ final class TraceSnapshotLifecycleTests: XCTestCase {
 }
 
 final class RecordInputAssistanceSnapshotTests: XCTestCase {
+    func testDeferredQuickNotesKeepRecommendationAndHistoricalPoolIdentical() {
+        let calendar = Calendar.current
+        let reference = calendar.date(bySettingHour: 18, minute: 43, second: 0, of: Date())!
+        let dates = (1...60).compactMap { calendar.date(byAdding: .day, value: -$0, to: reference) }
+            .filter { RecordCalendarContext.dayKind(for: $0) == RecordCalendarContext.dayKind(for: reference) }
+            .prefix(8)
+        let items = dates.map {
+            HomeItem(title: "牛肉面", amount: 36, category: .dining, createdAt: $0, userEditedTitle: true)
+        }
+        let key = RecordInputAssistanceComputation.historyKey(
+            ledgerRevision: 386, referenceDate: reference, referenceDateEditedByUser: true
+        )
+        let input = RecordInputHistoryPreparationInput(key: key, items: items, referenceDate: reference, now: reference)
+        let combined = RecordInputAssistanceComputation.historySnapshot(input)
+        let critical = RecordInputAssistanceComputation.historySnapshot(input, includeQuickNoteHistory: false)
+        XCTAssertFalse(combined.quickNoteTitlesByContext.isEmpty)
+        XCTAssertTrue(critical.quickNoteTitlesByContext.isEmpty)
+        XCTAssertEqual(critical.key, combined.key)
+        XCTAssertEqual(critical.prefillItems.map(\.id), combined.prefillItems.map(\.id))
+        XCTAssertFalse(critical.frequentSuggestions.isEmpty)
+        XCTAssertEqual(critical.frequentSuggestions, combined.frequentSuggestions)
+        XCTAssertEqual(critical.frequentTitlesBySuggestionID, combined.frequentTitlesBySuggestionID)
+        XCTAssertEqual(combined.quickNoteTitlesByContext, RecordQuickNotePolicy.historicalTitles(items: items, at: reference))
+        let context = RecordContextSignal(referenceDate: reference, weather: nil)
+        let prefillKey = RecordPrefillPreparationKey(
+            historyKey: key, amount: 36, referenceDate: reference, noteDraft: "", selectedCategory: .other, context: context
+        )
+        func recommendation(_ history: RecordInputHistorySnapshot) -> RecordPrefillSnapshot {
+            RecordInputAssistanceComputation.prefillSnapshot(.init(
+                key: prefillKey, history: history, amount: 36, referenceDate: reference, now: reference,
+                noteDraft: "", selectedCategory: .other, context: context
+            ))
+        }
+        let old = recommendation(combined)
+        let new = recommendation(critical)
+        XCTAssertEqual(new.appliedCategory, old.appliedCategory)
+        XCTAssertEqual(new.categoryGridRecommendation, old.categoryGridRecommendation)
+        XCTAssertTrue(RecordInputAssistanceComputation.prefillResultsEqual(new.result, old.result))
+    }
+
     private var semanticFixCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
@@ -12415,6 +12766,13 @@ final class RecordEmotionScenePolicyTests: XCTestCase {
             context(title: "早餐记一笔", brandID: nil),
             context(title: "午餐记一笔", brandID: nil),
             context(title: "晚餐记一笔", amount: 18.5, brandID: nil),
+            context(title: "今天晚饭", brandID: nil),
+            context(title: "瑞幸咖啡", amount: 12.9, brandID: nil),
+            context(title: "咖啡", brandID: nil),
+            context(title: "奶茶", brandID: nil),
+            context(title: "米粉", brandID: nil),
+            lateCommuteContext(),
+            lateCommuteContext(title: "这趟通勤记下", anchor: "晚间通勤"),
         ]
     }
 
@@ -12452,6 +12810,139 @@ final class RecordEmotionScenePolicyTests: XCTestCase {
             "午餐这顿记下", "这顿午饭记下", "午餐留一笔",
             "晚餐这顿记下", "这顿晚饭记下", "晚餐留一笔",
         ]
+    }
+
+    private func lateCommuteContext(
+        title: String = "通勤路上", at date: Date? = nil,
+        brandID: String? = nil, packID: String? = "commute", anchor: String? = nil,
+        preview: String? = nil, automatic: String? = nil
+    ) -> RecordEmotionSceneContext {
+        let at = date ?? mealDate(hour: 22, minute: 48)
+        let generated = NarrativeCopyResolver.resolveEmotionTag(context: .init(
+            brandId: brandID, category: .transport, amount: 36, date: at,
+            seed: title, note: title, scenePackId: packID
+        ))
+        return RecordEmotionSceneContext(
+            title: title, category: .transport, amount: 36, date: at,
+            merchantBrandID: brandID, scenePackID: packID, semanticAnchor: anchor,
+            previewEmotionTag: preview ?? generated,
+            automaticEmotionTag: automatic ?? generated
+        )
+    }
+
+    func testNightCommuteScreenshotOffersStableCycleAndSavesChosenExpression() throws {
+        let scene = lateCommuteContext()
+        let expected = ["晚上这段通勤", "晚间这段通勤", "这趟晚间通勤记下", "晚上的通勤记一笔"]
+        XCTAssertEqual(scene.previewEmotionTag, expected[0])
+        let choices = RecordEmotionScenePolicy.candidates(for: scene)
+        XCTAssertEqual(choices, expected)
+        XCTAssertEqual(choices, RecordEmotionScenePolicy.candidates(for: scene))
+        var current = try XCTUnwrap(choices.first)
+        var visited: [String] = []
+        for _ in choices.indices {
+            visited.append(current)
+            current = try XCTUnwrap(RecordEmotionScenePolicy.next(after: current, candidates: choices))
+        }
+        XCTAssertEqual(visited, expected)
+        XCTAssertEqual(current, expected[0])
+
+        for locked in [false, true] {
+            let saved = RecordDraftResolutionService.resolve(.init(
+                rawTitle: scene.title, fallbackCategory: .transport, amount: 36, date: scene.date,
+                merchantBrandId: nil, categoryLockedByUser: locked, userEditedTitle: false,
+                source: "manual", scenePackId: "commute",
+                generatedNoteContext: .init(title: scene.title, category: .transport)
+            ))
+            XCTAssertEqual(saved.title, scene.title)
+            XCTAssertEqual(saved.category, .transport)
+            XCTAssertEqual(saved.emotionTag, expected[0])
+            let automatic = RecordMemoryContextService.enhancedEmotionTag(input: .init(
+                title: saved.title, category: saved.category, amount: 36, date: scene.date,
+                baseEmotionTag: saved.emotionTag, weather: nil
+            ))
+            XCTAssertEqual(automatic, expected[0])
+            for choice in choices {
+                XCTAssertEqual(RecordEmotionScenePolicy.validatedTag(
+                    selection: .init(context: scene, tag: choice), resolution: saved,
+                    amount: 36, date: scene.date, scenePackID: "commute",
+                    automaticEmotionTag: automatic
+                ), choice)
+                let item = scene.item(emotionTag: choice)
+                XCTAssertEqual(item.displayEmotionTag, choice)
+                XCTAssertEqual(HomeItem.lateWorkCommutePlaybackTitle(for: item), "晚上通勤路上")
+                XCTAssertFalse(["上班", "下班", "雨", "雪", "地铁", "打车", "高铁", "机场"].contains {
+                    choice.contains($0)
+                })
+            }
+        }
+    }
+
+    func testNightCommuteSourceUsesSemanticSceneAndRejectsConflictingFacts() {
+        for title in ["通勤路上", "这趟通勤记下", "晚间通勤花费"] {
+            for hour in [0, 4, 21, 22, 23] {
+                let scene = lateCommuteContext(title: title, at: mealDate(hour: hour), anchor: "通勤这一程")
+                XCTAssertEqual(RecordEmotionCandidateSource.alternatives(for: scene).count, 3, title)
+                XCTAssertGreaterThan(RecordEmotionScenePolicy.candidates(for: scene).count, 1, title)
+            }
+        }
+        for hour in [5, 12, 20] {
+            let scene = lateCommuteContext(
+                at: mealDate(hour: hour), preview: "晚上这段通勤", automatic: "晚上这段通勤"
+            )
+            XCTAssertTrue(RecordEmotionCandidateSource.alternatives(for: scene).isEmpty)
+        }
+        let rejected = [
+            lateCommuteContext(title: "上班通勤"),
+            lateCommuteContext(title: "下班通勤"),
+            lateCommuteContext(title: "雨天通勤"),
+            lateCommuteContext(title: "雪天通勤"),
+            lateCommuteContext(title: "咖啡通勤"),
+            lateCommuteContext(title: "路上花费补上", preview: "晚上这段通勤", automatic: "晚上这段通勤"),
+            lateCommuteContext(brandID: "lawson", preview: "晚上这段通勤", automatic: "晚上这段通勤"),
+            lateCommuteContext(packID: "dining"),
+            lateCommuteContext(anchor: "上班通勤"),
+            lateCommuteContext(anchor: "下班通勤"),
+            lateCommuteContext(anchor: "雨天通勤"),
+            lateCommuteContext(anchor: "停车费"),
+            lateCommuteContext(preview: "雨天通勤"),
+            lateCommuteContext(automatic: "晚上通勤遇上雨"),
+        ]
+        for scene in rejected {
+            XCTAssertTrue(RecordEmotionCandidateSource.alternatives(for: scene).isEmpty, scene.title)
+        }
+        let weekend = lateCommuteContext(at: Calendar.current.date(from: DateComponents(
+            year: 2026, month: 9, day: 19, hour: 22, minute: 48
+        ))!)
+        // Existing weekend display correction stays authoritative; do not weaken
+        // the display guard merely to expose a button for every transport note.
+        XCTAssertTrue(RecordEmotionScenePolicy.candidates(for: weekend).isEmpty)
+    }
+
+    func testNightCommuteChoiceExpiresWithTimeWorkWeatherAndSceneChanges() throws {
+        let scene = lateCommuteContext()
+        let choice = try XCTUnwrap(RecordEmotionScenePolicy.candidates(for: scene).last)
+        let selection = RecordEmotionSelection(context: scene, tag: choice)
+        let changed = [
+            lateCommuteContext(at: mealDate(hour: 12)),
+            lateCommuteContext(title: "上班通勤"),
+            lateCommuteContext(title: "下班通勤"),
+            lateCommuteContext(title: "雨天通勤"),
+            lateCommuteContext(packID: nil),
+            lateCommuteContext(automatic: "晚上通勤遇上雨"),
+        ]
+        for newScene in changed {
+            XCTAssertNil(RecordEmotionScenePolicy.validatedTag(
+                selection: selection, resolution: resolution(for: newScene),
+                amount: newScene.amount, date: newScene.date, scenePackID: newScene.scenePackID,
+                automaticEmotionTag: newScene.automaticEmotionTag
+            ))
+        }
+        XCTAssertNotEqual(scene, lateCommuteContext(anchor: "上班通勤"))
+        XCTAssertNil(RecordEmotionScenePolicy.validatedTag(
+            selection: selection, resolution: resolution(for: scene),
+            amount: 37, date: scene.date, scenePackID: scene.scenePackID,
+            automaticEmotionTag: scene.automaticEmotionTag
+        ))
     }
 
     func testQuickDinnerAt1715OffersDeterministicCycleAndKeepsAutomaticDefault() throws {

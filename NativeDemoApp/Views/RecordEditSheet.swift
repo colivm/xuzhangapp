@@ -11,9 +11,144 @@ enum RecordEditCategoryMutationPolicy {
     }
 }
 
+/// The form sends only its actual edits. A fresh ledger row remains the owner of
+/// attachments and other fields that can change while an editor is open.
+struct RecordEditIntent {
+    let baseline: HomeItem
+    let categoryIntent: RecordExplicitIntentState
+    let amountChanged: Bool
+    let titleChanged: Bool
+    let dateChanged: Bool
+}
+
+enum RecordEditPolicy {
+    static func intent(
+        baseline: HomeItem,
+        amountText: String,
+        noteText: String,
+        initialNoteText: String,
+        date: Date,
+        categoryIntent: RecordExplicitIntentState
+    ) -> RecordEditIntent {
+        let amount = Double(amountText.replacingOccurrences(of: ",", with: ""))
+        // An untouched two-decimal display must not round a historical value.
+        let amountChanged = amountText != String(format: "%.2f", baseline.amount)
+            && amount != baseline.amount
+        return RecordEditIntent(
+            baseline: baseline,
+            categoryIntent: categoryIntent,
+            amountChanged: amountChanged,
+            titleChanged: noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+                != initialNoteText.trimmingCharacters(in: .whitespacesAndNewlines),
+            dateChanged: date != baseline.createdAt
+        )
+    }
+
+    static func proposedItem(
+        intent: RecordEditIntent,
+        amountText: String,
+        noteText: String,
+        date: Date
+    ) -> HomeItem {
+        var proposed = intent.baseline
+        if intent.amountChanged {
+            proposed.amount = Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
+        }
+        if intent.titleChanged {
+            let title = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+            proposed.title = title.isEmpty ? intent.categoryIntent.category.defaultRecordTitle : title
+        }
+        if intent.dateChanged { proposed.createdAt = date }
+        proposed.category = intent.categoryIntent.category
+        return proposed
+    }
+
+    static func applying(
+        _ proposed: HomeItem,
+        intent: RecordEditIntent,
+        to current: HomeItem
+    ) -> HomeItem {
+        guard proposed.id == current.id, intent.baseline.id == current.id else { return current }
+        var updated = current
+        if intent.amountChanged { updated.amount = proposed.amount }
+        if intent.titleChanged {
+            updated.title = proposed.title
+            updated.userEditedTitle = true
+        }
+        if intent.dateChanged { updated.createdAt = proposed.createdAt }
+        let newCategoryDecision = (intent.categoryIntent.categoryWasSelectedByUser
+            && intent.categoryIntent.categorySelectionRevision != nil)
+            || (intent.categoryIntent.categorySource == .handwritten
+                && intent.categoryIntent.handwrittenRevision != nil)
+        if newCategoryDecision {
+            updated.category = intent.categoryIntent.category
+            if intent.categoryIntent.categoryWasSelectedByUser {
+                updated.userEditedCategory = true
+                if updated.category != current.category {
+                    updated.categoryCorrectionFrom = current.category
+                }
+            } else if intent.categoryIntent.categorySource == .handwritten {
+                updated.userEditedCategory = nil
+                updated.categoryCorrectionFrom = nil
+            }
+        }
+        let factsChanged = updated.title != current.title
+            || updated.category != current.category
+            || updated.amount != current.amount
+            || updated.createdAt != current.createdAt
+        // Selecting the existing category changes provenance only. Opening and
+        // closing a form does not reset a chosen emotion or recalculate metadata.
+        guard factsChanged else { return updated }
+
+        if updated.category != current.category { updated.scenePackId = nil }
+        let matchedBrand = MerchantBrandCatalog.matchBrand(in: updated.title)
+        let brandID = intent.titleChanged ? matchedBrand?.id : (matchedBrand?.id ?? current.merchantBrandId)
+        let resolution = RecordDraftResolutionService.resolve(
+            RecordDraftResolutionInput(
+                rawTitle: updated.title, fallbackCategory: updated.category,
+                amount: updated.amount, date: updated.createdAt,
+                merchantBrandId: brandID,
+                categoryLockedByUser: updated.userEditedCategory == true,
+                userEditedTitle: true, source: "edit",
+                scenePackId: updated.scenePackId,
+                categoryIsSettled: true,
+                preserveConfirmedTitle: true,
+                manualNoteAnchor: updated.userEditedTitle == true ? updated.title : nil
+            )
+        )
+        // All editor text is confirmed existing text or a committed user edit.
+        // Keep it without turning existing generated text into handwritten data.
+        updated.title = resolution.title
+        updated.merchantBrandId = resolution.merchantBrandId
+        let hasConflict = updated.userEditedTitle == true && RecordExplicitIntentPolicy.hasCategoryConflict(
+            note: updated.title, category: updated.category
+        )
+        updated.emotionTag = hasConflict ? "" : RecordMemoryContextService.enhancedEmotionTag(
+            input: RecordMemoryContextInput(
+                title: updated.title, category: updated.category,
+                amount: updated.amount, date: updated.createdAt,
+                baseEmotionTag: resolution.emotionTag,
+                weather: storedWeather(from: updated.memoryContext, date: updated.createdAt)
+            )
+        )
+        updated = PhotoMemoryPromptPolicy.refreshedAutomaticAnchorMetadata(original: current, updated: updated)
+        if !hasConflict, let trusted = TrustedUserMomentNarrativePolicy.emotionTag(for: updated) {
+            updated.emotionTag = trusted
+        }
+        return updated
+    }
+
+    private static func storedWeather(from context: HomeItem.MemoryContext?, date: Date) -> WeatherSnapshot? {
+        guard let context else { return nil }
+        let code: Int? = context.weatherKind == "rain" ? 61 : context.weatherKind == "snow" ? 71 : nil
+        guard code != nil || context.temperatureCelsius != nil else { return nil }
+        return WeatherSnapshot(temp: context.temperatureCelsius, weatherCode: code, ts: date)
+    }
+}
+
 struct RecordEditSheet: View {
     let item: HomeItem
-    var onSave: (HomeItem) -> Bool
+    var onSave: (HomeItem, RecordEditIntent) -> Bool
     var onDelete: () -> Void
     var onAttachMemoryImage: (() -> Void)?
     var onAttachMemoryImages: (([Data]) -> Bool)?
@@ -22,6 +157,8 @@ struct RecordEditSheet: View {
     @State private var titleText: String
     @State private var selectedCategory: HomeItem.Category
     @State private var selectedDate: Date
+    @State private var initialBaseline: HomeItem
+    @State private var categoryIntent: RecordExplicitIntentState
     @State private var noteEditorExpanded = false
     @State private var categoryPanelExpanded = false
     @State private var datePanelExpanded = false
@@ -35,7 +172,7 @@ struct RecordEditSheet: View {
 
     init(
         item: HomeItem,
-        onSave: @escaping (HomeItem) -> Bool,
+        onSave: @escaping (HomeItem, RecordEditIntent) -> Bool,
         onDelete: @escaping () -> Void,
         onAttachMemoryImage: (() -> Void)? = nil,
         onAttachMemoryImages: (([Data]) -> Bool)? = nil
@@ -49,6 +186,10 @@ struct RecordEditSheet: View {
         _titleText = State(initialValue: item.title)
         _selectedCategory = State(initialValue: item.category)
         _selectedDate = State(initialValue: item.createdAt)
+        _initialBaseline = State(initialValue: item)
+        _categoryIntent = State(initialValue: RecordExplicitIntentState(
+            category: item.category, userSelectedCategory: item.userEditedCategory == true
+        ))
     }
 
     private var parsedAmount: Double {
@@ -59,53 +200,23 @@ struct RecordEditSheet: View {
         titleText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var previewTitle: String {
-        cleanTitle.isEmpty ? selectedCategory.defaultRecordTitle : cleanTitle
+    private var editIntent: RecordEditIntent {
+        RecordEditPolicy.intent(
+            baseline: initialBaseline, amountText: amountText, noteText: titleText,
+            initialNoteText: initialBaseline.title, date: selectedDate, categoryIntent: categoryIntent
+        )
     }
+
+    private var proposedItem: HomeItem {
+        RecordEditPolicy.proposedItem(
+            intent: editIntent, amountText: amountText, noteText: titleText, date: selectedDate
+        )
+    }
+
+    private var previewTitle: String { proposedItem.title }
 
     private var previewEmotion: String {
-        if editFieldsUnchanged {
-            return item.displayEmotionTag
-        }
-        return editPreviewResolution.emotionTag
-    }
-
-    private var editFieldsUnchanged: Bool {
-        abs(parsedAmount - item.amount) < 0.005
-            && cleanTitle == item.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            && selectedCategory == item.category
-            && abs(selectedDate.timeIntervalSince(item.createdAt)) < 1
-    }
-
-    private var editPreviewResolution: RecordDraftResolution {
-        let title = cleanTitle.isEmpty ? selectedCategory.defaultRecordTitle : cleanTitle
-        let matchedBrand = MerchantBrandCatalog.matchBrand(in: title)
-        let categoryOverridesBrand = matchedBrand.map { selectedCategory != $0.category } ?? false
-        // 用户改了标题时，判断旧品牌是否仍匹配新标题；不匹配就清掉，避免沿用旧品牌文案/分类。
-        let userEdited = title != item.title
-        let oldBrandId = userEdited ? item.merchantBrandId : nil
-        let oldBrandStillMatches: Bool = {
-            guard let oldBrandId, let oldBrand = MerchantBrandCatalog.definition(for: oldBrandId) else { return false }
-            return MerchantBrandCatalog.matchBrand(in: title)?.id == oldBrand.id
-        }()
-        let effectiveBrandId: String?
-        if userEdited, !oldBrandStillMatches {
-            effectiveBrandId = nil
-        } else {
-            effectiveBrandId = matchedBrand?.id ?? item.merchantBrandId
-        }
-        return RecordDraftResolutionService.resolve(
-            RecordDraftResolutionInput(
-                rawTitle: title,
-                fallbackCategory: selectedCategory,
-                amount: parsedAmount,
-                date: selectedDate,
-                merchantBrandId: effectiveBrandId,
-                categoryLockedByUser: selectedCategory != item.category || categoryOverridesBrand,
-                userEditedTitle: userEdited,
-                source: "edit_preview"
-            )
-        )
+        RecordEditPolicy.applying(proposedItem, intent: editIntent, to: item).displayEmotionTag
     }
 
     private var editContentBottomPadding: CGFloat {
@@ -128,13 +239,6 @@ struct RecordEditSheet: View {
                 .background(AppColors.bg.ignoresSafeArea())
                 .navigationTitle("调整这一笔")
                 .navigationBarTitleDisplayMode(.inline)
-                .onChange(of: titleText) { _, newValue in
-                    if newValue.count > 32 {
-                        titleText = String(newValue.prefix(32))
-                        return
-                    }
-                    safetyMessage = nil
-                }
                 .onChange(of: noteEditorExpanded) { _, isExpanded in
                     if isExpanded {
                         focusEditNoteField(scrollProxy)
@@ -303,7 +407,7 @@ struct RecordEditSheet: View {
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
-            editPreviewEmotionPill
+            if !previewEmotion.isEmpty { editPreviewEmotionPill }
             editPreviewMetaRow
         }
     }
@@ -386,8 +490,13 @@ struct RecordEditSheet: View {
     }
 
     private var editPreviewNoteField: some View {
-        TextField("这一笔想怎么被记住？", text: $titleText)
-            .focused($isNoteFieldFocused)
+        CommittedRecordNoteField(
+            text: titleText,
+            placeholder: "这一笔想怎么被记住？",
+            isFocused: Binding(get: { isNoteFieldFocused }, set: { isNoteFieldFocused = $0 }),
+            onCommittedChange: commitNote,
+            onSubmit: dismissKeyboard
+        )
             .font(.system(size: 16))
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -458,20 +567,35 @@ struct RecordEditSheet: View {
     }
 
     private func selectCategory(_ category: HomeItem.Category) {
+        // End IME composition before registering the later category selection.
+        dismissKeyboard()
+        categoryIntent.selectCategory(category)
         selectedCategory = category
         titleText = RecordEditCategoryMutationPolicy.titleAfterSelectingCategory(
             currentTitle: titleText,
             category: category
         )
-        dismissKeyboard()
         withAnimation(.easeInOut(duration: 0.18)) {
             categoryPanelExpanded = false
         }
     }
 
+    private func commitNote(_ value: String) {
+        let title = String(value.prefix(32))
+        guard title != titleText else { return }
+        let meaningChanged = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            != titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        titleText = title
+        if meaningChanged {
+            categoryIntent.writeNote(title)
+            selectedCategory = categoryIntent.category
+        }
+        safetyMessage = nil
+    }
+
     private func dismissKeyboard() {
-        isNoteFieldFocused = false
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        isNoteFieldFocused = false
     }
 
     private func focusEditNoteField(_ proxy: ScrollViewProxy) {
@@ -497,16 +621,8 @@ struct RecordEditSheet: View {
 
     private var saveButton: some View {
         Button {
-            var updated = item
-            updated.amount = parsedAmount
-            updated.title = cleanTitle.isEmpty ? selectedCategory.defaultRecordTitle : cleanTitle
-            updated.category = selectedCategory
-            updated.createdAt = selectedDate
-            updated.updatedAt = Date()
-            // 用编辑预览解析出的品牌/情绪标签覆盖，确保改了标题后旧品牌绑定被清掉。
-            updated.merchantBrandId = editPreviewResolution.merchantBrandId
-            updated.emotionTag = editPreviewResolution.emotionTag
-            if onSave(updated) {
+            dismissKeyboard()
+            if onSave(proposedItem, editIntent) {
                 dismiss()
             } else {
                 safetyMessage = "这句备注里可能有隐私信息，先改成更简单的记录。"
@@ -528,8 +644,8 @@ struct RecordEditSheet: View {
                 .shadow(color: AppColors.accent.opacity(0.22), radius: 8, y: 4)
         }
         .buttonStyle(.plain)
-        .disabled(parsedAmount <= 0)
-        .opacity(parsedAmount <= 0 ? 0.56 : 1)
+        .disabled(proposedItem.amount <= 0)
+        .opacity(proposedItem.amount <= 0 ? 0.56 : 1)
     }
 
     private func quietLink(_ title: String, action: @escaping () -> Void) -> some View {

@@ -143,6 +143,11 @@ enum RecordHabitOverridePolicy {
 }
 
 struct RecordPrefillService {
+    private struct HabitTimeContext {
+        let hourBucket: Int
+        let dayKind: RecordCalendarContext.DayKind
+    }
+
     private struct SceneHabit {
         let signal: LifeSceneSignal
         let items: [HomeItem]
@@ -155,7 +160,7 @@ struct RecordPrefillService {
     private let genericCategoryService = CategoryRecommendService()
 
     func prefill(input: RecordPrefillInput) -> RecordPrefillResult? {
-        guard input.amount > 0 else { return nil }
+        guard !Task.isCancelled, input.amount > 0 else { return nil }
         guard !input.categoryLocked else { return nil }
 
         let semanticCategory = RecordSemanticLexicon.semanticCategory(of: input.noteDraft)
@@ -210,9 +215,12 @@ struct RecordPrefillService {
             return genericPrefill(input: input, historyItems: historyItems)
         }
 
+        let referenceContext = habitTimeContext(for: input.referenceDate)
         let candidates = historyItems.filter { item in
-            sameHabitContext(item: item, amount: input.amount, referenceDate: input.referenceDate)
+            !Task.isCancelled
+                && sameHabitContext(item: item, amount: input.amount, referenceContext: referenceContext)
         }
+        guard !Task.isCancelled else { return nil }
         if let sceneHabit = dominantSceneHabit(in: candidates),
            RecordHabitOverridePolicy.allows(
                note: input.noteDraft,
@@ -338,12 +346,13 @@ struct RecordPrefillService {
         input: RecordPrefillInput,
         historyItems: [HomeItem]
     ) -> String? {
+        let referenceContext = habitTimeContext(for: input.referenceDate)
         let sameContext = historyItems.filter { item in
-            item.category == category
+            !Task.isCancelled && item.category == category
                 && sameHabitContext(
                     item: item,
                     amount: input.amount,
-                    referenceDate: input.referenceDate
+                    referenceContext: referenceContext
                 )
         }
         if sameContext.count >= 2,
@@ -352,9 +361,9 @@ struct RecordPrefillService {
         }
 
         let sameTime = historyItems.filter { item in
-            item.category == category
-                && hourBucket(for: item.createdAt) == hourBucket(for: input.referenceDate)
-                && dayKind(for: item.createdAt) == dayKind(for: input.referenceDate)
+            !Task.isCancelled && item.category == category
+                && hourBucket(for: item.createdAt) == referenceContext.hourBucket
+                && dayKind(for: item.createdAt) == referenceContext.dayKind
         }
         if sameTime.count >= 3,
            let title = mostCommonTitle(in: sameTime, category: category, minimumScore: 3) {
@@ -364,21 +373,28 @@ struct RecordPrefillService {
     }
 
     private func dominantSceneHabit(in items: [HomeItem]) -> SceneHabit? {
-        guard items.count >= 3 else { return nil }
+        guard !Task.isCancelled, items.count >= 3 else { return nil }
         let totalSupport = items.reduce(0.0) { $0 + sceneSupportWeight(for: $1) }
-        let grouped = Dictionary(grouping: items) { item in
-            LifeSceneSemanticService.classify(item).kind
+        var classified: [(item: HomeItem, signal: LifeSceneSignal)] = []
+        classified.reserveCapacity(items.count)
+        for item in items {
+            guard !Task.isCancelled else { return nil }
+            classified.append((item: item, signal: LifeSceneSemanticService.classify(item)))
         }
+        let grouped = Dictionary(grouping: classified, by: { $0.signal.kind })
         let ranked = grouped.compactMap { _, rows -> SceneHabit? in
-            guard let dominant = LifeSceneSemanticService.dominantScene(in: rows),
-                  dominant.signal.confidenceTier >= .medium else {
+            // The group already contains exactly one scene kind. Match the
+            // original dominantScene max/tie behavior without classifying twice.
+            guard !Task.isCancelled,
+                  let signal = rows.map({ $0.signal }).max(by: { $0.score < $1.score }),
+                  signal.confidenceTier >= .medium else {
                 return nil
             }
-            let support = rows.reduce(0.0) { $0 + sceneSupportWeight(for: $1) }
-            let activeSupport = rows.reduce(0.0) { $0 + activeUserSupportWeight(for: $1) }
+            let support = rows.reduce(0.0) { $0 + sceneSupportWeight(for: $1.item) }
+            let activeSupport = rows.reduce(0.0) { $0 + activeUserSupportWeight(for: $1.item) }
             return SceneHabit(
-                signal: dominant.signal,
-                items: rows,
+                signal: signal,
+                items: rows.map { $0.item },
                 count: rows.count,
                 confidence: support / max(totalSupport, 0.001),
                 activeSupport: activeSupport
@@ -453,9 +469,13 @@ struct RecordPrefillService {
         }
     }
 
-    private func sameHabitContext(item: HomeItem, amount: Double, referenceDate: Date) -> Bool {
-        hourBucket(for: item.createdAt) == hourBucket(for: referenceDate)
-            && dayKind(for: item.createdAt) == dayKind(for: referenceDate)
+    private func habitTimeContext(for date: Date) -> HabitTimeContext {
+        HabitTimeContext(hourBucket: hourBucket(for: date), dayKind: dayKind(for: date))
+    }
+
+    private func sameHabitContext(item: HomeItem, amount: Double, referenceContext: HabitTimeContext) -> Bool {
+        hourBucket(for: item.createdAt) == referenceContext.hourBucket
+            && dayKind(for: item.createdAt) == referenceContext.dayKind
             && sameAmountContext(historyAmount: item.amount, inputAmount: amount)
     }
 
