@@ -300,3 +300,6 @@ Git 可核对的历史：
 - 生产分支从 `a6f0964` 定向 `cherry-pick -x` 得到 `7b2e3337c871ad8d95bf572112dc1b58374d4591`，再同步交付台账得到 `8475b351569e8c9499db8fe044cb88a3bff3da8c`，已普通推送。生产原有 Apple Sandbox 订阅临时诊断代码、测试和诊断文档未被改动。
 - 生产隔离工作树安装 backend lockfile 依赖后完整 Windows 门禁通过，`release_repository_gate: OK`；连续意图、推荐反馈、餐饮情绪、快捷备注、金额五项专项均通过。
 - 本次只提交本功能代码、测试、报告、签收文档、台账和回归脚本；环境模板、个人 AI 任务卡、素材、输出和缓存仍留在主工作区，未部署或重启服务。
+
+- 最终同步复核补齐生产尚缺的情绪候选接线依赖：生产首次同步仍保留旧 `explicitMealAlternatives` 入口，已定向采用 staging 已验证的解析服务、对应测试和 `meal_emotion_regression.py`，让夜间通勤及同场景候选实际接通。没有同步独立首页滑动改动。
+- 补齐后三文件与 staging 完全一致，五项专项及完整生产 Windows 门禁重跑通过；最终日志/代码 blob 证据见 `C:/Users/yf/AppData/Local/Temp/xuzhang-record-intent-delivery-evidence/`。整个生产 backend 和工程树相对 `a6f0964` 无改动，Sandbox 订阅诊断及生产配置保持；详见台账第 177 节末尾补充。
