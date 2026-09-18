@@ -291,4 +291,12 @@ Git 可核对的历史：
 - 原品牌解绑、兼容品牌保留、原话保护、存储天气及自动照片语义更新继续用于真实改动。备注识别变类不伪记人工分类纠错；主动选原分类可仅建立来源确认，不重算其他事实。没有批量迁移或猜测修复历史账单。
 - 新增 16 项 XCTest：14 项连续状态/解析/解码编辑往返/来源/精度/并发合并/候选事实测试，2 项 UIKit 已提交输入与旧长备注测试。新增 `scripts/record_continuous_intent_regression.py` 并接入原完整门禁，检查真实输入接线、共享解析、候选隔离、两个编辑入口、固定基线和无修改提前返回。原两条静态规则改为检测共享构造器及明确冲突弃用情绪，保留原保护意图，没有删测试。
 - 四项既有专项、新连续链源码专项已通过；语法解析未发现新增诊断，但不等于 Swift 编译或类型检查。测试/生产配置完整 Windows 门禁按各自真实配置独立验证，日志与代码哈希位于 `C:/Users/yf/AppData/Local/Temp/xuzhang-record-intent-baseline-t7ceoyzg/`。生产使用真实 `a6f0964` 的隔离兼容副本，不代表已同步生产分支。
-- 必须剩余验收：本机无 Swift/Xcode，16 项新增 XCTest 尚未执行，尚未编译/Archive/真机验证；`RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 第 8.4 节列出 10 组逐阶段真机签收。最终候选需固定 commit/Archive/Build，运行两配置完整 XCTest 及实际操作矩阵后才可标 VERIFIED。本轮没有提交、推送、部署或改用户账本；保留既有未提交第 171 节修复与其他资料。
+- 必须剩余验收：本机无 Swift/Xcode，16 项新增 XCTest 尚未执行，尚未编译/Archive/真机验证；`RELEASE_1.0_DEVICE_SIGNOFF_TEST_CASES.md` 第 8.4 节列出 10 组逐阶段真机签收。最终候选需固定 commit/Archive/Build，运行两配置完整 XCTest 及实际操作矩阵后才可标 VERIFIED。实现阶段未部署或改用户账本；代码提交与双分支推送结果见下方第 9 节及全局台账第 177 节。
+
+
+## 9. 交付记录（2026-09-18）
+
+- `feature/xuzhangapp-staging` 已提交并推送 `56371938b736827242f435044f0d450b85cc76b8`；随后补充交付台账提交 `267abe59937c8ae73eaa36470f72cf7793962177`，远端与本地一致。
+- 生产分支从 `a6f0964` 定向 `cherry-pick -x` 得到 `7b2e3337c871ad8d95bf572112dc1b58374d4591`，再同步交付台账得到 `8475b351569e8c9499db8fe044cb88a3bff3da8c`，已普通推送。生产原有 Apple Sandbox 订阅临时诊断代码、测试和诊断文档未被改动。
+- 生产隔离工作树安装 backend lockfile 依赖后完整 Windows 门禁通过，`release_repository_gate: OK`；连续意图、推荐反馈、餐饮情绪、快捷备注、金额五项专项均通过。
+- 本次只提交本功能代码、测试、报告、签收文档、台账和回归脚本；环境模板、个人 AI 任务卡、素材、输出和缓存仍留在主工作区，未部署或重启服务。
