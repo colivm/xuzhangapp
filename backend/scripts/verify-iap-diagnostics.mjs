@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import net from "node:net";
 import jwt from "jsonwebtoken";
+import { signedAppleTransaction, appleJwsFixtureRootPath } from "./support/appleJwsFixture.mjs";
 
 // Isolate all settings before import: no developer .env, real Apple, SMS, Redis or DB.
 const source = readFileSync(new URL("../src/config.js", import.meta.url), "utf8");
@@ -18,7 +20,8 @@ Object.assign(process.env, {
   NODE_ENV: "test", PORT: "0", JWT_SECRET: "isolated-iap-diagnostic-test-secret-32-characters",
   SMS_PROVIDER: "dev", DEV_ALLOW_SMS_CODE: "654321", REVIEW_LOGIN_ENABLED: "false",
   IAP_DIAGNOSTICS_ENABLED: "true", IAP_DIAGNOSTICS_PHONE: phone, IAP_DIAGNOSTICS_EXPIRES_AT: settings.expiresAt,
-  APPLE_ISSUER_ID: "diagnostic-test-issuer", APPLE_KEY_ID: "DIAG123456", APPLE_BUNDLE_ID: "com.diag.test",
+  APPLE_ISSUER_ID: "diagnostic-test-issuer", APPLE_KEY_ID: "DIAG123456", APPLE_BUNDLE_ID: "com.diag.test", APPLE_APPLE_ID: "1234567890",
+  APPLE_ROOT_CA_PATHS: fileURLToPath(appleJwsFixtureRootPath),
   APPLE_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }),
   APPLE_APP_STORE_API_BASE_URL: "https://api.storekit.itunes.apple.com",
   IAP_MONTHLY_PRODUCT_ID: products.monthly, IAP_YEARLY_PRODUCT_ID: products.yearly, IAP_LIFETIME_PRODUCT_ID: products.lifetime,
@@ -30,7 +33,7 @@ const { config } = await import("../src/config.js");
 const jws = (payload) => `e30.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.test-signature`;
 const payloadFor = (environment, accountToken = account) => ({
   environment, appAccountToken: accountToken, transactionId, originalTransactionId: transactionId,
-  bundleId: "com.diag.test", productId: products.monthly, expiresDate: start + 3600_000,
+  bundleId: "com.diag.test", productId: products.monthly, expiresDate: start + 3600_000, signedDate: start,
 });
 const raw = {
   phone, accountToken: account, productId: products.monthly, transactionId,
@@ -57,7 +60,7 @@ function harness(overrides = {}) {
     emit: (entry) => entries.push(entry), defer: (run) => queued.push(run),
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
-      return url.includes("sandbox") ? response(200, { signedTransactionInfo: jws(payloadFor("Sandbox")) })
+      return url.includes("sandbox") ? response(200, { signedTransactionInfo: signedAppleTransaction(payloadFor("Sandbox")) })
         : response(401, { errorMessage: "DO_NOT_LOG_APPLE_ERROR", signedTransactionInfo: "DO_NOT_LOG_APPLE_BODY" });
     }, ...overrides,
   });
@@ -145,7 +148,7 @@ badPayload.diagnostics.schedule({ ...raw, signedTransactionInfo: jws({ environme
 await badPayload.run();
 assert.equal(badPayload.entries[0].clientEnvironmentHint, "Unknown");
 assert.ok(badPayload.entries[0].checks.every((check) => check.hasTransactionPayload === false));
-const mismatch = harness({ fetchImpl: async () => response(200, { signedTransactionInfo: jws({
+const mismatch = harness({ fetchImpl: async () => response(200, { signedTransactionInfo: signedAppleTransaction({
   ...payloadFor("Sandbox"), transactionId: "9999999999999999", productId: "SENSITIVE_PRODUCT",
   bundleId: "SENSITIVE_BUNDLE", appAccountToken: "SENSITIVE_ACCOUNT", revocationDate: start - 1000, expiresDate: start - 1000,
 }) }) });
@@ -188,9 +191,9 @@ globalThis.fetch = async (url, options) => {
   assert.equal(jwt.verify(token, publicKey, { algorithms: ["ES256"], audience: "appstoreconnect-v1", issuer: "diagnostic-test-issuer" }).bid, "com.diag.test");
   if (String(url).includes("sandbox")) {
     await sandboxGate;
-    return response(200, { signedTransactionInfo: jws(payloadFor("Sandbox", apiAccount)) });
+    return response(200, { signedTransactionInfo: signedAppleTransaction(payloadFor("Sandbox", apiAccount)) });
   }
-  return successfulPrimary ? response(200, { signedTransactionInfo: jws(payloadFor("Production", apiAccount)) })
+  return successfulPrimary ? response(200, { signedTransactionInfo: signedAppleTransaction(payloadFor("Production", apiAccount)) })
     : new Response("", { status: 401 });
 };
 try {

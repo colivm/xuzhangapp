@@ -6,6 +6,7 @@ import {
   isPlaceholderConfigValue,
   loadApplePrivateKey,
 } from "./config.js";
+import { AppleJwsVerificationError, verifyAppleSignedTransaction } from "./appleJwsVerifier.js";
 
 export class IAPVerifyError extends Error {
   constructor(code, message, status = 400) {
@@ -54,7 +55,21 @@ export async function verifyAppStoreTransaction({ productId, transactionId, sign
   }
 
   const transactionInfo = await resolveTransactionInfo({ productId, transactionId, signedTransactionInfo });
-  const payload = decodeJWSPayload(transactionInfo.signedTransactionInfo);
+  let payload;
+  try {
+    payload = await verifyAppleSignedTransaction(
+      transactionInfo.signedTransactionInfo,
+      transactionInfo.endpointEnvironment || expectedAppleEnvironment(),
+    );
+  } catch (error) {
+    if (error instanceof AppleJwsVerificationError) {
+      const failure = new IAPVerifyError("APPLE_BAD_RESPONSE", "Apple returned an invalid signed transaction.", 502);
+      failure.appleHttpStatus = transactionInfo.appleHttpStatus || 200;
+      failure.appleEndpointEnvironment = transactionInfo.endpointEnvironment || expectedAppleEnvironment();
+      throw failure;
+    }
+    throw error;
+  }
   validateTransactionPayload(payload, {
     productId,
     transactionId,
@@ -87,6 +102,7 @@ function ensureAppleConfig() {
     ["APPLE_ISSUER_ID", config.appleIssuerId],
     ["APPLE_KEY_ID", config.appleKeyId],
     ["APPLE_BUNDLE_ID", config.appleBundleId],
+    ...(expectedAppleEnvironment() === "Production" ? [["APPLE_APPLE_ID", config.appleAppAppleId]] : []),
     ["APPLE_PRIVATE_KEY_PATH", config.applePrivateKeyPath || config.applePrivateKey],
     ["IAP_MONTHLY_PRODUCT_ID", config.iapProductIds.monthly],
     ["IAP_YEARLY_PRODUCT_ID", config.iapProductIds.yearly],
@@ -125,7 +141,15 @@ async function fetchTransactionInfo(transactionId, baseUrl = config.appleAppStor
     error.appleEndpointEnvironment = appleEnvironmentForEndpoint(baseUrl);
     throw error;
   }
-  const json = JSON.parse(text || "{}");
+  let json;
+  try {
+    json = JSON.parse(text || "{}");
+  } catch {
+    const error = new IAPVerifyError("APPLE_BAD_RESPONSE", "Apple returned an invalid response.", 502);
+    error.appleHttpStatus = response.status;
+    error.appleEndpointEnvironment = appleEnvironmentForEndpoint(baseUrl);
+    throw error;
+  }
   if (!json.signedTransactionInfo) {
     const error = new IAPVerifyError("APPLE_BAD_RESPONSE", "Apple response missing signedTransactionInfo.", 502);
     error.appleHttpStatus = response.status;
@@ -253,13 +277,4 @@ function expiresAtFromPayload(payload) {
   }
   const parsed = Date.parse(String(payload.expiresDate));
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
-}
-
-function decodeJWSPayload(jws) {
-  const parts = String(jws || "").split(".");
-  if (parts.length < 2) {
-    throw new IAPVerifyError("INVALID_SIGNED_TRANSACTION", "Invalid signedTransactionInfo.", 400);
-  }
-  const json = Buffer.from(parts[1], "base64url").toString("utf8");
-  return JSON.parse(json);
 }

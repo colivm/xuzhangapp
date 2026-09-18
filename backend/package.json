@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "test": "npm run test:auth-token && npm run test:deleted-account-token && npm run test:nudge-policy && npm run test:ledger-sync && npm run test:iap-environment && npm run test:review-login && npm run test:iap-diagnostics && npm run test:iap-routing",
+    "test": "npm run test:auth-token && npm run test:deleted-account-token && npm run test:nudge-policy && npm run test:ledger-sync && npm run test:iap-environment && npm run test:review-login && npm run test:iap-diagnostics && npm run test:iap-jws && npm run test:iap-routing",
     "test:auth-token": "node scripts/verify-auth-token-ttl.mjs",
     "test:deleted-account-token": "node scripts/verify-deleted-account-token.mjs",
     "test:nudge-policy": "node scripts/verify-nudge-policy.mjs",
@@ -14,9 +14,11 @@
     "test:iap-environment": "node scripts/verify-iap-environment-gate.mjs",
     "test:review-login": "node scripts/verify-review-login.mjs",
     "test:iap-diagnostics": "node scripts/verify-iap-diagnostics.mjs",
+    "test:iap-jws": "node scripts/verify-iap-jws-signature.mjs",
     "test:iap-routing": "node scripts/verify-iap-sandbox-routing.mjs"
   },
   "dependencies": {
+    "@apple/app-store-server-library": "3.1.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",

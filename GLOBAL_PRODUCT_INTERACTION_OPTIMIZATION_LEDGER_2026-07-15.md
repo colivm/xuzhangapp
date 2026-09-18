@@ -5843,6 +5843,26 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 最终依赖复核补充：首次定向同步虽通过生产旧门禁，但逐文件比对发现生产未同步此前 `4a27e6e` 的情绪候选接线：`RecordEmotionCandidateSource` 已存在，`candidates()` 仍调用旧 `explicitMealAlternatives`，夜间通勤候选不可达。仅将 staging `8d5e368` 已验证的 `RecordDraftResolutionService.swift`、`StateRegressionTests.swift`、`scripts/meal_emotion_regression.py` 三文件同步到生产，闭合本轮第 171/176 节依赖；不扩入独立首页滑动或其专项。独立复核确认其余调用方/API 与下层语义文件一致，生产 HomeView 仅增加本次两处编辑意图回调。
 - 最终验证证据：上述三文件补齐后，五项专项再次全部通过；完整生产 Windows gate 重跑退出 0、`release_repository_gate: OK`。日志为 `C:/Users/yf/AppData/Local/Temp/xuzhang-record-intent-delivery-evidence/production-gate.log`，依赖日志及 `validated-git-blobs.json` 同目录。14 个验证文件的 Git blob 与 staging 完全相同（HomeView 保留生产独立首页实现，回调差异已逐行核对）；整个 backend 和工程树相对 `a6f0964` 无差异。staging 产品源码没有新增修改，继续对应第 176 节已通过的双配置证据。此补充通过普通提交推送交付，不改写已推送历史；最终远端头在交付答复中列出。原 `7b2e333` 的首次门禁证据不代替本次最终依赖闭合检查。
 
+### 178. IAP 临时诊断关闭准备与双分支隔离核对（2026-09-18）
+
+- 范围与状态：用户要求关闭临时诊断并核对测试/生产同步。本轮仅完成只读审计和关闭操作交接，线上关闭尚未执行/验收，不改变既有路线任务状态，不启动相邻优化。完整台账阅读沿用本线程证据；本轮唯一文件改动为本节记录。
+- 分支证据：fetch 后 staging `1c9dd86c5d3238afd2a53f8ab55b81ad210c956d`、production `b60bf71f8d90e09d9e20f735bddda055eebfc1da` 各与 origin 一致。两分支整个 backend tree 均为 `13d61e6d155f64c060e1bcfb0dd0e584ce8a375d`，IAP 路由、诊断、配置模板和测试无需再次同步；不是线上部署版本一致的证明。
+- 双环境检查：跨分支仅台账、project.pbxproj、HomeView.swift、home_swipe_regression.py 四文件有差异。工程差异仅测试 Debug/Release 的 STAGING 两条编译条件；两分支 bundle 均为 com.xuzhang.app，相同 AppSettings.swift 按 STAGING 分流 staging-api 与 api 域名。backend 的环境校验仍要求 production 主端点 Production、staging 主端点 Sandbox，生产 TestFlight 的匹配 Sandbox 交易由既有路由补丁处理，不把生产全局配置改为 Sandbox。业务域名、数据库、Redis 空间、JWT、端口和 PM2 服务继续隔离，不复制整份 .env。
+- 非环境差异：首页两文件的跨分支补丁与旧 4a27e6e 首页部分 stable patch-id 同为 `f94ac423484c6c05c1038bf7e543cee4ba456509`；第 177 节明确未纳入该独立首页滑动补丁。其属于尚未同步的业务优化，不是必须永久隔离的配置；本轮不擅自合并或宣称全仓完全一致。
+- 诊断关闭边界：config.js 和 .env.iap-diagnostics.example 均默认 false；仅默认关闭或到期不等于线上已持久关闭。对文档服务器进行一次短时、严格主机校验、非交互 SSH 探测，返回 Permission denied (publickey,password)，未获得服务器执行权限，未修改线上文件或重启服务。交接步骤为分别在 /opt/xuzhang/xuzhangapp/backend/.env 与 /opt/xuzhang/xuzhangapp-staging/backend/.env 设置 IAP_DIAGNOSTICS_ENABLED=false，并显式携带该 false 值分别 pm2 restart backend / backend-staging --update-env，避免旧 PM2 环境覆盖文件；两套 health 与关闭状态需收到操作结果后验收。保留审核登录、其他 IAP 配置、账号/交易和原日志。
+- 验证与保护：主代理与独立只读审阅交叉核对分支 tree、工程两行差异和首页补丁范围；没有业务代码变更，不重复完整门禁，沿用第 174/176/177 节测试证据。用户 backend/.env.staging.example SHA256 保持 `48FF5A142D67DBEAD8817432F23CE2A089C9A11C54D0A9D1B41622A30F8CD92C`；全部未跟踪素材、输出和既有 worktree 保留。没有提交、推送、部署、私钥读取或全量运行环境输出。
+- 剩余风险与下一步：先由有权限的操作者关闭两环境诊断并核对服务健康/有效开关。用户已验收生产配置 TestFlight 的 Sandbox 购买、恢复和加速到期，不要求重复此验收；真实 Apple Production 401 授权原因及既有 JWS 签名链缺口仍未解决，不能据此宣称真实收费链路已完成验收。首页业务补丁是否同步需单独定向处理，个人 AI 池及其他路线不启动。
+
+### 179. IAP 支付安全缺口只读复核（2026-09-18）
+
+- 状态：`ANALYSIS`，未进入实现；本轮承接“诊断关闭后继续”的支付风险核查，不改变交易路由、401 fallback、账号绑定、环境配置或会员授予规则。
+- 线上状态：生产与 staging `/health` 均返回 `ok: true`；生产诊断关闭由操作者完成重启，但本机仍无 SSH 权限，无法读取 PM2 有效环境快照，因此不把 health 当作开关验收证据。staging 未配置诊断开关，代码默认 `false`，保持不动。
+- 确定缺口：`backend/src/iapService.js` 的 Apple 响应信任路径仅通过 split/base64url/JSON.parse 读取 `signedTransactionInfo`，未验证 compact JWS 三段、protected `alg=ES256`、`x5c` 证书链、Apple Root CA、证书有效期或签名；商品、bundle、环境、账号和会员写入建立在未验签 payload 上。客户端 JWS 仍只能作为有界 Sandbox 路由 hint，不能升级为权益依据。诊断日志明确 `signatureVerified=false`，不应改作授权路径。
+- 最小后续任务：单独建立服务端 Apple JWS verifier（固定 Apple 信任锚、证书链/用途/有效期/ES256 验签），在现有业务字段校验和交易绑定之前执行；无效响应映射稳定的 `IAPVerifyError`，并补有效链、篡改、错误签名、非 Apple 证书、错误算法、段数/大小边界及“无交易/无会员写入”测试。不得借此修改客户端 hint、Production 401 回退、沙盒路由或账号迁移合同。
+- 401 结论：现有交易查询的 Production `401` 仍只能证明该次生产端点授权失败；Sandbox `200` 不足以区分 App Store Server API key 权限、issuer/key/bundle/JWT 或端点上下文。需要另行执行不带 transactionId 的 Apple Notification History 只读授权探测后再定位，不在本轮凭猜测改密钥或 endpoint。
+- 证据与保护：审计结论来自 `iapService.js`、诊断/路由专项及既有测试；当前 backend 测试覆盖路由和边界但没有真实 x5c 链验签 fixture。没有代码、依赖、服务器配置、交易数据、提交或推送变更。下一任务为用户明确授权后的独立 IAP JWS 验签修复与双环境测试。
+
+
 ### 179. FIRST-USE-PERMISSION-SYNC-FEEDBACK-01：首次记账定位与联网备份反馈（2026-09-18）
 
 - 状态：`IN_PROGRESS` → `CODE_DONE`，当前无进行中的实现任务，未标记 VERIFIED。用户要求首次记账不申请非必要定位，天气场景才按需使用并说明用途；同时反馈拒绝“无线局域网与蜂窝网络”后仍显示云同步成功。本线程完整台账阅读沿用第 175/176 节记录，新增第 178 节及第 80/108/114 节边界已核对；保留第 178 节未提交内容。
@@ -5858,3 +5878,13 @@ xcodebuild test -project NativeDemoApp.xcodeproj -scheme NativeDemoApp -destinat
 - 双环境完整验证：staging `1c9dd86` 当前工作区、真实 production `b60bf71` 的隔离副本分别完整运行 Windows release gate，退出码均 0、release_repository_gate: OK，仅既有七条文案软提示。日志为上述证据目录 staging-gate.log、production-gate.log，依赖日志及 validated-file-hashes.json 同目录；13 个验证文件在两份实际运行代码中哈希完全一致。后端/订阅诊断、两套工程、分类解析/HomeItem/同步字段和用户环境模板均未改，台账原第 178 节前缀逐字节保留，未跟踪素材/输出仍保留。
 - 剩余风险与下一任务：签收文档第 8.5 节增加 10 组流程，均未运行；需 Mac 编译/完整 XCTest，真机首笔无定位索权、明确天气启用/拒绝/撤权，以及用户仅蜂窝网络拒绝后登录/同步现场复现与恢复重试。需绑定实际包 commit/Build 和系统状态；不能用 Windows 门禁替代权限弹窗/服务器实测。完成本次必要真机证据后再决定 VERIFIED；本轮未提交、推送、部署或重启服务，不自动续做诊断关闭或首页同步。
 - 后续交付授权与范围（2026-09-18）：用户明确“提交推送，先不同步生产分支”，本次仅提交并推送 `feature/xuzhangapp-staging` 的上述 13 个实现/检查/签收文件及本节台账；第 178 节、用户环境模板和其他未跟踪资料继续留在工作区。提交前 13 个文件 SHA256 与双配置完整门禁通过时的清单全部一致，沿用既有证据，不重复无变更的全量检查；额外核对暂存范围及 `git diff --check`。使用普通提交和显式单分支推送，不同步 `xuzhang1.0-release-2026`，不部署或重启；交付前生产 HEAD 为 `b60bf71f8d90e09d9e20f735bddda055eebfc1da`，提交/远端结果在交付答复中记录。状态保持 CODE_DONE，下一步仍为 Mac/XCTest 和上述真机签收。
+
+### 180. IAP Apple JWS 服务端验签实现（2026-09-18）
+
+- 状态：`IN_PROGRESS` → `CODE_DONE`，尚未部署。用户明确要求“先单独实现服务端 Apple JWS 验签”；范围仅覆盖 Apple 返回交易 JWS 的信任验证和 backend 测试，不启动 Production 401 探测、客户端改动、沙盒路由改动、账号迁移或其他产品任务。
+- 实现：引入 Apple 官方 `@apple/app-store-server-library@3.1.0`；新增 `appleJwsVerifier.js`，在商品/账号/期限/绑定/会员写入前严格要求 compact JWS 三段、`alg=ES256`、三张 `x5c` 证书、大小上限，并用固定 Apple Root CA G2/G3、证书链、Apple OID、有效期和签名校验。验签失败统一为 `APPLE_BAD_RESPONSE`/502；上游 200 非 JSON 也不再冒泡为 500。客户端 JWS 仍只作受限 Sandbox endpoint hint。
+- 配置：Production 新增必填服务器环境 `APPLE_APPLE_ID`（App Store Connect 数字 App ID）；staging Sandbox 不需要。根证书默认随 backend `certs/` 部署，`APPLE_ROOT_CA_PATHS` 仅允许经审阅的替换路径；`APPLE_JWS_ONLINE_CHECKS=false` 默认做签名/链/证书日期校验，不发起 OCSP 网络请求。当前生产真实 `.env` 未改，部署前必须补数字 App ID 并随代码包带上根证书和新依赖。
+- 测试：新增 TEST-ONLY 合成三证书链和私钥，明确禁止部署；新增 `verify-iap-jws-signature.mjs` 覆盖 Production/Sandbox 有效链、签名/载荷篡改、错误算法、缺失/错误链长、超大 JWS 和不受信任根；路由专项 Apple mock 改用真实签名 JWS，保留伪造客户端 hint，并新增篡改 Apple 响应无会员/交易写入断言。2026-09-18 backend `npm test` 通过：原 auth/deleted/nudge/ledger/env/review/diagnostics，加 JWS 专项与 153 场景 IAP routing；`npm ci --ignore-scripts --no-audit --no-fund`、`git diff --check`、package JSON 解析均通过。
+- 证书来源与保护：生产 `apple-root-ca-g2.cer` SHA-256 `C2B9B042DD57830E7D117DAC55AC8AE19407D38E41D88F3215BC3A890444A050`，G3 SHA-256 `63343ABFB89A6A03EBB57E9B3F5FA7BE7C4F5C756F3017B3A8C488C3653E9179`，均来自 Apple PKI；测试 leaf 私钥仅在 `scripts/fixtures/apple-jws-test/`，不进入生产部署包。`npm ci --ignore-scripts --no-audit --no-fund` 通过。
+- Windows staging release gate（`python scripts/validate_release_gate.py --phase windows --release-branch feature/xuzhangapp-staging`）已完成并返回 `release_repository_gate: OK`，包含 fixtures、IAP environment gate、静态/体验检查和双配置边界检查。
+- 剩余风险与下一步：尚未在真实 Production/Sandbox server env 上运行验单；需先配置并审阅真实 `APPLE_APPLE_ID`、确认 cert 资源随包部署，再在 staging 和 production 隔离副本运行 backend gate 和真实沙盒恢复，之后才可部署。Production 401 原因仍是独立问题，JWS 验签修复不等于 Apple API JWT 授权已修复；Apple Root/库版本升级和 OCSP 策略另行审阅。本轮不部署或重启服务器。

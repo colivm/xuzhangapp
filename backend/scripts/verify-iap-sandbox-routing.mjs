@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import net from "node:net";
 import jwt from "jsonwebtoken";
+import { appleJwsFixtureRootPath, signedAppleTransaction } from "./support/appleJwsFixture.mjs";
 
 // Set every config input before importing application modules. dotenv cannot
 // replace these values with developer credentials, DB/Redis URLs or SMS settings.
@@ -19,7 +21,9 @@ Object.assign(process.env, {
   NODE_ENV: "test", PORT: "0", JWT_SECRET: "isolated-iap-routing-test-secret-32-characters",
   SMS_PROVIDER: "dev", DEV_ALLOW_SMS_CODE: "654321", REVIEW_LOGIN_ENABLED: "false",
   IAP_DIAGNOSTICS_ENABLED: "false", APPLE_ISSUER_ID: "routing-test-issuer", APPLE_KEY_ID: "ROUTE12345",
-  APPLE_BUNDLE_ID: bundleId, APPLE_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }),
+  APPLE_BUNDLE_ID: bundleId, APPLE_APPLE_ID: "1234567890",
+  APPLE_ROOT_CA_PATHS: fileURLToPath(appleJwsFixtureRootPath),
+  APPLE_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }),
   APPLE_APP_STORE_API_BASE_URL: "https://api.storekit.itunes.apple.com",
   IAP_MONTHLY_PRODUCT_ID: products.monthly, IAP_YEARLY_PRODUCT_ID: products.yearly,
   IAP_LIFETIME_PRODUCT_ID: products.lifetime,
@@ -42,7 +46,7 @@ const hintPayload = (patch = {}) => ({ environment: "Sandbox", transactionId, pr
 const matchingHint = jws(hintPayload());
 const applePayload = (environment, patch = {}) => ({
   environment, transactionId, originalTransactionId: transactionId, productId: products.monthly,
-  bundleId, appAccountToken: account, expiresDate, ...patch,
+  bundleId, appAccountToken: account, expiresDate, signedDate: Date.now(), ...patch,
 });
 let scenarios = 0;
 
@@ -66,7 +70,7 @@ function mockApple(plan) {
     calls.push(address);
     const status = next.status || 200;
     const body = next.body !== undefined ? next.body : status === 200
-      ? JSON.stringify({ signedTransactionInfo: jws(applePayload(next.environment, next.payload)) }) : "";
+      ? JSON.stringify({ signedTransactionInfo: signedAppleTransaction(applePayload(next.environment, next.payload)) }) : "";
     return new Response(body, { status, headers: { "content-type": "application/json" } });
   };
   return {
@@ -193,9 +197,9 @@ try {
   const rejectedPayloads = [
     ["PRODUCT_MISMATCH", { productId: products.yearly }],
     ["TRANSACTION_MISMATCH", { transactionId: "2000000999999999" }],
-    ["BUNDLE_MISMATCH", { bundleId: "com.other.test" }],
-    ["IAP_ENVIRONMENT_MISMATCH", { environment: "Production" }],
-    ["IAP_ENVIRONMENT_MISMATCH", { environment: undefined }],
+    ["APPLE_BAD_RESPONSE", { bundleId: "com.other.test" }],
+    ["APPLE_BAD_RESPONSE", { environment: "Production" }],
+    ["APPLE_BAD_RESPONSE", { environment: undefined }],
     ["APP_ACCOUNT_MISMATCH", { appAccountToken: otherAccount }],
     ["TRANSACTION_EXPIRED", { expiresDate: Date.now() - 60_000 }],
     ["TRANSACTION_EXPIRED", { expiresDate: undefined }],
@@ -312,7 +316,9 @@ try {
     });
   }
   for (const [error, payload] of rejectedPayloads.filter(([code]) => code !== "APP_ACCOUNT_MISMATCH")) {
-    await rejectHTTP(`HTTP Apple response enforces ${error}`, { error, payload, status: 400 });
+    await rejectHTTP(`HTTP Apple response enforces ${error}`, {
+      error, payload, status: error === "APPLE_BAD_RESPONSE" ? 502 : 400,
+    });
   }
   for (const appleStatus of [401, 404, 500]) {
     await rejectHTTP(`forged client payload cannot grant after Sandbox ${appleStatus}`, {
@@ -321,6 +327,12 @@ try {
   }
   await rejectHTTP("client cannot substitute for absent Apple transaction", {
     appleBody: "{}", status: 502, error: "APPLE_BAD_RESPONSE",
+  });
+  const signedForTamper = signedAppleTransaction(applePayload("Sandbox"));
+  const tamperParts = signedForTamper.split(".");
+  const tamperedAppleJws = `${tamperParts[0]}.${tamperParts[1]}.${tamperParts[2].startsWith("A") ? "B" : "A"}${tamperParts[2].slice(1)}`;
+  await rejectHTTP("tampered Apple signed transaction cannot grant", {
+    appleBody: { signedTransactionInfo: tamperedAppleJws }, status: 502, error: "APPLE_BAD_RESPONSE",
   });
 
   // Simulate a lost local entitlement; restoring the bound account remains valid,
