@@ -207,57 +207,43 @@ enum RecordEmotionScenePolicy {
         let seed = [context.title, context.semanticAnchor].compactMap { $0 }.joined(separator: "|")
         let allowedRules = Set(RecordSemanticLexicon.matchingEmotionRuleIDs(in: note + " " + context.previewEmotionTag))
         let automaticDisplayTag = context.item(emotionTag: context.automaticEmotionTag).displayEmotionTag
-        let mealAlternatives = explicitMealAlternatives(for: context)
         var result: [String] = []
         var seen: Set<String> = []
-        for index in 0..<24 {
-            if Task.isCancelled { return [] }
-            let tag: String
-            if index == 0 {
-                tag = context.previewEmotionTag
-            } else if index <= mealAlternatives.count {
-                tag = mealAlternatives[index - 1]
-            } else {
-                tag = NarrativeCopyResolver.resolveEmotionTag(
-                    context: NarrativeCopyResolver.Context(
-                        brandId: context.merchantBrandID, category: context.category,
-                        amount: context.amount, date: context.date,
-                        seed: seed + "|emotionChoice:\(index)", note: note, scenePackId: context.scenePackID
-                    )
-                )
-            }
+
+        // Both sources pass the same gate, including the save-time revalidation.
+        func appendIfCompatible(_ tag: String) {
             guard !tag.isEmpty, seen.insert(tag).inserted,
                   RecordSemanticLexicon.isTitle(tag, compatibleWith: context.category),
                   Set(RecordSemanticLexicon.matchingEmotionRuleIDs(in: tag)).isSubset(of: allowedRules),
                   context.item(emotionTag: tag).displayEmotionTag == tag,
                   legacyFactSignature(tag) == legacyFactSignature(automaticDisplayTag),
                   rewardFactSignature(title: context.title, tag: tag)
-                    == rewardFactSignature(title: context.title, tag: automaticDisplayTag) else { continue }
+                    == rewardFactSignature(title: context.title, tag: automaticDisplayTag) else { return }
             result.append(tag)
+        }
+
+        for index in 0..<24 {
+            if Task.isCancelled { return [] }
+            let tag = index == 0 ? context.previewEmotionTag : NarrativeCopyResolver.resolveEmotionTag(
+                context: NarrativeCopyResolver.Context(
+                    brandId: context.merchantBrandID, category: context.category,
+                    amount: context.amount, date: context.date,
+                    seed: seed + "|emotionChoice:\(index)", note: note, scenePackId: context.scenePackID
+                )
+            )
+            appendIfCompatible(tag)
             if result.count == 6 { break }
         }
+        // Preserve existing working pools/order. Only a collapsed pool needs the
+        // local semantic source; never change the automatic default or draft facts.
+        if result.count < 2 {
+            for tag in RecordEmotionCandidateSource.alternatives(for: context) {
+                if Task.isCancelled { return [] }
+                appendIfCompatible(tag)
+                if result.count == 6 { break }
+            }
+        }
         return result
-    }
-
-    /// Only plain meal notes opt in. Food, brands, conflicting anchors and enhanced
-    /// defaults keep the existing resolver; no automatic or stored label is changed.
-    private static func explicitMealAlternatives(for context: RecordEmotionSceneContext) -> [String] {
-        guard context.category == .dining, context.merchantBrandID == nil else { return [] }
-        let meals: [(titles: Set<String>, canonical: String, alternatives: [String])] = [
-            (["早餐", "早饭", "早餐记一笔", "这顿早餐先记下", "早餐花费记下来"],
-             "早餐先记下", ["早餐这顿记下", "这顿早饭记下", "早餐留一笔"]),
-            (["午餐", "午饭", "中午", "午餐记一笔", "这顿午饭先记下", "午餐花费记下来"],
-             "中午一顿饭", ["午餐这顿记下", "这顿午饭记下", "午餐留一笔"]),
-            (["晚餐", "晚饭", "晚餐记一笔", "这顿晚饭先记下", "晚餐花费记下来"],
-             "晚饭时间坐一会儿", ["晚餐这顿记下", "这顿晚饭记下", "晚餐留一笔"])
-        ]
-        let title = context.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let anchor = context.semanticAnchor?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard let meal = meals.first(where: { $0.titles.contains(title) }),
-              anchor.isEmpty || meal.titles.contains(anchor),
-              context.previewEmotionTag == meal.canonical,
-              context.automaticEmotionTag == meal.canonical else { return [] }
-        return meal.alternatives
     }
 
     static func next(after current: String, candidates: [String]) -> String? {

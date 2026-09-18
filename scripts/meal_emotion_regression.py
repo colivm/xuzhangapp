@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Source contracts for plain-meal emotion choices, not Swift runtime validation."""
+"""Source contracts for semantic dining choices, not Swift runtime validation."""
 
 from pathlib import Path
 import re
@@ -15,22 +15,32 @@ def section(source, start, end):
     return source.split(start, 1)[1].split(end, 1)[0]
 
 
-helper = section(service, "private static func explicitMealAlternatives(", "static func next(")
+helper = section(service, "enum RecordEmotionCandidateSource {", "enum RecordDraftResolutionService {")
 for contract in (
     "context.category == .dining", "context.merchantBrandID == nil",
-    "$0.titles.contains(title)", "anchor.isEmpty || meal.titles.contains(anchor)",
-    "context.previewEmotionTag == meal.canonical", "context.automaticEmotionTag == meal.canonical",
+    "MerchantBrandCatalog.matchBrand(in: context.title) == nil",
+    "anchor.isEmpty || self.scene(in: anchor) == scene",
+    "context.previewEmotionTag == canonical", "context.previewEmotionTag == context.automaticEmotionTag",
+    "let scene = scene(in: context.title)", "DiningCopyEvidencePolicy.specificKind(in: text)",
+    'rules.isSubset(of: ["meal", "drink", "convenience"])', "explicitMeals.count <= 1",
+    'case .coffee: return .coffee', 'case .drink: return .drink',
+    'matchingEmotionRuleIDs(in: context.previewEmotionTag).contains("meal")',
 ):
     assert contract in helper, contract
-rows = re.findall(r'\(\[([^\]]+)\],\s*"([^"]+)", \[([^\]]+)\]\)', helper)
-assert len(rows) == 3
+assert "explicitMealAlternatives" not in service
 templates = section(model, "static func templates(for category:", "static func isCompatible(")
 generic = section(item, "private static func shouldPreferRefinedTag(", "private static func correctedStoredEmotionTag(")
-for (titles_source, canonical, variants_source), band in zip(rows, (0, 1, 3)):
-    titles = set(re.findall(r'"([^"]+)"', titles_source))
+for name, band in (("breakfast", 0), ("lunch", 1), ("dinner", 3)):
+    cues_source = re.search(rf'\(\.{name}, \[([^\]]+)\]\)', helper).group(1)
+    cues = re.findall(r'"([^"]+)"', cues_source)
+    variants_source = re.search(rf'case \.{name}: return \[([^\]]+)\]', helper).group(1)
     variants = re.findall(r'"([^"]+)"', variants_source)
+    canonical = re.search(rf'case \.{name}: return "([^"]+)"', helper).group(1)
     template_source = re.search(rf'case {band}: return \[([^\]]+)\]', templates).group(1)
-    assert set(re.findall(r'"([^"]+)"', template_source)).issubset(titles)
+    titles = re.findall(r'"([^"]+)"', template_source)
+    assert len(titles) == 3
+    assert all(any(cue in title for cue in cues) for title in titles)
+    assert all(f'"{title}"' not in helper for title in titles)  # No full-template whitelist.
     assert len(variants) == len(set(variants)) == 3
     assert f'return "{canonical}"' in item  # Existing default is still present.
     for variant in variants:
@@ -38,13 +48,17 @@ for (titles_source, canonical, variants_source), band in zip(rows, (0, 1, 3)):
         assert f'"{variant}"' not in generic  # Must not be collapsed to the default on display.
         assert not any(word in variant for word in ("上班", "下班", "加班", "热", "雨", "外地", "旅行"))
 
-candidates = section(service, "static func candidates(", "private static func explicitMealAlternatives(")
+candidates = section(service, "static func candidates(", "static func next(")
 assert "for index in 0..<24" in candidates and "if Task.isCancelled { return [] }" in candidates
-assert "tag = context.previewEmotionTag" in candidates
-assert "tag = mealAlternatives[index - 1]" in candidates
-assert candidates.index("tag = mealAlternatives[index - 1]") < candidates.index("guard !tag.isEmpty")
+assert "index == 0 ? context.previewEmotionTag" in candidates
+assert "if result.count < 2" in candidates
+assert candidates.index("for index in 0..<24") < candidates.index("if result.count < 2")
+assert "for tag in RecordEmotionCandidateSource.alternatives(for: context)" in candidates
+assert candidates.count("appendIfCompatible(tag)") == 2  # Both sources use identical guards.
+assert candidates.count("if Task.isCancelled { return [] }") == 2
 for contract in (
-    "seen.insert(tag).inserted", "isSubset(of: allowedRules)", "displayEmotionTag == tag",
+    "seen.insert(tag).inserted", "RecordSemanticLexicon.isTitle(tag, compatibleWith: context.category)",
+    "isSubset(of: allowedRules)", "displayEmotionTag == tag",
     "legacyFactSignature(tag) == legacyFactSignature(automaticDisplayTag)",
     "rewardFactSignature(title: context.title, tag: tag)", "if result.count == 6 { break }",
 ):
@@ -55,4 +69,14 @@ assert "selection.context.automaticEmotionTag == automaticEmotionTag" in validat
 assert "preparedEmotionCandidates.count > 1" in view
 assert "?? automaticEmotionTag" in model
 
-print("meal_emotion_regression: OK (3 meal groups, 9 quick templates, unchanged selection safeguards; source checks only)")
+for cue in ("雨天", "下雪", "加班", "上班", "晚归", "夜宵", "宵夜", "深夜", "凌晨", "夜市", "夜摊"):
+    assert f'"{cue}"' in helper
+assert '"雪"' not in helper and 'case .noodles: return .food("餐食")' in helper
+for name in ("coffee", "drink", "food(let subject)"):
+    variants_source = re.search(rf'case \.{re.escape(name)}: return \[([^\]]+)\]', helper).group(1)
+    assert len(re.findall(r'"([^"]+)"', variants_source)) == 3
+# New sources stay local and bounded; they cannot perform remote or history expansion.
+for forbidden in ("URLSession", "UserDefaults", "homeViewModel", "DispatchQueue", "Task {"):
+    assert forbidden not in helper
+
+print("meal_emotion_regression: OK (semantic meal/coffee/drink/food sources, 9 quick templates, singleton-only fallback and shared save/fact guards; source checks only)")

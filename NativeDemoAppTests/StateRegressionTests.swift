@@ -13087,7 +13087,7 @@ final class RecordEmotionScenePolicyTests: XCTestCase {
         let date = mealDate(hour: 17)
         for title in [
             "晚餐咖啡", "晚餐馄饨", "罗森晚餐", "加班晚餐", "雨天晚餐",
-            "早餐晚餐", "午餐晚饭", "晚餐夜宵", "晚餐宵夜", "今天晚饭",
+            "早餐晚餐", "午餐晚饭", "晚餐夜宵", "晚餐宵夜",
         ] {
             let resolved = mealResolution(title, at: date, generated: false)
             let scene = mealContext(resolved, at: date)
@@ -13131,6 +13131,150 @@ final class RecordEmotionScenePolicyTests: XCTestCase {
                 selection: selection, resolution: draft, amount: amount, date: date,
                 scenePackID: packID, automaticEmotionTag: automatic
             ))
+        }
+    }
+
+    func testLockedLuckinAt1926CyclesAndSavesWithoutChangingDefaultOrCategoryLock() throws {
+        let date = mealDate(hour: 19, minute: 26)
+        func resolve(source: String) -> RecordDraftResolution {
+            RecordDraftResolutionService.resolve(.init(
+                rawTitle: "瑞幸咖啡", fallbackCategory: .dining, amount: 12.9, date: date,
+                merchantBrandId: nil, categoryLockedByUser: true,
+                userEditedTitle: true, source: source
+            ))
+        }
+        let preview = resolve(source: "preview")
+        let saved = resolve(source: "manual")
+        let scene = RecordEmotionSceneContext(
+            title: preview.title, category: preview.category, amount: 12.9, date: date,
+            merchantBrandID: preview.merchantBrandId, scenePackID: nil, semanticAnchor: preview.title,
+            previewEmotionTag: preview.emotionTag, automaticEmotionTag: saved.emotionTag
+        )
+        for resolved in [preview, saved] {
+            XCTAssertEqual(resolved.title, "瑞幸咖啡")
+            XCTAssertEqual(resolved.category, .dining)
+            XCTAssertNil(resolved.merchantBrandId)
+            XCTAssertTrue(resolved.trace.contains("category:userLocked"))
+            XCTAssertEqual(resolved.emotionTag, "买杯喝的")
+        }
+        let choices = RecordEmotionScenePolicy.candidates(for: scene)
+        XCTAssertGreaterThan(choices.count, 1)
+        XCTAssertLessThanOrEqual(choices.count, 6)
+        XCTAssertEqual(choices.first, saved.emotionTag)
+        XCTAssertEqual(choices, RecordEmotionScenePolicy.candidates(for: scene))
+        XCTAssertEqual(Set(choices).count, choices.count)
+        var current = try XCTUnwrap(choices.first)
+        var visited: [String] = []
+        for _ in choices.indices {
+            visited.append(current)
+            XCTAssertEqual(RecordEmotionScenePolicy.validatedTag(
+                selection: .init(context: scene, tag: current), resolution: saved,
+                amount: 12.9, date: date, scenePackID: nil,
+                automaticEmotionTag: saved.emotionTag
+            ), current)
+            XCTAssertEqual(scene.item(emotionTag: current).displayEmotionTag, current)
+            current = try XCTUnwrap(RecordEmotionScenePolicy.next(after: current, candidates: choices))
+        }
+        XCTAssertEqual(visited, choices)
+        XCTAssertEqual(current, choices.first)
+        XCTAssertNil(RecordEmotionScenePolicy.validatedTag(
+            selection: nil, resolution: saved, amount: 12.9, date: date,
+            scenePackID: nil, automaticEmotionTag: saved.emotionTag
+        ))
+        XCTAssertEqual(saved.emotionTag, "买杯喝的")
+    }
+
+    func testNaturalDinnerTitleUsesMealSemanticsBeyondQuickTemplateWhitelist() {
+        let date = mealDate(hour: 17)
+        let resolved = mealResolution("今天晚饭", at: date, generated: false, source: "manual")
+        let scene = mealContext(resolved, at: date, anchor: "今晚晚饭")
+        let quick = mealResolution("晚餐记一笔", at: date, generated: true)
+        let choices = RecordEmotionScenePolicy.candidates(for: scene)
+        XCTAssertEqual(resolved.title, "今天晚饭")
+        XCTAssertEqual(resolved.emotionTag, "晚饭时间坐一会儿")
+        XCTAssertGreaterThan(choices.count, 1)
+        XCTAssertEqual(choices, RecordEmotionScenePolicy.candidates(for: mealContext(quick, at: date)))
+        XCTAssertTrue(Set(RecordEmotionCandidateSource.alternatives(for: scene)).isSubset(of: Set(choices)))
+        for tag in choices {
+            XCTAssertEqual(RecordEmotionScenePolicy.validatedTag(
+                selection: .init(context: scene, tag: tag), resolution: resolved,
+                amount: 18.5, date: date, scenePackID: nil,
+                automaticEmotionTag: resolved.emotionTag
+            ), tag)
+            XCTAssertEqual(scene.item(emotionTag: tag).displayEmotionTag, tag)
+        }
+    }
+
+    func testCollapsedCoffeeDrinkAndFoodPoolsGainOnlyCompatibleSemanticChoices() {
+        for title in ["咖啡", "奶茶", "饭团", "牛肉面", "米粉", "麻辣烫"] {
+            let scene = context(title: title, brandID: nil)
+            let alternatives = RecordEmotionCandidateSource.alternatives(for: scene)
+            let choices = RecordEmotionScenePolicy.candidates(for: scene)
+            XCTAssertEqual(alternatives.count, 3, title)
+            XCTAssertGreaterThan(choices.count, 1, title)
+            XCTAssertLessThanOrEqual(choices.count, 6, title)
+            XCTAssertEqual(choices.first, scene.previewEmotionTag, title)
+            XCTAssertTrue(Set(alternatives).isSubset(of: Set(choices)), title)
+            for tag in choices {
+                XCTAssertEqual(scene.item(emotionTag: tag).displayEmotionTag, tag, title)
+            }
+            if ["米粉", "麻辣烫"].contains(title) {
+                XCTAssertTrue(alternatives.allSatisfy { $0.contains("餐食") && !$0.contains("面") }, title)
+            }
+        }
+        // The character 雪 in a drink name is not evidence of snowy weather.
+        let soda = context(title: "雪碧", brandID: nil)
+        XCTAssertEqual(RecordEmotionCandidateSource.alternatives(for: soda).count, 3)
+        XCTAssertGreaterThan(RecordEmotionScenePolicy.candidates(for: soda).count, 1)
+    }
+
+    func testSemanticFallbackRejectsStrongContextsConflictsAndInsufficientEvidence() {
+        let rejected = [
+            context(title: "加班咖啡", brandID: nil),
+            context(title: "雨天奶茶", brandID: nil),
+            context(title: "下雪咖啡", brandID: nil),
+            context(title: "深夜牛肉面", brandID: nil),
+            context(title: "早餐晚饭", brandID: nil),
+            context(title: "咖啡", brandID: nil, anchor: "奶茶"),
+            context(title: "牛肉面", brandID: nil, anchor: "饭团"),
+            context(title: "瑞幸", brandID: nil),
+            context(title: "一杯", brandID: nil),
+            context(title: "馄饨", brandID: nil),
+            context(title: "咖啡", category: .shopping, brandID: nil),
+            context(title: "奶茶", brandID: nil, preview: "雨天路上", automatic: "买杯喝的"),
+            context(title: "奶茶", brandID: nil, preview: "晚饭时间坐一会儿", automatic: "晚饭时间坐一会儿"),
+        ]
+        for scene in rejected {
+            XCTAssertTrue(RecordEmotionCandidateSource.alternatives(for: scene).isEmpty, scene.title)
+        }
+        let transit = context(title: "上班地铁", category: .transport, amount: 4, brandID: nil, packID: "commute")
+        XCTAssertTrue(RecordEmotionCandidateSource.alternatives(for: transit).isEmpty)
+        XCTAssertEqual(RecordEmotionScenePolicy.candidates(for: transit), ["公共交通一段"])
+    }
+
+    func testWorkingBrandedPoolsKeepOriginalResolverScanOrderWithoutSupplementing() {
+        for scene in [context(), context(title: "罗森咖啡"), context(title: "罗森饮料", amount: 8), context(title: "罗森便当")] {
+            let allowedRules = RecordSemanticLexicon.matchingEmotionRuleIDs(in: scene.title + " " + scene.previewEmotionTag)
+            var expected: [String] = []
+            for index in 0..<24 {
+                let tag = index == 0 ? scene.previewEmotionTag : NarrativeCopyResolver.resolveEmotionTag(
+                    context: .init(
+                        brandId: scene.merchantBrandID, category: scene.category,
+                        amount: scene.amount, date: scene.date,
+                        seed: scene.title + "|emotionChoice:\(index)", note: scene.title,
+                        scenePackId: scene.scenePackID
+                    )
+                )
+                if !expected.contains(tag),
+                   RecordSemanticLexicon.isTitle(tag, compatibleWith: scene.category),
+                   RecordSemanticLexicon.matchingEmotionRuleIDs(in: tag).isSubset(of: allowedRules),
+                   scene.item(emotionTag: tag).displayEmotionTag == tag {
+                    expected.append(tag)
+                }
+                if expected.count == 6 { break }
+            }
+            XCTAssertGreaterThan(expected.count, 1, scene.title)
+            XCTAssertEqual(RecordEmotionScenePolicy.candidates(for: scene), expected, scene.title)
         }
     }
 
